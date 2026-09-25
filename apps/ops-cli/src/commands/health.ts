@@ -101,13 +101,10 @@ export const DEFAULT_RELAY_PORT = '8080';
 
 /** Resolve the relay's /v1/health URL from env (no flags — `--url` is
  *  indexer-scoped), with the same no-file-access guarantee.  PURE. */
-export function resolveRelayHealthUrl(
-	env: Readonly<Record<string, string | undefined>>
-): string {
+export function resolveRelayHealthUrl(env: Readonly<Record<string, string | undefined>>): string {
 	const host =
 		(env.MORPHIT_RELAY_LISTEN_HOST ?? DEFAULT_INDEXER_HOST).trim() || DEFAULT_INDEXER_HOST;
-	const port =
-		(env.MORPHIT_RELAY_LISTEN_PORT ?? DEFAULT_RELAY_PORT).trim() || DEFAULT_RELAY_PORT;
+	const port = (env.MORPHIT_RELAY_LISTEN_PORT ?? DEFAULT_RELAY_PORT).trim() || DEFAULT_RELAY_PORT;
 	return `http://${host}:${port}/v1/health`;
 }
 
@@ -117,9 +114,7 @@ export function resolveRelayHealthUrl(
  *  CONTAINER can reach them (and why a loopback-only probe fails even
  *  though the service is up: the #13 symptom).  PURE given the
  *  interface map. */
-export function bridgeGatewayHosts(
-	ifaces: ReturnType<typeof networkInterfaces>
-): string[] {
+export function bridgeGatewayHosts(ifaces: ReturnType<typeof networkInterfaces>): string[] {
 	const out: string[] = [];
 	for (const addrs of Object.values(ifaces)) {
 		for (const a of addrs ?? []) {
@@ -291,7 +286,11 @@ export function probeServedCertDaysLeft(hostPort = '127.0.0.1:443'): number | nu
  *  wording for a cert seen on the wire (vs read from a file). */
 function tlsStatusFromDays(days: number, served: boolean): TlsCertStatus {
 	if (days < 0)
-		return { state: 'expired', daysLeft: days, detail: `certificate EXPIRED ${-days} day(s) ago — renew now` };
+		return {
+			state: 'expired',
+			daysLeft: days,
+			detail: `certificate EXPIRED ${-days} day(s) ago — renew now`
+		};
 	if (days < 30)
 		return {
 			state: 'expiring',
@@ -299,7 +298,11 @@ function tlsStatusFromDays(days: number, served: boolean): TlsCertStatus {
 			detail: `expires in ${days} day(s) — auto-renewal should run`
 		};
 	const how = served ? 'served by the web front, ' : '';
-	return { state: 'valid', daysLeft: days, detail: `valid, ${how}${days} day(s) to expiry (auto-renews)` };
+	return {
+		state: 'valid',
+		daysLeft: days,
+		detail: `valid, ${how}${days} day(s) to expiry (auto-renews)`
+	};
 }
 
 /** TLS certificate status. Prefers host certbot certs in `liveDir`; when none is
@@ -525,6 +528,7 @@ export interface HealthSummary {
 	 *  price_feeds). null when absent (relay health, or a pre-fast-path
 	 *  indexer build) — the renderer then shows a one-line hint. */
 	readonly fastPath: FastPathSummary | null;
+	readonly federation: FederationSummary | null;
 }
 
 /** v1.7.0 — head-block fast-path status (mirrors the indexer's
@@ -548,6 +552,82 @@ export interface FastPathSummary {
 	readonly emitted: number | null;
 	readonly lastError: string | null;
 }
+
+/**
+ * The FEDERATION half of the fast path — instance-to-instance chat push.
+ *
+ * Distinct from {@link FastPathSummary}, which is the head TAILER (ADR-0048):
+ * that one answers "am I keeping up with the chain", this one answers "am I
+ * reaching my peers, and if not, is it them or me". They are different
+ * subsystems that happen to share a block on /v1/health.
+ *
+ * Everything here was already in the endpoint and none of it was shown. The
+ * operator guide said to read it "with the ops CLI", which sent the
+ * operator-local header and then displayed only the tailer — so the one field
+ * an operator could not possibly guess at (their own Tor/i2pd/lokinet being
+ * the reason chat is slow) was reachable only by hand-curling the indexer.
+ */
+export interface FederationSummary {
+	readonly peers: number | null;
+	readonly delivered: number | null;
+	readonly failed: number | null;
+	/** Networks THIS box currently cannot use, by name. */
+	readonly networksDown: readonly string[];
+	/**
+	 * Local faults recorded against a network that has NOT been taken off the
+	 * list, because its failures do not identify our end and only one address
+	 * has produced one. Shown because otherwise it reads as a contradiction:
+	 * `localFault: true` failures beside an empty `networksDown`.
+	 */
+	readonly networksSuspected: readonly { readonly network: string; readonly count: number }[];
+	/** How many of the last twenty failures never left this machine. */
+	readonly localFaults: number | null;
+	/** Most recent failure reason, for the one-line hint. */
+	readonly lastFailure: string | null;
+	/**
+	 * Receiving side: messages taken from peers and verified.
+	 *
+	 * READ FROM `verified`, which is what the indexer actually emits. This field
+	 * spent a release reading `accepted`, a key nothing has ever sent, so it was
+	 * permanently null and the line below it never printed. The test did not
+	 * catch it because the fixture invented the same key — the warning against
+	 * exactly that ("a fixture that invents its own shape proves the path
+	 * accepts THE FIXTURE") was already written in another test in this repo.
+	 */
+	readonly intakeAccepted: number | null;
+	readonly intakeShed: number | null;
+	/**
+	 * The live admission bound, and what the instance thinks one verification
+	 * costs it. Below the ceiling means this box is slow enough that the
+	 * six-second promise — not memory — is what limits its intake queue, which
+	 * is a thing an operator can act on (a faster disk, a less contended box)
+	 * and cannot otherwise discover.
+	 */
+	readonly intakeAdmissionDepth: number | null;
+	readonly intakeVerifyCostMs: number | null;
+	/**
+	 * Pushes refused to protect the replay memory. Non-zero means the table was
+	 * full of entries still inside the window they guard, so pushes were declined
+	 * rather than forgetting one — either somebody flooding to flush it, or an
+	 * instance far busier than the table is sized for.
+	 */
+	readonly intakeReplayTableFull: number | null;
+	readonly warmOk: number | null;
+	readonly warmTotal: number | null;
+	readonly peersTruncated: number | null;
+}
+
+/**
+ * The indexer's hard ceiling on its intake queue (`VERIFY_QUEUE_MAX`).
+ *
+ * Duplicated rather than imported: the ops CLI talks to instances running OTHER
+ * versions, so it cannot assume its own build's constant is the one the box it
+ * is inspecting used. This is only a display threshold — "is the bound below
+ * the ceiling, i.e. is the budget binding?" — and being one version out makes
+ * the line appear or not appear, never wrong. `federation-intake-contract-smoke`
+ * pins it against the indexer so the two cannot drift silently.
+ */
+const INTAKE_QUEUE_CEILING = 500;
 
 /** One source's health within a feed (FX or a crypto asset). */
 export interface FeedSourceRow {
@@ -618,7 +698,8 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		relayBalance: typeof b.blurt_balance === 'string' ? b.blurt_balance : null,
 		priceFeed: parsePriceFeed(b.price_feed),
 		priceFeeds: parsePriceFeedsHealth(b.price_feeds),
-		fastPath: parseFastPath(b.fastpath)
+		fastPath: parseFastPath(b.fastpath),
+		federation: parseFederation(b.fastpath)
 	};
 }
 
@@ -634,6 +715,68 @@ export function parseFastPath(v: unknown): FastPathSummary | null {
 		scannedHead: numOrNull(o.scannedHead),
 		emitted: numOrNull(o.emitted),
 		lastError: typeof o.lastError === 'string' ? safe(o.lastError) : null
+	};
+}
+
+/**
+ * Interpret the federation half of the operator-only `fastpath` block.
+ *
+ * Tolerant of every shape a mixed-version federation produces: an older
+ * indexer has no `federation` key at all (→ null, and the caller says so
+ * rather than printing zeros), and a newer one may add fields this build does
+ * not know. Nothing here throws on a partial body — a health REPORT that
+ * crashes on an unexpected field is worse than one that omits a line.
+ * PURE.
+ */
+export function parseFederation(v: unknown): FederationSummary | null {
+	if (v === null || typeof v !== 'object') return null;
+	const fp = v as Record<string, unknown>;
+	const fed = fp.federation;
+	if (fed === null || fed === undefined || typeof fed !== 'object') return null;
+	const f = fed as Record<string, unknown>;
+
+	const diag = (fp.federationDiagnostics ?? null) as Record<string, unknown> | null;
+	const names = Array.isArray(diag?.networksDown)
+		? (diag.networksDown as unknown[]).flatMap((n) => (typeof n === 'string' ? [safe(n)] : []))
+		: [];
+
+	const suspectRaw = diag?.networksSuspected;
+	const suspected: { network: string; count: number }[] = [];
+	if (suspectRaw !== null && typeof suspectRaw === 'object' && !Array.isArray(suspectRaw)) {
+		for (const [net, n] of Object.entries(suspectRaw as Record<string, unknown>)) {
+			const count = numOrNull(n);
+			if (count !== null && count > 0) suspected.push({ network: safe(net), count });
+		}
+	}
+
+	const failures = Array.isArray(diag?.recentFailures)
+		? (diag.recentFailures as unknown[]).flatMap((r) =>
+				r !== null && typeof r === 'object' ? [r as Record<string, unknown>] : []
+			)
+		: [];
+	const localFaults = failures.filter((r) => r.localFault === true).length;
+	const last = failures.at(-1);
+	const lastReason =
+		last !== undefined && typeof last.reason === 'string' ? safe(last.reason) : null;
+
+	const intake = (fp.federationIntake ?? null) as Record<string, unknown> | null;
+
+	return {
+		peers: numOrNull(f.peers),
+		delivered: numOrNull(f.peerDeliveries),
+		failed: numOrNull(f.peerFailures),
+		networksDown: names.sort(),
+		networksSuspected: suspected.sort((a, b) => a.network.localeCompare(b.network)),
+		localFaults: failures.length > 0 ? localFaults : null,
+		lastFailure: lastReason,
+		intakeAccepted: intake === null ? null : numOrNull(intake.verified),
+		intakeShed: intake === null ? null : numOrNull(intake.shed),
+		intakeAdmissionDepth: intake === null ? null : numOrNull(intake.admissionDepth),
+		intakeVerifyCostMs: intake === null ? null : numOrNull(intake.verifyCostMs),
+		intakeReplayTableFull: intake === null ? null : numOrNull(intake.replayTableFull),
+		warmOk: numOrNull(f.lastWarmOk),
+		warmTotal: numOrNull(f.lastWarmTotal),
+		peersTruncated: numOrNull(f.peersTruncated)
 	};
 }
 
@@ -855,8 +998,7 @@ export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 		const o = e as Record<string, unknown>;
 		if (typeof o.url !== 'string') continue;
 		const t = o.transport;
-		const transport =
-			t === 'tor' || t === 'i2p' || t === 'local' ? t : 'clearnet';
+		const transport = t === 'tor' || t === 'i2p' || t === 'local' ? t : 'clearnet';
 		rows.push({
 			url: o.url,
 			transport,
@@ -871,7 +1013,10 @@ export function parseRpcEndpointRows(body: unknown): RpcEndpointRow[] {
 /** Fetch the indexer's per-endpoint RPC health. Derives /v1/rpc-endpoints?probe=1
  *  from the health URL. Best-effort: returns null on any failure (the summary
  *  count from /v1/health still renders). */
-async function fetchRpcEndpoints(healthUrl: string, timeoutMs = 22000): Promise<RpcEndpointRow[] | null> {
+async function fetchRpcEndpoints(
+	healthUrl: string,
+	timeoutMs = 22000
+): Promise<RpcEndpointRow[] | null> {
 	let url: string;
 	try {
 		const u = new URL(healthUrl);
@@ -1030,12 +1175,11 @@ async function probeHealth(
 	);
 }
 
-function serviceLine(
-	c: ReturnType<typeof color>,
-	unit: string,
-	state: ServiceState
-): string {
-	const name = unit.replace(/^morphit-/, '').replace(/\.service$/, '').padEnd(13);
+function serviceLine(c: ReturnType<typeof color>, unit: string, state: ServiceState): string {
+	const name = unit
+		.replace(/^morphit-/, '')
+		.replace(/\.service$/, '')
+		.padEnd(13);
 	const dot = (() => {
 		switch (state) {
 			case 'active':
@@ -1205,8 +1349,7 @@ export function checkBackups(facts: BackupFacts, now: Date): BackupStatus {
 	if (ageMs !== null && ageMs > BACKUP_STALE_AFTER_MS) {
 		return {
 			state: 'stale',
-			detail:
-				'the newest dump is over a day and a half old — at least one nightly run was missed',
+			detail: 'the newest dump is over a day and a half old — at least one nightly run was missed',
 			newestName,
 			ageMs,
 			bytes
@@ -1263,12 +1406,26 @@ export function readBackupFacts(envPath = '/etc/morphit/backup.env'): BackupFact
 		txt = readFileSync(envPath, 'utf8');
 	} catch {
 		// 640 root:morphit — a different user simply can't look. Not a fault.
-		return { configured: true, readable: false, dir: null, newest: null, lastTriggerMs, serviceFailed };
+		return {
+			configured: true,
+			readable: false,
+			dir: null,
+			newest: null,
+			lastTriggerMs,
+			serviceFailed
+		};
 	}
 	const raw = /^\s*BACKUP_DIR=(.*)$/m.exec(txt)?.[1]?.trim() ?? '';
 	const dir = raw.replace(/^['"]|['"]$/g, '');
 	if (dir === '') {
-		return { configured: true, readable: false, dir: null, newest: null, lastTriggerMs, serviceFailed };
+		return {
+			configured: true,
+			readable: false,
+			dir: null,
+			newest: null,
+			lastTriggerMs,
+			serviceFailed
+		};
 	}
 	let newest: BackupFacts['newest'] = null;
 	try {
@@ -1404,7 +1561,8 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 		case 'not-configured':
 			return {
 				state: 'not-configured',
-				detail: 'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
+				detail:
+					'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
 			};
 		case 'unreadable':
 			return { state: 'unknown', detail: 'could not read systemd state (no systemctl?)' };
@@ -1414,10 +1572,14 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 				detail: `Kubo (ipfs) daemon is ${f.daemon}; releases are NOT being seeded. Check: sudo systemctl status ipfs`
 			};
 		case 'degraded':
-			return { state: 'degraded', detail: cls.problems.map((p) => opsProblemText(p, f)).join('; ') };
+			return {
+				state: 'degraded',
+				detail: cls.problems.map((p) => opsProblemText(p, f)).join('; ')
+			};
 		case 'ok': {
 			const pinAge = f.pinRanMs !== null ? formatBackupAge(f.pinRanMs) : 'pending first run';
-			const rebAge = f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
+			const rebAge =
+				f.rebroadcastRanMs !== null ? formatBackupAge(f.rebroadcastRanMs) : 'pending first run';
 			// Say ONLY what these facts prove. They are systemd timer outcomes: the
 			// release is pinned locally and the IPNS record was rebroadcast. They do
 			// NOT prove a peer can fetch it — on morphit.io both ran happily for weeks
@@ -1469,7 +1631,9 @@ export function clampPct(n: number): number {
 
 /** Aggregate idle + total jiffies across all cores.  PURE given input. */
 export function cpuTimesTotals(
-	list: ReadonlyArray<{ times: { user: number; nice: number; sys: number; idle: number; irq: number } }>
+	list: ReadonlyArray<{
+		times: { user: number; nice: number; sys: number; idle: number; irq: number };
+	}>
 ): { idle: number; total: number } {
 	let idle = 0;
 	let total = 0;
@@ -1735,17 +1899,25 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				: c.yellow('behind');
 		console.log(`      Sync state:    ${syncLabel}`);
 		console.log(`      Last block:    ${s.indexedBlock ?? 'unknown'}`);
-		console.log(`      Chain head:    ${s.rpcAllDown ? 'unknown' : (s.chainHeadBlock ?? 'unknown')}`);
+		console.log(
+			`      Chain head:    ${s.rpcAllDown ? 'unknown' : (s.chainHeadBlock ?? 'unknown')}`
+		);
 		const lag = s.lagBlocks;
 		const lagStr = s.rpcAllDown || lag === null ? 'unknown' : `${lag} block${lag === 1 ? '' : 's'}`;
-		console.log(`      Lag:           ${!s.rpcAllDown && lag !== null && lag > 0 ? c.yellow(lagStr) : lagStr}`);
-		if (s.lagNote !== null && !s.rpcAllDown) console.log(`                     ${c.dim(s.lagNote)}`);
+		console.log(
+			`      Lag:           ${!s.rpcAllDown && lag !== null && lag > 0 ? c.yellow(lagStr) : lagStr}`
+		);
+		if (s.lagNote !== null && !s.rpcAllDown)
+			console.log(`                     ${c.dim(s.lagNote)}`);
 		// Count reachable from the per-endpoint rows the operator actually sees (a
 		// fresh active probe), not the pool's passive health count — otherwise the
 		// header ("7/10") can disagree with the ✓/✗ rows below it ("8 green").
 		const rowsHealthy =
 			rpcEndpointRows !== null && rpcEndpointRows.length > 0
-				? { healthy: rpcEndpointRows.filter((r) => r.healthy).length, total: rpcEndpointRows.length }
+				? {
+						healthy: rpcEndpointRows.filter((r) => r.healthy).length,
+						total: rpcEndpointRows.length
+					}
 				: null;
 		const rpcHealthy = rowsHealthy?.healthy ?? s.rpcHealthy;
 		const rpcTotal = rowsHealthy?.total ?? s.rpcTotal;
@@ -1846,9 +2018,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 										? c.dim(` (no ${f.label} market on this source)`)
 										: c.dim(' (never answered)')
 								: c.dim(` (${fmtUptime(src.lastOkAgeS)} ago)`);
-						console.log(
-							`      Price feed:    ${status} \u2014 ${px} (${safe(src.name)})${age}`
-						);
+						console.log(`      Price feed:    ${status} \u2014 ${px} (${safe(src.name)})${age}`);
 					}
 					if (f.outlierRejected) {
 						console.log(
@@ -1910,7 +2080,10 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 							? ` ${c.dim(`\u2014 ${lag} block(s) behind head`)}`
 							: ` ${c.yellow(`\u2014 ${lag} blocks behind head`)}`;
 				const delivered = fp.emitted !== null ? ` ${c.dim(`(${fp.emitted} delivered)`)}` : '';
-				const state = lag !== null && lag > FASTPATH_HEALTHY_LAG_BLOCKS ? c.yellow('lagging') : c.green('keeping up');
+				const state =
+					lag !== null && lag > FASTPATH_HEALTHY_LAG_BLOCKS
+						? c.yellow('lagging')
+						: c.green('keeping up');
 				line = `${state}${lagTxt}${delivered}`;
 			}
 			console.log(`      Fast path:     ${line}`);
@@ -1919,13 +2092,113 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			}
 		} else {
 			// Indexer up but no fastpath block → a pre-fast-path build.
-			console.log(
-				`      ${c.dim('Fast path:     status unavailable (older indexer build)')}`
-			);
+			console.log(`      ${c.dim('Fast path:     status unavailable (older indexer build)')}`);
+		}
+
+		// ── Federated chat (v1.18.0) ───────────────────────────────
+		//
+		// The OTHER fast path: chat pushed instance-to-instance, which is what
+		// gets a message across in under six seconds instead of waiting for the
+		// chain. Its whole diagnostic story was already on /v1/health and none of
+		// it was shown here — so the one thing an operator cannot guess at, that
+		// their OWN Tor/i2pd/lokinet is why chat is slow, was reachable only by
+		// curling the indexer by hand. The operator guide meanwhile said to read
+		// it "with the ops CLI".
+		//
+		// Ordered by what the reader should do about it: the verdict, then whose
+		// fault it is, then the counters.
+		if (s.federation !== null) {
+			const f = s.federation;
+			const peers = f.peers ?? 0;
+			const failed = f.failed ?? 0;
+			const delivered = f.delivered ?? 0;
+
+			let verdict: string;
+			if (peers === 0) {
+				verdict = c.dim('no peer instances yet — nothing to push to');
+			} else if (f.networksDown.length > 0) {
+				verdict = c.yellow(`degraded — ${f.networksDown.join(', ')} unusable from this box`);
+			} else if (failed > 0 && delivered === 0) {
+				verdict = c.yellow('not delivering — every push has failed');
+			} else {
+				verdict = c.green(`${peers} peer(s)`);
+			}
+			const counts =
+				delivered > 0 || failed > 0
+					? ` ${c.dim(`(${delivered} delivered, ${failed} failed)`)}`
+					: '';
+			console.log(`      Fed. chat:     ${verdict}${counts}`);
+
+			// WHOSE FAULT. This is the line the whole block exists for: a failure
+			// count sends an operator to look at the federation when the answer is
+			// a daemon on their own machine.
+			if (f.networksDown.length > 0) {
+				const verb = f.networksDown.length === 1 ? 'is' : 'are';
+				console.log(
+					`            ${c.yellow(`↳ your ${f.networksDown.join(' and ')} ${verb} not answering — start it; the next warm-up clears this`)}`
+				);
+			}
+			// The corroboration state. Without this line it reads as the health
+			// block contradicting itself: local faults recorded, nothing down.
+			for (const sus of f.networksSuspected) {
+				const noun = sus.count === 1 ? 'fault' : 'faults';
+				console.log(
+					`            ${c.dim(`↳ ${sus.count} unexplained ${sus.network} ${noun} — not enough to blame your router yet; if this sticks, check the daemon`)}`
+				);
+			}
+			if (f.networksDown.length === 0 && (f.localFaults ?? 0) > 0) {
+				// "of the last 20 failures" — the noun belongs to the WINDOW, which is
+				// always plural, not to the count in front of it.
+				console.log(
+					`            ${c.dim(`↳ ${f.localFaults} of the last 20 failures never left this machine`)}`
+				);
+			}
+			if (f.networksDown.length === 0 && failed > 0 && f.lastFailure !== null) {
+				console.log(`            ${c.dim(`↳ last failure: ${f.lastFailure}`)}`);
+			}
+			// A peer past the fan-out bound is healthy, reachable, and still on
+			// chain timing — the one degradation with no symptom of its own.
+			if ((f.peersTruncated ?? 0) > 0) {
+				console.log(
+					`            ${c.yellow(`↳ ${f.peersTruncated} peer(s) past the fan-out bound — they fall back to chain timing`)}`
+				);
+			}
+			if (f.warmTotal !== null && f.warmTotal > 0) {
+				console.log(`            ${c.dim(`↳ ${f.warmOk ?? 0}/${f.warmTotal} routes warm`)}`);
+			}
+			if (f.intakeAccepted !== null) {
+				const shed = (f.intakeShed ?? 0) > 0 ? `, ${f.intakeShed} shed` : '';
+				console.log(`            ${c.dim(`↳ received ${f.intakeAccepted} from peers${shed}`)}`);
+			}
+			// The intake queue is bounded by TIME, not by a fixed count: the
+			// instance measures what a verification costs it and admits only as
+			// deep as it can still drain inside six seconds. When that bound is
+			// below the ceiling, this box is slow enough that the promise — not
+			// memory — is the binding constraint, and shedding is the correct and
+			// deliberate consequence. Worth saying out loud, because "shed" beside
+			// no explanation reads as a fault rather than as the design working.
+			// The replay memory refusing pushes is not a capacity story like the
+			// queue depth above — it is the anti-replay rule holding the line, and
+			// the only thing that makes it happen at volume is somebody trying to
+			// flush the table. Said plainly, because "shed" alone reads as load.
+			if ((f.intakeReplayTableFull ?? 0) > 0) {
+				console.log(
+					`            ${c.yellow(`↳ ${f.intakeReplayTableFull} push(es) refused to protect replay memory — a flood, or this box is busier than that table is sized for`)}`
+				);
+			}
+			if (f.intakeAdmissionDepth !== null && f.intakeAdmissionDepth < INTAKE_QUEUE_CEILING) {
+				const cost =
+					f.intakeVerifyCostMs !== null ? ` (${f.intakeVerifyCostMs.toFixed(1)}ms per check)` : '';
+				console.log(
+					`            ${c.yellow(`↳ intake queue held to ${f.intakeAdmissionDepth}${cost} so pushes still land inside 6s — extra pushes go by chain`)}`
+				);
+			}
 		}
 	} else if (indexer.kind === 'unreachable') {
 		console.log(`      ${c.dim('Not reachable on loopback or any bridge gateway. If it binds')}`);
-		console.log(`      ${c.dim('a non-default address, pass --url or set MORPHIT_OPS_HEALTH_URL.')}`);
+		console.log(
+			`      ${c.dim('a non-default address, pass --url or set MORPHIT_OPS_HEALTH_URL.')}`
+		);
 	}
 
 	// ── Relay block ──
@@ -2087,7 +2360,8 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				? c.red('✗')
 				: c.yellow('⚠');
 	console.log(`  ${c.bold('Canary')}    ${canaryTag} ${canary.state}`);
-	if (canary.validThrough !== null) console.log(`      Valid through: ${safe(canary.validThrough)}`);
+	if (canary.validThrough !== null)
+		console.log(`      Valid through: ${safe(canary.validThrough)}`);
 	console.log(`      ${c.dim(canary.detail)}`);
 
 	// ── IPFS / IPNS release seeding block ──

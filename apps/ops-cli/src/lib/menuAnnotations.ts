@@ -9,13 +9,16 @@
  *   - currentVersion: the installed Morphit release tag, read from
  *     <installDir>/release-info.json (no network).
  *   - latestVersion: the newest release tag from Forgejo, via a short-
- *     timeout fetch (own lightweight fetcher — NOT upgrade's 30s one).
+ *     timeout fetch (own lightweight fetcher — NOT upgrade's 30s one). On a
+ *     hidden-only node: the on-chain release from this node's own indexer.
  *   - unresolvedFlags: recent abuse flags where NEITHER named account
  *     is blocked on this instance (i.e. the operator hasn't acted) —
  *     best-effort DB read, null if config/DB unavailable.
  *   - relayBalanceStatus: the relay account's liquid BLURT graded
  *     against thresholds.relayBalance ('warn'/'error' when running low),
- *     via a short-timeout chain read; null if config/chain unavailable.
+ *     via a short-timeout chain read; null if config/chain unavailable. On a
+ *     hidden-only node the read goes through this node's own indexer
+ *     (lookupBlurtAccount decides that).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -24,6 +27,7 @@ import { loadConfig, applyThreshold } from '../config.ts';
 import { createDatabase } from '../db.ts';
 import { lookupBlurtAccount } from '../init/chainCheck.ts';
 import { findLocalOfflineRelease, compareTags } from '../commands/upgrade.ts';
+import { isHiddenOnlyNode, readLocalRelease } from './hiddenOnly.ts';
 
 export interface MenuAnnotations {
 	readonly currentVersion: string | null;
@@ -59,6 +63,14 @@ export function readCurrentVersion(): string | null {
  *  null on any error/timeout. Prefers /releases/latest (stable), falls
  *  back to the newest release of any kind. */
 export async function fetchLatestVersion(timeoutMs = 2500): Promise<string | null> {
+	// v1.18.0 deep-deep, H1: a hidden-only node must not ask git.agorise.net
+	// anything — this ran on EVERY interactive launch, putting the box's home IP
+	// in the code host's logs. Its own indexer already holds the release the
+	// chain says is current (the same record a hidden upgrade verifies against),
+	// so read that instead. No answer means "unknown", never a clearnet retry.
+	if (isHiddenOnlyNode()) {
+		return (await readLocalRelease({ timeoutMs }))?.tag ?? null;
+	}
 	const host = process.env.MORPHIT_RELEASE_HOST ?? DEFAULT_RELEASE_HOST;
 	const repo = process.env.MORPHIT_RELEASE_REPO ?? DEFAULT_RELEASE_REPO;
 	const base = `https://${host}/api/v1/repos/${repo}`;

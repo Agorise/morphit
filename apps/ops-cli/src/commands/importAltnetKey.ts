@@ -87,6 +87,17 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 	}
 
 	let plaintext: Buffer;
+	/**
+	 * The bytes that get encrypted and stored — which is NOT always the file.
+	 *
+	 * For I2P it is the inspector's `keyBytes`: the key in the BINARY form i2pd
+	 * loads. Storing the input instead was the bug. A base64 export passed every
+	 * check here and was stored as base64 text, and exported back to i2pd that
+	 * text hosts nothing, silently — while this command had just printed
+	 * "✓ Valid I2P private key" and the address it would host. Verified against
+	 * i2pd 2.49, not reasoned about.
+	 */
+	let toStore: Buffer;
 	try {
 		plaintext = readFileSync(inAbs);
 	} catch (err) {
@@ -97,6 +108,7 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 		console.log(`Input file is empty: ${inAbs}`);
 		return 1;
 	}
+	toStore = plaintext;
 
 	// Sanity-check the input file looks like a service key.
 	// Tor v3 hs_ed25519_secret_key is 96 bytes (32-byte header
@@ -144,9 +156,11 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 			console.log('Nothing was written.');
 			return 1;
 		} else {
+			// Store the key i2pd can load, not the text it arrived as.
+			if (insp.keyBytes !== null) toStore = Buffer.from(insp.keyBytes);
 			console.log(
 				`  ✓ Valid I2P private key (destination ${insp.destinationBytes} bytes` +
-					`${insp.wasBase64 ? ', decoded from base64' : ''}).`
+					`${insp.wasBase64 ? ', decoded from base64 — it will be stored as the binary key i2pd loads' : ''}).`
 			);
 			console.log(`    This key hosts:  ${insp.address}`);
 			const configured = readConfiguredI2pAddress();
@@ -220,14 +234,17 @@ export async function runImportAltnetKey(ctx: ImportAltnetKeyCtx): Promise<numbe
 
 	let envelope;
 	try {
-		envelope = encryptAltKey(plaintext, passphrase, net);
+		envelope = encryptAltKey(toStore, passphrase, net);
 	} catch (err) {
 		console.log(`Encryption failed: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}`);
 		return 3;
 	}
 
-	// Wipe plaintext buffer (best-effort).
+	// Wipe BOTH buffers (best-effort). When the key arrived as base64 they are
+	// different allocations, and wiping only the input would leave the decoded
+	// private key sitting in memory.
 	plaintext.fill(0);
+	toStore.fill(0);
 
 	try {
 		mkdirSync(altDir, { recursive: true });

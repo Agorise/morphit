@@ -22,7 +22,10 @@
 # tick — the next NEW version notifies again.
 set -u
 
-BASE="${MORPHIT_LOCAL_API:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8088}}"
+# 8081 is the indexer's own default. This said 8088 — a port no Morphit indexer
+# listens on — so on a box with no override the notice could never fire
+# (v1.18.0 review).
+BASE="${MORPHIT_LOCAL_API:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8081}}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/morphit"
 STATE_FILE="$STATE_DIR/upgrade-notified"
 

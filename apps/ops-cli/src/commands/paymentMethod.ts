@@ -37,6 +37,7 @@ import { readFileSync } from 'node:fs';
 import { ask, askChoice, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, broadcastCustomJson, errMsg } from './chainErrors.ts';
+import { withSpinner } from '../init/spinner.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 
@@ -439,7 +440,10 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	// keeping a live reference past the single use.
 	let result: { trx_id: string };
 	try {
-		result = await broadcastCustomJson({
+		// v1.18.0 deep-deep, H1: on a hidden-only node this goes through the
+		// node's own indexer over Tor/I2P and can take a minute, so show a spinner
+		// rather than a silent terminal.
+		result = await withSpinner('Broadcasting to the chain…', () => broadcastCustomJson({
 			account,
 			wif,
 			opId: 'morphit_payment_method_addition_v1',
@@ -453,7 +457,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 				url,
 				ts: Math.floor(Date.now() / 1000)
 			}
-		});
+		}));
 	} catch (err) {
 		printChainErrorHelp(errMsg(err), {
 			opLabel: 'morphit_payment_method_addition_v1',
@@ -534,12 +538,13 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	// Audit 2026-05 hardening (NEW-9-13): see add() for rationale.
 	let result: { trx_id: string };
 	try {
-		result = await broadcastCustomJson({
+		// Spinner: see add() (v1.18.0 deep-deep, H1).
+		result = await withSpinner('Broadcasting to the chain…', () => broadcastCustomJson({
 			account,
 			wif,
 			opId: 'morphit_payment_method_addition_v1',
 			payload: { v: 1, action: 'remove', key, ts: Math.floor(Date.now() / 1000) }
-		});
+		}));
 	} catch (err) {
 		printChainErrorHelp(errMsg(err), {
 			opLabel: 'morphit_payment_method_addition_v1',

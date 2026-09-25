@@ -19,6 +19,7 @@ import { execSync } from 'node:child_process';
 import { resolve4 } from 'node:dns/promises';
 import { connect } from 'node:net';
 import { sanitizeForTerm } from '../render/term.ts';
+import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
 
 export type CheckStatus = 'ok' | 'warn' | 'error';
 
@@ -800,7 +801,19 @@ async function checkPostgresReachable(): Promise<Check> {
 	});
 }
 
-async function checkOutboundHttps(): Promise<Check> {
+export async function checkOutboundHttps(): Promise<Check> {
+	// v1.18.0 deep-deep, H1: re-running `init` on an installed hidden-only node
+	// (empty clearnet RPC pool in indexer.env) must not reach a clearnet RPC
+	// from the box's home IP just to learn that it can. Such a node needs no
+	// outbound clearnet HTTPS; its chain traffic goes over Tor/I2P.
+	if (isHiddenOnlyNode()) {
+		return {
+			name: 'Outbound HTTPS',
+			actual: 'not checked (hidden-only node)',
+			recommended: 'not needed',
+			status: 'ok'
+		};
+	}
 	try {
 		const controller = new AbortController();
 		const t = setTimeout(() => controller.abort(), 5000);
@@ -840,7 +853,18 @@ async function checkOutboundHttps(): Promise<Check> {
 	}
 }
 
-async function checkSystemTime(): Promise<Check> {
+export async function checkSystemTime(): Promise<Check> {
+	// Same reason as checkOutboundHttps (v1.18.0 deep-deep, H1): the clock is
+	// compared against a clearnet web server's Date header, which a hidden-only
+	// node must not contact. Tor itself refuses to run with a badly wrong clock.
+	if (isHiddenOnlyNode()) {
+		return {
+			name: 'System time',
+			actual: 'not checked (hidden-only node)',
+			recommended: 'within 30s of NTP',
+			status: 'ok'
+		};
+	}
 	try {
 		const before = Date.now();
 		const controller = new AbortController();

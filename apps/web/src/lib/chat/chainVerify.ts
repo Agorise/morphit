@@ -69,7 +69,7 @@
 
 import type { AuthorityType, SignedTransaction } from '@beblurt/dblurt';
 import { getBlurtClient } from '$blurt/client';
-import { chainRelay } from '$net/chainRelay';
+import { chainRelay, ChainRelayError } from '$net/chainRelay';
 import { OP_IDS } from '$net/config';
 import { verifyChainOpSignature, verifyTransactionSignatures } from './chainOpVerify';
 
@@ -219,6 +219,15 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 		console.warn(
 			`[chainVerify] relay unreachable for ${account} (quorumN=${quorumN}, agreeAtLeast=${agreeAtLeast}): ${err instanceof Error ? err.message : String(err)}`
 		);
+		// COULD NOT ASK is not THE CHAIN SAYS NO. Returning null here collapsed
+		// the two, and pub-pinning reads null as "the chain reports no key for
+		// this peer" — a TAMPER signal. So a slow Tor circuit or a dropped I2P
+		// tunnel told the user their operator might be fabricating data, and
+		// advised them to switch instances: useless advice for someone on a
+		// hidden-only instance precisely because the others are blocked where
+		// they are. ChainRelayError exists to carry this distinction (see its
+		// own docstring); it was being discarded one line after being thrown.
+		if (err instanceof ChainRelayError) throw err;
 		return null;
 	}
 	if (!Array.isArray(history)) return null;
@@ -278,6 +287,10 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 			console.warn(
 				`[chainVerify] S14 signature verification threw for ${account}: ${err instanceof Error ? err.message : String(err)}`
 			);
+			// ...but "the relay was unreachable" is not a verification result at
+			// all, and must not become a tamper accusation. Same reasoning as
+			// the history fetch above.
+			if (err instanceof ChainRelayError) throw err;
 			return null;
 		}
 	}

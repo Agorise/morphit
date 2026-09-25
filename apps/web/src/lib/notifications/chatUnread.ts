@@ -338,6 +338,8 @@ export function markAllChatRead(): void {
  *  Without this, the badge would over-count blocked-peer threads until the user
  *  happened to open the inbox (which is what loads blocks). */
 let blocksLoadedFor: string | null = null;
+/** Who the last poll was for, so an account switch can drop their pending set. */
+let lastPolledAccount: string | null = null;
 
 /** Fetch conversations + read-state, then recount. Best-effort: a
  *  transient failure keeps the last known count. */
@@ -346,9 +348,19 @@ async function poll(): Promise<void> {
 	if (!me) {
 		convos = [];
 		blocksLoadedFor = null;
+		// Fast pushes belong to whoever was signed in when they arrived. The key
+		// is peer+order with no account in it, so leaving them here means a
+		// second sign-in on the same device — without a page reload — could count
+		// a thread that belongs to the previous account.
+		fastPending.clear();
 		setCategoryCount('chat', 0);
 		return;
 	}
+	// The same reasoning as the clear above, for the case where the account
+	// changes without passing through a signed-out poll: anything pending was
+	// filed for somebody else.
+	if (lastPolledAccount !== null && lastPolledAccount !== me) fastPending.clear();
+	lastPolledAccount = me;
 	if (blocksLoadedFor !== me) {
 		blocksLoadedFor = me;
 		// Populate the blocked set so the badge filter matches the inbox even

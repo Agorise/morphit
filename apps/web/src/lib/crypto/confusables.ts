@@ -575,6 +575,25 @@ export function skeleton(s: string): string {
 
 let SKELETON_REVERSE_MAP: Record<string, string> | null = null;
 
+/** (v1.18.0 deep-deep, L3) Mirror of the indexer's `tagImpersonatesReserved`:
+ *  a tag that IS a reserved name under the homoglyph table, or a reserved
+ *  name followed by a separator (`m0rphit`, `rnorphit`, `morphit-io`). The
+ *  indexer refuses such a tag on first registration unless the signer owns
+ *  the name; this copy keeps the form from sending one it will refuse. Keep in
+ *  sync — `tag-reserved-parity-smoke` runs both over the same corpus. */
+const RESERVED_TAG_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.flatMap((n) => {
+	const src = compileReservedRegex(n).source;
+	return [new RegExp('^' + src + '$', 'i'), new RegExp('^' + src + '-', 'i')];
+});
+
+export function tagImpersonatesReserved(tag: string): boolean {
+	const folded = tag.toLowerCase().replace(/rn/g, 'm').replace(/vv/g, 'w').replace(/[._]/g, '-');
+	for (const re of RESERVED_TAG_REGEXES) {
+		if (re.test(folded)) return true;
+	}
+	return false;
+}
+
 /** P6-3 audit fix: mirror of indexer's isReservedTag. */
 export function isReservedTag(tag: string): boolean {
 	const lower = tag.toLowerCase();

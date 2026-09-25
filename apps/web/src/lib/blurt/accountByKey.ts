@@ -36,6 +36,7 @@
  */
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
+import { chainCallTimeoutMs } from '$net/transportBudget';
 
 /** Same-origin indexer proxy for the reverse key→account lookup. */
 function indexerUrl(path: string): URL {
@@ -58,7 +59,8 @@ export async function resolveAccountsByPublicKeys(pubKeysBLT: string[]): Promise
 				headers: { 'content-type': 'application/json', accept: 'application/json' },
 				body: JSON.stringify({ keys })
 			},
-			15_000
+			// Chain-backed through the indexer; see broadcastTransport.
+			chainCallTimeoutMs(15_000)
 		);
 		if (!res.ok) {
 			return []; // proxy unreachable / error ⇒ manual entry

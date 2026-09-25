@@ -44,6 +44,7 @@
 	import { identiconDataUri, seedBytesFromString } from '$crypto/identicon';
 	import { selfProfile } from '$lib/stores/selfProfile';
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
+	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 
 	interface Props {
 		/**
@@ -111,8 +112,8 @@
 		 * User-uploaded custom avatar as sanitized SVG text. Takes
 		 * precedence over the deterministic heart identicon when
 		 * populated. The source MUST have been processed through
-		 * $lib/avatar's `sanitizeSvg` — renderer inlines this via
-		 * {@html} so unsanitized input would be a live XSS vector.
+		 * $lib/avatar's `sanitizeSvg`. It is shown as an <img> (never
+		 * inlined — v1.18.0 deep-deep, M1).
 		 */
 		avatarSvg?: string | null;
 		/**
@@ -442,9 +443,8 @@
 	-->
 	<!--
 		Avatar. Priority:
-		  1. User-uploaded sanitized SVG (inline via {@html}; the
-		     sanitizer in $lib/avatar is the contract — this render
-		     path trusts that contract).
+		  1. User-uploaded sanitized SVG, shown as an <img> (see
+		     svgAvatarImgSrc: inlined, it could escape its frame).
 		  2. User-uploaded raster data URI (<img src="data:...">).
 		  3. Deterministic heart identicon from the seed bytes.
 		All three render at the same size and circular crop so the
@@ -453,15 +453,18 @@
 	-->
 	{#if !hideAvatar}
 		{#if effAvatarSvg && effAvatarSvg.length > 0}
-			<span
-				class="flex flex-none items-center justify-center overflow-hidden rounded-full bg-ink-200/50 ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
-				style:width="{avatarSize}px"
-				style:height="{avatarSize}px"
+			<!-- (v1.18.0 deep-deep, M1) An <img>, never {@html}: inlined, the
+			     picture's own style/class (position:fixed, `fixed inset-0`)
+			     escaped this frame and could cover the whole page. -->
+			<img
+				src={svgAvatarImgSrc(effAvatarSvg)}
+				alt=""
+				width={avatarSize}
+				height={avatarSize}
+				decoding="async"
+				class="flex-none rounded-full bg-ink-200/50 object-cover ring-1 ring-ink-300 dark:bg-ink-800/50 dark:ring-ink-700"
 				aria-hidden="true"
-			>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html effAvatarSvg}
-			</span>
+			/>
 		{:else if effAvatarDataUri && effAvatarDataUri.length > 0}
 			<img
 				src={effAvatarDataUri}

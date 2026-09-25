@@ -48,10 +48,8 @@ import { loadConfig } from '../src/config/index.ts';
 import { installHiddenServiceDispatcher } from '../src/indexer/hiddenServiceDispatcher.ts';
 import { hiddenServiceProxyConfigFromEnv } from '../src/indexer/hiddenServiceFetch.ts';
 import { BlurtClient } from '../src/blurt/client.ts';
-import {
-	selectNewestSnapshotOp,
-	INDEXER_SNAPSHOT_SIGNER_DEFAULT
-} from '../src/blurt/indexerSnapshotOp.ts';
+import { INDEXER_SNAPSHOT_SIGNER_DEFAULT } from '../src/blurt/indexerSnapshotOp.ts';
+import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
 
 const STATE_PATH = process.env.MORPHIT_SNAPSHOT_MIRROR_STATE ?? '/var/lib/morphit/snapshot-mirror.json';
 
@@ -180,22 +178,38 @@ async function main(): Promise<void> {
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
 	const limit = Math.max(1, Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000));
 
+	// v1.18.0 deep-deep (rv2-1): the op was read from ONE RPC endpoint and
+	// accepted on the strength of naming @signer — so one hostile node could make
+	// every instance pin and re-serve a CID of its choosing. Now two independent
+	// RPC operators must agree on the op and its block, and its signature must
+	// recover to the pinned posting key, exactly as fast-sync requires.
+	const pinnedPubkey =
+		flag('signer-pubkey') ??
+		(signer === config.officialAccountName.toLowerCase() ? config.officialPostingPubkey : undefined);
+	if (pinnedPubkey === undefined || pinnedPubkey === '') {
+		say(`@${signer} is not the official account, so its key is not pinned — pass --signer-pubkey <BLT…>. Nothing to do.`);
+		return;
+	}
 	say(`reading @${signer}'s chain history for the newest indexer_snapshot_v1 …`);
 	const blurt = new BlurtClient(config);
-	let history: unknown;
+	let resolved: Awaited<ReturnType<typeof resolveTrustedSnapshotOp>>;
 	try {
-		history = await blurt.callCondenser('get_account_history', [signer, -1, limit]);
+		resolved = await resolveTrustedSnapshotOp(blurt, {
+			signer,
+			pinnedPubkey,
+			chainId: config.chainId,
+			historyLimit: limit,
+			minAgree: 2
+		});
 	} catch (e) {
 		say(`could not read the chain right now (${e instanceof Error ? e.message : String(e)}) — will retry on the next run.`);
 		return;
 	}
-
-	const sel = selectNewestSnapshotOp(history, new Set([signer]));
-	if (!sel) {
-		say(`no snapshot has been anchored by @${signer} yet — nothing to mirror.`);
+	if (!resolved.ok) {
+		say(`${resolved.reason} Nothing was pinned; will retry on the next run.`);
 		return;
 	}
-	const op = sel.payload;
+	const op = resolved.selected.payload;
 
 	// Chain gate. Mirroring another chain's state would hand newcomers a snapshot
 	// their own node must reject — refuse rather than waste everyone's time.
@@ -298,7 +312,12 @@ async function main(): Promise<void> {
 	say('  so a new node \u2014 including a zero-clearnet one \u2014 can fast-sync from you.');
 }
 
-main().catch((err) => {
+// Exit as soon as the work is done (v1.18.0 deep-deep, rv2-1/rv2-9). The chain
+// reads are now quorum reads: once two operators agree, the others still in
+// flight are abandoned, but an abandoned RPC call keeps retrying in the
+// background until its own timeout (a minute for .onion/.i2p), holding the
+// process open for nothing.
+main().then(() => process.exit(0), (err) => {
 	// Never fail: this runs inside upgrades and on a timer.
 	say(`unexpected error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
 	process.exit(0);

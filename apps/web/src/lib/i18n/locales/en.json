@@ -356,7 +356,13 @@
 			"failed_label": "Failed",
 			"retry": "Retry",
 			"retry_aria": "Retry sending this message",
-			"peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry."
+			"peer_not_ready": "This recipient hasn't opened Morphit chat yet. Once they do, your message will go through on retry.",
+			"not_confirmed_on_chain": "Not confirmed on the blockchain — it may have been dropped. Tap Retry to send it again.",
+			"on_chain_not_accepted": "On the blockchain, but not accepted for delivery — the recipient may not be taking messages from you right now. Sending it again would not change that.",
+			"session_locked": "Your session is locked. Unlock and try again.",
+			"unrecorded_label": "Not recorded on the blockchain",
+			"unrecorded_detail": "This message reached you directly from the sender's server, but the blockchain never recorded it, so there is no permanent proof it was sent. If the sender's app reported it as not sent, they may send it again.",
+			"unrecorded_detail_own": "This message was sent from another of your sessions, but the blockchain never recorded it, so there is no permanent proof it was sent. You can send it again."
 		},
 		"composer": {
 			"aria_label": "Send a message",
@@ -463,7 +469,8 @@
 				"body": "In this mode your messages can't be recovered after you leave. Save a PDF now if you want to keep a copy.",
 				"get_now": "Get my PDF now",
 				"later": "Later"
-			}
+			},
+			"chain_unreachable": "We couldn't reach the blockchain to check this peer's chat key, so the message wasn't sent. This is common on Tor and I2P, where connections take a while to build. Nothing is wrong — try again in a moment."
 		},
 		"live": "Live",
 		"loading": "Loading conversation…",
@@ -693,7 +700,8 @@
 			"compare_body": "Read the 8 words to your contact via voice call, in-person, or another trusted channel. Do NOT compare them in this chat. If even one word differs, treat the conversation as compromised.",
 			"why_show": "Why does this matter?",
 			"why_hide": "Hide explanation",
-			"why_body": "By default Morphit chat trusts the indexer to deliver the right chat key for your counterparty. A hostile indexer could substitute attacker-controlled keys and read your messages. The 8-word fingerprint is computed locally from both sides' real chat keys — if both of you see the same words, no MITM occurred. This protects against MITM only; it does NOT prove the person on the other end of your phone call is who they say they are."
+			"why_body": "By default Morphit chat trusts the indexer to deliver the right chat key for your counterparty. A hostile indexer could substitute attacker-controlled keys and read your messages. The 8-word fingerprint is computed locally from both sides' real chat keys — if both of you see the same words, no MITM occurred. This protects against MITM only; it does NOT prove the person on the other end of your phone call is who they say they are.",
+			"error_chain_unreachable": "Couldn't reach the blockchain to check this peer's key. This is common on Tor and I2P, where connections take longer to build. Nothing is wrong with the key — try again in a moment."
 		},
 		"boot_failed": "Couldn't load chat. Try refreshing the page.",
 		"mailing_address": {
@@ -731,6 +739,7 @@
 			"verify_body": "Every message below is a permanent entry on the public Blurt blockchain, cryptographically signed by the sender's account. The “Blockchain proof” code on each message is its transaction ID: anyone can paste it into a Blurt block explorer (for example, blocks.blurtwallet.com) to confirm that this exact account sent a message to the other at the stated time. The text shown is the private message, decrypted with the keys of the account named above. Because each proof lives on a public, permanent ledger, this record cannot be secretly altered — changing any line here would no longer match the blockchain.",
 			"proof_label": "Blockchain proof",
 			"pending_label": "pending confirmation",
+			"unrecorded_label": "never recorded on the blockchain — this line cannot be verified",
 			"footer": "Morphit chat record — locked, read-only. Verify each message on a block explorer."
 		},
 		"pay_prefill": {
@@ -905,6 +914,18 @@
 		},
 		"footer": {
 			"snapshot_note": "This is a one-shot snapshot; both sides may have changed in the seconds between fetches. Refresh a few times over a minute or two to see a persistent pattern."
+		},
+		"verdict": {
+			"agree_heading": "These instances agree",
+			"differ_heading": "These instances differ",
+			"inconclusive_heading": "Not enough overlap to compare",
+			"agree_body": "Across the orders both instances could be compared on, every one appears on both. {n} orders matched. Nothing is being hidden by {host} in the range checked.",
+			"differ_body": "Some orders appear on only one of the two instances. Check the block gap first — if the instances are at different heights, the newest orders legitimately differ. A difference that survives several re-runs is the real signal.",
+			"inconclusive_body": "Both instances returned a capped page of orders and the pages do not overlap, so there is no range in which both are known to be complete. Nothing can be concluded from this comparison."
+		},
+		"window": {
+			"truncated_note": "At least one instance had more orders than it could return in one page, so the comparison was limited to the range where both are known to be complete. {excluded} orders fell outside that range and could not be checked either way.",
+			"since": "Compared orders updated after {since}"
 		}
 	},
 	"crypto": {
@@ -4233,6 +4254,7 @@
 			"push_subscribed": "On",
 			"push_unsupported": "Not supported on this device",
 			"push_error_push_disabled": "This instance's operator has not enabled push delivery yet. Falling back to in-tab notifications.",
+			"push_error_push_disabled_hidden_only": "This instance uses no clearnet at all, and phone and closed-browser notifications can only be delivered through a clearnet push service, so they are off here. Notifications still appear while Morphit is open.",
 			"push_error_permission_denied": "You declined the browser's notification permission. To enable push later, allow notifications for this site in your browser settings.",
 			"push_error_not_supported": "Your browser does not support Web Push. Try a recent Firefox, Chrome, or Edge.",
 			"push_error_unreachable": "Could not reach the operator's relay. Check your connection and try again.",

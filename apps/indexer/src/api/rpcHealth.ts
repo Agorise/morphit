@@ -26,6 +26,10 @@ import { morphitUserAgent } from '$blurt/userAgent';
 import { INDEXER_VERSION } from './health';
 import { hiddenNetworkOf, hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
 import { isHiddenRpcUrl } from '$blurt/rpcDirectoryOp';
+import { readCappedBytes } from '@morphit/hidden-transport/rpc-fetch';
+
+/** A get_dynamic_global_properties reply is a few KB. (v1.18.0 deep-deep, M2) */
+const PROBE_REPLY_MAX_BYTES = 1024 * 1024;
 
 /** Classify a pool URL into the card's transport buckets. Loopback → local (a
  *  co-located node), `.onion` → tor, `.b32.i2p`/`.i2p` → i2p, everything else
@@ -310,6 +314,11 @@ async function probeOne(url: string): Promise<ProbeResult> {
 		const res = await fetch(url, {
 			method: 'POST',
 			signal: controller.signal,
+			// (v1.18.0 deep-deep, M2) Never followed: the probed nodes are third
+			// parties from the on-chain directory, and a 307 to our own loopback
+			// made this probe re-POST there (a blind SSRF). A redirect is reported
+			// as the HTTP status it is.
+			redirect: 'manual',
 			headers: {
 				'content-type': 'application/json',
 				// Identify ourselves to the node being probed (a 403 from a
@@ -329,11 +338,16 @@ async function probeOne(url: string): Promise<ProbeResult> {
 		// "unreachable" (403 = a WAF / security policy in front of the node,
 		// 502 = the balancer can't reach its backend), so carry the status.
 		if (!res.ok) {
+			// Cancel the unread body so the socket is released now.
+			await res.body?.cancel().catch(() => {});
 			return { latencyMs: null, ok: false, reason: 'http', httpStatus: res.status };
 		}
 		let body: { result?: unknown; error?: unknown };
 		try {
-			body = (await res.json()) as { result?: unknown; error?: unknown };
+			// (v1.18.0 deep-deep, M2) Capped: `res.json()` read whatever the node
+			// chose to send. Past the cap the read throws → 'bad_body'.
+			const bytes = await readCappedBytes(res, PROBE_REPLY_MAX_BYTES, url);
+			body = JSON.parse(Buffer.from(bytes).toString('utf8')) as { result?: unknown; error?: unknown };
 		} catch {
 			return { latencyMs: null, ok: false, reason: 'bad_body', httpStatus: res.status };
 		}

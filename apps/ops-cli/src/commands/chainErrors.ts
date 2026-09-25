@@ -36,6 +36,13 @@
 
 import { sanitizeForTerm } from '../render/term.ts';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import {
+	isHiddenOnlyNode,
+	localCondenser,
+	localIndexerJson,
+	localIndexerBases,
+	LocalIndexerAnswerError
+} from '../lib/hiddenOnly.ts';
 
 /** Normalize an unknown thrown value to a string message. */
 export function errMsg(err: unknown): string {
@@ -82,6 +89,24 @@ export async function broadcastCustomJson(args: {
 		};
 		PrivateKey: { fromString(wif: string): unknown };
 	}
+	type CustomJsonOp = [
+		'custom_json',
+		{
+			required_auths: string[];
+			required_posting_auths: string[];
+			id: string;
+			json: string;
+		}
+	];
+	const buildOp = (): CustomJsonOp => [
+		'custom_json',
+		{
+			required_auths: [],
+			required_posting_auths: [args.account],
+			id: args.opId,
+			json: JSON.stringify(args.payload)
+		}
+	];
 	let dblurt: DblurtModule;
 	try {
 		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
@@ -91,6 +116,16 @@ export async function broadcastCustomJson(args: {
 		// bundle, NOT a missing install.  Surface the real cause so the
 		// diagnostics layer classifies it correctly.
 		throw new Error(`could not load the Blurt broadcast library: ${errMsg(err)}`);
+	}
+
+	// v1.18.0 deep-deep, H1: a HIDDEN-ONLY node signs here and hands the signed
+	// transaction to its OWN indexer's /v1/broadcast, which carries it to the
+	// chain over Tor/I2P. This used to go to the six clearnet defaults whatever
+	// the node was, so `register` sent the node's .onion from its home IP to a
+	// clearnet RPC operator: the one pairing a tor-only node exists to prevent.
+	// No clearnet fallback: if the indexer cannot do it, the broadcast fails.
+	if (isHiddenOnlyNode()) {
+		return broadcastViaLocalIndexer(dblurt, buildOp(), args.wif);
 	}
 
 	const endpoints = [...DEFAULT_BLURT_RPC_ENDPOINTS];
@@ -115,23 +150,7 @@ export async function broadcastCustomJson(args: {
 					chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f',
 					consoleOnFailover: false
 				});
-				const op: [
-					'custom_json',
-					{
-						required_auths: string[];
-						required_posting_auths: string[];
-						id: string;
-						json: string;
-					}
-				] = [
-					'custom_json',
-					{
-						required_auths: [],
-						required_posting_auths: [args.account],
-						id: args.opId,
-						json: JSON.stringify(args.payload)
-					}
-				];
+				const op = buildOp();
 				const priv = dblurt.PrivateKey.fromString(args.wif);
 				const result = await client.broadcast.sendOperations([op], priv);
 				return { trx_id: result.id };
@@ -149,6 +168,75 @@ export async function broadcastCustomJson(args: {
 	throw new Error(
 		`all Blurt RPC endpoints rejected the broadcast.  Last error: ${errMsg(lastError)}${noise}`
 	);
+}
+
+/** Build, sign and broadcast one op through this node's own indexer
+ *  (hidden-only nodes; v1.18.0 deep-deep, H1). The chain head comes from the
+ *  indexer's read whitelist, the signing is local crypto with the key never
+ *  leaving this process, and the signed transaction goes to /v1/broadcast,
+ *  whose op whitelist admits every `morphit_*` custom_json. A chain rejection
+ *  comes back as the chain's own reason, so the diagnostics still match. */
+async function broadcastViaLocalIndexer(
+	dblurt: {
+		Client: new (
+			endpoint: string,
+			opts: { addressPrefix: string; chainId: string; consoleOnFailover?: boolean }
+		) => unknown;
+		PrivateKey: { fromString(wif: string): unknown };
+	},
+	op: unknown,
+	wif: string
+): Promise<{ trx_id: string }> {
+	const props = await localCondenser<{
+		head_block_number?: unknown;
+		head_block_id?: unknown;
+		time?: unknown;
+	} | null>('get_dynamic_global_properties', []);
+	if (
+		props === null ||
+		typeof props.head_block_number !== 'number' ||
+		typeof props.head_block_id !== 'string' ||
+		typeof props.time !== 'string'
+	) {
+		throw new Error(
+			"this node's own indexer returned no chain head; the Blurt network may be unreachable over Tor/I2P right now"
+		);
+	}
+	const tx = {
+		ref_block_num: props.head_block_number & 0xffff,
+		ref_block_prefix: Buffer.from(props.head_block_id, 'hex').readUInt32LE(4),
+		// 60 s after the head block, as dblurt and the web wallet do.
+		expiration: new Date(new Date(props.time + 'Z').getTime() + 60_000).toISOString().slice(0, -5),
+		operations: [op],
+		extensions: [] as unknown[]
+	};
+	// Signing is local crypto: this client only holds the chain id and is never
+	// asked to send anything. Its address is this node's own indexer anyway, so
+	// not even a misuse could reach clearnet.
+	const signer = new dblurt.Client(localIndexerBases()[0]!, {
+		addressPrefix: 'BLT',
+		chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f',
+		consoleOnFailover: false
+	}) as { broadcast: { sign(tx: unknown, key: unknown): unknown } };
+	const signed = signer.broadcast.sign(tx, dblurt.PrivateKey.fromString(wif));
+	let res: { trx_id?: unknown; id?: unknown } | null;
+	try {
+		// A signed write over Tor waits for its block: allow it time.
+		res = await localIndexerJson<{ trx_id?: unknown; id?: unknown } | null>(
+			'/v1/broadcast',
+			{ method: 'POST', body: { trx: signed } },
+			{ timeoutMs: 120_000 }
+		);
+	} catch (err) {
+		if (err instanceof LocalIndexerAnswerError && err.status >= 500) {
+			throw new Error(
+				`this node's own indexer could not reach the Blurt network over Tor/I2P (${err.message})`
+			);
+		}
+		throw err;
+	}
+	const id = typeof res?.trx_id === 'string' ? res.trx_id : typeof res?.id === 'string' ? res.id : '';
+	return { trx_id: id };
 }
 
 export interface DiagnoseCtx {
@@ -301,6 +389,7 @@ export function classifyChainError(message: string): ChainErrorKind {
 
 	// Transport.
 	if (
+		m.includes("node's own indexer") ||
 		m.includes('all blurt rpc endpoints') ||
 		m.includes('econnrefused') ||
 		m.includes('enotfound') ||
@@ -458,6 +547,22 @@ export function printChainErrorHelp(
 			break;
 
 		case 'rpc_unreachable':
+			// v1.18.0 deep-deep, H1: on a hidden-only node the broadcast goes through
+			// this node's own indexer over Tor/I2P, so "curl a clearnet RPC" is the
+			// wrong advice: following it would be the very leak the node avoids.
+			if (isHiddenOnlyNode()) {
+				log('Could not complete the broadcast. This node is hidden-only, so it');
+				log('sends chain requests only through its own indexer, over Tor/I2P,');
+				log('and never to a clearnet Blurt node. Nothing is wrong with your');
+				log('account or keys; the hidden route was not available just now.');
+				log('');
+				log('What to do:');
+				log('  - Check the indexer is running:  sudo systemctl status morphit-indexer');
+				log('  - Check its view of the chain:   sudo morphit-ops doctor');
+				log('  - Tor and I2P can take a few minutes to warm up after a restart;');
+				log('    wait a little, then re-run this command.');
+				break;
+			}
 			log('Could not complete the broadcast against any Blurt RPC node.');
 			log('This is a connectivity problem between THIS server and the Blurt');
 			log('network, not a problem with your account or keys.');

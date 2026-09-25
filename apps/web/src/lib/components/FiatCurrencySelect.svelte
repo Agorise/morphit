@@ -94,7 +94,21 @@
 		inputEl?.focus();
 	}
 
+	// FOCUS PREFETCHES, IT DOES NOT OPEN.  Opening here used to blur the whole
+	// page unprompted: the open menu paints a `fixed inset-0 backdrop-blur-sm`
+	// scrim, and Firefox restores focus to the previously-focused element on
+	// every reload — so once this field had been touched in a tab, each later
+	// visit re-fired focus, re-opened the menu and blurred the page before the
+	// user did anything.  Focus is not intent; it also fires on programmatic
+	// .focus() and on tab-through.  Loading the registry here is still right —
+	// it paints nothing, and it means the data is ready by the time a real
+	// gesture opens the menu.  Opening is driven by `openFromGesture` below.
 	function onFocus(): void {
+		void ensureLoaded();
+	}
+
+	/** A real user gesture on the field: press to open. */
+	function openFromGesture(): void {
 		open = true;
 		void ensureLoaded();
 	}
@@ -172,7 +186,19 @@
 {/if}
 
 <div class="relative {open ? 'z-30' : 'z-10'}" bind:this={rootEl}>
+	<!-- svelte-ignore a11y_no_static_element_interactions -- the interactive
+	     control IS the <input role="combobox"> inside this wrapper; the wrapper's
+	     pointerdown only forwards a press on the surrounding chrome (chips row,
+	     padding) to it. Giving the wrapper its own ARIA role would announce a
+	     second control that does not exist. Keyboard users reach the same
+	     behaviour through the input: typing and ArrowDown open, Escape closes. -->
+	<!-- The press anywhere in the field is what opens the menu (see onFocus).
+	     It lives on the wrapper, not the input, so pressing the chips row, the
+	     single-select label or the field's padding all still open it — every
+	     route that previously worked by way of focus.  The input keeps its own
+	     keyboard openers (typing, ArrowDown) and Escape still closes. -->
 	<div
+		onpointerdown={openFromGesture}
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
 		class="flex flex-wrap items-center gap-1 rounded-xl border border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
@@ -187,12 +213,13 @@
 			     the user can type a replacement (picking one REPLACES). -->
 			{#if value.length === 1 && !focused}
 				<!-- A <label for> (not a bare <span>): clicking the visible
-				     currency text focuses the search input, which reopens the
-				     menu so the choice can be changed. As a plain span the
-				     text was a dead zone and the field read as "stuck" once a
-				     value was set (you could only reopen by hitting the thin
-				     grow-input strip to its right). cursor-text signals it's
-				     editable. -->
+				     currency text focuses the search input so the choice can be
+				     changed. As a plain span the text was a dead zone and the
+				     field read as "stuck" once a value was set (you could only
+				     reopen by hitting the thin grow-input strip to its right).
+				     cursor-text signals it's editable. The menu opens from the
+				     wrapper's pointerdown, which this press is inside of, so
+				     the behaviour is unchanged. -->
 				<label
 					for="fiat-currency-search"
 					class="cursor-text px-1 py-0.5 text-sm font-medium text-ink-900 dark:text-ink-50"

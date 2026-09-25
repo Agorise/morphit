@@ -84,6 +84,20 @@ export interface I2pKeyInspection {
 	readonly destinationOnly: boolean;
 	/** True when the input arrived base64-encoded and was decoded first. */
 	readonly wasBase64: boolean;
+	/**
+	 * The key in the form i2pd actually loads — BINARY — or null when the input
+	 * is not a usable key.
+	 *
+	 * THIS IS WHAT MUST BE STORED, not the input. The importer used to validate
+	 * the decoded bytes and then encrypt the original file, so a base64 export
+	 * passed every check ("✓ Valid I2P private key … This key hosts: …") and was
+	 * stored as base64 TEXT. Exported back to i2pd, that text hosts nothing at
+	 * all — verified against i2pd 2.49: the binary key hosts its address, the same
+	 * key as 908 base64 characters hosts no destination and logs no error naming
+	 * the key. Accepting base64 (rather than refusing it, as this file once did)
+	 * is what made that path reachable, so the fix belongs next to the decode.
+	 */
+	readonly keyBytes: Uint8Array | null;
 }
 
 /**
@@ -111,7 +125,8 @@ export function inspectI2pKeyFile(input: Uint8Array): I2pKeyInspection {
 				`${I2P_DESTINATION_MIN_BYTES}. This does not look like one.`,
 			destinationBytes: null,
 			destinationOnly: false,
-			wasBase64
+			wasBase64,
+			keyBytes: null
 		};
 	}
 	// A key file is binary. A file that is entirely printable text is almost
@@ -133,7 +148,8 @@ export function inspectI2pKeyFile(input: Uint8Array): I2pKeyInspection {
 					'binary or a base64 export. This looks like neither.',
 				destinationBytes: null,
 				destinationOnly: false,
-				wasBase64
+				wasBase64,
+				keyBytes: null
 			};
 		}
 	}
@@ -147,7 +163,8 @@ export function inspectI2pKeyFile(input: Uint8Array): I2pKeyInspection {
 				`${buf.length}-byte file. The file looks truncated or is not an I2P key.`,
 			destinationBytes: null,
 			destinationOnly: false,
-			wasBase64
+			wasBase64,
+			keyBytes: null
 		};
 	}
 	const dest = buf.subarray(0, destLen);
@@ -172,6 +189,8 @@ export function inspectI2pKeyFile(input: Uint8Array): I2pKeyInspection {
 				: null,
 		destinationBytes: destLen,
 		destinationOnly: tail < I2P_PRIVATE_TAIL_MIN_BYTES,
-		wasBase64
+		wasBase64,
+		// A bare destination is not a key and must never be stored as one.
+		keyBytes: tail < I2P_PRIVATE_TAIL_MIN_BYTES ? null : buf
 	};
 }

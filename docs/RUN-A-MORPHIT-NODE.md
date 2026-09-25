@@ -28,7 +28,7 @@ That's it. The wizard and the installer handle the fiddly parts.
 
 > **Tor-only nodes (maximum privacy, zero paperwork).** When the wizard asks how people will reach your marketplace, you can choose **Tor-only** instead of a clearnet domain. The node then has **no clearnet reliance**: it's reachable over its auto-generated Tor `.onion` (and, when i2pd is installed, its `.i2p`/`.b32.i2p`), it appears in the federated `/instances` directory by that onion, and it skips the domain, the HTTPS certificate, the home port-forward, and dynamic DNS — so the wizard is a few questions shorter. It advertises the onion as its on-chain origin automatically. You can add a clearnet domain later (see `OPERATIONS.md`).
 >
-> *Notifications on a Tor-only node:* live chat and the in-tab "you have new messages" badge (the number in the browser tab and on the icon) work exactly as they do on a clearnet node — fast and fully anonymous, no setup. The only thing that does not work is browser *push* notifications when the tab is fully closed: those rely on Google/Mozilla push servers your users would never want an anonymous session touching, and browsers block them on `.onion`/`.i2p` anyway. So you lose nothing a privacy-first node would want. (Details: `OPERATIONS.md` §42.)
+> *Notifications on a Tor-only node:* live chat and the in-tab "you have new messages" badge (the number in the browser tab and on the icon) work exactly as they do on a clearnet node — fast and fully anonymous, no setup. The only thing that does not work is browser *push* notifications when the tab is fully closed: those rely on Google/Mozilla push servers your users would never want an anonymous session touching, and browsers block them on `.onion`/`.i2p` anyway. So you lose nothing a privacy-first node would want. (Details: `OPERATIONS.md` §42.) If you raise how long a push may wait (`MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS`), the relay also remembers sent pushes at least that long, so nobody gets the same notification twice.
 
 ---
 
@@ -165,6 +165,10 @@ It reads the account, tag, display name and contact URL the wizard saved, shows 
 
 Once registered, orders posted on your instance carry your tag, and your share of the listing fees flows to you automatically. There's nothing to invoice and nobody to ask.
 
+> **Pick a tag that doesn't look like a reserved name.** From v1.18.0, a new tag is refused if it is `morphit`, `agorise` or one of the project's accounts, or a look-alike such as `m0rphit`. It is also refused if it starts with one of those names followed by `-`, `.` or `_`, such as `morphit-io`. A tag that only contains the name, such as `mymorphit`, is fine. A tag you already registered keeps working.
+>
+> **Someone registered your address before you?** You don't need to do anything. Register your address as usual. Your node's own `/v1/instance` names your relay account, and the other nodes give the directory entry to whichever registered account that is. The entry is not shown as a mismatch.
+
 ---
 
 ## 9. Keeping it running
@@ -194,6 +198,8 @@ sudo morphit-ops upgrade
 
 It backs up first, rebuilds and redeploys the site, restarts everything, and rolls back if anything fails. (Fully-offline upgrades from a signed tarball are supported too — see `OPERATIONS.md`.)
 
+**What the upgrade will not do (v1.18.0).** It never installs an older version than the one you run (add `--allow-downgrade` if you really mean to). It stops if a release's signature is there but doesn't check out, or if the downloaded file is a different version than promised. On a Tor-only box it asks only your own indexer, at the address in your settings, and first checks that the program answering there really is your indexer. If something else is sitting on that port, it stops, changes nothing, and tells you which program it is: start your indexer (`sudo systemctl start morphit-indexer`) and try again. Running the indexer without systemd? Put `MORPHIT_UPGRADE_TRUST_LOCAL_INDEXER=1` in front of the command. If an upgrade rolls back, it now also puts back the settings files it changed outside `/opt/morphit`. Note that the upgrade *to* a new version is run by the version you already have, so these protections start with the upgrade after v1.18.0. Details: `OPERATIONS.md`, "Upgrading".
+
 **Your warrant canary.** A short signed note on your site (`/canary.txt`) that quietly says "I haven't been handed a secret order." If you ever stop refreshing it — gagged, seized, or worse — it goes stale on its own and readers take the hint. Set it up once:
 
 ```sh
@@ -203,6 +209,30 @@ bash scripts/canary/setup.sh
 It offers to make you a signing key and then re-signs the canary weekly on its own. An upgrade clears the served folder, so the canary needs re-laying afterward — if you sign on the **same box**, the upgrade now does that for you; if you sign on a **separate laptop** (recommended for a VPS, so the key never sits on the server), it reminds you to run `bash ~/.morphit/update-canary.sh` once. Full reasoning: `OPERATIONS.md` §36.
 
 **Helping the next node start fast.** Your instance keeps a pinned copy of the federation's indexer snapshot — a small (~600 kB) file that lets a brand-new node be useful in minutes instead of replaying the chain for days. It refreshes itself weekly and after every upgrade, and it serves over your web address, your `.onion` and your `.i2p` alike, so a newcomer running Tor-only can start up without ever touching the clearnet. There is nothing to set up and nothing to watch: it is automatic wherever IPFS hosting is on. You are not vouching for anything by mirroring — the newcomer checks the file against a fingerprint published on the blockchain, so a bad copy is caught by maths, not by trust. Detail: `OPERATIONS.md` §52.
+
+**How a new node knows the snapshot is genuine (v1.18.0).** Two independent blockchain servers must agree on which snapshot is the newest, and it must carry `@morphit`'s signature. One dishonest server cannot pick it for you. The file can only contain data: the restore refuses anything that tries to run commands. If anything goes wrong, your database stays exactly as it was. Nothing personal travels in a snapshot: no push-notification subscriptions, no payout queue, no local moderation. Fast-sync needs a PostgreSQL client from August 2025 or newer. If yours is older, it says so, changes nothing, and asks you to update `postgresql-client`.
+
+**Checking chat speed to another instance.** Chat between instances is meant to arrive in under six seconds, even over Tor or I2P. To see what your own connection to another instance really gives you, run this on your box, pointed at the other instance's `.onion` or `.b32.i2p` address:
+
+```sh
+bash /opt/morphit/ops/fastchat-latency-probe.sh http://<their-address>.onion
+```
+
+It sends nothing and changes nothing. Give it just the address, with nothing after it. It ends with `PASS`, `MOSTLY WITHIN` or `SLOWER THAN THE TARGET`, plus what to try on your box if it is slow. Ask the other operator to run it back towards you too, because the two directions can differ. It will not use the open internet unless you tell it to. Details: `OPERATIONS.md`, "Measuring real fast-chat latency to a peer".
+
+**If someone floods fast chat.** Your instance only passes on chat messages it can check, and holds back any it cannot check until the blockchain accepts them. One account sending far too much only slows down its own messages. Everyone else stays fast. If someone floods using many different account names, some messages fall back to chain speed for a while. Nothing is lost and nothing fake is shown. There is nothing to set up. `/v1/health` counts these cases (`replayQuota`, `refusedLocally`, `dispatchedAfterChain`, `shed`). Details: `OPERATIONS.md`, "When someone floods fast chat".
+
+**Tor-only box: what the upgrade tells you about the relay.** On a node that uses no clearnet, `morphit-ops upgrade` also moves the relay onto hidden services only, restarts it, and checks. You will see one of: "…hidden services only — checked", "the relay is not running now…", "…is still starting…" (over Tor the relay's first chain read can take a few minutes; the new setting is kept), "…still reports that it uses clearnet RPC…" (another settings file overrides it; the message says where to look) or "…was put back as it was…" (the relay kept crashing, so nothing was changed). The first three need nothing from you. For the last two, the message says what to look at. Details, and what to do if you ever roll back: `OPERATIONS.md`, "Existing nodes are fixed on upgrade".
+
+**Lokinet.** Your node only looks up `.loki` names if you publish a Lokinet address or set `MORPHIT_INDEXER_LOKINET=on`. Without Lokinet running, those lookups would go to your internet provider's DNS. Nothing to do unless you run Lokinet.
+
+**Tor-only box: nothing reaches the normal internet.** On a Tor-only node, `morphit-ops` now gets everything it needs from the chain through your own node, over Tor/I2P. That covers the "new version" note in the menu, the relay balance, and `register` and `payment-method`. Before, opening the menu or registering contacted public servers from your home connection. Registering over Tor can take a minute; a spinner shows while it works. Your IPFS node also stays off the public IPFS network. It still hands the release to other hidden nodes over your `.onion`, which is all they need to upgrade from you. The job that finishes an offline install checks for a connection over Tor/I2P only. Existing nodes get the IPFS part on their next `morphit-ops upgrade`, which restarts IPFS, checks it came back, and puts the old settings back if it did not. On every node, the IPFS program's usage reporting is now switched off. Nothing to set. Details: `OPERATIONS.md`, "Nothing on a tor-only node talks to clearnet".
+
+**Matrix alerts on a Tor-only box.** The alert bot talks to its Matrix server over the normal internet (by default matrix.org). So if you switch alerts on, your node stops claiming "zero clearnet". That is now reported honestly; before, the claim stayed on anyway. If the claim matters more to you than the alerts, run `morphit-ops matrix clear`. Details: `OPERATIONS.md`, "Transport hardening in the final v1.18.0 review".
+
+**Reading the chain only from your own blurtd.** If you empty both RPC lists and read only from a blurtd on the same box, the indexer now treats your node as hidden-only: it contacts no internet host except through Tor or I2P, and its log says `local_chain_only` at start-up. (Your blurtd itself still talks to other Blurt nodes as usual.) Nothing to do.
+
+**Sign-up limits count real visitors (v1.18.0).** Your relay only allows a few new accounts per visitor per day, because each one costs you BLURT. Before v1.18.0 a visitor could get round that by typing a made-up address into one request header, so one person could look like thousands. Now the relay only believes addresses that your own web server or BunkerWeb wrote, never ones the visitor sent. For BunkerWeb boxes, `morphit-ops upgrade` also switches off one BunkerWeb setting (`USE_REAL_IP`) that believed that header from anyone, and checks that BunkerWeb really picked up the change. You don't need to do anything. If you put a CDN in front of BunkerWeb on purpose, keep `USE_REAL_IP=yes` and list only that CDN's addresses in `REAL_IP_FROM`. The upgrade leaves that alone. Everyone who comes in over Tor or I2P still shares one allowance, as before. Details: `OPERATIONS.md`, "Relay client IP (v1.18.0)".
 
 **If an honest user gets flagged.** Morphit auto-flags accounts that review each other to inflate ratings, and honest people can occasionally trip it. To undo: `sudo morphit-ops` → **Moderation** → **Clear a flag**, name the accounts — instant, reversible, and instance-local. Details in `OPERATIONS.md`.
 
@@ -259,6 +289,8 @@ sudo systemctl start morphit-backup.service
 ```
 
 — then copy the newest `.sql.gz` off the server. Reinstall like a fresh node, restore the dump, and the chain index rebuilds itself. For a canonical instance, rehearse on a throwaway box first. Full procedure: `OPERATIONS.md` and `docs/SWITCHING-NETWORKS.md`.
+
+**Exporting a Tor/I2P key to a file.** `morphit-ops export-altnet-key --out=PATH` only ever creates a new file. If something is already at `PATH`, it writes nothing and tells you; delete the old file first. (That stops another user on the box from setting up the file in advance to read your key.)
 
 ## 13. Lock your domain against email spoofing (2 DNS records)
 

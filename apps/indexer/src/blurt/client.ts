@@ -36,10 +36,12 @@
  */
 
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
+import { guardDblurtClient, guardedRpcFetch } from '@morphit/hidden-transport/rpc-fetch';
 import { Client } from '@beblurt/dblurt';
 import { morphitUserAgent } from './userAgent';
 import { INDEXER_VERSION } from '$api/health';
 import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
+import { rpcEndpointOperator } from '@morphit/operator-config';
 import {
 	blockConsistencyKey,
 	interpretChainConsistency,
@@ -237,7 +239,12 @@ function clientFor(url: string): Client {
 		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
 		const timeoutMs =
 			hiddenNet === null ? 10_000 : Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
-		c = new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(INDEXER_VERSION) });
+		// (v1.18.0 deep-deep, M2) Guarded: dblurt followed redirects and read
+		// replies whole, so a directory-listed node could bounce our POST to our
+		// own loopback or stream memory into us. See rpcFetch.ts.
+		c = guardDblurtClient(
+			new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(INDEXER_VERSION) })
+		);
 		clientCache.set(url, c);
 	}
 	return c;
@@ -266,6 +273,13 @@ export interface RpcCallOptions {
 export function resolveHedge(options: RpcCallOptions): boolean {
 	return options.hedge ?? options.userFacing === true;
 }
+
+/** How many operators a quorum read asks at once (v1.18.0 deep-deep, rv2-9).
+ *  Enough for two to agree with one to spare; the pool asks the next operator
+ *  when one fails or disagrees, so the cap costs no answers. Before this, every
+ *  quorum batch went to EVERY endpoint — nine requests for 251 accounts on a
+ *  three-node pool, and on the default list twenty. */
+export const QUORUM_MAX_OPERATORS = 3;
 
 export class BlurtClient {
 	private readonly pool: EndpointPool;
@@ -310,7 +324,12 @@ export class BlurtClient {
 			// available. Hand-pruning a node that blipped is precisely the manual
 			// work this pool exists to remove, so the knowledge is shared instead.
 			// Fail-open: an unwritable or stale file changes nothing.
-			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json'
+			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json',
+			// v1.18.0 deep-deep (rv2-2): a quorum counts OPERATORS, not URLs.
+			// Every default hidden node is listed at two addresses; counted per
+			// URL, one operator answering on both met a two-endpoint quorum
+			// alone.
+			operatorOf: (url) => rpcEndpointOperator(url)
 		});
 	}
 
@@ -323,8 +342,51 @@ export class BlurtClient {
 	/** Add RPC endpoints to the pool at runtime (idempotent). Used by the
 	 *  on-chain RPC-directory consumer to self-populate hidden nodes published by
 	 *  @morphit without a restart. Returns the newly-added URLs. */
-	mergeRpcEndpoints(urls: readonly string[]): string[] {
-		return this.pool.mergeEndpoints(urls);
+	mergeRpcEndpoints(urls: readonly string[], operators?: Readonly<Record<string, string>>): string[] {
+		// rv2-2: `operators` (url → node name, from the directory) makes a
+		// node's .onion and .b32.i2p count as the one operator they are.
+		const named: Record<string, string> | undefined =
+			operators === undefined
+				? undefined
+				: Object.fromEntries(Object.keys(operators).map((u) => [u, rpcEndpointOperator(u, operators)]));
+		return this.pool.mergeEndpoints(urls, named);
+	}
+
+	/** Distinct operators this node could ask right now (rv2-9). */
+	reachableOperatorCount(): number {
+		return this.pool.reachableOperatorCount();
+	}
+
+	/**
+	 * One condenser read that `minAgree` independent OPERATORS must agree on
+	 * (v1.18.0 deep-deep, rv2-1). `keyOf` reduces an answer to what must
+	 * match; returning null means "this answer does not count" (malformed, or
+	 * the node does not have it yet). Resolves to the agreed answer, or null
+	 * when no `minAgree` operators agreed. Background priority.
+	 */
+	async condenserAgreed<T>(
+		method: string,
+		params: readonly unknown[],
+		keyOf: (answer: T) => string | null,
+		minAgree: number
+	): Promise<{ readonly value: T; readonly key: string } | null> {
+		const result = await this.pool.quorumCall<{ value: T; key: string }>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const value = (await withSignal((client as any).call('condenser_api', method, params), signal)) as T;
+				let key: string | null;
+				try {
+					key = keyOf(value);
+				} catch {
+					key = null;
+				}
+				return key === null ? null : { value, key };
+			},
+			{ equivalenceKey: (a) => a.key, minAgree: Math.max(1, minAgree), maxOperators: QUORUM_MAX_OPERATORS }
+		);
+		if (result.kind !== 'quorum_met' || result.agreedKey === undefined) return null;
+		return result.responses.find((a) => a.key === result.agreedKey) ?? null;
 	}
 
 	/** Number of configured RPC endpoints — the catch-up backfill uses this to
@@ -418,7 +480,10 @@ export class BlurtClient {
 
 				let res: Response;
 				try {
-					res = await fetch(url, {
+					// (v1.18.0 deep-deep, M2) redirects refused, reply capped — the
+					// same guard as dblurt's calls; a refusal lands in the catch
+					// below as a transport failure, so the pool rotates.
+					res = await guardedRpcFetch()(url, {
 						method: 'POST',
 						// v1.7.7 — name ourselves explicitly rather than lean on the
 						// global wrapper in `blurt/userAgent.ts`. The wrapper exists to
@@ -558,6 +623,7 @@ export class BlurtClient {
 			{
 				equivalenceKey: blockConsistencyKey,
 				minAgree,
+				maxOperators: Math.max(QUORUM_MAX_OPERATORS, minAgree),
 				...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {})
 			}
 		);
@@ -611,6 +677,63 @@ export class BlurtClient {
 			},
 			{ hedge: userFacing }
 		);
+	}
+
+	/**
+	 * Batch account fetch that TWO independent endpoints must agree on
+	 * (v1.18.0 review, D1). Background priority.
+	 *
+	 * For an answer that is WRITTEN DOWN and trusted afterwards. `getAccounts`
+	 * asks one endpoint, which is right for a read used once and wrong for the
+	 * posting-key reconcile: its answer becomes a confirmed key the fast path
+	 * verifies against with no further check, so a node that is stuck behind —
+	 * or hostile, since the pool includes community and on-chain-directory
+	 * nodes — could confirm exactly the leaked key the reconcile exists to shut
+	 * out, permanently.
+	 *
+	 * `agreeOn` reduces one endpoint's answer to what must match — here, each
+	 * requested account's signing key, with a missing account counted as its
+	 * own value so a node that does not know an account yet disagrees rather
+	 * than abstains. Returns null when no two endpoints agreed: the caller then
+	 * learns nothing and must try again later. A pool of ONE endpoint is its own
+	 * quorum — an operator who configured a single node already trusts it with
+	 * everything else.
+	 */
+	async getAccountsAgreed(
+		names: readonly string[],
+		agreeOn: (account: ChainAccount | undefined) => string
+	): Promise<ReadonlyMap<string, ChainAccount> | null> {
+		if (names.length === 0) return new Map();
+		const unique = Array.from(new Set(names)).sort();
+		// rv2-2 / rv2-9: two distinct OPERATORS, not two URLs, and counted over
+		// the operators that can answer at all — a pool with one working node
+		// and unreachable hidden defaults used to wait for a second answer that
+		// could never come. An operator is only left out while every one of its
+		// endpoints is failing; it counts again the moment it answers.
+		const minAgree = Math.min(2, Math.max(1, this.pool.reachableOperatorCount()));
+		const result = await this.pool.quorumCall<Map<string, ChainAccount>>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const list = (await withSignal(client.condenser.getAccounts(unique), signal)) as
+					| readonly ChainAccount[]
+					| null
+					| undefined;
+				if (!Array.isArray(list)) return null;
+				const map = new Map<string, ChainAccount>();
+				for (const acc of list) if (acc && typeof acc.name === 'string') map.set(acc.name, acc);
+				return map;
+			},
+			{
+				equivalenceKey: (map) => JSON.stringify(unique.map((n) => [n, agreeOn(map.get(n))])),
+				minAgree,
+				maxOperators: QUORUM_MAX_OPERATORS
+			}
+		);
+		if (result.kind !== 'quorum_met' || result.agreedKey === undefined) return null;
+		const agreed = result.responses.find(
+			(map) => JSON.stringify(unique.map((n) => [n, agreeOn(map.get(n))])) === result.agreedKey
+		);
+		return agreed ?? null;
 	}
 
 	/** Generic condenser-API escape hatch.  Background by default;

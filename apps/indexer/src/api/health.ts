@@ -28,6 +28,9 @@ import type { PeerSampleCycleResult } from '$indexer/price/peerPriceMonitor';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
 import type { HeadTailer } from '$indexer/headTailer';
+import { fastEmitLedgerSize } from '$indexer/fastEmitLedger';
+import { recentOutboundChatSize } from '$indexer/recentOutboundChat';
+import { fastNotifyBudgetSize } from '$indexer/fastNotifyBudget';
 
 // Keep in sync with the root package.json `version`.  The
 // version-consistency-smoke (Part 122 cp20) fails the build if
@@ -40,7 +43,7 @@ import type { HeadTailer } from '$indexer/headTailer';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.17.15';
+export const INDEXER_VERSION = '1.18.0';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -83,8 +86,7 @@ export function computeSyncEstimate(args: {
 	const blocksPerSec = args.uptimeSec > 0 ? blocksProcessed / args.uptimeSec : 0;
 	const netBlocksPerSec = blocksPerSec - 1 / args.blockSeconds;
 	const behind = args.stale && args.lagBlocks > 0;
-	const canEstimate =
-		behind && args.uptimeSec >= 60 && blocksProcessed > 0 && netBlocksPerSec > 0;
+	const canEstimate = behind && args.uptimeSec >= 60 && blocksProcessed > 0 && netBlocksPerSec > 0;
 	const etaSeconds = canEstimate ? Math.round(args.lagBlocks / netBlocksPerSec) : null;
 	const etaUtc = etaSeconds != null ? new Date(nowMs + etaSeconds * 1000).toISOString() : null;
 	const span = args.chainHeadBlock - args.startBlock;
@@ -129,7 +131,31 @@ export function healthRoute(
 	// same X-Morphit-Local-Health gate) so the morphit-ops node-health
 	// view can show admins whether fast chat is on. Defaulted so a caller
 	// that doesn't wire it reports the fast path as absent, never a crash.
-	headTailer: HeadTailer | null = null
+	headTailer: HeadTailer | null = null,
+	// v1.18.0 — the federation fast path's SENDER side. Reported next to the
+	// tailer because between them they are the two producers of fast chat
+	// events, and an operator debugging "my users say chat is slow" needs to
+	// know which of the two is not working. On a zero-clearnet instance this is
+	// the only place that answers it: there is no other way to see whether
+	// hidden-peer routes are warm and pushes are landing. Same counters-only
+	// sensitivity as the tailer — no accounts, no message content.
+	chatFastDispatcher: {
+		status(): Record<string, number>;
+		diagnostics(): {
+			networksDown: readonly string[];
+			networksSuspected: Readonly<Record<string, number>>;
+			recentFailures: readonly { origin: string; reason: string; localFault?: boolean }[];
+			/** What each local daemon said when asked directly (F33): the reason a
+			 *  network can be in `networksDown` with no failed message behind it. */
+			localTransports?: { tor: boolean | null; i2p: boolean | null; loki: boolean | null } | null;
+		};
+	} | null = null,
+	// v1.18.0 — the federation fast path's RECEIVING side. Reported beside the
+	// sender so an operator sees both halves: whether we are pushing to peers,
+	// and whether we are keeping up with what peers push to us. `shed` is the
+	// one to watch — it is the difference between fast chat working and fast
+	// chat having quietly given up, with everyone back on chain timing.
+	chatFastIntake: { stats(): Record<string, number> } | null = null
 ): Hono {
 	const app = new Hono();
 	const bootTime = Date.now();
@@ -219,7 +245,9 @@ export function healthRoute(
 		const op = getOperationalSnapshot(config.relayHealthUrl);
 		body.ipfs_seeding = op.ipfs_seeding;
 		body.system = op.system;
-		body.relay = op.relay;
+		// `up` only: the relay's hidden_only is the gate's business, not a public
+		// field (see operationalHealth).
+		body.relay = { up: op.relay.up };
 
 		// Compact price-feed state on the PUBLIC (non-verbose) body so
 		// `morphit-ops health` can show whether the BLURT/USD feed is on
@@ -275,7 +303,35 @@ export function healthRoute(
 			// data. null when the tailer wasn't wired.
 			// v1.7.0 — key renamed `chat_fastpath` → `fastpath` with the tailer
 			// it reports: it covers more than chat now (ADR-0051).
-			body.fastpath = headTailer ? headTailer.getStatus() : null;
+			body.fastpath = headTailer
+				? {
+						...headTailer.getStatus(),
+						federation: chatFastDispatcher?.status() ?? null,
+						// WHY, not just how many. A push that never left this machine
+						// because our own Tor/i2pd/lokinet is down is a completely
+						// different problem from a peer refusing it, and an operator
+						// reading a failure count cannot tell them apart — which is
+						// the exact wrong guess to send them off on, because one is
+						// fixed by starting a daemon and the other is not theirs to
+						// fix at all. `networksDown` naming a network is the single
+						// most useful line in this block when chat is slow.
+						federationDiagnostics: chatFastDispatcher?.diagnostics() ?? null,
+						federationIntake: chatFastIntake?.stats() ?? null,
+						// The three in-memory tables the fast path keeps. Each is
+						// bounded by count and by age, and each fails in a direction
+						// worth knowing about when it is full: the ledger stops
+						// suppressing duplicates, the relay log stops letting replies
+						// notify, and the notify budget hands back allowances. An
+						// operator cannot see any of that from a delivery counter, and
+						// a bound nobody can observe approaching is a bound nobody
+						// finds out about until it is crossed.
+						tables: {
+							fastEmitLedger: fastEmitLedgerSize(),
+							outboundRelayLog: recentOutboundChatSize(),
+							notifyBudgetPairs: fastNotifyBudgetSize()
+						}
+					}
+				: null;
 		}
 
 		// Audit 2026-05 finding NEW-9-8: verbose mode now requires
@@ -314,11 +370,7 @@ export function healthRoute(
 				// consecutive failures, `half_open` during the brief
 				// window between cooldown expiry and the next attempt.
 				const state =
-					cooldownRemaining > 0
-						? 'open'
-						: s.consecutiveFailures > 0
-							? 'half_open'
-							: 'closed';
+					cooldownRemaining > 0 ? 'open' : s.consecutiveFailures > 0 ? 'half_open' : 'closed';
 				explorers.push({
 					url: s.url,
 					state,
@@ -355,8 +407,7 @@ export function healthRoute(
 							// market price, and whether a sustained-divergence
 							// alert has fired.  null when C isn't wired for BLURT
 							// (native pricing disabled) or no cycle has run yet.
-							const disagree =
-								disagreementMonitors.get('BLURT')?.lastCheck() ?? null;
+							const disagree = disagreementMonitors.get('BLURT')?.lastCheck() ?? null;
 							const peerResult = peerMonitorResults.get('BLURT') ?? null;
 							return {
 								enabled: true,
@@ -445,11 +496,7 @@ export function healthRoute(
 			const rpc_endpoints = rpcSnap.map((s) => {
 				const cooldownRemaining = Math.max(0, s.cooldownUntil - now);
 				const state =
-					cooldownRemaining > 0
-						? 'open'
-						: s.consecutiveFailures > 0
-							? 'half_open'
-							: 'closed';
+					cooldownRemaining > 0 ? 'open' : s.consecutiveFailures > 0 ? 'half_open' : 'closed';
 				return {
 					url: s.url,
 					state,

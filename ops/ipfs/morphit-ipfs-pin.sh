@@ -16,7 +16,7 @@
 #
 # Config (env, e.g. from /etc/morphit/ipfs-pin.env):
 #   MORPHIT_RELEASE_URL   full URL to /v1/release (default: local indexer).
-#   MORPHIT_INDEXER_PORT  port for the default local URL (default 8088).
+#   MORPHIT_INDEXER_PORT  port for the default local URL (default 8081).
 #   IPFS_PATH             Kubo repo dir (default /var/lib/ipfs/.ipfs).
 #   MORPHIT_IPFS_PIN_TIMEOUT  seconds for the pin fetch (default 900).
 
@@ -30,16 +30,37 @@ log() { echo "morphit-ipfs-pin: $*" >&2; }
 # Root-written (0640) trusted config; simple KEY=value lines, safe under `set -u`.
 [ -r /etc/morphit/ipfs-pin.env ] && . /etc/morphit/ipfs-pin.env
 
-RELEASE_URL="${MORPHIT_RELEASE_URL:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8088}/v1/release}"
+RELEASE_URL="${MORPHIT_RELEASE_URL:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8081}/v1/release}"
 PIN_TIMEOUT="${MORPHIT_IPFS_PIN_TIMEOUT:-900}"
 export IPFS_PATH="${IPFS_PATH:-/var/lib/ipfs/.ipfs}"
+
+# THE CONFIGURED URL FIRST, THEN THE STANDARD LOCAL ONES (v1.18.0 review).
+# The default used to name port 8088, which no Morphit indexer listens on (the
+# indexer's own default is 8081), and `morphit-ipfs-setup.sh` wrote that into
+# /etc/morphit/ipfs-pin.env — so on a hand-installed box this could fail every
+# run, quietly, exiting 0 with "will retry". The indexer's standard addresses
+# are tried after the configured one, and a fallback that works is logged so
+# the setting can be corrected.
+fetch_release() {
+	# shellcheck disable=SC2086 # the candidate list is word-split on purpose
+	for u in "$RELEASE_URL" ${MORPHIT_RELEASE_URL_FALLBACKS:-http://127.0.0.1:8081/v1/release \
+		http://172.18.0.1:8081/v1/release http://172.17.0.1:8081/v1/release}; do
+		out="$(curl -fsS --max-time 20 "$u" 2>/dev/null)" || continue
+		if [ "$u" != "$RELEASE_URL" ]; then
+			log "$RELEASE_URL did not answer; used $u instead (set MORPHIT_RELEASE_URL=$u in /etc/morphit/ipfs-pin.env)."
+		fi
+		printf '%s' "$out"
+		return 0
+	done
+	return 1
+}
 
 command -v ipfs >/dev/null 2>&1 || { log "ipfs (Kubo) not installed — skipping."; exit 0; }
 command -v curl >/dev/null 2>&1 || { log "curl not installed — skipping."; exit 0; }
 
 # 1. Ask our own indexer for the latest verified release + its distribution block.
-RESP="$(curl -fsS --max-time 20 "$RELEASE_URL" 2>/dev/null)" || {
-	log "could not reach $RELEASE_URL (indexer not up yet?) — will retry next run."
+RESP="$(fetch_release)" || {
+	log "could not reach $RELEASE_URL or the indexer's standard local addresses (indexer not up yet?) — will retry next run."
 	exit 0
 }
 

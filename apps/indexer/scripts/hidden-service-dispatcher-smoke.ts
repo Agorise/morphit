@@ -6,13 +6,19 @@
  *   1. The routing DECISION (`hiddenRouteOf`) sends ONLY .onion→tor and
  *      .i2p→i2p; everything else (clearnet, .loki, junk) → direct.
  *   2. The DELEGATION never proxies clearnet: a clearnet origin always goes to
- *      the direct sub-dispatcher, and a hidden origin with no proxy configured
- *      falls back to direct (fail-safe, doesn't crash).
+ *      the direct sub-dispatcher.
+ *   3. A hidden name is NEVER handed to the direct agent (v1.18.0 review, S11,
+ *      S3). This smoke used to assert the opposite — "a hidden origin with no
+ *      proxy configured falls back to direct (fail-safe)" — on the reasoning
+ *      that the name would only fail to resolve. The resolution attempt is the
+ *      leak: the `.onion` / `.i2p` / `.loki` name goes to the system resolver,
+ *      which is the ISP's. Refused with the "not configured" marker instead.
  */
 import {
 	hiddenRouteOf,
 	HiddenServiceRoutingDispatcher
 } from '../src/indexer/hiddenServiceDispatcher.ts';
+import { isProxyUnavailable } from '@morphit/hidden-transport';
 import type { Dispatcher } from 'undici';
 
 let pass = 0;
@@ -59,6 +65,16 @@ function spy(tag: string, sink: string[]): Dispatcher {
 
 const noopHandler = {} as unknown as Dispatcher.DispatchHandler;
 
+/** A handler that records the error a refused request is failed with. */
+function recordingHandler(errors: Error[]): Dispatcher.DispatchHandler {
+	return {
+		onConnect: () => undefined,
+		onError: (e: Error) => {
+			errors.push(e);
+		}
+	} as unknown as Dispatcher.DispatchHandler;
+}
+
 {
 	const hits: string[] = [];
 	const router = new HiddenServiceRoutingDispatcher({
@@ -77,13 +93,47 @@ const noopHandler = {} as unknown as Dispatcher.DispatchHandler;
 }
 
 {
-	// Proxies NOT configured → hidden falls back to direct (fail-safe, no crash).
+	// Proxies NOT configured → REFUSED, never handed to the direct agent (S11).
 	const hits: string[] = [];
+	const errors: Error[] = [];
 	const router = new HiddenServiceRoutingDispatcher({ direct: spy('direct', hits) });
-	router.dispatch({ origin: `http://${ONION}.onion:8091`, path: '/', method: 'POST' }, noopHandler);
-	router.dispatch({ origin: `http://${B32}.b32.i2p:8091`, path: '/', method: 'POST' }, noopHandler);
-	check('no-proxy: hidden origins fall back to direct (fail-safe)', hits.length === 2 && hits.every((h) => h.startsWith('direct:')));
+	router.dispatch({ origin: `http://${ONION}.onion:8091`, path: '/', method: 'POST' }, recordingHandler(errors));
+	router.dispatch({ origin: `http://${B32}.b32.i2p:8091`, path: '/', method: 'POST' }, recordingHandler(errors));
+	check('no-proxy: a hidden origin never reaches the direct agent (no resolver query)', hits.length === 0);
+	check(
+		'no-proxy: it is refused as OUR transport being unavailable, not as the peer',
+		errors.length === 2 && errors.every((e) => isProxyUnavailable(e))
+	);
 	void router.closeAll();
+}
+
+{
+	// A name that LOOKS hidden but is not a valid address never reaches the
+	// resolver either.
+	const hits: string[] = [];
+	const errors: Error[] = [];
+	const router = new HiddenServiceRoutingDispatcher({
+		direct: spy('direct', hits),
+		tor: spy('tor', hits)
+	});
+	router.dispatch({ origin: 'http://abc.onion', path: '/', method: 'GET' }, recordingHandler(errors));
+	check('a short fake .onion is refused, not resolved', hits.length === 0 && errors.length === 1);
+	void router.closeAll();
+}
+
+{
+	// Lokinet: only where it runs (S3).
+	const off: string[] = [];
+	const offErr: Error[] = [];
+	const routerOff = new HiddenServiceRoutingDispatcher({ direct: spy('direct', off) }, 'allow', false);
+	routerOff.dispatch({ origin: 'http://peer.loki', path: '/', method: 'GET' }, recordingHandler(offErr));
+	check('.loki on a node without lokinet is refused, not resolved', off.length === 0 && offErr.length === 1);
+	const on: string[] = [];
+	const routerOn = new HiddenServiceRoutingDispatcher({ direct: spy('direct', on) }, 'allow', true);
+	routerOn.dispatch({ origin: 'http://peer.loki', path: '/', method: 'GET' }, noopHandler);
+	check('.loki on a node that runs lokinet goes direct, to its tun', on.length === 1);
+	void routerOff.closeAll();
+	void routerOn.closeAll();
 }
 
 console.log(

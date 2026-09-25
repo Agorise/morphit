@@ -67,8 +67,11 @@ import type { Database } from '$db/pool';
 import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { chatEventBus } from '$indexer/chatEventBus';
+import { fastChatNotifyAllowed } from '$indexer/fastNotifyGate';
+import { reviewCitesFeePaidOrder } from '$indexer/reviewCitation';
+import { wasFastEmitted } from '$indexer/fastEmitLedger';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
-import { checkChatOrder, recipientHasReplied, hasVerifiedChat } from '$indexer/chatGates';
+import { hasVerifiedChat } from '$indexer/chatGates';
 import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
 import { logger } from '$log';
@@ -87,7 +90,7 @@ function tailerDbg(event: string, data: Record<string, unknown>): void {
  *  (not imported from the dispatcher) so this file has no dependency
  *  on the full handler-dispatch graph; the parity smoke asserts it
  *  matches OP_IDS.chatMessage. */
-const CHAT_OP_ID = 'morphit_chat_v1';
+export const CHAT_OP_ID = 'morphit_chat_v1';
 
 /** v1.5.5 fastfeedback — the review op the tailer also watches. Same
  *  hardcoded-id reasoning as CHAT_OP_ID above (fast path, no cross-package
@@ -111,8 +114,14 @@ const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=
 /** Upper bound on how many head blocks we scan in a single tick. If the
  *  tailer fell far behind (paused, slow RPC), we skip ahead rather than
  *  emit a huge burst — the skipped blocks' messages still arrive via the
- *  durable path. Keeps fast-path RPC + emit work bounded. */
-const MAX_CATCHUP_BLOCKS = 120;
+ *  durable path. Keeps fast-path RPC + emit work bounded.
+ *
+ *  Exported because it is also the honest bound on how OLD a block this tailer
+ *  may still scan, which is what the fast-emit ledger's TTL has to outlast — a
+ *  ledger that forgets sooner re-emits everything a catching-up tailer sees.
+ *  fastEmitLedger.ts restates it (importing it there would be a cycle) and
+ *  fast-emit-ledger-smoke.ts asserts the two still agree. */
+export const MAX_CATCHUP_BLOCKS = 120;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -267,8 +276,14 @@ function locateFeedbackOp(op: ChainOperation): LocatedFeedbackOp | null {
 	return { reviewer, subject, rating, orderPermlink };
 }
 
-/** A chat op located in a head block, narrowed to what we emit. */
-interface LocatedChatOp {
+/** A chat op located in a head block, narrowed to what we emit.
+ *
+ *  EXPORTED because the federation fast path (chatFastFederation.ts) delivers
+ *  the very same op shape, and must parse it with the very same parser. Two
+ *  parsers for one wire format is how the two quietly stop agreeing about what
+ *  a valid message is — and the fast path's whole safety argument rests on it
+ *  admitting a strict SUBSET of what the durable handler will accept. */
+export interface LocatedChatOp {
 	readonly signer: string;
 	readonly recipient: string;
 	readonly ciphertext: string;
@@ -292,7 +307,7 @@ interface LocatedChatOp {
  * persist. It is deliberately NOT a superset: anything the handler would
  * reject on shape, we also reject here.
  */
-function locateChatOp(op: ChainOperation): LocatedChatOp | null {
+export function locateChatOp(op: ChainOperation): LocatedChatOp | null {
 	const [opName, opBody] = op;
 	if (opName !== 'custom_json') return null;
 	const body = opBody as Partial<CustomJsonOp> | undefined;
@@ -562,7 +577,36 @@ export class HeadTailer {
 				// independent evaluations of "is this sender established?" is
 				// exactly the drift chatGates.ts exists to prevent.
 				const trxId = block.transaction_ids[ti];
+
+				// Already delivered on the fast path — by our own broadcast relay
+				// (both parties on this instance) or by a peer's push — so emitting
+				// it again would be a second copy of a message the recipient has
+				// had for seconds. The client collapses duplicates by client_tag, so
+				// this was never visible; it was simply wasted work and doubled SSE
+				// traffic on the transport where bytes are dearest.
+				//
+				// The ledger records only messages that were genuinely EMITTED, so a
+				// fast attempt that was dropped or could not evaluate its gate does
+				// not suppress this one. See fastEmitLedger.ts.
+				if (trxId !== undefined && wasFastEmitted(trxId)) {
+					tailerDbg('tailer.SKIP_ALREADY_FAST', { trxId });
+					continue;
+				}
+
 				const fastAllowed = await this.fastNotifyAllowed(located, createdAt);
+
+				// ASKED AGAIN, on purpose. The gate above is one or two database
+				// reads, and this loop yields at them — which is long enough for a
+				// peer's push of this very transaction to arrive, verify, emit and
+				// record itself in the window between the first check and here.
+				// Re-reading immediately before the emit closes that window; the
+				// earlier check stays because it saves the gate queries entirely in
+				// the common case, which is that the fast path got there first.
+				if (trxId !== undefined && wasFastEmitted(trxId)) {
+					tailerDbg('tailer.SKIP_ALREADY_FAST_LATE', { trxId });
+					continue;
+				}
+
 				tailerDbg('tailer.EMIT', {
 					sender: located.signer,
 					recipient: located.recipient,
@@ -611,26 +655,13 @@ export class HeadTailer {
 	 *  path still delivers, just at its own pace). */
 	private async fastNotifyAllowed(located: LocatedChatOp, createdAt: Date): Promise<boolean> {
 		try {
-			let orderResponseBypass = false;
-			if (located.orderPermlink !== null) {
-				const oc = await checkChatOrder(this.db, {
-					permlink: located.orderPermlink,
-					recipient: located.recipient,
-					signer: located.signer,
-					blockTime: createdAt
-				});
-				// A tag naming no real owned order → the durable REJECTS the
-				// message (order_permlink_not_found). Never fast-path it.
-				if (!oc.found) return false;
-				orderResponseBypass = oc.ownedByRecipient && oc.live;
-			}
-			const recipientReplied = await recipientHasReplied(this.db, {
-				recipient: located.recipient,
-				sender: located.signer
-			});
-			// A genuine two-way conversation (the recipient has replied) OR a
-			// response to the recipient's own live order = safe.
-			return recipientReplied || orderResponseBypass;
+			// ONE gate, shared with the federation intake (v1.18.0 deep-deep,
+			// rv1-2). The two used to be copies, and both let the "recent
+			// outbound" shortcut answer before the order tag was validated — so
+			// a tag the durable handler rejects outright could still notify and
+			// be replayed. See fastNotifyGate.ts. Block time is the admission
+			// clock here, exactly as the durable handler uses it.
+			return await fastChatNotifyAllowed(this.db, located, createdAt);
 		} catch (err) {
 			log.warn('fast_gate_failed', {
 				recipient: located.recipient,
@@ -721,16 +752,17 @@ export class HeadTailer {
 	private async fastFeedbackAllowed(fb: LocatedFeedbackOp, createdAt: Date): Promise<boolean> {
 		// 1. Fee-verified order citation owned by one of the two parties. Same
 		//    shape as the durable handler's citation gate.
-		const ord = await this.db.query<{ ok: boolean }>(
-			`SELECT EXISTS (
-			   SELECT 1 FROM orders
-			    WHERE permlink = $1
-			      AND account IN ($2, $3)
-			      AND fee_status IN ('verified', 'verified_by_attestation')
-			 ) AS ok`,
-			[fb.orderPermlink, fb.subject, fb.reviewer]
-		);
-		if (ord.rows[0]?.ok !== true) return false;
+		//    (v1.18.0 deep-deep, rv6-L1) THE durable handler's predicate, not a
+		//    copy of it: the copy here also accepted 'verified_by_attestation',
+		//    so a review the durable path rejects still notified — and, never
+		//    indexed, it could be re-sent without the duplicate check below
+		//    ever stopping it.
+		const cited = await reviewCitesFeePaidOrder(this.db, {
+			permlink: fb.orderPermlink,
+			subject: fb.subject,
+			reviewer: fb.reviewer
+		});
+		if (!cited) return false;
 
 		// 3. Duplicate — a re-broadcast the durable path rejects must not
 		//    re-notify. (Checked before the heavier conformance query.)

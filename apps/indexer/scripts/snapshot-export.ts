@@ -38,6 +38,7 @@ import { loadConfig } from '../src/config/index.ts';
 import { createDatabase } from '../src/db/pool.ts';
 import { buildManifest, MANIFEST_FILENAME, DUMP_FILENAME } from '../src/db/snapshotManifest.ts';
 import { INDEXER_VERSION } from '../src/api/health.ts';
+import { exportExclusionArgs } from '../src/db/snapshotLocalState.ts';
 
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
@@ -74,12 +75,39 @@ async function main(): Promise<void> {
 		const work = mkdtempSync(join(tmpdir(), 'morphit-snap-'));
 		try {
 			process.stderr.write(`snapshot: pg_dump (--clean --if-exists) → ${DUMP_FILENAME} …\n`);
-			// pg_dump "$url" | gzip > work/indexer.sql.gz  (via a shell for the pipe).
+			// v1.18.0 deep-deep (rv2-5, rv2-8). This dumped the WHOLE database,
+			// and the relay shares it: every push subscription (device endpoint
+			// token, keys, user agent) and the push queue went out on public
+			// IPFS, as did this box's relay payout queue. Only chain-derived rows
+			// leave now (snapshotLocalState.ts lists what stays home), and
+			// `operator_blocks` goes without this operator's own local blocks.
+			// --no-owner --no-privileges: a snapshot must restore under any role
+			// name, not only the one this box happens to use.
+			const obCols = await db.query<{ column_name: string }>(
+				`SELECT column_name FROM information_schema.columns
+				  WHERE table_schema = 'public' AND table_name = 'operator_blocks'
+				  ORDER BY ordinal_position`
+			);
+			// Plain identifiers only — they go into a shell command line below.
+			for (const r of obCols.rows) {
+				if (!/^[a-z_][a-z0-9_]*$/.test(r.column_name)) {
+					throw new Error(`unexpected operator_blocks column name: ${r.column_name}`);
+				}
+			}
+			const cols = obCols.rows.map((r) => r.column_name).join(', ');
+			const hasOrigin = obCols.rows.some((r) => r.column_name === 'origin');
+			const chainRows =
+				obCols.rows.length === 0
+					? ''
+					: `printf '%s\\n' "COPY public.operator_blocks (${cols}) FROM stdin;"; ` +
+						`psql -X -q -v ON_ERROR_STOP=1 "$DBURL" -c "\\copy (SELECT ${cols} FROM public.operator_blocks` +
+						`${hasOrigin ? " WHERE origin <> 'local'" : ''}) TO STDOUT"; printf '%s\\n' '\\.'; `;
 			const dump = spawnSync(
 				'bash',
 				[
 					'-c',
-					`set -o pipefail; pg_dump --clean --if-exists "$DBURL" | gzip -c > "${join(work, DUMP_FILENAME)}"`
+					`set -o pipefail; { pg_dump --clean --if-exists --no-owner --no-privileges ` +
+						`${exportExclusionArgs().join(' ')} "$DBURL"; ${chainRows}} | gzip -c > "${join(work, DUMP_FILENAME)}"`
 				],
 				{ env: { ...process.env, DBURL: config.databaseUrl }, stdio: ['ignore', 'inherit', 'inherit'] }
 			);

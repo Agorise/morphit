@@ -13,10 +13,10 @@
  * branch here: point it at a scratch dir with no reachable RPC and confirm it
  * exits 0 having done nothing irreversible.
  */
-import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync, readdirSync, mkdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 const SCRIPT = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
@@ -140,6 +140,103 @@ if (src.length > 0) {
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
+}
+
+// ── Functional: a HIDDEN-ONLY node never probes clearnet (v1.18.0 deep-deep, H4) ──
+// A tor-only install writes MORPHIT_INDEXER_RPC_ENDPOINTS= (present, EMPTY).  The
+// script used to read that as "unconfigured" and probe six clearnet RPCs from the
+// box's home IP, every five minutes while clearnet stayed firewalled.  Run the
+// REAL script with stub curl / systemctl / logger / apt-get on PATH, record every
+// curl, and assert: only hidden names through the local proxy, or loopback.
+if (src.length > 0) {
+	const ONION = `http://${'a'.repeat(56)}.onion`;
+	const I2P = `http://${'b'.repeat(52)}.b32.i2p`;
+	// Stub curl: logs argv (one JSON array per line).  STUB_CURL_OK is a regex of
+	// argv-joined strings that should succeed; STUB_HEALTH is served for /v1/health.
+	const STUB_CURL = `#!/usr/bin/env node
+const fs = require('fs');
+const argv = process.argv.slice(2);
+fs.appendFileSync(process.env.STUB_LOG_CURL, JSON.stringify(argv) + '\\n');
+const url = argv.find((a) => /^https?:\\/\\//.test(a)) || '';
+if (process.env.STUB_HEALTH && /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\/v1\\/health$/.test(url)) { process.stdout.write(process.env.STUB_HEALTH); process.exit(0); }
+if (process.env.STUB_CURL_OK && new RegExp(process.env.STUB_CURL_OK).test(argv.join(' '))) process.exit(0);
+process.exit(7);
+`;
+	const runFo = (indexerEnv: string, extra: Record<string, string>): { exit: number; out: string; curls: string[][]; systemctl: string } => {
+		const dir = mkdtempSync(join(tmpdir(), 'morphit-fo-hidden-'));
+		try {
+			const bin = join(dir, 'bin');
+			mkdirSync(bin);
+			writeFileSync(join(bin, 'curl'), STUB_CURL);
+			for (const name of ['systemctl', 'logger', 'apt-get', 'certbot', 'docker']) {
+				writeFileSync(join(bin, name), `#!/bin/sh\necho "${name} $*" >> "${join(dir, 'calls.log')}"\nexit 0\n`);
+			}
+			for (const f of readdirSync(bin)) chmodSync(join(bin, f), 0o755);
+			writeFileSync(join(dir, 'calls.log'), '');
+			writeFileSync(join(dir, 'curl.log'), '');
+			writeFileSync(join(dir, 'indexer.env'), indexerEnv);
+			// No domain (tor-only has none), no auto-register, a served canary so
+			// step 4 is a no-op: this run is about the GATE.
+			mkdirSync(join(dir, 'build'));
+			writeFileSync(join(dir, 'build', 'canary.txt'), 'x');
+			writeFileSync(join(dir, 'first-online.env'), `MORPHIT_DOMAIN=\nMORPHIT_AUTO_REGISTER=no\nMORPHIT_OPS_DIR=${dir}\nMORPHIT_CANARY_SERVE_DIR=${join(dir, 'build')}\n`);
+			const r = spawnSync('sh', [SCRIPT], {
+				encoding: 'utf-8',
+				timeout: 120_000,
+				env: {
+					PATH: `${bin}:${process.env.PATH}`,
+					HOME: dir,
+					STUB_LOG_CURL: join(dir, 'curl.log'),
+					MORPHIT_FIRST_ONLINE_STATE_DIR: join(dir, 'state'),
+					MORPHIT_FIRST_ONLINE_ENV: join(dir, 'first-online.env'),
+					MORPHIT_FIRST_ONLINE_INDEXER_ENV: join(dir, 'indexer.env'),
+					MORPHIT_FIRST_ONLINE_RELAY_ENV: join(dir, 'relay.env'),
+					...extra
+				}
+			});
+			const curls = readFileSync(join(dir, 'curl.log'), 'utf-8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as string[]);
+			return { exit: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}`, curls, systemctl: readFileSync(join(dir, 'calls.log'), 'utf-8') };
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	};
+	const clearnet = (curls: string[][]): string[] =>
+		curls.flatMap((argv) =>
+			argv
+				.filter((a) => /^https?:\/\//.test(a))
+				.filter((u) => {
+					const h = new URL(u).hostname;
+					if (h === '127.0.0.1') return false;
+					if (h.endsWith('.onion') && argv.includes('--socks5-hostname')) return false;
+					if (h.endsWith('.i2p') && argv.includes('-x')) return false;
+					return true;
+				})
+		);
+	const hiddenEnv =
+		'MORPHIT_INDEXER_RPC_ENDPOINTS=\n' +
+		`MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=${ONION},${I2P}\n` +
+		'MORPHIT_INDEXER_TOR_SOCKS=127.0.0.1:9050\nMORPHIT_INDEXER_I2P_HTTP_PROXY=127.0.0.1:4444\nMORPHIT_INDEXER_LISTEN_PORT=8081\n';
+
+	let r = runFo(hiddenEnv, {});
+	check('hidden-only, nothing reachable: exits 0 and waits (no internet yet)', r.exit === 0 && /no internet yet/.test(r.out), r.out.slice(0, 300));
+	check('hidden-only, nothing reachable: NO clearnet curl (no fallback RPC list)', clearnet(r.curls).length === 0, clearnet(r.curls).join(' '));
+	check('hidden-only: probes its .onion RPC through Tor SOCKS (remote DNS) and its .b32.i2p through the i2pd proxy',
+		r.curls.some((a) => a.includes('--socks5-hostname') && a.includes(ONION)) && r.curls.some((a) => a.includes('-x') && a.includes(I2P)));
+
+	r = runFo(hiddenEnv, { STUB_CURL_OK: '--socks5-hostname .*\\.onion' });
+	check('hidden-only, .onion RPC answers over Tor: online → deferred steps run (indexer nudged), still no clearnet curl',
+		r.exit === 0 && /reachable over a hidden service/.test(r.out) && /restart morphit-indexer/.test(r.systemctl) && clearnet(r.curls).length === 0,
+		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`);
+
+	r = runFo(hiddenEnv, { STUB_HEALTH: '{"status":"ok","rpc_endpoints_healthy":2}' });
+	check('hidden-only, hidden probes fail but the local indexer reaches the chain: online, no clearnet curl',
+		r.exit === 0 && /local indexer reaches the chain/.test(r.out) && clearnet(r.curls).length === 0,
+		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`);
+
+	// Control: the key ABSENT still means "unconfigured" → the clearnet fallback,
+	// which also proves the recorder sees a clearnet probe when one happens.
+	r = runFo('MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=\n', {});
+	check('control: key ABSENT (clearnet install) still probes the baked clearnet fallback list', clearnet(r.curls).length >= 1, JSON.stringify(r.curls).slice(0, 200));
 }
 
 // ── RPC-endpoint var name must MATCH what the install writes (cp660) ──

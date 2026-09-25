@@ -7,7 +7,7 @@
  * emits ciphertext/content, only the peer account name.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 
 import { chatActivityStreamRoute } from '$api/chatActivityStream';
 import { chatEventBus } from '$indexer/chatEventBus';
@@ -38,6 +38,14 @@ async function readUntil(
 	}
 	return acc;
 }
+
+// The bus is a process-wide singleton and its replay ring outlives a case, so
+// a replayable event emitted by one test is delivered to the next test's stream
+// at connect — ahead of anything that test emits itself. Every assertion about
+// "the first frame" is otherwise reading the previous case's leftovers.
+beforeEach(() => {
+	chatEventBus._resetFastRingForTest();
+});
 
 let openReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 afterEach(() => {
@@ -97,6 +105,10 @@ describe('chatActivityStreamRoute', () => {
 		await readUntil(reader, 'event: ready');
 
 		// Fast event where alice is the recipient → peer is the sender.
+		// `replayable: true` is the safe-subset gate's answer — "this sender may
+		// notify this person" — and an INBOUND ping now requires it, exactly as
+		// the web push and the cold-start replay always have. See the case below
+		// for what happens without it.
 		chatEventBus.emitFast({
 			lo: 'alice',
 			hi: 'erin',
@@ -106,7 +118,8 @@ describe('chatActivityStreamRoute', () => {
 			header: { client_tag: 'x' },
 			createdAt: new Date(),
 			clientTag: 'x',
-			orderPermlink: null
+			orderPermlink: null,
+			replayable: true
 		});
 
 		const frame = await readUntil(reader, 'chat_activity');
@@ -114,6 +127,95 @@ describe('chatActivityStreamRoute', () => {
 		// The ciphertext from the fast event must NOT appear on the wire.
 		expect(frame).not.toContain('SECRETCIPHERTEXTBLOB');
 		expect(frame).not.toContain('ciphertext');
+	});
+
+	it('does NOT light the inbox for a sender the gate refused', async () => {
+		// The counterpart to the case above, and the reason it exists.
+		//
+		// Every other consumer of a fast event checks `replayable` before acting
+		// on it: the web push does, the cold-start replay does. This listener did
+		// not, which left the live badge as the one unguarded route into
+		// somebody's inbox. That mattered little while every chat message had to
+		// come out of a block — it cost resource credits and left a public record
+		// — and matters a great deal now that a peer instance can push one
+		// straight in: a signed chat op is free to mint offline, so an ungated
+		// badge was a free, repeatable, untraceable ping at any account, tagged
+		// with any thread the sender chose to name.
+		//
+		// A refused sender must produce NOTHING here. The message is still
+		// delivered into an open chatroom — a conversation you are looking at is
+		// not a notification — and the durable path still judges it on its own
+		// terms.
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/alice/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+		await readUntil(reader, 'event: ready');
+
+		chatEventBus.emitFast({
+			lo: 'alice',
+			hi: 'mallory',
+			sender: 'mallory',
+			recipient: 'alice',
+			ciphertext: 'SPAM==',
+			header: { client_tag: 'spam' },
+			createdAt: new Date(),
+			clientTag: 'spam',
+			orderPermlink: 'some-order-mallory-picked'
+			// replayable deliberately absent — the gate said no.
+		});
+		// And one the gate DID allow, after it, so this is a test of ordering
+		// rather than of the stream simply being slow: if the refused ping were
+		// still being written, it would arrive first and this assertion would see
+		// mallory rather than erin.
+		chatEventBus.emitFast({
+			lo: 'alice',
+			hi: 'erin',
+			sender: 'erin',
+			recipient: 'alice',
+			ciphertext: 'OK==',
+			header: { client_tag: 'ok' },
+			createdAt: new Date(),
+			clientTag: 'ok',
+			orderPermlink: null,
+			replayable: true
+		});
+
+		const frame = await readUntil(reader, 'chat_activity');
+		expect(frame).toContain('"peer":"erin"');
+		expect(frame).not.toContain('mallory');
+	});
+
+	it('still tells the SENDER about their own message on another device', async () => {
+		// The gate governs who may notify YOU. It has nothing to say about your
+		// own outgoing message reaching your other tabs, and gating that would
+		// break multi-device echo for every send — including the sends that go
+		// out before the recipient has ever replied, which is most first
+		// messages. The client ignores anything not marked inbound, so this frame
+		// is a reconcile hint rather than a badge.
+		const app = chatActivityStreamRoute();
+		const res = await app.request('/alice/stream');
+		const reader = res.body!.getReader();
+		openReader = reader;
+		await readUntil(reader, 'event: ready');
+
+		chatEventBus.emitFast({
+			lo: 'alice',
+			hi: 'grace',
+			sender: 'alice',
+			recipient: 'grace',
+			ciphertext: 'MINE==',
+			header: { client_tag: 'mine' },
+			createdAt: new Date(),
+			clientTag: 'mine',
+			orderPermlink: null
+			// Not replayable — alice has never been replied to by grace. Her own
+			// message must still reach her other devices.
+		});
+
+		const frame = await readUntil(reader, 'chat_activity');
+		expect(frame).toContain('"peer":"grace"');
+		expect(frame).toContain('"inbound":false');
 	});
 
 	// ─── v1.7.5 (t.txt #1): the COLD START ───────────────────────────

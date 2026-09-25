@@ -32,6 +32,7 @@
  */
 
 import type { PriceProvider, PriceQuote, PricedSymbol } from '../types';
+import { withHiddenFloor } from '$net/transportBudget';
 
 const COINGECKO_IDS: Record<PricedSymbol, string> = {
 	BTC: 'bitcoin',
@@ -124,7 +125,11 @@ export function createCoingeckoProvider(config: CoingeckoProviderConfig = {}): P
 
 			const url = `${baseUrl}/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd`;
 			const ac = new AbortController();
-			const timer = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
+			// Through the shared floor like every other request in the app, so
+			// there is no exception for this one to hide behind later. On a
+			// clearnet page the 5s budget is unchanged; from a Tor/I2P page it is
+			// raised rather than being the one place a clearnet number survived.
+			const timer = setTimeout(() => ac.abort(), withHiddenFloor(REQUEST_TIMEOUT_MS, url));
 			try {
 				const headers: Record<string, string> = { accept: 'application/json' };
 				if (config.apiKey) headers['x-cg-pro-api-key'] = config.apiKey;

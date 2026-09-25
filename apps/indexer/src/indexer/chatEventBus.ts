@@ -260,6 +260,20 @@ class ChatEventBus {
 		return this.fastRing.length;
 	}
 
+	/**
+	 * Empty the replay ring. TESTS ONLY, and they need it more than it looks.
+	 *
+	 * This bus is a process-wide singleton and the ring survives between cases,
+	 * so a test that emits a replayable event leaves it there for whatever opens
+	 * a stream next — which then receives it at connect, before anything the new
+	 * case does. That reads as the new case's own event arriving implausibly
+	 * fast, or as the wrong peer arriving first, and either way the case is
+	 * passing or failing on the previous one's leftovers. Reset between cases.
+	 */
+	_resetFastRingForTest(): void {
+		this.fastRing.length = 0;
+	}
+
 	/** Number of active subscribers.  Surfaced via /v1/health
 	 *  verbose so operators can confirm the bus is wired and
 	 *  see how many tabs are watching live chats. */

@@ -26,6 +26,22 @@
 	 *     slightly different indexed blocks.
 	 *   - A large disparity or a persistent one across refreshes is
 	 *     the actual signal.
+	 *
+	 * TRUNCATION (the timeapp admin's report — "this order is old, some days
+	 * ago, so seems the two instance are not on the same page"):
+	 * `/v1/orderbook` returns at most 100 rows, `updated_at DESC`, with a
+	 * `next_cursor` when more exist. This page used to diff the two pages as if
+	 * each were a whole orderbook. On a busy instance that is a comparison of
+	 * two WINDOWS OF DIFFERENT DEPTH: a handful of genuinely-new orders at the
+	 * top of one side push an equal number off the bottom, and those displaced
+	 * orders — present on both instances, just 101st on one of them — were
+	 * reported as missing. They are old, because the bottom of the window is
+	 * where old orders live. That is precisely what he saw, and both instances
+	 * were behaving correctly.
+	 *
+	 * The diff now runs through `compareOrderbooks`, which restricts the
+	 * comparison to the window where BOTH sides are known-complete and says so
+	 * in the UI. See that module for the reasoning.
 	 */
 
 	import { onMount } from 'svelte';
@@ -36,21 +52,12 @@
 	import { getOrderbook, getOrderbookFromOrigin } from '$lib/indexer/client';
 	import { validateInstanceUrl, type InstanceUrlError } from '$utils/instanceUrl';
 	import { safeInstanceOrigin } from '$lib/utils/safeContactUrl';
+	import { compareOrderbooks, type CompareVerdict } from '$lib/utils/compareOrderbooks';
+	import { formatDayMonthTime } from '$i18n/formatters';
 	import type { OrderRecord } from '@morphit/indexer-client';
-
-	/** Keyed view of a set of orders for diffing. Key =
-	 *  `${account}/${permlink}` — stable across all instances
-	 *  reading the same chain. */
-	type KeyedOrders = Map<string, OrderRecord>;
 
 	function keyOf(o: OrderRecord): string {
 		return `${o.account}/${o.permlink}`;
-	}
-
-	function indexByKey(items: readonly OrderRecord[]): KeyedOrders {
-		const m = new Map<string, OrderRecord>();
-		for (const o of items) m.set(keyOf(o), o);
-		return m;
 	}
 
 	let otherUrlInput = $state('');
@@ -64,9 +71,15 @@
 	let otherIndexedBlock = $state<number | null>(null);
 
 	// Diff output: three sets derived from the two fetched orderbooks.
-	let onlyHere = $state<OrderRecord[]>([]);
-	let inBoth = $state<OrderRecord[]>([]);
-	let onlyThere = $state<OrderRecord[]>([]);
+	let onlyHere = $state<readonly OrderRecord[]>([]);
+	let inBoth = $state<readonly OrderRecord[]>([]);
+	let onlyThere = $state<readonly OrderRecord[]>([]);
+
+	// How much of the two orderbooks the comparison could honestly cover.
+	let verdict = $state<CompareVerdict>('inconclusive');
+	let truncated = $state(false);
+	let windowStart = $state<string | null>(null);
+	let excludedCount = $state(0);
 
 	let hasRun = $state(false);
 
@@ -127,27 +140,23 @@
 				return;
 			}
 
-			const hereMap = indexByKey(localRes.data.items);
-			const thereMap = indexByKey(remoteRes.data.items);
-
 			thisIndexedBlock = localRes.data.indexed_block;
 			otherIndexedBlock = remoteRes.data.indexed_block;
 
-			const oh: OrderRecord[] = [];
-			const ib: OrderRecord[] = [];
-			const ot: OrderRecord[] = [];
+			// Restricted to the window where both instances are known-complete.
+			// A straight set difference over two capped pages accuses instances
+			// of hiding orders they are serving perfectly well — see the module.
+			const cmp = compareOrderbooks(localRes.data, remoteRes.data);
 
-			for (const [k, order] of hereMap) {
-				if (thereMap.has(k)) ib.push(order);
-				else oh.push(order);
-			}
-			for (const [k, order] of thereMap) {
-				if (!hereMap.has(k)) ot.push(order);
-			}
-
-			onlyHere = oh;
-			inBoth = ib;
-			onlyThere = ot;
+			onlyHere = cmp.onlyHere;
+			inBoth = cmp.inBoth;
+			onlyThere = cmp.onlyThere;
+			verdict = cmp.verdict;
+			truncated = cmp.truncated;
+			windowStart = cmp.windowStart;
+			// The module computes the DISTINCT count; the two per-side numbers
+			// overlap and must not be added into something labelled "orders".
+			excludedCount = cmp.excludedDistinct;
 			hasRun = true;
 		} catch (err) {
 			// Either getOrderbook call could throw (network failure
@@ -230,6 +239,59 @@
 
 	<!-- Results -->
 	{#if hasRun}
+		<!-- The verdict, stated plainly and BEFORE the numbers.
+		     Three counts and a block gap are not an answer to the question the
+		     user came with, which is "is this instance hiding orders?" When the
+		     comparison is clean, saying so outright is the whole point — a row of
+		     zeroes reads as "nothing happened", not "these instances agree". -->
+		<section
+			class="card mb-6 border-l-4 {verdict === 'agree'
+				? 'border-l-morphit-emerald'
+				: verdict === 'differ'
+					? 'border-l-amber-500'
+					: 'border-l-ink-400'}"
+		>
+			<h2 class="font-display text-xl font-bold">
+				{#if verdict === 'agree'}
+					<span class="text-morphit-emerald">{$_('compare.verdict.agree_heading')}</span>
+				{:else if verdict === 'differ'}
+					{$_('compare.verdict.differ_heading')}
+				{:else}
+					{$_('compare.verdict.inconclusive_heading')}
+				{/if}
+			</h2>
+			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
+				{#if verdict === 'agree'}
+					{$_('compare.verdict.agree_body', {
+						values: { n: inBoth.length, host: otherOrigin }
+					})}
+				{:else if verdict === 'differ'}
+					{$_('compare.verdict.differ_body')}
+				{:else}
+					{$_('compare.verdict.inconclusive_body')}
+				{/if}
+			</p>
+
+			{#if truncated}
+				<!-- Say what was NOT compared. Without this the page implies a
+				     complete comparison it did not perform, which is how a
+				     displaced order came to look like a censored one. -->
+				<p
+					class="mt-3 rounded-lg bg-ink-100 p-3 text-xs text-ink-600 dark:bg-ink-800 dark:text-ink-300"
+				>
+					{$_('compare.window.truncated_note', { values: { excluded: excludedCount } })}
+					{#if windowStart}
+						<br />
+						<span class="font-mono">
+							{$_('compare.window.since', {
+								values: { since: formatDayMonthTime(windowStart) }
+							})}
+						</span>
+					{/if}
+				</p>
+			{/if}
+		</section>
+
 		<section class="card mb-6">
 			<h2 class="font-display text-xl font-bold">
 				{$_('compare.results.heading')}

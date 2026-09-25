@@ -60,12 +60,16 @@ export interface SettledElsewhereDeps {
 		senderChatPub: Uint8Array,
 		includeSelfCopy: boolean
 	): Promise<ChatEnvelope>;
-	/** Broadcast a chat custom_json op. */
+	/** Broadcast a chat custom_json op.
+	 *
+	 *  `block_num` is null because a chat message does not wait for a block —
+	 *  see broadcastChatMessage. This announcer discards the result either way;
+	 *  it awaits only so a failed send can be counted. */
 	broadcast(
 		live: LiveIdentity,
 		payload: Record<string, unknown>,
 		blurtAccount: string
-	): Promise<{ block_num: number; trx_id: string }>;
+	): Promise<{ block_num: number | null; trx_id: string }>;
 	/** 32-char hex client tag. */
 	generateClientTag(): string;
 }

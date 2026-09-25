@@ -278,8 +278,13 @@ scenario(
 		if (!src.includes(`from '$indexer/federationProbe'`)) {
 			throw new Error('expected $indexer/federationProbe import');
 		}
-		if (!src.includes('fetchJson<PeerReceiptResponse>(')) {
-			throw new Error('expected fetchJson<PeerReceiptResponse> call');
+		// v1.18.0 (F31): the transport is a parameter, because a HIDDEN address
+		// needs the hidden transport — fetchJson refuses http:// and, on a
+		// hidden-only node, everything. The CLEARNET default must still be
+		// fetchJson, which is what this pins; the hidden path is covered by
+		// hiddenOnlyNoClearnet.test.ts and fastchat-transport-harness T56-T60.
+		if (!src.includes('fetcher: <T>(url: string, timeoutMs: number) => Promise<T> = (url) => fetchJson(url)')) {
+			throw new Error('expected fetchPeerReceipt to default its transport to fetchJson');
 		}
 	}
 );

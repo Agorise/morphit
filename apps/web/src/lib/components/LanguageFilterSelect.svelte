@@ -82,6 +82,24 @@
 		}
 	}
 
+	/**
+	 * A real user gesture on the field: press to open.
+	 *
+	 * This deliberately does NOT hang off focus. The open menu paints a
+	 * `fixed inset-0 backdrop-blur-sm` scrim across the viewport, and Firefox
+	 * restores focus to the previously-focused element on every reload — so
+	 * opening from focus meant that once this field had been used in a tab,
+	 * every later visit to the page re-fired focus, re-opened the menu and
+	 * blurred the whole page before the user touched anything. The sticky
+	 * header sits at z-40 and the scrim at z-20, so the header stayed sharp
+	 * while everything under it blurred. Focus is not intent: it also fires on
+	 * programmatic .focus() and on tab-through. Typing and ArrowDown open it
+	 * from the keyboard; Escape closes it.
+	 */
+	function openFromGesture(): void {
+		open = true;
+	}
+
 	$effect(() => {
 		if (!open) return;
 		const onDocPointerDown = (e: PointerEvent): void => {
@@ -103,7 +121,17 @@
 {/if}
 
 <div class="relative {open ? 'z-30' : 'z-10'}" bind:this={rootEl}>
+	<!-- svelte-ignore a11y_no_static_element_interactions -- the interactive
+	     control IS the <input role="combobox"> inside this wrapper; the wrapper's
+	     pointerdown only forwards a press on the surrounding chrome (chips row,
+	     padding) to it. Giving the wrapper its own ARIA role would announce a
+	     second control that does not exist. Keyboard users reach the same
+	     behaviour through the input: typing and ArrowDown open, Escape closes. -->
+	<!-- The press anywhere in the field opens the menu (see openFromGesture).
+	     It sits on the wrapper rather than the input so pressing the chips row
+	     or the field's padding still opens it, as focusing used to. -->
 	<div
+		onpointerdown={openFromGesture}
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
 		class="flex flex-wrap items-center gap-1 rounded-xl border border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
@@ -134,7 +162,6 @@
 			role="combobox"
 			aria-expanded={open}
 			aria-controls="language-filter-listbox"
-			onfocus={() => (open = true)}
 			oninput={() => {
 				open = true;
 				activeIndex = 0;

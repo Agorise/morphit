@@ -36,6 +36,7 @@
  */
 
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
+import { indexerTimeoutMs } from '$net/transportBudget';
 import { PENDING_TTL_MS } from '$lib/stores/pendingEcho';
 import { idbGetProfiles, idbPutProfiles, idbDeleteProfile } from '$lib/indexer/profilePersist';
 import type { PersistedProfile } from '$lib/indexer/profilePersist';
@@ -66,15 +67,16 @@ const PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  *  long enough to prevent a retry storm during a sustained outage. */
 const FAILED_FETCH_TTL_MS = 5_000;
 
-
 /** Server-side batch limit. Larger requests are split into multiple
  *  HTTP calls; the resulting promises are awaited in parallel. */
 const MAX_BATCH_SIZE = 100;
 
-/** Request timeout. Matches the default in the main indexer client;
- *  keep it separately configurable here in case batch calls want a
- *  different budget later. */
-const REQUEST_TIMEOUT_MS = 8_000;
+/** Request timeout. Delegated to the shared transport budget so this
+ *  hand-rolled fetch cannot drift from the main indexer client: a flat 8s here
+ *  meant that on a Tor/I2P instance every profile batch aborted during tunnel
+ *  setup and silently degraded every display name and avatar to an identicon,
+ *  with no error anywhere. */
+const requestTimeoutMs = (): number => indexerTimeoutMs();
 
 interface CacheEntry {
 	/** The profile data, or `null` if the server returned no row for
@@ -168,7 +170,7 @@ async function fetchBatch(
 
 	// Compose a timeout signal with any caller-supplied signal.
 	const timeoutCtrl = new AbortController();
-	const timeoutId = setTimeout(() => timeoutCtrl.abort(), REQUEST_TIMEOUT_MS);
+	const timeoutId = setTimeout(() => timeoutCtrl.abort(), requestTimeoutMs());
 	const combined = signal ? anySignal([signal, timeoutCtrl.signal]) : timeoutCtrl.signal;
 
 	try {
@@ -202,7 +204,6 @@ async function fetchBatch(
 		clearTimeout(timeoutId);
 	}
 }
-
 
 /** Compose multiple AbortSignals. Aborts when any input aborts.
  *  Duplicate of the helper in indexer/client.ts; kept separate so

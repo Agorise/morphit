@@ -17,7 +17,7 @@
 # Tor SOCKS5 and i2pd HTTP proxy stubs, over BOTH networks, and asserts on the
 # PROXY LOG — so "it worked" is only accepted when the traffic genuinely went
 # through the proxy. Tor and I2P are different code paths (a hand-rolled SOCKS5
-# connector vs undici's ProxyAgent); passing one proves nothing about the other.
+# connector vs a CONNECT connector); passing one proves nothing about the other.
 #
 # It also asserts the fail-closed property: a hidden-only node must NEVER reach
 # for a clearnet source, even when one is on offer.
@@ -63,13 +63,22 @@ SIZE="$(stat -c %s "$TARBALL")"
 # The registration is how a brand-new node learns a peer's hidden addresses
 # without any baked-in list — it is already reading this account's history to
 # find the snapshot, and the alt_addresses ride along for free.
-cat > "$WORK/history.json" <<HJSON
-[[281,{"op":["custom_json",{"id":"morphit_operator_register_v1","required_posting_auths":["morphit"],"json":"{\\"alt_addresses\\":{\\"tor\\":\\"$ONION\\",\\"i2p_b32\\":\\"$I2P\\"}}"}],"timestamp":"2026-09-13T00:00:00"}],
- [282,{"op":["custom_json",{"id":"indexer_snapshot_v1","required_posting_auths":["morphit"],"json":"{\\"ipfs_cid\\":\\"$CID\\",\\"sha256\\":\\"$DUMP_SHA\\",\\"chain_id\\":\\"$CHAIN_ID\\",\\"schema_version\\":59,\\"last_applied_block\\":63610645,\\"size_bytes\\":$SIZE,\\"indexer_version\\":\\"1.17.8\\"}"}],"timestamp":"2026-09-13T00:00:00"}]]
-HJSON
+#
+# v1.18.0 deep-deep (rv2-1): the snapshot op must be SIGNED by the pinned key and
+# served with its block, and two RPC operators must agree on it — so the fixture
+# is built by signed-snapshot-op.mjs with a test key, that key is pinned below,
+# and every run lists two RPC addresses (two operators) on the same transport.
+REG='[[281,{"op":["custom_json",{"id":"morphit_operator_register_v1","required_posting_auths":["morphit"],"json":"{\"alt_addresses\":{\"tor\":\"'"$ONION"'\",\"i2p_b32\":\"'"$I2P"'\"}}"}],"timestamp":"2026-09-13T00:00:00"}]]'
+PAYLOAD="{\"ipfs_cid\":\"$CID\",\"sha256\":\"$DUMP_SHA\",\"chain_id\":\"$CHAIN_ID\",\"schema_version\":59,\"last_applied_block\":63610645,\"size_bytes\":$SIZE,\"indexer_version\":\"1.17.8\"}"
+(cd "$REPO" && node ops/test/lib/signed-snapshot-op.mjs "$PAYLOAD" "$REG") > "$WORK/signed.json"
+PINNED="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pubkey)' "$WORK/signed.json")"
+node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(j.history))' "$WORK/signed.json" > "$WORK/history.json"
+node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(j.rpc))' "$WORK/signed.json" > "$WORK/rpc.json"
+ONION2="$(printf 'c%.0s' $(seq 56)).onion"
+I2P2="$(printf 'd%.0s' $(seq 52)).b32.i2p"
 
 PLOG="$WORK/proxy.log"; : > "$PLOG"
-MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" MORPHIT_STUB_FILE="$TARBALL" \
+MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" MORPHIT_STUB_RPC="$(cat "$WORK/rpc.json")" MORPHIT_STUB_FILE="$TARBALL" \
 	node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" 45951 45952 45953 "$PLOG" \
 	> "$WORK/ready" 2>&1 &
 STUB_PID=$!
@@ -83,7 +92,7 @@ run_bootstrap() {
 		MORPHIT_INDEXER_DATABASE_URL="postgres://unused" \
 		MORPHIT_INDEXER_CHAIN_ID="$CHAIN_ID" \
 		MORPHIT_INDEXER_PUBLIC_ORIGIN="https://harness.invalid" \
-		MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="BLT1111111111111111111111111111111114T1Anm" \
+		MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="$PINNED" \
 		MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="" \
 		MORPHIT_INDEXER_RPC_ENDPOINTS="" \
 		MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="$1" \
@@ -97,7 +106,7 @@ run_bootstrap() {
 }
 
 for net in i2p tor; do
-	[ "$net" = "i2p" ] && RPC="http://$I2P" || RPC="http://$ONION"
+	[ "$net" = "i2p" ] && RPC="http://$I2P,http://$I2P2" || RPC="http://$ONION,http://$ONION2"
 	: > "$PLOG"
 	OUT="$(run_bootstrap "$RPC")"
 	case "$OUT" in
@@ -129,10 +138,10 @@ OUT_FC="$(cd "$REPO" && env \
 	MORPHIT_INDEXER_DATABASE_URL="postgres://unused" \
 	MORPHIT_INDEXER_CHAIN_ID="$CHAIN_ID" \
 	MORPHIT_INDEXER_PUBLIC_ORIGIN="https://harness.invalid" \
-	MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="BLT1111111111111111111111111111111114T1Anm" \
+	MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="$PINNED" \
 	MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="" \
 	MORPHIT_INDEXER_RPC_ENDPOINTS="" \
-	MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="http://$I2P" \
+	MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="http://$I2P,http://$I2P2" \
 	MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:45953" \
 	MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:45952" \
 	MORPHIT_IPFS_GATEWAYS="http://127.0.0.1:45951" \

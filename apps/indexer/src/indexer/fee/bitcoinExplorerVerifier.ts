@@ -166,6 +166,12 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		// (but eventually responding) explorer can still arrive
 		// while we wait for the quorum to coalesce.
 		const quorumTimeoutMs = this.config.requestTimeoutMs * 2;
+		// (v1.18.0 deep-deep, H1) Count explorers that answered a clean 404
+		// ("no such transaction"). Before, a 404 was just "no usable answer",
+		// so a made-up txid that EVERY explorer 404s ended as
+		// `pending_external` — the state the attestation path can promote —
+		// instead of `missing`. See the quorum-not-met branch below.
+		let notFoundCount = 0;
 
 		const quorumResult = await this.pool.quorumCall<{
 			base: string;
@@ -180,6 +186,8 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 						// Penalize the endpoint via the pool's cooldown ladder.
 						throw new Error('transport_failure');
 					case 'data_not_found':
+						notFoundCount++;
+						return null;
 					case 'data_malformed':
 						// Explorer responded healthily; the data is the
 						// user's problem.  Don't penalize the endpoint
@@ -207,8 +215,24 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 
 		// Quorum not met.  Either the responses disagreed (no group
 		// reached minSuccessfulResponses) or too many transport-failed
-		// or returned null.  Either way the verdict is pending.
+		// or returned null.  Either way the verdict is pending —
+		// UNLESS a quorum of explorers positively answered "not found".
 		if (quorumResult.kind === 'all_responses_in') {
+			// (v1.18.0 deep-deep, H1) A quorum (the same
+			// minSuccessfulResponses bar a payment needs to verify) of
+			// explorers answering 404 is a definitive answer: the tx does
+			// not exist, so the fee is MISSING, not pending.  Only when no
+			// usable response contradicted it: a found tx in some other
+			// bucket means the explorers disagree, which stays pending.
+			if (
+				notFoundCount >= this.config.minSuccessfulResponses &&
+				quorumResult.responses.length === 0
+			) {
+				return {
+					kind: 'rejected',
+					reason: `tx_not_found: ${notFoundCount} explorer(s) answered 404`
+				};
+			}
 			return {
 				kind: 'pending_external',
 				reason: `quorum not met: best group had < ${this.config.minSuccessfulResponses} agreeing explorers (${quorumResult.responses.length} usable responses, ${quorumResult.cooledDown} in cooldown)`

@@ -24,9 +24,14 @@ import { loadConfig, resolveFeeRecipient } from '$config';
 import { createDatabase } from '$db/pool';
 import { checkSchemaDrift, formatDriftReport } from '$db/schemaDrift';
 import { runMigrations } from '$db/migrations';
-import { backfillPostingKeys, ensurePostingPubkeyColumn } from '$indexer/postingKeyBackfill';
+import {
+	backfillPostingKeys,
+	ensurePostingPubkeyColumn,
+	keepReconcilingPostingKeys
+} from '$indexer/postingKeyBackfill';
+import { keepReloadingRpcDirectory } from '$indexer/rpcDirectoryReload';
 import { seedFederationDirectory } from '$indexer/federationSeed';
-import { installHiddenServiceDispatcher } from '$indexer/hiddenServiceDispatcher';
+import { installHiddenServiceDispatcher, indexerRouterPolicy } from '$indexer/hiddenServiceDispatcher';
 import { hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
@@ -69,6 +74,14 @@ import { accountHistoryRoute } from '$api/accountHistory';
 import { accountKeysRoute } from '$api/accountKeys';
 import { chainExplorerRoute } from '$api/chainExplorer';
 import { broadcastRoute } from '$api/broadcast';
+import { federationChatFastRoute, gatesFromDb } from '$api/federationChatFast';
+import {
+	deliverVerifiedPush,
+	durableIsCurrentFor,
+	chainPostingKeyRefresher
+} from '$indexer/chatFastFederation';
+import { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
+import { closePool, readCappedText } from '$indexer/hiddenServicePool';
 import { feedbackByAccountRoute } from '$api/feedback';
 import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
@@ -232,24 +245,32 @@ async function main(): Promise<void> {
 	await seedFederationDirectory(db);
 
 	// ─── 4. Blurt client ───────────────────────────────────────
-	// Before constructing the client: if any hidden-service RPC endpoints are
-	// configured, install the global routing dispatcher so dblurt's fetch reaches
-	// .onion (via Tor SOCKS) and .b32.i2p (via i2pd). GATED — a clearnet-only node
-	// never touches the global dispatcher, so its behaviour is unchanged. Hidden
-	// endpoints that can't be reached (proxy down) just fail and the pool uses
-	// clearnet; the node never blocks on them.
-	if (config.hiddenRpcEndpoints.length > 0) {
-		// Hidden-only ⇔ the clearnet RPC pool has been deliberately emptied (cp755):
-		// the node reaches the chain purely over .onion/.i2p. In that mode the
-		// dispatcher runs FAIL-CLOSED — a public clearnet origin is refused, never
-		// leaked — so the node can't deanonymise itself even via an errant fetch.
-		// (Local/loopback/.loki stay allowed; see isClearnetOrigin.) A node that
-		// still keeps clearnet RPC endpoints keeps the classic 'allow' behaviour.
-		const hiddenOnly = config.blurtRpcEndpoints.length === 0;
-		installHiddenServiceDispatcher(
-			hiddenServiceProxyConfigFromEnv(process.env),
-			hiddenOnly ? 'refuse' : 'allow'
-		);
+	// Before constructing the client: install the global routing dispatcher so
+	// dblurt's fetch reaches .onion (via Tor SOCKS) and .b32.i2p (via i2pd).
+	// ALWAYS installed (v1.18.0 deep-deep, L3) — it used to be gated on hidden
+	// endpoints being configured, but the on-chain RPC directory merges hidden
+	// nodes into EVERY node's pool, and without the router their names went to
+	// the system resolver. Clearnet goes to a plain Agent, exactly as before.
+	// Hidden endpoints that can't be reached (proxy down) just fail and the pool
+	// uses clearnet; the node never blocks on them.
+	//
+	// Hidden-only ⇔ the clearnet RPC pool has been deliberately emptied (cp755):
+	// the node reaches the chain over .onion/.i2p or a co-located blurtd only.
+	// In that mode the dispatcher runs FAIL-CLOSED — a public clearnet origin is
+	// refused, never leaked — so the node can't deanonymise itself even via an
+	// errant fetch. (Local/loopback/.loki stay allowed; see isClearnetOrigin.) A
+	// node that still keeps clearnet RPC endpoints keeps the classic 'allow'
+	// behaviour. See indexerRouterPolicy.
+	installHiddenServiceDispatcher(
+		hiddenServiceProxyConfigFromEnv(process.env),
+		indexerRouterPolicy(config)
+	);
+	if (config.blurtRpcEndpoints.length === 0 && config.hiddenRpcEndpoints.length === 0) {
+		// L3: say so, rather than leave an operator to infer it from a quiet
+		// probe and a federated price.
+		bootLog.info('local_chain_only', {
+			note: 'no clearnet or hidden RPC endpoints set: the chain is read from this box only, and the node is treated as hidden-only (it contacts no clearnet host)'
+		});
 	}
 	const blurt = new BlurtClient(config);
 
@@ -259,18 +280,20 @@ async function main(): Promise<void> {
 	// directory from the DB and merge it back into the pool now. Best-effort: a
 	// missing table (pre-migration) or empty row just leaves the baked
 	// DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS in place.
-	try {
-		const dir = await db.query<{ endpoints: string[] }>(
-			`SELECT endpoints FROM rpc_directory WHERE id = 1`
-		);
-		const dirEndpoints = dir.rows[0]?.endpoints ?? [];
-		if (dirEndpoints.length > 0) {
-			const added = blurt.mergeRpcEndpoints(dirEndpoints);
-			if (added.length > 0) bootLog.info('rpc_directory_reloaded', { added: added.length });
-		}
-	} catch (e) {
-		bootLog.warn('rpc_directory_reload_skipped', { err: e instanceof Error ? e.message : String(e) });
-	}
+	//
+	// v1.18.0 deep-deep (rv2-4): the row's endpoints used to be merged as-is —
+	// and a snapshot restore brings the row over from someone else's database,
+	// so its URLs became permanent members of this pool unchecked. Now the row is
+	// only a pointer (its block): the op there must be agreed by independent RPC
+	// operators and signed by the pinned official key, and the endpoints merged
+	// are the signed op's. In the background, retried while the chain is out of
+	// reach, so boot never waits on it.
+	keepReloadingRpcDirectory(db, blurt, config, (o) => {
+		if (o.kind === 'merged' && o.added > 0) bootLog.info('rpc_directory_reloaded', { added: o.added });
+		else if (o.kind === 'rejected') bootLog.warn('rpc_directory_row_unverified_dropped', {});
+		else if (o.kind === 'unreachable') bootLog.info('rpc_directory_reload_deferred', {});
+		else if (o.kind === 'error') bootLog.warn('rpc_directory_reload_skipped', { err: o.error });
+	});
 
 	// ─── 4-ter. Auto-detect a CO-LOCATED Blurt RPC node (v1.12.1) ──
 	// If a blurtd (e.g. the hidden-rpc package) is running on the standard
@@ -323,12 +346,33 @@ async function main(): Promise<void> {
 	// accounts created before the column existed, from the chain, in the
 	// background so the poller isn't blocked. New accounts already get their key
 	// at ingest from the account_create op. Fire-and-forget: a failure here only
-	// leaves some rows' key NULL (harmless — display-only, serves as NULL), and
-	// never blocks indexing or the orderbook.
+	// leaves some rows' key NULL or unconfirmed, and never blocks indexing or the
+	// orderbook.
+	//
+	// v1.18.0 (F37) — it also confirms, once, every key recorded before this
+	// release against the chain. The column is NOT display-only any more: the
+	// fast path verifies pushed chat against it, so a key the owner rotated away
+	// from before upgrading would otherwise go on verifying. Until a row is
+	// confirmed, the fast path re-reads the chain for it rather than trusting it.
+	let stopPostingKeyRetry: (() => void) | undefined;
 	void backfillPostingKeys(db, blurt).then(
 		(r) => {
-			if (r.updated > 0 || r.remaining > 0) {
-				bootLog.info('posting_key_backfill_done', { ...r });
+			const rc = r.reconciled;
+			if (r.updated > 0 || r.remaining > 0 || (rc && (rc.checked > 0 || rc.remaining > 0))) {
+				bootLog.info('posting_key_backfill_done', { ...r, reconciled: rc ? { ...rc } : undefined });
+			}
+			// v1.18.0 review (D5): rows the boot pass could not confirm — RPC not
+			// ready yet, no two endpoints agreeing — are retried with backoff
+			// rather than left until the next restart.
+			if (rc !== undefined && rc.remaining > 0) {
+				stopPostingKeyRetry = keepReconcilingPostingKeys(db, blurt, {
+					onPass: (p) =>
+						bootLog.info('posting_key_reconcile_retry', {
+							checked: p.checked,
+							corrected: p.corrected,
+							remaining: p.remaining
+						})
+				});
 			}
 		},
 		(e) => bootLog.warn('posting_key_backfill_failed', { error: String(e) })
@@ -398,7 +442,16 @@ async function main(): Promise<void> {
 	// /v1/health can surface F's peer comparison alongside B and C
 	// (the cp129 schema comment always promised F would surface here).
 	const peerMonitorResults = new Map<string, PeerSampleCycleResult>();
-	if (config.priceFeedPeerMonitorEnabled && multiAssetSources.size > 0) {
+	// ALWAYS on a hidden-only node, whatever the switch says. There the PRIMARY
+	// price is the federated median of the observations this monitor collects
+	// (price/factory.ts, federatedPriceFetcher.ts); with the monitor off that
+	// median has one sample — our own — and never reaches its minimum, so every
+	// asset prices from our own trades or the static floor while /v1/instance
+	// reports the price leg as federated. The switch exists for the ALERT side,
+	// on a clearnet node with other upstreams; a hidden-only node has no other.
+	const peerMonitorRuns =
+		config.priceFeedPeerMonitorEnabled || config.blurtRpcEndpoints.length === 0;
+	if (peerMonitorRuns && multiAssetSources.size > 0) {
 		for (const [asset, source] of multiAssetSources) {
 			const stop = startPeerPriceMonitor(
 				{
@@ -406,7 +459,8 @@ async function main(): Promise<void> {
 					priceSource: source,
 					asset,
 					denominationFiat: config.priceFeedDenominationFiat,
-					// Hidden-only node → sample peers over their on-chain .onion/.i2p.
+					// Hidden-only node → sample peers over every hidden address
+					// they published (I2P, Tor, Lokinet), never their clearnet origin.
 					hiddenOnly: config.blurtRpcEndpoints.length === 0
 				},
 				config.priceFeedPeerSampleIntervalMinutes,
@@ -465,6 +519,78 @@ async function main(): Promise<void> {
 	// Fire-and-forget; a crash here must NOT take down the process (unlike
 	// the poller), so its errors are contained inside run() — the catch is
 	// a belt-and-suspenders that just logs, never exits.
+	// The federation chat fast path's sender side. Constructed here so it shares
+	// the head tailer's lifetime: between them they are the two producers of
+	// fast chat events — one from blocks, one from peers.
+	const chatFastDispatcher = new ChatFastDispatcher({
+		db,
+		// The SITE origin, not the indexer's. `known_instances.origin` is written
+		// from the on-chain registration, which registers the site; an indexer
+		// served from `indexer.<domain>` would otherwise never recognise its own
+		// row and would push every message to itself over Tor. Same derivation
+		// the durable poller uses.
+		selfOrigin: config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//'),
+		proxies: hiddenServiceProxyConfigFromEnv(process.env),
+		// Clearnet peers go through the ordinary fetch; hidden peers go through
+		// the pooled, kept-warm dispatcher inside the federation module.
+		// The same two defences the hidden-service path already has, because the
+		// clearnet path faces the same peer:
+		//
+		//   redirect: 'manual' — a peer that answers 307 with a Location of
+		//     http://127.0.0.1:6379/ would otherwise have us re-POST the whole
+		//     signed body to a service on our own loopback. The peer list is
+		//     on-chain and validated, but "registered" is not "trustworthy", and
+		//     following a redirect is a decision, not a default worth inheriting.
+		//
+		//   a bounded read — the abort above bounds this call in TIME, not in
+		//     bytes. A peer that answers 202 and then streams indefinitely costs
+		//     us whatever fits in the timeout, per push, per peer, resident in
+		//     memory. We never read anything but the status here anyway.
+		postClearnet: async (url, body, timeoutMs) => {
+			const ctrl = new AbortController();
+			const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+			try {
+				const res = await fetch(url, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json', accept: 'application/json' },
+					body: JSON.stringify(body),
+					redirect: 'manual',
+					signal: ctrl.signal
+				});
+				return { status: res.status, body: await readCappedText(res) };
+			} finally {
+				clearTimeout(timer);
+			}
+		}
+	});
+	chatFastDispatcher.start();
+
+	// The RECEIVING half of the federation fast path. Constructed here rather
+	// than at its mount point so /v1/health, which is mounted earlier, can report
+	// its intake queue — an operator cannot otherwise tell a working fast path
+	// from one that has started shedding.
+	// Re-read one account's posting key from the chain — for an unconfirmed row,
+	// while the poller lags, and after a signature that did not verify, under
+	// the cooldown and ceilings in chatFastFederation. Through a QUORUM of
+	// endpoints (v1.18.0 deep-deep, rv2-3): it used to be `blurt.getAccounts`,
+	// one endpoint, so any single node in the pool could vouch for its own key
+	// as anyone's. No agreement means no fast verdict, and chain delivery.
+	const chatFastIntake = federationChatFastRoute(db, chainPostingKeyRefresher(blurt), {
+		// v1.18.0 review (D6): while the durable poller is far behind the chain
+		// head — after downtime, while it catches up — a key rotated inside the
+		// gap is not in `accounts.posting_pubkey` yet, so no stored key is
+		// trusted on its own and the chain is asked instead. An UNKNOWN head is
+		// no longer "current" (v1.18.0 deep-deep, rv2-7): with the RPC down at
+		// boot it stayed unknown for the whole outage and confirmed rows were
+		// trusted blindly. See durableIsCurrentFor.
+		durableIsCurrent: () => durableIsCurrentFor(poller.getStatus())
+	});
+
+	// The gates a LOCAL delivery runs, built once. Identical to the ones the
+	// federation endpoint applies to a peer's push — a message from our own user
+	// gets no easier ride than one from a peer.
+	const localChatGates = gatesFromDb(db);
+
 	const headTailer = new HeadTailer(config, db, blurt);
 	const headTailerPromise = headTailer.run().catch((err) => {
 		pollerLog.error('chat_fastpath_fatal', {}, err);
@@ -476,14 +602,21 @@ async function main(): Promise<void> {
 	// Middleware chain, applied to every request in order.
 	app.use('*', security);
 	app.use('*', cors(config.allowedOrigins));
-	app.use('*', bodyCap(config.maxRequestBodyBytes, config.maxBroadcastBodyBytes));
+	app.use(
+		'*',
+		bodyCap(
+			config.maxRequestBodyBytes,
+			config.maxBroadcastBodyBytes,
+			config.maxFederationBodyBytes
+		)
+	);
 
 	// Versioned API routes. Each route gets its own rate-limit tier
 	// per ADR-0008: list endpoints (orderbook, per-account order
 	// list, feedback list, chat history) at the lower `list` limit;
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
-	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources, headTailer));
+	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources, headTailer, chatFastDispatcher, chatFastIntake));
 	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses()));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
 	app.route('/v1/instances', instancesRoute(db));
@@ -599,8 +732,9 @@ async function main(): Promise<void> {
 	// an unauthenticated flood of well-formed-but-bogus requests could amplify
 	// load onto the operator's RPC pool. 600/min (the resource default) is far
 	// above any legitimate broadcast or explorer rate, so real writes never trip
-	// it (and a 429 is not in broadcastTransport's fallback set, so a throttled
-	// op surfaces "try again" rather than silently leaking to direct RPC).
+	// it. A throttled op surfaces "try again" in the browser; there is no
+	// direct-RPC fallback anywhere in the client, so nothing leaks to a
+	// third-party node when this fires.
 	const chainApp = new Hono();
 	chainApp.use('*', rateLimit('resource', config.resourceRatePerMin));
 	chainApp.route('/', chainExplorerRoute(blurt, db));
@@ -608,8 +742,23 @@ async function main(): Promise<void> {
 
 	const broadcastApp = new Hono();
 	broadcastApp.use('*', rateLimit('resource', config.resourceRatePerMin));
-	broadcastApp.route('/', broadcastRoute(blurt));
+	broadcastApp.route(
+		'/',
+		broadcastRoute(blurt, chatFastDispatcher, (located, trxId) => {
+			// Both parties on THIS instance: deliver straight to our own listeners
+			// rather than waiting for the head tailer to read the message back off
+			// the chain. Same gates as every other fast delivery — the block list
+			// and the safe-subset notification gate — through the same function.
+			void deliverVerifiedPush(located, trxId, localChatGates).catch(() => undefined);
+		})
+	);
 	app.route('/v1/broadcast', broadcastApp);
+
+	// The federation chat fast path's receiving side. Peer instances POST a
+	// signed chat op here so the recipient sees it without waiting for a block.
+	// Its own rate limit lives in the route; see the file header for why an
+	// unauthenticated endpoint is the right shape here.
+	app.route('/v1/federation/chat-fast', chatFastIntake.app);
 
 	const feedbackApp = new Hono();
 	feedbackApp.use('*', rateLimit('list', config.listRatePerMin));
@@ -891,6 +1040,28 @@ async function main(): Promise<void> {
 		// transaction (read-only + in-process emits), so it stops cleanly
 		// at its next loop boundary; no timeout race needed.
 		headTailer.stop();
+		stopPostingKeyRetry?.();
+		// The federation fast path's sender side: stop the warm-up interval and
+		// close the pooled hidden-service connections. Both are deliberately
+		// long-lived — a warm circuit is the whole point — so neither goes away
+		// on its own, and a shutdown that skipped this would leave a repeating
+		// timer and a handful of open circuits behind it.
+		chatFastDispatcher.stop();
+		// Hand over what is already queued for peers before the connections go.
+		// Bounded: a peer that cannot take a message in two seconds is not going
+		// to, and shutdown must not wait on the slowest instance in the
+		// federation. Anything still unsent arrives by the chain, as always.
+		// The deadline is given to drain() rather than only raced against it:
+		// the losing side of a bare race keeps polling for as long as the
+		// process lives, and the process can live a while yet (see the HTTP
+		// close below).
+		await Promise.race([
+			chatFastDispatcher.drain(2_000),
+			new Promise<void>((r) => setTimeout(r, 2_000))
+		]).catch(() => undefined);
+		// Bounded as well (v1.18.0 review, S6): `close()` waits for in-flight
+		// requests, and a warm-up already under way can run for a minute.
+		await closePool(2_000).catch(() => undefined);
 		// Give the poller up to 10 seconds to wrap up. If it's stuck
 		// on a slow RPC call, we've told it to abort via AbortSignal
 		// but the underlying fetch might not honor that in time.
@@ -931,9 +1102,27 @@ async function main(): Promise<void> {
 
 		// Close HTTP next. @hono/node-server exposes close via the
 		// ServerType returned from serve().
-		await new Promise<void>((resolve, reject) => {
+		//
+		// `server.close()` stops ACCEPTING connections and then fires its
+		// callback only once every existing one has ended — and this process
+		// deliberately holds connections open forever: an SSE chat stream is
+		// kept alive by its own `:keepalive` interval and ends when the browser
+		// goes away, not when we ask. So with a single chat tab open anywhere,
+		// waiting on that callback never returns, the lines below are never
+		// reached, and the process is eventually SIGKILLed by the supervisor
+		// instead of shutting down. Close the idle sockets, then bound the wait:
+		// a client that will not let go must not stop us from closing the
+		// database cleanly.
+		const httpClose = new Promise<void>((resolve, reject) => {
 			server.close((err?: Error) => (err ? reject(err) : resolve()));
 		});
+		const closeIdle = (server as unknown as { closeIdleConnections?: () => void })
+			.closeIdleConnections;
+		if (typeof closeIdle === 'function') closeIdle.call(server);
+		await Promise.race([
+			httpClose,
+			new Promise<void>((r) => setTimeout(r, 5_000))
+		]).catch(() => undefined);
 
 		// Then the DB pool.
 		await db.close();

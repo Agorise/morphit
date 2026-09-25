@@ -157,6 +157,16 @@
 						message: $_('chat.verify_peer.error_bad_key') as string
 					};
 					return;
+				case 'chain_unreachable':
+					// NOT a security event. We could not reach the chain to check
+					// at all, which on a Tor/I2P instance is an ordinary, transient
+					// thing. Rendering the red tamper banner here would teach the
+					// user to dismiss it, and that banner has to mean something.
+					panelState = {
+						kind: 'error',
+						message: $_('chat.verify_peer.error_chain_unreachable') as string
+					};
+					return;
 				case 'indexer_error':
 					panelState = {
 						kind: 'error',

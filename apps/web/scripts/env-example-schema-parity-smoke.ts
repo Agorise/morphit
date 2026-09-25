@@ -92,6 +92,27 @@ interface Service {
 	schemaPath: string;
 	examplePath: string;
 	scriptsDir: string;
+	/**
+	 * Source trees belonging to a DIFFERENT package that nevertheless read this
+	 * service's env file.
+	 *
+	 * A third category, added v1.18.0, and it needs its own justification
+	 * because a parity check that accepts a new excuse is a parity check that
+	 * has been weakened.
+	 *
+	 * `morphit-ops` reads the indexer's env file directly — that is how every
+	 * `doctor` check knows where the instance lives. So a var can be genuinely
+	 * consumed, genuinely documented in the right example, and belong in no Zod
+	 * schema, because the process that reads it is not the indexer. Before this,
+	 * the only way to document such a var was to add it to the indexer's schema
+	 * as config the indexer does not use — which is worse than the gap, since it
+	 * makes the schema lie about what the service reads.
+	 *
+	 * Narrow on purpose: it accepts the `readEnvVar(env, cfg, 'NAME')` shape the
+	 * ops CLI actually uses, so a var still has to be READ by something, not
+	 * merely mentioned.
+	 */
+	consumerDirs?: string[];
 }
 
 const SERVICES: Service[] = [
@@ -99,7 +120,8 @@ const SERVICES: Service[] = [
 		name: 'indexer',
 		schemaPath: 'apps/indexer/src/config/index.ts',
 		examplePath: 'ops/env/indexer.env.example',
-		scriptsDir: 'apps/indexer/scripts'
+		scriptsDir: 'apps/indexer/scripts',
+		consumerDirs: ['apps/ops-cli/src/commands']
 	},
 	{
 		name: 'relay',
@@ -215,6 +237,39 @@ function parseExampleVars(examplePath: string): Set<string> {
 }
 
 /**
+ * Scan a directory tree for `readEnvVar(..., 'MORPHIT_NAME')` references.
+ *
+ * The ops CLI does not touch `process.env` for these — it reads the operator's
+ * env FILE, because it is diagnosing an instance rather than being one. So the
+ * name appears as a string argument, and the scan has to look for that shape
+ * rather than the one `parseScriptEnvRefs` looks for.
+ */
+function parseConsumerEnvRefs(dirs: string[]): Set<string> {
+	const result = new Set<string>();
+	for (const dir of dirs) {
+		const fullDir = join(REPO_ROOT, dir);
+		let entries: string[];
+		try {
+			entries = readdirSync(fullDir);
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			if (!entry.endsWith('.ts')) continue;
+			try {
+				const src = readFileSync(join(fullDir, entry), 'utf-8');
+				const re = /['"`](MORPHIT_[A-Z0-9_]+)['"`]/g;
+				let m: RegExpExecArray | null;
+				while ((m = re.exec(src)) !== null) result.add(m[1]!);
+			} catch {
+				// skip unreadable file
+			}
+		}
+	}
+	return result;
+}
+
+/**
  * Scan apps/<svc>/scripts/ for any env var references.  Returns a
  * set of MORPHIT_<NAME> names referenced via process.env.
  */
@@ -250,6 +305,7 @@ for (const svc of SERVICES) {
 	const schemaVars = parseSchemaVars(svc.schemaPath);
 	const exampleVars = parseExampleVars(svc.examplePath);
 	const scriptVars = parseScriptEnvRefs(svc.scriptsDir);
+	for (const v of parseConsumerEnvRefs(svc.consumerDirs ?? [])) scriptVars.add(v);
 
 	// Direction A: every schema var must be in example
 	const missingInExample: string[] = [];

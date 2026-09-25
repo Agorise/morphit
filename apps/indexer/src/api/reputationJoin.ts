@@ -122,6 +122,24 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
  *   REMOVES accounts — it can never relax a sock-puppet exclusion or change the
  *   count of an account it keeps.
  */
+/*
+ * (v1.18.0 deep-deep, M2) FEE-PAID ONLY. What was wrong: every completed order
+ * counted, whatever its fee_status — an order op with NO fee transfer (row
+ * fee_status='missing') plus an order_complete op minted a trade credit for two
+ * free custom_json ops, so the "costs a real listing fee per fake trade" claim
+ * above was false. Now only completed orders whose fee is in the verified set
+ * the orderbook itself uses ('verified' | 'verified_by_attestation') count; H1
+ * made attestation no longer free, and the external-fee re-check demotes an
+ * attested order whose payment the explorers say does not exist. The
+ * alternative — refusing order_complete on unverified orders — was rejected:
+ * completing an order is also how its owner takes it down, and a read-side
+ * filter corrects already-indexed rows immediately, with no re-index.
+ *
+ * (v1.18.0 deep-deep, M3) A free first-buy waiver order (fee_method
+ * 'waived_first_buy', recorded as 'verified' at zero cost) still credits its
+ * OWNER — it is their real first trade — but never the named counterparty:
+ * otherwise every free sock signup could mint one trade credit for a target.
+ */
 export function tradeCountSql(scopeAccountsSql?: string): string {
 	const scope = scopeAccountsSql ? `\n\t       AND t.account IN (${scopeAccountsSql})` : '';
 	return `
@@ -130,10 +148,13 @@ export function tradeCountSql(scopeAccountsSql?: string): string {
 	        SELECT o.account AS account, o.completed_counterparty AS peer
 	          FROM orders o
 	         WHERE o.status = 'completed'
+	           AND o.fee_status IN ('verified', 'verified_by_attestation')
 	        UNION ALL
 	        SELECT o.completed_counterparty AS account, o.account AS peer
 	          FROM orders o
 	         WHERE o.status = 'completed'
+	           AND o.fee_status IN ('verified', 'verified_by_attestation')
+	           AND o.fee_method <> 'waived_first_buy'
 	           AND o.completed_counterparty IS NOT NULL
 	      ) t
 	     WHERE (t.peer IS NULL

@@ -211,7 +211,17 @@ const TRX = 'abc123def456';
 		bad('source', 'no sent_at stamp found — rows must outlive delivery to act as dedup tombstones');
 	}
 
-	if (/DELETE FROM push_pending WHERE sent_at IS NOT NULL/.test(flat) && /await this\.prune\(\)/.test(flat)) {
+	// v1.18.0 — the prune SQL moved to pushQueueJanitor.ts so a relay with push
+	// OFF prunes by the same rule (F36). Follow it there, and require that the
+	// sender's own prune() still calls it: a shared function nobody calls is the
+	// same "defined but never invoked" as before.
+	const janitorSrc = readFileSync(resolve(HERE, '../src/policy/pushQueueJanitor.ts'), 'utf8');
+	const janitorFlat = janitorSrc.replace(/\/\/.*$/gm, '').replace(/\s+/g, ' ');
+	if (
+		/DELETE FROM push_pending WHERE sent_at IS NOT NULL/.test(janitorFlat) &&
+		/async prune\(\)[^{]*\{[^}]*prunePushTombstones\(this\.db, this\.config\.pushMaxAgeSeconds\)/.test(flat) &&
+		/await this\.prune\(\)/.test(flat)
+	) {
 		ok('a pruner exists AND is actually called from the loop');
 	} else {
 		bad(

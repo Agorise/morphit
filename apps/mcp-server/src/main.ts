@@ -26,6 +26,7 @@
  * results.  Outbound fetches are SSRF-guarded in indexerClient.ts.
  */
 
+import { clientKey } from './clientKey.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -134,7 +135,7 @@ interface ToolRegistration<I extends z.ZodTypeAny> {
  *  repo version-consistency smoke (Category B) so it can't drift from the
  *  root package.json on a release bump — mirrors the relay/indexer
  *  health.ts VERSION constants. */
-const MCP_VERSION = '1.17.15';
+const MCP_VERSION = '1.18.0';
 
 const TOOLS: ToolRegistration<z.ZodTypeAny>[] = [
 	{
@@ -328,22 +329,6 @@ class RateLimiter {
 	}
 }
 
-/** Resolve the client identity for rate-limiting.  When the direct
- *  peer is loopback (i.e. the operator's reverse proxy), trust the
- *  LEFTMOST X-Forwarded-For hop as the real client; otherwise use the
- *  socket peer.  Bounds abuse per real client behind nginx and per
- *  connection for direct loopback access. */
-function clientKey(req: IncomingMessage): string {
-	const peer = req.socket.remoteAddress ?? 'unknown';
-	const peerLoopback =
-		peer === '127.0.0.1' || peer === '::1' || peer.startsWith('127.') || peer === '::ffff:127.0.0.1';
-	if (peerLoopback) {
-		const xff = req.headers['x-forwarded-for'];
-		const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
-		if (first) return first.slice(0, 64);
-	}
-	return peer;
-}
 
 function sendJson(res: ServerResponse, status: number, body: unknown, close = false): void {
 	const headers: Record<string, string> = {

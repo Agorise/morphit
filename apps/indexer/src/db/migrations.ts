@@ -115,7 +115,15 @@ COMMENT ON COLUMN orders.accepted_assets IS
 		// Partial (WHERE NOT NULL) since NULL rows (not yet backfilled) are never
 		// a lookup target and the backfill's own `WHERE posting_pubkey IS NULL`
 		// scan wants those rows excluded from this index anyway.
+		//
+		// v1.18.0 review (D8): the column itself is delivered by
+		// ensurePostingPubkeyColumn, which main.ts runs AFTER the migrations —
+		// so on a database old enough to predate the column, this index failed
+		// with "column posting_pubkey does not exist" on every boot and the
+		// ensure step never got to run. The same idempotent ADD COLUMN here
+		// first makes the order irrelevant.
 		sql: `
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS posting_pubkey TEXT;
 CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
     ON accounts (posting_pubkey)
     WHERE posting_pubkey IS NOT NULL;
@@ -254,6 +262,9 @@ COMMENT ON TABLE chat_folders IS
 		// makes the second INSERT a no-op, so the recipient gets ONE push, fast.
 		// featureBid/feedback leave source_trx_id NULL (single-path, no dedup);
 		// the partial index ignores NULLs. Idempotent with schema.sql.
+		// (True at v43 only: feedback became two-path and keyed in v1.5.5, and
+		// its key is namespaced since v1.18.0 — v60 corrects the column comment.
+		// This SQL is left as it shipped; migrations are history.)
 		sql: `
 ALTER TABLE push_pending
     ADD COLUMN IF NOT EXISTS source_trx_id TEXT;
@@ -564,6 +575,48 @@ COMMENT ON COLUMN known_instances.cached_clearnet_eliminated IS
     'federation probe. TRUE only when the peer proved every private-transport leg '
     '(chain/Tor/I2P/price/frontend/upgrade/matrix). Drives the strong '
     '"Zero use of clearnet internet" directory label. v1.16.1.';
+`
+	}
+
+	,{
+		version: 60,
+		description:
+			'push_pending.source_trx_id — correct the column comment. v43 described it as "the on-chain trx id" and said feedback left it NULL. Feedback became two-path and keyed in v1.5.5, and since v1.18.0 its key is namespaced (feedback:<trx id>) so a review and a chat message carried by ONE transaction no longer collide on (account, source_trx_id) and silently drop one notification (F17b). Comment only; no data or index change.',
+		// Why a migration for a comment: `\d+ push_pending` is what an operator
+		// reads when a notification goes missing, and the v43 text sends them
+		// looking for a NULL that is not there and a bare trx id that no longer is.
+		// COMMENT ON is idempotent, so this is safe on fresh and upgraded DBs alike.
+		sql: `
+COMMENT ON COLUMN push_pending.source_trx_id IS
+    'Dedup key shared by the fast (head-block) and durable enqueues of ONE source '
+    'operation; the partial UNIQUE (account, source_trx_id) makes the later INSERT '
+    'a no-op, so exactly one push is delivered. Chat: the on-chain trx id. Feedback: '
+    '''feedback:'' || trx id — namespaced because one transaction can carry a chat '
+    'op and a review for the same account (F17b, v1.18.0). NULL for single-path '
+    'pushes (featureBid outbid); the partial index ignores NULLs. A dedup key only: '
+    'nothing reads it back as a trx id.';
+`
+	}
+
+	,{
+		version: 61,
+		description:
+			'accounts.posting_key_reconciled — FALSE until this row\'s posting_pubkey has been confirmed against the chain. Rows written before v1.18.0 recorded the key at first observation and never again, so an account that rotated its posting key away from a LEAKED key before upgrading still holds the leaked key here, and the fast path verifies pushed chat against this column. Every existing row starts FALSE; the dispatcher writes TRUE with the keys it records; the boot backfill reconciles the rest against the chain; the fast path asks the chain before trusting a FALSE row. Additive, with a default.',
+		// A column rather than a one-off sweep: the sweep alone would leave a
+		// window — minutes on a big table — in which the leaked key still
+		// verified, and the flag is what lets the fast path refuse to trust an
+		// unconfirmed key during that window. ADD COLUMN IF NOT EXISTS is
+		// idempotent, and the DEFAULT gives every existing row FALSE.
+		sql: `
+ALTER TABLE accounts
+    ADD COLUMN IF NOT EXISTS posting_key_reconciled BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN accounts.posting_key_reconciled IS
+    'TRUE once posting_pubkey is known to match the chain: written by the '
+    'dispatcher from an account create or account_update op, or by the boot '
+    'backfill from a chain read. FALSE rows date from before v1.18.0, when the '
+    'key was recorded once and never updated, and may hold a key the owner has '
+    'since rotated away from; the fast path re-reads the chain before trusting one.';
 `
 	}
 

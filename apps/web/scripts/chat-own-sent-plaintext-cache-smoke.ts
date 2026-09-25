@@ -86,7 +86,9 @@ const SCENARIOS: readonly Scenario[] = [
 			'const ownTag = clientTagFromHeader(rec.header);',
 			'deps.getLiveIdentity() !== null && ownTag !== null',
 			'ownSentPlaintext.get(ownSentKey(deps.me, ownTag))',
-			'text: ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER'
+			// v1.18.0: named, because the retry link compares it before the push.
+			'const ownText = ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER;',
+			'text: ownText,'
 		],
 		mustNotHave: [
 			// Pre-fix: our own historical messages were ALWAYS placeholder.

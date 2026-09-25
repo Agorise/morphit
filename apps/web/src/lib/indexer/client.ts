@@ -11,6 +11,7 @@
  */
 
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
+import { indexerTimeoutMs } from '$net/transportBudget';
 
 import type {
 	AccountFeedbackResponse,
@@ -65,7 +66,12 @@ export type Result<T> =
 			readonly message: string;
 	  };
 
-const DEFAULT_TIMEOUT_MS = 8_000;
+// The per-call budget now depends on what the request has to cross, so there is
+// no single default here any more — see `indexerTimeoutMs` in
+// `$net/transportBudget`. A flat 8s meant that on a Tor/I2P instance essentially
+// every frontend request aborted during tunnel setup, and each caller reported
+// that as its own kind of failure: an unverifiable chat key, an unreachable peer
+// instance, an empty orderbook.
 
 /** Core fetch wrapper. Handles: timeout via AbortController,
  *  JSON parse error → 'network_error', 200 → T, 4xx/5xx → map
@@ -81,9 +87,16 @@ async function request<T>(
 		for (const [k, v] of init.query) url.searchParams.append(k, v);
 	}
 
-	// Compose a timeout signal with any caller-supplied signal.
+	// Compose a timeout signal with any caller-supplied signal. The budget
+	// depends on what this particular request has to cross: a hidden page
+	// origin (every call from a Tor/I2P visitor) or a hidden TARGET origin
+	// (the compare page fetching a peer instance's orderbook from a .b32.i2p
+	// address, which the old flat budget could not complete even from clearnet).
 	const internalAbort = new AbortController();
-	const timeoutId = setTimeout(() => internalAbort.abort(), DEFAULT_TIMEOUT_MS);
+	const timeoutId = setTimeout(
+		() => internalAbort.abort(),
+		indexerTimeoutMs(init.origin ?? MORPHIT_INDEXER_ORIGIN)
+	);
 	const combined = init.signal
 		? anySignal([init.signal, internalAbort.signal])
 		: internalAbort.signal;
@@ -117,18 +130,30 @@ async function request<T>(
 			message: err instanceof Error ? err.message : 'Network error'
 		};
 	}
-	clearTimeout(timeoutId);
-
+	// NOT cleared yet. `fetch()` resolves on headers; the body is still
+	// streaming, and a connection that dies or stalls mid-body — routine over
+	// Tor/I2P — would leave the read below with no timeout at all and hang the
+	// caller forever. Keeping the abort armed across the body read means a
+	// stalled body fails cleanly as a timeout instead of never settling.
 	let body: unknown;
 	try {
 		body = await response.json();
 	} catch {
+		clearTimeout(timeoutId);
+		// Distinguish "the connection died while we were reading" from "the
+		// server sent us something that is not JSON". Only the latter is the
+		// indexer misbehaving; reporting a truncated hidden-transport read as a
+		// malformed response sends the operator looking in the wrong place.
+		if (internalAbort.signal.aborted) {
+			return { ok: false, code: 'timeout', message: 'Request timed out. Try again.' };
+		}
 		return {
 			ok: false,
 			code: 'network_error',
 			message: `Malformed response from indexer (status ${response.status})`
 		};
 	}
+	clearTimeout(timeoutId);
 
 	if (response.ok) {
 		return { ok: true, data: body as T };

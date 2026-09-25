@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
-	import { DEFAULT_LOCALE, type LocaleCode , SUPPORTED_LOCALES} from '$i18n/locales';
+	import { DEFAULT_LOCALE, type LocaleCode, SUPPORTED_LOCALES } from '$i18n/locales';
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { installPrompt, isInstalled, promptInstall } from '$lib/pwa/installPrompt';
@@ -34,7 +35,12 @@
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 	import { changePassword } from '$crypto/changePassword';
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
-	import { hiddenAccounts, unhideAccount, clearAllHidden, refreshHidden } from '$lib/utils/hiddenAccounts';
+	import {
+		hiddenAccounts,
+		unhideAccount,
+		clearAllHidden,
+		refreshHidden
+	} from '$lib/utils/hiddenAccounts';
 	import {
 		firstTradeAnnounce,
 		setFirstTradeAnnounce,
@@ -45,14 +51,14 @@
 	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
 	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
 	import { getProfile } from '$lib/indexer/client';
-	import { readLocalPreferredLangs, writeLocalPreferredLangs, preferredLangsFromProfile } from '$lib/stores/preferredLangs';
+	import {
+		readLocalPreferredLangs,
+		writeLocalPreferredLangs,
+		preferredLangsFromProfile
+	} from '$lib/stores/preferredLangs';
 	import { isOrderLang } from '$i18n/locales';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
-	import {
-		broadcastProfile,
-		getUserBlurtAccount,
-		setUserBlurtAccount
-	} from '$blurt/ops/profile';
+	import { broadcastProfile, getUserBlurtAccount, setUserBlurtAccount } from '$blurt/ops/profile';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
@@ -1566,7 +1572,7 @@
 			<div class="flex min-w-0 items-center gap-3">
 				<label
 					for="avatar-file-input"
-					class="shrink-0 cursor-pointer rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 focus-within:outline-none focus-within:ring-2 focus-within:ring-morphit-emerald aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+					class="shrink-0 cursor-pointer rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white focus-within:outline-none focus-within:ring-2 focus-within:ring-morphit-emerald hover:brightness-110 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
 					aria-disabled={avatarProcessing || avatarBroadcasting}
 				>
 					{$_('settings.avatar.file_input_label')}
@@ -1665,12 +1671,16 @@
 			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri && hasCustomAvatar}
 				<div class="flex items-center gap-3">
 					{#if currentAvatarSvg}
-						<span
-							class="h-12 w-12 flex-none overflow-hidden rounded-full bg-ink-100 ring-1 ring-ink-200 dark:bg-ink-800 dark:ring-ink-700 [&>svg]:h-full [&>svg]:w-full"
+						<!-- An <img>, never inlined (v1.18.0 deep-deep, M1). -->
+						<img
+							src={svgAvatarImgSrc(currentAvatarSvg)}
+							alt=""
+							width="48"
+							height="48"
+							decoding="async"
+							class="h-12 w-12 flex-none rounded-full bg-ink-100 object-cover ring-1 ring-ink-200 dark:bg-ink-800 dark:ring-ink-700"
 							aria-hidden="true"
-						>
-							{@html currentAvatarSvg}
-						</span>
+						/>
 					{:else if currentAvatarDataUri}
 						<img
 							src={currentAvatarDataUri}
@@ -2006,8 +2016,7 @@
 				size="sm"
 				busy={websiteSaving}
 				done={websiteSavedToast}
-				disabled={!websiteIsValid ||
-					(websiteIsEmpty ? '' : websiteCleaned) === websiteSaved}
+				disabled={!websiteIsValid || (websiteIsEmpty ? '' : websiteCleaned) === websiteSaved}
 				busyLabel={$_('common.saving')}
 				onclick={saveWebsiteLocal}
 			>
@@ -2412,8 +2421,8 @@
 		<div class="flex items-start justify-between gap-4">
 			<div class="min-w-0">
 				<h2 id="hidden-accounts-heading" class="min-w-0 font-display text-xl font-bold">
-				{$_('settings.hidden_accounts.heading')}
-			</h2>
+					{$_('settings.hidden_accounts.heading')}
+				</h2>
 				<div class="mt-1"><VisibilityBadge scope="private" /></div>
 			</div>
 			<div class="flex flex-none items-center gap-2">
@@ -2513,8 +2522,8 @@
 		<div class="flex items-start justify-between gap-4">
 			<div class="min-w-0">
 				<h2 id="blocked-accounts-heading" class="min-w-0 font-display text-xl font-bold">
-				{$_('settings.blocked_accounts.heading')}
-			</h2>
+					{$_('settings.blocked_accounts.heading')}
+				</h2>
 				<div class="mt-1"><VisibilityBadge scope="private" /></div>
 			</div>
 			<div class="flex flex-none items-center gap-2">

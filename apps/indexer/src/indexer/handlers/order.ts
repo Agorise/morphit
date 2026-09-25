@@ -861,6 +861,22 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				external_tx_id: v.external_tx_id,
 				prior_claimer: reuseProbe.rows[0]!.account
 			});
+			// (v1.18.0 deep-deep, H2) What was wrong: this INSERT wrote
+			// external_tx_id = the reused txid, which collides with the
+			// partial UNIQUE index orders_external_tx_id_uniq
+			// (fee_method, external_tx_id) WHERE external_tx_id IS NOT NULL
+			// held by the FIRST claimant. The handler threw, the dispatcher
+			// logged handler_threw, and the second claimant's order got no
+			// row at all — the user never saw why. The documented 'reused'
+			// row was dead code. The reused row is now written with
+			// external_tx_id = NULL: the index cannot fire (the partial
+			// index skips NULLs, so no ON CONFLICT arbiter on it is needed
+			// and the (account, permlink) arbiter still makes replays
+			// idempotent), fee_status='reused' tells the UI exactly why the
+			// order is not on the book, and the claimed txid is kept in the
+			// fee_tx_reused log line above. The real fix — binding a BTC
+			// payment to the lister — needs a protocol change and is
+			// deferred.
 			const reusedRes = await client.query(
 				`INSERT INTO orders (
 					account, permlink, side, asset, asset_network, fiat_currency,
@@ -869,7 +885,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					expires_at, fee_status, fee_method, external_tx_id, tx_proof,
 					operator_tag, accepted_assets, specific_barter_title, lang
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-				          'live', $13, $13, $14, 'reused', $15, $16, $17, $18, $19, $20, $21)
+				          'live', $13, $13, $14, 'reused', $15, NULL, $16, $17, $18, $19, $20)
 				ON CONFLICT (account, permlink) DO NOTHING`,
 				[
 					ctx.signer,
@@ -887,7 +903,6 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					ctx.blockTime,
 					v.expires_at,
 					v.fee_method,
-					v.external_tx_id,
 					v.tx_proof,
 					operatorTagForRow,
 					v.accepted_assets,

@@ -13,7 +13,12 @@
 import { readFileSync, statSync } from 'node:fs';
 import { z } from 'zod';
 import { looksLikeEnvelope } from '../crypto/keyEnvelope.ts';
-import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import {
+	hiddenNetworkOf,
+	isHiddenServiceOrigin,
+	isHiddenOnlyEndpointSet
+} from '@morphit/hidden-transport';
 
 /**
  * A VAPID application-server (public) key is the uncompressed P-256 public
@@ -141,6 +146,20 @@ const envSchema = z.object({
 	// of truth in @morphit/operator-config), identical to the indexer's
 	// fallback — no more divergent hardcoded lists.
 	MORPHIT_RELAY_BLURT_RPC: z.string().default([...DEFAULT_BLURT_RPC_ENDPOINTS].join(',')),
+	// v1.18.0 (F32) — hidden-service RPC endpoints, the relay's copy of the
+	// indexer's MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS, with the same baked default
+	// so every relay carries the public hidden nodes as a censorship-resistant
+	// fallback. Reached through the shared routing dispatcher (Tor SOCKS / i2pd),
+	// which the relay did not have: it could hold such an endpoint in its pool
+	// and never reach it. Empty `MORPHIT_RELAY_BLURT_RPC` with a non-empty list
+	// here makes the relay HIDDEN-ONLY: public clearnet refused, fail-closed.
+	MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS: z
+		.string()
+		.default([...DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS].join(',')),
+	// Where this box's Tor SOCKS proxy and i2pd HTTP proxy listen. Blank = that
+	// daemon is not run here, so that network's endpoints are not dialled.
+	MORPHIT_RELAY_TOR_SOCKS: z.string().default('127.0.0.1:9050'),
+	MORPHIT_RELAY_I2P_HTTP_PROXY: z.string().default('127.0.0.1:4444'),
 	MORPHIT_RELAY_ALLOWED_ORIGINS: z.string().default('https://morphit.io'),
 
 	// Rate limits.
@@ -417,6 +436,16 @@ export interface Config {
 	readonly listenPort: number;
 	readonly publicOrigin: string;
 	readonly blurtRpcEndpoints: readonly string[];
+	/** v1.18.0 (F32) — hidden-service RPC endpoints (.onion / .i2p), routed
+	 *  through the local Tor / i2pd proxies by the shared routing dispatcher. */
+	readonly hiddenRpcEndpoints: readonly string[];
+	/** The local proxies those endpoints go through. Blank = not run here. */
+	readonly hiddenServiceProxies: { readonly torSocks: string; readonly i2pHttpProxy: string };
+	/** True when EVERY endpoint this relay may reach the chain through is a
+	 *  hidden one. The relay then refuses public clearnet outright — the
+	 *  routing dispatcher fails closed — and sends no Web Push, whose endpoints
+	 *  are the browser vendors' clearnet push services. */
+	readonly hiddenOnly: boolean;
 	readonly relayAccount: string;
 	/** WIF-formatted private key string. Present when the key
 	 *  file is a plaintext WIF; undefined when the file is an
@@ -604,8 +633,24 @@ export function loadConfig(): Config {
 	}
 
 	const blurtRpcEndpoints = splitTrim(env.MORPHIT_RELAY_BLURT_RPC);
-	if (blurtRpcEndpoints.length === 0) {
-		throw new Error('MORPHIT_RELAY_BLURT_RPC must list at least one endpoint');
+	const hiddenRpcEndpoints = splitTrim(env.MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS);
+	for (const ep of hiddenRpcEndpoints) {
+		// A SECURITY GUARD, as on the indexer: only a genuine hidden host may use
+		// this knob's http://, so it can never smuggle a clearnet URL past the
+		// https requirement on the list above.
+		const net = hiddenNetworkOf(ep);
+		if (!isHiddenServiceOrigin(ep) || (net !== 'tor' && net !== 'i2p')) {
+			throw new Error(
+				`MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS entry ${JSON.stringify(ep)} must be an ` +
+					`http:// .onion or .i2p URL`
+			);
+		}
+	}
+	if (blurtRpcEndpoints.length === 0 && hiddenRpcEndpoints.length === 0) {
+		throw new Error(
+			'MORPHIT_RELAY_BLURT_RPC must list at least one endpoint ' +
+				'(or, for a hidden-only relay, leave it empty and list MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS)'
+		);
 	}
 	for (const ep of blurtRpcEndpoints) {
 		if (!ep.startsWith('https://') && !isHiddenServiceOrigin(ep)) {
@@ -634,6 +679,12 @@ export function loadConfig(): Config {
 		listenPort: env.MORPHIT_RELAY_LISTEN_PORT,
 		publicOrigin: env.MORPHIT_RELAY_PUBLIC_ORIGIN,
 		blurtRpcEndpoints,
+		hiddenRpcEndpoints,
+		hiddenServiceProxies: {
+			torSocks: env.MORPHIT_RELAY_TOR_SOCKS.trim(),
+			i2pHttpProxy: env.MORPHIT_RELAY_I2P_HTTP_PROXY.trim()
+		},
+		hiddenOnly: relayIsHiddenOnly(blurtRpcEndpoints, hiddenRpcEndpoints),
 		relayAccount: env.MORPHIT_RELAY_ACCOUNT,
 		relayActiveKeyWif: wif,
 		relayActiveKeyEnvelope: keyEnvelope,
@@ -684,7 +735,13 @@ export function loadConfig(): Config {
 		pushEnabled: Boolean(
 			isValidVapidPublicKey(env.MORPHIT_RELAY_VAPID_PUBLIC_KEY) &&
 				env.MORPHIT_RELAY_VAPID_PRIVATE_KEY &&
-				isValidVapidSubject(env.MORPHIT_RELAY_VAPID_SUBJECT)
+				isValidVapidSubject(env.MORPHIT_RELAY_VAPID_SUBJECT) &&
+				// Web Push is delivered to the browser vendor's push service —
+				// a public clearnet host by construction — and the web-push
+				// library opens the connection with node:https, which no
+				// dispatcher sees. A hidden-only relay therefore does not send
+				// it. main.ts says so at boot.
+				!relayIsHiddenOnly(blurtRpcEndpoints, hiddenRpcEndpoints)
 		),
 		pushPollIntervalMs: env.MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS,
 		pushBatchSize: env.MORPHIT_RELAY_PUSH_BATCH_SIZE,
@@ -694,6 +751,40 @@ export function loadConfig(): Config {
 	};
 }
 
+/**
+ * Hidden-only ⇔ this relay has at least one chain endpoint and every one of
+ * them is a hidden service. PURE. Judged over BOTH lists, because the clearnet
+ * list has always accepted an http:// hidden entry: an operator who put only
+ * onions there is hidden-only too, and must be treated as such.
+ */
+export function relayIsHiddenOnly(
+	clearnetList: readonly string[],
+	hiddenList: readonly string[]
+): boolean {
+	// The rule lives in the transport package, where `morphit-ops upgrade` reads
+	// it too: the upgrade's "this relay is now hidden-only" must be this verdict.
+	return isHiddenOnlyEndpointSet(clearnetList, hiddenList);
+}
+
+/**
+ * Whether, and how, this relay must install the hidden-service router. PURE.
+ *   - 'refuse' — hidden-only: route hidden hosts, fail closed on public clearnet.
+ *   - 'allow'  — hidden endpoints alongside clearnet ones: route the hidden,
+ *                leave clearnet exactly as it was.
+ *   - null     — clearnet only: install nothing, behaviour unchanged.
+ */
+export function hiddenRouterPolicy(cfg: {
+	readonly hiddenOnly: boolean;
+	readonly blurtRpcEndpoints: readonly string[];
+	readonly hiddenRpcEndpoints: readonly string[];
+}): 'refuse' | 'allow' | null {
+	if (cfg.hiddenOnly) return 'refuse';
+	const anyHidden = [...cfg.blurtRpcEndpoints, ...cfg.hiddenRpcEndpoints].some((ep) =>
+		isHiddenServiceOrigin(ep)
+	);
+	return anyHidden ? 'allow' : null;
+}
+
 function splitTrim(s: string): string[] {
 	return s
 		.split(',')
@@ -701,16 +792,3 @@ function splitTrim(s: string): string[] {
 		.filter(Boolean);
 }
 
-/** A .onion / .i2p host is SELF-AUTHENTICATING — the network layer provides the
- *  encryption and the address IS the public key, so the service is served over
- *  plain `http://` with no TLS (a cert would be both pointless and impossible).
- *  Accept `http://` ONLY for those hosts; everything else must still be https. */
-function isHiddenServiceOrigin(o: string): boolean {
-	if (!o.startsWith('http://')) return false;
-	try {
-		const h = new URL(o).hostname.toLowerCase();
-		return h.endsWith('.onion') || h.endsWith('.i2p');
-	} catch {
-		return false;
-	}
-}

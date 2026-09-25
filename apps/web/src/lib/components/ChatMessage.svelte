@@ -30,7 +30,12 @@
 
 	import { _ } from 'svelte-i18n';
 	import type { LocalMessage } from '$lib/chat/chatService';
-	import { CHAT_CONSTANTS } from '$lib/chat/chatService';
+	import {
+		CHAT_CONSTANTS,
+		NOT_CONFIRMED_SENTINEL,
+		ON_CHAIN_NOT_ACCEPTED_SENTINEL,
+		SESSION_LOCKED_SENTINEL
+	} from '$lib/chat/chatService';
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
 	import { CARRIERS, buildTrackingUrl } from '$lib/shipping/carriers';
 
@@ -174,6 +179,10 @@
 	 *  time is the broadcast latency, decoupled from follower/SSE lag. */
 	const isSending = $derived(message.state === 'pending');
 	const isFailed = $derived(message.state === 'failed');
+	/** A provisional copy the chain never recorded (see `unrecorded` in
+	 *  chatService.ts). Kept on screen — it was read — but never passed off as
+	 *  an ordinary message: dashed outline, dimmed, and a note beneath. */
+	const isUnrecorded = $derived(message.unrecorded === true && !isFailed);
 	// Placeholder = either the explicit decrypt-failed signal, or
 	// the legacy string match (for the "message sent from my other
 	// session" case where decryptFailed is false but the text still
@@ -704,6 +713,10 @@
 			class:text-red-900={isFailed}
 			class:dark:text-red-200={isFailed}
 			class:opacity-80={isSending}
+			class:opacity-70={isUnrecorded}
+			class:border={isUnrecorded}
+			class:border-dashed={isUnrecorded}
+			class:border-amber-600={isUnrecorded}
 			title={timestampRevealable ? fullTimestamp : undefined}
 			onclick={onBubbleActivate}
 			onkeydown={(e) => {
@@ -1512,16 +1525,39 @@
 					<span class="text-red-700 dark:text-red-300">
 						{$_('chat.message.failed_label')}
 					</span>
-					<button
-						type="button"
-						class="rounded font-semibold text-morphit-emerald hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-						onclick={() => onRetry?.(message.localSeq)}
-						aria-label={$_('chat.message.retry_aria') as string}
-					>
-						{$_('chat.message.retry')}
-					</button>
+					<!-- (v1.18.0 deep-deep, L1) No Retry when the chain has it and the
+					     indexers refused it: a resend would be refused the same way. -->
+					{#if message.error !== ON_CHAIN_NOT_ACCEPTED_SENTINEL}
+						<button
+							type="button"
+							class="rounded font-semibold text-morphit-emerald hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
+							onclick={() => onRetry?.(message.localSeq)}
+							aria-label={$_('chat.message.retry_aria') as string}
+						>
+							{$_('chat.message.retry')}
+						</button>
+					{/if}
 				{/if}
 			</div>
+		{/if}
+
+		<!-- A copy the chain never recorded. Not an error the reader can act on,
+		     so no red and no button: just the fact, and what it means for them. -->
+		{#if isUnrecorded}
+			<p
+				class="max-w-prose text-xs text-amber-800 dark:text-amber-300"
+				class:self-end={isOutgoing}
+				class:self-start={!isOutgoing}
+				class:text-right={isOutgoing}
+				role="note"
+			>
+				<span class="block font-semibold">{$_('chat.message.unrecorded_label')}</span>
+				<span class="block">
+					{isOutgoing
+						? $_('chat.message.unrecorded_detail_own')
+						: $_('chat.message.unrecorded_detail')}
+				</span>
+			</p>
 		{/if}
 
 		<!-- Detailed error message on failed, below the meta line. Present
@@ -1545,6 +1581,18 @@
 					{$_('chat.security.pub_pin_chain_older_than_pin')}
 				{:else if message.error === 'pub_pin_malformed_indexer_response'}
 					{$_('chat.security.pub_pin_malformed_indexer_response')}
+				{:else if message.error === NOT_CONFIRMED_SENTINEL}
+					{$_('chat.message.not_confirmed_on_chain')}
+				{:else if message.error === ON_CHAIN_NOT_ACCEPTED_SENTINEL}
+					{$_('chat.message.on_chain_not_accepted')}
+				{:else if message.error === SESSION_LOCKED_SENTINEL}
+					{$_('chat.message.session_locked')}
+				{:else if message.error === 'chain_unreachable'}
+					<!-- Not a pub_pin_* code on purpose: the chain was never
+					     reached, so nothing about the peer's key is in doubt and
+					     the FAQ deep-link below (which explains key tampering)
+					     must not fire for it. -->
+					{$_('chat.security.chain_unreachable')}
 				{:else}
 					{message.error}
 				{/if}

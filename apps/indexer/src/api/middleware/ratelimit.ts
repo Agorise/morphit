@@ -1,11 +1,24 @@
 /**
  * Morphit indexer — per-IP rate-limit middleware.
  *
- * Sliding-window token bucket, in-memory. Two tiers:
+ * Sliding-window token bucket, in-memory. Three tiers:
  *   - `list`:     orderbook, feedback list, chat history — busier
  *                 endpoints, lower limit (default 120/min)
  *   - `resource`: profile by account, release, single order —
  *                 cheap lookups, higher limit (default 600/min)
+ *   - `federation`: instance-to-instance traffic (chat fast push).
+ *                 Its own tier for a reason that is easy to miss:
+ *                 THE BUCKET KEY IS `tier:ip`, NOT `tier:ip:limit`.
+ *                 Two middlewares on the same tier share one
+ *                 timestamp array and each compares its length
+ *                 against its OWN limit, so the lower limit wins
+ *                 for both. Federation runs at thousands/min while
+ *                 /v1/broadcast runs at hundreds; on the same tier,
+ *                 a few hundred peer pushes a minute would 429 every
+ *                 user write on the instance — and over Tor/I2P
+ *                 every peer AND every user arrives as 127.0.0.1,
+ *                 so that is one shared bucket for the whole world.
+ *                 Adding a tier is how you get a separate bucket.
  *
  * Client-IP derivation (Finding B): forwarded-address headers
  * (X-Real-IP, X-Forwarded-For) are honored only when the socket
@@ -23,7 +36,7 @@
 
 import type { Context, MiddlewareHandler } from 'hono';
 
-type Tier = 'list' | 'resource';
+type Tier = 'list' | 'resource' | 'federation';
 
 interface Bucket {
 	/** Unix-ms timestamps of requests still within the window. */
@@ -103,8 +116,17 @@ export function rateLimit(tier: Tier, perMin: number): MiddlewareHandler {
 			bucket = { timestamps: [] };
 			buckets.set(key, bucket);
 		}
-		// Drop expired timestamps.
-		bucket.timestamps = bucket.timestamps.filter((t) => t > cutoff);
+		// Drop expired timestamps. Entries are pushed in arrival order and
+		// Date.now() does not go backwards, so the expired ones are always a
+		// PREFIX — scan it and splice once, rather than .filter()ing (which
+		// allocates a whole new array on every request). At the federation
+		// tier this array holds thousands of entries and is touched ~100
+		// times a second, so the difference is not academic.
+		let expired = 0;
+		while (expired < bucket.timestamps.length && (bucket.timestamps[expired] ?? 0) <= cutoff) {
+			expired++;
+		}
+		if (expired > 0) bucket.timestamps.splice(0, expired);
 
 		if (bucket.timestamps.length >= perMin) {
 			// Compute retry-after from the oldest timestamp in the window.

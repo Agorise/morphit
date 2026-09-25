@@ -29,7 +29,7 @@ const log = logger('relay-acts');
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-export const VERSION = '1.17.15';
+export const VERSION = '1.18.0';
 const POLL_INTERVAL_MS = 30_000;
 /** Liquid-BLURT headroom (above the account_creation_fee) the relay
  *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
@@ -187,7 +187,13 @@ export class HealthService {
 			const body: Record<string, unknown> = {
 				status: 'ok',
 				rpc_endpoints_healthy: rpcEndpointsHealthy,
-				rpc_endpoints_total: rpcSnap.length
+				rpc_endpoints_total: rpcSnap.length,
+				// v1.18.0 (F32) — whether this relay reaches the chain ONLY over
+				// hidden services. The indexer reads it to decide whether the
+				// instance may claim "Zero use of clearnet internet": the relay is
+				// the process that broadcasts, and the claim is about the node, not
+				// just the indexer. Not sensitive — the claim itself is public.
+				hidden_only: this.cfg.hiddenOnly
 			};
 			if (this.cfg.verboseHealth) {
 				const elapsedNs = process.hrtime.bigint() - this.startedHrTime;

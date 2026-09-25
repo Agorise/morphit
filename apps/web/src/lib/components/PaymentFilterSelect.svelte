@@ -54,8 +54,9 @@
 
 	// LAZY: the registry + its search matcher are the heavy bits; load them
 	// only when the user focuses this field (ensureLoaded is wired to the
-	// input's onfocus). Until then `all` is just the operator additions and
-	// `hits` is empty, so the initial orderbook bundle ships neither.
+	// input's onfocus; opening the menu is a separate gesture). Until then
+	// `all` is just the operator additions and `hits` is empty, so the initial
+	// orderbook bundle ships neither.
 	let regMod = $state<typeof import('$lib/payments/registry') | null>(null);
 	let searchMod = $state<typeof import('$lib/payments/search') | null>(null);
 
@@ -128,6 +129,23 @@
 		}
 	}
 
+	/**
+	 * A real user gesture on the field: press to open (and start the lazy load
+	 * if focus has not already).
+	 *
+	 * Opening is deliberately NOT wired to focus. The open menu paints a
+	 * `fixed inset-0 backdrop-blur-sm` scrim across the viewport, and Firefox
+	 * restores focus to the previously-focused element on every reload — so
+	 * opening from focus blurred the whole page on load for anyone who had
+	 * used this filter in that tab, before they touched anything. Focus is not
+	 * intent; it also fires on programmatic .focus() and tab-through. The
+	 * registry prefetch below stays on focus because it paints nothing.
+	 */
+	function openFromGesture(): void {
+		open = true;
+		void ensureLoaded();
+	}
+
 	// Robust outside-close — same approach as FiatCurrencySelect: a
 	// document-level pointerdown listener (capture) closes the menu when the
 	// press lands outside this component's root. pointerdown (not click)
@@ -161,7 +179,17 @@
 {/if}
 
 <div class="relative {open ? 'z-30' : 'z-10'}" bind:this={rootEl}>
+	<!-- svelte-ignore a11y_no_static_element_interactions -- the interactive
+	     control IS the <input role="combobox"> inside this wrapper; the wrapper's
+	     pointerdown only forwards a press on the surrounding chrome (chips row,
+	     padding) to it. Giving the wrapper its own ARIA role would announce a
+	     second control that does not exist. Keyboard users reach the same
+	     behaviour through the input: typing and ArrowDown open, Escape closes. -->
+	<!-- The press anywhere in the field opens the menu (see openFromGesture).
+	     It sits on the wrapper rather than the input so pressing the chips row
+	     or the field's padding still opens it, as focusing used to. -->
 	<div
+		onpointerdown={openFromGesture}
 		onfocusin={() => (focused = true)}
 		onfocusout={() => (focused = false)}
 		class="flex flex-wrap items-center gap-1 rounded-xl border border-ink-200 dark:border-ink-700 transition-colors duration-150 ease-out hover:border-ink-300 dark:hover:border-ink-600 {focused || open
@@ -192,10 +220,7 @@
 			role="combobox"
 			aria-expanded={open}
 			aria-controls="payment-method-listbox"
-			onfocus={() => {
-				open = true;
-				void ensureLoaded();
-			}}
+			onfocus={() => void ensureLoaded()}
 			oninput={() => {
 				open = true;
 				activeIndex = 0;

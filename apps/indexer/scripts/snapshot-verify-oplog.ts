@@ -19,8 +19,14 @@
  *   node_modules/.bin/tsx --tsconfig tsconfig.smoke.json \
  *     apps/indexer/scripts/snapshot-verify-oplog.ts [--samples 40] [--up-to <block>]
  *
- * Exit 0 = verified (or nothing to verify). Exit 1 = quarantine (mismatch).
- * Exit 2 = inconclusive (couldn't reach the chain) — treated as NOT verified.
+ * Exit 0 = verified. Exit 3 = QUARANTINE (a sampled op is not on the chain as
+ * recorded). Exit 2 = inconclusive (chain unreachable, or nothing to sample) —
+ * treated as NOT verified. Any other code (a crash) is inconclusive too.
+ *
+ * v1.18.0 deep-deep (rv2-6): quarantine used to be exit 1 — the same code Node
+ * uses for an uncaught startup error, so a script that could not even load read
+ * as "this snapshot is fabricated". And an empty ops log exited 0, "verified",
+ * when nothing had been checked at all.
  */
 import { loadConfig } from '../src/config/index.ts';
 import { createDatabase } from '../src/db/pool.ts';
@@ -77,8 +83,13 @@ async function main(): Promise<void> {
 		}));
 
 		if (rows.length === 0) {
-			process.stderr.write('snapshot-verify-oplog: no applied ops in range — nothing to verify.\n');
-			process.exit(0);
+			// rv2-6: nothing sampled is not a pass. A restored snapshot always has
+			// applied ops; an empty log proves nothing about the rest of the data.
+			process.stderr.write(
+				'snapshot-verify-oplog: no applied ops in range — nothing could be checked, so this is\n' +
+					'  INCONCLUSIVE, not a pass.\n'
+			);
+			process.exit(2);
 		}
 
 		const sample = pickVerificationSample(rows, samples);
@@ -132,7 +143,7 @@ async function main(): Promise<void> {
 					`  corrupted. Do NOT serve from it. Wipe the DB and full-replay:\n` +
 					`      set MORPHIT_INDEXER_START_BLOCK to genesis, then start the indexer.\n`
 			);
-			process.exit(1);
+			process.exit(3);
 		}
 		if (verified === 0) {
 			process.stderr.write(

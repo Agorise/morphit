@@ -165,8 +165,24 @@ export class PushEndpoints {
 		 *  verified IF present but its absence is not a
 		 *  rejection.  Operators who set requireSignedSubscribe
 		 *  should also set this; the pair is symmetric. */
-		private readonly requireSignedUnsubscribe: boolean
+		private readonly requireSignedUnsubscribe: boolean,
+		/** v1.18.0 — why push is off when it is off ON PURPOSE. A hidden-only
+		 *  relay turns push off because every browser push service is a clearnet
+		 *  host; saying so lets the browser tell its user the truth, instead of
+		 *  "the operator has not enabled push yet", which invites them to ask for
+		 *  something that will not come. null = off for the old reasons. */
+		private readonly disabledReason: 'hidden_only' | null = null
 	) {}
+
+	/** The 503 every endpoint answers while push is off. */
+	private pushDisabled(c: Context): Response {
+		return c.json(
+			this.disabledReason === null
+				? { status: 'push_disabled' }
+				: { status: 'push_disabled', reason: this.disabledReason },
+			503
+		);
+	}
 
 	register(app: Hono): void {
 		app.get('/v1/push/vapid-public-key', (c) => this.getVapidKey(c));
@@ -180,14 +196,14 @@ export class PushEndpoints {
 	 *  expose publicly — VAPID public keys are designed to be. */
 	private getVapidKey(c: Context): Response {
 		if (!this.pushEnabled || !this.vapidPublicKey) {
-			return c.json({ status: 'push_disabled' }, 503);
+			return this.pushDisabled(c);
 		}
 		return c.json({ vapid_public_key: this.vapidPublicKey });
 	}
 
 	private async subscribe(c: Context): Promise<Response> {
 		if (!this.pushEnabled) {
-			return c.json({ status: 'push_disabled' }, 503);
+			return this.pushDisabled(c);
 		}
 
 		// Rate limit: per-IP, bounded.
@@ -269,9 +285,14 @@ export class PushEndpoints {
 	}
 
 	private async unsubscribe(c: Context): Promise<Response> {
-		if (!this.pushEnabled) {
-			return c.json({ status: 'push_disabled' }, 503);
-		}
+		// NOT gated on push being enabled (v1.18.0 review, W4). Removing a
+		// subscription is a database delete and nothing more — no push service is
+		// contacted — and it is the user's to ask for whatever the relay can send.
+		// A tor-only relay turns push off on upgrade; refusing here left every
+		// existing (account, device-endpoint) link stored indefinitely, with no
+		// sender ever running to prune it and no way for the user to remove it —
+		// and it would start delivering again, unannounced, if the operator ever
+		// turned push back on.
 
 		// cp131 MED-009 — per-IP rate limit on unsubscribe.
 		// Pre-cp131 this was deliberately UN-limited on the

@@ -87,6 +87,18 @@ for (const v of ['MORPHIT_BUILD_VERSION', 'MORPHIT_BUILD_HASH_MANIFEST_FILE', 'M
 // each instance silently fall back to its own env. Pin the canonical 125.
 check('BLOCK 4 pins the BLURT floor to 125', /MORPHIT_BUILD_BLURT_BASE=125\b/.test(out));
 
+// ─── every block says WHICH MACHINE it runs on (v1.18.0 review, O12) ───
+// the maintainer works across several boxes at once; a block that does not say where it
+// runs is a block run in the wrong terminal. Blocks 3, 5 and 6 did not.
+const MACHINE = /\((?:laptop|morphit\.io|morphitir|morphitlat)\b/;
+const headers = [...out.matchAll(/^\*\*BLOCK (\d)\*\* — (.*)$/gm)];
+check('there are exactly six blocks', headers.length === 6);
+for (const h of headers) {
+	check(`BLOCK ${h[1]} names the machine it runs on`, MACHINE.test(h[2] ?? ''));
+}
+check('BLOCK 3 (the upgrade) runs on morphit.io', /^\*\*BLOCK 3\*\* — [^\n]*\(morphit\.io\b/m.test(out));
+check('BLOCKS 5 and 6 (key and canary) run on the laptop, never the server', /^\*\*BLOCK 5\*\* — [^\n]*\(laptop\b/m.test(out) && /^\*\*BLOCK 6\*\* — [^\n]*\(laptop\b/m.test(out));
+
 // ─── the gates ───
 check('BLOCK 2 waits for CI to go green', /GATE: wait for CI to go green/.test(out));
 check('the tag is SIGNED with a message (the maintainer\u2019s git config rejects bare tags)', /git tag -s /.test(out) && !/git tag v/.test(out));

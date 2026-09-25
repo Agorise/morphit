@@ -7,8 +7,7 @@
  * the key, defaulted to clearnet, and fetched the upgrade over HTTPS — on
  * morphitlat, a hidden-only instance. This pins:
  *   1. the file heuristic keys off MORPHIT_INDEXER_RPC_ENDPOINTS (empty ⇒ hidden);
- *   2. the detector prefers the indexer's clearnet_eliminated, falling back to
- *      the file only when the indexer is unreachable;
+ *   2. the root-owned config decides (v1.18.0 deep-deep: never an HTTP answer);
  *   3. the upgrade caller reads indexer.env (where the key actually is);
  *   4. gateway labels name the hidden service + network;
  *   5. the resolver reports "zero clearnet" and never a clearnet host.
@@ -47,12 +46,22 @@ check('empty clearnet RPC pool ⇒ hidden-only', isHiddenOnlyFromEnvFile([emptyP
 check('populated clearnet RPC pool ⇒ NOT hidden-only', isHiddenOnlyFromEnvFile([clearPool]) === false);
 check('key absent ⇒ NOT hidden-only (safe default)', isHiddenOnlyFromEnvFile([noKey]) === false);
 
-// 2. authoritative detector falls back to the file when the indexer is unreachable
-const dead = ['http://127.0.0.1:1']; // nothing listens
-const hiddenViaFallback = await isHiddenOnly(dead, [emptyPool]);
-const clearViaFallback = await isHiddenOnly(dead, [clearPool]);
-check('indexer unreachable + empty pool ⇒ hidden-only (fallback)', hiddenViaFallback === true);
-check('indexer unreachable + clearnet pool ⇒ NOT hidden-only (fallback)', clearViaFallback === false);
+// 2. v1.18.0 deep-deep (ops-1, H2): the ROOT-OWNED config decides — never an
+// HTTP answer from whatever listens on port 8081 (it is not even asked when
+// the config can be read; `verifyListener` records any attempt).
+let asked = 0;
+const neverAsk = { verifyListener: () => { asked++; return { kind: 'refused' as const, reason: 'test' }; } };
+const hiddenFromConfig = await isHiddenOnly({ ...neverAsk, configEnvPaths: [emptyPool], unitEnvFiles: [emptyPool] });
+const clearFromConfig = await isHiddenOnly({ ...neverAsk, configEnvPaths: [clearPool], unitEnvFiles: [clearPool] });
+const noKeyFromConfig = await isHiddenOnly({ ...neverAsk, configEnvPaths: [noKey], unitEnvFiles: [noKey] });
+check('config: empty clearnet pool ⇒ hidden-only', hiddenFromConfig === true);
+check('config: clearnet pool ⇒ NOT hidden-only', clearFromConfig === false);
+check('config: pool unset (built-in clearnet default) ⇒ NOT hidden-only', noKeyFromConfig === false);
+check('a readable config never asks the local indexer', asked === 0, `asked ${asked}×`);
+// The unit's effective environment (last file wins) is read too: a hidden-only
+// pool set in indexer.env after a clearnet one in morphit.env is hidden-only.
+const hiddenLast = await isHiddenOnly({ ...neverAsk, configEnvPaths: [], unitEnvFiles: [clearPool, emptyPool] });
+check('effective env: a later empty pool overrides an earlier clearnet one', hiddenLast === true);
 
 // 4. gateway labels
 check('onion gateway labelled Tor', /\(Tor\)$/.test(hiddenGatewayLabel('http://ws7btkyabpcvb7pqm7mnlqbriyd5ltz5kya5o7dun22y7m3254d5zzad.onion')));
@@ -62,7 +71,6 @@ check('long onion host is truncated', hiddenGatewayLabel('http://ws7btkyabpcvb7p
 // 3 + 5. structural: detector source + upgrade caller + reporting
 const resolver = readFileSync(join(REPO, 'apps/ops-cli/src/init/hiddenUpgradeResolve.ts'), 'utf8');
 const upgrade = readFileSync(join(REPO, 'apps/ops-cli/src/commands/upgrade.ts'), 'utf8');
-check('detector prefers the indexer /v1/instance clearnet_eliminated', /\/v1\/instance/.test(resolver) && /clearnet_eliminated/.test(resolver));
 check('the file heuristic keys off MORPHIT_INDEXER_RPC_ENDPOINTS', /MORPHIT_INDEXER_RPC_ENDPOINTS/.test(resolver));
 check('upgrade caller reads indexer.env (the v1.16.6 fix)', /indexer\.env/.test(upgrade) && /configEnvPaths:/.test(upgrade));
 check('resolver reports the hidden gateway used', /hiddenGatewayLabel\(result\.peer\)/.test(resolver));
@@ -77,7 +85,13 @@ check('the release payload emits offline_sha256', /offline_sha256/.test(payload)
 check('upgrade offline path seeds the BUNDLED canonical tarball (hidden nodes become seeders, v1.16.10)', /\.canonical-release/.test(upgrade) && /becomes a Tor\/I2P origin host/.test(upgrade));
 check('upgrade offline path still skips cleanly when no canonical tarball is bundled', /Skipping the IPFS self-seed/.test(upgrade) && /does not carry the canonical/.test(upgrade));
 check('upgrade re-execs the JUST-BUILT binary for self-heals (v1.16.11 — no more upgrade-twice)', /__post-upgrade-selfheal/.test(upgrade) && /selfHealReexeced/.test(upgrade));
-check('upgrade falls back to in-process heals if the re-exec is unavailable', /if \(!selfHealReexeced\)/.test(upgrade) && /healBunkerWebWaf\(\);/.test(upgrade));
+// Since the final v1.18.0 review the heals run from ONE list, `runSelfHeals`
+// (relay first, each isolated), shared by the re-exec'd binary and this fallback.
+check(
+	'upgrade falls back to in-process heals if the re-exec is unavailable',
+	/if \(!selfHealReexeced\) \{\s*await runSelfHeals\(\);/.test(upgrade) &&
+		/\(\) => healBunkerWebWaf\(\)/.test(upgrade)
+);
 check('v1.16.13: the self-heal phase rebuilds the frontend (nginx.conf change applies same-upgrade)', /healFrontendConfig\(\)/.test(upgrade));
 check('resolver states "zero clearnet"', /zero clearnet/i.test(resolver));
 

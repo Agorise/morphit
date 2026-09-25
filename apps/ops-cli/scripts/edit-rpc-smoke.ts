@@ -17,12 +17,13 @@
  *     parsing site)
  */
 
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
 	_testLoadExistingEnv as loadExistingEnv,
-	_testAtomicEnvWrite as atomicEnvWrite
+	_testAtomicEnvWrite as atomicEnvWrite,
+	rpcEnvUpdates
 } from '../src/commands/edit.ts';
 import { parseRpcEndpoints } from '../src/init/steps.ts';
 
@@ -274,6 +275,42 @@ scenario('round-trip: written value parses successfully on indexer side', async 
 		throw new Error(`wizard's own parser rejected its own format: ${parseResult}`);
 	}
 	assertEqual([...parseResult], ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+});
+
+// ─── The relay's twin line (v1.18.0) ─────────────────────────
+// init writes ONE answer to both the indexer's and the relay's RPC keys; an
+// edit that changed only the indexer's left the relay on the old nodes.
+
+scenario('rpcEnvUpdates: an init-rendered file has BOTH lines updated to the new list', () => {
+	const text =
+		'MORPHIT_INDEXER_RPC_ENDPOINTS=https://old.example\nMORPHIT_RELAY_BLURT_RPC=https://old.example\n';
+	const u = rpcEnvUpdates(text, ['https://new.example']);
+	assertEqual(u.get('MORPHIT_INDEXER_RPC_ENDPOINTS'), 'https://new.example', 'indexer');
+	assertEqual(u.get('MORPHIT_RELAY_BLURT_RPC'), 'https://new.example', 'relay');
+});
+
+scenario('rpcEnvUpdates: …and the written file carries the new list on both lines', () => {
+	const dir = mkdtempSync(join(tmpdir(), 'edit-rpc-twin-'));
+	const path = join(dir, 'morphit.env');
+	const text =
+		'MORPHIT_INDEXER_RPC_ENDPOINTS=https://old.example\nMORPHIT_RELAY_BLURT_RPC=https://old.example\n';
+	writeFileSync(path, text);
+	const r = atomicEnvWrite(
+		path,
+		text,
+		rpcEnvUpdates(text, ['https://new.example']) as Map<string, string | null>
+	);
+	if (!r.ok) throw new Error(r.message);
+	const out = readFileSync(path, 'utf-8');
+	if (out.includes('old.example')) throw new Error(`an old endpoint survived the edit: ${out}`);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+scenario('rpcEnvUpdates: a file with no relay line does not grow one', () => {
+	const u = rpcEnvUpdates('MORPHIT_INDEXER_RPC_ENDPOINTS=https://old.example\n', [
+		'https://new.example'
+	]);
+	assertEqual([...u.keys()], ['MORPHIT_INDEXER_RPC_ENDPOINTS']);
 });
 
 console.log('');

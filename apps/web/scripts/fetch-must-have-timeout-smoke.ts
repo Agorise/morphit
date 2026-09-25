@@ -115,22 +115,11 @@ const ALLOW_LIST: readonly AllowEntry[] = [
 		snippet: 'fetch(input, { ...init, signal })',
 		reason: 'fetchWithTimeout is the timeout-wrapping helper itself; its signal comes from an AbortController constructed earlier than the smoke window'
 	},
-	{
-		// v1.7.5 (t.txt #4) — the batched get_block fetch. Its `signal` is the
-		// pool's own: EndpointPool.attemptSingle does `new AbortController()` +
-		// `setTimeout(() => ctl.abort(), timeoutMs)` and hands ctl.signal to
-		// `fn(url, signal)` (packages/rpc-pool/src/index.ts:588-595). So this
-		// fetch IS bounded — by a controller in a different FILE, which is well
-		// outside a 10-line look-back.
-		//
-		// Allow-listed rather than given its own redundant controller: a second
-		// timeout inside the callback would race the pool's, and whichever fired
-		// first would decide the endpoint's health. The pool must own that
-		// decision, because it is the thing that records the failure and rotates.
-		file: 'apps/indexer/src/blurt/client.ts',
-		snippet: 'res = await fetch(url, {',
-		reason: 'batched get_block; the signal is the EndpointPool AbortController that already bounds every per-endpoint attempt (attemptSingle: new AbortController + setTimeout(abort, timeoutMs)). A local controller would race the pool and corrupt its health accounting.'
-	}
+	// (v1.18.0 deep-deep, M2) The batched get_block fetch in
+	// apps/indexer/src/blurt/client.ts was allow-listed here; it now goes through
+	// `guardedRpcFetch()` (redirects refused, reply capped), which this scan does
+	// not see as a bare fetch. Its signal is still the EndpointPool's own
+	// AbortController, bounded per attempt in packages/rpc-pool.
 ];
 const allowMatched: boolean[] = ALLOW_LIST.map(() => false);
 

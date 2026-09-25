@@ -23,6 +23,7 @@ import type { Config } from '$config';
 import type { BlurtClient } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { computeClearnetEliminated, clearnetLegsFromConfig } from './clearnetGate.ts';
+import { relayReportsHiddenOnly } from './relayPosture.ts';
 import { applyBlock } from '$indexer/dispatcher';
 import { reconcileOperatorRegistrations } from '$indexer/reconcileRegistrations';
 import { consumeInOrderWithPrefetch } from '$indexer/prefetch';
@@ -39,6 +40,7 @@ import { buildSignupAnomalyProbe } from '$indexer/signupAnomalyProbe';
 import type { FeeVerifier } from '$indexer/fee/verifier';
 import { BitcoinExplorerFeeVerifier } from '$indexer/fee/bitcoinExplorerVerifier';
 import { MoneroProofFeeVerifier } from '$indexer/fee/moneroProofVerifier';
+import { ExternalFeeRechecker } from '$indexer/fee/externalFeeRecheck';
 import type { EndpointState } from '@morphit/rpc-pool';
 import { TreasurySource } from '$indexer/treasurySource';
 import type { BlurtPriceSource } from '$indexer/price/source';
@@ -62,6 +64,13 @@ export interface PollerStatus {
 	readonly startedAt: Date;
 	readonly lastError: string | null;
 	readonly lastErrorAt: Date | null;
+	/** (v1.18.0 deep-deep, rv2-7) wall time the chain head was last read, or
+	 *  null before the first read. Lets the fast path tell a lag it has
+	 *  measured from a head it has not seen for a long time. */
+	readonly chainHeadSeenAt?: Date | null;
+	/** (v1.18.0 deep-deep, rv2-7) block time of the last committed block, or
+	 *  null before one is committed this run. */
+	readonly indexedBlockTime?: Date | null;
 }
 
 /** Read or initialise the persistent state row. On first boot the
@@ -156,6 +165,10 @@ export class Poller {
 	private readonly lowBalanceScanner: LowBalanceScanner;
 	private readonly operatorBalanceScanner: OperatorAccountBalanceScanner;
 	private readonly federationProbe: FederationProbeScheduler;
+	/** (v1.18.0 deep-deep, H1) periodic re-verification of pending /
+	 *  attested / recently-missing BTC+XMR listing fees. Nothing re-checked
+	 *  them before, so a pending order stayed pending (or attested) forever. */
+	private readonly externalFeeRechecker: ExternalFeeRechecker;
 	/** F4 — origins already alerted for sharing our relay account, so we
 	 *  don't re-log every probe cycle. Per-process (a restart re-alerts,
 	 *  which is fine — the operator wants to know on every boot). */
@@ -354,7 +367,8 @@ export class Poller {
 			// 🏅 badge. Peers saw it (their probe reads our /v1/instance); we never
 			// wrote it for ourselves, so morphitlat — a zero-clearnet node — was the
 			// only instance that could not see its own badge.
-			localClearnetEliminated: () => computeClearnetEliminated(clearnetLegsFromConfig(config)),
+			localClearnetEliminated: () =>
+				computeClearnetEliminated(clearnetLegsFromConfig(config, relayReportsHiddenOnly())),
 			selfBranding: () => ({
 				name: config.instanceName ?? null,
 				tagline: config.instanceTagline ?? null,
@@ -409,6 +423,13 @@ export class Poller {
 		// env-var address before the chain-pin takes over.
 		this.feeVerifiers = {};
 		this.buildVerifiersFromBootstrap();
+		// (v1.18.0 deep-deep, H1) reads the CURRENT verifiers/amounts on every
+		// pass, so a chain re-pin of the treasury is followed automatically.
+		this.externalFeeRechecker = new ExternalFeeRechecker(
+			db,
+			() => ({ verifiers: this.feeVerifiers, amounts: this.feeAmounts }),
+			(orderId) => orderbookEventBus.emit(orderId)
+		);
 
 		this.status = {
 			running: false,
@@ -417,7 +438,9 @@ export class Poller {
 			bootIndexedBlock: 0,
 			startedAt: this.startedAt,
 			lastError: null,
-			lastErrorAt: null
+			lastErrorAt: null,
+			chainHeadSeenAt: null,
+			indexedBlockTime: null
 		};
 	}
 
@@ -694,6 +717,10 @@ export class Poller {
 				// which (if any) instances are due.  Errors caught
 				// internally and logged.
 				await this.federationProbe.maybeScan();
+				// (v1.18.0 deep-deep, H1) BTC/XMR fee re-check — self-throttling
+				// (every 10 min, ≤25 explorer lookups, each order ≤ once per 30
+				// min). Errors are caught and logged inside.
+				await this.externalFeeRechecker.maybeRun();
 			} catch (err) {
 				this.status = {
 					...this.status,
@@ -716,7 +743,8 @@ export class Poller {
 		const dgp = await this.blurt.getDynamicGlobalProperties();
 		this.status = {
 			...this.status,
-			chainHeadBlock: dgp.head_block_number
+			chainHeadBlock: dgp.head_block_number,
+			chainHeadSeenAt: new Date()
 		};
 
 		const irreversible = dgp.last_irreversible_block_num;
@@ -799,6 +827,8 @@ export class Poller {
 			// indexedBlock never advances past a block that didn't commit.
 			type Committed = {
 				n: number;
+				/** Block timestamp, for `indexedBlockTime` (rv2-7). */
+				time: string;
 				orderbookChanges: readonly string[];
 				chatChanges: readonly { lo: string; hi: string; messageId: number }[];
 				applied: number;
@@ -860,6 +890,7 @@ export class Poller {
 						n,
 						orderbookChanges: result.orderbookChanges,
 						chatChanges: result.chatChanges,
+						time: block.timestamp,
 						applied: result.applied,
 						rejected: result.rejected
 					});
@@ -881,7 +912,13 @@ export class Poller {
 			// here — so nothing below runs for a rolled-back window, and no phantom
 			// event or cursor advance escapes.
 			for (const c of committed) {
-				this.status = { ...this.status, indexedBlock: c.n, lastError: null };
+				const t = Date.parse(c.time.endsWith('Z') ? c.time : `${c.time}Z`);
+				this.status = {
+					...this.status,
+					indexedBlock: c.n,
+					indexedBlockTime: Number.isFinite(t) ? new Date(t) : null,
+					lastError: null
+				};
 				// Phase E — orderbook-change events on the in-process bus.
 				for (const orderId of c.orderbookChanges) {
 					orderbookEventBus.emit(orderId);

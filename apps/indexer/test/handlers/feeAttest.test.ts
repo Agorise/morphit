@@ -120,8 +120,8 @@ describe('feeAttest handler — insertion + promotion', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT attestor)',
-				rows: [{ total_attestors: '1', non_poster_attestors: '1' }],
+				match: 'COUNT(DISTINCT fa.attestor)',
+				rows: [{ n: '1' }],
 				rowCount: 1
 			}
 		]);
@@ -135,30 +135,17 @@ describe('feeAttest handler — insertion + promotion', () => {
 		expect(r).toEqual({ ok: true });
 		// Four queries: order lookup, eligibility, INSERT, count. No UPDATE.
 		expect(mock.queries).toHaveLength(4);
-		expect(mock.queries[3]!.text).toContain('COUNT(DISTINCT attestor)');
+		expect(mock.queries[3]!.text).toContain('COUNT(DISTINCT fa.attestor)');
 	});
 
-	it('self-attestation alone does NOT promote (ADR-0011 §3)', async () => {
+	// (v1.18.0 deep-deep, H1) The poster can never attest their own order: the
+	// op is rejected before eligibility or any INSERT (it used to be recorded
+	// and count as one of the two required attestors).
+	it('self-attestation is rejected outright (attestor_is_poster)', async () => {
 		const mock = makeMockClient([
 			{
 				match: 'SELECT fee_status, account FROM orders',
 				rows: [{ fee_status: 'pending_external', account: 'bob' }],
-				rowCount: 1
-			},
-			{
-				match: 'created_block_time',
-				rows: [
-					{
-						created_block_time: new Date('2026-01-01T00:00:00Z'),
-						cumulative_blurt_paid: '500'
-					}
-				]
-			},
-			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
-			{
-				match: 'COUNT(DISTINCT attestor)',
-				// Only 1 total, 0 non-poster — self-attesting.
-				rows: [{ total_attestors: '1', non_poster_attestors: '0' }],
 				rowCount: 1
 			}
 		]);
@@ -169,13 +156,12 @@ describe('feeAttest handler — insertion + promotion', () => {
 			}),
 			mock.client
 		);
-		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(4);
-		// No UPDATE query.
-		expect(mock.queries.some((q) => q.text.includes('UPDATE orders'))).toBe(false);
+		expect(r).toEqual({ ok: false, reason: 'attestor_is_poster' });
+		expect(mock.queries).toHaveLength(1);
+		expect(mock.queries.some((q) => q.text.includes('INSERT INTO fee_attestations'))).toBe(false);
 	});
 
-	it('promotes when ≥2 distinct attestors AND ≥1 non-poster', async () => {
+	it('promotes when ≥2 independent (non-poster, unflagged) attestors', async () => {
 		const mock = makeMockClient([
 			{
 				match: 'SELECT fee_status, account FROM orders',
@@ -193,9 +179,10 @@ describe('feeAttest handler — insertion + promotion', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT attestor)',
-				// 2 distinct (bob self + charlie counterparty).
-				rows: [{ total_attestors: '2', non_poster_attestors: '1' }],
+				match: 'COUNT(DISTINCT fa.attestor)',
+				// 2 independent attestors (the query itself excludes the
+				// poster and pairs flagged by the anti-ring signals).
+				rows: [{ n: '2' }],
 				rowCount: 1
 			},
 			{ match: 'UPDATE orders', rowCount: 1 }
@@ -219,9 +206,8 @@ describe('feeAttest handler — insertion + promotion', () => {
 	});
 
 	it('two distinct attestors but both non-posters → also promotes', async () => {
-		// Edge case: two unrelated parties both attest without the
-		// poster attesting. Still satisfies ADR-0011 §3 (≥2 distinct,
-		// ≥1 non-poster — both are non-poster, which is fine).
+		// Two unrelated parties both attest without the poster — the
+		// only shape that can promote since (v1.18.0 deep-deep, H1).
 		const mock = makeMockClient([
 			{
 				match: 'SELECT fee_status, account FROM orders',
@@ -239,8 +225,8 @@ describe('feeAttest handler — insertion + promotion', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT attestor)',
-				rows: [{ total_attestors: '2', non_poster_attestors: '2' }],
+				match: 'COUNT(DISTINCT fa.attestor)',
+				rows: [{ n: '2' }],
 				rowCount: 1
 			},
 			{ match: 'UPDATE orders', rowCount: 1 }
@@ -462,8 +448,8 @@ describe('feeAttest handler — Finding I eligibility gate', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT attestor)',
-				rows: [{ total_attestors: '1', non_poster_attestors: '1' }],
+				match: 'COUNT(DISTINCT fa.attestor)',
+				rows: [{ n: '1' }],
 				rowCount: 1
 			}
 		]);

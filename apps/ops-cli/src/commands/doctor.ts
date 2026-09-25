@@ -213,6 +213,12 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	// --no-rpc for a purely-local check. Catches the all-endpoints-dead
 	// case that froze a real node's sync before it ever stalls.
 	const skipRpc = ctx.flags['no-rpc'] === 'true';
+
+	// Can a peer actually hand us a batch? Advisory like the rest of the audit,
+	// and grouped with --no-rpc because it is the one check in that block which
+	// leaves the machine. See checkFederationBodyCap for why it must go through
+	// the public origin rather than loopback.
+	if (!skipRpc) security.push(await checkFederationBodyCap(envPath, cfgPath));
 	const rpc = skipRpc ? null : await probeConfiguredEndpoints(envPath, cfgPath);
 
 	// Database schema drift (read-only, advisory). Skipped with --no-db.
@@ -444,6 +450,215 @@ async function probeConfiguredEndpoints(
 	);
 	if (urls.length === 0) return null;
 	return probeRpcEndpoints(urls);
+}
+
+/**
+ * Can a peer instance actually hand us a BATCH of chat messages?
+ *
+ * WHY THIS IS A CHECK AND NOT A LINE IN A DOCUMENT
+ *
+ * The fast chat path groups messages when a peer is already busy, because one
+ * connection over Tor or I2P completes one round trip at a time and grouping is
+ * the only thing that makes a federation affordable. A full group is a couple of
+ * hundred kilobytes, and every other endpoint on this service takes a few
+ * kilobytes — so a reverse proxy configured for the rest of the API rejects the
+ * group before the indexer ever sees it.
+ *
+ * That failure is invisible in every way that matters. Nothing errors. Single
+ * messages keep working, so chat looks fine. It only bites when an instance is
+ * BUSY, which is when nobody is reading logs — and the symptom is "chat got slow
+ * again", which points at the network rather than at a proxy setting. An
+ * operator upgrading from an older release keeps their existing proxy config by
+ * definition, so this is the default state of every upgrade rather than an
+ * unlucky one.
+ *
+ * So it is worth actually trying it.
+ *
+ * THROUGH THE PUBLIC ORIGIN, NEVER LOOPBACK. Testing 127.0.0.1:8081 would skip
+ * the proxy entirely and pass on a box that is misconfigured — a check that
+ * cannot fail, which is worse than no check. If the public origin cannot be
+ * determined or cannot be reached from here, this reports exactly that and
+ * prints the command to run by hand, rather than guessing.
+ *
+ * WHAT IT SENDS: a JSON body of the right shape and the wrong contents, sized
+ * above the small read default and far below the federation cap. The indexer
+ * refuses it structurally — nothing is delivered, nothing is stored, no
+ * signature is checked — so the only thing under test is whether the bytes
+ * arrived. A 413 means they did not.
+ */
+/**
+ * POST a batch-shaped body to one origin's federation endpoint.
+ *
+ * One definition, used for both the public origin and the hidden-service front
+ * end, so the two checks cannot drift into asking subtly different questions of
+ * subtly different things — which is how a check ends up reporting on a path
+ * nobody runs.
+ */
+/** Does this origin name a hidden service — `.onion`, `.i2p`, `.loki`? Such a
+ *  name must never reach the system resolver. */
+export function isHiddenHostOrigin(origin: string): boolean {
+	let host: string;
+	try {
+		host = new URL(origin).hostname.toLowerCase();
+	} catch {
+		return /\.(onion|i2p|loki)(:\d+)?(\/|$)/i.test(origin);
+	}
+	return host.endsWith('.onion') || host.endsWith('.i2p') || host.endsWith('.loki');
+}
+
+async function probeFederationBody(
+	origin: string,
+	body: string
+): Promise<{ status: number; error: string }> {
+	const ctrl = new AbortController();
+	const timer = setTimeout(() => ctrl.abort(), 20_000);
+	try {
+		const res = await fetch(`${origin}/v1/federation/chat-fast`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body,
+			signal: ctrl.signal
+		});
+		return { status: res.status, error: '' };
+	} catch (e) {
+		return { status: 0, error: e instanceof Error ? e.message : String(e) };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+export async function checkFederationBodyCap(
+	envPath: string,
+	configEnvPath: string | null
+): Promise<SecurityFinding> {
+	const label = 'federation batch size';
+
+	// The SITE origin, which is what a peer pushes to. Same derivation the
+	// indexer itself uses for recognising its own directory row.
+	const instanceOrigin = await readEnvVar(envPath, configEnvPath, 'MORPHIT_INSTANCE_ORIGIN');
+	const publicOrigin = await readEnvVar(envPath, configEnvPath, 'MORPHIT_INDEXER_PUBLIC_ORIGIN');
+	const origin = (instanceOrigin || publicOrigin.replace(/\/\/indexer\./, '//')).replace(/\/+$/, '');
+
+	const manual =
+		'Send a large body to /v1/federation/chat-fast through your PUBLIC origin (not ' +
+		'127.0.0.1 — that skips the proxy) and check you do not get 413. Anything but 413 ' +
+		'means the bytes arrived, which is all this is testing.';
+
+	/**
+	 * The port Tor and i2pd forward a hidden-service request to.
+	 *
+	 * This is NOT loopback-as-a-shortcut. The warning above — that 127.0.0.1
+	 * skips the proxy and reports all-clear on exactly the box that has the
+	 * problem — is about bypassing the front end. Here the front end IS what
+	 * answers on this port: `HiddenServicePort 80 127.0.0.1:8090` and i2pd's
+	 * tunnel both point at it, so a request to it traverses the same server
+	 * block, the same location matching and the same `client_max_body_size` a
+	 * real peer's push does. It is the only honest way to check the path a
+	 * privacy-only instance actually uses.
+	 */
+	const hiddenFrontendPort =
+		(await readEnvVar(envPath, configEnvPath, 'MORPHIT_ONION_FRONTEND_PORT')) || '8090';
+
+	if (origin === '') {
+		return {
+			level: 'warn',
+			label,
+			detail:
+				'Could not determine this instance’s public origin, so the batch size was not ' +
+				`verified. ${manual}`
+		};
+	}
+
+	// ~8 KB: above the 4 KB default that every other read endpoint uses, far
+	// below the 256 KB the federation endpoint should allow. Large enough to be
+	// refused by a proxy that was not updated, small enough to be harmless.
+	const filler = '0'.repeat(8_000);
+	const body = JSON.stringify({ trxs: [{ not: 'a transaction', filler }] });
+
+	// A HIDDEN origin is never fetched directly (v1.18.0 review, O1). A plain
+	// fetch of `http://<onion>` asks the SYSTEM resolver for the onion name —
+	// on a tor-only home server that is its ISP's resolver, tying the home
+	// address to the onion, the one link tor-only mode exists to hide. There is
+	// nothing to learn from that attempt anyway: it can only fail. Such an
+	// instance is checked where Tor and i2pd actually deliver, below.
+	const first = isHiddenHostOrigin(origin)
+		? { status: 0, error: 'a hidden-service origin, checked through the local front end instead' }
+		: await probeFederationBody(origin, body);
+	const status = first.status;
+	const transportError = first.error;
+
+	if (transportError !== '') {
+		// A privacy-only instance cannot resolve its own address from the host,
+		// which is normal and used to end the check here — leaving the operators
+		// who depend on federated chat MOST with the one configuration nobody
+		// verified. Tor and i2pd hand their traffic to a local front end, so
+		// that front end can be asked directly.
+		const hidden = await probeFederationBody(
+			`http://127.0.0.1:${hiddenFrontendPort}`,
+			body
+		);
+		if (hidden.status === 413) {
+			return {
+				level: 'warn',
+				label,
+				detail:
+					`Your hidden-service front end (127.0.0.1:${hiddenFrontendPort}, where Tor and ` +
+					'i2pd deliver) answered 413 to an 8 KB batch, so it is rejecting federated chat ' +
+					'batches before the indexer sees them. Chat still works — it falls back to the ' +
+					'blockchain — but it gets SLOW under load, which is exactly when you will not ' +
+					'notice. Add a /v1/federation location with `client_max_body_size 256k;` ' +
+					'(ops/bunkerweb/frontend/nginx.conf ships it), reload the proxy, and re-run.'
+			};
+		}
+		if (hidden.status > 0) {
+			return {
+				level: 'ok',
+				label,
+				detail:
+					`${origin} is not resolvable from this host, which is normal for a privacy-only ` +
+					`instance. Checked the hidden-service front end instead (127.0.0.1:` +
+					`${hiddenFrontendPort}, where Tor and i2pd deliver): it accepted an 8 KB batch ` +
+					`(answered ${hidden.status}), so federated chat can group messages over your ` +
+					'onion and I2P addresses.'
+			};
+		}
+		return {
+			level: 'warn',
+			label,
+			detail:
+				`Could not reach ${origin} from this machine (${transportError}), and nothing ` +
+				`answered on the hidden-service front end either (127.0.0.1:${hiddenFrontendPort}` +
+				`${hidden.error === '' ? '' : `, ${hidden.error}`}), so the batch size was not ` +
+				`verified. If your front end listens elsewhere, set MORPHIT_ONION_FRONTEND_PORT. ` +
+				`${manual}`
+		};
+	}
+
+	if (status === 413) {
+		return {
+			level: 'warn',
+			label,
+			detail:
+				`${origin} answered 413 to an 8 KB batch, so your reverse proxy is rejecting ` +
+				'federated chat batches before the indexer sees them. Chat still works — it ' +
+				'falls back to the blockchain — but it gets SLOW under load, which is exactly ' +
+				'when you will not notice. Add a /v1/federation location with ' +
+				'`client_max_body_size 256k;` (ops/nginx/web.conf and indexer.conf ship it), ' +
+				'reload the proxy, and re-run this check.'
+		};
+	}
+
+	if (status === 0) {
+		return { level: 'warn', label, detail: `No response from ${origin}. ${manual}` };
+	}
+
+	// 400 is the expected answer: the body arrived and was refused on its
+	// contents, which is the whole point — the bytes got through.
+	return {
+		level: 'ok',
+		label,
+		detail: `${origin} accepted an 8 KB batch (answered ${status}), so federated chat can group messages.`
+	};
 }
 
 /** Read-only security audit. Inspects the active-key file (encryption

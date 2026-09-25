@@ -208,7 +208,8 @@ const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /**
  * Broadcast a native Blurt comment. Returns the block_num and trx_id.
  * cp344: submitted SAME-ORIGIN through the indexer broadcast proxy
- * (broadcastTransport.submitSignedTransaction), with a direct-RPC fallback —
+ * (broadcastTransport.submitSignedTransaction). There is NO direct-RPC
+ * fallback: if the instance is unreachable the send fails and the user retries —
  * no cross-origin RPC connection, no third-party IP leak.
  *
  * @param live     Session LiveIdentity. The posting private key is

@@ -15,6 +15,15 @@ bad(){ printf '  %s\xe2\x9c\x97%s %s\n' "$r" "$x" "$1"; }
 hdr(){ printf '\n%s== %s ==%s\n' "$b" "$1" "$x"; }
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 [ -f "$FP" ] || { echo "no $FP"; exit 1; }
+# v1.18.0 review (O11). A one-off bridge for cp775, which has since shipped.
+# On a release that already carries it, the patch below finds no anchor, the
+# check after it still passes (the shipped code holds the same marker), and the
+# script used to restart the indexer and report "PROVEN" for a change it never
+# made. When the fix is already installed there is nothing for it to do.
+if grep -q 'bothReservedBrandAccounts' "$FP"; then
+	ok "This fix is already part of the installed release — nothing to change, and the indexer was not restarted."
+	exit 0
+fi
 set -a; for f in "${ENV_FILES[@]}"; do [ -f "$f" ] && . "$f"; done; set +a
 DB="${MORPHIT_INDEXER_DATABASE_URL:-}"; [ -n "$DB" ] || { echo "no DATABASE_URL"; exit 1; }
 psqlc(){ psql "$DB" -tA -c "$1" 2>/dev/null; }

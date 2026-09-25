@@ -119,7 +119,23 @@ const fakeDb = (rows: Array<{ observed_price: string }>): any => ({
 	// A brand-new instance (e.g. vigilante.trading) that registered a hidden addr
 	// is reachable the moment it lands in known_instances — no config anywhere.
 	ok('a newly-registered peer with a hidden addr is auto-resolvable', peerReceiptBase('https://vigilante.trading', { i2p_b32: B32, tor: ONION }, true) === `http://${B32}`);
+	// v1.18.0 (F31) — the other two networks. The picker read only i2p_b32 and
+	// tor, so a peer reachable only by an I2P name or over Lokinet was never
+	// sampled.
+	ok('hidden-only + I2P name only → sampled', peerReceiptBase('https://x', { i2p_name: 'peer.i2p' }, true) === 'http://peer.i2p');
+	ok('hidden-only + Lokinet only → sampled', peerReceiptBase('https://x', { lokinet: 'peer.loki' }, true) === 'http://peer.loki');
 }
+
+// ── the monitor RUNS on a hidden-only node ──
+// Its observations are the federated median's only input there. Opt-in by env
+// alone meant a default hidden-only node priced from its own trades or the
+// static floor while /v1/instance called its price leg federated.
+{
+	const fs = await import('node:fs');
+	const main = fs.readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+	ok('main.ts starts the peer monitor on every hidden-only node', /config\.priceFeedPeerMonitorEnabled \|\| config\.blurtRpcEndpoints\.length === 0/.test(main));
+}
+
 
 console.log('');
 if (fails.length > 0) {

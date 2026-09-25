@@ -502,12 +502,16 @@ jobs:
         # currently supported on GHES`).  Pin to v3, which uses
         # the older backend Forgejo does support.
         #
-        # Tag-based pinning rather than SHA-pinning here: Forgejo
-        # mirrors all action sources via data.forgejo.org, which
-        # is already the trust boundary for every action in this
-        # workflow.  v3 is a stable security-supported branch;
-        # the tag won't relocate.
-        uses: actions/upload-artifact@v3
+        # v1.18.0 deep-deep (ops-3): pinned by COMMIT, like every other
+        # action here. This step's code runs after the tarball, .sha256,
+        # .asc and distribution-anchor.env are written and before they are
+        # published, so a moved tag could rewrite all of them consistently.
+        # ff15f030… is the commit `v3` pointed to when this was pinned — the
+        # v3.2.1 tag (verified with `git ls-remote
+        # https://github.com/actions/upload-artifact`, 2026-09-24; both tags
+        # are lightweight tags on that commit). The publish step below also
+        # re-verifies the .asc before anything is attached.
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5 # v3.2.1
         with:
           name: ${{ steps.ver.outputs.tag }}
           path: |
@@ -598,6 +602,34 @@ jobs:
           AUTO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
+          # v1.18.0 deep-deep (ops-3). Re-verify what is about to be published:
+          # steps that ran after signing (a third-party action among them) could
+          # have rewritten the tarball, .sha256 and anchor consistently. The
+          # signing key left the runner when the sign step finished, so a
+          # rewritten tarball cannot carry a valid .asc. Signer keys are read
+          # from the signed tag's own tree, not from the workspace.
+          sha256sum -c "$TARBALL.sha256"
+          ANCHOR_SHA=$(sed -n 's/^export MORPHIT_BUILD_SOURCE_SHA256=//p' distribution-anchor.env | head -n1)
+          if [ "$ANCHOR_SHA" != "$(awk '{print $1}' "$TARBALL.sha256")" ]; then
+            echo "ERROR: distribution-anchor.env does not anchor the tarball being published." >&2
+            exit 1
+          fi
+          if [ -f "$TARBALL.asc" ]; then
+            VERIFY_HOME="$(mktemp -d)"
+            chmod 700 "$VERIFY_HOME"
+            for key in $(git ls-tree --name-only "$TAG" .forgejo/release-signers/ | grep '\.asc$'); do
+              git show "$TAG:$key" | gpg --homedir "$VERIFY_HOME" --batch --import
+            done
+            if ! gpg --homedir "$VERIFY_HOME" --batch --verify "$TARBALL.asc" "$TARBALL"; then
+              rm -rf "$VERIFY_HOME"
+              echo "ERROR: $TARBALL.asc does not verify against the release signers; not publishing." >&2
+              exit 1
+            fi
+            rm -rf "$VERIFY_HOME"
+            echo "re-verified $TARBALL.asc against the release signers in ${TAG}"
+          else
+            echo "::warning::no $TARBALL.asc to re-verify (unsigned release)."
+          fi
           TOKEN="${RELEASE_TOKEN:-$AUTO_TOKEN}"
           if [ -z "${TOKEN:-}" ]; then
             echo "ERROR: no token available. Add a token with repository (write) scope as an Actions secret named MORPHIT_RELEASE_TOKEN." >&2

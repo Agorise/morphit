@@ -14,6 +14,7 @@
  */
 
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { isHiddenOnlyNode, localCondenser } from '../lib/hiddenOnly.ts';
 
 export interface AccountInfo {
 	readonly name: string;
@@ -27,37 +28,28 @@ interface BlurtAccountRow {
 }
 
 /** Look up an account by name.  Returns AccountInfo on hit,
- *  null on "no such account", throws on transport failure. */
+ *  null on "no such account", throws on transport failure.
+ *
+ *  v1.18.0 deep-deep, H1: with no explicit endpoint list, a HIDDEN-ONLY node
+ *  (empty clearnet pool in indexer.env) asks its own indexer instead of the
+ *  clearnet defaults. This lookup runs on every interactive menu launch (the
+ *  relay-balance marker), in the install summary and in the wizard, and it used
+ *  to send the relay account name from the box's home IP to six clearnet RPC
+ *  operators each time. It never falls back to clearnet: if the indexer does
+ *  not answer, this throws and each caller already treats that as "unknown". */
 export async function lookupBlurtAccount(
 	accountName: string,
-	endpoints: readonly string[] = DEFAULT_BLURT_RPC_ENDPOINTS
+	endpoints?: readonly string[]
 ): Promise<AccountInfo | null> {
+	if (endpoints === undefined && isHiddenOnlyNode()) {
+		const result = await localCondenser<unknown>('get_accounts', [[accountName]], { timeoutMs: 20_000 });
+		return accountInfoFromRows(result, accountName);
+	}
 	let lastError: unknown = null;
-	for (const endpoint of endpoints) {
+	for (const endpoint of endpoints ?? DEFAULT_BLURT_RPC_ENDPOINTS) {
 		try {
 			const result = await callRpc(endpoint, 'condenser_api.get_accounts', [[accountName]]);
-			if (!Array.isArray(result) || result.length === 0) return null;
-			const first = result[0];
-			// cp139-C-2: runtime type guard before the cast.  If a
-			// rogue RPC endpoint returns `[null]` (or any non-object)
-			// as the first row, `first.balance` would TypeError on
-			// the null path.  The catch below would absorb it and
-			// fall through to the next endpoint, but a hostile
-			// upstream serving all 4 fallbacks the same garbage
-			// would yield an opaque "Could not reach any Blurt RPC"
-			// error instead of a clean "account doesn't exist"
-			// return.  Treat non-object as same-as-empty (account
-			// not found).
-			if (typeof first !== 'object' || first === null) return null;
-			const row = first as BlurtAccountRow;
-			const balanceStr = row.balance ?? '0.000 BLURT';
-			const m = /^([\d.]+)\s+BLURT$/.exec(balanceStr);
-			const balanceBlurt = m !== null ? parseFloat(m[1]!) : 0;
-			return {
-				name: row.name ?? accountName,
-				balance: balanceStr,
-				balanceBlurt
-			};
+			return accountInfoFromRows(result, accountName);
 		} catch (err) {
 			lastError = err;
 			continue;
@@ -66,6 +58,32 @@ export async function lookupBlurtAccount(
 	throw new Error(
 		`Could not reach any Blurt RPC endpoint.  Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`
 	);
+}
+
+/** Shape a get_accounts result into AccountInfo (null = no such account). */
+function accountInfoFromRows(result: unknown, accountName: string): AccountInfo | null {
+	if (!Array.isArray(result) || result.length === 0) return null;
+	const first = result[0];
+	// cp139-C-2: runtime type guard before the cast.  If a
+	// rogue RPC endpoint returns `[null]` (or any non-object)
+	// as the first row, `first.balance` would TypeError on
+	// the null path.  The catch below would absorb it and
+	// fall through to the next endpoint, but a hostile
+	// upstream serving all 4 fallbacks the same garbage
+	// would yield an opaque "Could not reach any Blurt RPC"
+	// error instead of a clean "account doesn't exist"
+	// return.  Treat non-object as same-as-empty (account
+	// not found).
+	if (typeof first !== 'object' || first === null) return null;
+	const row = first as BlurtAccountRow;
+	const balanceStr = row.balance ?? '0.000 BLURT';
+	const m = /^([\d.]+)\s+BLURT$/.exec(balanceStr);
+	const balanceBlurt = m !== null ? parseFloat(m[1]!) : 0;
+	return {
+		name: row.name ?? accountName,
+		balance: balanceStr,
+		balanceBlurt
+	};
 }
 
 async function callRpc(

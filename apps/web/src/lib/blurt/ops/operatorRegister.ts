@@ -21,7 +21,7 @@ import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from './profile';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
-import { isReservedTag } from '$crypto/confusables';
+import { isReservedTag, ownsReservedName, tagImpersonatesReserved } from '$crypto/confusables';
 
 export const TAG_MIN = 1;
 export const TAG_MAX = 64;
@@ -53,12 +53,18 @@ export type TagValidationReason =
 	| 'tag_reserved';
 
 export function validateTag(
-	tag: string
+	tag: string,
+	/** The registering account. A look-alike of a reserved name is refused
+	 *  unless this account owns that name — the indexer's own rule (L3). */
+	signer?: string | null
 ): { ok: true } | { ok: false; reason: TagValidationReason } {
 	if (tag.length < TAG_MIN) return { ok: false, reason: 'tag_too_short' };
 	if (tag.length > TAG_MAX) return { ok: false, reason: 'tag_too_long' };
 	if (!TAG_PATTERN.test(tag)) return { ok: false, reason: 'tag_invalid_chars' };
 	if (isReservedTag(tag)) return { ok: false, reason: 'tag_reserved' };
+	if (tagImpersonatesReserved(tag) && !(signer && ownsReservedName(signer, tag))) {
+		return { ok: false, reason: 'tag_reserved' };
+	}
 	return { ok: true };
 }
 
@@ -148,7 +154,7 @@ export async function broadcastOperatorRegister(
 	// definitely-rejected op. The indexer will still validate, but
 	// there's no point spending a broadcast on something we can
 	// already prove bad.
-	const tagCheck = validateTag(payload.tag);
+	const tagCheck = validateTag(payload.tag, account);
 	if (!tagCheck.ok) throw new Error(tagCheck.reason);
 	const nameCheck = validateOperatorDisplayName(payload.display_name);
 	if (!nameCheck.ok) throw new Error(nameCheck.reason);

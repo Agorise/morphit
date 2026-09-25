@@ -703,7 +703,9 @@ defense blocks (each `null` until it has data):
   would false-alarm).  Also peer-independent.
 - **`peer` — Defense F (cross-instance).** Only meaningful once your
   instance is federated with ≥3 reachable peers and
-  `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`.
+  `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true` — or is hidden-only
+  (empty `MORPHIT_INDEXER_RPC_ENDPOINTS`), where the monitor always runs
+  because its samples ARE that node's primary price.
   `peers_queried` / `peer_median` / `my_price` / `deviation` /
   `above_threshold` / `alert` compare your derived price against the
   federation median.
@@ -1685,7 +1687,11 @@ values are expressed in.  This is purely a display-side change;
 order matching and on-chain fees are unaffected.  See ADR-0040.
 
 **cp129 update — Defense F cross-instance peer disagreement
-detector**: opt-in via `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`.
+detector**: opt-in via `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true`,
+and always on for a hidden-only node (v1.18.0): there the federated median
+of these samples is the primary price, and with the monitor off it never had a
+sample. A hidden-only node samples each peer over every hidden address it
+published — I2P first, then Tor, then Lokinet — and never over clearnet.
 When on, the indexer periodically (every 30 min) queries peer
 Morphit instances' `/v1/price/morphit-native/receipt` and alerts
 on sustained disagreement >25% for >4 hours.  Catches the case
@@ -1795,7 +1801,8 @@ price is correct and peers are wrong): the alert auto-suppresses
 for 24h after firing, then re-fires if disagreement persists.
 You can also temporarily set
 `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=false` and restart;
-this stops querying peers entirely.  Re-enable once the
+this stops querying peers entirely — except on a hidden-only node, where
+the samples are the price itself and the monitor keeps running.  Re-enable once the
 underlying situation resolves.
 
 If the alert is a true positive (your indexer is wrong): pause
@@ -2050,7 +2057,9 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # OVERWRITE, never append ($proxy_add_x_forwarded_for keeps the
+        # visitor's own header) — see "Relay client IP (v1.18.0)".
+        proxy_set_header X-Forwarded-For $remote_addr;
     }
 
     # Indexer — public API. Proxied to loopback.
@@ -2664,6 +2673,63 @@ you're ready to also serve `https://`:
    registered, the operator-update flow) with `MORPHIT_INSTANCE_ORIGIN=https://<domain>`.
    The onion stays advertised as an alt-network address, so nothing you've
    published breaks — you're adding clearnet, not replacing Tor.
+
+#### Nothing on a tor-only node talks to clearnet (v1.18.0)
+
+A node is **hidden-only** when `/etc/morphit/indexer.env` has the clearnet
+RPC key present and empty: `MORPHIT_INDEXER_RPC_ENDPOINTS=` (that is what a
+Tor-only install writes). `morphit-ops`, IPFS and the first-online job read
+that file and follow it. No new setting is involved.
+
+- **`morphit-ops` menu.** "Latest version" now comes from this node's own
+  indexer (`/v1/release`, the on-chain release), and the relay-balance marker
+  reads the balance through the indexer. Before, every launch contacted
+  `git.agorise.net` and six clearnet Blurt RPCs from the box's own IP.
+- **`morphit-ops register` and `payment-method`.** The operation is signed
+  on the box, and the signed transaction goes to this node's own indexer
+  (`/v1/broadcast`), which sends it over Tor/I2P. Before, it went straight to
+  a clearnet RPC node, so your `.onion` and your home IP were in the same
+  request. Over Tor this can take a minute; a spinner shows while it runs
+  (`register` waits up to 200 s). If the indexer is not running or cannot
+  reach the chain, the command stops with a short explanation. It never falls
+  back to clearnet.
+- **Re-running `init` on the box** skips the "Outbound HTTPS" and "System
+  time" checks. Both would have contacted clearnet sites.
+- **IPFS (Kubo).** A tor-only node's Kubo stays off the public IPFS network:
+  `Routing.Type=none`, no bootstrap peers, no swarm listener, no UPnP port
+  mapping, no mDNS, no provider announcements, and AutoConf/AutoTLS off, so
+  Kubo does not contact `conf.ipfs-mainnet.org` or `libp2p.direct` either.
+  DNSLink lookups go to a resolver on a closed loopback port, so a request for
+  `/ipns/<some-domain>` cannot make the box look up a name. The gateway still
+  serves the release it holds, by CID, over your `.onion`/`.b32.i2p`. That
+  is how hidden-only peers upgrade from you, and it needs no DHT. The
+  upgrade's seed step no longer fetches anything from `git.agorise.net`.
+  The on-chain CID comes from your indexer, and the seed step does not
+  announce to the DHT. The IPNS rebroadcast timer does nothing on such a node
+  (it logs why). On **every** node, Kubo's telemetry (a daily report to
+  `telemetry.ipshipyard.dev`) is now off. The list of settings is in
+  `ops/ipfs/morphit-ipfs-privacy.sh`. `ipfs-pin.env` gains
+  `MORPHIT_IPFS_HIDDEN_ONLY=yes|no`, written by Ansible.
+- **Existing nodes get this on upgrade.** Ansible templates are not
+  re-rendered by `morphit-ops upgrade`, so the upgrade applies the same Kubo
+  settings itself, then restarts `ipfs` and checks that it answers. If it
+  does not come back, the previous config is put back exactly and `ipfs` is
+  restarted on it. You will see one of: "IPFS now stays off the public IPFS
+  network…", "IPFS telemetry is now off.", "…the settings apply when it
+  starts" (ipfs was not running), or "…its previous settings were restored"
+  (check `sudo systemctl status ipfs`, then upgrade again). No message means
+  the settings were already in place. To check by hand:
+  `sudo -u ipfs env IPFS_PATH=/var/lib/ipfs/.ipfs sh /opt/morphit/ops/ipfs/morphit-ipfs-privacy.sh check-hidden`
+  (exit 0 = in place).
+- **First-online job.** `morphit-first-online` decides whether the box is
+  online by asking your **hidden** Blurt RPC endpoints through the local Tor
+  SOCKS port (`.onion`) or the i2pd HTTP proxy (`.b32.i2p`), or by asking
+  whether your indexer already reaches the chain. Before, it probed six
+  clearnet RPCs every five minutes. On a hidden-only node it also skips the
+  `apt-get update` it used to run after an offline install. Automatic
+  registration goes through the indexer, as above. A key that is *absent*
+  (not empty) still means "not configured", and a clearnet node keeps using
+  the clearnet list.
 
 ---
 
@@ -4791,6 +4857,115 @@ activates, and any patient attacker can still sybil-attest
 their own orders with two ≥30-day-old accounts. The OR gate
 is a bootstrap mode, not a permanent posture.
 
+### v1.18.0 — marketplace hardening (fees, reviews, federation)
+
+These are local indexing rules. The on-chain op formats are unchanged, and
+there is no new environment variable. Every node running v1.18.0 reaches the
+same verdict from the same chain data and the same explorer answers.
+
+**BTC/XMR fee attestation.** Until this release, a made-up BTC txid that every
+explorer answered with 404 ended up as `pending_external`. The poster and one
+aged second account could then attest it into `verified_by_attestation`: a
+free, public, "fee-paid" listing, repeatable forever. Now:
+
+- **404 means missing.** When a quorum of explorers answers 404, the fee is
+  `missing`. The quorum is the same `*_MIN_SUCCESSFUL_RESPONSES` count a
+  payment needs to verify. One 404 while another explorer is down still means
+  `pending_external`.
+- **The poster cannot attest.** A poster attesting their own order is
+  rejected with `attestor_is_poster`. It takes **two** attestors who are
+  independent of the poster. An account the anti-review-ring signals have
+  flagged as a pair with the poster (`related_accounts`,
+  `suspicious_reciprocity`) does not count.
+- **Pending fees are re-checked.** Every 10 minutes the indexer re-runs the
+  explorer check on live BTC/XMR orders that are:
+  - `pending_external`,
+  - `verified_by_attestation`, or
+  - `missing` and less than 24 hours old.
+
+  Each pass makes at most 25 explorer lookups, and checks any one order at
+  most once every 30 minutes. If the explorer confirms the payment, the order
+  becomes `verified`. If it reports an underpayment, `underpaid`. If it
+  answers that the tx does not exist, `missing`. If it has no answer, the
+  attestation rule decides between `verified_by_attestation` and
+  `pending_external`. Look for `fee_status_rechecked` in the indexer log.
+
+- **BTC/XMR fees stay flat-rate.** The Sybil tier (a rising fee per extra
+  order) is still not applied to them, as ADR-0011 §6 specifies. Changing
+  that is a design decision, not a local fix.
+
+**A reused fee txid is now visible.** An order that claims a BTC/XMR txid
+already claimed by another order is stored with `fee_status = 'reused'`. The
+user sees why in My Orders. Before, the insert failed on the txid uniqueness
+index and the order silently had no row at all. The row stores no txid, so it
+cannot collide. The txid is in the `fee_tx_reused` log line.
+
+**Trade counts and reviews.**
+
+- A completed order adds to `trade_count` only if its fee is `verified` or
+  `verified_by_attestation`.
+- A free first-buy waiver order credits its owner, never a named
+  counterparty.
+- A waiver order cannot be cited by a review, and never triggers the relay's
+  welcome bonus. The bonus is paid only when the cited order is the
+  subject's own paid order.
+
+**Federation directory.**
+
+- **Ownership of an origin.** If an origin was first registered by account A
+  and later by account B, the origin itself decides who owns it. Whichever of
+  them its `/v1/instance` names as `relay_account` gets the directory row,
+  instead of the real operator being shown as `mismatch`. Look for
+  `origin_ownership_confirmed` in the log. An origin that names an account
+  which never registered it is still a `mismatch`.
+- **New registrations cannot crowd out existing peers.** At most 20
+  never-probed registrations are probed per scan, oldest registration first.
+  Peers already in the directory are always re-probed on schedule.
+
+**Operator tags.** A new registration is refused with `tag_reserved` if its
+tag is a reserved name or a look-alike of one (`m0rphit`, `rnorphit`), or if
+it starts with a reserved name followed by `-`, `.` or `_` (`morphit-io`,
+`testowner-node`). A tag that only contains a brand, like `mymorphit` or
+`morphitlat-relay`, is still accepted. The owner of a reserved name may build
+tags on it. A tag you already hold keeps working. `morphit-ops register`
+still checks only exact names before broadcasting.
+
+**Hidden-only price.** The federated median now takes one sample per peer
+_operator_, the latest from each. Samples from origins no longer in the
+directory are ignored. The median is also clamped to within ±15%
+(`FEE_PRICE_TOLERANCE`) of the price implied by the chain-pinned fee amount.
+The peer-disagreement monitor uses the same one-sample-per-operator rule. The
+post page never quotes a fee outside the chain-pinned amount ±15%.
+
+**MCP.** `morphit_get_listing` returns only live listings with a verified fee.
+It says the listing's terms are untrusted user content. It also reads the
+indexer's `{ items }` response. It used to look for `rows`, so it never found
+a listing.
+
+**What happens to rows your indexer already has:**
+
+- **Read-time rules apply at once, with no re-index.** These are trade counts,
+  review citations, the MCP gate, the price median, directory ownership (on
+  the next probe) and the probe-queue cap.
+- **Orders already `verified_by_attestation`** are re-derived by the re-check.
+  It starts within 10 minutes of the upgrade and works through 25 orders per
+  pass, oldest first. One the explorers now say does
+  not exist becomes `missing`. One whose attestations no longer meet the new
+  rule, for example because the poster was one of the two, goes back to
+  `pending_external`. It returns to the orderbook once the explorers confirm
+  the payment. Orders already `pending_external` are re-checked the same way.
+- **Orders already `missing` or `underpaid`** keep their status, except BTC/XMR
+  orders less than 24 hours old, which are re-checked.
+- **Reviews and bonuses already recorded** are not undone. A review that cited
+  a waiver order stays, and a welcome bonus already queued or paid stays.
+- **Waiver orders' trade credits** stop counting for the counterparty at once,
+  because trade counts are computed at read time.
+- **A victim order that previously vanished because of a reused txid** does
+  not reappear on its own. It only reappears after a re-index from chain
+  history.
+
+No migration is needed.
+
 ## 20b. Schema v39 upgrade note — chat read-state is re-keyed, and the indexer cannot be rolled back over it
 
 `morphit-ops upgrade` applies this automatically at indexer
@@ -5353,7 +5528,7 @@ The indexer reads these at startup and includes them in its instance announce; t
 - **I2P** — prefix vanity via `i2pd-tools`' `vain` (`scripts/generate-i2p.sh <prefix>`), but the `.b32.i2p` is `base32(sha256(destination))`, so only a *short* prefix is feasible (~1–5 chars quick, 6 ≈ minutes, 7+ hours). `vain` writes a `private.dat` that i2pd reads directly. A readable `name.i2p` is a registrar step (`reg.i2p`/`stats.i2p`), not local key-grinding.
 - **Lokinet** — **no prefix vanity.** A `.loki` is the SNApp's ed25519 pubkey and Lokinet generates that keyfile itself (set `keyfile=` in `lokinet.ini` `[network]`, restart, read the address). There is no vanity-key import path and no `lokinet-vanity` tool. A readable `name.loki` is **ONS**: burn OXEN on-chain via the Oxen wallet (1–10 yr). `scripts/generate-lokinet.sh` prints the setup + ONS steps.
 
-**Key-security model** (unchanged, matches `generate-onion.sh`'s long-standing design): vanity keys are generated on **operator hardware**, never committed (`hidden-services/` is git-ignored), and hand-carried to the box over SSH. Only the **public address** ever enters `morphit.config.env` → footer. For encrypting an alt-network service key at rest under the relay passphrase, see `import-altnet-key` / `export-altnet-key`.
+**Key-security model** (unchanged, matches `generate-onion.sh`'s long-standing design): vanity keys are generated on **operator hardware**, never committed (`hidden-services/` is git-ignored), and hand-carried to the box over SSH. Only the **public address** ever enters `morphit.config.env` → footer. For encrypting an alt-network service key at rest under the relay passphrase, see `import-altnet-key` / `export-altnet-key`. Since v1.18.0 `export-altnet-key --out=PATH` only creates a NEW file (mode 0600): if `PATH` already exists, or is a symlink, it writes nothing and says so. Delete a leftover file before exporting again, so no other user can pre-create the file and read the key.
 
 ---
 
@@ -5492,6 +5667,31 @@ Headline guidance:
 The full procedure including separate Postgres roles, separate
 systemd units, archived configs for rollback safety, and
 post-launch smoke testing is in `SWITCHING-NETWORKS.md`.
+
+## 25b. Upgrading — what the upgrade trusts, and what the first upgrade still runs on old code
+
+`docs/UPGRADING.md` walks through `morphit-ops upgrade` step by step. This section covers the v1.18.0 deep-deep changes an operator can see.
+
+**Which indexer the upgrade asks.** `upgrade` runs as root, and on a hidden-only node it takes the release version, its SHA-256 and the peers to download from from this node's own indexer. Until v1.18.0 it asked whatever answered first on `127.0.0.1`, `172.18.0.1` or `172.17.0.1`, port 8081, without checking who that was. Now:
+- **Hidden-only is decided from the root-owned config:** an empty `MORPHIT_INDEXER_RPC_ENDPOINTS=` in the indexer's env files. A node whose chain reads are hidden-only counts as hidden-only even if another part of its "zero clearnet" badge is missing (for example no I2P address). Before, such a node fetched its upgrade from git.agorise.net over clearnet.
+- **Only the configured address is asked** (`MORPHIT_INDEXER_LISTEN_HOST` / `MORPHIT_INDEXER_LISTEN_PORT`). The three addresses above are a fallback only when neither is set, and the first one with a listener is the only one asked.
+- **The listener must be `morphit-indexer.service`.** As root, the upgrade traces the listening socket to its process and checks that process's cgroup. The release monitor runs unprivileged, so it checks that the socket belongs to the same user as the indexer's main process. If anything else holds the port, nothing is fetched, and the message names the process.
+- **Override for installs that do not run the indexer under systemd:** `MORPHIT_UPGRADE_TRUST_LOCAL_INDEXER=1` on the command line (`sudo MORPHIT_UPGRADE_TRUST_LOCAL_INDEXER=1 morphit-ops upgrade`). It skips only the ownership check; every hash check still applies.
+
+**What is refused now.**
+- A release that is not newer than the one you run is not installed: the command says so and exits 0. `--allow-downgrade` installs an older release on purpose.
+- A tarball whose own `release-info.json` names a different version is put back (exit 3).
+- A signature (`.asc`) that is present but does not verify stops the upgrade. When the primary's `.sha256` is known, the bytes must match it even if a signature verifies.
+- A release version or asset name that is not a plain version number / file name is refused.
+
+**Rollback puts back files outside `/opt/morphit`.** When an upgrade rolls back, it now also restores the systemd units it refreshed (from `<unit>.bak`) and `/etc/morphit/relay.env` if this run's relay self-heal changed it, then runs `systemctl daemon-reload`.
+
+**Upgrading: what the first upgrade to a new release still runs on old code.** `morphit-ops upgrade` is run by the version you have installed. Only the self-heal phase runs from the new release: the old binary re-executes the freshly built one with a 300-second limit. So on the upgrade *to* v1.18.0 from 1.17.x:
+- The checks above (indexer authentication, no downgrades, invalid-signature refusal, rollback restoring relay.env) are **not** in force yet. They protect the upgrades after v1.18.0.
+- A hidden-only node downloads over the older Tor/I2P transport. That transport can wait indefinitely on a peer that sends headers and then stalls; if the download seems stuck for many minutes, press Ctrl-C and run the upgrade again.
+- On a hidden-only 1.17.x node, the old release monitor may not report v1.18.0 at all. Tor-only operators should be told about the release directly.
+- If the new build fails, or the self-heals run past 300 seconds, the old binary runs its own, older self-heals instead. A 1.17.x binary has no relay heal, so the relay heal is skipped until the next upgrade.
+- If that older rollback runs after the relay heal, restore the relay file by hand (see section 51, "If you roll back to a release before v1.18.0").
 
 ## 26. Release signing (SHA-256 + GPG)
 
@@ -6463,7 +6663,7 @@ journalctl -u bunkerweb.service -f
 # Or via the web UI at https://your-host:7000 (if you enabled it)
 ```
 
-`USE_REAL_IP=yes` is also worth setting — without it, all your indexer/relay logs show BunkerWeb's IP, not the user's, making downstream debugging harder.
+Leave `USE_REAL_IP=no` (the shipped value). BunkerWeb is the public edge, so the socket address it sees already IS the visitor; `USE_REAL_IP=yes` makes it believe the visitor's own `X-Forwarded-For` instead. Only turn it on if you put a CDN or load balancer in front of BunkerWeb, and then list only that proxy's ranges in `REAL_IP_FROM` — never `0.0.0.0/0`. See "Relay client IP (v1.18.0)" below.
 
 ### CRITICAL: trusted-proxy IPs for BunkerWeb deployments
 
@@ -6483,7 +6683,24 @@ To fix the Docker-compose case, set `MORPHIT_RELAY_TRUSTED_PROXY_IPS` to the Doc
 MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16
 ```
 
-The Ansible playbook's group_vars default already sets this. The compose was deliberately pinned to `172.20.0.0/16` (instead of letting Docker auto-assign) precisely so this CIDR is stable and operators can hard-code it without re-inspecting after rebuilds. In the canonical topology the relay's immediate socket peer is the `frontend` container (requests flow BunkerWeb → frontend → relay), but BOTH containers live on `172.20.0.0/16`, so the single pinned CIDR is all the relay needs; BunkerWeb sets the real client as the leftmost `X-Forwarded-For` entry and the `frontend` appends to the chain, so the relay reads the real client from `XFF[0]`.
+The Ansible playbook's group_vars default already sets this. The compose was deliberately pinned to `172.20.0.0/16` (instead of letting Docker auto-assign) precisely so this CIDR is stable and operators can hard-code it without re-inspecting after rebuilds. In the canonical topology the relay's immediate socket peer is the `frontend` container (requests flow BunkerWeb → frontend → relay), but BOTH containers live on `172.20.0.0/16`, so the single pinned CIDR is all the relay needs. BunkerWeb (with `USE_REAL_IP=no`) passes the visitor it saw on its socket as `X-Real-IP`; the `frontend` forwards exactly that one address as `X-Forwarded-For`, and the relay takes the right-most address in the chain that is not a trusted proxy. See "Relay client IP (v1.18.0)" below.
+
+#### Relay client IP (v1.18.0)
+
+**What was wrong.** The relay took the LEFTMOST `X-Forwarded-For` entry. nginx's `$proxy_add_x_forwarded_for` means "whatever the visitor sent, then `$remote_addr`", so the leftmost entry is whatever the visitor typed: `X-Forwarded-For: 10.N.0.1` got a fresh rate-limit bucket per request and walked past every per-IP signup defense (hourly and daily limits, spacing, invite binding, the sequential-name detector, the ALTCHA trigger). On BunkerWeb boxes it was worse: BunkerWeb shipped `USE_REAL_IP=yes` with `REAL_IP_FROM=0.0.0.0/0`, so the public edge believed that header from the whole internet, and its own bans and rate limits could be dodged the same way.
+
+**How the relay reads the client now** (`apps/relay/src/middleware/ip.ts`):
+
+1. From a loopback peer (nginx on the same host), `X-Real-IP` wins. The shipped nginx configs set it to `$remote_addr`, which the visitor cannot choose. This is what the indexer already did.
+2. Otherwise it walks `X-Forwarded-For` from the RIGHT, skipping addresses in the trusted set (loopback plus `MORPHIT_RELAY_TRUSTED_PROXY_IPS`), and takes the first address it does not trust.
+3. If every entry is a trusted address (a visitor who reached the proxy from a local address, such as Tor through the frontend container), it uses the right-most entry, which your own proxy wrote.
+4. If nothing is usable, it uses the socket peer. `X-Real-IP` from a non-loopback proxy is ignored, because the BunkerWeb frontend does not set it.
+
+**What the shipped configs do now.** `ops/nginx/web.conf` and `ops/nginx/relay.conf` send `X-Forwarded-For $remote_addr` to the relay (overwrite, never append). `ops/bunkerweb/frontend/nginx.conf` sends the address BunkerWeb wrote (its `X-Real-IP`) for requests from BunkerWeb, and `$remote_addr` for everything else, including Tor/I2P through the published `127.0.0.1` port (the Docker bridge gateway `172.20.0.1`). It also clears `X-Real-IP`. The `geo` block in that file names `172.20.0.0/16`. If you change the Docker subnet, change it there too. A mismatch fails safe: everyone shares one bucket, and nobody gets to pick their address. BunkerWeb ships `USE_REAL_IP=no`.
+
+**Tor and I2P.** Everyone arriving over Tor or I2P still shares one bucket (`127.0.0.1` on bare metal, the bridge gateway behind BunkerWeb), exactly as before. The difference is that they can no longer type their way out of it.
+
+**Existing nodes.** `morphit-ops upgrade` refreshes the frontend `nginx.conf` as before. Its BunkerWeb WAF heal now also sets `USE_REAL_IP=no` in `/etc/bunkerweb/bunkerweb.env` when it trusts `X-Forwarded-For` from a `/0` range or from BunkerWeb's default private ranges (`REAL_IP_FROM` unset). A `REAL_IP_FROM` that lists specific ranges, as for a deliberate CDN, is left alone. The heal then checks the running container (`nginx -T` inside BunkerWeb). `docker restart` keeps a container's old environment, so if `set_real_ip_from` is still loaded, the heal recreates the containers from compose (`docker compose up -d --force-recreate`), waits and checks again. If that still doesn't take, it prints the one command to run. Bare-metal `ops/nginx/web.conf` is not re-rendered by the upgrade. It doesn't need to be for this fix: the shipped `/relay/` block has always set `X-Real-IP $remote_addr`, and the relay now prefers that from a loopback peer. That covers clearnet and Tor visitors alike. You can still copy the new `/relay/` block (`X-Forwarded-For $remote_addr`) into your vhost and run `nginx -s reload` to keep it in step with the repo.
 
 **If you deploy your OWN compose** with a different network CIDR, the default Docker bridge networks are typically `172.17.0.0/16` (the default `bridge` network) and `172.18.0.0/16` through `172.31.0.0/16` for user-defined networks. To find YOUR bridge network's CIDR:
 
@@ -6530,7 +6747,7 @@ BunkerWeb interacts with several of §37's hardening directives. Check these bef
 
 **§37.13 Outbound egress allowlist.** BunkerWeb makes outbound connections to: Let's Encrypt (TCP 80 + 443), Maxmind GeoIP database updates (TCP 443), and DNSBL queries (TCP/UDP 53). If you applied the relay-host egress allowlist, those work. The BunkerWeb-bot-database refresh (`USE_BAD_BEHAVIOR=yes` enables a daily download from the BunkerWeb cloud) hits 443; also fine. If you see `geoip_update_failed` or `dnsbl_update_failed` in BunkerWeb logs, your egress policy is the likely culprit.
 
-**§34 fail2ban.** Most fail2ban rules watch `/var/log/auth.log` (SSH) — no conflict. If you've added a Morphit-specific fail2ban rule that watches the relay's HTTP error log for `429`s, double-check the log format: BunkerWeb's nginx writes a different format than stock nginx. The simpler approach is to write fail2ban rules against BunkerWeb's own logs (`/var/log/bunkerweb/access.log` and `/var/log/bunkerweb/error.log`) which include the original client IP via `USE_REAL_IP=yes`.
+**§34 fail2ban.** Most fail2ban rules watch `/var/log/auth.log` (SSH) — no conflict. If you've added a Morphit-specific fail2ban rule that watches the relay's HTTP error log for `429`s, double-check the log format: BunkerWeb's nginx writes a different format than stock nginx. The simpler approach is to write fail2ban rules against BunkerWeb's own logs (`/var/log/bunkerweb/access.log` and `/var/log/bunkerweb/error.log`) which include the original client IP (BunkerWeb is the edge, so the socket address it logs is the visitor).
 
 **§37.8 Postgres hardening.** No interaction. BunkerWeb doesn't touch the Postgres port.
 
@@ -6817,8 +7034,10 @@ What it does, and why it's trustworthy:
   a failure it surfaces the validation lines (not a stack trace) plus
   the fix.
 - It **mutates nothing** — no files, no database, no started
-  services, no network calls. The relay check runs *before* the
-  passphrase-unlock step, so it never prompts; instead it reports
+  services. It does make a few READ-ONLY network calls (RPC
+  reachability, and the federation batch-size probe below); `--no-rpc`
+  skips all of them for a purely local check. The relay check runs
+  *before* the passphrase-unlock step, so it never prompts; instead it reports
   whether the active key is plaintext or an encrypted envelope (i.e.
   whether the relay will ask for a passphrase at real start).
 - Exit code: `0` if both services validate, `1` if either fails, `2`
@@ -6847,6 +7066,43 @@ which would advertise a weak key to attackers). It reports:
   `morphit.config.env` is group/other-readable; `morphit.env` holds
   the database password and is not permission-checked at boot, so
   this catches a real at-rest leak.
+- **Federation batch size** (v1.18.0) — whether your reverse proxy
+  will accept a BATCH of chat messages from a peer instance.
+
+  Federated chat groups messages when a peer is already busy, because
+  one connection over Tor or I2P completes one round trip at a time,
+  and grouping is the only thing that makes a federation of any size
+  affordable. A full group is a couple of hundred kilobytes; every
+  other endpoint here takes a few. So a proxy configured for the rest
+  of the API rejects the group before the indexer ever sees it.
+
+  **That failure is invisible in every way that matters.** Nothing
+  errors. Single messages keep working, so chat looks fine. It only
+  bites when the instance is BUSY — which is when nobody is reading
+  logs — and the symptom is "chat got slow again", which points at
+  the network rather than at a proxy setting. If you UPGRADED to
+  v1.18.0, your proxy config is by definition the old one, so this
+  is the default state of an upgrade rather than an unlucky one.
+
+  The check posts a deliberately oversized, deliberately invalid body
+  to `/v1/federation/chat-fast` **through your public origin** and
+  reports whether it got through. Two things about how it does that:
+
+  - It goes through the public origin, never `127.0.0.1`. Probing
+    loopback would skip the proxy entirely and report all-clear on
+    exactly the box that has the problem.
+  - The body is not a real transaction, so the indexer refuses it on
+    its contents. That refusal is the PASS: it proves the bytes
+    arrived, which is the only thing being tested. Nothing is
+    delivered, nothing is stored, no signature is checked.
+
+  On a privacy-only instance whose own `.onion` the host cannot
+  resolve, it says it could not check and gives you the command to run
+  by hand — it does not guess. The remediation, when it does fire, is
+  a `/v1/federation` location with `client_max_body_size 256k;` (both
+  `ops/nginx/web.conf` and `ops/nginx/indexer.conf` ship it) plus
+  `MORPHIT_INDEXER_MAX_FEDERATION_BODY_BYTES` in your env, then a
+  proxy reload.
 
 Security findings are **advisory** — they do not change doctor's exit
 code (which reflects boot-readiness), but a hardened instance should
@@ -8705,8 +8961,11 @@ done | grep -E 'HTTP|x-ratelimit'
 ```
 
 If every request returns 200 with a fresh rate-limit budget,
-your trusted-proxy CIDR is too wide and any user can forge XFF
-to bypass rate limiting.
+your trusted-proxy CIDR is too wide, or a proxy in front of the
+relay is passing the visitor's own `X-Forwarded-For` through (see
+"Relay client IP (v1.18.0)"). Either way, any user can forge XFF
+to bypass rate limiting. Before v1.18.0 this check failed on every
+stock install, because the relay read the leftmost entry.
 
 **Secrets file hygiene (§37.10):**
 
@@ -11092,7 +11351,7 @@ unexpectedly off after you set the keys, grep the relay log for
 | --- | --- | --- |
 | `MORPHIT_RELAY_PUSH_POLL_INTERVAL_MS` | `2000` | How often the worker drains the queue.  Lower = snappier deliveries, more DB load |
 | `MORPHIT_RELAY_PUSH_BATCH_SIZE` | `50` | Max queue rows per tick.  Caps worst-case latency |
-| `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` | `3600` | Drop pushes older than this.  Stale notifications are worse than no notifications |
+| `MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS` | `3600` | Drop pushes older than this.  Stale notifications are worse than no notifications. Since v1.18.0 the record that stops a sent push being sent twice is kept at least this long (never under an hour), so raising it cannot bring duplicates back |
 | `MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES` | `5` | Delete a subscription after this many consecutive failed pushes (presumed dead browser) |
 | `MORPHIT_RELAY_PUSH_REQUIRE_SIGNED` | `true` | When `true` (default, cp14), `/v1/push/subscribe` rejects requests without a valid posting-key signature. Set to `false` only during a brief frontend roll-forward window |
 
@@ -11673,6 +11932,92 @@ Two things now tell you when this is the case:
   `Database schema (drift detected)` with the exact tables/columns that are
   missing. (Pass `--no-db` to skip this check, e.g. when Postgres is down.)
 
+### Missing *indexes* — the drift with no symptom
+
+As of v1.18.0 the same check also compares your **indexes** against the
+shipped schema, and reports them the same way:
+
+```
+Database schema (drift detected)
+  missing index(es): push_pending_account_source_trx_uidx
+```
+
+A missing index normally reads as "it'll just be slower". Not always. An
+`INSERT … ON CONFLICT (cols) WHERE …` **requires** a matching unique index —
+PostgreSQL raises `42P10`, *there is no unique or exclusion constraint
+matching the ON CONFLICT specification*, rather than falling back to a slow
+path. The push enqueues do exactly that, inside a `try`/`catch`, deliberately:
+a notification problem must never take the chat message or the feedback entry
+itself down with it.
+
+So a database missing `push_pending_account_source_trx_uidx` delivers **no
+chat, order-chat or feedback push notifications at all** — nothing is
+inserted, so there is nothing for the sender to pick up. (Outbid notifications
+from `featureBid` insert without an `ON CONFLICT` clause and keep working,
+which makes the symptom *more* confusing, not less: push is evidently "working".)
+
+There is no error page, no failing health check, and no degraded verdict. The
+only trace is one log line per message:
+
+```
+# Run on: the indexer host (your Morphit VPS).
+journalctl -u morphit-indexer | grep push_enqueue_failed
+```
+
+This is worth knowing about because a database can lose an index without
+losing anything else: a dump restored with `--section=data`, a hand-repaired
+table, a migration run that was interrupted between the table and its indexes.
+Everything else about the database is fine.
+
+**Fixing it does not need the full reset below.** Three commands on the running
+node, in this order. First, remove any duplicates — keeping the earliest row of
+each pair — because a unique index cannot be built over them:
+
+```
+# Run on: the indexer host (your Morphit VPS).
+sudo -u postgres psql -d morphit_indexer -c \
+  "DELETE FROM push_pending a USING push_pending b
+    WHERE a.source_trx_id IS NOT NULL
+      AND a.account = b.account
+      AND a.source_trx_id = b.source_trx_id
+      AND a.id > b.id;"
+```
+
+Second, drop whatever is left of the index. This matters: a
+`CREATE UNIQUE INDEX CONCURRENTLY` that failed — on duplicates, say — leaves an
+index of the right NAME behind, marked invalid. PostgreSQL will not use it for
+`ON CONFLICT`, and `IF NOT EXISTS` would skip creating a good one because the
+name is taken. Dropping first makes the next step start clean:
+
+```
+# Run on: the indexer host (your Morphit VPS).
+sudo -u postgres psql -d morphit_indexer -c \
+  "DROP INDEX CONCURRENTLY IF EXISTS push_pending_account_source_trx_uidx;"
+```
+
+Third, create it:
+
+```
+# Run on: the indexer host (your Morphit VPS), as a shell user with sudo.
+sudo -u postgres psql -d morphit_indexer -c \
+  "CREATE UNIQUE INDEX CONCURRENTLY push_pending_account_source_trx_uidx
+     ON push_pending (account, source_trx_id)
+     WHERE source_trx_id IS NOT NULL;"
+```
+
+(`CONCURRENTLY` so none of this locks the table; it can all be run while the
+indexer is up. Substitute your own database name from
+`MORPHIT_INDEXER_DATABASE_URL`. If your database runs in a Docker container,
+run the same SQL inside it instead: `docker exec -i <container> psql -U <user>
+-d <database> -c "…"`, with the user and database from that URL.) Then
+confirm with `morphit-ops doctor` — you want `Database schema (matches this
+version)`. Since v1.18.0 doctor counts an index only if PostgreSQL will
+actually use it, so an invalid or non-unique leftover of this name is reported
+as missing rather than passed as healthy.
+
+If doctor reports missing *tables or columns* as well, the reset below is the
+right move and recreates every index along with them.
+
 ### Why it's safe to fix by resetting
 
 The indexer database is a **derived cache**, not a system of record. Every
@@ -11828,6 +12173,10 @@ sudo systemctl start morphit-ipfs-pin.service    # pin right now
 journalctl -u morphit-ipfs-pin -e --no-pager
 ```
 
+**Where the pinner asks for the release.** It reads `MORPHIT_RELEASE_URL` from `/etc/morphit/ipfs-pin.env`, default `http://127.0.0.1:8081/v1/release`, your indexer's own port. If that does not answer, it tries the indexer on the Docker bridge addresses (`172.18.0.1:8081`, then `172.17.0.1:8081`; override the list with `MORPHIT_RELEASE_URL_FALLBACKS`). When a fallback works, it logs which one and the line to put in `ipfs-pin.env`. The IPNS rebroadcast does the same.
+
+Until the final v1.18.0 review the default port was **8088**, where nothing listens. Every run then failed to reach the indexer, logged it, and exited 0, so the timer looked healthy while nothing was pinned. The setup script, the Ansible role and the desktop upgrade notice had the same wrong port, and all now use 8081. If `ipfs pin ls --type=recursive` on your box shows no release CID, run `sudo systemctl start morphit-ipfs-pin.service` once after upgrading. The journal line says which address answered.
+
 ### Verifying + footprint
 
 `ipfs pin ls --type=recursive` on the box lists the pinned release CID; it
@@ -11954,9 +12303,312 @@ MORPHIT_INDEXER_I2P_HTTP_PROXY=127.0.0.1:4444
 
 Only genuine `.onion` / `.b32.i2p` hosts are accepted in `MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS` — a clearnet URL is rejected, so this knob can never be used to point the pool at a private internal address. Leaving it empty keeps the node clearnet-only with no behavioural change.
 
+### Hidden-only: no clearnet RPC at all
+
+Empty `MORPHIT_INDEXER_RPC_ENDPOINTS` entirely, keeping only hidden endpoints, and the indexer becomes **hidden-only**: it refuses every public clearnet host, fail-closed, rather than reach one. Since v1.18.0 that refusal covers every outbound path in the indexer, including the ones that bring their own transport instead of going through the shared router. The two that matter:
+
+- **The federation directory.** A hidden-only indexer does not contact a clearnet peer's origin — not to probe it, not even to look up its name. It probes each peer over the hidden addresses that peer published on chain (Tor, I2P, Lokinet). A peer that published none is **listed** on the strength of its signed registration (`last_probe_error = clearnet_peer_not_probed_hidden_only`), never marked unreachable. That is a request this node chose not to make, not evidence about the peer. Before this release the probe looked names up with the system resolver and connected to clearnet peers directly from your server's address, on every scan.
+- **Prices.** A hidden-only node prices from the federation: the median of peers' own prices, sampled over their hidden addresses (I2P first, then Tor, then Lokinet). The sampler therefore always runs on a hidden-only node, whatever `MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED` says. Before this release it was off by default, and when switched on it could not fetch a hidden address at all. Either way the federated median never had a sample, and prices fell back to your own trades or the static floor.
+
+**The relay has its own list, and has to be hidden-only too.** The relay broadcasts signups and relayed transfers from its own chain endpoint list, `MORPHIT_RELAY_BLURT_RPC`, and emptying the indexer's list does not change it. Since v1.18.0 the relay runs the same router as the indexer. Give it hidden endpoints (`MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS`, which defaults to the public hidden nodes) and empty `MORPHIT_RELAY_BLURT_RPC`, and it refuses every public clearnet host, fail-closed. A tor-only Ansible install now sets this for you.
+
+**Existing nodes are fixed on upgrade.** `morphit-ops upgrade` checks the relay whenever the indexer uses no clearnet. If the relay's clearnet list is set nowhere, it appends a marked block to `/etc/morphit/relay.env` (or `/opt/morphit/morphit.env` when there is no `relay.env`):
+- `MORPHIT_RELAY_BLURT_RPC` emptied;
+- the indexer's hidden endpoints and proxies, where the indexer sets them.
+
+That empty-list state is what every earlier tor-only install had. A list you set yourself is never rewritten: the upgrade warns and names the line instead. It reads the files as the services do (sourced by bash, in the units' order, last assignment wins), so an override in `relay.env` counts over `morphit.env`. To undo it, delete the block.
+
+**The upgrade checks that it worked, and says what it saw.** Before appending, it copies the file to `<file>.before-v1.18.0-relay-heal`. It then restarts the relay and reads the relay's own `/v1/health`, with a spinner while it waits (up to a minute). This heal runs first among the upgrade's self-heals, and a failure in one heal does not stop the others. One of five things is printed:
+
+| What you see | What happened |
+| --- | --- |
+| "The relay now reaches the chain over hidden services only — checked: it restarted, and its own health report says so." | Done and verified. |
+| "The relay is not running now; it will use hidden services only when it next starts." | The setting is in place; there was nothing running to check. |
+| "The relay restarted and is working, but it still reports that it uses clearnet RPC…" | Another env file sets `MORPHIT_RELAY_BLURT_RPC` after ours. The message names the file ours went into. Find the other assignment and empty it. |
+| "The relay restarted with hidden-only RPC and is still starting: its first chain read over Tor/I2P can take a few minutes. The setting … is kept." | Normal on a slow Tor/I2P link. The relay only starts answering after its first chain read, which tries each hidden endpoint in turn with a 60-second timeout. Nothing to do; `journalctl -u morphit-relay -f` shows it finish. |
+| "The relay kept failing after being set to hidden-only RPC, so … was put back as it was…" | systemd reported the relay failed or restarting it (a crash loop). The file was restored from the copy and the relay restarted on its previous settings. `journalctl -u morphit-relay` shows why it did not start, and the next upgrade tries again. |
+
+Until the v1.18.0 deep-deep fixes, a relay that had not answered within a minute was put back on its previous (clearnet) settings even when it was only slow. On a tor-only node whose first hidden endpoint is slow, that happened on every upgrade. Now only a relay that systemd reports as failing is put back.
+
+Before the final v1.18.0 review the first message was printed as soon as the lines were written, before any restart and without checking anything.
+
+**If an upgrade rolls itself back after this heal ran** (for example a service fails to restart), a v1.18.0 or later `morphit-ops` puts `/etc/morphit/relay.env` back from the copy, along with any systemd unit it refreshed, before restarting services. The upgrade *to* v1.18.0 is still run by your older `morphit-ops`, whose rollback does not know about the copy (see "Upgrading: what the first upgrade to a new release still runs on old code" below). **If you roll back to a release before v1.18.0 by hand, or that older rollback ran,** put the relay's file back too. An older relay has no hidden endpoint list, so with an empty `MORPHIT_RELAY_BLURT_RPC` it may not start. On the node:
+
+```
+sudo cp /etc/morphit/relay.env.before-v1.18.0-relay-heal /etc/morphit/relay.env
+sudo systemctl restart morphit-relay
+```
+
+(Use `/opt/morphit/morphit.env.before-v1.18.0-relay-heal` instead if the heal wrote to `morphit.env`; the upgrade names the file it used.)
+
+A hidden-only relay sends no Web Push: a browser's push service is a public clearnet host, so delivering to it would contact the open internet. In-app notifications are unaffected.
+
+What happens to users who subscribed before:
+- **Subscriptions are kept,** so push resumes if the relay stops being hidden-only.
+- **Their queued pushes don't pile up.** The indexer keeps queueing them, and a janitor retires and prunes the queue by the sender's own rules (`pushMaxAgeSeconds`, then the one-hour tombstone retention), logged as `push_queue_janitor`.
+- **Their browsers are told the truth.** The push endpoints answer `503 {"status":"push_disabled","reason":"hidden_only"}`, and the settings page shows why push is off here instead of "subscribed".
+
+The relay reports `hidden_only` on its `/v1/health`, and the indexer's `clearnet_eliminated` requires it (`relayHidden` in `clearnet_eliminated_missing`). Before this release the relay had no router and no hidden endpoints, and on a tor-only node it reached the chain over clearnet from your server's address. The instance claimed zero clearnet regardless, because the claim was computed from the indexer alone.
+
+### Blanking a proxy setting is a real switch, not a no-op
+
+`MORPHIT_INDEXER_TOR_SOCKS` and `MORPHIT_INDEXER_I2P_HTTP_PROXY` default to `127.0.0.1:9050` and `127.0.0.1:4444`, and those defaults apply **whether or not the daemon behind them exists**. Setting one to an empty string is how you tell the indexer you do not run that daemon, and it is worth doing: a blank setting takes that network's addresses out of the federated-chat peer list up front, so a peer that published both an onion and a clearnet origin is dialled at the clearnet one immediately instead of after a refused connection.
+
+Leaving it at the default when the daemon is absent is not broken. Since v1.18.0 the indexer asks each local daemon directly, at boot and every minute: a TCP connection to the Tor and I2P proxies, and — only where Lokinet is switched on, see below — `localhost.loki`, the one `.loki` name lokinet answers with your own address. A network whose local end does not answer is off the federated-chat peer list before the first message. The answers are in `/v1/health` as `localTransports` (`null` for a daemon you blanked, or for Lokinet when it is off). On Lokinet the check also settles an old ambiguity. Your router down and a peer's dead `.loki` name used to look identical. With your router answering its own name, a peer whose name is dead is now recorded as the peer failing, and stops holding a fan-out slot.
+
+### Lokinet is opt-in: `MORPHIT_INDEXER_LOKINET`
+
+Tor and I2P are reached through a proxy, so a `.onion` or `.b32.i2p` name only ever goes to your own Tor or i2pd. Lokinet has no proxy: a `.loki` name is looked up through the system's resolver, and on a box that does not run lokinet that resolver is your ISP's. Before the final v1.18.0 review every indexer did that — the liveness check above asked for `localhost.loki` once a minute, and every peer that published a `.loki` address was looked up on each warm-up and send — so a tor-only home server told its ISP's resolver it was a Morphit node, sixty times an hour. No install path sets lokinet up, so that was every node.
+
+The indexer now leaves `.loki` alone unless you say you run lokinet:
+
+| `MORPHIT_INDEXER_LOKINET` | Meaning |
+| --- | --- |
+| *(unset)* or `auto` | On only if this instance publishes a Lokinet address (`MORPHIT_INSTANCE_LOKINET_ADDRESS` is set). An instance that publishes one must be running lokinet to be reached on it. |
+| `on` (`1`, `true`, `yes`) | You run lokinet and want to reach other instances' `.loki` addresses, whether or not you publish one yourself. |
+| `off` (`0`, `false`, `no`) | Never look up a `.loki` name, even if you publish one. |
+
+When it is off, `.loki` addresses are dropped from the federated-chat peer list, the warm-up and the federation probe, a `.loki` request is refused before any lookup, and `localTransports.loki` reads `null`. Lokinet never appears in `networksDown` on a node that does not run it. Nothing else changes: a peer that also publishes an onion, an I2P address or a clearnet origin is reached there.
+
+### Transport hardening in the final v1.18.0 review
+
+These change what your node does on the network without any setting to change.
+
+**A name is never "local" because of how it is spelled.** The router used to treat any host whose name _started_ like a private address — `10.`, `127.`, `192.168.`, `172.16`–`172.31.`, `169.254.` — as local, and let it through even on a hidden-only node. So `https://10.anything.example` was looked up with your ISP's resolver and connected to from your own address. Anyone could register such an origin on chain, and every chat message then went to it. Now only an **address** (an IP literal in a private, loopback or link-local range, or `localhost`) is local; every **name** is public, and a hidden-only node refuses it. Registration also rejects an origin whose leading labels spell a private address (`origin_ip_like_name`) and any non-public address literal, including IPv4-mapped IPv6 and CGNAT (`origin_private`). A two-label name such as `10.tv` is still accepted. On a hidden-only node the federated-chat peer list no longer offers a peer's clearnet origin at all.
+
+**Chain RPC nodes cannot redirect you.** The indexer's and relay's Blurt RPC calls, the batch block reads and the RPC health probe no longer follow redirects, and they stop reading a reply past 32 MiB (1 MiB for the health probe). A node that answers with a redirect is treated as failing and the pool moves to another one. Before, a node listed in the on-chain directory could send your indexer or relay to an address on your own machine.
+
+**The router is always installed.** It used to be installed only when hidden RPC endpoints were configured. But the on-chain RPC directory adds `.onion` and `.i2p` nodes to every node's pool, and without the router those names were looked up with your ISP's resolver. A node with clearnet RPC endpoints runs it in `allow` mode, where clearnet works exactly as before. A node whose clearnet list `MORPHIT_INDEXER_RPC_ENDPOINTS` is empty now counts as hidden-only even when it reads only from a co-located blurtd and has no hidden endpoints: it contacts no clearnet host (loopback is still allowed), and says so at boot with `local_chain_only`. The rest of the indexer already treated an empty clearnet list as hidden-only (federated price, peer sampling); the probe, chat and FX sources now agree with it.
+
+**The "no clearnet Matrix" leg reads the alert bot's real settings.** `clearnet_eliminated` used to check `MORPHIT_INSTANCE_MATRIX_HOMESERVER`, which nothing sets, so it always passed. It now reads `/etc/morphit/matrix-bot.env`, the file the bot's unit loads. The leg (`matrixClean` in `clearnet_eliminated_missing`) passes only when:
+
+- the file is absent, or has no `MORPHIT_MATRIX_BOT_ALERT_MXID` (the bot exits at start); or
+- the bot's `MORPHIT_MATRIX_BOT_HOMESERVER` is on this machine (loopback).
+
+The default homeserver, `https://matrix.org`, is clearnet, so a tor-only node with Matrix alerts switched on no longer claims zero clearnet. The bot has no Tor route, so a `.onion` homeserver fails the leg too: the bot would ask your ISP's resolver for that name. If the indexer cannot read the file, the leg fails, because unknown is not clean. The indexer runs as root and can read it on a standard install. To keep the claim on a tor-only node, clear the alert address with `morphit-ops matrix clear`.
+
+### If you run the Java I2P router instead of i2pd
+
+The indexer reaches a `.b32.i2p` peer by issuing an HTTP `CONNECT` to your I2P HTTP proxy. Both i2pd and the Java router accept this, on any port — but the **Java router has a setting that disables it**: with `i2ptunnel.httpclient.allowInternalSSL=false` (and `sslManuallySet` present) on the HTTP client tunnel, `CONNECT` to in-network destinations is refused outright, port 80 included. The default is to allow it. i2pd has no equivalent setting and cannot be configured to refuse.
+
+If you run the Java router and have turned that off, federated chat over I2P will not work — and, since v1.18.0, your indexer can say so. The refusal is not a connection failure: your proxy is running, accepts the connection, and answers the `CONNECT` with an HTTP status. Until this release that was recorded as the *peer* refusing your message, so the symptom was a rising failure count against instances that were perfectly healthy, with nothing anywhere naming your own router.
+
+Your indexer now recognises a refused `CONNECT` as possibly its own fault and reports it. **Which field it appears in depends on how many I2P peers you have**, and this is worth knowing before you go looking:
+
+- A router refusing by policy refuses **every** destination, so two different I2P peers fail on the first batch and I2P is named in `networksDown`. Two addresses belonging to the same peer count once.
+- With exactly **one** I2P peer in your directory it cannot be corroborated, so it shows as `networksSuspected: {"i2p": 1}` instead and `networksDown` stays empty. That is the rule declining to convict on one address, not a missing field.
+
+Why the caution: a status alone cannot tell "I refuse all tunnels" (yours) from "I cannot reach that destination" (theirs), and which status means which differs between routers. Rather than guess, the indexer waits for a second address to agree. If you want to check the setting directly rather than read it off the health block, that is faster: look for `i2ptunnel.httpclient.allowInternalSSL` on the HTTP client tunnel.
+
 > **Trust reminder:** reaching a node over Tor/I2P hides *where* you read, not *whether* the data is true. That's exactly why hidden endpoints go through the same quorum cross-check as clearnet ones — a node that serves a forged block is caught regardless of transport.
 
 ---
+
+### `morphit-ops doctor` checks the batch size on a privacy-only instance too
+
+The batch-size check sends an 8 KB batch-shaped body to your own public origin and reports whether it got through. On a privacy-only instance that always failed — the box cannot resolve its own `.onion` from itself — so the check ended "could not verify" for exactly the operators who depend on federated chat most.
+
+It now falls back to the **hidden-service front end**: `127.0.0.1:8090`, where `HiddenServicePort 80` and the i2pd tunnel deliver. That is not the loopback shortcut this check otherwise warns against — the front end *is* the proxy, so the request crosses the same server block, the same location match and the same `client_max_body_size` a real peer's push does. Set `MORPHIT_ONION_FRONTEND_PORT` if yours listens elsewhere.
+
+The fallback runs only when the public origin is unreachable. A clearnet instance whose proxy refuses batches still fails the check, as it must.
+
+## 51.1. Diagnosing federated chat when it is slow
+
+Federated chat is supposed to land in under six seconds between any two instances. When it does not, the question is almost always *which* of the two possible failures you have, and they look identical from the outside:
+
+- **the message went over the chain instead**, because the direct push to the recipient's instance did not land, or
+- **the push landed, slowly**, because the transport is slow.
+
+`/v1/health` separates them, under `fastpath.federation` (counters) and `fastpath.federationDiagnostics` (reasons). Both are **operator-only**: the whole `fastpath` block appears only on the operator-local path, which `morphit-ops` uses and the public edge strips, so read it with the ops CLI or by hitting the indexer directly rather than through your own front door.
+
+**Verifying the safety rule yourself.** The fast path must never write to the database — that is what makes displaying an unconfirmed message safe. On a box with a database you can check it rather than take it on trust:
+
+```bash
+# Run on: the machine with the indexer's database (a dev box or a node you can point at a SCRATCH database).
+cd /opt/morphit/apps/indexer
+TEST_DATABASE_URL="postgres://USER:PASS@localhost:5432/SCRATCH_DB" npm run test:integration
+```
+
+Use a scratch database, not your live one — the suite creates and drops its own schemas. `fastpath-writes-nothing` photographs every table, pushes a real signed message through the real intake, and fails if any row anywhere changed. Without `TEST_DATABASE_URL` the suite skips, which is why it does not run as part of the ordinary battery.
+
+**`morphit-ops health` is the short way, and it does the interpreting for you.** Under the indexer block it prints a `Fed. chat:` line and, when there is anything to say, the reason underneath it:
+
+```
+      Fed. chat:     degraded — tor unusable from this box (12 delivered, 40 failed)
+            ↳ your tor is not answering — start it; the next warm-up clears this
+            ↳ 3/3 routes warm
+            ↳ received 3 from peers
+```
+
+That is the case worth recognising: **40 failures that are not the federation's fault.** A count like that reads as a problem with your peers, and the second line is the answer — one daemon on your own machine. The same block names the corroboration state described below, so a Lokinet fault that has not been convicted shows as "1 unexplained loki fault" rather than as an empty `networksDown` beside failures that say `localFault: true`.
+
+An indexer older than v1.18.0 has no federation block, and the line is omitted entirely rather than printed as zeros — during an upgrade that distinction matters, because "0 delivered" would read as a fault rather than as a version difference. The raw fields below are still there for anything the summary does not cover.
+
+| field | where | what it tells you |
+| --- | --- | --- |
+| `peerDeliveries` | `federation` | pushes that a peer accepted |
+| `peerFailures` | `federation` | pushes that did not land at all |
+| `networksDown` | `federation` | how many hidden networks **this box** currently cannot use |
+| `lastWarmOk` / `lastWarmTotal` | `federation` | how many peer routes the last background warm-up brought up |
+| `networksDown` | `federationDiagnostics` | **which** ones, by name |
+| `recentFailures` | `federationDiagnostics` | the last 20 failures: peer origin, reason, and `localFault` — true when the push never left your machine |
+| `networksSuspected` | `federationDiagnostics` | local faults recorded against a network that has **not** been taken off the list, by name and count — see the Lokinet note below |
+| `verified` / `shed` | `federationIntake` | pushes from peers that were checked and displayed, and pushes declined because the queue was already as deep as this box can clear in time |
+| `admissionDepth` / `verifyCostMs` | `federationIntake` | how many pushes this box will queue before declining, and the measured cost of one signature check — see below |
+| `replayTableFull` / `replayQuota` | `federationIntake` | pushes declined to protect the replay memory: because the whole memory was full, or because one account already holds its share of it (250 entries). Non-zero `replayQuota` is one account pushing far faster than anyone types — see "When someone floods fast chat" below |
+| `refusedLocally` / `dispatchedAfterChain` | `federation` | chat sends this instance would not pass to peers because they were malformed, oversized or mixed with other operations; and sends it could not verify itself, so it held them until the Blurt node accepted them |
+
+### When your instance declines pushes: `intake queue held to N`
+
+Every message a peer hands you has its signature checked before it is shown, and
+those checks run one at a time. So anything queued is waiting behind all the
+checks ahead of it — the length of the queue is really a length of *time*, and
+how much time depends on how fast your hardware is.
+
+Since v1.18.0 your instance measures its own checks and queues only as deep as
+it can still clear inside six seconds. When that bound is below the maximum,
+`morphit-ops health` says so:
+
+```
+      Fed. chat:     3 peer(s) (120 delivered, 8 failed)
+            ↳ received 97 from peers, 61 shed
+            ↳ intake queue held to 252 (18.2ms per check) so pushes still land inside 6s — extra pushes go by chain
+```
+
+**This is the design working, not a fault.** A declined push is carried by the
+blockchain exactly as every chat message was before this release — it arrives,
+just at chain speed. The alternative, which is what earlier builds did, is to
+accept the message, tell the sending instance you have it, and deliver it
+outside the six seconds; that is worse, because nobody is told.
+
+What to do about it, in order of how much it helps:
+
+- **Nothing, if `shed` is small or occasional.** A burst during a busy minute is
+  what the mechanism is for.
+- **Look at `verifyCostMs`.** Each check is a signature recovery plus one
+  `SELECT` against `accounts`. A figure well above ~6 ms usually means the
+  database round trip is slow — Postgres on a contended disk, or a container
+  boundary between the indexer and the database. §30 and §33 cover both.
+- **Give the box more CPU, or a quieter one.** The check is CPU-bound and the
+  worker is single-threaded by design (it must not starve the SSE streams that
+  deliver the messages).
+
+A sustained `shed` with `admissionDepth` at its floor means this instance cannot
+keep the six-second promise at all and effectively everything is going by chain.
+That is worth acting on; the fast path is still working, it is simply not fast
+enough on this hardware to be worth much.
+
+### When someone floods fast chat
+
+Anyone can post to `/v1/federation/chat-fast` and `/v1/broadcast`. Since the
+v1.18.0 deep review, your instance protects the fast path like this:
+
+- **It only forwards what a peer would accept.** A chat message sent through
+  your instance goes to your peers only if it is a single, well-formed chat
+  operation of normal size whose signature checks out against your own copy of
+  the sender's key. If your instance cannot check it (a brand-new account, a key
+  it has not confirmed yet), it waits until the Blurt node accepts the message,
+  then forwards it. A message the node refuses is never forwarded. The counters
+  are `refusedLocally` and `dispatchedAfterChain`.
+- **No single account can fill the replay memory.** Each account can hold at
+  most 250 entries of it at once. That is far more than any person sends in the
+  eight minutes an entry is kept, so one account flooding its own messages only
+  gets its own extra messages declined (`replayQuota`). Everyone else keeps
+  fast delivery.
+- **A full intake queue drops the flooder's messages first.** When the queue is
+  full, your instance drops a message from whoever holds the most of the queue,
+  or from a name whose messages recently failed their signature check. It no
+  longer drops the newest arrival. One busy or hostile sender cannot push
+  everyone else onto chain speed.
+- **Chain look-ups have two separate budgets.** A message whose signature does
+  not match the key on file can only use up the budget for mismatches. A sender
+  your instance simply has not confirmed yet, which is everyone for the first
+  minutes after an upgrade, draws from a separate budget. Junk cannot use that
+  one up.
+
+**What it cannot fully prevent** (a known limit, not a fault): someone can post
+junk that *claims* to come from a real account without holding its key.
+Nothing can tell that junk from the real thing before its signature is
+checked, and over Tor every caller comes from the same address, so the sender
+cannot be rate-limited. The protections above limit the damage to **the
+account whose name is being used**. That account's own messages may lose fast
+delivery while the flood lasts. Other senders are not affected. An attacker
+who uses many different names at once, one message each, can still fill the
+queue. Your instance then declines pushes as described above, and every
+message still arrives by chain at chain speed. Nothing is lost and nothing
+false is shown. A sustained, rising `shed` with `refused` climbing alongside
+it is what this looks like in `/v1/health`.
+
+**Start with `networksDown`.** If it is non-empty, the problem is on your machine, not in the federation: your Tor, i2pd or lokinet is not answering. The warm-up loop also names them in the log line `peer_routes_warmed` (`networks_down: ["tor"]`). Start the daemon; the next warm pass clears the mark, and so does the first push that succeeds.
+
+`localFault: true` on a recent failure says the same thing per push: the peer was never asked. A peer that genuinely refused carries an HTTP `status` instead.
+
+Chat keeps working while a network is down — a peer that also published a clearnet origin is dialled there instead, automatically and within the same message. **That is a degraded state even though nothing is failing**: those messages are no longer taking the privacy route their addresses were published for. It is exactly the situation this field exists to make visible, because a delivery count alone looks perfectly healthy.
+
+A peer with *no* address on a network you can reach — a zero-clearnet instance, when your Tor is down and neither of you speaks I2P — is the one case that has nowhere to fall back to. Those messages still arrive, over the chain, at chain speed.
+
+**Lokinet is named more slowly than the other two, on purpose.** Your instance
+decides a network is its own fault from the shape of the failure. Tor and I2P
+say so plainly — the failure names your own proxy, and no peer can produce that
+shape. A Lokinet failure is a name that would not resolve, and a peer whose
+published `.loki` address is stale or mistyped fails in precisely the way your
+own router being stopped fails. There is nothing in the error to tell them
+apart.
+
+So on Lokinet your instance waits until **two different peers** have failed
+before it names the network. A router that is actually stopped supplies the
+second immediately, because it fails every address it is given, so a real outage
+still shows up in the same batch. (Until the final v1.18.0 review this counted
+two different *addresses*, and one registration could publish two: a single
+peer with two dead names could take a network away from everyone. It now takes
+two separate instances to agree.) What this avoids is one peer's out-of-date
+chain record taking the network away from every other `.loki` peer — and
+silently moving their traffic to your clearnet origin, if you publish one.
+
+The practical consequence when reading `/v1/health`: if you have exactly ONE
+`.loki` peer in your directory and your router is stopped, `networksDown` will
+not name Lokinet, because one peer can never be corroborated. That is what
+`networksSuspected` is for — it shows `{"loki": 1}`, meaning "one local fault
+recorded, not enough to convict". **`networksSuspected` holding steady at 1 while
+messages keep failing is the signature of this case**, and the answer is to check
+`lokinet status` on the box rather than to wait for `networksDown` to populate,
+because with one peer it never will. A count of 2 or more means the network has
+already been marked down and will appear in `networksDown` instead.
+
+**If `networksDown` is empty and `peerFailures` is climbing**, the failures are the peers'. `recentFailures` distinguishes a refused size (`HTTP 413`, fixable — see the federation `client_max_body_size` note in §22) from a peer that is simply unreachable.
+
+### Measuring real fast-chat latency to a peer: `ops/fastchat-latency-probe.sh`
+
+The six-second figures in the release notes were measured in software, with the hop times of Tor and I2P modelled. This script measures your actual circuits. It times GETs of the peer's public `/v1/health`, which is the request the warm-up makes. It sends no chat and changes nothing on either box.
+
+Run it **on the sending instance**, pointed at the **other** instance's `.onion` or `.b32.i2p` address. Then run it on the other box, pointed back: circuits are not symmetric, and the slow direction is the one users notice.
+
+```
+bash /opt/morphit/ops/fastchat-latency-probe.sh http://<peer>.onion
+bash /opt/morphit/ops/fastchat-latency-probe.sh http://<peer>.b32.i2p --samples 20
+```
+
+What it does, and why each part matters:
+
+- **Same path as the indexer.** Tor goes through the SOCKS port. I2P goes as a `CONNECT` tunnel through the router's HTTP proxy, the way the indexer dials it, so a router that refuses tunnels shows up as a failure rather than a timing.
+- **Only real answers count.** A sample counts only when the peer answered with an HTTP status from 200 to 499. An error page from your own proxy used to count as a fast round trip and produced `PASS`.
+- **Each cold sample gets its own Tor circuit,** by asking Tor for stream isolation. Without that, all three could ride one existing circuit and the "no warm-up" figure came out too low.
+- **Your indexer's own settings.** It reads `MORPHIT_INDEXER_TOR_SOCKS` and `MORPHIT_INDEXER_I2P_HTTP_PROXY` from the environment, then from `/etc/morphit/indexer.env` and `/opt/morphit/morphit.env`. A value written with a scheme (`http://127.0.0.1:4444`) is accepted. A setting that is present but **blank** means that network is off, as it does for the indexer, and the probe says so instead of trying the standard port.
+- **A bare address only.** The peer must be a scheme, a host and an optional port, such as `http://<peer>.onion`. Anything with a path, query, fragment or user name is refused. The network used to be decided by how the text ended, so `http://example.com?.loki` counted as Lokinet and was fetched directly.
+- **No clearnet.** Given a clearnet address it refuses, unless you add `--allow-clearnet`. It used to connect directly from your server's own address, which on a tor-only box is the thing the box exists not to do.
+
+It prints the cold samples, then the warm ones on a single reused connection, then an estimate for a message whose three legs are all hidden (browser → instance → instance → browser):
+
+| Verdict | Exit | Meaning |
+| --- | --- | --- |
+| `PASS` | 0 | Even the slowest round trip seen fits the six seconds. |
+| `MOSTLY WITHIN` | 0 | Typical delivery fits, the slowest round trip seen did not. Suggestions for this box follow. |
+| `SLOWER THAN THE TARGET` | 1 | Messages arrive, but take longer than six seconds on this route. Suggestions follow. |
+| "could not be reached" | 1 | No sample got an answer from the peer. Check the daemon named in the output, and the peer's current address. |
+
+The estimate assumes three hidden legs. A user who reaches their own instance over the clearnet does not pay one of them, so for that user the real figure is lower.
+
+**Peers' idle connections now last five minutes.** The frontend nginx that every Tor and I2P visitor reaches sets `keepalive_timeout 300s 300s`. Before the final v1.18.0 review it used nginx's default of 75 seconds. Other instances renew their warmed connection to you every three minutes, so it was always closed by then, and each renewal paid for a new tunnel. `morphit-ops upgrade` refreshes the frontend config and restarts the container.
 
 ## 52. Fast-sync and the federation snapshot mirror
 
@@ -11987,7 +12639,7 @@ With mirrors in place, a hidden-only newcomer fetches from a peer's `.onion` or 
 
 The mirror job:
 
-1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required);
+1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required). Since v1.18.0 it only accepts an op that **two independent RPC operators agree on** (a node's `.onion` and `.b32.i2p` count as one operator) and whose signature comes from the pinned `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` — the same key the release and RPC-directory checks use. If the nodes it can reach do not agree yet, it pins nothing and tries again next run;
 2. refuses outright if the snapshot is for a different chain;
 3. pins the CID to your Kubo;
 4. reads the pinned content back and **verifies it against the on-chain SHA-256** — if it does not match, the pin is removed and your box serves nothing rather than serving something a newcomer will reject;
@@ -12021,6 +12673,15 @@ A healthy run ends with a line confirming the SHA-256 matched and that this inst
 ### Fast-syncing a new node
 
 On a fresh box the install wizard offers fast-sync by default; `morphit-ops fast-sync` runs it at any time. It picks sources in this order: your own gateway if you run one, then federation peers over Tor and I2P, then the signed HTTPS mirror, then public IPFS gateways — with the clearnet tiers omitted entirely on a hidden-only node. Whatever answers first is verified against the on-chain hash before anything is restored, so which mirror served you affects only your wait, never your safety.
+
+**What fast-sync checks before it restores anything (v1.18.0).**
+
+- **Which snapshot.** The newest `indexer_snapshot_v1` op is read from at least two independent RPC operators, and they must agree on it and on the block that holds it. Its signature must come from the pinned `@morphit` posting key (`MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY`). One misbehaving RPC node can no longer choose your snapshot. With `--signer <account>` for any other publisher, you must also pass `--signer-pubkey <BLT…>`, the key you trust for that account.
+- **What is in it.** A snapshot is data only. The restore refuses any psql command (`\…`) in the dump, and psql runs in its restricted mode, so it refuses one anywhere in a line as well. The restore runs as **one transaction**: if anything fails, your existing database is exactly as it was. Ownership and privilege statements are left out, so the restore works whatever your database role is called. Functions, triggers or rules the snapshot adds that Morphit does not define are removed.
+- **psql version.** That restricted mode needs a PostgreSQL client from August 2025 or later (13.22, 14.19, 15.14, 16.10, 17.6, or any 18). With an older `psql`, fast-sync stops before it changes anything and asks you to update the `postgresql-client` package.
+- **Your own state stays yours.** Snapshots carry only what the chain proves. The publisher's push subscriptions, push queue, relay payout queue, view counters, price observations, moderation clearances and local operator blocks are never exported. If an older snapshot still contains them, they are removed on restore.
+- **The op-log spot-check.** After the restore, the spot-check samples the restored op log against the chain. `snapshot-verify-oplog.ts` exits `0` when verified, `3` for QUARANTINE (a sampled op is not on the chain as recorded) and `2` when inconclusive (chain unreachable, or nothing to sample). Only `3` means quarantine. A crash counts as inconclusive, never as a verdict.
+- **The RPC directory in a restored database.** The indexer re-checks it against the chain on start. The directory op must be in the recorded block, agreed by independent RPC operators and signed by the pinned key. Only the endpoints in that signed op join your RPC pool. A stored directory the chain does not back is deleted. Until the check can reach the chain, the built-in endpoint list carries the node.
 
 ### Publishing: the first snapshot, and automating it afterwards
 

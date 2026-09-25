@@ -237,6 +237,190 @@ case "$reg" in
 	*) no "  …the display is not conditional on any being set" ;;
 esac
 
+# ── THE KEY THAT GETS STORED, NOT JUST THE KEY THAT GETS CHECKED ─────
+#
+# The checks above prove the INSPECTOR reads a base64 key correctly. They said
+# nothing about what the IMPORT then stored — and it stored the wrong thing.
+# `inspectI2pKeyFile` decoded base64 to validate it; `import-altnet-key` then
+# encrypted the ORIGINAL file. A base64 export passed every check, printed
+# "✓ Valid I2P private key … This key hosts: <b32>", and was stored as base64
+# TEXT. Exported back to i2pd, that text hosts nothing, and nothing says why.
+#
+# Verified against i2pd 2.49 before this was written: the 679-byte binary key
+# i2pd generated hosts its address; the same key as 908 base64 characters hosts
+# no destination at all. Accepting base64, which 1.17.15 added, is what made the
+# path reachable — before that it was refused, loudly.
+#
+# So this drives the REAL `import-altnet-key` and the REAL `export-altnet-key`
+# with a base64 key, and requires the bytes that come back out to be the BINARY
+# key. When i2pd is installed it also asks i2pd itself which address it hosts
+# from them, because "byte-identical to what we expected" is our claim and
+# "i2pd serves it" is the property.
+#
+# The negative case runs against a COPY of ops-cli in $WORK, never the real
+# source: a mutation restored from the wrong backup destroyed a core module in
+# round fourteen, and a copy cannot do that.
+I2P_KEY_DIR="$WORK/i2pkey"; mkdir -p "$I2P_KEY_DIR"
+( cd "$REPO/apps/ops-cli" && npx tsx -e "
+import { randomBytes } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+// Ed25519 destination: 256 enc + 128 sign + cert(type 5, len 4, 00 07 00 00), then
+// the private half — 679 bytes, the size Morphit's installer and i2pd both write.
+const cert = Buffer.from([5, 0, 4, 0, 7, 0, 0]);
+const dest = Buffer.concat([randomBytes(256), randomBytes(128), cert]);
+const key = Buffer.concat([dest, randomBytes(679 - dest.length)]);
+writeFileSync('$I2P_KEY_DIR/key.bin', key);
+writeFileSync('$I2P_KEY_DIR/key.b64', key.toString('base64'));
+" ) >/dev/null 2>&1
+
+# One passphrase per chunk: the prompt resolves at the first newline and drops
+# the rest of the chunk, which is harmless at a keyboard and fatal in a pipe.
+feed_once()  { ( sleep 1; printf 'harness passphrase\n' ); }
+# Answer each prompt only once it has APPEARED in the command's own log. Fixed
+# sleeps raced a cold `tsx` start: inside the smoke battery (which exports
+# TSX_TSCONFIG_PATH, so the ops-cli COPY compiles cold) both passphrases arrived
+# in one chunk before the first prompt existed. The prompt keeps the first line
+# and drops the rest, so the confirmation waited for input that never came, the
+# import wrote nothing — and three checks failed for a reason that had nothing
+# to do with what they check. Standalone, the cache was warm and it passed.
+feed_on() { # <log> <prompt label>...
+	local log="$1"; shift
+	( for label in "$@"; do
+		for _ in $(seq 1 600); do grep -q "$label" "$log" 2>/dev/null && break; sleep 0.1; done
+		printf 'harness passphrase\n'
+	  done )
+}
+
+roundtrip() { # $1 = ops-cli dir to run   $2 = scratch root   → prints exported path
+	local cli="$1" root="$2"
+	rm -rf "$root"; mkdir -p "$root"
+	feed_on "$root/import.log" 'Relay passphrase' 'Confirm passphrase' | ( cd "$cli" && npx tsx src/main.ts import-altnet-key --network=i2p \
+		--in="$I2P_KEY_DIR/key.b64" --out="$root" ) >"$root/import.log" 2>&1
+	feed_on "$root/export.log" 'Passphrase' | ( cd "$cli" && npx tsx src/main.ts export-altnet-key --network=i2p \
+		--repo="$root" --out="$root/exported.dat" ) >"$root/export.log" 2>&1
+	printf '%s' "$root/exported.dat"
+}
+
+# v1.18.0 (F38): export now REPAIRS a key an older import stored as base64 text,
+# and says so. That makes "the exported bytes are binary" true whatever was
+# stored, so on its own it no longer proves the import stores binary — the
+# property moved. What still tells the two apart is the repair notice: a key
+# stored correctly exports WITHOUT it.
+LEGACY_NOTICE='stored as base64 text by an older morphit-ops'
+exported="$(roundtrip "$REPO/apps/ops-cli" "$WORK/rt-real")"
+if [ ! -s "$exported" ]; then
+	no "the base64 import/export round trip produced no key: $(tail -2 "$WORK/rt-real/import.log" | tr '\n' ' ' | cut -c1-80)"
+elif grep -q "$LEGACY_NOTICE" "$WORK/rt-real/export.log"; then
+	no "the import STORED the base64 text — the export had to repair it (the notice printed)"
+elif cmp -s "$exported" "$I2P_KEY_DIR/key.bin"; then
+	ok "a key imported as base64 is stored — and exported — as the BINARY key i2pd loads"
+else
+	no "a base64 key came back as $(stat -c %s "$exported") bytes, not the 679-byte binary key — i2pd will host nothing"
+fi
+
+# i2pd's own verdict, when i2pd is here to give one. Skipped LOUDLY otherwise:
+# a leg that silently passes when its tool is missing is how a check stops
+# checking without anyone noticing.
+if command -v i2pd >/dev/null 2>&1 && [ -s "$exported" ]; then
+	d="$WORK/i2pd"; mkdir -p "$d/data"
+	cp "$exported" "$d/data/k.dat"
+	printf '[t]\ntype = http\nhost = 127.0.0.1\nport = 18089\nkeys = k.dat\n' > "$d/tunnels.conf"
+	printf 'log = file\nlogfile = %s/i2pd.log\nloglevel = info\n[http]\nenabled = false\n[httpproxy]\nenabled = false\n[socksproxy]\nenabled = false\n[sam]\nenabled = false\n[reseed]\nverify = false\nurls =\n' "$d" > "$d/i2pd.conf"
+	timeout 12 i2pd --datadir="$d/data" --conf="$d/i2pd.conf" --tunconf="$d/tunnels.conf" >/dev/null 2>&1
+	hosted="$(grep -oE '[a-z2-7]{52}\.b32\.i2p' "$d/i2pd.log" 2>/dev/null | sort -u | head -1)"
+	expect="$( cd "$REPO/apps/ops-cli" && npx tsx -e "
+import { readFileSync } from 'node:fs';
+import { inspectI2pKeyFile } from './src/lib/i2pDestination.ts';
+process.stdout.write(inspectI2pKeyFile(readFileSync('$I2P_KEY_DIR/key.bin')).address ?? '');
+" 2>/dev/null )"
+	if [ -n "$hosted" ] && [ "$hosted" = "$expect" ]; then
+		ok "  …and i2pd itself hosts the address the import promised ($(printf '%s' "$hosted" | cut -c1-12)…)"
+	else
+		no "  …i2pd hosts '${hosted:-nothing}' from the exported key; the import promised $expect"
+	fi
+else
+	echo "  - i2pd not installed: skipped asking i2pd itself (the byte check above still ran)"
+fi
+
+# ── A BARE DESTINATION IS REFUSED BY THE COMMAND, NOT ONLY FLAGGED ───
+#
+# The inspector check above proves a 391-byte destination is RECOGNISED. What
+# matters is that the import then REFUSES it and writes nothing — i2pd cannot
+# host with a destination, so storing one would make the address silently never
+# serve. This is the exact shape of the key that prompted the check: 391 bytes,
+# 524 base64 characters, ending BQAEAAcAAA== (Ed25519 key certificate).
+( cd "$REPO/apps/ops-cli" && npx tsx -e "
+import { randomBytes } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+const cert = Buffer.from([5, 0, 4, 0, 7, 0, 0]);
+writeFileSync('$I2P_KEY_DIR/dest.b64', Buffer.concat([randomBytes(256), randomBytes(128), cert]).toString('base64'));
+" ) >/dev/null 2>&1
+DR="$WORK/dest-only"; rm -rf "$DR"; mkdir -p "$DR"
+feed_once | ( cd "$REPO/apps/ops-cli" && npx tsx src/main.ts import-altnet-key --network=i2p \
+	--in="$I2P_KEY_DIR/dest.b64" --out="$DR" ) >"$DR/log" 2>&1
+dest_rc=$?
+if [ "$dest_rc" -ne 0 ] && [ ! -e "$DR/apps/relay/altnet/i2p-key.json" ] && grep -q "PUBLIC address, not a private key" "$DR/log"; then
+	ok "a 391-byte destination (524 base64 chars) is REFUSED by the import and nothing is written"
+else
+	no "a bare destination was not refused: exit=$dest_rc keystore=$( [ -e "$DR/apps/relay/altnet/i2p-key.json" ] && echo WRITTEN || echo none)"
+fi
+
+# NEGATIVE CASE — the fix reverted, on a COPY. Must fail, or the check above is
+# not a check.
+CPY="$WORK/cli-copy"; mkdir -p "$CPY/apps"
+for a in "$REPO"/apps/*; do n="$(basename "$a")"; [ "$n" = ops-cli ] && continue; ln -s "$a" "$CPY/apps/$n"; done
+cp -r "$REPO/apps/ops-cli" "$CPY/apps/ops-cli"; rm -rf "$CPY/apps/ops-cli/node_modules"
+ln -s "$REPO/apps/ops-cli/node_modules" "$CPY/apps/ops-cli/node_modules"
+ln -s "$REPO/node_modules" "$CPY/node_modules"; ln -s "$REPO/packages" "$CPY/packages"; cp "$REPO/package.json" "$CPY/"
+MUT_TARGET="$CPY/apps/ops-cli/src/commands/importAltnetKey.ts"
+if grep -q 'envelope = encryptAltKey(toStore, passphrase, net);' "$MUT_TARGET"; then
+	sed -i 's/envelope = encryptAltKey(toStore, passphrase, net);/envelope = encryptAltKey(plaintext, passphrase, net);/' "$MUT_TARGET"
+	bad_export="$(roundtrip "$CPY/apps/ops-cli" "$WORK/rt-mutant")"
+	# Caught by the repair notice now, not the bytes (see LEGACY_NOTICE above).
+	if [ -s "$bad_export" ] && grep -q "$LEGACY_NOTICE" "$WORK/rt-mutant/export.log"; then
+		ok "MUTANT: storing the file instead of the decoded key IS caught (the export had to repair it)"
+	else
+		no "MUTANT: reverting the fix went unnoticed — the round-trip check guards nothing"
+	fi
+
+	# ── F38: A KEY 1.17.15 ALREADY STORED AS TEXT ──────────────────────
+	# The mutant import above IS 1.17.15's importer: it validates the decoded
+	# key and stores the original text. So its keystore is exactly what an
+	# operator who imported a base64 key on 1.17.15 has on disk today. The
+	# REAL export must hand i2pd the binary key from it, and say what it did.
+	feed_on "$WORK/rt-mutant/legacy.log" 'Passphrase' | ( cd "$REPO/apps/ops-cli" && npx tsx src/main.ts export-altnet-key --network=i2p \
+		--repo="$WORK/rt-mutant" --out="$WORK/rt-mutant/legacy-real.dat" ) >"$WORK/rt-mutant/legacy.log" 2>&1
+	if cmp -s "$WORK/rt-mutant/legacy-real.dat" "$I2P_KEY_DIR/key.bin" && grep -q "$LEGACY_NOTICE" "$WORK/rt-mutant/legacy.log"; then
+		ok "a key a 1.17.15 import stored as base64 TEXT exports as the binary key i2pd loads, and says so"
+	else
+		no "a 1.17.15-stored key exported as $(stat -c %s "$WORK/rt-mutant/legacy-real.dat" 2>/dev/null || echo 0) bytes — i2pd would host nothing"
+	fi
+	# …and that repair is a check only if removing it is caught. On the copy:
+	# the import back as it was (irrelevant here), the export's repair off.
+	EXP_TARGET="$CPY/apps/ops-cli/src/commands/exportAltnetKey.ts"
+	if grep -q "	if (net === 'i2p') {" "$EXP_TARGET"; then
+		sed -i "s/	if (net === 'i2p') {/	if (false) {/" "$EXP_TARGET"
+		feed_on "$WORK/rt-mutant/legacy-mutant.log" 'Passphrase' | ( cd "$CPY/apps/ops-cli" && npx tsx src/main.ts export-altnet-key --network=i2p \
+			--repo="$WORK/rt-mutant" --out="$WORK/rt-mutant/legacy-mutant.dat" ) >"$WORK/rt-mutant/legacy-mutant.log" 2>&1
+		if [ -s "$WORK/rt-mutant/legacy-mutant.dat" ] && ! cmp -s "$WORK/rt-mutant/legacy-mutant.dat" "$I2P_KEY_DIR/key.bin"; then
+			ok "MUTANT: an export that does not repair a 1.17.15 key IS caught ($(stat -c %s "$WORK/rt-mutant/legacy-mutant.dat") bytes out)"
+		else
+			no "MUTANT: removing the export repair went unnoticed"
+		fi
+	else
+		no "MUTANT: the export repair changed shape; update this harness"
+	fi
+else
+	no "MUTANT: the store line changed shape; update this harness (a mutation that does not apply is not a catch)"
+fi
+# The real source must be untouched by any of the above. Checked, not assumed.
+if grep -q 'envelope = encryptAltKey(toStore, passphrase, net);' "$REPO/apps/ops-cli/src/commands/importAltnetKey.ts" \
+	&& grep -q "	if (net === 'i2p') {" "$REPO/apps/ops-cli/src/commands/exportAltnetKey.ts"; then
+	ok "the real importAltnetKey.ts and exportAltnetKey.ts were not modified by the negative cases"
+else
+	no "the REAL source was modified — the negative case escaped its copy"
+fi
+
 echo ""
 if [ "$fails" -gt 0 ]; then
 	printf '\033[31m✗ %d alt-address check(s) failed\033[0m (%d passed)\n' "$fails" "$pass"; exit 1

@@ -28,7 +28,11 @@ ProtectClock=true
 RestrictRealtime=true
 RestrictSUIDSGID=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# Node's V8 JIT writes and then executes code in memory, so W^X must stay
+# off for this unit: with it on, node aborts ("Check failed: 12 == errno")
+# the first time it compiles anything, and the release check never ran
+# (v1.18.0 review, O10). Same carve-out as the indexer and relay units.
+MemoryDenyWriteExecute=no
 LimitCORE=0
 
 # Outbound HTTPS to git.agorise.net + DNS lookup.

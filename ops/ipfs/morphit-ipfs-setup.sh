@@ -17,7 +17,7 @@ DIST="${MORPHIT_KUBO_DIST_BASE:-https://dist.ipfs.tech/kubo}"
 IPFS_USER="${MORPHIT_IPFS_USER:-ipfs}"
 IPFS_HOME="${MORPHIT_IPFS_HOME:-/var/lib/ipfs}"
 IPFS_REPO="${IPFS_PATH:-$IPFS_HOME/.ipfs}"
-RELEASE_URL="${MORPHIT_RELEASE_URL:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8088}/v1/release}"
+RELEASE_URL="${MORPHIT_RELEASE_URL:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8081}/v1/release}"
 PIN_CALENDAR="${MORPHIT_IPFS_PIN_ON_CALENDAR:-hourly}"
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
@@ -71,6 +71,27 @@ sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh -c '
 	ipfs config --json Swarm.ConnMgr.LowWater 20 >/dev/null 2>&1 || true
 '
 
+# 3b. Privacy settings (v1.18.0 deep-deep, H3), the same list Ansible and
+# `morphit-ops upgrade` apply: telemetry off on every node, and on a HIDDEN-ONLY
+# node (MORPHIT_INDEXER_RPC_ENDPOINTS present and empty in indexer.env) no part
+# in the public IPFS network at all. Without this a tor-only box set up by hand
+# joined the public DHT from its home IP until its next upgrade.
+HIDDEN_ONLY=no
+IDX_ENV="${MORPHIT_INDEXER_ENV:-/etc/morphit/indexer.env}"
+if [ -f "$IDX_ENV" ] && grep -q '^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=' "$IDX_ENV" \
+	&& [ -z "$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "$IDX_ENV" | tail -n1 | tr -d "\"' \t\r")" ]; then
+	HIDDEN_ONLY=yes
+fi
+PRIV_MODE=base
+[ "$HIDDEN_ONLY" = yes ] && PRIV_MODE=hidden
+PRIV_CHANGED=no
+if ! sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh "$HERE/morphit-ipfs-privacy.sh" "check-$PRIV_MODE" 2>/dev/null; then
+	sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh "$HERE/morphit-ipfs-privacy.sh" "apply-$PRIV_MODE" >/dev/null 2>&1 \
+		&& PRIV_CHANGED=yes \
+		|| echo "  ! could not apply every IPFS privacy setting (see: sh $HERE/morphit-ipfs-privacy.sh check-$PRIV_MODE)"
+fi
+[ "$HIDDEN_ONLY" = yes ] && echo "  + hidden-only node: IPFS stays off the public IPFS network (serves the release over Tor/I2P only)"
+
 # 4. Pin script + env.
 mkdir -p /usr/local/lib/morphit /etc/morphit
 install -m 0755 "$HERE/morphit-ipfs-pin.sh" /usr/local/lib/morphit/morphit-ipfs-pin.sh
@@ -79,6 +100,7 @@ cat > /etc/morphit/ipfs-pin.env <<EOF
 MORPHIT_RELEASE_URL=$RELEASE_URL
 IPFS_PATH=$IPFS_REPO
 MORPHIT_IPFS_PIN_TIMEOUT=900
+MORPHIT_IPFS_HIDDEN_ONLY=$HIDDEN_ONLY
 EOF
 chmod 0640 /etc/morphit/ipfs-pin.env
 
@@ -166,6 +188,10 @@ EOF
 
 # 6. Enable + start.
 systemctl daemon-reload
+# A daemon that was already running reads new settings only on a restart.
+if [ "$PRIV_CHANGED" = yes ] && systemctl is-active --quiet ipfs.service; then
+	systemctl restart ipfs.service
+fi
 systemctl enable --now ipfs.service
 systemctl enable --now morphit-ipfs-pin.timer
 systemctl enable --now morphit-ipns-rebroadcast.timer

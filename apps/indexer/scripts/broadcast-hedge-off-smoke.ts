@@ -19,10 +19,18 @@
  *             `userFacing`, while leaving user-facing READ hedging intact (so
  *             a fix here can't over-correct and disable read hedging).
  *
- * A "broadcast_transaction" (async) rewrite would drop block_num from the
- * frontend contract, so the fix deliberately keeps the synchronous method and
- * only removes the hedge — the single-broadcast latency is the cost of
- * correctness, same trade the relay makes.
+ * ORIGINALLY this file also pinned the synchronous METHOD, on the reasoning
+ * that a "broadcast_transaction" (async) rewrite would drop block_num from the
+ * frontend contract. That reasoning held for orders, transfers, feature bids,
+ * account creation and chat-IDENTITY publication, all of which record the block
+ * number — and it did NOT hold for a chat message, whose result both send paths
+ * in chatService.ts discard without reading. v1.18.0 split the two: a chat
+ * message uses the async method and answers before a block exists, everything
+ * else is unchanged.
+ *
+ * The hedge guarantee this file exists for is untouched by that split and is now
+ * checked on BOTH paths, because it was never really about which method was
+ * called — it was about never parallel-firing a signed write.
  */
 import { broadcastRoute } from '../src/api/broadcast.ts';
 import { resolveHedge, type RpcCallOptions, type BlurtClient } from '../src/blurt/client.ts';
@@ -74,8 +82,26 @@ const CHAT_TX = {
 	}
 };
 
-async function postChat(): Promise<{
+/** A non-chat signed write. v1.18.0 split the broadcast method by op class —
+ *  chat answers before a block, everything else still waits for one — so the
+ *  hedge guarantee below has to be checked on BOTH paths, not just whichever
+ *  one this file's original fixture happened to take. */
+const TRANSFER_TX = {
+	trx: {
+		ref_block_num: 1,
+		ref_block_prefix: 1,
+		expiration: '2026-01-01T00:00:00',
+		operations: [
+			['transfer', { from: 'tester2', to: 'tester3', amount: '1.000 BLURT', memo: '' }]
+		],
+		extensions: [],
+		signatures: ['deadbeef']
+	}
+};
+
+async function post(tx: unknown): Promise<{
 	status: number;
+	body: unknown;
 	calls: Array<{ method: string; options: RpcCallOptions }>;
 }> {
 	const { client, calls } = capturingBlurt();
@@ -83,10 +109,26 @@ async function postChat(): Promise<{
 	const res = await app.request('/', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(CHAT_TX)
+		body: JSON.stringify(tx)
 	});
-	return { status: res.status, calls };
+	let body: unknown = null;
+	try {
+		body = await res.json();
+	} catch {
+		/* a non-JSON body is itself a failure the assertions will catch */
+	}
+	return { status: res.status, body, calls };
 }
+
+/** A chat send from a CURRENT client, which asks for the fast answer. The flag
+ *  is what makes the async path safe across versions: an older browser tab does
+ *  not send it, gets the old synchronous behaviour, and cannot be handed a reply
+ *  shape it would read as a failure. See the `chat_async` field in
+ *  apps/indexer/src/api/broadcast.ts. */
+const postChat = () => post({ ...CHAT_TX, chat_async: true });
+
+/** The same chat transaction from an OLDER client, which does not ask. */
+const postChatUnflagged = () => post(CHAT_TX);
 
 scenarios.push({
 	name: 'route reaches the broadcast (allowlisted chat op → 200)',
@@ -97,13 +139,90 @@ scenarios.push({
 });
 
 scenarios.push({
-	name: 'route broadcasts through broadcast_transaction_synchronous exactly once',
+	name: 'a chat message broadcasts through the ASYNC broadcast_transaction, exactly once',
 	async run() {
 		const { calls } = await postChat();
 		if (calls.length !== 1) return `expected exactly 1 callCondenser call, got ${calls.length}`;
+		return calls[0].method === 'broadcast_transaction'
+			? null
+			: `expected method broadcast_transaction, got ${calls[0].method}`;
+	}
+});
+
+scenarios.push({
+	name: 'and answers with block_num null — it did not wait for a block',
+	async run() {
+		const { status, body } = await postChat();
+		if (status !== 200) return `expected 200, got ${status}`;
+		const b = body as { block_num?: unknown; trx_id?: unknown };
+		if (b.block_num !== null) return `expected block_num null, got ${JSON.stringify(b.block_num)}`;
+		return typeof b.trx_id === 'string' && b.trx_id.length > 0
+			? null
+			: 'a chat send must still return a usable trx_id';
+	}
+});
+
+scenarios.push({
+	name: 'a chat send that did NOT ask still waits for its block',
+	async run() {
+		// The version-skew guard. A browser tab from before this release calls the
+		// generic submit path, which reads a null block_num as a malformed reply
+		// and throws — so the user is shown a permanent failure for a message that
+		// was in fact delivered, beside a retry button that sends a second copy.
+		// The indexer must therefore never take the fast path on its own
+		// initiative, however chat-like the transaction looks.
+		const { status, body, calls } = await postChatUnflagged();
+		if (status !== 200) return `expected 200, got ${status}`;
+		if (calls[0]?.method !== 'broadcast_transaction_synchronous')
+			return `expected the synchronous method, got ${calls[0]?.method}`;
+		const b = body as { block_num?: unknown };
+		return typeof b.block_num === 'number'
+			? null
+			: `an older client must get a numeric block_num, got ${JSON.stringify(b.block_num)}`;
+	}
+});
+
+scenarios.push({
+	name: 'a NON-chat write still waits for its block (synchronous, block_num returned)',
+	async run() {
+		const { status, body, calls } = await post(TRANSFER_TX);
+		if (status !== 200) return `expected 200, got ${status}`;
+		if (calls.length !== 1) return `expected exactly 1 callCondenser call, got ${calls.length}`;
+		if (calls[0].method !== 'broadcast_transaction_synchronous') {
+			return `a transfer must stay synchronous, got ${calls[0].method}`;
+		}
+		const b = body as { block_num?: unknown };
+		return typeof b.block_num === 'number'
+			? null
+			: `a transfer must report the block it landed in, got ${JSON.stringify(b.block_num)}`;
+	}
+});
+
+scenarios.push({
+	name: 'a chat op riding alongside a transfer stays synchronous (ALL ops, not ANY)',
+	async run() {
+		const mixed = {
+			trx: {
+				...TRANSFER_TX.trx,
+				operations: [...TRANSFER_TX.trx.operations, ...CHAT_TX.trx.operations]
+			}
+		};
+		const { calls } = await post(mixed);
+		if (calls.length !== 1) return `expected 1 call, got ${calls.length}`;
 		return calls[0].method === 'broadcast_transaction_synchronous'
 			? null
-			: `expected method broadcast_transaction_synchronous, got ${calls[0].method}`;
+			: `a mixed transaction must keep block confirmation, got ${calls[0].method}`;
+	}
+});
+
+scenarios.push({
+	name: 'the non-chat write is ALSO never hedged',
+	async run() {
+		const { calls } = await post(TRANSFER_TX);
+		if (calls.length !== 1) return `expected 1 call, got ${calls.length}`;
+		return calls[0].options.hedge === false
+			? null
+			: `transfer options.hedge must be false, got ${JSON.stringify(calls[0].options.hedge)}`;
 	}
 });
 
@@ -165,6 +284,68 @@ for (const c of HEDGE_CASES) {
 		}
 	});
 }
+
+// ─── v1.18.0 review (W5): a duplicate is the chain already having it ───────
+//
+// With hedge:false the pool never parallel-fires a write — but it still
+// FAILS OVER in sequence: a node that accepted the send and timed out on the
+// answer is followed by the next node, which refuses the same signed
+// transaction as a duplicate. For the async chat answer that duplicate is the
+// success it is; everything else keeps the old reply.
+
+async function postWithError(tx: unknown, message: string): Promise<{ status: number; body: unknown }> {
+	const client = {
+		callCondenser: async () => {
+			throw new Error(message);
+		}
+	} as unknown as BlurtClient;
+	const res = await broadcastRoute(client).request('/', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(tx)
+	});
+	let body: unknown = null;
+	try {
+		body = await res.json();
+	} catch {
+		/* checked below */
+	}
+	return { status: res.status, body };
+}
+
+const DUP = 'Duplicate transaction check failed';
+
+scenarios.push({
+	name: 'a chat send the chain calls a DUPLICATE is answered as the success it is',
+	async run() {
+		const { status, body } = await postWithError({ ...CHAT_TX, chat_async: true }, DUP);
+		if (status !== 200)
+			return `expected 200, got ${status} — the sender is shown a failure for a message on its way to a block`;
+		const b = body as { block_num?: unknown; trx_id?: unknown };
+		return b.block_num === null && typeof b.trx_id === 'string' && b.trx_id.length === 40
+			? null
+			: `expected {block_num:null, trx_id:<40 hex>}, got ${JSON.stringify(body)}`;
+	}
+});
+
+scenarios.push({
+	name: 'but a duplicate for a client that needs a block number keeps the old reply',
+	async run() {
+		const older = await postWithError(CHAT_TX, DUP);
+		const transfer = await postWithError(TRANSFER_TX, DUP);
+		return older.status === 400 && transfer.status === 400
+			? null
+			: `expected 400 for both, got chat ${older.status}, transfer ${transfer.status}`;
+	}
+});
+
+scenarios.push({
+	name: 'and any OTHER chain rejection of a chat send is still a rejection',
+	async run() {
+		const { status } = await postWithError({ ...CHAT_TX, chat_async: true }, 'missing required posting authority');
+		return status === 400 ? null : `expected 400, got ${status}`;
+	}
+});
 
 // ─── runner ───
 let pass = 0;

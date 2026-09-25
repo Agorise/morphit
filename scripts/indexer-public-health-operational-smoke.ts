@@ -73,7 +73,7 @@ check('all active, no failures → ok', decideSeeding(mk({})).state === 'ok');
 const populated: OperationalSnapshot = {
 	ipfs_seeding: { state: 'ok', detail: 'seeding' },
 	system: { cpu_pct: 12, mem_pct: 40, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 20, disk_used_gb: 90, disk_total_gb: 460, disk_avail_gb: 360 },
-	relay: { up: true }
+	relay: { up: true, hidden_only: null }
 };
 {
 	// relay probe failed this pass (null) → relay keeps prev true, others update.
@@ -87,7 +87,7 @@ const populated: OperationalSnapshot = {
 }
 {
 	// systemctl block failed → ipfs keeps prev; system + relay still refresh.
-	const merged = mergeOperationalSnapshot(populated, { ipfs_seeding: null, system: { cpu_pct: 9, mem_pct: 42, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 22, disk_used_gb: 92, disk_total_gb: 460, disk_avail_gb: 358 }, relay: { up: false } });
+	const merged = mergeOperationalSnapshot(populated, { ipfs_seeding: null, system: { cpu_pct: 9, mem_pct: 42, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 22, disk_used_gb: 92, disk_total_gb: 460, disk_avail_gb: 358 }, relay: { up: false, hidden_only: null } });
 	check('a failed seeding block keeps its previous value', merged.ipfs_seeding.state === 'ok');
 	check('system + relay still refresh when seeding fails', merged.system.cpu_pct === 9 && merged.relay.up === false);
 }
@@ -128,7 +128,10 @@ check('reading the snapshot never throws', !threw);
 // ── WIRING: on the PUBLIC body, not behind the gate ──────────────
 const health = read('apps/indexer/src/api/health.ts');
 check('health imports the operational snapshot', /getOperationalSnapshot|primeOperationalSnapshot/.test(health));
-check('the public body sets ipfs_seeding + system + relay', /body\.ipfs_seeding = op\.ipfs_seeding/.test(health) && /body\.system = op\.system/.test(health) && /body\.relay = op\.relay/.test(health));
+check('the public body sets ipfs_seeding + system + relay', /body\.ipfs_seeding = op\.ipfs_seeding/.test(health) && /body\.system = op\.system/.test(health) && /body\.relay = \{ up: op\.relay\.up \}/.test(health));
+// v1.18.0 (F32): the snapshot also carries the relay's hidden_only for the
+// clearnet gate. It is not a public health field; the body copies `up` alone.
+check('the relay\'s hidden_only is NOT served on the public health body', !/body\.[\w.]+\s*=[^;]*hidden_only/.test(health));
 check('the snapshot is primed at route setup', /primeOperationalSnapshot\(config\.relayHealthUrl\)/.test(health));
 
 // the three blocks must be assigned BEFORE the localDiag gate (i.e. public)

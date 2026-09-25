@@ -34,6 +34,7 @@
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
 	import { identiconDataUri, identiconDataUriFromString } from '$crypto/identicon';
+	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 	import {
 		liveIdentity,
 		isPairedReadOnly,
@@ -364,14 +365,18 @@
 		>
 			{#if selfAvatar.svg}
 				<!-- User's uploaded SVG avatar (sanitized on read by
-				     profileProps → sanitizeSvg). Same {@html} treatment as
-				     the profile-page hero and IdentityLabel. -->
-				<span
-					class="block h-10 w-10 overflow-hidden rounded-full bg-ink-200/50 dark:bg-ink-800/50 [&>svg]:h-full [&>svg]:w-full"
+				     profileProps → sanitizeSvg), shown as an <img> like
+				     everywhere else: inlined, its own style/class could escape
+				     this frame (v1.18.0 deep-deep, M1). -->
+				<img
+					src={svgAvatarImgSrc(selfAvatar.svg)}
+					alt=""
+					width="40"
+					height="40"
+					decoding="async"
+					class="block h-10 w-10 rounded-full bg-ink-200/50 object-cover dark:bg-ink-800/50"
 					aria-hidden="true"
-				>
-					{@html selfAvatar.svg}
-				</span>
+				/>
 			{:else if selfAvatar.dataUri}
 				<img
 					src={selfAvatar.dataUri}

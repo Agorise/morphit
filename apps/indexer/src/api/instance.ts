@@ -27,6 +27,8 @@ import { Hono } from 'hono';
 
 import type { Config } from '$config';
 import { computeClearnetEliminated, clearnetEliminationMissing, clearnetLegsFromConfig } from '$indexer/clearnetGate';
+import { relayReportsHiddenOnly } from '$indexer/relayPosture';
+import { getOperationalSnapshot } from '$api/operationalHealth';
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 
 export interface InstanceResponse {
@@ -265,7 +267,11 @@ export function instanceRoute(
 	const app = new Hono();
 
 	app.get('/', (c) => {
-		const clearnetLegs = clearnetLegsFromConfig(config);
+		// The relay leg comes from what the relay last reported; asking for the
+		// operational snapshot keeps that sample fresh (a background refresh at
+		// most every 15 s, never on the request path).
+		getOperationalSnapshot(config.relayHealthUrl);
+		const clearnetLegs = clearnetLegsFromConfig(config, relayReportsHiddenOnly());
 		const body: InstanceResponse = {
 			name: config.instanceName ?? null,
 			tagline: config.instanceTagline ?? null,

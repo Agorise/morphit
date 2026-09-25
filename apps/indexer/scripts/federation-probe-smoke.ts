@@ -16,6 +16,7 @@
 
 import {
 	probeOne,
+	publishedHiddenHosts,
 	selfReachableStatus,
 	makePinnedLookup,
 	_setDnsResolverForTesting,
@@ -466,14 +467,46 @@ await scenario('v1.15.3: dropFailedInstances NEVER prunes a clearnet_blocked (ce
 	);
 });
 
-await scenario('v1.15.3: a failed clearnet probe retries over the on-chain onion (Fix A)', () => {
+await scenario(
+	'v1.15.3: a failed clearnet probe retries over the peer on-chain hidden addresses (Fix A)',
+	() => {
+		// This used to grep the source for `reg_alt_networks?.tor`, which is a
+		// test of a spelling rather than of a behaviour — and it duly went red
+		// when v1.18.0 widened the fallback past Tor, while the behaviour it
+		// was meant to protect had got BETTER. A test that names a token has a
+		// shelf life nobody has written down.
+		//
+		// The address choice now has a seam, so it is asserted directly.
+		const ONION = `${'a'.repeat(56)}.onion`;
+		const B32 = `${'b'.repeat(52)}.b32.i2p`;
+
+		// The original guarantee: a peer that published an onion has it tried.
+		assertEqual(publishedHiddenHosts({ tor: ONION }), [ONION], 'an onion is retried over Tor');
+
+		// v1.18.0 — and so is every other network Morphit runs on. A
+		// clearnet-censored instance that published only an I2P destination
+		// (which is what an operator does where Tor itself is blocked) used to
+		// be recorded unreachable and dropped from the directory.
+		assertEqual(publishedHiddenHosts({ i2p_b32: B32 }), [B32], 'an I2P destination is retried');
+		assertEqual(
+			publishedHiddenHosts({ lokinet: 'peer.loki' }),
+			['peer.loki'],
+			'a Lokinet name is retried'
+		);
+		assertEqual(publishedHiddenHosts(null), [], 'a peer that published nothing is not retried');
+	}
+);
+
+await scenario('v1.15.3: the censorship window constant is still wired (Fix A)', () => {
+	// No seam for this one — it is a constant consumed inside the scan loop, so
+	// its presence is all that can be checked from out here. Kept as a grep,
+	// and kept SEPARATE from the assertion above so that a spelling change
+	// cannot be mistaken for a behaviour change again.
 	const src = readFileSync(new URL('../src/indexer/federationProbe.ts', import.meta.url), 'utf8');
 	assertEqual(
-		/reg_alt_networks\?\.tor/.test(src) &&
-			/fetchJsonViaHiddenService/.test(src) &&
-			/CLEARNET_BLOCKED_WINDOW_BLOCKS/.test(src),
+		/CLEARNET_BLOCKED_WINDOW_BLOCKS/.test(src) && /fetchJsonViaHiddenService/.test(src),
 		true,
-		'Tor fallback + clearnet_blocked window present'
+		'clearnet_blocked window + hidden-service fetch present'
 	);
 });
 

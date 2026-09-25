@@ -7,30 +7,41 @@
  * security-critical code). This module re-exports that core unchanged — so every
  * existing `./hiddenServiceFetch` importer keeps working — and adds the
  * undici-based `fetchJsonViaHiddenService` (which stays here because it needs
- * undici's Agent/ProxyAgent, whereas the shared core is intentionally undici-free
+ * undici's Agent, whereas the shared core is intentionally undici-free
  * for offline portability).
  */
-import { Agent, ProxyAgent } from 'undici';
+import { Agent } from 'undici';
 import {
 	hiddenNetworkOf,
 	parseHostPort,
 	makeSocks5Connector,
-	ProxyUnavailableError
+	makeHttpConnectConnector,
+	ProxyUnavailableError,
+	asLocalTransportFault,
+	lokinetEnabled
 } from '@morphit/hidden-transport';
 import type { HiddenServiceProxyConfig } from '@morphit/hidden-transport';
 
 // Re-export the shared transport core so existing importers are unchanged.
 export {
 	hiddenNetworkOf,
+	hiddenHostNetworkOf,
 	parseHostPort,
 	makeSocks5Connector,
+	makeHttpConnectConnector,
 	ProxyUnavailableError,
+	ProxyConnectRejectedError,
+	localFaultConfidence,
 	hiddenServiceProxyConfigFromEnv,
 	socks5Greeting,
 	parseSocks5Greeting,
 	socks5ConnectRequest,
 	parseSocks5ConnectReply,
-	HIDDEN_HANDSHAKE_TIMEOUT_MS
+	HIDDEN_HANDSHAKE_TIMEOUT_MS,
+	causeChain,
+	isLocalTransportFault,
+	isProxyUnavailable,
+	asLocalTransportFault
 } from '@morphit/hidden-transport';
 export type { HiddenServiceProxyConfig, HiddenNetwork } from '@morphit/hidden-transport';
 
@@ -51,19 +62,32 @@ export async function fetchJsonViaHiddenService<T>(
 	const network = hiddenNetworkOf(url);
 	if (network === null) throw new Error(`not a hidden-service URL: ${url}`);
 
-	let dispatcher: Agent | ProxyAgent;
+	let dispatcher: Agent;
 	if (network === 'tor') {
-		if (config.torSocks.length === 0) throw new ProxyUnavailableError('Tor SOCKS proxy not configured');
+		if (config.torSocks.length === 0)
+			throw new ProxyUnavailableError('Tor SOCKS proxy not configured');
 		const { host, port } = parseHostPort(config.torSocks, 9050);
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- undici's
 		// connect type doesn't model a custom SOCKS connector cleanly.
 		dispatcher = new Agent({ connect: makeSocks5Connector(host, port) as any });
 	} else if (network === 'i2p') {
-		if (config.i2pHttpProxy.length === 0) throw new ProxyUnavailableError('I2P HTTP proxy not configured');
+		if (config.i2pHttpProxy.length === 0)
+			throw new ProxyUnavailableError('I2P HTTP proxy not configured');
 		const { host, port } = parseHostPort(config.i2pHttpProxy, 4444);
-		dispatcher = new ProxyAgent(`http://${host}:${port}`);
+		// The same CONNECT connector the chat pool and the routing dispatcher
+		// use. This decision had THREE homes — here, the pool, and the router —
+		// and fixing fewer than all of them would leave the probe and the sender
+		// disagreeing about whether a refused CONNECT is the peer's fault.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- undici's
+		// connect type doesn't model a custom tunnelling connector cleanly.
+		dispatcher = new Agent({ connect: makeHttpConnectConnector(host, port) as any });
 	} else {
-		// .loki — routed by the lokinet tun; a plain fetch resolves it.
+		// .loki — routed by the lokinet tun; a plain fetch resolves it. Only
+		// where lokinet runs (v1.18.0 review, S3): elsewhere the resolver is the
+		// ISP's, and asking it is the leak. "Not configured" lists the peer
+		// without penalising it, exactly as a blanked Tor setting does.
+		if (!lokinetEnabled(config))
+			throw new ProxyUnavailableError('Lokinet is not enabled on this node');
 		dispatcher = new Agent();
 	}
 
@@ -78,7 +102,18 @@ export async function fetchJsonViaHiddenService<T>(
 			// lib.dom type omits undici's `dispatcher`.
 			dispatcher
 		} as any);
-		if (!res.ok) throw new Error(`hidden-service probe HTTP ${res.status}`);
+		if (!res.ok) {
+			// CANCEL THE BODY BEFORE THROWING (v1.18.0 review, S1). The
+			// `finally` below awaits `dispatcher.close()`, and undici's close
+			// waits for every response body to be consumed. An error page larger
+			// than the socket buffers — 128 KB was enough — was never read, so
+			// close() never resolved, the probe never settled, and the scan that
+			// awaited it stayed "in flight" for the life of the process: one
+			// hidden peer returning a big 404 stopped federation probing for the
+			// whole node until restart.
+			await res.body?.cancel().catch(() => undefined);
+			throw new Error(`hidden-service probe HTTP ${res.status}`);
+		}
 		const reader = res.body?.getReader();
 		if (!reader) throw new Error('hidden-service probe: no body');
 		const chunks: Uint8Array[] = [];
@@ -96,8 +131,38 @@ export async function fetchJsonViaHiddenService<T>(
 			}
 		}
 		return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
+	} catch (err) {
+		// See the matching note in hiddenServicePool.postJsonViaHiddenService.
+		// The probe's whole "never penalise a healthy peer for our Tor being
+		// offline" rule depends on this class arriving intact; before this, the
+		// rule was unreachable on Tor and had never existed at all on I2P or
+		// Lokinet, so a local daemon being down wrote `unreachable` across the
+		// directory for peers that were fine.
+		throw asLocalTransportFault(err, network, config);
 	} finally {
 		clearTimeout(timer);
-		await dispatcher.close().catch(() => {});
+		// Bounded as well as drained: a close that still does not finish — a
+		// body some path forgot to consume, a peer holding the socket — must
+		// not hold the caller. Past the deadline the dispatcher is destroyed.
+		await closeWithin(dispatcher, CLOSE_DEADLINE_MS);
 	}
+}
+
+/** How long a probe's own dispatcher may take to close before it is destroyed. */
+const CLOSE_DEADLINE_MS = 5_000;
+
+async function closeWithin(dispatcher: Agent, ms: number): Promise<void> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const late = await Promise.race([
+		dispatcher.close().then(
+			() => false,
+			() => false
+		),
+		new Promise<boolean>((r) => {
+			timer = setTimeout(() => r(true), ms);
+			timer.unref?.();
+		})
+	]);
+	if (timer !== undefined) clearTimeout(timer);
+	if (late) await dispatcher.destroy().catch(() => undefined);
 }

@@ -95,7 +95,8 @@ import { createCoincapFetcher } from '$indexer/price/coincapFetcher';
 import { createCoinloreFetcher } from '$indexer/price/coinloreFetcher';
 import { createMessariFetcher } from '$indexer/price/messariFetcher';
 import { createMorphitNativeFetcher } from '$indexer/price/morphitNativeFetcher';
-import { createFederatedFetcher } from '$indexer/price/federatedPriceFetcher';
+import { createFederatedFetcher, pinnedFeeImpliedUsdPrice } from '$indexer/price/federatedPriceFetcher';
+import { TreasurySource } from '$indexer/treasurySource';
 import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 
 /** Per-asset configuration for one price source.
@@ -409,13 +410,38 @@ export function createAssetPriceSource(
 	// + this node's own native price becomes the PRIMARY. Clearnet CEX/aggregator
 	// upstreams are dropped entirely; the static floor is the last resort.
 	if (config.blurtRpcEndpoints.length === 0) {
+		// (v1.18.0 deep-deep, M1) the chain-pinned fee amount (chain-pin > env,
+		// the SAME resolution the order handler enforces) implies a USD price;
+		// the federated median is clamped to it ± FEE_PRICE_TOLERANCE so K+1
+		// free sybil peers cannot move a hidden-only node's fee quote outside
+		// the band the indexer accepts. USD only (the pin is USD-targeted).
+		const treasury =
+			db && isUsd
+				? new TreasurySource(db, {
+						btcAddress: config.btcFeeAddress,
+						btcSatoshis: config.btcFeeSatoshis,
+						xmrAddress: config.xmrFeeAddress,
+						xmrPiconero: config.xmrFeePiconero.toString(),
+						blurtBase: config.feeBaseBlurt
+					})
+				: null;
 		const federated = createFederatedFetcher({
 			db,
 			asset: options.asset,
 			denominationFiat: config.priceFeedDenominationFiat,
 			ownNative: nativeFetch,
 			freshnessMinutes: 240,
-			minObservations: 3
+			minObservations: 3,
+			pinnedPrice: treasury
+				? async () => {
+						const t = await treasury.current();
+						return pinnedFeeImpliedUsdPrice(options.asset, {
+							blurtBase: t.blurt?.base ?? null,
+							btcSatoshis: t.btc?.satoshis ?? null,
+							xmrPiconero: t.xmr?.piconero ?? null
+						});
+					}
+				: undefined
 		});
 		return new CompositeCachedPriceSource({
 			upstreams: [],

@@ -9,6 +9,7 @@
 	import Term from '$components/Term.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { liveIdentity, isPairedReadOnly, hasAnySession } from '$stores/identity';
+	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 	import {
 		broadcastOperatorRegister,
 		validateTag,
@@ -29,7 +30,7 @@
 	// Live validation feedback. We surface the FIRST failing check
 	// rather than all of them, to avoid wall-of-red on a partially-typed
 	// form. The Register button disables until the form is submission-ready.
-	const tagCheck = $derived(tag.length > 0 ? validateTag(tag) : null);
+	const tagCheck = $derived(tag.length > 0 ? validateTag(tag, getUserBlurtAccount()) : null);
 	const nameCheck = $derived(
 		displayName.length > 0 ? validateOperatorDisplayName(displayName) : null
 	);

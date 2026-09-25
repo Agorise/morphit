@@ -31,6 +31,7 @@
 import { Hono } from 'hono';
 
 import type { BlurtClient } from '$blurt/client';
+import { isTransportError } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { errorBody } from '$api/shared';
 
@@ -117,7 +118,15 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 		let result: unknown;
 		try {
 			result = await blurt.callCondenser('get_transaction', [id], { userFacing: true });
-		} catch {
+		} catch (err) {
+			// A node that ANSWERED "Unknown Transaction" has told us something:
+			// the chain does not have it. That is a 404, not an outage. The
+			// browser's chat sweep asks exactly this before it calls a send
+			// failed (v1.18.0 review, W3), and needs "no" and "could not ask"
+			// kept apart. A transport failure is still a 502.
+			if (!isTransportError(err) && isUnknownTransactionError(err)) {
+				return c.json(errorBody('not_found', 'no such transaction on chain'), 404);
+			}
 			return c.json(errorBody('internal', 'could not reach the Blurt network'), 502);
 		}
 		if (result === null || result === undefined) {
@@ -332,4 +341,10 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 	});
 
 	return app;
+}
+
+/** Did the node answer that it has no such transaction? */
+function isUnknownTransactionError(err: unknown): boolean {
+	const msg = err instanceof Error ? err.message : String(err);
+	return /unknown transaction/i.test(msg);
 }

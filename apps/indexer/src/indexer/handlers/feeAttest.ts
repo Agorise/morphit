@@ -11,14 +11,19 @@
  *   1. Insert a row in fee_attestations for (order_account,
  *      order_permlink, attestor=ctx.signer).
  *   2. If the referenced order is in fee_status='pending_external'
- *      AND there are ≥2 distinct attestors for this order AND at
- *      least one of them is not the order poster, update the
- *      order to fee_status='verified_by_attestation'.
+ *      AND there are ≥2 distinct INDEPENDENT attestors for this order
+ *      (never the poster; never an account flagged as a related or
+ *      reciprocal pair with the poster), update the order to
+ *      fee_status='verified_by_attestation'.
  *
- * Rationale: ADR-0011 §3 specifies the two-distinct-accounts,
- * at-least-one-non-poster rule to prevent a grifter from flipping
- * their own order's fee_status via sock-puppet attestations they
- * control. The rule is checked in-handler rather than via a CHECK
+ * Rationale: ADR-0011 §3 originally let the poster be one of the two
+ * attestors. (v1.18.0 deep-deep, H1) that let the poster plus one sock
+ * self-verify an unpaid order forever; the poster is now rejected
+ * (`attestor_is_poster`) and the quorum lives in
+ * $indexer/fee/attestationQuorum, shared with the external-fee re-check
+ * job, which also re-verifies pending/attested orders against the
+ * explorers and demotes them when the explorers say the payment does
+ * not exist. The rule is checked in-handler rather than via a CHECK
  * constraint because it depends on row count, not column values.
  *
  * Idempotency: the UNIQUE (order_account, order_permlink, attestor)
@@ -39,6 +44,7 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkAttestorEligibility } from '$indexer/attestorEligibility';
+import { attestationQuorumMet } from '$indexer/fee/attestationQuorum';
 import { validateOrderPermlink } from '$indexer/permlink';
 
 // Per Blurt's is_valid_account_name, account names are
@@ -104,6 +110,15 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'order_not_found' };
 	}
 
+	// (v1.18.0 deep-deep, H1) The poster can never attest their own order.
+	// Before, the poster counted as one of the two required attestors, so the
+	// poster plus ONE aged sock could flip an unpaid BTC order to
+	// verified_by_attestation — for free, as often as they liked. Rejected
+	// here (before any row is written) so it is visible in the event log.
+	if (ctx.signer === orderAccount) {
+		return { ok: false, reason: 'attestor_is_poster' };
+	}
+
 	// Finding I mitigation: attestor eligibility gate. Checks
 	// loyalty + age thresholds against the current phase's rule
 	// (OR gate in 'launch', AND gate in 'steady'). Runs before
@@ -159,27 +174,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: true };
 	}
 
-	// Count distinct attestors + check at least one is not the
-	// poster. Both in a single query using FILTER (the modern
-	// Postgres way — clearer than subqueries).
-	const counts = await client.query<{
-		total_attestors: string; // bigint arrives as string
-		non_poster_attestors: string;
-	}>(
-		`SELECT
-		    COUNT(DISTINCT attestor) AS total_attestors,
-		    COUNT(DISTINCT attestor) FILTER (WHERE attestor <> $3)
-		      AS non_poster_attestors
-		 FROM fee_attestations
-		 WHERE order_account = $1 AND order_permlink = $2`,
-		[orderAccount, orderPermlink, orderAccount]
-	);
-	const total = Number(counts.rows[0]!.total_attestors);
-	const nonPoster = Number(counts.rows[0]!.non_poster_attestors);
-
-	// ADR-0011 §3: ≥2 distinct accounts AND at least one
-	// not-the-poster. Both conditions must hold.
-	if (total >= 2 && nonPoster >= 1) {
+	// (v1.18.0 deep-deep, H1) Quorum = ≥2 attestors that are neither the
+	// poster nor flagged as a related/reciprocal pair with the poster by the
+	// anti-review-ring signals. One shared implementation with the external-fee
+	// re-check job ($indexer/fee/attestationQuorum), so intake and re-derivation
+	// can never disagree. The old rule (≥2 distinct, ≥1 non-poster) let the
+	// poster be one of the two.
+	if (await attestationQuorumMet(client, orderAccount, orderPermlink as string)) {
 		const updated = await client.query(
 			`UPDATE orders
 			   SET fee_status = 'verified_by_attestation',

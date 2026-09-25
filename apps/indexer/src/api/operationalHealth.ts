@@ -40,6 +40,9 @@ import { statfs } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { get as httpGet, type IncomingMessage } from 'node:http';
 import { get as httpsGet } from 'node:https';
+import { isIP } from 'node:net';
+import { clearnetRefused, isClearnetOrigin } from '$indexer/hiddenServiceDispatcher';
+import { noteRelayHiddenOnly } from '$indexer/relayPosture';
 
 import {
 	classifySeeding,
@@ -66,7 +69,12 @@ export interface SystemBlock {
 export interface OperationalSnapshot {
 	ipfs_seeding: { state: SeedingState; detail: string };
 	system: SystemBlock;
-	relay: { up: boolean };
+	/** `hidden_only` is what the relay said on its /v1/health about how it
+	 *  reaches the chain: null when it has not been asked yet, or answered
+	 *  without saying (a relay older than v1.18.0). Kept here with `up`, and
+	 *  mirrored into relayPosture.ts for the clearnet gate. NOT served on the
+	 *  public /v1/health — health.ts emits `up` alone. */
+	relay: { up: boolean; hidden_only: boolean | null };
 }
 
 export interface SeedingFacts {
@@ -91,7 +99,7 @@ const DEFAULT_SNAPSHOT: OperationalSnapshot = {
 		disk_total_gb: null,
 		disk_avail_gb: null
 	},
-	relay: { up: false }
+	relay: { up: false, hidden_only: null }
 };
 
 /** Render one degraded-problem kind into the indexer's terse public-endpoint
@@ -303,11 +311,11 @@ function serviceFailed(unit: string): Promise<boolean> {
  *  package.) node:http bypasses undici entirely, so the probe always connects
  *  directly to the local relay regardless of the global dispatcher. PROVEN with a
  *  broken-global-dispatcher test: built-in fetch fails, node:http succeeds. cp773. */
-function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
-	if (url.length === 0) return Promise.resolve(false);
+function probeRelay(url: string, timeoutMs: number): Promise<RelayProbe> {
+	if (url.length === 0) return Promise.resolve(RELAY_DOWN);
 	return new Promise((resolve) => {
 		let settled = false;
-		const finish = (v: boolean): void => {
+		const finish = (v: RelayProbe): void => {
 			if (!settled) {
 				settled = true;
 				resolve(v);
@@ -323,19 +331,51 @@ function probeRelay(url: string, timeoutMs: number): Promise<boolean> {
 				},
 				(res: IncomingMessage) => {
 					const code = res.statusCode ?? 0;
-					res.resume(); // drain the body so the socket is released
-					finish(code >= 200 && code < 300);
+					const up = code >= 200 && code < 300;
+					// v1.18.0 (F32) — read the body too, for `hidden_only`: the
+					// relay's own account of how it reaches the chain, which the
+					// clearnet gate needs. Capped, and a body that will not parse
+					// still leaves `up` standing — the up/down verdict must not
+					// start depending on the JSON.
+					const chunks: Buffer[] = [];
+					let total = 0;
+					res.on('data', (c: Buffer) => {
+						total += c.length;
+						if (total <= RELAY_HEALTH_MAX_BYTES) chunks.push(c);
+					});
+					res.on('end', () => finish({ up, hiddenOnly: up ? hiddenOnlyOf(chunks) : null }));
+					res.on('error', () => finish({ up, hiddenOnly: null }));
 				}
 			);
-			req.on('error', () => finish(false));
+			req.on('error', () => finish(RELAY_DOWN));
 			req.on('timeout', () => {
 				req.destroy();
-				finish(false);
+				finish(RELAY_DOWN);
 			});
 		} catch {
-			finish(false);
+			finish(RELAY_DOWN);
 		}
 	});
+}
+
+/** One relay-health answer: reachable, and what it said about its chain route. */
+interface RelayProbe {
+	readonly up: boolean;
+	readonly hiddenOnly: boolean | null;
+}
+const RELAY_DOWN: RelayProbe = { up: false, hiddenOnly: null };
+/** The relay's /v1/health is a few hundred bytes; anything past this is not it. */
+const RELAY_HEALTH_MAX_BYTES = 64 * 1024;
+
+/** `hidden_only` from a relay health body, or null if absent/unparseable. PURE.
+ *  Exported for the regression test. */
+export function hiddenOnlyOf(chunks: readonly Buffer[]): boolean | null {
+	try {
+		const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { hidden_only?: unknown };
+		return typeof body.hidden_only === 'boolean' ? body.hidden_only : null;
+	} catch {
+		return null;
+	}
 }
 
 /** Parse the IPv4 default gateway out of /proc/net/route text (or null). Pure —
@@ -439,7 +479,26 @@ function relayProbeCandidates(configured: string): string[] {
 	} catch {
 		/* interface enumeration blocked by the sandbox — configured URL + loopback still probed */
 	}
-	return buildRelayCandidates(configured, addrs, defaultGatewayV4());
+	// A hidden-only node does not look a public name up, even its own relay's —
+	// the lookup names the host to the resolver. The configured URL is the only
+	// candidate that can be one; every other candidate is an address literal on
+	// this box, which never leaves it.
+	return buildRelayCandidates(configured, addrs, defaultGatewayV4()).filter(
+		(u) => !(clearnetRefused() && needsPublicLookup(u))
+	);
+}
+
+/** A URL whose host is a public NAME (not an address literal) — reaching it
+ *  starts with a clearnet DNS query. PURE. */
+export function needsPublicLookup(url: string): boolean {
+	let host: string;
+	try {
+		host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+	} catch {
+		return false;
+	}
+	if (isIP(host) !== 0) return false;
+	return isClearnetOrigin(url);
 }
 
 /** True if the relay answers on ANY candidate address. Probes run in parallel;
@@ -447,11 +506,15 @@ function relayProbeCandidates(configured: string): string[] {
  *  cp769 — no longer bails on an empty configured URL: loopback is always probed
  *  (relayProbeCandidates guarantees it), so an unset/empty RELAY_HEALTH_URL can't
  *  make a healthy local relay read down. */
-async function probeRelayAny(configured: string, timeoutMs: number): Promise<boolean> {
+async function probeRelayAny(configured: string, timeoutMs: number): Promise<RelayProbe> {
 	const results = await Promise.all(
 		relayProbeCandidates(configured).map((u) => probeRelay(u, timeoutMs))
 	);
-	return results.some(Boolean);
+	const answered = results.filter((r) => r.up);
+	// Every candidate is the same relay reached by a different address, so the
+	// first that says anything speaks for it.
+	const said = answered.find((r) => r.hiddenOnly !== null);
+	return { up: answered.length > 0, hiddenOnly: said?.hiddenOnly ?? null };
 }
 
 // ── cached snapshot, stale-while-revalidate ──────────────────────
@@ -522,7 +585,7 @@ export function mergeOperationalSnapshot(
 	next: {
 		ipfs_seeding: { state: SeedingState; detail: string } | null;
 		system: SystemBlock | null;
-		relay: { up: boolean } | null;
+		relay: { up: boolean; hidden_only: boolean | null } | null;
 	}
 ): OperationalSnapshot {
 	return {
@@ -547,8 +610,23 @@ async function refresh(relayHealthUrl: string): Promise<void> {
 	cached = mergeOperationalSnapshot(cached, {
 		ipfs_seeding: ipfsRes.status === 'fulfilled' ? ipfsRes.value : null,
 		system: sysRes.status === 'fulfilled' ? sysRes.value : null,
-		relay: relayRes.status === 'fulfilled' ? { up: relayRes.value } : null
+		relay:
+			relayRes.status === 'fulfilled'
+				? {
+						up: relayRes.value.up,
+						// The relay's route to the chain is CONFIGURATION: it changes
+						// only across a restart, and a restarted relay answers again.
+						// So a relay that is merely down right now keeps the posture it
+						// last reported, rather than the node's claim flickering with
+						// its uptime.
+						hidden_only: relayRes.value.up ? relayRes.value.hiddenOnly : cached.relay.hidden_only
+					}
+				: null
 	});
+	// The clearnet gate reads the relay's posture from the indexer layer.
+	// Mirrored from the MERGED snapshot, so a failed sample keeps the last
+	// thing the relay actually said rather than forgetting it.
+	noteRelayHiddenOnly(cached.relay.hidden_only);
 	lastRefreshMs = Date.now();
 }
 
@@ -569,6 +647,13 @@ export function getOperationalSnapshot(relayHealthUrl: string, now = Date.now())
  *  Best-effort; failures are swallowed. */
 export function primeOperationalSnapshot(relayHealthUrl: string): void {
 	kickRefresh(relayHealthUrl, Date.now());
+}
+
+/** Test seam: is a background sample still running? Lets a test wait for a
+ *  sample to FINISH rather than sleep for a guessed while (a real-time wait in
+ *  a test is a flake whose margin vanishes under CPU contention). */
+export function __operationalRefreshInFlightForTest(): boolean {
+	return refreshing;
 }
 
 /** Test seam: reset the module cache + cpu baseline. */

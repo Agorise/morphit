@@ -16,7 +16,10 @@
  *
  * Source greps strip // and block comments; YAML greps keep comments.
  */
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -127,6 +130,69 @@ const src = (p: string) => strip(raw(p));
 		: bad('harden menu IPFS entry');
 }
 
+void (async (): Promise<void> => {
+// ── 5. the pin script, EXECUTED, finds the indexer (v1.18.0 review) ─
+// Its default named port 8088, which no indexer listens on, and the setup
+// script wrote that into /etc/morphit/ipfs-pin.env — so a hand-installed box
+// could skip pinning on every run, exiting 0 with "will retry". Run for real,
+// with a stub Kubo and a stub indexer: a configured URL that does not answer
+// must fall through to the indexer's standard address and pin.
+{
+	const dir = mkdtempSync(resolve(tmpdir(), 'pin-'));
+	const log = resolve(dir, 'ipfs.log');
+	writeFileSync(
+		resolve(dir, 'ipfs'),
+		`#!/bin/sh\necho "$*" >> "${log}"\ncase "$*" in *"pin ls"*) exit 1;; esac\nexit 0\n`
+	);
+	chmodSync(resolve(dir, 'ipfs'), 0o755);
+	const srv = createServer((_q, r) => {
+		const b = JSON.stringify({ version: '9.9.9', distribution: { ipfs_cid: 'bafyEXECUTEDCID' } });
+		r.writeHead(200, { 'content-length': String(b.length) }).end(b);
+	});
+	await new Promise<void>((r) => srv.listen(0, '127.0.0.1', () => r()));
+	const port = (srv.address() as { port: number }).port;
+	const dead = createServer();
+	await new Promise<void>((r) => dead.listen(0, '127.0.0.1', () => r()));
+	const deadPort = (dead.address() as { port: number }).port;
+	await new Promise<void>((r) => dead.close(() => r()));
+	// ASYNC spawn: the stub indexer lives in THIS process, and a spawnSync
+	// would block the very event loop that has to answer the script.
+	const run = await new Promise<{ stderr: string }>((done) => {
+		const child = spawn('sh', [resolve(ROOT, 'ops/ipfs/morphit-ipfs-pin.sh')], {
+			env: {
+				PATH: `${dir}:${process.env.PATH ?? ''}`,
+				MORPHIT_RELEASE_URL: `http://127.0.0.1:${deadPort}/v1/release`,
+				MORPHIT_RELEASE_URL_FALLBACKS: `http://127.0.0.1:${port}/v1/release`
+			}
+		});
+		let stderr = '';
+		child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+		const t = setTimeout(() => child.kill(), 60_000);
+		child.on('close', () => {
+			clearTimeout(t);
+			done({ stderr });
+		});
+	});
+	await new Promise<void>((r) => srv.close(() => r()));
+	let calls = '';
+	try {
+		calls = readFileSync(log, 'utf8');
+	} catch {
+		/* no calls at all */
+	}
+	/pin add .*bafyEXECUTEDCID/.test(calls)
+		? ok('pin script: a configured URL that does not answer falls through to the indexer, and pins')
+		: bad('pin script did not reach the indexer through its fallback', (run.stderr ?? '').slice(0, 300));
+	/did not answer; used http:\/\/127\.0\.0\.1:\d+/.test(run.stderr ?? '')
+		? ok('pin script: and says which address worked, so the setting can be corrected')
+		: bad('pin script: the fallback was silent');
+	const scripts = ['ops/ipfs/morphit-ipfs-pin.sh', 'ops/ipfs/morphit-ipns-rebroadcast.sh', 'ops/ipfs/morphit-ipfs-setup.sh', 'ops/desktop/morphit-upgrade-notify.sh'];
+	const stale = scripts.filter((f) => /:-8088\b/.test(raw(f)));
+	stale.length === 0 && /127\.0\.0\.1:8081\/v1\/release/.test(raw('ops/ipfs/morphit-ipfs-pin.sh'))
+		? ok('no local-indexer default names port 8088; the fallbacks include the indexer default 8081')
+		: bad('a default still names port 8088', stale.join(', '));
+}
+
 console.log('\n' + '\u2500'.repeat(56));
 if (fail > 0) {
 	console.log(`\u2717 ipfs-release-hosting smoke FAILED (${fail})`);
@@ -134,3 +200,4 @@ if (fail > 0) {
 }
 console.log('\u2713 every instance pins the signed release: persisted CID + /v1/release, pin script, Kubo role (default ON), manual setup + harden');
 console.log(`\u2713 all ${pass} ipfs-release-hosting scenarios passed`);
+})();

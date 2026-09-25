@@ -51,11 +51,35 @@ const SCENARIOS: readonly Scenario[] = [
 		// rather than only matching pending/broadcast — so a provisional
 		// already reconciled (confirmed, id null) is still found when the
 		// durable copy lands.
-		mustHave: ['if (m.clientTag !== tag) continue;']
+		mustHave: ['if (m.clientTag !== tag && m.priorTags?.includes(tag) !== true) continue;']
+	},
+	{
+		name: '2a — a tag the message used BEFORE a retry still matches it',
+		// v1.18.0. A retry deliberately mints a fresh client_tag, because the
+		// previous broadcast may already have landed and a repeated tag would
+		// collide. But the ORIGINAL copy identifies itself by the old tag, and
+		// with the async broadcast it really can still be in flight — the
+		// unconfirmed sweeper exists to prompt a retry for a send that is late
+		// rather than lost. Forget the old tag and that original matches nothing,
+		// so it is appended as a second message and BOTH people see it twice.
+		mustHave: [
+			'target.priorTags = [...(target.priorTags ?? []), target.clientTag];',
+			// Bounded: someone leaning on Retry must not grow this without limit —
+			// by the same constant that bounds what a recipient accepts from
+			// `prior_tags`, so the two cannot drift apart.
+			'while (target.priorTags.length > MAX_PRIOR_TAGS) target.priorTags.shift();'
+		]
 	},
 	{
 		name: '3 — a provisional (id 0) never overwrites a real durable id (our-own)',
-		mustHave: ['if (isDurable && (m.id === null || m.id === 0)) {', 'm.id = rec.id;']
+		// v1.18.0: adoption goes through ONE function, because landing a durable
+		// copy now also has to clear the "still waiting for the chain" markers
+		// (sentAtMs, provisionalSinceMs, unrecorded) — see neverRecorded.test.ts.
+		mustHave: [
+			'if (isDurable && (m.id === null || m.id === 0)) adoptDurable(m, rec);',
+			'function adoptDurable(m: LocalMessage, rec: ChatMessageRecord): void {',
+			'm.id = rec.id;'
+		]
 	},
 	{
 		name: '4 — incoming branch extracts the client_tag + provisional flag',
@@ -65,12 +89,18 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: '5 — incoming twin found by (sender + client_tag), durable id adopted, then dedup-continue',
+		// The tag is the SENDER's to choose, so a twin must also carry the same
+		// encrypted bytes (v1.18.0 review, W1) — else a never-recorded message
+		// could inherit a different message's chain proof.
+		name: '5 — incoming twin found by (sender + client_tag + identical wire), durable id adopted, then dedup-continue',
 		mustHave: [
+			'const wire = wireOf(rec);',
 			'const twin = messages.find(',
-			'(m) => m.sender === rec.sender && m.clientTag === incomingTag',
+			'm.sender === rec.sender &&',
+			'm.clientTag === incomingTag &&',
+			'm.wire === wire',
 			'if (isDurable && (twin.id === null || twin.id === 0)) {',
-			'twin.id = rec.id;'
+			'adoptDurable(twin, rec);'
 		]
 	},
 	{
@@ -82,6 +112,16 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: ['if (isDurable && seenIds.has(rec.id)) {'],
 		// The pre-change unconditional form must be gone.
 		mustNotHave: ['\t\t\t\tif (seenIds.has(rec.id)) continue;\n\t\t\t\tconst d = await decryptOrPlaceholder']
+	},
+	{
+		name: '6a — our own provisional from ANOTHER session is stored with a null id too',
+		// Every provisional carries id 0. Stored as an id, the 0 entered seenIds
+		// and silenced each later provisional from that session until its
+		// durable copy arrived. Behaviour is pinned in neverRecorded.test.ts.
+		mustHave: [
+			'// from our other session until its durable copy arrived.\n\t\t\t\t\tid: isDurable ? rec.id : null,',
+			'if (isDurable && seenIds.has(rec.id)) continue;'
+		]
 	},
 	{
 		name: '8 — SAFETY: twin dedup happens BEFORE decode/record, so a durable twin never re-records a money-flow payload',

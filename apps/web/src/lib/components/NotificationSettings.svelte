@@ -34,6 +34,7 @@
 	import {
 		isPushSupported,
 		currentSubscription,
+		pushDeliveryUnavailable,
 		subscribe as subscribeToPush,
 		unsubscribe as unsubscribeFromPush,
 		resyncPushCategories,
@@ -93,6 +94,27 @@
 			try {
 				const existing = await currentSubscription();
 				pushSubscribed = existing !== null;
+				// v1.18.0 — a subscription can outlive the instance's ability to
+				// deliver to it: every existing tor-only node turns push off on
+				// upgrade. Ask, and say so, rather than show "subscribed" for
+				// something that will never arrive. Only when there IS a
+				// subscription: a browser without one learns this on its first
+				// Subscribe, as before.
+				const unavailable = existing === null ? null : await pushDeliveryUnavailable();
+				if (unavailable !== null) {
+					pushSubscribed = false;
+					pushError = unavailable;
+					// A hidden-only instance will never deliver to this
+					// subscription, by design (v1.18.0 review, W4): remove it
+					// — from the browser and from the relay — rather than leave
+					// a stored link between this account and this device that
+					// nothing will ever use or prune. Best-effort; the next
+					// visit tries again if it did not go through.
+					const account = getUserBlurtAccount();
+					if (unavailable === 'push_disabled_hidden_only' && account) {
+						void unsubscribeFromPush(account).catch(() => undefined);
+					}
+				}
 			} catch {
 				// no-op — push not available yet
 			}

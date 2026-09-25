@@ -21,7 +21,9 @@
 #
 # Paranoid by design: the "are we online?" gate is a REAL reachability probe
 # against several independent Blurt RPC endpoints — never a single host, never
-# mere link-up — so a censored or dead endpoint can't fool it either way.
+# mere link-up — so a censored or dead endpoint can't fool it either way.  On a
+# hidden-only node (empty clearnet RPC pool) it probes only hidden endpoints,
+# through the local Tor/I2P proxies, and never touches clearnet.
 
 set -eu
 
@@ -83,9 +85,66 @@ rpc_endpoints() {
 	esac
 }
 
+# One value from indexer.env, read inertly (never sourced; see rpc_endpoints).
+indexer_env_value() {
+	[ -f "${INDEXER_ENV}" ] || return 0
+	sed -n "s/^[[:space:]]*$1=//p" "${INDEXER_ENV}" 2>/dev/null | tail -n1 | tr -d "\"'" | tr -d ' \t\r'
+}
+
+# HIDDEN-ONLY node: the clearnet pool key is PRESENT but EMPTY — exactly what a
+# tor-only install writes (v1.18.0 deep-deep, H4).  rpc_endpoints() treated that
+# as "not configured" and fell back to the six clearnet defaults, so every
+# tor-only box POSTed to clearnet RPCs from its home IP on its first run, and
+# every five minutes after that for as long as clearnet stayed firewalled.
+# An ABSENT key still means "unconfigured" and keeps the clearnet fallback.
+hidden_only() {
+	[ -f "${INDEXER_ENV}" ] || return 1
+	grep -q '^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=' "${INDEXER_ENV}" 2>/dev/null || return 1
+	[ -z "$(indexer_env_value MORPHIT_INDEXER_RPC_ENDPOINTS)" ]
+}
+
+# The gate for a hidden-only node: a hidden Blurt RPC answering THROUGH the
+# local Tor/I2P proxy (the name is resolved by the proxy, never by this box),
+# or else the local indexer reporting a healthy chain source — which it can
+# only have reached over Tor/I2P.  Never a clearnet host, never a direct dial.
+check_online_hidden() {
+	_socks="$(indexer_env_value MORPHIT_INDEXER_TOR_SOCKS)"
+	[ -n "${_socks}" ] || _socks='127.0.0.1:9050'
+	_i2p="$(indexer_env_value MORPHIT_INDEXER_I2P_HTTP_PROXY)"
+	[ -n "${_i2p}" ] || _i2p='127.0.0.1:4444'
+	for ep in $(indexer_env_value MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS | tr ',' ' '); do
+		_host="$(printf '%s' "${ep}" | sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##' -e 's#[/:?].*$##')"
+		case "${_host}" in
+			*.onion) set -- --socks5-hostname "${_socks}" ;;
+			*.i2p) set -- -x "http://${_i2p}" ;;
+			*) continue ;; # not a hidden name: never dialled from a hidden-only node
+		esac
+		if curl -fsS --max-time 30 -o /dev/null "$@" \
+			-H 'content-type: application/json' \
+			--data '{"jsonrpc":"2.0","method":"condenser_api.get_dynamic_global_properties","params":[],"id":1}' \
+			"${ep}" 2>/dev/null; then
+			log "reachable over a hidden service: ${_host}"
+			return 0
+		fi
+	done
+	_port="$(indexer_env_value MORPHIT_INDEXER_LISTEN_PORT)"
+	[ -n "${_port}" ] || _port=8081
+	_health="$(curl -fsS --max-time 8 "http://127.0.0.1:${_port}/v1/health" 2>/dev/null || true)"
+	_healthy="$(printf '%s' "${_health}" | sed -n 's/.*"rpc_endpoints_healthy"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1)"
+	if [ -n "${_healthy}" ] && [ "${_healthy}" -gt 0 ]; then
+		log "the local indexer reaches the chain over Tor/I2P (${_healthy} healthy source(s))"
+		return 0
+	fi
+	return 1
+}
+
 # The internet GATE — real reachability, not link state.  Succeeds the moment
 # ANY Blurt RPC answers a cheap chain call.  Tries them all before giving up.
 check_online() {
+	if hidden_only; then
+		check_online_hidden
+		return $?
+	fi
 	for ep in $(rpc_endpoints); do
 		if curl -fsS --max-time 8 -o /dev/null \
 			-H 'content-type: application/json' \
@@ -140,7 +199,12 @@ log 'internet detected — running outstanding deferred completion steps'
 if [ -f /etc/apt/apt.conf.d/99-morphit-offline.conf ]; then
 	log 'restoring normal apt (removing the offline local-repo override)'
 	rm -f /etc/apt/apt.conf.d/99-morphit-offline.conf
-	apt-get update >/dev/null 2>&1 || true
+	# Not on a hidden-only node: an apt refresh is a clearnet fetch from its home
+	# IP, and "online" here was proven over Tor/I2P, not clearnet (v1.18.0
+	# deep-deep, H4).  The operator's own update routine takes it from here.
+	if ! hidden_only; then
+		apt-get update >/dev/null 2>&1 || true
+	fi
 fi
 
 # ── Step 1: TLS — obtain the real Let's Encrypt certificate. ──
@@ -197,6 +261,8 @@ fi
 # failed on a missing var regardless of the relay's balance.)  An encrypted relay key
 # additionally needs MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE; if that isn't set here,
 # unattended unlock is impossible by design and the operator registers by hand.
+# On a hidden-only node `register` broadcasts through this node's own indexer
+# over Tor/I2P, never to a clearnet RPC (v1.18.0 deep-deep, H1/H4).
 if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 	log 'auto-registering this instance on chain (operator opted in)'
 	_get_env() { sed -n "s/^[[:space:]]*$1=//p" "$2" 2>/dev/null | tail -n1 | sed 's/^"//; s/"$//'; }

@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isHiddenServiceOrigin } from '../packages/hidden-transport/src/index.ts';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (r: string): string => readFileSync(join(REPO, r), 'utf8');
@@ -36,7 +37,7 @@ check('validate() is exported (unit-testable)', /export function validate\(/.tes
 const probe = read('apps/indexer/src/indexer/federationProbe.ts');
 check('federation probe detects hidden-service origins', /function isHiddenServiceOrigin\(/.test(probe));
 check('federation probe LISTS hidden-service origins instead of probing them',
-	/isHiddenServiceOrigin\(inst\.origin\)/.test(probe) && /persistHiddenServiceListed/.test(probe));
+	/isHiddenServiceOrigin\(inst\.origin\)/.test(probe) && /persistListedNotProbed/.test(probe));
 check('hidden-service listing records it was not network-probed (auditable, not a false "good")',
 	/hidden_service_not_network_probed/.test(probe));
 
@@ -44,9 +45,23 @@ check('hidden-service listing records it was not network-probed (auditable, not 
 // origin. This is the LOCAL config validation (distinct from the on-chain register
 // path above); a too-strict https-only check here crash-looped a tor-only relay.
 const relayCfg = read('apps/relay/src/config/index.ts');
-check('relay config recognises self-authenticating http:// .onion/.i2p origins',
-	/function isHiddenServiceOrigin\(/.test(relayCfg) &&
-	/\.endsWith\('\.onion'\)/.test(relayCfg) && /\.endsWith\('\.i2p'\)/.test(relayCfg));
+// v1.18.0 (F35) — the rule moved into @morphit/hidden-transport so the relay and
+// `morphit-ops upgrade` share one reading of it. Asked by BEHAVIOUR, of the very
+// function the relay imports, rather than by matching its definition text.
+check('relay config takes its hidden-origin rule from the shared transport package',
+	/\bisHiddenServiceOrigin,[\s\S]*?\} from '@morphit\/hidden-transport';/.test(relayCfg) &&
+	!/function isHiddenServiceOrigin\(/.test(relayCfg));
+{
+	const onion = `http://${'a'.repeat(56)}.onion:8091`;
+	const b32 = `http://${'b'.repeat(52)}.b32.i2p:8091`;
+	check('that rule accepts self-authenticating http:// .onion and .i2p (named and .b32)',
+		isHiddenServiceOrigin(onion) && isHiddenServiceOrigin(b32) && isHiddenServiceOrigin('http://morphit.i2p'));
+	// The https onion is the case that matters: a clearnet host is refused by its
+	// NAME whatever the scheme, so only a hidden host proves the scheme is checked.
+	check('…and refuses clearnet over http, a hidden host over anything but http, and junk',
+		!isHiddenServiceOrigin('http://rpc.example.com') && !isHiddenServiceOrigin(onion.replace('http://', 'https://')) &&
+		!isHiddenServiceOrigin('not a url'));
+}
 check('relay ALLOWED_ORIGINS accepts http:// hidden-service origins (tor-only CORS boot)',
 	/!o\.startsWith\('https:\/\/'\) && !o\.startsWith\('http:\/\/localhost'\) && !isHiddenServiceOrigin\(o\)/.test(relayCfg));
 check('relay BLURT_RPC accepts http:// hidden-service endpoints (tor-only broadcast)',

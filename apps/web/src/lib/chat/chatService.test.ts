@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	createConversationController,
+	clearOwnSentPlaintextCache,
 	type ChatControllerDeps,
 	type LocalMessage
 } from './chatService';
@@ -140,6 +141,10 @@ function mockDeps(overrides: Partial<ChatControllerDeps> = {}): ChatControllerDe
 describe('chatService — controller', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
+		// Own sends the chain has not confirmed now outlive the controller that
+		// sent them (v1.18.0 review, W2) — which is the point in the app, and
+		// a leak between tests here: every test talks as the same two people.
+		clearOwnSentPlaintextCache();
 	});
 
 	afterEach(() => {
@@ -671,6 +676,10 @@ describe('chatService — controller', () => {
 });
 
 describe('chatService — crypto integration', () => {
+	beforeEach(() => {
+		clearOwnSentPlaintextCache(); // see the controller block above (W2)
+	});
+
 	it('send fails with peer_not_ready when peer has no published chat pubkey', async () => {
 		const deps = mockDeps();
 		deps.fetchMock.mockResolvedValue({ ok: true, items: [], nextCursor: null });

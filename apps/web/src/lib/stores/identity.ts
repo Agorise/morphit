@@ -49,7 +49,7 @@ import {
 	readPairedSession,
 	type PairedSession
 } from '$crypto/pairedSession';
-import { bindSessionPostingKey, clearUserBlurtAccount } from '$blurt/ops/profile';
+import { bindSessionPostingKey, clearUserBlurtAccount, getUserBlurtAccount } from '$blurt/ops/profile';
 
 export type IdentityState =
 	| { state: 'locked' }
@@ -928,6 +928,31 @@ export function restoreSessionFromReloadStash(): void {
  *  of an EXPLICIT sign-out. Idempotent and safe to call when already locked
  *  (siblings receiving the message just reset() a locked store — a no-op). */
 export function broadcastSignOut(): void {
+	// (v1.18.0 deep-deep, M2) Stop this browser's push notifications for the
+	// account BEFORE the session is wiped: reset() zeroes the posting key, and
+	// the relay-side unsubscribe should be signed with it. So take a COPY of the
+	// key and the account name now; push.ts signs, unsubscribes (browser and
+	// relay) and zeroes the copy. Without this, the next person at a shared
+	// browser kept getting notifications naming who messaged this account.
+	// Dynamically imported (push.ts imports this store) and never awaited: a
+	// sign-out must not wait on the network.
+	let pushKey: Uint8Array | null = null;
+	let pushAccount: string | null = null;
+	try {
+		const cur = get(internal);
+		if (cur.state === 'unlocked') pushKey = cur.live.posting.privateKey.slice();
+		pushAccount = getUserBlurtAccount();
+	} catch {
+		// Best-effort; the browser-side unsubscribe still runs without these.
+	}
+	const pushKeyCopy = pushKey;
+	const pushAccountName = pushAccount;
+	void import('$lib/notifications/push')
+		.then((mod) => mod.unsubscribeOnSignOut(pushAccountName, pushKeyCopy))
+		.catch(() => {
+			(pushKeyCopy as Uint8Array | null)?.fill(0);
+		});
+
 	const ch = getSessionHandoffChannel();
 	if (ch) {
 		try {

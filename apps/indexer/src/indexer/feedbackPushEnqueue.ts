@@ -57,8 +57,47 @@ export interface FeedbackPushParams {
 }
 
 /**
- * Enqueue a feedback Web Push, dedup-keyed on the on-chain trx id. Non-fatal:
- * a failure is logged and swallowed (the feedback row is already stored).
+ * The push dedup key for a REVIEW, as distinct from a chat message.
+ *
+ * WHY IT IS NAMESPACED (F17b). The partial unique index is on
+ * `(account, source_trx_id)`, and the chat enqueue and this one both used the bare
+ * trx id. A Blurt transaction carries a LIST of operations, and the head tailer
+ * walks every op in it against one trx id — so a single transaction holding a
+ * review and a chat message for the same account enqueued twice under one
+ * identical key, and the index dropped the second in silence. Confirmed against a
+ * live database before this was changed: one row, `category = 'chat'`, the
+ * review notification gone.
+ *
+ * WHY A PREFIX AND NOT A CATEGORY COLUMN. The obvious fix — put `category` in the
+ * index — keys on how a notification is DISPLAYED, and one chat message can be
+ * displayed as either `chat` or `order` depending on its tag. If the fast and
+ * durable enqueues of one message ever disagreed on that, a category-keyed index
+ * would deliver it twice: the duplicate notification v1.5.5 fixed. What actually
+ * needs distinguishing is which OPERATION produced the notification, and that is
+ * fixed by which enqueue runs. So the review path namespaces its value and the
+ * chat path is left byte-for-byte as it was.
+ *
+ * Safe because nothing reads `push_pending.source_trx_id` back as a trx id —
+ * checked, not assumed: it is written by the two enqueues and read by nothing,
+ * the relay included. It is a dedup key and nothing else.
+ *
+ * Applied HERE, inside the one enqueue both review paths share, so the fast
+ * (head tailer) and durable (handler) enqueues of one review cannot disagree
+ * about it — they still collide with each other, which is the dedup this key
+ * exists for.
+ *
+ * Upgrade boundary, stated: a review whose fast enqueue ran on the old build and
+ * whose durable enqueue runs on the new one gets two notifications, once, in the
+ * minute straddling the restart.
+ */
+export function feedbackDedupKey(trxId: string): string {
+	return `feedback:${trxId}`;
+}
+
+/**
+ * Enqueue a feedback Web Push, dedup-keyed on the on-chain trx id (namespaced —
+ * see `feedbackDedupKey`). Non-fatal: a failure is logged and swallowed (the
+ * feedback row is already stored).
  */
 export async function enqueueFeedbackPush(
 	db: FeedbackPushDb,
@@ -102,7 +141,7 @@ export async function enqueueFeedbackPush(
 			   (account, category, title, body, click_path, event_at, source_trx_id)
 			 VALUES ($1, 'feedback', $2, $3, $4, $5, $6)
 			 ON CONFLICT (account, source_trx_id) WHERE source_trx_id IS NOT NULL DO NOTHING`,
-			[params.subject, title, body, clickPath, params.eventAt, params.sourceTrxId]
+			[params.subject, title, body, clickPath, params.eventAt, feedbackDedupKey(params.sourceTrxId)]
 		);
 	} catch (err) {
 		log.warn('push_enqueue_failed', {

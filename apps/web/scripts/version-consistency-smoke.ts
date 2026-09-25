@@ -102,7 +102,7 @@ function tsConstExtractor(constName: string) {
 function docExampleExtractor(text: string): string | null {
 	// Match "version": "<vstring>" anywhere; the smoke doc is small
 	// enough that "first occurrence" is well-defined.
-	const m = text.match(/"version"\s*:\s*"([0-9][0-9A-Za-z.+\-]*)"/);
+	const m = text.match(/"version"\s*:\s*"([0-9][0-9A-Za-z.+-]*)"/);
 	return m && m[1] ? m[1] : null;
 }
 

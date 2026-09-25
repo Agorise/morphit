@@ -34,6 +34,26 @@ import { logger } from '$log';
 
 const log = logger('rpc-directory');
 
+/**
+ * Who runs each directory address (v1.18.0 deep-deep, rv2-2): a node's
+ * `.onion` and `.b32.i2p` are ONE operator, named by the node's name or, when
+ * it has none, by its first address. The RPC quorum counts agreement per
+ * operator; before this, a directory node's two addresses were two witnesses,
+ * so one operator could meet a two-endpoint quorum by itself.
+ */
+export function directoryOperators(payload: {
+	readonly nodes: ReadonlyArray<{ readonly name?: string; readonly onion?: string; readonly i2p?: string }>;
+}): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const n of payload.nodes) {
+		const id = n.name || n.onion || n.i2p;
+		if (!id) continue;
+		if (n.onion) out[n.onion] = id;
+		if (n.i2p) out[n.i2p] = id;
+	}
+	return out;
+}
+
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
 	const v = validateRpcDirectoryPayload(ctx.payload);
 	if (!v.ok) return { ok: false, reason: v.reason };
@@ -54,7 +74,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// Trusted → self-populate the hidden RPC pool with the directory's nodes.
 	const endpoints = directoryEndpointUrls(v.payload);
 	const nodeNames = directoryNodeNameMap(v.payload);
-	const added = ctx.blurt.mergeRpcEndpoints(endpoints);
+	const added = ctx.blurt.mergeRpcEndpoints(endpoints, directoryOperators(v.payload));
 	if (added.length > 0) {
 		log.info('rpc_directory_merged', { added: added.length, nodes: v.payload.nodes.length });
 	}

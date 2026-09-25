@@ -36,6 +36,7 @@ import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contrac
 import { logger } from '$log';
 import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { hasVerifiedChat as verifiedChatGate } from '$indexer/chatGates';
+import { reviewCitesFeePaidOrder } from '$indexer/reviewCitation';
 
 const log = logger('feedback');
 
@@ -160,15 +161,15 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		//    every fake-feedback row carries a non-trivial real-
 		//    money cost.  ALSO closes the symmetric B2 vector
 		//    (retaliatory 1-star citing an unpaid order).
-		const orderCheck = await client.query(
-			`SELECT 1 FROM orders
-			  WHERE account IN ($1, $3)
-			    AND permlink = $2
-			    AND fee_status = 'verified'
-			  LIMIT 1`,
-			[subject, ctx.payload.order_permlink, ctx.signer]
-		);
-		if (orderCheck.rowCount === 0) {
+		// (v1.18.0 deep-deep, rv6-L1) ONE predicate, shared with the head
+		// tailer's fast review notification, which used to carry its own copy
+		// that also accepted 'verified_by_attestation'.
+		const cited = await reviewCitesFeePaidOrder(client, {
+			permlink: ctx.payload.order_permlink,
+			subject,
+			reviewer: ctx.signer
+		});
+		if (!cited) {
 			return { ok: false, reason: 'order_permlink_not_found_or_unverified' };
 		}
 		orderPermlink = ctx.payload.order_permlink;
@@ -394,9 +395,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// (e.g. we missed its block, or the order was on a different
 		// account), `cited` returns rowCount=0 → treated as "not our
 		// instance," no bonus queued.  Conservative.
+		// (v1.18.0 deep-deep, rv6-M3) Only the SUBJECT's own PAID order can
+		// make this instance's relay pay the bonus. What was wrong: this
+		// lookup ignored the fee, so once the citation check passed — even
+		// via the REVIEWER's paid order that merely shares the permlink of
+		// the subject's free first-buy waiver order — the waiver order's
+		// operator_tag (chosen by the subject) decided which relay paid.
+		// A free waiver order (or any unpaid one) now resolves to "no tag":
+		// no transfer is queued.
 		const cited = await client.query<{ operator_tag: string | null }>(
 			`SELECT operator_tag FROM orders
-			  WHERE account = $1 AND permlink = $2`,
+			  WHERE account = $1 AND permlink = $2
+			    AND fee_status = 'verified'
+			    AND fee_method <> 'waived_first_buy'`,
 			[subject, orderPermlink]
 		);
 		const citedOperatorTag =

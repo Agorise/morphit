@@ -21,6 +21,7 @@
 
 import type { BlurtBlock, BlurtTransaction } from '$blurt/client';
 import type { ChainBlockResponse, ChainTxResponse } from '@morphit/indexer-client';
+import { chainCallTimeoutMs } from '$net/transportBudget';
 
 export type ChainBlockFetchResult =
 	| { kind: 'ok'; block: BlurtBlock }
@@ -63,17 +64,51 @@ export async function fetchChainBlock(
 	return { kind: 'ok', block: b.block as BlurtBlock };
 }
 
-/** Fetch `GET /v1/chain/tx/:id` from the indexer. */
+/** Clearnet budget for one tx lookup; hidden transports get the chain floor
+ *  from chainCallTimeoutMs (the indexer answers it with a real chain RPC). */
+export const CHAIN_TX_TIMEOUT_MS = 20_000;
+
+/** Fetch `GET /v1/chain/tx/:id` from the indexer.
+ *
+ *  (v1.18.0 deep-deep, L1) Bounded: this had no timeout, so a stalled request —
+ *  an ordinary thing on a Tor circuit — never settled. The chat sweep asks this
+ *  before calling a send failed, and a question that never returns left the
+ *  message showing "confirmed" for as long as the request hung. The budget
+ *  covers the body read too, and holds even for a fetchImpl that ignores the
+ *  abort signal. */
 export async function fetchChainTx(
 	indexerOrigin: string,
 	trxId: string,
-	fetchImpl: typeof fetch = fetch
+	fetchImpl: typeof fetch = fetch,
+	timeoutMs: number = chainCallTimeoutMs(CHAIN_TX_TIMEOUT_MS, indexerOrigin)
+): Promise<ChainTxFetchResult> {
+	const ac = new AbortController();
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timedOut = new Promise<ChainTxFetchResult>((resolve) => {
+		timer = setTimeout(() => {
+			ac.abort();
+			resolve({ kind: 'error', message: 'timed out' });
+		}, timeoutMs);
+	});
+	try {
+		return await Promise.race([fetchChainTxOnce(indexerOrigin, trxId, fetchImpl, ac.signal), timedOut]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function fetchChainTxOnce(
+	indexerOrigin: string,
+	trxId: string,
+	fetchImpl: typeof fetch,
+	signal: AbortSignal
 ): Promise<ChainTxFetchResult> {
 	let res: Response;
 	try {
 		res = await fetchImpl(`${indexerOrigin}/v1/chain/tx/${encodeURIComponent(trxId)}`, {
 			method: 'GET',
-			headers: { accept: 'application/json' }
+			headers: { accept: 'application/json' },
+			signal
 		});
 	} catch (err) {
 		return { kind: 'error', message: err instanceof Error ? err.message : String(err) };

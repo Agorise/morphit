@@ -19,6 +19,9 @@
  * Failure modes:
  *   - `push_disabled` — operator hasn't set VAPID env vars.
  *     Client falls back to in-tab channels.
+ *   - `push_disabled_hidden_only` (v1.18.0) — push is off ON PURPOSE:
+ *     the instance uses no clearnet, and every browser push service is a
+ *     clearnet host. Not something the operator will "enable yet".
  *   - `permission_denied` — user clicked "Block" in the browser
  *     permission prompt.  We don't re-ask.
  *   - `not_supported` — old browser without Notification or
@@ -51,6 +54,7 @@ export type PushPrivacyMode = 'standard' | 'self_hosted';
 
 export type SubscribeError =
 	| 'push_disabled'
+	| 'push_disabled_hidden_only'
 	| 'permission_denied'
 	| 'not_supported'
 	| 'unreachable'
@@ -133,6 +137,29 @@ export async function resyncPushCategories(
  *  lifetime — operators don't rotate keys at runtime.  Throws
  *  `push_disabled` if the relay returns 503. */
 let cachedVapidKey: string | null = null;
+
+/** The error a relay's 503 stands for. It says WHY when push is off on purpose
+ *  (v1.18.0); an older relay's bare 503 still reads as plain `push_disabled`. */
+async function pushDisabledError(res: Response): Promise<SubscribeError> {
+	const body = (await res.json().catch(() => ({}))) as { reason?: unknown };
+	return body.reason === 'hidden_only' ? 'push_disabled_hidden_only' : 'push_disabled';
+}
+
+/** Can this instance deliver push at all? null when it can (or when that cannot
+ *  be told right now); otherwise the reason it cannot. For a browser that
+ *  subscribed before the instance stopped sending — every existing tor-only
+ *  node after v1.18.0 — so the settings page stops showing "subscribed" for a
+ *  subscription nothing will ever deliver to. */
+export async function pushDeliveryUnavailable(): Promise<SubscribeError | null> {
+	try {
+		await getVapidPublicKey();
+		return null;
+	} catch (err) {
+		return err === 'push_disabled' || err === 'push_disabled_hidden_only'
+			? (err as SubscribeError)
+			: null;
+	}
+}
 async function getVapidPublicKey(): Promise<string> {
 	if (cachedVapidKey !== null) return cachedVapidKey;
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/vapid-public-key`;
@@ -142,7 +169,7 @@ async function getVapidPublicKey(): Promise<string> {
 	} catch {
 		throw 'unreachable' satisfies SubscribeError;
 	}
-	if (res.status === 503) throw 'push_disabled' satisfies SubscribeError;
+	if (res.status === 503) throw await pushDisabledError(res);
 	if (!res.ok) throw 'no_vapid_key' satisfies SubscribeError;
 	const body = (await res.json().catch(() => ({}))) as {
 		vapid_public_key?: string;
@@ -213,10 +240,12 @@ async function signPushAction(
 	action: 'subscribe' | 'unsubscribe',
 	account: string,
 	endpoint: string,
-	timestamp: number
+	timestamp: number,
+	/** A posting key captured before the session was wiped (sign-out). */
+	postingPrivateKey?: Uint8Array
 ): Promise<string> {
-	const live = get(liveIdentity);
-	if (!live) {
+	const key = postingPrivateKey ?? get(liveIdentity)?.posting.privateKey;
+	if (!key) {
 		throw 'locked_session' satisfies SubscribeError;
 	}
 	// Canonical message must match the server-side reconstruction
@@ -232,7 +261,7 @@ async function signPushAction(
 	// settings-page chunk graph (the only consumer of this module).
 	const { PrivateKey, cryptoUtils } = await import('@beblurt/dblurt');
 	const messageBuf = messageHashBytes as unknown as Buffer;
-	const privKey = new PrivateKey(live.posting.privateKey as unknown as Buffer);
+	const privKey = new PrivateKey(key as unknown as Buffer);
 	const sig = privKey.sign(messageBuf);
 	if (!cryptoUtils.isCanonicalSignature(sig.data)) {
 		// dblurt usually retries-until-canonical, but be defensive.
@@ -410,7 +439,7 @@ export async function subscribe(
 		throw 'unreachable' satisfies SubscribeError;
 	}
 
-	if (res.status === 503) throw 'push_disabled' satisfies SubscribeError;
+	if (res.status === 503) throw await pushDisabledError(res);
 	if (res.status === 401) {
 		const body = (await res.json().catch(() => ({}))) as { status?: string };
 		throw (body.status === 'signature_required'
@@ -498,4 +527,70 @@ export async function unsubscribe(account: string): Promise<UnsubscribeSuccess> 
 	}
 
 	return { status: 'unsubscribed' };
+}
+
+/** Stop this browser's notifications for `account` on an EXPLICIT sign-out.
+ *  (v1.18.0 deep-deep, M2)
+ *
+ *  Signing out used to leave both halves of the push subscription alive: the
+ *  browser kept its subscription and the relay kept the row linking the
+ *  account to this device. On a shared or borrowed browser, the next person
+ *  kept getting OS notifications naming who messaged the signed-out user —
+ *  and on a hidden-only relay no "410 Gone" ever prunes the row.
+ *
+ *  broadcastSignOut() wipes the session synchronously, so it hands us a COPY
+ *  of the posting key taken just before; we sign the relay-side unsubscribe
+ *  with it (the relay may refuse an unsigned one) and zero the copy when done.
+ *  The browser-side unsubscribe happens regardless, so deliveries stop even if
+ *  the relay can't be reached. Never throws. */
+export async function unsubscribeOnSignOut(
+	account: string | null,
+	postingPrivateKey: Uint8Array | null
+): Promise<void> {
+	try {
+		if (!isPushSupported()) return;
+		// getRegistration(), not `serviceWorker.ready`: `ready` never settles
+		// when no worker is registered, which would hold the key copy forever.
+		let existing: PushSubscription | null = null;
+		try {
+			const reg = await navigator.serviceWorker.getRegistration();
+			existing = reg ? await reg.pushManager.getSubscription() : null;
+		} catch {
+			existing = null;
+		}
+		if (!existing) return;
+		const endpoint = existing.endpoint;
+		try {
+			await existing.unsubscribe();
+		} catch {
+			// Non-fatal — the relay-side delete below still runs.
+		}
+		if (!account || !endpoint) return;
+		const timestamp = Math.floor(Date.now() / 1000);
+		let signatureHex: string | undefined;
+		if (postingPrivateKey) {
+			try {
+				signatureHex = await signPushAction('unsubscribe', account, endpoint, timestamp, postingPrivateKey);
+			} catch {
+				signatureHex = undefined;
+			}
+		}
+		try {
+			await fetchWithTimeout(`${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/unsubscribe`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(
+					signatureHex !== undefined
+						? { account, endpoint, signature: signatureHex, timestamp }
+						: { account, endpoint }
+				)
+			});
+		} catch {
+			// Non-fatal — the browser side is already unsubscribed.
+		}
+	} catch {
+		// Best-effort: sign-out must never fail over notifications.
+	} finally {
+		postingPrivateKey?.fill(0);
+	}
 }

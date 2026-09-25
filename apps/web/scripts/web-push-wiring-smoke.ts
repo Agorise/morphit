@@ -206,6 +206,82 @@ results.push({
 	detail: missing.length === 0 ? undefined : `Missing: [${missing.join(', ')}]`
 });
 
+// ─── 9b. Every error the settings page can show has words, everywhere ──
+// Settings and the chat nudge both render `settings.notifications.push_error_
+// <error>` for whatever SubscribeError they hold — the nudge for EVERY code,
+// including push_service_unavailable, which Settings swaps for per-browser help.
+// A hand-kept list goes stale the day a new error is added (v1.18.0 added
+// `push_disabled_hidden_only`), and a missing key renders as the raw key path.
+// So the list is read from the union itself, with no exceptions.
+{
+	const pushSrc = readFileSync(join(REPO, 'apps/web/src/lib/notifications/push.ts'), 'utf-8');
+	const union = /export type SubscribeError =((?:\s*\|\s*'[a-z_]+')+);/.exec(pushSrc);
+	const errors = union ? [...union[1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!) : [];
+	const shown = errors;
+	const gaps: string[] = [];
+	for (const loc of LOCALES) {
+		const p = join(REPO, `apps/web/src/lib/i18n/locales/${loc}.json`);
+		const notif = existsSync(p)
+			? (JSON.parse(readFileSync(p, 'utf-8'))?.settings?.notifications ?? {})
+			: {};
+		for (const e of shown) if (!notif[`push_error_${e}`]) gaps.push(`${loc}: push_error_${e}`);
+	}
+	results.push({
+		name: `every SubscribeError has a message in all ${LOCALES.length} locales (${shown.length} errors)`,
+		// Fewer than ten would mean the union was not found — a check over
+		// nothing, which must not read as a pass.
+		ok: shown.length >= 10 && gaps.length === 0,
+		detail:
+			shown.length < 10
+				? `read only ${shown.length} errors from the SubscribeError union — the pattern no longer matches it`
+				: gaps.length === 0
+					? undefined
+					: `Missing: [${gaps.join(', ')}]`
+	});
+}
+
+// ─── 9c. Push off ON PURPOSE (v1.18.0) — the call sites ──
+// The behaviour is tested where it lives: the relay's answers and the janitor
+// in apps/relay/test/pushOffOnPurpose.test.ts, the janitor's SQL against a real
+// Postgres in the indexer's integration suite, the browser's reading in
+// pushOffReason.test.ts. What no unit test reaches is the wiring in the two
+// entry points, so the call sites are pinned here.
+{
+	const relayMain = join(REPO, 'apps/relay/src/main.ts');
+	const src = readFileSync(relayMain, 'utf-8').replace(/^\s*\/\/.*$/gm, '');
+	results.push({
+		name: 'relay: with no sender, the push-queue janitor is built and started',
+		ok:
+			/pushSender\s*\?\s*null\s*:\s*new PushQueueJanitor\(/.test(src) &&
+			/else pushJanitor\?\.start\(\);/.test(src)
+	});
+	results.push({
+		name: 'relay: a hidden-only relay tells the browser why push is off',
+		ok: /cfg\.hiddenOnly \? 'hidden_only' : null\s*\)/.test(src)
+	});
+	const settings = readFileSync(
+		join(REPO, 'apps/web/src/lib/components/NotificationSettings.svelte'),
+		'utf-8'
+	).replace(/^\s*\/\/.*$/gm, '');
+	results.push({
+		name: 'settings: a held subscription is checked against the instance, and cleared when push cannot arrive',
+		ok:
+			/existing === null \? null : await pushDeliveryUnavailable\(\)/.test(settings) &&
+			/if \(unavailable !== null\) \{\s*pushSubscribed = false;\s*pushError = unavailable;/.test(settings)
+	});
+	// v1.18.0 review (W4): on a hidden-only instance the held subscription is
+	// REMOVED, from the browser and the relay — asserted at the call site, inside
+	// the hidden-only branch. (That the relay's unsubscribe answers with push off
+	// — it used to 503, so the stored link could never be removed — is a
+	// behaviour, and is tested where it lives: pushOffOnPurpose.test.ts.)
+	results.push({
+		name: 'settings: a subscription a hidden-only instance can never serve is removed, not just hidden',
+		ok: /unavailable === 'push_disabled_hidden_only' && account\) \{\s*void unsubscribeFromPush\(account\)/.test(
+			settings
+		)
+	});
+}
+
 // ─── 10. Indexer enqueues push_pending for feedback + chat ──
 // v1.5.5 (t155): the feedback enqueue MOVED out of the handler into the shared
 // `feedbackPushEnqueue` module, so the durable path and the new fast-notify path
@@ -219,6 +295,25 @@ results.push({
 	name: 'Indexer feedback push enqueue lives in the shared module',
 	ok: fileContains('apps/indexer/src/indexer/feedbackPushEnqueue.ts', 'INSERT INTO push_pending')
 });
+// THE INSERT IS NOT THE POINT — the dedup clause is, and the check above passes
+// just as happily with it deleted. That is not a hypothetical weakness: the
+// comment block above describes the duplicate-notification bug in detail, and
+// the assertion under it would not have caught the bug coming back. Both
+// keyed enqueues are pinned on the clause AND the key, and both are now
+// covered at runtime as well (test/integration/{fast,feedback}-notification-
+// dedup.test.ts) — this stays as the cheap tripwire that fires in the battery
+// without a database.
+for (const [label, path] of [
+	['feedback', 'apps/indexer/src/indexer/feedbackPushEnqueue.ts'],
+	['chat', 'apps/indexer/src/indexer/chatPushEnqueue.ts']
+] as const) {
+	results.push({
+		name: `${label} enqueue keeps its dedup key and ON CONFLICT clause`,
+		ok:
+			fileContains(path, 'source_trx_id') &&
+			fileContains(path, 'ON CONFLICT (account, source_trx_id) WHERE source_trx_id IS NOT NULL')
+	});
+}
 results.push({
 	name: 'Indexer feedback handler delegates to the shared enqueue',
 	ok: fileContains('apps/indexer/src/indexer/handlers/feedback.ts', 'enqueueFeedbackPush')

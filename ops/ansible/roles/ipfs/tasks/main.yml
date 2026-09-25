@@ -133,7 +133,11 @@
     - { key: "Gateway.NoFetch", value: "true" }
     - { key: "Swarm.ConnMgr.HighWater", value: "{{ morphit_ipfs_connmgr_high }}" }
     - { key: "Swarm.ConnMgr.LowWater", value: "{{ morphit_ipfs_connmgr_low }}" }
-    - { key: "Routing.Type", value: "'\"auto\"'" }
+    # A tor-only node takes no part in the public IPFS network (v1.18.0
+    # deep-deep, H3): see the privacy task below for the rest of that posture.
+    # Setting "auto" here and "none" there on every run would flap the config.
+    - key: "Routing.Type"
+      value: "'\"{{ (morphit_tor_only | default(false) | bool) | ternary('none', 'auto') }}\"'"
   changed_when: false
   notify: Restart ipfs
 
@@ -172,6 +176,43 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Install the Kubo privacy script (one list of settings, shared with morphit-ops upgrade)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../ipfs/morphit-ipfs-privacy.sh"
+    dest: /usr/local/lib/morphit/morphit-ipfs-privacy.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+# v1.18.0 deep-deep, H3. Every node: Kubo's telemetry off (it POSTs to a third
+# party by default). A TOR-ONLY node additionally leaves the public IPFS network
+# entirely: no DHT, no bootstrap peers, no swarm listener, no UPnP, no mDNS, no
+# AutoConf/AutoTLS phone-home, no provider records, and DNSLink lookups that
+# cannot leave the box. It still serves its pinned release by CID from its own
+# gateway, which is how hidden-only peers upgrade from it over Tor/I2P. The list
+# lives in the script so `morphit-ops upgrade` heals existing nodes with the
+# exact same settings. Check first, so a re-run changes (and restarts) nothing.
+- name: Check Kubo's privacy settings
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-ipfs-privacy.sh check-{{ (morphit_tor_only | default(false) | bool) | ternary('hidden', 'base') }}"
+  become: true
+  become_user: "{{ morphit_ipfs_user }}"
+  environment:
+    IPFS_PATH: "{{ morphit_ipfs_repo }}"
+  register: morphit_ipfs_privacy_check
+  changed_when: false
+  failed_when: false
+
+- name: Apply Kubo's privacy settings
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-ipfs-privacy.sh apply-{{ (morphit_tor_only | default(false) | bool) | ternary('hidden', 'base') }}"
+  become: true
+  become_user: "{{ morphit_ipfs_user }}"
+  environment:
+    IPFS_PATH: "{{ morphit_ipfs_repo }}"
+  when: morphit_ipfs_privacy_check.rc != 0
+  notify: Restart ipfs
 
 - name: Install the pin service env file
   ansible.builtin.template:

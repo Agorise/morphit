@@ -126,7 +126,8 @@ function sleep(ms: number): Promise<void> {
 		// 4 sequential calls = 3 gaps (the first dispatches immediately).
 		const floor = SPACING * 3 * 0.8;
 		if (elapsed >= floor) pass(`rps pacing: 4 sequential calls take >= ${Math.round(floor)} ms`);
-		else fail(`rps pacing: 4 sequential calls take >= ${Math.round(floor)} ms`, `got ${elapsed} ms`);
+		else
+			fail(`rps pacing: 4 sequential calls take >= ${Math.round(floor)} ms`, `got ${elapsed} ms`);
 	}
 
 	{
@@ -246,8 +247,7 @@ function sleep(ms: number): Promise<void> {
 	const hi = await cooldownWithRandom(0.999);
 
 	// Allow a few ms of clock drift between recordFailure and the snapshot read.
-	const near = (actual: number, expected: number): boolean =>
-		Math.abs(actual - expected) <= 25;
+	const near = (actual: number, expected: number): boolean => Math.abs(actual - expected) <= 25;
 
 	if (near(lo, LADDER * (1 - f))) pass(`jitter: random()=0 → floor (${LADDER * (1 - f)} ms)`);
 	else fail(`jitter: random()=0 → floor (${LADDER * (1 - f)} ms)`, `got ${lo} ms`);
@@ -316,8 +316,7 @@ function sleep(ms: number): Promise<void> {
 		cooldownLadderMs: [50, 200, 1_000] // tight ladder for the test
 	});
 	let calls = 0;
-	const transportErr = () =>
-		Promise.reject(new Error('fetch failed'));
+	const transportErr = () => Promise.reject(new Error('fetch failed'));
 	// First failure → 50 ms cooldown.
 	try {
 		await pool.call(async () => {
@@ -348,10 +347,7 @@ function sleep(ms: number): Promise<void> {
 	if (snap2[0]!.consecutiveFailures === 0 && snap2[0]!.cooldownUntil === 0) {
 		pass('cooldown ladder: success resets the ladder');
 	} else {
-		fail(
-			'cooldown ladder: success resets',
-			`state ${JSON.stringify(snap2[0])}`
-		);
+		fail('cooldown ladder: success resets', `state ${JSON.stringify(snap2[0])}`);
 	}
 }
 
@@ -378,10 +374,7 @@ function sleep(ms: number): Promise<void> {
 			if (xCalls === 1 && yCalls === 0) {
 				pass('application-level errors propagate without rotating');
 			} else {
-				fail(
-					'app errors do not rotate',
-					`x=${xCalls} y=${yCalls} (expected 1, 0)`
-				);
+				fail('app errors do not rotate', `x=${xCalls} y=${yCalls} (expected 1, 0)`);
 			}
 		} else {
 			fail('app error propagation', `wrong error: ${(err as Error).message}`);
@@ -410,10 +403,7 @@ function sleep(ms: number): Promise<void> {
 	}
 	const snap = pool.snapshot();
 	if (snap[0]!.ewmaLatencyMs === null || snap[0]!.ewmaLatencyMs > 50) {
-		fail(
-			'scenario 4a warm-up — endpoint warmed below threshold',
-			`ewma=${snap[0]!.ewmaLatencyMs}`
-		);
+		fail('scenario 4a warm-up — endpoint warmed below threshold', `ewma=${snap[0]!.ewmaLatencyMs}`);
 	} else {
 		let calls = 0;
 		const t0 = Date.now();
@@ -427,9 +417,7 @@ function sleep(ms: number): Promise<void> {
 		);
 		const elapsed = Date.now() - t0;
 		if (r === 'solo' && calls === 1 && elapsed >= 290 && elapsed < 600) {
-			pass(
-				'hedge: true with no second endpoint → single call only (no double-dispatch)'
-			);
+			pass('hedge: true with no second endpoint → single call only (no double-dispatch)');
 		} else {
 			fail(
 				'no-hedge when no second endpoint',
@@ -478,9 +466,7 @@ function sleep(ms: number): Promise<void> {
 	// Hedge should fire at ~50ms, then 'q' responds 30ms later
 	// (~80ms total).  Allow generous slop for test scheduling.
 	if (r === 'q' && elapsed < 400 && calls.includes('p') && calls.includes('q')) {
-		pass(
-			'hedge: degraded primary + slow response → second endpoint wins fast'
-		);
+		pass('hedge: degraded primary + slow response → second endpoint wins fast');
 	} else {
 		fail(
 			'hedge fires + wins',
@@ -598,10 +584,7 @@ function sleep(ms: number): Promise<void> {
 if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	pass('DEFAULT_HEDGE_THRESHOLD_MS exported and is 500ms');
 } else {
-	fail(
-		'DEFAULT_HEDGE_THRESHOLD_MS',
-		`expected 500, got ${DEFAULT_HEDGE_THRESHOLD_MS}`
-	);
+	fail('DEFAULT_HEDGE_THRESHOLD_MS', `expected 500, got ${DEFAULT_HEDGE_THRESHOLD_MS}`);
 }
 
 /* ---------------- scenario 9: quorumCall — single match satisfies minAgree=1 ---------------- */
@@ -623,9 +606,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		r.agreedKey === 'shared-key' &&
 		r.contacted === 3
 	) {
-		pass(
-			`quorumCall: minAgree=1 returns on first success (responses=${r.responses.length})`
-		);
+		pass(`quorumCall: minAgree=1 returns on first success (responses=${r.responses.length})`);
 	} else {
 		fail(
 			'quorumCall minAgree=1',
@@ -660,9 +641,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		elapsed < 500 &&
 		!callTimes.has('slow') // slow shouldn't have completed
 	) {
-		pass(
-			`quorumCall: 2-of-3 quorum returns in ${elapsed} ms without waiting for slow endpoint`
-		);
+		pass(`quorumCall: 2-of-3 quorum returns in ${elapsed} ms without waiting for slow endpoint`);
 	} else {
 		fail(
 			'quorumCall early return',
@@ -689,14 +668,8 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		}
 	);
 	const elapsed = Date.now() - t0;
-	if (
-		r.kind === 'quorum_met' &&
-		r.responses.length === 2 &&
-		elapsed < 200
-	) {
-		pass(
-			`quorumCall: 2 transport failures + 2 successes → quorum met fast (${elapsed} ms)`
-		);
+	if (r.kind === 'quorum_met' && r.responses.length === 2 && elapsed < 200) {
+		pass(`quorumCall: 2 transport failures + 2 successes → quorum met fast (${elapsed} ms)`);
 	} else {
 		fail(
 			'quorumCall with transport failures',
@@ -719,14 +692,8 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 			minAgree: 2
 		}
 	);
-	if (
-		r.kind === 'all_responses_in' &&
-		r.responses.length === 3 &&
-		r.agreedKey === undefined
-	) {
-		pass(
-			'quorumCall: disagreeing responses → all_responses_in without quorum'
-		);
+	if (r.kind === 'all_responses_in' && r.responses.length === 3 && r.agreedKey === undefined) {
+		pass('quorumCall: disagreeing responses → all_responses_in without quorum');
 	} else {
 		fail(
 			'quorumCall disagreement',
@@ -759,9 +726,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	// All three endpoints should now have ewmaLatencyMs set
 	// (a null-but-healthy response still records latency / resets
 	// the breaker) and zero cooldownUntil.
-	const allHealthy = snap.every(
-		(s) => s.ewmaLatencyMs !== null && s.cooldownUntil === 0
-	);
+	const allHealthy = snap.every((s) => s.ewmaLatencyMs !== null && s.cooldownUntil === 0);
 	if (r.kind === 'quorum_met' && r.responses.length === 1 && allHealthy) {
 		pass('quorumCall: null-return endpoints stay healthy + bucketless');
 	} else {
@@ -796,7 +761,10 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		if (r === 'OK' && deadHits >= 1 && goodHits === 1) {
 			pass('call(): one dead (ENOTFOUND) endpoint → rotates to healthy, returns result (no stall)');
 		} else {
-			fail('call(): dead-endpoint rotation', `result=${r} deadHits=${deadHits} goodHits=${goodHits}`);
+			fail(
+				'call(): dead-endpoint rotation',
+				`result=${r} deadHits=${deadHits} goodHits=${goodHits}`
+			);
 		}
 	} catch (err) {
 		fail('call(): dead-endpoint rotation threw', err instanceof Error ? err.message : String(err));
@@ -810,7 +778,10 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	if (deadEp && deadEp.cooldownUntil > Date.now()) {
 		pass('call(): the dead endpoint was put into cooldown after the transport failure');
 	} else {
-		fail('call(): dead endpoint cooldown', `cooldownUntil=${deadEp?.cooldownUntil ?? 'n/a'} now=${Date.now()}`);
+		fail(
+			'call(): dead endpoint cooldown',
+			`cooldownUntil=${deadEp?.cooldownUntil ?? 'n/a'} now=${Date.now()}`
+		);
 	}
 }
 
@@ -832,7 +803,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		msg = err instanceof Error ? err.message : String(err);
 	}
 	if (threw && /all RPC endpoints unavailable/i.test(msg)) {
-		pass('call(): all endpoints dead → throws a single clear "all RPC endpoints unavailable" error');
+		pass(
+			'call(): all endpoints dead → throws a single clear "all RPC endpoints unavailable" error'
+		);
 	} else {
 		fail('call(): all-dead error', `threw=${threw} msg=${msg}`);
 	}
@@ -852,7 +825,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		'all RPC endpoints unavailable: getaddrinfo ENOTFOUND rpc.x',
 		'indexer: applied block 59441299',
 		'relay-boot starting',
-		"failover succeeded", // contains 'failover' but is not the dblurt line
+		'failover succeeded', // contains 'failover' but is not the dblurt line
 		42,
 		null
 	];
@@ -924,7 +897,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	const retryOk = retryable.every((s) => isTransportError(new Error(s)));
 	const clientOk = clientErrors.every((s) => !isTransportError(new Error(s)));
 	if (retryOk && clientOk) {
-		pass('isTransportError: 408/429/500/502/503/504 + upstream 52x (origin-down) are transport; 4xx client errors are not');
+		pass(
+			'isTransportError: 408/429/500/502/503/504 + upstream 52x (origin-down) are transport; 4xx client errors are not'
+		);
 	} else {
 		fail(
 			'HTTP status classification',
@@ -953,7 +928,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 	const cooled = pool.snapshot().find((s) => s.url === 'upstream-origin-down');
 	if (result === 'OK' && goodHits === 1 && cooled && cooled.cooldownUntil > Date.now()) {
-		pass('call(): a 521 (upstream origin-down) endpoint rotates to a healthy one and is cooled down');
+		pass(
+			'call(): a 521 (upstream origin-down) endpoint rotates to a healthy one and is cooled down'
+		);
 	} else {
 		fail(
 			'521 endpoint did not rotate to a healthy node',
@@ -981,7 +958,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 	const cooled = pool.snapshot().find((s) => s.url === 'ratelimited');
 	if (result === 'OK' && goodHits === 1 && cooled && cooled.cooldownUntil > Date.now()) {
-		pass('call(): a 429 (rate-limited) endpoint rotates to a healthy one and is cooled down (backoff)');
+		pass(
+			'call(): a 429 (rate-limited) endpoint rotates to a healthy one and is cooled down (backoff)'
+		);
 	} else {
 		fail(
 			'429 rotation+cooldown',
@@ -1012,7 +991,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		isTransportError(new Error('HTTP 500: x')) &&
 		!isRateLimitError(new Error('HTTP 500: x'));
 	if (allDetected && noFalsePositive && subset) {
-		pass('isRateLimitError: matches 429/too-many-requests/rate-limit, not 500/502/timeout; 429 is a subset of transport');
+		pass(
+			'isRateLimitError: matches 429/too-many-requests/rate-limit, not 500/502/timeout; 429 is a subset of transport'
+		);
 	} else {
 		fail(
 			'isRateLimitError detection',
@@ -1054,7 +1035,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 	const rlCooldown = rlPool.snapshot()[0]!.cooldownUntil - Date.now();
 	if (rlCooldown > 450 && rlCooldown <= 750) {
-		pass('a 429 parks the endpoint on the longer rate-limit ladder (~600 ms, not the 50 ms generic)');
+		pass(
+			'a 429 parks the endpoint on the longer rate-limit ladder (~600 ms, not the 50 ms generic)'
+		);
 	} else {
 		fail('429 parks on rate-limit ladder', `cooldown=${rlCooldown} ms (expected ~600)`);
 	}
@@ -1077,7 +1060,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 	const genCooldown = genPool.snapshot()[0]!.cooldownUntil - Date.now();
 	if (genCooldown > 0 && genCooldown <= 150) {
-		pass('a generic transport failure still uses the short ladder (~50 ms) — 429 handling did not regress it');
+		pass(
+			'a generic transport failure still uses the short ladder (~50 ms) — 429 handling did not regress it'
+		);
 	} else {
 		fail('generic transport failure stays short', `cooldown=${genCooldown} ms (expected ~50)`);
 	}
@@ -1116,7 +1101,9 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	const o2 = await firstTouched(2);
 	const o3 = await firstTouched(3); // wraps: 3 % 3 === 0 → back to fastest
 	if (o0 === 'a' && o1 === 'b' && o2 === 'c' && o3 === 'a') {
-		pass('startOffset rotates the primary endpoint (spreads concurrent backfill windows across nodes)');
+		pass(
+			'startOffset rotates the primary endpoint (spreads concurrent backfill windows across nodes)'
+		);
 	} else {
 		fail(
 			'startOffset rotation',
@@ -1216,7 +1203,8 @@ let failed = 0;
 		// …but it must still be REACHABLE: never excluded, only deprioritised.
 		if (tried.length === 1 && fresh.snapshot().length === 2)
 			pass('the known-bad endpoint stays eligible (nodes come and go — never excluded)');
-		else if (fresh.snapshot().length === 2) pass('the known-bad endpoint stays eligible (nodes come and go — never excluded)');
+		else if (fresh.snapshot().length === 2)
+			pass('the known-bad endpoint stays eligible (nodes come and go — never excluded)');
 		else fail('the known-bad endpoint stays eligible', 'it was dropped from the pool');
 
 		// And when the good one is gone, the known-bad one IS still tried.
@@ -1234,8 +1222,13 @@ let failed = 0;
 		} catch {
 			/* expected */
 		}
-		if (reached) pass('a known-bad endpoint is still ATTEMPTED when it is the only one (never excluded)');
-		else fail('a known-bad endpoint is still attempted when it is the only one', 'it was skipped entirely');
+		if (reached)
+			pass('a known-bad endpoint is still ATTEMPTED when it is the only one (never excluded)');
+		else
+			fail(
+				'a known-bad endpoint is still attempted when it is the only one',
+				'it was skipped entirely'
+			);
 	} finally {
 		try {
 			unlinkSync(statePath);
@@ -1253,7 +1246,10 @@ let failed = 0;
 		tried.push(url);
 		return url;
 	});
-	if (tried[0] === 'a') pass('a never-tried endpoint is still bootstrapped first (failure ranking did not regress cp165)');
+	if (tried[0] === 'a')
+		pass(
+			'a never-tried endpoint is still bootstrapped first (failure ranking did not regress cp165)'
+		);
 	else fail('a never-tried endpoint is bootstrapped first', `tried ${tried[0]} first`);
 }
 
@@ -1270,7 +1266,11 @@ let failed = 0;
 	const i2p = 'http://' + 'b'.repeat(52) + '.b32.i2p:8091';
 	const clear = 'https://rpc.example.com';
 
-	if (isHiddenEndpointUrl(onion) && isHiddenEndpointUrl(i2p) && isHiddenEndpointUrl('http://x.loki'))
+	if (
+		isHiddenEndpointUrl(onion) &&
+		isHiddenEndpointUrl(i2p) &&
+		isHiddenEndpointUrl('http://x.loki')
+	)
 		pass('hidden endpoints are recognised (.onion, .b32.i2p, .loki)');
 	else fail('hidden endpoints are recognised', 'a hidden suffix was not detected');
 
@@ -1290,7 +1290,10 @@ let failed = 0;
 	else fail('a hidden endpoint gets the longer floor', 'hidden endpoint kept the short budget');
 
 	// The floor RAISES, never clamps: a caller asking for more must keep it.
-	if (effectiveTimeoutMs(onion, 90_000) === 90_000 && effectiveTimeoutMs(onion, 90_000, true) === 90_000)
+	if (
+		effectiveTimeoutMs(onion, 90_000) === 90_000 &&
+		effectiveTimeoutMs(onion, 90_000, true) === 90_000
+	)
 		pass('an explicit LONGER caller timeout is preserved, never clamped to the floor');
 	else fail('an explicit longer caller timeout is preserved', 'the floor clamped a larger budget');
 
@@ -1300,13 +1303,24 @@ let failed = 0;
 	// answer either. Relay endpoints MAY be hidden (config allows .onion/.i2p),
 	// so without this split a hidden-only relay would hang for a full minute on
 	// every availability check.
-	if (effectiveTimeoutMs(onion, DEFAULT_USER_FACING_TIMEOUT_MS, true) === DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS)
+	if (
+		effectiveTimeoutMs(onion, DEFAULT_USER_FACING_TIMEOUT_MS, true) ===
+		DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS
+	)
 		pass('a user-facing hidden call gets the SHORTER hidden floor, not the background one');
-	else fail('a user-facing hidden call gets the shorter hidden floor', 'it inherited the background floor');
+	else
+		fail(
+			'a user-facing hidden call gets the shorter hidden floor',
+			'it inherited the background floor'
+		);
 
 	if (DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS < DEFAULT_HIDDEN_TIMEOUT_MS)
 		pass('the user-facing hidden floor is shorter than the background one');
-	else fail('the user-facing hidden floor is shorter', 'a person would wait as long as a background job');
+	else
+		fail(
+			'the user-facing hidden floor is shorter',
+			'a person would wait as long as a background job'
+		);
 }
 
 // ─── A slow-connecting endpoint must still succeed ────────────────────
@@ -1324,10 +1338,14 @@ let failed = 0;
 			async (_url, signal) =>
 				await new Promise<string>((resolve, reject) => {
 					const t = setTimeout(() => resolve('ok'), CONNECT_MS);
-					signal.addEventListener('abort', () => {
-						clearTimeout(t);
-						reject(new Error('This operation was aborted'));
-					}, { once: true });
+					signal.addEventListener(
+						'abort',
+						() => {
+							clearTimeout(t);
+							reject(new Error('This operation was aborted'));
+						},
+						{ once: true }
+					);
 				}),
 			{ timeoutMs: 50 } // SHORTER than the connect time, as 10s was for I2P
 		);
@@ -1336,12 +1354,163 @@ let failed = 0;
 	}
 	if (!threw && out === 'ok')
 		pass('a hidden endpoint slower than the caller timeout still succeeds (floor applies)');
-	else fail(
-		'a hidden endpoint slower than the caller timeout still succeeds',
-		'it aborted — the hidden floor is not being applied per endpoint'
-	);
+	else
+		fail(
+			'a hidden endpoint slower than the caller timeout still succeeds',
+			'it aborted — the hidden floor is not being applied per endpoint'
+		);
 }
 
+/* ---------------- v1.18.0 deep-deep (rv2-2, rv2-9): quorum per OPERATOR ---------------- */
+// One operator reached at two addresses (.onion + .b32.i2p, as every hidden
+// Blurt node is listed) answers a forged value instantly on both. Two honest
+// operators answer the truth more slowly. Counted per URL, the forger met the
+// two-endpoint quorum alone; counted per operator it is one voice.
+{
+	const names: Record<string, string> = { 'evil-onion': 'evil', 'evil-i2p': 'evil' };
+	const pool = new EndpointPool({
+		endpoints: ['evil-onion', 'honest-a', 'evil-i2p', 'honest-b'],
+		operatorOf: (u) => names[u]
+	});
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			if (u.startsWith('evil')) {
+				await sleep(1);
+				return 'forged';
+			}
+			await sleep(60);
+			return 'truth';
+		},
+		{ equivalenceKey: (v) => v, minAgree: 2 }
+	);
+	if (r.kind === 'quorum_met' && r.agreedKey === 'truth')
+		pass('quorumCall: one operator at two addresses cannot meet a 2-quorum alone');
+	else fail('quorumCall per operator', `kind=${r.kind} agreed=${r.agreedKey}`);
+}
+// The same, with the operator names learned at runtime (the on-chain directory).
+{
+	const pool = new EndpointPool({ endpoints: ['honest-a', 'honest-b'] });
+	pool.mergeEndpoints(['evil-onion', 'evil-i2p'], { 'evil-onion': 'evil', 'evil-i2p': 'evil' });
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			await sleep(u.startsWith('evil') ? 1 : 60);
+			return u.startsWith('evil') ? 'forged' : 'truth';
+		},
+		{ equivalenceKey: (v) => v, minAgree: 2 }
+	);
+	if (r.kind === 'quorum_met' && r.agreedKey === 'truth' && pool.operatorCount() === 3)
+		pass('quorumCall: operator names merged at runtime count a directory node once');
+	else
+		fail(
+			'quorumCall runtime operator names',
+			`kind=${r.kind} agreed=${r.agreedKey} operators=${String((pool as { operatorCount?: () => number }).operatorCount?.())}`
+		);
+}
+// rv2-9: a hidden endpoint gets the hidden floor inside a quorum too, and is
+// not cooled down for being slower than a clearnet budget.
+{
+	const pool = new EndpointPool({
+		endpoints: ['http://aaaa.onion:8091', 'http://bbbb.b32.i2p:8091']
+	});
+	const r = await pool.quorumCall<string>(
+		(_u, signal) =>
+			new Promise<string>((resolve, reject) => {
+				const t = setTimeout(() => resolve('agreed'), 150);
+				signal.addEventListener(
+					'abort',
+					() => {
+						clearTimeout(t);
+						reject(new Error('timeout'));
+					},
+					{ once: true }
+				);
+			}),
+		{ equivalenceKey: (v) => v, minAgree: 2, timeoutMs: 50 }
+	);
+	const failures = pool.snapshot().reduce((n, e) => n + e.consecutiveFailures, 0);
+	if (r.kind === 'quorum_met' && failures === 0)
+		pass('quorumCall: hidden endpoints get the hidden timeout floor and no cooldown');
+	else fail('quorumCall hidden floor', `kind=${r.kind} failures=${failures}`);
+}
+// rv2-9: fan-out is capped — six agreeing operators, at most three asked.
+{
+	const eps = ['o1', 'o2', 'o3', 'o4', 'o5', 'o6'];
+	const pool = new EndpointPool({ endpoints: eps });
+	let asked = 0;
+	const r = await pool.quorumCall<string>(
+		async () => {
+			asked++;
+			await sleep(20);
+			return 'same';
+		},
+		{ equivalenceKey: (v) => v, minAgree: 2, maxOperators: 3 }
+	);
+	if (r.kind === 'quorum_met' && asked <= 3)
+		pass(`quorumCall: fan-out capped (${asked} of 6 asked)`);
+	else fail('quorumCall fan-out cap', `kind=${r.kind} asked=${asked}`);
+}
+// rv2-9: the cap never lowers what can be learned — failing operators are
+// replaced by the next ones until a quorum forms.
+{
+	const pool = new EndpointPool({ endpoints: ['d1', 'd2', 'd3', 'g1', 'g2'] });
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			if (u.startsWith('d')) throw new Error('ECONNREFUSED');
+			await sleep(10);
+			return 'same';
+		},
+		{ equivalenceKey: (v) => v, minAgree: 2, maxOperators: 3 }
+	);
+	if (r.kind === 'quorum_met') pass('quorumCall: a capped window slides past failing operators');
+	else fail('quorumCall sliding window', `kind=${r.kind}`);
+}
+// rv2-9: an operator whose every endpoint is failing is not counted as reachable.
+{
+	const names: Record<string, string> = { 'x-onion': 'x', 'x-i2p': 'x' };
+	const pool = new EndpointPool({
+		endpoints: ['x-onion', 'x-i2p', 'up'],
+		operatorOf: (u) => names[u]
+	});
+	await pool.quorumCall<string>(
+		async (u) => {
+			if (u !== 'up') throw new Error('ECONNREFUSED');
+			return 'v';
+		},
+		{ equivalenceKey: (v) => v, minAgree: 5 }
+	);
+	const reach = (pool as { reachableOperatorCount?: () => number }).reachableOperatorCount?.();
+	if (reach === 1) pass('reachableOperatorCount: a fully failing operator is not waited for');
+	else fail('reachableOperatorCount', `got ${String(reach)}`);
+}
+
+// rv2-9: with a capped window, operators that have ANSWERED are asked before
+// never-tried ones, so a quorum is not held up by unknown slow nodes.
+{
+	const pool = new EndpointPool({ endpoints: ['new1', 'new2', 'new3', 'proven1', 'proven2'] });
+	// The new ones give an application error: nothing is learned about them.
+	await pool.quorumCall<string>(
+		async (u) => {
+			if (!u.startsWith('proven')) throw new Error('application error');
+			return 'v';
+		},
+		{
+			equivalenceKey: (v) => v,
+			minAgree: 5
+		}
+	);
+	const asked: string[] = [];
+	const r = await pool.quorumCall<string>(
+		async (u) => {
+			asked.push(u);
+			await sleep(5);
+			return 'v';
+		},
+		{ equivalenceKey: (v) => v, minAgree: 2, maxOperators: 2 }
+	);
+	if (r.kind === 'quorum_met' && asked.every((u) => u.startsWith('proven')))
+		pass('quorumCall: proven operators are asked before never-tried ones');
+	else fail('quorumCall proven-first order', `asked=${asked.join(',')}`);
+}
 
 for (const r of results) {
 	if (r.passed) {

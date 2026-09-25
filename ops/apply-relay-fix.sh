@@ -16,6 +16,16 @@ bad(){ printf '  %s\xe2\x9c\x97%s %s\n' "$r" "$x" "$1"; }
 hdr(){ printf '\n%s== %s ==%s\n' "$b" "$1" "$x"; }
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo"; exit 1; }
 [ -f "$OH" ] || { echo "no $OH"; exit 1; }
+# v1.18.0 review (O11). This was a one-off bridge for cp774, which has since
+# shipped. It REPLACES relayProbeCandidates wholesale with the cp774 body, so
+# run on any later release it would silently drop what that function gained
+# since — on a hidden-only node, the rule that keeps the relay's public name
+# away from the resolver — and then restart the indexer. When the fix is
+# already in the installed code there is nothing for this script to do.
+if grep -q 'enumeration blocked by the sandbox' "$OH"; then
+	ok "This fix is already part of the installed release — nothing to change, and the indexer was not restarted."
+	exit 0
+fi
 set -a; for f in "${ENV_FILES[@]}"; do [ -f "$f" ] && . "$f"; done; set +a
 IHOST="${MORPHIT_INDEXER_LISTEN_HOST:-172.18.0.1}"; IPORT="${MORPHIT_INDEXER_LISTEN_PORT:-8081}"
 

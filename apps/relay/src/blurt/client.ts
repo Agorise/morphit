@@ -22,6 +22,7 @@
  */
 
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
+import { guardDblurtClient } from '@morphit/hidden-transport/rpc-fetch';
 import { Client, PrivateKey } from '@beblurt/dblurt';
 import { EndpointPool } from '@morphit/rpc-pool';
 import { VERSION } from '../api/health.ts';
@@ -758,7 +759,10 @@ function clientFor(url: string): Client {
 		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
 		const timeoutMs =
 			hiddenNet === null ? 10_000 : Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
-		c = new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(VERSION) });
+		// (v1.18.0 deep-deep, M2) Guarded: dblurt followed redirects and read
+		// replies whole, so a directory-listed node could bounce a broadcast to
+		// our own loopback or stream memory into us. See rpcFetch.ts.
+		c = guardDblurtClient(new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(VERSION) }));
 		clientCache.set(url, c);
 	}
 	return c;

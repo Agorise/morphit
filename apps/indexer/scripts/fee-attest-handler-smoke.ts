@@ -134,8 +134,8 @@ await scenario('launch phase: admits on age-only', async () => {
 		eligibilitySeed(60, 0),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT attestor)',
-			rows: [{ total_attestors: '1', non_poster_attestors: '1' }],
+			match: 'COUNT(DISTINCT fa.attestor)',
+			rows: [{ n: '1' }],
 			rowCount: 1
 		}
 	]);
@@ -149,8 +149,8 @@ await scenario('launch phase: admits on loyalty-only', async () => {
 		eligibilitySeed(5, 150),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT attestor)',
-			rows: [{ total_attestors: '1', non_poster_attestors: '1' }],
+			match: 'COUNT(DISTINCT fa.attestor)',
+			rows: [{ n: '1' }],
 			rowCount: 1
 		}
 	]);
@@ -164,8 +164,8 @@ await scenario('steady phase: admits when both gates pass', async () => {
 		eligibilitySeed(60, 500),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT attestor)',
-			rows: [{ total_attestors: '1', non_poster_attestors: '1' }],
+			match: 'COUNT(DISTINCT fa.attestor)',
+			rows: [{ n: '1' }],
 			rowCount: 1
 		}
 	]);
@@ -197,48 +197,44 @@ await scenario('order_not_found still short-circuits before eligibility', async 
 
 // ─── Promotion flow ─────────────────────────────────────────
 
-await scenario(
-	'promotes order when ≥2 attestors + ≥1 non-poster + eligibility passes',
-	async () => {
-		const mock = makeMockClient([
-			orderSeed('pending_external'),
-			eligibilitySeed(60, 500),
-			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
-			{
-				match: 'COUNT(DISTINCT attestor)',
-				rows: [{ total_attestors: '2', non_poster_attestors: '1' }],
-				rowCount: 1
-			},
-			{ match: 'UPDATE orders', rowCount: 1 }
-		]);
-		const r = await handler(ctxFor({ phase: 'launch' }), mock.client);
-		assertEqual(r, { ok: true }, 'result');
-		// UPDATE ran.
-		const updateRan = mock.queries.some((q) => q.text.includes('UPDATE orders'));
-		if (!updateRan) throw new Error('expected UPDATE to run');
-	}
-);
-
-await scenario('does NOT promote when self-attestation alone (non_poster=0)', async () => {
+await scenario('promotes order when ≥2 independent attestors + eligibility passes', async () => {
 	const mock = makeMockClient([
 		orderSeed('pending_external'),
 		eligibilitySeed(60, 500),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT attestor)',
-			// 1 total, 0 non-poster = self-attesting.
-			rows: [{ total_attestors: '1', non_poster_attestors: '0' }],
+			match: 'COUNT(DISTINCT fa.attestor)',
+			// v1.18.0 deep-deep (H1): the count is of INDEPENDENT attestors
+			// (never the poster, never a pair flagged with the poster).
+			rows: [{ n: '2' }],
 			rowCount: 1
-		}
+		},
+		{ match: 'UPDATE orders', rowCount: 1 }
 	]);
-	const r = await handler(
-		ctxFor({ signer: 'bob', orderAccount: 'bob', phase: 'launch' }),
-		mock.client
-	);
+	const r = await handler(ctxFor({ phase: 'launch' }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
+	// UPDATE ran.
 	const updateRan = mock.queries.some((q) => q.text.includes('UPDATE orders'));
-	if (updateRan) throw new Error('self-only promotion should not run UPDATE');
+	if (!updateRan) throw new Error('expected UPDATE to run');
 });
+
+// v1.18.0 deep-deep (H1): the poster can never attest their own order — it
+// used to be recorded and count as one of the two required attestors.
+await scenario(
+	'rejects self-attestation outright (attestor_is_poster), nothing recorded',
+	async () => {
+		const mock = makeMockClient([orderSeed('pending_external'), eligibilitySeed(60, 500)]);
+		const r = await handler(
+			ctxFor({ signer: 'bob', orderAccount: 'bob', phase: 'launch' }),
+			mock.client
+		);
+		assertEqual(r, { ok: false, reason: 'attestor_is_poster' }, 'result');
+		if (mock.queries.some((q) => q.text.includes('INSERT INTO fee_attestations')))
+			throw new Error('a self-attestation must not be recorded');
+		if (mock.queries.some((q) => q.text.includes('UPDATE orders')))
+			throw new Error('self-attestation must not promote');
+	}
+);
 
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {

@@ -228,6 +228,19 @@ morphit_mcp_bind_port: 8124
 # a different set.  Comma-separated.
 morphit_indexer_blurt_rpc_endpoints: "https://rpc.drakernoise.com,https://blurtrpc.dagobert.uk,https://rpc.blurt.blog,https://rpc.beblurt.com,https://rpc.blurt.one,https://blurt-rpc.saboin.com"
 
+# Hidden-service Blurt RPC seed nodes, one list per transport. Read by BOTH
+# indexer.env.j2 and relay.env.j2 (v1.18.0, F32): the relay had no hidden
+# endpoints at all, so on a tor-only node it reached the chain over clearnet
+# while the indexer beside it did not. One list here, so the two processes
+# cannot be seeded differently. Keep in sync with
+# DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS in packages/operator-config.
+morphit_hidden_rpc_seed_onion:
+  - "http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091"
+  - "http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091"
+morphit_hidden_rpc_seed_i2p:
+  - "http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091"
+  - "http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091"
+
 # Asset registry: disable specific tradable assets if your instance
 # specializes (§38, Memory #25).  Comma-separated uppercase tickers.
 # Empty string = no assets disabled (default-everything posture).

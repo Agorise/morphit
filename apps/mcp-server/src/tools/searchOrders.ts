@@ -110,7 +110,10 @@ export type SearchOrdersInput = z.infer<typeof SearchOrdersInputSchema>;
 
 /** Indexer response shape (lifted from /v1/orderbook). */
 interface OrderbookResponse {
-	rows: Array<Record<string, unknown>>;
+	/** What the indexer sends (api/orderbook.ts). */
+	items?: Array<Record<string, unknown>>;
+	/** Older name this tool used to read; kept so an old indexer still works. */
+	rows?: Array<Record<string, unknown>>;
 	next_cursor?: string | null;
 	total?: number;
 }
@@ -133,7 +136,9 @@ export async function searchOrders(input: SearchOrdersInput): Promise<{
 		limit: input.limit
 	});
 	const res = await fetchJson<OrderbookResponse>(url);
-	const rows = (res.rows || []).map(trimOrderRow);
+	// The indexer answers `items`; this read `rows` alone, so every search came
+	// back empty (v1.18.0 deep-deep).
+	const rows = (res.items ?? res.rows ?? []).map(trimOrderRow);
 
 	// Build a clickable deeplink so the AI agent can hand the user
 	// off to the actual Morphit web UI for the trade step.  Mirror

@@ -20,6 +20,7 @@
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { onMount, onDestroy } from 'svelte';
+	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
@@ -485,18 +486,18 @@
 	{:else}
 		<header class="mb-6 flex items-center gap-4">
 			{#if avatarSvg}
-				<!-- Custom avatar SVG. The avatar_svg value was produced by
-				     sanitizeSvg on the uploader's device, broadcast to chain,
-				     then indexed — it reaches this render path having already
-				     passed allowlist sanitization; we trust that chokepoint
-				     and inline it. -->
-				<span
-					class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl"
+				<!-- Custom avatar SVG (sanitized), shown as an <img>: inlined,
+				     its own style/class could escape this frame and cover the
+				     page (v1.18.0 deep-deep, M1). -->
+				<img
+					src={svgAvatarImgSrc(avatarSvg)}
+					alt=""
+					width="64"
+					height="64"
+					decoding="async"
+					class="h-16 w-16 rounded-xl object-cover"
 					aria-hidden="true"
-				>
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html avatarSvg}
-				</span>
+				/>
 			{:else if avatarDataUri}
 				<img
 					src={avatarDataUri}
@@ -715,7 +716,10 @@
 										? 'bg-morphit-emerald/15 text-morphit-emerald'
 										: 'bg-ink-200 text-ink-700 dark:bg-ink-800 dark:text-ink-200'}"
 								>
-									{$_(`explorer.op.label.${dec.labelKey}`, dec.values ? { values: dec.values } : undefined)}
+									{$_(
+										`explorer.op.label.${dec.labelKey}`,
+										dec.values ? { values: dec.values } : undefined
+									)}
 								</span>
 								<time datetime={iso} class="text-xs text-ink-500 dark:text-ink-400">
 									{formatDayMonthTime(iso)}
@@ -734,8 +738,7 @@
 									block:
 									<a
 										href={blockUrl ? lp(blockUrl) : '#'}
-										class="text-morphit-emerald underline-offset-2 hover:underline"
-										>{op.block}</a
+										class="text-morphit-emerald underline-offset-2 hover:underline">{op.block}</a
 									>
 								</span>
 							</div>

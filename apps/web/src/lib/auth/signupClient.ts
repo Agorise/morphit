@@ -22,6 +22,7 @@
 
 import { MORPHIT_RELAY_ORIGIN, resolveOrigin } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
+import { chainCallTimeoutMs } from '$net/transportBudget';
 
 import type { AltchaChallenge, AltchaSolution } from './altchaSolver';
 
@@ -149,14 +150,21 @@ export async function createAccount(params: {
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/account/create`;
 	let res: Response;
 	try {
-		res = await fetchWithTimeout(url, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				invite_token: params.invite_token,
-				op: params.op
-			})
-		});
+		res = await fetchWithTimeout(
+			url,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					invite_token: params.invite_token,
+					op: params.op
+				})
+			},
+			// The relay broadcasts account_create to the chain for this one, so on
+			// a hidden-only instance it waits on a hidden RPC. The default 30s is
+			// under the 60s the server allows itself there.
+			chainCallTimeoutMs(30_000)
+		);
 	} catch {
 		throw { code: 'unreachable' } satisfies SignupError;
 	}

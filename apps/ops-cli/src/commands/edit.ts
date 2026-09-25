@@ -134,7 +134,12 @@ const EDITABLE_KEYS = [
 	// morphit.env in a tightly-scoped second pass for THIS key only;
 	// other morphit.env keys (DB URL, account names, active key path)
 	// stay manual-edit-only.
-	'MORPHIT_INDEXER_RPC_ENDPOINTS'
+	'MORPHIT_INDEXER_RPC_ENDPOINTS',
+	// …and its twin. `morphit-ops init` writes the SAME list to the relay
+	// (render.ts, "beta5 item D": the asymmetry behind the firefight — one
+	// survived, the other froze). Editing only the indexer's re-created exactly
+	// that asymmetry the first time anyone changed their nodes.
+	'MORPHIT_RELAY_BLURT_RPC'
 ] as const;
 
 export async function runEdit(ctx: EditCtx): Promise<number> {
@@ -384,7 +389,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			return 1;
 		}
 		const newList = await stepRpcEndpoints(existingEnv.rpcEndpoints);
-		envUpdates.set('MORPHIT_INDEXER_RPC_ENDPOINTS', newList.join(','));
+		for (const [k, v] of rpcEnvUpdates(existingEnv.text, newList)) envUpdates.set(k, v);
 	}
 
 	// ─── Review ────
@@ -816,6 +821,21 @@ function quoteValue(v: string, consumer: EnvFileConsumer = 'bash'): string {
 
 /** Test-only export.  Smoke runner imports this to verify the
  *  parser+applier without needing real file I/O. */
+/**
+ * The env keys an RPC-list edit writes. PURE. The indexer's always; the
+ * relay's too whenever the file carries it — which every `init`-rendered file
+ * does, because init writes both from one answer. A file without the relay line
+ * (a hand-rolled one, or a split deployment) is left without it: adding a key
+ * the operator never had is not this edit's call.
+ */
+export function rpcEnvUpdates(existingText: string, newList: readonly string[]): Map<string, string> {
+	const out = new Map<string, string>([['MORPHIT_INDEXER_RPC_ENDPOINTS', newList.join(',')]]);
+	if (parseKvLines(existingText).has('MORPHIT_RELAY_BLURT_RPC')) {
+		out.set('MORPHIT_RELAY_BLURT_RPC', newList.join(','));
+	}
+	return out;
+}
+
 export { applyUpdates as _testApplyUpdates };
 export { loadExistingEnv as _testLoadExistingEnv };
 export { atomicEnvWrite as _testAtomicEnvWrite };

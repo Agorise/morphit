@@ -63,6 +63,10 @@ function read(abs: string): string {
 const chat = read(join(ROOT, 'src/indexer/handlers/chat.ts'));
 const tailer = read(join(ROOT, 'src/indexer/headTailer.ts'));
 const gates = read(join(ROOT, 'src/indexer/chatGates.ts'));
+// v1.18.0 deep-deep (rv1-2): the safe-subset gate is ONE function shared by the
+// tailer and the federation intake, so its rule is asserted where it lives.
+const fastGate = read(join(ROOT, 'src/indexer/fastNotifyGate.ts'));
+const intakeRoute = read(join(ROOT, 'src/api/federationChatFast.ts'));
 const enqueue = read(join(ROOT, 'src/indexer/chatPushEnqueue.ts'));
 const migrations = read(join(ROOT, 'src/db/migrations.ts'));
 const schema = readFileSync(join(ROOT, 'src/db/schema.sql'), 'utf8'); // SQL comments kept
@@ -111,10 +115,14 @@ scenario('the fast path acts only on recipient-reply OR order-response bypass', 
 	// "is this sender established?" twice is precisely how two call sites
 	// silently drift apart. Same rule, one evaluation, shared answer.
 	assert(
-		/return recipientReplied \|\| orderResponseBypass;/.test(tailer),
-		'fastNotifyAllowed lacks the (recipientReplied || orderResponseBypass) safe gate'
+		/if \(recipientReplied\) return true;[\s\S]*?if \(!orderResponseBypass\) return false;/.test(fastGate),
+		'the shared fast gate lacks the (recipientReplied || orderResponseBypass) safe gate'
 	);
-	assert(tailer.includes('recipientHasReplied(this.db'), 'the fast gate does not check recipient-reply');
+	assert(fastGate.includes('recipientHasReplied(db'), 'the fast gate does not check recipient-reply');
+	assert(
+		tailer.includes('fastChatNotifyAllowed(this.db') && intakeRoute.includes('fastChatNotifyAllowed(db'),
+		'the tailer and the federation intake must BOTH call the one shared gate'
+	);
 	// …and the gate must actually be APPLIED, not merely defined: both the push
 	// and replayability hang off the one answer.
 	assert(
@@ -131,14 +139,14 @@ scenario('the fast path acts only on recipient-reply OR order-response bypass', 
 	);
 });
 scenario('the fast gate denies a bogus order tag (durable would reject)', () => {
-	assert(tailer.includes('if (!oc.found) return false'), 'the fast gate does not deny an invalid order tag');
+	assert(fastGate.includes('if (!oc.found) return false'), 'the fast gate does not deny an invalid order tag');
 });
 
 // ── No divergence: order validity has ONE implementation ─────────────
 scenario('checkChatOrder is the single order-validity impl (query lives in chatGates)', () => {
 	assert(/FROM orders/.test(gates) && gates.includes('account IN ($2, $4)'), 'chatGates lacks the order query');
 	assert(chat.includes('checkChatOrder(client'), 'chat.ts does not delegate to checkChatOrder');
-	assert(tailer.includes('checkChatOrder(this.db'), 'tailer does not use the shared checkChatOrder');
+	assert(fastGate.includes('checkChatOrder(db'), 'the fast gate does not use the shared checkChatOrder');
 	assert(!chat.includes('account IN ($2, $4)'), 'chat.ts still has an inline order query (divergence risk)');
 });
 scenario('recipientHasReplied is DIRECTIONAL (recipient→sender) + uses the pair index', () => {

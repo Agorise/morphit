@@ -38,6 +38,7 @@ import type { Config } from '$config';
 import type { Database } from '$db/pool';
 import type { PushSubscriptionStore, PushSubscription } from './pushSubscriptions.ts';
 import { logger } from '$log';
+import { PUSH_PRUNE_INTERVAL_MS, prunePushTombstones } from './pushQueueJanitor.ts';
 
 const log = logger('relay-push-sender');
 
@@ -65,17 +66,8 @@ export interface PushSendTickResult {
 	readonly subscriptionsDeleted: number;
 }
 
-/** v1.5.5 — how long a delivered row is retained as its own dedup tombstone
- *  before the pruner reclaims it. Must comfortably exceed the fast→durable gap
- *  (~60s normally, much more while the indexer catches up) or duplicate
- *  notifications return. One hour is ~60x the observed gap and still bounds
- *  the table. */
-const PUSH_TOMBSTONE_RETENTION_SECONDS = 3600;
-
-/** v1.5.5 — how often the tombstone pruner runs. Far cheaper than the retention
- *  window is long, so 5 minutes keeps the table bounded without scanning for
- *  deletions on every poll tick. */
-const PUSH_PRUNE_INTERVAL_MS = 5 * 60 * 1000;
+// The tombstone retention, the prune interval and the prune itself live in
+// pushQueueJanitor.ts, so a relay with push OFF prunes by the same rule (v1.18.0).
 
 export class PushSender {
 	private abort = new AbortController();
@@ -282,13 +274,8 @@ export class PushSender {
 	 * observed gap and still bounds the table.
 	 */
 	async prune(): Promise<number> {
-		const res = await this.db.query(
-			`DELETE FROM push_pending
-			  WHERE sent_at IS NOT NULL
-			    AND sent_at < NOW() - ($1::int * INTERVAL '1 second')`,
-			[PUSH_TOMBSTONE_RETENTION_SECONDS]
-		);
-		const n = res.rowCount ?? 0;
+		// rv2-11: the retention is never shorter than the push max age.
+		const n = await prunePushTombstones(this.db, this.config.pushMaxAgeSeconds);
 		if (n > 0) log.info('push_pending_pruned', { rows: n });
 		return n;
 	}

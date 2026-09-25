@@ -90,6 +90,8 @@
 	import { addPendingOrder } from '$lib/stores/pendingOrders';
 	import { orderPayloadToRecord, type OrderPayload } from '$lib/orders/payload';
 	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
+	import { boundedBlurtBase, boundedPiconero, boundedSatoshis } from '$lib/orders/feeQuoteFloor';
+	import { chainPinnedTreasury } from '$stores/release';
 	import { onDestroy } from 'svelte';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import {
@@ -1173,6 +1175,13 @@
 			// indexer will reject as fee_underpaid and the user
 			// gets clear status feedback in their My Orders page.
 			const lf = await lfPromise;
+			// (v1.18.0 deep-deep, M1) never quote outside the chain-pinned band.
+			// The indexer's /v1/listing-fee figure (on a hidden-only node, a
+			// federated peer median) was used verbatim, so a sybil-steered price
+			// could quote far below the floor the indexer enforces (order lands
+			// underpaid, fee lost) or make the user overpay. The signed release's
+			// pinned amounts bound it; see $lib/orders/feeQuoteFloor.
+			const pinned = get(chainPinnedTreasury);
 			if (lf.kind === 'ok') {
 				if (typeof lf.quote.base_fee_blurt === 'number' && lf.quote.base_fee_blurt > 0) {
 					operatorBaseBlurt = lf.quote.base_fee_blurt;
@@ -1186,14 +1195,19 @@
 					denominationFiat = lf.quote.denomination_fiat;
 				}
 				// cp372 Model A: live BTC/XMR fee amounts + USD echoes.
-				btcFeeSatoshisLive =
-					typeof lf.quote.btc_fee_satoshis === 'number' ? lf.quote.btc_fee_satoshis : undefined;
-				xmrFeePiconeroLive =
-					typeof lf.quote.xmr_fee_piconero === 'string' ? lf.quote.xmr_fee_piconero : undefined;
+				btcFeeSatoshisLive = boundedSatoshis(
+					typeof lf.quote.btc_fee_satoshis === 'number' ? lf.quote.btc_fee_satoshis : undefined,
+					pinned?.btc?.satoshis
+				);
+				xmrFeePiconeroLive = boundedPiconero(
+					typeof lf.quote.xmr_fee_piconero === 'string' ? lf.quote.xmr_fee_piconero : undefined,
+					pinned?.xmr?.piconero
+				);
 				btcFeeFiat = typeof lf.quote.btc_fee_fiat === 'number' ? lf.quote.btc_fee_fiat : undefined;
 				xmrFeeFiat = typeof lf.quote.xmr_fee_fiat === 'number' ? lf.quote.xmr_fee_fiat : undefined;
 			}
 
+			operatorBaseBlurt = boundedBlurtBase(operatorBaseBlurt, BASE_FEE_BLURT, pinned?.blurt?.base);
 			feeQuote = computeFee(activeCount + 1, operatorBaseBlurt);
 
 			// cp372: settle the FX table (best-effort).

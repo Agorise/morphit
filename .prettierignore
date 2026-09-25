@@ -1,0 +1,15 @@
+# The house style is in .prettierrc (this directory) and is inherited by every
+# workspace that has no config of its own — packages/*, root scripts/, and the
+# matrix-bot and mcp-server apps. Before it existed, `prettier --write` on any of
+# those applied prettier's DEFAULTS (two-space indent, double quotes, 80 columns)
+# and mangled the file while reporting success. apps/web keeps its own config for
+# its Svelte and Tailwind plugins; the other apps' copies are identical to this.
+node_modules/
+dist/
+build/
+coverage/
+.svelte-kit/
+package-lock.json
+# Machine-maintained: the i18n parity smokes are the gate, and they are tab-indented.
+apps/web/src/lib/i18n/locales/
+apps/web/static/

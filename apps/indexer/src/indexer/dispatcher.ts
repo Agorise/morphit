@@ -33,6 +33,8 @@ import type { Config } from '$config';
 import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
 import type { Handler, OpContext } from '$indexer/handler-contract';
 import { parseBlurtAmount, parseMemoPermlink } from '$indexer/fee-transfer';
+import { forgetFreshKey } from '$indexer/chatFastFederation';
+import { signingPostingKey } from '$indexer/postingKeyBackfill';
 
 import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
@@ -286,8 +288,12 @@ interface AccountCreateRow {
 	readonly blockTime: Date;
 	readonly trxId: string;
 	/** Primary posting public key from the account_create op's posting
-	 *  authority, or null if unparseable. Stored for display (the
-	 *  truncated "(BLT…)" on order cards) — NOT used for verification. */
+	 *  authority, or null if unparseable.
+	 *
+	 *  ONCE "for display only, NOT used for verification" — no longer true.
+	 *  v1.18.0's federated fast path verifies a pushed chat message against
+	 *  this column, which is what made keeping it current a security matter
+	 *  rather than a cosmetic one. See `collectPostingKeyUpdates`. */
 	readonly postingPubkey: string | null;
 }
 
@@ -321,7 +327,7 @@ function collectAccountCreates(
 				new_account_name?: unknown;
 				name?: unknown;
 				creator?: unknown;
-				posting?: { key_auths?: unknown };
+				posting?: { key_auths?: unknown; weight_threshold?: unknown };
 			};
 			// Different op variants use different field names; pick
 			// whichever is present.
@@ -334,15 +340,13 @@ function collectAccountCreates(
 			if (!newName) continue;
 			if (typeof b.creator !== 'string') continue;
 
-			// Primary posting pubkey from the op's posting authority:
-			// key_auths is [[pubkey, weight], ...]. Store the first key
-			// for display only. Defensive parse — never throws on a
-			// malformed/absent authority (just yields null).
-			let postingPubkey: string | null = null;
-			const ka = b.posting?.key_auths;
-			if (Array.isArray(ka) && Array.isArray(ka[0]) && typeof ka[0][0] === 'string') {
-				postingPubkey = ka[0][0];
-			}
+			// The posting key that can sign for this account ALONE, from the
+			// op's posting authority — NOT display-only any more: the federated
+			// fast path verifies pushed chat against this column. One rule for
+			// every writer (signingPostingKey): a key whose weight meets the
+			// threshold, or null. Defensive — never throws on a malformed or
+			// absent authority.
+			const postingPubkey = signingPostingKey(b.posting);
 
 			out.push({
 				newAccountName: newName,
@@ -362,7 +366,13 @@ function collectAccountCreates(
  *  otherwise does nothing — so (a) the poller may retry a block,
  *  and (b) re-observing an account can backfill a posting key we
  *  hadn't captured, without disturbing the first-observed create
- *  metadata. */
+ *  metadata.
+ *
+ *  v1.18.0 (F37) — a key taken from the create op is the chain's key as of
+ *  this block, so the row is written reconciled, and the fast path trusts it
+ *  without a chain read. On conflict the flag moves only when THIS write is
+ *  the one that supplies the key; a key some earlier write left there is not
+ *  vouched for by this op. */
 async function writeAccountCreates(
 	client: pg.PoolClient,
 	rows: readonly AccountCreateRow[]
@@ -372,12 +382,102 @@ async function writeAccountCreates(
 		await client.query(
 			`INSERT INTO accounts (
 				name, creator, created_block_num, created_block_time,
-				created_trx_id, posting_pubkey
-			) VALUES ($1, $2, $3, $4, $5, $6)
+				created_trx_id, posting_pubkey, posting_key_reconciled
+			) VALUES ($1, $2, $3, $4, $5, $6, $6::text IS NOT NULL)
 			ON CONFLICT (name) DO UPDATE SET
-				posting_pubkey = COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey)`,
+				posting_pubkey = COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey),
+				posting_key_reconciled = accounts.posting_key_reconciled
+					OR (accounts.posting_pubkey IS NULL AND EXCLUDED.posting_pubkey IS NOT NULL)`,
 			[r.newAccountName, r.creator, r.blockNum, r.blockTime, r.trxId, r.postingPubkey]
 		);
+	}
+}
+
+/** A posting-key change observed in an `account_update` op. */
+interface PostingKeyUpdateRow {
+	readonly account: string;
+	/** Null when the new authority has no single key that can sign alone. */
+	readonly postingPubkey: string | null;
+}
+
+/**
+ * Walk a block for `account_update` ops that CHANGE the posting authority.
+ *
+ * WHY THIS EXISTS. `accounts.posting_pubkey` was written at first observation
+ * and never again: account creates COALESCE it, the backfill only fills NULLs,
+ * and nothing read `account_update` at all. An owner who rotated their posting
+ * key on chain kept their OLD key here forever. That was cosmetic until the
+ * federated fast path began verifying pushed messages against this column —
+ * after which a stolen key went on verifying after its owner had rotated it
+ * away, which the chain itself would refuse, and the owner's own messages
+ * stopped verifying.
+ *
+ * `account_update` is the ONLY op that changes a posting authority on Blurt —
+ * checked against the chain library's operation types rather than assumed:
+ * `recover_account` replaces the OWNER authority only, and Blurt has no
+ * `account_update2`. After a recovery the chain keeps accepting the old posting
+ * key until the owner rotates it, and so does this.
+ *
+ * `posting` is OPTIONAL on the op; an update that changes only the memo key or
+ * metadata leaves it absent, and must leave the column alone. When it IS
+ * present the column is ALWAYS written — with the key that can sign alone
+ * (signingPostingKey), or NULL when no single key can. The old rule took
+ * `key_auths[0][0]` and SKIPPED an authority with no keys, which is exactly how
+ * an owner kills a leaked key (moving posting authority to another account):
+ * the leaked key stayed on file and went on verifying. And a 2-of-2 authority
+ * stored its first key as if it could sign alone (v1.18.0 review, R2).
+ *
+ * Returned in op order, so applying them in order is last-writer-wins within a
+ * block, and the poller's in-order processing makes it so across blocks.
+ */
+function collectPostingKeyUpdates(block: BlockHeader): PostingKeyUpdateRow[] {
+	const out: PostingKeyUpdateRow[] = [];
+	for (let ti = 0; ti < block.transactions.length; ti++) {
+		const trx = block.transactions[ti];
+		if (!trx) continue;
+		for (const op of trx.operations) {
+			if (!op) continue;
+			const [opName, body] = op;
+			if (opName !== 'account_update') continue;
+			const b = body as {
+				account?: unknown;
+				posting?: { key_auths?: unknown; weight_threshold?: unknown } | null;
+			};
+			if (typeof b.account !== 'string') continue;
+			// No posting authority on the op means posting did not change.
+			if (b.posting === undefined || b.posting === null) continue;
+			// Present means it changed — to a key, or to no single key at all.
+			out.push({ account: b.account, postingPubkey: signingPostingKey(b.posting) });
+		}
+	}
+	return out;
+}
+
+/**
+ * Record posting-key rotations — the write account creates deliberately do not
+ * make, since a create is the FIRST observation and an update is a LATER one.
+ *
+ * An account we have no row for (created before our start block) is left
+ * alone: the table's create metadata is NOT NULL and an update does not carry
+ * it. Those accounts are what the backfill and the fast path's chain re-read are
+ * for.
+ *
+ * Each rotation also drops the fast path's in-memory correction for that
+ * account. See `forgetFreshKey` for why that is not optional: without it a
+ * cached key could outrank a column that had already moved past it, for up to
+ * half an hour, in precisely the case of an owner rotating away from a leak.
+ */
+async function writePostingKeyUpdates(
+	client: pg.PoolClient,
+	rows: readonly PostingKeyUpdateRow[]
+): Promise<void> {
+	for (const r of rows) {
+		// Reconciled: an account_update IS the chain's key as of this block (F37).
+		await client.query(
+			'UPDATE accounts SET posting_pubkey = $2, posting_key_reconciled = TRUE WHERE name = $1',
+			[r.account, r.postingPubkey]
+		);
+		forgetFreshKey(r.account);
 	}
 }
 
@@ -534,6 +634,11 @@ export async function applyBlock(
 	// fine — Signal A's focus is on *new* accounts.
 	const accountRows = collectAccountCreates(block, blockNum, blockTime, block.transaction_ids);
 	await writeAccountCreates(client, accountRows);
+
+	// Pre-pass: posting-key ROTATIONS. After creates, so an account created and
+	// rotated in the same block ends on the rotated key. See
+	// collectPostingKeyUpdates for why this column must be kept current.
+	await writePostingKeyUpdates(client, collectPostingKeyUpdates(block));
 
 	// Phase E — per-block collector for orderbook-change
 	// notifications.  Handlers that mutate orderbook-relevant

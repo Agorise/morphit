@@ -28,6 +28,10 @@
 #                    script just adds + prints (no assertion).
 # Env:
 #   IPFS_PATH                 Kubo repo (default /var/lib/ipfs/.ipfs)
+#   MORPHIT_SEED_HIDDEN_ONLY  =1 on a hidden-only node (morphit-ops upgrade sets it
+#                             from indexer.env). Also inferred from Kubo's own
+#                             Routing.Type=none. Then: no clearnet anchor fetch, no
+#                             download, no DHT announce (v1.18.0 deep-deep, H3).
 #   MORPHIT_RELEASE_DOWNLOAD_BASE   base URL for release assets (fetch the tag's anchor when expected_cid omitted)
 #   IPFS_ADD_TIMEOUT          seconds for the add (default 900)
 # Run as the ipfs service user (the systemd unit / morphit-ops handle that):
@@ -83,11 +87,42 @@ if ! ipfs --timeout=10s id >/dev/null 2>&1; then
 	exit 1
 fi
 
+# 1b. HIDDEN-ONLY? (v1.18.0 deep-deep, H3)
+# A hidden-only node must not touch clearnet or the public IPFS network from its
+# home IP. This script used to, three ways: it curled git.agorise.net for the
+# tag's anchor whenever no CID was passed (and `morphit-ops upgrade` never passed
+# one), the stager downloads the release from there when no local copy is given,
+# and step 5 announced this box as a provider on the public DHT — a list anyone
+# can read to collect the home IPs of Morphit nodes. The caller says so
+# (MORPHIT_SEED_HIDDEN_ONLY=1, from indexer.env, which this unprivileged user
+# cannot read), and Kubo's own config says so too once the hidden-only posture
+# is applied (Routing.Type=none), which covers a hand-run seed.
+HIDDEN_ONLY=no
+case "${MORPHIT_SEED_HIDDEN_ONLY:-}" in
+	1|yes|true) HIDDEN_ONLY=yes ;;
+esac
+if [ "$HIDDEN_ONLY" = no ] && [ "$(ipfs config Routing.Type 2>/dev/null || true)" = "none" ]; then
+	HIDDEN_ONLY=yes
+fi
+if [ "$HIDDEN_ONLY" = yes ]; then
+	log "hidden-only node: nothing is fetched from or announced to clearnet; peers get the release from this node over Tor/I2P."
+	if [ -z "${MORPHIT_STAGE_TARBALL:-}" ] || [ ! -s "${MORPHIT_STAGE_TARBALL}" ]; then
+		log "no local copy of $TAG was given (MORPHIT_STAGE_TARBALL), and a hidden-only node does not download"
+		log "it over clearnet. Nothing to seed now; the next upgrade seeds the release it installs."
+		exit 1
+	fi
+	if [ -z "$EXPECTED" ]; then
+		log "no expected CID was given, so the CID is not cross-checked this time"
+		log "(morphit-ops upgrade passes the on-chain one; a hand run can pass it as the 2nd argument)."
+	fi
+fi
+
 # 2. If no expected CID was passed, read it from the TAG's published
 #    distribution-anchor.env (release.yml attaches it) — the tag-authoritative
 #    CID. NOT /v1/release, which serves the CURRENTLY broadcast release (the
 #    WRONG, older CID when seeding a newer release pre-broadcast).
-if [ -z "$EXPECTED" ] && command -v curl >/dev/null 2>&1; then
+#    Never on a hidden-only node: that is a clearnet request from its home IP.
+if [ -z "$EXPECTED" ] && [ "$HIDDEN_ONLY" = no ] && command -v curl >/dev/null 2>&1; then
 	ANCHOR_URL="${MORPHIT_RELEASE_DOWNLOAD_BASE:-https://git.agorise.net/agorise/morphit/releases/download}/$TAG/distribution-anchor.env"
 	ANCHOR="$(curl -fsS --max-time 20 "$ANCHOR_URL" 2>/dev/null || true)"
 	EXPECTED="$(printf '%s' "$ANCHOR" \
@@ -126,13 +161,20 @@ if [ -n "$EXPECTED" ]; then
 fi
 
 # 5. Announce it promptly so gateways + other instances can find it (best-effort).
-log "announcing to the network…"
-ipfs --timeout=60s routing provide "$CID" >/dev/null 2>&1 &
-_spin "$!" "announcing $CID to the DHT…"
-if wait "$!" 2>/dev/null; then
-	log "announced $CID to the network."
+# Not on a hidden-only node (v1.18.0 deep-deep, H3): a provider record on the
+# public DHT names this box's home IP as a Morphit host. Its peers fetch the
+# release by CID from its .onion/.b32.i2p gateway instead, which needs no DHT.
+if [ "$HIDDEN_ONLY" = yes ]; then
+	log "not announcing $CID to the public IPFS network (hidden-only node)."
 else
-	log "routing provide did not complete (non-fatal) — the daemon reprovides on its own schedule."
+	log "announcing to the network…"
+	ipfs --timeout=60s routing provide "$CID" >/dev/null 2>&1 &
+	_spin "$!" "announcing $CID to the DHT…"
+	if wait "$!" 2>/dev/null; then
+		log "announced $CID to the network."
+	else
+		log "routing provide did not complete (non-fatal) — the daemon reprovides on its own schedule."
+	fi
 fi
 
 # 6. Self-verify we are a USABLE seeder — along the path a PEER actually uses.
@@ -386,4 +428,8 @@ if [ -z "${_onion:-}" ] && [ -z "${_i2p:-}" ]; then
 fi
 
 echo "$CID"
-log "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"
+if [ "$HIDDEN_ONLY" = yes ]; then
+	log "done. Peers fetch it from this node's hidden addresses at /ipfs/$CID/morphit-latest.tar.gz"
+else
+	log "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"
+fi

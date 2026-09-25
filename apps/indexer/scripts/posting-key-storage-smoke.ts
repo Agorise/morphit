@@ -33,16 +33,24 @@ const check = (name: string, cond: boolean, detail = '') => {
 };
 
 // ─── primaryPostingKey extractor ──────────────────────────────────
+// v1.18.0 review (R2): the stored key is what a pushed chat message is
+// verified against, so it must be a key the CHAIN would accept alone — the
+// first whose weight meets weight_threshold — or null. Every fixture below
+// carries weight_threshold, because the chain always does.
 check(
-	'1 extracts the first posting key from a well-formed authority',
+	'1 extracts the posting key from a single-key authority',
 	primaryPostingKey({
-		posting: { key_auths: [['BLT5vwvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv7Bjw', 1]] }
+		posting: {
+			weight_threshold: 1,
+			key_auths: [['BLT5vwvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv7Bjw', 1]]
+		}
 	}) === 'BLT5vwvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv7Bjw'
 );
 check(
-	'2 with multiple key_auths, takes the first',
+	'2 with several keys that can EACH sign alone, takes the first',
 	primaryPostingKey({
 		posting: {
+			weight_threshold: 1,
 			key_auths: [
 				['BLTfirst', 1],
 				['BLTsecond', 1]
@@ -53,12 +61,40 @@ check(
 check('3 absent posting → null', primaryPostingKey({}) === null);
 check(
 	'4 empty key_auths → null',
-	primaryPostingKey({ posting: { key_auths: [] } }) === null
+	primaryPostingKey({ posting: { weight_threshold: 1, key_auths: [] } }) === null
 );
 check(
 	'5 malformed key_auths entry → null',
-	// @ts-expect-error deliberately malformed shape
-	primaryPostingKey({ posting: { key_auths: [[123, 1]] } }) === null
+	primaryPostingKey({ posting: { weight_threshold: 1, key_auths: [[123, 1]] } }) === null
+);
+check(
+	'5a a 2-of-2 authority names NO key: neither can sign alone',
+	primaryPostingKey({
+		posting: {
+			weight_threshold: 2,
+			key_auths: [
+				['BLTa', 1],
+				['BLTb', 1]
+			]
+		}
+	}) === null,
+	'storing the first key let whoever held it alone impersonate the account on the fast path'
+);
+check(
+	'5b under a threshold, the FIRST KEY THAT MEETS IT, not the first key',
+	primaryPostingKey({
+		posting: {
+			weight_threshold: 2,
+			key_auths: [
+				['BLTweak', 1],
+				['BLTstrong', 2]
+			]
+		}
+	}) === 'BLTstrong'
+);
+check(
+	'5c no threshold on the shape → null (the chain always sends one)',
+	primaryPostingKey({ posting: { key_auths: [['BLTx', 1]] } }) === null
 );
 
 // ─── Source wiring assertions ─────────────────────────────────────
@@ -70,8 +106,9 @@ check(
 
 const dispatcher = read('indexer/dispatcher.ts');
 check(
-	'7 account-create ingest captures postingPubkey from the op',
-	/postingPubkey/.test(dispatcher) && /key_auths/.test(dispatcher)
+	'7 account-create AND account_update ingest both use the one signing-key rule',
+	(dispatcher.match(/signingPostingKey\(b\.posting\)/g) ?? []).length === 2,
+	'every writer of posting_pubkey must apply signingPostingKey — a second rule is a second answer'
 );
 check(
 	'8 INSERT stores posting_pubkey and fills NULLs on conflict (COALESCE)',
@@ -98,6 +135,27 @@ const stream = read('api/orderbookStream.ts');
 check(
 	'11 orderbook REST + stream both SELECT a.posting_pubkey',
 	/a\.posting_pubkey/.test(orderbook) && /a\.posting_pubkey/.test(stream)
+);
+
+// v1.18.0 review (D4): a fast-sync must hand every restored key back to THIS
+// node's reconcile. Checked at the call site — after the restore is confirmed,
+// before anything could start serving — not merely that the helper exists.
+const bootstrap = readFileSync(resolve(HERE, 'snapshot-bootstrap.ts'), 'utf8');
+{
+	const restoredAt = bootstrap.indexOf('✓ restored to block');
+	const distrustAt = bootstrap.indexOf('await distrustRestoredPostingKeys(db)');
+	const verifyAt = bootstrap.indexOf('Tier-2 hardening: op-log spot-check');
+	check(
+		'16 a snapshot restore withdraws the publisher\'s posting-key confirmations',
+		restoredAt > 0 && distrustAt > restoredAt && (verifyAt < 0 || distrustAt < verifyAt),
+		'snapshot-bootstrap.ts must await distrustRestoredPostingKeys(db) right after the restore is confirmed'
+	);
+}
+// v1.18.0 review (D5): rows the boot reconcile could not confirm are retried,
+// from the backfill's own completion handler.
+check(
+	'17 rows left unconfirmed at boot are retried rather than left for the next restart',
+	/rc\.remaining > 0\)\s*\{[\s\S]{0,400}keepReconcilingPostingKeys\(db, blurt/.test(main)
 );
 
 // The key invariant: verification must NOT read this display column.

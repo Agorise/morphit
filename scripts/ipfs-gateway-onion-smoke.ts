@@ -56,7 +56,8 @@ check('frontend: gateway upstream is host.docker.internal:8082', (fe.match(/host
 
 // ── v1.16.10 upgrade self-heal: auto-expose on existing instances ──
 const up = raw('apps/ops-cli/src/commands/upgrade.ts');
-check('upgrade: self-heals IPFS gateway exposure + is called', /function healIpfsGatewayExposure\(/.test(up) && /\bhealIpfsGatewayExposure\(\);/.test(up));
+// Called from the shared heal list since the final v1.18.0 review (runSelfHeals).
+check('upgrade: self-heals IPFS gateway exposure + is called', /function healIpfsGatewayExposure\(/.test(up) && /\(\) => healIpfsGatewayExposure\(\)/.test(up) && /await runSelfHeals\(\)/.test(up));
 check('upgrade: exposes the all-interfaces bind :8082', /\/ip4\/0\.0\.0\.0\/tcp\/8082/.test(up));
 check('upgrade: sets NoFetch true BEFORE the bind (never briefly an open proxy)', /Gateway\.NoFetch.*true/.test(up) && up.indexOf('NoFetch') < up.indexOf("Addresses.Gateway', EXPOSE_ADDR"));
 check('upgrade: VERIFIES the gateway is live on the bridge (curl 127.0.0.1:8082)', /127\.0\.0\.1:8082/.test(up));

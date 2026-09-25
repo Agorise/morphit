@@ -38,6 +38,12 @@
  *     one review per reviewer/subject/order) and filtered by the sock-puppet
  *     signals. Reputation-by-collusion therefore still costs a real listing fee
  *     per fake trade and still trips the reciprocity/related-account signals.
+ *     (v1.18.0 deep-deep, M2) That "real listing fee" claim was false until
+ *     then: an order with NO fee (fee_status 'missing') could be completed and
+ *     counted. This handler still completes any live order (completing is also
+ *     how an owner takes a listing down), but TRADE_COUNT_SQL in
+ *     $api/reputationJoin now counts only completed orders whose fee is
+ *     verified.
  * Naming yourself is rejected (self-trade); an unparseable name is rejected
  * outright rather than silently dropped, so a client bug can't quietly cost
  * someone their trade credit.

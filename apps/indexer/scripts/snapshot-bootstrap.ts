@@ -25,13 +25,18 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config/index.ts';
 import { installHiddenServiceDispatcher } from '../src/indexer/hiddenServiceDispatcher.ts';
 import { hiddenServiceProxyConfigFromEnv } from '../src/indexer/hiddenServiceFetch.ts';
 import { createDatabase } from '../src/db/pool.ts';
 import { latestSchemaVersion } from '../src/db/migrations.ts';
 import { BlurtClient } from '../src/blurt/client.ts';
+import { distrustRestoredPostingKeys } from '../src/indexer/postingKeyBackfill.ts';
+import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
+import { sanitizeDumpFile, newRestrictKey, DumpRefusedError } from '../src/db/snapshotDumpSanitize.ts';
+import { scrubRestoredLocalState, dropRoutinesNotInSchema } from '../src/db/snapshotLocalState.ts';
 import {
 	parseManifest,
 	verifyManifestCompatible,
@@ -42,7 +47,6 @@ import {
 	type TargetFacts
 } from '../src/db/snapshotManifest.ts';
 import {
-	selectNewestSnapshotOp,
 	INDEXER_SNAPSHOT_SIGNER_DEFAULT,
 	type IndexerSnapshotPayload,
 	type SelectedSnapshotOp
@@ -132,25 +136,36 @@ async function acquireFromChain(
 	work: string
 ): Promise<SelectedSnapshotOp> {
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
-	const trusted = new Set([signer]);
 	const limit = Math.max(1, Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000));
+	const pinnedPubkey = snapshotSignerPubkey(config, signer);
 
 	process.stderr.write(`\nsnapshot: reading @${signer}'s chain history for the newest indexer_snapshot_v1 …\n`);
 	const blurt = new BlurtClient(config);
-	let history: unknown;
+	// v1.18.0 deep-deep (rv2-1): this used to be ONE callCondenser — the
+	// fastest endpoint alone decided which op (and so which dump) this node
+	// restored, and nothing checked that @signer really signed it. Now two
+	// independent RPC operators must agree on the op AND on the block holding
+	// it, and its signature must recover to the pinned posting key.
+	let resolved: Awaited<ReturnType<typeof resolveTrustedSnapshotOp>>;
 	try {
-		history = await blurt.callCondenser('get_account_history', [signer, -1, limit]);
+		resolved = await resolveTrustedSnapshotOp(blurt, {
+			signer,
+			pinnedPubkey,
+			chainId: config.chainId,
+			historyLimit: limit,
+			minAgree: 2
+		});
 	} catch (e) {
-		die(`could not read @${signer}'s account history from any RPC: ${e instanceof Error ? e.message : String(e)}`);
+		die(`could not read @${signer}'s snapshot op from the chain: ${e instanceof Error ? e.message : String(e)}`);
 	}
-	const sel = selectNewestSnapshotOp(history, trusted);
-	if (!sel) {
+	if (!resolved.ok) {
 		die(
-			`no valid indexer_snapshot_v1 op signed by a trusted signer (@${signer}) in the last ${limit} history entries. ` +
-				`Either none has been published yet, or raise --history-limit. Full replay is always available: set ` +
+			`${resolved.reason} Nothing was downloaded or changed. Full replay is always available: set ` +
 				`MORPHIT_INDEXER_START_BLOCK to genesis and start the indexer.`
 		);
 	}
+	const sel = resolved.selected;
+	const history = resolved.history;
 	const op: IndexerSnapshotPayload = sel.payload;
 	process.stderr.write(
 		`  found: block ${op.last_applied_block.toLocaleString()} · schema v${op.schema_version} · ` +
@@ -224,12 +239,44 @@ async function acquireFromChain(
 			);
 			continue;
 		}
-		process.stderr.write('  ✓ downloaded + sha256 matches the on-chain op.\n');
+		process.stderr.write('  ✓ downloaded + sha256 matches the signed on-chain op.\n');
 		return sel;
 	}
 	die('every source failed to yield a snapshot matching the on-chain sha256. Try again later, set --gateway, or do a full replay.');
 }
 
+
+/**
+ * The public key a snapshot op from `signer` must be signed with (rv2-1).
+ * The official account's is the pinned MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY
+ * — the same anchor the release and rpc-directory handlers check. Any other
+ * signer needs its key pinned explicitly with --signer-pubkey.
+ */
+function snapshotSignerPubkey(config: ReturnType<typeof loadConfig>, signer: string): string {
+	const explicit = flag('signer-pubkey');
+	if (explicit !== undefined && explicit !== '') return explicit;
+	if (signer === config.officialAccountName.toLowerCase()) return config.officialPostingPubkey;
+	die(
+		`--signer @${signer} is not the official account (@${config.officialAccountName}), so its posting key ` +
+			`is not pinned. Add --signer-pubkey <BLT…> with the key you trust for @${signer}.`
+	);
+}
+
+/** Repo root, from this script's own location (apps/indexer/scripts/). */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+/**
+ * Does this psql understand `\restrict`? The restore depends on it: it is what
+ * makes psql refuse every meta-command in the dump (see snapshotDumpSanitize).
+ * It shipped in PostgreSQL 18 and in the August 2025 minor releases of 13–17.
+ */
+function psqlSupportsRestrict(dbUrl: string): boolean {
+	const r = spawnSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', dbUrl], {
+		input: '\\restrict k0\n\\unrestrict k0\n',
+		stdio: ['pipe', 'ignore', 'ignore']
+	});
+	return r.status === 0;
+}
 
 /**
  * Route .onion / .b32.i2p fetches through Tor and i2pd.
@@ -279,8 +326,11 @@ async function main(): Promise<void> {
 	if (has('verify-only')) {
 		process.env.MORPHIT_INDEXER_DATABASE_URL ??= 'postgres://verify-only-unused';
 		process.env.MORPHIT_INDEXER_PUBLIC_ORIGIN ??= 'https://verify-only.invalid';
+		// The REAL @morphit posting key (the documented default), not a
+		// placeholder: since v1.18.0 deep-deep (rv2-1) the snapshot op's
+		// signature is checked against it, so a dry run proves that too.
 		process.env.MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY ??=
-			'BLT1111111111111111111111111111111114T1Anm';
+			'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9';
 		if ((process.env.MORPHIT_INDEXER_CHAIN_ID ?? '') === '') {
 			die(
 				'--verify-only still needs MORPHIT_INDEXER_CHAIN_ID (64-char hex). It is the gate that ' +
@@ -422,13 +472,49 @@ async function main(): Promise<void> {
 		}
 
 		// ── restore ───────────────────────────────────────────────
+		// v1.18.0 deep-deep (rv2-1b, rv2-8). The dump used to be piped straight
+		// into psql, which runs its own backslash commands from its input — `\!`
+		// is a shell command, and this runs as root. And an `OWNER TO` naming the
+		// publisher's role failed on any box whose role differs, after `--clean`
+		// had already dropped everything. Now: the dump is filtered (no
+		// meta-commands, no ownership or privilege statements), psql is put into
+		// `\restrict` mode with a key only this run knows, so psql itself refuses
+		// any meta-command anywhere in the dump, and the whole restore is ONE
+		// transaction — any failure leaves the existing database as it was.
 		process.stderr.write(`\nsnapshot: restoring into the indexer DB (this replaces existing objects)…\n`);
+		if (!psqlSupportsRestrict(config.databaseUrl)) {
+			die(
+				'this box\'s psql is too old to restore a snapshot safely (it needs \\restrict, added in the ' +
+					'August 2025 PostgreSQL client releases: 13.22, 14.19, 15.14, 16.10, 17.6 or 18). Update the ' +
+					'postgresql-client package and re-run. Nothing was changed.'
+			);
+		}
+		const sqlPath = join(work, 'restore.sql');
+		try {
+			const st = await sanitizeDumpFile(dumpPath, sqlPath, newRestrictKey());
+			if (st.droppedOwnership + st.droppedPrivileges > 0) {
+				process.stderr.write(
+					`  note: left out ${st.droppedOwnership} ownership and ${st.droppedPrivileges} privilege statement(s); ` +
+						`everything is owned by this node's own database role.\n`
+				);
+			}
+		} catch (e) {
+			if (e instanceof DumpRefusedError) {
+				die(`refusing this snapshot: ${e.message}. Nothing was changed.`);
+			}
+			die(`could not read the snapshot dump: ${e instanceof Error ? e.message : String(e)}. Nothing was changed.`);
+		}
 		const restore = spawnSync(
-			'bash',
-			['-c', `set -o pipefail; gunzip -c "${dumpPath}" | psql -v ON_ERROR_STOP=1 "$DBURL" >/dev/null`],
-			{ env: { ...process.env, DBURL: config.databaseUrl }, stdio: ['ignore', 'inherit', 'inherit'] }
+			'psql',
+			['-X', '-q', '-v', 'ON_ERROR_STOP=1', '--single-transaction', '-f', sqlPath, config.databaseUrl],
+			{ stdio: ['ignore', 'ignore', 'inherit'] }
 		);
-		if (restore.status !== 0) die(`restore failed (psql exit ${restore.status ?? 'signal'}). The DB may be partially restored — investigate before starting the indexer.`);
+		if (restore.status !== 0) {
+			die(
+				`restore failed (psql exit ${restore.status ?? 'signal'}). It ran as one transaction, so the ` +
+					`database is exactly as it was before. Nothing to clean up.`
+			);
+		}
 
 		// ── confirm ───────────────────────────────────────────────
 		const after = await db.query<{ chain_id: string; last_applied_block: string }>(
@@ -443,6 +529,52 @@ async function main(): Promise<void> {
 			`\n✓ restored to block ${gotBlock.toLocaleString()} (chain ${gotChain}).\n`
 		);
 
+		// ── posting keys: this node confirms them itself (v1.18.0, D4) ──
+		// A restored row marked confirmed would be trusted by the chat fast path
+		// with no chain read, on the publisher's word alone — and the op-log check
+		// below does not cover posting keys. Withdraw every confirmation; the
+		// indexer's own reconcile asks the chain for each on its next start.
+		try {
+			const withdrawn = await distrustRestoredPostingKeys(db);
+			if (withdrawn > 0) {
+				process.stderr.write(
+					`  posting keys: ${withdrawn.toLocaleString()} will be re-confirmed against the chain ` +
+						`when the indexer starts.\n`
+				);
+			}
+		} catch (err) {
+			die(
+				`could not reset posting-key confirmations after restore: ` +
+					`${err instanceof Error ? err.message : String(err)}. Do not start the indexer on ` +
+					`this database until this succeeds — re-run the restore.`
+			);
+		}
+
+		// ── local-only state and foreign code (v1.18.0 deep-deep, rv2-5 / rv2-1c) ──
+		// A snapshot carries the chain's state, never the publisher's own: an
+		// older snapshot still holds its push subscriptions, its relay payout
+		// queue and similar (see snapshotLocalState.ts) — this node's relay would
+		// otherwise act on them. And a snapshot is data: any function, trigger or
+		// rule it created that schema.sql does not is dropped before the indexer
+		// can fire it.
+		try {
+			const scrubbed = await scrubRestoredLocalState(db);
+			if (scrubbed > 0) {
+				process.stderr.write(`  local-only rows from the publisher left out: ${scrubbed.toLocaleString()}.\n`);
+			}
+			const schemaSql = readFileSync(join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'schema.sql'), 'utf8');
+			const dropped = await dropRoutinesNotInSchema(db, schemaSql);
+			if (dropped.length > 0) {
+				process.stderr.write(`  removed ${dropped.length} object(s) the snapshot added that Morphit does not define:\n`);
+				for (const d of dropped.slice(0, 20)) process.stderr.write(`      ${d}\n`);
+			}
+		} catch (err) {
+			die(
+				`could not tidy the restored database: ${err instanceof Error ? err.message : String(err)}. ` +
+					`Do not start the indexer on this database until this succeeds — re-run the restore.`
+			);
+		}
+
 		// ── Tier-2 hardening: op-log spot-check (from-chain only) ──
 		// Prove the restored `ops` log matches the chain before we recommend
 		// serving. Quarantine on any mismatch. --skip-verify opts out (e.g. a
@@ -450,26 +582,34 @@ async function main(): Promise<void> {
 		if (fromChain && !has('skip-verify')) {
 			process.stderr.write(`\nsnapshot: Tier-2 op-log spot-check against the chain…\n`);
 			const samples = flag('verify-samples') ?? '40';
+			// v1.18.0 deep-deep (rv2-6): this spawned plain `node` on a .ts file
+			// with no path aliases, which died with ERR_MODULE_NOT_FOUND ('$config')
+			// and exit 1 — read as QUARANTINE, after a restore that was fine. Run it
+			// the way fast-sync runs this script: the repo's tsx with the tsconfig.
+			// And only its QUARANTINE code (3) means quarantine; a crash is
+			// inconclusive, never a verdict.
 			const verify = spawnSync(
-				process.execPath,
+				join(REPO_ROOT, 'node_modules', '.bin', 'tsx'),
 				[
-					process.argv[1]!.replace(/snapshot-bootstrap\.ts$/, 'snapshot-verify-oplog.ts'),
+					'--tsconfig',
+					join(REPO_ROOT, 'tsconfig.smoke.json'),
+					join(REPO_ROOT, 'apps', 'indexer', 'scripts', 'snapshot-verify-oplog.ts'),
 					'--samples',
 					samples,
 					'--up-to',
 					String(gotBlock)
 				],
-				{ stdio: ['ignore', 'inherit', 'inherit'] }
+				{ cwd: REPO_ROOT, stdio: ['ignore', 'inherit', 'inherit'] }
 			);
-			if (verify.status === 1) {
+			if (verify.status === 3) {
 				die(
 					'op-log spot-check QUARANTINED this snapshot (it does not match the chain). ' +
 						'Wipe the DB and full-replay (MORPHIT_INDEXER_START_BLOCK=genesis).'
 				);
 			}
-			if (verify.status === 2) {
+			if (verify.status !== 0 && verify.status !== 3) {
 				process.stderr.write(
-					`  note: op-log spot-check was INCONCLUSIVE (chain unreachable). The snapshot is\n` +
+					`  note: op-log spot-check was INCONCLUSIVE (chain unreachable, or nothing to sample). The snapshot is\n` +
 						`  restored but NOT yet chain-verified — re-run snapshot-verify-oplog.ts when the\n` +
 						`  pool is reachable, or proceed knowing the tail catch-up will still verify recent ops.\n`
 				);
@@ -487,7 +627,14 @@ async function main(): Promise<void> {
 	}
 }
 
-main().catch((err) => {
-	console.error('snapshot-bootstrap failed:', err instanceof Error ? err.message : err);
-	process.exit(1);
-});
+// Exit as soon as the work is done (v1.18.0 deep-deep, rv2-1/rv2-9): quorum
+// reads abandon the slower RPC calls once two operators agree, and an abandoned
+// call keeps retrying in the background until its own timeout (a minute over
+// Tor/I2P), which would otherwise hold the process open for nothing.
+main().then(
+	() => process.exit(0),
+	(err) => {
+		console.error('snapshot-bootstrap failed:', err instanceof Error ? err.message : err);
+		process.exit(1);
+	}
+);

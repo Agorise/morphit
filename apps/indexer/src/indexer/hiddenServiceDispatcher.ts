@@ -1,223 +1,82 @@
 /**
  * Morphit indexer — global per-host hidden-service routing dispatcher.
  *
- * WHY THIS EXISTS
- * The chain RPC client is `@beblurt/dblurt`, whose `Client` makes calls with the
- * GLOBAL `fetch` (undici) and exposes no per-request dispatcher hook. So to let
- * the RPC pool include hidden-service endpoints (.onion / .b32.i2p) we install a
- * global undici dispatcher that routes PER ORIGIN:
- *
- *   - `.onion`  → the Tor SOCKS5 proxy (via `makeSocks5Connector`)
- *   - `.b32.i2p`/`.i2p` → the i2pd HTTP proxy (`ProxyAgent`)
- *   - everything else (clearnet, `.loki`) → a plain `Agent`, i.e. undici's
- *     ordinary behaviour, UNCHANGED.
- *
- * SECURITY / BLAST-RADIUS REASONING (read before touching this)
- *  1. CLEARNET IS UNTOUCHED. A clearnet origin is delegated to a plain `Agent`
- *     with undici defaults — byte-for-byte the same path as if this dispatcher
- *     were never installed. The router only *diverts* the two hidden suffixes;
- *     it never alters, inspects, or proxies clearnet traffic.
- *  2. ONLY the two hidden suffixes divert, and via a STRICT classifier
- *     (`hiddenNetworkOf`: `.onion` must be a 56-char v3 address; `.i2p` suffix).
- *     A clearnet host can never be routed to a proxy.
- *  3. NO SSRF SURFACE. `.onion`/`.i2p` are not IP addresses, so they cannot
- *     target internal/loopback IPs through the proxy. The app-level SSRF guards
- *     (net-defense IP/DNS pinning) live above the transport and are unaffected.
- *  4. FAIL-SAFE, NEVER FAIL-OPEN. If the Tor/i2pd proxy is down, the hidden
- *     endpoint's connection fails and the pool marks it unhealthy and uses a
- *     clearnet endpoint — the node keeps working. A hidden request is NEVER
- *     silently downgraded onto the clear net: if the proxy for its network is
- *     unconfigured we still hand it to the (plain) direct agent, where a `.onion`
- *     host simply fails DNS resolution — it cannot leak, because there is no real
- *     host to leak to.
- *  5. GATED INSTALL. `main.ts` installs this ONLY when hidden RPC endpoints are
- *     actually configured. A clearnet-only node never sets a global dispatcher,
- *     so its behaviour is exactly as before.
+ * The router itself now lives in `@morphit/hidden-transport/router`, so the
+ * RELAY installs the same one (F32): it was the process that broadcasts, and
+ * on a tor-only node it had no router at all. This module keeps every name the
+ * indexer and its tests import, and adds the indexer's install log line. The
+ * design notes — why clearnet is untouched, why only two suffixes divert, why
+ * a hidden-only node fails closed — are in the package, with the code they
+ * describe.
  */
 
-import { Agent, ProxyAgent, Dispatcher, setGlobalDispatcher, getGlobalDispatcher } from 'undici';
 import {
-	hiddenNetworkOf,
-	makeSocks5Connector,
-	parseHostPort,
-	type HiddenServiceProxyConfig
-} from './hiddenServiceFetch';
+	installHiddenServiceDispatcher as installRouter,
+	type HiddenDispatcherHandle
+} from '@morphit/hidden-transport/router';
+import type { HiddenServiceProxyConfig } from './hiddenServiceFetch';
 import { logger } from '$log';
+
+export {
+	hiddenRouteOf,
+	isClearnetOrigin,
+	clearnetRefused,
+	ClearnetRefusedError,
+	buildHiddenSubDispatchers,
+	HiddenServiceRoutingDispatcher
+} from '@morphit/hidden-transport/router';
+export type {
+	HiddenRoute,
+	HiddenSubDispatchers,
+	HiddenDispatcherHandle
+} from '@morphit/hidden-transport/router';
 
 const log = logger('hidden-dispatcher');
 
-export type HiddenRoute = 'tor' | 'i2p' | 'direct';
-
-/** Which transport an origin must use. PURE + total — the security-critical
- *  routing decision, exhaustively unit-tested. `.loki` and clearnet both go
- *  `direct` (lokinet resolves `.loki` on its tun; clearnet is normal). */
-export function hiddenRouteOf(origin: string): HiddenRoute {
-	const net = hiddenNetworkOf(origin);
-	return net === 'tor' ? 'tor' : net === 'i2p' ? 'i2p' : 'direct';
-}
-
 /**
- * Is this origin a PUBLIC clearnet host — the thing a hidden-only node must
- * never touch? PURE. True only for a real, routable public DNS name / IP.
- * Returns FALSE for: `.onion`/`.i2p` (hidden), `.loki` (lokinet's own tun),
- * localhost/loopback, and RFC1918/link-local/ULA private addresses — all of
- * which are either private nets or local services (the DB, a local IPFS) and
- * carry no clearnet-exit / deanonymisation risk. Used by the fail-closed
- * hidden-only policy below to refuse (never proxy, never leak) public clearnet.
- */
-export function isClearnetOrigin(origin: string): boolean {
-	if (hiddenRouteOf(origin) !== 'direct') return false; // tor/i2p → not clearnet
-	let host: string;
-	try {
-		host = new URL(origin).hostname.toLowerCase();
-	} catch {
-		return false;
-	}
-	host = host.replace(/^\[|\]$/g, ''); // strip IPv6 brackets
-	if (host === '' || host === 'localhost' || host === '::1') return false;
-	if (host.endsWith('.loki') || host.endsWith('.onion') || host.endsWith('.i2p')) return false;
-	// Loopback / RFC1918 / link-local / IPv6 ULA + link-local → local, not clearnet.
-	if (
-		/^127\./.test(host) ||
-		/^10\./.test(host) ||
-		/^192\.168\./.test(host) ||
-		/^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-		/^169\.254\./.test(host) ||
-		/^(fc|fd)[0-9a-f]{2}:/.test(host) ||
-		/^fe80:/.test(host)
-	) {
-		return false;
-	}
-	return true; // a real public host → clearnet
-}
-
-/** Extract the origin string undici hands us (it may pass a string or URL). */
-function originOf(opts: { origin?: string | URL | null }): string {
-	const o = opts.origin;
-	if (o === null || o === undefined) return '';
-	return typeof o === 'string' ? o : o.href;
-}
-
-/** The three sub-dispatchers the router delegates to. `tor`/`i2p` are optional
- *  (a network whose proxy is unconfigured falls back to `direct`). */
-export interface HiddenSubDispatchers {
-	readonly direct: Dispatcher;
-	readonly tor?: Dispatcher;
-	readonly i2p?: Dispatcher;
-}
-
-/** Build the sub-dispatchers from proxy config: a plain Agent for clearnet, a
- *  SOCKS-connector Agent for Tor, an HTTP ProxyAgent for i2pd. Separated from the
- *  router so tests can inject mocks and assert routing without a network. */
-export function buildHiddenSubDispatchers(config: HiddenServiceProxyConfig): HiddenSubDispatchers {
-	const subs: { direct: Dispatcher; tor?: Dispatcher; i2p?: Dispatcher } = {
-		// Clearnet: undici defaults — identical to no dispatcher at all.
-		direct: new Agent()
-	};
-	if (config.torSocks.length > 0) {
-		const { host, port } = parseHostPort(config.torSocks, 9050);
-		// undici's connect typing doesn't model a custom SOCKS connector.
-		subs.tor = new Agent({ connect: makeSocks5Connector(host, port) as never });
-	}
-	if (config.i2pHttpProxy.length > 0) {
-		const { host, port } = parseHostPort(config.i2pHttpProxy, 4444);
-		subs.i2p = new ProxyAgent(`http://${host}:${port}`);
-	}
-	return subs;
-}
-
-/**
- * A composed undici Dispatcher that delegates each request to one of three
- * sub-dispatchers by origin. It owns no connection logic of its own — it is pure
- * routing over `Agent`/`ProxyAgent`.
- */
-export class HiddenServiceRoutingDispatcher extends Dispatcher {
-	readonly #subs: HiddenSubDispatchers;
-	readonly #clearnetPolicy: 'allow' | 'refuse';
-
-	constructor(subs: HiddenSubDispatchers, clearnetPolicy: 'allow' | 'refuse' = 'allow') {
-		super();
-		this.#subs = subs;
-		this.#clearnetPolicy = clearnetPolicy;
-	}
-
-	/** Route by origin. Falls back to the direct agent when a hidden network's
-	 *  proxy wasn't configured — where a `.onion`/`.i2p` host fails to resolve
-	 *  (safe: nothing to leak to), rather than silently proxying it wrong.
-	 *  In `refuse` (hidden-only) mode a PUBLIC clearnet origin is FAIL-CLOSED:
-	 *  the request is errored, never handed to the direct agent — so a
-	 *  hidden-only node can never leak its IP even if some code path slips a
-	 *  clearnet URL through. Local/loopback/`.loki` are unaffected. */
-	override dispatch(
-		opts: Dispatcher.DispatchOptions,
-		handler: Dispatcher.DispatchHandler
-	): boolean {
-		const origin = originOf(opts);
-		if (this.#clearnetPolicy === 'refuse' && isClearnetOrigin(origin)) {
-			const err = new Error(
-				`clearnet blocked (hidden-only, fail-closed): refusing to reach ${origin} over the open internet`
-			);
-			// Reject through the handler per undici's contract, never dispatch.
-			try {
-				handler.onConnect?.(() => {});
-			} catch {
-				/* older handler shape without onConnect */
-			}
-			handler.onError?.(err);
-			return false;
-		}
-		const route = hiddenRouteOf(origin);
-		const sub =
-			route === 'tor'
-				? (this.#subs.tor ?? this.#subs.direct)
-				: route === 'i2p'
-					? (this.#subs.i2p ?? this.#subs.direct)
-					: this.#subs.direct;
-		return sub.dispatch(opts, handler);
-	}
-
-	/** Close all three sub-dispatchers. Named to avoid clashing with undici's
-	 *  overloaded `close`/`destroy` signatures; called by the install handle. */
-	async closeAll(): Promise<void> {
-		await Promise.all(
-			[this.#subs.direct, this.#subs.tor, this.#subs.i2p]
-				.filter((d): d is Dispatcher => d !== undefined)
-				.map((d) => d.close().catch(() => {}))
-		);
-	}
-}
-
-export interface HiddenDispatcherHandle {
-	/** Restore the dispatcher that was global before install, and close ours. */
-	uninstall(): Promise<void>;
-}
-
-/**
- * Install the routing dispatcher globally so dblurt's `fetch` reaches hidden
- * endpoints. Idempotent-ish: keeps a handle to the previous global dispatcher so
- * it can be restored (used by tests / clean shutdown). Call ONLY when hidden RPC
- * endpoints are configured — see the gating in main.ts.
+ * Install the routing dispatcher globally (see the package), and say so in the
+ * indexer's log. main.ts always installs it; `indexerRouterPolicy` picks the
+ * policy (v1.18.0 deep-deep, L3).
  */
 export function installHiddenServiceDispatcher(
 	config: HiddenServiceProxyConfig,
-	clearnetPolicy: 'allow' | 'refuse' = 'allow'
+	policy: 'allow' | 'refuse' = 'allow'
 ): HiddenDispatcherHandle {
-	const previous = getGlobalDispatcher();
-	const router = new HiddenServiceRoutingDispatcher(buildHiddenSubDispatchers(config), clearnetPolicy);
-	setGlobalDispatcher(router);
+	const handle = installRouter(config, policy);
 	log.info('hidden_dispatcher_installed', {
 		tor: config.torSocks.length > 0 ? config.torSocks : '(disabled)',
 		i2p: config.i2pHttpProxy.length > 0 ? config.i2pHttpProxy : '(disabled)',
-		clearnet_policy: clearnetPolicy,
+		clearnet_policy: policy,
 		note:
-			clearnetPolicy === 'refuse'
+			policy === 'refuse'
 				? 'HIDDEN-ONLY: public clearnet fail-closed; .onion→Tor, .b32.i2p→i2pd, local/.loki allowed'
 				: 'clearnet unchanged; .onion→Tor, .b32.i2p→i2pd'
 	});
-	return {
-		async uninstall(): Promise<void> {
-			setGlobalDispatcher(previous);
-			await router.closeAll().catch(() => {});
-		}
-	};
+	return handle;
+}
+
+/**
+ * Whether, and how, the indexer installs the router. PURE. Always installed.
+ *
+ * (v1.18.0 deep-deep, L3) It used to be installed only when hidden RPC
+ * endpoints were CONFIGURED, which left two configurations without one:
+ *   - a clearnet node with a blank hidden list still merges `.onion`/`.i2p`
+ *     nodes from the on-chain RPC directory into its pool (at boot and at
+ *     runtime); with no router those names went to the system resolver, the
+ *     ISP's. With the router, a hidden name goes to its proxy or is refused
+ *     before any lookup, and clearnet goes to a plain Agent — undici's default,
+ *     unchanged.
+ *   - a node reading only from a co-located blurtd (both lists blank) is
+ *     hidden-only by every other rule here (an empty clearnet pool drops the
+ *     clearnet price sources and makes the peer monitor sample over hidden
+ *     addresses only), but with no router `clearnetRefused()` was false and
+ *     the probe, chat fan-out and FX sources used clearnet from the box's own
+ *     address. An empty clearnet pool now means `refuse`, whatever else is set;
+ *     loopback (the co-located blurtd) is never refused.
+ */
+export function indexerRouterPolicy(config: {
+	readonly blurtRpcEndpoints: readonly string[];
+	readonly hiddenRpcEndpoints: readonly string[];
+}): 'refuse' | 'allow' {
+	return config.blurtRpcEndpoints.length === 0 ? 'refuse' : 'allow';
 }

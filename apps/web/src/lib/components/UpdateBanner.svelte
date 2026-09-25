@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
+	import { withHiddenFloor } from '$net/transportBudget';
 	import { browser } from '$app/environment';
 	import { runningVersion } from '$stores/release';
 	import { fetchWithTimeout } from '$net/fetchWithTimeout';
@@ -151,7 +152,7 @@
 				const res = await fetchWithTimeout(
 					verifyJsonPollUrl(),
 					{ cache: 'no-store', credentials: 'same-origin' },
-					10_000
+					withHiddenFloor(10_000)
 				);
 				if (cancelled || !res.ok) return;
 				const deployed = parseDeployedVersion(await res.text());

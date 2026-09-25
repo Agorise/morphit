@@ -466,6 +466,10 @@ function byteLength(s: string): number {
 	return encoder.encode(s).byteLength;
 }
 
+// (v1.18.0 deep-deep, M1) Its own tiny module, so components can show an
+// SVG avatar without pulling the whole sanitizer into their bundle.
+export { svgAvatarImgSrc } from './imgSrc';
+
 // ─── SVG sanitization ───────────────────────────────────────────
 
 /**

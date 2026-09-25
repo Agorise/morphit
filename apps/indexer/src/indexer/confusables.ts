@@ -347,6 +347,41 @@ export function ownsReservedName(signer: string, input: string): boolean {
 	return false;
 }
 
+/** (v1.18.0 deep-deep, L3) Confusable-aware reserved-name check for operator
+ *  TAGS. What was wrong: tags were checked only by exact equality
+ *  (`isReservedTag`), so `m0rphit`, `rnorphit` and `morphit-io` were all
+ *  claimable (and a tag is immutable, so a look-alike is squatted for good),
+ *  while the display-name guard already used the confusable-aware regexes.
+ *
+ *  Refused: a tag that IS a reserved name under the homoglyph table, or that
+ *  is a reserved name followed by a separator — the namespaced shape the
+ *  project's own accounts use (`morphit-fees`, `morphit-relay`), so
+ *  `morphit-io` / `kencode-node` read as official. Tags are ASCII
+ *  `[a-z0-9._-]`: the single-character table covers digits-for-letters
+ *  (`0`→o, `1`→i/l, …), and the two ASCII multi-letter look-alikes (`rn`→m,
+ *  `vv`→w) plus `.`/`_` as separators are folded first.
+ *
+ *  Still allowed (earlier deliberate decisions, P6-3 and cp670): a tag that
+ *  merely CONTAINS a brand with no separator after it, e.g. `mymorphit` or the
+ *  first-party regional `morphitlat-relay`.
+ *
+ *  Deliberately a SEPARATE function: `isReservedTag` stays exact-match because
+ *  federationProbe's both-reserved relay rule relies on it meaning "one of the
+ *  exact reserved ACCOUNT names" — a confusable match there would let an
+ *  attacker-created look-alike account pass as a brand account. */
+const RESERVED_TAG_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.flatMap((n) => {
+	const src = compileReservedRegex(n).source;
+	return [new RegExp('^' + src + '$', 'i'), new RegExp('^' + src + '-', 'i')];
+});
+
+export function tagImpersonatesReserved(tag: string): boolean {
+	const folded = tag.toLowerCase().replace(/rn/g, 'm').replace(/vv/g, 'w').replace(/[._]/g, '-');
+	for (const re of RESERVED_TAG_REGEXES) {
+		if (re.test(folded)) return true;
+	}
+	return false;
+}
+
 /** P6-3 audit fix: check whether an operator-tag matches a
  *  project-reserved name.  Tag charset is `[a-z0-9._-]+` (ASCII)
  *  so case-insensitive equality against RESERVED_NAMES_RAW is the

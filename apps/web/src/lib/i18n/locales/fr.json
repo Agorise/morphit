@@ -356,7 +356,13 @@
 			"failed_label": "Échec",
 			"retry": "Réessayer",
 			"retry_aria": "Réessayer l'envoi de ce message",
-			"peer_not_ready": "Ce destinataire n'a pas encore ouvert le chat Morphit. Quand il le fera, votre message passera lors d'une nouvelle tentative."
+			"peer_not_ready": "Ce destinataire n'a pas encore ouvert le chat Morphit. Quand il le fera, votre message passera lors d'une nouvelle tentative.",
+			"not_confirmed_on_chain": "Non confirmé sur la blockchain — il a peut-être été perdu. Touchez Réessayer pour l'envoyer à nouveau.",
+			"on_chain_not_accepted": "Présent sur la blockchain, mais pas accepté pour la remise — le destinataire n'accepte peut-être pas vos messages pour l'instant. Le renvoyer n'y changerait rien.",
+			"session_locked": "Votre session est verrouillée. Déverrouillez-la et réessayez.",
+			"unrecorded_label": "Non enregistré sur la blockchain",
+			"unrecorded_detail": "Ce message vous est parvenu directement depuis le serveur de l'expéditeur, mais la blockchain ne l'a jamais enregistré : il n'existe donc aucune preuve permanente de son envoi. Si l'application de l'expéditeur l'a signalé comme non envoyé, il le renverra peut-être.",
+			"unrecorded_detail_own": "Ce message a été envoyé depuis une autre de vos sessions, mais la blockchain ne l'a jamais enregistré : il n'existe donc aucune preuve permanente de son envoi. Vous pouvez l'envoyer à nouveau."
 		},
 		"composer": {
 			"aria_label": "Envoyer un message",
@@ -463,7 +469,8 @@
 				"body": "Dans ce mode, vos messages ne peuvent pas être récupérés après votre départ. Enregistrez un PDF maintenant si vous souhaitez en conserver une copie.",
 				"get_now": "Obtenir mon PDF maintenant",
 				"later": "Plus tard"
-			}
+			},
+			"chain_unreachable": "La blockchain n'a pas pu être jointe pour vérifier la clé de discussion de ce contact, le message n'a donc pas été envoyé. C'est courant sur Tor et I2P, où les connexions mettent plus de temps à s'établir. Rien d'anormal — réessayez dans un instant."
 		},
 		"live": "En direct",
 		"loading": "Chargement de la conversation…",
@@ -693,7 +700,8 @@
 			"compare_body": "Lisez les 8 mots à votre contact par appel vocal, en personne ou via un autre canal de confiance. NE les comparez PAS dans ce chat. Si un seul mot diffère, considérez la conversation comme compromise.",
 			"why_show": "Pourquoi est-ce important ?",
 			"why_hide": "Masquer l'explication",
-			"why_body": "Par défaut, le chat Morphit fait confiance à l'indexer pour délivrer la bonne clé de chat de votre contact. Un indexer hostile pourrait substituer des clés contrôlées par un attaquant et lire vos messages. L'empreinte de 8 mots est calculée localement à partir des vraies clés des deux côtés — si vous voyez tous les deux les mêmes mots, pas de MITM. Cela protège uniquement contre le MITM ; cela NE PROUVE PAS que la personne à l'autre bout du téléphone est bien celle qu'elle prétend être."
+			"why_body": "Par défaut, le chat Morphit fait confiance à l'indexer pour délivrer la bonne clé de chat de votre contact. Un indexer hostile pourrait substituer des clés contrôlées par un attaquant et lire vos messages. L'empreinte de 8 mots est calculée localement à partir des vraies clés des deux côtés — si vous voyez tous les deux les mêmes mots, pas de MITM. Cela protège uniquement contre le MITM ; cela NE PROUVE PAS que la personne à l'autre bout du téléphone est bien celle qu'elle prétend être.",
+			"error_chain_unreachable": "La blockchain n'a pas pu être jointe pour vérifier la clé de ce contact. C'est courant sur Tor et I2P, où les connexions mettent plus de temps à s'établir. La clé n'a rien d'anormal — réessayez dans un instant."
 		},
 		"boot_failed": "Impossible de charger le chat. Essaie de rafraîchir la page.",
 		"mailing_address": {
@@ -731,6 +739,7 @@
 			"verify_body": "Chaque message ci-dessous est une entrée permanente sur la blockchain publique Blurt, signée cryptographiquement par le compte de l'expéditeur. Le code « Preuve blockchain » de chaque message est son identifiant de transaction : n'importe qui peut le coller dans un explorateur de blocs Blurt (par exemple blocks.blurtwallet.com) pour confirmer que ce compte précis a envoyé un message à l'autre à l'heure indiquée. Le texte affiché est le message privé, déchiffré avec les clés du compte nommé ci-dessus. Comme chaque preuve réside sur un registre public et permanent, ce document ne peut pas être modifié en secret : changer une ligne ici ne correspondrait plus à la blockchain.",
 			"proof_label": "Preuve blockchain",
 			"pending_label": "confirmation en attente",
+			"unrecorded_label": "jamais enregistré sur la blockchain — cette ligne ne peut pas être vérifiée",
 			"footer": "Document de conversation Morphit — verrouillé, lecture seule. Vérifiez chaque message sur un explorateur de blocs."
 		},
 		"pay_prefill": {
@@ -905,6 +914,18 @@
 		},
 		"footer": {
 			"snapshot_note": "Ceci est un instantané unique ; les deux côtés peuvent avoir changé dans les secondes entre les requêtes. Rafraîchissez plusieurs fois sur une minute ou deux pour voir un motif persistant."
+		},
+		"verdict": {
+			"agree_heading": "Ces instances concordent",
+			"differ_heading": "Ces instances diffèrent",
+			"inconclusive_heading": "Chevauchement insuffisant pour comparer",
+			"agree_body": "Parmi les ordres comparables sur les deux instances, tous figurent sur les deux. {n} ordres concordent. Dans la plage vérifiée, {host} ne dissimule rien.",
+			"differ_body": "Certains ordres n'apparaissent que sur l'une des deux instances. Vérifiez d'abord l'écart de blocs : si les instances sont à des hauteurs différentes, les ordres les plus récents diffèrent légitimement. Une différence qui persiste après plusieurs relances est le vrai signal.",
+			"inconclusive_body": "Les deux instances ont renvoyé une page limitée d'ordres et ces pages ne se chevauchent pas : il n'existe aucune plage où les deux sont connues comme complètes. Rien ne peut être conclu de cette comparaison."
+		},
+		"window": {
+			"truncated_note": "Au moins une instance avait plus d'ordres qu'elle ne pouvait en renvoyer en une page ; la comparaison s'est donc limitée à la plage où les deux sont complètes. {excluded} ordres sont tombés en dehors de cette plage et n'ont pu être vérifiés dans un sens ni dans l'autre.",
+			"since": "Ordres comparés mis à jour après {since}"
 		}
 	},
 	"crypto": {
@@ -4211,6 +4232,7 @@
 			"push_subscribed": "Activé",
 			"push_unsupported": "Non pris en charge sur cet appareil",
 			"push_error_push_disabled": "L'opérateur de cette instance n'a pas encore activé la livraison push. Repli sur les notifications dans l'onglet.",
+			"push_error_push_disabled_hidden_only": "Cette instance n'utilise aucun clearnet, et les notifications sur le téléphone ou navigateur fermé ne peuvent passer que par un service push du clearnet : elles sont donc désactivées ici. Les notifications s'affichent toujours tant que Morphit est ouvert.",
 			"push_error_permission_denied": "Vous avez refusé l'autorisation de notifications du navigateur. Pour activer le push plus tard, autorisez les notifications pour ce site dans les paramètres du navigateur.",
 			"push_error_not_supported": "Votre navigateur ne prend pas en charge Web Push. Essayez une version récente de Firefox, Chrome ou Edge.",
 			"push_error_unreachable": "Impossible d'atteindre le relai de l'opérateur. Vérifiez votre connexion et réessayez.",

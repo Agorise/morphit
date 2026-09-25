@@ -319,10 +319,7 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 	// EndpointState records across the BTC and XMR verifiers.
 	// Tests construct synthetic EndpointState objects directly.
 
-	function ep(
-		url: string,
-		overrides: Partial<EndpointState> = {}
-	): EndpointState {
+	function ep(url: string, overrides: Partial<EndpointState> = {}): EndpointState {
 		return {
 			url,
 			ewmaLatencyMs: null,
@@ -392,7 +389,12 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 			'verbose=1'
 		);
 		const d = body.diagnostics as {
-			explorers: Array<{ url: string; state: string; consecutive_failures: number; cooldown_remaining_ms: number }>;
+			explorers: Array<{
+				url: string;
+				state: string;
+				consecutive_failures: number;
+				cooldown_remaining_ms: number;
+			}>;
 		};
 		expect(d.explorers[0]!.state).toBe('open');
 		expect(d.explorers[0]!.consecutive_failures).toBe(5);
@@ -792,5 +794,109 @@ describe('computeSyncEstimate — catch-up ETA math', () => {
 			stale: true
 		});
 		expect(s.pct_complete).toBe(0);
+	});
+});
+
+// ─── v1.18.0: federation transport diagnostics ──────────────────
+//
+// `peerFailures: 40` is not a diagnosis. A push refused by a peer and a push
+// that never left this machine because the operator's own Tor daemon is not
+// running are completely different problems with completely different fixes,
+// and a count cannot tell them apart. The sender has kept the reasons since the
+// fast path shipped — but only the tests could read them, so an operator
+// staring at that count was no better off than before the list existed.
+//
+// These pin that the reasons are actually REACHABLE, and that reaching them
+// still requires the operator-local path. A peer's origin and a transport error
+// are low-sensitivity, but they are this instance's federation posture and do
+// not belong on a public endpoint.
+describe('healthRoute — federation transport diagnostics (v1.18.0)', () => {
+	const dispatcher = {
+		status: (): Record<string, number> => ({ peers: 3, peerFailures: 40, networksDown: 1 }),
+		diagnostics: () => ({
+			networksDown: ['tor'],
+			// One local fault recorded against Lokinet that has NOT convicted it,
+			// because a .loki failure names the peer's host rather than our
+			// router and one is not enough. This is the state that reads as a
+			// contradiction without a field to explain it.
+			networksSuspected: { loki: 1 },
+			recentFailures: [
+				{
+					origin: 'http://aaaa.onion',
+					reason: 'local tor transport unavailable: connect ECONNREFUSED 127.0.0.1:9050',
+					localFault: true
+				},
+				{ origin: 'https://peer.example', reason: 'HTTP 413', status: 413 }
+			]
+		})
+	};
+
+	// Only `getStatus()` is read by the route; the rest of HeadTailer is not
+	// reachable from here, so a cast keeps the fixture honest about that rather
+	// than pretending to be a tailer.
+	const headTailer = { getStatus: () => ({ running: true, head: 1 }) } as unknown as Parameters<
+		typeof healthRoute
+	>[7];
+
+	async function requestHealth(headers?: Record<string, string>): Promise<Record<string, unknown>> {
+		const app = healthRoute(
+			fakeConfig(),
+			fakePoller(),
+			fakePriceSource(),
+			new Map(), // disagreementMonitors
+			new Map(), // peerMonitorResults
+			null, // fxSource
+			new Map(), // multiAssetSources
+			headTailer,
+			dispatcher
+		);
+		const res = await app.request('http://localhost/', headers ? { headers } : undefined);
+		return (await res.json()) as Record<string, unknown>;
+	}
+
+	it('names the network that is down, not just how many', async () => {
+		const body = await requestHealth({ 'x-morphit-local-health': '1' });
+		const fp = body.fastpath as Record<string, unknown>;
+		const diag = fp.federationDiagnostics as { networksDown: string[] };
+		expect(diag.networksDown).toEqual(['tor']);
+	});
+
+	it('says which failures never left this machine', async () => {
+		const body = await requestHealth({ 'x-morphit-local-health': '1' });
+		const fp = body.fastpath as Record<string, unknown>;
+		const diag = fp.federationDiagnostics as {
+			recentFailures: { origin: string; localFault?: boolean; status?: number }[];
+		};
+		// One of ours, one of theirs — and they are distinguishable, which is the
+		// entire point of carrying the list.
+		expect(diag.recentFailures.filter((f) => f.localFault === true)).toHaveLength(1);
+		expect(diag.recentFailures.find((f) => f.status === 413)?.localFault).toBeUndefined();
+	});
+
+	/**
+	 * THE FIELD THAT STOPS A RULE LOOKING LIKE A BUG. An operator whose lokinet
+	 * is stopped, with one `.loki` peer in the directory, sees local faults in
+	 * `recentFailures` and nothing in `networksDown` — because the corroboration
+	 * rule declines to convict a network on a single address, and with one peer
+	 * a second address will never arrive. Without this count that reads as the
+	 * health block contradicting itself.
+	 */
+	it('reports faults held against a network it has not convicted', async () => {
+		const body = await requestHealth({ 'x-morphit-local-health': '1' });
+		const fp = body.fastpath as Record<string, unknown>;
+		const diag = fp.federationDiagnostics as {
+			networksDown: string[];
+			networksSuspected: Record<string, number>;
+		};
+		expect(
+			diag.networksSuspected.loki,
+			'a pending local fault must be visible even though the network stays up'
+		).toBe(1);
+		expect(diag.networksDown, 'and it must NOT be reported as down').not.toContain('loki');
+	});
+
+	it('stays behind the operator-local header, like the counters beside it', async () => {
+		const body = await requestHealth();
+		expect(body.fastpath).toBeUndefined();
 	});
 });

@@ -30,7 +30,9 @@ const ALL: ClearnetEliminationLegs = {
 	priceFederated: true,
 	frontendLocal: true,
 	upgradeHidden: true,
-	matrixClean: true
+	matrixClean: true,
+	// v1.18.0 (F32): the relay is a separate process with its own chain route.
+	relayHidden: true
 };
 
 ok('all legs true → eliminated', computeClearnetEliminated(ALL) === true);

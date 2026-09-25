@@ -339,6 +339,18 @@ export interface EndpointPoolOptions {
 	readonly hedgeThresholdMs?: number;
 	/** Minimum stagger between primary and hedge dispatch. */
 	readonly hedgeStaggerFloorMs?: number;
+	/** Who RUNS the node behind a URL (v1.18.0 deep-deep, rv2-2).
+	 *
+	 *  `quorumCall` used to count agreement per URL. Every hidden Blurt node is
+	 *  listed twice — once as `.onion`, once as `.b32.i2p` — so ONE operator
+	 *  answering on both transports met a two-endpoint quorum alone, and a quorum
+	 *  exists precisely so that no single operator decides. Agreement is now
+	 *  counted per operator: URLs mapped to the same name count once.
+	 *
+	 *  Return undefined for "unknown", which falls back to the URL itself — the
+	 *  old per-URL behaviour, still right for pools whose URLs are independent
+	 *  by construction (the BTC/XMR explorer lists). */
+	readonly operatorOf?: (url: string) => string | undefined;
 }
 
 /** Options for a single call. */
@@ -486,13 +498,56 @@ export class EndpointPool {
 		this.hedgeThresholdMs = options.hedgeThresholdMs ?? DEFAULT_HEDGE_THRESHOLD_MS;
 		this.hedgeStaggerFloorMs =
 			options.hedgeStaggerFloorMs ?? DEFAULT_HEDGE_STAGGER_FLOOR_MS;
+		this.operatorOfOption = options.operatorOf;
+	}
+
+	private readonly operatorOfOption: ((url: string) => string | undefined) | undefined;
+	/** Operator names learned at runtime (the on-chain directory's node names). */
+	private readonly operatorByUrl = new Map<string, string>();
+
+	/** The operator identity quorum agreement is counted by (rv2-2): a name
+	 *  learned at runtime, else the constructor's `operatorOf`, else the URL. */
+	operatorOf(url: string): string {
+		return this.operatorByUrl.get(url) ?? this.operatorOfOption?.(url) ?? url;
+	}
+
+	/** Distinct operators in the pool. */
+	operatorCount(): number {
+		return new Set(this.endpoints.map((ep) => this.operatorOf(ep.url))).size;
+	}
+
+	/**
+	 * Distinct operators worth counting on for a quorum right now (rv2-9).
+	 *
+	 * An operator is left out only while EVERY one of its endpoints is failing
+	 * (its last attempt was a transport failure and nothing has succeeded
+	 * since). Before this, a quorum's size came from the configured pool, so a
+	 * box with one working node plus hidden defaults it cannot reach (Tor not
+	 * installed, say) asked for two agreeing answers that could never arrive,
+	 * forever. A failing operator is still ASKED — it counts again the moment it
+	 * answers — it is just not waited for.
+	 */
+	reachableOperatorCount(): number {
+		const ok = new Set<string>();
+		for (const ep of this.endpoints) {
+			if (ep.consecutiveFailures === 0) ok.add(this.operatorOf(ep.url));
+		}
+		return ok.size;
 	}
 
 	/** Add endpoints to the pool at runtime (idempotent — a URL already present
 	 *  is skipped, so existing health/latency state is preserved). Returns the
 	 *  URLs that were newly added. Used to self-populate from the on-chain RPC
-	 *  directory (`morphit_rpc_v1`) without a restart. */
-	mergeEndpoints(urls: readonly string[]): string[] {
+	 *  directory (`morphit_rpc_v1`) without a restart.
+	 *
+	 *  `operators` (url → operator name) records who runs each address, so the
+	 *  two addresses of one directory node count once in a quorum (rv2-2). */
+	mergeEndpoints(urls: readonly string[], operators?: Readonly<Record<string, string>>): string[] {
+		if (operators !== undefined) {
+			for (const [url, name] of Object.entries(operators)) {
+				if (typeof name === 'string' && name !== '') this.operatorByUrl.set(url, name);
+			}
+		}
 		const have = new Set(this.endpoints.map((ep) => ep.url));
 		const added: string[] = [];
 		for (const url of urls) {
@@ -952,13 +1007,18 @@ export class EndpointPool {
 			 *  with the same key are considered to agree.  Cheap to
 			 *  compute — invoked once per successful response. */
 			equivalenceKey: (response: T) => string;
-			/** Minimum number of agreeing responses required.
-			 *  Defaults to 1 (any single success satisfies). */
+			/** Minimum number of agreeing OPERATORS required (see
+			 *  {@link EndpointPoolOptions.operatorOf}).  Defaults to 1. */
 			minAgree?: number;
-			/** Per-call timeout in ms.  If the deadline passes before
-			 *  quorum is met, returns whatever responses are in.
-			 *  Defaults to {@link DEFAULT_BACKGROUND_TIMEOUT_MS}. */
+			/** Per-endpoint timeout in ms, raised to the hidden-network floor
+			 *  for .onion/.i2p endpoints exactly as `call` does.  Defaults to
+			 *  {@link DEFAULT_BACKGROUND_TIMEOUT_MS}. */
 			timeoutMs?: number;
+			/** How many operators are asked at once (rv2-9).  When one of them
+			 *  fails, disagrees or has no answer, the next operator is asked,
+			 *  so a cap never lowers what can be learned — it only stops every
+			 *  endpoint being hit for every call.  Default: all at once. */
+			maxOperators?: number;
 		}
 	): Promise<QuorumCallResult<T>> {
 		const minAgree = options.minAgree ?? 1;
@@ -966,6 +1026,7 @@ export class EndpointPool {
 			throw new Error('quorumCall: minAgree must be >= 1');
 		}
 		const timeoutMs = options.timeoutMs ?? DEFAULT_BACKGROUND_TIMEOUT_MS;
+		const maxOperators = Math.max(1, options.maxOperators ?? Number.POSITIVE_INFINITY);
 		const allEndpoints = this.endpoints;
 		const candidates = this.sortByLatency(
 			allEndpoints.filter((e) => Date.now() >= e.cooldownUntil)
@@ -982,107 +1043,122 @@ export class EndpointPool {
 			};
 		}
 
-		// Buckets by equivalence-key, plus running count of total
-		// successful responses + total finished (success/null/error).
-		const buckets = new Map<string, T[]>();
+		// v1.18.0 deep-deep (rv2-2): group endpoints by OPERATOR, fastest
+		// operator first. One operator contributes at most one answer, however
+		// many addresses it has, so its .onion and .b32.i2p can no longer
+		// out-vote an honest pair. An operator's other addresses are its
+		// fallbacks when the first fails at transport level.
+		//
+		// Ordered PROVEN-first, unlike `call`'s bootstrap-unknowns-first rule:
+		// with a capped window, asking three never-tried hidden nodes before two
+		// that just answered would make every quorum wait out their full
+		// hidden-network timeouts. Known-good by latency, then never tried, then
+		// failing — nobody is excluded, only ordered.
+		const quorumRank = (e: EndpointState): number =>
+			e.ewmaLatencyMs !== null ? 0 : e.consecutiveFailures > 0 ? 2 : 1;
+		candidates.sort((a, b) => {
+			const d = quorumRank(a) - quorumRank(b);
+			if (d !== 0) return d;
+			return (a.ewmaLatencyMs ?? 0) - (b.ewmaLatencyMs ?? 0);
+		});
+		const byOperator = new Map<string, EndpointState[]>();
+		for (const ep of candidates) {
+			const op = this.operatorOf(ep.url);
+			const list = byOperator.get(op);
+			if (list === undefined) byOperator.set(op, [ep]);
+			else list.push(ep);
+		}
+		const operators = [...byOperator.values()];
+
+		// Buckets by equivalence-key → the operators that returned it.
+		const buckets = new Map<string, number>();
 		const allResponses: T[] = [];
-		let finished = 0;
 		let agreedKey: string | undefined;
+		let contacted = 0;
+		const inFlight = new Set<AbortController>();
 
-		// One AbortController per endpoint — when quorum is reached we
-		// cancel the rest so we don't keep hammering them and so the
-		// fn implementation can abort in-flight fetches.
-		const controllers = candidates.map(() => new AbortController());
+		/** Ask one operator: its endpoints in latency order until one answers
+		 *  (a value or a null) or all fail. Resolves with the answer, or
+		 *  undefined when none came. Never rejects. */
+		const askOperator = async (eps: EndpointState[]): Promise<{ value: T | null } | undefined> => {
+			for (const ep of eps) {
+				if (agreedKey !== undefined) return undefined;
+				const c = new AbortController();
+				inFlight.add(c);
+				// rv2-9: the hidden-network floor, per endpoint. The flat 10 s
+				// budget cut every .onion/.i2p answer off mid-tunnel on a cold
+				// hidden-only node, so its quorum never formed.
+				let timedOut = false;
+				const handle = setTimeout(() => {
+					timedOut = true;
+					c.abort();
+				}, effectiveTimeoutMs(ep.url, timeoutMs));
+				const t0 = Date.now();
+				contacted++;
+				try {
+					const value = await fn(ep.url, c.signal);
+					this.recordSuccess(ep, Date.now() - t0);
+					return { value };
+				} catch (err) {
+					// rv2-9: an abort WE caused because quorum was already met
+					// says nothing about this endpoint — never a failure. A
+					// timeout at the endpoint's full budget is a real one.
+					if (c.signal.aborted && !timedOut) return undefined;
+					if (timedOut || isTransportError(err)) {
+						this.recordFailure(ep, isRateLimitError(err));
+					}
+				} finally {
+					clearTimeout(handle);
+					inFlight.delete(c);
+				}
+			}
+			return undefined;
+		};
 
-		// Outer controller for the overall timeout.
-		const timeoutController = new AbortController();
-		const timeoutHandle = setTimeout(() => timeoutController.abort(), timeoutMs);
-
-		// Wrap fn in a one-per-endpoint promise that updates state when
-		// it settles.  We deliberately await Promise.allSettled at the
-		// bottom — the early-return is via a separate awaitable that
-		// resolves the instant quorum is met (or all responses are in).
-		const quorumReached = new Promise<void>((resolveQuorum) => {
-			const allDoneCheck = (): void => {
-				if (finished === candidates.length) {
-					resolveQuorum();
+		await new Promise<void>((resolveDone) => {
+			let next = 0;
+			let running = 0;
+			const launch = (): void => {
+				while (agreedKey === undefined && running < maxOperators && next < operators.length) {
+					const eps = operators[next++]!;
+					running++;
+					void askOperator(eps).then((answer) => {
+						running--;
+						if (agreedKey === undefined && answer !== undefined && answer.value !== null) {
+							const result = answer.value;
+							allResponses.push(result);
+							const key = options.equivalenceKey(result);
+							const n = (buckets.get(key) ?? 0) + 1;
+							buckets.set(key, n);
+							if (n >= minAgree) {
+								agreedKey = key;
+								// Quorum reached — cancel everyone still in flight.
+								for (const c of inFlight) c.abort();
+								resolveDone();
+								return;
+							}
+						}
+						if (agreedKey !== undefined) return;
+						// Replace an operator that gave nothing usable at once. One
+						// that answered is waited on with the others still out; only
+						// when every asked operator is in without agreement are more
+						// asked — so an honest, agreeing set costs `maxOperators`
+						// requests at most.
+						const gaveNothing = answer === undefined || answer.value === null;
+						if (gaveNothing || running === 0) launch();
+						if (running === 0 && next >= operators.length) resolveDone();
+					});
 				}
 			};
-
-			candidates.forEach((ep, i) => {
-				const t0 = Date.now();
-				const c = controllers[i]!;
-				// Link the per-endpoint controller to the timeout so the
-				// fn sees an abort signal in both cases.
-				const onTimeout = (): void => c.abort();
-				timeoutController.signal.addEventListener('abort', onTimeout);
-
-				fn(ep.url, c.signal).then(
-					(result) => {
-						timeoutController.signal.removeEventListener('abort', onTimeout);
-						const elapsed = Date.now() - t0;
-						if (result === null) {
-							// Healthy but non-contributing.  Reset the
-							// cooldown ladder (treat as success for
-							// breaker purposes) but don't bucket.
-							this.recordSuccess(ep, elapsed);
-							finished++;
-							allDoneCheck();
-							return;
-						}
-						// Success that contributes to quorum.
-						this.recordSuccess(ep, elapsed);
-						allResponses.push(result);
-						const key = options.equivalenceKey(result);
-						const bucket = buckets.get(key) ?? [];
-						bucket.push(result);
-						buckets.set(key, bucket);
-						if (bucket.length >= minAgree && agreedKey === undefined) {
-							agreedKey = key;
-							// Quorum reached — cancel everyone still in flight.
-							for (let j = 0; j < controllers.length; j++) {
-								if (j !== i) controllers[j]!.abort();
-							}
-							resolveQuorum();
-						}
-						finished++;
-						allDoneCheck();
-					},
-					(err) => {
-						timeoutController.signal.removeEventListener('abort', onTimeout);
-						// If we got here because WE aborted this branch
-						// (quorum already reached or overall timeout),
-						// don't count it as a transport failure — that
-						// would unfairly penalize a healthy endpoint
-						// that just hadn't responded yet.
-						if (c.signal.aborted && agreedKey !== undefined) {
-							finished++;
-							allDoneCheck();
-							return;
-						}
-						// Genuine transport / network failure — penalize.
-						if (isTransportError(err)) {
-							this.recordFailure(ep, isRateLimitError(err));
-						}
-						finished++;
-						allDoneCheck();
-					}
-				);
-			});
+			launch();
 		});
-
-		try {
-			await quorumReached;
-		} finally {
-			clearTimeout(timeoutHandle);
-		}
 
 		if (agreedKey !== undefined) {
 			return {
 				kind: 'quorum_met',
 				responses: allResponses,
 				agreedKey,
-				contacted: candidates.length,
+				contacted,
 				cooledDown
 			};
 		}
@@ -1090,7 +1166,7 @@ export class EndpointPool {
 			kind: 'all_responses_in',
 			responses: allResponses,
 			agreedKey: undefined,
-			contacted: candidates.length,
+			contacted,
 			cooledDown
 		};
 	}

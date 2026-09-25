@@ -171,13 +171,22 @@ Steps the command takes, in order:
    beta you always get the newest beta even if it's flagged
    pre-release; once a stable ships, the stable is preferred and you
    are not pushed onto a newer beta automatically.
-3. If you're already on it, exits 0 (no-op).
+3. If you're already on it, exits 0 (no-op). It also exits 0 without
+   changing anything when the release offered is **older** than the one
+   you run (v1.18.0): only a strictly newer version counts as an upgrade,
+   so a mirror or an on-chain record can never walk your node back to an
+   older release. To install an older release on purpose, add
+   `--allow-downgrade`; the prompt then says "Apply DOWNGRADE".
 4. Otherwise, **shows you the release notes** and prompts y/N.
 5. Downloads the tarball + `.sha256` to `/tmp/morphit-upgrade-<ts>/`.
 6. Verifies the SHA-256 against the downloaded checksum file.
    **Refuses to proceed if it doesn't match.**
 7. Renames `/opt/morphit` → `/opt/morphit.bak-<timestamp>` (backup).
-8. Extracts the new tarball to `/opt/morphit`.
+8. Extracts the new tarball to `/opt/morphit`, then checks the
+   tarball's own `release-info.json` names the version it was offered as
+   (v1.18.0). A tarball that is a different release — for example an
+   older one served under the new name — is not installed: the previous
+   install is put back and the command exits 3.
 8b. **Carries your config and signing key forward** from the backup
     into the freshly-extracted tree — `morphit.config.env`,
     `morphit.env`, `apps/relay/keystore.json` (or `.wif`),
@@ -277,6 +286,11 @@ If **any** step from 7 onwards fails, the command:
 - Removes the partial extract at `/opt/morphit`
 - Renames the backup back to `/opt/morphit`
 - Restores the previous web frontend (if it had already redeployed)
+- Restores the files this upgrade changed outside `/opt/morphit`
+  (v1.18.0): systemd units it refreshed (from their `<unit>.bak`) and
+  `/etc/morphit/relay.env` if the relay hidden-RPC self-heal changed it
+  during this run (from `relay.env.before-v1.18.0-relay-heal`), then
+  runs `systemctl daemon-reload`
 - Restarts services on the previous version
 - Exits with code 3 ("upgrade failed, rolled back")
 
@@ -315,6 +329,41 @@ sudo -u morphit npx morphit-ops upgrade --yes
 | `MORPHIT_INSTALL_DIR` | `/opt/morphit` | install location |
 | `MORPHIT_WEB_ROOT` | `/var/www/morphit-frontend` | bare-metal nginx web root; if it exists, `upgrade` copies the freshly-built `apps/web/build` here. Set it for a custom bare-metal path. The web app is **always** rebuilt regardless; on a host running a Docker frontend the container that bind-mounts the build dir is `docker restart`ed instead (detected by the mount, any container name), and if neither target is found the rebuilt files are left on disk with a warning |
 | `MORPHIT_BACKUP_KEEP` | `3` | how many `.bak-*` backups to retain |
+| `MORPHIT_UPGRADE_TRUST_LOCAL_INDEXER` | unset | Set to `1` only if your indexer does **not** run as the `morphit-indexer.service` systemd unit. It skips the check that the process answering on the indexer's port is that unit (see "Which indexer the upgrade asks" below) |
+
+Flags: `--check-only`, `--json`, `--yes`, `--from-file=PATH`, and
+`--allow-downgrade` (install a release older than the one you run; off
+by default).
+
+### Which indexer the upgrade asks (v1.18.0)
+
+Before an upgrade, `morphit-ops` decides whether your node is
+**hidden-only** (it reads the chain over Tor/I2P only). If it is, the
+release is fetched over Tor/I2P and checked against the SHA-256 published
+on-chain, which your own indexer reads.
+
+- **Hidden-only comes from your config**, not from a network answer: an
+  empty `MORPHIT_INDEXER_RPC_ENDPOINTS=` in the indexer's env files
+  (`/etc/morphit/indexer.env` and friends). A node whose chain reads are
+  hidden-only is treated as hidden-only even if its "zero clearnet" badge
+  is still missing another piece (for example an I2P address).
+- **Only your indexer's configured address is asked**
+  (`MORPHIT_INDEXER_LISTEN_HOST` / `MORPHIT_INDEXER_LISTEN_PORT`). If
+  neither is set, `127.0.0.1:8081`, `172.18.0.1:8081` and
+  `172.17.0.1:8081` are tried in turn, and the first one with anything
+  listening is the only one asked.
+- **The listener must be your indexer.** The upgrade checks that the
+  process listening there belongs to `morphit-indexer.service` (the
+  release monitor, which runs unprivileged, checks the socket belongs to
+  the same user as that service). If something else holds the port, the
+  upgrade stops without fetching anything and names the process. Start the
+  indexer (`sudo systemctl start morphit-indexer`) and stop whatever holds
+  the port. If you run the indexer outside systemd, set
+  `MORPHIT_UPGRADE_TRUST_LOCAL_INDEXER=1` for the command.
+
+Why: the upgrade runs as root, and it used to take the release from
+whatever answered first on port 8081. Any program on the box that got
+there first could have chosen what root installed.
 
 ### Mirrors and how integrity is protected
 
@@ -330,6 +379,12 @@ nothing. Two integrity paths apply, in trust order:
    trust anchor is local and code-reviewed, so a signed tarball is
    trustworthy no matter which mirror served it — this is what makes a
    fully standalone mirror safe, even if the primary is censored or gone.
+   Since v1.18.0 a signature that is **present but does not verify**
+   stops the upgrade (it used to be ignored when the primary's hash
+   matched), and a verified signature no longer overrides a mismatch
+   with the primary's hash: when the primary's hash is known, the bytes
+   must match it too. The signature is not tied to a version, so this is
+   what stops a mirror serving an older signed release.
 
 2. **Anchored SHA-256.** When there's no signature, the tiny `.sha256` is
    always fetched from the **trusted primary** over HTTPS; the big tarball
@@ -364,8 +419,39 @@ The sidecar **never applies upgrades itself** — it only watches.
 You still run `morphit-ops upgrade` manually (or with
 `MORPHIT_AUTO_UPGRADE=1` cron) when you decide to apply.
 
-Enable it via the Ansible role `release_monitor` (default OFF;
-opt-in via `enable_release_monitor: true` in `group_vars/all.yml`).
+**Turning it on.** Nothing installs it for you. (This page used to
+name an Ansible role, `release_monitor`, for it. That role does not
+exist.) On the node, as root:
+
+```
+sudo cp /opt/morphit/ops/systemd/morphit-release-monitor.service \
+        /opt/morphit/ops/systemd/morphit-release-monitor.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now morphit-release-monitor.timer
+```
+
+It runs as the `morphit-host-monitor` user, which the host monitor's
+install creates. If `id morphit-host-monitor` reports no such user,
+create it first:
+`sudo useradd --system --no-create-home --shell /usr/sbin/nologin morphit-host-monitor`.
+
+To check it once without waiting six hours:
+`sudo systemctl start morphit-release-monitor.service`, then
+`journalctl -u morphit-release-monitor -n 5 --no-pager`. Nothing
+printed means you are up to date; `release_available` names the
+installed and the new version.
+
+**If you enabled it before v1.18.0, it never worked.** Three
+separate faults, all fixed in 1.18.0:
+- its unit blocked the memory permissions Node needs to run;
+- it looked for its tools from the wrong directory, so it went to
+  the npm registry for them and timed out;
+- when it did report a release, the version fields were empty.
+
+Every run logged `release_check_failed`. On a hidden-only node the
+check now reads the current release from this node's own indexer, the
+same on-chain record the upgrade verifies against, and nothing is
+fetched from a peer.
 
 ## Manual upgrade procedure
 

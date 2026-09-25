@@ -189,26 +189,61 @@ function socketPeer(c: Context): string | null {
 	return info.replace(/^\[|\]$/g, '');
 }
 
-/** Parse the leftmost entry from a comma-separated X-Forwarded-For
- *  value. Returns null on empty or malformed input. Max-length
- *  bound here to defend against absurdly-long forged headers that
- *  could bloat the bucket map key.
+/** Is `s` shaped like an IP address (v4 dotted-quad, or v6 hex+colons with an
+ *  optional trailing dotted-quad)? A proxy only ever appends real addresses to
+ *  X-Forwarded-For, so anything else in the chain came from the client. */
+function looksLikeIp(s: string): boolean {
+	if (s.length === 0 || s.length > 64) return false;
+	if (parseV4(s) !== null) return true;
+	return s.includes(':') && /^[0-9a-fA-F:.]+$/.test(s);
+}
+
+/** Pick the client out of a trusted proxy's forwarded headers.
  *
- *  Handles the corner cases:
- *    - "1.2.3.4, 5.6.7.8"   → "1.2.3.4"  (leftmost split)
- *    - "1.2.3.4"            → "1.2.3.4"  (no comma; full value)
- *    - ", 1.2.3.4"          → null       (empty leftmost)
- *    - " "                  → null       (whitespace-only)
- *    - 65+ char input       → null       (defends bucket-map bloat)
- */
-function parseXff(raw: string): string | null {
-	const comma = raw.indexOf(',');
-	// >= 0 covers both "no comma" (treat whole string) and
-	// "comma at start" (treat empty prefix). For comma==0, slice
-	// returns "" which fails the empty-check below.
-	const first = (comma >= 0 ? raw.slice(0, comma) : raw).trim();
-	if (first.length === 0 || first.length > 64) return null;
-	return first;
+ *  (v1.18.0 deep-deep, H1) This used to take the LEFTMOST X-Forwarded-For
+ *  entry. But nginx's `$proxy_add_x_forwarded_for` means "whatever the client
+ *  sent, then $remote_addr", so the leftmost entry is whatever the client typed:
+ *  a request with `X-Forwarded-For: 10.N.0.1` got a fresh rate-limit bucket per
+ *  request, defeating every per-IP signup defense. Now:
+ *
+ *    1. From a LOOPBACK peer (bare-metal nginx on this host), X-Real-IP wins.
+ *       ops/nginx/*.conf set it to `$remote_addr`, which the client cannot
+ *       choose. This is what the indexer already does. Over Tor/I2P that is
+ *       127.0.0.1 for everyone: one shared bucket, exactly as before.
+ *    2. Otherwise walk X-Forwarded-For from the RIGHT, skipping addresses we
+ *       trust as proxies; the first untrusted address is the client. Every entry
+ *       to the right of it was appended by a proxy we trust, so the client can't
+ *       forge it. (BunkerWeb → frontend → relay: "…, client, bunkerweb".)
+ *    3. If every entry is a trusted proxy address (a request that reached the
+ *       proxy from a local address, like Tor via the frontend container), use
+ *       the RIGHTMOST entry — the one our own proxy wrote. All such visitors
+ *       share that one bucket, which is how Tor/I2P already behaved.
+ *    4. Nothing usable → the peer itself. X-Real-IP is NOT read from a
+ *       non-loopback proxy: the BunkerWeb frontend doesn't set it, so it would
+ *       arrive exactly as the client typed it. */
+function forwardedClient(c: Context, peer: string): string {
+	const xri = c.req.header('x-real-ip')?.trim();
+	const xriOk = xri !== undefined && xri.length > 0 && xri.length < 64;
+	if (xriOk && DEFAULT_LOOPBACK_PEERS.includes(peer)) return xri;
+
+	const xff = c.req.header('x-forwarded-for');
+	if (xff) {
+		const hops = xff.split(',').map((h) => h.trim().replace(/^\[|\]$/g, ''));
+		for (let i = hops.length - 1; i >= 0; i--) {
+			const hop = hops[i]!;
+			// A malformed entry can only have come from the client (proxies append
+			// real addresses), so stop walking: nothing left of it is trustworthy.
+			if (!looksLikeIp(hop)) break;
+			if (!isTrustedPeer(hop)) return hop;
+		}
+		// No untrusted address to the right of the first malformed entry (or at
+		// all): the nearest hop is the one our own proxy wrote.
+		const nearest = hops[hops.length - 1]!;
+		if (looksLikeIp(nearest)) return nearest;
+	}
+	// Trusted peer with no usable forwarded headers — unusual (nginx always
+	// sets them) — fall back to the peer itself rather than fabricating anything.
+	return peer;
 }
 
 export function clientIp(c: Context): string {
@@ -217,19 +252,7 @@ export function clientIp(c: Context): string {
 	// If the peer is a trusted proxy (loopback nginx by default,
 	// or any address/CIDR added via configureTrustedProxies()),
 	// honor the forwarded-address headers it set.
-	if (peer !== null && isTrustedPeer(peer)) {
-		const xff = c.req.header('x-forwarded-for');
-		if (xff) {
-			const first = parseXff(xff);
-			if (first !== null) return first;
-		}
-		const xri = c.req.header('x-real-ip');
-		if (xri && xri.length < 64) return xri.trim();
-		// Loopback peer with no forwarded headers — this is
-		// unusual (nginx almost always sets them) but fall back
-		// to the peer itself rather than fabricating anything.
-		return peer;
-	}
+	if (peer !== null && isTrustedPeer(peer)) return forwardedClient(c, peer);
 
 	// Non-loopback peer: the socket address IS the client. Ignore
 	// any forwarded-address headers they sent — they could be
@@ -294,7 +317,7 @@ export function canonicalBucketKey(ip: string): string {
 	// itself, not the actual client), but if one slips through
 	// it bucket-keys normally which is acceptable.
 	if (trustedExactPeers.has(ip)) return ip;
-	// Strip IPv6 brackets defensively (parseXff and socketPeer
+	// Strip IPv6 brackets defensively (forwardedClient and socketPeer
 	// already do this, but a hand-passed value might not).
 	const clean = ip.replace(/^\[|\]$/g, '');
 

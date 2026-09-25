@@ -55,36 +55,46 @@ SIZE="$(stat -c %s "$TARBALL")"
 CID="QmHarnessMirroraaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 # ── Fake Blurt RPC serving one indexer_snapshot_v1 op ────────────────
+# v1.18.0 deep-deep (rv2-1): the mirror now accepts an op only when two RPC
+# operators agree on it and on its block, and its signature recovers to the
+# pinned posting key. So the op is SIGNED with a test key (signed-snapshot-op.mjs),
+# served with its block, that key is pinned below, and the RPC is listed under
+# two hostnames (127.0.0.1 and localhost — two operators) on the same server.
 cat > "$WORK/rpc.mjs" <<'RPC'
 import { createServer } from 'node:http';
-const [,, port, cid, sha, chainId, size] = process.argv;
-const payload = {
-  ipfs_cid: cid, sha256: sha, chain_id: chainId, schema_version: 59,
-  last_applied_block: 63610645, size_bytes: Number(size), indexer_version: '1.17.6'
-};
-const history = [[282, { op: ['custom_json', {
-  id: 'indexer_snapshot_v1', required_posting_auths: ['morphit'],
-  json: JSON.stringify(payload)
-}], timestamp: '2026-09-13T00:00:00' }]];
+import { readFileSync } from 'node:fs';
+const [,, port, rpcFile] = process.argv;
+const byMethod = JSON.parse(readFileSync(rpcFile, 'utf8'));
 createServer((req, res) => {
   let b = '';
   req.on('data', (c) => (b += c));
   req.on('end', () => {
     let id = 1;
-    try { id = JSON.parse(b).id ?? 1; } catch { /* ignore */ }
+    let method = '';
+    try { const j = JSON.parse(b); id = j.id ?? 1; method = j.method ?? ''; } catch { /* ignore */ }
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ jsonrpc: '2.0', id, result: history }));
+    res.end(JSON.stringify({ jsonrpc: '2.0', id, result: byMethod[method] ?? null }));
   });
 }).listen(Number(port), '127.0.0.1');
 RPC
 PORT=45917
-# The canned get_account_history result the hidden-proxy stubs will serve.
-cat > "$WORK/history.json" <<HJSON
-[[282,{"op":["custom_json",{"id":"indexer_snapshot_v1","required_posting_auths":["morphit"],"json":"{\\"ipfs_cid\\":\\"$CID\\",\\"sha256\\":\\"$DUMP_SHA\\",\\"chain_id\\":\\"$CHAIN_ID\\",\\"schema_version\\":59,\\"last_applied_block\\":63610645,\\"size_bytes\\":$SIZE,\\"indexer_version\\":\\"1.17.8\\"}"}],"timestamp":"2026-09-13T00:00:00"}]]
-HJSON
-node "$WORK/rpc.mjs" "$PORT" "$CID" "$DUMP_SHA" "$CHAIN_ID" "$SIZE" &
-RPC_PID=$!
-sleep 1
+# sign_fixture <sha> <chain_id> → $WORK/rpc.json, $WORK/history.json, $PINNED
+sign_fixture() {
+	local payload="{\"ipfs_cid\":\"$CID\",\"sha256\":\"$1\",\"chain_id\":\"$2\",\"schema_version\":59,\"last_applied_block\":63610645,\"size_bytes\":$SIZE,\"indexer_version\":\"1.17.8\"}"
+	(cd "$REPO" && node ops/test/lib/signed-snapshot-op.mjs "$payload") > "$WORK/signed.json"
+	node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(j.rpc))' "$WORK/signed.json" > "$WORK/rpc.json"
+	node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(j.history))' "$WORK/signed.json" > "$WORK/history.json"
+	PINNED="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pubkey)' "$WORK/signed.json")"
+}
+# start_rpc <sha> <chain_id>
+start_rpc() {
+	[ -n "$RPC_PID" ] && kill "$RPC_PID" 2>/dev/null
+	sign_fixture "$1" "$2"
+	node "$WORK/rpc.mjs" "$PORT" "$WORK/rpc.json" &
+	RPC_PID=$!
+	sleep 1
+}
+start_rpc "$DUMP_SHA" "$CHAIN_ID"
 
 # ── Stub kubo ────────────────────────────────────────────────────────
 BIN="$WORK/bin"; mkdir -p "$BIN"
@@ -126,13 +136,13 @@ export MORPHIT_SNAPSHOT_MIRROR_STATE="$WORK/mirror-state.json"
 export MORPHIT_INDEXER_DATABASE_URL="postgres://unused"
 export MORPHIT_INDEXER_CHAIN_ID="$CHAIN_ID"
 export MORPHIT_INDEXER_PUBLIC_ORIGIN="https://harness.invalid"
-export MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="BLT1111111111111111111111111111111114T1Anm"
+export MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="$PINNED"
 # Use the LOCAL (loopback) RPC tier, not the clearnet one. Clearnet endpoints
 # must be https:// — a rule that exists so a node never leaks its IP to a
 # plaintext RPC — and the harness must not weaken it to make itself pass. A
 # co-located loopback blurtd is a supported deployment, so this is the honest
 # lever, and it exercises the same code path.
-export MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="http://127.0.0.1:$PORT"
+export MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="http://127.0.0.1:$PORT,http://localhost:$PORT"
 export MORPHIT_INDEXER_RPC_ENDPOINTS=""
 export MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT="0"
 
@@ -168,10 +178,7 @@ else
 fi
 
 # ── A wrong sha256 must be REFUSED, not served ───────────────────────
-kill "$RPC_PID" 2>/dev/null; RPC_PID=""
-node "$WORK/rpc.mjs" "$PORT" "$CID" "$(printf 'b%.0s' {1..64})" "$CHAIN_ID" "$SIZE" &
-RPC_PID=$!
-sleep 1
+start_rpc "$(printf 'b%.0s' {1..64})" "$CHAIN_ID"
 rm -f "$WORK/mirror-state.json"
 OUT2="$(cd "$REPO" && "$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$MIRROR_TS" --signer morphit 2>&1)"
 case "$OUT2" in
@@ -181,17 +188,14 @@ esac
 
 # Restore a correct-sha RPC first: the preceding case deliberately serves a bad
 # hash, and a zero-peer test must not be confounded by a mismatch.
-kill "$RPC_PID" 2>/dev/null; RPC_PID=""
-node "$WORK/rpc.mjs" "$PORT" "$CID" "$DUMP_SHA" "$CHAIN_ID" "$SIZE" &
-RPC_PID=$!
-sleep 1
+start_rpc "$DUMP_SHA" "$CHAIN_ID"
 
 # ── A kubo with NO peers must defer, not burn the fetch budget ────────
 # The API answers seconds after a restart, but fetching content needs a swarm.
 # morphitir sat through a 10-minute `pin add` against 0 peers, then gave up.
 rm -f "$WORK/mirror-state.json"
 OUT_NP="$(cd "$REPO" && env HARNESS_NO_PEERS=1 \
-	MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="http://127.0.0.1:$PORT" \
+	MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="http://127.0.0.1:$PORT,http://localhost:$PORT" \
 	MORPHIT_INDEXER_RPC_ENDPOINTS="" \
 	"$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$MIRROR_TS" --signer morphit 2>&1)"
 case "$OUT_NP" in
@@ -213,20 +217,20 @@ esac
 # .b32.i2p hostname with no proxy and got "fetch failed". That is what stopped
 # morphitlat mirroring, and it would have stopped fast-sync there too.
 #
-# Tor and I2P are DIFFERENT code paths (SOCKS5 connector vs undici ProxyAgent),
+# Tor and I2P are DIFFERENT code paths (a SOCKS5 connector vs a CONNECT one),
 # so both are exercised. The proxy log is the real assertion: it proves the
 # request TRAVERSED a proxy rather than reaching the origin directly.
 PLOG="$WORK/proxy.log"; : > "$PLOG"
-MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" \
+MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" MORPHIT_STUB_RPC="$(cat "$WORK/rpc.json")" node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" \
 	45941 45942 45943 "$PLOG" > "$WORK/stubs-ready" 2>&1 &
 STUB_PID=$!
 for _i in $(seq 1 40); do grep -q stubs-ready "$WORK/stubs-ready" 2>/dev/null && break; sleep 0.2; done
 
 for net in i2p tor; do
 	if [ "$net" = "i2p" ]; then
-		HIDDEN_RPC="http://$(printf 'b%.0s' $(seq 52)).b32.i2p"
+		HIDDEN_RPC="http://$(printf 'b%.0s' $(seq 52)).b32.i2p,http://$(printf 'd%.0s' $(seq 52)).b32.i2p"
 	else
-		HIDDEN_RPC="http://$(printf 'a%.0s' $(seq 56)).onion"
+		HIDDEN_RPC="http://$(printf 'a%.0s' $(seq 56)).onion,http://$(printf 'c%.0s' $(seq 56)).onion"
 	fi
 	rm -f "$WORK/mirror-state.json"
 	: > "$PLOG"
@@ -253,10 +257,7 @@ done
 kill "$STUB_PID" 2>/dev/null
 
 # ── A foreign chain must be refused before any bandwidth is spent ─────
-kill "$RPC_PID" 2>/dev/null; RPC_PID=""
-node "$WORK/rpc.mjs" "$PORT" "$CID" "$DUMP_SHA" "deadbeefdeadbeef" "$SIZE" &
-RPC_PID=$!
-sleep 1
+start_rpc "$DUMP_SHA" "deadbeefdeadbeef"
 rm -f "$WORK/mirror-state.json"
 OUT3="$(cd "$REPO" && "$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$MIRROR_TS" --signer morphit 2>&1)"
 case "$OUT3" in

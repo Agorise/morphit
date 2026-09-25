@@ -33,10 +33,33 @@
 import type { DynamicGlobalProperties } from './client';
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
+import { chainCallTimeoutMs } from '$net/transportBudget';
 import type { SignedTransaction } from '@beblurt/dblurt';
 
 export interface BroadcastResult {
 	block_num: number;
+	trx_id: string;
+}
+
+/**
+ * What a CHAT MESSAGE send gets back.
+ *
+ * `block_num` is null because a chat message is broadcast asynchronously: the
+ * indexer answers as soon as the Blurt node has accepted and validated the
+ * transaction, rather than waiting up to a full 3,000 ms block interval for a
+ * witness to seal it into a block. On a zero-clearnet instance that wait sat on
+ * top of two hidden round trips and pushed the sender past six seconds before
+ * they were told their own message had gone.
+ *
+ * It is a separate type rather than a nullable `block_num` on BroadcastResult
+ * because every OTHER caller — orders, feature bids, transfers, account
+ * creation, chat-identity publication — writes that block number into a receipt
+ * and genuinely needs it. Widening the shared type would have made those
+ * callers handle a null that can never reach them, and the compiler would have
+ * stopped telling them the truth.
+ */
+export interface ChatBroadcastResult {
+	block_num: null;
 	trx_id: string;
 }
 
@@ -86,7 +109,10 @@ export async function fetchDynamicGlobalProperties(): Promise<DynamicGlobalPrope
 		res = await fetchWithTimeout(
 			indexerUrl('/v1/chain/properties'),
 			{ method: 'GET', headers: { accept: 'application/json' } },
-			15_000
+			// Same-origin, but the indexer answers it with a real chain RPC —
+			// up to 60s on a hidden-only instance. A flat 15s here aborted every
+			// chat send on Tor/I2P while the identity check beside it succeeded.
+			chainCallTimeoutMs(15_000)
 		);
 	} catch (e) {
 		throw new BroadcastUnavailableError(
@@ -108,11 +134,30 @@ export async function fetchDynamicGlobalProperties(): Promise<DynamicGlobalPrope
 	throw new BroadcastUnavailableError('your Morphit instance returned no chain head');
 }
 
-/** Submit a SIGNED transaction through the same-origin indexer broadcast proxy.
- *  Surfaces a `ChainRejectedError` on chain rejection (400) and a
- *  `BroadcastUnavailableError` if the indexer is unreachable — NEVER falls back
- *  to a direct browser→node broadcast (privacy #1). */
-export async function submitSignedTransaction(signed: SignedTransaction): Promise<BroadcastResult> {
+/**
+ * POST the signed transaction and return the parsed success body.
+ *
+ * Shared by both submit functions below so that the error handling — chain
+ * rejection, unreachable instance, no direct-RPC fallback — has exactly one
+ * implementation. The only thing the two callers disagree about is whether a
+ * missing `block_num` is a failure, and that is decided by each of them rather
+ * than duplicated here.
+ */
+async function postSignedTransaction(
+	signed: SignedTransaction,
+	/**
+	 * Ask the indexer to answer as soon as the node accepts the transaction,
+	 * rather than when a witness seals it into a block.
+	 *
+	 * Sent only by the chat path, and only because the indexer cannot safely
+	 * assume it. A browser tab can be older than the indexer serving it, and a
+	 * bundle from before this release would read the resulting `block_num: null`
+	 * as a malformed reply and show a permanent failure for a message that was
+	 * in fact delivered. Asking for the behaviour is what makes the two versions
+	 * safe in both directions.
+	 */
+	chatAsync = false
+): Promise<{ block_num?: unknown; trx_id?: unknown }> {
 	let res: Response;
 	try {
 		res = await fetchWithTimeout(
@@ -120,9 +165,11 @@ export async function submitSignedTransaction(signed: SignedTransaction): Promis
 			{
 				method: 'POST',
 				headers: { 'content-type': 'application/json', accept: 'application/json' },
-				body: JSON.stringify({ trx: signed })
+				body: JSON.stringify(chatAsync ? { trx: signed, chat_async: true } : { trx: signed })
 			},
-			30_000
+			// A chain WRITE through the indexer — same reasoning as the head
+			// fetch above, and the step the whole send depends on.
+			chainCallTimeoutMs(30_000)
 		);
 	} catch (e) {
 		throw new BroadcastUnavailableError(
@@ -131,11 +178,7 @@ export async function submitSignedTransaction(signed: SignedTransaction): Promis
 	}
 
 	if (res.ok) {
-		const body = (await res.json()) as Partial<BroadcastResult>;
-		if (typeof body.block_num === 'number' && typeof body.trx_id === 'string') {
-			return { block_num: body.block_num, trx_id: body.trx_id };
-		}
-		throw new BroadcastUnavailableError('your Morphit instance returned an unexpected result');
+		return (await res.json()) as { block_num?: unknown; trx_id?: unknown };
 	}
 
 	if (res.status === 400) {
@@ -155,4 +198,37 @@ export async function submitSignedTransaction(signed: SignedTransaction): Promis
 	throw new BroadcastUnavailableError(
 		`your Morphit instance could not broadcast right now (status ${res.status})`
 	);
+}
+
+/** Submit a SIGNED transaction through the same-origin indexer broadcast proxy.
+ *  Surfaces a `ChainRejectedError` on chain rejection (400) and a
+ *  `BroadcastUnavailableError` if the indexer is unreachable — NEVER falls back
+ *  to a direct browser→node broadcast (privacy #1). */
+export async function submitSignedTransaction(signed: SignedTransaction): Promise<BroadcastResult> {
+	const body = await postSignedTransaction(signed);
+	if (typeof body.block_num === 'number' && typeof body.trx_id === 'string') {
+		return { block_num: body.block_num, trx_id: body.trx_id };
+	}
+	throw new BroadcastUnavailableError('your Morphit instance returned an unexpected result');
+}
+
+/**
+ * Submit a signed CHAT MESSAGE, which is answered before it reaches a block.
+ *
+ * Identical to `submitSignedTransaction` except that a null `block_num` is the
+ * expected, successful answer rather than a malformed one — see
+ * {@link ChatBroadcastResult}. A NUMBER is still accepted, so this keeps working
+ * against an older indexer that still broadcasts chat synchronously and ignores
+ * the flag below; what is refused is a reply with no usable transaction id at
+ * all. Between the flag and that tolerance, either half of this pair can be the
+ * older one without anybody seeing an error.
+ */
+export async function submitSignedChatTransaction(
+	signed: SignedTransaction
+): Promise<ChatBroadcastResult> {
+	const body = await postSignedTransaction(signed, true);
+	if (typeof body.trx_id === 'string' && body.trx_id.length > 0) {
+		return { block_num: null, trx_id: body.trx_id };
+	}
+	throw new BroadcastUnavailableError('your Morphit instance returned an unexpected result');
 }

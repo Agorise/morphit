@@ -1,9 +1,9 @@
 {
   "name": "@morphit/hidden-transport",
-  "version": "1.17.15",
+  "version": "1.18.0",
   "private": true,
   "type": "module",
-  "description": "Dependency-free hidden-network transport primitives (SOCKS5 connector for Tor .onion, host/port parsing, network classification, proxy config) shared by the indexer's hidden-service fetch and the ops-cli hidden upgrade fetch, so the two can never drift. Pure node:net + buffers — no external deps, so it bundles and installs fully offline.",
+  "description": "Dependency-free hidden-network transport primitives (the main entry; the separate ./router entry adds the undici routing dispatcher and needs undici as a peer) (SOCKS5 connector for Tor .onion, host/port parsing, network classification, proxy config) shared by the indexer's hidden-service fetch and the ops-cli hidden upgrade fetch, so the two can never drift. Pure node:net + buffers — no external deps, so it bundles and installs fully offline.",
   "license": "AGPL-3.0-or-later",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -15,5 +15,13 @@
   },
   "devDependencies": {
     "typescript": "^5.6.3"
+  },
+  "peerDependencies": {
+    "undici": "^7.28.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./router": "./src/router.ts",
+    "./rpc-fetch": "./src/rpcFetch.ts"
   }
 }

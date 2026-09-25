@@ -15,6 +15,7 @@
  * short tail.
  *
  * Flags: --signer <account> (trusted publisher, default morphit),
+ *        --signer-pubkey <BLT…> (the key a non-official --signer must sign with),
  *        --force (restore over an existing DB — destructive),
  *        --skip-verify (skip the Tier-2 spot-check, e.g. tor-only with no
  *        cleartext block access yet).
@@ -47,6 +48,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 		return fastSyncFromChain({
 			repoRoot: defaultRepoRoot(),
 			signer: ctx.flags.signer,
+			signerPubkey: ctx.flags['signer-pubkey'],
 			verifyOnly: true
 		});
 	}
@@ -148,6 +150,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 			: fastSyncFromChain({
 					repoRoot: defaultRepoRoot(),
 					signer: ctx.flags.signer,
+			signerPubkey: ctx.flags['signer-pubkey'],
 					force: forceEffective,
 					skipVerify: ctx.flags['skip-verify'] === 'true'
 				});
@@ -195,6 +198,9 @@ function stopIndexerAndWait(): boolean {
 export function fastSyncFromChain(opts: {
 	repoRoot: string;
 	signer?: string;
+	/** v1.18.0 deep-deep (rv2-1): the posting key a non-official --signer must
+	 *  have signed with. The official account's key is pinned in indexer.env. */
+	signerPubkey?: string;
 	force?: boolean;
 	skipVerify?: boolean;
 	/** Rehearse only: find, fetch and VERIFY the snapshot, then stop before the
@@ -215,6 +221,7 @@ export function fastSyncFromChain(opts: {
 	];
 	if (opts.verifyOnly) bootstrapArgs.push('--verify-only');
 	if (opts.signer) bootstrapArgs.push('--signer', opts.signer);
+	if (opts.signerPubkey) bootstrapArgs.push('--signer-pubkey', opts.signerPubkey);
 	if (opts.force) bootstrapArgs.push('--force');
 	if (opts.skipVerify) bootstrapArgs.push('--skip-verify');
 

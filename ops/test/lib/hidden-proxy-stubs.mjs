@@ -3,7 +3,7 @@
  *
  * Faithful stand-ins for the two proxies a hidden-only Morphit node depends on:
  *
- *   .b32.i2p  →  i2pd's HTTP proxy      (undici `new ProxyAgent('http://h:p')`)
+ *   .b32.i2p  →  i2pd's HTTP proxy      (our `makeHttpConnectConnector`, HTTP CONNECT)
  *   .onion    →  Tor's SOCKS5 port      (a hand-rolled SOCKS5 connector)
  *
  * They are DIFFERENT code paths in hiddenServiceDispatcher.ts, so a test that
@@ -34,6 +34,10 @@ const ORIGIN_PORT = Number(originPortRaw);
 const HTTP_PROXY_PORT = Number(httpProxyPortRaw);
 const SOCKS_PORT = Number(socksPortRaw);
 const BODY = process.env.MORPHIT_STUB_BODY ?? '{}';
+// Optional per-method answers (v1.18.0 deep-deep, rv2-1): a JSON object mapping a
+// JSON-RPC method (e.g. "condenser_api.get_block") to its result. A method not
+// in the map gets BODY, as before.
+const RPC_BY_METHOD = process.env.MORPHIT_STUB_RPC ? JSON.parse(process.env.MORPHIT_STUB_RPC) : {};
 
 const note = (line) => {
 	try {
@@ -66,13 +70,17 @@ createHttpServer((req, res) => {
 	req.on('data', (c) => (body += c));
 	req.on('end', () => {
 		let id = 1;
+		let method = '';
 		try {
-			id = JSON.parse(body).id ?? 1;
+			const j = JSON.parse(body);
+			id = j.id ?? 1;
+			method = typeof j.method === 'string' ? j.method : '';
 		} catch {
 			/* a non-JSON probe still gets a well-formed reply */
 		}
+		const result = Object.hasOwn(RPC_BY_METHOD, method) ? RPC_BY_METHOD[method] : JSON.parse(BODY);
 		res.writeHead(200, { 'content-type': 'application/json' });
-		res.end(JSON.stringify({ jsonrpc: '2.0', id, result: JSON.parse(BODY) }));
+		res.end(JSON.stringify({ jsonrpc: '2.0', id, result }));
 	});
 }).listen(ORIGIN_PORT, '127.0.0.1');
 

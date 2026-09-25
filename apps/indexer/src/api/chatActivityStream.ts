@@ -159,6 +159,22 @@ export function chatActivityStreamRoute(): Hono {
 				unsubscribeFastBus = chatEventBus.onFast((ev) => {
 					if (cancelled) return;
 					if (ev.lo !== account && ev.hi !== account) return;
+					// INBOUND pings obey the same gate as the push and the replay.
+					//
+					// Everything else that acts on a fast event checks `replayable`
+					// — the safe-subset answer to "may this sender notify this
+					// person?" — and this listener did not, which made the live
+					// badge the one unguarded way to reach somebody's inbox. It
+					// mattered more once messages could arrive from peers: a signed
+					// chat op costs nothing to mint offline (no block, no resource
+					// credits, no stranger fee), so an ungated live badge was a
+					// free, repeatable, traceless ping at any account, on any
+					// thread the sender cared to name. Delivery into a chatroom the
+					// two are already looking at stays unconditional — a message
+					// you are reading is not a notification — and the sender's own
+					// echo to their other devices is untouched, because the client
+					// ignores anything not marked inbound.
+					if (ev.recipient === account && ev.replayable !== true) return;
 					// The fast event carries sender/recipient/orderPermlink directly, so
 					// this ping can name the exact thread — which is what lets the client
 					// light the badge NOW instead of re-polling a table that won't know

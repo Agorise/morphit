@@ -13,7 +13,7 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
-import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, type Config, type UnlockedConfig } from './config/index.ts';
+import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, hiddenRouterPolicy, type Config, type UnlockedConfig } from './config/index.ts';
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { unlockActiveKey } from './config/unlock.ts';
 import { BlurtClient } from './blurt/client.ts';
@@ -33,6 +33,7 @@ import { configureTrustedProxies } from './middleware/ip.ts';
 import { Limiter } from './middleware/ratelimit.ts';
 import { PushSubscriptionStore } from './policy/pushSubscriptions.ts';
 import { PushSender } from './policy/pushSender.ts';
+import { PushQueueJanitor } from './policy/pushQueueJanitor.ts';
 import { PushEndpoints } from './api/push.ts';
 import { corsAllowlist } from './middleware/cors.ts';
 import { enforceOriginAllowlist } from './middleware/origin_enforcement.ts';
@@ -41,6 +42,7 @@ import { maxBodyBytes, securityHeaders } from './middleware/security.ts';
 import { accessLog } from './middleware/access_log.ts';
 import { logger } from '$log';
 import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+import { installHiddenServiceDispatcher, routerInstallPolicy } from '@morphit/hidden-transport/router';
 
 // Scoped loggers per phase so operators can filter journalctl by
 // module rather than grepping free-form prefixes.
@@ -118,8 +120,33 @@ async function main(): Promise<void> {
 		listen_port: cfg.listenPort,
 		public_origin: cfg.publicOrigin,
 		rpc_endpoints: cfg.blurtRpcEndpoints.length,
+		hidden_rpc_endpoints: cfg.hiddenRpcEndpoints.length,
+		hidden_only: cfg.hiddenOnly,
 		allowed_origins: cfg.allowedOrigins.length,
 		verbose_health: cfg.verboseHealth
+	});
+
+	// ─── Hidden-service routing (v1.18.0, F32) ─────────────────────────
+	// Before ANY outbound request. The relay had no router at all: an
+	// `.onion`/`.i2p` endpoint in its pool — including every one merged from the
+	// on-chain directory below — was dialled as if it were a public name and
+	// could never answer, and on a tor-only node the relay reached the chain over
+	// clearnet from the box's own address while the indexer beside it did not.
+	// The SAME router the indexer installs (one home, in the package), with the
+	// same rule: fail-closed on public clearnet when every endpoint is hidden.
+	// ALWAYS installed (v1.18.0 deep-deep, L3): the on-chain directory merged
+	// below adds `.onion`/`.i2p` nodes to a clearnet relay's pool too, and with no
+	// router their names went to the system resolver. routerInstallPolicy turns
+	// "no hidden endpoint configured" into 'allow' — clearnet unchanged.
+	const routerPolicy = routerInstallPolicy(hiddenRouterPolicy(cfg));
+	installHiddenServiceDispatcher(cfg.hiddenServiceProxies, routerPolicy);
+	cfgLog.info('hidden_dispatcher_installed', {
+		tor: cfg.hiddenServiceProxies.torSocks || '(disabled)',
+		i2p: cfg.hiddenServiceProxies.i2pHttpProxy || '(disabled)',
+		clearnet_policy: routerPolicy,
+		note: cfg.hiddenOnly
+			? 'HIDDEN-ONLY: public clearnet fail-closed; chain over .onion/.i2p only; Web Push off'
+			: 'clearnet unchanged; .onion→Tor, .i2p→i2pd'
 	});
 
 	// Configure trusted-proxy IPs / CIDRs that may set
@@ -148,7 +175,10 @@ async function main(): Promise<void> {
 		}
 	}
 
-	const blurt = new BlurtClient(cfg.blurtRpcEndpoints, cfg.accountCreationFeeBlurt);
+	const blurt = new BlurtClient(
+		[...cfg.blurtRpcEndpoints, ...cfg.hiddenRpcEndpoints],
+		cfg.accountCreationFeeBlurt
+	);
 
 	// Task #7 — local-vs-chain clock drift sanity check.  We
 	// don't need atomic-clock precision; the chain provides
@@ -307,7 +337,13 @@ async function main(): Promise<void> {
 	// subscriptions, so config treats push as disabled. Tell the operator
 	// clearly rather than letting every user hit a cryptic "subscribe
 	// failed" in their browser.
-	if (
+	if (cfg.hiddenOnly && cfg.vapidPublicKey && cfg.vapidPrivateKey && cfg.vapidSubject) {
+		// Checked first: the keys may be perfectly valid, and the hints below
+		// would then blame them.
+		cfgLog.warn('push_disabled_hidden_only', {
+			hint: 'This relay is hidden-only (every chain endpoint is .onion/.i2p), so Web Push is off: a browser push service is a public clearnet host, and delivering to it would contact the open internet from this box. Chat, orders and in-app notifications are unaffected.'
+		});
+	} else if (
 		cfg.vapidPublicKey &&
 		cfg.vapidPrivateKey &&
 		cfg.vapidSubject &&
@@ -342,7 +378,10 @@ async function main(): Promise<void> {
 		// who require signed subscribe also require signed
 		// unsubscribe; permissive-mode operators get the
 		// signature verified opportunistically.
-		cfg.pushRequireSigned
+		cfg.pushRequireSigned,
+		// v1.18.0 — say WHY push is off when it is off on purpose, so the
+		// browser can tell its user the truth rather than "not enabled yet".
+		cfg.hiddenOnly ? 'hidden_only' : null
 	);
 	const pushSender = cfg.pushEnabled
 		? new PushSender(cfg, db, pushSubscriptionStore)
@@ -353,9 +392,27 @@ async function main(): Promise<void> {
 			batch_size: cfg.pushBatchSize,
 			max_age_seconds: cfg.pushMaxAgeSeconds
 		});
-	} else {
+	} else if (!cfg.hiddenOnly) {
+		// A hidden-only relay has already said why push is off (above), and its
+		// keys may be perfectly valid — "no VAPID keys" would be false there.
 		bootLog.info('push_disabled_no_vapid_keys', {});
 	}
+	// v1.18.0 — with no sender, nothing retires or prunes push_pending, and
+	// the indexer keeps queueing for every account that subscribed while push
+	// worked. The janitor applies the sender's own age and retention rules so
+	// the table stays bounded. See pushQueueJanitor.ts.
+	const pushJanitor = pushSender
+		? null
+		: new PushQueueJanitor(
+				db,
+				cfg.pushMaxAgeSeconds,
+				(r) => {
+					if (r.retired > 0 || r.pruned > 0) {
+						bootLog.info('push_queue_janitor', { retired: r.retired, pruned: r.pruned });
+					}
+				},
+				(err) => bootLog.error('push_queue_janitor_failed', {}, err as Error)
+			);
 
 	// Start the background BLURT-balance poll. We don't wait for it
 	// to succeed — the relay should come up even if the chain is
@@ -373,6 +430,7 @@ async function main(): Promise<void> {
 	// Start the push-sender worker — drains push_pending into
 	// per-device Web Push deliveries.  Only when VAPID is set.
 	if (pushSender) pushSender.start();
+	else pushJanitor?.start();
 
 	const app = new Hono();
 

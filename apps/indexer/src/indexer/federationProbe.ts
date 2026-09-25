@@ -37,9 +37,11 @@ import { Agent } from 'undici';
 import {
 	fetchJsonViaHiddenService,
 	hiddenServiceProxyConfigFromEnv,
-	ProxyUnavailableError,
+	isProxyUnavailable,
+	hiddenHostNetworkOf,
 	type HiddenServiceProxyConfig
 } from '$indexer/hiddenServiceFetch';
+import { clearnetRefused, ClearnetRefusedError } from '$indexer/hiddenServiceDispatcher';
 
 import type { Database } from '$db/pool';
 import { logger } from '$log';
@@ -69,7 +71,7 @@ const FAILURE_DROP_DAYS = 7; // drop row after 7d of consecutive failures
  *  straight to 'unreachable' on a single miss; we hold its last status until it
  *  has missed this many probes IN A ROW. Clearnet peers keep the immediate
  *  behaviour (a clearnet timeout is a reliable signal). Mirrors the
- *  benefit-of-the-doubt the proxy-down path (persistHiddenServiceListed) already
+ *  benefit-of-the-doubt the proxy-down path (persistListedNotProbed) already
  *  gives when OUR proxy is down. */
 const HIDDEN_SERVICE_UNREACHABLE_AFTER = 3;
 /** Probe schedule, by current status.  Picks the longest interval
@@ -92,6 +94,15 @@ const DEFAULT_CONCURRENCY = 10;
  *  the indexer skips populating new known_instances rows and emits
  *  a warning.  Won't matter for years; sized for "small federation". */
 const MAX_TRACKED_INSTANCES = 200;
+/** (v1.18.0 deep-deep, M4) Cap on NEVER-probed rows per scan. What was wrong:
+ *  registrations are free, and never-probed rows sorted first
+ *  (`ORDER BY last_probed_at NULLS FIRST LIMIT 200`), so a burst of throwaway
+ *  registrations filled the whole scan and starved established peers of their
+ *  re-probe. New rows now get at most this many slots per scan, taken oldest
+ *  on-chain registration first (deterministic), and established peers that are
+ *  due get the rest. At the 15 s scheduler tick this still probes ~80 new
+ *  registrations a minute. */
+export const MAX_NEW_PROBES_PER_SCAN = 20;
 
 /** v1.15.3 — how recent an operator's last on-chain action must be for an
  *  unreachable-over-clearnet node to count as 'clearnet_blocked' (censored, still
@@ -180,6 +191,10 @@ export interface FederationProbeConfig {
 	 *  proxy that's down or unset just falls the peer back to listed-not-probed —
 	 *  it never marks an onion peer 'unreachable' for OUR daemon being offline. */
 	readonly hiddenServiceProxies?: HiddenServiceProxyConfig;
+	/** The JSON fetcher for CLEARNET peers. Defaults to the SSRF-hardened
+	 *  `fetchJson`; injectable so the scheduler pass can be exercised end to
+	 *  end against stub peers (v1.18.0 deep-deep, M4 guard). */
+	readonly clearnetFetch?: <T>(url: string) => Promise<T>;
 }
 
 /** Normalize an origin for self-comparison: trim, drop any trailing
@@ -196,6 +211,36 @@ function normalizeOrigin(origin: string): string {
  *  always time out and spuriously mark an otherwise-healthy onion-only node
  *  'unreachable'.  Real cross-network verification is the Phase-F+ Tor-routed
  *  probe (see the module header). */
+/**
+ * The hidden addresses an operator has published on chain, in the order this
+ * indexer would rather try them, and only those that still look like addresses
+ * of their network.
+ *
+ * `ens` is excluded: it is a name to be resolved, not a transport, and there is
+ * no resolver on this path. Everything else is validated at registration
+ * (operatorRegister) and re-validated here, because "valid when written" and
+ * "valid now, in this row" are different claims.
+ */
+export function publishedHiddenHosts(
+	alt: {
+		tor?: string | null;
+		i2p_b32?: string | null;
+		i2p_name?: string | null;
+		lokinet?: string | null;
+	} | null
+): string[] {
+	if (alt === null || alt === undefined) return [];
+	const out: string[] = [];
+	for (const host of [alt.tor, alt.i2p_b32, alt.i2p_name, alt.lokinet]) {
+		if (typeof host !== 'string') continue;
+		const h = host.trim().toLowerCase();
+		if (h.length === 0 || out.includes(h)) continue;
+		if (hiddenHostNetworkOf(h) === null) continue;
+		out.push(h);
+	}
+	return out;
+}
+
 function isHiddenServiceOrigin(origin: string): boolean {
 	let host: string;
 	try {
@@ -224,6 +269,11 @@ export interface KnownInstanceRow {
 	/** v1.15.3 — the block of the operator's most recent on-chain action. Lets us
 	 *  tell a clearnet-blocked-but-alive node from a dead one. pg BIGINT → string. */
 	last_action_block_num: string | number | null;
+	/** (v1.18.0 deep-deep, M4) OTHER accounts whose on-chain registration
+	 *  claims this same origin (operators.origin), oldest registration first.
+	 *  If the origin itself serves one of them as its relay_account, that
+	 *  registrant owns the row — see probeOne. Absent/null → none. */
+	rival_claimants?: readonly string[] | null;
 }
 
 export interface ProbeOutcome {
@@ -237,6 +287,10 @@ export interface ProbeOutcome {
 	cachedAltNetworks: unknown | null;
 	cachedIndexedBlock: number | null;
 	cachedChainLagSec: number | null;
+	/** (v1.18.0 deep-deep, M4) Set when the origin's own /v1/instance named a
+	 *  DIFFERENT on-chain registrant of this origin than the row's current
+	 *  operator_account; persistOutcome moves the row to that account. */
+	readonly confirmedOwner?: string;
 }
 
 export class FederationProbeScheduler {
@@ -316,30 +370,52 @@ export class FederationProbeScheduler {
 		// Probe-due query: rows where the time-since-last-probe exceeds
 		// the per-status interval.  We compute the per-status threshold
 		// in SQL via CASE for a single round-trip.
+		//
+		// (v1.18.0 deep-deep, M4) Two queries now: at most
+		// MAX_NEW_PROBES_PER_SCAN never-probed rows (oldest on-chain
+		// registration first), then the established rows that are due. Before,
+		// never-probed rows sorted first under one LIMIT, so free throwaway
+		// registrations could starve real peers of their re-probe. Both
+		// queries also carry `rival_claimants` (other registrants of the same
+		// origin) so the probe can hand the row to the one the origin names.
 		const goodMs = PROBE_INTERVAL_MS.good;
 		const failMs = PROBE_INTERVAL_MS.unreachable;
-		const result = await this.db.query<KnownInstanceRow>(
-			`SELECT ki.origin, ki.operator_account, ki.registered_at_time,
+		const cols = `ki.origin, ki.operator_account, ki.registered_at_time,
 			        ki.last_probed_at, ki.last_probe_status, ki.consecutive_failures,
 			        ki.cached_indexed_block,
-			        o.reg_alt_networks, o.last_action_block_num
+			        o.reg_alt_networks, o.last_action_block_num,
+			        ARRAY(SELECT o2.account FROM operators o2
+			               WHERE o2.origin = ki.origin AND o2.account <> ki.operator_account
+			               ORDER BY o2.registered_in_block, o2.account) AS rival_claimants`;
+		const fresh = await this.db.query<KnownInstanceRow>(
+			`SELECT ${cols}
 			 FROM known_instances ki
 			 LEFT JOIN operators o ON o.account = ki.operator_account
-			 WHERE ki.last_probe_status = 'never'
-			    OR ki.last_probed_at IS NULL
-			    OR (
+			 WHERE ki.last_probe_status = 'never' OR ki.last_probed_at IS NULL
+			 ORDER BY ki.registered_at_block, ki.origin
+			 LIMIT ${MAX_NEW_PROBES_PER_SCAN}`,
+			[]
+		);
+		const result = await this.db.query<KnownInstanceRow>(
+			`SELECT ${cols}
+			 FROM known_instances ki
+			 LEFT JOIN operators o ON o.account = ki.operator_account
+			 WHERE ki.last_probe_status <> 'never'
+			   AND ki.last_probed_at IS NOT NULL
+			   AND (
+			    (
 			        ki.last_probe_status IN ('good', 'quiet', 'syncing')
 			        AND ki.last_probed_at < NOW() - INTERVAL '${Math.floor(goodMs / 1000)} seconds'
 			    )
 			    OR (
 			        ki.last_probe_status IN ('stale', 'unreachable', 'mismatch', 'clearnet_blocked')
 			        AND ki.last_probed_at < NOW() - INTERVAL '${Math.floor(failMs / 1000)} seconds'
-			    )
-			 ORDER BY ki.last_probed_at NULLS FIRST
+			    ))
+			 ORDER BY ki.last_probed_at
 			 LIMIT ${MAX_TRACKED_INSTANCES}`,
 			[]
 		);
-		return result.rows;
+		return [...fresh.rows, ...result.rows];
 	}
 
 	private async probePool(instances: readonly KnownInstanceRow[]): Promise<void> {
@@ -390,9 +466,22 @@ export class FederationProbeScheduler {
 				}
 				// Hidden-service origin (.onion / .b32.i2p / .i2p / .loki): probe
 				// it THROUGH the co-located Tor/I2P proxy so its status is real.
-				// If OUR proxy is down (ProxyUnavailableError), fall back to
-				// listing it — never penalise a healthy peer for our Tor being
-				// offline. Any other failure is the peer's, and is recorded.
+				// If OUR proxy is down, fall back to listing it — never penalise
+				// a healthy peer for our Tor being offline. Any other failure is
+				// the peer's, and is recorded.
+				//
+				// `isProxyUnavailable`, NOT `instanceof`. This rule was written
+				// as an `instanceof ProxyUnavailableError` against an error
+				// `fetch()` does not produce: fetch reports `TypeError: fetch
+				// failed` and hangs the connector's error off `cause`, so the
+				// branch was unreachable and every onion peer in the directory
+				// was marked `unreachable` whenever OUR Tor daemon stopped —
+				// silently, and federation-wide, from a purely local fault. It
+				// had also never covered I2P or Lokinet at all, since neither
+				// raised the marker class until the transport entry points began
+				// normalising into it. See localTransportFault.test.ts, which
+				// asserts the shape a real dead proxy produces so this cannot be
+				// rewritten the confident-looking way again.
 				if (isHiddenServiceOrigin(inst.origin)) {
 					const proxies =
 						this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
@@ -407,9 +496,9 @@ export class FederationProbeScheduler {
 						);
 						await this.persistOutcome(inst, outcome);
 					} catch (err) {
-						if (err instanceof ProxyUnavailableError) {
+						if (isProxyUnavailable(err)) {
 							try {
-								await this.persistHiddenServiceListed(inst);
+								await this.persistListedNotProbed(inst, 'hidden_service_not_network_probed');
 							} catch (perr) {
 								log.error('hidden_service_persist_threw', { origin: inst.origin }, perr);
 							}
@@ -430,33 +519,75 @@ export class FederationProbeScheduler {
 					continue;
 				}
 				try {
-					let outcome = await probeOne(inst, treasuryForProbe, fetchJson, selfCheck);
+					// A hidden-only node does not contact a clearnet origin at all —
+					// not to probe it, not to resolve its name. It goes straight to
+					// the peer's published hidden addresses below.
+					const hiddenOnly = clearnetRefused();
+					let outcome: ProbeOutcome = hiddenOnly
+						? mkUnreachable('clearnet_not_contacted_hidden_only')
+						: await probeOne(inst, treasuryForProbe, this.config.clearnetFetch ?? fetchJson, selfCheck);
+					// Whether anything that failed below failed on OUR side (no
+					// hidden address to try, or our proxy for it down) rather than
+					// the peer's. Only a peer-side failure may be recorded against it.
+					let onlyOurSideFailed = true;
 					// v1.15.3 Fix A — the clearnet fetch failed, but the operator may
-					// have published an .onion ON-CHAIN. Retry the probe over Tor so a
-					// clearnet-censored node (e.g. Iran) is still discovered + reachable.
+					// have published a hidden address ON-CHAIN. Retry the probe over it
+					// so a clearnet-censored node (e.g. Iran) is still discovered and
+					// reachable.
+					//
+					// v1.18.0 — EVERY published hidden address, not just the onion.
+					// This tried `.onion` alone, which meant a clearnet-censored peer
+					// that had published only an I2P destination or a Lokinet name was
+					// recorded `unreachable` and dropped out of the directory —
+					// unreachable being precisely what it was not. It is the same
+					// narrowness the chat fast path carried (ADR-0052 decision 8):
+					// treating "hidden service" as a synonym for Tor, in a federation
+					// built on three of them.
+					//
+					// Order matters only for cost: the first address that answers wins,
+					// and each is tried through the transport its network needs.
 					if (outcome.status === 'unreachable') {
-						const onion = inst.reg_alt_networks?.tor ?? null;
-						if (onion && /^[a-z2-7]{56}\.onion$/.test(onion)) {
-							const proxies =
-								this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
+						const proxies =
+							this.config.hiddenServiceProxies ?? hiddenServiceProxyConfigFromEnv();
+						for (const hidden of publishedHiddenHosts(inst.reg_alt_networks)) {
 							try {
-								const torOutcome = await probeOne(
-									{ ...inst, origin: `http://${onion}` },
+								const hiddenOutcome = await probeOne(
+									{ ...inst, origin: `http://${hidden}` },
 									treasuryForProbe,
 									<T>(url: string): Promise<T> => fetchJsonViaHiddenService<T>(url, proxies),
 									selfCheck
 								);
 								if (
-									torOutcome.status === 'good' ||
-									torOutcome.status === 'quiet' ||
-									torOutcome.status === 'syncing'
+									hiddenOutcome.status === 'good' ||
+									hiddenOutcome.status === 'quiet' ||
+									hiddenOutcome.status === 'syncing'
 								) {
-									outcome = torOutcome; // reached over Tor — the censored node is alive
+									// Reached over a hidden network — the censored node is alive.
+									outcome = hiddenOutcome;
+									break;
 								}
+								// It answered, or failed to, on its own account.
+								onlyOurSideFailed = false;
+								if (hiddenOnly) outcome = hiddenOutcome;
 							} catch {
-								/* our Tor proxy is down or the onion is unreachable — fall through */
+								/* probeOne rethrows only a local transport fault: our
+								   proxy for this network is down. Try the next one. */
 							}
 						}
+					}
+					// Hidden-only, and nothing was asked of the peer that it could
+					// have failed: it published no hidden address, or every one needs
+					// a proxy of ours that is down. That is our policy or our fault,
+					// never evidence about the peer — list it, exactly as a clearnet
+					// node lists a hidden origin it has no proxy for.
+					if (hiddenOnly && outcome.status === 'unreachable' && onlyOurSideFailed) {
+						await this.persistListedNotProbed(
+							inst,
+							publishedHiddenHosts(inst.reg_alt_networks).length === 0
+								? 'clearnet_peer_not_probed_hidden_only'
+								: 'hidden_service_not_network_probed'
+						);
+						continue;
 					}
 					// v1.15.3 Fix B — still unreachable over clearnet AND Tor, but is the
 					// operator ALIVE on-chain (recent action)? Then it's censored, not
@@ -501,6 +632,28 @@ export class FederationProbeScheduler {
 	}
 
 	private async persistOutcome(inst: KnownInstanceRow, outcome: ProbeOutcome): Promise<void> {
+		// (v1.18.0 deep-deep, M4) Ownership follows the registrant the origin
+		// itself confirms. What was wrong: first registrant owned the origin row
+		// forever (register handler: ON CONFLICT (origin) DO NOTHING), so a
+		// squatter who registered a real operator's origin first had that
+		// operator probed as a fee-redirecting 'mismatch' with no recourse.
+		// The row moves ONLY to an account that (a) registered this exact
+		// origin on chain and (b) is the relay_account the origin serves —
+		// every node probing the origin gets the same answer, so they converge.
+		if (outcome.confirmedOwner !== undefined && outcome.confirmedOwner !== inst.operator_account) {
+			const moved = await this.db.query(
+				`UPDATE known_instances SET operator_account = $2
+				  WHERE origin = $1 AND operator_account = $3`,
+				[inst.origin, outcome.confirmedOwner, inst.operator_account]
+			);
+			if ((moved.rowCount ?? 0) > 0) {
+				log.info('origin_ownership_confirmed', {
+					origin: inst.origin,
+					from: inst.operator_account,
+					to: outcome.confirmedOwner
+				});
+			}
+		}
 		const isSuccess =
 			outcome.status === 'good' || outcome.status === 'quiet' || outcome.status === 'syncing';
 		// On success: store cached snapshot, reset failure counter.
@@ -653,15 +806,20 @@ export class FederationProbeScheduler {
 	 *  Status 'good' keeps it in the directory; last_probe_error records that it
 	 *  wasn't network-verified so the reason is auditable. A future Tor-routed
 	 *  probe (Phase F+) will verify it for real and can downgrade a dead onion. */
-	private async persistHiddenServiceListed(inst: KnownInstanceRow): Promise<void> {
+	/** List a peer this node could not ask about — no route of ours reaches it
+	 *  (our proxy is down, or it is clearnet-only and we are hidden-only) — on the
+	 *  strength of its signed on-chain registration, with the reason recorded.
+	 *  Never 'unreachable': that is a claim about the peer, and nothing was
+	 *  learned about the peer. */
+	private async persistListedNotProbed(inst: KnownInstanceRow, reason: string): Promise<void> {
 		await this.db.query(
 			`UPDATE known_instances SET
 				last_probed_at = NOW(),
 				last_probe_status = 'good',
-				last_probe_error = 'hidden_service_not_network_probed',
+				last_probe_error = $2,
 				consecutive_failures = 0
 			 WHERE origin = $1`,
-			[inst.origin]
+			[inst.origin, reason]
 		);
 	}
 }
@@ -693,6 +851,20 @@ export async function probeOne(
 	fetchFn: <T>(url: string) => Promise<T> = fetchJson,
 	selfCheck: SelfRelayCollisionCheck | null = null
 ): Promise<ProbeOutcome> {
+	// (v1.18.0 deep-deep, M4) the inner probe reports, through `owner`, a rival
+	// on-chain registrant of this origin that the origin itself confirmed.
+	const owner: { confirmed?: string } = {};
+	const out = await probeOneInner(inst, canonicalTreasury, fetchFn, selfCheck, owner);
+	return owner.confirmed === undefined ? out : { ...out, confirmedOwner: owner.confirmed };
+}
+
+async function probeOneInner(
+	inst: KnownInstanceRow,
+	canonicalTreasury: { btc: string | null; xmr: string | null } | null,
+	fetchFn: <T>(url: string) => Promise<T>,
+	selfCheck: SelfRelayCollisionCheck | null,
+	owner: { confirmed?: string }
+): Promise<ProbeOutcome> {
 	const { origin, operator_account, registered_at_time } = inst;
 
 	// Fetch /v1/instance.
@@ -700,7 +872,7 @@ export async function probeOne(
 	try {
 		instanceData = await fetchFn<InstanceShape>(`${origin}/v1/instance`);
 	} catch (err) {
-		if (err instanceof ProxyUnavailableError) throw err;
+		if (isProxyUnavailable(err)) throw err;
 		return mkUnreachable(`instance_fetch: ${errMsg(err)}`);
 	}
 	if (!isInstanceShape(instanceData)) {
@@ -737,7 +909,23 @@ export async function probeOne(
 	// differs from the operator is still a mismatch.
 	const bothReservedBrandAccounts =
 		isReservedTag(operator_account) && isReservedTag(instanceData.relay_account);
-	if (instanceData.relay_account !== operator_account && !bothReservedBrandAccounts) {
+	// (v1.18.0 deep-deep, M4) The row's current owner is only the FIRST account
+	// that registered this origin. If the origin names a DIFFERENT account that
+	// also registered this exact origin on chain (same both-reserved rule as
+	// above), that account is the real operator: hand it the row instead of
+	// accusing it of fee redirection. An account the origin names that never
+	// registered the origin is still a mismatch.
+	const rival =
+		instanceData.relay_account !== operator_account && !bothReservedBrandAccounts
+			? (inst.rival_claimants ?? []).find(
+					(r) =>
+						r === instanceData.relay_account ||
+						(isReservedTag(r) && isReservedTag(instanceData.relay_account))
+				)
+			: undefined;
+	if (rival !== undefined) {
+		owner.confirmed = rival;
+	} else if (instanceData.relay_account !== operator_account && !bothReservedBrandAccounts) {
 		return mkMismatch(
 			`relay_account mismatch: chain=${operator_account} instance=${instanceData.relay_account}`
 		);
@@ -757,7 +945,7 @@ export async function probeOne(
 	try {
 		healthData = await fetchFn<HealthShape>(`${origin}/v1/health`);
 	} catch (err) {
-		if (err instanceof ProxyUnavailableError) throw err;
+		if (isProxyUnavailable(err)) throw err;
 		return mkUnreachable(`health_fetch: ${errMsg(err)}`);
 	}
 	if (!isHealthShape(healthData)) {
@@ -1125,6 +1313,13 @@ export async function fetchJson<T>(url: string): Promise<T> {
 	if (parsed.protocol !== 'https:') {
 		throw new Error('fetchJson: non-https origin');
 	}
+	// HIDDEN-ONLY: never. This function carries its own transport — a system
+	// DNS lookup and an IP-pinned agent — so the fail-closed global router never
+	// sees its requests. Checked BEFORE the lookup, because the lookup is itself
+	// a clearnet query naming the peer. See clearnetRefused().
+	if (clearnetRefused()) {
+		throw new ClearnetRefusedError(parsed.origin);
+	}
 	const hostname = parsed.hostname.toLowerCase();
 	// First defense: literal-hostname denylist (catches obvious
 	// `https://localhost/`, `https://127.0.0.1/`, etc.).
@@ -1161,6 +1356,9 @@ export async function fetchJson<T>(url: string): Promise<T> {
 			dispatcher: pinnedAgent
 		});
 		if (!resp.ok) {
+			// (v1.18.0 deep-deep, L4) Cancel the unread body: left alone it kept
+			// the connection to the peer open after we had given up on it.
+			await resp.body?.cancel().catch(() => {});
 			throw new Error(`HTTP ${resp.status}`);
 		}
 		// Audit 2026-05 finding NEW-9-11: cap response body size so a
@@ -1177,6 +1375,7 @@ export async function fetchJson<T>(url: string): Promise<T> {
 		if (contentLength !== null) {
 			const declared = parseInt(contentLength, 10);
 			if (Number.isFinite(declared) && declared > MAX_BYTES) {
+				await resp.body?.cancel().catch(() => {});
 				throw new Error(
 					`fetchJson: response too large (declared ${declared} bytes, cap ${MAX_BYTES})`
 				);
@@ -1214,6 +1413,12 @@ export async function fetchJson<T>(url: string): Promise<T> {
 		return JSON.parse(text) as T;
 	} finally {
 		clearTimeout(timeout);
+		// (v1.18.0 deep-deep, L4) The pinned agent is this probe's alone and is
+		// never reused, so close it: it used to be dropped with its idle
+		// keep-alive connection to the peer still open — one per probe, per
+		// peer, on every scan. `destroy`, not `close`: on an error path a
+		// request may still be in flight, and nothing here wants its answer.
+		pinnedAgent.destroy().catch(() => {});
 	}
 }
 

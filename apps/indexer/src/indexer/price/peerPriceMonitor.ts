@@ -105,7 +105,9 @@
  * Wiring
  * ──────
  * - `apps/indexer/src/main.ts` starts the monitor on boot when
- *   MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true.
+ *   MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED=true — and ALWAYS on a
+ *   hidden-only node, whose primary price is the federated median of the
+ *   observations this monitor collects (federatedPriceFetcher.ts).
  * - The monitor stores observations to `price_peer_observations`
  *   and updates an in-process `lastAlertFiredAt` timestamp for
  *   rate-limiting.  No new endpoint surfaces alerts; they appear
@@ -117,7 +119,13 @@
 import type { Database } from '$db/pool';
 import { logger } from '$log';
 import type { BlurtPriceSource } from '$indexer/price/source';
-import { fetchJson } from '$indexer/federationProbe';
+import { fetchJson, publishedHiddenHosts } from '$indexer/federationProbe';
+import {
+	fetchJsonViaHiddenService,
+	hiddenHostNetworkOf,
+	hiddenServiceProxyConfigFromEnv
+} from '$indexer/hiddenServiceFetch';
+import { PER_OPERATOR_LATEST_PRICE_SQL } from '$indexer/price/federatedPriceFetcher';
 
 const log = logger('peer-price-monitor');
 
@@ -198,10 +206,13 @@ export interface PeerPriceMonitorConfig {
 	readonly minObservations?: number;
 	readonly fetchTimeoutMs?: number;
 	/** When true (hidden-only node), fetch each peer's receipt over its on-chain
-	 *  `.onion`/`.i2p` address (via Tor/I2P) instead of its clearnet origin —
-	 *  which stage-1's fail-closed dispatcher would refuse. Peers that publish no
-	 *  hidden address are skipped (can't be reached privately). */
+	 *  hidden addresses — I2P, Tor or Lokinet — instead of its clearnet origin,
+	 *  which a hidden-only node never contacts. Peers that publish no hidden
+	 *  address are skipped (can't be reached privately). */
 	readonly hiddenOnly?: boolean;
+	/** The transport for a hidden address. Defaults to the proxies this
+	 *  indexer is configured with; injected by tests. */
+	readonly hiddenFetch?: <T>(url: string, timeoutMs: number) => Promise<T>;
 }
 
 /** Result of one sample cycle — observation count + comparison
@@ -217,31 +228,51 @@ export interface PeerSampleCycleResult {
 	readonly alertFired: boolean;
 }
 
+/** Hidden networks in the order a price sample should try them: I2P first, as
+ *  a hedge against a compromised Tor network (the operator's explicit concern),
+ *  then Tor, then Lokinet. */
+const PRICE_NETWORK_RANK: Readonly<Record<string, number>> = { i2p: 0, tor: 1, loki: 2 };
+
 /**
- * Resolve the base URL to fetch a peer's price receipt from. PURE.
- *   - clearnet node → the peer's clearnet `origin` (unchanged).
- *   - hidden-only node → the peer's on-chain hidden address (I2P preferred, then
- *     Tor) as `http://<host>`, so the fetch rides I2P/Tor. Preferring I2P first
- *     hedges against a Tor-network compromise (operator's explicit concern).
- *     Returns null when the peer publishes no hidden address — a hidden-only
- *     node then simply skips it (never falls back to its clearnet origin).
- * `regAltNetworks` is the peer's on-chain `{tor?, i2p_b32?, …}` (JSONB), so any
- * newly-registered instance that published a hidden address is picked up
- * automatically.
+ * Every base URL a peer's price receipt may be fetched from, in the order to try
+ * them. PURE.
+ *   - clearnet node → the peer's clearnet `origin`, alone (unchanged).
+ *   - hidden-only node → EVERY hidden address the peer published on chain —
+ *     `.b32.i2p`, a named `.i2p`, `.onion`, `.loki` — as `http://<host>`, I2P
+ *     first. Empty when it published none: a hidden-only node then skips it and
+ *     never falls back to its clearnet origin.
+ *
+ * This read only `i2p_b32` and `tor`, so a peer reachable only by an I2P name or
+ * a Lokinet address was never sampled — the same "hidden service means Tor or a
+ * b32" narrowness v1.18.0 removed from the chat fast path (ADR-0052 decision 8)
+ * and the probe. The address list comes from `publishedHiddenHosts`, the probe's
+ * own, so the two cannot disagree about what a peer published.
  */
+export function peerReceiptBases(
+	origin: string,
+	regAltNetworks: unknown,
+	hiddenOnly: boolean
+): string[] {
+	if (!hiddenOnly) return [origin];
+	if (regAltNetworks === null || typeof regAltNetworks !== 'object') return [];
+	const hosts = publishedHiddenHosts(
+		regAltNetworks as Parameters<typeof publishedHiddenHosts>[0]
+	);
+	const rank = (h: string): number => PRICE_NETWORK_RANK[hiddenHostNetworkOf(h) ?? ''] ?? 9;
+	return hosts
+		.map((h, i) => ({ h, i }))
+		.sort((a, b) => rank(a.h) - rank(b.h) || a.i - b.i)
+		.map(({ h }) => `http://${h}`);
+}
+
+/** The first base {@link peerReceiptBases} would try, or null. Kept for callers
+ *  that want one address; the sample cycle tries them all. */
 export function peerReceiptBase(
 	origin: string,
 	regAltNetworks: unknown,
 	hiddenOnly: boolean
 ): string | null {
-	if (!hiddenOnly) return origin;
-	if (regAltNetworks === null || typeof regAltNetworks !== 'object') return null;
-	const alt = regAltNetworks as { i2p_b32?: unknown; tor?: unknown };
-	const i2p = typeof alt.i2p_b32 === 'string' ? alt.i2p_b32.trim() : '';
-	const tor = typeof alt.tor === 'string' ? alt.tor.trim() : '';
-	if (i2p.endsWith('.b32.i2p')) return `http://${i2p}`;
-	if (tor.endsWith('.onion')) return `http://${tor}`;
-	return null;
+	return peerReceiptBases(origin, regAltNetworks, hiddenOnly)[0] ?? null;
 }
 
 /** Fetch a single peer's price-receipt endpoint.  Returns null on
@@ -274,17 +305,14 @@ export async function fetchPeerReceipt(
 	peerOrigin: string,
 	asset: string,
 	denominationFiat: string,
-	timeoutMs: number = PEER_FETCH_TIMEOUT_MS
+	timeoutMs: number = PEER_FETCH_TIMEOUT_MS,
+	/** The transport. Defaults to the clearnet SSRF-hardened `fetchJson`, which
+	 *  observes its own 5 s budget and ignores `timeoutMs`. A HIDDEN address must
+	 *  be given a hidden transport — `fetchJson` refuses anything but https, and
+	 *  refuses everything on a hidden-only node — and that one honours the
+	 *  budget, which on Tor or I2P has to allow for building a circuit. */
+	fetcher: <T>(url: string, timeoutMs: number) => Promise<T> = (url) => fetchJson(url)
 ): Promise<PeerReceiptResponse | null> {
-	// timeoutMs is observed via fetchJson's internal FETCH_TIMEOUT_MS
-	// (5s).  Per-call override would require fetchJson to accept a
-	// timeout parameter; for now the canonical 5s is shorter than
-	// PEER_FETCH_TIMEOUT_MS default 10s so peers are MORE likely to
-	// be skipped on slow responses, not less — acceptable tradeoff
-	// vs forking fetchJson's signature.  The argument is preserved
-	// in the function signature for API back-compat with smokes that
-	// pass it explicitly.
-	void timeoutMs;
 	try {
 		const url = new URL(
 			'/v1/price/morphit-native/receipt',
@@ -292,7 +320,7 @@ export async function fetchPeerReceipt(
 		);
 		url.searchParams.set('asset', asset);
 		url.searchParams.set('denomination_fiat', denominationFiat);
-		const body = await fetchJson<PeerReceiptResponse>(url.toString());
+		const body = await fetcher<PeerReceiptResponse>(url.toString(), timeoutMs);
 		if (
 			typeof body.derived_price !== 'number' ||
 			!Number.isFinite(body.derived_price) ||
@@ -404,7 +432,9 @@ export async function runPeerPriceSampleCycle(
 		alertCooldownHours = PEER_ALERT_COOLDOWN_HOURS,
 		minObservations = PEER_MIN_OBSERVATIONS,
 		fetchTimeoutMs: fetchTimeoutMsRaw = PEER_FETCH_TIMEOUT_MS,
-		hiddenOnly = false
+		hiddenOnly = false,
+		hiddenFetch = <T>(url: string, timeoutMs: number): Promise<T> =>
+			fetchJsonViaHiddenService<T>(url, hiddenServiceProxyConfigFromEnv(), timeoutMs)
 	} = cfg;
 
 	// A hidden-only node reaches every peer over Tor/I2P (see hiddenOnly above),
@@ -437,15 +467,29 @@ export async function runPeerPriceSampleCycle(
 		 WHERE ki.last_probe_status IN ('good', 'quiet')
 		   AND ki.origin IS NOT NULL`
 	);
-	// Resolve each peer to the base URL we actually fetch from + the canonical
-	// origin we record the observation under. On a hidden-only node a peer with
-	// no on-chain hidden address is dropped (can't be reached privately).
-	const targets: Array<{ origin: string; base: string }> = [];
+	// Resolve each peer to the base URLs we may fetch from, in order, + the
+	// canonical origin we record the observation under. On a hidden-only node a
+	// peer with no on-chain hidden address is dropped (can't be reached
+	// privately).
+	const targets: Array<{ origin: string; bases: string[] }> = [];
 	for (const row of peersQuery.rows) {
-		const base = peerReceiptBase(row.origin, row.reg_alt_networks, hiddenOnly === true);
-		if (base !== null) targets.push({ origin: row.origin, base });
+		const bases = peerReceiptBases(row.origin, row.reg_alt_networks, hiddenOnly === true);
+		if (bases.length > 0) targets.push({ origin: row.origin, bases });
 	}
 	const peers = targets.map((t) => t.origin);
+
+	/** One peer's receipt: its addresses in order, first answer wins. A peer on
+	 *  two networks is still ONE sample — the median counts instances, and a
+	 *  peer must not weigh double for having published twice. */
+	const receiptFrom = async (t: { bases: string[] }): Promise<PeerReceiptResponse | null> => {
+		for (const base of t.bases) {
+			const r = hiddenOnly
+				? await fetchPeerReceipt(base, asset, denominationFiat, fetchTimeoutMs, hiddenFetch)
+				: await fetchPeerReceipt(base, asset, denominationFiat, fetchTimeoutMs);
+			if (r !== null) return r;
+		}
+		return null;
+	};
 
 	// Step 2: query each peer in parallel.  Failures are silent
 	// (peer offline, denomination-mismatch, etc.) — they just
@@ -477,9 +521,7 @@ export async function runPeerPriceSampleCycle(
 	// then; the current ~30-minute background cycle has no
 	// latency budget that pool integration would help with.
 	const observations: PeerObservation[] = [];
-	const fetchResults = await Promise.allSettled(
-		targets.map((t) => fetchPeerReceipt(t.base, asset, denominationFiat, fetchTimeoutMs))
-	);
+	const fetchResults = await Promise.allSettled(targets.map(receiptFrom));
 	for (let i = 0; i < peers.length; i++) {
 		const result = fetchResults[i]!;
 		const peerOrigin = peers[i]!;
@@ -518,13 +560,12 @@ export async function runPeerPriceSampleCycle(
 	// against unknown sources is apples-to-oranges.
 	const windowMs = disagreementWindowHours * 60 * 60 * 1000;
 	const windowStart = new Date(now.getTime() - windowMs);
+	// (v1.18.0 deep-deep, M1) ONE latest sample per peer operator (shared SQL
+	// with the hidden-only federated fetcher). Was: every observation row in
+	// the window, so a peer sampled N times — or one operator publishing N
+	// origins — weighed N times in the median.
 	const medianQuery = await db.query<{ observed_price: string }>(
-		`SELECT observed_price::TEXT AS observed_price
-		 FROM price_peer_observations
-		 WHERE asset = $1
-		   AND denomination_fiat = $2
-		   AND observed_at >= $3
-		   AND source_native = 'morphit_native'`,
+		PER_OPERATOR_LATEST_PRICE_SQL,
 		[asset, denominationFiat, windowStart]
 	);
 	const peerPrices = medianQuery.rows

@@ -10,6 +10,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { INTEGRATION_ENABLED, setup, type IntegrationFixture } from './harness';
+import { runMigrations } from '../../src/db/migrations';
 
 // If integration is disabled, we still register a describe so the
 // skip is visible in the test output (rather than the suite just
@@ -321,5 +322,26 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 		const actual = new Set(res.rows.map((r) => r.table_name));
 		const missing = expectedTables.filter((t) => !actual.has(t));
 		expect(missing).toEqual([]);
+	});
+
+	/**
+	 * v1.18.0 review (D8). `accounts.posting_pubkey` is delivered by
+	 * `ensurePostingPubkeyColumn`, which boot runs AFTER the migrations — and v38
+	 * indexes that column. A database from before the column existed failed v38
+	 * with "column posting_pubkey does not exist" on every boot, so the ensure
+	 * step that would have fixed it never ran. Rebuilt here as exactly that
+	 * database: the column gone, the migrations from v38 on not yet applied.
+	 */
+	it('a database from before posting_pubkey existed still upgrades through v38', async () => {
+		await fx.db.query('DROP INDEX IF EXISTS idx_accounts_posting_pubkey');
+		await fx.db.query('ALTER TABLE accounts DROP COLUMN IF EXISTS posting_pubkey');
+		await fx.db.query('DELETE FROM schema_migrations WHERE version >= 38');
+		await runMigrations(fx.db);
+		const col = await fx.db.query(
+			`SELECT 1 FROM information_schema.columns
+			  WHERE table_schema = current_schema() AND table_name = 'accounts'
+			    AND column_name = 'posting_pubkey'`
+		);
+		expect(col.rowCount, 'the upgrade must leave the column in place').toBe(1);
 	});
 });

@@ -109,8 +109,36 @@ check(
 // ── Indexer: the broadcast proxy exists, is guarded, and is mounted ──────────
 check('indexer POST /broadcast route exists', /app\.post\('\/'/.test(route));
 check(
-	'indexer broadcast forwards broadcast_transaction_synchronous server-side',
-	/callCondenser\(\s*'broadcast_transaction_synchronous'/.test(route)
+	// The point of this check is that the broadcast happens SERVER-SIDE — the
+	// browser never opens an RPC connection of its own. The literal method name
+	// used to stand in for that, and v1.18.0 split the method by op class (a
+	// chat message answers before a block, everything else waits for one), so
+	// the name is now chosen at runtime. Both methods must still be the ones
+	// this route reaches for, and the call must still go through callCondenser.
+	'indexer broadcast forwards to the chain server-side, via callCondenser',
+	/callCondenser\(\s*method\b/.test(route) &&
+		/'broadcast_transaction_synchronous'/.test(route) &&
+		/'broadcast_transaction'/.test(route)
+);
+check(
+	'indexer broadcast keeps block confirmation for everything except a chat message',
+	/isChatMessageOnly/.test(route) &&
+		/chatAsync\s*\?\s*'broadcast_transaction'\s*:\s*'broadcast_transaction_synchronous'/.test(
+			route
+		)
+);
+check(
+	// The fast answer is OPT-IN, and that is what makes it safe across versions:
+	// a browser tab can be older than the indexer serving it, and a bundle from
+	// before v1.18.0 reads a null block_num as a malformed reply — showing a
+	// permanent failure for a message that was in fact delivered, beside a retry
+	// button that sends a second copy. The indexer must never take the fast path
+	// on its own initiative. Behaviour is asserted in
+	// apps/indexer/scripts/fastchat-three-leg-smoke.ts; this file pins the shape
+	// at the seam, which is its job.
+	'the async chat answer requires the CLIENT to ask for it',
+	/chat_async/.test(route) &&
+		/chatAsync\s*=\s*chatOnly\s*&&\s*chatAsyncRequested\s*===\s*true/.test(route)
 );
 check(
 	'indexer broadcast whitelists Morphit op types',
@@ -130,8 +158,14 @@ check(
 );
 check(
 	'broadcast route mounted at /v1/broadcast in main.ts (cp347: via a rate-limited sub-app)',
+	// Neither the argument list NOR the call's layout is pinned. What this check
+	// is about is the MOUNT: that broadcast is reached at /v1/broadcast through
+	// the rate-limited sub-app rather than attached directly. v1.18.0 broke this
+	// regex twice — once by adding an argument, once by wrapping the call across
+	// lines for a callback — and both times it was the regex guarding incidental
+	// detail rather than the structure it exists to protect.
 	/broadcastRoute/.test(main) &&
-		/broadcastApp\.route\('\/', broadcastRoute\(blurt\)\)/.test(main) &&
+		/broadcastApp\.route\(\s*'\/',\s*broadcastRoute\(\s*blurt/.test(main) &&
 		/app\.route\('\/v1\/broadcast', broadcastApp\)/.test(main)
 );
 

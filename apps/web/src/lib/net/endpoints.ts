@@ -25,6 +25,7 @@ import {
 	RPC_MAX_CONSECUTIVE_FAILURES,
 	RPC_MAX_RETRIES_PER_CALL
 } from './config';
+import { withHiddenFloor } from './transportBudget';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -229,7 +230,15 @@ export class EndpointRotator {
 					method,
 					params: params ?? {}
 				};
-				const res = await fetchWithTimeout(target.url, body, RPC_TIMEOUT_MS);
+				// The pool is hidden-only on a hidden origin (selectRpcPool), and the
+				// browser fetches those .onion endpoints DIRECTLY. A flat 8s cannot
+				// survive a cold circuit, so the boot-time release-integrity check
+				// could never succeed there. Raised by the target, never shortened.
+				const res = await fetchWithTimeout(
+					target.url,
+					body,
+					withHiddenFloor(RPC_TIMEOUT_MS, target.url)
+				);
 				const json = (await res.json()) as JsonRpcResponse<T>;
 				const elapsed = performance.now() - started;
 				if ('error' in json && json.error) {
@@ -329,7 +338,15 @@ export class EndpointRotator {
 					method,
 					params: params ?? {}
 				};
-				const res = await fetchWithTimeout(target.url, body, RPC_TIMEOUT_MS);
+				// The pool is hidden-only on a hidden origin (selectRpcPool), and the
+				// browser fetches those .onion endpoints DIRECTLY. A flat 8s cannot
+				// survive a cold circuit, so the boot-time release-integrity check
+				// could never succeed there. Raised by the target, never shortened.
+				const res = await fetchWithTimeout(
+					target.url,
+					body,
+					withHiddenFloor(RPC_TIMEOUT_MS, target.url)
+				);
 				const json = (await res.json()) as JsonRpcResponse<T>;
 				const elapsed = performance.now() - started;
 				if ('error' in json && json.error) {
@@ -418,7 +435,14 @@ export class EndpointRotator {
 
 async function fetchWithTimeout(url: string, body: JsonRpcRequest, ms: number): Promise<Response> {
 	const ac = new AbortController();
-	const timer = setTimeout(() => ac.abort(), ms);
+	// This is a PRIVATE copy of the shared helper (it POSTs a JSON-RPC body and
+	// omits credentials), so it does not inherit the shared one's behaviour and
+	// has to repeat both of its guarantees: the hidden-transport floor, and a
+	// timer that stays armed across the body read. Callers already raise `ms`,
+	// but applying it here too means a future caller cannot forget — and this
+	// helper talks DIRECTLY to `.onion` endpoints, where the clearnet number is
+	// never survivable.
+	const timer = setTimeout(() => ac.abort(), withHiddenFloor(ms, url));
 	try {
 		const res = await fetch(url, {
 			method: 'POST',
@@ -434,11 +458,19 @@ async function fetchWithTimeout(url: string, body: JsonRpcRequest, ms: number): 
 			cache: 'no-store'
 		});
 		if (!res.ok) {
+			clearTimeout(timer);
 			throw new Error(`HTTP ${res.status} from ${url}`);
 		}
+		// NOT cleared on success: `fetch()` resolves on headers and the caller
+		// reads the body next. Clearing here left that read unbounded, so a
+		// connection that stalled after headers never settled at all — the same
+		// defect the shared helper had. unref() so a pending timer cannot hold a
+		// Node process open; it is a no-op in the browser.
+		(timer as unknown as { unref?: () => void }).unref?.();
 		return res;
-	} finally {
+	} catch (err) {
 		clearTimeout(timer);
+		throw err;
 	}
 }
 
@@ -479,6 +511,70 @@ export class EndpointRotationError extends Error {
 
 let singleton: EndpointRotator | null = null;
 
+/** The page context the RPC pool is chosen from. */
+export interface PageOrigin {
+	/** `location.protocol`, e.g. "https:" — including the colon. */
+	readonly protocol: string;
+	/** `location.hostname`, any case. */
+	readonly hostname: string;
+}
+
+/**
+ * Choose the browser's Blurt RPC pool for a given page origin.
+ *
+ * Pure and exported so it can be executed against every origin shape rather
+ * than reasoned about. See `rpc-pool-mixed-content-smoke.ts`.
+ *
+ * Three cases:
+ *
+ * 1. SERVED FROM A HIDDEN ORIGIN (.onion / .i2p) — hidden endpoints ONLY. The
+ *    visitor is on Tor or I2P and their browser must never open a clearnet
+ *    connection, not even as a fallback, so there is no clearnet tier to fall
+ *    through to.
+ *
+ * 2. SERVED OVER PLAIN HTTP — hidden first, then clearnet. An http page may
+ *    fetch http subresources, so the hidden tier is genuinely attempted and a
+ *    Tor/I2P-capable browser gets the private path before any clearnet node.
+ *
+ * 3. SERVED OVER HTTPS — clearnet ONLY.
+ *
+ *    The hidden endpoints are `http://…onion:8091`. Fetching http from an https
+ *    page is MIXED ACTIVE CONTENT: Firefox blocks it outright, before any
+ *    connection is attempted. The old comment here claimed these "fail fast
+ *    because a .onion host is not a real DNS name, and fall through to
+ *    clearnet" — the fallback happened, but the mechanism was wrong and the
+ *    cost was real. Every visitor to an https instance took two guaranteed
+ *    blocked requests on boot and got a mixed-content error in the console for
+ *    each, on every page load. That is alarming in a project whose whole pitch
+ *    is that you can audit what it does in your browser.
+ *
+ *    Nothing is lost by dropping them here. Chrome treats `.onion` as a
+ *    potentially-trustworthy origin and Firefox does not, so the behaviour was
+ *    never consistent anyway — and the privacy path it was reaching for is
+ *    served properly by Onion-Location (`$lib/seo/onionLocation`): Tor Browser
+ *    is offered the instance's own `.onion`, and once there, case 1 applies and
+ *    the pool is hidden-only. That is a stronger guarantee than a best-effort
+ *    first attempt from the clearnet origin, not a weaker one.
+ */
+export function selectRpcPool(origin: PageOrigin | null): readonly string[] {
+	// No `location` (SSR, prerender): assume the safest reachable pool.
+	if (origin === null) return [...DEFAULT_RPC_ENDPOINTS];
+
+	const host = origin.hostname.toLowerCase();
+	if (host.endsWith('.onion') || host.endsWith('.i2p')) {
+		return [...DEFAULT_HIDDEN_RPC_ENDPOINTS];
+	}
+
+	// Mixed active content: an https page cannot fetch an http endpoint.
+	const hiddenAreFetchable =
+		origin.protocol.toLowerCase() !== 'https:' ||
+		DEFAULT_HIDDEN_RPC_ENDPOINTS.every((u) => u.toLowerCase().startsWith('https://'));
+
+	return hiddenAreFetchable
+		? [...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_RPC_ENDPOINTS]
+		: [...DEFAULT_RPC_ENDPOINTS];
+}
+
 /** Get or create the app-wide rotator. Warmup is kicked off on first
  *  access and runs in the background — calls made before warmup completes
  *  still work, just without latency-informed priority. */
@@ -492,28 +588,15 @@ export function getRotator(): EndpointRotator {
 	// nodes — so it uses DEFAULT_RPC_ENDPOINTS, not any user-supplied list (the
 	// custom-endpoint feature was removed with the settings card's simplification;
 	// there's nothing left in the app that would honor a custom node).
-	// Hidden-service RPC nodes (.onion / .b32.i2p) FIRST, then the clearnet
-	// canonical pool. privacyFirst makes the rotator exhaust the hidden tier
-	// before touching clearnet, so a Tor-Browser / I2P visitor verifies the
-	// release without their IP ever reaching the clear net. A normal browser
-	// can't route the hidden ones, fails fast, and falls through to clearnet —
-	// the unchanged behaviour when DEFAULT_HIDDEN_RPC_ENDPOINTS is empty.
-	// PRIVACY (tor-only sites): if this page is itself being served from a
-	// hidden-service origin (.onion / .i2p), the visitor is on Tor/I2P and their
-	// browser must NEVER open a clearnet connection — not even as a fallback. So
-	// the pool is hidden-service endpoints ONLY, with no clearnet tier to fall
-	// through to. On a clearnet origin we keep the prior behaviour: hidden nodes
-	// first (privacy for Tor-Browser visitors of a clearnet site), then the
-	// clearnet canonical pool as a fallback.
-	const servedFromHidden =
-		typeof location !== 'undefined' &&
-		(() => {
-			const h = location.hostname.toLowerCase();
-			return h.endsWith('.onion') || h.endsWith('.i2p');
-		})();
-	const urls = servedFromHidden
-		? [...DEFAULT_HIDDEN_RPC_ENDPOINTS]
-		: [...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_RPC_ENDPOINTS];
+	// Which nodes this page may actually reach — see selectRpcPool above for the
+	// three origin cases and why an https page gets no http hidden tier.
+	// privacyFirst makes the rotator exhaust the hidden tier before touching
+	// clearnet wherever both are present.
+	const urls = selectRpcPool(
+		typeof location === 'undefined'
+			? null
+			: { protocol: location.protocol, hostname: location.hostname }
+	);
 	singleton = new EndpointRotator(urls, { privacyFirst: true });
 	// cp268/cp408 privacy (#1): the browser NEVER probe-pings Blurt RPC nodes.
 	// getRotator() runs on ordinary pages (the layout's per-session

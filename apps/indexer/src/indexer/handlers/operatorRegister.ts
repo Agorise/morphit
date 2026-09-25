@@ -34,7 +34,8 @@ import { CONTACT_URL_SCHEMES } from '@morphit/operator-config';
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { impersonatesReservedOperatorName, ownsReservedName, isReservedTag } from '$indexer/confusables';
+import { impersonatesReservedOperatorName, ownsReservedName, isReservedTag, tagImpersonatesReserved } from '$indexer/confusables';
+import { isNonPublicAddressLiteral, nameMimicsNonPublicAddress } from '@morphit/hidden-transport';
 
 const TAG_MIN = 1;
 const TAG_MAX = 64;
@@ -307,6 +308,24 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 			if (/^\[?fe80:/i.test(hostname)) {
 				return { reason: 'origin_link_local' };
 			}
+			// (v1.18.0 deep-deep, C1) The patterns above only match an IPv4
+			// literal written out in full, so an IPv4-mapped IPv6 literal
+			// (`[::ffff:127.0.0.1]`, which the URL parser rewrites to
+			// `[::ffff:7f00:1]`), CGNAT, 0/8 and the like slipped through; and a
+			// NAME such as `10.attacker.example` was accepted outright. The name
+			// is the dangerous one: the transport router used to treat any host
+			// spelled with a private prefix as local, so on a hidden-only node a
+			// registered `https://10.<attacker>` was resolved and dialled from
+			// the node's own address on every chat push. The router now parses
+			// addresses (the real fix); here, any non-public address literal is
+			// rejected by parsing it, and a name whose leading labels spell a
+			// non-public prefix is refused as the disguise it is.
+			if (isNonPublicAddressLiteral(hostname)) {
+				return { reason: 'origin_private' };
+			}
+			if (nameMimicsNonPublicAddress(hostname)) {
+				return { reason: 'origin_ip_like_name' };
+			}
 			// Reject `.local` (mDNS), `.localhost`, `.internal`
 			// pseudo-TLDs.
 			if (
@@ -415,6 +434,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			[ctx.signer, v.display_name, v.contact_url, v.origin, v.alt_networks ? JSON.stringify(v.alt_networks) : null, ctx.blockNum]
 		);
 	} else {
+		// (v1.18.0 deep-deep, L3) Confusable-aware reserved-tag check for a NEW
+		// claim. What was wrong: only exact equality (isReservedTag, in
+		// validate()) was checked, so `m0rphit` / `rnorphit` / `morphit-io` were
+		// claimable — and a tag is immutable, so a look-alike is squatted for
+		// good. Checked here, on first registration only, so an operator who
+		// already holds such a tag can still update their registration; the
+		// rightful owner of a reserved name may build a tag on it.
+		if (!ownsReservedName(ctx.signer, v.tag) && tagImpersonatesReserved(v.tag)) {
+			return { ok: false, reason: 'tag_reserved' };
+		}
 		// First-time registration. UNIQUE(tag) enforces first-come-first-served;
 		// ON CONFLICT DO NOTHING + the rowCount check distinguishes "tag already
 		// claimed by another account" from a successful insert.

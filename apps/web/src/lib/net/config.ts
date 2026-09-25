@@ -160,9 +160,12 @@ export function resolveOrigin(originOrPath: string): string {
  *
  *  cp344: chain WRITES (and the ref-block read that precedes them) now go
  *  SAME-ORIGIN through the indexer proxy first (`POST /v1/broadcast`, `GET
- *  /v1/chain/properties` — see `broadcastTransport.ts`). This pool is now the
- *  direct-RPC FALLBACK for those writes (used only if the proxy is
- *  unreachable) plus the transport for the browser reads not yet proxied
+ *  /v1/chain/properties` — see `broadcastTransport.ts`). This pool is NOT a
+ *  fallback for those writes: cp410 removed the fallback outright, because a
+ *  direct browser→node broadcast hands a third party the user's IP alongside
+ *  the exact action they just took, and an unreachable proxy must fail loudly
+ *  rather than leak quietly. It is now only the transport for the reads not yet
+ *  proxied
  *  (endpoint-settings pings, QR-pairing `get_accounts`, chat-identity
  *  verification, release verification). The CORS-clean requirement below
  *  still applies because those paths talk to these nodes directly.

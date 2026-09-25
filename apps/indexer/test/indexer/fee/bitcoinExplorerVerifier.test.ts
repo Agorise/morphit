@@ -341,7 +341,11 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 		}
 	});
 
-	it('explorer returns 404 → counted as failure', async () => {
+	// (v1.18.0 deep-deep, H1) A quorum of explorers answering 404 is a
+	// definitive "this tx does not exist": the fee is MISSING. This used to
+	// assert pending_external — the state the attestation path could promote,
+	// which is how a made-up txid became a free "verified" listing.
+	it('a quorum of explorers returning 404 → rejected (tx_not_found), not pending', async () => {
 		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		try {
 			const fetchImpl = mockFetchByUrl({
@@ -349,6 +353,24 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 				'mempool.space': { status: 404 }
 			});
 			const verifier = new BitcoinExplorerFeeVerifier(baseConfig(), fetchImpl);
+			const result = await verifier.verify(claim());
+			expect(result.kind).toBe('rejected');
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	it('a 404 below the quorum (the other explorer down) stays pending_external', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const fetchImpl = mockFetchByUrl({
+				blockstream: { status: 404 },
+				'mempool.space': { status: 503 }
+			});
+			const verifier = new BitcoinExplorerFeeVerifier(
+				baseConfig({ minSuccessfulResponses: 2 }),
+				fetchImpl
+			);
 			const result = await verifier.verify(claim());
 			expect(result.kind).toBe('pending_external');
 		} finally {

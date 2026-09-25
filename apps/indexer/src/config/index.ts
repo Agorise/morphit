@@ -170,6 +170,8 @@ export interface Config {
 	 *  but the middleware runs anyway; tiny limit reflects that. */
 	readonly maxRequestBodyBytes: number;
 	readonly maxBroadcastBodyBytes: number;
+	/** Cap for /v1/federation/*, which carries peer-to-peer chat batches. */
+	readonly maxFederationBodyBytes: number;
 
 	/** Morphit's official posting pubkey, used to verify release ops.
 	 *  Must match MORPHIT_OFFICIAL_POSTING_PUBKEY on the frontend. */
@@ -938,6 +940,16 @@ const envSchema = z.object({
 	// 128 KB: comfortably above a ~8 KB avatar broadcast, at/above the relay's
 	// own 64 KB body cap which is the authoritative limiter.
 	MORPHIT_INDEXER_MAX_BROADCAST_BODY_BYTES: z.coerce.number().int().positive().default(131072),
+	// v1.18.0 — /v1/federation/chat-fast accepts a BATCH of signed chat
+	// transactions from a peer instance (up to BATCH_MAX = 64). Batching is the
+	// entire reason per-peer throughput is viable over a hidden transport, where
+	// one connection completes one round trip at a time; on the 4 KB read default
+	// a batch of more than three was 413'd, with the result that the fast path
+	// worked while idle and turned itself off under load. 256 KB covers a full
+	// batch of maximum-length messages with room for the JSON framing; the sender
+	// keeps itself under BATCH_MAX_BYTES (200 KB) so it never builds a request a
+	// peer with this cap would refuse.
+	MORPHIT_INDEXER_MAX_FEDERATION_BODY_BYTES: z.coerce.number().int().positive().default(262144),
 	MORPHIT_INDEXER_DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
 
 	MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY: z
@@ -1756,6 +1768,7 @@ export function loadConfig(): Config {
 		resourceRatePerMin: e.MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN,
 		maxRequestBodyBytes: e.MORPHIT_INDEXER_MAX_BODY_BYTES,
 		maxBroadcastBodyBytes: e.MORPHIT_INDEXER_MAX_BROADCAST_BODY_BYTES,
+		maxFederationBodyBytes: e.MORPHIT_INDEXER_MAX_FEDERATION_BODY_BYTES,
 
 		officialPostingPubkey: e.MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY,
 		officialAccountName: e.MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME,

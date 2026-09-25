@@ -21,10 +21,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-	loadOperatorConfig,
-	getAllowlist
-} from '../src/index.ts';
+import { loadOperatorConfig, getAllowlist } from '../src/index.ts';
+import * as operatorConfig from '../src/index.ts';
 
 let failures = 0;
 let scenarios = 0;
@@ -219,8 +217,8 @@ await scenario('returns no-op when no file exists in search paths', () => {
 
 await scenario('throws when override env var points to nonexistent file', () => {
 	clearKeys();
-	process.env.MORPHIT_OPERATOR_CONFIG_FILE = '/tmp/morphit-does-not-exist-' +
-		Math.random().toString(36).slice(2);
+	process.env.MORPHIT_OPERATOR_CONFIG_FILE =
+		'/tmp/morphit-does-not-exist-' + Math.random().toString(36).slice(2);
 	assertThrows(
 		() => loadOperatorConfig({ searchPaths: [] }),
 		'no file exists there',
@@ -292,10 +290,7 @@ await scenario('rejects entire file (not partial-apply) when offender present', 
 	// hard to debug. Atomic rejection is the better failure mode.
 	clearKeys();
 	const dir = mkTempDir();
-	writeFileSync(
-		join(dir, 'morphit.config.env'),
-		`${KEY}=0.005\nUNKNOWN_KEY=whatever\n`
-	);
+	writeFileSync(join(dir, 'morphit.config.env'), `${KEY}=0.005\nUNKNOWN_KEY=whatever\n`);
 	try {
 		loadOperatorConfig({ searchPaths: [dir] });
 		throw new Error('expected throw but got success');
@@ -314,10 +309,7 @@ await scenario('mixes applied + skipped correctly', () => {
 	clearKeys();
 	process.env[KEY] = '0.002'; // pre-set, will be skipped
 	const dir = mkTempDir();
-	writeFileSync(
-		join(dir, 'morphit.config.env'),
-		`${KEY}=0.005\n${KEY2}=false\n`
-	);
+	writeFileSync(join(dir, 'morphit.config.env'), `${KEY}=0.005\n${KEY2}=false\n`);
 	const result = loadOperatorConfig({ searchPaths: [dir] });
 	assertEqual(result.applied, 1, 'applied count');
 	assertEqual(result.skipped, [KEY], 'skipped list');
@@ -348,14 +340,7 @@ await scenario('comments and blank lines are ignored', () => {
 	const dir = mkTempDir();
 	writeFileSync(
 		join(dir, 'morphit.config.env'),
-		[
-			'# This is a comment',
-			'',
-			'# Another one',
-			`${KEY}=0.009`,
-			'',
-			''
-		].join('\n')
+		['# This is a comment', '', '# Another one', `${KEY}=0.009`, '', ''].join('\n')
 	);
 	const result = loadOperatorConfig({ searchPaths: [dir] });
 	assertEqual(result.applied, 1, 'applied');
@@ -363,6 +348,43 @@ await scenario('comments and blank lines are ignored', () => {
 	rmSync(dir, { recursive: true });
 	clearKeys();
 });
+
+await scenario(
+	'v1.18.0 deep-deep (rv2-2): every default hidden RPC endpoint names its operator, one address per transport',
+	() => {
+		const m = operatorConfig as unknown as {
+			DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[];
+			rpcEndpointOperator?: (url: string) => string;
+		};
+		if (typeof m.rpcEndpointOperator !== 'function')
+			throw new Error('rpcEndpointOperator is not exported');
+		const byOp = new Map<string, string[]>();
+		for (const url of m.DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS) {
+			const op = m.rpcEndpointOperator(url);
+			if (!op.startsWith('name:')) throw new Error(`${url} has no operator name (got ${op})`);
+			byOp.set(op, [...(byOp.get(op) ?? []), url]);
+		}
+		for (const [op, urls] of byOp) {
+			const onion = urls.filter((u) => new URL(u).hostname.endsWith('.onion')).length;
+			const i2p = urls.filter((u) => new URL(u).hostname.endsWith('.i2p')).length;
+			if (onion !== 1 || i2p !== 1)
+				throw new Error(`${op}: ${onion} .onion + ${i2p} .i2p (want 1 + 1)`);
+		}
+		// Two ports on one clearnet host are one operator; two hosts are two.
+		assertEqual(
+			m.rpcEndpointOperator('https://rpc.example.org:443') ===
+				m.rpcEndpointOperator('https://rpc.example.org:8443'),
+			true,
+			'same host, same operator'
+		);
+		assertEqual(
+			m.rpcEndpointOperator('https://a.example.org') ===
+				m.rpcEndpointOperator('https://b.example.org'),
+			false,
+			'different hosts'
+		);
+	}
+);
 
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {

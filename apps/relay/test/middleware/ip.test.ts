@@ -61,14 +61,15 @@ describe('clientIp — IP extraction trust boundary', () => {
 			expect(clientIp(c)).toBe('198.51.100.42');
 		});
 
-		it('takes only the leftmost entry from a multi-hop XFF', () => {
-			// nginx → another proxy → us; leftmost is the original
-			// client.
+		it('takes the rightmost UNTRUSTED entry from a multi-hop XFF', () => {
+			// (v1.18.0 deep-deep, H1) The leftmost entry is whatever the
+			// client typed; nginx appends the real peer on the right. With
+			// only loopback trusted, 10.0.0.6 is the nearest untrusted hop.
 			const c = ctx({
 				peer: '127.0.0.1',
 				xff: '198.51.100.42, 10.0.0.5, 10.0.0.6'
 			});
-			expect(clientIp(c)).toBe('198.51.100.42');
+			expect(clientIp(c)).toBe('10.0.0.6');
 		});
 
 		it('falls back to X-Real-IP when XFF is absent', () => {
@@ -105,9 +106,10 @@ describe('clientIp — IP extraction trust boundary', () => {
 				peer: '127.0.0.1',
 				xff: ', 198.51.100.42'
 			});
-			// Empty leftmost — null parse — falls through to X-Real-IP
-			// (absent here) → falls back to peer.
-			expect(clientIp(c)).toBe('127.0.0.1');
+			// (v1.18.0 deep-deep, H1) The empty entry is client-written
+			// junk on the left; the proxy-appended entry on the right is
+			// the client.
+			expect(clientIp(c)).toBe('198.51.100.42');
 		});
 
 		it('strips IPv6 brackets from peer addr', () => {

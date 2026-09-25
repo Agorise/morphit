@@ -36,10 +36,15 @@ import { randomBytes } from 'node:crypto';
 import { ask, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { printChainErrorHelp, classifyChainError, SUGGESTED_LIQUID_BLURT_BUFFER, broadcastCustomJson, errMsg } from './chainErrors.ts';
-import { isReservedTag } from '../../../indexer/src/indexer/confusables.ts';
+import {
+	isReservedTag,
+	ownsReservedName,
+	tagImpersonatesReserved
+} from '../../../indexer/src/indexer/confusables.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 import { operatorTagConflict, fetchRegisteredTag } from '../lib/operatorTagGuard.ts';
+import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
 
 export interface RegisterCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -172,6 +177,20 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		return 1;
 	}
 
+	// Pre-flight (v1.18.0 deep-deep, L3): the indexer now refuses, on FIRST
+	// registration, a tag that looks like a reserved name (`m0rphit`,
+	// `morphit-io`) unless this account owns that name. An existing
+	// registration keeps its tag, so only a first registration is checked —
+	// the same rule the indexer applies, so the op is not broadcast for nothing.
+	if (registeredTag === null && tagImpersonatesReserved(tag) && !ownsReservedName(account, tag)) {
+		console.log(`✗ The tag "${sanitizeForTerm(tag)}" looks like a name reserved by the Morphit project`);
+		console.log('  (look-alikes such as m0rphit, or morphit- followed by anything, are held');
+		console.log('  back so nobody can pass as an official node). Choose a tag that');
+		console.log('  identifies YOUR node — your domain is a good choice — with');
+		console.log('  `npx morphit-ops edit` (Operator tag), then re-run register.');
+		return 1;
+	}
+
 	// ─── 2. Confirm ────
 	if (!nonInteractive) {
 		const ok = await askYesNo(
@@ -271,7 +290,17 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 				if (altAddresses.ens) alt.ens = altAddresses.ens;
 				if (Object.keys(alt).length > 0) payload.alt_addresses = alt;
 			}
-			result = await withSpinner('Broadcasting your registration to the chain…', () =>
+			// v1.18.0 deep-deep, H1: a hidden-only node broadcasts through its own
+			// indexer over Tor/I2P (see broadcastCustomJson), where a round trip
+			// plus the wait for a block routinely takes longer than 15 s. The old
+			// 15 s limit would report a timeout for a registration that then lands.
+			const hiddenOnly = isHiddenOnlyNode();
+			const limitMs = hiddenOnly ? 200_000 : 15_000;
+			result = await withSpinner(
+				hiddenOnly
+					? 'Broadcasting your registration through this node\u2019s indexer over Tor/I2P (can take a minute)…'
+					: 'Broadcasting your registration to the chain…',
+				() =>
 				Promise.race([
 				broadcastCustomJson({
 					account,
@@ -288,12 +317,14 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 						() =>
 							reject(
 								new Error(
-									'Timed out reaching a Blurt RPC after 15s — this box may not be online yet. ' +
+									(hiddenOnly
+										? `No answer from this node's own indexer over Tor/I2P after ${limitMs / 1000}s — the hidden route may still be warming up. `
+										: `Timed out reaching a Blurt RPC after ${limitMs / 1000}s — this box may not be online yet. `) +
 										'Your registration is unchanged; re-run `sudo morphit-ops register` once you are online ' +
 										'(a fresh install also lists itself automatically on first connection).'
 								)
 							),
-						15_000
+						limitMs
 					)
 				)
 				])

@@ -33,6 +33,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { selectRpcPool } from '../src/lib/net/endpoints';
+import { DEFAULT_HIDDEN_RPC_ENDPOINTS } from '../src/lib/net/config';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(here, '..');
@@ -198,14 +200,32 @@ check(
 console.log('');
 // A page served from a .onion/.i2p origin must use a HIDDEN-ONLY RPC pool — the
 // visitor is on Tor/I2P and their browser must never open a clearnet connection,
-// not even as a fallback. getRotator() drops DEFAULT_RPC_ENDPOINTS in that case.
+// not even as a fallback.
+//
+// This used to be three regexes over endpoints.ts, matching the local variable
+// `servedFromHidden`, the exact shape of its `.endsWith()` test, and the exact
+// text of the ternary that consumed it. None of that is the property. Renaming
+// the variable broke it while the guarantee got STRONGER, and — far worse —
+// keeping the names while gutting the behaviour would have kept it green. It is
+// the definition-matching anti-pattern this repo has been bitten by three times.
+//
+// So call the function and look at what comes back.
 {
-	const endpointsSrc = read('src/lib/net/endpoints.ts');
+	const hiddenOnly = (hostname: string): boolean => {
+		const pool = selectRpcPool({ protocol: 'http:', hostname });
+		return pool.length > 0 && pool.every((u) => DEFAULT_HIDDEN_RPC_ENDPOINTS.includes(u));
+	};
 	check(
 		'served-from-hidden origin → hidden-only RPC pool (no clearnet fall-through)',
-		/servedFromHidden/.test(endpointsSrc) &&
-			/\.endsWith\('\.onion'\)\s*\|\|\s*h\.endsWith\('\.i2p'\)/.test(endpointsSrc) &&
-			/servedFromHidden\s*\?\s*\[\.\.\.DEFAULT_HIDDEN_RPC_ENDPOINTS\]/.test(endpointsSrc)
+		hiddenOnly('abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrstuvwxyz23.onion') &&
+			hiddenOnly('of65zlzj7b4sjlg47weanpi3uwyer6abprh2xwwztgq3qqzxvspq.b32.i2p') &&
+			hiddenOnly('morphit.i2p')
+	);
+	check(
+		'clearnet https origin → no http:// endpoint the browser would block as mixed content',
+		selectRpcPool({ protocol: 'https:', hostname: 'morphit.io' }).every(
+			(u) => !u.toLowerCase().startsWith('http://')
+		)
 	);
 }
 

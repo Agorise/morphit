@@ -2,6 +2,19 @@
 set -u
 START="${1:-1}"; END="${2:-9999}"
 repo="$(cd "$(dirname "$0")/.." && pwd)"; cd "$repo"
+
+# ─── Alert repeat-suppression OFF, exactly as run-smokes.sh does ──────
+# This was MISSING here, and its absence produced the precise false failure
+# run-smokes.sh warns about in its own comment: emit() suppresses an identical
+# (module, event, payload) for 6h, so a smoke that drives a monitor and asserts
+# on the event it emits reads the suppression as "the error branch never fired".
+# `sidecar-envelope-error-path-smoke` fails here and passes there for no reason
+# but this line — a runner difference masquerading as a code defect, which is
+# worse than a plain failure because it sends you looking at the wrong file.
+#
+# Anything that changes the ENVIRONMENT a smoke runs in has to be set in BOTH
+# runners or neither; `smoke-runner-env-parity-smoke` now enforces that.
+export MORPHIT_EMIT_DEDUP=0
 # Resolve tsx portably (workspace first, then PATH) — mirrors scripts/run-smokes.sh.
 # (Previously this hardcoded an absolute sandbox path, which broke on every
 # other machine and leaked the build environment's directory layout.)

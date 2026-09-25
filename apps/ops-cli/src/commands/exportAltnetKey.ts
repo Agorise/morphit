@@ -17,13 +17,22 @@
  * If --out is omitted, plaintext is written to stdout (suitable
  * for piping).  Stdout writes are binary-safe.
  *
- * The output file (if specified) is written with mode 0600.
+ * The output file (if specified) is CREATED with mode 0600; a path that
+ * already exists (file or symlink) is refused, never written through.
  * Operators on a privacy-conscious system should prefer tmpfs
  * (`/dev/shm`, `/run/user/<uid>`) so the plaintext never touches
  * persistent disk.
  */
 
-import { existsSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import {
+	existsSync,
+	readFileSync,
+	openSync,
+	writeSync,
+	fchmodSync,
+	closeSync,
+	constants as fsConstants
+} from 'node:fs';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { resolve, join } from 'node:path';
 import { askPassword } from '../init/prompt.ts';
@@ -33,6 +42,14 @@ import {
 	type AltKeyEnvelope,
 	type AltNetwork
 } from '../init/altKeystore.ts';
+import { inspectI2pKeyFile } from '../lib/i2pDestination.ts';
+
+/** Printed when a stored I2P key is base64 TEXT, exported as binary instead. */
+export const LEGACY_BASE64_NOTICE =
+	'This I2P key was stored as base64 text by an older morphit-ops (1.17.15). i2pd ' +
+	'cannot host a key in that form, so it is written in the binary form i2pd loads. ' +
+	'To store it that way too, import the exported file again: ' +
+	'morphit-ops import-altnet-key --network=i2p --in=<the exported file>\n';
 
 export interface ExportAltnetKeyCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -91,18 +108,52 @@ export async function runExportAltnetKey(ctx: ExportAltnetKeyCtx): Promise<numbe
 		return 3;
 	}
 
+	// v1.18.0 (F38) — AN ENVELOPE AN OLDER IMPORT WROTE. 1.17.15's importer
+	// validated a base64 key by decoding it and then stored the ORIGINAL text
+	// (F26). Fixing the importer protects new imports only; a key already stored
+	// that way would still come out as text, which i2pd loads as no destination
+	// at all and logs nothing about. A genuinely binary key never reads as
+	// base64, so this converts exactly the keys that were stored wrong.
+	if (net === 'i2p') {
+		const insp = inspectI2pKeyFile(plaintext);
+		if (insp.wasBase64 && insp.keyBytes !== null) {
+			const binary = Buffer.from(insp.keyBytes);
+			insp.keyBytes.fill(0);
+			plaintext.fill(0);
+			plaintext = binary;
+			writeStderr(LEGACY_BASE64_NOTICE);
+		}
+	}
+
 	const outPath = ctx.flags.out;
 	if (outPath) {
 		const outAbs = resolve(outPath);
+		// v1.18.0 deep-deep (ops-6). This was writeFileSync(..., {mode:0o600})
+		// then chmod: the mode applies only to a NEW file, so a file another user
+		// had pre-created at this predictable path (mode 0666) was written
+		// through and stayed theirs to read, and a symlink there redirected the
+		// write. Create it exclusively (O_EXCL) and never through a symlink
+		// (O_NOFOLLOW); an existing path is refused.
+		let fd: number | null = null;
 		try {
-			writeFileSync(outAbs, plaintext, { mode: 0o600 });
-			chmodSync(outAbs, 0o600);
+			fd = openSync(
+				outAbs,
+				fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+				0o600
+			);
+			writeSync(fd, plaintext);
+			fchmodSync(fd, 0o600);
 		} catch (err) {
+			const code = (err as NodeJS.ErrnoException).code;
 			writeStderr(
-				`Failed to write ${outAbs}: ${err instanceof Error ? err.message : String(err)}\n`
+				code === 'EEXIST' || code === 'ELOOP'
+					? `${outAbs} already exists, so nothing was written. Remove it (or pick a new path) and run this again.\n`
+					: `Failed to write ${outAbs}: ${err instanceof Error ? err.message : String(err)}\n`
 			);
 			plaintext.fill(0);
 			return 3;
+		} finally {
+			if (fd !== null) closeSync(fd);
 		}
 		writeStderr(`Wrote ${plaintext.length} bytes to ${outAbs} (mode 600).\n`);
 	} else {

@@ -11,11 +11,16 @@
  * co-located Tor SOCKS5 proxy, so the IP is hidden behind a Tor exit while the
  * freshness-proof diversity (real RPC nodes, real explorers) is preserved.
  *
- * DESIGN: a small, dependency-free SOCKS5 connector over `node:net` feeding
- * undici's global dispatcher — the same technique the indexer uses in
- * apps/indexer/src/indexer/hiddenServiceFetch.ts, kept SELF-CONTAINED here so
- * the operator-auditable canary scripts don't reach into the indexer's
- * internals. The wire helpers are pure (unit-tested without a socket).
+ * DESIGN: undici's global dispatcher fed by the SHARED SOCKS5 connector from
+ * @morphit/hidden-transport — the one the indexer, relay and ops-cli use.
+ * (v1.18.0 deep-deep, L1) This file used to carry its own copy "so the canary
+ * would not reach into the indexer's internals"; the copy never received the
+ * shared connector's fixes (S8 settle-once, S10 early close, X5 reply sized from
+ * its address type and bytes after the reply kept), so a pooled tunnel's later
+ * error could call undici's callback twice, a domain-typed reply left its tail in
+ * front of the HTTP bytes, and a proxy hanging up mid-handshake waited out the
+ * full 20 s. The shared package is a package, not indexer internals, and one
+ * copy cannot drift. The wire helpers are re-exported for the routing smoke.
  *
  * FAIL-SAFE: when tor-only is on, EVERY fetch is pinned to the SOCKS proxy. If
  * the proxy is unreachable the fetch FAILS (the connector errors) — it never
@@ -29,110 +34,17 @@
  * .onion and .b32.i2p origins. Reaching clearnet freshness sources over I2P
  * alone would need an outproxy and is out of scope; Tor is the universal path.
  */
-import net from 'node:net';
 import { Agent, setGlobalDispatcher } from 'undici';
+import { makeSocks5Connector, parseHostPort } from '@morphit/hidden-transport';
 
-const HANDSHAKE_TIMEOUT_MS = 20_000;
-
-/** SOCKS5 greeting: version 5, one method, "no authentication". */
-export function socks5Greeting(): Buffer {
-	return Buffer.from([0x05, 0x01, 0x00]);
-}
-
-/** Parse the greeting reply. Valid = `[0x05, 0x00]` (no-auth chosen). */
-export function parseSocks5Greeting(reply: Buffer): { ok: boolean; error?: string } {
-	if (reply.length < 2) return { ok: false, error: 'short greeting reply' };
-	if (reply[0] !== 0x05) return { ok: false, error: `bad version 0x${reply[0]?.toString(16)}` };
-	if (reply[1] !== 0x00) return { ok: false, error: 'proxy requires authentication' };
-	return { ok: true };
-}
-
-/** SOCKS5 CONNECT with ATYP=domain — the proxy resolves the host, so DNS never
- *  leaks off the box (the `socks5h` semantics; a local resolve would defeat the
- *  whole point on a tor-only node). */
-export function socks5ConnectRequest(host: string, port: number): Buffer {
-	const h = Buffer.from(host, 'ascii');
-	if (h.length > 255) throw new Error('socks5: hostname too long');
-	const buf = Buffer.alloc(4 + 1 + h.length + 2);
-	buf[0] = 0x05; // version
-	buf[1] = 0x01; // CONNECT
-	buf[2] = 0x00; // reserved
-	buf[3] = 0x03; // ATYP = domain name
-	buf[4] = h.length;
-	h.copy(buf, 5);
-	buf.writeUInt16BE(port, 5 + h.length);
-	return buf;
-}
-
-const SOCKS5_REPLY: Record<number, string> = {
-	0x00: 'succeeded',
-	0x01: 'general failure',
-	0x02: 'connection not allowed',
-	0x03: 'network unreachable',
-	0x04: 'host unreachable',
-	0x05: 'connection refused',
-	0x06: 'ttl expired',
-	0x07: 'command not supported',
-	0x08: 'address type not supported'
-};
-
-/** Parse the CONNECT reply. rep byte 0x00 = success. */
-export function parseSocks5ConnectReply(reply: Buffer): { ok: boolean; error?: string } {
-	if (reply.length < 2) return { ok: false, error: 'short connect reply' };
-	if (reply[0] !== 0x05) return { ok: false, error: `bad version 0x${reply[0]?.toString(16)}` };
-	const rep = reply[1] ?? 0xff;
-	if (rep === 0x00) return { ok: true };
-	return { ok: false, error: SOCKS5_REPLY[rep] ?? `reply 0x${rep.toString(16)}` };
-}
-
-export function parseHostPort(hp: string, fallbackPort: number): { host: string; port: number } {
-	const i = hp.lastIndexOf(':');
-	if (i === -1) return { host: hp, port: fallbackPort };
-	return { host: hp.slice(0, i), port: Number(hp.slice(i + 1)) || fallbackPort };
-}
-
-/** Build an undici `connect` function that tunnels the target origin through a
- *  SOCKS5 proxy. undici then drives HTTP/TLS over the returned raw socket. */
-export function makeSocks5Connector(socksHost: string, socksPort: number) {
-	return (
-		opts: { hostname: string; port: number | string },
-		cb: (err: Error | null, socket: net.Socket | null) => void
-	): void => {
-		const targetHost = opts.hostname;
-		const targetPort = typeof opts.port === 'string' ? Number(opts.port) || 443 : opts.port || 443;
-		const sock = net.connect({ host: socksHost, port: socksPort });
-		let stage: 'greet' | 'connect' = 'greet';
-		let acc = Buffer.alloc(0);
-		const fail = (err: Error): void => {
-			sock.destroy();
-			cb(err, null);
-		};
-		sock.once('error', (err) =>
-			fail(new Error(`canary: Tor SOCKS proxy ${socksHost}:${socksPort} unreachable: ${err.message}`))
-		);
-		sock.setTimeout(HANDSHAKE_TIMEOUT_MS, () => fail(new Error('canary: SOCKS handshake timeout')));
-		sock.once('connect', () => sock.write(socks5Greeting()));
-		sock.on('data', (chunk: Buffer) => {
-			acc = Buffer.concat([acc, chunk]);
-			if (stage === 'greet') {
-				if (acc.length < 2) return;
-				const g = parseSocks5Greeting(acc);
-				if (!g.ok) return fail(new Error(`canary: SOCKS greeting: ${g.error}`));
-				acc = Buffer.alloc(0);
-				stage = 'connect';
-				sock.write(socks5ConnectRequest(targetHost, targetPort));
-				return;
-			}
-			if (acc.length < 10) return; // CONNECT reply ≥ 10 bytes (IPv4 BND.ADDR)
-			const r = parseSocks5ConnectReply(acc);
-			if (!r.ok) return fail(new Error(`canary: target unreachable via Tor: ${r.error}`));
-			sock.removeAllListeners('data');
-			sock.removeAllListeners('timeout');
-			sock.setTimeout(0);
-			cb(null, sock);
-		});
-	};
-}
+export {
+	socks5Greeting,
+	parseSocks5Greeting,
+	socks5ConnectRequest,
+	parseSocks5ConnectReply,
+	parseHostPort,
+	makeSocks5Connector
+} from '@morphit/hidden-transport';
 
 /** True when the canary should route over Tor — set by generate.sh from the
  *  instance origin (.onion/.b32.i2p) or an explicit MORPHIT_CANARY_TOR_ONLY. */

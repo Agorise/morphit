@@ -2745,6 +2745,8 @@ COMMENT ON TABLE chat_folders IS
 -- the later INSERT a no-op, so the recipient gets exactly ONE notification —
 -- fast when the tailer wins. featureBid/feedback leave source_trx_id NULL
 -- (single-path, no dedup); the partial index ignores NULLs.
+-- (True at v43 only — feedback became two-path and keyed in v1.5.5, namespaced
+-- in v1.18.0. The v60 section at the end of this file restates the comment.)
 -- Idempotent with the v43 migration in migrations.ts.
 ALTER TABLE push_pending
     ADD COLUMN IF NOT EXISTS source_trx_id TEXT;
@@ -2981,3 +2983,34 @@ COMMENT ON COLUMN known_instances.cached_clearnet_eliminated IS
     'The peer''s clearnet_eliminated gate (from its /v1/instance), cached by the '
     'federation probe. TRUE only when the peer proved every private-transport leg. '
     'Drives the strong "Zero use of clearnet internet" directory label. v1.16.1.';
+
+-- ─── v60: push_pending.source_trx_id comment (F17b namespaced feedback key) ───
+-- Comment only. v43 called the column "the on-chain trx id" and said feedback
+-- left it NULL; feedback has been two-path and keyed since v1.5.5, and since
+-- v1.18.0 its key is 'feedback:' || trx id so a review and a chat message in one
+-- transaction no longer collide and silently drop a notification.
+COMMENT ON COLUMN push_pending.source_trx_id IS
+    'Dedup key shared by the fast (head-block) and durable enqueues of ONE source '
+    'operation; the partial UNIQUE (account, source_trx_id) makes the later INSERT '
+    'a no-op, so exactly one push is delivered. Chat: the on-chain trx id. Feedback: '
+    '''feedback:'' || trx id — namespaced because one transaction can carry a chat '
+    'op and a review for the same account (F17b, v1.18.0). NULL for single-path '
+    'pushes (featureBid outbid); the partial index ignores NULLs. A dedup key only: '
+    'nothing reads it back as a trx id.';
+
+-- ─── v61: accounts.posting_key_reconciled (pre-upgrade key rotations) ───
+-- Rows written before v1.18.0 recorded the posting key at first observation and
+-- never again, so an account that rotated away from a leaked key before the
+-- upgrade still holds the leaked key, and the fast path verifies against it.
+-- FALSE until the key is confirmed against the chain: the dispatcher writes TRUE
+-- with the keys it records, the boot backfill reconciles the rest, and the fast
+-- path re-reads the chain before trusting a FALSE row.
+ALTER TABLE accounts
+    ADD COLUMN IF NOT EXISTS posting_key_reconciled BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN accounts.posting_key_reconciled IS
+    'TRUE once posting_pubkey is known to match the chain: written by the '
+    'dispatcher from an account create or account_update op, or by the boot '
+    'backfill from a chain read. FALSE rows date from before v1.18.0, when the '
+    'key was recorded once and never updated, and may hold a key the owner has '
+    'since rotated away from; the fast path re-reads the chain before trusting one.';

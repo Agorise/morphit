@@ -48,7 +48,17 @@ function bad(scope: string, msg: string): void {
 	console.log(`  ✗ ${scope}: ${msg}`);
 }
 
-const intake = readFileSync(resolve(SRC, 'indexer/handlers/feedback.ts'), 'utf8');
+// The intake's cited-order query lives in the shared predicate the handler and
+// the head tailer both call (v1.18.0 deep-deep, rv6-L1), so the rule is read
+// from there — and the handler must still be the one calling it.
+const handlerSrc = readFileSync(resolve(SRC, 'indexer/handlers/feedback.ts'), 'utf8');
+if (!/reviewCitesFeePaidOrder\(/.test(handlerSrc)) {
+	bad(
+		'intake',
+		'the feedback handler no longer calls the shared reviewCitesFeePaidOrder predicate'
+	);
+}
+const intake = readFileSync(resolve(SRC, 'indexer/reviewCitation.ts'), 'utf8');
 const summary = readFileSync(resolve(SRC, 'api/feedback.ts'), 'utf8');
 
 // Normalize whitespace so multi-line/indented SQL matches regardless of

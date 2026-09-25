@@ -20,6 +20,7 @@
  */
 
 import { writable, type Readable } from 'svelte/store';
+import { chainCallTimeoutMs } from '$net/transportBudget';
 import { browser } from '$app/environment';
 
 export interface ChainFeeState {
@@ -66,7 +67,10 @@ export function initChainFee(): Promise<void> {
 			// the same FALLBACK shape used for HTTP errors below, so
 			// the UI just proceeds with conservative defaults.
 			const ac = new AbortController();
-			const timer = setTimeout(() => ac.abort(), 10_000);
+			// Chain-backed through the indexer, so it inherits the hidden
+			// floor: 10s could not survive a cold circuit, and the silent
+			// fallback to conservative defaults hid that completely.
+			const timer = setTimeout(() => ac.abort(), chainCallTimeoutMs(10_000));
 			let res: Response;
 			try {
 				res = await fetch('/v1/chain-fee', {

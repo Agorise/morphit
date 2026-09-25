@@ -54,28 +54,36 @@ export function makeHiddenTarballFetcher(
 			throw new Error(`hidden upgrade: refusing to fetch a non-hidden URL over the open internet: ${url}`);
 		}
 
+		// Own timeout (a big tarball over Tor/I2P is slow, but must not hang
+		// forever) combined with the caller's abort (race-loss cancels losers).
+		//
+		// BOTH STAY ARMED UNTIL THE LAST BYTE (v1.18.0 review). They used to be
+		// cleared the moment the response HEADERS arrived, so the body — tens of
+		// megabytes over Tor or I2P, i.e. nearly all of the time — was read with
+		// no timeout and deaf to the caller: a peer that sent headers and then
+		// trickled or stalled held the upgrade forever, and a peer that lost the
+		// race went on downloading the whole tarball in the background.
+		const ac = new AbortController();
+		const timer = setTimeout(() => ac.abort(new Error('hidden upgrade: tarball fetch timeout')), 600_000);
+		const onCallerAbort = (): void => ac.abort((signal as AbortSignal).reason);
+		if (signal.aborted) onCallerAbort();
+		else signal.addEventListener('abort', onCallerAbort);
 		try {
-			// Own timeout (a big tarball over Tor/I2P is slow, but must not hang
-			// forever) combined with the caller's abort (race-loss cancels losers).
-			const ac = new AbortController();
-			const timer = setTimeout(() => ac.abort(new Error('hidden upgrade: tarball fetch timeout')), 600_000);
-			const onCallerAbort = (): void => ac.abort((signal as AbortSignal).reason);
-			signal.addEventListener('abort', onCallerAbort);
-			let res: Response;
-			try {
-				res = await fetch(url, {
-					signal: ac.signal,
-					redirect: 'manual',
-					headers: { 'user-agent': 'morphit-ops/hidden-upgrade' },
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any -- fetch's
-					// lib.dom type omits undici's `dispatcher`.
-					dispatcher
-				} as any);
-			} finally {
-				clearTimeout(timer);
-				signal.removeEventListener('abort', onCallerAbort);
+			const res = await fetch(url, {
+				signal: ac.signal,
+				redirect: 'manual',
+				headers: { 'user-agent': 'morphit-ops/hidden-upgrade' },
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- fetch's
+				// lib.dom type omits undici's `dispatcher`.
+				dispatcher
+			} as any);
+			if (!res.ok) {
+				// Cancel the body first (v1.18.0 review, S1): the `finally` below
+				// awaits dispatcher.close(), which waits for an unread body, so a
+				// large error page from a peer would otherwise hang the upgrade.
+				await res.body?.cancel().catch(() => undefined);
+				throw new Error(`hidden upgrade: HTTP ${res.status} from ${url}`);
 			}
-			if (!res.ok) throw new Error(`hidden upgrade: HTTP ${res.status} from ${url}`);
 			const reader = res.body?.getReader();
 			if (!reader) throw new Error('hidden upgrade: empty response body');
 			const chunks: Uint8Array[] = [];
@@ -100,7 +108,23 @@ export function makeHiddenTarballFetcher(
 			}
 			return out;
 		} finally {
-			await dispatcher.close().catch(() => {});
+			clearTimeout(timer);
+			signal.removeEventListener('abort', onCallerAbort);
+			// Bounded: close() waits on anything left unread; destroy past a
+			// short grace rather than hold the upgrade on a dead socket.
+			let t: ReturnType<typeof setTimeout> | undefined;
+			const late = await Promise.race([
+				dispatcher.close().then(
+					() => false,
+					() => false
+				),
+				new Promise<boolean>((r) => {
+					t = setTimeout(() => r(true), 5_000);
+					t.unref?.();
+				})
+			]);
+			if (t !== undefined) clearTimeout(t);
+			if (late) await dispatcher.destroy().catch(() => undefined);
 		}
 	};
 }

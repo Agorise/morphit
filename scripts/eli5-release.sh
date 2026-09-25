@@ -76,7 +76,7 @@ git push origin main
 
 ---
 
-**BLOCK 2** — tag + push (signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs (if a signing secret is set), **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\`** — you download and upload nothing:
+**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs (if a signing secret is set), **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\`** — you download and upload nothing:
 \`\`\`
 git tag -s v${VERSION} -m "Morphit v${VERSION}"
 git push origin v${VERSION}
@@ -88,7 +88,7 @@ git push origin v${VERSION}
 
 ---
 
-**BLOCK 3** — upgrade the VPS (regenerates the served bundle + \`/verify.json\`; let it finish):
+**BLOCK 3** — upgrade the VPS (morphit.io, logged in as root; regenerates the served bundle + \`/verify.json\`; let it finish):
 \`\`\`
 sudo morphit-ops
 \`\`\`
@@ -111,7 +111,7 @@ There is deliberately **no public-gateway check here**. Block 3 already asserted
 
 ---
 
-**BLOCK 5** — the real broadcast (masked \`@morphit\` WIF prompt; your key starts with \`5\`):
+**BLOCK 5** — the real broadcast (laptop, repo root; masked \`@morphit\` WIF prompt; your key starts with \`5\`):
 \`\`\`
 npx tsx apps/indexer/scripts/release-broadcast.ts release.json
 \`\`\`
@@ -119,7 +119,7 @@ Afterwards anyone can verify a download against the chain by re-fetching the can
 
 ---
 
-**BLOCK 6** — canary repair (the upgrade wipes \`build/canary.txt\` every time):
+**BLOCK 6** — canary repair (laptop — the canary is signed there, never on the server; the upgrade wipes \`build/canary.txt\` every time):
 \`\`\`
 bash ~/.morphit/update-canary.sh
 \`\`\`

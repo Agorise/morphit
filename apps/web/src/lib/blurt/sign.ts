@@ -10,7 +10,9 @@
  *   2. Build and sign a Transaction locally with dblurt's helpers
  *   3. Submit the signed tx same-origin through the indexer broadcast proxy
  *      (broadcastTransport.submitSignedTransaction → POST /v1/broadcast),
- *      with a direct-RPC fallback if the proxy is unreachable (cp344)
+ *      and NOT directly to a Blurt node — there is no fallback, because a
+ *      direct browser→node broadcast would leak the user's IP with their
+ *      action (cp344, cp410)
  *
  * The net effect: dblurt's well-tested crypto is used as a library, chain
  * access is relayed through the operator's own indexer (no cross-origin RPC,
@@ -33,7 +35,12 @@ import {
 	type Operation
 } from '@beblurt/dblurt';
 import { signDigestWithNoble } from './nobleSigner';
-import { submitSignedTransaction, fetchDynamicGlobalProperties } from './broadcastTransport';
+import {
+	submitSignedTransaction,
+	submitSignedChatTransaction,
+	fetchDynamicGlobalProperties,
+	type ChatBroadcastResult
+} from './broadcastTransport';
 import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
 // Relative, NOT `$blurt/accountBinding`: in `tsconfig.smoke.json` the `$blurt/*`
 // alias points at apps/indexer/src/blurt/*, so the same specifier means a
@@ -420,7 +427,7 @@ export function signOrderWithFeeWithKey(
 export async function broadcastSignedTransaction(
 	signed: SignedTransaction
 ): Promise<{ block_num: number; trx_id: string }> {
-	// cp344: same-origin broadcast proxy (direct-RPC fallback). See broadcastTransport.ts.
+	// cp344/cp410: same-origin broadcast proxy, and nothing else. See broadcastTransport.ts.
 	return submitSignedTransaction(signed);
 }
 
@@ -465,12 +472,12 @@ export async function broadcastSignedTransaction(
  *                      display name in localStorage and will broadcast
  *                      after account creation).
  */
-export async function broadcastCustomJson(
+async function signCustomJsonTx(
 	live: LiveIdentity,
 	id: MorphitOpId,
 	payload: unknown,
 	blurtAccount: string
-): Promise<{ block_num: number; trx_id: string }> {
+): Promise<SignedTransaction> {
 	if (!blurtAccount) {
 		throw new Error(
 			'Cannot broadcast: no Blurt account registered yet. ' +
@@ -527,10 +534,52 @@ export async function broadcastCustomJson(
 	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey, live.posting.privateKey);
 
 	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
-	// fallback) — no cross-origin RPC connection, no IP leak to third-party
-	// nodes. See broadcastTransport.ts.
-	const result = await submitSignedTransaction(signed);
-	return result;
+	return signed;
+}
+
+/**
+ * Broadcast a `custom_json` op and wait for it to reach a block.
+ *
+ * Every op except a chat message uses this: orders, feature bids, profile
+ * updates and chat-identity publication all record the block number the op
+ * landed in, so the wait is buying something they need.
+ */
+export async function broadcastCustomJson(
+	live: LiveIdentity,
+	id: MorphitOpId,
+	payload: unknown,
+	blurtAccount: string
+): Promise<{ block_num: number; trx_id: string }> {
+	// cp344: broadcast SAME-ORIGIN through the indexer proxy — no cross-origin
+	// RPC connection, no IP leak to third-party nodes. See broadcastTransport.ts.
+	const signed = await signCustomJsonTx(live, id, payload, blurtAccount);
+	return submitSignedTransaction(signed);
+}
+
+/**
+ * Broadcast a chat MESSAGE, without waiting for it to reach a block.
+ *
+ * Signed and relayed identically to any other custom_json — same posting key,
+ * same same-origin indexer proxy, same authority proof — and it differs in one
+ * respect only: it returns as soon as the Blurt node has accepted the
+ * transaction instead of waiting up to a full block interval for a witness to
+ * seal it.
+ *
+ * That wait was worth up to three seconds, and on a zero-clearnet instance it
+ * sat on top of two hidden round trips, which is what pushed a send past six
+ * seconds. Nothing is given up for it: the node still validates signature,
+ * authority and fees, so a rejected message is still rejected here and now, and
+ * a message that somehow never reaches a block simply stays unconfirmed in the
+ * transcript — which is exactly what the client already does with it, since it
+ * reconciles against the durable row by `client_tag` and never by block number.
+ */
+export async function broadcastChatMessage(
+	live: LiveIdentity,
+	payload: unknown,
+	blurtAccount: string
+): Promise<ChatBroadcastResult> {
+	const signed = await signCustomJsonTx(live, OP_IDS.chatMessage, payload, blurtAccount);
+	return submitSignedChatTransaction(signed);
 }
 
 export const MORPHIT_OP_IDS = OP_IDS;
@@ -541,7 +590,7 @@ export const MORPHIT_OP_IDS = OP_IDS;
  * (liquid BLURT + powered-up BP) balances. cp396.
  *
  * Same-origin via the indexer broadcast proxy (claim_reward_balance is on
- * its op whitelist), with the direct-RPC fallback inherited from
+ * its op whitelist). No direct-RPC fallback; the behaviour is inherited from
  * submitSignedTransaction. Posting authority only — the signer can claim
  * ONLY their own rewards, so this op can never move another account's funds.
  *

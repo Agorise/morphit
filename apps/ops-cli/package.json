@@ -1,45 +1,45 @@
 {
-  "name": "morphit-ops",
-  "version": "1.17.15",
-  "description": "Morphit operator CLI — status, drain queue, signups, abuse alerts. Read-mostly view into the indexer + relay shared database.",
-  "type": "module",
-  "private": true,
-  "license": "AGPL-3.0-or-later",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "bin": {
-    "morphit-ops": "bin/morphit-ops.mjs"
-  },
-  "files": [
-    "bin/",
-    "dist/",
-    "src/"
-  ],
-  "scripts": {
-    "build": "node scripts/build.mjs",
-    "format": "prettier --write .",
-    "lint": "prettier --check .",
-    "start": "tsx src/main.ts",
-    "dev": "tsx src/main.ts",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@beblurt/dblurt": "^0.17.0",
-    "@morphit/node-health": "*",
-    "pg": "^8.13.0",
-    "tsx": "^4.19.0",
-    "@morphit/hidden-transport": "*",
-    "undici": "^7.28.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.9.0",
-    "@types/pg": "^8.11.10",
-    "esbuild": "^0.19.12",
-    "prettier": "~3.6.2",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.9"
-  }
+	"name": "morphit-ops",
+	"version": "1.18.0",
+	"description": "Morphit operator CLI — status, drain queue, signups, abuse alerts. Read-mostly view into the indexer + relay shared database.",
+	"type": "module",
+	"private": true,
+	"license": "AGPL-3.0-or-later",
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"bin": {
+		"morphit-ops": "bin/morphit-ops.mjs"
+	},
+	"files": [
+		"bin/",
+		"dist/",
+		"src/"
+	],
+	"scripts": {
+		"build": "node scripts/build.mjs",
+		"format": "prettier --write .",
+		"lint": "tsx ../../scripts/lint-gate-smoke.ts",
+		"start": "tsx src/main.ts",
+		"dev": "tsx src/main.ts",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@beblurt/dblurt": "^0.17.0",
+		"@morphit/node-health": "*",
+		"pg": "^8.13.0",
+		"tsx": "^4.19.0",
+		"@morphit/hidden-transport": "*",
+		"undici": "^7.28.0"
+	},
+	"devDependencies": {
+		"@types/node": "^22.9.0",
+		"@types/pg": "^8.11.10",
+		"esbuild": "^0.19.12",
+		"prettier": "~3.6.2",
+		"typescript": "^5.6.3",
+		"vitest": "^2.1.9"
+	}
 }

@@ -356,7 +356,13 @@
 			"failed_label": "Nieudane",
 			"retry": "Ponów",
 			"retry_aria": "Ponów wysyłanie tej wiadomości",
-			"peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby."
+			"peer_not_ready": "Ten odbiorca jeszcze nie otworzył czatu Morphit. Gdy to zrobi, Twoja wiadomość zostanie wysłana po ponowieniu próby.",
+			"not_confirmed_on_chain": "Nie potwierdzono w blockchainie — wiadomość mogła zostać utracona. Stuknij Ponów, aby wysłać ją ponownie.",
+			"on_chain_not_accepted": "Jest w blockchainie, ale nie został przyjęty do doręczenia — odbiorca może teraz nie przyjmować od Ciebie wiadomości. Ponowne wysłanie tego nie zmieni.",
+			"session_locked": "Twoja sesja jest zablokowana. Odblokuj ją i spróbuj ponownie.",
+			"unrecorded_label": "Nie zapisano w blockchainie",
+			"unrecorded_detail": "Ta wiadomość dotarła do Ciebie bezpośrednio z serwera nadawcy, ale blockchain nigdy jej nie zapisał, więc nie ma trwałego dowodu, że została wysłana. Jeśli aplikacja nadawcy zgłosiła ją jako niewysłaną, może wysłać ją ponownie.",
+			"unrecorded_detail_own": "Ta wiadomość została wysłana z innej Twojej sesji, ale blockchain nigdy jej nie zapisał, więc nie ma trwałego dowodu, że została wysłana. Możesz wysłać ją ponownie."
 		},
 		"composer": {
 			"aria_label": "Wyślij wiadomość",
@@ -463,7 +469,8 @@
 				"body": "W tym trybie Twoich wiadomości nie można odzyskać po wyjściu. Zapisz teraz PDF, jeśli chcesz zachować kopię.",
 				"get_now": "Pobierz mój PDF teraz",
 				"later": "Później"
-			}
+			},
+			"chain_unreachable": "Nie udało się połączyć z blockchainem, aby sprawdzić klucz czatu tego kontaktu, więc wiadomość nie została wysłana. W sieciach Tor i I2P zdarza się to często, bo nawiązanie połączenia trwa dłużej. Nic złego się nie stało — spróbuj ponownie za chwilę."
 		},
 		"live": "Na żywo",
 		"loading": "Wczytywanie rozmowy…",
@@ -693,7 +700,8 @@
 			"compare_body": "Przeczytaj te 8 słów rozmówcy przez rozmowę głosową, osobiście lub innym zaufanym kanałem. NIE porównuj ich w tym czacie. Jeśli choć jedno słowo się różni — uznaj rozmowę za skompromitowaną.",
 			"why_show": "Dlaczego to ważne?",
 			"why_hide": "Ukryj wyjaśnienie",
-			"why_body": "Domyślnie czat Morphit ufa indekserowi, że dostarcza właściwy klucz czatu twojego rozmówcy. Wrogi indekser mógłby podstawić klucze kontrolowane przez atakującego i czytać twoje wiadomości. Odcisk 8 słów jest obliczany lokalnie z prawdziwych kluczy czatu obu stron — jeśli obie strony widzą te same słowa, nie ma MITM. To chroni tylko przed MITM; NIE udowadnia, że osoba po drugiej stronie połączenia jest tą, za którą się podaje."
+			"why_body": "Domyślnie czat Morphit ufa indekserowi, że dostarcza właściwy klucz czatu twojego rozmówcy. Wrogi indekser mógłby podstawić klucze kontrolowane przez atakującego i czytać twoje wiadomości. Odcisk 8 słów jest obliczany lokalnie z prawdziwych kluczy czatu obu stron — jeśli obie strony widzą te same słowa, nie ma MITM. To chroni tylko przed MITM; NIE udowadnia, że osoba po drugiej stronie połączenia jest tą, za którą się podaje.",
+			"error_chain_unreachable": "Nie udało się połączyć z blockchainem, aby sprawdzić klucz tego kontaktu. W sieciach Tor i I2P zdarza się to często, bo nawiązanie połączenia trwa dłużej. Z kluczem wszystko w porządku — spróbuj ponownie za chwilę."
 		},
 		"boot_failed": "Nie udało się załadować czatu. Spróbuj odświeżyć stronę.",
 		"mailing_address": {
@@ -731,6 +739,7 @@
 			"verify_body": "Każda wiadomość poniżej to trwały wpis w publicznym blockchainie Blurt, kryptograficznie podpisany przez konto nadawcy. Kod „Dowód blockchain” przy każdej wiadomości to jej identyfikator transakcji: każdy może wkleić go w eksploratorze bloków Blurt (na przykład blocks.blurtwallet.com), aby potwierdzić, że dokładnie to konto wysłało wiadomość do drugiego o podanym czasie. Wyświetlany tekst to prywatna wiadomość odszyfrowana kluczami konta wskazanego powyżej. Ponieważ każdy dowód znajduje się w publicznym, trwałym rejestrze, tego dokumentu nie można potajemnie zmienić — zmiana dowolnej linii nie zgadzałaby się już z blockchainem.",
 			"proof_label": "Dowód blockchain",
 			"pending_label": "oczekuje na potwierdzenie",
+			"unrecorded_label": "nigdy nie zapisano w blockchainie — tego wiersza nie można zweryfikować",
 			"footer": "Dokument czatu Morphit — zablokowany, tylko do odczytu. Zweryfikuj każdą wiadomość w eksploratorze bloków."
 		},
 		"pay_prefill": {
@@ -905,6 +914,18 @@
 		},
 		"footer": {
 			"snapshot_note": "To jednorazowa migawka; obie strony mogły się zmienić w sekundach między pobraniami. Odśwież kilka razy w ciągu minuty-dwóch, aby zobaczyć utrzymujący się wzorzec."
+		},
+		"verdict": {
+			"agree_heading": "Te instancje są zgodne",
+			"differ_heading": "Te instancje się różnią",
+			"inconclusive_heading": "Za małe pokrycie, aby porównać",
+			"agree_body": "Spośród zleceń, które dało się porównać na obu instancjach, każde występuje na obu. Zgodnych zleceń: {n}. W sprawdzonym zakresie {host} niczego nie ukrywa.",
+			"differ_body": "Część zleceń występuje tylko na jednej z dwóch instancji. Najpierw sprawdź różnicę bloków — jeśli instancje są na różnej wysokości, najnowsze zlecenia różnią się zgodnie z oczekiwaniem. Różnica, która utrzymuje się po kilku powtórzeniach, to właściwy sygnał.",
+			"inconclusive_body": "Obie instancje zwróciły ograniczoną stronę zleceń, a strony te nie zachodzą na siebie, więc nie ma zakresu, w którym obie są znane jako kompletne. Z tego porównania nic nie wynika."
+		},
+		"window": {
+			"truncated_note": "Co najmniej jedna instancja miała więcej zleceń, niż mogła zwrócić na jednej stronie, więc porównanie ograniczono do zakresu, w którym obie są kompletne. Poza tym zakresem znalazło się {excluded} zleceń, których nie dało się sprawdzić w żadną stronę.",
+			"since": "Porównano zlecenia zaktualizowane po {since}"
 		}
 	},
 	"crypto": {
@@ -4211,6 +4232,7 @@
 			"push_subscribed": "Włączone",
 			"push_unsupported": "Nieobsługiwane na tym urządzeniu",
 			"push_error_push_disabled": "Operator tej instancji nie włączył jeszcze dostarczania push. Powrót do powiadomień w karcie.",
+			"push_error_push_disabled_hidden_only": "Ta instancja w ogóle nie korzysta z clearnetu, a powiadomienia na telefon lub przy zamkniętej przeglądarce można dostarczyć tylko przez usługę push w clearnecie, więc są tu wyłączone. Powiadomienia nadal pojawiają się, gdy Morphit jest otwarty.",
 			"push_error_permission_denied": "Odrzucono uprawnienie powiadomień przeglądarki. Aby włączyć push później, zezwól na powiadomienia dla tej witryny w ustawieniach przeglądarki.",
 			"push_error_not_supported": "Twoja przeglądarka nie obsługuje Web Push. Spróbuj nowszego Firefoksa, Chrome lub Edge.",
 			"push_error_unreachable": "Nie udało się dotrzeć do relaya operatora. Sprawdź połączenie i spróbuj ponownie.",

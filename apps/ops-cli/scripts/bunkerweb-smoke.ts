@@ -160,7 +160,11 @@ expect(
 	// v1.16.9 — the upgrade self-heal must be MULTI-STRATEGY (the maintainer's mandate):
 // all three fixes, tried more than one way, verified against the container.
 const up = readFileSync(resolve(root, 'apps/ops-cli/src/commands/upgrade.ts'), 'utf8');
-expect('self-heal: healBunkerWebWaf exists + is called', /function healBunkerWebWaf\(/.test(up) && /\bhealBunkerWebWaf\(\);/.test(up));
+// Called from the shared heal list since the final v1.18.0 review (runSelfHeals).
+expect(
+	'self-heal: healBunkerWebWaf exists + is called',
+	/function healBunkerWebWaf\(/.test(up) && /\(\) => healBunkerWebWaf\(\)/.test(up) && /await runSelfHeals\(\)/.test(up)
+);
 expect('self-heal fixes MAX_CLIENT_SIZE (413)', /MAX_CLIENT_SIZE/.test(up) && /RELAY_BODY_FLOOR/.test(up));
 expect('self-heal drops 400 from bad-behavior (403 ban)', /BAD_BEHAVIOR_STATUS_CODES/.test(up) && /c !== '400'/.test(up));
 expect('self-heal tries the ModSec exemption BOTH as env var AND as a file', /CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) && /morphit-json-api-off\.conf/.test(up));

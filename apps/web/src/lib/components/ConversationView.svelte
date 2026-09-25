@@ -678,10 +678,15 @@
 				y += 13 * 1.42;
 				// Message body (decrypted plaintext, or an encrypted-marker).
 				para(m.decryptFailed ? t('chat.export.encrypted') : m.text, 9.5, { color: 25, gap: 1 });
-				// On-chain proof — the verifiable anchor for this line.
+				// On-chain proof — the verifiable anchor for this line. A copy the
+				// chain never recorded is NOT "pending": this document tells its
+				// reader every line can be checked on a block explorer, and for
+				// that line nothing can. Say so on the line itself.
 				const proof = m.trxId
 					? `${t('chat.export.proof_label')}: ${m.trxId}`
-					: `${t('chat.export.proof_label')}: ${t('chat.export.pending_label')}`;
+					: m.unrecorded === true
+						? `${t('chat.export.proof_label')}: ${t('chat.export.unrecorded_label')}`
+						: `${t('chat.export.proof_label')}: ${t('chat.export.pending_label')}`;
 				para(proof, 7.5, { font: 'courier', color: 110, gap: 10 });
 			}
 		}

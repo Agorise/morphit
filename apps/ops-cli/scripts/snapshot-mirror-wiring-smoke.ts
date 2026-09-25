@@ -142,7 +142,9 @@ ok('UPGRADE refreshes the mirror on every upgrade', /snapshot-mirror\.sh/.test(u
 ok('upgrade only mirrors when this box actually runs IPFS', /systemctl is-active --quiet ipfs/.test(upgrade));
 
 // ── E. The mirror job verifies before it serves ──────────────────────
-ok('mirror: reads the newest SIGNED op, not an arbitrary CID', /selectNewestSnapshotOp/.test(mirrorTs));
+// v1.18.0 deep-deep (rv2-1): the op now comes through the trusted resolver
+// (two RPC operators agree + signature against the pinned key).
+ok('mirror: reads the newest SIGNED op, not an arbitrary CID', /resolveTrustedSnapshotOp/.test(mirrorTs));
 ok('mirror: gates on chain_id', /chain_id/.test(mirrorTs));
 ok('mirror: verifies the pinned bytes against the on-chain sha256', /createHash\('sha256'\)/.test(mirrorTs));
 ok('mirror: unpins rather than serving bytes it could not verify', /pin', 'rm'/.test(mirrorTs));
@@ -301,7 +303,12 @@ const gate = read('apps/indexer/src/indexer/clearnetGate.ts');
 const instApi = read('apps/indexer/src/api/instance.ts');
 
 ok('the clearnet legs have ONE definition, shared by /v1/instance and the probe',
-	/export function clearnetLegsFromConfig/.test(gate) && /clearnetLegsFromConfig\(config\)/.test(instApi));
+	// v1.18.0 (F32): with the relay's reported posture as the second input —
+	// and BOTH callers must pass the same one, or the self row and /v1/instance
+	// disagree about the node again.
+	/export function clearnetLegsFromConfig/.test(gate) &&
+		/clearnetLegsFromConfig\(config, relayReportsHiddenOnly\(\)\)/.test(instApi) &&
+		/clearnetLegsFromConfig\(config, relayReportsHiddenOnly\(\)\)/.test(poller));
 ok('the self row writes its own cached_clearnet_eliminated', /cached_clearnet_eliminated = COALESCE/.test(probe));
 ok('…from the locally computed gate', /localClearnetEliminated/.test(probe) && /localClearnetEliminated/.test(poller));
 ok('COALESCE keeps a peer-observed value when we have none (never clobbers with null)',
@@ -674,7 +681,13 @@ ok('…that runs BEFORE the restore guards (nothing is written, so they do not a
 const relayMain = read('apps/relay/src/main.ts');
 const indexerMain = read('apps/indexer/src/main.ts');
 
-ok('the indexer merges the on-chain RPC directory', /mergeRpcEndpoints\(dirEndpoints\)/.test(indexerMain));
+// v1.18.0 deep-deep (rv2-4): the boot merge now goes through the chain-verified
+// reload (rpcDirectoryReload.ts), which merges only what the signed op holds.
+ok(
+	'the indexer merges the on-chain RPC directory',
+	/keepReloadingRpcDirectory\(/.test(indexerMain) &&
+		/mergeRpcEndpoints\(\s*directoryEndpointUrls\(/.test(read('apps/indexer/src/indexer/rpcDirectoryReload.ts'))
+);
 ok('the RELAY merges it too (it is the one that broadcasts)', /mergeRpcEndpoints\(dirEndpoints\)/.test(relayMain));
 ok('…and its client exposes the merge', /mergeRpcEndpoints\(urls: readonly string\[\]\)/.test(relayClient));
 ok(

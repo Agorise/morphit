@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { capDisplayName } from '$lib/crypto/profile';
+	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -51,7 +52,11 @@
 	// import MyBalanceCard from '$components/MyBalanceCard.svelte';
 	import { get } from 'svelte/store';
 	import RelativeTime from '$components/RelativeTime.svelte';
-	import { pendingFeedbackReplies, addPendingReply, mergePendingReplies } from '$lib/stores/pendingFeedbackReplies';
+	import {
+		pendingFeedbackReplies,
+		addPendingReply,
+		mergePendingReplies
+	} from '$lib/stores/pendingFeedbackReplies';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import { identiconDataUri } from '$crypto/identicon';
 	import {
@@ -211,7 +216,6 @@
 	 *  v1.8.13 (the maintainer) — a review list whose author names and avatars rewrite
 	 *  themselves undermines the very thing the list exists to establish. */
 	let reviewerProfilesHydrated = $state(false);
-
 
 	/** Collect every account referenced in a feedback list — reviewers
 	 *  (for 'received') or subjects (for 'given'), plus all response
@@ -457,7 +461,7 @@
 	 *  single source of truth for displayName/avatarSvg/avatarDataUri/
 	 *  nostrUrl/streamingUrl extraction.  Per Finding G2.2 the
 	 *  helper re-sanitizes avatar_svg from indexer data, so the hero
-	 *  on this page (which inlines avatarSvg via {@html}) is
+	 *  on this page (which shows avatarSvg as an <img>) is
 	 *  defense-in-depth-protected against malicious indexer content
 	 *  or non-Morphit-client profile ops. */
 	const labelProps = $derived(extractLabelPropsFromProfile(profile));
@@ -647,18 +651,18 @@
 		     on the profile page renders THIS user's link icons. -->
 		<div class="mb-3 flex items-center justify-center gap-2">
 			{#if avatarSvg}
-				<span
-					class="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-ink-800/50 ring-1 ring-ink-700 dark:bg-ink-800"
+				<!-- Sanitized avatar_svg, shown as an <img>: inlined, its own
+				     style/class could escape this frame and cover the page
+				     (v1.18.0 deep-deep, M1). -->
+				<img
+					src={svgAvatarImgSrc(avatarSvg)}
+					alt=""
+					width="96"
+					height="96"
+					decoding="async"
+					class="h-24 w-24 rounded-2xl bg-ink-800/50 object-cover ring-1 ring-ink-700 dark:bg-ink-800"
 					aria-hidden="true"
-				>
-					<!-- The avatar_svg value was produced by sanitizeSvg
-					     on the uploader's device, then broadcast to chain,
-					     then indexed. It reaches this render path having
-					     already passed allowlist sanitization; we trust
-					     that chokepoint and inline it. -->
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html avatarSvg}
-				</span>
+				/>
 			{:else if avatarDataUri}
 				<img
 					src={avatarDataUri}
@@ -985,11 +989,20 @@
 							? o.asset_network
 							: null}
 					{@const networkChip = usdtRowNetwork
-						? { label: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`) as string, tone: 'usdt' as const }
+						? {
+								label: $_(`assets.usdt.network.${usdtRowNetwork}.displayName`) as string,
+								tone: 'usdt' as const
+							}
 						: usdcRowNetwork
-							? { label: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`) as string, tone: 'usdc' as const }
+							? {
+									label: $_(`assets.usdc.network.${usdcRowNetwork}.displayName`) as string,
+									tone: 'usdc' as const
+								}
 							: daiRowNetwork
-								? { label: $_(`assets.dai.network.${daiRowNetwork}.displayName`) as string, tone: 'dai' as const }
+								? {
+										label: $_(`assets.dai.network.${daiRowNetwork}.displayName`) as string,
+										tone: 'dai' as const
+									}
 								: null}
 					<!-- v1.8.12 (the maintainer) — same rule as the orderbook: the Message
 					     button shows for SIGNED-OUT visitors too. /chat/:peer is
@@ -1090,7 +1103,7 @@
 							     name. -->
 							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
-							pending={!reviewerProfilesHydrated}
+									pending={!reviewerProfilesHydrated}
 									account={fb.reviewer}
 									displayName={reviewerProps.displayName}
 									avatarSvg={reviewerProps.avatarSvg}
@@ -1181,7 +1194,7 @@
 							<div class="ml-6 mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
-							pending={!reviewerProfilesHydrated}
+										pending={!reviewerProfilesHydrated}
 										account={resp.responder}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
@@ -1316,7 +1329,7 @@
 							     the name. -->
 							<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 								<IdentityLabel
-							pending={!reviewerProfilesHydrated}
+									pending={!reviewerProfilesHydrated}
 									account={fb.subject}
 									displayName={subjectProps.displayName}
 									avatarSvg={subjectProps.avatarSvg}
@@ -1407,7 +1420,7 @@
 							<div class="ml-6 mt-3 border-l-2 border-ink-200 pl-3 dark:border-ink-700">
 								<div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
 									<IdentityLabel
-							pending={!reviewerProfilesHydrated}
+										pending={!reviewerProfilesHydrated}
 										account={resp.responder}
 										displayName={responderProps.displayName}
 										avatarSvg={responderProps.avatarSvg}
@@ -1441,45 +1454,45 @@
 		{/if}
 	</section>
 	{#if isOwnProfile}
-	<!-- ─── cp511 [B]: Trade history (completed trades) ─────── -->
-	<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
-	<section
-		role="tabpanel"
-		id="panel-history"
-		aria-labelledby="tab-history"
-		tabindex="0"
-		hidden={activeTab !== 'history'}
-	>
-		<h2 id="history-heading" class="sr-only">
-			{$_('profile.tab_trade_history')}
-		</h2>
-		{#if ordersState === 'loading'}
-			<StatusLine kind="loading">{$_('profile.loading_orders')}</StatusLine>
-		{:else if ordersState === 'error'}
-			<StatusLine kind="warn">{$_('profile.orders_error')}</StatusLine>
-			<p class="mt-1 text-xs text-ink-500">{ordersError}</p>
-		{:else if completedOrders.length === 0}
-			<p class="text-sm text-ink-600 dark:text-ink-300">
-				{$_('profile.no_trade_history')}
-			</p>
-		{:else}
-			<ul class="space-y-3">
-				{#each completedOrders as o (o.permlink)}
-					<li class="card">
-						<div class="font-medium">{cardTitle(o)}</div>
-						<div class="mt-1 text-xs text-ink-500 dark:text-ink-400">
-							{#if o.completed_counterparty}
-								{$_('profile.trade_history_with', {
-									values: { account: o.completed_counterparty }
-								})}
-								<span aria-hidden="true">·</span>
-							{/if}
-							<RelativeTime iso={o.created_at} format="descriptive" />
-						</div>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
+		<!-- ─── cp511 [B]: Trade history (completed trades) ─────── -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+		<section
+			role="tabpanel"
+			id="panel-history"
+			aria-labelledby="tab-history"
+			tabindex="0"
+			hidden={activeTab !== 'history'}
+		>
+			<h2 id="history-heading" class="sr-only">
+				{$_('profile.tab_trade_history')}
+			</h2>
+			{#if ordersState === 'loading'}
+				<StatusLine kind="loading">{$_('profile.loading_orders')}</StatusLine>
+			{:else if ordersState === 'error'}
+				<StatusLine kind="warn">{$_('profile.orders_error')}</StatusLine>
+				<p class="mt-1 text-xs text-ink-500">{ordersError}</p>
+			{:else if completedOrders.length === 0}
+				<p class="text-sm text-ink-600 dark:text-ink-300">
+					{$_('profile.no_trade_history')}
+				</p>
+			{:else}
+				<ul class="space-y-3">
+					{#each completedOrders as o (o.permlink)}
+						<li class="card">
+							<div class="font-medium">{cardTitle(o)}</div>
+							<div class="mt-1 text-xs text-ink-500 dark:text-ink-400">
+								{#if o.completed_counterparty}
+									{$_('profile.trade_history_with', {
+										values: { account: o.completed_counterparty }
+									})}
+									<span aria-hidden="true">·</span>
+								{/if}
+								<RelativeTime iso={o.created_at} format="descriptive" />
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 	{/if}
 </div>

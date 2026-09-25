@@ -39,12 +39,18 @@ import { resolveChatPubFromIndexer, PubPinError, type ChatPubPin } from '$lib/ch
 import { verifyPeerChatIdentityOnChain } from '$lib/chat/chainVerify';
 import { decodeChatPub } from '$lib/chat/crypto';
 import { getChatIdentity } from '$lib/indexer/client';
+import { ChainRelayError } from '$net/chainRelay';
 
 /** Result of a peer-pub fetch. */
 export type PeerPubFetchResult =
 	| { kind: 'ok'; pub: Uint8Array }
 	| { kind: 'not_published' }
 	| { kind: 'indexer_error'; message: string }
+	/** The chain could not be REACHED to verify against. Deliberately distinct
+	 *  from `tamper_detected`: nothing about the peer's key is in question, we
+	 *  simply have no answer yet. Conflating the two is how a slow Tor circuit
+	 *  came to accuse an operator of fabricating data. */
+	| { kind: 'chain_unreachable'; message: string }
 	| { kind: 'tamper_detected'; code: string }
 	| { kind: 'malformed_key' };
 
@@ -97,6 +103,15 @@ export async function fetchPeerChatPubChainVerified(peer: string): Promise<PeerP
 		// everything else is generic indexer_error.
 		if (err instanceof PubPinError) {
 			return { kind: 'tamper_detected', code: err.code };
+		}
+		// The chain relay could not be reached (a hidden-transport circuit that
+		// never came up, the instance briefly unreachable, an aborted request).
+		// Report it as what it is. The user can retry; there is nothing here to
+		// be alarmed about and no reason to send them looking for another
+		// instance — advice that is actively wrong for anyone whose instance is
+		// hidden-only *because* the others are blocked where they are.
+		if (err instanceof ChainRelayError) {
+			return { kind: 'chain_unreachable', message: err.message };
 		}
 		return {
 			kind: 'indexer_error',

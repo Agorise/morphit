@@ -52,7 +52,13 @@ function assert(cond: boolean, msg: string): void {
 for (const rel of VIEWS) {
 	const view = rel.split('/explorer/')[1].split('/')[0]; // tx | block | account
 	scenario(`${view} view forwards dec.values to the op label`, () => {
-		const src = readFileSync(join(REPO, rel), 'utf8');
+		// Whitespace-normalized, so a formatter wrapping the call across lines
+		// (prettier does, once the line is long) doesn't read as a missing
+		// argument. (v1.18.0 deep-deep: the account view was reformatted.)
+		const src = readFileSync(join(REPO, rel), 'utf8')
+			.replace(/\s+/g, ' ')
+			.replace(/\(\s/g, '(')
+			.replace(/\s\)/g, ')');
 		assert(
 			src.includes('explorer.op.label.${dec.labelKey}'),
 			`${view}: op-label render not found — did the render move or the key change?`

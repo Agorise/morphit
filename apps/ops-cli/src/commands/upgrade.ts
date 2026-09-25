@@ -103,9 +103,23 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
-import { tryResolveHiddenUpgrade, type HiddenUpgradeResolution } from '../init/hiddenUpgradeResolve.js';
+import {
+	tryResolveHiddenUpgrade,
+	readHiddenReleaseTarget,
+	type HiddenUpgradeResolution,
+	RELEASE_VERSION_RE
+} from '../init/hiddenUpgradeResolve.js';
+import {
+	indexerUnitEnvFiles,
+	locateLocalIndexer,
+	getLocalIndexerJson,
+	type ListenerVerifier,
+	type LocalIndexerOptions
+} from '../init/hiddenUpgradeLocalIndexer.ts';
 import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
 import { withSpinner, startDotsSpinner } from '../init/spinner.ts';
+import { healIpfsPrivacy } from '../lib/ipfsPrivacyHeal.ts';
+import { isHiddenOnlyNode, readLocalRelease } from '../lib/hiddenOnly.ts';
 import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
@@ -114,6 +128,14 @@ import { tmpdir } from 'node:os';
 
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
+import {
+	applyAndVerifyRelayHeal,
+	relayHealBackupPath,
+	readEffectiveEnv,
+	INDEXER_ENV_FILES,
+	RELAY_ENV_FILES,
+	RELAY_ENV_TARGETS
+} from '../lib/relayHiddenHeal.ts';
 import { daemonReload } from '../lib/restartServices.ts';
 import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../lib/canaryDirOwner.ts';
 import {
@@ -143,6 +165,13 @@ interface UpgradeFlags {
 interface RunUpgradeOptions {
 	readonly flags: UpgradeFlags;
 	readonly positional: readonly string[];
+	/** Where this node's own indexer answers. Tests only; the default is the
+	 *  loopback + docker-bridge list the hidden resolver already uses. */
+	readonly localIndexerBases?: readonly string[];
+	/** How the local indexer's listener is authenticated. Tests only; the
+	 *  default proves from /proc that it is morphit-indexer.service
+	 *  (v1.18.0 deep-deep, ops-1). */
+	readonly verifyLocalIndexer?: ListenerVerifier;
 }
 
 interface ReleaseInfo {
@@ -298,6 +327,12 @@ export function resolveOfflineTarball(
 	if (!tarballPath.endsWith('.tar.gz')) {
 		throw new Error(`--from-file: expected a .tar.gz release tarball, got ${basename(tarballPath)}`);
 	}
+	if (!SAFE_ASSET_NAME.test(basename(tarballPath))) {
+		throw new Error(
+			`--from-file: rename the tarball to its release name (like morphit-v1.18.0-offline.tar.gz); ` +
+				`only letters, digits, dots, dashes and underscores are accepted.`
+		);
+	}
 	const sib = `${tarballPath}.asc`;
 	const sigPath = existsSync(sib) ? sib : null;
 	const tag = parseTagFromTarballName(basename(tarballPath));
@@ -387,6 +422,48 @@ export function compareTags(a: string, b: string): number {
 	return pa.pre! < pb.pre! ? -1 : pa.pre! > pb.pre! ? 1 : 0;
 }
 
+/** Is `latest` a strictly newer release than the installed `current`? When
+ *  both are version numbers this is compareTags() > 0 — an OLDER or equal tag
+ *  is never an upgrade (v1.18.0 deep-deep, ops-2). When the installed version
+ *  cannot be read, any different tag counts, as before. PURE. */
+export function isNewerRelease(latest: string, current: string): boolean {
+	const isVer = (t: string): boolean => /^v?\d+\.\d+\.\d+(?:-.+)?$/.test(t.trim());
+	if (isVer(latest) && isVer(current)) return compareTags(latest, current) > 0;
+	return latest !== current;
+}
+
+/** Does this box serve /canary.txt for its own origin? Asked on loopback.
+ *  v1.18.0 deep-deep (ops-8): this was an `sh -c` string built from the
+ *  configured origin's host with no quoting, so a value like `x;cmd` ran `cmd`
+ *  as root. It is now curl with an argument list, and a host that is not a
+ *  host name is not probed at all. */
+export function probeLiveCanary(origin: string): boolean {
+	const host = origin.replace(/^https?:\/\//, '').replace(/[/:].*$/, '');
+	if (!/^[A-Za-z0-9.-]+$/.test(host)) return false;
+	return (
+		spawnSync(
+			'curl',
+			[
+				'-fsS',
+				'-o',
+				'/dev/null',
+				'--max-time',
+				'15',
+				'-k',
+				'--resolve',
+				`${host}:443:127.0.0.1`,
+				`https://${host}/canary.txt`
+			],
+			{ stdio: 'ignore', timeout: 20_000 }
+		).status === 0
+	);
+}
+
+/** Do two tags name the same release? A leading "v" is optional. PURE. */
+export function sameReleaseTag(a: string, b: string): boolean {
+	return a.trim().replace(/^v/, '') === b.trim().replace(/^v/, '');
+}
+
 /** Scan the offline drop-dir for the newest signed release tarball an operator
  *  has left there. A tarball with NO sibling `.asc` is ignored — offline installs
  *  require a signature (an unsigned tarball can't be trusted with no primary to
@@ -444,12 +521,20 @@ function synthOfflineRelease(
 	};
 }
 
+/** A release asset name that is a plain file name (no path, no spaces). */
+export const SAFE_ASSET_NAME = /^[A-Za-z0-9._-]+$/;
+
 /** Pick the tarball + sha256 + (optional) detached GPG signature out of a
  *  release's assets. Returns null if the required tarball+sha pair is
  *  missing. PURE. */
 export function selectReleaseAssets(
-	assets: readonly ForgejoReleaseAsset[]
+	allAssets: readonly ForgejoReleaseAsset[]
 ): SelectedAssets | null {
+	// v1.18.0 deep-deep (ops-7). Asset names come from the release source — a
+	// mirror when the primary is down — and name files in the temp dir:
+	// join(tmpDir, '../../etc/x.tar.gz') is /etc/x.tar.gz, written as root. An
+	// asset whose name is not a plain file name is ignored.
+	const assets = allAssets.filter((a) => SAFE_ASSET_NAME.test(a.name));
 	const tarballs = assets.filter(
 		(a) => a.name.endsWith('.tar.gz') && !a.name.endsWith('.sha256.tar.gz')
 	);
@@ -536,6 +621,77 @@ export function decideTrust(args: {
 	};
 }
 
+/** What checking a release's detached signature found. */
+export type SignatureCheck =
+	/** No .asc came with the release. */
+	| 'absent'
+	/** gpg reported a good signature from a shipped release-signer key. */
+	| 'valid'
+	/** A signature was there and gpg ran, and it did NOT verify. */
+	| 'invalid'
+	/** It could not be checked here at all (no gpg, no signer keys). */
+	| 'unverifiable';
+
+/**
+ * The whole step-6 decision, as run by runUpgrade. PURE.
+ * (v1.18.0 deep-deep, ops-2 + ops-3)
+ *
+ * WHAT WAS WRONG.
+ *   - A present but INVALID .asc just meant "not signed": with the primary's
+ *     hash matching, the upgrade went ahead with no word, so the signature
+ *     added nothing against a compromised primary or CI run (ops-3).
+ *   - A verified signature OVERRODE a known mismatch against the primary's
+ *     hash. The signature is not tied to a version, so a mirror serving an
+ *     older, genuinely signed tarball under the new name was installed (ops-2).
+ * NOW. An invalid signature refuses; a hash the primary (or the chain) gave
+ * must match, signature or not; then decideTrust as before.
+ */
+export function integrityGate(args: {
+	signature: SignatureCheck;
+	expectedHash: string | null;
+	actualHash: string;
+	expectedHashFromChain: boolean;
+	bytesFromPrimary: boolean;
+	hidden: { servedBy: string; tag: string } | null;
+}): { allowed: boolean; proof: string | null; reason: string } {
+	if (args.signature === 'invalid') {
+		return {
+			allowed: false,
+			proof: null,
+			reason:
+				'The release came with a signature (.asc), but it does not verify against the release-signer ' +
+				'keys shipped with this install. Nothing was changed. Try again later; if it keeps happening, ' +
+				'the release source is serving files that were altered.'
+		};
+	}
+	if (args.expectedHash !== null && args.expectedHash !== args.actualHash) {
+		return {
+			allowed: false,
+			proof: null,
+			reason:
+				`SHA-256 mismatch on the downloaded tarball.\n` +
+				`  Expected (from ${args.expectedHashFromChain ? 'the chain' : 'the primary'}): ${args.expectedHash}\n` +
+				`  Actual:                  ${args.actualHash}\n` +
+				'  Nothing was changed. The tarball was altered in transit, or the SHA file is stale.'
+		};
+	}
+	const hashMatched = args.expectedHash !== null;
+	if (args.hidden !== null) {
+		return {
+			allowed: true,
+			proof: 'hidden-federation-onchain-sha256',
+			reason: `Fetched over Tor/I2P from ${args.hidden.servedBy} and verified against the on-chain SHA-256 for ${args.hidden.tag}.`
+		};
+	}
+	return decideTrust({
+		bytesFromPrimary: args.bytesFromPrimary,
+		sigVerified: args.signature === 'valid',
+		hashMatched,
+		hashFromPrimary: args.expectedHash !== null && !args.expectedHashFromChain,
+		hashFromChain: args.expectedHashFromChain && hashMatched
+	});
+}
+
 /** True iff `gpg` is on PATH. */
 function gpgAvailable(): boolean {
 	return spawnSync('which', ['gpg'], { stdio: 'pipe', timeout: 3000 }).status === 0;
@@ -550,19 +706,33 @@ export function verifyDetachedSignature(
 	tarballPath: string,
 	sigPath: string
 ): boolean {
+	return checkDetachedSignature(installDir, tarballPath, sigPath) === 'valid';
+}
+
+/** Check a detached signature against the release-signer pubkeys shipped at
+ *  <installDir>/.forgejo/release-signers/*.asc, in a throwaway keyring (never
+ *  the operator's ~/.gnupg). 'invalid' means gpg ran with at least one signer
+ *  key loaded and did not report a good signature — including a signature by
+ *  an unknown key (v1.18.0 deep-deep, ops-3). */
+export function checkDetachedSignature(
+	installDir: string,
+	tarballPath: string,
+	sigPath: string
+): SignatureCheck {
 	if (!gpgAvailable()) {
 		warn('gpg not found on PATH — cannot verify the release signature (will fall back to hash anchoring).');
-		return false;
+		return 'unverifiable';
 	}
 	const signersDir = join(installDir, '.forgejo', 'release-signers');
-	if (!existsSync(signersDir)) return false;
+	if (!existsSync(signersDir)) return 'unverifiable';
 	const keyFiles = readdirSync(signersDir).filter((f) => f.endsWith('.asc'));
-	if (keyFiles.length === 0) return false;
+	if (keyFiles.length === 0) return 'unverifiable';
 
 	const gnupgHome = mkdtempSync(join(tmpdir(), 'morphit-gpg-'));
 	try {
 		// Lock down the throwaway home (gpg insists on 0700).
 		spawnSync('chmod', ['700', gnupgHome], { stdio: 'ignore' });
+		let imported = 0;
 		for (const kf of keyFiles) {
 			const imp = spawnSync('gpg', ['--homedir', gnupgHome, '--batch', '--import', join(signersDir, kf)], {
 				stdio: 'pipe',
@@ -570,8 +740,11 @@ export function verifyDetachedSignature(
 			});
 			if (imp.status !== 0) {
 				warn(`Could not import release-signer key ${kf}.`);
+			} else {
+				imported++;
 			}
 		}
+		if (imported === 0) return 'unverifiable';
 		const res = spawnSync(
 			'gpg',
 			['--homedir', gnupgHome, '--batch', '--status-fd', '1', '--verify', sigPath, tarballPath],
@@ -579,7 +752,7 @@ export function verifyDetachedSignature(
 		);
 		const status = typeof res.stdout === 'string' ? res.stdout : '';
 		// A trustworthy result = a GOODSIG/VALIDSIG line AND a zero exit.
-		return res.status === 0 && /\bVALIDSIG\b/.test(status);
+		return res.status === 0 && /\bVALIDSIG\b/.test(status) ? 'valid' : 'invalid';
 	} finally {
 		rmSync(gnupgHome, { recursive: true, force: true });
 	}
@@ -1341,19 +1514,61 @@ async function runStepWithSpinner(
 	// tarball is then handed to the SAME offline apply path below — only the trust
 	// gate is overridden (its anchor is the on-chain SHA, not a GPG sig/primary).
 	let hiddenResolution: HiddenUpgradeResolution | null = null;
+	// v1.18.0 deep-deep (ops-1). /etc/morphit is relocatable for tests, as for
+	// mcpEnvFile(); unset on a real box.
+	const etcDir = process.env.MORPHIT_ETC_DIR ?? '/etc/morphit';
+	const hiddenConfigEnvPaths = [
+		join(etcDir, 'indexer.env'),
+		join(installDir, 'indexer.env'),
+		join(etcDir, 'morphit.config.env'),
+		join(installDir, 'morphit.config.env')
+	];
+	// v1.18.0 deep-deep (ops-1, H2). Hidden-only is decided from this ROOT-OWNED
+	// config, never from whatever answers on port 8081; the indexer is asked
+	// only at its configured address, only after its listener is proven to be
+	// morphit-indexer.service, and never the next address after one answers.
+	const localIndexer: LocalIndexerOptions = {
+		bases: opts.localIndexerBases,
+		unitEnvFiles: indexerUnitEnvFiles(installDir, etcDir),
+		verifyListener: opts.verifyLocalIndexer
+	};
+	const hiddenOpts = { ...localIndexer, configEnvPaths: hiddenConfigEnvPaths };
+	const allowDowngrade = opts.flags['allow-downgrade'] === 'true';
+	// v1.18.0 review (O10). A CHECK on a hidden-only node asks only "is there a
+	// newer release?" — the answer is the on-chain release version this node's
+	// own indexer already holds. It used to download the whole release over
+	// Tor/I2P to learn that, which the release monitor's 30-second limit never
+	// allowed, so no tor-only operator was ever told a release was out.
+	// v1.18.0 deep-deep (ops-2): a real upgrade reads the same record FIRST, so
+	// an on-chain release that is not newer is never downloaded at all.
+	let hiddenCheckTag: string | null = null;
 	if (offline === null) {
 		try {
+			hiddenCheckTag = (await readHiddenReleaseTarget(hiddenOpts))?.tag ?? null;
+		} catch (err) {
+			printError(
+				`Could not check for a new release privately, so nothing was fetched and this node stays as it is: ` +
+					`${err instanceof Error ? err.message : String(err)}`
+			);
+			return 5;
+		}
+		if (hiddenCheckTag !== null && !checkOnly && localInfo !== null && !allowDowngrade) {
+			if (!isNewerRelease(hiddenCheckTag, localInfo.tag)) {
+				info(`Current version: ${sanitizeForTerm(localInfo.tag)}`);
+				info(`On-chain release: ${sanitizeForTerm(hiddenCheckTag)}`);
+				info(
+					compareTags(hiddenCheckTag, localInfo.tag) < 0
+						? '✓ The on-chain release is older than this install, so nothing was changed.'
+						: '✓ Already on the latest release.'
+				);
+				return 0;
+			}
+		}
+	}
+	if (offline === null && hiddenCheckTag !== null && !checkOnly) {
+		try {
 			hiddenResolution = await tryResolveHiddenUpgrade({
-				// The hidden-only signal lives where the RPC pool is actually
-				// written — indexer.env — NOT morphit.config.env (the v1.16.6 bug).
-				// The resolver prefers the local indexer's clearnet_eliminated and
-				// only falls back to these files if it can't reach the indexer.
-				configEnvPaths: [
-					'/etc/morphit/indexer.env',
-					join(installDir, 'indexer.env'),
-					'/etc/morphit/morphit.config.env',
-					join(installDir, 'morphit.config.env')
-				],
+				...hiddenOpts,
 				onProgress: (m) => info(m)
 			});
 		} catch (err) {
@@ -1363,9 +1578,13 @@ async function runStepWithSpinner(
 			);
 			return 5; // fail-closed — never fall back to a clearnet mirror
 		}
-		if (hiddenResolution !== null) {
-			offline = { tarballPath: hiddenResolution.tarballPath, sigPath: null, tag: `v${hiddenResolution.version}` };
+		if (hiddenResolution === null) {
+			// The node was hidden-only a moment ago; never fall back to clearnet.
+			printError('Hidden-only upgrade could not be completed privately (staying on the current version).');
+			return 5;
 		}
+		hiddenCheckTag = null;
+		offline = { tarballPath: hiddenResolution.tarballPath, sigPath: null, tag: `v${hiddenResolution.version}` };
 	}
 
 	// The PRIMARY is the trusted hash anchor. We fetch each source's
@@ -1375,7 +1594,16 @@ async function runStepWithSpinner(
 	let primaryRelease: ForgejoRelease | null = null;
 	const releasesBySource: Array<{ src: ReleaseSource; rel: ForgejoRelease }> = [];
 	let latest: ForgejoRelease | null;
-	if (offline !== null) {
+	if (hiddenCheckTag !== null) {
+		latest = {
+			tag_name: hiddenCheckTag,
+			name: hiddenCheckTag,
+			body: '',
+			html_url: '',
+			published_at: new Date(0).toISOString(),
+			assets: []
+		};
+	} else if (offline !== null) {
 		latest = synthOfflineRelease(offline.tag, offline.tarballPath, offline.sigPath);
 		info(`Offline upgrade — using local tarball: ${offline.tarballPath}`);
 		// A HIDDEN-federation fetch carries no sibling .asc by design: its trust
@@ -1439,7 +1667,23 @@ async function runStepWithSpinner(
 
 	const currentTag = localInfo?.tag ?? '(unknown)';
 	const latestTag = latest.tag_name;
-	const isUpToDate = currentTag === latestTag;
+	// v1.18.0 deep-deep (ops-7). The tag comes from a release source (a mirror
+	// when the primary is down) and reaches file names and the confirmation
+	// prompt. Only a version number is accepted.
+	if (!RELEASE_VERSION_RE.test(latestTag)) {
+		printError(
+			`The release source named a version that is not a version number ` +
+				`("${sanitizeForTerm(latestTag).slice(0, 40)}"), so nothing was changed.`
+		);
+		return 5;
+	}
+	// v1.18.0 deep-deep (ops-2). "Up to date" was plain string equality, so ANY
+	// other tag — an older signed release a mirror served under the new name, or
+	// an older on-chain re-broadcast — was installed as an "upgrade". Only a
+	// strictly newer release is; --allow-downgrade is the explicit escape.
+	const isNewer = isNewerRelease(latestTag, currentTag);
+	const downgrading = !checkOnly && !isNewer && allowDowngrade && latestTag !== currentTag;
+	const isUpToDate = !isNewer && !downgrading;
 
 	if (jsonOutput) {
 		const payload = {
@@ -1458,12 +1702,19 @@ async function runStepWithSpinner(
 	info(`Release URL:     ${latest.html_url}`);
 
 	if (isUpToDate) {
-		info('✓ Already on the latest release.');
+		if (latestTag !== currentTag && compareTags(latestTag, currentTag) < 0) {
+			info(
+				`✓ The release offered (${latestTag}) is older than this install, so nothing was changed. ` +
+					`To install it anyway, run the upgrade again with --allow-downgrade.`
+			);
+		} else {
+			info('✓ Already on the latest release.');
+		}
 		return 0;
 	}
 
 	console.log('');
-	info(`Newer release available: ${latestTag}`);
+	info(downgrading ? `Downgrade requested (--allow-downgrade): ${latestTag}` : `Newer release available: ${latestTag}`);
 	console.log('');
 	// A hidden-only node fetches the tarball over Tor/I2P, so `latest.body` (the
 	// Forgejo release body) is empty — morphitlat's operator saw a blank "Release
@@ -1516,7 +1767,9 @@ async function runStepWithSpinner(
 	// ─── 4. Confirmation prompt ─────────────────────────────────
 	if (!forceYes) {
 		const ok = await promptYes(
-			`Apply upgrade from ${currentTag} to ${latestTag}?\n` +
+			// v1.18.0 deep-deep (ops-7): rl.question() is not sanitized, so a tag
+			// carrying terminal escapes could repaint this question.
+			`Apply ${downgrading ? 'DOWNGRADE' : 'upgrade'} from ${sanitizeForTerm(currentTag)} to ${sanitizeForTerm(latestTag)}?\n` +
 				`This will: backup ${installDir}, extract new tarball, run npm ci, rebuild + redeploy the web frontend (and verify it's actually being served), restart services.\n` +
 				`Set MORPHIT_AUTO_UPGRADE=1 to skip this prompt in future runs.`
 		);
@@ -1565,7 +1818,7 @@ async function runStepWithSpinner(
 		// tarball. (A valid .asc, if present, still wins in decideTrust below.)
 		if (offline.sigPath === null) {
 			const wantOffline = /-offline\.tar\.gz$/.test(offline.tarballPath);
-			const onchainSha = await readOnchainReleaseSha(latestTag, wantOffline);
+			const onchainSha = await readOnchainReleaseSha(latestTag, wantOffline, localIndexer);
 			if (onchainSha) {
 				expectedHash = onchainSha;
 				expectedHashFromChain = true;
@@ -1622,33 +1875,20 @@ async function runStepWithSpinner(
 	}
 
 	// ─── 6. Verify integrity + decide trust ─────────────────────
-	const sigVerified = sigPath !== null && verifyDetachedSignature(installDir, tarballPath, sigPath);
+	// v1.18.0 deep-deep (ops-2, ops-3): see integrityGate — a signature that is
+	// present but does not verify refuses, and a known primary hash must match
+	// even when a signature verifies.
+	const signature: SignatureCheck =
+		sigPath === null ? 'absent' : checkDetachedSignature(installDir, tarballPath, sigPath);
 	const actualHash = computeSha256(tarballPath);
-	const hashMatched = expectedHash !== null && expectedHash === actualHash;
-	if (expectedHash !== null && !hashMatched && !sigVerified) {
-		printError(
-			`SHA-256 mismatch on downloaded tarball.\n` +
-				`  Expected (from primary): ${expectedHash}\n` +
-				`  Actual:                  ${actualHash}\n` +
-				`Refusing to proceed.  The tarball was tampered with in transit, or the SHA file is stale.`
-		);
-		cleanupTmp(tmpDir);
-		return 5;
-	}
-	const trust =
-		hiddenResolution !== null
-			? {
-					allowed: true,
-					proof: 'hidden-federation-onchain-sha256',
-					reason: `Fetched over Tor/I2P from ${hiddenResolution.servedBy} and verified against the on-chain SHA-256 for ${latestTag}.`
-				}
-			: decideTrust({
-					bytesFromPrimary,
-					sigVerified,
-					hashMatched,
-					hashFromPrimary: expectedHash !== null && !expectedHashFromChain,
-					hashFromChain: expectedHashFromChain && hashMatched
-				});
+	const trust = integrityGate({
+		signature,
+		expectedHash,
+		actualHash,
+		expectedHashFromChain,
+		bytesFromPrimary,
+		hidden: hiddenResolution !== null ? { servedBy: hiddenResolution.servedBy, tag: latestTag } : null
+	});
 	if (!trust.allowed) {
 		printError(`Cannot verify the integrity of release ${latestTag}.\n  ${trust.reason}`);
 		cleanupTmp(tmpDir);
@@ -1673,6 +1913,9 @@ async function runStepWithSpinner(
 		/* '/' is always accessible; ignore the impossible failure */
 	}
 	const backupDir = `${installDir}.bak-${Date.now()}`;
+	// v1.18.0 deep-deep (ops-5): files changed outside the install dir from here
+	// on (refreshed units, self-heal edits), for rollback() to put back.
+	const restoreOnRollback: RollbackRestore[] = [];
 	info(`Backing up ${installDir} → ${backupDir}`);
 	try {
 		renameSync(installDir, backupDir);
@@ -1742,6 +1985,27 @@ async function runStepWithSpinner(
 	} catch (err) {
 		warn(`Extract failed; rolling back to ${backupDir}.`);
 		return rollback(installDir, backupDir, tmpDir, err);
+	}
+
+	// ─── 8a. The tarball must BE the release we chose ──────────────
+	// v1.18.0 deep-deep (ops-2). Nothing checked that the extracted tree was the
+	// version the source named: a mirror could serve an older signed tarball
+	// under the new release's name and the banner would still say the new
+	// version. The tarball's own release-info.json must name the chosen tag.
+	{
+		const extracted = readLocalReleaseInfo(installDir);
+		if (extracted === null || !sameReleaseTag(extracted.tag, latestTag)) {
+			warn(
+				`The downloaded tarball is ${extracted === null ? 'not a Morphit release' : `release ${sanitizeForTerm(extracted.tag)}`}, ` +
+					`not ${latestTag}; putting the previous install back.`
+			);
+			return rollback(
+				installDir,
+				backupDir,
+				tmpDir,
+				new Error(`tarball does not contain ${latestTag}`)
+			);
+		}
 	}
 
 	// ─── 8b. Carry the operator's config + keys forward ────────────
@@ -2277,17 +2541,7 @@ async function runStepWithSpinner(
 			};
 			const origin = readCfgKey('MORPHIT_INSTANCE_ORIGIN');
 			if (origin !== '') {
-				const host = origin.replace(/^https?:\/\//, '').replace(/[/:].*$/, '');
-				liveCanary =
-					spawnSync(
-						'sh',
-						[
-							'-c',
-							`curl -fsS -o /dev/null --max-time 15 -k --resolve ${host}:443:127.0.0.1 ` +
-								`https://${host}/canary.txt`
-						],
-						{ stdio: 'ignore', timeout: 20_000 }
-					).status === 0;
+				liveCanary = probeLiveCanary(origin);
 			}
 		} catch {
 			/* a failed probe must never cause a prompt on its own */
@@ -2367,6 +2621,14 @@ async function runStepWithSpinner(
 		const refreshed = results.filter((r) => r.action === 'refreshed');
 		if (refreshed.length > 0) {
 			for (const r of refreshed) {
+				// v1.18.0 deep-deep (ops-5): a rollback puts the previous unit back.
+				if (r.backupPath) {
+					restoreOnRollback.push({
+						target: join(process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system', r.unit),
+						backup: r.backupPath,
+						isUnit: true
+					});
+				}
 				info(
 					`Refreshed ${r.unit} from the new template` +
 						(r.backupPath ? ` (previous saved to ${basename(r.backupPath)})` : '')
@@ -2436,6 +2698,10 @@ async function runStepWithSpinner(
 	//   (413/403 on /v1/ + /relay/); healIpfsGatewayExposure() — expose the Kubo
 	//   gateway over Tor/I2P (NoFetch-safe) so every instance is a seeder.
 	let selfHealReexeced = false;
+	// v1.18.0 deep-deep (ops-5): note the heal backups before the phase, so a
+	// rollback restores exactly the files THIS run's heals changed.
+	const envRoot = process.env.MORPHIT_ENV_ROOT ?? '';
+	const healSnapshot = snapshotSelfHealBackups(RELAY_ENV_TARGETS.map((f) => `${envRoot}${f}`));
 	try {
 		const newCli = join(installDir, 'apps', 'ops-cli', 'dist', 'main.js');
 		if (existsSync(newCli)) {
@@ -2449,10 +2715,9 @@ async function runStepWithSpinner(
 		/* fall back to in-process below */
 	}
 	if (!selfHealReexeced) {
-		healBunkerWebWaf();
-		healIpfsGatewayExposure();
-		healFrontendConfig();
+		await runSelfHeals();
 	}
+	restoreOnRollback.push(...selfHealRestoreList(healSnapshot, installDir));
 
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
@@ -2465,7 +2730,7 @@ async function runStepWithSpinner(
 			runOrThrow('systemctl', ['restart', svc]);
 		} catch (err) {
 			warn(`Service restart failed for ${svc}; rolling back.`);
-			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup });
+			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup }, restoreOnRollback);
 		}
 	}
 
@@ -2846,6 +3111,20 @@ async function runStepWithSpinner(
 		} catch {
 			/* detection is a nicety; the seed still runs and says what it could not find */
 		}
+		// v1.18.0 deep-deep, H3: this passed only the tag, so the seed script
+		// curled git.agorise.net for the tag's CID after EVERY upgrade, hidden and
+		// offline ones included, from the box's home IP. Hand it the on-chain CID
+		// this node's own indexer holds (only when that record IS this tag; a newer
+		// release seeded before its broadcast has none yet), and tell it when the
+		// node is hidden-only, which the unprivileged ipfs user cannot read from
+		// indexer.env: then it never fetches, downloads or announces anything.
+		const seedHiddenOnly = isHiddenOnlyNode();
+		if (seedHiddenOnly) seedAddrArgs.push('MORPHIT_SEED_HIDDEN_ONLY=1');
+		const onchainRelease = await readLocalRelease();
+		const seedCidArg =
+			onchainRelease !== null && onchainRelease.cid !== null && onchainRelease.tag === latestTag
+				? [onchainRelease.cid]
+				: [];
 		const ipfsHostingUp =
 			spawnSync(
 				'sh',
@@ -2876,7 +3155,7 @@ async function runStepWithSpinner(
 				await runStepWithSpinner(
 					`Seeding ${latestTag} to IPFS\u2026`,
 					'sudo',
-					['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag],
+					['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag, ...seedCidArg],
 					{ timeoutMs: 1_200_000 }
 				);
 			} else {
@@ -2910,7 +3189,7 @@ async function runStepWithSpinner(
 			const seedRes = await runStepWithSpinner(
 				`Seeding ${latestTag} to IPFS\u2026`,
 				'sudo',
-				['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag],
+				['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag, ...seedCidArg],
 				{ timeoutMs: 1_200_000 }
 			);
 			if (seedRes === 0) {
@@ -3034,6 +3313,128 @@ async function runStepWithSpinner(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
+
+/** v1.18.0 (F32) — SELF-HEAL: on a node whose indexer uses no clearnet, give
+ *  the relay no clearnet either. The old tor-only template never set the
+ *  relay's endpoint list, and an upgrade does not re-render templates, so
+ *  without this every EXISTING tor-only node would keep a relay that reaches
+ *  the chain over clearnet — and lose its zero-clearnet claim, which now asks
+ *  the relay. Runs before the service restarts below, so it takes effect on
+ *  this upgrade. See lib/relayHiddenHeal.ts for exactly what it will and will
+ *  not change. */
+/**
+ * Every post-upgrade self-heal, in order, EACH ON ITS OWN (v1.18.0 review, O7).
+ *
+ * The relay heal runs FIRST: it is quick, and it is the privacy one — a relay
+ * on a tor-only node still reaching clearnet RPC from the box's own address.
+ * It used to run last, after heals that restart docker containers and IPFS, so
+ * a slow one could run the re-exec past its timeout and the relay heal never
+ * ran at all; and the heals shared one try, so any one throwing skipped every
+ * heal after it, silently. Each is now isolated and a failure is said out loud.
+ */
+export async function runSelfHeals(): Promise<void> {
+	const heals: Array<[string, () => unknown]> = [
+		['the relay RPC heal', () => healRelayClearnet()],
+		// v1.18.0 deep-deep, H3: existing nodes get the Kubo privacy settings a
+		// fresh install now gets (tor-only: off the public IPFS network).
+		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		['the BunkerWeb WAF heal', () => healBunkerWebWaf()],
+		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
+		['the frontend config heal', () => healFrontendConfig()]
+	];
+	for (const [name, heal] of heals) {
+		try {
+			await heal();
+		} catch (err) {
+			warn(`Skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+}
+
+export async function healRelayClearnet(): Promise<void> {
+	// MORPHIT_ENV_ROOT relocates the env files under a directory, as
+	// MORPHIT_SYSTEMD_DIR relocates units: it is how the test drives this real
+	// entry point against scratch files. Unset on a real box.
+	const root = process.env.MORPHIT_ENV_ROOT ?? '';
+	const at = (files: readonly string[]): string[] => files.map((f) => `${root}${f}`);
+	const relayFiles = at(RELAY_ENV_FILES);
+	// Where the relay answers its health check: its own bind, read the way the
+	// unit reads it. A wildcard bind is reached on loopback.
+	const listen = (() => {
+		try {
+			const v = readEffectiveEnv(relayFiles, ['MORPHIT_RELAY_LISTEN_HOST', 'MORPHIT_RELAY_LISTEN_PORT']);
+			const host = (v.get('MORPHIT_RELAY_LISTEN_HOST') ?? '').trim();
+			const port = Number((v.get('MORPHIT_RELAY_LISTEN_PORT') ?? '').trim()) || 8080;
+			return { host: host === '' || host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host, port };
+		} catch {
+			return { host: '127.0.0.1', port: 8080 };
+		}
+	})();
+	// A test drives the real entry point with no systemd: it says so, and the
+	// heal then stops at "written", which is what it can honestly claim.
+	const noSystemd = process.env.MORPHIT_HEAL_NO_SYSTEMD === '1';
+	await applyAndVerifyRelayHeal({
+		indexerFiles: at(INDEXER_ENV_FILES),
+		relayFiles,
+		targets: at(RELAY_ENV_TARGETS),
+		info,
+		warn,
+		runtime: {
+			isActive: () =>
+				!noSystemd &&
+				spawnSync('systemctl', ['is-active', '--quiet', 'morphit-relay.service']).status === 0,
+			restart: () =>
+				spawnSync('systemctl', ['restart', 'morphit-relay.service'], { timeout: 60_000 }).status === 0,
+			// v1.18.0 deep-deep (ops-4): only a relay systemd reports as failing is
+			// reverted; a slow first chain read over Tor is not a failure.
+			unitState: () => {
+				const r = spawnSync(
+					'systemctl',
+					['show', '-p', 'ActiveState', '-p', 'SubState', '-p', 'NRestarts', 'morphit-relay.service'],
+					{ encoding: 'utf8', timeout: 10_000 }
+				);
+				if (r.status !== 0 || typeof r.stdout !== 'string') throw new Error('systemctl show failed');
+				const v = (k: string): string => new RegExp(`^${k}=(.*)$`, 'm').exec(r.stdout)?.[1]?.trim() ?? '';
+				const n = Number(v('NRestarts'));
+				return {
+					activeState: v('ActiveState'),
+					subState: v('SubState'),
+					restarts: v('NRestarts') !== '' && Number.isInteger(n) ? n : null
+				};
+			},
+			health: async () => {
+				const ctrl = new AbortController();
+				const t = setTimeout(() => ctrl.abort(), 3_000);
+				try {
+					const host = listen.host.includes(':') ? `[${listen.host}]` : listen.host;
+					const res = await fetch(`http://${host}:${listen.port}/v1/health`, { signal: ctrl.signal });
+					// Capped before parsing, like every body this file reads (the
+					// hardening rule: no bare res.json()). The relay's health report
+					// is a few hundred bytes; anything past 64 KB is not one.
+					const txt = await res.text().catch(() => '');
+					let body: { hidden_only?: unknown } = {};
+					if (txt.length <= 65536) {
+						try {
+							body = JSON.parse(txt) as { hidden_only?: unknown };
+						} catch {
+							body = {};
+						}
+					}
+					return {
+						reachable: res.ok,
+						hiddenOnly: typeof body.hidden_only === 'boolean' ? body.hidden_only : null
+					};
+				} catch {
+					return { reachable: false, hiddenOnly: null };
+				} finally {
+					clearTimeout(t);
+				}
+			},
+			sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+			spinner: (label) => startDotsSpinner(label)
+		}
+	});
+}
 
 /** v1.16.13 — SELF-HEAL: rebuild the compose-managed frontend so a shipped
  *  nginx.conf change (e.g. the v1.16.12 `/v1/broadcast` body cap) lands on the
@@ -3221,9 +3622,14 @@ function dockerContainer(want: RegExp, avoid: RegExp | null): string | null {
  *    B. bad-behavior counts routine API 400s → bans the client IP → 403 on all.
  *    C. ModSecurity CRS flags the base64 avatar payload → 403.
  *  Best-effort + idempotent: a non-BunkerWeb deploy just no-ops; a steady-state
- *  box where everything is already applied skips the reload. */
-export function healBunkerWebWaf(): void {
-	const bwEnv = '/etc/bunkerweb/bunkerweb.env';
+ *  box where everything is already applied skips the reload.
+ *
+ *  D. (v1.18.0 deep-deep, H1) USE_REAL_IP=yes + REAL_IP_FROM=0.0.0.0/0 made the
+ *     public edge believe every visitor's X-Forwarded-For, so anyone could pick
+ *     their own address per request (past BunkerWeb's bans and the relay's per-IP
+ *     signup limits). Templates aren't re-rendered on upgrade, so turn it off here.
+ *  `bwEnv` is a parameter only so the smoke can run this against a temp dir. */
+export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
 	try {
 		if (!existsSync(bwEnv)) return; // not a BunkerWeb deployment — nothing to heal
 	} catch {
@@ -3286,6 +3692,26 @@ export function healBunkerWebWaf(): void {
 	try {
 		if (!/^CUSTOM_CONF_MODSEC_morphit_json_api_off=/m.test(env)) {
 			setVal('CUSTOM_CONF_MODSEC_morphit_json_api_off', MODSEC_RULE);
+		}
+	} catch {
+		/* keep going */
+	}
+
+	// ── Fix D: BunkerWeb is the public edge — it must not believe a visitor's
+	//    X-Forwarded-For. Turn USE_REAL_IP off when it trusts that header from
+	//    everyone (a /0 entry) or from BunkerWeb's default private ranges (unset
+	//    REAL_IP_FROM), which include the Docker bridge IPv6 visitors arrive from.
+	//    A deliberate CDN setup (REAL_IP_FROM listing that CDN's ranges) is left
+	//    alone. (v1.18.0 deep-deep, H1) ──
+	const unq = (v: string | null): string => (v ?? '').trim().replace(/^["']|["']$/g, '').trim();
+	try {
+		if (unq(getVal('USE_REAL_IP')).toLowerCase() === 'yes') {
+			const from = unq(getVal('REAL_IP_FROM'));
+			const wide = from === '' || from.split(/\s+/).some((e) => /\/0$/.test(e) || e === '0.0.0.0' || e === '::');
+			if (wide) {
+				setVal('USE_REAL_IP', 'no');
+				info("WAF: set USE_REAL_IP=no. BunkerWeb is the public edge, so it now uses each visitor's real address instead of one they could type in.");
+			}
 		}
 	} catch {
 		/* keep going */
@@ -3437,6 +3863,55 @@ export function healBunkerWebWaf(): void {
 	} catch {
 		/* best-effort — never fail the upgrade over a probe */
 	}
+
+	// (3) REAL IP (Fix D) — when the env now says USE_REAL_IP=no, prove the RUNNING
+	//     nginx has no `set_real_ip_from` left. `docker restart` (the first reload
+	//     strategy above) keeps a container's old environment, so an env change
+	//     can sit on disk unapplied; recreating the containers from compose is what
+	//     makes them read the file again. Try each compose file, re-checking after
+	//     each. (v1.18.0 deep-deep, H1)
+	try {
+		if (unq(getVal('USE_REAL_IP')).toLowerCase() !== 'yes') {
+			const liveTrustsXff = (): boolean | null => {
+				const r = spawnSync('docker', ['exec', bw, 'sh', '-c', 'nginx -T 2>/dev/null'], {
+					encoding: 'utf8',
+					timeout: 20000,
+					maxBuffer: 64 * 1024 * 1024
+				});
+				const out = r.stdout ?? '';
+				if (r.status !== 0 || !/\bserver\s*\{/.test(out)) return null; // can't tell
+				return /^\s*set_real_ip_from\s/m.test(out);
+			};
+			let live = liveTrustsXff();
+			if (live === true) {
+				info('WAF: recreating the BunkerWeb containers so they pick up USE_REAL_IP=no (about half a minute)...');
+				const files = [...new Set([join(dirname(bwEnv), 'docker-compose.yml'), '/etc/bunkerweb/docker-compose.yml', '/opt/morphit/docker-compose.yml'])];
+				const attempts: Array<[string, string[]]> = files
+					.filter((f) => existsSync(f))
+					.flatMap((f): Array<[string, string[]]> => [
+						['docker', ['compose', '-f', f, 'up', '-d', '--force-recreate']],
+						['docker-compose', ['-f', f, 'up', '-d', '--force-recreate']]
+					]);
+				for (const [cmd, args] of attempts) {
+					try {
+						if (spawnSync(cmd, args, { encoding: 'utf8', timeout: 180000 }).status !== 0) continue;
+						spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
+						live = liveTrustsXff();
+						if (live !== true) break;
+					} catch {
+						/* try the next one */
+					}
+				}
+			}
+			if (live === false) info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
+			else if (live === true)
+				info(
+					`WAF: BunkerWeb still has the old real-IP setting loaded. Run \`cd ${dirname(bwEnv)} && docker compose up -d --force-recreate\` when convenient.`
+				);
+		}
+	} catch {
+		/* best-effort — never fail the upgrade over a probe */
+	}
 }
 
 /** Read the release's on-chain SHA-256 anchor from the LOCAL indexer's
@@ -3446,31 +3921,36 @@ export function healBunkerWebWaf(): void {
  *  or different release's hash). Best-effort: null if unreachable / absent /
  *  version-mismatch. v1.16.9 — lets a hidden/air-gapped node apply an offline
  *  tarball with no hand-signed .asc. */
-async function readOnchainReleaseSha(tag: string, wantOffline: boolean): Promise<string | null> {
-	const bases = ['http://127.0.0.1:8081', 'http://172.18.0.1:8081', 'http://172.17.0.1:8081'];
+export async function readOnchainReleaseSha(
+	tag: string,
+	wantOffline: boolean,
+	where: LocalIndexerOptions = {}
+): Promise<string | null> {
+	// v1.18.0 deep-deep (ops-1). This asked 127.0.0.1, 172.18.0.1 and 172.17.0.1
+	// in turn, trusting whichever answered, and on a version MISMATCH moved on to
+	// the next address — so a lagging real indexer handed the decision to
+	// whoever listened on the next one. Now: ONE authenticated listener (the
+	// configured address, proven to be morphit-indexer.service), and its answer
+	// is final — a mismatch is "no anchor", never "ask someone else".
 	const want = tag.replace(/^v/, '');
-	for (const base of bases) {
-		try {
-			const ctrl = new AbortController();
-			const timer = setTimeout(() => ctrl.abort(), 5000);
-			const res = await fetch(`${base}/v1/release`, { signal: ctrl.signal });
-			clearTimeout(timer);
-			if (!res.ok) continue;
-			// Cap the body before parsing — /v1/release is tiny; refuse an absurd
-			// response rather than parse it (hardening: no bare res.json()).
-			const txt = await res.text();
-			if (txt.length > 65536) continue;
-			const body = JSON.parse(txt) as {
-				version?: string;
-				distribution?: { source_sha256?: string; offline_sha256?: string } | null;
-			};
-			if ((body.version ?? '').replace(/^v/, '') !== want) continue; // stale/other release
-			const d = body.distribution ?? {};
-			const sha = wantOffline ? d.offline_sha256 : d.source_sha256;
-			if (typeof sha === 'string' && /^[0-9a-f]{64}$/i.test(sha)) return sha.toLowerCase();
-		} catch {
-			/* try the next base */
-		}
+	let base: string;
+	try {
+		base = locateLocalIndexer(where);
+	} catch (err) {
+		info(`  No on-chain hash available: ${err instanceof Error ? err.message : String(err)}`);
+		return null;
+	}
+	try {
+		const body = await getLocalIndexerJson<{
+			version?: string;
+			distribution?: { source_sha256?: string; offline_sha256?: string } | null;
+		}>(base, '/v1/release');
+		if ((body.version ?? '').replace(/^v/, '') !== want) return null; // stale/other release
+		const d = body.distribution ?? {};
+		const sha = wantOffline ? d.offline_sha256 : d.source_sha256;
+		if (typeof sha === 'string' && /^[0-9a-f]{64}$/i.test(sha)) return sha.toLowerCase();
+	} catch {
+		/* no anchor — decideTrust then requires a signature */
 	}
 	return null;
 }
@@ -3795,12 +4275,61 @@ function runOrThrow(cmd: string, args: readonly string[], opts: { cwd?: string }
 	}
 }
 
-function rollback(
+/** A file the upgrade changed outside the install dir, and the copy of it
+ *  taken first. `isUnit` marks a systemd unit (a daemon-reload follows). */
+export interface RollbackRestore {
+	readonly target: string;
+	readonly backup: string;
+	readonly isUnit?: boolean;
+}
+
+/** The self-heal backups' state before the self-heal phase: a backup whose
+ *  mtime changes (or that appears) during the phase was written by THIS run.
+ *  (v1.18.0 deep-deep, ops-5) */
+export function snapshotSelfHealBackups(
+	targets: readonly string[]
+): ReadonlyArray<{ target: string; backup: string; mtimeMs: number | null }> {
+	return targets.map((target) => {
+		const backup = relayHealBackupPath(target);
+		let mtimeMs: number | null = null;
+		try {
+			mtimeMs = statSync(backup).mtimeMs;
+		} catch {
+			mtimeMs = null;
+		}
+		return { target, backup, mtimeMs };
+	});
+}
+
+/** Which self-heal backups this run made, as files rollback() must restore.
+ *  Files inside the install dir are left out: the directory swap already puts
+ *  the previous ones back. */
+export function selfHealRestoreList(
+	snap: ReadonlyArray<{ target: string; backup: string; mtimeMs: number | null }>,
+	installDir: string
+): RollbackRestore[] {
+	const inside = (p: string): boolean => resolve(p).startsWith(`${resolve(installDir)}/`);
+	const out: RollbackRestore[] = [];
+	for (const s of snap) {
+		if (inside(s.target)) continue;
+		let now: number | null = null;
+		try {
+			now = statSync(s.backup).mtimeMs;
+		} catch {
+			now = null;
+		}
+		if (now !== null && now !== s.mtimeMs) out.push({ target: s.target, backup: s.backup });
+	}
+	return out;
+}
+
+export function rollback(
 	installDir: string,
 	backupDir: string,
 	tmpDir: string,
 	err: unknown,
-	web?: { webRoot: string; webRootBackup: string | null }
+	web?: { webRoot: string; webRootBackup: string | null },
+	restore: readonly RollbackRestore[] = []
 ): number {
 	printError(`Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
 	info(`Rolling back: removing partial extract at ${installDir}`);
@@ -3838,6 +4367,28 @@ function rollback(
 					`rebuild apps/web and copy build/ to ${web.webRoot} to realign.`
 			);
 		}
+	}
+	// v1.18.0 deep-deep (ops-5). The self-heal phase edits files OUTSIDE the
+	// install dir (the relay heal appends to /etc/morphit/relay.env) and the
+	// upgrade refreshes systemd units. Rolling back only /opt/morphit left the
+	// previous version to start on the NEW version's relay settings and units.
+	// Put back every file this run recorded, before restarting anything.
+	let unitsRestored = false;
+	for (const r of restore) {
+		try {
+			copyFileSync(r.backup, r.target);
+			if (r.isUnit === true) unitsRestored = true;
+			info(`Restored ${r.target} as it was before this upgrade.`);
+		} catch (restoreErr) {
+			warn(
+				`Could not restore ${r.target} from ${r.backup}: ` +
+					`${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}. ` +
+					`Copy it back by hand: sudo cp ${r.backup} ${r.target}`
+			);
+		}
+	}
+	if (unitsRestored && !daemonReload()) {
+		warn('Could not run `systemctl daemon-reload`; run it by hand so the restored units take effect.');
 	}
 	// Best-effort: restart services after rollback so the old version is running.
 	for (const svc of SERVICES_TO_RESTART) {

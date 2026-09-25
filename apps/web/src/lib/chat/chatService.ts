@@ -28,11 +28,39 @@
  *              visual disappears. The record now has a real id
  *              and created_at.
  *
- *   failed   — broadcast threw. UI shows the message in red with
- *              "Tap to retry." Retrying transitions back to pending.
+ *   failed   — broadcast threw, OR the send never became durable
+ *              within NEVER_RECORDED_AFTER_MS (an asynchronously-
+ *              broadcast message can be accepted by a node and still
+ *              never reach a block). That applies to a message a fast
+ *              provisional copy has ALREADY shown as confirmed, too:
+ *              a provisional copy proves the node took it, not that the
+ *              chain kept it. UI shows the message in red with "Tap to
+ *              retry." Retrying transitions back to pending.
+ *
+ *              NOT TERMINAL. A real copy arriving late clears the
+ *              failure — arriving is the proof it did not fail — and
+ *              a retry keeps the original's client_tag in
+ *              `priorTags` so that late copy still reconciles
+ *              instead of appearing twice.
  *
  * Incoming messages from the peer go straight into the
  * `confirmed` bucket — they already have ids and created_at.
+ *
+ * ─── A copy the chain never records ──────────────────────────────
+ *
+ * The federation fast path hands a message to the recipient's instance
+ * BEFORE the sender's broadcast (ADR-0052), so a recipient can hold a
+ * provisional copy of a message the chain then refuses or drops. Such a
+ * copy is never deleted — the recipient has read it — but once it has
+ * gone NEVER_RECORDED_AFTER_MS without a durable twin it is marked
+ * `unrecorded`, and the UI says so. A durable twin arriving later clears
+ * the mark: arriving is the proof.
+ *
+ * When the sender retries, the retry carries the tags it replaces in
+ * `header.prior_tags`, and a copy linked to an existing message by tag
+ * AND identical plaintext is absorbed into it instead of appearing as a
+ * second message. Both conditions, never one: the tag link alone would
+ * let a sender hide a different message behind an old one.
  *
  * ─── client_tag reconciliation ───────────────────────────────────
  *
@@ -81,8 +109,9 @@
  */
 
 import { getChatHistory, getChatIdentity } from '$lib/indexer/client';
-import { broadcastCustomJson } from '$blurt/sign';
-import { OP_IDS } from '$net/config';
+import { broadcastChatMessage } from '$blurt/sign';
+import { OP_IDS, resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
+import { fetchChainTx } from '$blurt/chainExplorer';
 import { createChatStream } from '$lib/chat/stream';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { ChatMessageRecord } from '@morphit/indexer-client';
@@ -90,6 +119,12 @@ import { decodePayload } from '$lib/chat/payload';
 import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
 import { resolveChatPubFromIndexer, PubPinError, type ChatPubPin } from '$lib/chat/pubPin';
+import { ChainRelayError } from '$net/chainRelay';
+
+/** LocalMessage.error sentinel for "the chain relay could not be reached".
+ *  Mapped to `chat.security.chain_unreachable` by ChatMessage.svelte, exactly
+ *  as the PubPinError codes are. */
+export const CHAIN_UNREACHABLE_SENTINEL = 'chain_unreachable';
 import { verifyPeerChatIdentityOnChain } from '$lib/chat/chainVerify';
 import { readChatSecurityMode, shouldAttachSelfCopy, type ChatSecurityMode } from '$stores/chatSecurity';
 import {
@@ -142,6 +177,35 @@ export interface LocalMessage {
 	/** Non-null only in the 'failed' state. Populated by the
 	 *  broadcast catch block. Used by the "Tap to retry" UI. */
 	error: string | null;
+	/** Tags this message has previously been sent under, oldest first — a retry
+	 *  mints a new one, and the copy sent under an older one can still arrive.
+	 *  Kept so that late original reconciles instead of appearing twice. */
+	priorTags?: string[];
+	/** When this client handed the message to the indexer, for OUR OWN sends
+	 *  only. Present so a message that was accepted by a node but never made it
+	 *  into a block can be noticed and reported rather than sitting in the
+	 *  transcript looking delivered — see NEVER_RECORDED_AFTER_MS. Set whether or
+	 *  not a provisional copy has already shown the message as confirmed.
+	 *  Undefined for incoming messages and for anything loaded from history. */
+	sentAtMs?: number;
+	/** The transaction id the node accepted this send under, for OUR OWN
+	 *  sends. Lets the sweep ask the chain whether a send it is about to call
+	 *  failed has in fact landed (v1.18.0 review, W3). */
+	sentTrxId?: string;
+	/** When the chain first said this send IS on it while our indexer still had
+	 *  no durable copy (v1.18.0 deep-deep, L1). The sweep re-arms the window
+	 *  once; a second "on chain, still not recorded" is final. */
+	onChainAtMs?: number;
+	/** When a PROVISIONAL copy (id 0 on the wire) of this message first reached
+	 *  this client, for messages this client did not send itself — the peer's,
+	 *  or our own from another session. Local clock, never the record's
+	 *  `created_at`: a skewed clock must not mark every message unrecorded.
+	 *  Cleared when the durable copy lands. */
+	provisionalSinceMs?: number;
+	/** True once a provisional copy has gone NEVER_RECORDED_AFTER_MS without a
+	 *  durable twin: the chain has no record of this message. Never set on a
+	 *  durable message; cleared if the durable copy turns up late. */
+	unrecorded?: boolean;
 	/** True if the confirmed message was received but we couldn't
 	 *  decrypt it (not our key, malformed ciphertext, etc.). The
 	 *  UI renders with muted styling and an explanatory tooltip
@@ -152,6 +216,31 @@ export interface LocalMessage {
 	 *  within a controller's lifetime. Does NOT correspond to
 	 *  the server id. */
 	localSeq: number;
+	/** For messages from the PEER: the encrypted bytes this message was
+	 *  decrypted from (ciphertext, ephemeral key, nonce). Two copies are the
+	 *  same message only if these match — see `wireOf`. */
+	wire?: string;
+}
+
+/**
+ * The encrypted bytes a record decrypts from: ciphertext, ephemeral key and
+ * nonce. Two records with the same client tag are TWINS — the fast copy and the
+ * chain's copy of one message — only if these are identical too.
+ *
+ * WHY THE TAG ALONE IS NOT ENOUGH (v1.18.0 review, W1). The tag is chosen by
+ * the SENDER, and nothing anywhere makes it unique per message. A sender who
+ * reused one could make the recipient's view merge two different messages: the
+ * words of a message the chain REFUSED (pushed to the federation first, which is
+ * how fast delivery works) adopting the id and on-chain proof of a different
+ * message that landed — so the transcript and the PDF export would show
+ * "Blockchain proof: <tx>" beside words that transaction never carried. Or a
+ * second on-chain message would be silently folded into the first and never
+ * shown. The bytes are what the proof covers, so the bytes decide.
+ */
+export function wireOf(rec: { ciphertext: string; header: unknown }): string {
+	const h = (rec.header ?? {}) as { ephemeral_pub?: unknown; nonce?: unknown };
+	const part = (v: unknown): string => (typeof v === 'string' ? v : '');
+	return `${rec.ciphertext}|${part(h.ephemeral_pub)}|${part(h.nonce)}`;
 }
 
 /** Dependencies the controller takes. Exposed as an interface
@@ -199,13 +288,19 @@ export interface ChatControllerDeps {
 		| { ok: true; items: readonly ChatMessageRecord[]; nextCursor: string | null }
 		| { ok: false; message: string }
 	>;
-	/** Broadcast an op. Defaults to broadcastCustomJson at runtime;
-	 *  tests inject a mock. */
+	/** Broadcast a chat message. Defaults to broadcastChatMessage at runtime;
+	 *  tests inject a mock.
+	 *
+	 *  `block_num` is null: a chat message does not wait for a block (see
+	 *  broadcastChatMessage). Nothing here reads it — both send paths discard
+	 *  this result entirely and await it only so a rejection can mark the
+	 *  message failed — but the type says so rather than implying a block
+	 *  number that was never fetched. */
 	broadcast(
 		live: LiveIdentity,
 		payload: Record<string, unknown>,
 		blurtAccount: string
-	): Promise<{ block_num: number; trx_id: string }>;
+	): Promise<{ block_num: number | null; trx_id: string }>;
 	/** Fetch the peer's published X25519 chat pubkey (ADR-0015).
 	 *  Returns null if the peer has never published — in that case
 	 *  the sender can't encrypt and sendMessage surfaces a
@@ -269,6 +364,13 @@ export interface ChatControllerDeps {
 	 *  fresh at send time. Optional: absent → treated as 'keep' (the default,
 	 *  self-copy on), so existing tests keep their prior behavior. */
 	chatSecurityMode?(): ChatSecurityMode;
+	/**
+	 * Is this transaction on the chain? Asked by the sweep before it calls one
+	 * of our sends failed (v1.18.0 review, W3). 'unknown' when the question
+	 * could not be answered — the sweep then does what it always did. Optional:
+	 * absent, the sweep does not ask (tests that predate it).
+	 */
+	transactionOnChain?(trxId: string): Promise<'found' | 'not_found' | 'unknown'>;
 	/** Called on EVERY state change. The component subscribes via
 	 *  its own $effect so Svelte re-renders automatically. */
 	onChange(messages: readonly LocalMessage[]): void;
@@ -331,6 +433,75 @@ const HISTORY_PAGE_SIZE = 50;
  *  the same block boundary. Kept small (≤2s) so base + jitter stays within
  *  the ≤6s fastchat target. */
 const POLL_JITTER_MS = 2_000;
+/**
+ * How long a message may go without a durable copy before it is treated as one
+ * the chain will never record.
+ *
+ * Built from the worst legitimate case, not a feeling. A Blurt transaction is
+ * signed to expire sixty seconds after the head block it references, and a node
+ * may include it any time before then; the durable row it reconciles with is
+ * written only once its block is irreversible, 45-63 seconds after inclusion.
+ * 60 + 63 = 123 seconds before anything can be called late — which the previous
+ * two-minute figure did not cover. The rest is margin for the fallback poll and
+ * a slow hidden-network round trip.
+ *
+ * Being early here is not harmless in either direction. On the sender's side it
+ * prompts a resend of a message that is still on its way; on the recipient's it
+ * tells them the chain has no record of something it is about to record.
+ */
+export const NEVER_RECORDED_AFTER_MS = 150_000;
+
+/** LocalMessage.error sentinel: our own send was accepted but never became
+ *  durable. Localized by ChatMessage.svelte as `chat.message.not_confirmed_on_chain`. */
+export const NOT_CONFIRMED_SENTINEL = 'not_confirmed_on_chain';
+
+/** LocalMessage.error sentinel: the session was locked when the send was
+ *  attempted. Localized as `chat.message.session_locked`. */
+export const SESSION_LOCKED_SENTINEL = 'session_locked';
+
+/**
+ * LocalMessage.error sentinel: the transaction IS on the chain, but no durable
+ * copy ever arrived — the indexers refused it (the recipient blocks us, the
+ * stranger fee applies after all, the order it answered is gone). FINAL: no
+ * Retry, because resending would be refused the same way. Localized as
+ * `chat.message.on_chain_not_accepted`. (v1.18.0 deep-deep, L1: W3 used to
+ * treat "on chain" as "will be recorded" and re-armed forever, so such a
+ * message said "confirmed" for good while the recipient never got it.)
+ */
+export const ON_CHAIN_NOT_ACCEPTED_SENTINEL = 'on_chain_not_accepted';
+
+/**
+ * Only unconfirmed own sends younger than this are put back when a thread is
+ * reopened (v1.18.0 deep-deep, L2). Past it the sweep would already have
+ * decided, and the durable copy may simply have landed while no view was open
+ * — beyond the newest page of history, where the merge cannot see it. Putting
+ * such a message back ended in a ghost "failed" bubble and, on Retry, a second
+ * copy on chain. The window plus a minute for the poll and the chain check.
+ */
+export const RESTORE_UNCONFIRMED_MAX_AGE_MS = NEVER_RECORDED_AFTER_MS + 60_000;
+
+/** At most this many earlier tags travel with a retry, and at most this many
+ *  are accepted from one. Matches the bound on `priorTags` itself. */
+export const MAX_PRIOR_TAGS = 8;
+
+/** The shape `generateClientTag` produces: 16 random bytes as hex. */
+const CLIENT_TAG_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * The tags a copy declares it replaces (`header.prior_tags`), validated.
+ *
+ * Anything malformed yields none rather than some: the field is written by the
+ * sender, and a partially-honoured list is harder to reason about than an
+ * ignored one. Never includes the copy's own tag.
+ */
+export function priorTagsFromHeader(header: unknown, ownTag: string | null): string[] {
+	if (typeof header !== 'object' || header === null) return [];
+	const v = (header as Record<string, unknown>).prior_tags;
+	if (!Array.isArray(v) || v.length === 0 || v.length > MAX_PRIOR_TAGS) return [];
+	if (!v.every((t) => typeof t === 'string' && CLIENT_TAG_RE.test(t))) return [];
+	return [...new Set(v as string[])].filter((t) => t !== ownTag);
+}
+
 /** Placeholder text for messages we can't decrypt — shown when
  *  the AEAD verification fails (malformed ciphertext, recipient
  *  not us, key rotation since the message was sent, AAD tamper
@@ -395,6 +566,55 @@ function rememberOwnSent(me: string, clientTag: string, plaintext: string): void
  *  controller instance. */
 export function clearOwnSentPlaintextCache(): void {
 	ownSentPlaintext.clear();
+	unconfirmedOwnSends.clear();
+	// (v1.18.0 deep-deep, M3) This is the lock hook — identity.ts calls it from
+	// lockSession() and reset(). Clearing the maps was not enough: a controller
+	// still mounted kept the decrypted transcript on screen and its derived chat
+	// key, and its sweep or an in-flight send wrote plaintext straight back.
+	for (const onLock of Array.from(controllerLockHooks)) {
+		try {
+			onLock();
+		} catch {
+			// One controller's trouble must not stop the others from locking.
+		}
+	}
+}
+
+/** One entry per live conversation controller: what it does on a lock. */
+const controllerLockHooks = new Set<() => void>();
+
+/**
+ * Our own sends the node ACCEPTED and the chain has not yet confirmed, kept
+ * past the conversation view that sent them (v1.18.0 review, W2).
+ *
+ * "Not confirmed on chain — tap to send again" (F29) lived only inside one
+ * conversation controller. Sending and then leaving the chat is the ordinary
+ * pattern, and the next controller rebuilt the message from whatever the
+ * indexer still had: within five minutes a provisional copy with a fresh clock
+ * (and no Retry), after that nothing at all. So a send the chain dropped
+ * vanished from the sender's view, silently, exactly when they were not
+ * looking — the case F29 exists for. Restored here on return, with the
+ * ORIGINAL clock, so the sweep can still say so and offer Retry.
+ *
+ * Holds plaintext, so it follows the own-sent cache's rules: keep-history mode
+ * only (destroy mode promises nothing survives leaving the chat), in memory
+ * only, cleared on lock and sign-out, bounded.
+ */
+interface UnconfirmedOwnSend {
+	readonly clientTag: string;
+	readonly text: string;
+	readonly sentAtMs: number;
+	readonly trxId: string | null;
+	readonly priorTags: readonly string[];
+	readonly onChainAtMs: number | null;
+}
+const UNCONFIRMED_OWN_MAX = 200;
+const unconfirmedOwnSends = new Map<string, UnconfirmedOwnSend>();
+function unconfirmedKey(me: string, peer: string, order: string | null, tag: string): string {
+	return `${me}\t${peer}\t${order ?? ''}\t${tag}`;
+}
+function unconfirmedThreadPrefix(me: string, peer: string, order: string | null): string {
+	return `${me}\t${peer}\t${order ?? ''}\t`;
 }
 
 /** Map an unknown caught error to a stable sentinel string for
@@ -406,6 +626,12 @@ export function clearOwnSentPlaintextCache(): void {
  *  defensively. */
 function errorToSentinel(err: unknown): string {
 	if (err instanceof PubPinError) return err.code;
+	// A chain read that could not be MADE is not a verification result, and must
+	// not fall through to a raw technical message on a send failure. It gets its
+	// own localized sentinel so the user is told the ordinary truth — the
+	// blockchain was briefly unreachable, common on Tor/I2P, try again — rather
+	// than an AbortError, or worse, a tamper warning.
+	if (err instanceof ChainRelayError) return CHAIN_UNREACHABLE_SENTINEL;
 	if (err instanceof Error) return err.message;
 	return String(err);
 }
@@ -432,6 +658,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	let streamUnsubscribe: (() => void) | null = null;
 	let destroyed = false;
 	let started = false;
+	/** Bumped on every session lock. An async merge that started before the lock
+	 *  must not add what it decrypted after it (v1.18.0 deep-deep, M3). */
+	let lockEpoch = 0;
 
 	/** Cached derivation of the current user's chat identity. Null
 	 *  until the first send/decrypt needs it. Keyed implicitly by
@@ -502,27 +731,121 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// overwrite a real, durable id.
 		const isDurable = rec.id !== 0;
 		for (const m of messages) {
-			if (m.clientTag !== tag) continue;
+			// Our own messages only. A tag is chosen by whoever signs the message,
+			// and the PEER's messages carry tags too — including, since retries
+			// declare the tags they replace, tags the peer merely NAMED. Without
+			// this a peer could list one of our tags and have our own message
+			// reconcile into theirs and vanish from our transcript.
+			if (m.sender !== deps.me) continue;
+			// A tag this message is CURRENTLY using, or one it used before a retry.
+			// See `priorTags`: without the second clause a late original arrives
+			// matching nothing and is appended as a duplicate.
+			if (m.clientTag !== tag && m.priorTags?.includes(tag) !== true) continue;
 			// This is one of our own messages, matched by client_tag. It
 			// could be the local optimistic echo (pending/broadcast), a
 			// provisional fast-path copy already reconciled (confirmed,
 			// id still null), or the durable copy (confirmed, real id).
 			// Every case is a dedup hit — we return true so the caller
 			// never appends a second entry.
-			if (m.state === 'pending' || m.state === 'broadcast') {
+			// 'failed' is included deliberately. A message can be marked failed
+			// while it is in fact on its way — the node accepted it and the
+			// response was lost, or an older bundle rejected a reply shape it did
+			// not recognise. If the real copy then arrives, the transcript should
+			// say what happened rather than keep a red bubble beside the message
+			// it is complaining about. Arriving IS the proof it did not fail.
+			if (m.state === 'pending' || m.state === 'broadcast' || m.state === 'failed') {
+				// A PROVISIONAL copy clearing a failure proves the node took the
+				// message, not that the chain kept it — so it earns a fresh window,
+				// not a permanent pass. Without this the next sweep would fail it
+				// again at once, and without the window at all it would sit
+				// confirmed forever if it then never landed.
+				if (m.state === 'failed' && !isDurable) m.sentAtMs = Date.now();
 				m.state = 'confirmed';
+				m.error = null;
 				m.createdAt = new Date(rec.created_at);
 			}
 			// Adopt the durable id the first time it lands; a provisional
 			// (id 0) never overwrites a real id we already hold.
-			if (isDurable && (m.id === null || m.id === 0)) {
-				m.id = rec.id;
-				m.createdAt = new Date(rec.created_at);
-				m.trxId = rec.source_trx_id || null;
-			}
+			if (isDurable && (m.id === null || m.id === 0)) adoptDurable(m, rec);
 			return true;
 		}
 		return false;
+	}
+
+	/** A durable copy has landed for `m`: take its id, time and on-chain anchor,
+	 *  and drop every "still waiting for the chain" marker — arriving is the
+	 *  proof. */
+	function adoptDurable(m: LocalMessage, rec: ChatMessageRecord): void {
+		// Our own send is on the chain for good: nothing left to remember (W2).
+		if (m.sender === deps.me) {
+			forgetUnconfirmed(m.clientTag);
+			delete m.sentTrxId;
+			delete m.onChainAtMs;
+		}
+		m.id = rec.id;
+		m.createdAt = new Date(rec.created_at);
+		m.trxId = rec.source_trx_id || null;
+		delete m.provisionalSinceMs;
+		delete m.sentAtMs;
+		m.unrecorded = false;
+	}
+
+	/**
+	 * An existing message that `rec` is a retry of, or that is a retry of `rec`.
+	 *
+	 * Linked by TAG — the new copy names the message's tag in its prior_tags, or
+	 * the message already carries the copy's tag among its own — AND by identical
+	 * readable plaintext from the same sender in the same thread. The tag says the
+	 * sender means it as a resend; the text says it IS one. A tag link alone would
+	 * let a sender quietly hide a different message behind an older one, in the
+	 * live view only, which is worse than a duplicate.
+	 */
+	function findRetryLink(
+		sender: string,
+		orderPermlink: string | null,
+		text: string,
+		incomingTag: string,
+		declared: readonly string[]
+	): LocalMessage | undefined {
+		// A placeholder is not content: two unreadable messages are not the same
+		// message. (A locked session yields the placeholder with decryptFailed
+		// false, so the flag alone does not cover it.)
+		if (text === ENCRYPTED_PLACEHOLDER) return undefined;
+		return messages.find(
+			(m) =>
+				m.sender === sender &&
+				m.orderPermlink === orderPermlink &&
+				!m.decryptFailed &&
+				m.text === text &&
+				((m.clientTag !== null && declared.includes(m.clientTag)) ||
+					m.priorTags?.includes(incomingTag) === true)
+		);
+	}
+
+	/**
+	 * Fold a retry copy into the message it resends. The message keeps its place
+	 * in the transcript and its tag; the copy's tag and whatever it declared join
+	 * `priorTags`, so every later copy of either attempt lands here too.
+	 */
+	function absorbRetryCopy(
+		m: LocalMessage,
+		rec: ChatMessageRecord,
+		incomingTag: string,
+		declared: readonly string[]
+	): void {
+		const tags = new Set([...(m.priorTags ?? []), incomingTag, ...declared]);
+		if (m.clientTag !== null) tags.delete(m.clientTag);
+		// Bounded like everything a peer can grow: one attempt's own declared
+		// list plus the attempts folded in since, newest kept.
+		m.priorTags = [...tags].slice(-MAX_PRIOR_TAGS * 2);
+		if (rec.id !== 0) {
+			if (m.id === null || m.id === 0) adoptDurable(m, rec);
+		} else if (m.id === null) {
+			// A fresh provisional attempt: it may yet land, so the verdict on the
+			// old one no longer describes this message. Start its window again.
+			m.provisionalSinceMs = Date.now();
+			m.unrecorded = false;
+		}
 	}
 
 	/**
@@ -640,6 +963,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  that the wasted bandwidth isn't worth a server change. */
 	async function mergePollResponse(items: readonly ChatMessageRecord[]): Promise<void> {
 		if (items.length === 0) return;
+		const epoch = lockEpoch;
+		/** A lock landed while this merge was awaiting a decrypt: stop here. */
+		const lockedSince = (): boolean => epoch !== lockEpoch || destroyed;
 
 		// Build a set of ids already in local state as 'confirmed'.
 		// Pending / broadcast / failed don't have ids yet, so they
@@ -658,6 +984,18 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		let added = false;
 
 		for (const rec of oldestFirst) {
+			// (v1.18.0 deep-deep, L2) A durable copy of our own send, in ANY thread
+			// with this peer (history spans them all): that send is recorded, so it
+			// must never be put back as "unconfirmed" — even if this view never
+			// shows the record. Checked before the thread filter for that reason.
+			if (rec.sender === deps.me && rec.id !== 0) {
+				const durableTag = clientTagFromHeader(rec.header);
+				if (durableTag !== null) {
+					unconfirmedOwnSends.delete(
+						unconfirmedKey(deps.me, deps.peer, rec.order_permlink ?? null, durableTag)
+					);
+				}
+			}
 			// cp446 — ONE THREAD PER (peer, order). Every record enters here: the
 			// initial page, "load older" pages, and live SSE appends. Filtering at
 			// this single seam is what keeps a reply about order A out of the
@@ -668,6 +1006,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			if ((rec.order_permlink ?? null) !== (deps.orderPermlink ?? null)) {
 				continue;
 			}
+			// id 0 marks a PROVISIONAL copy (ADR-0048/0052): not yet on the
+			// chain's irreversible record, and possibly never.
+			const isDurable = rec.id !== 0;
 			// Is this a confirmation of a local outgoing message?
 			if (rec.sender === deps.me) {
 				if (reconcileByClientTag(rec)) {
@@ -676,8 +1017,9 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				}
 				// No local tag matched AND we've seen this id before
 				// (e.g. second poll after we already merged it once):
-				// skip.
-				if (seenIds.has(rec.id)) continue;
+				// skip. Durable ids only: every provisional carries id 0, so
+				// testing it would drop each provisional after the first.
+				if (isDurable && seenIds.has(rec.id)) continue;
 				// No local tag matched — a message we sent, but not from
 				// this controller's live echo (we navigated away and back,
 				// or it was sent from another client/session). cp406: in
@@ -689,22 +1031,46 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// shows the placeholder, exactly like incoming messages.
 				const ownTag = clientTagFromHeader(rec.header);
 				const ownFromChain = await decryptOwnFromChain(rec);
+				if (lockedSince()) return;
 				const ownCached =
 					ownFromChain === null && deps.getLiveIdentity() !== null && ownTag !== null
 						? ownSentPlaintext.get(ownSentKey(deps.me, ownTag))
 						: undefined;
+				const ownText = ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER;
+				const ownDeclared = priorTagsFromHeader(rec.header, ownTag);
+				// A retry made from our OTHER session: fold it into the attempt it
+				// resends, exactly as the recipient does (see the incoming branch).
+				if (ownTag !== null) {
+					const linked = findRetryLink(
+						rec.sender,
+						rec.order_permlink ?? null,
+						ownText,
+						ownTag,
+						ownDeclared
+					);
+					if (linked) {
+						absorbRetryCopy(linked, rec, ownTag, ownDeclared);
+						added = true;
+						continue;
+					}
+				}
 				messages.push({
-					id: rec.id,
+					// Provisional copies get NO id. They all carry 0, and a 0 here
+					// entered seenIds above and silenced every later provisional
+					// from our other session until its durable copy arrived.
+					id: isDurable ? rec.id : null,
 					orderPermlink: rec.order_permlink ?? null,
 					clientTag: ownTag,
-					text: ownFromChain ?? ownCached ?? ENCRYPTED_PLACEHOLDER,
+					text: ownText,
 					sender: rec.sender,
 					state: 'confirmed',
 					createdAt: new Date(rec.created_at),
-					trxId: rec.source_trx_id || null,
+					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: false,
-					localSeq: ++localSeqCounter
+					localSeq: ++localSeqCounter,
+					...(ownDeclared.length > 0 ? { priorTags: ownDeclared } : {}),
+					...(isDurable ? {} : { provisionalSinceMs: Date.now() })
 				});
 				added = true;
 			} else {
@@ -712,7 +1078,6 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// cp403 [1] — id 0 marks a PROVISIONAL head-block copy
 				// (ADR-0048 fast path), not yet irreversible.
 				const incomingTag = clientTagFromHeader(rec.header);
-				const isDurable = rec.id !== 0;
 
 				// Collapse a fast-path provisional against its durable
 				// twin — either may arrive first, and both carry the same
@@ -722,14 +1087,18 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// first arrived, and re-running them would double-record
 				// an address/funds-sent payload.
 				if (incomingTag !== null) {
+					// Same sender, same tag AND the same encrypted bytes — the tag
+					// alone is the sender's to choose. See wireOf.
+					const wire = wireOf(rec);
 					const twin = messages.find(
-						(m) => m.sender === rec.sender && m.clientTag === incomingTag
+						(m) =>
+							m.sender === rec.sender &&
+							m.clientTag === incomingTag &&
+							m.wire === wire
 					);
 					if (twin) {
 						if (isDurable && (twin.id === null || twin.id === 0)) {
-							twin.id = rec.id;
-							twin.createdAt = new Date(rec.created_at);
-							twin.trxId = rec.source_trx_id || null;
+							adoptDurable(twin, rec);
 						}
 						added = true;
 						continue;
@@ -742,6 +1111,29 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					continue;
 				}
 				const d = await decryptOrPlaceholder(rec);
+				if (lockedSince()) return;
+				const declared = priorTagsFromHeader(rec.header, incomingTag);
+
+				// A RETRY of a message already here — typically one whose first
+				// attempt reached us from a peer and was then refused by the chain.
+				// Fold it in rather than show the same words twice, and DO NOT run
+				// the side effects below again: they ran for the first copy, and a
+				// second run would record the same payment claim twice.
+				if (incomingTag !== null && !d.decryptFailed) {
+					const linked = findRetryLink(
+						rec.sender,
+						rec.order_permlink ?? null,
+						d.text,
+						incomingTag,
+						declared
+					);
+					if (linked) {
+						absorbRetryCopy(linked, rec, incomingTag, declared);
+						added = true;
+						continue;
+					}
+				}
+
 				messages.push({
 					id: isDurable ? rec.id : null,
 					orderPermlink: rec.order_permlink ?? null,
@@ -753,7 +1145,13 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: d.decryptFailed,
-					localSeq: ++localSeqCounter
+					localSeq: ++localSeqCounter,
+					wire: wireOf(rec),
+					// Kept so a copy of the attempt this one replaces, arriving
+					// AFTER it, is recognised too. Unverified until then: the
+					// link still has to pass the identical-text test.
+					...(declared.length > 0 ? { priorTags: declared } : {}),
+					...(isDurable ? {} : { provisionalSinceMs: Date.now() })
 				});
 				added = true;
 
@@ -863,11 +1261,118 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// user doesn't need to see every transient network error.
 	}
 
+	/**
+	 * Say so when a message has gone NEVER_RECORDED_AFTER_MS without a durable
+	 * copy — on both sides of the conversation.
+	 *
+	 * OUR OWN SENDS. A chat message is answered when the NODE accepts it, not when
+	 * a witness seals it into a block — which is what removes three seconds from
+	 * every send. Acceptance is not inclusion: a transaction can be accepted and
+	 * then expire, be dropped, or lose a fork. Such a send becomes 'failed', with
+	 * Retry. That includes one a provisional copy has already shown as
+	 * 'confirmed' — and in practice that is nearly all of them, because this
+	 * instance delivers every accepted chat message to its own listeners, the
+	 * sender's included. A sweep that looked only at 'broadcast' therefore almost
+	 * never fired: the one case it was written for sat confirmed forever.
+	 *
+	 * EVERYONE ELSE'S. A provisional copy from the peer (or from our own other
+	 * session) with no durable twin is marked `unrecorded` — never removed, since
+	 * the recipient has read it, and not failed, since there is nothing here to
+	 * retry.
+	 *
+	 * Safe to be wrong in the late-arriving case either way: a durable copy
+	 * clears both the failure and the mark.
+	 */
+	function sweepUnconfirmed(): void {
+		const cutoff = Date.now() - NEVER_RECORDED_AFTER_MS;
+		let changed = false;
+		for (const m of messages) {
+			if (m.id !== null && m.id !== 0) continue; // durable: nothing to wait for
+			if (
+				m.sentAtMs !== undefined &&
+				m.sentAtMs <= cutoff &&
+				(m.state === 'broadcast' || m.state === 'confirmed')
+			) {
+				// ASK THE CHAIN FIRST, when we can (v1.18.0 review, W3). The
+				// window assumes our indexer keeps up; one that is catching up
+				// — hidden-only RPC, a restart — has not yet recorded a message
+				// that DID land, and calling it failed invites a Retry that puts
+				// a second copy on chain. The answer arrives asynchronously and
+				// decides then; see askChainBeforeFailing.
+				if (m.sentTrxId !== undefined && deps.transactionOnChain !== undefined) {
+					askChainBeforeFailing(m);
+					continue;
+				}
+				m.state = 'failed';
+				m.error = NOT_CONFIRMED_SENTINEL;
+				changed = true;
+			} else if (
+				m.provisionalSinceMs !== undefined &&
+				m.provisionalSinceMs <= cutoff &&
+				m.unrecorded !== true
+			) {
+				m.unrecorded = true;
+				changed = true;
+			}
+		}
+		if (changed) emit();
+	}
+
+	/** Messages whose chain check is in flight, so a sweep does not ask twice. */
+	const chainChecks = new WeakSet<LocalMessage>();
+
+	/**
+	 * One of our sends has waited out the window: is it on the chain after all?
+	 *
+	 *   found     → our indexer is behind, not the send: ONE fresh window for the
+	 *               durable copy, and no Retry to put a second one on chain. Found
+	 *               again after that window → final: on chain but not accepted
+	 *               (L1 — the indexers refused it; a resend would be refused too);
+	 *   not_found → it never landed: failed, with Retry, exactly as before;
+	 *   unknown   → the question could not be answered: as before, failed.
+	 *
+	 * Decided only if the message is still the same attempt, still waiting.
+	 */
+	function askChainBeforeFailing(m: LocalMessage): void {
+		const trxId = m.sentTrxId;
+		const ask = deps.transactionOnChain;
+		if (trxId === undefined || ask === undefined || chainChecks.has(m)) return;
+		chainChecks.add(m);
+		void ask(trxId)
+			.catch(() => 'unknown' as const)
+			.then((verdict) => {
+				chainChecks.delete(m);
+				if (destroyed) return;
+				if (m.sentTrxId !== trxId || (m.id !== null && m.id !== 0)) return;
+				if (m.state !== 'broadcast' && m.state !== 'confirmed') return;
+				if (verdict === 'found') {
+					if (m.onChainAtMs === undefined) {
+						m.onChainAtMs = Date.now();
+						m.sentAtMs = Date.now();
+						rememberUnconfirmed(m);
+						return;
+					}
+					// (v1.18.0 deep-deep, L1) A whole further window on the chain and
+					// still no durable copy: the indexers will not record it. Say so,
+					// finally, with no Retry — not "confirmed" forever.
+					forgetUnconfirmed(m.clientTag);
+					m.state = 'failed';
+					m.error = ON_CHAIN_NOT_ACCEPTED_SENTINEL;
+					emit();
+					return;
+				}
+				m.state = 'failed';
+				m.error = NOT_CONFIRMED_SENTINEL;
+				emit();
+			});
+	}
+
 	function schedulePoll(): void {
 		if (destroyed) return;
 		const jitter = Math.floor(Math.random() * POLL_JITTER_MS);
 		pollHandle = setTimeout(async () => {
 			await pollOnce();
+			sweepUnconfirmed();
 			schedulePoll();
 		}, FALLBACK_POLL_INTERVAL_MS + jitter);
 	}
@@ -925,7 +1430,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				state: 'failed',
 				createdAt: null,
 				trxId: null,
-				error: 'Session is locked — unlock and try again.',
+				error: SESSION_LOCKED_SENTINEL,
 				decryptFailed: false,
 				localSeq: ++localSeqCounter
 			});
@@ -1027,18 +1532,49 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		// Step 4: build on-wire payload. Header carries the envelope's
-		// public fields (ephemeral_pub + nonce) PLUS our client_tag
-		// for optimistic reconciliation on the poll side.
-		//
-		// Q11: when the user is responding to a specific order
-		// (deps.orderPermlink set, e.g. /chat/peer?order=...), we
-		// include `order_permlink` as a plaintext field on the
-		// payload.  The indexer uses this to bypass the
-		// stranger-fee gate for that message.  The block list and
-		// rate limits still apply regardless.  When orderPermlink
-		// is null (direct DM, inbox follow-up, etc.), the field is
-		// omitted entirely so the indexer's gate runs as before.
+		// Step 4: build the on-wire payload and hand it to the node.
+		const payload = wirePayload(clientTag, envelope, []);
+		try {
+			const res = await deps.broadcast(live, payload, deps.me);
+			markAccepted(local, res?.trx_id);
+		} catch (err) {
+			markSendFailed(local, err);
+		}
+	}
+
+	/**
+	 * The morphit_chat_v1 payload for one send attempt.
+	 *
+	 * ONE builder for the first send and every retry. They used to be two
+	 * literals, and the retry's had quietly lost `order_permlink`: a retried
+	 * message in an order discussion went out as a DIRECT message — threaded
+	 * into the wrong conversation on both sides, charged the stranger fee the
+	 * order context waives, and never reconciled with the bubble it was sent
+	 * from, which the sweep then failed again. Retrying could not succeed.
+	 *
+	 * Header: the envelope's public fields (ephemeral_pub + nonce) plus our
+	 * client_tag for reconciliation, the keep-history self-copy when there is
+	 * one, and on a retry the tags it replaces (`prior_tags`), so the recipient
+	 * can fold it into a first attempt the chain never recorded rather than show
+	 * both. All opaque to the indexer, which bounds the header's size and stores
+	 * it.
+	 *
+	 * Q11: `order_permlink`, when this conversation is about an order, lets the
+	 * indexer bypass the stranger-fee gate for it (the block list and rate
+	 * limits still apply) and is what threads the message by order. Omitted for
+	 * a direct message, so the gate runs as before.
+	 */
+	function wirePayload(
+		clientTag: string,
+		envelope: {
+			ciphertext: string;
+			ephemeralPub: string;
+			nonce: string;
+			selfCiphertext?: string;
+			selfNonce?: string;
+		},
+		priorTags: readonly string[]
+	): Record<string, unknown> {
 		const payload: Record<string, unknown> = {
 			recipient: deps.peer,
 			ciphertext: envelope.ciphertext,
@@ -1050,33 +1586,133 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// by the indexer exactly like the main ciphertext.
 				...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
 					? { self_ciphertext: envelope.selfCiphertext, self_nonce: envelope.selfNonce }
-					: {})
+					: {}),
+				...(priorTags.length > 0 ? { prior_tags: priorTags.slice(-MAX_PRIOR_TAGS) } : {})
 			}
 		};
 		if (deps.orderPermlink !== null) {
 			payload.order_permlink = deps.orderPermlink;
 		}
-		try {
-			await deps.broadcast(live, payload, deps.me);
-			// Flip the local state to 'broadcast' only if the message
-			// is still in 'pending' — a race with the poll loop
-			// might have already upgraded it to 'confirmed' before
-			// we got here. (Extremely unlikely in practice, but the
-			// check is cheap.)
-			if (local.state === 'pending') {
-				local.state = 'broadcast';
-				emit();
+		return payload;
+	}
+
+	/**
+	 * The node took the message. Start its durable clock — whether or not a
+	 * provisional copy has ALREADY shown it as confirmed, which on this
+	 * instance is the usual order of events: it delivers an accepted chat
+	 * message to its own listeners before it answers the request.
+	 */
+	function markAccepted(m: LocalMessage, trxId?: string): void {
+		if (m.state === 'pending') m.state = 'broadcast';
+		if (m.id === null) {
+			m.sentAtMs = Date.now();
+			if (typeof trxId === 'string' && trxId.length > 0 && !trxId.startsWith('tag:')) {
+				m.sentTrxId = trxId;
 			}
-		} catch (err) {
-			local.state = 'failed';
-			local.error = err instanceof Error ? err.message : String(err);
-			emit();
+			rememberUnconfirmed(m);
 		}
+		emit();
+	}
+
+	/** Keep an accepted, unconfirmed own send past this view (W2). */
+	function rememberUnconfirmed(m: LocalMessage): void {
+		// (v1.18.0 deep-deep, M3) Plaintext is kept only for a live session: after
+		// a lock, a send completing in flight or a sweep's "found" must not put
+		// the words back into memory for a locked view to show.
+		if (deps.getLiveIdentity() === null) return;
+		if (m.clientTag === null || m.sentAtMs === undefined) return;
+		if (!shouldAttachSelfCopy(deps.chatSecurityMode?.())) return;
+		unconfirmedOwnSends.set(
+			unconfirmedKey(deps.me, deps.peer, deps.orderPermlink ?? null, m.clientTag),
+			{
+				clientTag: m.clientTag,
+				text: m.text,
+				sentAtMs: m.sentAtMs,
+				trxId: m.sentTrxId ?? null,
+				priorTags: m.priorTags ?? [],
+				onChainAtMs: m.onChainAtMs ?? null
+			}
+		);
+		while (unconfirmedOwnSends.size > UNCONFIRMED_OWN_MAX) {
+			const oldest = unconfirmedOwnSends.keys().next().value;
+			if (oldest === undefined) break;
+			unconfirmedOwnSends.delete(oldest);
+		}
+	}
+
+	function forgetUnconfirmed(tag: string | null): void {
+		if (tag === null) return;
+		unconfirmedOwnSends.delete(unconfirmedKey(deps.me, deps.peer, deps.orderPermlink ?? null, tag));
+	}
+
+	/** Put this thread's unconfirmed own sends back, with their original clocks.
+	 *  Run at start, BEFORE any record merges, so a copy the indexer still has
+	 *  reconciles against the restored message by tag instead of beside it. */
+	function restoreUnconfirmed(): void {
+		// (v1.18.0 deep-deep, M3) A locked or read-only view shows no plaintext —
+		// the same rule as the own-sent cache and incoming messages.
+		if (deps.getLiveIdentity() === null) return;
+		const prefix = unconfirmedThreadPrefix(deps.me, deps.peer, deps.orderPermlink ?? null);
+		const oldestRestorable = Date.now() - RESTORE_UNCONFIRMED_MAX_AGE_MS;
+		let restored = false;
+		for (const [key, u] of Array.from(unconfirmedOwnSends)) {
+			if (!key.startsWith(prefix)) continue;
+			// (L2) Too old to still be waiting: the sweep has long had its say,
+			// and its durable copy may have landed out of sight. Forget it.
+			if (u.sentAtMs < oldestRestorable) {
+				unconfirmedOwnSends.delete(key);
+				continue;
+			}
+			if (messages.some((m) => m.clientTag === u.clientTag)) continue;
+			messages.push({
+				id: null,
+				orderPermlink: deps.orderPermlink ?? null,
+				clientTag: u.clientTag,
+				text: u.text,
+				sender: deps.me,
+				state: 'broadcast',
+				createdAt: null,
+				trxId: null,
+				error: null,
+				decryptFailed: false,
+				localSeq: ++localSeqCounter,
+				sentAtMs: u.sentAtMs,
+				...(u.trxId !== null ? { sentTrxId: u.trxId } : {}),
+				...(u.onChainAtMs !== null ? { onChainAtMs: u.onChainAtMs } : {}),
+				...(u.priorTags.length > 0 ? { priorTags: [...u.priorTags] } : {})
+			});
+			restored = true;
+		}
+		if (restored) emit();
+	}
+
+	/**
+	 * The send request failed. Guarded, because our own provisional copy can come
+	 * back on the stream and reconcile the message to 'confirmed' while the
+	 * request is still in flight; if the response then dies on the wire — a
+	 * dropped Tor circuit, a proxy timeout, a 502 — stamping 'failed' over it
+	 * would put a Retry button beside a message the sender can SEE delivered, and
+	 * the retry would post it to the recipient a second time.
+	 *
+	 * But a provisional copy proves only that the node took it. Such a message
+	 * still gets a durable clock, so if the chain then drops it the sweep says so.
+	 */
+	function markSendFailed(m: LocalMessage, err: unknown): void {
+		if (m.state === 'pending') {
+			m.state = 'failed';
+			m.error = err instanceof Error ? err.message : String(err);
+		} else if (m.id === null && m.sentAtMs === undefined) {
+			m.sentAtMs = Date.now();
+		}
+		emit();
 	}
 
 	async function retryMessage(localSeq: number): Promise<void> {
 		const target = messages.find((m) => m.localSeq === localSeq);
 		if (!target || target.state !== 'failed') return;
+		// (L1) Final: the chain has it and the indexers refused it. A resend
+		// would be refused the same way — and would put a second copy on chain.
+		if (target.error === ON_CHAIN_NOT_ACCEPTED_SENTINEL) return;
 		// Reset to pending and re-run the send path with the
 		// existing text. We reuse the existing LocalMessage — don't
 		// add a new one — so the UI doesn't duplicate. Generate a
@@ -1086,15 +1722,43 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// is a distinct op.
 		const text = target.text;
 		const newTag = deps.generateClientTag();
+		// KEEP THE OLD TAG REACHABLE. A retry deliberately gets a fresh tag,
+		// because the previous broadcast may have landed and a repeated tag would
+		// collide. But the old one is how the ORIGINAL copy identifies itself, and
+		// the original really can still be in flight — the unconfirmed sweeper
+		// exists precisely to prompt a retry for a send that is late rather than
+		// lost. Forget the old tag and that original arrives matching nothing, so
+		// it is appended as a second message and both people see it twice.
+		// This attempt is abandoned: it is not "unconfirmed" any more, it is
+		// being replaced. The new one is remembered once the node accepts it.
+		forgetUnconfirmed(target.clientTag);
+		delete target.sentTrxId;
+		delete target.onChainAtMs;
+		if (target.clientTag !== null) {
+			target.priorTags = [...(target.priorTags ?? []), target.clientTag];
+			// Bounded: someone leaning on Retry must not grow this without limit.
+			// The same bound the recipient accepts from `prior_tags`.
+			while (target.priorTags.length > MAX_PRIOR_TAGS) target.priorTags.shift();
+		}
+		// Same own-sent cache the first send fills, under the tag this attempt
+		// will come back with — otherwise a retried message reads as the
+		// placeholder after navigating away and back in keep-history mode.
+		// Only for a live session: a locked one fails just below, and must not
+		// leave the words in memory (v1.18.0 deep-deep, M3).
+		if (deps.getLiveIdentity() !== null && shouldAttachSelfCopy(deps.chatSecurityMode?.())) {
+			rememberOwnSent(deps.me, newTag, text);
+		}
 		target.state = 'pending';
 		target.clientTag = newTag;
 		target.error = null;
+		// The previous attempt's clock says nothing about this one.
+		delete target.sentAtMs;
 		emit();
 
 		const live = deps.getLiveIdentity();
 		if (!live) {
 			target.state = 'failed';
-			target.error = 'Session is locked — unlock and try again.';
+			target.error = SESSION_LOCKED_SENTINEL;
 			emit();
 			return;
 		}
@@ -1157,35 +1821,39 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		const payload: Record<string, unknown> = {
-			recipient: deps.peer,
-			ciphertext: envelope.ciphertext,
-			header: {
-				client_tag: newTag,
-				ephemeral_pub: envelope.ephemeralPub,
-				nonce: envelope.nonce,
-				...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
-					? { self_ciphertext: envelope.selfCiphertext, self_nonce: envelope.selfNonce }
-					: {})
-			}
-		};
+		const payload = wirePayload(newTag, envelope, target.priorTags ?? []);
 		try {
-			await deps.broadcast(live, payload, deps.me);
-			if (target.state === 'pending') {
-				target.state = 'broadcast';
-				emit();
-			}
+			const res = await deps.broadcast(live, payload, deps.me);
+			markAccepted(target, res?.trx_id);
 		} catch (err) {
-			target.state = 'failed';
-			target.error = err instanceof Error ? err.message : String(err);
-			emit();
+			markSendFailed(target, err);
 		}
+	}
+
+	/**
+	 * The session was locked (idle auto-lock, Lock, sign-out) while this view is
+	 * open (v1.18.0 deep-deep, M3). Before, the view kept the whole decrypted
+	 * transcript on screen and this controller kept the chat key derived from the
+	 * posting key the lock had just wiped. Now: drop every message (the next poll
+	 * brings the records back, shown the way a locked view shows them), wipe the
+	 * derived key, and make any merge still decrypting stop.
+	 */
+	function onSessionLocked(): void {
+		if (destroyed) return;
+		lockEpoch++;
+		const id = myChatIdentity;
+		myChatIdentity = null;
+		if (id) id.priv.fill(0);
+		messages = [];
+		emit();
 	}
 
 	return {
 		start() {
 			if (started || destroyed) return;
 			started = true;
+			controllerLockHooks.add(onSessionLocked);
+			restoreUnconfirmed();
 
 			// Phase E.5 — wire up SSE if the dep is provided. The
 			// stream delivers a snapshot followed by appended
@@ -1250,6 +1918,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		destroy() {
 			if (destroyed) return;
 			destroyed = true;
+			controllerLockHooks.delete(onSessionLocked);
 			if (streamUnsubscribe !== null) {
 				streamUnsubscribe();
 				streamUnsubscribe = null;
@@ -1363,7 +2032,11 @@ export function runtimeDeps(
 			return { ok: false, message: r.message };
 		},
 		broadcast: (live, payload, blurtAccount) =>
-			broadcastCustomJson(live, OP_IDS.chatMessage, payload, blurtAccount),
+			broadcastChatMessage(live, payload, blurtAccount),
+		transactionOnChain: async (trxId: string) => {
+			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), trxId);
+			return r.kind === 'ok' ? 'found' : r.kind === 'not_found' ? 'not_found' : 'unknown';
+		},
 		fetchPeerChatPub: async (peerAccount: string) => {
 			const r = await getChatIdentity(peerAccount);
 			if (!r.ok) {

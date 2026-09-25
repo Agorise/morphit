@@ -150,6 +150,41 @@ export const DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[] = [
 ] as const;
 
 /**
+ * Who runs each default hidden endpoint (v1.18.0 deep-deep, rv2-2).
+ *
+ * The list above names every node twice — its `.onion` and its `.b32.i2p` —
+ * and the RPC quorum used to count those as two independent witnesses. One
+ * operator answering on both transports could therefore meet a two-endpoint
+ * quorum alone. The quorum now counts OPERATORS, and this map is where a
+ * default endpoint's operator comes from. Both addresses of a node share its
+ * name. Keep it in step with the list: the operator-config smoke checks that
+ * every default hidden endpoint is named and every name has one address per
+ * transport.
+ */
+const DEFAULT_HIDDEN_NODE_NAMES: readonly string[] = ['Star', 'Jade', 'kc', 'oldpc', 'mama', 'j2', 's2'];
+export const DEFAULT_HIDDEN_BLURT_RPC_OPERATORS: Readonly<Record<string, string>> = Object.freeze(
+	Object.fromEntries(
+		DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.map((url, i) => [url, DEFAULT_HIDDEN_NODE_NAMES[Math.floor(i / 2)] ?? url])
+	)
+);
+
+/**
+ * The operator identity an RPC endpoint's answers are counted under in a
+ * quorum (rv2-2). A default hidden node's name when it is one; otherwise the
+ * URL's hostname, so two ports on one host are one operator. `extra` (for
+ * example the on-chain directory's node names) wins over both.
+ */
+export function rpcEndpointOperator(url: string, extra?: Readonly<Record<string, string>>): string {
+	const named = extra?.[url] ?? DEFAULT_HIDDEN_BLURT_RPC_OPERATORS[url];
+	if (named !== undefined && named !== '') return `name:${named}`;
+	try {
+		return `host:${new URL(url).hostname.toLowerCase()}`;
+	} catch {
+		return `url:${url}`;
+	}
+}
+
+/**
  * Public Bitcoin block-explorer Esplora API bases. These speak the Esplora
  * HTTP API (`/blocks/tip/height` → tip height as text, `/blocks/tip/hash` →
  * 64-hex hash; `/tx/{txid}` for the fee verifier's quorum). Kept as its own

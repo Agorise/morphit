@@ -63,7 +63,7 @@ morphit_ipfs_gateway_expose_addr: "/ip4/0.0.0.0/tcp/8082"
 # How the pin script reaches THIS instance's /v1/release (the CID source). The
 # default hits the local indexer directly; override to the public URL if the
 # indexer isn't on this port. MUST resolve to this instance's own release.
-morphit_ipfs_release_url: "http://127.0.0.1:{{ morphit_indexer_bind_port | default(8088) }}/v1/release"
+morphit_ipfs_release_url: "http://127.0.0.1:{{ morphit_indexer_bind_port | default(8081) }}/v1/release"
 # How often the pin service re-checks for a new release to pin.
 morphit_ipfs_pin_on_calendar: "hourly"
 # Seconds allowed for a single pin fetch.

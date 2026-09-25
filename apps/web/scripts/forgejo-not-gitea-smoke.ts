@@ -175,7 +175,8 @@ const scenarios = [
 	},
 	{
 		name: 'allow-list contains the documented self-references, meta-docs, and mirror-glyph data',
-		ok: ALLOW_LIST.size === 4 &&
+		ok:
+			ALLOW_LIST.size === 4 &&
 			ALLOW_LIST.has('scripts/run-smokes.sh') &&
 			ALLOW_LIST.has('TARBALL.md') &&
 			ALLOW_LIST.has('docs/REVISIT-LIST.md') &&
@@ -183,9 +184,7 @@ const scenarios = [
 	},
 	{
 		name: 'this smoke file scans the right extensions',
-		ok: SCAN_EXTENSIONS.has('.md') &&
-			SCAN_EXTENSIONS.has('.ts') &&
-			SCAN_EXTENSIONS.has('.svelte')
+		ok: SCAN_EXTENSIONS.has('.md') && SCAN_EXTENSIONS.has('.ts') && SCAN_EXTENSIONS.has('.svelte')
 	}
 ];
 
