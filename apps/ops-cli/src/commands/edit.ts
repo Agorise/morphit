@@ -28,7 +28,13 @@
  */
 
 import { resolve } from 'node:path';
-import { normalizeContactUrl } from '@morphit/operator-config';
+import {
+	DEFAULT_BRAND_NAME,
+	normalizeContactUrl,
+	sanitizeBrandName
+} from '@morphit/operator-config';
+import { brandNameProblem } from '../lib/branding.ts';
+import { runBranding } from './branding.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import {
 	existsSync,
@@ -73,6 +79,9 @@ interface ExistingConfig {
 	 *  (and hit the unquoted-space shell-source trap).  Now editable in
 	 *  the "Branding & SEO" section. */
 	readonly name: string | null;
+	/** Per-instance SITE brand (docs/BRANDING.md) — the name the UI uses for
+	 *  the site ("Sign in to …"); applied by `morphit-ops branding apply`. */
+	readonly brandName: string | null;
 	readonly tagline: string | null;
 	readonly contactUrl: string | null;
 	readonly altNetworks: AltNetworkResult;
@@ -118,6 +127,7 @@ interface ExistingEnv {
 const EDITABLE_KEYS = [
 	'MORPHIT_INSTANCE_ORIGIN',
 	'MORPHIT_INSTANCE_NAME',
+	'MORPHIT_INSTANCE_BRAND_NAME',
 	'MORPHIT_INSTANCE_TAGLINE',
 	'MORPHIT_INSTANCE_CONTACT_URL',
 	'MORPHIT_INSTANCE_TOR_ADDRESS',
@@ -193,6 +203,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// operator-register record (as display_name), so a title change needs the
 	// same "re-publish to the federation" step as origin/tag.
 	let nameChanged = false;
+	let brandChanged = false;
 	// The contact URL (contact_url) ALSO rides in the on-chain operator-register
 	// record, so a contact change needs the same re-publish step. Without this
 	// flag, editing only the contact URL updated the local footer but silently
@@ -274,12 +285,38 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		// title bar, footer), then the search-engine meta tags.
 		const nameR = await editField(
 			'Instance name',
-			'The bold name on your directory card, browser title bar, and footer.',
+			'The bold name on your directory card — how other instances list you. Keep it the same as the site brand name below unless you have a reason not to.',
 			existing.name
 		);
 		if (nameR.changed) {
 			configUpdates.set('MORPHIT_INSTANCE_NAME', nameR.value);
 			nameChanged = true;
+		}
+
+		// Per-instance SITE brand (docs/BRANDING.md) — distinct from the
+		// directory-card name above: this is what the UI calls the site itself
+		// ("Sign in to …", "Your … password"). Validated here so a bad value is
+		// caught at the prompt, not at apply time.
+		const brandR = await editField(
+			'Site brand name',
+			'What your site calls itself ("Sign in to …", page titles). Unset = "Morphit". Mentions of the Morphit software stay.',
+			existing.brandName
+		);
+		if (brandR.changed) {
+			const problem = brandR.value === null ? null : brandNameProblem(brandR.value);
+			if (problem !== null) {
+				console.log(`✗ "${sanitizeForTerm(brandR.value ?? '')}" can't be used: ${problem}.`);
+				console.log('  Leaving the site brand name unchanged.');
+			} else {
+				// Store the SANITIZED name (’ for ', whitespace collapsed); plain
+				// "Morphit" is the unbranded default, so it clears the setting.
+				const clean = brandR.value === null ? null : sanitizeBrandName(brandR.value);
+				configUpdates.set(
+					'MORPHIT_INSTANCE_BRAND_NAME',
+					clean === DEFAULT_BRAND_NAME ? null : clean
+				);
+				brandChanged = true;
+			}
 		}
 
 		const taglineR = await editField(
@@ -462,6 +499,18 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	if (originChanged) unitsToRestart.push('morphit-relay');
 	const restarted = await offerRestart(unitsToRestart);
 
+	// The site brand name lives in the SERVED frontend (re-branded in place,
+	// docs/BRANDING.md), so it also needs `branding apply` — offer it now.
+	if (brandChanged) {
+		console.log('');
+		const applyNow = await askYesNo('Apply the new site brand name to your live site now?', true);
+		if (applyNow) {
+			await runBranding({ flags: {}, positional: ['apply'], colorEnabled: false });
+		} else {
+			console.log('  Later: sudo morphit-ops branding apply  (every upgrade also re-applies it).');
+		}
+	}
+
 	// cp186 — the one easy-to-miss second step.  origin, operator tag, AND the
 	// instance display name (title) are part of the ON-CHAIN operator-register
 	// record; editing the local config does NOT update what other Morphit
@@ -634,6 +683,7 @@ function loadExisting(path: string): ExistingConfig {
 		text,
 		origin: kv.get('MORPHIT_INSTANCE_ORIGIN') ?? null,
 		name: kv.get('MORPHIT_INSTANCE_NAME') ?? null,
+		brandName: kv.get('MORPHIT_INSTANCE_BRAND_NAME') ?? null,
 		tagline: kv.get('MORPHIT_INSTANCE_TAGLINE') ?? null,
 		contactUrl: kv.get('MORPHIT_INSTANCE_CONTACT_URL') ?? null,
 		altNetworks: {
@@ -790,11 +840,10 @@ function applyUpdates(
  *
  *  - 'bash' consumer: POSIX close-escape-reopen idiom `'\''` for
  *    embedded apostrophes (bash understands; parseEnv doesn't).
- *  - 'parseEnv' consumer: falls back to double-quoted when value
- *    contains `'`.  Double-quoted in parseEnv doesn't expand
- *    `$`/backtick (dotenv semantics) but does NOT support `\"`
- *    escape, so a value containing both `'` AND `"` is rejected
- *    at quote() time.
+ *  - 'parseEnv' consumer (morphit.config.env — read by node's parseEnv
+ *    AND sourced by bash in the systemd units): double-quoted when the
+ *    value contains `'` but nothing bash would expand inside double
+ *    quotes; otherwise `'` → `’` and single-quoted (v1.19.0).
  *
  *  Symmetric with init/render.ts:quote() — both write paths must
  *  produce identical env-file output for the same (value, consumer)
@@ -806,13 +855,15 @@ function quoteValue(v: string, consumer: EnvFileConsumer = 'bash'): string {
 		if (!v.includes("'")) {
 			return `'${v}'`;
 		}
-		if (v.includes('"')) {
-			throw new Error(
-				`quoteValue(): value contains both ' and " which is unrepresentable in parseEnv ` +
-					`env-file format.  Wizard/edit prompt layer must reject this input.`
-			);
-		}
-		return `"${v}"`;
+		// v1.19.0 deep-deep: morphit.config.env is NOT parseEnv-only — the
+		// indexer/relay/matrix-bot systemd units SOURCE it with bash (as root).
+		// Inside double quotes bash still expands `$…`, `$(…)` and backticks, so
+		// the double-quoted fallback is only safe when none of those can occur.
+		// Otherwise the ASCII apostrophe becomes the typographic ’ (reads the
+		// same) and the value is single-quoted, which both readers take
+		// literally.
+		if (!/[$`\\"!]/.test(v)) return `"${v}"`;
+		return `'${v.replace(/'/g, '\u2019')}'`;
 	}
 	// Bash consumer.
 	const esc = v.replace(/'/g, "'\\''");
@@ -885,7 +936,7 @@ async function pickSection(
 			key: 'seo',
 			label: 'Branding & SEO',
 			description:
-				'Instance name, tagline, contact URL, and homepage SEO <title>/description/keywords.'
+				'Instance name, site brand name, tagline, contact URL, and homepage SEO <title>/description/keywords.'
 		},
 		{
 			key: 'listing-fee',
@@ -996,6 +1047,7 @@ function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	// at next `morphit-ops edit` invocation.  Sanitize on display.
 	console.log(`  Primary origin:    ${c.origin !== null ? sanitizeForTerm(c.origin) : '(unset)'}`);
 	console.log(`  Instance name:     ${c.name !== null ? sanitizeForTerm(c.name) : '(unset — falls back to "Morphit" / your operator account)'}`);
+	console.log(`  Site brand name:   ${c.brandName !== null ? sanitizeForTerm(c.brandName) : '(unset — "Morphit")'}`);
 	console.log(`  Tagline:           ${c.tagline !== null ? sanitizeForTerm(truncate(c.tagline, 50)) : '(unset)'}`);
 	console.log(`  Contact URL:       ${c.contactUrl !== null ? sanitizeForTerm(c.contactUrl) : '(unset)'}`);
 	console.log(`  Tor address:       ${c.altNetworks.tor !== null ? sanitizeForTerm(c.altNetworks.tor) : '(unset)'}`);

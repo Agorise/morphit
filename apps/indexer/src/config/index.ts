@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, normalizeContactUrl } from '@morphit/operator-config';
+import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, normalizeContactUrl, sanitizeBrandName } from '@morphit/operator-config';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
 /** Blurt account-name shape — the project-canonical regex (cp175 F-007):
@@ -514,6 +514,10 @@ export interface Config {
 	 *  unset.  Surfaced via /v1/instance for the frontend to
 	 *  display in title bar, footer, and homepage. */
 	readonly instanceName: string | undefined;
+	/** The SITE's brand name (docs/BRANDING.md), sanitized; undefined = "Morphit".
+	 *  Used for RSS feed titles/author. The frontend gets it from the served
+	 *  build (`morphit-ops branding apply`), not from here. */
+	readonly instanceBrandName: string | undefined;
 	readonly instanceTagline: string | undefined;
 	readonly instanceContactUrl: string | undefined;
 	readonly instanceTorAddress: string | undefined;
@@ -1424,6 +1428,10 @@ const envSchema = z.object({
 	// any of these is unset, so an unbranded instance still
 	// works.
 	MORPHIT_INSTANCE_NAME: z.string().max(64).optional(),
+	// The SITE's brand name (docs/BRANDING.md) — used here for RSS feed titles.
+	// Accept any string (non-fatal, like the contact URL): an unusable name is
+	// dropped by sanitizeBrandName below and the feeds say "Morphit".
+	MORPHIT_INSTANCE_BRAND_NAME: z.string().optional(),
 	MORPHIT_INSTANCE_TAGLINE: z.string().max(200).optional(),
 	// v1.16.7 — accept ANY string here (non-fatal). A bad contact URL (e.g. a
 	// bare email typed into `edit → branding`) must never fail config validation
@@ -1889,6 +1897,7 @@ export function loadConfig(): Config {
 
 		verboseHealth: e.MORPHIT_INDEXER_VERBOSE_HEALTH,
 		instanceName: e.MORPHIT_INSTANCE_NAME,
+		instanceBrandName: sanitizeBrandName(e.MORPHIT_INSTANCE_BRAND_NAME) ?? undefined,
 		instanceTagline: e.MORPHIT_INSTANCE_TAGLINE,
 		instanceContactUrl: (() => {
 			const norm = normalizeContactUrl(e.MORPHIT_INSTANCE_CONTACT_URL);

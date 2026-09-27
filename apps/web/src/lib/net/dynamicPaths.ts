@@ -60,3 +60,41 @@ export function isDynamicDataPath(pathname: string): boolean {
 	if (pathname === '/canary.txt') return true;
 	return false;
 }
+
+/**
+ * Per-instance branding (docs/BRANDING.md): the served files an operator's
+ * `morphit-ops branding apply` may REPLACE in place — same URL, new bytes.
+ *
+ * They are static assets (precached, offline-capable), so they are NOT dynamic
+ * data; but pure cache-first would pin a visitor to the logo/brand their
+ * service worker first saw until the next Morphit release rotates the cache.
+ * The service worker therefore serves exactly these paths
+ * STALE-WHILE-REVALIDATE: the cached copy answers instantly (no extra round
+ * trip, still works offline) while a background refresh updates the cache, so
+ * a re-applied brand reaches returning visitors on their next load.
+ *
+ * Keep in sync with the overlay targets in apps/ops-cli/src/lib/branding.ts
+ * (a branding-overridable-paths smoke asserts the two lists match).
+ */
+export const BRAND_OVERRIDABLE_PATHS: readonly string[] = [
+	'/brand/brand.json',
+	'/brand/site-logo.svg',
+	'/brand/site-logo-footer.svg',
+	'/favicon.svg',
+	'/app-icon.svg',
+	'/app-icon-maskable.svg',
+	'/app-icon-192.png',
+	'/app-icon-512.png',
+	'/app-icon-maskable-512.png',
+	'/apple-touch-icon.png',
+	'/manifest.webmanifest'
+];
+
+/**
+ * @param pathname  A URL pathname with no query or hash.
+ * @returns `true` for a brand asset the operator may replace in place
+ *          (including the iOS launch images under /splash/).
+ */
+export function isBrandOverridablePath(pathname: string): boolean {
+	return BRAND_OVERRIDABLE_PATHS.includes(pathname) || pathname.startsWith('/splash/');
+}

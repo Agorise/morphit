@@ -8,7 +8,7 @@ upstream releases, written for sysadmins.
 run:
 
 ```
-sudo -u morphit npx morphit-ops upgrade
+sudo morphit-ops upgrade
 ```
 
 That command checks for a new release, shows you the notes, asks
@@ -80,7 +80,7 @@ check → backup → apply → `npm ci` → restart → auto-rollback flow.
 Run exactly the same command no matter how far behind you are:
 
 ```
-sudo -u morphit npx morphit-ops upgrade
+sudo morphit-ops upgrade
 ```
 
 Two things to do first when you've been away a while:
@@ -134,7 +134,7 @@ release API, and walks you through the upgrade.
 ### Check without applying
 
 ```
-sudo -u morphit npx morphit-ops upgrade --check-only
+sudo morphit-ops upgrade --check-only
 ```
 
 Exits 0 if up-to-date, 1 if a newer release exists. Suitable for
@@ -143,7 +143,7 @@ cron and the `morphit-release-monitor` sidecar (see below).
 Add `--json` to get machine-readable output:
 
 ```
-sudo -u morphit npx morphit-ops upgrade --check-only --json
+sudo morphit-ops upgrade --check-only --json
 {
   "current": "v1.0.0-beta.1",
   "latest": "v1.0.0-beta.1",
@@ -156,7 +156,7 @@ sudo -u morphit npx morphit-ops upgrade --check-only --json
 ### Apply an upgrade
 
 ```
-sudo -u morphit npx morphit-ops upgrade
+sudo morphit-ops upgrade
 ```
 
 Steps the command takes, in order:
@@ -202,10 +202,13 @@ Steps the command takes, in order:
 9b. **Rebuilds and republishes the web frontend.** The indexer, relay,
     and matrix-bot run straight from TypeScript source via `tsx`, so
     `npm ci` is all they need — but the website is a static SvelteKit
-    build, and the release tarball does **not** ship a prebuilt frontend.
-    So the upgrade **always** runs the web build (`npm run build` in
-    `apps/web`) — on every upgrade, regardless of how your site is
-    served — and then publishes it to wherever it's served from:
+    build. The release tarball ships the canonical prebuilt frontend
+    (`apps/web/build`, marked `.shipped`), so the upgrade's web build step
+    (`npm run build` in `apps/web`, on every upgrade, however your site is
+    served) deploys those exact bytes instead of rebuilding them — that is
+    what keeps the build-integrity check green. It then re-applies your
+    branding if you set any (9b3 below) and publishes the result to
+    wherever it's served from:
     - **Bare-metal nginx:** if your web root exists (`MORPHIT_WEB_ROOT`,
       default `/var/www/morphit-frontend`), the new build is copied in,
       preserving that folder's ownership. nginx serves the new files
@@ -237,6 +240,15 @@ Steps the command takes, in order:
     > stacks (a different container name, or no compose file on the host);
     > mount-based detection handles them, so an operator running a
     > bespoke reverse-proxy stack gets the new build without manual steps.
+9b3. **Re-applies your branding (v1.19.0).** This happens between the build
+    and the publish described in 9b. If you branded your instance
+    (your logo, icons or site name — `docs/BRANDING.md`), the fresh frontend
+    is re-branded in place before it is published, from
+    `/etc/morphit/branding/` and `morphit.config.env`, which the upgrade does
+    not touch. Only files outside the on-chain release manifest change, so the
+    build-integrity check stays green. A bad logo file never fails the
+    upgrade: the plain Morphit look is served and the upgrade tells you what to
+    fix.
 9c. **Verifies the new frontend is actually being served (beta.14).**
     Publishing the build and *serving* it are two different things — a
     frontend container that bakes the build into its image (rather than
@@ -304,7 +316,7 @@ prompt — for cron jobs or unattended automation — set:
 
 ```
 export MORPHIT_AUTO_UPGRADE=1
-sudo -u morphit -E npx morphit-ops upgrade
+sudo -E morphit-ops upgrade
 ```
 
 `MORPHIT_AUTO_UPGRADE=1` is opt-in, not the default, by design:
@@ -315,7 +327,7 @@ want to track upstream tightly.
 Equivalent inline:
 
 ```
-sudo -u morphit npx morphit-ops upgrade --yes
+sudo morphit-ops upgrade --yes
 ```
 
 ### Configuration

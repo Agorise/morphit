@@ -186,6 +186,16 @@ describe('TOTP — otpauth:// URI', () => {
 		// '@' must be percent-encoded inside the label
 		expect(uri).toContain('Morphit%3Aalice%40example');
 	});
+
+	it('uses the site brand as issuer, percent-encoded and without colons (docs/BRANDING.md)', () => {
+		const uri = otpauthUri('alice', 'JBSWY3DPEHPK3PXP', 'Vigilante Trading');
+		expect(uri).toContain('/Vigilante%20Trading%3Aalice?');
+		expect(uri).toContain('issuer=Vigilante%20Trading&');
+		expect(uri).not.toContain('+');
+		const colon = otpauthUri('alice', 'JBSWY3DPEHPK3PXP', 'Trade: MX');
+		expect(colon).toContain('/Trade%20MX%3Aalice?');
+		expect(colon).toContain('issuer=Trade%20MX&');
+	});
 });
 
 describe('TOTP — secret generation', () => {

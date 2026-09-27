@@ -1,6 +1,6 @@
 {
 	"name": "morphit-web",
-	"version": "1.18.0",
+	"version": "1.19.0",
 	"private": true,
 	"type": "module",
 	"description": "Morphit web frontend — SvelteKit SSG, PWA, No-JS read-only paths",
@@ -21,7 +21,8 @@
 		"build:sitemap": "node ../../scripts/build-sitemap.mjs",
 		"build:llms-full": "node ../../scripts/build-llms-full.mjs",
 		"build:verify-json": "node ../../scripts/build-verify-json.mjs",
-		"build:vite": "vite build"
+		"build:vite": "vite build",
+		"build:brand-slots": "node ../../scripts/build-brand-slots.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.14.0",

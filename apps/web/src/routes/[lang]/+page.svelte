@@ -21,6 +21,7 @@
 	// AltNetworkIcon import remains removed (Reachable-via panel is
 	// gone; the footer renders its own chips).
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
+	import { DEFAULT_BRAND_NAME } from '$lib/brand/brandName';
 	import { instance } from '$stores/instance';
 	import { hasAnySession } from '$stores/identity';
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
@@ -74,15 +75,20 @@
 	// SearchAction unlocking the SERP sitelinks search box).
 	// cp119-A5: pass currentLang so each schema emits `inLanguage` —
 	// helps Google disambiguate translated copies of the same @id node.
+	// The Organization / WebSite / SoftwareApplication nodes are anchored to
+	// the CANONICAL origin (@id https://morphit.io/#…): they describe the
+	// Morphit project and software, so they always say "Morphit" — an
+	// instance's own brand (docs/BRANDING.md) must not be written into
+	// structured data that claims to be morphit.io (v1.19.0 deep-deep).
 	const jsonLd = $derived([
-		organizationSchema($_('seo.site_name'), $_('app.tagline'), currentLang),
-		websiteSchema($_('seo.site_name'), currentLang),
+		organizationSchema(DEFAULT_BRAND_NAME, $_('app.tagline'), currentLang),
+		websiteSchema(DEFAULT_BRAND_NAME, currentLang),
 		// cp112: SoftwareApplication schema makes the homepage eligible
 		// for Google's installation-rich-result UI (price/category/OS).
 		// Per-instance SEO description override is respected here so
 		// community operators with custom branding get the right copy.
 		softwareApplicationSchema(
-			$instance.seo?.title || $_('seo.site_name'),
+			$instance.seo?.title || DEFAULT_BRAND_NAME,
 			$instance.seo?.description || ($_('seo.home.description') as string),
 			currentLang
 		)

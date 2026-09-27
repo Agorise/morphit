@@ -42,6 +42,8 @@
 		operator_tag: string | null;
 		built_at: string;
 		hash_manifest: Record<string, string>;
+		/** Present when the operator re-branded files in place (docs/BRANDING.md). */
+		operator_branding?: { brand_name?: unknown; files?: unknown };
 	}
 
 	let verify = $state<VerifyPayload | null>(null);
@@ -78,6 +80,18 @@
 	});
 
 	const manifestFileCount = $derived(verify ? Object.keys(verify.hash_manifest).length : 0);
+
+	/** The operator's re-branding disclosure (ops-cli writes it into verify.json):
+	 *  the name the site calls itself and how many files it re-branded. A
+	 *  green integrity check covers the app code, not who runs the site — this
+	 *  row says plainly that this site's look is the operator's own. */
+	const branding = $derived.by(() => {
+		const b = verify?.operator_branding;
+		if (!b || typeof b !== 'object') return null;
+		const name = typeof b.brand_name === 'string' ? b.brand_name : '';
+		const count = Array.isArray(b.files) ? b.files.length : 0;
+		return count > 0 ? { name, count } : null;
+	});
 
 	/** Build a link to a Matrix room alias (#…) or user id (@…). We use the
 	 *  universal matrix.to redirect (the same link the rest of the app uses)
@@ -212,6 +226,18 @@
 						{/if}
 					</dd>
 				</div>
+				{#if branding}
+					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
+						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
+							{$_('about_this_instance.field.branding')}
+						</dt>
+						<dd>
+							{$_('about_this_instance.field.branding_value', {
+								values: { name: branding.name, count: branding.count }
+							})}
+						</dd>
+					</div>
+				{/if}
 				{#if $instance.operator_matrix_room}
 					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
 						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">

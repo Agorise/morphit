@@ -1,6 +1,7 @@
 <!--
-	MorphitLogoBling — the Morphit wordmark, with an OPTIONAL occasional
-	"shine" that sweeps along the letterforms to draw the eye.
+	MorphitLogoBling — the site logo (the Morphit wordmark, or the operator's own
+	logo on a re-branded instance — docs/BRANDING.md), with an OPTIONAL
+	occasional "shine" that sweeps along the logo's shapes to draw the eye.
 
 	HISTORY / WHY THIS IS NOW STATIC (cp228)
 
@@ -20,9 +21,11 @@
 
 	  - Homepage hero (centre):  <MorphitLogoBling heightClass="…" shine />
 	  - Header (top-left):       <MorphitLogoBling heightPx={32} shine />
-	  - Footer (centre):         <MorphitLogoBling heightPx={40} shine />
-	    → all three are now IDENTICAL — the same imported wordmark SVG and the
-	      same `shine` glint, with NO extra effects.  (cp304: the footer's
+	  - Footer (centre):         <MorphitLogoBling heightPx={40} variant="footer" shine />
+	    → all three use the same `shine` glint with NO extra effects. Header +
+	      hero show /brand/site-logo.svg; the footer shows
+	      /brand/site-logo-footer.svg (identical on a canonical build; an
+	      operator may give the footer its own wordmark).  (cp304: the footer's
 	      former `animate-morphit-hue-shift` was dropped so the footer matches
 	      the header exactly, at the maintainer's request.  Only the display height
 	      differs.)  Omitting `shine` still yields a fully static wordmark for
@@ -44,55 +47,79 @@
 	  - No canvas / RAF / observer.  The shine is pure CSS (an animated
 	    background-position) and only mounts its one extra <span> when
 	    `shine` is set; the hero pays nothing.
-	  - The shine layer is aria-hidden="true" (decorative) and the wordmark
-	    <img> keeps alt="Morphit", so screen-reader output is unchanged.
+	  - The shine layer is aria-hidden="true" (decorative) and the logo <img>
+	    carries alt=<the site's brand name>, so screen-reader output names the
+	    site the visitor is on.
 	  - `prefers-reduced-motion: reduce` removes the shine entirely (a plain
 	    static wordmark) — serves vestibular-disorder accessibility and the
 	    "no jittery motion on low-end devices" grandma-friendliness rule.
-	  - The wordmark is IMPORTED (see the import at the top of the component),
-	    so Vite fingerprints it and emits an immutable Cache-Control: the browser
-	    fetches it once and reuses that one cached copy for every instance and
-	    every later navigation — it never re-fetches after first paint.
+	  - The logo is ONE cached file per placement: every instance on a page (and
+	    the shine mask, which points at the same URL) reuses the browser's copy.
+	    It is no longer a fingerprinted import (an operator must be able to
+	    replace it in place); the service worker serves it
+	    stale-while-revalidate, so repeat visits cost no extra round trip.
 -->
 <script lang="ts">
-	// The wordmark is IMPORTED (not referenced as a raw /static URL) so Vite
-	// fingerprints it and serves it with an immutable Cache-Control.  That means
-	// the browser fetches the SVG ONCE per client and reuses that single cached
-	// copy for every instance on a page (header, hero, footer — and the shine
-	// mask, which points at the same URL) and across every later navigation,
-	// instead of re-requesting a non-fingerprinted static file each time.
-	import wordmarkUrl from '../../../static/brand/morphit-wordmark.svg?url';
+	// Per-instance branding (docs/BRANDING.md). The logo is served from STABLE,
+	// un-fingerprinted paths so an operator can replace it without rebuilding
+	// the frontend (a local rebuild is not byte-reproducible and would trip the
+	// on-chain build-integrity banner): `morphit-ops branding apply` overwrites
+	// these two files in the served build, and nothing else. A canonical build
+	// ships the Morphit wordmark at both paths.
+	//   /brand/site-logo.svg         header (top-left) + homepage hero
+	//   /brand/site-logo-footer.svg  footer
+	// (These used to be one Vite-imported, fingerprinted asset — that import is
+	// why a file swap could never give the footer its own logo. The service
+	// worker serves both stale-while-revalidate, so a re-branded logo shows up
+	// on the visitor's next load; see isBrandOverridablePath.)
+	import { brandName } from '$lib/brand/brand';
+
+	const SITE_LOGO_PATH = '/brand/site-logo.svg';
+	const SITE_LOGO_FOOTER_PATH = '/brand/site-logo-footer.svg';
 
 	interface Props {
-		/** Path to the wordmark SVG (defaults to the bundled brand asset). */
+		/** Which operator-overridable logo to show: `main` (header + hero) or
+		 *  `footer`. Ignored when `wordmarkSrc` is given. */
+		variant?: 'main' | 'footer';
+		/** Explicit logo URL (overrides `variant`). */
 		wordmarkSrc?: string;
-		/** Display height of the wordmark in CSS pixels (Tailwind h-7 ≈ 28px). */
+		/** Display height of the logo in CSS pixels (Tailwind h-7 ≈ 28px). The
+		 *  width follows the SVG's own aspect ratio (never stretched), so a
+		 *  replacement logo fills the same height as the Morphit wordmark did. */
 		heightPx?: number;
 		/** Responsive height via Tailwind classes (e.g. "h-11 sm:h-16 lg:h-24").
-		 *  When set, this WINS over heightPx so the wordmark scales across
+		 *  When set, this WINS over heightPx so the logo scales across
 		 *  breakpoints (used by the homepage hero). */
 		heightClass?: string;
 		/** Extra classes for the wrapping container. */
 		class?: string;
-		/** When true, overlay the occasional letterform-tracing shine (used by
-		 *  the small header wordmark).  Default OFF → a fully static wordmark
-		 *  with no effects (used by the homepage hero). */
+		/** When true, overlay the occasional shape-tracing shine. Default OFF →
+		 *  a fully static logo with no effects. */
 		shine?: boolean;
 	}
 
 	const {
-		wordmarkSrc = wordmarkUrl,
+		variant = 'main',
+		wordmarkSrc,
 		heightPx = 28,
 		heightClass = '',
 		class: cls = '',
 		shine = false
 	}: Props = $props();
 
+	const logoSrc = $derived(
+		wordmarkSrc ?? (variant === 'footer' ? SITE_LOGO_FOOTER_PATH : SITE_LOGO_PATH)
+	);
+
 	// cp428 — TEMPORARY beta marker. Small red "BETA" overlaid in the
-	// bottom-right corner of the wordmark, everywhere the wordmark appears
-	// (header, footer, hero). Sized relative to the logo so it stays
-	// proportional at every placement. Remove this (the `beta` span + its
-	// style + this size) at the stable public launch.
+	// bottom-right corner of the logo, everywhere it appears (header, footer,
+	// hero). Sized relative to the logo so it stays proportional at every
+	// placement. Per-instance: an operator turns it off with
+	// MORPHIT_INSTANCE_BETA_BADGE=off (and it is off by default once they supply
+	// their own logo) — `morphit-ops branding apply` stamps
+	// <html data-brand-beta="off">, and a CSS rule below hides the marker, so it
+	// never flashes on first paint. Remove this (the `beta` span + its style +
+	// this size) at the stable public launch.
 	const betaFontStyle = $derived(
 		heightClass
 			? // Responsive hero: scale with the viewport, roughly tracking the
@@ -107,16 +134,16 @@
 	style={heightClass ? '' : `height: ${heightPx}px;`}
 >
 	<img
-		src={wordmarkSrc}
-		alt="Morphit"
+		src={logoSrc}
+		alt={$brandName}
 		class={`morphit-logo-bling-wordmark ${heightClass}`}
-		style={heightClass ? '' : `height: ${heightPx}px;`}
+		style={heightClass ? 'max-width: 90vw;' : `height: ${heightPx}px;`}
 		decoding="async"
 	/>
 	{#if shine}
 		<span
 			class="morphit-logo-bling-shine"
-			style={`--morphit-wordmark: url("${wordmarkSrc}");`}
+			style={`--morphit-wordmark: url("${logoSrc}");`}
 			aria-hidden="true"
 		></span>
 	{/if}
@@ -134,6 +161,13 @@
 		position: relative;
 		display: block;
 		width: auto;
+		/* An operator's logo (docs/BRANDING.md) can be much wider than the
+		 * Morphit wordmark at the same height; never let it push the header
+		 * off a phone screen. contain keeps its proportions (and the sheen's
+		 * mask-size: contain stays aligned with it). The Morphit wordmark
+		 * (~5.8:1) is well inside these caps. */
+		max-width: 60vw;
+		object-fit: contain;
 		z-index: 1;
 	}
 	/* The shine layer sits OVER the wordmark (z-index 2) but is MASKED to the
@@ -193,6 +227,11 @@
 			animation: none;
 			display: none;
 		}
+	}
+	/* Per-instance: hidden when the operator turned the marker off (see the
+	 * script block). The attribute is on <html>, outside this component. */
+	:global(html[data-brand-beta='off']) .morphit-logo-bling-beta {
+		display: none;
 	}
 	/* cp428 — TEMPORARY beta marker. Small red "BETA" pinned to the wordmark's
 	 * bottom-right corner. z-index 3 so it sits above the wordmark (1) and the

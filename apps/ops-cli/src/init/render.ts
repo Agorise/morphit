@@ -1297,16 +1297,14 @@ function quote(value: string, consumer: EnvFileConsumer = 'bash'): string {
 		if (!value.includes("'")) {
 			return `'${value}'`;
 		}
-		// Apostrophe present.  Fall back to double-quoted.  But
-		// embedded `"` is not representable in parseEnv's double-
-		// quote form (no \" escape), so reject up front.
-		if (value.includes('"')) {
-			throw new Error(
-				`quote(): value contains both ' and " which is unrepresentable in parseEnv ` +
-					`env-file format.  Wizard prompt layer must reject this input.  Value (first 80 chars): ${value.slice(0, 80)}`
-			);
-		}
-		return `"${value}"`;
+		// Apostrophe present.  morphit.config.env is read by node's parseEnv
+		// AND sourced by bash in the systemd units (as root), and bash expands
+		// `$…`/`$(…)`/backticks inside double quotes — so double-quote only a
+		// value with none of those (nor `"`, which parseEnv cannot escape).
+		// Otherwise `'` → `’` (reads the same) and single-quote. Kept identical
+		// to edit.ts quoteValue (v1.19.0 deep-deep).
+		if (!/[$`\\"!]/.test(value)) return `"${value}"`;
+		return `'${value.replace(/'/g, '\u2019')}'`;
 	}
 	// Bash consumer: single-quoted with close-escape-reopen.
 	const escaped = value.replace(/'/g, "'\\''");

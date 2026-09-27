@@ -26,6 +26,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
+import { applyBrandToString } from '../../../packages/operator-config/src/brand.ts';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
@@ -856,7 +857,9 @@ function faqText(): string {
 	for (const v of Object.values(d.faq?.entries ?? {})) {
 		if (typeof v === 'object' && v !== null) {
 			const e = v as { q?: string; a?: string };
-			out += (e.q ?? '') + '\n' + (e.a ?? '') + '\n';
+			// Resolve {brand} / {brand|form} placeholders to the canonical
+			// default form — the text an unbranded instance actually shows.
+			out += applyBrandToString((e.q ?? '') + '\n' + (e.a ?? '') + '\n', (form) => form);
 		}
 	}
 	return out;

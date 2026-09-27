@@ -1,5 +1,28 @@
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { fileURLToPath } from 'node:url';
+import { processBuild } from '../../scripts/build-brand-slots.mjs';
+
+/**
+ * Per-instance branding (docs/BRANDING.md). adapter-static, then — in the same
+ * step, so EVERY `vite build` emits a clean build — scripts/build-brand-slots.mjs:
+ * record each prerendered site-name slot into build/.brand-slots.json, strip the
+ * invisible slot markers, stamp the canonical <html data-brand-*> attributes and
+ * re-compress the pages it changed. `morphit-ops branding apply` rewrites exactly
+ * those slots on an operator's server, without rebuilding.
+ * @param {import('@sveltejs/kit').Adapter} base
+ * @param {string} pages
+ * @returns {import('@sveltejs/kit').Adapter}
+ */
+function withBrandSlots(base, pages) {
+	return {
+		...base,
+		async adapt(builder) {
+			await base.adapt(builder);
+			processBuild(fileURLToPath(new URL(pages, import.meta.url)), (m) => builder.log.minor(m));
+		}
+	};
+}
 
 // v1.11.1 — quiet ONE benign SvelteKit adapter-static warning during the
 // `morphit-ops upgrade` frontend build. adapter-static prerenders the root `/`
@@ -28,13 +51,16 @@ const config = {
 
 	kit: {
 		// Fully static output — deployable anywhere, no runtime server required.
-		adapter: adapter({
-			pages: 'build',
-			assets: 'build',
-			fallback: 'index.html',
-			precompress: true, // emit .gz and .br alongside every asset
-			strict: true
-		}),
+		adapter: withBrandSlots(
+			adapter({
+				pages: 'build',
+				assets: 'build',
+				fallback: 'index.html',
+				precompress: true, // emit .gz and .br alongside every asset
+				strict: true
+			}),
+			'./build/'
+		),
 
 		// Every Morphit instance is served from its DOMAIN ROOT (nginx web
 		// root = the build dir), never a sub-path.  SvelteKit's default

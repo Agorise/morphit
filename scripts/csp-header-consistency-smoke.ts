@@ -101,7 +101,30 @@ const operations = read(OPERATIONS);
 const bunkerweb = read(BUNKERWEB);
 
 // ─── Collect CSP values from every surface ───────────────────────────
-const cspWeb = nginxHeaderValues(webConf, 'Content-Security-Policy');
+// SVGs are served under their own, stricter policy (v1.19.0: an operator's
+// brand SVG opened directly must not run anything, docs/BRANDING.md). It is
+// not a page policy, so it is checked on its own below and kept out of the
+// page-CSP parity check.
+const SVG_IMAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox";
+const cspWebAll = nginxHeaderValues(webConf, 'Content-Security-Policy');
+const cspWeb = cspWebAll.filter((v) => v !== SVG_IMAGE_CSP);
+{
+	const svgBlock = /location ~\* \^\/\(\?!_app\/\)\.\*\\\.svg\$ \{([\s\S]*?)\n {4}\}/.exec(webConf)?.[1] ?? '';
+	const inBlock = nginxHeaderValues(svgBlock, 'Content-Security-Policy');
+	if (
+		cspWebAll.length - cspWeb.length === 1 &&
+		inBlock.length === 1 &&
+		inBlock[0] === SVG_IMAGE_CSP &&
+		nginxHeaderValues(svgBlock, 'Permissions-Policy').length === 1
+	) {
+		ok('the strict SVG-image CSP appears once, only in the `.svg` location (with the other security headers)');
+	} else {
+		bad(
+			'SVG-image CSP misplaced',
+			`expected exactly one "${SVG_IMAGE_CSP}", inside \`location ~* ^/(?!_app/).*\\.svg$\` in ${WEB_CONF}`
+		);
+	}
+}
 const cspOps = nginxHeaderValues(operations, 'Content-Security-Policy');
 const cspBw = envValue(bunkerweb, 'CONTENT_SECURITY_POLICY');
 
@@ -219,14 +242,14 @@ if (/microphone=\(\)/.test(canonicalPp) && /geolocation=\(\)/.test(canonicalPp))
 else bad('Permissions-Policy unexpectedly grants microphone or geolocation', canonicalPp);
 
 // ── E. web.conf emits CSP and Permissions-Policy on the SAME blocks ──
-if (cspWeb.length === ppWeb.length && cspWeb.length >= 1) {
+if (cspWebAll.length === ppWeb.length && cspWeb.length >= 1) {
 	ok(
-		`web.conf emits CSP (${cspWeb.length}) and Permissions-Policy (${ppWeb.length}) on the same ` +
+		`web.conf emits CSP (${cspWebAll.length}) and Permissions-Policy (${ppWeb.length}) on the same ` +
 			`number of blocks — the two security headers travel together`
 	);
 } else {
 	bad(
-		`web.conf CSP block count (${cspWeb.length}) != Permissions-Policy block count (${ppWeb.length})`,
+		`web.conf CSP block count (${cspWebAll.length}) != Permissions-Policy block count (${ppWeb.length})`,
 		'a HTML-serving block has one security header but not the other'
 	);
 }

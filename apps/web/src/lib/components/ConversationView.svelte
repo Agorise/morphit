@@ -39,6 +39,8 @@
 	import { truncatePublicKey } from '$lib/crypto/publicKeyDisplay';
 	import { get } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
+	import { brand } from '$lib/brand/brand';
+	import { brandFileSlug } from '$lib/brand/brandName';
 
 	import ChatMessage from '$components/ChatMessage.svelte';
 	import LeaveFeedbackForm from '$components/LeaveFeedbackForm.svelte';
@@ -694,7 +696,9 @@
 		footer();
 
 		const dateStr = new Date().toISOString().slice(0, 10);
-		doc.save(`Morphit-chat-${peer}-${dateStr}.pdf`);
+		// Per-instance brand in the filename (the PDF's title/footer already use
+		// the branded chat.export.* strings). "Morphit-chat-…" when unbranded.
+		doc.save(`${brandFileSlug(get(brand).name)}-chat-${peer}-${dateStr}.pdf`);
 	}
 
 	function closeVerifyPeer(): void {

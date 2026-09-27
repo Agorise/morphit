@@ -2348,7 +2348,7 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 			'\n' +
 			'Canonical morphit.io uses `morphit` (reserved — community\n' +
 			'operators cannot register it).  After wizard setup, register\n' +
-			'your tag on chain with `npx morphit-ops register`.\n' +
+			'your tag on chain with `sudo morphit-ops register`.\n' +
 			'\n' +
 			'Constraints: lowercase letters, digits, dots, underscores,\n' +
 			'hyphens; 1..64 characters.'
@@ -2386,7 +2386,7 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 		console.log(`\n  ✓ Operator tag: ${trimmed}\n`);
 		console.log(
 			'  ⚠ Remember to register this tag on chain via\n' +
-				'    `npx morphit-ops register` before launch, otherwise your\n' +
+				'    `sudo morphit-ops register` before launch, otherwise your\n' +
 				'    instance will not receive operator-payout (90% of\n' +
 				'    BLURT-paid fees).\n'
 		);

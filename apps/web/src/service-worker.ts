@@ -69,7 +69,9 @@
 
 import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
-import { isDynamicDataPath } from '$lib/net/dynamicPaths';
+import { isDynamicDataPath, isBrandOverridablePath } from '$lib/net/dynamicPaths';
+import { withHiddenFloor } from '$lib/net/transportBudget';
+import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
 import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -80,6 +82,10 @@ declare const self: ServiceWorkerGlobalScope;
  * activation (after user consent).
  */
 const CACHE = `morphit-${version}`;
+
+/** Upper bound on the background refresh of an operator-replaceable brand
+ *  asset (logo, icons, manifest, brand.json) — see the fetch handler. */
+const BRAND_REFRESH_TIMEOUT_MS = 30_000;
 
 /**
  * Everything SvelteKit knows about shipping to the browser:
@@ -219,6 +225,51 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 				}
 			}
 
+			// ── Operator-replaceable brand assets → STALE-WHILE-REVALIDATE ──
+			// Per-instance branding (docs/BRANDING.md): the logo, favicon, app
+			// icons, manifest and /brand/brand.json keep their URL when an
+			// operator re-brands. Answer from cache instantly (offline-safe, no
+			// extra round trip) and refresh the cache in the background, so a
+			// re-applied brand shows on the visitor's next load instead of
+			// waiting for the next release to rotate this cache.
+			if (isBrandOverridablePath(url.pathname)) {
+				const cached = await cache.match(req, { ignoreSearch: true });
+				// Bounded: a hung background refresh must not keep the SW
+				// alive via waitUntil. Raised to the hidden-transport floor on
+				// a .onion/.i2p origin; on a cache miss a timeout falls through
+				// to the 503 below.
+				const ac = new AbortController();
+				const timer = setTimeout(
+					() => ac.abort(),
+					withHiddenFloor(BRAND_REFRESH_TIMEOUT_MS, url.origin)
+				);
+				// The timer stays armed until the BODY is cached (cache.put reads
+				// it), not just the headers — a stall after the headers must not
+				// hold the worker open either.
+				const refresh = fetch(req, { cache: 'no-cache', signal: ac.signal })
+					.then((fresh) => {
+						if (fresh.ok && fresh.status === 200) {
+							return cache
+								.put(req, fresh.clone())
+								.catch(() => {})
+								.then(() => fresh);
+						}
+						return fresh;
+					})
+					.catch(() => null)
+					.finally(() => clearTimeout(timer));
+				if (cached) {
+					event.waitUntil(refresh);
+					return cached;
+				}
+				const fresh = await refresh;
+				if (fresh) return fresh;
+				return new Response('Offline — resource unavailable.', {
+					status: 503,
+					headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+				});
+			}
+
 			// ── Everything else (hashed JS/CSS, /static/*) → CACHE-FIRST ──
 			// These are content-addressed / immutable, so a cache hit is
 			// always correct and fast. On a miss (first sight, or the entry
@@ -315,6 +366,26 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 // $lib/notifications/chatThread so the page can take a notification DOWN using
 // exactly the rule the worker used to decide whether to put it UP.
 
+/** The instance's brand name from the precached /brand/brand.json
+ *  (docs/BRANDING.md); "Morphit" if it is absent or unreadable. Cache only —
+ *  a push can arrive offline. Same validation as $lib/brand/brandName. */
+async function cachedBrandName(): Promise<string> {
+	try {
+		const res = await caches.match('/brand/brand.json', { ignoreSearch: true });
+		if (res) {
+			const body: unknown = await res.json();
+			const name =
+				body !== null && typeof body === 'object'
+					? sanitizeBrandName((body as { name?: unknown }).name)
+					: null;
+			if (name) return name;
+		}
+	} catch {
+		/* fall through to the default */
+	}
+	return DEFAULT_BRAND_NAME;
+}
+
 self.addEventListener('push', (event: PushEvent) => {
 	let payload: {
 		title?: unknown;
@@ -332,7 +403,10 @@ self.addEventListener('push', (event: PushEvent) => {
 		return;
 	}
 
-	const title = typeof payload.title === 'string' ? payload.title : 'Morphit';
+	// Fallback title = the instance's brand (docs/BRANDING.md). The indexer
+	// always sends a localized title, so this only covers a malformed payload;
+	// it reads the precached /brand/brand.json, never the network.
+	const payloadTitle = typeof payload.title === 'string' ? payload.title : null;
 	const body = typeof payload.body === 'string' ? payload.body : '';
 	const category =
 		payload.category === 'order' ||
@@ -403,7 +477,7 @@ self.addEventListener('push', (event: PushEvent) => {
 				}
 			}
 			if (!activelyViewing) {
-				await self.registration.showNotification(title, {
+				await self.registration.showNotification(payloadTitle ?? (await cachedBrandName()), {
 					body,
 					tag, // dedup key — same eventId across devices doesn't double-notify
 					data: { clickPath, category },

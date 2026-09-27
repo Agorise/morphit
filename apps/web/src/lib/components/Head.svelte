@@ -7,6 +7,8 @@
 	import { computeOnionLocation } from '$lib/seo/onionLocation';
 	import { instance } from '$stores/instance';
 	import { setBaseTitle } from '$lib/notifications/ambient';
+	import { brand } from '$lib/brand/brand';
+	import { DEFAULT_BRAND_NAME } from '$lib/brand/brandName';
 
 	interface Props {
 		/**
@@ -100,7 +102,14 @@
 		if (routeKey === 'home' && $instance.seo?.title) {
 			return $instance.seo.title;
 		}
-		return $instance.name ? `${baseTitle} — ${$instance.name}` : baseTitle;
+		// Per-instance brand (docs/BRANDING.md): a branded site already names
+		// itself in its titles ("Sign in to Vigilante Trading"), so the
+		// directory name is not appended as well ("… — vigilante-p2p"). An
+		// unbranded site keeps the suffix unless the title already carries it.
+		if ($brand.name !== DEFAULT_BRAND_NAME) return baseTitle;
+		return $instance.name && !baseTitle.includes($instance.name)
+			? `${baseTitle} — ${$instance.name}`
+			: baseTitle;
 	});
 
 	// Keep the ambient (N)-unread title prefix anchored to THIS page's title.

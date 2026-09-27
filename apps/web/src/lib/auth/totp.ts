@@ -154,22 +154,30 @@ export function generateSecret(): Uint8Array {
  *  Example:
  *    otpauth://totp/Morphit:alice?secret=JBSWY3DPEHPK3PXP&issuer=Morphit
  *
- *  Account label is the user's Morphit account name; issuer is
- *  hard-coded to "Morphit" so the authenticator displays a
- *  consistent label across instances.
+ *  Account label is the user's Morphit account name; issuer is the
+ *  SITE's brand name (docs/BRANDING.md) — "Morphit" on an unbranded
+ *  instance, the operator's brand on a re-branded one. 2FA protects the
+ *  keystore saved on THIS site, so the authenticator should label the
+ *  entry with the site the user enrolled on. Defaults to "Morphit".
  */
-export function otpauthUri(account: string, secretB32: string): string {
+export function otpauthUri(account: string, secretB32: string, issuer = 'Morphit'): string {
+	// The label is "issuer:account", so the issuer itself must not contain a
+	// colon (an authenticator would split "Trade: MX:alice" in the wrong place
+	// and show a label that no longer matches the issuer parameter).
+	const iss = issuer.replace(/:/g, ' ').replace(/\s+/g, ' ').trim() || 'Morphit';
 	// Per the URI spec, label = "issuer:account", URL-encoded.
-	const issuer = 'Morphit';
-	const label = encodeURIComponent(`${issuer}:${account}`);
-	const params = new URLSearchParams({
-		secret: secretB32,
-		issuer,
-		algorithm: 'SHA1',
-		digits: String(DIGITS),
-		period: String(PERIOD_SECONDS)
-	});
-	return `otpauth://totp/${label}?${params.toString()}`;
+	const label = encodeURIComponent(`${iss}:${account}`);
+	// Percent-encoding (%20), not form encoding (+): the Key URI format is a
+	// URI, and "Vigilante+Trading" shows up with a literal "+" in some apps.
+	const params: Array<[string, string]> = [
+		['secret', secretB32],
+		['issuer', iss],
+		['algorithm', 'SHA1'],
+		['digits', String(DIGITS)],
+		['period', String(PERIOD_SECONDS)]
+	];
+	const query = params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+	return `otpauth://totp/${label}?${query}`;
 }
 
 /* ───────────── code computation (RFC 6238 + RFC 4226) ────────────── */

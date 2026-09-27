@@ -18,8 +18,11 @@
  *        PARTICLES physics.  (A regression that re-introduced the canvas
  *        would reintroduce the per-frame CPU cost priority #4 rejected.)
  *
- *   I-2  The wordmark <img> keeps alt="Morphit" — screen-reader output is
- *        unchanged from every prior header.
+ *   I-2  The wordmark <img> announces the SITE's name — alt={$brandName},
+ *        which is "Morphit" on an unbranded instance (screen-reader output
+ *        unchanged from every prior header) and the operator's brand on a
+ *        re-branded one (docs/BRANDING.md). A hard-coded alt="Morphit" would
+ *        mis-name a re-branded site.
  *
  *   I-3  The shine is OPTIONAL: a `shine` prop (default false) gates an
  *        `{#if shine}` block.  This is what lets the hero stay static
@@ -74,10 +77,13 @@ const scenarios: Scenario[] = [
 		}
 	},
 	{
-		name: 'I-2: wordmark <img> retains alt="Morphit"',
+		name: 'I-2: wordmark <img> is announced as the site brand (alt={$brandName})',
 		test: () => {
-			if (!/<img[\s\S]{0,200}?alt="Morphit"/.test(src)) {
-				return 'wordmark <img> with alt="Morphit" not found';
+			if (!/<img[\s\S]{0,200}?alt=\{\$brandName\}/.test(src)) {
+				return 'wordmark <img> with alt={$brandName} not found';
+			}
+			if (!/import\s*\{[^}]*\bbrandName\b[^}]*\}\s*from\s*'\$lib\/brand\/brand'/.test(src)) {
+				return 'brandName is not imported from $lib/brand/brand';
 			}
 			return null;
 		}

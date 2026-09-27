@@ -52,7 +52,12 @@ check('re-verifies Node after install (fails loudly if still too old)', /node_ok
 
 // ── Deps + hand-off ───────────────────────────────────────────────
 check('installs project libraries (npm install)', /\bnpm install\b/.test(code));
-check('hands off to the guided installer (morphit-ops install)', /exec npx --no-install morphit-ops install/.test(code));
+// `exec env npm_config_update_notifier=false … npx …`: the env prefix keeps npm's
+// update notice off the end of the wizard (npm-update-notice-silenced-smoke).
+check(
+	'hands off to the guided installer (morphit-ops install)',
+	/exec (?:env (?:[A-Za-z_]+=\S+ )+)?npx --no-install morphit-ops install/.test(code)
+);
 check(
 	'installs git only if absent (guarded), from the offline bundle or apt',
 	/if ! command -v git\b/.test(code) && /(apt-get[\s\S]{0,40}install -y git|vendor\/apt\/git)/.test(code)

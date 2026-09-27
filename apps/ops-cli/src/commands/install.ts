@@ -32,6 +32,16 @@ import { runInit } from './init.ts';
 import { runHarden } from './harden.ts';
 import { fastSyncFromChain } from './fastSync.ts';
 import { runAnsibleInstall } from '../init/runAnsibleInstall.ts';
+import { healNpmUpdateNotice } from '../lib/npmNotice.ts';
+import {
+	applyBranding,
+	brandingConfigured,
+	buildDirOf,
+	readBrandingSettings,
+	syncTouchedToWebRoot
+} from '../lib/branding.ts';
+import { resolveWebRoot } from './upgrade.ts';
+import { sanitizeForTerm } from '../render/term.ts';
 
 export interface InstallCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -106,7 +116,9 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	]);
 	if (modeIdx === 0) {
 		const repoRoot = safeCwd() ?? defaultRepoRoot();
-		return runAnsibleInstall({ repoRoot });
+		const code = await runAnsibleInstall({ repoRoot });
+		if (code === 0) finishInstall(repoRoot);
+		return code;
 	}
 
 	console.log('');
@@ -231,6 +243,7 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('');
 	console.log('Step 6 — convenience.');
 	await offerPathSymlink();
+	finishInstall(safeCwd() ?? defaultRepoRoot());
 
 	console.log('');
 	console.log('━'.repeat(60));
@@ -244,6 +257,36 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('   • Update later:       npx morphit-ops upgrade');
 	console.log('');
 	return 0;
+}
+
+/**
+ * Last steps of any install (v1.19.0 deep-deep):
+ *  - npm's "New major version of npm available!" notice off box-wide, and the
+ *    global npmrc root-owned 0644 (lib/npmNotice.ts) — the wizard itself runs
+ *    under an npx whose notice would otherwise print right after this;
+ *  - a re-install on a box that already has branding set up
+ *    (/etc/morphit/branding, MORPHIT_INSTANCE_BRAND_NAME) serves it at once,
+ *    instead of plain Morphit until the next upgrade.
+ * Best-effort: neither may fail an install.
+ */
+function finishInstall(repoRoot: string): void {
+	healNpmUpdateNotice();
+	try {
+		const settings = readBrandingSettings(repoRoot);
+		if (!brandingConfigured(settings)) return;
+		const buildDir = buildDirOf(repoRoot);
+		const r = applyBranding({ buildDir, settings });
+		if (r.unsupported) return;
+		const webRoot = resolveWebRoot(process.env);
+		if (r.touched.length > 0 && existsSync(webRoot)) syncTouchedToWebRoot(buildDir, webRoot, r.touched);
+		if (r.active) console.log('  \u2713 Applied your existing branding (docs/BRANDING.md).');
+		for (const w of r.warnings) console.log(`  ! ${sanitizeForTerm(w)}`);
+	} catch (err) {
+		console.log(
+			`  ! Your branding was not applied (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}). ` +
+				'Run: sudo morphit-ops branding apply'
+		);
+	}
 }
 
 /**

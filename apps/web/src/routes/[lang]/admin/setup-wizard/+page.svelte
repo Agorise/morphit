@@ -237,15 +237,17 @@
 
 	const cliCommand = $derived.by(() => {
 		if (!pmReady) return '';
+		// `--flag=value`: a value that starts with a dash ("-5% off") would
+		// otherwise be read as the next flag.
 		const parts = [
 			'morphit-ops payment-method add',
 			shellEscape(pmKey.trim()),
-			`--name ${shellEscape(pmName.trim())}`,
-			`--description ${shellEscape(pmDescription.trim())}`,
+			`--name=${shellEscape(pmName.trim())}`,
+			`--description=${shellEscape(pmDescription.trim())}`,
 			`--category ${pmCategory}`
 		];
 		if (pmUrl.trim()) {
-			parts.push(`--url ${shellEscape(pmUrl.trim())}`);
+			parts.push(`--url=${shellEscape(pmUrl.trim())}`);
 		}
 		return parts.join(' \\\n  ');
 	});

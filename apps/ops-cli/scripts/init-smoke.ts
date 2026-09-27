@@ -591,36 +591,31 @@ scenario("cp139-D-1: bash consumer (morphit.env critical-infra) stays single-quo
 });
 
 scenario(
-	"cp139-D-1 negative: value with both ' and \" throws at quote() time (unrepresentable in parseEnv)",
+	"v1.19.0: a value with ' plus \" or $ is written so bash AND parseEnv read it literally (’ for ')",
 	() => {
 		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
 		try {
-			// parseEnv supports neither escape form for the OTHER
-			// quote char inside a given quote.  An operator typing
-			// `alice's "first" morphit` into the tagline is an edge
-			// case we surface loudly rather than silently corrupt.
-			// Wizard prompt layer is the right place to reject — for
-			// now the write throws, which is much better than
-			// truncating at parse time.
+			// morphit.config.env is read by node's parseEnv AND sourced by bash
+			// (as root) in the systemd units. Neither quote form can carry an
+			// apostrophe next to `"` (parseEnv) or `$` (bash expands it inside
+			// double quotes), so the apostrophe becomes the typographic ’ and the
+			// value is single-quoted. It used to throw here — and before that,
+			// "Joe's $5" landed in double quotes where bash expanded $5.
 			const answers: WizardAnswers = {
 				...sampleAnswers,
-				tagline: "alice's \"first\" morphit"
+				tagline: "alice's \"first\" morphit $(id)"
 			};
-			let threw = false;
-			try {
-				writeWizardOutput(answers, tmp);
-			} catch (err) {
-				if (
-					err instanceof Error &&
-					err.message.includes('both') &&
-					err.message.includes('unrepresentable')
-				) {
-					threw = true;
-				} else {
-					throw err;
-				}
-			}
-			assertTrue(threw, 'expected quote() to throw on value with both apostrophe and double-quote');
+			const result = writeWizardOutput(answers, tmp);
+			const content = readFileSync(result.configPath, 'utf8');
+			assertContains(
+				content,
+				"MORPHIT_INSTANCE_TAGLINE='alice\u2019s \"first\" morphit $(id)'",
+				'single-quoted, apostrophe as ’'
+			);
+			assertTrue(
+				parseEnv(content).MORPHIT_INSTANCE_TAGLINE === 'alice\u2019s "first" morphit $(id)',
+				'parseEnv reads it literally'
+			);
 		} finally {
 			rmSync(tmp, { recursive: true, force: true });
 		}
@@ -696,7 +691,7 @@ scenario(
 			const answers: WizardAnswers = {
 				...sampleAnswers,
 				instanceName: 'My Test Node',  // space → quote path
-				tagline: "alice's tagline with $HOME",  // apostrophe + $ literal
+				tagline: "alice's tagline with $HOME",  // apostrophe + $ → ’ + single quotes (v1.19.0)
 				contactUrl: 'https://example.com/contact?to=alice@example.com',  // @ + ? + =
 				origin: 'https://my-morphit.example.com:8443',  // : (bare-safe)
 				operatorTag: {
@@ -718,7 +713,8 @@ scenario(
 			// separate bash-consumer round-trip in edit-smoke.
 			const checks: Array<[string, string]> = [
 				['MORPHIT_INSTANCE_NAME', 'My Test Node'],
-				['MORPHIT_INSTANCE_TAGLINE', "alice's tagline with $HOME"],
+				// ' next to $ → ’ (bash would expand $HOME in double quotes).
+				['MORPHIT_INSTANCE_TAGLINE', 'alice\u2019s tagline with $HOME'],
 				['MORPHIT_INSTANCE_CONTACT_URL', 'https://example.com/contact?to=alice@example.com'],
 				['MORPHIT_INSTANCE_ORIGIN', 'https://my-morphit.example.com:8443'],
 				['MORPHIT_INSTANCE_SEO_TITLE', "morphit's first instance"]

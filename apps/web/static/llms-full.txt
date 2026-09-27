@@ -626,7 +626,7 @@ The Blurt/USD price you see next to listing fees on Morphit (the "~$0.125" subte
 
 **Your first order is free.** New users get a one-time waiver that covers the listing fee on their first Blurt buy — see "Is my first order really free?" for details. So your first Blurt acquisition can also be your first trade on Morphit, with no exchange account, no card, and no KYC required. The waiver is offered automatically when you compose your first order.
 
-**Once you have Blurt in your wallet**, paying a Morphit listing fee is automatic — choose "Pay in Blurt" on the post-order screen and Morphit deducts the configured fee directly from your Blurt balance with no extra steps.
+**Once you have Blurt in your wallet**, paying a listing fee on Morphit is automatic — choose "Pay in Blurt" on the post-order screen and Morphit deducts the configured fee directly from your Blurt balance with no extra steps.
 
 ---
 
@@ -747,13 +747,15 @@ Running a node lets you register as an operator and earn a generous share of the
 
 **FAQ key:** `customize_your_instance`
 
-Yes — and it's encouraged. You can change the logo, colours, name, fonts, and every word on the screen, and many operators do, to make their instance feel local to their community.
+Yes — and it's encouraged. Your logo, favicon and app icons, your site's name and the red BETA marker can all be changed **without rebuilding anything**, so your instance keeps serving the signed release and your users never see the build-integrity warning. Copy your logo files to the server, then run one command:
 
-The easy parts need no programming at all. Brand images live in `apps/web/static/brand/` — drop in your own SVG or PNG. Colours are a handful of named tokens in the CSS config (the brand emerald is `#00DA69`). Every visible word lives in plain `"key": "value"` translation files under `apps/web/src/lib/i18n/locales/`. If you can edit a file, you can do all of this — no JavaScript involved.
+`sudo morphit-ops branding apply --logo /home/you/logo.svg --logo-footer /home/you/logo-footer.svg --icon /home/you/icon.svg --name "Your Site"`
 
-Changing the layout or structure is the deeper part: Morphit's frontend is built with **SvelteKit**, so the page files end in `.svelte` — HTML-like markup with a little framework syntax mixed in. Your HTML and CSS knowledge transfers directly; the Svelte-specific bits have a short learning curve.
+`--logo` is the header and homepage logo, `--logo-footer` (optional) the footer logo, `--icon` the favicon and app icon, and `--name` your site's name. It replaces "Morphit" wherever the site names itself ("Sign in to …"); mentions of the Morphit software and federation stay. Prefer to be asked one question at a time? Run `sudo morphit-ops branding setup` (it is also *Branding* in the `sudo morphit-ops` menu). Your files are kept in `/etc/morphit/branding/` and the name in the install's settings file, `morphit.config.env`; upgrades keep both. Set it up once — every upgrade re-applies it. The red BETA marker turns off once you supply a logo (`--beta on` brings it back). RSS feed titles pick up the new name after `sudo systemctl restart morphit-indexer`, and the phone icons and launch screens need a small image converter (`librsvg2-bin`) — the command offers to install it.
 
-To work comfortably, install the free **Visual Studio Code** editor and its **"Svelte for VS Code"** extension (search the Extensions panel, publisher *Svelte*). It gives you syntax highlighting and inline error hints for `.svelte` files, which makes editing far easier than going without it. Running `npm run dev` in `apps/web/` then gives you a live preview that reloads every time you save. If you've never used Svelte, the official tutorial at svelte.dev/tutorial is a couple of hours and covers everything a rebrand needs.
+Each logo keeps its own proportions (it is shown at the height of the logo it replaces, never stretched), and the occasional sheen follows your logo's shape. The full guide is `docs/BRANDING.md` in the Morphit repo.
+
+Going further — colours, fonts, layout, other wording — means a fork. Morphit's frontend is built with **SvelteKit**: `.svelte` files are HTML-like markup with a little framework syntax (the tutorial at svelte.dev/tutorial takes a couple of hours; the free **Visual Studio Code** editor with its **"Svelte for VS Code"** extension helps). A rebuilt frontend is no longer byte-identical to the signed release, so visitors' browsers show the build-integrity warning — by design, that is how users tell modified code from the signed release — and you maintain your fork across upgrades yourself. A passing integrity check means the code is the signed release — not who runs the site: for that, visitors look at the address bar and the *About this instance* page.
 
 One rule, from the AGPL licence: cosmetic rebrands are completely fine, but if you run a **modified** instance publicly you must offer your changed source to your users — a footer link to your fork is enough. The full step-by-step is in the run-a-node guide (see /run-a-node).
 
@@ -1023,7 +1025,7 @@ No — that's the whole point of the federated design. Your orders, profile, fee
 
 **FAQ key:** `backup_practices`
 
-Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Besides paper, we personally like to use the encrypted password manager called KeePass. Never type it into any site that isn't Morphit. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash.
+Write down your 12-word recovery phrase on paper, in order, exactly as shown. That phrase is everything — it regenerates every key Morphit uses. Store the paper somewhere safe and not networked: a fireproof box, a bank safety deposit box, somewhere a fire or theft can't hit the same place as your computer. Never photograph it, never email it to yourself, never paste it into a password manager that syncs to the cloud. Besides paper, we personally like to use the encrypted password manager called KeePass. Never type it into any site that isn't Morphit or another Morphit instance you trust. For extra durability: write two copies, store them in separate locations. For very high value: engrave it on a steel plate — paper burns and water destroys it, metal survives both. Your 12 words are your account; protect them like cash.
 
 If you signed in with an existing Blurt account, you have no 12-word phrase and there can't be one — a phrase *derives* keys, and it cannot be built backwards from keys you already had. Your backup is your Keyfile, downloaded from the Back up my keys page. If you chose to keep your Active key on this device, that Keyfile holds both your Posting and Active keys, encrypted with your Morphit password. Treat it exactly like the paper above.
 
@@ -1435,7 +1437,7 @@ It means this account hasn't received any feedback yet. They might be a brand-ne
 
 **FAQ key:** `profile_pages`
 
-A Morphit profile lives at /@username. At the top you'll see an avatar (a deterministic identicon derived from the account name — no photo upload), their display name, and shortcut links to any Nostr or Blurt.media presence they've declared. Below that: a reputation summary with weighted rating and a 1-5 star histogram so you can see how reviews are distributed. Then a list of their live orders, sorted with the ones closest to expiring first. Then the reviews they've received (with any replies the subject has posted), followed by the reviews they've left for other traders. Everything is public — anyone can read any profile without signing in.
+Every profile on Morphit lives at /@username. At the top you'll see an avatar (a deterministic identicon derived from the account name — no photo upload), their display name, and shortcut links to any Nostr or Blurt.media presence they've declared. Below that: a reputation summary with weighted rating and a 1-5 star histogram so you can see how reviews are distributed. Then a list of their live orders, sorted with the ones closest to expiring first. Then the reviews they've received (with any replies the subject has posted), followed by the reviews they've left for other traders. Everything is public — anyone can read any profile without signing in.
 
 ---
 

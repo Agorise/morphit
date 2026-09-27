@@ -86,9 +86,12 @@ check("rssQuery sets feed_title", /params\.set\('feed_title', rssTitle\)/.test(p
 // 3. The indexer echoes feed_title, keeps a static fallback, and does NOT
 //    treat it as a filter (cosmetic only).
 check('indexer reads rawFilters.feed_title', handler.includes('rawFilters.feed_title'));
+// Per-instance branding (docs/BRANDING.md): the fallback names the SITE, so it
+// uses the operator's brand — which itself falls back to "Morphit".
 check(
-	'indexer keeps a static fallback title',
-	/Morphit — New \$\{asset\} orderbook entries/.test(handler)
+	'indexer keeps a static fallback title (site brand, "Morphit" by default)',
+	/\$\{brand\} — New \$\{asset\} orderbook entries/.test(handler) &&
+		/function siteBrand[\s\S]*?DEFAULT_BRAND_NAME/.test(handler)
 );
 const parseBlock = handler.match(/function parseFeedFilters[\s\S]*?\n\}/)?.[0] ?? '';
 check(

@@ -85,9 +85,20 @@ touch node_modules/.morphit-bundle-complete
 # skips the vite build entirely. This mirrors what release.yml does for the
 # online tarball, so online and offline nodes are byte-for-byte identical.
 log "     Building the canonical web frontend to ship in the bundle…"
+# A `.shipped` marker left by an earlier bundle run would make the build guard
+# (apps/web/scripts/build-shipped-guard.mjs) skip the build and ship that OLD
+# frontend inside this release's bundle. Drop it so this is always a fresh build.
+rm -f apps/web/build/.shipped
 npm run build -w apps/web
 if [ ! -f apps/web/build/index.html ]; then
 	echo "FATAL: web frontend build did not produce apps/web/build/index.html — refusing to ship a bundle that would 500-loop on the target." >&2
+	exit 1
+fi
+# The brand-slot record lets `morphit-ops branding` put an operator's site name
+# into the prerendered pages (docs/BRANDING.md); a build without it cannot be
+# branded.
+if [ ! -f apps/web/build/.brand-slots.json ]; then
+	echo "FATAL: web frontend build did not produce apps/web/build/.brand-slots.json (the brand-slot adapter did not run) — refusing to ship it." >&2
 	exit 1
 fi
 touch apps/web/build/.shipped
@@ -149,11 +160,15 @@ log "4/6  Downloading the apt dependency closure in a clean ubuntu:24.04 contain
 # the roles and FAILS on drift — so a fresh, minimal target installs with zero
 # network.  Node is NOT here: vendor/node covers it and nodejs.yml skips
 # NodeSource.  Monitors / matrix_bot / trivy are default-off and not bundled.
+# librsvg2-bin is not a role install: `morphit-ops branding apply` offers it to
+# draw the phone icons and launch screens, and an offline node must be able to
+# say yes without a network (docs/BRANDING.md).
 PKGS="ca-certificates curl wget gnupg git lsb-release jq age rsync build-essential \
 chrony cron ufw fail2ban auditd audispd-plugins aide aide-common apparmor apparmor-utils \
 rkhunter libpam-pwquality unattended-upgrades apt-listchanges postfix libsasl2-modules \
 certbot postgresql postgresql-client postgresql-contrib python3-psycopg2 tor i2pd \
-apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin ansible"
+apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin ansible \
+librsvg2-bin"
 docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 	ubuntu:24.04 bash -c '
 		set -eu
@@ -336,7 +351,7 @@ if [ "${1:-}" != "--no-tar" ]; then
 	# guard would try to rebuild, which an offline box can't do) both survived the
 	# packaging excludes. This is the guard against a future --exclude edit
 	# silently dropping apps/web/build again.
-	for _need in 'apps/web/build/index[.]html' 'apps/web/build/[.]shipped'; do
+	for _need in 'apps/web/build/index[.]html' 'apps/web/build/[.]shipped' 'apps/web/build/[.]brand-slots[.]json'; do
 		grep -qE "${_need}" <<< "${_manifest}" \
 			|| die "offline bundle is INCOMPLETE — missing ${_need} (the prebuilt frontend was not shipped); an offline node would have no servable site. NOT shipping this."
 	done

@@ -66,5 +66,23 @@ if (!existsSync(indexHtml)) {
 	);
 	process.exit(1);
 }
+// Per-instance branding (docs/BRANDING.md): the adapter wrapper in
+// svelte.config.js has already recorded every prerendered brand slot into
+// build/.brand-slots.json and stripped the invisible slot markers. Re-run it as a
+// safety net (a no-op on a processed build) BEFORE the postbuild verify.json
+// hashes the build: a failure here is a real bug (a marker leaked or was left
+// unpaired, or the map is missing) and must stop the build.
+const slots = spawnSync(
+	process.execPath,
+	[join(webRoot, '..', '..', 'scripts', 'build-brand-slots.mjs'), buildDir],
+	{
+		stdio: 'inherit',
+		cwd: webRoot
+	}
+);
+if ((slots.status ?? 1) !== 0) {
+	console.error('apps/web: brand-slot post-processing failed (scripts/build-brand-slots.mjs).');
+	process.exit(slots.status ?? 1);
+}
 console.log('apps/web: build complete — root entry point (index.html) present.');
 process.exit(0);

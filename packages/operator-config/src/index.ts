@@ -464,6 +464,23 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_NAME',
 	'MORPHIT_INSTANCE_TAGLINE',
 	'MORPHIT_INSTANCE_CONTACT_URL',
+
+	// Per-instance SITE brand (docs/BRANDING.md) — applied to the served
+	// frontend by `morphit-ops branding apply` (and on every upgrade), and read
+	// by the indexer for RSS feed titles. All optional; unset = "Morphit".
+	//
+	// MORPHIT_INSTANCE_BRAND_NAME: the site's name wherever the UI names the
+	//   SITE the visitor is using ("Sign in to Vigilante Trading"); mentions of
+	//   the Morphit SOFTWARE / federation stay "Morphit". ≤48 chars; may not
+	//   contain { } # | < > " \ or backtick.
+	// MORPHIT_INSTANCE_BRAND_SHORT_NAME: home-screen label (PWA short_name);
+	//   defaults to the brand name.
+	// MORPHIT_INSTANCE_BETA_BADGE: on | off — the red "BETA" marker over the
+	//   logo. Default: off when the operator supplies their own logo
+	//   (/etc/morphit/branding/logo.svg), otherwise on.
+	'MORPHIT_INSTANCE_BRAND_NAME',
+	'MORPHIT_INSTANCE_BRAND_SHORT_NAME',
+	'MORPHIT_INSTANCE_BETA_BADGE',
 	'MORPHIT_INSTANCE_TOR_ADDRESS',
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_ADDRESS',
@@ -521,7 +538,10 @@ export const INSTANCE_ENV = {
 	OPERATOR_TAG: 'MORPHIT_INSTANCE_OPERATOR_TAG',
 	ORIGIN: 'MORPHIT_INSTANCE_ORIGIN',
 	NAME: 'MORPHIT_INSTANCE_NAME',
-	CONTACT_URL: 'MORPHIT_INSTANCE_CONTACT_URL'
+	CONTACT_URL: 'MORPHIT_INSTANCE_CONTACT_URL',
+	BRAND_NAME: 'MORPHIT_INSTANCE_BRAND_NAME',
+	BRAND_SHORT_NAME: 'MORPHIT_INSTANCE_BRAND_SHORT_NAME',
+	BETA_BADGE: 'MORPHIT_INSTANCE_BETA_BADGE'
 } as const;
 
 export interface LoadResult {
@@ -719,3 +739,8 @@ export function isOrderLang(v: unknown): v is OrderLangCode {
 // (node:fs/path/util) into the browser bundle. Re-exported here so Node
 // consumers (indexer, ops-cli, relay) importing the package root are unchanged.
 export * from './contact.js';
+
+// ── Per-instance brand name (docs/BRANDING.md) ───────────────────────────────
+// Browser-safe like ./contact (the web frontend imports
+// `@morphit/operator-config/brand` directly). Re-exported for Node consumers.
+export * from './brand.js';

@@ -15,6 +15,26 @@
   changed_when: false
   become: true
 
+# `npm config set --location=global` leaves the global npmrc world-writable
+# (npm chmods it 0666 after saving). Any local account could then add
+# `script-shell=` / `node-options=` and run code as root the next time root runs
+# npm (v1.19.0 deep-deep). Make it root-owned 0644 again.
+- name: Find the global npmrc
+  ansible.builtin.command:
+    cmd: npm config get globalconfig
+    chdir: /
+  register: morphit_global_npmrc
+  changed_when: false
+  become: true
+
+- name: Keep the global npmrc root-owned and not world-writable
+  ansible.builtin.file:
+    path: "{{ morphit_global_npmrc.stdout | trim }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Clone morphit repo (remote install — no local source given)
   ansible.builtin.git:
     repo: "{{ morphit_repo_url }}"

@@ -342,6 +342,14 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 		return 1;
 	}
 
+	// A flag given with no value parses as the string "true" — never store
+	// that as a name or description (v1.19.0 deep-deep).
+	for (const f of ['name', 'description'] as const) {
+		if (ctx.flags[f] === 'true') {
+			console.log(`✗ --${f} needs a value: --${f} "…"`);
+			return 1;
+		}
+	}
 	const nameRaw = (ctx.flags.name ?? '').trim();
 	if (nameRaw.length === 0) {
 		console.log('✗ --name is required.');

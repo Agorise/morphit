@@ -469,7 +469,7 @@ export function printChainErrorHelp(
 			log('digits, dots, underscores, or hyphens only — nothing else.');
 			log('');
 			log('What to do:');
-			log(`  - Set a valid tag via \`npx morphit-ops edit\` (Operator tag).`);
+			log(`  - Set a valid tag via \`sudo morphit-ops edit\` (Operator tag).`);
 			log('    Your domain (lowercased) is a safe, valid choice.');
 			break;
 
@@ -481,7 +481,7 @@ export function printChainErrorHelp(
 			log('"@", or contain control/invisible characters.');
 			log('');
 			log('What to do:');
-			log('  - Run `npx morphit-ops edit` and set a display name that');
+			log('  - Run `sudo morphit-ops edit` and set a display name that');
 			log('    identifies your own instance without impersonating a');
 			log('    reserved project name, then re-run.');
 			break;
@@ -494,7 +494,7 @@ export function printChainErrorHelp(
 			log('or a 192.168.x.x LAN address will be refused).');
 			log('');
 			log('What to do:');
-			log('  - Run `npx morphit-ops edit` and set MORPHIT_INSTANCE_ORIGIN to');
+			log('  - Run `sudo morphit-ops edit` and set MORPHIT_INSTANCE_ORIGIN to');
 			log('    your real public site, e.g. https://yourdomain.com (origin');
 			log('    only — no trailing path), then re-run.');
 			break;
@@ -522,11 +522,11 @@ export function printChainErrorHelp(
 			log('');
 			log('What to do:');
 			log('  - Verify which key is saved by running:');
-			log('       npx morphit-ops show-key');
+			log('       sudo morphit-ops show-key');
 			log('    It prints the PUBLIC key your saved key derives to (it never');
 			log('    reveals the private key).  Compare that public key against');
 			log(`    the active authority shown for @${sanitizeForTerm(ctx.account)} on a Blurt`);
-			log('    block explorer.  If they differ, re-run `npx morphit-ops');
+			log('    block explorer.  If they differ, re-run `sudo morphit-ops');
 			log('    edit` and supply the correct ACTIVE key.');
 			break;
 
@@ -580,7 +580,7 @@ export function printChainErrorHelp(
 			log('Things worth checking:');
 			log(`  - Tag availability: is the tag derived from ${ctx.nameEnvVar}`);
 			log('    free and not project-reserved? (try a different name)');
-			log(`  - Key: does \`npx morphit-ops show-key\` show the active key for`);
+			log(`  - Key: does \`sudo morphit-ops show-key\` show the active key for`);
 			log(`    @${sanitizeForTerm(ctx.account)}?`);
 			log(`  - Fee: does @${sanitizeForTerm(ctx.account)} hold a little liquid BLURT for the`);
 			log('    small per-op fee? (Blurt charges a fee, not mana — do not power up.)');

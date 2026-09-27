@@ -31,6 +31,7 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { _ } from 'svelte-i18n';
+	import { brandName } from '$lib/brand/brand';
 	import { localePath } from '$i18n/path';
 	import { page } from '$app/stores';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -183,7 +184,7 @@
 				pendingSecret = secret;
 				pendingSecretB32 = base32Encode(secret);
 				const accountLabel = `${getUserBlurtAccount() || 'account'}@morphit`;
-				const uri = otpauthUri(accountLabel, pendingSecretB32);
+				const uri = otpauthUri(accountLabel, pendingSecretB32, $brandName);
 				// Render QR.
 				try {
 					const qr = await import('qrcode');
@@ -434,7 +435,7 @@
 </script>
 
 <svelte:head>
-	<title>{$_('settings.totp.heading')} · Morphit</title>
+	<title>{$_('settings.totp.heading')} · {$brandName}</title>
 	<meta name="description" content={$_('settings.totp.subtitle')} />
 </svelte:head>
 

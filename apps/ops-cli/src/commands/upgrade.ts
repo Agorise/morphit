@@ -120,6 +120,14 @@ import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
 import { withSpinner, startDotsSpinner } from '../init/spinner.ts';
 import { healIpfsPrivacy } from '../lib/ipfsPrivacyHeal.ts';
 import { isHiddenOnlyNode, readLocalRelease } from '../lib/hiddenOnly.ts';
+import { healNpmUpdateNotice as healNpmNoticeGlobal } from '../lib/npmNotice.ts';
+import {
+	applyBranding,
+	brandingConfigured,
+	readBrandingSettings,
+	syncTouchedToWebRoot,
+	BRAND_SLOTS_FILE
+} from '../lib/branding.ts';
 import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
@@ -2357,6 +2365,36 @@ async function runStepWithSpinner(
 	} catch {
 		/* non-fatal — verify.json's operator_tag is informational */
 	}
+	// ─── 9b3. Re-apply this operator's branding (docs/BRANDING.md) ──
+	//
+	// The operator's logo / icons (/etc/morphit/branding) and brand name
+	// (MORPHIT_INSTANCE_BRAND_NAME…) live OUTSIDE the install, so they survive
+	// this upgrade; the fresh canonical build is re-branded in place here, BEFORE
+	// either publish path, so the new frontend goes live already branded. Only
+	// files the on-chain build-integrity check does not cover are touched.
+	// NEVER fatal: a bad logo file must not roll back a good upgrade — on any
+	// failure the build is left (or put back) plain Morphit, and we say how to fix.
+	try {
+		const brandingSettings = readBrandingSettings(installDir);
+		if (brandingConfigured(brandingSettings)) info('Applying your branding to the new frontend…');
+		const br = applyBranding({ buildDir, settings: brandingSettings });
+		if (!br.unsupported && br.active) {
+			info(
+				`\u2713 Applied your branding${br.brandName ? ` ("${sanitizeForTerm(br.brandName)}")` : ''} to the new frontend.`
+			);
+		}
+		for (const w of br.warnings) warn(sanitizeForTerm(w));
+	} catch (err) {
+		warn(
+			`Your branding could not be applied (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}), ` +
+				'so the plain Morphit look is served. Fix it, then run: sudo morphit-ops branding apply'
+		);
+		try {
+			applyBranding({ buildDir, settings: readBrandingSettings(installDir), reset: true });
+		} catch {
+			/* the fresh build is canonical unless apply got partway — best-effort */
+		}
+	}
 	if (plan.copyToWebRoot) {
 		try {
 			// Snapshot the current web root so a deploy failure (or a later
@@ -2730,7 +2768,14 @@ async function runStepWithSpinner(
 			runOrThrow('systemctl', ['restart', svc]);
 		} catch (err) {
 			warn(`Service restart failed for ${svc}; rolling back.`);
-			return rollback(installDir, backupDir, tmpDir, err, { webRoot, webRootBackup }, restoreOnRollback);
+			return rollback(
+				installDir,
+				backupDir,
+				tmpDir,
+				err,
+				{ webRoot, webRootBackup, container: plan.restartContainer },
+				restoreOnRollback
+			);
 		}
 	}
 
@@ -3340,7 +3385,13 @@ export async function runSelfHeals(): Promise<void> {
 		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],
 		['the BunkerWeb WAF heal', () => healBunkerWebWaf()],
 		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
-		['the frontend config heal', () => healFrontendConfig()]
+		['the frontend config heal', () => healFrontendConfig()],
+		// npm's "New major version of npm available!" notice, box-wide.
+		['the npm notice heal', () => healNpmUpdateNotice()],
+		// Per-instance branding (docs/BRANDING.md). Runs here too so an upgrade
+		// DRIVEN BY AN OLDER morphit-ops (whose upgrade flow predates branding)
+		// still goes live branded; idempotent when the new flow already applied it.
+		['the branding heal', () => healBranding()]
 	];
 	for (const [name, heal] of heals) {
 		try {
@@ -3434,6 +3485,33 @@ export async function healRelayClearnet(): Promise<void> {
 			spinner: (label) => startDotsSpinner(label)
 		}
 	});
+}
+
+/** npm's "New major version" notice, box-wide — see ../lib/npmNotice.ts. */
+export function healNpmUpdateNotice(): void {
+	healNpmNoticeGlobal();
+}
+
+/** Per-instance branding self-heal (docs/BRANDING.md): re-apply the operator's
+ *  branding to the served build and mirror any change into a bare-metal web
+ *  root (a container frontend bind-mounts the build, so it is live at once).
+ *  Idempotent — a build that already matches is left untouched. */
+export function healBranding(): void {
+	let installDir = (process.env.MORPHIT_INSTALL_DIR ?? '').trim() || '/opt/morphit';
+	const m = /^(.*)\/apps\/ops-cli\/(?:dist|src)\//.exec(process.argv[1] ?? '');
+	if (m && m[1] && existsSync(join(m[1], 'apps', 'web'))) installDir = m[1];
+	const buildDir = join(installDir, 'apps', 'web', 'build');
+	if (!existsSync(join(buildDir, BRAND_SLOTS_FILE))) return; // pre-branding build
+	const br = applyBranding({ buildDir, settings: readBrandingSettings(installDir) });
+	for (const w of br.warnings) warn(sanitizeForTerm(w));
+	if (br.touched.length === 0) return;
+	const webRoot = resolveWebRoot(process.env);
+	if (existsSync(webRoot)) syncTouchedToWebRoot(buildDir, webRoot, br.touched);
+	info(
+		br.active
+			? `\u2713 Applied your branding${br.brandName ? ` ("${sanitizeForTerm(br.brandName)}")` : ''} to the live frontend.`
+			: '\u2713 Frontend branding reset to the plain Morphit look (no branding configured).'
+	);
 }
 
 /** v1.16.13 — SELF-HEAL: rebuild the compose-managed frontend so a shipped
@@ -4328,7 +4406,7 @@ export function rollback(
 	backupDir: string,
 	tmpDir: string,
 	err: unknown,
-	web?: { webRoot: string; webRootBackup: string | null },
+	web?: { webRoot: string; webRootBackup: string | null; container?: string | null },
 	restore: readonly RollbackRestore[] = []
 ): number {
 	printError(`Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -4365,6 +4443,23 @@ export function rollback(
 					`${webErr instanceof Error ? webErr.message : String(webErr)}. ` +
 					`Your site may be on the new build while services rolled back; ` +
 					`rebuild apps/web and copy build/ to ${web.webRoot} to realign.`
+			);
+		}
+	}
+	// v1.19.0 deep-deep: a container frontend bind-mounts <install>/apps/web/
+	// build. Step 9c re-created the container on the NEW install; after the
+	// delete + rename above, that mount points at a directory that no longer
+	// exists (the kernel keeps the deleted inode: the site serves an empty tree
+	// and nginx 500-loops). Re-bind it to the restored install.
+	if (web?.container) {
+		try {
+			restartFrontendContainer(web.container, installDir);
+			info(`Re-attached the frontend container "${web.container}" to the restored install.`);
+		} catch (ctErr) {
+			warn(
+				`Could not restart the frontend container "${web.container}": ` +
+					`${ctErr instanceof Error ? ctErr.message : String(ctErr)}. ` +
+					`Restart it by hand so it serves the restored build: sudo docker restart ${web.container}`
 			);
 		}
 	}

@@ -16,6 +16,7 @@
 
 import type { Database } from '$db/pool';
 import type { Config } from '$config/index';
+import { DEFAULT_BRAND_NAME } from '@morphit/operator-config';
 import { cryptoFacingSideWhere, isAccountName, escapeLike } from '$api/shared';
 
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
@@ -148,6 +149,8 @@ interface FeedMeta {
 	readonly description: string;
 	readonly selfUrl: string;
 	readonly humanLink: string;
+	/** Feed-level author: this SITE's brand (docs/BRANDING.md). */
+	readonly author: string;
 }
 
 /** RSS 2.0 feed. Wire format is unchanged from the original
@@ -207,7 +210,7 @@ function renderAtom(items: readonly FeedItem[], meta: FeedMeta): string {
   <link rel="alternate" href="${xmlEscape(meta.humanLink)}" />
   <id>${xmlEscape(meta.selfUrl)}</id>
   <updated>${updated}</updated>
-  <author><name>Morphit</name></author>
+  <author><name>${xmlEscape(meta.author)}</name></author>
 ${entriesXml}
 </feed>
 `;
@@ -251,8 +254,17 @@ function serializeFeed(
 	return renderRss(items, meta);
 }
 
-const PRIVACY_NOTE_GLOBAL =
-	'Blurt is a public chain, so this feed does not reveal information that a chain indexer wouldn\'t — but it does make aggregation trivial. If you value privacy when posting, consider varying your timing and using Tor. See the FAQ entry "Can I follow Morphit with RSS?" for details.';
+/** Per-instance brand (docs/BRANDING.md): the SITE's name in feed titles and
+ *  copy — "Morphit" unless the operator set MORPHIT_INSTANCE_BRAND_NAME. */
+function siteBrand(config: Config): string {
+	return config.instanceBrandName ?? DEFAULT_BRAND_NAME;
+}
+
+/** Cites the FAQ entry by its title, which names the site (so it carries the
+ *  brand, exactly like the frontend's FAQ page does). */
+function privacyNoteGlobal(brand: string): string {
+	return `Blurt is a public chain, so this feed does not reveal information that a chain indexer wouldn't — but it does make aggregation trivial. If you value privacy when posting, consider varying your timing and using Tor. See the FAQ entry "Can I follow ${brand} with RSS?" for details.`;
+}
 
 const PRIVACY_NOTE_PER_TRADER =
 	"Blurt is a public chain, so this feed does not reveal information that a chain indexer wouldn't. However, polling a per-trader URL reveals to a network observer that you are watching this specific account — slightly more revealing than the global or per-asset feeds. If timing correlation matters in your threat model, poll over Tor.";
@@ -355,15 +367,17 @@ export async function globalFeedHandler(
 		.replace(/[\u0000-\u001f\u007f]/g, ' ')
 		.trim()
 		.slice(0, 300);
-	const feedTitle = customTitle.length > 0 ? customTitle : 'Morphit — New orderbook entries';
+	const brand = siteBrand(config);
+	const feedTitle = customTitle.length > 0 ? customTitle : `${brand} — New orderbook entries`;
 
 	const body = serializeFeed(
 		result.rows,
 		{
 			title: feedTitle,
-			description: `The ${FEED_LIMIT} most recent live orders on Morphit with an established listing fee${filtered ? ' matching your selected filters' : ''}. ${filtered ? PRIVACY_NOTE_FILTERED : PRIVACY_NOTE_GLOBAL}`,
+			description: `The ${FEED_LIMIT} most recent live orders on ${brand} with an established listing fee${filtered ? ' matching your selected filters' : ''}. ${filtered ? PRIVACY_NOTE_FILTERED : privacyNoteGlobal(brand)}`,
 			selfUrl: `${config.publicOrigin}/rss/orderbook.${feedExt(format)}${filterQueryString(filters)}`,
-			humanLink: `${frontendOrigin}/orderbook`
+			humanLink: `${frontendOrigin}/orderbook`,
+			author: brand
 		},
 		frontendOrigin,
 		format
@@ -631,16 +645,18 @@ export async function perAssetFeedHandler(
 		.replace(/[\u0000-\u001f\u007f]/g, ' ')
 		.trim()
 		.slice(0, 300);
+	const brand = siteBrand(config);
 	const feedTitle =
-		customTitle.length > 0 ? customTitle : `Morphit — New ${asset} orderbook entries`;
+		customTitle.length > 0 ? customTitle : `${brand} — New ${asset} orderbook entries`;
 
 	const body = serializeFeed(
 		result.rows,
 		{
 			title: feedTitle,
-			description: `The ${FEED_LIMIT} most recent live ${asset} orders on Morphit${filtered ? ' matching your selected filters' : ''}. ${filtered ? PRIVACY_NOTE_FILTERED : PRIVACY_NOTE_GLOBAL}`,
+			description: `The ${FEED_LIMIT} most recent live ${asset} orders on ${brand}${filtered ? ' matching your selected filters' : ''}. ${filtered ? PRIVACY_NOTE_FILTERED : privacyNoteGlobal(brand)}`,
 			selfUrl: `${config.publicOrigin}/rss/orderbook/by-asset/${lower}.${ext}${filterQueryString(filters)}`,
-			humanLink: `${frontendOrigin}/orderbook?asset=${asset}`
+			humanLink: `${frontendOrigin}/orderbook?asset=${asset}`,
+			author: brand
 		},
 		frontendOrigin,
 		format
@@ -693,10 +709,11 @@ export async function perAccountFeedHandler(
 	const body = serializeFeed(
 		result.rows,
 		{
-			title: `Morphit — Orders by @${account}`,
+			title: `${siteBrand(config)} — Orders by @${account}`,
 			description: `The ${FEED_LIMIT} most recent live orders posted by @${account}. ${PRIVACY_NOTE_PER_TRADER}`,
 			selfUrl: `${config.publicOrigin}/rss/orderbook/by-account/@${account}.${ext}`,
-			humanLink: `${frontendOrigin}/@${account}`
+			humanLink: `${frontendOrigin}/@${account}`,
+			author: siteBrand(config)
 		},
 		frontendOrigin,
 		format

@@ -93,6 +93,7 @@ import { runUpgrade } from './commands/upgrade.ts';
 import { runImportAltnetKey } from './commands/importAltnetKey.ts';
 import { runExportAltnetKey } from './commands/exportAltnetKey.ts';
 import { runPaymentMethod } from './commands/paymentMethod.ts';
+import { runBranding } from './commands/branding.ts';
 
 // ─── Tiny arg parser ─────────────────────────────────────────────
 
@@ -119,7 +120,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 				const next = argv[i + 1];
 				if (
 					next !== undefined &&
-					!next.startsWith('-') &&
+					// A value may itself start with one dash ("-5% off", a
+					// "-Cash-" name); only another --flag ends it (v1.19.0).
+					!next.startsWith('--') &&
 					// Don't consume the next arg as a value if it looks
 					// like a positional (no = and not after a value-
 					// expecting flag).  Heuristic: flags we know take
@@ -153,7 +156,37 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 /** Long-form names of flags that consume the next arg as their
  *  value.  Bare flags (--json, --help) are not in this set. */
-const VALUE_FLAGS = new Set(['since', 'age', 'type', 'out', 'url', 'port', 'host', 'from-file']);
+const VALUE_FLAGS = new Set([
+	'since',
+	'age',
+	'type',
+	'out',
+	'url',
+	'port',
+	'host',
+	'from-file',
+	// payment-method add <key> --name … --description … --category … (its
+	// documented usage; before, only the --flag=value form worked)
+	'description',
+	'category',
+	// Value flags that used to be missing here, so `--reason "spam"` stored
+	// "true" (block, ADR-0018), and likewise these (v1.19.0 deep-deep):
+	'reason',
+	'network',
+	'in',
+	'repo',
+	'signer',
+	'signer-pubkey',
+	'config-dir',
+	'mxid',
+	// branding apply (docs/BRANDING.md); --name is shared with payment-method
+	'logo',
+	'logo-footer',
+	'icon',
+	'name',
+	'short-name',
+	'beta'
+]);
 
 const SHORT_FLAGS: Record<string, string> = {
 	h: 'help',
@@ -181,6 +214,14 @@ function printHelp(): void {
 		'  init [--check-only] [--out=PATH]   First-time setup wizard (run on a fresh install)',
 		'  edit [--out=PATH]               Re-prompt origin, alt-network addresses, SEO, listing fee,',
 		'                                  operator tag, or RPC endpoints of an existing config',
+		'  branding [status|setup|apply|reset] [--dry-run]',
+		'                                  Your own site branding: logo, favicon + app icons, the site',
+		'                                  name (MORPHIT_INSTANCE_BRAND_NAME), the BETA marker. Files go',
+		'                                  in /etc/morphit/branding; re-applied on every upgrade. See',
+		'                                  docs/BRANDING.md. One-command setup:',
+		'                                  branding apply --logo F --logo-footer F --icon F --name "…"',
+		'                                  Also: --short-name "…" (Android label), --beta on|off|auto,',
+		'                                  --json (machine-readable result).',
 		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address: helps you',
 		'                                  generate one (vanity prefix where possible), then saves it',
 		'                                  to the footer. Lokinet has no vanity prefix (ONS for names).',
@@ -437,6 +478,23 @@ async function main(): Promise<number> {
 		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
 		try {
 			return await runEdit({
+				flags: args.flags,
+				positional: args.positional,
+				colorEnabled
+			});
+		} catch (err) {
+			printError(err instanceof Error ? err.message : String(err));
+			return 3;
+		}
+	}
+
+	// `branding` — per-instance site branding (docs/BRANDING.md): logo, icons,
+	// the site's brand name, the BETA marker. Re-brands the served build in
+	// place (never rebuilds it). Pure file work — no DB needed.
+	if (args.subcommand === 'branding') {
+		const colorEnabled = args.flags['no-color'] !== 'true' && process.stdout.isTTY === true;
+		try {
+			return await runBranding({
 				flags: args.flags,
 				positional: args.positional,
 				colorEnabled

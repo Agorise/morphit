@@ -765,6 +765,8 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 348. **Every timestamp is 24-hour UTC, to the second.** Dates and times sitewide — pages, PDFs, and exports — render as "30 June, 2026 @ 16:45:18 UTC": day-first, the month translated into your language, 24-hour clock, a literal UTC suffix, and seconds. Unambiguous across time zones and locales, and precise enough to line up with an on-chain transaction if a record ever has to hold up in a dispute.
 
+349. **Your instance, your name and logo — without forking.** Every federated operator runs the same signed frontend, yet one command gives it their logo, icon and site name: "Sign in to Morphit" becomes "Sign in to Vigilante Trading" wherever the page names the site, in all 10 languages. The favicon and home-screen icons come from the operator's icon, the iPhone launch screens from their logo, and every logo file passes an allowlist check first; mentions of the software stay "Morphit", and a "Runs on Morphit" line says what the site runs on. Nothing is rebuilt, so the build-integrity check stays green, and every upgrade re-applies it (`docs/BRANDING.md`).
+
 ## How to verify any of the above
 
 Every claim in this document is verifiable. The repository is at **git.agorise.net/agorise/morphit**. Specific anchors:
@@ -783,4 +785,4 @@ Don't trust this list. Verify it. That's the whole point.
 
 ---
 
-*348 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 27 August, 2026.*
+*349 specific selling points. None of them invented. All of them shipped, documented, or honestly disclosed as backlog. If you find one that isn't accurate, open an issue at git.agorise.net/agorise/morphit and we'll either fix the claim or fix the code. Last updated: 26 September, 2026.*

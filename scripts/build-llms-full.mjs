@@ -37,6 +37,20 @@ const LOCALE_PATH = resolve(
 const OUT_PATH = resolve(__dirname, '../apps/web/static/llms-full.txt');
 
 /**
+ * Per-instance brand placeholders (docs/BRANDING.md): SITE-brand mentions in
+ * the locale JSON are `{brand}` / `{brand|<default form>}`. llms-full.txt is the
+ * canonical project FAQ (it links morphit.io throughout), so every placeholder
+ * resolves to its DEFAULT form — the text is exactly what it was before the
+ * placeholders existed. Mirrors applyBrandToString in src/lib/brand/brandName.ts.
+ */
+const BRAND_PLACEHOLDER_RE = /\{brand(?:\|([^{}|]*))?\}/g;
+export function resolveBrandDefault(s) {
+	return typeof s === 'string'
+		? s.replace(BRAND_PLACEHOLDER_RE, (_m, alt) => (alt ? alt : 'Morphit'))
+		: s;
+}
+
+/**
  * Pure renderer: parsed en.json object → exact llms-full.txt body.
  * No file I/O, no side effects — safe to import from the smoke.
  */
@@ -57,8 +71,8 @@ export function renderLlmsFull(en) {
 	let count = 0;
 	for (const [key, entry] of Object.entries(entries)) {
 		count++;
-		const q = entry.q ?? '';
-		const a = entry.a ?? '';
+		const q = resolveBrandDefault(entry.q ?? '');
+		const a = resolveBrandDefault(entry.a ?? '');
 		lines.push(`## ${q}`);
 		lines.push('');
 		lines.push(`**FAQ key:** \`${key}\``);

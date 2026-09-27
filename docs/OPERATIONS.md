@@ -94,6 +94,9 @@ Payment-method configuration — enabling/disabling canonical payment methods in
 48. [IPFS release hosting — every instance pins the signed release](#48-ipfs-release-hosting--every-instance-pins-the-signed-release)
 49. [Advanced install paths — Ansible playbook or build-from-source](#49-advanced-install-paths--ansible-playbook-or-build-from-source)
 50. [How your indexer treats the public Blurt RPC nodes (User-Agent + rate limits)](#50-how-your-indexer-treats-the-public-blurt-rpc-nodes-user-agent--rate-limits)
+51. [Optional: censorship-resistant chain reads over hidden-service RPC](#51-optional-censorship-resistant-chain-reads-over-hidden-service-rpc)
+52. [Fast-sync and the federation snapshot mirror](#52-fast-sync-and-the-federation-snapshot-mirror)
+53. [Per-instance branding — your logo, icons and site name](#53-per-instance-branding--your-logo-icons-and-site-name)
 
 ---
 
@@ -12785,3 +12788,69 @@ compares your config against what Tor and i2pd actually serve and prints a
 `CONFIG/ROUTER MISMATCH` if they differ. One instance advertised a `.b32.i2p` its
 own router had stopped hosting — every peer's fetch failed, for an unknown
 period, hidden by its other address still working. Do not skip this check.
+
+---
+
+## 53. Per-instance branding — your logo, icons and site name
+
+Every instance serves the same signed frontend, but it can carry the operator's
+own logo, icons and site name, without a rebuild and without tripping visitors'
+build-integrity check. The full guide is [`BRANDING.md`](BRANDING.md); this is the
+operator summary.
+
+**Set it up once:**
+
+```sh
+sudo morphit-ops branding apply \
+  --logo /home/you/my-logo.svg --logo-footer /home/you/my-wordmark.svg \
+  --icon /home/you/my-symbol.svg --name "Vigilante Trading"
+```
+
+Full paths always work; a plain file name is looked up in the folder you ran the
+command from. The files are validated (an allowlist of plain-drawing SVG parts;
+scripts, links and external references are refused) and copied to
+`/etc/morphit/branding/`; the name is written, quoted, to the install's
+`morphit.config.env` as `MORPHIT_INSTANCE_BRAND_NAME` (backed up first). The
+branding folder is outside the install and upgrades carry `morphit.config.env`
+forward, so every `morphit-ops upgrade` re-applies them. `--short-name` sets the
+Android home-screen label (iPhones use the name) and `--beta on|off|auto` the red
+BETA marker (automatic: off once you supply a logo). `--name=` or `--name Morphit`
+removes the name.
+Restart the indexer (`sudo systemctl restart morphit-indexer`) for RSS feed titles
+to pick up a new name.
+
+**Check, change, undo:**
+
+| Command | What it does |
+|---|---|
+| `sudo morphit-ops branding status` | What is configured, and whether the build directory matches it |
+| `sudo morphit-ops branding setup` | Guided: asks for each file and the name, then applies (the menu's *Branding* item) |
+| `sudo morphit-ops branding apply` | Apply again (after editing the files or the config by hand) |
+| `sudo morphit-ops branding apply --dry-run` | Show what would change |
+| `sudo morphit-ops branding reset` | Serve the plain Morphit look again (config kept) |
+
+**What changes on disk.** Only files outside the on-chain release manifest:
+the two logo SVGs under `/brand/`, the site's `brand/brand.json`, `/favicon.svg`,
+`/app-icon.svg`, `/app-icon-maskable.svg`, the PNG app icons, iPhone/iPad launch
+screens under `/splash/`, `/manifest.webmanifest`, any images the operator puts
+under `/etc/morphit/branding/static/` (images only — pages, scripts, fonts and the
+warrant canary files are refused), and the site-name slots in the prerendered
+pages (recorded at build time in `.brand-slots.json`, in the build directory).
+`index.html`, the service worker and `_app/` are never written. `verify.json` gets
+fresh hashes and an `operator_branding` block listing the re-branded files, which
+*About this instance* shows. The canonical originals are saved to
+`apps/web/.brand-pristine` before anything changes, which makes `reset` exact and
+lets an interrupted `apply` be finished or undone by the next run.
+
+**Icons and launch screens** are rasterized from your SVGs by `rsvg-convert`
+(`librsvg2-bin`) or ImageMagick. Neither is part of a Morphit install; when both
+are missing, `branding apply` offers to install `librsvg2-bin` (not on a node that
+reaches the network only over hidden services, where `apt` would go out over the
+clearnet — install it your usual way there; the offline bundle carries it), and
+the upgrade prints the same warning. Without one, those images keep the Morphit mark — or put
+your own PNGs in `/etc/morphit/branding/` (launch screens under `static/splash/`).
+
+**Bare-metal web root.** When the frontend is served from a copied web root
+(`MORPHIT_WEB_ROOT`, default `/var/www/morphit-frontend`), `branding apply` copies the
+changed files there too. A container frontend bind-mounts the build, so it is
+live at once.

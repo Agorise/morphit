@@ -127,7 +127,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log(`  Federation tag: ${sanitizeForTerm(tag)}`);
 		console.log('    (MORPHIT_INSTANCE_OPERATOR_TAG is not set, so this was');
 		console.log('     derived from your display name.  Set that variable — via');
-		console.log('     `npx morphit-ops init` or `edit` — so your registered tag');
+		console.log('     `sudo morphit-ops init` or `edit` — so your registered tag');
 		console.log('     and your earnings tag are guaranteed to match.)');
 	}
 	console.log('');
@@ -151,7 +151,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log('');
 		console.log('  Change your federation tag to one that identifies YOUR node');
 		console.log('  (your domain is a good choice) by re-running');
-		console.log('  `npx morphit-ops edit` (Operator tag), then re-run register.');
+		console.log('  `sudo morphit-ops edit` (Operator tag), then re-run register.');
 		return 1;
 	}
 
@@ -172,7 +172,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log('  nothing — your display name, origin, and contact would NOT update.');
 		console.log('');
 		console.log(`  Set MORPHIT_INSTANCE_OPERATOR_TAG="${sanitizeForTerm(registeredTag as string)}" (via`);
-		console.log('  `npx morphit-ops edit` → Operator tag, or the config file) so it matches');
+		console.log('  `sudo morphit-ops edit` → Operator tag, or the config file) so it matches');
 		console.log('  your registered tag, then re-run register to update the other fields.');
 		return 1;
 	}
@@ -187,7 +187,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log('  (look-alikes such as m0rphit, or morphit- followed by anything, are held');
 		console.log('  back so nobody can pass as an official node). Choose a tag that');
 		console.log('  identifies YOUR node — your domain is a good choice — with');
-		console.log('  `npx morphit-ops edit` (Operator tag), then re-run register.');
+		console.log('  `sudo morphit-ops edit` (Operator tag), then re-run register.');
 		return 1;
 	}
 
@@ -248,7 +248,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 				console.log('    Open this URL and look at the Active Auth public key —');
 				console.log('    it should match the line above exactly:');
 				console.log(`      https://blocks.blurtwallet.com/#/@${sanitizeForTerm(account)}`);
-				console.log('    (Run `npx morphit-ops show-key` anytime to re-check.  A');
+				console.log('    (Run `sudo morphit-ops show-key` anytime to re-check.  A');
 				console.log('     wrong key here is the #1 cause of failure.)');
 				console.log('');
 			} catch {
@@ -366,11 +366,11 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 			`Once @${account} holds a little liquid BLURT for the fee (~${SUGGESTED_LIQUID_BLURT_BUFFER} BLURT ` +
 				`is ample — transfer it, do NOT power up), retry the broadcast now? ` +
 				`(No need to re-run setup — answer No to quit and run ` +
-				`\`npx morphit-ops register\` later)`,
+				`\`sudo morphit-ops register\` later)`,
 			false
 		);
 		if (!retry) {
-			console.log('Stopped.  Re-run `npx morphit-ops register` when ready.');
+			console.log('Stopped.  Re-run `sudo morphit-ops register` when ready.');
 			return 1;
 		}
 		console.log('');

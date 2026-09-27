@@ -13,6 +13,10 @@
 # mirrors the role's own verify step:
 #     npm exec --offline --workspace apps/ops-cli morphit-ops -- --help
 set -eu
+# The caller's directory, so relative paths they type (`branding apply --logo
+# my-logo.svg`) resolve where THEY are, not inside the install (v1.19.0).
+MORPHIT_OPS_CALLER_CWD="$PWD"
+export MORPHIT_OPS_CALLER_CWD
 cd "{{ morphit_repo_path }}" || {
 	echo "morphit-ops: Morphit is not installed at {{ morphit_repo_path }}." >&2
 	exit 1
@@ -31,4 +35,10 @@ if [ -z "${MORPHIT_INDEXER_DATABASE_URL:-}" ] && [ -r "$_indexer_env" ]; then
 	if [ -n "$_dburl" ]; then export MORPHIT_INDEXER_DATABASE_URL="$_dburl"; fi
 fi
 
+# This npm process is the PARENT of the whole command, and npm prints its
+# "New major version of npm available! … npm install -g npm@…" notice when it
+# exits — after all of morphit-ops' own output, where no setting made inside
+# morphit-ops can reach it. Turn it off here (the repo's .npmrc does too), and
+# never follow it: the install pins its own Node/npm.
+export npm_config_update_notifier=false npm_config_fund=false
 exec npm exec --offline --workspace apps/ops-cli morphit-ops -- "$@"

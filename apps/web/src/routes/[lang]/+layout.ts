@@ -46,6 +46,7 @@ import { waitLocale } from 'svelte-i18n';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 import { localePath, pickLocaleFromAcceptLanguages } from '$i18n/path';
 import { initI18nFor } from '$i18n';
+import { ensureBrandWithin, BRAND_WAIT_MS } from '$lib/brand/brand';
 
 export const prerender = true;
 export const ssr = true;
@@ -113,7 +114,14 @@ export async function load({
 			: DEFAULT_LOCALE;
 		throw redirect(307, localePath(url.pathname + url.search + url.hash, detected));
 	}
+	// Per-instance brand (docs/BRANDING.md), resolved IN PARALLEL with the
+	// locale bundle so every `{brand}` string renders branded on the first
+	// pass. Instant on a prerendered page (read from <html data-brand-name>); on
+	// the SPA-fallback shell it fetches /brand/brand.json — alongside the bundle
+	// fetch, so it adds no round trip, and never holding the page for more than
+	// a few seconds (a slow Tor circuit): a brand that arrives later is applied
+	// in place by the i18n brand subscription. No-op during prerender.
 	initI18nFor(code);
-	await waitLocale(code);
+	await Promise.all([ensureBrandWithin(BRAND_WAIT_MS), waitLocale(code)]);
 	return { lang: code };
 }

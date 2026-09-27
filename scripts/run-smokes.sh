@@ -510,6 +510,8 @@ SMOKES=(
 	"apps/web:llms-txt-freshness-smoke"
 	"apps/web:build-manifest-release-json-smoke"
 	"apps/web:logo-bling-invariants-smoke"
+	".:branding-contract-smoke"
+	".:npm-update-notice-silenced-smoke"
 	"apps/web:coin-carousel-invariants-smoke"
 	"apps/web:svelte-component-import-coverage-smoke"
 	"apps/web:text-input-maxlength-coverage-smoke"

@@ -1,7 +1,9 @@
 import { browser } from '$app/environment';
-import { init, register, locale, _ } from 'svelte-i18n';
+import { init, register, locale, addMessages, _ } from 'svelte-i18n';
 import { isolateAtHandles } from './rtlHandle';
 import { derived, get, writable } from 'svelte/store';
+import { brand, brandRenderer, brandTextNow } from '$lib/brand/brand';
+import { applyBrandToMessages } from '$lib/brand/brandName';
 
 // Pure constants + matchSupported() are SSoT in ./locales.  This
 // module re-exports them so existing call sites that do
@@ -36,15 +38,39 @@ import { SUPPORTED_LOCALES, DEFAULT_LOCALE, matchSupported, type LocaleCode } fr
 // inside an arrow returned from a loop body, with `code` from
 // `for...of`, is fine — vite recognizes the pattern as long as
 // the directory and extension are literal strings.
+/**
+ * Per-instance brand (docs/BRANDING.md). Locale strings that name the SITE the
+ * visitor is using carry a `{brand}` placeholder (or `{brand|<default form>}`
+ * where the language inflects the name); it is substituted TEXTUALLY
+ * here, as each bundle loads, with the instance's brand ("Morphit" on an
+ * unbranded instance) — no call site passes a `brand` value and ICU never sees
+ * the token. The un-substituted bundle is kept so a brand that resolves AFTER a
+ * bundle loaded (the SPA-fallback shell fetches /brand/brand.json) is
+ * re-applied in place via addMessages().
+ */
+type Dictionary = Parameters<typeof addMessages>[1];
+const rawBundles = new Map<string, Dictionary>();
+let appliedBrandText = brandTextNow();
+
 for (const { code } of SUPPORTED_LOCALES) {
 	// t.txt (the maintainer) — isolate @{handle} slots (LTR) at load time so usernames
 	// render "@alice", never "alice@", in RTL locales. See rtlHandle.ts.
 	register(code, () =>
-		import(`./locales/${code}.json`).then((m) =>
-			isolateAtHandles((m as { default?: unknown }).default ?? m)
-		)
+		import(`./locales/${code}.json`).then((m) => {
+			const raw = isolateAtHandles((m as { default?: unknown }).default ?? m) as Dictionary;
+			rawBundles.set(code, raw);
+			return applyBrandToMessages(raw, brandRenderer());
+		})
 	);
 }
+
+brand.subscribe(() => {
+	const text = brandTextNow();
+	if (text === appliedBrandText) return;
+	appliedBrandText = text;
+	const render = brandRenderer();
+	for (const [code, raw] of rawBundles) addMessages(code, applyBrandToMessages(raw, render));
+});
 
 /**
  * PLANNED_LOCALES and the LocaleCode types are SSoT in ./locales

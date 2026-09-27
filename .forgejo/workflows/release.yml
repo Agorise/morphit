@@ -192,6 +192,16 @@ jobs:
                   exit 1
                   ;;
           esac
+          # The tag must name the version the tree says it is: a
+          # `v1.19.0` tag on a tree whose package.json still reads
+          # 1.18.x would publish a tarball whose upgrade/verify
+          # reporting shows the wrong version everywhere.
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "v${PKG_VERSION}" != "$TAG" ]; then
+            echo "ERROR: tag '$TAG' does not match package.json version '${PKG_VERSION}'" >&2
+            echo "       Bump the version in every package.json (version-consistency smoke) before tagging." >&2
+            exit 1
+          fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "tarball=morphit-${TAG}.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -233,6 +243,12 @@ jobs:
         # identity loads at runtime from /v1/instance — so one build serves everyone.
         run: |
           npm run build -w apps/web
+          # Without the brand-slot record, `morphit-ops branding` cannot put an
+          # operator's site name into the prerendered pages (docs/BRANDING.md).
+          if [ ! -f apps/web/build/.brand-slots.json ]; then
+            echo "ERROR: apps/web/build/.brand-slots.json missing — the brand-slot adapter did not run" >&2
+            exit 1
+          fi
           # Mark the freshly-built frontend as the SHIPPED canonical build. On an
           # operator's box, apps/web's build script sees this marker and deploys
           # these exact bytes instead of rebuilding — so every instance's assets

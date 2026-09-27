@@ -49,10 +49,16 @@
 	 */
 
 	import { onMount } from 'svelte';
+	// Per-instance brand for the tab title (docs/BRANDING.md). Never blocks the
+	// redirect: this shell is index.html, which nothing may rewrite, so the brand
+	// comes from /brand/brand.json.
+	import { brandName, ensureBrand } from '$lib/brand/brand';
 	import {
 		pickLocaleFromAcceptLanguages,
 		localePath
 	} from '$i18n/path';
+
+	void ensureBrand();
 
 	onMount(() => {
 		// `navigator.languages` is ordered by preference; the picker
@@ -125,7 +131,7 @@
 	     The [lang] subtree emits its own canonical/hreflang tags
 	     per page in its +layout.svelte. -->
 	<meta name="robots" content="noindex" />
-	<title>Morphit</title>
+	<title>{$brandName}</title>
 </svelte:head>
 
 <!-- Minimal visible content — the redirect happens within ~one

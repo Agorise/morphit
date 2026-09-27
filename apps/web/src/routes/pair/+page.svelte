@@ -23,6 +23,11 @@
 	import { onMount } from 'svelte';
 	import { pickLocaleFromAcceptLanguages, localePath } from '$i18n/path';
 	import { resolveWebMorphitTarget } from '$lib/pair/resolveTarget';
+	import { brandName, ensureBrand } from '$lib/brand/brand';
+
+	// Per-instance brand for the title + "Opening …" line (docs/BRANDING.md).
+	// Instant on a stamped page; never blocks the redirect below.
+	void ensureBrand();
 
 	onMount(() => {
 		const prefs =
@@ -44,9 +49,9 @@
 	<!-- Functional bounce route — never an indexable result. Not in the
 	     sitemap; carries noindex like the root `/` shell. -->
 	<meta name="robots" content="noindex" />
-	<title>Morphit</title>
+	<title>{$brandName}</title>
 </svelte:head>
 
 <div style="display: flex; align-items: center; justify-content: center; min-height: 50vh;">
-	<p style="color: #666; font-family: system-ui, sans-serif;">Opening Morphit…</p>
+	<p style="color: #666; font-family: system-ui, sans-serif;">Opening {$brandName}…</p>
 </div>

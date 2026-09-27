@@ -97,6 +97,13 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 				tip: 'Optional. Gives privacy-conscious users a censorship-resistant way to reach your instance.'
 			},
 			{
+				label: 'Branding — your logo, icons and site name',
+				blurb: 'Show or change your own logo, favicon, app icons and site name — asks for your SVG files, then applies them.',
+				subcommand: 'branding',
+				positional: ['setup'],
+				tip: 'Set it up once — every upgrade re-applies it. See docs/BRANDING.md. Without the menu: `sudo morphit-ops branding apply --logo FILE --icon FILE --name "…"`.'
+			},
+			{
 				label: 'Manage payment methods',
 				blurb: "List, add, or remove this instance's payment-method additions.",
 				subcommand: 'payment-method',
@@ -299,6 +306,7 @@ const ROOT_REQUIRED_SUBCOMMANDS: ReadonlySet<string> = new Set([
 	'edit',
 	'alt-address',
 	'payment-method',
+	'branding',
 	'show-key',
 	'edit-active-key',
 	'register',

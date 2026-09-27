@@ -12,6 +12,8 @@
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import AvatarMenu from '$components/AvatarMenu.svelte';
 	import MorphitLogoBling from '$components/MorphitLogoBling.svelte';
+	import { brand, brandName } from '$lib/brand/brand';
+	import { DEFAULT_BRAND_NAME } from '$lib/brand/brandName';
 	import PermissionBanner from '$components/PermissionBanner.svelte';
 	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
 	import InstallBanner from '$components/InstallBanner.svelte';
@@ -288,7 +290,7 @@
 			<a
 				href={lp('/')}
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-				aria-label="Morphit — home"
+				aria-label="{$brandName} — home"
 			>
 				<MorphitLogoBling heightPx={32} shine />
 			</a>
@@ -390,19 +392,31 @@
 		<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
 		<div class="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center md:px-6">
 			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed.
-			     cp304 — IDENTICAL to the top-left header wordmark: same imported wordmark
-			     SVG, same occasional letterform "bling" glint (shine), no extra effects.
-			     (The former animate-morphit-hue-shift was dropped at the maintainer's request so the
-			     footer matches the header exactly — only the display height differs.) The
-			     wordmark is a Vite-fingerprinted, immutably-cached asset fetched once per
-			     client and reused here, so there is no extra per-page network request (Priority #4). -->
+			     cp304 — same occasional letterform "bling" glint (shine) as the top-left
+			     header, no extra effects. (The former animate-morphit-hue-shift was dropped
+			     at the maintainer's request so the footer matches the header exactly — only the display
+			     height differs.) variant="footer" → /brand/site-logo-footer.svg: identical to
+			     the header logo on a canonical build, but an operator can give the footer its
+			     own wordmark (docs/BRANDING.md). One cached file, served stale-while-revalidate
+			     by the service worker, so no extra per-page round trip (Priority #4). -->
 			<a
 				href={lp('/')}
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-				aria-label="Morphit — home"
+				aria-label="{$brandName} — home"
 			>
-				<MorphitLogoBling heightPx={40} shine />
+				<MorphitLogoBling heightPx={40} variant="footer" shine />
 			</a>
+			<!-- A branded instance (docs/BRANDING.md) says what it runs on, so a
+			     visitor on "Vigilante Trading" can tell it is a Morphit instance
+			     and check it on "About this instance". Not shown on an unbranded
+			     site, which already says Morphit everywhere. -->
+			{#if $brand.name !== DEFAULT_BRAND_NAME}
+				<a
+					href={lp('/about-this-instance')}
+					class="-mt-4 text-xs text-ink-500 underline decoration-dotted underline-offset-2 transition-colors hover:text-morphit-emerald hover:no-underline"
+					title={$_('footer.about_title')}>{$_('footer.runs_on_morphit')}</a
+				>
+			{/if}
 
 
 			<div class="flex flex-col items-center gap-3">

@@ -254,23 +254,31 @@ curl https://yourdomain.com/v1/health
 
 A healthy response is JSON with a recent block number and a small lag, like `{"chain_head_block": 12345678, "lag_blocks": 15}`. If that works but the site doesn't, the problem is in the website/nginx layer, not the services.
 
-## 11. Make it your own (optional — logo, colours, wording)
+## 11. Make it your own (optional — logo, name, colours, wording)
 
-You're free to rebrand completely — name, logo, colours, even every word on screen. Many operators do, to make their instance feel local to their community.
+You're free to rebrand — many operators do, to make their instance feel local to their community.
 
-**The easy 90% — no programming.**
+**Logo, icons and your site's name — no rebuild, survives every upgrade.** This is the recommended way, and it keeps every file the integrity check looks at byte-for-byte on the signed release, so visitors never see the build-integrity (tamper) warning. Full guide: [`docs/BRANDING.md`](BRANDING.md).
 
-- **Name, tagline, SEO title/description — no file editing at all.** Run `sudo morphit-ops` → *Edit settings* → *Branding & SEO*. These are config values, so they survive upgrades and don't change the frontend build. (This is the recommended way to set your instance's name.)
-- **Logo / brand images** — replace the files in `apps/web/static/brand/`, keeping the **same filenames** so the app picks them up:
-  - `morphit-mark.svg` — the icon/mark shown in the header and used to derive the favicon. **SVG preferred** (scales crisply at any size); the stock mark's aspect ratio is ~1.55 : 1 (roughly landscape). If you must use PNG, export at ≥ 256 px on the long edge with a transparent background.
-  - `morphit-wordmark.svg` — the text logo beside the mark. Aspect ratio ~5.8 : 1 (wide). SVG preferred.
-  - `favicon.svg` (in `apps/web/static/`) — the browser-tab icon. Keep it simple and roughly square so it reads at 16 px.
-  - `app-icon-512.png` and `app-icon-maskable-512.png` (in `apps/web/static/`) — the "add to home screen" / PWA icons. **Exactly 512 × 512 PNG.** The *maskable* one needs your art inside the centre ~80% (a ~10% safe margin all round), because phones crop it to a circle/rounded-square.
-  - Formats: SVG or PNG only. If you can save a file, you can do this.
-- **Colours / fonts** — a handful of named colour tokens in the Tailwind/CSS config (brand emerald `#00DA69`, teal `#027c86`). Change the values and the whole site follows. Plain CSS.
-- **Text / wording** — every visible string lives in `apps/web/src/lib/i18n/locales/` (`en.json`, one file per language) as simple `"key": "value"` pairs. Edit the values, keep the keys. The homepage headline + subtext are `hero_title` and `hero_body`; header-menu and footer-menu labels are keys in the same file (search for the current wording to find its key). Change `en.json` for English; repeat in the other locale files (or just `en.json` if you only serve English).
+Copy your SVG files to the server and run one command (use the full path to wherever you put them):
 
-**The other 10% — layout.** Moving things around means editing the page files (`.svelte`) — HTML-like markup with a little framework syntax (SvelteKit). If you know HTML and CSS most of it transfers; the [svelte.dev/tutorial](https://svelte.dev/tutorial) is a couple of hours and covers what you'd hit. Install [VS Code](https://code.visualstudio.com/) + its "Svelte" extension + [Node.js](https://nodejs.org/) LTS, then from `apps/web/` run `npm install` once and `npm run dev` to preview live at `http://localhost:5173` (it reloads as you save). `npm run build` then `sudo morphit-ops upgrade` ships it. Stuck? The Agorise Matrix room `#agorise:matrix.org` has people who've done it.
+```sh
+sudo morphit-ops branding apply --logo /home/you/my-logo.svg --logo-footer /home/you/my-wordmark.svg --icon /home/you/my-symbol.svg --name "Your Site"
+```
+
+- `--logo` — header (top-left) and homepage hero. Any aspect ratio: it is shown at the same **height** as the Morphit logo, never stretched.
+- `--logo-footer` — the footer logo (optional; defaults to the `--logo` one).
+- `--icon` — the favicon and the "add to home screen" app icons (a simple, roughly square symbol). The home-screen icons and iPhone/iPad launch screens are drawn from your files; if the server lacks the small converter for that (`librsvg2-bin`), the command offers to install it.
+- `--name` — replaces "Morphit" wherever the site names **itself** ("Sign in to Your Site"), while mentions of the Morphit *software* and federation ("Run a Morphit node", "other Morphit instances") stay. Leave it out to keep "Morphit". A small "Runs on Morphit" line under your footer logo links to *About this instance*, so visitors can still tell what your site runs on.
+- **Your directory name is separate.** The name other instances show for you in the directory is `MORPHIT_INSTANCE_NAME` (`sudo morphit-ops` → *Edit settings*). Keep the two the same unless you have a reason not to, so people who find you in the directory recognise the site they land on.
+
+Prefer to be asked? `sudo morphit-ops branding setup` (or *Branding* in the `sudo morphit-ops` menu) asks for each file and the name. It is live on visitors' next page load; `sudo morphit-ops branding status` shows what's configured.
+
+Every `morphit-ops upgrade` re-applies it automatically — set it up once. The red **BETA** marker over the logo turns off automatically once you supply your own `logo.svg` (`MORPHIT_INSTANCE_BETA_BADGE=on|off` to choose).
+
+**Tagline and SEO title/description** are config values too: `sudo morphit-ops` → *Edit settings* → *Branding & SEO*.
+
+**Colours, fonts, wording, layout — that's a fork.** Anything beyond the above means editing the source (`apps/web/`): colour tokens in the Tailwind/CSS config (brand emerald `#00DA69`), every visible string in `apps/web/src/lib/i18n/locales/*.json`, and page layout in the `.svelte` files (HTML-like markup with a little SvelteKit syntax — [svelte.dev/tutorial](https://svelte.dev/tutorial) covers it in a couple of hours; [VS Code](https://code.visualstudio.com/) + its "Svelte" extension helps). Two consequences to know up front: a rebuilt frontend is **no longer byte-identical to the signed release**, so your visitors' browsers show the build-integrity warning (that's by design — it's how users tell modified code from the signed release; a green check means the code is the signed release, not who runs the site — for that they check the address bar and *About this instance*), and `morphit-ops upgrade` installs the canonical frontend again, so you maintain your fork across releases yourself. Stuck? The Agorise Matrix room `#agorise:matrix.org` has people who've done it.
 
 **One rule (the licence).** Morphit is AGPL-3.0-or-later. Cosmetic rebrands are fine and encouraged — the only requirement is that if you run a *modified* frontend as a public instance, you make your changed source available to your users (a footer link to your fork is enough). No secret closed-source forks. See the "Why does Morphit use the AGPL licence?" FAQ.
 

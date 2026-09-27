@@ -130,7 +130,6 @@ fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");
 # MORPHIT_MCP_CACHE_WARM=1 to force the online branch even though the cache dir
 # already exists, and points npm_config_cache at vendor/npm-cache so what it
 # fetches lands there.
-if [ -d "$REPO_DIR/vendor/npm-cache" ] && [ -z "${MORPHIT_MCP_CACHE_WARM:-}" ]; then
 # Silence npm's "New major version of npm available!" banner and the funding
 # notice for the installs this script runs. upgrade.ts already exports these for
 # the children it spawns, but this is the LAST npm an upgrade runs and its
@@ -138,11 +137,14 @@ if [ -d "$REPO_DIR/vendor/npm-cache" ] && [ -z "${MORPHIT_MCP_CACHE_WARM:-}" ]; 
 # upgrade's own success message, reading like part of the result. Setting them
 # here too means the suppression holds however this script is invoked (upgrade,
 # a bare `sudo bash deploy-mcp.sh`, or a sudo that reset the environment).
+# (v1.19.0 deep-deep: this used to sit INSIDE the offline branch below, so the
+# online install — outside the repo, where its .npmrc can't reach — still
+# printed the notice.)
 export npm_config_update_notifier=false
 export NPM_CONFIG_UPDATE_NOTIFIER=false
 export npm_config_fund=false
 export npm_config_audit=false
-
+if [ -d "$REPO_DIR/vendor/npm-cache" ] && [ -z "${MORPHIT_MCP_CACHE_WARM:-}" ]; then
 	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund --offline --cache "$REPO_DIR/vendor/npm-cache" )
 else
 	( cd "$DEST" && npm install --omit=dev --no-audit --no-fund )

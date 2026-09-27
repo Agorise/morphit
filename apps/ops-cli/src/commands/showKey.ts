@@ -119,7 +119,7 @@ export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
 			// is a useful diagnosis (the saved key isn't a valid WIF).
 			console.log(`✗ The saved key is not a valid Blurt private key: ${sanitizeForTerm(errMsg(err))}`);
 			console.log('');
-			console.log('  Re-run `npx morphit-ops edit-active-key` and paste the');
+			console.log('  Re-run `sudo morphit-ops edit-active-key` and paste the');
 			console.log("  account's ACTIVE private key (starts with 5...).");
 			return 1;
 		}
@@ -139,7 +139,7 @@ export async function runShowKey(_ctx: ShowKeyCtx): Promise<number> {
 		console.log('  3. It should match the "Public key" shown above exactly.');
 		console.log('');
 		console.log('If they match, this server holds the right active key.');
-		console.log('If they differ, run `npx morphit-ops edit-active-key` and');
+		console.log('If they differ, run `sudo morphit-ops edit-active-key` and');
 		console.log("supply the account's ACTIVE key (a posting or owner key will");
 		console.log('not work for operator registration).');
 		console.log('');

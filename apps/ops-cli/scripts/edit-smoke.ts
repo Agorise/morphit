@@ -168,6 +168,19 @@ scenario('cp139-D-1: command-substitution $(...) is single-quoted in parseEnv co
 	);
 });
 
+scenario('v1.19.0: an apostrophe next to $ or a backtick never lands in bash-expanded double quotes', () => {
+	// morphit.config.env is SOURCED by bash (as root) in the systemd units, and
+	// bash expands $… inside double quotes. "Joe's $5 Shop" must be written so
+	// both bash and parseEnv read it literally.
+	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
+	const updates = new Map<string, string | null>([
+		['MORPHIT_INSTANCE_TAGLINE', "Joe's $5 Shop $(id)"]
+	]);
+	const after = applyUpdates(before, updates, 'parseEnv');
+	assertContains(after, "MORPHIT_INSTANCE_TAGLINE='Joe\u2019s $5 Shop $(id)'", 'single-quoted, ’ for the apostrophe');
+	assertNotContains(after, '"Joe', 'never double-quoted');
+});
+
 scenario("cp139-D-1: parseEnv-consumer apostrophe falls back to double-quoted", () => {
 	const before = ['MORPHIT_INSTANCE_NAME=alice', ''].join('\n');
 	const updates = new Map<string, string | null>([

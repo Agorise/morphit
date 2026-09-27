@@ -120,4 +120,7 @@ echo ""
 # morphit-ops now exists in node_modules/.bin; --no-install keeps it offline-safe
 # and prevents npx from trying to fetch anything.  `install` checks the rest of
 # the prerequisites and walks the operator through configuration.
-exec npx --no-install morphit-ops install
+# The update-notifier is also off in the repo's .npmrc; set it here too so
+# the npx wrapper — which prints npm's "New major version" notice when it
+# exits, AFTER the whole wizard — can never show it.
+exec env npm_config_update_notifier=false npm_config_fund=false npx --no-install morphit-ops install
