@@ -260,6 +260,74 @@ if (noRunsOn.length === 0) {
 	);
 }
 
+/* ---------------- invariant 5: smokes that need Postgres get Postgres in CI ----------------
+ *
+ * (v1.20.0) Two relay smokes drive REAL Postgres. Without TEST_DATABASE_URL they
+ * print a skip line and no `✓ all N` line; run-smokes.sh counts that as a
+ * failure, so the first CI push after they landed failed the whole smoke job —
+ * the local battery always had a database, so it never saw the skip path. Rule:
+ * if any smoke registered in scripts/run-smokes.sh reads TEST_DATABASE_URL, the
+ * job that runs run-smokes.sh must declare a postgres service AND set
+ * TEST_DATABASE_URL.
+ */
+{
+	const name = 'the CI job running run-smokes.sh provides Postgres to the smokes that need it';
+	const runner = readFileSync(join(REPO_ROOT, 'scripts', 'run-smokes.sh'), 'utf8');
+	const entries = [...runner.matchAll(/^\s*"([^":]+):([A-Za-z0-9._-]+)"\s*$/gm)].map((m) => ({
+		dir: m[1]!,
+		smoke: m[2]!
+	}));
+	const needDb = entries
+		.filter(({ dir, smoke }) => {
+			try {
+				return /process\.env\.TEST_DATABASE_URL/.test(
+					readFileSync(join(REPO_ROOT, dir, 'scripts', `${smoke}.ts`), 'utf8')
+				);
+			} catch {
+				return false;
+			}
+		})
+		.map(({ dir, smoke }) => `${dir}:${smoke}`);
+	const smokeJobs = allJobs.filter((j) => {
+		const body = readFileSync(join(REPO_ROOT, j.workflow), 'utf8')
+			.split('\n')
+			.slice(j.startLine - 1, j.endLine)
+			.join('\n');
+		// An executed line (a `run:` or a script line), not a comment that names it.
+		return /^(?!\s*#).*\bbash scripts\/run-smokes\.sh\b/m.test(body);
+	});
+	if (entries.length < 100) {
+		fail(
+			name,
+			`parsed only ${entries.length} entries from run-smokes.sh — the SMOKES parser is broken`
+		);
+	} else if (needDb.length === 0) {
+		pass(`${name} (no registered smoke reads TEST_DATABASE_URL)`);
+	} else if (smokeJobs.length === 0) {
+		fail(name, 'no workflow job runs scripts/run-smokes.sh');
+	} else {
+		const missing = smokeJobs.filter((j) => {
+			const body = readFileSync(join(REPO_ROOT, j.workflow), 'utf8')
+				.split('\n')
+				.slice(j.startLine - 1, j.endLine)
+				.join('\n');
+			return !(
+				/^ {4}services:\s*$/m.test(body) &&
+				/^ {8}image:\s*postgres:/m.test(body) &&
+				/TEST_DATABASE_URL:\s*postgres(ql)?:\/\//.test(body)
+			);
+		});
+		if (missing.length === 0) {
+			pass(`${name} (${needDb.length} smoke(s): ${needDb.join(', ')})`);
+		} else {
+			fail(
+				name,
+				`${missing.map((j) => `${j.workflow}::${j.name}`).join('; ')} runs run-smokes.sh without a postgres service + TEST_DATABASE_URL, but ${needDb.join(', ')} need(s) one — they will print a skip line and fail the job`
+			);
+		}
+	}
+}
+
 /* ---------------- report ---------------- */
 
 /* ---------------- invariant 4: apt-get update is container-executor-clean ----------------

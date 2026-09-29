@@ -11133,6 +11133,15 @@ internal packages whose source lives under `packages/`, and the
 workspace symlinks under `node_modules/@morphit/*` are what let
 `apps/*/src/...` resolve their imports.  Pure environment setup.
 
+**Smoke-suite troubleshooting — "skipped — TEST_DATABASE_URL is not set".**
+Two relay smokes (`drainer-no-double-pay`, `relay-adversarial-rpc`) drive a
+real PostgreSQL. Without `TEST_DATABASE_URL` they print that skip line and
+no `✓ all N` line, and `run-smokes.sh` counts them as failed — on purpose,
+so a guard never passes by not running. Point it at any scratch database
+the user may create schemas in (each smoke uses its own schema and drops
+it), e.g. `TEST_DATABASE_URL=postgres://morphit:morphit@localhost:5433/morphit_a bash scripts/run-smokes.sh`.
+CI's smokes and release jobs get one from a `postgres:16` service.
+
 
 ### Migration
 

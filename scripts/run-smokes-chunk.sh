@@ -30,6 +30,21 @@ mapfile -t SMOKES < <(grep -E '^[[:space:]]*"[^"]+"' scripts/run-smokes.sh | sed
 total=0; failed=0
 # Mirror run-smokes.sh: per-smoke wall-clock, overridable for slow hosts.
 SMOKE_TIMEOUT="${MORPHIT_SMOKE_TIMEOUT:-240}"
+# Slow-solo smokes each run a whole toolchain — every workspace's vitest, the
+# typecheck sweep, a cold vite build — and vitest-must-pass alone took 236 s on
+# a 2-CPU host (2026-09-29, ~3,300 unit tests): right at the 240 s default. They
+# get at least MORPHIT_SLOW_SMOKE_TIMEOUT (600 s); every other smoke keeps
+# SMOKE_TIMEOUT. smoke-runner-env-parity-smoke runs this function from both
+# runners, so run-smokes.sh and run-smokes-chunk.sh cannot drift apart.
+SLOW_SMOKE_TIMEOUT="${MORPHIT_SLOW_SMOKE_TIMEOUT:-600}"
+smoke_timeout_for() {
+	case "$1" in
+	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke)
+		if [ "$SLOW_SMOKE_TIMEOUT" -gt "$SMOKE_TIMEOUT" ]; then echo "$SLOW_SMOKE_TIMEOUT"; else echo "$SMOKE_TIMEOUT"; fi
+		;;
+	*) echo "$SMOKE_TIMEOUT" ;;
+	esac
+}
 SMOKE_OUT="$(mktemp -t morphit-smoke.XXXXXX.out)"
 trap 'rm -f "$SMOKE_OUT"' EXIT
 idx=0
@@ -43,7 +58,7 @@ for entry in "${SMOKES[@]}"; do
   # own so $blurt/$indexer resolve to WEB, not the indexer. Mirror run-smokes.sh
   # exactly; hardcoding the repo-root config mis-resolves those per-app aliases.
   if [ -f "$repo/$dir/tsconfig.smoke.json" ]; then CFG="$repo/$dir/tsconfig.smoke.json"; else CFG="$repo/tsconfig.smoke.json"; fi
-  if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 "$SMOKE_TIMEOUT" "$TSX" --tsconfig "$CFG" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
+  if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 "$(smoke_timeout_for "$name")" "$TSX" --tsconfig "$CFG" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
     # Anchor count extraction at ^✓ all N (see run-smokes.sh): a greedy
     # `.*all ` matches the "all " inside assemble-INSTALL / local-INSTALL
     # and captures empty, mis-reporting those two as "no canonical line".

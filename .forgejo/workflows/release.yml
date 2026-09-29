@@ -1,9 +1,9 @@
 # Morphit release workflow — fires on annotated-tag push.
 #
-# Runs the full validation gate (typecheck + ansible-lint +
-# triple-pulse smokes) AGAIN at release time (defensive — even
-# though ci.yml runs on every push, tag pushes may bypass
-# branch-protected CI in some forge configs), then builds a
+# Runs the full validation gate (typecheck + ansible-lint + the
+# smoke suite) AGAIN at release time (defensive — even though
+# ci.yml runs on every push, tag pushes may bypass branch-protected
+# CI in some forge configs), then builds a
 # release tarball with the manifest of files needed to reproduce
 # the deploy.
 #
@@ -32,10 +32,31 @@ jobs:
     # and ignores it), so we don't set one. The Publish step's token scope
     # comes from Forgejo's default Actions token (repo-scoped) or, if that
     # is capped, an operator-supplied MORPHIT_RELEASE_TOKEN secret.
-    # cp145 — release does the smokes-job's work (~18 min) plus
-    # tag verification, tarball build, checksum, upload.  Observed
-    # runtime ~25 min.  60-minute ceiling = 2.4× headroom.
+    # One smoke pulse took 19.5 minutes on this runner (2026-09-29), so the
+    # job runs ONE pulse (~20 min) plus tag verification, typecheck,
+    # ansible-lint, tarball build, checksum and upload: ~30 min. 60 = 2×.
+    # (Three pulses here would be ~70 min and could not fit under the 90-min
+    # ceiling ci-workflow-hardening-smoke allows with any safety margin; the
+    # tagged commit already passed ci.yml's triple-pulse — Block 2's gate.)
     timeout-minutes: 60
+    # Same heap as ci.yml's smokes job: the memory stress smoke allocates near
+    # V8's ~2 GB default on the container executor.
+    env:
+      NODE_OPTIONS: --max-old-space-size=3072
+    # Same Postgres sidecar as ci.yml's smokes job: the relay's drainer and
+    # adversarial-RPC smokes drive a real database and fail the suite without one.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: morphit_test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: morphit_test
+        options: >-
+          --health-cmd "pg_isready -U morphit_test -d morphit_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
       - name: Checkout (full history for git describe)
@@ -156,12 +177,11 @@ jobs:
         working-directory: ops/ansible
         run: ansible-lint --offline --strict playbook.yml
 
-      - name: Triple-pulse smokes
-        run: |
-          for i in 1 2 3; do
-            echo "=== Pulse $i ==="
-            bash scripts/run-smokes.sh
-          done
+      - name: Smoke suite (one pulse; ci.yml ran three on this commit)
+        env:
+          # The `postgres` service sidecar (declared above), reachable by name.
+          TEST_DATABASE_URL: postgres://morphit_test:test@postgres:5432/morphit_test
+        run: bash scripts/run-smokes.sh
 
       - name: Compute release version + validate tag format
         id: ver

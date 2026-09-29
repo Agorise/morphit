@@ -274,21 +274,37 @@ jobs:
   smokes:
     name: Smoke suite (run-smokes.sh, triple-pulse)
     runs-on: ubuntu-24.04
-    # cp145 — triple-pulse currently takes ~18 minutes (6 minutes
-    # per pulse × 3).  cp143's per-smoke 240s timeout caps any
-    # single hung smoke; this job-level ceiling caps the whole
-    # battery in case a non-smoke step (npm ci, build, ansible-lint
-    # install, ansible-galaxy collection install) hangs, or in
-    # case the outer `for i in 1 2 3` loop itself wedges.
-    # 45 minutes gives 2.5× headroom over the current observed
-    # runtime.
-    timeout-minutes: 45
+    # One pulse took 19.5 minutes on this runner (2026-09-29, 734 smokes), so
+    # triple-pulse is ~60 minutes. cp143's per-smoke 240s timeout caps any
+    # single hung smoke; this job-level ceiling caps the whole battery in case
+    # a non-smoke step (npm ci, build, ansible-lint install, ansible-galaxy
+    # collection install) hangs, or the outer `for i in 1 2 3` loop wedges.
+    # 90 is the ceiling ci-workflow-hardening-smoke allows (1.5× the observed
+    # runtime); if the pulses outgrow it, cut the pulse count, not the cap.
+    timeout-minutes: 90
     # The container executor gives V8 a ~2 GB default old-space heap; the memory
     # stress smoke (orderbook-provisional-removal-memory) allocates near that and
     # OOM'd on the CI container (it has more headroom locally). Raise the heap for
     # every smoke subprocess in this job so a legitimate memory test doesn't crash.
     env:
       NODE_OPTIONS: --max-old-space-size=3072
+    # A few smokes drive REAL Postgres (the relay's drainer no-double-pay and
+    # adversarial-RPC smokes). Without a database they print a skip line and no
+    # `✓ all N` line, which run-smokes.sh counts as a failure — on purpose: a
+    # guard that silently skips in CI is a guard that never runs. Same sidecar
+    # as the integration job; each smoke works in its own schema and drops it.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: morphit_test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: morphit_test
+        options: >-
+          --health-cmd "pg_isready -U morphit_test -d morphit_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -340,9 +356,10 @@ jobs:
         run: npm run build -w apps/mcp-server
 
       - name: Run smokes (triple-pulse)
-        # We run the suite three times to catch flakes.  Each
-        # invocation is ~30s in CI; the parallel typecheck +
-        # ansible-lint jobs finish well before this anyway.
+        # We run the suite three times to catch flakes (~20 minutes a pulse).
+        env:
+          # The `postgres` service sidecar (declared above), reachable by name.
+          TEST_DATABASE_URL: postgres://morphit_test:test@postgres:5432/morphit_test
         run: |
           for i in 1 2 3; do
             echo "=== Pulse $i ==="

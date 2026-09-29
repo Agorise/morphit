@@ -368,6 +368,9 @@ Every workspace including yours should report "0 errors."
 
 ### 4. Triple-pulse smokes
 
+Two relay smokes need a scratch PostgreSQL: set `TEST_DATABASE_URL` first
+(see OPERATIONS.md, "Smoke-suite troubleshooting"), or they fail on purpose.
+
 ```bash
 for i in 1 2 3; do
   echo "=== Pulse $i ==="

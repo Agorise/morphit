@@ -772,6 +772,21 @@ SMOKES=(
 	".:theme-tokens-smoke"
 )
 
+# Slow-solo smokes each run a whole toolchain — every workspace's vitest, the
+# typecheck sweep, a cold vite build — and vitest-must-pass alone took 236 s on
+# a 2-CPU host (2026-09-29, ~3,300 unit tests): right at the 240 s default. They
+# get at least MORPHIT_SLOW_SMOKE_TIMEOUT (600 s); every other smoke keeps
+# SMOKE_TIMEOUT. smoke-runner-env-parity-smoke runs this function from both
+# runners, so run-smokes.sh and run-smokes-chunk.sh cannot drift apart.
+SLOW_SMOKE_TIMEOUT="${MORPHIT_SLOW_SMOKE_TIMEOUT:-600}"
+smoke_timeout_for() {
+	case "$1" in
+	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke)
+		if [ "$SLOW_SMOKE_TIMEOUT" -gt "$SMOKE_TIMEOUT" ]; then echo "$SLOW_SMOKE_TIMEOUT"; else echo "$SMOKE_TIMEOUT"; fi
+		;;
+	*) echo "$SMOKE_TIMEOUT" ;;
+	esac
+}
 total=0
 failed=0
 # Per-invocation tempfile prevents concurrent runs from racing on
@@ -834,7 +849,8 @@ for entry in "${SMOKES[@]}"; do
 	# `timeout` exits 124 on SIGTERM expiry / 137 on SIGKILL,
 	# distinguishable from smoke's own non-zero exits.
 	SMOKE_TIMEOUT="${MORPHIT_SMOKE_TIMEOUT:-240}"
-	if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 "$SMOKE_TIMEOUT" "$TSX" "${TSX_ARGS[@]}" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
+	this_timeout="$(smoke_timeout_for "$name")"
+	if (cd "$repo/$dir" && timeout --signal=TERM --kill-after=5 "$this_timeout" "$TSX" "${TSX_ARGS[@]}" "scripts/$name.ts" >"$SMOKE_OUT" 2>&1); then
 		# Smokes MUST emit a canonical `✓ all N ...` line so this runner
 		# can tally scenarios.  Without that line, the smoke is treated as
 		# a runner failure rather than silently counted as 0 — see J-1
@@ -860,7 +876,7 @@ for entry in "${SMOKES[@]}"; do
 		failed=$((failed + 1))
 		# Distinguish timeout (124/137) from smoke-emitted non-zero.
 		if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 137 ]; then
-			echo "  ✗ $name (HUNG — killed after ${SMOKE_TIMEOUT}s; this is the cp142 bug class — see scripts/spawn-dist-prebuild-coverage-smoke.ts)"
+			echo "  ✗ $name (HUNG — killed after ${this_timeout}s; this is the cp142 bug class — see scripts/spawn-dist-prebuild-coverage-smoke.ts)"
 		else
 			echo "  ✗ $name (exit $exit_code)"
 		fi
