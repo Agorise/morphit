@@ -230,6 +230,60 @@ let failed = 0;
 	}
 }
 
+// ─── Third-party entries point at real tarballs (v1.20.0) ─────────
+// A version bump done with a text replace (1.19.1 → 1.20.0) also rewrote
+// `@hono/node-server` 1.19.14 into "1.20.04" — version AND resolved URL —
+// in the lockfile. `npm ci --dry-run` (scenario 1) never downloads a
+// tarball, so it passed; every CI job then died at `npm ci` with a 404.
+// Two offline checks close that: (a) each registry `resolved` URL must end
+// in `<name>-<version>.tgz` for the entry's own name and version, and (b)
+// the lockfile version must equal the version actually installed in
+// node_modules — the tree every local test ran against.
+{
+	const nameA = 'every registry tarball URL in the lockfile matches its entry (name-version.tgz)';
+	const nameB = 'every lockfile version equals the version installed in node_modules';
+	try {
+		const lock = JSON.parse(readFileSync(resolvePath(REPO_ROOT, 'package-lock.json'), 'utf8')) as {
+			packages?: Record<string, { version?: string; resolved?: string; name?: string; link?: boolean }>;
+		};
+		const badUrl: string[] = [];
+		const badInstalled: string[] = [];
+		let checkedUrl = 0;
+		let checkedInstalled = 0;
+		for (const [key, entry] of Object.entries(lock.packages ?? {})) {
+			if (!key.includes('node_modules/') || entry.link === true || entry.version === undefined) continue;
+			const pkgName = entry.name ?? key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
+			const resolved = entry.resolved ?? '';
+			if (resolved.startsWith('https://registry.npmjs.org/')) {
+				checkedUrl++;
+				const file = resolved.slice(resolved.lastIndexOf('/') + 1);
+				const base = pkgName.includes('/') ? pkgName.slice(pkgName.indexOf('/') + 1) : pkgName;
+				if (file !== `${base}-${entry.version}.tgz`) {
+					badUrl.push(`${key}: version ${entry.version} but resolved ${file}`);
+				}
+				if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(entry.version) || /\.0\d/.test(entry.version.split(/[-+]/)[0]!)) {
+					badUrl.push(`${key}: "${entry.version}" is not a valid semver version`);
+				}
+			}
+			const installed = resolvePath(REPO_ROOT, key, 'package.json');
+			if (existsSync(installed)) {
+				checkedInstalled++;
+				const v = (JSON.parse(readFileSync(installed, 'utf8')) as { version?: string }).version;
+				if (v !== entry.version) badInstalled.push(`${key}: lockfile ${entry.version} vs installed ${v}`);
+			}
+		}
+		if (checkedUrl === 0) fail(nameA, 'no registry entries found — the lockfile walk is broken');
+		else if (badUrl.length === 0) pass(`${nameA} — ${checkedUrl} entries`);
+		else fail(nameA, `${badUrl.length} bad entr${badUrl.length === 1 ? 'y' : 'ies'} (\`npm ci\` will 404):\n      ${badUrl.slice(0, 10).join('\n      ')}`);
+		if (checkedInstalled === 0) {
+			pass(`${nameB} — skipped: node_modules is not installed here`);
+		} else if (badInstalled.length === 0) pass(`${nameB} — ${checkedInstalled} packages`);
+		else fail(nameB, `${badInstalled.length} mismatch(es) — the lockfile no longer describes the tested tree:\n      ${badInstalled.slice(0, 10).join('\n      ')}`);
+	} catch (err) {
+		fail(nameA, `could not walk the lockfile: ${String(err)}`);
+	}
+}
+
 for (const r of results) {
 	if (r.passed) {
 		console.log(`  ${ANSI_GREEN}✓${ANSI_RESET} ${r.name}`);
