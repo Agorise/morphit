@@ -40,7 +40,10 @@ import { buildSignupAnomalyProbe } from '$indexer/signupAnomalyProbe';
 import type { FeeVerifier } from '$indexer/fee/verifier';
 import { BitcoinExplorerFeeVerifier } from '$indexer/fee/bitcoinExplorerVerifier';
 import { MoneroProofFeeVerifier } from '$indexer/fee/moneroProofVerifier';
+import { BlockNotConfirmedError } from '$indexer/fee/btcFeeBlockConfirm';
+import { reconcileAfterUpgrade } from '$indexer/reconcileUpgrade';
 import { ExternalFeeRechecker } from '$indexer/fee/externalFeeRecheck';
+import { BlurtFeeReverifier } from '$indexer/blurtFeeReverify';
 import type { EndpointState } from '@morphit/rpc-pool';
 import { TreasurySource } from '$indexer/treasurySource';
 import type { BlurtPriceSource } from '$indexer/price/source';
@@ -169,6 +172,9 @@ export class Poller {
 	 *  attested / recently-missing BTC+XMR listing fees. Nothing re-checked
 	 *  them before, so a pending order stayed pending (or attested) forever. */
 	private readonly externalFeeRechecker: ExternalFeeRechecker;
+	/** v1.20.0 (G1) — one-shot re-judging of BLURT fee ops indexed before the
+	 *  tagged operator's fee account was known here. */
+	private readonly blurtFeeReverifier: BlurtFeeReverifier;
 	/** F4 — origins already alerted for sharing our relay account, so we
 	 *  don't re-log every probe cycle. Per-process (a restart re-alerts,
 	 *  which is fine — the operator wants to know on every boot). */
@@ -430,6 +436,12 @@ export class Poller {
 			() => ({ verifiers: this.feeVerifiers, amounts: this.feeAmounts }),
 			(orderId) => orderbookEventBus.emit(orderId)
 		);
+		this.blurtFeeReverifier = new BlurtFeeReverifier({
+			db,
+			blurt: this.blurt,
+			config,
+			onOrderVerified: (orderId) => orderbookEventBus.emit(orderId)
+		});
 
 		this.status = {
 			running: false,
@@ -663,8 +675,11 @@ export class Poller {
 		// where a validator bug (e.g. cp670 regional-brand names, cp671
 		// Persian ZWNJ) wrongly rejected a valid registration: once the
 		// fixed indexer boots, the already-rejected op is replayed through
-		// the idempotent handler and materialised.  Safe no-op when there's
-		// nothing to heal; never touches non-idempotent (order/fee) ops.
+		// the register handler and materialised.  The handler is an UPSERT,
+		// so superseded ops (a later registration by the same account was
+		// applied) are never replayed and the handler refuses an older op
+		// (v1.20.0, E5).  Safe no-op when there's nothing to heal; never
+		// touches non-idempotent (order/fee) ops.
 		// Best-effort: a failure here must not stop the poller from serving.
 		try {
 			await reconcileOperatorRegistrations({
@@ -683,6 +698,28 @@ export class Poller {
 		} catch (err) {
 			log.error('reconcile_registrations_failed', {}, err instanceof Error ? err : undefined);
 		}
+
+		// v1.20.0 (V3-1) — converge after an upgrade: re-validate stored release
+		// rows from their raw payloads in `ops` (a v1.19 node stored the v1.20.0
+		// release without treasury.btc.xpub / xmr.primary_address), then replay
+		// order ops an older handler refused for reasons the current one no
+		// longer gives (and the cancels/replaces that missed them). Idempotent,
+		// local-only, before any block is applied. See reconcileUpgrade.ts.
+		await reconcileAfterUpgrade({
+			db: this.db,
+			blurt: this.blurt,
+			config: this.config,
+			feeVerifiers: this.feeVerifiers,
+			feeAmounts: this.feeAmounts,
+			fiatToUsd: (amount: number, fiat: string): number | null => {
+				if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
+				if (fiat.trim().toUpperCase() === 'USD') return Number.isFinite(amount) ? amount : null;
+				return null;
+			},
+			// the corrected pins may change the verifiers' addresses / amounts
+			beforeReapply: () => this.refreshFeeVerifiersFromTreasury(),
+			log: (msg, meta) => log.info(msg, meta ?? {})
+		});
 
 		while (!this.abort.signal.aborted) {
 			try {
@@ -721,6 +758,10 @@ export class Poller {
 				// (every 10 min, ≤25 explorer lookups, each order ≤ once per 30
 				// min). Errors are caught and logged inside.
 				await this.externalFeeRechecker.maybeRun();
+				// (v1.20.0, G1) BLURT fee re-verification — self-throttling (every
+				// 10 min, ≤20 block fetches through the full RPC pool); each op is
+				// re-judged once. Errors are caught and logged inside.
+				await this.blurtFeeReverifier.maybeRun();
 			} catch (err) {
 				this.status = {
 					...this.status,
@@ -862,30 +903,44 @@ export class Poller {
 						break;
 					}
 
-					const result = await applyBlock(
-						client,
-						n,
-						block,
-						this.blurt,
-						this.config,
-						this.feeVerifiers,
-						this.feeAmounts,
-						// FX-aware first-order floor converter.  When the FX
-						// feed is live (default) this routes through the
-						// composite FX source (which itself falls back to a
-						// static rate table during an outage).  When the
-						// operator has disabled the feed, it degrades to a
-						// USD-only identity: USD converts 1:1, any other
-						// currency returns null and the order handler falls
-						// back to the documented direct comparison.
-						(amount: number, fiat: string): number | null => {
-							if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
-							if (fiat.trim().toUpperCase() === 'USD') {
-								return Number.isFinite(amount) ? amount : null;
+					let result: Awaited<ReturnType<typeof applyBlock>>;
+					try {
+						result = await applyBlock(
+							client,
+							n,
+							block,
+							this.blurt,
+							this.config,
+							this.feeVerifiers,
+							this.feeAmounts,
+							// FX-aware first-order floor converter.  When the FX
+							// feed is live (default) this routes through the
+							// composite FX source (which itself falls back to a
+							// static rate table during an outage).  When the
+							// operator has disabled the feed, it degrades to a
+							// USD-only identity: USD converts 1:1, any other
+							// currency returns null and the order handler rejects the waiver
+							// (an amount it cannot value cannot clear the $1 floor — G5).
+							(amount: number, fiat: string): number | null => {
+								if (this.fxSource) return this.fxSource.fiatToUsd(amount, fiat);
+								if (fiat.trim().toUpperCase() === 'USD') {
+									return Number.isFinite(amount) ? amount : null;
+								}
+								return null;
 							}
-							return null;
+						);
+					} catch (err) {
+						// (v1.20.0, V3-6) A fee-relevant block two RPC operators do not
+						// (yet) confirm: thrown before applyBlock wrote anything, so
+						// treat it like a hole — commit the prefix, back off, re-fetch.
+						if (err instanceof BlockNotConfirmedError) {
+							log.warn('block_not_confirmed', { block: n });
+							stop = true;
+							holeBackoff = true;
+							break;
 						}
-					);
+						throw err;
+					}
 					committed.push({
 						n,
 						orderbookChanges: result.orderbookChanges,
@@ -1170,6 +1225,15 @@ export class Poller {
 	 *  /v1/instance (so peers can audit it) and used as the canonical
 	 *  reference by the federation probe's treasury-mismatch check.
 	 *  Safe to call concurrently with run(); does no I/O. */
+	/** (v1.20.0, V3-3) The CURRENT fee verifiers and amounts, for the
+	 *  "check my payment now" route (api/feeCheck.ts). No I/O. */
+	feeCheckCurrent(): {
+		verifiers: { btc?: FeeVerifier; xmr?: FeeVerifier };
+		amounts: { btcSatoshis?: number; xmrPiconero?: bigint };
+	} {
+		return { verifiers: this.feeVerifiers, amounts: this.feeAmounts };
+	}
+
 	currentTreasuryAddresses(): { btc: string | null; xmr: string | null } {
 		return {
 			btc: this.feeVerifierAddresses.btc ?? null,

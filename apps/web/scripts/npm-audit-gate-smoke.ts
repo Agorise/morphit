@@ -268,9 +268,11 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 		acceptedTitles: [
 			'ip-address: Address4 decodes leading-zero octets as decimal while resolvers decode them as octal, allowing SSRF and trust-boundary bypass',
 			'ip-address: a CIDR suffix on the parsed address suppresses special-use classification and can bypass SSRF and trust-boundary checks',
-			'ip-address: misclassification of IPv4-mapped/NAT64 IPv6 addresses can bypass SSRF and trust-boundary checks'
+			'ip-address: misclassification of IPv4-mapped/NAT64 IPv6 addresses can bypass SSRF and trust-boundary checks',
+			'ip-address: Address6.isLinkLocal() recognizes fe80::/64 rather than fe80::/10, allowing SSRF and trust-boundary bypass to on-link hosts',
+			'ip-address: no classifier recognizes the NAT64 local-use range 64:ff9b:1::/48, allowing SSRF and trust-boundary bypass'
 		],
-		lastReviewed: '2026-08-03',
+		lastReviewed: '2026-09-28',
 		rationale:
 			'Transitive dependency reached ONLY by the read-only MCP server (morphit-mcp ' +
 			'→ @modelcontextprotocol/sdk → express-rate-limit → ip-address). express- ' +
@@ -290,7 +292,10 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'its outbound-request SSRF defense is the DNS-pinned undici Agent in ' +
 			'federationProbe.ts, which does not involve ip-address. Revisit if a patched ' +
 			'ip-address lands under express-rate-limit or ip-address is ever used for an ' +
-			'outbound/trust decision. Reviewed at the v1.9.20 cut (2026-08-03).'
+			'outbound/trust decision. Reviewed at the v1.9.20 cut (2026-08-03). Two more ' +
+			'misclassification advisories (fe80::/64 link-local, the NAT64 local-use ' +
+			'range) added at the v1.20.0 cut (2026-09-28): same consumer, same bucketing- ' +
+			'only use, so the same bounded rate-limit-evasion residual.'
 	},
 	{
 		package: 'undici',
@@ -300,9 +305,10 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives',
 			'undici vulnerable to CRLF Injection via blob-like body \'type\' property',
 			'undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives',
-			'undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields'
+			'undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields',
+			'undici vulnerable to Denial of Service via unhandled error in WebSocket permessage-deflate decompression'
 		],
-		lastReviewed: '2026-08-03',
+		lastReviewed: '2026-09-28',
 		rationale:
 			'Runtime dependency (override-pinned to ^7.28.0), used by the indexer and ' +
 			'relay for OUTBOUND HTTP only — Blurt RPC, FX/price feeds, and federation ' +
@@ -326,7 +332,12 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'into this release; the lockfile is the tested source of truth (no npm audit ' +
 			'fix). Revisit if Morphit adopts undici\'s retry, cache, or cookie features ' +
 			'or Blob request bodies, or when a patched undici covering all five lands in ' +
-			'range. Reviewed at the v1.9.20 cut (2026-08-03).'
+			'range. Reviewed at the v1.9.20 cut (2026-08-03). (6) WebSocket ' +
+			'permessage-deflate DoS, added at the v1.20.0 cut (2026-09-28): needs undici\'s ' +
+			'WebSocket CLIENT — no Node-side Morphit code opens a WebSocket (no ' +
+			'WebSocket anywhere in indexer, relay, ops-cli, mcp-server or the shared ' +
+			'packages; the browser uses its own). Fixed in 7.29.1; the bump waits for ' +
+			'the same dedicated review.'
 	}
 ];
 

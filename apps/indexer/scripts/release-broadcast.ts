@@ -18,8 +18,16 @@
  * Flags:
  *   --dry-run        Print the exact op and exit.  No key, no network.
  *   --signer <acct>  Signing account (default: morphit).
- *   --node <url>     Override the RPC node(s) (default: the project's
- *                    DEFAULT_BLURT_RPC_ENDPOINTS, tried in order).
+ *   --node <url>     Use exactly this RPC node (default: the six clearnet
+ *                    DEFAULT_BLURT_RPC_ENDPOINTS, health-ranked).
+ *   --include-hidden Also rank the 14 hidden (.onion / .b32.i2p) nodes, through
+ *                    this machine's Tor SOCKS / i2pd proxy (env
+ *                    MORPHIT_INDEXER_TOR_SOCKS / MORPHIT_INDEXER_I2P_HTTP_PROXY).
+ *                    Off by default: a laptop may run neither.
+ *
+ * The transaction is SIGNED ONCE and that exact transaction is offered to the
+ * ranked nodes in turn (v1.20.0, D12 — see scripts/lib/signOnceBroadcast.ts);
+ * it used to be re-signed per node, so a lost acceptance became a second op.
  *
  * The @morphit PRIVATE posting key (the WIF) is read from a MASKED
  * prompt at runtime — never a
@@ -29,8 +37,10 @@
 
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { Client, PrivateKey } from '@beblurt/dblurt';
+import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+
 import {
 	buildReleaseCustomJsonOp,
 	RELEASE_SIGNER_DEFAULT,
@@ -50,17 +60,19 @@ const argv = process.argv.slice(2);
 let dryRun = false;
 let signer = RELEASE_SIGNER_DEFAULT;
 let nodeOverride: string | null = null;
+let includeHidden = false;
 let fileArg: string | null = null;
 for (let i = 0; i < argv.length; i++) {
 	const a = argv[i];
 	if (a === '--dry-run') dryRun = true;
 	else if (a === '--signer') signer = argv[++i] ?? signer;
 	else if (a === '--node') nodeOverride = argv[++i] ?? null;
+	else if (a === '--include-hidden') includeHidden = true;
 	else if (!a.startsWith('--') && fileArg === null) fileArg = a;
 }
 if (!fileArg) {
 	die(
-		'usage: tsx release-broadcast.ts <release.json> [--dry-run] [--signer <acct>] [--node <url>]\n' +
+		'usage: tsx release-broadcast.ts <release.json> [--dry-run] [--signer <acct>] [--node <url>] [--include-hidden]\n' +
 			'  build the file first:  tsx release-build-payload.ts > release.json'
 	);
 }
@@ -82,7 +94,9 @@ try {
 } catch (e) {
 	die(errMsg(e));
 }
-const nodes = nodeOverride ? [nodeOverride] : [...DEFAULT_BLURT_RPC_ENDPOINTS];
+const nodes = nodeOverride
+	? [nodeOverride]
+	: [...DEFAULT_BLURT_RPC_ENDPOINTS, ...(includeHidden ? ['(+ 14 hidden nodes)'] : [])];
 
 process.stderr.write(
 	'\n┌─────────────────────────────────────────────────────────────┐\n' +
@@ -178,28 +192,20 @@ async function main(): Promise<void> {
 		json: op.json
 	};
 
-	let lastErr: unknown;
-	for (const url of nodes) {
-		try {
-			process.stderr.write(`\nBroadcasting via ${url} …\n`);
-			const client = new Client(url, { timeout: 20_000 });
-			const conf = (await client.broadcast.customJson(opData, priv)) as {
-				id?: string;
-				block_num?: number;
-			};
-			process.stdout.write(
-				`\n✓ Broadcast accepted.\n  trx_id    : ${conf.id ?? '(unknown)'}\n` +
-					`  block_num : ${conf.block_num ?? '(pending)'}\n` +
-					`  op id     : ${RELEASE_OP_ID}\n\n` +
-					'Every Morphit instance picks up the chain-pinned treasury within a block.\n'
-			);
-			return;
-		} catch (e) {
-			lastErr = e;
-			process.stderr.write(`  ✗ ${url}: ${errMsg(e)}\n`);
-		}
+	let res: Awaited<ReturnType<typeof broadcastCustomJsonOnce>>;
+	try {
+		res = await broadcastCustomJsonOnce(opData, priv, { nodeOverride, includeHidden });
+	} catch (e) {
+		die(errMsg(e));
 	}
-	die(`all RPC nodes failed. Last error: ${errMsg(lastErr)}`);
+	process.stdout.write(
+		`\n✓ Broadcast accepted${res.duplicate ? ' (an earlier attempt had already landed)' : ''}.\n` +
+			`  trx_id    : ${res.trxId}\n` +
+			`  block_num : ${res.blockNum ?? '(pending)'}\n` +
+			`  via       : ${res.via}\n` +
+			`  op id     : ${RELEASE_OP_ID}\n\n` +
+			'Every Morphit instance picks up the chain-pinned treasury within a block.\n'
+	);
 }
 
 void main();

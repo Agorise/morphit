@@ -21,8 +21,11 @@ One job, three HTTP endpoints:
   chain lookup.
 - `POST /v1/account/create` — accepts an unsigned
   `account_create` op body from the client, validates rigorously,
-  signs with the relay's active key, pays the chain's BLURT fee,
-  and broadcasts.
+  signs with the relay's active key, pays the chain's live
+  `account_creation_fee` (~100 BLURT) from the relay's liquid
+  balance, broadcasts, then sends the new account 2 BLURT so it can
+  pay its first operation fees — ~102 BLURT per signup. (Blurt
+  disabled account-creation tokens at HF2; there is no fee-free path.)
 
 The user's private keys never reach the relay. The client ships only
 the four public keys that will govern their new account; the relay
@@ -31,7 +34,7 @@ BLURT.
 
 ## Stack
 
-- **Node.js 24 LTS** (get from [nodejs.org](https://nodejs.org/en/download))
+- **Node.js 22 or newer** (the guided install sets it up; `engines` in package.json)
 - **TypeScript** — matches the frontend
 - **[@beblurt/dblurt](https://www.npmjs.com/package/@beblurt/dblurt)** —
   the same Blurt library the Morphit frontend uses. Promise-based,
@@ -44,10 +47,11 @@ BLURT.
 
 ## Build locally
 
-Requires Node.js 24 or newer.
+Requires Node.js 22 or newer. Install from the repo root (the relay
+depends on workspace packages such as `@morphit/rpc-pool`):
 
+    npm install          # at the repo root
     cd apps/relay
-    npm install
     # Generate a throwaway test WIF to satisfy startup validation.
     # In production this holds the REAL morphit-relay active key.
     echo "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFDe" > /tmp/test.key
@@ -69,128 +73,49 @@ Type-check without running:
 
     npm run typecheck
 
-## Deploy to VPS
+## Deploy
 
-### 1. DNS record
+The relay is not deployed on its own. The guided install
+(`sudo bash morphit-setup.sh` → *Full guided install*, see
+[`docs/RUN-A-MORPHIT-NODE.md`](../../docs/RUN-A-MORPHIT-NODE.md)) or the
+Ansible playbook ([`ops/ansible/`](../../ops/ansible/README.md)) installs it
+with the rest of the node:
 
-Add an **A record** (or AAAA for IPv6) pointing `relay.example.com`
-at the VPS's public IP. Most registrars have a web UI; the exact
-steps depend on your DNS provider, but the record is typically:
+- code in `/opt/morphit/apps/relay`, run by `morphit-relay.service`
+  ([`ops/systemd/morphit-relay.service`](../../ops/systemd/morphit-relay.service))
+  from TypeScript source via the workspace's `tsx`;
+- settings in `/etc/morphit/relay.env` (plus `/opt/morphit/morphit.env` and
+  `morphit.config.env`); the unit reads these files itself, so a systemd
+  `Environment=` override does **not** win over a value set in them — edit
+  the file and `sudo systemctl restart morphit-relay`;
+- the active key as an encrypted keystore — the file
+  `MORPHIT_RELAY_ACTIVE_KEY_FILE` names (`/etc/morphit/relay.keystore` on a
+  guided/Ansible install; `apps/relay/keystore.json` after a hand-run
+  `init`) — unlocked at boot from a systemd-encrypted credential, never a
+  plaintext WIF on disk;
+- state in `/var/lib/morphit/relay` (the signup kill-switch file and the
+  persisted daily-ceiling count).
 
-| Field     | Value                  |
-| --------- | ---------------------- |
-| Type      | A                      |
-| Host/Name | relay                  |
-| Value     | `<your VPS public IP>` |
-| TTL       | 3600 (default is fine) |
+Every setting is documented in [`ops/env/relay.env.example`](../../ops/env/relay.env.example)
+and `docs/OPERATIONS.md`.
 
-Propagation is usually under 5 minutes; occasionally up to an hour.
-Check with `dig relay.example.com` from any shell.
+## Error codes worth knowing (`POST /v1/account/create`)
 
-### 2. Install Node.js 24 on the VPS
+| `code` | Meaning |
+| --- | --- |
+| `signups_disabled` (503) | Signups are paused: `/var/lib/morphit/relay/SIGNUPS_DISABLED` exists, or `MORPHIT_RELAY_SIGNUP_ENABLED=false` |
+| `daily_ceiling_reached` (503) | Today's `MORPHIT_RELAY_SIGNUP_DAILY_CEILING` is used up (resets at UTC midnight; survives restarts) |
+| `relay_out_of_funds` (503) | The relay can't cover the live fee + 3 BLURT, or its last balance poll is over 90 s old |
+| `relay_fee_spike` (503) | The chain's live `account_creation_fee` is more than 1.5× `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`; nothing is broadcast or spent until you confirm the new fee and set it |
+| `broadcast_outcome_unknown` (503) | No node confirmed the transaction and the chain can't yet say whether it landed; counted as spent, never re-signed. A retry with the same name is safe: the relay checks the chain first and answers success (`note: "already_created"`) if the account exists with the caller's owner key, or 409 `already_registered` if it exists with another; the per-IP slot is held 30 min so the retry isn't refused for spacing |
 
-On Ubuntu / Debian, use NodeSource's apt repo for the latest LTS:
+A success may carry `note: "recovered_after_lost_reply"` (the account landed
+although the node's reply was lost) or `note: "already_created"`.
 
-    ssh your-vps
-    curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-    sudo apt-get install -y nodejs
-    node --version    # should be v24.x
-    npm --version
-
-### 3. VPS prep — one-time
-
-    sudo useradd --system --home /opt/morphit-relay --shell /usr/sbin/nologin morphit-relay
-    sudo mkdir -p /opt/morphit-relay /etc/morphit/keys
-    sudo chown morphit-relay:morphit-relay /opt/morphit-relay
-
-### 4. Install the active key
-
-On a secure machine (**not** the VPS unless you trust its disk
-encryption + physical access controls), export `morphit-relay`'s
-**active** private key in WIF format (starts with `5...`).
-
-    # Transfer with scp, not email or chat.
-    scp relay-active.key your-vps:/tmp/relay-active.key
-    ssh your-vps '
-        sudo mv /tmp/relay-active.key /etc/morphit/keys/relay-active.key
-        sudo chown morphit-relay:morphit-relay /etc/morphit/keys/relay-active.key
-        sudo chmod 0400 /etc/morphit/keys/relay-active.key
-    '
-
-The relay refuses to start if this file has any group or other
-permission bits set.
-
-### 5. Install the env file
-
-    scp ops/env/relay.env.example your-vps:/tmp/relay.env
-    ssh your-vps '
-        sudo mv /tmp/relay.env /etc/morphit/relay.env
-        sudoedit /etc/morphit/relay.env
-        # edit the file, save
-        sudo chown morphit-relay:morphit-relay /etc/morphit/relay.env
-        sudo chmod 0600 /etc/morphit/relay.env
-    '
-
-### 6. Install the relay source + dependencies
-
-    # From your dev machine. Copy the relay source.
-    rsync -a --exclude node_modules apps/relay/ your-vps:/tmp/morphit-relay/
-    ssh your-vps '
-        sudo rsync -a --chown=morphit-relay:morphit-relay /tmp/morphit-relay/ /opt/morphit-relay/
-        sudo -u morphit-relay bash -c "cd /opt/morphit-relay && npm ci --omit=dev"
-        rm -rf /tmp/morphit-relay
-    '
-
-`npm ci` installs exactly what `package-lock.json` specifies,
-nothing more. `--omit=dev` skips test-only dependencies. The
-node_modules directory ends up inside /opt/morphit-relay/,
-owned by the service user.
-
-### 7. Install the systemd unit
-
-    scp ops/systemd/morphit-relay.service your-vps:/tmp/
-    ssh your-vps '
-        sudo install -m 0644 -o root -g root /tmp/morphit-relay.service /etc/systemd/system/
-        sudo systemctl daemon-reload
-        sudo systemctl enable morphit-relay
-        sudo systemctl start  morphit-relay
-        sudo systemctl status morphit-relay
-    '
-
-`systemctl status` should show `active (running)`. Follow logs with:
-
-    sudo journalctl -u morphit-relay -f
-
-### 8. Install the nginx vhost
-
-    scp ops/nginx/relay.conf your-vps:/tmp/
-    ssh your-vps '
-        sudo mv /tmp/relay.conf /etc/nginx/sites-available/relay.example.com.conf
-        sudo ln -s /etc/nginx/sites-available/relay.example.com.conf /etc/nginx/sites-enabled/
-        sudo nginx -t && sudo systemctl reload nginx
-    '
-
-### 9. Provision the TLS cert
-
-Once DNS has propagated (step 1) and nginx is reloaded with the
-HTTP-only stub, certbot can fetch a Let's Encrypt cert:
-
-    ssh your-vps 'sudo certbot --nginx -d relay.example.com'
-
-Verify:
-
-    curl -v https://relay.example.com/v1/health
-
-### 10. Smoke test from the frontend
-
-Point a dev build of `apps/web` at the staging relay origin:
-
-    # apps/web/.env.local (or similar)
-    PUBLIC_MORPHIT_RELAY_ORIGIN=https://relay.example.com
-
-Then run `npm run dev` in `apps/web` and open the registration
-flow — the browser's dev-tools network tab shows the relay calls
-succeeding.
+Verbose `/v1/health` also reports `transfer_queue: { unsettled, escalated }`
+for the payout queue (welcome bonus, dust, BP): non-zero `escalated` means a
+payout could not be settled from the account history and needs a manual
+check (see OPERATIONS.md §5).
 
 ## Observability
 
@@ -203,43 +128,33 @@ succeeding.
 
 | Symptom                                                                  | Cause                                         | Fix                                                  |
 | ------------------------------------------------------------------------ | --------------------------------------------- | ---------------------------------------------------- |
-| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "..." has permissions 0640` | Key file readable by group                    | `sudo chmod 0400 /etc/morphit/keys/relay-active.key` |
-| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "...": no such file`        | Typo in env or file not created yet           | `sudo ls -la /etc/morphit/keys/`                     |
+| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "..." has permissions 0640` | Key file readable by group                    | `sudo chmod 0600` the file named in `MORPHIT_RELAY_ACTIVE_KEY_FILE` |
+| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "...": no such file`        | Typo in env or file not created yet           | `grep MORPHIT_RELAY_ACTIVE_KEY_FILE /opt/morphit/morphit.env`                     |
 | Relay starts but `/` returns 404                                         | Expected — only `/v1/*` paths are served      | Use `/v1/health`                                     |
 | CORS error in browser console                                            | Origin not in `MORPHIT_RELAY_ALLOWED_ORIGINS` | Edit env, `sudo systemctl restart morphit-relay`     |
 | 502 from nginx                                                           | Relay not running                             | `sudo systemctl status morphit-relay`, check journal |
-| `relay_out_of_funds` returned to clients                                 | Relay's BLURT balance is low                  | Transfer BLURT to the morphit-relay account          |
+| `relay_out_of_funds` returned to clients                                 | Relay's BLURT balance is low                  | Transfer liquid BLURT to your relay account          |
 
 ## Updating the relay
 
-When a new release ships:
+The relay is updated with the rest of the node — on the server:
 
-    # Build fresh on your dev machine.
-    rsync -a --exclude node_modules apps/relay/ your-vps:/tmp/morphit-relay/
-    ssh your-vps '
-        sudo systemctl stop morphit-relay
-        sudo rsync -a --chown=morphit-relay:morphit-relay /tmp/morphit-relay/ /opt/morphit-relay/
-        sudo -u morphit-relay bash -c "cd /opt/morphit-relay && npm ci --omit=dev"
-        sudo systemctl start morphit-relay
-    '
+    sudo morphit-ops upgrade
 
-There's a ~2-second gap when the old process is down and the new one
-is starting. Nginx surfaces this as `502 Bad Gateway` for in-flight
-requests during that window; the Morphit frontend retries
-automatically so legitimate users experience at most a small delay.
+It backs up, installs the new release, restarts the services and rolls back
+on failure (see [`docs/UPGRADING.md`](../../docs/UPGRADING.md)).
 
 ## Rotating the relay's active key
 
-Quarterly or on suspicion of compromise:
+Quarterly or on suspicion of compromise, on the server:
 
-1. Generate a new active key pair (on a cold/air-gapped machine,
-   using `@beblurt/dblurt`'s `PrivateKey.fromSeed()` or an offline
-   tool).
-2. Broadcast an `account_update` op from the current active key,
-   setting the new pubkey as the active authority.
-3. Replace `/etc/morphit/keys/relay-active.key` with the new WIF.
-4. `sudo systemctl restart morphit-relay`.
-5. Securely destroy the old key.
+1. Generate a new key pair offline and set it as the relay account's
+   active authority with an `account_update` op (signed with the account's
+   owner or current active key, from your own computer — not the server).
+2. `sudo morphit-ops edit-active-key` — replaces the saved keystore with the
+   new key (it asks whether to keep a backup of the old one) and tells you
+   to restart the relay.
+3. `sudo systemctl restart morphit-relay`.
 
-An ADR for the full key-rotation procedure lands in Phase 4 (item
-#P2-14 on the carry-forward list).
+Full procedure, including the "wrong key was installed" case:
+[`docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`](../../docs/RECOVERING-FROM-WRONG-RELAY-KEY.md).

@@ -8,34 +8,63 @@ import { CONTACT_URL_SCHEMES } from '@morphit/operator-config';
  *   {
  *     "v": 1,
  *     "tag": string (1..64 chars, [a-z0-9._-]),
- *     "display_name": string (1..64 chars),
- *     "contact_url"?: string (optional https URL),
+ *     "display_name": string (1..64 code points),
+ *     "contact_url"?: string (optional; a CONTACT_URL_SCHEMES URL, no userinfo),
+ *     "origin"?: string (optional; https://host[:port] for clearnet, or
+ *                http://<v3>.onion | <x>.i2p | <x>.loki for a hidden service —
+ *                https:// is refused for hidden hosts, v1.20.0 S9),
+ *     "alt_addresses"?: { tor?, i2p_b32?, i2p_name?, lokinet?, ens? }
+ *                (optional bare hosts, each validated to its network's shape),
+ *     "fee_recipient"?: string (optional; the Blurt account this instance's
+ *                BLURT fees pay their 90 % owner leg to — v1.20.0, G1),
  *     "ts"?: number (optional unix seconds)
  *   }
+ * Unknown fields are ignored, so an older indexer accepts a newer op (it just
+ * does not act on the new field) — proven for `fee_recipient` against the
+ * v1.19.0 handler.
  *
- * Effect:
- *   - Validates tag + display_name + optional contact_url
- *   - Inserts into `operators` — first-come-first-served on tag
- *     via UNIQUE constraint
- *   - Appends an audit row to operator_registration_events with
- *     kind='register'
+ * THE OP IS AN UPSERT KEYED ON THE SIGNING ACCOUNT (the account is the permanent
+ * identity — it signs every op):
+ *   - first registration: inserts into `operators`; the TAG is first-come-
+ *     first-served via its UNIQUE constraint and is immutable afterwards;
+ *   - re-registration by the same account with the same tag: UPDATES the mutable
+ *     fields (display_name, contact_url, origin, alt addresses). This is how an
+ *     operator moves between clearnet and tor-only, renames an instance, or
+ *     changes contact details. A registration OLDER than the newest one applied
+ *     (only reachable through the boot reconcile's replay) changes nothing
+ *     (v1.20.0, E5);
+ *   - a field the payload does not carry (e.g. the web form sends no `origin`
+ *     or `alt_addresses`) is left as it was; `known_instances` follows the
+ *     CURRENT origin: a moved origin replaces the old row, and an origin sent
+ *     EMPTY withdraws it (v1.20.0, E9);
+ *   - `fee_recipient` (v1.20.0, G1): an accepted op carrying it appends a row
+ *     to the append-only `operator_fee_recipients` history (block + trx), which
+ *     other indexers read AS OF an op's block to accept the owner leg of fees
+ *     paid through this operator's instance (see $indexer/feeRecipients). An
+ *     op without it leaves the history as it was;
+ *   - every accepted op appends an audit row to operator_registration_events.
  *
  * Rejection reasons:
  *   - payload_not_object
- *   - tag_* — tag validation failures
- *   - display_name_* — display name validation failures
- *   - contact_url_* — optional URL validation failures
+ *   - tag_* — tag validation failures (incl. tag_reserved)
+ *   - tag_immutable — this account already registered a different tag
  *   - tag_already_claimed — another account registered this tag first
- *   - account_already_registered — this account already has an
- *     operator identity (idempotent-replay isn't automatic; the
- *     account uses a separate op to change its tag or display_name
- *     once policy for that lands in ADR-0013 extensions)
+ *   - display_name_* — display name validation failures (incl.
+ *     display_name_impersonates_reserved)
+ *   - contact_url_* — optional URL validation failures
+ *   - origin_* — origin validation failures (scheme, userinfo, path/query/
+ *     fragment, non-public address or address-like name, pseudo-TLD)
+ *   - alt_* — alt address validation failures
+ *   - fee_recipient_invalid — `fee_recipient` present but not a Blurt account
+ *     name (a malformed fee account would pay out to nobody; refused whole)
+ *   - superseded_by_newer_registration — see above (E5)
  */
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { impersonatesReservedOperatorName, ownsReservedName, isReservedTag, tagImpersonatesReserved } from '$indexer/confusables';
 import { isNonPublicAddressLiteral, nameMimicsNonPublicAddress } from '@morphit/hidden-transport';
+import { FEE_RECIPIENT_ACCOUNT_RE, recordFeeRecipient } from '$indexer/feeRecipients';
 
 const TAG_MIN = 1;
 const TAG_MAX = 64;
@@ -77,6 +106,16 @@ interface ValidatedPayload {
 	 *  first completing a (blocked) clearnet probe. All fields optional + host-only
 	 *  (no scheme). null when the operator published none. */
 	readonly alt_networks: RegAltNetworks | null;
+	/** Did the payload carry an `origin` key at all? Absent = leave the stored
+	 *  origin (and directory row) as they are on a re-registration; present but
+	 *  empty/null = withdraw it (v1.20.0, E9). */
+	readonly originProvided: boolean;
+	/** Same for `alt_addresses`. */
+	readonly altProvided: boolean;
+	/** v1.20.0 (G1) — the registered BLURT fee account, or null when the
+	 *  payload does not carry one (absent / null / "": the history is left as
+	 *  it was). */
+	readonly fee_recipient: string | null;
 }
 
 /** On-chain-published hidden-service addresses (host strings, no scheme). */
@@ -86,6 +125,31 @@ export interface RegAltNetworks {
 	readonly i2p_name: string | null;
 	readonly lokinet: string | null;
 	readonly ens: string | null;
+}
+
+/** One DNS label: letters, digits and inner hyphens. */
+const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+/**
+ * The shape each published alt address must have, by key — ONE definition for
+ * the register op, the federation probe's cache of a peer's own answer, and the
+ * directory output (v1.20.0, E7). The name forms used to be checked with
+ * `endsWith('.i2p')` / `endsWith('.loki')` alone, so `x.com/a.i2p` passed and
+ * became `http://x.com/a.i2p` — a CLEARNET link — in the directory's "I2P" pill.
+ */
+export const ALT_HOST_SHAPES: Readonly<Record<'tor' | 'i2p_b32' | 'i2p_name' | 'lokinet' | 'ens', RegExp>> = {
+	tor: /^[a-z2-7]{56}\.onion$/,
+	i2p_b32: /^[a-z2-7]{52}\.b32\.i2p$/,
+	i2p_name: new RegExp(`^(?!.*\\.b32\\.i2p$)(?:${LABEL}\\.)+i2p$`),
+	lokinet: new RegExp(`^(?:${LABEL}\\.)+loki$`),
+	ens: /^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/
+};
+
+/** A published alt host, normalised, if it has its network's shape; else null. */
+export function altHostFor(key: keyof typeof ALT_HOST_SHAPES, v: unknown): string | null {
+	if (typeof v !== 'string') return null;
+	const h = v.trim().toLowerCase();
+	if (h.length === 0 || h.length > 80) return null;
+	return ALT_HOST_SHAPES[key].test(h) ? h : null;
 }
 
 export function validate(payload: unknown): ValidatedPayload | { reason: string } {
@@ -211,7 +275,14 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 			} catch {
 				return { reason: 'origin_not_url' };
 			}
-			// Clearnet origins must be https (TLS). Hidden-service networks —
+			// Clearnet origins must be https (TLS), and hidden-service origins http
+			// (v1.20.0, S9): the federation's hidden transports dial a hidden origin
+			// as plain HTTP through the tunnel — the network already authenticates
+			// the host and encrypts end to end — so an https:// onion was silently
+			// dialled on port 80 and, where it served only 443, failed every push
+			// and probe as the PEER's fault until it was pruned. Legacy https hidden
+			// rows are normalised to http at dial time (hiddenOriginForDial).
+			// Hidden-service networks —
 			// Tor (.onion), I2P (.b32.i2p), Lokinet (.loki) — carry their own
 			// end-to-end encryption + cryptographic host authentication at the
 			// network layer, so http:// is the correct (and only) scheme there:
@@ -229,8 +300,8 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 				/^[a-z2-7]{56}\.onion$/.test(oHost) || // Tor v3 onion (56 base32 chars)
 				oHost.endsWith('.i2p') || // I2P — both the named .i2p and the .b32.i2p hash end in .i2p
 				oHost.endsWith('.loki'); // Lokinet / Session name
-			if (parsed.protocol === 'https:') {
-				/* clearnet (or a rare TLS-fronted onion) — allowed */
+			if (parsed.protocol === 'https:' && !isHiddenServiceHost) {
+				/* clearnet — allowed */
 			} else if (parsed.protocol === 'http:' && isHiddenServiceHost) {
 				/* hidden service — transport encryption is at the network layer */
 			} else {
@@ -361,19 +432,19 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 		};
 		const tor = host(a.tor, 'tor');
 		if (typeof tor === 'object' && tor !== null) return tor;
-		if (tor !== null && !/^[a-z2-7]{56}\.onion$/.test(tor)) return { reason: 'alt_tor_not_onion' };
+		if (tor !== null && altHostFor('tor', tor) === null) return { reason: 'alt_tor_not_onion' };
 		const i2pB32 = host(a.i2p_b32, 'i2p_b32');
 		if (typeof i2pB32 === 'object' && i2pB32 !== null) return i2pB32;
-		if (i2pB32 !== null && !/^[a-z2-7]{52}\.b32\.i2p$/.test(i2pB32)) return { reason: 'alt_i2p_b32_invalid' };
+		if (i2pB32 !== null && altHostFor('i2p_b32', i2pB32) === null) return { reason: 'alt_i2p_b32_invalid' };
 		const i2pName = host(a.i2p_name, 'i2p_name');
 		if (typeof i2pName === 'object' && i2pName !== null) return i2pName;
-		if (i2pName !== null && (!i2pName.endsWith('.i2p') || i2pName.endsWith('.b32.i2p'))) return { reason: 'alt_i2p_name_invalid' };
+		if (i2pName !== null && altHostFor('i2p_name', i2pName) === null) return { reason: 'alt_i2p_name_invalid' };
 		const loki = host(a.lokinet, 'lokinet');
 		if (typeof loki === 'object' && loki !== null) return loki;
-		if (loki !== null && !loki.endsWith('.loki')) return { reason: 'alt_lokinet_invalid' };
+		if (loki !== null && altHostFor('lokinet', loki) === null) return { reason: 'alt_lokinet_invalid' };
 		const ens = host(a.ens, 'ens');
 		if (typeof ens === 'object' && ens !== null) return ens;
-		if (ens !== null && !/^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/.test(ens)) return { reason: 'alt_ens_invalid' };
+		if (ens !== null && altHostFor('ens', ens) === null) return { reason: 'alt_ens_invalid' };
 		// Keep null only if EVERY field was absent — else store the object.
 		if (tor || i2pB32 || i2pName || loki || ens) {
 			alt_networks = {
@@ -386,12 +457,27 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 		}
 	}
 
+	// fee_recipient — OPTIONAL (v1.20.0, G1). The account this operator's
+	// instance pays the 90 % owner leg of BLURT fees to. Exact account-name
+	// shape, no normalisation: the value is compared byte-for-byte against the
+	// `to` of fee transfers, so a value that would need fixing up is refused.
+	let feeRecipient: string | null = null;
+	if (payload.fee_recipient !== undefined && payload.fee_recipient !== null && payload.fee_recipient !== '') {
+		if (typeof payload.fee_recipient !== 'string' || !FEE_RECIPIENT_ACCOUNT_RE.test(payload.fee_recipient)) {
+			return { reason: 'fee_recipient_invalid' };
+		}
+		feeRecipient = payload.fee_recipient;
+	}
+
 	return {
 		tag,
 		display_name: dnTrimmed,
 		contact_url: contactUrl,
 		origin,
-		alt_networks
+		alt_networks,
+		originProvided: 'origin' in payload,
+		altProvided: 'alt_addresses' in payload,
+		fee_recipient: feeRecipient
 	};
 }
 
@@ -427,12 +513,44 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		}
 		// Same account, same tag → update the mutable fields. registered_in_block
 		// is deliberately left untouched (it records the FIRST registration).
-		await client.query(
+		// A field the payload does not CARRY is left as it is (v1.20.0, E9): the
+		// web /run-a-node form re-registers with tag + name + contact only, and
+		// used to wipe the operator's origin and addresses from `operators` while
+		// the directory row stayed — two stories about one operator. An origin
+		// sent EMPTY is a withdrawal.
+		// last_action_block_num only moves FORWARD: the dispatcher also advances
+		// it on every other Morphit op the operator signs (E6).
+		//
+		// MONOTONIC (v1.20.0, E5): not over a NEWER registration. Live indexing
+		// applies blocks in order, so this only refuses the boot reconcile
+		// replaying an OLD op a validator used to reject — which, applied over
+		// the newer registration, reverted the operator's origin, name and
+		// addresses, deleted the current origin's directory row with its probe
+		// history, and re-inserted the old origin as 'never'.
+		const upd = await client.query(
 			`UPDATE operators
-			 SET display_name = $2, contact_url = $3, origin = $4, reg_alt_networks = $5, last_action_block_num = $6
-			 WHERE account = $1`,
-			[ctx.signer, v.display_name, v.contact_url, v.origin, v.alt_networks ? JSON.stringify(v.alt_networks) : null, ctx.blockNum]
+			 SET display_name = $2, contact_url = $3,
+			     origin = CASE WHEN $7::boolean THEN $4 ELSE origin END,
+			     reg_alt_networks = CASE WHEN $8::boolean THEN $5::jsonb ELSE reg_alt_networks END,
+			     last_action_block_num = GREATEST(COALESCE(last_action_block_num, 0), $6)
+			 WHERE account = $1
+			   AND NOT EXISTS (SELECT 1 FROM operator_registration_events e
+			                    WHERE e.account = $1 AND e.kind = 'register'
+			                      AND e.observed_in_block > $6)`,
+			[
+				ctx.signer,
+				v.display_name,
+				v.contact_url,
+				v.origin,
+				v.alt_networks ? JSON.stringify(v.alt_networks) : null,
+				ctx.blockNum,
+				v.originProvided,
+				v.altProvided
+			]
 		);
+		if ((upd.rowCount ?? 0) === 0) {
+			return { ok: false, reason: 'superseded_by_newer_registration' };
+		}
 	} else {
 		// (v1.18.0 deep-deep, L3) Confusable-aware reserved-tag check for a NEW
 		// claim. What was wrong: only exact equality (isReservedTag, in
@@ -462,7 +580,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	// Sync known_instances to the operator's CURRENT origin — this works for both a
-	// first-time insert and an origin change on update. Drop any prior origin row
+	// first-time insert and an origin change on update (and, with no origin, for a
+	// withdrawal). Drop any prior origin row
 	// this operator held that is no longer current (so a clearnet→tor move does not
 	// leave the old clearnet origin lingering in the directory), then upsert the
 	// current origin.  ON CONFLICT (origin) DO NOTHING preserves first-write-wins if
@@ -470,7 +589,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// origin's existing probe status/history intact (the DELETE skips it and the
 	// INSERT no-ops).  Other indexers running this same handler against the same op
 	// converge identically; the chain is the federation source of truth.
-	if (v.origin !== null) {
+	if (!v.originProvided) {
+		// No origin key at all: the directory row is left exactly as it is.
+	} else if (v.origin === null) {
+		// An origin sent EMPTY on a RE-registration: the operator runs no public
+		// instance any more. Withdraw every directory row it held (v1.20.0, E9) —
+		// left in place, peers kept probing and pushing chat to an origin its
+		// operator had taken back. (A first registration holds no row.)
+		if (existingRow !== undefined) {
+			await client.query(`DELETE FROM known_instances WHERE operator_account = $1`, [ctx.signer]);
+		}
+	} else {
 		await client.query(
 			`DELETE FROM known_instances WHERE operator_account = $1 AND origin <> $2`,
 			[ctx.signer, v.origin]
@@ -484,6 +613,20 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			ON CONFLICT (origin) DO NOTHING`,
 			[v.origin, ctx.signer, ctx.blockNum, ctx.blockTime]
 		);
+	}
+
+	// v1.20.0 (G1) — the fee account history, keyed by this op's position.
+	// Written only on an ACCEPTED op (a superseded or rejected one returned
+	// above), so a boot-reconcile heal records it at the op's ORIGINAL block.
+	if (v.fee_recipient !== null) {
+		await recordFeeRecipient(client, {
+			account: ctx.signer,
+			feeRecipient: v.fee_recipient,
+			blockNum: ctx.blockNum,
+			trxId: ctx.trxId,
+			trxInBlock: ctx.trxInBlock,
+			opInTrx: ctx.opInTrx
+		});
 	}
 
 	// Audit row in the registration events log — matches the
@@ -501,6 +644,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				display_name: v.display_name,
 				contact_url: v.contact_url,
 				origin: v.origin,
+				fee_recipient: v.fee_recipient,
 				trx_id: ctx.trxId
 			}),
 			ctx.blockNum

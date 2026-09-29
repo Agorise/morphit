@@ -448,9 +448,8 @@ const AMOUNT_RE = /^\d{1,12}(?:\.\d{1,12})?$/;
  *
  *  Constraints:
  *    - Round UP only (jitter is non-negative).  Never underpay
- *      the seller; the verifier is observed-amount-vs-expected
- *      and treats underpayment as a fail (see
- *      apps/indexer/src/indexer/fee/moneroExplorerVerifier.ts).
+ *      the seller: a seller checking "did I receive at least the
+ *      agreed amount?" must never see less than the base.
  *      Asymmetric jitter means a "0.5" trade pays at most an
  *      extra 999_999 piconeros ≈ 0.000001 XMR ≈ trivial cost.
  *    - 12-decimal precision matches XMR's piconero granularity.
@@ -478,13 +477,11 @@ export function jitterMoneroAmount(base: string): string {
 	const fracPadded = (frac + '000000000000').slice(0, 12);
 	const basePico = BigInt(whole) * 1_000_000_000_000n + BigInt(fracPadded);
 
-	// Generate 6 random bytes, fold into 0..(10^6 - 1) — i.e., up
-	// to 999_999 piconero of jitter ≈ 1 microXMR maximum.
-	// Using 6 bytes (24 bits, max 16M) and modulo 10^6 is fine —
-	// the modulo bias is negligible (16M / 10^6 ≈ 16.7 buckets,
-	// last bucket slightly underrepresented but not in any way
-	// observable to an attacker; we're not generating
-	// cryptographic keys, we're just spreading values).
+	// Generate 6 random bytes (48 bits, < 2^53 so exact in a JS
+	// number), fold into 0..(10^6 - 1) — i.e., up to 999_999
+	// piconero of jitter ≈ 1 microXMR maximum.  The modulo bias is
+	// negligible (2^48 / 10^6 ≈ 2.8e8 buckets); we're not generating
+	// cryptographic keys, we're just spreading values.
 	const buf = new Uint8Array(6);
 	crypto.getRandomValues(buf);
 	let r = 0;

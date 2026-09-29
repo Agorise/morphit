@@ -172,27 +172,25 @@ morphit_relay_sequential_threshold: 1
 morphit_relay_sequential_window_ms: 86400000
 morphit_relay_sequential_min_prefix: 3
 
-# Trusted-proxy IPs (§32 CRITICAL).  Set to the IP/CIDR that
-# BunkerWeb runs on.  For the canonical BunkerWeb shipped with
-# the morphit Ansible playbook (roles/bunkerweb/), the Docker
-# network CIDR is PINNED at 172.20.0.0/16 (see
-# roles/bunkerweb/templates/docker-compose.yml.j2:60).  This
-# default matches that pinned CIDR — DO NOT change unless you
-# also change the bunkerweb role's docker-compose subnet, or you
-# will silently break per-IP rate limiting (relay rejects
-# X-Forwarded-For from BunkerWeb because it's on an untrusted
-# CIDR, falls back to peer IP which is the BunkerWeb container's
-# IP, and all users bucket into one rate-limit slot).
+# Trusted-proxy IPs (§32 CRITICAL).  EMPTY = the relay's own default:
+# loopback + 172.16.0.0/12, Docker's default bridge pool — it covers this
+# playbook's pinned bunkerweb_net (172.20.0.0/16) and a hand-made stack's
+# bridge (morphit.io: 172.18.0.0/24).  The relay then believes the ONE
+# X-Forwarded-For address the frontend container sends: the visitor's, for
+# requests BunkerWeb delivered to the frontend's edge listener (:8088); the
+# frontend's peer for everything else (Tor/I2P share one bucket, and cannot
+# set it).  The same rule as the indexer (MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS)
+# and the frontend (ops/bunkerweb/frontend/nginx.conf).
 #
-# Verify the live deploy with:
+# Set it ONLY for a proxy outside that pool (e.g. a CDN, or a Docker
+# default-address-pool you moved elsewhere).  A value REPLACES the default
+# (loopback stays trusted), so include the bridge too.  Comma-separated.
+# Too narrow = every visitor shares one rate-limit bucket (fail-safe); too
+# wide (e.g. 0.0.0.0/0) = anyone can forge X-Forwarded-For.  Check the live
+# bridge with:
 #   docker network inspect bunkerweb_net --format \
 #     '{{ "{{" }}range .IPAM.Config{{ "}}" }}{{ "{{" }}.Subnet{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
-#
-# Comma-separated for multiple proxies (e.g., CDN + BunkerWeb).
-# CRITICAL: too narrow = X-Forwarded-For ignored = users share
-# one rate-limit bucket.  Too wide (e.g. 0.0.0.0/0) = any user can
-# forge X-Forwarded-For = rate limits bypassed.  Both are bad.
-morphit_relay_trusted_proxy_ips: "172.20.0.0/16"
+morphit_relay_trusted_proxy_ips: ""
 
 
 # ─── Indexer environment (§18, §23) ──────────────────────────────

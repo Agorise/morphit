@@ -3,8 +3,9 @@
 One page. When the service is under attack, work top to bottom. Every lever here
 is reversible. The single most important one is #1.
 
-Paths below assume the defaults; substitute your own `MORPHIT_RELAY_DATA_DIR`
-and BunkerWeb env file if you changed them.
+Run every command below **on the server that runs your relay** (logged in as
+root or with `sudo`). Paths assume the defaults; substitute your own
+`MORPHIT_RELAY_DATA_DIR` and BunkerWeb env file if you changed them.
 
 ---
 
@@ -15,21 +16,41 @@ mass-signup abuse is the one attack that costs you real money. Stop it instantly
 — **no restart, no deploy**:
 
 ```
-touch /var/lib/morphit/relay/SIGNUPS_DISABLED
+sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED
 ```
 
-The relay checks for this sentinel file on every create request and returns
-`503` while it exists. Everything else (browsing, chat, trading, the explorer)
-keeps working. Reverse when the wave passes:
+The relay polls for this file every second and, while it exists, answers every
+invite and create request with `503` (`signups_disabled`). Everything else
+(browsing, chat, trading, the explorer) keeps working. Reverse when the wave
+passes:
 
 ```
-rm /var/lib/morphit/relay/SIGNUPS_DISABLED
+sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED
 ```
+
+Check that the switch is armed (since v1.20.0 it is on every install; before,
+no installer set the relay's state directory, so this file did nothing):
+
+```
+journalctl -u morphit-relay -b | grep -E 'kill_switch_armed|signup_state_dir'
+```
+
+`kill_switch_armed` names the file the relay watches. If you see
+`signup_state_dir_not_writable` instead, the line gives the fix command; until
+then use the fallback below.
+
+**Fallback (needs a restart):** in `/etc/morphit/relay.env` set
+`MORPHIT_RELAY_SIGNUP_ENABLED=false`, then `sudo systemctl restart morphit-relay`.
+Edit that file itself — an `Environment=` line in a systemd drop-in does **not**
+work, because the relay's unit reads `/etc/morphit/relay.env` after systemd has
+set the environment, and the file's value wins.
 
 You do **not** need this if the automatic guards are holding — the global daily
-ceiling, per-IP `createRatePerHour` (2/day), the invite gate, and the
-fail-closed low-balance pre-check already bound the loss. Use the kill switch
-when the automatic bounds are being probed hard or you want zero doubt.
+ceiling (persisted in `/var/lib/morphit/relay/signup-ceiling.json`, so a relay
+restart does not reset it), the per-IP limits (5 per hour, 2 per day by
+default), the invite gate, the fail-closed low-balance pre-check and the
+fee-spike refusal already bound the loss. Use the kill switch when the automatic
+bounds are being probed hard or you want zero doubt.
 
 ## 2. Watch the money
 
@@ -37,12 +58,21 @@ Tail the relay journal for these keys — any of them means "signups are eating
 BLURT, consider #1":
 
 ```
-journalctl -u morphit-relay -f | grep -E 'low_balance|relay_out_of_funds|relay_low_balance_for_signups|CEILING_REACHED'
+journalctl -u morphit-relay -f | grep -E 'low_balance|relay_out_of_funds|relay_low_balance_for_signups|CEILING_REACHED|relay_fee_spike_refused'
 ```
 
 `relay_out_of_funds` / `low_balance` = the fail-closed balance check is already
 refusing new signups. `CEILING_REACHED` = the daily ceiling has capped the day.
-Both are the guards doing their job — the kill switch (#1) is the hard stop.
+`relay_fee_spike_refused` = the chain's account-creation fee is more than 1.5×
+your configured `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`, so the relay
+refuses to create accounts (code `relay_fee_spike`) and spends nothing. All are
+the guards doing their job — the kill switch (#1) is the hard stop.
+
+If the fee really changed (check `condenser_api.get_chain_properties` or any
+Blurt block explorer), set the new value as
+`MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT=<fee>` in `/etc/morphit/relay.env`
+and `sudo systemctl restart morphit-relay`; signups resume once the live fee is
+within 1.5× of it.
 
 ## 3. Watch the price feeds
 
@@ -89,8 +119,8 @@ Report or coordinate over an **encrypted, private** channel — the Matrix user,
 not the public room:
 
 - Private security DM: **`@agorise:matrix.org`** (MXID — end-to-end encrypted by default)
-- Do **NOT** post details in the public room `#agorise:matrix.org`.
-- Confidential ticket: git.agorise.net (mark confidential).
+- Do **NOT** post details in the public room `#agorise:matrix.org`, and do not
+  open a public issue.
 
 ---
 
@@ -98,7 +128,7 @@ not the public room:
 
 | Lever | Command | Reverse |
 |---|---|---|
-| Halt signups | `touch $DATADIR/SIGNUPS_DISABLED` | `rm` the file |
+| Halt signups | `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED` | `sudo rm` the file |
 | Prefer on-chain price | set `…PREFER_NATIVE_WHEN_DISAGREEING=true` + restart indexer | unset + restart |
 | Ban IPs / ASNs | `BLACKLIST_IP` / `BLACKLIST_ASN` in BunkerWeb env + reload | remove + reload |
 
@@ -106,6 +136,8 @@ not the public room:
 
 Multi-layer rate limits (edge + app), per-IP connection caps, tight request-body
 caps, slowloris timeouts, the keyless indexer broadcast proxy (no secret to
-steal), the fee-divergence guard (a witness fee spike can't quietly drain the
-wallet), and configs that refuse to start with placeholder secrets. See
-`SECURITY-AUDIT-attack-resilience.md` for the full picture.
+steal), the fee-spike refusal (above 1.5× the configured account-creation fee
+the relay creates no accounts until you confirm the new fee), and configs that
+refuse to start with placeholder secrets. The layered signup-drain defences are
+described in `docs/OPERATIONS.md` §18 ("Signup-drain prevention") and
+`docs/SECURITY.md`.

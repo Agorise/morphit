@@ -42,11 +42,12 @@
  * No snapshot and no fallback poll here: the client already holds its inbox
  * (from getConversations on mount) and keeps a ≤6s poll as its own backstop,
  * so this stream is purely the sub-second push. Subscribes to BOTH the durable
- * chatEventBus (post-DB-insert) and the head-block fast path (ADR-0048,
- * sub-second, when the operator enabled the tailer).
+ * chatEventBus (post-DB-insert) and the fast path (the head tailer, always on
+ * since ADR-0051, and verified peer pushes — sub-second).
  */
 
 import { Hono } from 'hono';
+import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
 
 import { logger } from '$log';
 import { chatEventBus } from '$indexer/chatEventBus';
@@ -67,6 +68,11 @@ export function chatActivityStreamRoute(): Hono {
 			return c.json(errorBody('bad_request', 'invalid account name'), 400);
 		}
 
+		// v1.20.0 (E4): a slot under the open-stream caps, released exactly
+		// once when this stream ends however it ends.
+		const releaseSlot = acquireStreamSlot(c);
+		if (releaseSlot === null) return streamCapResponse(c);
+
 		const encoder = new TextEncoder();
 		let unsubscribeBus: (() => void) | null = null;
 		let unsubscribeFastBus: (() => void) | null = null;
@@ -86,6 +92,7 @@ export function chatActivityStreamRoute(): Hono {
 
 				const cleanup = (): void => {
 					cancelled = true;
+					releaseSlot();
 					if (unsubscribeBus !== null) {
 						unsubscribeBus();
 						unsubscribeBus = null;
@@ -153,9 +160,9 @@ export function chatActivityStreamRoute(): Hono {
 					pushActivity(ev.lo === account ? ev.hi : ev.lo, null, false);
 				});
 
-				// Head-block fast path (ADR-0048) — sub-second, pre-DB. No-op
-				// unless the operator enabled the tailer. Carries sender/recipient
-				// directly, so the peer is the participant that isn't `account`.
+				// Fast path (head tailer + verified peer pushes) — sub-second,
+				// pre-DB. Carries sender/recipient directly, so the peer is the
+				// participant that isn't `account`.
 				unsubscribeFastBus = chatEventBus.onFast((ev) => {
 					if (cancelled) return;
 					if (ev.lo !== account && ev.hi !== account) return;
@@ -240,6 +247,7 @@ export function chatActivityStreamRoute(): Hono {
 
 			cancel(): void {
 				cancelled = true;
+				releaseSlot();
 				if (unsubscribeBus !== null) {
 					unsubscribeBus();
 					unsubscribeBus = null;

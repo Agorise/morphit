@@ -49,6 +49,7 @@
 import {
 	chmodSync,
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -201,24 +202,16 @@ try {
 	const m1 = statSync(rc).mode & 0o777;
 	if (!r1.changed || m1 !== 0o644)
 		n5c += `new file: changed=${r1.changed} mode=${m1.toString(8)}; `;
-	writeFileSync(rc, 'prefix=/usr/local\nupdate-notifier=true\n');
-	chmodSync(rc, 0o666);
-	ensureQuietNpmrc(rc);
-	const text = readFileSync(rc, 'utf8');
-	const m2 = statSync(rc).mode & 0o777;
-	if (m2 !== 0o644) n5c += `0666 file left at ${m2.toString(8)}; `;
-	if (!/^update-notifier=false$/m.test(text) || !/^fund=false$/m.test(text))
-		n5c += 'settings not written; ';
-	if (!/^prefix=\/usr\/local$/m.test(text)) n5c += 'existing settings lost; ';
-	const link = join(rcScratch, 'link-npmrc');
-	symlinkSync(rc, link);
-	let refused = false;
-	try {
-		ensureQuietNpmrc(link);
-	} catch {
-		refused = true;
-	}
-	if (!refused) n5c += 'wrote through a symbolic link; ';
+	// A SECURE (0644) file with a benign operator setting: keep it, don't strip.
+	writeFileSync(rc, 'save-exact=true\nupdate-notifier=true\n');
+	chmodSync(rc, 0o644);
+	const rSecure = ensureQuietNpmrc(rc);
+	const secureText = readFileSync(rc, 'utf8');
+	if (rSecure.strippedKeys.length !== 0)
+		n5c += `stripped from a secure file: ${rSecure.strippedKeys}; `;
+	if (!/^save-exact=true$/m.test(secureText)) n5c += 'benign setting lost on a secure file; ';
+	if (statSync(rc).mode & 0o777 && (statSync(rc).mode & 0o777) !== 0o644)
+		n5c += `secure file mode changed to ${(statSync(rc).mode & 0o777).toString(8)}; `;
 } finally {
 	rmSync(rcScratch, { recursive: true, force: true });
 }
@@ -226,6 +219,52 @@ check(
 	'N-5c: the heal writes the global npmrc itself, root-owned 0644 (never npm config set, which leaves it 0666)',
 	n5c === '' && !/'config',\s*'set'/.test(npmNoticeSrc),
 	n5c || 'npmNotice.ts calls `npm config set`'
+);
+
+// N-5e — a global npmrc left GROUP/OTHER-WRITABLE is a root-code-execution
+// vector: a local account can plant `script-shell=`/`node-options=` and the
+// next root `npm` runs it. The heal must STRIP those on an insecure file before
+// repairing the mode, while keeping benign operator settings. Exercised for
+// real (review B8).
+const rcScratch2 = mkdtempSync(join(tmpdir(), 'npm-notice-smoke-'));
+let n5e = '';
+try {
+	const rc = join(rcScratch2, 'etc', 'npmrc');
+	mkdirSync(dirname(rc), { recursive: true });
+	writeFileSync(
+		rc,
+		'save-exact=true\nscript-shell=/tmp/evil.sh\nnode-options=--require /tmp/evil.js\nprefix=/tmp/hijack\n'
+	);
+	chmodSync(rc, 0o666); // the tamper window npm's own `config set --location=global` opens
+	const res = ensureQuietNpmrc(rc);
+	const text = readFileSync(rc, 'utf8');
+	const mode = statSync(rc).mode & 0o777;
+	if (mode !== 0o644) n5e += `insecure file left at ${mode.toString(8)}; `;
+	if (/^\s*script-shell=/m.test(text)) n5e += 'script-shell survived; ';
+	if (/^\s*node-options=/m.test(text)) n5e += 'node-options survived; ';
+	if (/^\s*prefix=/m.test(text)) n5e += 'prefix survived; ';
+	for (const k of ['script-shell', 'node-options', 'prefix']) {
+		if (!res.strippedKeys.includes(k)) n5e += `did not report ${k} stripped; `;
+	}
+	if (!/^save-exact=true$/m.test(text)) n5e += 'benign save-exact lost; ';
+	if (!/^update-notifier=false$/m.test(text)) n5e += 'notifier not set; ';
+	// A symbolic link is still refused.
+	const link = join(rcScratch2, 'link-npmrc');
+	symlinkSync(rc, link);
+	let refused = false;
+	try {
+		ensureQuietNpmrc(link);
+	} catch {
+		refused = true;
+	}
+	if (!refused) n5e += 'wrote through a symbolic link; ';
+} finally {
+	rmSync(rcScratch2, { recursive: true, force: true });
+}
+check(
+	'N-5e: an insecure (0666) global npmrc has code-execution keys stripped before the mode is repaired, benign settings kept',
+	n5e === '',
+	n5e
 );
 
 // N-5d

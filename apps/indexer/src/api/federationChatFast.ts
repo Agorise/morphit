@@ -2,6 +2,8 @@
  * Morphit indexer — POST /v1/federation/chat-fast
  *
  *   body: { "trx": <signed Blurt transaction carrying ONE morphit_chat_v1 op> }
+ *      or { "trxs": [ …up to BATCH_MAX of them… ] }  (a peer batches when it
+ *      already has a push in flight to us)
  *
  * A peer instance hands us a chat message directly, so the two people talking
  * do not have to wait for the chain. See `chatFastFederation.ts` for why the

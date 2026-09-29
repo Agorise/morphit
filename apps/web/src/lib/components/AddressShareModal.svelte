@@ -29,7 +29,8 @@
 	 */
 
 	import { formatDayMonth } from '$lib/i18n/formatters';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
+	import { parseAmountInput } from '$lib/orders/amountInput';
 	import {
 		encodeAddressPayload,
 		generateBlurtMemo,
@@ -122,6 +123,13 @@
 	});
 	let address = $state('');
 	let amount = $state('');
+	/** v1.20.0 fix wave, G6 — the requested amount is read with the active
+	 *  locale's conventions (either decimal mark, native digits) and SENT in
+	 *  canonical ASCII; an ambiguous "1,234" (en) is refused, not guessed.
+	 *  `canonicalAmount` is '' when blank, the raw text when unreadable (so
+	 *  the shape checks below still fail it). */
+	const amountParse = $derived(parseAmountInput(amount, $locale));
+	const canonicalAmount = $derived(amountParse.ok ? amountParse.value : amount.trim());
 	let note = $state('');
 	/** Part 121 — USDT sub-network (ERC-20/TRC-20/SPL/BEP-20).
 	 *  Null when method !== 'usdt' OR when user hasn't picked
@@ -215,14 +223,14 @@
 		if (
 			!jitterEligible ||
 			!jitterAmount ||
-			amount.trim() === '' ||
-			!/^\d{1,12}(?:\.\d{1,12})?$/.test(amount.trim())
+			canonicalAmount === '' ||
+			!/^\d{1,12}(?:\.\d{1,12})?$/.test(canonicalAmount)
 		) {
 			jitteredAmount = null;
 			return;
 		}
 		try {
-			jitteredAmount = jitterAmountForAsset(method, amount.trim());
+			jitteredAmount = jitterAmountForAsset(method, canonicalAmount);
 		} catch {
 			jitteredAmount = null;
 		}
@@ -252,7 +260,7 @@
 	let sendError = $state<string | null>(null);
 
 	const trimmedAddress = $derived(address.trim());
-	const trimmedAmount = $derived(amount.trim());
+	const trimmedAmount = $derived(canonicalAmount);
 	const trimmedNote = $derived(note.trim());
 
 	/** v1.5.0 — real-time BLURT account-existence check. A BLURT receiving
@@ -783,7 +791,13 @@
 				autocomplete="off"
 				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm dark:border-ink-700 dark:bg-ink-900"
 			/>
-			{#if !amountLooksValid && trimmedAmount.length > 0}
+			{#if !amountParse.ok && amountParse.reason === 'ambiguous' && amountParse.readings}
+				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+					{$_('common.amount_input.ambiguous', {
+						values: { a: amountParse.readings[0], b: amountParse.readings[1] }
+					})}
+				</p>
+			{:else if !amountLooksValid && trimmedAmount.length > 0}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 					{$_('chat.address.amount_invalid')}
 				</p>
@@ -903,7 +917,7 @@
 			</button>
 			<button
 				type="button"
-				class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+				class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110 disabled:opacity-50"
 				onclick={handleSubmit}
 				disabled={!canSubmit}
 			>

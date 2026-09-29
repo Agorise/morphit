@@ -12,6 +12,7 @@
  * portable and offline-safe.
  */
 import net from 'node:net';
+import { isNonPublicIpLiteral } from '@morphit/net-defense';
 
 /** Per-connect handshake timeout. */
 export const HIDDEN_HANDSHAKE_TIMEOUT_MS = 20_000;
@@ -127,19 +128,6 @@ const LOCAL_V6: [string, number][] = [
 	['fe80::', 10]
 ];
 const LOCAL_ADDRESSES = blockListOf(LOCAL_V4, LOCAL_V6);
-/** Everything that is not a public unicast destination: the local ranges plus
- *  "this network", CGNAT, benchmarking, multicast, reserved and broadcast. */
-const NON_PUBLIC_ADDRESSES = blockListOf(
-	[
-		...LOCAL_V4,
-		['0.0.0.0', 8],
-		['100.64.0.0', 10],
-		['198.18.0.0', 15],
-		['224.0.0.0', 4],
-		['240.0.0.0', 4]
-	],
-	[...LOCAL_V6, ['::', 128], ['ff00::', 8]]
-);
 
 function bareHost(host: string): string {
 	return host
@@ -157,13 +145,14 @@ export function isLocalAddressLiteral(host: string): boolean {
 	return LOCAL_ADDRESSES.check(h, fam === 4 ? 'ipv4' : 'ipv6');
 }
 
-/** Is `host` an IP LITERAL that is not a public unicast address (the local
- *  ranges plus 0/8, CGNAT, multicast, reserved, broadcast, `::`)? PURE. */
+/** Is `host` an IP LITERAL that is not a public unicast address? PURE.
+ *  v1.20.0 fix wave (D13): delegates to the ONE non-public set in
+ *  @morphit/net-defense (loopback, RFC 1918, link-local, 0/8, CGNAT,
+ *  benchmarking, multicast, reserved, ULA, site-local, NAT64, 6to4, Teredo,
+ *  IPv4-compatible and IPv4-mapped in any form). It used to keep its own list,
+ *  which disagreed with the probe-time check. */
 export function isNonPublicAddressLiteral(host: string): boolean {
-	const h = bareHost(host);
-	const fam = net.isIP(h);
-	if (fam === 0) return false;
-	return NON_PUBLIC_ADDRESSES.check(h, fam === 4 ? 'ipv4' : 'ipv6');
+	return isNonPublicIpLiteral(bareHost(host));
 }
 
 /** Local = a local address literal, or exactly `localhost`. PURE. */
@@ -191,8 +180,16 @@ export function nameMimicsNonPublicAddress(host: string): boolean {
 		octets.push(String(Number(l)));
 	}
 	if (octets.length === 0) return false;
-	while (octets.length < 4) octets.push('0');
-	return isNonPublicAddressLiteral(octets.join('.'));
+	// The numeric labels must ALONE decide it: the range is non-public whatever
+	// the missing octets are, i.e. both the lowest (…0) and highest (…255)
+	// completion are non-public. Zero-padding alone made `192.example.org`
+	// (→ 192.0.0.0, inside the non-public 192.0.0.0/24) look like an address
+	// once that /24 joined the set (v1.20.0 fix wave 2).
+	const low = [...octets];
+	const high = [...octets];
+	while (low.length < 4) low.push('0');
+	while (high.length < 4) high.push('255');
+	return isNonPublicAddressLiteral(low.join('.')) && isNonPublicAddressLiteral(high.join('.'));
 }
 
 // ─── when a Blurt RPC endpoint list means "hidden-only" ──────────
@@ -620,11 +617,34 @@ function handBack(sock: net.Socket, rest: Buffer): void {
 	process.nextTick(() => sock.resume());
 }
 
+/**
+ * An `https:` URL was handed to a hidden-network connector (v1.20.0 fix wave 2,
+ * S9). The connectors return a PLAIN socket — hidden networks encrypt and
+ * authenticate end to end, so their URLs are `http://` — and a missing port
+ * defaults to 80. Dialling an `https://<host>.onion` URL therefore used to
+ * speak plaintext HTTP to port 80: not what the URL says, and silently. It is
+ * now refused before the proxy is contacted. Write the endpoint as
+ * `http://<host>:<port>`.
+ */
+export class HiddenHttpsUnsupportedError extends Error {
+	constructor(readonly host: string) {
+		super(
+			`refusing https:// for hidden-network host ${host}: Tor/I2P carry plain HTTP (the network ` +
+				`encrypts and authenticates), so use http://${host}:<port> instead`
+		);
+		this.name = 'HiddenHttpsUnsupportedError';
+	}
+}
+
 export function makeSocks5Connector(socksHost: string, socksPort: number) {
 	return (
-		opts: { hostname: string; port: number | string },
+		opts: { hostname: string; port: number | string; protocol?: string },
 		cb: (err: Error | null, socket: net.Socket | null) => void
 	): void => {
+		if (opts.protocol === 'https:') {
+			cb(new HiddenHttpsUnsupportedError(opts.hostname), null);
+			return;
+		}
 		const targetHost = opts.hostname;
 		const targetPort = typeof opts.port === 'string' ? Number(opts.port) || 80 : opts.port || 80;
 		const sock = net.connect({ host: socksHost, port: socksPort });
@@ -718,9 +738,14 @@ export function makeSocks5Connector(socksHost: string, socksPort: number) {
  *  supported CONNECT since 0.9.11. */
 export function makeHttpConnectConnector(proxyHost: string, proxyPort: number) {
 	return (
-		opts: { hostname: string; port: number | string },
+		opts: { hostname: string; port: number | string; protocol?: string },
 		cb: (err: Error | null, socket: net.Socket | null) => void
 	): void => {
+		// Same rule as the SOCKS connector: no silent https → plaintext :80.
+		if (opts.protocol === 'https:') {
+			cb(new HiddenHttpsUnsupportedError(opts.hostname), null);
+			return;
+		}
 		const targetHost = opts.hostname;
 		const targetPort = typeof opts.port === 'string' ? Number(opts.port) || 80 : opts.port || 80;
 		const authority = `${targetHost}:${targetPort}`;

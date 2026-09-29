@@ -121,7 +121,7 @@ read the notes for each skipped release, then run the upgrade.
 Your config and signing key (`morphit.config.env`, `morphit.env`,
 `apps/relay/keystore.*`, `apps/relay/altnet/`) live inside the
 install dir, so the upgrade explicitly **carries them forward**
-into the new release (step 8b above) with their permissions
+into the new release (step 8b below) with their permissions
 intact — your settings and active key survive every upgrade, and
 your PostgreSQL database is never touched.
 
@@ -470,6 +470,10 @@ fetched from a peer.
 If you'd rather apply each step by hand — for review, for an
 air-gapped install, or because something about the automated
 flow doesn't fit your environment — here's the explicit recipe.
+Run it **on the Morphit server**, as root (or with `sudo`). Download
+the two files on the server itself, or copy them up from your own
+computer with `scp -O` (hardened servers turn SFTP off, which plain
+`scp` needs).
 
 ```
 # 1. Download the release artifacts (replace VERSION).
@@ -481,42 +485,71 @@ curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/${VERSION}/
 # 2. Verify the checksum.  Output must say "OK"; refuse to proceed otherwise.
 sha256sum -c "morphit-${VERSION}.tar.gz.sha256"
 
-# 3. Stop the running services.
+# 3. Stop the running services (each optional one only if it is running).
 sudo systemctl stop morphit-indexer morphit-relay
-# Matrix bot is optional; stop if installed:
-sudo systemctl is-active --quiet morphit-matrix-bot && sudo systemctl stop morphit-matrix-bot
+for u in morphit-matrix-bot morphit-mcp; do
+  if systemctl is-active --quiet "$u"; then sudo systemctl stop "$u"; echo "$u" >> /tmp/morphit-was-running; fi
+done
 
 # 4. Backup the current install.
-sudo mv /opt/morphit /opt/morphit.bak-$(date -u +%Y%m%dT%H%M%S)
+BACKUP=/opt/morphit.bak-$(date -u +%Y%m%dT%H%M%S)
+sudo mv /opt/morphit "$BACKUP"
 
 # 5. Extract the new tarball.
 sudo mkdir -p /opt/morphit
-sudo tar -xzf "morphit-${VERSION}.tar.gz" -C /opt/morphit
+sudo tar -xzf "morphit-${VERSION}.tar.gz" -C /opt/morphit --no-same-owner
+
+# 5b. Carry your settings and keys forward.  The tarball deliberately
+#     does not contain them; without this step the services start with
+#     no configuration and no relay key.  Copy only what exists.
+for f in morphit.config.env morphit.env apps/relay/keystore.json apps/relay/keystore.wif morphit-hardening-checklist.md; do
+  [ -e "$BACKUP/$f" ] && sudo cp -p "$BACKUP/$f" "/opt/morphit/$f"
+done
+[ -d "$BACKUP/apps/relay/altnet" ] && sudo cp -rp "$BACKUP/apps/relay/altnet" /opt/morphit/apps/relay/
 sudo chown -R morphit:morphit /opt/morphit  # adjust to match your install
+# The secrets must stay private (0600, as the upgrade keeps them):
+ls -l /opt/morphit/morphit.env /opt/morphit/apps/relay/keystore.* 2>/dev/null
 
 # 6. Install workspace dependencies.
 cd /opt/morphit
 sudo -u morphit npm ci --no-audit --no-fund
 
-# 6b. Rebuild the static web frontend and deploy it to your web root.
-#     (indexer/relay/matrix-bot run from TS source via tsx and need no
-#     build step; the website is static files nginx serves from a folder.)
+# 6b. Deploy the web frontend.  `npm run build` in apps/web keeps the
+#     prebuilt frontend the release ships (apps/web/build, marked
+#     .shipped) instead of rebuilding it, which keeps visitors'
+#     build-integrity check green.
 (cd apps/web && sudo -u morphit npm run build)
-sudo cp -r apps/web/build/* /var/www/morphit-frontend/
+
+# 6c. Re-apply your branding (logo, icons, site name), if you set any —
+#     the fresh build is the plain Morphit look until you do.  Harmless
+#     when you have none ("Nothing to apply").
+sudo morphit-ops branding apply
+
+# 6d. Publish it where your site is served from:
+#     - bare-metal nginx web root:
+sudo cp -r apps/web/build/. /var/www/morphit-frontend/
 sudo chown -R www-data:www-data /var/www/morphit-frontend  # match your web root's owner
+#     - OR a Docker frontend (BunkerWeb): restart the container that
+#       mounts /opt/morphit/apps/web/build so it serves the new files:
+#       sudo docker restart morphit-frontend   # your container's name
 
 # 7. Verify the new version's release-info.json matches what you downloaded.
 cat /opt/morphit/release-info.json
 # Confirm "tag" field === "${VERSION}"
 
-# 8. Restart services.
+# 8. Restart services (and the optional ones that were running before).
 sudo systemctl start morphit-indexer
 sudo systemctl start morphit-relay
-sudo systemctl is-active --quiet morphit-matrix-bot.service || true && sudo systemctl start morphit-matrix-bot
+[ -f /tmp/morphit-was-running ] && while read -r u; do sudo systemctl start "$u"; done < /tmp/morphit-was-running
+rm -f /tmp/morphit-was-running
 
 # 9. Tail logs for a minute to confirm clean startup.
 journalctl -fu morphit-indexer -u morphit-relay
 ```
+
+The automated `sudo morphit-ops upgrade` does all of this for you
+(plus the systemd-unit refresh, the post-upgrade self-heals and an
+automatic rollback), which is why it is the recommended path.
 
 If the new version misbehaves, see Rollback below.
 
@@ -562,9 +595,10 @@ reported by a user — you can manually swap to the previous
 install:
 
 ```
+# (on the Morphit server, as root)
 # 1. Stop services.
 sudo systemctl stop morphit-indexer morphit-relay
-sudo systemctl is-active --quiet morphit-matrix-bot && sudo systemctl stop morphit-matrix-bot
+if systemctl is-active --quiet morphit-matrix-bot; then sudo systemctl stop morphit-matrix-bot; fi
 
 # 2. Find the most recent backup.
 ls -ltd /opt/morphit.bak-* | head -1
@@ -573,7 +607,8 @@ ls -ltd /opt/morphit.bak-* | head -1
 sudo mv /opt/morphit /opt/morphit.bad-$(date -u +%Y%m%dT%H%M%S)
 sudo mv /opt/morphit.bak-<timestamp> /opt/morphit
 
-# 4. Restart services.
+# 4. Restart services, and point the served frontend at the restored
+#    build (a Docker frontend: sudo docker restart <its name>).
 sudo systemctl start morphit-indexer morphit-relay
 ```
 
@@ -641,9 +676,10 @@ version and apply normally.
 
 **"SHA-256 mismatch on downloaded tarball"** — the download was
 corrupted or tampered with. Don't proceed. Retry the download; if
-the mismatch persists, alert the maintainers via the Matrix
-channel (`#agorise:matrix.org`) — this could indicate a Forgejo
-compromise.
+the mismatch persists, report it **privately** by Matrix direct
+message to **`@agorise:matrix.org`** — this could indicate a
+Forgejo compromise, which is a security report. Do not post it in
+the public room `#agorise:matrix.org`.
 
 **"Service restart failed for morphit-indexer; rolling back"** —
 the new version's startup failed. Check

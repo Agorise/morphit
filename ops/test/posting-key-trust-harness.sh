@@ -27,8 +27,8 @@
 #  K2  a chain that does not answer falls back to the stale row
 #  K3  the reconcile UPDATE overwrites a rotation the dispatcher recorded
 #  K4  a key the chain no longer names is kept
-#  K5  an account_update no longer confirms the key it records
-#  K6  an account created from the block stream is not born confirmed
+#  K5  an account_update is stored CONFIRMED again (one endpoint's word — E1)
+#  K6  an account create is stored CONFIRMED again (one endpoint's word — E1)
 #  K7  the migration's DEFAULT confirms every existing row — the upgrade path
 #  K8  schema.sql's DEFAULT confirms every existing row — fresh installs
 #  K9  the stored key ignores the authority's threshold (R2)
@@ -39,6 +39,9 @@
 #  K14 an account missing from the answer is written "no key" (D7)
 #  K15 a restored snapshot keeps the publisher's confirmations (D4)
 #  K16 the reconcile retry stops before every row is confirmed (D5)
+#  K17 the head tailer shows a chat op nobody verified signed (E1)
+#  K18 the head tailer hides an order on an unsigned cancel (E1)
+#  K19 a replayed account create re-arms a key the owner disowned (E1)
 #  Q1  the janitor retires fresh rows (the age comparison flipped)
 #  Q2  the janitor deletes where the sender retires (dedup tombstones lost)
 #  Q3  the janitor prunes before the tombstone retention
@@ -86,7 +89,8 @@ DSP="$WORK/apps/indexer/src/indexer/dispatcher.ts"
 MIG="$WORK/apps/indexer/src/db/migrations.ts"
 SCHEMA="$WORK/apps/indexer/src/db/schema.sql"
 JAN="$WORK/apps/relay/src/policy/pushQueueJanitor.ts"
-TESTS=(test/integration/posting-key-rotation.test.ts test/integration/posting-key-quorum.test.ts test/integration/push-queue-janitor.test.ts)
+TESTS=(test/integration/posting-key-rotation.test.ts test/integration/posting-key-quorum.test.ts test/integration/push-queue-janitor.test.ts test/integration/forged-block-trust.test.ts)
+HT="$WORK/apps/indexer/src/indexer/headTailer.ts"
 ROUTE="$WORK/apps/indexer/src/api/federationChatFast.ts"
 
 run_tests(){
@@ -95,13 +99,13 @@ run_tests(){
 	printf '%s\n' "$out"
 	# Both files must have RUN: a suite that skipped (no database reached) is
 	# not a verdict, and neither is one that crashed on an import.
-	printf '%s' "$out" | grep -qE 'Test Files +[0-9]+ (failed|passed)' || echo 'RUN-INCOMPLETE'
-	printf '%s' "$out" | grep -qE 'skipped' && echo 'RUN-SKIPPED'
+	grep -qE 'Test Files +[0-9]+ (failed|passed)' <<<"$out" || echo 'RUN-INCOMPLETE'
+	grep -qE 'skipped' <<<"$out" && echo 'RUN-SKIPPED'
 }
 verdict(){
-	if printf '%s' "$1" | grep -qE 'RUN-INCOMPLETE|RUN-SKIPPED'; then echo crash
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ failed'; then echo fail
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ passed'; then echo pass
+	if grep -qE 'RUN-INCOMPLETE|RUN-SKIPPED' <<<"$1"; then echo crash
+	elif grep -qE 'Tests +[0-9]+ failed' <<<"$1"; then echo fail
+	elif grep -qE 'Tests +[0-9]+ passed' <<<"$1"; then echo pass
 	else echo crash; fi
 }
 
@@ -158,18 +162,23 @@ try 'K2 a chain that does not answer falls back to the stale row' "$FED" \
 ' \
 	'			return (await refreshKey(refreshFromChain, account, opts?.network, budget)) ?? row.posting_pubkey ?? null;
 '
+# K3/K4/K5/K16 re-aimed after the v1.20.0 E1 fix: the reconcile's guard is now
+# the KEY it read (not the flag), a block-read account_update is recorded
+# UNCONFIRMED (a block is one endpoint's word), and the retry never stops.
 try 'K3 the reconcile overwrites a rotation the dispatcher recorded' "$BF" \
-	'				  WHERE name = $1 AND posting_key_reconciled = FALSE`,' \
-	'				  WHERE name = $1`,'
+	'				    AND posting_pubkey IS NOT DISTINCT FROM $3`,' \
+	'				    AND $3::text IS NOT DISTINCT FROM $3`,'
 try 'K4 a key the chain no longer names is kept' "$BF" \
-	'				[row.name, chainKey]' \
-	'				[row.name, chainKey ?? row.posting_pubkey]'
-try 'K5 an account_update no longer confirms the key it records' "$DSP" \
-	"			'UPDATE accounts SET posting_pubkey = \$2, posting_key_reconciled = TRUE WHERE name = \$1'," \
-	"			'UPDATE accounts SET posting_pubkey = \$2 WHERE name = \$1',"
-try 'K6 an account created from the block stream is not born confirmed' "$DSP" \
-	'			) VALUES ($1, $2, $3, $4, $5, $6, $6::text IS NOT NULL)' \
-	'			) VALUES ($1, $2, $3, $4, $5, $6, FALSE)'
+	'				[row.name, chainKey, row.posting_pubkey]' \
+	'				[row.name, chainKey ?? row.posting_pubkey, row.posting_pubkey]'
+try 'K5 an account_update is stored CONFIRMED again (one endpoint'"'"'s word)' "$DSP" \
+	"			'UPDATE accounts SET posting_pubkey = \$2, posting_key_reconciled = FALSE WHERE name = \$1'," \
+	"			'UPDATE accounts SET posting_pubkey = \$2, posting_key_reconciled = TRUE WHERE name = \$1',"
+# K6 flipped in v1.20.0 (E1): creates are now recorded UNCONFIRMED, like
+# updates; the mutation restores the old "confirmed when it has a key".
+try 'K6 an account create is stored CONFIRMED again (one endpoint'"'"'s word)' "$DSP" \
+	'			) VALUES ($1, $2, $3, $4, $5, $6, FALSE)' \
+	'			) VALUES ($1, $2, $3, $4, $5, $6, $6::text IS NOT NULL)'
 try 'K7 the migration confirms every existing row (the upgrade path)' "$MIG" \
 	'    ADD COLUMN IF NOT EXISTS posting_key_reconciled BOOLEAN NOT NULL DEFAULT FALSE;' \
 	'    ADD COLUMN IF NOT EXISTS posting_key_reconciled BOOLEAN NOT NULL DEFAULT TRUE;'
@@ -204,8 +213,22 @@ try 'K15 a restored snapshot keeps the publisher'"'"'s confirmations' "$BF" \
 	"		'UPDATE accounts SET posting_key_reconciled = FALSE WHERE posting_key_reconciled'" \
 	"		'UPDATE accounts SET posting_key_reconciled = posting_key_reconciled WHERE posting_key_reconciled'"
 try 'K16 the reconcile retry stops before every row is confirmed' "$BF" \
-	'		if (r.remaining === 0) return; // done: nothing left to confirm' \
-	'		return;'
+	'		delay = r.remaining === 0 ? steadyDelay : Math.min(delay * 2, maxDelay);' \
+	'		if (r.remaining === 0) return;
+		delay = Math.min(delay * 2, maxDelay);'
+
+# ── v1.20.0 E1: the head tailer shows nothing it has not verified ────
+try 'K17 the head tailer shows a chat op nobody verified signed' "$HT" \
+	'				if (!(await this.verified(trx, located.signer))) {' \
+	'				if (false && !(await this.verified(trx, located.signer))) {'
+try 'K18 the head tailer hides an order on an unsigned cancel' "$HT" \
+	'					if (!(await this.verified(trx, owner))) {' \
+	'					if (false && !(await this.verified(trx, owner))) {'
+try 'K19 a replayed account create re-arms a key the owner disowned' "$DSP" \
+	'				posting_pubkey = CASE WHEN accounts.posting_key_reconciled
+					THEN accounts.posting_pubkey
+					ELSE COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey) END,' \
+	'				posting_pubkey = COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey),'
 
 # ── F36: push_pending with nothing sending ───────────────────────────
 try 'Q1 the janitor retires fresh rows' "$JAN" \

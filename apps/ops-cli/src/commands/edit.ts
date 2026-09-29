@@ -209,6 +209,11 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// flag, editing only the contact URL updated the local footer but silently
 	// left the on-chain contact stale (v1.15.5).
 	let contactChanged = false;
+	// v1.20.0 (G1): the fees account rides in the on-chain register record too
+	// (`fee_recipient`). Other instances accept the 90 % leg of your users' BLURT
+	// fees only when it matches, so a changed account needs the re-publish step.
+	let feesChanged = false;
+	let newFeesAccount: string | null = null;
 	if (choice === 'origin' || choice === 'all') {
 		const origin = await stepOrigin();
 		configUpdates.set('MORPHIT_INSTANCE_ORIGIN', origin);
@@ -408,6 +413,10 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			'';
 		const feesAccount = await stepFeesAccount(currentFees || undefined);
 		configUpdates.set('MORPHIT_INDEXER_FEE_RECIPIENT', feesAccount);
+		if (feesAccount !== currentFees) {
+			feesChanged = true;
+			newFeesAccount = feesAccount;
+		}
 	}
 	if (choice === 'operator-tag' || choice === 'all') {
 		const op = await stepOperatorTag(existing.origin ?? null);
@@ -517,12 +526,16 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	// instances show in their /instances directory.  Make the re-register step
 	// impossible to overlook — and offer to do it right here — when (and only
 	// when) it actually applies.
-	if (originChanged || tagChanged || nameChanged || contactChanged) {
+	if (originChanged || tagChanged || nameChanged || contactChanged || feesChanged) {
 		const parts: string[] = [];
 		if (originChanged) parts.push('origin');
 		if (tagChanged) parts.push('operator tag');
 		if (nameChanged) parts.push('display name');
 		if (contactChanged) parts.push('contact URL');
+		if (feesChanged) parts.push('fees account');
+		// `register` reads the fees account from the files just written; make
+		// sure no older value in this process's environment stands in for it.
+		if (newFeesAccount !== null) process.env.MORPHIT_INDEXER_FEE_RECIPIENT = newFeesAccount;
 		const whatChanged =
 			parts.length === 1
 				? parts[0]
@@ -537,6 +550,12 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		console.log('  instances read to list you in their /instances directory.');
 		console.log('');
 		console.log('  The local edit above does NOT update that on-chain record.');
+		if (feesChanged) {
+			console.log('');
+			console.log('  Your fees account matters most: other Morphit instances accept the');
+			console.log('  90% share of your users\u2019 BLURT fees only at the account in that');
+			console.log('  record, so until it is re-published they hide those orders.');
+		}
 		console.log('');
 
 		// Offer to re-publish right now — the env + Active key are already

@@ -30,7 +30,10 @@
 			"aggregate_hash_computing": "calcul…",
 			"operator_matrix": "Salon Matrix",
 			"branding": "Nom et logo propres",
-			"branding_value": "« {name} » — {count} fichiers personnalisés par cet opérateur. Le code de l'application lui-même est inchangé, la vérification d'intégrité le couvre donc toujours."
+			"branding_value": "« {name} » — {count} fichiers personnalisés par cet opérateur. Le code de l'application lui-même est inchangé, la vérification d'intégrité le couvre donc toujours.",
+			"aggregate_hash_unavailable": "Indisponible sur cette connexion : votre navigateur désactive son outil de hachage sur les adresses HTTP simples, comme celles d’I2P. Le lien vers verify.json ci-dessous fonctionne toujours.",
+			"btc_fee_key": "Clé des frais en BTC",
+			"btc_fee_key_hint": "Chaque frais d'annonce en BTC va à sa propre adresse de cette clé, qui est ancrée sur la blockchain Blurt."
 		},
 		"integrity": {
 			"explain": "Cette instance sert {count} fichiers. Chacun est haché et listé dans le manifeste complet ci-dessous. Comparez le hash agrégé ci-dessous à celui publié dans la dernière release signée sur la blockchain (@morphit publie une op morphit_release_v1 après chaque build). S'ils correspondent, le bundle est octet par octet identique à la release officielle.",
@@ -58,7 +61,8 @@
 			"disabled_label": "Moyens désactivés",
 			"disabled_none": "Aucun — cette instance propose tous les moyens de paiement.",
 			"disabled_suffix": "(désactivé par l'opérateur sur cette instance ; utilisable sur les instances pairs)"
-		}
+		},
+		"fee_recipient_unregistered": "Le compte de frais de cette instance, @{account}, ne figure pas encore dans l’enregistrement on-chain de son opérateur : les autres instances de la fédération masquent donc les ordres payés ici en BLURT et ne remettent pas à leurs utilisateurs les premiers messages envoyés d’ici. L’opérateur corrige cela en exécutant sudo morphit-ops register sur le serveur."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -703,7 +707,8 @@
 			"why_show": "Pourquoi est-ce important ?",
 			"why_hide": "Masquer l'explication",
 			"why_body": "Par défaut, le chat Morphit fait confiance à l'indexer pour délivrer la bonne clé de chat de votre contact. Un indexer hostile pourrait substituer des clés contrôlées par un attaquant et lire vos messages. L'empreinte de 8 mots est calculée localement à partir des vraies clés des deux côtés — si vous voyez tous les deux les mêmes mots, pas de MITM. Cela protège uniquement contre le MITM ; cela NE PROUVE PAS que la personne à l'autre bout du téléphone est bien celle qu'elle prétend être.",
-			"error_chain_unreachable": "La blockchain n'a pas pu être jointe pour vérifier la clé de ce contact. C'est courant sur Tor et I2P, où les connexions mettent plus de temps à s'établir. La clé n'a rien d'anormal — réessayez dans un instant."
+			"error_chain_unreachable": "La blockchain n'a pas pu être jointe pour vérifier la clé de ce contact. C'est courant sur Tor et I2P, où les connexions mettent plus de temps à s'établir. La clé n'a rien d'anormal — réessayez dans un instant.",
+			"error_insecure_context": "La vérification de l’empreinte n’est pas disponible sur cette connexion : votre navigateur la désactive sur les adresses HTTP simples, comme celles d’I2P. Ouvrez ce chat à l’adresse https:// ou .onion pour comparer."
 		},
 		"boot_failed": "Impossible de charger le chat. Essaie de rafraîchir la page.",
 		"mailing_address": {
@@ -867,6 +872,11 @@
 			"duplicate": "Il semble que cela soit déjà passé. Actualisez la page pour vérifier votre avatar avant de réessayer. (Chaîne : {reason})",
 			"waf_too_large": "Le pare-feu web de ton instance a refusé cet envoi car trop volumineux (413). Demande à l'opérateur d'augmenter la limite de taille de requête — une mise à jour de Morphit le corrige automatiquement.",
 			"waf_blocked": "Le pare-feu web de ton instance a bloqué cette requête (403). Demande à l'opérateur d'exempter l'API /v1/ — une mise à jour de Morphit le corrige automatiquement."
+		},
+		"copy_unavailable": "Sélectionnez le texte pour le copier",
+		"amount_input": {
+			"ambiguous": "Ce montant peut signifier {a} ou {b}. Veuillez le saisir à nouveau sans séparateur de milliers.",
+			"invalid": "Saisissez un nombre — utilisez « {sep} » pour les décimales."
 		}
 	},
 	"compare": {
@@ -1165,7 +1175,7 @@
 		"entries": {
 			"why_agpl": {
 				"q": "Pourquoi Morphit utilise-t-il la licence AGPL-3.0 ?",
-				"a": "Pour que personne — ni une entreprise, ni un gouvernement, ni même nous — ne puisse prendre Morphit, le verrouiller et le retourner discrètement contre les personnes qui l'utilisent. La licence garantit que chaque copie de Morphit en fonctionnement reste ouverte et inspectable. Tout le reste repose là-dessus.\n\n**La seule règle qu'elle ajoute.** Si vous faites tourner Morphit comme service public et que vous modifiez le code, vous devez partager vos modifications avec les personnes qui l'utilisent. C'est tout. Lancez une instance, changez-en la marque, réécrivez chaque mot à l'écran, ajoutez des fonctionnalités, faites-la payer — tout cela est permis, et même encouragé. La seule chose interdite, c'est de faire tourner une version *secrète et modifiée*. Si votre instance peut atteindre des utilisateurs, vos utilisateurs peuvent en lire le code source. Pour un outil de confidentialité, c'est tout l'enjeu : c'est ainsi que n'importe qui peut confirmer que l'instance sur laquelle il se trouve est le vrai Morphit, et non une copie piégée. Une liberté que vous ne pouvez pas vérifier n'est qu'une promesse — ceci la transforme en quelque chose de vérifiable.\n\n**Pourquoi pas une licence « plus libre » ?** Les licences permissives (MIT, BSD, Apache) ne demandent rien en retour, ce qui semble plus libre — jusqu'à ce qu'on remarque qu'elles permettent aussi à quiconque de prendre Morphit, d'y greffer un pistage caché, de fermer le code source et de le revendre à vos voisins sous forme d'une application de surveillance soignée, sans que personne ne s'en aperçoive. Une licence qui autorise votre propre capture ne protège pas votre liberté ; elle protège celui qui veut vous mettre en cage. La GPL classique a le même trou pour les logiciels en réseau : elle ne s'applique que lorsque vous remettez un programme à télécharger, pas lorsque vous faites tourner une copie modifiée sur votre propre serveur — ce qui est exactement la façon dont on utilise Morphit. L'AGPL comble ce trou. Et n'avoir aucune licence est le pire de tout : si vous ne dites rien, le droit d'auteur impose par défaut *tous droits réservés* — personne ne peut légalement le forker ni faire tourner sa propre instance. Le silence n'est pas la liberté ; c'est une porte fermée à clé.\n\n**Pour les agoristes en particulier.** Voici la tension honnête : l'AGPL s'appuie sur le droit d'auteur, et le droit d'auteur est une créature de l'État. La position puriste consiste à ne rien revendiquer — le verser dans le domaine public et passer son chemin. Nous pensons que cela fait un cadeau précisément aux gens que vous cherchez à fuir : les acteurs bien financés qui le prendront, le fermeront, le brancheront sur la machine de surveillance et appelleront cela du confort. Intentions pures, outil capturé. Le copyleft, c'est le mouvement de judo : il prend l'instrument même de l'État et le retourne contre l'enclosure. Nous ne supplions pas l'État de nous protéger ; nous utilisons ses propres règles pour rendre ce bien commun définitivement inappropriable. Chaque fork reste ouvert. Chaque instance reste inspectable. Personne ne peut construire une cage avec notre code. Ce n'est pas faire la paix avec le système — c'est le système qui travaille enfin pour la contre-économie au lieu de travailler contre elle.\n\n**La vue d'ensemble.** Le but n'a jamais été de gagner un débat contre la bête — c'est de la rendre obsolète. Plus il y a de gens qui font tourner leurs propres instances, et qui en convainquent d'autres d'en faire tourner encore plus, moins il reste de prise pour un pouvoir central : des outils qu'il ne peut pas surveiller, des marchés qu'il ne peut pas voir, des échanges qu'il ne peut ni taxer ni arrêter. C'est cela qui rend l'appareil inutile. Ce ne sera pas élégant : quand le contrôle échappe, le premier réflexe est toujours de serrer plus fort, avec plus de règles et plus de force. Mais la coercition coûte cher et l'inutilité épuise, et tôt ou tard la bête fait ce que font les tyrans quand plus personne n'a peur : elle se désintéresse et s'en va chercher quelque chose de plus productif à faire. Alors forkez Morphit. Faites-le vôtre. Montez une instance, et convainquez trois amis d'en monter trois de plus. La licence est là pour garantir une seule chose : que chacune de ces instances reste libre, ouverte et impossible à retourner discrètement contre les personnes qui l'utilisent.\n\n*Morphit est publié sous la GNU Affero General Public License, version 3. Ceci est notre raisonnement, pas un avis juridique.*"
+				"a": "Pour que personne — ni une entreprise, ni un gouvernement, ni même nous — ne puisse prendre Morphit, le verrouiller et le retourner discrètement contre les personnes qui l'utilisent. La licence garantit que chaque copie de Morphit en fonctionnement reste ouverte et inspectable. Tout le reste repose là-dessus.\n\n**La seule règle qu'elle ajoute.** Si vous faites tourner Morphit comme service public et que vous modifiez le code, vous devez partager vos modifications avec les personnes qui l'utilisent. C'est tout. Lancez une instance, changez-en la marque, réécrivez chaque mot à l'écran, ajoutez des fonctionnalités, faites-la payer — tout cela est permis, et même encouragé. La seule chose interdite, c'est de faire tourner une version *secrète et modifiée*. Si votre instance peut atteindre des utilisateurs, vos utilisateurs peuvent en lire le code source. Pour un outil de confidentialité, c'est tout l'enjeu : c'est ainsi que n'importe qui peut confirmer que l'instance sur laquelle il se trouve est le vrai Morphit, et non une copie piégée. Une liberté que vous ne pouvez pas vérifier n'est qu'une promesse — ceci la transforme en quelque chose de vérifiable.\n\n**Pourquoi pas une licence « plus libre » ?** Les licences permissives (MIT, BSD, Apache) ne demandent rien en retour, ce qui semble plus libre — jusqu'à ce qu'on remarque qu'elles permettent aussi à quiconque de prendre Morphit, d'y greffer un pistage caché, de fermer le code source et de le revendre à vos voisins sous forme d'une application de surveillance soignée, sans que personne ne s'en aperçoive. Une licence qui autorise votre propre capture ne protège pas votre liberté ; elle protège celui qui veut vous mettre en cage. La GPL classique a le même trou pour les logiciels en réseau : elle ne s'applique que lorsque vous remettez un programme à télécharger, pas lorsque vous faites tourner une copie modifiée sur votre propre serveur — ce qui est exactement la façon dont on utilise Morphit. L'AGPL comble ce trou. Et n'avoir aucune licence est le pire de tout : si vous ne dites rien, le droit d'auteur impose par défaut *tous droits réservés* — personne ne peut légalement le forker ni faire tourner sa propre instance. Le silence n'est pas la liberté ; c'est une porte fermée à clé.\n\n**Pour les agorists en particulier.** Voici la tension honnête : l'AGPL s'appuie sur le droit d'auteur, et le droit d'auteur est une créature de l'État. La position puriste consiste à ne rien revendiquer — le verser dans le domaine public et passer son chemin. Nous pensons que cela fait un cadeau précisément aux gens que vous cherchez à fuir : les acteurs bien financés qui le prendront, le fermeront, le brancheront sur la machine de surveillance et appelleront cela du confort. Intentions pures, outil capturé. Le copyleft, c'est le mouvement de judo : il prend l'instrument même de l'État et le retourne contre l'enclosure. Nous ne supplions pas l'État de nous protéger ; nous utilisons ses propres règles pour rendre ce bien commun définitivement inappropriable. Chaque fork reste ouvert. Chaque instance reste inspectable. Personne ne peut construire une cage avec notre code. Ce n'est pas faire la paix avec le système — c'est le système qui travaille enfin pour la contre-économie au lieu de travailler contre elle.\n\n**La vue d'ensemble.** Le but n'a jamais été de gagner un débat contre la bête — c'est de la rendre obsolète. Plus il y a de gens qui font tourner leurs propres instances, et qui en convainquent d'autres d'en faire tourner encore plus, moins il reste de prise pour un pouvoir central : des outils qu'il ne peut pas surveiller, des marchés qu'il ne peut pas voir, des échanges qu'il ne peut ni taxer ni arrêter. C'est cela qui rend l'appareil inutile. Ce ne sera pas élégant : quand le contrôle échappe, le premier réflexe est toujours de serrer plus fort, avec plus de règles et plus de force. Mais la coercition coûte cher et l'inutilité épuise, et tôt ou tard la bête fait ce que font les tyrans quand plus personne n'a peur : elle se désintéresse et s'en va chercher quelque chose de plus productif à faire. Alors forkez Morphit. Faites-le vôtre. Montez une instance, et convainquez trois amis d'en monter trois de plus. La licence est là pour garantir une seule chose : que chacune de ces instances reste libre, ouverte et impossible à retourner discrètement contre les personnes qui l'utilisent.\n\n*Morphit est publié sous la GNU Affero General Public License, version 3. Ceci est notre raisonnement, pas un avis juridique.*"
 			},
 			"what_is_morphit": {
 				"q": "Qu'est-ce que Morphit ?",
@@ -1289,7 +1299,7 @@
 			},
 			"security_attack_vectors": {
 				"q": "Morphit est-il vulnérable au piratage, au vol de données ou aux blocages ?",
-				"a": "La meilleure défense, c'est la conception elle-même. Morphit n'est pas dépositaire — vos clés privées ne quittent jamais votre appareil et ne sont jamais transmises à nos serveurs ; il n'existe donc aucune base de données de clés à voler. Il n'y a ni comptes, ni mots de passe, ni sessions, ni état de connexion, ce qui élimine le phishing de credentials, le détournement de session et toute la catégorie des attaques par prise de compte. Nous ne collectons pas de KYC et nous ne journalisons pas les IP : aucune base de données d'informations personnelles ne peut être compromise ou saisie par voie judiciaire. Le carnet d'ordres vit sur la blockchain elle-même — n'importe quel utilisateur peut exécuter son propre indexeur et son propre frontend — donc la censure et les blocages ne peuvent pas supprimer d'ordres, seulement les masquer sur un miroir particulier. Les surfaces d'attaque web habituelles (XSS, CSRF, SSRF, RCE, injection SQL, pollution de paramètres) sont traitées par une combinaison d'en-têtes CSP stricts, de listes CORS à origine exacte, de corps de requête validés par schéma avec des longueurs de champs bornées, sans eval ni chemins de code dynamiques, sans requêtes base de données côté serveur sur l'entrée utilisateur, et un service relais qui ne parle qu'à des endpoints RPC pré-configurés. Nous n'avons pas de PHP, pas de WordPress, pas de xmlrpc.php, pas de couche OAuth — des classes entières de vulnérabilités qui affectent d'autres plateformes n'existent tout simplement pas ici. Le DDoS volumétrique (niveau réseau) dépasse la portée de toute application seule — cela relève du fournisseur VPS ou d'un service de nettoyage en amont — mais les abus au niveau applicatif sont atténués par des limites de taux par IP, un plafond de 64 Kio pour les corps de requête, et des plafonds de ressources serrés. Le modèle de menaces complet est documenté dans SECURITY.md et ADR-0006 dans le dépôt du projet."
+				"a": "La meilleure défense, c'est la conception elle-même. Morphit n'est pas dépositaire — vos clés privées ne quittent jamais votre appareil et ne sont jamais transmises à nos serveurs ; il n'existe donc aucune base de données de clés à voler. Il n'y a ni comptes, ni mots de passe, ni sessions, ni état de connexion, ce qui élimine le phishing de credentials, le détournement de session et toute la catégorie des attaques par prise de compte. Nous ne collectons pas de KYC et nous ne journalisons pas les IP : aucune base de données d'informations personnelles ne peut être compromise ou saisie par voie judiciaire. Le carnet d'ordres vit sur la blockchain elle-même — n'importe quel utilisateur peut exécuter son propre indexeur et son propre frontend — donc la censure et les blocages ne peuvent pas supprimer d'ordres, seulement les masquer sur un miroir particulier. Les surfaces d'attaque web habituelles (XSS, CSRF, SSRF, RCE, injection SQL, pollution de paramètres) sont traitées par une combinaison d'en-têtes CSP stricts, d'une liste d'origines exactes sur le point de terminaison d'inscription du relais, de corps de requête validés par schéma avec des longueurs de champs bornées, sans eval ni chemins de code dynamiques, sans requêtes base de données côté serveur sur l'entrée utilisateur, et un service relais qui ne parle qu'à des endpoints RPC pré-configurés. Nous n'avons pas de PHP, pas de WordPress, pas de xmlrpc.php, pas de couche OAuth — des classes entières de vulnérabilités qui affectent d'autres plateformes n'existent tout simplement pas ici. Le DDoS volumétrique (niveau réseau) dépasse la portée de toute application seule — cela relève du fournisseur VPS ou d'un service de nettoyage en amont — mais les abus au niveau applicatif sont atténués par des limites de taux par IP, un plafond de 64 Kio pour les corps de requête, et des plafonds de ressources serrés. Le modèle de menaces complet est documenté dans SECURITY.md et ADR-0006 dans le dépôt du projet."
 			},
 			"security_engineering_rigor": {
 				"q": "Quelle est la rigueur du processus d'examen de sécurité de Morphit ?",
@@ -1444,8 +1454,8 @@
 				"a": "Un TxID Monero (ID de transaction) est une chaîne hexadécimale de 64 caractères qui identifie de façon unique une transaction Monero sur la blockchain XMR. Cela ressemble à : `c1a2b3…deadbeef`. {brand} demande un TxID quand vous devez prouver que vous avez envoyé ou reçu un paiement Monero — par ex. pour attester qu'un transfert XMR réclamé par un contrepartie a réellement eu lieu.\n\nOù le trouver :\n• Dans le **Monero GUI wallet** : ouvrez Transactions, cliquez sur la transaction voulue, le TxID est la longue chaîne hex en haut du panneau de détail. Bouton copier juste à côté.\n• Dans **Cake Wallet / Monero.com mobile** : touchez la transaction dans votre historique ; le TxID apparaît en haut avec une icône copier.\n• Dans **Feather Wallet** : onglet Transactions → clic droit ou touchez une ligne → Copy → Transaction ID.\n• Dans **monero-wallet-cli en ligne de commande** : le TxID s'affiche quand vous exécutez `show_transfers out`.\n\nLe TxID est une information publique. Le publier sur {brand} pour attester un trade NE révèle PAS qui vous êtes, votre view key ou votre solde — juste qu'une transaction spécifique a eu lieu.\n\n**Une note honnête pour les maximalistes de la vie privée.** Si vous choisissez de payer vos *frais de publication* en Monero, le TxID de cette transaction de frais est enregistré dans votre opération d'ordre sur la blockchain publique (afin que n'importe quel indexeur puisse vérifier les frais sans la clé de visualisation de la trésorerie). C'est le seul endroit où un TxID Monero touche la chaîne Blurt — et il s'agit de frais d'environ 0,25 USD vers l'adresse publique de la trésorerie, jamais du règlement réel de votre échange (le XMR que vous vendez à une contrepartie circule de pair à pair et ne touche jamais la chaîne Blurt). Si vous voulez *zéro* lien entre Monero et la blockchain, payez simplement vos frais de publication en BLURT — c'est l'option par défaut, c'est moitié prix, et aucun TxID Monero n'est diffusé."
 			},
 			"xmr_tx_proof": {
-				"q": "Qu'est-ce qu'une preuve de transaction Monero (tx_proof) et pourquoi {brand} la demande-t-elle ?",
-				"a": "Une preuve de transaction Monero (tx_proof) est une courte chaîne issue de votre propre portefeuille qui prouve que vous avez payé une transaction spécifique à une adresse spécifique — sans rien révéler d'autre de votre portefeuille. Elle a la forme `OutProofV2…` suivie d'une longue chaîne base58.\n\n**Pourquoi {brand} la demande.** {brand} vérifie votre frais XMR en consultant la blockchain pour confirmer que votre paiement est bien arrivé à l'adresse de la trésorerie avec le bon montant. Pour le faire sans détenir la clé de vue (view key) de la trésorerie (publier la clé de vue désanonymiserait chaque paiement de frais à jamais — voir l'invariant de confidentialité dans OPERATIONS.md §40.2), chaque instance Morphit VOUS demande de générer une preuve par paiement depuis votre propre portefeuille. N'importe quel indexeur peut vérifier votre preuve avec des données publiques ; aucune partie privilégiée n'est nécessaire.\n\n**Ce qu'elle révèle.** La preuve révèle uniquement :\n• Que cette transaction précise (le txid que vous avez fourni) a payé cette adresse précise (la trésorerie de Morphit), et\n• Le montant payé.\n\n**Ce qu'elle NE révèle PAS.**\n• Vos autres transactions\n• Le solde de votre portefeuille\n• Vos autres adresses\n• Aucune métadonnée de portefeuille\n• Rien sur les paiements futurs\n\nLa preuve est à usage unique et par paiement. La détenir ne révèle rien à un tiers sur d'autres paiements à l'adresse (les vôtres ou d'autres personnes) ni sur toute autre activité de portefeuille.\n\n**Comment en générer une.**\n• **Monero CLI** : `get_tx_proof <txid> <adresse-trésorerie>`\n• **Monero GUI** : Advanced → Prove transaction → remplir txid + adresse → Generate\n• **Cake Wallet** : Settings → Privacy → Verify a transaction → Generate proof\n• **Feather Wallet** : Tools → Prove/check transaction → Generate\n\nVous obtiendrez une chaîne commençant par `OutProofV1` ou `OutProofV2`. Collez-la dans le champ Preuve de paiement.\n\n**Pourquoi c'est mieux qu'une clé de vue.** Une clé de vue permettrait à quiconque la détenant de voir tous les paiements à l'adresse à jamais. Une tx_proof révèle un seul paiement, point. Cela signifie que toute instance Morphit — la vôtre, la canonique, celle d'un opérateur communautaire — peut vérifier les frais XMR de façon indépendante sans secret partagé. C'est la fédération qui fonctionne comme prévu."
+				"q": "Qu'est-ce que la clé de transaction Monero et pourquoi {brand} la demande-t-il ?",
+				"a": "Chaque paiement Monero possède une **clé de transaction** : un code de 64 caractères (0–9, a–f) que conserve le portefeuille qui envoie. Avec l'ID de transaction et cette clé, n'importe qui peut vérifier que le paiement est arrivé à une adresse donnée et pour quel montant. La clé ne peut déplacer aucun argent.\n\n**Pourquoi {brand} la demande.** Quand vous payez les frais d'annonce en XMR, votre annonce contient l'ID et la clé de transaction : chaque serveur {brand} — le principal comme ceux de la communauté — peut ainsi vérifier le paiement lui-même avec des explorateurs Monero publics. Personne n'a besoin de la clé de visualisation secrète du portefeuille de trésorerie.\n\n**L'adresse des frais est créée pour votre annonce.** Une fois l'adresse Monero principale de la trésorerie publiée sur la chaîne, les frais vont à une adresse créée pour votre seule annonce. Elle porte un code d'annonce caché que seule votre clé de transaction déverrouille : personne ne peut recopier votre ID et votre clé sur sa propre annonce, et votre paiement ne peut pas servir deux fois.\n\n**Où trouver la clé.** Monero CLI : `get_tx_key <ID de transaction>`. Monero GUI : Transactions → détails du paiement → \"Transaction key\". Feather : History → clic droit sur le paiement → Show details → Copy Tx Secret Key. Cake Wallet : touchez le paiement → \"Transaction Key\". Monerujo : touchez le paiement → \"TX Key\". Seul le portefeuille qui a envoyé le paiement possède la clé ; une plateforme d'échange ne peut pas vous la donner.\n\n**Confidentialité.** La clé est publiée avec votre annonce. Elle ne montre que ce paiement vers l'adresse de {brand}, mais quelqu'un qui connaît aussi l'adresse de votre portefeuille pourrait s'en servir pour voir la monnaie rendue de ce paiement. Pour un maximum de confidentialité, payez depuis une adresse que vous n'avez partagée avec personne, ou payez en BLURT.\n\n**Les « preuves de paiement » (OutProof…) ne fonctionnent plus.** Les explorateurs publics ne peuvent pas les vérifier. Une annonce envoyée avec l'une d'elles affiche « frais non vérifiables » ; republiez-la avec la clé de transaction du paiement."
 			},
 			"morphit_mirrors": {
 				"q": "Pourquoi le code source de Morphit est-il mis en miroir sur autant d'hébergeurs ?",
@@ -1717,7 +1727,7 @@
 			},
 			"how_to_spread_morphit": {
 				"q": "Comment faire pour que les gens utilisent Morphit ?",
-				"a": "Le bouche-à-oreille est toute la stratégie de croissance. Morphit ne fait pas de publicité, ne paie pas de contenu sponsorisé, ne paie pas d'influenceurs — mais chaque opérateur et supporter qui amène quelques personnes sur la plateforme rend le carnet d'ordres matériellement plus utile pour tout le monde. Voici les canaux qui ont fonctionné, classés approximativement par effort :\n\n**1. Canaux en ligne (gratuits).**\n- **Articles de blog** sur Blurt.blog (publie dans le même écosystème dans lequel tu trades — et gagne des Blurt pour le post), Substack, Medium, Ghost, Mirror, ou ton propre site. Les posts approfondis sur Morphit, Blurt et le problème cypherpunk plus large fiat-vers-crypto vieillissent bien : linkable, citable, evergreen. Cross-poste sur Hacker News, Lobste.rs, le subreddit Monero et toute communauté où c'est dans le sujet.\n- **Groupes meetup.com** pour crypto, Bitcoin, Monero, vie privée, libertarien, freedom-tech, mesh-networks et sujets adjacents — beaucoup ont des meetups mensuels où une démo de 5 minutes de l'app Morphit est la bienvenue\n- **Clubs universitaires et tableaux d'affichage** — clubs de cryptographie étudiants, groupes libertariens étudiants, sociétés d'informatique. Punaise une affiche imprimée avec un QR vers /install.\n- **Communautés existantes vie privée/sécurité** comme KYCnot.me, forums PrivacyGuides, subreddit/Matrix Monero, discussions GrapheneOS\n\n**2. Canaux physiques (petit coût d'impression).**\n- **Tracts distribués aux portes des usines à l'heure de la sortie** — beaucoup d'ouvriers ont des besoins en cash non-bancarisés que crypto-sans-KYC résout, et ils sont stationnaires dans une file pendant 60 secondes où tu peux leur tendre quelque chose\n- **Tracts sur les voitures dans les parkings, sur les portes, sur les tableaux communautaires** dans les cafés, bibliothèques, makerspaces, événements freedom-tech. Garde le QR gros et le call-to-action en une ligne ('Achète crypto, pas d'ID' / 'Vends crypto contre cash')\n- **Autocollants** sur les laptops en conférence, sur les lampadaires dans les quartiers tech. Moins cher que les tracts par impression\n\n**3. Promotion croisée (gratuit).**\n- **Autres communautés crypto** : Ethereum, DeFi, Solana, XRP, Pirate Chain, Decred — chacune a sa propre base d'utilisateurs, et Morphit les trade toutes. L'angle 'on trade ta crypto préférée aussi, peer-to-peer sans KYC' fonctionne bien\n- **Communautés non-crypto** avec recouvrement de valeurs : groupes libertariens, meetups voluntaryistes, défenseurs de la vie privée, défenseurs du hard money, communautés freedom-tech et mesh-networks, cercles agoristes. Morphit est construit spécifiquement pour les valeurs que ces communautés ont déjà\n\n**4. Promoteurs locaux payés (niveau opérateur, dépense modeste).**\n- Paye un 'geek marketer' local curieux de crypto un petit salaire de base en pesos (ou quelle que soit ta monnaie locale) plus des commissions de performance payées en Blurt. Le salaire en pesos les garde engagés ; les commissions Blurt les alignent avec la croissance long-terme du réseau et leur donnent une participation free-speech-token. Événements de commission qui marchent : inscription nouveau compte (petite prime), premier trade réussi (prime plus grande), démo de l'app dans un meetup (prime événementielle)\n- C'est exactement le genre de marketing grassroots distribué où le modèle de fédération de Morphit brille — chaque opérateur peut construire son propre réseau local de promoteurs, indépendant de tout budget marketing central\n\n**5. Ce qu'il NE faut PAS faire.**\n- Ne spamme pas les groupes Telegram, serveurs Discord ou subreddits où tu n'es pas régulier. Les communautés crypto ont des réflexes d'immunité-spam forts et tu brûleras la marque\n- Ne pitche pas Morphit aux gens qui ont déjà un compte CEX et en sont heureux ; pitche aux non-bancarisés, aux soucieux de vie privée, aux gens dont les comptes CEX ont été gelés\n- Ne promets pas des choses que Morphit ne promet pas (pas d'arbitrage instantané, pas d'escrow, pas de liquidité garantie) — survendre fait fuir\n\nLe modèle de fédération signifie que chaque promotion locale réussie fait grandir le réseau pour tout le monde. Un participant à un meetup qui rejoint via ton instance d'opérateur est une contrepartie disponible simultanément sur toutes les autres instances d'opérateur. La croissance locale est la croissance mondiale."
+				"a": "Le bouche-à-oreille est toute la stratégie de croissance. Morphit ne fait pas de publicité, ne paie pas de contenu sponsorisé, ne paie pas d'influenceurs — mais chaque opérateur et supporter qui amène quelques personnes sur la plateforme rend le carnet d'ordres matériellement plus utile pour tout le monde. Voici les canaux qui ont fonctionné, classés approximativement par effort :\n\n**1. Canaux en ligne (gratuits).**\n- **Articles de blog** sur Blurt.blog (publie dans le même écosystème dans lequel tu trades — et gagne des Blurt pour le post), Substack, Medium, Ghost, Mirror, ou ton propre site. Les posts approfondis sur Morphit, Blurt et le problème cypherpunk plus large fiat-vers-crypto vieillissent bien : linkable, citable, evergreen. Cross-poste sur Hacker News, Lobste.rs, le subreddit Monero et toute communauté où c'est dans le sujet.\n- **Groupes meetup.com** pour crypto, Bitcoin, Monero, vie privée, libertarien, freedom-tech, mesh-networks et sujets adjacents — beaucoup ont des meetups mensuels où une démo de 5 minutes de l'app Morphit est la bienvenue\n- **Clubs universitaires et tableaux d'affichage** — clubs de cryptographie étudiants, groupes libertariens étudiants, sociétés d'informatique. Punaise une affiche imprimée avec un QR vers /install.\n- **Communautés existantes vie privée/sécurité** comme KYCnot.me, forums PrivacyGuides, subreddit/Matrix Monero, discussions GrapheneOS\n\n**2. Canaux physiques (petit coût d'impression).**\n- **Tracts distribués aux portes des usines à l'heure de la sortie** — beaucoup d'ouvriers ont des besoins en cash non-bancarisés que crypto-sans-KYC résout, et ils sont stationnaires dans une file pendant 60 secondes où tu peux leur tendre quelque chose\n- **Tracts sur les voitures dans les parkings, sur les portes, sur les tableaux communautaires** dans les cafés, bibliothèques, makerspaces, événements freedom-tech. Garde le QR gros et le call-to-action en une ligne ('Achète crypto, pas d'ID' / 'Vends crypto contre cash')\n- **Autocollants** sur les laptops en conférence, sur les lampadaires dans les quartiers tech. Moins cher que les tracts par impression\n\n**3. Promotion croisée (gratuit).**\n- **Autres communautés crypto** : Ethereum, DeFi, Solana, XRP, Pirate Chain, Decred — chacune a sa propre base d'utilisateurs, et Morphit les trade toutes. L'angle 'on trade ta crypto préférée aussi, peer-to-peer sans KYC' fonctionne bien\n- **Communautés non-crypto** avec recouvrement de valeurs : groupes libertariens, meetups voluntaryistes, défenseurs de la vie privée, défenseurs du hard money, communautés freedom-tech et mesh-networks, cercles d'agorists. Morphit est construit spécifiquement pour les valeurs que ces communautés ont déjà\n\n**4. Promoteurs locaux payés (niveau opérateur, dépense modeste).**\n- Paye un 'geek marketer' local curieux de crypto un petit salaire de base en pesos (ou quelle que soit ta monnaie locale) plus des commissions de performance payées en Blurt. Le salaire en pesos les garde engagés ; les commissions Blurt les alignent avec la croissance long-terme du réseau et leur donnent une participation free-speech-token. Événements de commission qui marchent : inscription nouveau compte (petite prime), premier trade réussi (prime plus grande), démo de l'app dans un meetup (prime événementielle)\n- C'est exactement le genre de marketing grassroots distribué où le modèle de fédération de Morphit brille — chaque opérateur peut construire son propre réseau local de promoteurs, indépendant de tout budget marketing central\n\n**5. Ce qu'il NE faut PAS faire.**\n- Ne spamme pas les groupes Telegram, serveurs Discord ou subreddits où tu n'es pas régulier. Les communautés crypto ont des réflexes d'immunité-spam forts et tu brûleras la marque\n- Ne pitche pas Morphit aux gens qui ont déjà un compte CEX et en sont heureux ; pitche aux non-bancarisés, aux soucieux de vie privée, aux gens dont les comptes CEX ont été gelés\n- Ne promets pas des choses que Morphit ne promet pas (pas d'arbitrage instantané, pas d'escrow, pas de liquidité garantie) — survendre fait fuir\n\nLe modèle de fédération signifie que chaque promotion locale réussie fait grandir le réseau pour tout le monde. Un participant à un meetup qui rejoint via ton instance d'opérateur est une contrepartie disponible simultanément sur toutes les autres instances d'opérateur. La croissance locale est la croissance mondiale."
 			},
 			"totp_2fa_what_is_it": {
 				"q": "Qu'est-ce que l'authentification à deux facteurs et comment l'activer sur {brand} ?",
@@ -2092,7 +2102,6 @@
 			}
 		},
 		"priorities": {
-			"heading": "Ce sur quoi Morphit est conçu",
 			"privacy": {
 				"title": "La confidentialité d'abord",
 				"body": "Pas de KYC, d'e-mail, de téléphone/SMS, de cookies, d'analytique ni de selfies. Choisis un pseudo cool, c'est tout, sérieux."
@@ -2364,7 +2373,9 @@
 			"action_complete": "Marquer comme terminé",
 			"feedback_no_counterparty": "Aucune discussion avec une contrepartie pour le moment",
 			"posting": "Publication…",
-			"feature_arming_hint": "Disponible dès que votre ordre est actif"
+			"feature_arming_hint": "Disponible dès que votre ordre est actif",
+			"fee_awaiting_payment": "En attente de vos frais en BTC",
+			"fee_proof_unsupported": "Absent du carnet d'ordres — les frais ne peuvent pas être vérifiés ; republiez avec la clé de transaction"
 		},
 		"cancel": {
 			"confirm_title": "Annuler cet ordre ?",
@@ -2531,7 +2542,7 @@
 				"seed_word_count": "Une phrase de récupération Blurt comporte exactement 12 mots — tu en as saisi {count}. Vérifie que les 12 sont présents, séparés par une seule espace.",
 				"seed_invalid": "Cette phrase de sauvegarde n'est pas valide. Vérifie les mots pour des fautes de frappe et réessaie.",
 				"keyfile_password_wrong": "Mot de passe du keyfile incorrect. Réessaie.",
-				"keyfile_corrupt": "Le keyfile est corrompu ou n'est pas un keyfile Morphit valide.",
+				"keyfile_corrupt": "Ce fichier n'est pas un keyfile Morphit valide, ou il a été endommagé. Téléversez le fichier 'morphit-keyfile-….json' que vous avez enregistré lors de la création de votre compte — pas une capture d'écran ni un autre fichier.",
 				"generic": "L'import a échoué. Vérifie ta saisie et réessaie.",
 				"network": "Impossible de joindre le réseau Blurt. Vérifie ta connexion et réessaie."
 			},
@@ -2623,7 +2634,9 @@
 				"daily_ceiling_voucher_step_3": "Revenez sur {brand} et connectez-vous avec les clés que vous venez de générer. Vous êtes prêt à trader.",
 				"name_high_value": "Ce nom est réservé à un examen de réclamation légitime (court, marque ou mot du dictionnaire commun). Essayez un nom plus long ou personnel. Si vous avez une réclamation légitime, contactez l'opérateur.",
 				"name_sequential_pattern": "Les créations de comptes récentes depuis votre réseau ont suivi un motif séquentiel suggérant une automatisation. Essayez un nom avec un préfixe différent, ou attendez une heure.",
-				"daily_ceiling_voucher_external_warning": "blurtplugin.online est un service de la communauté Blurt, non géré par {brand}. Tu quittes {brand}. Si le lien ne marche pas, tape l'URL à la main :"
+				"daily_ceiling_voucher_external_warning": "blurtplugin.online est un service de la communauté Blurt, non géré par {brand}. Tu quittes {brand}. Si le lien ne marche pas, tape l'URL à la main :",
+				"relay_fee_spike": "L'inscription est suspendue sur ce serveur pendant que son opérateur examine un changement des frais de création de compte Blurt. Réessayez plus tard ou passez cette étape pour l'instant.",
+				"broadcast_outcome_unknown": "Le réseau Blurt n'a pas confirmé à temps si votre compte a été créé. Attendez une minute et réessayez avec le même nom : s'il a été créé, vous en serez informé."
 			},
 			"success": {
 				"title": "Bienvenue sur {brand}",
@@ -2761,7 +2774,9 @@
 		"action_edit_countdown": "Modifier (dans : {remaining})",
 		"status_completed": "Terminée et payée",
 		"status_settling": "Plus disponible — confirmation en cours",
-		"status_confirming": "Confirmation sur la blockchain"
+		"status_confirming": "Confirmation sur la blockchain",
+		"fee_awaiting_payment": "En attente des frais en BTC",
+		"fee_proof_unsupported": "Les frais ne peuvent pas être vérifiés : cette annonce a été envoyée avec une « preuve de paiement » Monero, que les serveurs Morphit ne peuvent pas vérifier. Republiez-la avec la clé de transaction du paiement."
 	},
 	"orderbook": {
 		"heading": "Carnet d'ordres",
@@ -3237,7 +3252,8 @@
 			"amount_min_too_large": "Le minimum est trop grand. Choisis une valeur plus petite.",
 			"amount_max_too_large": "Le maximum est trop grand. Choisis une valeur plus petite.",
 			"fixed_price_too_large": "Le prix fixe est trop grand. Choisis une valeur plus petite.",
-			"waiver_min_required_usd": "La dispense de frais d'annonce exige une taille de commande minimale. Réglez la valeur minimale à au moins 1 $ US."
+			"waiver_min_required_usd": "La dispense de frais d'annonce exige une taille de commande minimale. Réglez la valeur minimale à au moins 1 $ US.",
+			"waiver_fiat_unconvertible": "Ce serveur ne peut pas convertir {fiat} en dollars américains pour le moment ; il ne peut donc pas vérifier le minimum de 1 $ US du premier achat gratuit. Choisissez une devise courante (par exemple USD) ou payez les petits frais d'annonce."
 		},
 		"fee": {
 			"heading": "Frais d'inscription",
@@ -3273,7 +3289,9 @@
 			"feature_upsell_cta": "Configurer une enchère en vedette",
 			"edit_window_countdown": "{remaining} pour modifier",
 			"edit_window_tooltip": "Les modifications ne sont possibles que dans les 15 minutes après publication. Ensuite, annule et republie.",
-			"edit_window_expired": "Fenêtre d'édition fermée"
+			"edit_window_expired": "Fenêtre d'édition fermée",
+			"btc_title": "Publié ! Il reste une étape : payer les frais",
+			"btc_body": "Votre ordre apparaîtra tout seul dans le carnet d'ordres dès que ses frais en Bitcoin seront payés et confirmés."
 		},
 		"broadcast_error": {
 			"title": "L'ordre n'est pas passé",
@@ -3299,7 +3317,7 @@
 			"btc_label": "Payer en BTC",
 			"btc_hint": "Envoyez les frais à notre adresse Bitcoin, puis collez l'ID de transaction ci-dessous.",
 			"xmr_label": "Payer en XMR",
-			"xmr_hint": "Envoyez les frais à notre adresse Monero, puis collez l'ID de transaction et la preuve ci-dessous.",
+			"xmr_hint": "Envoyez les frais depuis votre portefeuille Monero, puis collez ci-dessous l'ID de transaction et la clé de transaction.",
 			"txid_label": "ID de transaction",
 			"txid_placeholder": "Collez l'ID de transaction (64 caractères hex)",
 			"txid_required": "L'identifiant de transaction ou le Hash est requis.",
@@ -3307,27 +3325,6 @@
 			"txid_hint": "Votre ordre n'apparaîtra dans le carnet qu'une fois le paiement confirmé sur sa chaîne.",
 			"txid_tooltip": "L'ID de transaction de votre portefeuille — une longue chaîne de caractères hex qui prouve votre paiement. Cliquez pour des détails sur où le trouver.",
 			"txid_tooltip_aria": "Qu'est-ce qu'un ID de transaction ?",
-			"tx_proof_label": "Preuve de paiement",
-			"tx_proof_placeholder": "Collez la chaîne de preuve de votre portefeuille (commence par OutProofV1 ou OutProofV2)",
-			"tx_proof_required": "La preuve de paiement est requise pour les commandes en Monero.",
-			"tx_proof_malformed_prefix": "La preuve doit commencer par OutProofV1 ou OutProofV2 — c'est le préfixe que tout générateur de preuve Monero produit.",
-			"tx_proof_malformed_length": "La chaîne de preuve est trop courte ou trop longue. Générez-en une nouvelle depuis votre portefeuille.",
-			"tx_proof_malformed_charset": "La preuve contient des caractères qui n'y appartiennent pas. Copiez-la proprement depuis la boîte de dialogue de preuve de votre portefeuille.",
-			"tx_proof_hint": "Votre portefeuille la génère gratuitement. La preuve ne révèle que ce seul paiement — aucune autre activité de portefeuille.",
-			"tx_proof_tooltip": "Une courte chaîne de votre portefeuille Monero qui prouve que vous avez payé cette transaction spécifique à notre adresse — sans rien révéler d'autre de votre portefeuille. Cliquez pour les instructions par portefeuille.",
-			"tx_proof_tooltip_aria": "Qu'est-ce qu'une preuve de paiement ?",
-			"tx_proof_privacy_note": "Confidentialité : cette preuve ne révèle que ce seul paiement à cette adresse. Elle NE révèle PAS vos autres transactions, votre solde, vos autres adresses, ni aucune métadonnée de portefeuille.",
-			"tx_proof_how_to_label": "Comment générer votre preuve (par portefeuille)",
-			"tx_proof_how_to_cli_heading": "Monero CLI",
-			"tx_proof_how_to_cli_body": "Exécutez : get_tx_proof <votre-txid> <notre-adresse>. Le portefeuille imprime une longue chaîne commençant par OutProofV2 — copiez-la.",
-			"tx_proof_how_to_gui_heading": "Monero GUI",
-			"tx_proof_how_to_gui_body": "Ouvrez Advanced → Prove transaction. Renseignez l'ID de transaction et notre adresse. Cliquez sur Generate. Copiez la chaîne de preuve obtenue.",
-			"tx_proof_how_to_cake_heading": "Cake Wallet",
-			"tx_proof_how_to_cake_body": "Settings → Privacy → Verify a transaction → Generate proof. Renseignez le txid et notre adresse ; copiez la preuve.",
-			"tx_proof_how_to_feather_heading": "Feather Wallet",
-			"tx_proof_how_to_feather_body": "Tools → Prove/check transaction → Generate. Renseignez le txid et notre adresse ; copiez la chaîne de preuve.",
-			"tx_proof_how_to_other_heading": "Autres portefeuilles Monero",
-			"tx_proof_how_to_other_body": "La plupart des portefeuilles Monero modernes ont une fonction « Prove transaction » ou « Generate proof » dans leurs paramètres avancés ou de confidentialité. Cherchez sous Tools, Privacy ou Advanced. Voir l'entrée FAQ sur les preuves de paiement pour l'explication complète.",
 			"fee_address_heading_btc": "Envoyez vos frais en BTC à cette adresse",
 			"fee_address_heading_xmr": "Envoyez vos frais en XMR à cette adresse",
 			"fee_address_amount_btc": "Montant : {amount} BTC ({sats} sats)",
@@ -3338,7 +3335,35 @@
 			"fee_address_chain_pinned": "Ancré sur la chaîne par {account} — chaque instance Morphit vérifie les frais contre cette adresse.",
 			"fee_address_chain_pinned_aria": "Authenticité de l'adresse ancrée sur la chaîne",
 			"fee_address_unavailable": "Cet opérateur n'a pas configuré d'adresse de frais {asset}. Choisissez BLURT à la place, ou publiez votre ordre sur une autre instance Morphit.",
-			"blurt_needs_active_key": "Nécessite votre clé Active. Vous êtes connecté avec votre clé Posting — {brand} vous demandera votre clé Active au moment de publier, et rien de ce que vous avez saisi ne sera perdu."
+			"blurt_needs_active_key": "Nécessite votre clé Active. Vous êtes connecté avec votre clé Posting — {brand} vous demandera votre clé Active au moment de publier, et rien de ce que vous avez saisi ne sera perdu.",
+			"btc_hint_per_order": "Publiez d'abord, payez ensuite : vous recevrez une adresse Bitcoin créée uniquement pour cette annonce.",
+			"btc_per_order_heading": "Comment fonctionnent les frais en BTC",
+			"btc_per_order_body": "Après la publication, vous verrez une adresse Bitcoin créée uniquement pour cette annonce et le montant exact à envoyer (environ {amount} BTC). Payez-le depuis n'importe quel portefeuille Bitcoin et votre ordre apparaîtra tout seul dans le carnet d'ordres. Aucun ID de transaction à copier.",
+			"tx_key_label": "Clé de transaction",
+			"tx_key_tooltip": "Un code de 64 caractères que votre portefeuille Monero affiche pour chaque paiement envoyé. Il permet à chacun de vérifier que ce paiement précis nous est parvenu, et il ne peut déplacer aucun argent. Cliquez pour savoir où le trouver dans votre portefeuille.",
+			"tx_key_tooltip_aria": "Qu'est-ce qu'une clé de transaction ?",
+			"tx_key_privacy_note": "Bon à savoir : cette clé est publiée avec votre annonce pour que chaque serveur Morphit puisse vérifier votre paiement. Elle prouve ce seul paiement et ne peut déplacer aucun argent. Quelqu'un qui connaît aussi l'adresse de votre portefeuille pourrait s'en servir pour voir la monnaie rendue de ce paiement ; pour un maximum de confidentialité, payez les frais depuis une adresse que vous n'avez partagée avec personne.",
+			"tx_key_how_to_label": "Où trouver la clé de transaction ?",
+			"tx_key_how_to_cli_heading": "Monero CLI (monero-wallet-cli)",
+			"tx_key_how_to_cli_body": "Tapez get_tx_key suivi de l'ID de transaction, puis copiez la clé affichée.",
+			"tx_key_how_to_gui_heading": "Monero GUI",
+			"tx_key_how_to_gui_body": "Ouvrez Transactions, ouvrez les détails du paiement et copiez la « Transaction key ».",
+			"tx_key_how_to_feather_heading": "Feather",
+			"tx_key_how_to_feather_body": "Dans History, faites un clic droit sur le paiement, choisissez « Show details », puis « Copy Tx Secret Key ».",
+			"tx_key_how_to_cake_heading": "Cake Wallet",
+			"tx_key_how_to_cake_body": "Touchez le paiement dans la liste des transactions et copiez la « Transaction Key ».",
+			"tx_key_how_to_monerujo_heading": "Monerujo",
+			"tx_key_how_to_monerujo_body": "Touchez le paiement et copiez la « TX Key ».",
+			"tx_key_how_to_other_heading": "Autres portefeuilles Monero",
+			"tx_key_how_to_other_body": "Cherchez « transaction key », « tx key » ou « tx secret key » dans les détails du paiement. Seul le portefeuille qui a envoyé le paiement la possède : une plateforme d'échange ne peut pas vous la donner. Si votre portefeuille ne l'affiche pas, payez depuis l'un des portefeuilles ci-dessus ou payez les frais en BLURT.",
+			"tx_key_placeholder": "64 caractères, 0–9 et a–f",
+			"tx_key_hint": "Copiez-la depuis le portefeuille qui a envoyé le paiement.",
+			"tx_key_required": "Collez la clé de transaction du paiement.",
+			"tx_key_malformed": "Ce n'est pas une clé de transaction : elle fait exactement 64 caractères, uniquement 0–9 et a–f. Une « preuve de paiement » (commençant par OutProof) ne fonctionnera pas.",
+			"tx_key_several": "Votre portefeuille affiche plus d'une clé : ce paiement est donc aussi allé à d'autres adresses. Envoyez les frais d'annonce dans un paiement séparé, puis utilisez l'ID et la clé de ce paiement.",
+			"xmr_bound_heading": "Envoyez les frais en Monero à l'adresse propre à cette annonce",
+			"xmr_bound_body": "Cette adresse a été créée pour cette seule annonce (code {permlink}) : personne d'autre ne peut revendiquer votre paiement. Envoyez le montant ci-dessous une seule fois, dans un paiement séparé, puis collez ci-dessous l'ID et la clé de transaction de ce paiement. Si vous fermez cette page, votre brouillon garde la même adresse.",
+			"xmr_bound_need_account": "Connectez-vous d'abord : l'adresse des frais en Monero est créée pour votre compte et cette annonce."
 		},
 		"draft": {
 			"restored_banner": "Brouillon restauré d'il y a {age}. Reprends où tu t'étais arrêté — ou recommence.",
@@ -3760,7 +3785,7 @@
 		"step2_title": "Lancez une seule commande",
 		"step2_body": "Téléchargez la dernière version, extrayez-la dans un dossier /morphit/, ouvrez-y un terminal et lancez sudo bash morphit-setup.sh — puis choisissez « Full guided install ». Un court assistant vous pose quelques questions en langage clair (votre domaine, votre compte Blurt, un e-mail pour HTTPS) et configure tout pour vous : Node.js, PostgreSQL, l'application et ses services, HTTPS à renouvellement automatique, le pare-feu et vos adresses Tor et I2P. Aucun fichier à modifier.",
 		"step3_title": "Inscrivez-vous comme opérateur",
-		"step3_body": "Lancez npx morphit-ops register pour revendiquer votre tag sur la chaîne, premier arrivé premier servi. Votre instance apparaît dans l'annuaire /operators et commence à gagner automatiquement votre part de 90 % des frais de dépôt payés en Blurt, versés sur la chaîne. Consultez la FAQ sur les revenus des opérateurs pour les détails économiques.",
+		"step3_body": "Lancez sudo morphit-ops register pour revendiquer votre tag sur la chaîne, premier arrivé premier servi. Votre instance apparaît dans l'annuaire /operators et commence à gagner automatiquement votre part de 90 % des frais de dépôt payés en Blurt, versés sur la chaîne. Consultez la FAQ sur les revenus des opérateurs pour les détails économiques.",
 		"asset_policy_heading": "Votre instance, votre politique d'actifs",
 		"asset_policy_body": "La fédération de Morphit permet à chaque opérateur de choisir pour quels actifs négociables son instance accepte de nouveaux ordres. Les nouveaux actifs sont livrés ACTIVÉS par défaut à l'échelle de l'instance — les opérateurs les désactivent par actif via la variable d'environnement `MORPHIT_INDEXER_DISABLED_ASSETS`. Ainsi une fédération d'instances peut servir des préférences utilisateur différentes sans que personne n'ait à bifurquer le code.",
 		"asset_policy_default_label": "Activé par défaut pour les nouveaux actifs.",
@@ -3808,7 +3833,7 @@
 			"err_contact_url_too_long": "L'URL de contact est trop longue.",
 			"err_contact_url_bad_scheme": "L'URL de contact doit utiliser https:// ou http://.",
 			"err_contact_url_not_url": "L'URL de contact n'est pas une URL valide.",
-			"err_account_already_registered": "Ce compte est déjà inscrit comme opérateur. Vous pouvez mettre à jour le nom d'affichage ou l'URL de contact via une future page de paramètres, mais votre tag est immuable une fois revendiqué.",
+			"err_account_already_registered": "Ce compte est déjà inscrit comme opérateur. Se réinscrire met à jour votre nom d’affichage, votre contact et votre origine ; seul votre tag reste fixe une fois revendiqué.",
 			"err_tag_reserved": "Cet identifiant est réservé au projet Morphit. Choisis-en un autre."
 		},
 		"beginner_label": "Première fois ?",
@@ -3859,7 +3884,10 @@
 		"failed_posting_key_not_authorized": "Ta clé de connexion n'est pas actuellement autorisée pour ce compte. Les clés du compte ont peut-être changé depuis ton import. Réimporte ta phrase de sauvegarde ou contacte le titulaire du compte.",
 		"failed_account_not_found": "Impossible de trouver ce compte sur la blockchain. Vérifie le nom du compte dans Paramètres.",
 		"failed_chain_unreachable": "Impossible de contacter la blockchain pour vérifier ton compte. Vérifie ta connexion et réessaie.",
-		"failed_back_home": "Retour à l'accueil"
+		"failed_back_home": "Retour à l'accueil",
+		"checking": "Vérification du code…",
+		"not_in_directory_heading": "Instance Morphit inconnue",
+		"not_in_directory_body": "Ce code QR vient d'une instance qui n'est pas dans le répertoire Morphit. Pour ta sécurité, ton téléphone ne s'y connectera pas."
 	},
 	"security": {
 		"heading": "Posture de sécurité",
@@ -4539,7 +4567,8 @@
 				"code_label": "Code authentificateur ou code de secours",
 				"code_placeholder": "000000 ou XXXX-XXXX",
 				"err_invalid_code": "Ce code n’a pas été vérifié. Vérifiez que l’heure de votre appareil est synchronisée, ou essayez un code de secours.",
-				"err_locked_out": "Trop de tentatives invalides. Réessayez dans {seconds} secondes."
+				"err_locked_out": "Trop de tentatives invalides. Réessayez dans {seconds} secondes.",
+				"err_unavailable_insecure": "Les codes d’authentification ne peuvent pas être vérifiés sur cette connexion : votre navigateur désactive cette fonction sur les adresses HTTP simples, comme celles d’I2P. Saisissez plutôt l’un de vos codes de secours, ou déverrouillez sur l’adresse https:// ou .onion de {brand}."
 			},
 			"recommended_apps": {
 				"heading": "Applications d’authentification recommandées (open source)",
@@ -4576,7 +4605,8 @@
 			},
 			"confirm_password_to_begin": "Confirmez votre mot de passe pour commencer",
 			"confirm_password": "Confirmez votre mot de passe",
-			"yubikey_protected": "Ce porte-clés est protégé par une YubiKey. L’ajout du 2FA basé sur TOTP à un porte-clés protégé par YubiKey n’est pas pris en charge dans cette version. Votre YubiKey fournit déjà une authentification cryptographiquement plus forte que ne le ferait TOTP."
+			"yubikey_protected": "Ce porte-clés est protégé par une YubiKey. L’ajout du 2FA basé sur TOTP à un porte-clés protégé par YubiKey n’est pas pris en charge dans cette version. Votre YubiKey fournit déjà une authentification cryptographiquement plus forte que ne le ferait TOTP.",
+			"unavailable_insecure": "La configuration de la double authentification nécessite une fonction du navigateur désactivée sur cette connexion (une adresse HTTP simple, comme celles d’I2P). Pour activer ou désactiver la 2FA, ou obtenir de nouveaux codes de secours, ouvrez {brand} à son adresse https:// ou à son adresse .onion dans Tor Browser."
 		},
 		"visibility": {
 			"public": "Public",
@@ -4825,5 +4855,30 @@
 		"email": "E-mail",
 		"nostr": "Nostr",
 		"web": "Web"
+	},
+	"insecure_context": {
+		"notice": "Votre navigateur ne considère pas cette adresse comme une connexion sécurisée (par exemple une adresse I2P en HTTP simple) ; il désactive donc ici quelques fonctions : les codes d’authentification (2FA), les boutons de copie, la vérification de l’empreinte dans le chat, le mode hors ligne et les notifications. Vos clés, vos échanges et le chat fonctionnent toujours. Pour ces fonctions, ouvrez {brand} à son adresse https:// ou à son adresse .onion dans Tor Browser.",
+		"dismiss": "Compris"
+	},
+	"btc_fee_pay": {
+		"heading": "Payez les frais d'annonce",
+		"intro": "Envoyez le montant ci-dessous à cette adresse Bitcoin. L'adresse appartient uniquement à cette annonce : personne d'autre ne peut utiliser votre paiement.",
+		"amount": "Montant à envoyer : {amount} BTC",
+		"address_label": "Adresse Bitcoin de cette annonce",
+		"copy": "Copier l'adresse",
+		"open_wallet": "Ouvrir dans mon portefeuille",
+		"waiting_address": "Obtention de votre adresse de paiement… Cela prend environ une minute, le temps que le réseau Blurt confirme votre ordre.",
+		"checking": "Vérification des détails du paiement…",
+		"mismatch": "Nous n'avons pas pu vérifier cette adresse de paiement, nous ne l'affichons donc pas. Ne payez pas encore : réessayez dans quelques minutes ou utilisez une autre instance.",
+		"on_its_way": "Nous voyons {amount} BTC en route. Le réseau Bitcoin le confirme généralement en 10 à 60 minutes.",
+		"received_partial": "Reçu jusqu'à présent : {amount} BTC.",
+		"all_sent": "Paiement reçu. Dès que le réseau Bitcoin l'aura confirmé, votre ordre sera en ligne tout seul.",
+		"paid": "Frais payés. Votre ordre est dans le carnet d'ordres.",
+		"when_live": "Vous pouvez fermer cette page : votre ordre sera en ligne tout seul une fois le paiement confirmé. Merci de payer sous 7 jours. Vous retrouverez aussi cette adresse dans Mes ordres.",
+		"slow": "Toujours pas d'adresse ? Votre ordre n'a donc pas été accepté, et vous n'avez rien payé. Une raison possible : la limite de 3 annonces par jour avec des frais en Bitcoin. Réessayez plus tard ou payez les frais en BLURT.",
+		"peer_disagrees": "Un autre serveur Morphit a attribué une adresse Bitcoin différente à cette annonce : la copie de la blockchain de ce serveur est peut-être décalée. Pour protéger votre argent, aucune adresse n'est affichée. Réessayez plus tard ou ouvrez cette annonce sur un autre serveur Morphit.",
+		"check_now": "J'ai payé — vérifier maintenant",
+		"checking_now": "Vérification…",
+		"check_again_in": "Revérifier dans {seconds} s"
 	}
 }

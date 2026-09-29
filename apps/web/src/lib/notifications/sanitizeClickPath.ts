@@ -20,11 +20,15 @@
  *                                  preserves the javascript: scheme
  *     - `'mailto:a@b'`         → opens mail client
  *
- *   `WindowClient.navigate()` enforces same-origin per spec, but
- *   `clients.openWindow()` does NOT uniformly across browsers
- *   (Chrome will open cross-origin tabs from a SW context).
- *   The fix here is at the SW level: validate before either is
- *   called.
+ *   Neither `WindowClient.navigate()` nor `clients.openWindow()`
+ *   stops a cross-origin URL: navigate() performs the navigation and
+ *   only resolves its promise with null afterwards, and openWindow()
+ *   opens any URL. So the SW must validate before either is called.
+ *
+ *     - `'/.//evil.com/x'`, `'https://<origin>//evil.com/x'` resolve
+ *       same-origin, but their pathname `//evil.com/x` becomes
+ *       protocol-relative when the caller resolves it again — so the
+ *       returned path is re-checked the way the caller uses it.
  *
  * Behavior:
  *
@@ -51,7 +55,14 @@ export function sanitizeClickPath(input: unknown, origin: string): string {
 		if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') {
 			return '/';
 		}
-		return resolved.pathname + resolved.search + resolved.hash;
+		const path = resolved.pathname + resolved.search + resolved.hash;
+		// v1.20.0 review (F-3): `/.//evil.com`, `/..//evil.com` and
+		// `https://<origin>//evil.com` all resolve SAME-origin with a pathname
+		// that starts with `//`. The caller re-resolves the returned path
+		// (`new URL(path, origin)`), which reads that as protocol-relative and
+		// lands on evil.com. Check the result the way the caller will use it.
+		if (path.startsWith('//') || new URL(path, origin).origin !== origin) return '/';
+		return path;
 	} catch {
 		return '/';
 	}

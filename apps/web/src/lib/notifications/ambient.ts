@@ -97,6 +97,13 @@ export function setBaseTitle(base: string): void {
  *   - SVG favicons: we render the badge over the rasterized version,
  *     so some fidelity is lost. Acceptable tradeoff.
  */
+/** A theme token as a canvas colour: `rgb(R G B)` from `--<name>-rgb` on
+ *  <html> (src/theme.css defaults, or the instance's theme). */
+function themeColor(name: string): string {
+	const v = getComputedStyle(document.documentElement).getPropertyValue(`--${name}-rgb`).trim();
+	return /^\d{1,3} \d{1,3} \d{1,3}$/.test(v) ? `rgb(${v.replace(/ /g, ', ')})` : 'gray';
+}
+
 async function setFaviconBadge(count: number): Promise<void> {
 	const link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
 	if (!link || originalFaviconHref === null) return;
@@ -145,10 +152,11 @@ async function setFaviconBadge(count: number): Promise<void> {
 		const badgeCx = FAVICON_SIZE - badgeR;
 		const badgeCy = badgeR;
 
-		// Morphit brand emerald for the badge fill. Using #00DA69 (the
-		// middle gradient stop) so it reads as "Morphit" color at a
-		// glance even at 16×16.
-		ctx.fillStyle = '#00DA69';
+		// The brand's primary accent for the badge fill (Morphit: the emerald
+		// middle gradient stop) so it reads as the site's colour at a glance
+		// even at 16×16 — read from the theme tokens (src/theme.css), so an
+		// instance's colour theme recolours the badge too.
+		ctx.fillStyle = themeColor('brand-primary');
 		ctx.beginPath();
 		ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2);
 		ctx.fill();
@@ -156,7 +164,7 @@ async function setFaviconBadge(count: number): Promise<void> {
 		// Badge text — cap visible count at 9+ so two-digit numbers
 		// don't blow out the circle.
 		const text = count > 9 ? '9+' : String(count);
-		ctx.fillStyle = '#0F141C'; // dark ink for contrast on emerald
+		ctx.fillStyle = themeColor('surface-900'); // dark ink for contrast on the accent
 		const fontSize = count > 9 ? FAVICON_SIZE * 0.36 : FAVICON_SIZE * 0.46;
 		ctx.font = `900 ${fontSize}px system-ui, sans-serif`;
 		ctx.textAlign = 'center';

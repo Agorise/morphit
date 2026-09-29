@@ -427,11 +427,11 @@
 		   the textarea's content, but at low opacity so it doesn't
 		   look like a solid pill. */
 		background-color: rgb(255 255 255 / 0.78);
-		color: #64748b; /* slate-500 */
+		color: rgb(var(--slate-500-rgb));
 	}
 	:global(.dark) .pk-counter {
-		background-color: rgb(15 20 28 / 0.78); /* ink-900 at 78% */
-		color: #94a3b8; /* slate-400 */
+		background-color: rgb(var(--surface-900-rgb) / 0.78); /* ink-900 at 78% */
+		color: rgb(var(--slate-400-rgb));
 	}
 
 	.pk-counter-hidden {

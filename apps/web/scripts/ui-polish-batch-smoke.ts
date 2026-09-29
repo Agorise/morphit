@@ -50,8 +50,8 @@ check('the fiat keeps its own text-xs line-box (no phantom gap)', /font-sans tex
 check('the three columns get an even, roomier gutter', /grid grid-cols-3 gap-x-6 gap-y-3/.test(wallet));
 
 // ─── 2. focus border ─────────────────────────────────────────────────
-check('a crisp 1px emerald focus border is defined for text fields', /:focus-visible \{[\s\S]{0,200}border-color: theme\('colors\.morphit\.emerald'\)/.test(css));
-check('it paints a 1px ring, not a 3px translucent glow', /box-shadow: 0 0 0 1px theme\('colors\.morphit\.emerald'\)/.test(css));
+check('a crisp 1px emerald focus border is defined for text fields', /:focus-visible \{[\s\S]{0,200}border-color: rgb\(var\(--focus-ring-rgb\)\)/.test(css));
+check('it paints a 1px ring, not a 3px translucent glow', /box-shadow: 0 0 0 1px rgb\(var\(--focus-ring-rgb\)\)/.test(css));
 check('invalid fields keep their red border on focus', /:not\(\[aria-invalid='true'\]\):not\(\[class\*='border-red'\]\):focus-visible/.test(css));
 check('buttons/links keep the soft glow (rule is field-only)', !/:where\(a, button[^)]*\)[\s\S]{0,80}border-color: theme/.test(css));
 
@@ -59,7 +59,7 @@ check('buttons/links keep the soft glow (rule is field-only)', !/:where\(a, butt
 check('send validation lives in a pure, testable module', /export function validateBlurtAmount/.test(validation));
 check('amount precision is capped at BLURT\u2019s 3 decimals', /\^\\d\*\(\\\.\\d\{0,3\}\)\?\$/.test(validation));
 check('a sub-precision amount cannot become 0.000 BLURT', /MIN_BLURT = 0\.001/.test(validation) && /n >= MIN_BLURT/.test(validation));
-check('the modal uses the shared validator', /import \{[^}]*\bvalidateBlurtAmount\b[^}]*\} from '\$lib\/blurt\/sendValidation';/.test(send) && /validateBlurtAmount\(amountInput, blurtBalance\)/.test(send));
+check('the modal uses the shared validator', /import \{[^}]*\bvalidateBlurtAmount\b[^}]*\} from '\$lib\/blurt\/sendValidation';/.test(send) && /validateBlurtAmount\(amountParse\.value, blurtBalance\)/.test(send));
 // deep-deep: "use full balance" must FLOOR, never round — toFixed(3) can fill
 // the field with more BLURT than the user has, which the validator then rejects.
 check('use-full-balance floors to BLURT precision (never rounds up)', /floorToBlurtPrecision\(blurtBalance\)/.test(send) && !/amountInput = blurtBalance\.toFixed\(3\)/.test(send));

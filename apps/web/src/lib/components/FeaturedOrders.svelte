@@ -270,8 +270,12 @@
 	     🚀 cards announce themselves, and the label was just noise above them.
 	     The heading string is retained as the section's accessible NAME, so
 	     screen-reader users still get told what this group of cards is —
-	     removing the visible text shouldn't cost them the context. -->
-	<section aria-label={$_('featured.heading')} class="space-y-3">
+	     removing the visible text shouldn't cost them the context.
+	     v1.20.0: that name is a visually-hidden <h2> (not an aria-label) so the
+	     cards' <h3> titles sit under an <h2> and the homepage outline never jumps
+	     h1 → h3 (heading-hierarchy smoke follows this component). -->
+	<section aria-labelledby="featured-orders-heading" class="space-y-3">
+		<h2 id="featured-orders-heading" class="sr-only">{$_('featured.heading')}</h2>
 		{@render cards()}
 	</section>
 {:else if loaded && showEmptyState}

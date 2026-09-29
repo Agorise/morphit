@@ -75,11 +75,13 @@ Next, on the SERVER:
   1. Copy the key file over, e.g.:
        scp "${KEYFILE}" you@server:/var/lib/i2pd/morphit.dat
      then: sudo chown i2pd:i2pd /var/lib/i2pd/morphit.dat && sudo chmod 600 /var/lib/i2pd/morphit.dat
-  2. Add a tunnel in i2pd's tunnels.conf (point it at your web port):
+  2. Add a tunnel in i2pd's tunnels.conf (point it at the frontend fan-out
+     port 8090 — NOT the bare relay on 8080, which trusts X-Real-IP from its
+     caller and 404s the site):
        [morphit]
        type = http
        host = 127.0.0.1
-       port = 8080
+       port = 8090
        keys = morphit.dat
      then: sudo systemctl restart i2pd
   3. Run "morphit-ops" → "Set up a Tor / Lokinet / I2P address" → I2P,

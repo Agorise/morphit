@@ -5,13 +5,25 @@
  *   {
  *     v: 1,
  *     recipient: string (blurt account name),
- *     amount_blurt: number  // BLURT amount the client is paying
+ *     amount_blurt: number,  // BLURT amount the client is paying
+ *     operator_tag?: string  // v1.20.0 (G1): the tag of the instance the
+ *                            // sender paid through (older ops lack it)
  *   }
  *
- * Accompanying op (in the same Blurt transaction):
+ * Accompanying op(s) (in the same Blurt transaction), the payment-time split:
  *   transfer { from=signer, to=@morphit-fees,
  *              amount="N BLURT",
  *              memo="morphit-stranger:<recipient>" }
+ * for the canonical 10 % (or the whole fee), plus — when the sender's instance
+ * has its own fees account — a 90 % transfer to that account with the same memo.
+ *
+ * Cross-instance (v1.20.0, G1): the fee is verified on the RECIPIENT's
+ * instance, which is usually not the sender's. The owner leg counts when it
+ * went to this indexer's own recipient OR to the fee_recipient the operator
+ * owning `operator_tag` registered on chain before this block —
+ * $indexer/feeRecipients. Before, a fee paid through
+ * another instance was `fee_underpaid` here and the first-contact message was
+ * dropped. The canonical 10 % leg stays mandatory.
  *
  * Effect: record that `signer` has paid the first-contact fee
  * to message `recipient`. Inserts a row in `stranger_fees`
@@ -48,7 +60,8 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { getStrangerFeeQuote } from '$indexer/strangerFeePricing';
-import { canonicalShareOk, sumFeeTransfers } from '$indexer/fee';
+import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/fee';
+import { ownerRecipientsFor } from '$indexer/feeRecipients';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
@@ -148,7 +161,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const fee = sumFeeTransfers(
 		ctx.siblingOps,
 		ctx.signer,
-		ctx.config.feeRecipient,
+		// G1 — own recipient ∪ the tagged operator's registered fee account
+		// (∪ the legacy-grace account when the re-verifier re-runs this op).
+		[
+			...(await ownerRecipientsFor(client, ctx.config.feeRecipient, ctx.payload, ctx.blockNum)),
+			...(ctx.extraOwnerRecipients ?? [])
+		],
 		CANONICAL_TREASURY.blurt,
 		`morphit-stranger:${recipient}`
 	);
@@ -160,7 +178,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// no USD conversion needed.  Tolerance band absorbs floating-
 	// point rounding in the client's BLURT amount formatting.
 	const minAcceptable = quote.priceBlurt * (1 - ctx.config.feeTolerance);
-	if (fee.totalBlurt < minAcceptable) {
+	// G8 — exact milliBLURT comparison (no float-sum boundary error).
+	if (!meetsMinimumMilli(fee.totalMilli, minAcceptable)) {
 		return { ok: false, reason: 'fee_underpaid' };
 	}
 	if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) {

@@ -28,19 +28,24 @@
  *
  * WHY THIS IS NOT A TRUST HOLE
  *
- *  1. THE PUSH IS VERIFIED OFFLINE. What travels is the signed transaction the
+ *  1. THE PUSH IS VERIFIED. What travels is the signed transaction the
  *     browser already produced. The receiving instance recovers the public key
  *     from the signature over the transaction digest and checks it against the
- *     sender's `posting_pubkey`, which it already holds in its own `accounts`
- *     table from ordinary chain sync. No chain read, no network call, nothing
- *     on the critical path. Forging a message requires the sender's posting
- *     key — the same bar the chain itself sets.
+ *     sender's `posting_pubkey`. A CONFIRMED key on file is used offline, with
+ *     no network call on the critical path; an unconfirmed one (a pre-v1.18.0
+ *     row, a rotation read from a block, a poller far behind) or a signature
+ *     that does not match is checked against the chain through a quorum of RPC
+ *     operators, OFF the intake queue, under a budget (postingKeyLookupFromDb).
+ *     Forging a message requires the sender's posting key — the same bar the
+ *     chain itself sets.
  *
- *  2. IT CHANGES NOTHING DURABLE. The fast path has never written to the
- *     database and still does not — not chat, not orders, not receipts, not
- *     even a cache. It emits to `chatEventBus.emitFast`, exactly as the head
- *     tailer does, and the durable poller remains the sole writer once the
- *     block is irreversible. The worst a bad push can achieve is an SSE event
+ *  2. IT CHANGES NOTHING DURABLE. The fast path writes no message state — not
+ *     chat, not orders, not receipts, not keys. It emits to
+ *     `chatEventBus.emitFast`, exactly as the head tailer does, and the durable
+ *     poller remains the sole writer of history once the block is irreversible.
+ *     The ONE write, stated (v1.18.0 review, R4): when the notify gate passes
+ *     and the recipient has a push subscription, one `push_pending` row, keyed
+ *     on the transaction id under a unique index. The worst a bad push can achieve is an SSE event
  *     that no durable row ever backs — which the client already handles,
  *     because that is the head tailer's existing contract.
  *
@@ -81,6 +86,7 @@ import {
 	type LocatedChatOp
 } from '$indexer/headTailer';
 import { postJsonViaHiddenService } from '$indexer/hiddenServicePool';
+import { hiddenOriginForDial } from '$indexer/hiddenOriginForDial';
 import { primaryPostingKey } from '$indexer/postingKeyBackfill';
 import { clearnetRefused } from '@morphit/hidden-transport/router';
 import type {
@@ -601,24 +607,22 @@ export class KeyRefreshPending extends Error {
 	}
 }
 
-/** Re-read one account's posting key from the CHAIN.
- *
- *  Injected so a test COULD drive key rotation without a node — but nothing
- *  does yet. This path, its per-account cooldown and its global ceiling are
- *  currently unexercised, and saying so here is more useful than implying
- *  coverage that does not exist. Every smoke builds the route as
- *  `federationChatFastRoute(db)` with no refresher. */
+/** Re-read one account's posting key from the CHAIN (main.ts wires
+ *  `chainPostingKeyRefresher`, a quorum read). Injected so tests drive key
+ *  rotation without a node: test/integration/posting-key-rotation.test.ts and
+ *  fastchat-abuse-guards-smoke exercise it, its cooldown and its ceilings. */
 export interface PostingKeyRefresher {
 	(account: string): Promise<string | null>;
 }
 
 /** Per-account cooldown on chain refreshes, and a global ceiling on them.
  *
- *  A refresh is only ever triggered by a signature that did NOT verify, which is
- *  something anybody can produce for free. Without both bounds, "re-check the
- *  key when a signature fails" is an instruction to make an RPC call on demand,
- *  for any account name an attacker cares to name — a reflected load amplifier
- *  pointed at whichever node this instance is using. */
+ *  A refresh is triggered by a signature that did NOT match the key on file
+ *  (something anybody can produce for free), and by a key that is not
+ *  confirmed or a durable record too far behind (see the budgets below).
+ *  Without both bounds, "re-check the key" is an instruction to make an RPC
+ *  call on demand, for any account name an attacker cares to name — a
+ *  reflected load amplifier pointed at whichever node this instance is using. */
 const REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 const REFRESH_PER_MIN = 30;
 const refreshedAt = new Map<string, number>();
@@ -783,14 +787,14 @@ function freshKeyFor(account: string, now: number): string | null {
 /**
  * Look up a sender's posting key, normally from our own database.
  *
- * WHY THE `refresh` PATH EXISTS. `accounts.posting_pubkey` is written once and
- * never overwritten — the durable upsert COALESCEs it, and the backfill only
- * fills NULLs — because until now nothing depended on it being current. The fast
- * path does: it is the ONLY thing standing between a pushed transaction and a
- * message rendered as authentically from that account. A frozen key means a
- * stolen key keeps working after its owner has rotated it away on chain, which
- * the chain itself would refuse; and it means the owner's own messages stop
- * verifying, silently and permanently, the moment they rotate.
+ * WHY THE `refresh` PATH EXISTS. `accounts.posting_pubkey` is the ONLY thing
+ * standing between a pushed transaction and a message rendered as
+ * authentically from that account, and the column can lag the chain: the
+ * dispatcher records rotations only once their block is irreversible (and, since
+ * v1.20.0, records them UNCONFIRMED — a block is one RPC endpoint's word), and
+ * rows from before v1.18.0 may hold a key their owner rotated away from. So a
+ * key that is not confirmed is checked against the chain, and so is a
+ * signature that does not match the key on file.
  *
  * So a signature that does not match is treated as a question about the key
  * rather than a verdict about the message, and the chain is asked once — under a
@@ -2318,7 +2322,11 @@ export function fastPeerFromRow(row: DirectoryRow, proxies: HiddenServiceProxyCo
 	// sender in the first place.
 	const originHidden = hiddenNetworkOf(row.origin) !== null;
 	const hiddenOnly = clearnetRefused();
-	if (originHidden || !hiddenOnly) add(row.origin, originHidden);
+	// A legacy https:// hidden origin is dialled as http (v1.20.0, S9): the
+	// hidden transports carry plain HTTP, and `:443` meant plaintext to a TLS
+	// port. The peer's IDENTITY below stays the registered origin.
+	if (originHidden || !hiddenOnly)
+		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
 
 	// A hidden-only node with no hidden address for this peer: the peer keeps
 	// its identity (its queue key) but its one "address" is marked hidden, so it

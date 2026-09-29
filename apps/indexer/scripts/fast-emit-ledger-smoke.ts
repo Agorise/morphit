@@ -204,7 +204,10 @@ async function runTailerOverBlock(trxId: string, tag: string): Promise<string[]>
 		if (ev.clientTag !== null) seenTags.push(ev.clientTag);
 	});
 
-	const tailer = new HeadTailer(config, db, blurt);
+	// The signature check (v1.20.0, E1) is not what this smoke is about: it is
+	// covered against real signatures in test/integration/forged-block-trust.
+	// Here every op counts as signed, so the LEDGER is the only thing deciding.
+	const tailer = new HeadTailer(config, db, blurt, { signedBySigner: async () => true });
 	const running = tailer.run();
 	// First tick establishes the watermark at 10; then the head advances to 11.
 	await sleep(80);

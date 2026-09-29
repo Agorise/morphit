@@ -23,14 +23,18 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { expectedFeeBlurt, canonicalShareOk, sumFeeTransfers } from '$indexer/fee';
+import { listingFeeStatus, sumFeeTransfers } from '$indexer/fee';
+import { ownerRecipientsFor } from '$indexer/feeRecipients';
 import { trackVerifiedBlurtFee } from '$indexer/loyalty';
 import { attributeBlurtFeeToOperator } from '$indexer/operatorEarnings';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
+import { addressModePermlink, allocateBtcFeeAddress, btcPinAt } from '$indexer/fee/btcFeeAddressIndex';
+import { xmrBindingFor, xmrPrimaryAt, type XmrBinding } from '$indexer/fee/xmrBinding';
+import { xmrIntegratedAddress } from '@morphit/release-schema';
 import { logger } from '$log';
-import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, FEE_PRICE_TOLERANCE, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
 
 const log = logger('order-handler');
@@ -117,6 +121,11 @@ interface ValidatedOrder {
 	 *  fee verifier to confirm the payment without holding the
 	 *  treasury's view key. */
 	readonly tx_proof: string | null;
+	/** v1.20.0 (M-X1): the XMR fee transaction's private key r, 64 lowercase
+	 *  hex — what the explorers' txprove needs and what decrypts a bound
+	 *  payment ID. Null for non-XMR orders and for legacy OutProof-only XMR
+	 *  orders (stored `proof_unsupported`). */
+	readonly tx_key: string | null;
 	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
 	 *  network assets.  Non-null when asset is multi-network: for
 	 *  USDT one of 'erc20'|'trc20'|'spl'|'bep20'; for USDC one of
@@ -352,6 +361,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 	let fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' = 'blurt';
 	let external_tx_id: string | null = null;
 	let tx_proof: string | null = null;
+	let tx_key: string | null = null;
 	if (payload.fee_method !== undefined && payload.fee_method !== null) {
 		if (typeof payload.fee_method !== 'string') {
 			return { reason: 'fee_method_not_string' };
@@ -362,56 +372,69 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 			fee_method = 'waived_first_buy';
 		} else if (payload.fee_method === 'btc' || payload.fee_method === 'xmr') {
 			fee_method = payload.fee_method;
-			// external_tx_id is required for btc/xmr — it's the
-			// payer's pointer to "this is the payment that pays
-			// for this listing." Without it, there's no payment
-			// to verify.
+			// external_tx_id: the payer's pointer to "this is the payment
+			// that pays for this listing". Required for xmr. For btc it is
+			// OPTIONAL here (v1.20.0, MK-H2): once the treasury xpub is
+			// pinned, a BTC order carries NO txid and pays to its own
+			// address instead; before the pin the handler still requires
+			// one. Which of the two applies depends on the pin in force at
+			// the op's block, so the handler decides it, not this shape
+			// check.
 			const txid = payload.external_tx_id;
-			if (typeof txid !== 'string') {
+			if (txid === undefined || txid === null) {
+				if (payload.fee_method === 'xmr') {
+					return { reason: 'external_tx_id_required_for_btc_xmr' };
+				}
+			} else if (typeof txid !== 'string') {
 				return { reason: 'external_tx_id_required_for_btc_xmr' };
-			}
-			if (!/^[0-9a-f]{64}$/i.test(txid)) {
+			} else if (!/^[0-9a-f]{64}$/i.test(txid)) {
 				return { reason: 'external_tx_id_malformed' };
+			} else {
+				external_tx_id = txid.toLowerCase();
 			}
-			external_tx_id = txid.toLowerCase();
 
-			// Part 108++ — XMR-only: tx_proof is required for
-			// per-payment verification without a view key.  BTC
-			// has its own multi-explorer verification path that
-			// doesn't need a proof; only XMR needs this.
+			// v1.20.0 (M-X1) — XMR: the payer's transaction key.
+			// The explorer API every XMR verifier uses
+			// (onion-monero-blockchain-explorer /api/outputs?txprove=1)
+			// proves a payment with the 64-hex transaction PRIVATE key
+			// ("viewkey" parsed by parse_str_secret_key) and nothing else.
+			// Until v1.20.0 orders carried a wallet OutProof string here,
+			// which that API rejects — every XMR order ended `missing`.
+			// Now: `tx_key` (64 hex) is the proof. An order that still
+			// carries only an OutProof (older frontends) is accepted and
+			// stored `proof_unsupported` — deterministically, without asking
+			// any explorer — so the lister sees exactly why it is not on the
+			// book. An order with neither is refused.
 			if (payload.fee_method === 'xmr') {
-				const proof = payload.tx_proof;
-				if (typeof proof !== 'string') {
-					return { reason: 'tx_proof_required_for_xmr' };
+				const key = payload.tx_key;
+				if (key !== undefined && key !== null) {
+					if (typeof key !== 'string' || !/^[0-9a-fA-F]{64}$/.test(key.trim())) {
+						return { reason: 'tx_key_malformed' };
+					}
+					tx_key = key.trim().toLowerCase();
+				} else {
+					const proof = payload.tx_proof;
+					if (typeof proof !== 'string') {
+						return { reason: 'tx_key_required_for_xmr' };
+					}
+					const trimmed = proof.trim();
+					// Legacy shape checks kept so a stored proof stays bounded
+					// and printable (it is shown back to the lister, never sent
+					// anywhere any more).
+					if (
+						!trimmed.startsWith('OutProofV1') &&
+						!trimmed.startsWith('OutProofV2')
+					) {
+						return { reason: 'tx_proof_malformed_prefix' };
+					}
+					if (trimmed.length < 64 || trimmed.length > 4096) {
+						return { reason: 'tx_proof_malformed_length' };
+					}
+					if (!/^[A-Za-z0-9]+$/.test(trimmed)) {
+						return { reason: 'tx_proof_malformed_charset' };
+					}
+					tx_proof = trimmed;
 				}
-				const trimmed = proof.trim();
-				// Monero tx_proof strings start with 'OutProofV1' or
-				// 'OutProofV2' (out-bound proof) or 'InProofV1' /
-				// 'InProofV2' (in-bound proof, used by the recipient).
-				// For our use case the SENDER (user) is generating
-				// the proof, so it's an OutProof.  We accept either
-				// V1 or V2.  The full string is base58-encoded after
-				// the prefix and ranges in length depending on the
-				// number of outputs proven; we cap at a generous
-				// 4 KiB to bound the JSONB write size while comfortably
-				// fitting any realistic proof.
-				if (
-					!trimmed.startsWith('OutProofV1') &&
-					!trimmed.startsWith('OutProofV2')
-				) {
-					return { reason: 'tx_proof_malformed_prefix' };
-				}
-				if (trimmed.length < 64 || trimmed.length > 4096) {
-					return { reason: 'tx_proof_malformed_length' };
-				}
-				// Charset check — base58 + the literal "OutProofVN"
-				// prefix.  Reject control characters and other
-				// shenanigans early so they can't reach the
-				// verifier endpoint as a query parameter.
-				if (!/^[A-Za-z0-9]+$/.test(trimmed)) {
-					return { reason: 'tx_proof_malformed_charset' };
-				}
-				tx_proof = trimmed;
 			}
 		} else {
 			return { reason: 'fee_method_unknown' };
@@ -578,6 +601,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		fee_method,
 		external_tx_id,
 		tx_proof,
+		tx_key,
 		asset_network,
 		accepted_assets,
 		specific_barter_title,
@@ -594,7 +618,16 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
  *  Sybil tier" bucket per ADR-0009 §4: currently live OR created
  *  in the last 24h (even if cancelled). The count is of orders
  *  ALREADY in the DB; the order we're about to insert is the
- *  (n+1)-th. */
+ *  (n+1)-th.
+ *
+ *  "Currently live" means live AT THIS OP'S BLOCK TIME: status='live'
+ *  AND not past expires_at. (v1.20.0, G2) Nothing ever writes
+ *  status='expired' — expiry is enforced at read time — so the old
+ *  `status = 'live'` test counted every order that merely ran out as live
+ *  forever, compounding the fee 1.5× per expired order. Block time (not
+ *  NOW()) keeps the verdict identical on replay and across instances. The
+ *  frontend quote applies the same rule (apps/web/src/lib/orders/fee.ts
+ *  `countsTowardSybilTier`). */
 async function countForSybilTier(
 	client: pg.PoolClient,
 	signer: string,
@@ -605,8 +638,9 @@ async function countForSybilTier(
 		`SELECT COUNT(*)::text AS n
 		 FROM orders
 		 WHERE account = $1
-		   AND (status = 'live' OR created_at >= $2)`,
-		[signer, cutoff]
+		   AND ((status = 'live' AND (expires_at IS NULL OR expires_at > $3))
+		        OR created_at >= $2)`,
+		[signer, cutoff, blockTime]
 	);
 	return parseInt(res.rows[0]?.n ?? '0', 10);
 }
@@ -729,10 +763,15 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// comment flagged as a "multi-currency-pricing follow-up".
 		// fiatToUsd returns null when the currency can't be converted
 		// (FX feed disabled AND non-USD, or a currency outside both the
-		// live and static tables) — fall back to the documented direct
-		// comparison (treat amount_min as USD-equivalent), which is no
-		// worse than the pre-cp372 behaviour and exact for USD instances.
-		const minUsd = ctx.fiatToUsd(v.amount_min, v.fiat_currency) ?? v.amount_min;
+		// live and static tables).  (v1.20.0 fix wave, G5) That used to
+		// fall back to treating amount_min AS USD, so "1 IRR" passed the
+		// $1 floor on a node without an IRR rate while a node with one
+		// rejected the same op.  An amount we cannot value cannot clear a
+		// value floor: reject.  (USD always converts 1:1.)
+		const minUsd = ctx.fiatToUsd(v.amount_min, v.fiat_currency);
+		if (minUsd === null) {
+			return { ok: false, reason: 'waiver_fiat_unconvertible' };
+		}
 		if (minUsd < WAIVER_MIN_FIAT_USD) {
 			return { ok: false, reason: 'waiver_requires_min_usd' };
 		}
@@ -812,6 +851,150 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// payment, finds it underpaid/missing, or reports the explorer
 	// is unreachable (pending_external).
 	if (v.fee_method === 'btc' || v.fee_method === 'xmr') {
+		// ─── v1.20.0 (MK-H2): per-order BTC fee address ────────────────
+		// Once the release pin in force at this block carries the
+		// treasury's account xpub, a BTC fee is no longer "paste the txid
+		// of a payment to the shared address" — a watcher could paste a
+		// victim's txid first. Instead this order gets its OWN address
+		// (receive index n of the xpub, numbered in chain order from the
+		// event log — see fee/btcFeeAddressIndex.ts) and the re-check
+		// loop watches it. Everything here is chain data (pin at this
+		// block, event log), so every indexer lands on the same address,
+		// whatever its local verifier / explorer configuration.
+		if (v.fee_method === 'btc') {
+			const pin = await btcPinAt(client, ctx.blockNum);
+			if (pin !== null && pin.xpub !== undefined) {
+				if (v.external_tx_id !== null) {
+					// The shared-address txid path is closed for orders
+					// posted after the pin (MK-H2).
+					return { ok: false, reason: 'btc_fee_txid_after_xpub_pin' };
+				}
+				const permlink = addressModePermlink(ctx.payload);
+				if (permlink === null) {
+					// Unreachable after validate() (btc, no txid, valid
+					// permlink); kept so a future validator change cannot
+					// slip an unnumbered order through.
+					return { ok: false, reason: 'btc_fee_not_bindable' };
+				}
+				const alloc = await allocateBtcFeeAddress(
+					client,
+					{ blockNum: ctx.blockNum, trxInBlock: ctx.trxInBlock, opInTrx: ctx.opInTrx },
+					ctx.blockTime,
+					ctx.signer,
+					permlink,
+					pin.xpub
+				);
+				if (alloc.kind === 'refused') return { ok: false, reason: alloc.reason };
+				const addrRes = await client.query(
+					`INSERT INTO orders (
+						account, permlink, side, asset, asset_network, fiat_currency,
+						amount_min, amount_max, price_model, location_region,
+						payment_methods, terms, status, created_at, updated_at,
+						expires_at, fee_status, fee_method, external_tx_id, tx_proof,
+						operator_tag, accepted_assets, specific_barter_title, lang,
+						btc_fee_xpub, btc_fee_index, btc_fee_address, btc_fee_sats
+					) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+					          'live', $13, $13, $14, 'awaiting_payment', 'btc', NULL, NULL,
+					          $15, $16, $17, $18, $19, $20, $21, $22)
+					ON CONFLICT (account, permlink) DO NOTHING`,
+					[
+						ctx.signer,
+						v.permlink,
+						v.side,
+						v.asset,
+						v.asset_network,
+						v.fiat_currency,
+						v.amount_min,
+						v.amount_max,
+						v.price_model_serialized,
+						v.location_region,
+						v.payment_methods,
+						v.terms,
+						ctx.blockTime,
+						v.expires_at,
+						operatorTagForRow,
+						v.accepted_assets,
+						v.specific_barter_title,
+						v.lang,
+						alloc.xpub,
+						alloc.index,
+						alloc.address,
+						pin.satoshis
+					]
+				);
+				if ((addrRes.rowCount ?? 0) > 0) {
+					ctx.recordOrderbookChange(`${ctx.signer}/${v.permlink}`);
+				}
+				return { ok: true };
+			}
+			if (v.external_tx_id === null) {
+				// No xpub pinned yet: the pre-v1.20 txid path, which needs one.
+				return { ok: false, reason: 'external_tx_id_required_for_btc_xmr' };
+			}
+		}
+
+		// ─── v1.20.0 (M-X1 / MK-H2): XMR ───────────────────────────────
+		// No tx key (a legacy OutProof-only order): no explorer can check
+		// it, so it is stored `proof_unsupported` without asking one — the
+		// same answer on every indexer. external_tx_id stays NULL so the
+		// txid is not "taken" by a claim that can never verify.
+		//
+		// With a tx key: once a release pins treasury.xmr.primary_address
+		// (in force from the next block), the fee must be paid to the
+		// integrated address carrying THIS order's payment ID
+		// (Keccak("morphit-fee-v1|account/permlink")[0..8]); the verifier
+		// proves the amount with the key AND decrypts the payment ID. A
+		// txid + key copied from someone else's op then pays for nothing,
+		// so the first-claim-wins reuse rule is not needed (and not
+		// applied: it would let a copier knock the payer out as `reused`).
+		let xmrBinding: XmrBinding | null = null;
+		if (v.fee_method === 'xmr') {
+			if (v.tx_key === null) {
+				const unsupportedRes = await client.query(
+					`INSERT INTO orders (
+						account, permlink, side, asset, asset_network, fiat_currency,
+						amount_min, amount_max, price_model, location_region,
+						payment_methods, terms, status, created_at, updated_at,
+						expires_at, fee_status, fee_method, external_tx_id, tx_proof,
+						operator_tag, accepted_assets, specific_barter_title, lang
+					) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
+					          'live', $13, $13, $14, 'proof_unsupported', 'xmr', NULL, $15, $16, $17, $18, $19)
+					ON CONFLICT (account, permlink) DO NOTHING`,
+					[
+						ctx.signer,
+						v.permlink,
+						v.side,
+						v.asset,
+						v.asset_network,
+						v.fiat_currency,
+						v.amount_min,
+						v.amount_max,
+						v.price_model_serialized,
+						v.location_region,
+						v.payment_methods,
+						v.terms,
+						ctx.blockTime,
+						v.expires_at,
+						v.tx_proof,
+						operatorTagForRow,
+						v.accepted_assets,
+						v.specific_barter_title,
+						v.lang
+					]
+				);
+				if ((unsupportedRes.rowCount ?? 0) > 0) {
+					ctx.recordOrderbookChange(`${ctx.signer}/${v.permlink}`);
+				}
+				return { ok: true };
+			}
+			const primary = await xmrPrimaryAt(client, ctx.blockNum);
+			if (primary !== null) {
+				xmrBinding = xmrBindingFor(primary, ctx.signer, v.permlink);
+				// Unreachable: xmrPrimaryAt only returns a parsed address.
+				if (xmrBinding === null) return { ok: false, reason: 'xmr_fee_not_bindable' };
+			}
+		}
+
 		const verifier = v.fee_method === 'btc' ? ctx.feeVerifiers.btc : ctx.feeVerifiers.xmr;
 		if (verifier === undefined) {
 			// Operator hasn't configured this fee method. Reject
@@ -846,13 +1029,32 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// INSERT below where ON CONFLICT (account, permlink) DO
 		// NOTHING handles it correctly.  So the reuse query also
 		// excludes our own (account, permlink).
-		const reuseProbe = await client.query<{ account: string }>(
-			`SELECT account FROM orders
-			 WHERE fee_method = $1 AND external_tx_id = $2
-			   AND NOT (account = $3 AND permlink = $4)
-			 LIMIT 1`,
-			[v.fee_method, v.external_tx_id, ctx.signer, v.permlink]
-		);
+		// (v1.20.0) Bound XMR claims: a copied txid carries someone else's
+		// payment ID and simply fails, so first-claim-wins must NOT apply to
+		// them (a copier would knock the payer out). But one account can
+		// birthday-search two permlinks whose 8-byte payment IDs collide
+		// (~2^32 Keccak evaluations), and then ONE payment would carry the ID
+		// of both. So among bound claims, the first claim of a (txid, payment
+		// ID) pair wins, in chain order — orders_xmr_bound_payment_uniq. The
+		// unbound probe ignores bound rows, matching orders_external_tx_id_uniq.
+		const reuseProbe =
+			xmrBinding !== null
+				? await client.query<{ account: string }>(
+						`SELECT account FROM orders
+						 WHERE fee_method = 'xmr' AND external_tx_id = $1
+						   AND xmr_payment_id = $2
+						   AND NOT (account = $3 AND permlink = $4)
+						 LIMIT 1`,
+						[v.external_tx_id, xmrBinding.paymentId, ctx.signer, v.permlink]
+					)
+				: await client.query<{ account: string }>(
+						`SELECT account FROM orders
+						 WHERE fee_method = $1 AND external_tx_id = $2
+						   AND xmr_payment_id IS NULL
+						   AND NOT (account = $3 AND permlink = $4)
+						 LIMIT 1`,
+						[v.fee_method, v.external_tx_id, ctx.signer, v.permlink]
+					);
 		if ((reuseProbe.rowCount ?? 0) > 0) {
 			log.info('fee_tx_reused', {
 				signer: ctx.signer,
@@ -875,17 +1077,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			// idempotent), fee_status='reused' tells the UI exactly why the
 			// order is not on the book, and the claimed txid is kept in the
 			// fee_tx_reused log line above. The real fix — binding a BTC
-			// payment to the lister — needs a protocol change and is
-			// deferred.
+			// payment to the lister — landed in v1.20.0 (MK-H2): once the
+			// treasury xpub is pinned, BTC orders pay their own address
+			// (branch above) and this txid path only serves BTC orders
+			// posted before the pin, and XMR.
 			const reusedRes = await client.query(
 				`INSERT INTO orders (
 					account, permlink, side, asset, asset_network, fiat_currency,
 					amount_min, amount_max, price_model, location_region,
 					payment_methods, terms, status, created_at, updated_at,
 					expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-					operator_tag, accepted_assets, specific_barter_title, lang
+					operator_tag, accepted_assets, specific_barter_title, lang, xmr_tx_key
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-				          'live', $13, $13, $14, 'reused', $15, NULL, $16, $17, $18, $19, $20)
+				          'live', $13, $13, $14, 'reused', $15, NULL, $16, $17, $18, $19, $20, $21)
 				ON CONFLICT (account, permlink) DO NOTHING`,
 				[
 					ctx.signer,
@@ -907,7 +1111,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 					operatorTagForRow,
 					v.accepted_assets,
 					v.specific_barter_title,
-					v.lang
+					v.lang,
+					v.tx_key
 				]
 			);
 			// Reused-fee orders have fee_status='reused' so they
@@ -928,6 +1133,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			expectedAmount,
 			externalTxId: v.external_tx_id,
 			txProof: v.tx_proof,
+			txKey: v.tx_key,
+			xmrBinding,
 			permlink: v.permlink,
 			signer: ctx.signer
 		});
@@ -961,9 +1168,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				amount_min, amount_max, price_model, location_region,
 				payment_methods, terms, status, created_at, updated_at,
 				expires_at, fee_status, fee_method, external_tx_id, tx_proof,
-				operator_tag, accepted_assets, specific_barter_title, lang
+				operator_tag, accepted_assets, specific_barter_title, lang,
+				xmr_tx_key, xmr_payment_id, xmr_fee_address
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12,
-			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+			          'live', $13, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+			          $23, $24, $25)
 			ON CONFLICT (account, permlink) DO NOTHING`,
 			[
 				ctx.signer,
@@ -987,7 +1196,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				operatorTagForRow,
 				v.accepted_assets,
 				v.specific_barter_title,
-				v.lang
+				v.lang,
+				v.tx_key,
+				xmrBinding?.paymentId ?? null,
+				xmrBinding !== null ? xmrIntegratedAddress(xmrBinding.primaryAddress, xmrBinding.paymentId) : null
 			]
 		);
 		if ((externalRes.rowCount ?? 0) > 0) {
@@ -1008,10 +1220,23 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// underpaid check and separately confirm the canonical treasury received its
 	// ~10% cut — that second check is what stops a federation instance from
 	// keeping the canonical's share.
+	//
+	// v1.20.0 (G1) — "this instance's fee recipient" is not the only owner: an
+	// order posted through ANOTHER instance paid ITS fee account. The owner leg
+	// also counts when it went to the fee_recipient the operator owning the
+	// order's `operator_tag` registered on chain before this block —
+	// $indexer/feeRecipients has the rule. Before,
+	// every such order was `underpaid`, i.e. hidden, on every other instance.
+	const ownerRecipients = await ownerRecipientsFor(
+		client,
+		ctx.config.feeRecipient,
+		ctx.payload,
+		ctx.blockNum
+	);
 	const fee = sumFeeTransfers(
 		ctx.siblingOps,
 		ctx.signer,
-		ctx.config.feeRecipient,
+		ownerRecipients,
 		CANONICAL_TREASURY.blurt,
 		`morphit-fee:${v.permlink}`
 	);
@@ -1040,19 +1265,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// floor (overpayment fine); an operator who set feeTolerance
 		// wider than 15% keeps it.  Bounded + not fork-controllable.
 		const feeBaseBlurt = ctx.feeAmounts.blurtBase ?? ctx.config.feeBaseBlurt;
-		const expected = expectedFeeBlurt(nth, feeBaseBlurt);
-		const tolerance = Math.max(ctx.config.feeTolerance, FEE_PRICE_TOLERANCE);
-		const minAcceptable = expected * (1 - tolerance);
-		if (fee.totalBlurt < minAcceptable) {
-			feeStatus = 'underpaid';
-		} else if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) {
-			// Total was paid, but the canonical treasury's 10% leg was missing or
-			// short. Treated as underpaid (order stays hidden) — the canonical
-			// cut is not optional.
-			feeStatus = 'underpaid';
-		} else {
-			feeStatus = 'verified';
-		}
+		// Floor = base × tier × (1 − max(feeTolerance, FEE_PRICE_TOLERANCE)) in
+		// exact milliBLURT (G8), then the canonical treasury's 10 % leg must be
+		// there — the canonical cut is not optional. Shared with the G1
+		// re-verification (blurtFeeReverify.ts) so both give one verdict.
+		feeStatus = listingFeeStatus(fee, nth, feeBaseBlurt, ctx.config.feeTolerance);
 	}
 
 	// INSERT ... ON CONFLICT DO NOTHING — idempotent. If the row

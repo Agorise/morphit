@@ -101,16 +101,6 @@ export function validateContactUrl(
 	return { ok: true };
 }
 
-/** Broadcast an operator registration op. Signs with the posting
- *  key from the LiveIdentity. Caller is responsible for ensuring
- *  the identity is unlocked — this function throws BroadcastError
- *  with code='no_account' if the user has no Blurt account yet.
- *
- *  On-chain rejection reasons (visible in indexer event log) map to
- *  UI messages via the same i18n keys as the client-side validators:
- *    - tag_already_claimed: another account registered this tag first
- *    - account_already_registered: this account already has an op
- *      identity — ask the user if they meant to switch accounts */
 /** Pure body-builder for an operator-register op. Takes the
  *  (already-validated) payload plus an explicit `ts` and returns
  *  the wire body with redaction applied to free-text.
@@ -141,6 +131,21 @@ export function buildOperatorRegisterBody(
 	return body;
 }
 
+/** Broadcast an operator registration op. Signs with the posting
+ *  key from the LiveIdentity. Caller is responsible for ensuring
+ *  the identity is unlocked — this function throws BroadcastError
+ *  with code='no_account' if the user has no Blurt account yet.
+ *
+ *  The indexer applies the op as an UPSERT keyed on the SIGNING ACCOUNT
+ *  (apps/indexer/src/indexer/handlers/operatorRegister.ts): the first op
+ *  claims the tag (first-come-first-served, immutable afterwards);
+ *  re-registering from the same account with the same tag UPDATES
+ *  display_name, origin, contact_url and the alt addresses. On-chain
+ *  rejections (visible in the indexer event log):
+ *    - tag_already_claimed: another account already holds this tag
+ *    - tag_immutable: this account is registered under a different tag
+ *    - plus the shape/validation reasons the client-side validators
+ *      above already catch. */
 export async function broadcastOperatorRegister(
 	live: LiveIdentity,
 	payload: OperatorRegisterPayload

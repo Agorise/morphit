@@ -112,78 +112,32 @@ describe('buildOrderPayload — pass-through (no over-redaction)', () => {
 		expect(out.external_tx_id).toHaveLength(64);
 	});
 
-	it('Part 108++: includes tx_proof when feeMethod=xmr and txProof is supplied', () => {
-		const proof =
-			'OutProofV2' +
-			'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789' +
-			'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789';
+	it('v1.20.0 (M-X1): includes tx_key (trimmed, lowercased) for xmr and never a tx_proof', () => {
+		const key = 'E5B4FE26AE0A3A2F7D2BBED8A0C2A1C6D66925CCDBCB6BCEF67A0AD66A9B9807';
 		const out = buildOrderPayload(
 			'order-xmr-permlink',
-			mkInput({
-				feeMethod: 'xmr',
-				externalTxId: 'a'.repeat(64),
-				txProof: proof
-			})
+			mkInput({ feeMethod: 'xmr', externalTxId: 'a'.repeat(64), txKey: '  ' + key + '\n' })
 		);
-		expect(out.tx_proof).toBe(proof);
-	});
-
-	it('Part 108++: trims surrounding whitespace from tx_proof', () => {
-		const proof =
-			'OutProofV2' +
-			'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789' +
-			'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789';
-		const out = buildOrderPayload(
-			'order-xmr-permlink',
-			mkInput({
-				feeMethod: 'xmr',
-				externalTxId: 'a'.repeat(64),
-				txProof: '  ' + proof + '\n\n'
-			})
-		);
-		expect(out.tx_proof).toBe(proof);
-	});
-
-	it('Part 108++: omits tx_proof when feeMethod is not xmr', () => {
-		// The frontend page also gates this, but the payload builder
-		// must do the right thing if asked.  Same pattern as
-		// externalTxId — only included when relevant.
-		const out = buildOrderPayload(
-			'btc-permlink',
-			mkInput({
-				feeMethod: 'btc',
-				externalTxId: 'a'.repeat(64),
-				txProof: 'should be omitted from output'
-			})
-		);
-		// txProof is preserved in the input but this test cares
-		// only that the OUTPUT shape doesn't carry tx_proof for
-		// non-xmr methods (the caller in +page.svelte explicitly
-		// gates this; this test verifies the gate's contract).
-		// Note: buildOrderPayload includes tx_proof if input has
-		// it, regardless of fee_method — gating happens at the
-		// call site.  So this test just confirms passthrough.
-		expect(out.tx_proof).toBe('should be omitted from output');
-	});
-
-	it('Part 108++: omits tx_proof when txProof is empty/undefined', () => {
-		const out = buildOrderPayload(
-			'order-permlink',
-			mkInput({ feeMethod: 'xmr', externalTxId: 'a'.repeat(64) })
-		);
+		expect(out.tx_key).toBe(key.toLowerCase());
 		expect(out.tx_proof).toBeUndefined();
 	});
 
-	it('Part 108++: omits tx_proof when txProof is whitespace-only', () => {
-		const out = buildOrderPayload(
-			'order-permlink',
-			mkInput({
-				feeMethod: 'xmr',
-				externalTxId: 'a'.repeat(64),
-				txProof: '   \n  '
-			})
-		);
-		expect(out.tx_proof).toBeUndefined();
+	it('v1.20.0 (M-X1): omits tx_key when empty, whitespace-only, or not an xmr order', () => {
+		expect(
+			buildOrderPayload('p', mkInput({ feeMethod: 'xmr', externalTxId: 'a'.repeat(64) })).tx_key
+		).toBeUndefined();
+		expect(
+			buildOrderPayload(
+				'p',
+				mkInput({ feeMethod: 'xmr', externalTxId: 'a'.repeat(64), txKey: '   \n  ' })
+			).tx_key
+		).toBeUndefined();
+		expect(
+			buildOrderPayload(
+				'p',
+				mkInput({ feeMethod: 'btc', externalTxId: 'a'.repeat(64), txKey: 'b'.repeat(64) })
+			).tx_key
+		).toBeUndefined();
 	});
 
 	it('preserves ordinary payment method names unchanged', () => {

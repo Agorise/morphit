@@ -69,7 +69,7 @@ const TAILWIND_CONFIG = join(REPO_ROOT, 'apps/web/tailwind.config.js');
 // ─── Color palette ─────────────────────────────────────────────
 //
 // The custom `ink-*` scale is parsed from
-// `apps/web/tailwind.config.js`.  Standard Tailwind v3.4
+// `apps/web/tailwind.config.js` + the theme tokens in `apps/web/src/theme.css`.  Standard Tailwind v3.4
 // palette hex values are hard-coded below — these are
 // public, documented at tailwindcss.com, and stable across
 // minor versions.  Updating Tailwind to a major version
@@ -127,6 +127,14 @@ const PALETTE_DEFAULTS: Record<string, ColorScale> = {
 };
 
 // ─── Parse custom ink scale from tailwind.config.js ────────────
+//
+// Since per-instance colour theming, tailwind.config.js maps each ink shade
+// to a theme token — `50: token('surface-50')` → `rgb(var(--surface-50-rgb) /
+// <alpha-value>)` — and the values live in apps/web/src/theme.css
+// (`--surface-50-rgb: 247 248 250;`). Resolve the shade through both, so the
+// check keeps measuring the colours actually painted (the Morphit defaults).
+
+const THEME_CSS = join(REPO_ROOT, 'apps/web/src/theme.css');
 
 function parseInkScale(): ColorScale {
 	const cfg = readFileSync(TAILWIND_CONFIG, 'utf-8');
@@ -136,9 +144,12 @@ function parseInkScale(): ColorScale {
 		throw new Error('Could not find ink scale in tailwind.config.js');
 	}
 	const body = m[1];
+	const css = readFileSync(THEME_CSS, 'utf-8');
 	const scale: ColorScale = {};
-	for (const lm of body.matchAll(/(\d+):\s*'(#[0-9a-fA-F]+)'/g)) {
-		scale[lm[1]] = lm[2];
+	for (const lm of body.matchAll(/(\d+):\s*token\('([a-z0-9-]+)'\)/g)) {
+		const v = new RegExp(`--${lm[2]}-rgb:\\s*(\\d+) (\\d+) (\\d+);`).exec(css);
+		if (!v) throw new Error(`ink.${lm[1]} → token ${lm[2]} is not defined in theme.css`);
+		scale[lm[1]] = '#' + [v[1], v[2], v[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('');
 	}
 	if (Object.keys(scale).length === 0) {
 		throw new Error('Parsed ink scale is empty — config format changed?');
@@ -506,7 +517,7 @@ for (const [a, b, expected] of selfTestPairs) {
 
 // Resolution sanity: the ink-900 we resolved must be the
 // hex declared in tailwind.config.js.
-const resolutionOk = resolveColor('ink', '900') === '#0F141C';
+const resolutionOk = resolveColor('ink', '900')?.toLowerCase() === '#0f141c';
 
 const scenarios = [
 	{

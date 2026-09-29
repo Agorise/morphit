@@ -1,10 +1,16 @@
 /**
  * Morphit indexer — composite reputation score (cp404).
  *
- * The orderbook shows TWO distinct trust signals per trader, side by side:
- *   • the TRADE COUNT (raw `feedback_count`, e.g. "852" / "1.4K") — how
- *     much history exists; and
+ * The orderbook shows distinct trust signals per trader, side by side:
+ *   • the TRADE COUNT (`trade_count`: fee-verified COMPLETED orders, both
+ *     sides credited — `tradeCountSql` in $api/reputationJoin, v1.5.5) — how
+ *     much trading history exists;
+ *   • the RATINGS COUNT (`feedback_count`, the sock-puppet-filtered reviews
+ *     behind the average, "★5.00 (34)"); and
  *   • the REPUTATION SCORE (0–5, e.g. "4.06") — how GOOD that history is.
+ *   (Before v1.5.5 the trade count WAS feedback_count; it no longer is. The
+ *   score below deliberately uses the REVIEWED count, not trade_count: only
+ *   reviewed trades carry a rating to weigh.)
  *
  * The raw time-decayed average (`weighted_rating`) answers "what's the mean
  * star rating," but a reputation score should reward *sustained good
@@ -18,9 +24,9 @@
  *      a neutral prior so few reviews stay cautious and can't spike the score.
  *      This is where volume earns trust: as good trades accumulate, the shrunk
  *      rating rises toward the true (high) mean.
- *   2. EXPERIENCE — a log-scaled function of the trade count, saturating at
- *      EXPERIENCE_FULL. A long track record is worth more, with diminishing
- *      returns.
+ *   2. EXPERIENCE — a log-scaled function of the included FEEDBACK count
+ *      (reviewed trades), saturating at EXPERIENCE_FULL. A long track
+ *      record is worth more, with diminishing returns.
  *   3. RECENCY — recent activity keeps a reputation "fresh"; long dormancy
  *      gently discounts the bonus (a great trader who vanished for years is
  *      still good, just less demonstrably current).
@@ -47,7 +53,8 @@ export const REPUTATION_PRIOR_MEAN = 3.0;
  *  outweigh with real feedback before the score reflects their true mean.
  *  Higher = more caution for low-volume traders. */
 export const REPUTATION_PRIOR_WEIGHT = 4;
-/** Trade count at which the experience factor saturates (full credit). */
+/** Included-feedback (reviewed-trade) count at which the experience factor
+ *  saturates (full credit). */
 export const REPUTATION_EXPERIENCE_FULL = 40;
 /** Half-life (days) of the recency bonus decay. */
 export const REPUTATION_RECENCY_HALF_LIFE_DAYS = 180;
@@ -73,7 +80,7 @@ export interface ReputationScoreBreakdown {
 	readonly base: number | null;
 	/** Track-record bonus actually applied (points). */
 	readonly bonus: number;
-	/** 0–1 experience fraction (log-scaled trade count). */
+	/** 0–1 experience fraction (log-scaled included-feedback count). */
 	readonly experienceFrac: number;
 	/** 0–1 recency fraction (decays with dormancy). */
 	readonly recencyFrac: number;

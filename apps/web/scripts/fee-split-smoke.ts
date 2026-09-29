@@ -24,7 +24,15 @@
  *   tsx apps/web/scripts/fee-split-smoke.ts
  */
 
-import { feeTransfersFor, FEE_RECIPIENT, type FeeTransfer } from '../src/lib/orders/fee.ts';
+import { computeFee, feeTransfersFor, FEE_RECIPIENT, type FeeTransfer } from '../src/lib/orders/fee.ts';
+import { boundedBlurtBase } from '../src/lib/orders/feeQuoteFloor.ts';
+import {
+	sumFeeTransfers,
+	meetsMinimumMilli,
+	expectedFeeBlurt,
+	canonicalShareOk
+} from '../../indexer/src/indexer/fee.ts';
+import { FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { FEE_TREASURY_SHARE_BLURT } from '@morphit/asset-registry';
 
 // Must match the indexer's FEE_SPLIT_TOLERANCE (apps/indexer/src/indexer/fee.ts).
@@ -56,6 +64,42 @@ function sumMilli(legs: FeeTransfer[]): number {
 
 // Realistic + edge fee sizes (BLURT). Real fees are ~40-300 BLURT (USD-targeted).
 const FEES = [0.125, 1, 12.5, 40, 54.001, 60, 75.4271, 123.456, 300, 999.999];
+
+// ─── v1.20.0 (G8): a quote clamped onto the chain-pinned floor must VERIFY ──
+// When BLURT rises past the tolerance band the post page clamps its quote to
+// pinned × (1 − FEE_PRICE_TOLERANCE). Round-trip every such payment through
+// the REAL indexer code (sumFeeTransfers + the milliBLURT floor check): the
+// old float sum/compare rejected ~0.2% of pins as underpaid.
+{
+	let rejected = 0;
+	let tried = 0;
+	let example = '';
+	for (let p = 1000; p <= 130000; p += 7) {
+		const pinned = p / 1000;
+		for (const nth of [1, 4, 11]) {
+			for (const owner of [OWNER, CANON]) {
+				tried++;
+				const base = boundedBlurtBase(0.0001, 60, pinned);
+				const q = computeFee(nth, base);
+				const legs = feeTransfersFor(q.blurtAmount, owner, CANON, 'alice');
+				const ops = legs.map(
+					(l) => ['transfer', { from: 'alice', to: l.to, amount: l.amount, memo: 'm' }] as const
+				);
+				const fee = sumFeeTransfers(ops, 'alice', owner, CANON, 'm');
+				const min = expectedFeeBlurt(nth, pinned) * (1 - FEE_PRICE_TOLERANCE);
+				const ok =
+					fee !== null &&
+					meetsMinimumMilli(fee.totalMilli, min) &&
+					canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt);
+				if (!ok) {
+					rejected++;
+					if (!example) example = `pinned=${pinned} nth=${nth} legs=${legs.map((l) => l.amount).join('+')}`;
+				}
+			}
+		}
+	}
+	check(`clamped-to-floor quotes verify at the indexer (${tried} pins × tiers × recipients)`, rejected === 0, `${rejected} rejected, e.g. ${example}`);
+}
 
 // ─── Federation instance: owner ≠ canonical → 90/10 split ─────────────
 for (const fee of FEES) {

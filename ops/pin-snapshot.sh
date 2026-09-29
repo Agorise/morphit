@@ -144,7 +144,9 @@ echo ""; sed 's/^/    /' "$PAYLOAD"
 
 hdr "DONE — next: broadcast from your laptop"
 echo "  1. Copy the payload down:"
-echo "       scp morphit@morphit.io:$PAYLOAD ."
+# root@: the payload sits inside the IPFS repo, and the morphit service user has
+# no login shell. -O: hardened boxes turn SSH's SFTP off, which plain scp needs.
+echo "       scp -O root@morphit.io:$PAYLOAD ."
 echo "  2. In the Morphit repo (dry-run, then real — prompts for the @morphit POSTING WIF):"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/chain-snapshot-broadcast.ts snapshot-payload-$SNAP_HEIGHT.json --dry-run"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/chain-snapshot-broadcast.ts snapshot-payload-$SNAP_HEIGHT.json"

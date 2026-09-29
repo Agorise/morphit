@@ -70,7 +70,7 @@
 	const variantClass = $derived.by(() => {
 		switch (variant) {
 			case 'primary':
-				return 'bg-morphit-btn text-white font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
+				return 'bg-morphit-btn text-morphit-btn-text font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
 			case 'secondary':
 				// v1.8.10 (the maintainer): the disabled colours carry `dark:` variants now.
 				// `border-ink-300 / text-ink-400` are LIGHT-theme greys — on the

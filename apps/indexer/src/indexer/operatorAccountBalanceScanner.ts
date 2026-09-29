@@ -39,6 +39,7 @@
 import type { BlurtClient } from '$blurt/client';
 import { parseBlurtAmount } from '$indexer/fee-transfer';
 import { logger } from '$log';
+import type { SignupAnomaly } from './signupAnomalyProbe.ts';
 
 const log = logger('operator-balance');
 
@@ -107,34 +108,12 @@ export type OperatorBalanceAlert =
 			at: Date;
 	  };
 
-/** Result of probing the relay's /v1/health?verbose=1 for signup
- *  stats. When a drain pattern is likely, `recommendKillSwitch`
- *  is true and the alert sink surfaces the recommendation.
- *  Fields carried over from the relay so the sink has enough
- *  context for a human-readable message without a second fetch. */
-export interface SignupAnomaly {
-	/** Whether the anomaly detector was able to read relay stats.
-	 *  False means the probe failed (relay unreachable, parse
-	 *  error, etc.). When false, the other fields are undefined. */
-	probed: boolean;
-	/** Is signup currently enabled on the relay? */
-	signupEnabled?: boolean;
-	/** Signups completed in the current UTC hour. */
-	currentHourCount?: number;
-	/** Peak per-hour count seen today. */
-	peakHourCount?: number;
-	/** Total signups today. */
-	successfulToday?: number;
-	/** Daily ceiling configured on the relay. */
-	dailyCeiling?: number;
-	/** Our judgment: does this look like a drain? Set true when
-	 *  the current hour's count is significantly higher than
-	 *  recent norms AND balance is dropping. */
-	recommendKillSwitch: boolean;
-	/** Human-readable rationale for the kill-switch recommendation,
-	 *  or an explanation of why we can't recommend one. */
-	message: string;
-}
+/** Defined in signupAnomalyProbe.ts, which has no path-alias imports of its
+ *  own besides the logger — so the relay's smoke typecheck, which reaches the
+ *  probe through drain-defense-live-fire.ts, never pulls this scanner (and its
+ *  indexer-only `$indexer/*` / `$blurt/*` aliases) in. Re-exported here for
+ *  existing importers. */
+export type { SignupAnomaly };
 
 /** Injectable alert sink. Default routes through the structured
  *  logger. Operators override to route to Discord / email /

@@ -71,7 +71,9 @@
 1. User composes order in browser.
 2. Browser asks for fee payment (BTC / XMR / BLURT), displays address + QR.
 3. For BTC/XMR: indexer's verifier polls explorers (or accepts a
-   user-supplied tx_proof for XMR) and credits the fee.  For BLURT:
+   user-supplied payment tx key for XMR) and credits the fee.  (Since
+   v1.20.0, with the treasury xpub / main address pinned, BTC and XMR fees
+   are paid to per-order addresses — OPERATIONS §40.12–40.13.)  For BLURT:
    the indexer sees a `transfer` op directly on the next Blurt block.
 4. Browser constructs `custom_json` op (`id = morphit_order_v1`), signs with
    user's active key **in memory only**.
@@ -185,7 +187,8 @@ runs as modules inside the indexer process:
   expected sats arrive at the canonical chain-pinned BTC treasury
   address.
 - `apps/indexer/src/indexer/fee/moneroProofVerifier.ts` — accepts
-  user-supplied `tx_proof` strings carried in the order op,
+  the payment's tx key (`tx_key`, 64 hex) carried in the order op
+  (v1.20.0; the earlier OutProof `tx_proof` never verified),
   verifies against a configured Monero block explorer (no view-key
   required since Part 108++).  See ADR-0019.
 - BLURT fees are verified directly: the indexer sees the

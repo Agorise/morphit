@@ -15,10 +15,9 @@
  * files.  We measure "when did this file's content last change" with
  * git commit time (`git log -1 --format=%ct`), NOT filesystem mtime:
  * a fresh `git checkout` (as in CI) writes every file with the
- * checkout-instant mtime in path order, so e.g.
- * `apps/web/static/morphit-mediakit.zip` is always written a moment
- * before `apps/web/tailwind.config.js` ('s' < 't') and would look
- * "stale" on every clean checkout regardless of content.  Git commit
+ * checkout-instant mtime in path order, so a source whose path sorts
+ * after `apps/web/static/morphit-mediakit.zip` is written a moment after
+ * it and would look "stale" on every clean checkout regardless of content.  Git commit
  * time is immune to that: in CI's shallow (depth-1) checkout every
  * file reports the single HEAD-commit time (equal → not stale); in a
  * full-history checkout each file reports its real last-commit time
@@ -48,10 +47,12 @@ const WORDMARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-
 // The feature-comparison PNG is bundled into the kit (build-mediakit.sh),
 // so a regenerated comparison image must regenerate the zip too.
 const COMPARISON_PNG = join(REPO_ROOT, 'apps', 'web', 'static', 'morphit-comparison.png');
-// The README's "Color standards" section is derived from the Tailwind
-// palette, so a color change must regenerate the zip — track it as a
-// source so a stale kit fails this smoke.
-const TAILWIND_CONFIG = join(REPO_ROOT, 'apps', 'web', 'tailwind.config.js');
+// The README's "Color standards" section is derived from the brand
+// palette — the theme tokens in apps/web/src/theme.css (per-instance colour
+// theming moved the values there from tailwind.config.js) — so a color
+// change must regenerate the zip — track it as a source so a stale kit
+// fails this smoke.
+const THEME_CSS = join(REPO_ROOT, 'apps', 'web', 'src', 'theme.css');
 const BUILD_SCRIPT = join(REPO_ROOT, 'scripts', 'build-mediakit.sh');
 
 // ─── Effective "last changed" time (git-aware, mtime fallback) ─────
@@ -152,7 +153,7 @@ const sources = [
 	{ path: COMPARISON_PNG, label: 'apps/web/static/morphit-comparison.png' },
 	{ path: MARK_SVG, label: 'apps/web/static/brand/morphit-mark.svg' },
 	{ path: WORDMARK_SVG, label: 'apps/web/static/brand/morphit-wordmark.svg' },
-	{ path: TAILWIND_CONFIG, label: 'apps/web/tailwind.config.js (brand palette → README color standards)' }
+	{ path: THEME_CSS, label: 'apps/web/src/theme.css (brand palette → README color standards)' }
 ];
 const missing = sources.filter((s) => !existsSync(s.path));
 results.push({

@@ -35,6 +35,26 @@ describe('sanitizeClickPath', () => {
 		expect(sanitizeClickPath('//evil.com/login', ORIGIN)).toBe('/');
 	});
 
+	// v1.20.0 review (F-3): these RESOLVE same-origin, but their pathname
+	// starts with `//`, and the service worker re-resolves the returned path
+	// with `new URL(path, origin)` — which reads `//evil.com/…` as a
+	// protocol-relative URL. So the check must hold for what the worker
+	// actually opens, not just for the first resolution.
+	for (const sneaky of [
+		'/.//evil.com/phish',
+		'/..//evil.com/x',
+		'/foo/..//evil.com/x',
+		'https://morphit.io//evil.com/phish',
+		'/.\\/evil.com/x'
+	]) {
+		it(`never yields a path the worker would open cross-origin: ${JSON.stringify(sneaky)}`, () => {
+			const safe = sanitizeClickPath(sneaky, ORIGIN);
+			// Exactly what service-worker.ts does with the result:
+			expect(new URL(safe, ORIGIN).origin).toBe(ORIGIN);
+			expect(safe.startsWith('//')).toBe(false);
+		});
+	}
+
 	it('rejects fully-qualified cross-origin URL', () => {
 		expect(sanitizeClickPath('https://evil.com/login', ORIGIN)).toBe('/');
 	});

@@ -13,12 +13,14 @@
  * sampled op is absent/altered, the snapshot fabricated data → quarantine.
  *
  * This file is PURE (no DB, no network): the sampling + the position-based match
- * are unit-tested. The runner (snapshot-verify-oplog.ts) supplies the DB rows +
+ * are unit-tested (scripts/snapshot-oplog-verify-smoke.ts). The runner (snapshot-verify-oplog.ts) supplies the DB rows +
  * the fetched blocks. Fails CLOSED: an ambiguous match is a MISMATCH.
  */
 
 /** A recorded op from the snapshot's `ops` table, with just what we need to
  *  locate + match it against the chain. */
+import { ACTIVE_AUTH_OP_IDS, extractSigner } from '$blurt/verify';
+
 export interface StoredOpRef {
 	readonly blockNum: number;
 	readonly trxInBlock: number;
@@ -45,9 +47,17 @@ export interface OpMatchResult {
 
 /**
  * Does `block` contain `stored` at its recorded (trxInBlock, opInTrx) position,
- * as a custom_json with the same op id, signed (posting auth) by the same
- * account, and — when the stored op has a permlink — carrying that same permlink?
- * Pure + fail-closed: anything missing/ambiguous is a MISMATCH.
+ * as a custom_json with the same op id, signed by the same account under the
+ * DISPATCHER'S OWN signer rule, and — when the stored op has a permlink —
+ * carrying that same permlink? Pure + fail-closed: anything missing/ambiguous is
+ * a MISMATCH.
+ *
+ * The signer rule is `extractSigner` itself (v1.20.0, V3-7). This used to check
+ * `required_posting_auths` only — but BLURT-paid orders, feature bids and
+ * stranger fees are signed with ACTIVE authority (`required_auths`), so every
+ * honest snapshot holding one was declared a mismatch and QUARANTINED. The
+ * applied rows this samples are exactly the ones extractSigner accepted, so the
+ * same function is the only rule that can agree with them.
  */
 export function verifyStoredOpAgainstBlock(stored: StoredOpRef, block: BlockLike | null): OpMatchResult {
 	if (!block || !Array.isArray(block.transactions)) return { ok: false, reason: 'block missing or has no transactions' };
@@ -61,9 +71,27 @@ export function verifyStoredOpAgainstBlock(stored: StoredOpRef, block: BlockLike
 	const body = opBody as Record<string, unknown>;
 	if (body.id !== stored.opId) return { ok: false, reason: `op id mismatch (chain '${String(body.id)}' ≠ recorded '${stored.opId}')` };
 
-	const auths = Array.isArray(body.required_posting_auths) ? body.required_posting_auths : [];
-	if (!auths.includes(stored.signer)) {
-		return { ok: false, reason: `signer '${stored.signer}' not in the on-chain op's posting auths` };
+	// An absent auth list is an empty one — exactly how the dispatcher reads the
+	// op (collectMorphitOps) before it calls extractSigner.
+	const signer = extractSigner(
+		{
+			required_auths: Array.isArray(body.required_auths) ? (body.required_auths as string[]) : [],
+			required_posting_auths: Array.isArray(body.required_posting_auths)
+				? (body.required_posting_auths as string[])
+				: [],
+			id: stored.opId,
+			json: typeof body.json === 'string' ? body.json : ''
+		},
+		ACTIVE_AUTH_OP_IDS.has(stored.opId)
+	);
+	if (!signer.ok) {
+		return { ok: false, reason: `the on-chain op has no signer the dispatcher accepts (${signer.reason})` };
+	}
+	if (signer.signer !== stored.signer) {
+		return {
+			ok: false,
+			reason: `signer mismatch (chain '${signer.signer}' ≠ recorded '${stored.signer}')`
+		};
 	}
 
 	if (stored.permlink !== null) {

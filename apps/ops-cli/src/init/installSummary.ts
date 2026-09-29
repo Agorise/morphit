@@ -25,6 +25,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { lookupBlurtAccount } from './chainCheck.ts';
+import { parseDockerInspect } from '../lib/proxyConfigHeal.ts';
 
 export interface ComponentStatus {
 	readonly label: string;
@@ -55,13 +56,21 @@ export interface SystemHealth {
 	readonly detail?: string;
 }
 
+export interface ContainerMatch {
+	readonly image?: string;
+	readonly mounts?: string;
+}
+
 export interface SummaryProbe {
 	/** `systemctl is-active <unit>` reports 'active'. */
 	readonly serviceActive: (unit: string) => boolean;
 	/** Of the given units, the ones NOT active (returned by name for the aggregate row). */
 	readonly failedUnits: (units: readonly string[]) => string[];
-	/** a currently-running container is named exactly <name>. */
-	readonly containerRunning: (name: string) => boolean;
+	/** a currently-running container has image repository `image` (any tag),
+	 *  or bind-mounts the path `mounts`. Never by container name: a hand-made
+	 *  stack names them differently (morphit.io: bunkerweb-<service>-1), and a
+	 *  false ✗ there is an alarm for something that is fine (wave 6). */
+	readonly containerRunning: (match: ContainerMatch) => boolean;
 	/** the UFW firewall reports active. */
 	readonly firewallActive: () => boolean;
 	/** a path exists on disk. */
@@ -202,10 +211,11 @@ export async function collectInstallSummary(
 
 	// ── Web edge ─────────────────────────────────────────────────────
 	if (inputs.enableBunkerweb && !inputs.torOnly) {
-		rows.push({ label: 'Web firewall (BunkerWeb)', ok: probe.containerRunning('bunkerweb') });
+		rows.push({ label: 'Web firewall (BunkerWeb)', ok: probe.containerRunning({ image: 'bunkerity/bunkerweb' }) });
 	}
 	if (inputs.enableBunkerweb) {
-		rows.push({ label: 'Website (front end)', ok: probe.containerRunning('morphit-frontend') });
+		// The front end is the container serving this install's web build.
+		rows.push({ label: 'Website (front end)', ok: probe.containerRunning({ mounts: build }) });
 	}
 	if (!inputs.torOnly) {
 		rows.push({
@@ -347,6 +357,25 @@ export function renderInstallSummary(
 		.join('\n');
 }
 
+/** Is a container running that matches (see SummaryProbe.containerRunning)?
+ *  IMPURE (docker ps + docker inspect); false when docker can't answer. */
+export function containerRunningNow(match: ContainerMatch): boolean {
+	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8', timeout: 10_000 });
+	if (ps.status !== 0) return false;
+	const names = (ps.stdout ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
+	if (names.length === 0) return false;
+	const insp = spawnSync('docker', ['inspect', ...names], { encoding: 'utf8', timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+	const norm = (p: string): string => p.replace(/\/+$/, '');
+	const repo = match.image?.replace(/[/.-]/g, '\\$&');
+	const imageRe = repo !== undefined ? new RegExp(`(^|/)${repo}(?=$|[:@])`) : null;
+	return parseDockerInspect(insp.stdout || '[]').some(
+		(c) =>
+			c.running &&
+			(imageRe === null || imageRe.test(c.image)) &&
+			(match.mounts === undefined || c.mounts.some((m) => norm(m) === norm(match.mounts!)))
+	);
+}
+
 function realProbe(): SummaryProbe {
 	const isActive = (unit: string): boolean => {
 		const r = spawnSync('systemctl', ['is-active', unit], { encoding: 'utf8' });
@@ -355,14 +384,7 @@ function realProbe(): SummaryProbe {
 	return {
 		serviceActive: isActive,
 		failedUnits: (units): string[] => units.filter((u) => !isActive(u)),
-		containerRunning: (name): boolean => {
-			const r = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8' });
-			if (r.status !== 0) return false;
-			return (r.stdout ?? '')
-				.split('\n')
-				.map((s) => s.trim())
-				.includes(name);
-		},
+		containerRunning: containerRunningNow,
 		firewallActive: (): boolean => {
 			const r = spawnSync('ufw', ['status'], { encoding: 'utf8' });
 			return /Status:\s*active/i.test(r.stdout ?? '');

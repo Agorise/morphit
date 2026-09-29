@@ -28,6 +28,7 @@
 	 */
 
 	import { t } from '$lib/i18n';
+	import { formatRating } from '$lib/i18n/formatters';
 	import TrustScoreModal from '$components/TrustScoreModal.svelte';
 
 	interface Props {
@@ -69,7 +70,8 @@
 	// cp123: 2-decimal precision (per the maintainer's reputation-hardening
 	// ask).  Server returns NUMERIC(3,2); displaying `.toFixed(1)`
 	// discards information.  4.74 conveys more than 4.7.
-	const ratingStr = $derived(rating === null ? '—' : rating.toFixed(2));
+	// v1.20.0 (G12) — in the reader's number format ("4,50" de, "۴٫۵۰" fa).
+	const ratingStr = $derived(rating === null ? '—' : formatRating(rating));
 </script>
 
 {#if count > 0 && rating !== null}

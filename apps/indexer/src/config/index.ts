@@ -8,6 +8,7 @@
  * See ops/env/indexer.env.example for the full schema with comments.
  */
 
+import { DEFAULT_XMR_EXPLORERS, parseXmrExplorerList } from './xmrExplorers';
 import { z } from 'zod';
 import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, normalizeContactUrl, sanitizeBrandName } from '@morphit/operator-config';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
@@ -163,6 +164,11 @@ export interface Config {
 	readonly publicOrigin: string;
 	/** Exact-match allowed origins for CORS. */
 	readonly allowedOrigins: readonly string[];
+	/** Reverse proxies whose X-Forwarded-For / X-Real-IP the per-IP limiter
+	 *  believes (v1.20.0, E2). Undefined = the built-in default (loopback +
+	 *  172.16.0.0/12, Docker's default bridge pool, where the BunkerWeb
+	 *  frontend sits); loopback is always trusted. */
+	readonly trustedProxyCidrs: readonly string[] | undefined;
 	/** Per-IP rate limits. */
 	readonly listRatePerMin: number;
 	readonly resourceRatePerMin: number;
@@ -831,7 +837,8 @@ const envSchema = z.object({
 	// separate knob from the https-only clearnet pool above. The host refine is a
 	// SECURITY GUARD: only genuine .onion/.i2p hosts are accepted here, so a
 	// clearnet http:// URL can never sneak past the https requirement via this
-	// knob. Empty by default → clearnet-only, dispatcher not installed.
+	// knob. An https:// entry is rewritten to http:// at load, with a warning
+	// (hiddenRpcEndpointsForDial) — the hidden transports refuse https.
 	MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS: z
 		.string()
 		// Baked default = the public hidden nodes (Star/Jade), so EVERY instance —
@@ -935,6 +942,22 @@ const envSchema = z.object({
 				.split(',')
 				.map((o) => o.trim())
 				.filter(Boolean)
+		),
+	// v1.20.0 (E2) — the reverse proxies the per-IP limiter believes. Unset: the
+	// code default (loopback + 172.16.0.0/12, Docker's default bridge pool —
+	// the ansible bridge is 172.20.0.0/16, morphit.io's 172.18.0.0/24), so
+	// existing nodes need no env change. Set: REPLACES that list
+	// (loopback stays trusted regardless). Comma-separated CIDRs or addresses.
+	MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS: z
+		.string()
+		.optional()
+		.transform((v) =>
+			v === undefined || v.trim() === ''
+				? undefined
+				: v
+						.split(',')
+						.map((o) => o.trim())
+						.filter(Boolean)
 		),
 	MORPHIT_INDEXER_LIST_RATE_PER_MIN: z.coerce.number().int().positive().default(120),
 	MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN: z.coerce.number().int().positive().default(600),
@@ -1306,32 +1329,15 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_XMR_EXPLORER_URLS: z
 		.string()
 		.default(
-			// Default ships with five verified-compatible explorers
-			// running the `moneroexamples/onion-monero-blockchain-explorer`
-			// reference codebase.  All five expose the same
-			// `/api/outputs?txprove=1` endpoint used for per-payment
-			// proof verification.  Multi-explorer cross-check means
-			// a single compromised explorer cannot lie about a
-			// verification — all responding explorers must agree.
-			// See docs/OPERATIONS.md §40.4 for explorer choice
-			// rationale and self-hosted-monerod option (priority #2
-			// maximum independence).
-			[
-				'https://xmrchain.net',
-				'https://localmonero.co/blocks',
-				'https://monerohash.com/explorer',
-				'https://exploremonero.com',
-				'https://moneroexplorer.org'
-			].join(',')
+			// v1.20.0 (wave 4): three explorers checked live, two kinds —
+			// `https://…` = onion-monero-blockchain-explorer (txprove),
+			// `raw-tx+https://…` = raw transactions verified locally. See
+			// config/xmrExplorers.ts and docs/OPERATIONS.md §40.4.
+			DEFAULT_XMR_EXPLORERS.join(',')
 		)
 		.refine(
-			(s) =>
-				s
-					.split(',')
-					.map((u) => u.trim())
-					.filter((u) => u.length > 0)
-					.every((u) => u.startsWith('https://')),
-			'all XMR explorer URLs must be https:// — cleartext would leak the proof string'
+			(s) => parseXmrExplorerList(s) !== null,
+			'all XMR explorer URLs must be https:// (or raw-tx+https://) — cleartext would leak the tx key'
 		),
 
 	// Part 109 quorum gates (BTC + XMR).  Minimum number of
@@ -1347,11 +1353,11 @@ const envSchema = z.object({
 		.int()
 		.positive()
 		.default(1),
-	MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: z.coerce
-		.number()
-		.int()
-		.positive()
-		.default(1),
+	// v1.20.0: XMR defaults to TWO agreeing explorers — less trust in
+	// any one of them. Left unset it resolves to min(2, number of configured
+	// explorers) in resolveXmrQuorum below, so an instance whose own list has
+	// a single explorer still boots (quorum 1, with a boot line saying why).
+	MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: z.coerce.number().int().positive().optional(),
 
 	// ADR-0010 §3 low-balance auto-refill.
 	// The relay's account name — used to exclude it from the
@@ -1740,6 +1746,70 @@ const envSchema = z.object({
 		.optional()
 });
 
+/**
+ * MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS as the transport will dial them (v1.20.0).
+ *
+ * The hidden-network connectors now REFUSE an `https:` URL (S9): Tor and I2P
+ * carry plain HTTP, the network itself encrypts and authenticates, and a
+ * missing port has always meant 80. An operator who wrote
+ * `https://<host>.onion` had a working node — dialled as plaintext HTTP to the
+ * URL's port — that the refusal would silently drop from the pool. So it is
+ * rewritten here to the `http://` URL that was always what went on the wire:
+ * same host, same explicit port (WHATWG parsing already reads `:443` on an
+ * https URL as "no port", i.e. 80, which is what was dialled), same path. Each
+ * rewrite is reported through `warn` so the operator can fix the env file.
+ * `http://` endpoints pass untouched. The host guard (.onion / .i2p only) runs
+ * before this, in the schema.
+ */
+export function hiddenRpcEndpointsForDial(
+	urls: readonly string[],
+	warn: (message: string) => void
+): string[] {
+	return urls.map((raw) => {
+		let u: URL;
+		try {
+			u = new URL(raw);
+		} catch {
+			return raw;
+		}
+		if (u.protocol !== 'https:') return raw;
+		const dial = `http://${u.host}${u.pathname === '/' ? '' : u.pathname}${u.search}`;
+		warn(
+			`[config] MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS '${raw}' rewritten to '${dial}': Tor/I2P carry plain HTTP (the network encrypts and authenticates) and the hidden transports refuse https:// — write it as http:// in the env file`
+		);
+		return dial;
+	});
+}
+
+/** The default XMR fee-verification quorum (v1.20.0): two agreeing explorers. */
+export const DEFAULT_XMR_MIN_SUCCESSFUL_RESPONSES = 2;
+
+/**
+ * v1.20.0 — how many XMR explorers must agree before a Monero fee counts as
+ * paid. An explicit MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES is used as
+ * given (validated against the list length where the list is parsed). Unset,
+ * it is DEFAULT_XMR_MIN_SUCCESSFUL_RESPONSES, lowered to the number of
+ * explorers when the operator configured fewer — a quorum that can never be
+ * met would stop every XMR fee from verifying — with a calm note saying so.
+ */
+export function resolveXmrQuorum(
+	explicit: number | undefined,
+	explorerCount: number
+): { value: number; note: string | null } {
+	if (explicit !== undefined) return { value: explicit, note: null };
+	if (explorerCount >= DEFAULT_XMR_MIN_SUCCESSFUL_RESPONSES) {
+		return { value: DEFAULT_XMR_MIN_SUCCESSFUL_RESPONSES, note: null };
+	}
+	const value = Math.max(1, explorerCount);
+	return {
+		value,
+		note:
+			`[config] MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} XMR explorer(s) configured, ` +
+			`so a Monero fee is accepted on ${value} explorer's word. Add a second explorer to ` +
+			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has three) to require two to agree.`
+	};
+}
+
 export function loadConfig(): Config {
 	const parsed = envSchema.safeParse(process.env);
 	if (!parsed.success) {
@@ -1754,7 +1824,10 @@ export function loadConfig(): Config {
 		databasePoolMax: e.MORPHIT_INDEXER_DB_POOL_MAX,
 		chainId: e.MORPHIT_INDEXER_CHAIN_ID,
 		blurtRpcEndpoints: e.MORPHIT_INDEXER_RPC_ENDPOINTS,
-		hiddenRpcEndpoints: e.MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS,
+		hiddenRpcEndpoints: hiddenRpcEndpointsForDial(e.MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS, (m) =>
+			// eslint-disable-next-line no-console
+			console.warn(m)
+		),
 		localRpcEndpoints: e.MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS,
 		localRpcAutodetect: e.MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT,
 		startBlock: e.MORPHIT_INDEXER_START_BLOCK,
@@ -1772,6 +1845,7 @@ export function loadConfig(): Config {
 		listenPort: e.MORPHIT_INDEXER_LISTEN_PORT,
 		publicOrigin: e.MORPHIT_INDEXER_PUBLIC_ORIGIN,
 		allowedOrigins: e.MORPHIT_INDEXER_ALLOWED_ORIGINS,
+		trustedProxyCidrs: e.MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS,
 		listRatePerMin: e.MORPHIT_INDEXER_LIST_RATE_PER_MIN,
 		resourceRatePerMin: e.MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN,
 		maxRequestBodyBytes: e.MORPHIT_INDEXER_MAX_BODY_BYTES,
@@ -1865,19 +1939,23 @@ export function loadConfig(): Config {
 		xmrFeeAddress: e.MORPHIT_INDEXER_XMR_FEE_ADDRESS,
 		xmrFeePiconero: BigInt(e.MORPHIT_INDEXER_XMR_FEE_PICONERO),
 		xmrExplorerUrls: (() => {
-			const list = e.MORPHIT_INDEXER_XMR_EXPLORER_URLS.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean);
-			if (e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES > list.length && list.length > 0) {
+			const list = parseXmrExplorerList(e.MORPHIT_INDEXER_XMR_EXPLORER_URLS) ?? [];
+			const explicit = e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES;
+			if (explicit !== undefined && explicit > list.length && list.length > 0) {
 				throw new Error(
-					`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES=${e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES} ` +
+					`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES=${explicit} ` +
 						`exceeds configured XMR explorer URL count (${list.length}). ` +
 						`Quorum can never be met. Reduce the threshold or add more URLs.`
 				);
 			}
 			return list;
 		})(),
-		xmrMinSuccessfulResponses: e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES,
+		xmrMinSuccessfulResponses: (() => {
+			const list = parseXmrExplorerList(e.MORPHIT_INDEXER_XMR_EXPLORER_URLS) ?? [];
+			const q = resolveXmrQuorum(e.MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES, list.length);
+			if (q.note !== null) console.warn(q.note);
+			return q.value;
+		})(),
 
 		lowBalanceRefillIntervalMs: e.MORPHIT_INDEXER_LOW_BALANCE_REFILL_INTERVAL_MS,
 		lowBalanceThresholdBlurt: e.MORPHIT_INDEXER_LOW_BALANCE_THRESHOLD_BLURT,

@@ -30,7 +30,10 @@
 			"aggregate_hash_computing": "computing…",
 			"operator_matrix": "Matrix group chat",
 			"branding": "Own name and logo",
-			"branding_value": "“{name}” — {count} files re-branded by this operator. The app code itself is unchanged, so the integrity check still covers it."
+			"branding_value": "“{name}” — {count} files re-branded by this operator. The app code itself is unchanged, so the integrity check still covers it.",
+			"aggregate_hash_unavailable": "Not available over this connection — your browser switches its hashing tool off on plain-HTTP addresses such as I2P. The verify.json link below still works.",
+			"btc_fee_key": "BTC fee key",
+			"btc_fee_key_hint": "Each BTC listing fee goes to its own address of this key, which is pinned on the Blurt blockchain."
 		},
 		"integrity": {
 			"explain": "This instance serves {count} files. Each one is hashed and listed in the full manifest below. Compare the aggregate hash below to the one published in the latest signed release on the chain (@morphit posts a morphit_release_v1 op after every build). If they match, the bundle is byte-identical to the official release.",
@@ -58,7 +61,8 @@
 			"disabled_label": "Disabled methods",
 			"disabled_none": "None — this instance offers every payment method.",
 			"disabled_suffix": "(operator-disabled on this instance; usable on peer instances)"
-		}
+		},
+		"fee_recipient_unregistered": "This instance's fees account @{account} is not in its operator's on-chain registration yet, so other instances in the federation hide orders paid in BLURT here and do not deliver first messages sent from here to their users. The operator fixes this by running sudo morphit-ops register on the server."
 	},
 	"admin": {
 		"setup_wizard": {
@@ -703,7 +707,8 @@
 			"why_show": "Why does this matter?",
 			"why_hide": "Hide explanation",
 			"why_body": "By default Morphit chat trusts the indexer to deliver the right chat key for your counterparty. A hostile indexer could substitute attacker-controlled keys and read your messages. The 8-word fingerprint is computed locally from both sides' real chat keys — if both of you see the same words, no MITM occurred. This protects against MITM only; it does NOT prove the person on the other end of your phone call is who they say they are.",
-			"error_chain_unreachable": "Couldn't reach the blockchain to check this peer's key. This is common on Tor and I2P, where connections take longer to build. Nothing is wrong with the key — try again in a moment."
+			"error_chain_unreachable": "Couldn't reach the blockchain to check this peer's key. This is common on Tor and I2P, where connections take longer to build. Nothing is wrong with the key — try again in a moment.",
+			"error_insecure_context": "The fingerprint check isn’t available over this connection — your browser switches it off on plain-HTTP addresses such as I2P. Open this chat at the https:// or .onion address to compare."
 		},
 		"boot_failed": "Couldn't load chat. Try refreshing the page.",
 		"mailing_address": {
@@ -867,6 +872,11 @@
 			"duplicate": "This looks like it already went through. Refresh the page to check your avatar before trying again. (Chain: {reason})",
 			"waf_too_large": "Your instance's web firewall rejected this upload as too large (413). Ask the operator to raise its request body-size limit — a Morphit upgrade fixes this automatically.",
 			"waf_blocked": "Your instance's web firewall blocked this request (403). Ask the operator to exempt the /v1/ API — a Morphit upgrade fixes this automatically."
+		},
+		"copy_unavailable": "Select the text to copy it",
+		"amount_input": {
+			"ambiguous": "That amount could mean {a} or {b}. Please type it again without a thousands separator.",
+			"invalid": "Enter a number — use “{sep}” for decimals."
 		}
 	},
 	"compare": {
@@ -1289,7 +1299,7 @@
 			},
 			"security_attack_vectors": {
 				"q": "Is Morphit vulnerable to hacking, data theft, or takedowns?",
-				"a": "The best defense is the design itself. Morphit is non-custodial — your private keys never leave your device and are never transmitted to our servers, so there is no key database for anyone to steal. There are no accounts, no passwords, no sessions, and no login state, which means no credential phishing, no session hijacking, and no account-takeover class of attack. We do not collect KYC and we do not log IPs, so there is no personal-information database that could be breached or subpoenaed. The orderbook lives on the blockchain itself — any user can run their own indexer and their own frontend — so censorship and takedowns cannot delete orders, only hide them from one particular mirror. Standard web attack surfaces (XSS, CSRF, SSRF, RCE, SQL injection, parameter pollution) are addressed through a combination of strict Content Security Policy headers, exact-origin CORS allowlists, schema-validated request bodies with bounded field lengths, no eval / no dynamic code paths, no server-side database queries on user input, and a relay service that only speaks to pre-configured blockchain endpoints. We also have no PHP, no WordPress, no xmlrpc.php, and no OAuth layer, so entire vulnerability classes that plague other platforms simply do not apply here. Volumetric (network-level) DDoS is beyond the reach of any application to solve alone — that belongs to the VPS provider or an upstream scrubbing service — but application-layer abuse is mitigated by per-IP rate limits, 64 KiB request body caps, and tight resource ceilings. The full threat model is documented in SECURITY.md and ADR-0006 in the project repository."
+				"a": "The best defense is the design itself. Morphit is non-custodial — your private keys never leave your device and are never transmitted to our servers, so there is no key database for anyone to steal. There are no accounts, no passwords, no sessions, and no login state, which means no credential phishing, no session hijacking, and no account-takeover class of attack. We do not collect KYC and we do not log IPs, so there is no personal-information database that could be breached or subpoenaed. The orderbook lives on the blockchain itself — any user can run their own indexer and their own frontend — so censorship and takedowns cannot delete orders, only hide them from one particular mirror. Standard web attack surfaces (XSS, CSRF, SSRF, RCE, SQL injection, parameter pollution) are addressed through a combination of strict Content Security Policy headers, an exact-origin allowlist on the relay's signup endpoint, schema-validated request bodies with bounded field lengths, no eval / no dynamic code paths, no server-side database queries on user input, and a relay service that only speaks to pre-configured blockchain endpoints. We also have no PHP, no WordPress, no xmlrpc.php, and no OAuth layer, so entire vulnerability classes that plague other platforms simply do not apply here. Volumetric (network-level) DDoS is beyond the reach of any application to solve alone — that belongs to the VPS provider or an upstream scrubbing service — but application-layer abuse is mitigated by per-IP rate limits, 64 KiB request body caps, and tight resource ceilings. The full threat model is documented in SECURITY.md and ADR-0006 in the project repository."
 			},
 			"security_engineering_rigor": {
 				"q": "How rigorous is Morphit's security review process?",
@@ -1444,8 +1454,8 @@
 				"a": "A Monero TxID (transaction ID) is a 64-character hexadecimal string that uniquely identifies a single Monero transaction on the XMR blockchain. It looks like this: `c1a2b3…deadbeef`. {brand} asks for a TxID when you need to provide proof that you sent or received a Monero payment — e.g. attesting that a counterparty's claimed XMR transfer actually landed.\n\nWhere to find it:\n• In **Monero GUI wallet**: open Transactions, click the transaction you want, the TxID is the long hex string at the top of the detail panel. Copy button is right there.\n• In **Cake Wallet / Monero.com mobile**: tap the transaction in your history; the TxID appears at the top and has a copy icon.\n• In **Feather Wallet**: Transactions tab → right-click or tap a row → Copy → Transaction ID.\n• In **command-line monero-wallet-cli**: the TxID is printed when you run `show_transfers out` — it's the long hex after the date.\n\nThe TxID is public information (it's visible to anyone with a blockchain explorer). Posting it to {brand} to attest a trade does NOT reveal who you are, your view key, or your balance — just that a specific transaction happened.\n\n**One honest note for privacy maximalists.** If you choose to pay your *listing fee* in Monero, the fee transaction's TxID is recorded in your order op on the public blockchain (so any indexer can verify the fee without the treasury view key). That is the only place a Monero TxID ever touches the Blurt chain — and it's a ~$0.25 fee to the public treasury address, never your actual trade settlement (the XMR you sell to a counterparty moves peer-to-peer and never touches the Blurt chain). If you want *zero* linkage between Monero and the blockchain, simply pay your listing fee in BLURT — it's the default, it's half the price, and no XMR TxID is broadcast at all."
 			},
 			"xmr_tx_proof": {
-				"q": "What is a Monero tx_proof and why does {brand} ask for one?",
-				"a": "A Monero tx_proof (transaction proof) is a short string from your own wallet that proves you paid a specific transaction to a specific address — without revealing anything else about your wallet. It looks like `OutProofV2…` followed by a long base58 string.\n\n**Why {brand} asks for one.** {brand} verifies your XMR fee by checking on the blockchain that your payment landed at the treasury address with the right amount. To do that without holding the treasury wallet's view key (publishing a view key would deanonymize every fee payment forever — see the privacy invariant in OPERATIONS.md §40.2), every Morphit instance asks YOU to generate a per-payment proof from your own wallet. Any indexer can verify your proof using public data; no privileged party is needed.\n\n**What it reveals.** The proof reveals only:\n• That this specific transaction (the txid you supplied) paid this specific address (Morphit's treasury), and\n• The amount that was paid.\n\n**What it does NOT reveal.** It does NOT reveal:\n• Your other transactions\n• Your wallet balance\n• Your other addresses\n• Any wallet metadata\n• Anything about future payments\n\nThe proof is one-time and per-payment. Possessing one proof tells an outsider nothing about other payments to the address (yours or anyone else's) or any other wallet activity.\n\n**How to generate one.**\n• **Monero CLI**: `get_tx_proof <txid> <treasury-address>`\n• **Monero GUI**: Advanced → Prove transaction → fill in txid + address → Generate\n• **Cake Wallet**: Settings → Privacy → Verify a transaction → Generate proof\n• **Feather Wallet**: Tools → Prove/check transaction → Generate\n\nYou'll get a string starting with `OutProofV1` or `OutProofV2`. Paste that into the Payment proof field.\n\n**Why this is better than a view key.** A view key would let any holder see every payment to the address forever. A tx_proof reveals one payment, period. This means every Morphit instance — yours, the canonical one, a community operator's — can verify XMR fees independently without needing a shared secret. That's the federation working as intended."
+				"q": "What is the Monero transaction key and why does {brand} ask for it?",
+				"a": "Every Monero payment has a **transaction key**: a 64-character code (0–9, a–f) that the sending wallet keeps. With the transaction ID and this key, anyone can check that the payment reached a given address and how much it carried. The key cannot move any money.\n\n**Why {brand} asks for it.** When you pay the listing fee in XMR, your listing carries the transaction ID and the transaction key, so every {brand} server — the main one and every community one — can check the payment on its own with public Monero explorers. Nobody needs the treasury wallet's secret view key.\n\n**The fee address is made for your listing.** Once the treasury's main Monero address is published on chain, the fee goes to an address made for your one listing. That address carries a hidden listing code that only your transaction key unlocks, so nobody can copy your transaction ID and key onto their own listing, and your payment cannot be used twice.\n\n**Where to find the key.** Monero CLI: `get_tx_key <transaction ID>`. Monero GUI: Transactions → the payment's details → \"Transaction key\". Feather: History → right-click the payment → Show details → Copy Tx Secret Key. Cake Wallet: tap the payment → \"Transaction Key\". Monerujo: tap the payment → \"TX Key\". Only the wallet that sent the payment has the key; an exchange cannot give it to you.\n\n**Privacy.** The key is published with your listing. It shows only this payment to {brand}'s address — but someone who also knows your own wallet address could use it to see the change from this payment. For the most privacy, pay the fee from an address you have not shared with anyone, or pay in BLURT.\n\n**\"Payment proofs\" (OutProof…) no longer work.** The public explorers cannot check them. A listing that was sent with one shows \"fee can't be checked\"; post it again with the payment's transaction key."
 			},
 			"morphit_mirrors": {
 				"q": "Why is Morphit's source mirrored to so many code hosts?",
@@ -2092,7 +2102,6 @@
 			}
 		},
 		"priorities": {
-			"heading": "What Morphit is built around",
 			"privacy": {
 				"title": "Privacy first",
 				"body": "No KYC, email, phone/SMS, cookies, analytics or selfies. Pick a cool username, that's it, seriously."
@@ -2364,7 +2373,9 @@
 			"action_complete": "Mark as complete",
 			"feedback_no_counterparty": "No chats with a counterparty have happened yet",
 			"posting": "Posting…",
-			"feature_arming_hint": "Available the moment your order is live"
+			"feature_arming_hint": "Available the moment your order is live",
+			"fee_awaiting_payment": "Waiting for your BTC fee",
+			"fee_proof_unsupported": "Not in orderbook — fee can't be checked; post again with the transaction key"
 		},
 		"cancel": {
 			"confirm_title": "Cancel this order?",
@@ -2623,7 +2634,9 @@
 				"daily_ceiling_voucher_step_3": "Come back to {brand} and log in with the keys you just generated. You're trading.",
 				"name_high_value": "That name is reserved for legitimate-claim review (it's short, a brand, or a common dictionary word). Try a longer or more personal name. If you have a legitimate claim to this exact name, contact the operator.",
 				"name_sequential_pattern": "Recent account creations from your network have followed a sequential pattern that suggests automation. Try a name that doesn't share a prefix with recent signups, or wait an hour and retry.",
-				"daily_ceiling_voucher_external_warning": "blurtplugin.online is a Blurt-community service, not run by {brand}. You're leaving {brand} when you click. If the link doesn't work, type the URL by hand:"
+				"daily_ceiling_voucher_external_warning": "blurtplugin.online is a Blurt-community service, not run by {brand}. You're leaving {brand} when you click. If the link doesn't work, type the URL by hand:",
+				"relay_fee_spike": "Registration is paused on this server while its operator reviews a change in the Blurt account fee. Please try again later, or skip for now.",
+				"broadcast_outcome_unknown": "The Blurt network did not confirm in time whether your account was created. Wait a minute and try again with the same name — if it was created, you will be told so."
 			},
 			"success": {
 				"title": "Welcome to {brand}",
@@ -2761,7 +2774,9 @@
 		"action_edit_countdown": "Edit (within: {remaining})",
 		"status_completed": "Completed & paid",
 		"status_settling": "No longer available — confirming",
-		"status_confirming": "Confirming on the blockchain"
+		"status_confirming": "Confirming on the blockchain",
+		"fee_awaiting_payment": "Waiting for the BTC fee",
+		"fee_proof_unsupported": "Fee can't be checked: this listing was sent with a Monero “payment proof”, which Morphit servers cannot verify. Post it again with the payment's transaction key instead."
 	},
 	"orderbook": {
 		"heading": "Orderbook",
@@ -3237,7 +3252,8 @@
 			"amount_min_too_large": "Minimum is too large. Pick a smaller value.",
 			"amount_max_too_large": "Maximum is too large. Pick a smaller value.",
 			"fixed_price_too_large": "Fixed price is too large. Pick a smaller value.",
-			"waiver_min_required_usd": "The listing fee waiver requires a minimum order size. Set the minimum value to at least $1."
+			"waiver_min_required_usd": "The listing fee waiver requires a minimum order size. Set the minimum value to at least $1.",
+			"waiver_fiat_unconvertible": "This server can’t convert {fiat} to US dollars right now, so it can’t check the $1 minimum for a free first buy. Choose a common currency (for example USD), or pay the small listing fee instead."
 		},
 		"fee": {
 			"heading": "Listing fee",
@@ -3273,7 +3289,9 @@
 			"feature_upsell_cta": "Set up a featured bid",
 			"edit_window_countdown": "{remaining} to edit",
 			"edit_window_tooltip": "Edits are only possible within 15 minutes of posting. After that, cancel and re-post.",
-			"edit_window_expired": "Edit window passed"
+			"edit_window_expired": "Edit window passed",
+			"btc_title": "Posted! One step left: pay the fee",
+			"btc_body": "Your order goes on the orderbook by itself as soon as its Bitcoin fee is paid and confirmed."
 		},
 		"broadcast_error": {
 			"title": "The order didn't go through",
@@ -3299,7 +3317,7 @@
 			"btc_label": "Pay in BTC",
 			"btc_hint": "Send the fee to our Bitcoin address, then paste the transaction ID below.",
 			"xmr_label": "Pay in XMR",
-			"xmr_hint": "Send the fee to our Monero address, then paste the transaction ID and proof below.",
+			"xmr_hint": "Send the fee from your Monero wallet, then paste the transaction ID and transaction key below.",
 			"txid_label": "Transaction ID",
 			"txid_placeholder": "Paste the 64-character hex transaction ID",
 			"txid_required": "Transaction ID or Hash is required.",
@@ -3307,27 +3325,6 @@
 			"txid_hint": "Your order won't appear in the orderbook until the payment is confirmed on its chain.",
 			"txid_tooltip": "The transaction ID from your wallet — a long string of hex characters that proves your payment. Click for details on where to find it.",
 			"txid_tooltip_aria": "What is a transaction ID?",
-			"tx_proof_label": "Payment proof",
-			"tx_proof_placeholder": "Paste the proof string from your wallet (starts with OutProofV1 or OutProofV2)",
-			"tx_proof_required": "Payment proof is required for Monero orders.",
-			"tx_proof_malformed_prefix": "Proof must start with OutProofV1 or OutProofV2 — that's the prefix every Monero wallet's proof generator outputs.",
-			"tx_proof_malformed_length": "Proof string is too short or too long. Generate a fresh one from your wallet.",
-			"tx_proof_malformed_charset": "Proof contains characters that don't belong. Copy it cleanly from your wallet's proof dialog.",
-			"tx_proof_hint": "Your wallet generates this for free. The proof reveals only this one payment — no other wallet activity.",
-			"tx_proof_tooltip": "A short string from your Monero wallet that proves you paid this specific transaction to our address — without revealing anything else about your wallet. Click for per-wallet instructions.",
-			"tx_proof_tooltip_aria": "What is a payment proof?",
-			"tx_proof_privacy_note": "Privacy: this proof reveals only this one payment to this address. It does NOT reveal your other transactions, your balance, your other addresses, or any wallet metadata.",
-			"tx_proof_how_to_label": "How to generate your proof (per wallet)",
-			"tx_proof_how_to_cli_heading": "Monero CLI",
-			"tx_proof_how_to_cli_body": "Run: get_tx_proof <your-txid> <our-address>. The wallet prints a long string starting with OutProofV2 — copy that.",
-			"tx_proof_how_to_gui_heading": "Monero GUI",
-			"tx_proof_how_to_gui_body": "Open Advanced → Prove transaction. Fill in the transaction ID and our address. Click Generate. Copy the resulting proof string.",
-			"tx_proof_how_to_cake_heading": "Cake Wallet",
-			"tx_proof_how_to_cake_body": "Settings → Privacy → Verify a transaction → Generate proof. Fill in the txid and our address; copy the proof.",
-			"tx_proof_how_to_feather_heading": "Feather Wallet",
-			"tx_proof_how_to_feather_body": "Tools → Prove/check transaction → Generate. Fill in the txid and our address; copy the proof string.",
-			"tx_proof_how_to_other_heading": "Other Monero wallets",
-			"tx_proof_how_to_other_body": "Most modern Monero wallets have a \"Prove transaction\" or \"Generate proof\" feature in their advanced or privacy settings. Look for it under Tools, Privacy, or Advanced. See the FAQ entry on payment proofs for the full explanation.",
 			"fee_address_heading_btc": "Send your BTC fee to this address",
 			"fee_address_heading_xmr": "Send your XMR fee to this address",
 			"fee_address_amount_btc": "Amount: {amount} BTC ({sats} sats)",
@@ -3338,7 +3335,35 @@
 			"fee_address_chain_pinned": "Chain-pinned by {account} — every Morphit instance verifies fees against this address.",
 			"fee_address_chain_pinned_aria": "Chain-pinned address authenticity",
 			"fee_address_unavailable": "This operator hasn't configured a {asset} fee address. Pick BLURT instead, or post your order on a different Morphit instance.",
-			"blurt_needs_active_key": "Needs your Active key. You're signed in with your Posting key — {brand} will ask for your Active key when you post, and nothing you've filled in will be lost."
+			"blurt_needs_active_key": "Needs your Active key. You're signed in with your Posting key — {brand} will ask for your Active key when you post, and nothing you've filled in will be lost.",
+			"btc_hint_per_order": "Post first, then pay: you'll get a Bitcoin address made just for this listing.",
+			"btc_per_order_heading": "How the BTC fee works",
+			"btc_per_order_body": "After you post, you'll see a Bitcoin address made just for this listing and the exact amount to send (about {amount} BTC). Pay it from any Bitcoin wallet and your order goes on the orderbook by itself. No transaction ID to copy.",
+			"tx_key_label": "Transaction key",
+			"tx_key_tooltip": "A 64-character code your Monero wallet shows for every payment you send. It lets anyone check that this one payment reached us, and it cannot move any money. Click for where to find it in your wallet.",
+			"tx_key_tooltip_aria": "What is a transaction key?",
+			"tx_key_privacy_note": "Good to know: this key is published with your listing so every Morphit server can check your payment. It proves this one payment and cannot move any money. Someone who also knows your wallet address could use it to see the change from this payment, so for the most privacy, pay the fee from a wallet address you have not shared with anyone.",
+			"tx_key_how_to_label": "Where do I find the transaction key?",
+			"tx_key_how_to_cli_heading": "Monero CLI (monero-wallet-cli)",
+			"tx_key_how_to_cli_body": "Type get_tx_key followed by the transaction ID, then copy the key it prints.",
+			"tx_key_how_to_gui_heading": "Monero GUI",
+			"tx_key_how_to_gui_body": "Open Transactions, open the details of the payment, and copy the “Transaction key”.",
+			"tx_key_how_to_feather_heading": "Feather",
+			"tx_key_how_to_feather_body": "In History, right-click the payment, choose “Show details”, then “Copy Tx Secret Key”.",
+			"tx_key_how_to_cake_heading": "Cake Wallet",
+			"tx_key_how_to_cake_body": "Tap the payment in your transaction list and copy the “Transaction Key”.",
+			"tx_key_how_to_monerujo_heading": "Monerujo",
+			"tx_key_how_to_monerujo_body": "Tap the payment and copy the “TX Key”.",
+			"tx_key_how_to_other_heading": "Other Monero wallets",
+			"tx_key_how_to_other_body": "Look in the payment's details for “transaction key”, “tx key” or “tx secret key”. Only the wallet that sent the payment has it — an exchange cannot give it to you. If your wallet does not show it, pay from one of the wallets above, or pay the fee in BLURT.",
+			"tx_key_placeholder": "64 characters, 0–9 and a–f",
+			"tx_key_hint": "Copy it from the same wallet that sent the payment.",
+			"tx_key_required": "Paste the payment's transaction key.",
+			"tx_key_malformed": "That is not a transaction key: it is exactly 64 characters, only 0–9 and a–f. A “payment proof” (starting with OutProof) will not work.",
+			"tx_key_several": "Your wallet shows more than one key, which means this payment also went to other addresses. Please send the listing fee in a payment of its own, then use that payment's ID and key.",
+			"xmr_bound_heading": "Send the Monero fee to this listing's own address",
+			"xmr_bound_body": "This address was made for this one listing (listing code {permlink}), so nobody else can claim your payment. Send the amount below once, in a payment of its own, then paste that payment's transaction ID and transaction key below. If you close this page, your draft keeps the same address.",
+			"xmr_bound_need_account": "Sign in first: the Monero fee address is made for your account and this listing."
 		},
 		"draft": {
 			"restored_banner": "Draft restored from {age} ago. Pick up where you left off — or start fresh.",
@@ -3760,7 +3785,7 @@
 		"step2_title": "Run one command",
 		"step2_body": "Download the latest release, extract it into a /morphit/ folder, open a terminal there, and run sudo bash morphit-setup.sh — then choose \"Full guided install.\" A short wizard asks a few plain-language questions (your domain, your Blurt account, an email for HTTPS) and sets up everything for you: Node.js, PostgreSQL, the app and its services, auto-renewing HTTPS, the firewall, and your Tor and I2P addresses. No files to edit.",
 		"step3_title": "Register as an operator",
-		"step3_body": "Run npx morphit-ops register to claim your tag on-chain, first-come first-served. Your instance appears in the /operators directory and starts earning your 90% share of Blurt-paid listing fees automatically, delivered on-chain. See the operator-earnings FAQ for the economics.",
+		"step3_body": "Run sudo morphit-ops register to claim your tag on-chain, first-come first-served. Your instance appears in the /operators directory and starts earning your 90% share of Blurt-paid listing fees automatically, delivered on-chain. See the operator-earnings FAQ for the economics.",
 		"asset_policy_heading": "Your instance, your asset policy",
 		"asset_policy_body": "Morphit's federation lets each operator pick which tradable assets their instance accepts new orders for. New assets ship default-ON instance-wide — operators opt out per-asset via the `MORPHIT_INDEXER_DISABLED_ASSETS` environment variable. This is how a federation of instances can serve different user preferences without anyone needing to fork the code.",
 		"asset_policy_default_label": "Default-on for new assets.",
@@ -3808,7 +3833,7 @@
 			"err_contact_url_too_long": "Contact URL is too long.",
 			"err_contact_url_bad_scheme": "Contact URL must use https:// or http://.",
 			"err_contact_url_not_url": "Contact URL is not a valid URL.",
-			"err_account_already_registered": "This account is already registered as an operator. You can update your display name or contact URL via a future settings page, but your tag is immutable once claimed.",
+			"err_account_already_registered": "This account is already registered as an operator. Re-registering updates your display name, contact and origin — only your tag stays fixed once claimed.",
 			"err_tag_reserved": "That tag is reserved for the Morphit project. Please choose a different tag."
 		},
 		"beginner_label": "First time?",
@@ -3859,7 +3884,10 @@
 		"failed_posting_key_not_authorized": "Your sign-in key isn't currently authorized for this account. The account's keys may have changed since you imported. Re-import your seed phrase or contact the account holder.",
 		"failed_account_not_found": "We couldn't find this account on the blockchain. Check the account name in Settings.",
 		"failed_chain_unreachable": "We couldn't reach the blockchain to check your account. Check your connection and try again.",
-		"failed_back_home": "Back to home"
+		"failed_back_home": "Back to home",
+		"checking": "Checking this code…",
+		"not_in_directory_heading": "Unknown Morphit instance",
+		"not_in_directory_body": "This QR code is from an instance that isn't in the Morphit directory. To keep you safe, your phone won't sign in there."
 	},
 	"security": {
 		"heading": "Security posture",
@@ -4539,7 +4567,8 @@
 				"code_label": "Authenticator code or backup code",
 				"code_placeholder": "000000 or XXXX-XXXX",
 				"err_invalid_code": "That code didn’t verify. Check your device time is in sync, or try a backup code.",
-				"err_locked_out": "Too many invalid attempts. Try again in {seconds} seconds."
+				"err_locked_out": "Too many invalid attempts. Try again in {seconds} seconds.",
+				"err_unavailable_insecure": "Authenticator codes can’t be checked over this connection — your browser switches that feature off on plain-HTTP addresses such as I2P. Enter one of your backup codes instead, or unlock at the https:// or .onion address of {brand}."
 			},
 			"recommended_apps": {
 				"heading": "Recommended authenticator apps (open source)",
@@ -4576,7 +4605,8 @@
 			},
 			"confirm_password_to_begin": "Confirm your password to begin",
 			"confirm_password": "Confirm your password",
-			"yubikey_protected": "This keystore is protected with a YubiKey. Adding TOTP-based 2FA to a YubiKey-protected keystore isn’t supported in this version. Your YubiKey already provides cryptographically stronger authentication than TOTP would."
+			"yubikey_protected": "This keystore is protected with a YubiKey. Adding TOTP-based 2FA to a YubiKey-protected keystore isn’t supported in this version. Your YubiKey already provides cryptographically stronger authentication than TOTP would.",
+			"unavailable_insecure": "Setting up two-factor authentication needs a browser feature that is switched off on this connection (a plain-HTTP address such as I2P). To turn 2FA on or off, or to get new backup codes, open {brand} at its https:// address, or at its .onion address in Tor Browser."
 		},
 		"visibility": {
 			"public": "Public",
@@ -4825,5 +4855,30 @@
 		"email": "Email",
 		"nostr": "Nostr",
 		"web": "Web"
+	},
+	"insecure_context": {
+		"notice": "Your browser doesn’t treat this address as a secure connection (a plain-HTTP I2P address, for example), so it switches off a few features here: authenticator (2FA) codes, copy buttons, the fingerprint check in chat, offline mode and notifications. Your keys, trading and chat still work. For those features, open {brand} at its https:// address, or at its .onion address in Tor Browser.",
+		"dismiss": "Got it"
+	},
+	"btc_fee_pay": {
+		"heading": "Pay the listing fee",
+		"intro": "Send the amount below to this Bitcoin address. The address belongs to this listing only, so nobody else can use your payment.",
+		"amount": "Amount to send: {amount} BTC",
+		"address_label": "Bitcoin address for this listing",
+		"copy": "Copy address",
+		"open_wallet": "Open in my wallet",
+		"waiting_address": "Getting your payment address… This takes about a minute while the Blurt network confirms your order.",
+		"checking": "Checking the payment details…",
+		"mismatch": "We couldn't double-check this payment address, so we're not showing it. Please don't pay yet: try again in a few minutes, or use another instance.",
+		"on_its_way": "We can see {amount} BTC on its way. The Bitcoin network usually confirms it within 10 to 60 minutes.",
+		"received_partial": "Received so far: {amount} BTC.",
+		"all_sent": "Payment received. As soon as the Bitcoin network confirms it, your order goes live by itself.",
+		"paid": "Fee paid. Your order is on the orderbook.",
+		"when_live": "You can close this page: your order goes live by itself once the payment is confirmed. Please pay within 7 days. You'll also find this address under My orders.",
+		"slow": "Still no address? Then your order was not accepted — and you have not paid anything. A reason can be the limit of 3 listings with a Bitcoin fee per day. Try again later, or pay the fee in BLURT.",
+		"peer_disagrees": "Another Morphit server gave this listing a different Bitcoin address, so this server's copy of the blockchain may be out of step. To keep your money safe we are not showing an address. Please try again later or open this listing on another Morphit server.",
+		"check_now": "I've paid — check now",
+		"checking_now": "Checking…",
+		"check_again_in": "Check again in {seconds} s"
 	}
 }

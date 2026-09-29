@@ -32,6 +32,7 @@
  *   failed-broadcasts [--since=DUR]     Relay broadcasts that errored
  *   loyalty [--since=DUR]               Loyalty milestones triggered
  *   attestations                        Pending fee-attestation queue
+ *   treasury btc [--addresses]          BTC treasury: per-order fee addresses + wallet gap limit (read-only)
  *   flags [--type=reciprocity|related]  Moderation flags raised
  *
  * Sally-operator finding So-2 (Part 119): pre-fix this JSDoc was
@@ -66,6 +67,7 @@ import { runAbuse } from './commands/abuse.ts';
 import { runFailedBroadcasts } from './commands/failedBroadcasts.ts';
 import { runLoyalty } from './commands/loyalty.ts';
 import { runAttestations } from './commands/attestations.ts';
+import { runTreasury } from './commands/treasury.ts';
 import { runFlags } from './commands/flags.ts';
 import { runFastForward } from './commands/fastForward.ts';
 import { runFastSync } from './commands/fastSync.ts';
@@ -73,7 +75,9 @@ import { runBlock, runUnblock } from './commands/block.ts';
 import { runModeration } from './commands/moderation.ts';
 import { runInit } from './commands/init.ts';
 import { describeInstallError, INSTALL_LOG_PATH } from './init/assembleInstall.ts';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { runRegister } from './commands/register.ts';
 import { runShowKey } from './commands/showKey.ts';
 import { runEdit } from './commands/edit.ts';
@@ -185,7 +189,14 @@ const VALUE_FLAGS = new Set([
 	'icon',
 	'name',
 	'short-name',
-	'beta'
+	'beta',
+	// branding apply colour theme (docs/BRANDING.md, "Colours")
+	'theme',
+	'theme-from',
+	'theme-mid',
+	'theme-to',
+	'theme-background',
+	'theme-button'
 ]);
 
 const SHORT_FLAGS: Record<string, string> = {
@@ -222,6 +233,10 @@ function printHelp(): void {
 		'                                  branding apply --logo F --logo-footer F --icon F --name "…"',
 		'                                  Also: --short-name "…" (Android label), --beta on|off|auto,',
 		'                                  --json (machine-readable result).',
+		"                                  Colours: --theme-from '#f3dca0' --theme-to '#bb872f'",
+		"                                  [--theme-mid '#…'] [--theme-background '#121212'], or a",
+		'                                  preset: --theme champagne-gold | morphit (the default).',
+		'                                  Buttons: --theme-button deep | bright.',
 		'  alt-address [--out=PATH]        Guided setup for a Tor/Lokinet/I2P address: helps you',
 		'                                  generate one (vanity prefix where possible), then saves it',
 		'                                  to the footer. Lokinet has no vanity prefix (ONS for names).',
@@ -259,9 +274,10 @@ function printHelp(): void {
 		'                                  Docker bridge if loopback fails), matrix-bot + mcp service',
 		'                                  state, and canary freshness. Needs no config or DB.',
 		'  mcp                             MCP server on/off switch: show the morphit-mcp service state',
-		'  matrix [set <mxid>|clear|test]  Matrix alert username: set/edit/clear it (bot auto starts/stops); test DMs you a sample alert',
 		'                                  and enable+start or stop+disable it (the AI-agent orderbook',
 		'                                  surface). Read-only + non-custodial; on by default.',
+		'  matrix [set <mxid>|clear|test]  Matrix alert username: set/edit/clear it (the bot auto',
+		'                                  starts/stops); "test" DMs you a sample alert.',
 		'  status                          Operator dashboard at a glance',
 		'  drain-queue [--age=DUR]         List pending relay transfers',
 		'  signups [--since=DUR]           Recent signups via this relay',
@@ -269,6 +285,8 @@ function printHelp(): void {
 		'  failed-broadcasts [--since=DUR] Relay broadcasts that errored',
 		'  loyalty [--since=DUR]           Loyalty milestones triggered',
 		'  attestations                    Pending fee-attestation queue',
+		'  treasury btc [--addresses]      BTC treasury: per-order fee addresses + the gap limit to set',
+		'                                  in your wallet (read-only; run on the server)',
 		'  moderation [--type=...] [--since=DUR]  Review abuse flags + block/unblock accounts (interactive)',
 		'  flags [--type=reciprocity|related]  Moderation flags raised',
 		'  block <account> [reason]        Hide an account\u2019s listings on THIS instance (local; no posting key)',
@@ -294,11 +312,23 @@ function printHelp(): void {
 	for (const line of lines) info(line);
 }
 
+/** This CLI's version, read from apps/ops-cli/package.json — the SAME file the
+ *  release bumps, so `--version` can never drift from the installed release
+ *  (review B13/H-13: it used to print a hardcoded 0.1.0 forever). The read is on
+ *  the rare `--version` path only, so its cost is irrelevant. Returns 'unknown'
+ *  if the file can't be read. */
+export function opsCliVersion(): string {
+	try {
+		const pkgPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+		const v = (JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: unknown }).version;
+		return typeof v === 'string' && v.length > 0 ? v : 'unknown';
+	} catch {
+		return 'unknown';
+	}
+}
+
 function printVersion(): void {
-	// Hardcoded — matches package.json.  Bump in lockstep on
-	// release.  Kept as a constant rather than reading the json
-	// at runtime to avoid the file-read cost on every invocation.
-	info('morphit-ops 0.1.0');
+	info(`morphit-ops ${opsCliVersion()}`);
 }
 
 // ─── Main ────────────────────────────────────────────────────────
@@ -761,6 +791,8 @@ async function main(): Promise<number> {
 				return await runLoyalty(ctx);
 			case 'attestations':
 				return await runAttestations(ctx);
+			case 'treasury':
+				return await runTreasury(ctx);
 			case 'flags':
 				return await runFlags(ctx);
 			case 'fast-forward':

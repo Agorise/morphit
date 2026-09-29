@@ -68,5 +68,30 @@ export const CANONICAL_TREASURY = {
 	 *  100% to treasury.  Passes @morphit/release-schema
 	 *  validateTreasury (XMR_MAINNET_ADDRESS_RE).  View key is
 	 *  env-only and never published. */
-	xmr: '84bwu2PWp3NaRudAKTadmeZPBLTjL5f4bKU8F6NJKqxgUvwth6QxUVSUNFAQnHbbuQcMRNR4baYUKNcZXQtKMMKm4aVE3Fe'
+	xmr: '84bwu2PWp3NaRudAKTadmeZPBLTjL5f4bKU8F6NJKqxgUvwth6QxUVSUNFAQnHbbuQcMRNR4baYUKNcZXQtKMMKm4aVE3Fe',
+	/** v1.20.0 (MK-H2) — the treasury BTC wallet's ACCOUNT extended PUBLIC
+	 *  key (native segwit, m/84'/0'/0'), canonical `xpub…` spelling. When
+	 *  set, the release-op builder pins it (treasury.btc.xpub) and every
+	 *  BTC-fee order posted after that release gets its OWN fee address
+	 *  (receive address n of this key) instead of paying `btc` above.
+	 *  Empty = not pinned (BTC fees keep the shared-address txid path).
+	 *  Set it ONLY with `npx tsx apps/indexer/scripts/set-treasury-btc-xpub.ts
+	 *  <xpub-or-zpub>` on the laptop: it refuses private/testnet/wrong-type
+	 *  keys and prints the first receive addresses to compare with the
+	 *  wallet. Public information (every indexer must derive the
+	 *  addresses); never a private key. Chain-pin ONLY: no indexer env
+	 *  var reads it, because every indexer must number addresses from the
+	 *  same on-chain value. */
+	btcXpub: '',
+	/** v1.20.0 (MK-H2) — the treasury Monero wallet's PRIMARY (main) address,
+	 *  `4…`, 95 chars — the same wallet as `xmr` above. When set, the
+	 *  release-op builder pins it (treasury.xmr.primary_address) and every
+	 *  XMR-fee order posted after that release must pay the INTEGRATED
+	 *  address of this address carrying the order's own payment ID, so a
+	 *  copied txid + tx key cannot pay for anyone else's order. Empty = not
+	 *  pinned (XMR fees stay unbound payments to `xmr`). Set it ONLY with
+	 *  `npx tsx apps/indexer/scripts/set-treasury-xmr-primary.ts <address>`
+	 *  on the laptop, and only after the pre-pin checklist in
+	 *  docs/OPERATIONS.md §40.13 passes. Public; chain-pin ONLY. */
+	xmrPrimary: ''
 } as const;

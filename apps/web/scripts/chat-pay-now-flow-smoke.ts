@@ -160,7 +160,9 @@ const SCENARIOS: readonly Scenario[] = [
 			// not the old empty string.
 			'let enteredAmount = $state(',
 			'seedToInput(amount)',
-			'const effectiveAmount = $derived(amountEditable ? Number(enteredAmount.trim()) : amount);'
+			// v1.20.0 G6 — the typed text is parsed locale-aware ("12,5" in de).
+			'const effectiveAmount = $derived(',
+			'amountEditable ? (enteredParse.ok ? enteredParse.number : Number.NaN) : amount'
 		]
 	},
 	{

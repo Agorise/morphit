@@ -1,38 +1,36 @@
 /**
- * ops-bridge-scripts-smoke (v1.18.0 review, O11).
+ * ops-bridge-scripts-smoke — no one-off live-patch script ships in ops/.
  *
- * `ops/apply-relay-fix.sh` and `ops/apply-federation-fix.sh` were one-off
- * bridges: each patched the installed indexer source on a live box to carry a
- * fix until the release that contained it shipped, then restarted the indexer.
- * Both fixes have long since shipped, and both scripts still travel in every
- * release, in /opt/morphit/ops. Run on today's code:
+ * History. `ops/` used to carry sixteen one-off scripts written during live
+ * debugging sessions (v1.12.x relay-health, cp775 federation, the morphitlat
+ * canary). They travelled in every release, in /opt/morphit/ops, long after the
+ * fixes they bridged had shipped. Run on a current release they did harm
+ * (v1.20.0 deep review, C5/C6), for example:
+ *   - relay-updown-proof.sh swapped the indexer's relay probe for an old
+ *     true/false version: a HEALTHY relay then read {"up":false} and its
+ *     hidden_only posture was dropped, until the script restored it (no trap);
+ *   - relay-runtime-debug.sh / relay-filelog-debug.sh made /v1/health lose the
+ *     relay `up` key and printed "up=true" for a relay that was down;
+ *   - fix-stale-indexer.sh chose processes to kill host-wide by command-line
+ *     pattern and always printed "The stale orphan was the whole problem";
+ *   - the canary fix scripts deleted the served canary before re-signing and
+ *     then said "last good canary still served".
+ * They were deleted in v1.20.0. (v1.18.0 had only guarded the two apply-*-fix
+ * scripts; that version of this smoke covered just those two.)
  *
- *   - apply-relay-fix.sh replaced `relayProbeCandidates` wholesale with its old
- *     body, silently dropping the rule added since that keeps a hidden-only
- *     node from looking its relay's public name up — then restarted the
- *     indexer on the reverted code;
- *   - apply-federation-fix.sh found no anchor, reported success anyway, and
- *     restarted the indexer.
+ * This smoke keeps them gone:
+ *   A. none of the deleted scripts exists anywhere under ops/;
+ *   B. no ops/ shell script edits application source in place — a script that
+ *      runs an interpreter (python3/perl/sed -i) AND names an apps/<app>/src
+ *      path is exactly the live-patch shape. The detector is proven on a
+ *      synthetic patcher and a benign script first, so a broken detector can't
+ *      pass the scan vacuously.
  *
- * This EXECUTES both against a copy of the current source, with systemctl,
- * psql and sleep stubbed, and asserts: exit 0, source untouched, no restart.
- *
- * To watch it fail on the old scripts:
- *   MORPHIT_OPS_BRIDGE_DIR=<old>/ops npx tsx scripts/ops-bridge-scripts-smoke.ts
+ * Override the tree with MORPHIT_OPS_BRIDGE_DIR=<some>/ops to watch it fail on
+ * an older release.
  */
-import { spawnSync } from 'node:child_process';
-import {
-	chmodSync,
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readFileSync,
-	rmSync,
-	writeFileSync
-} from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,67 +48,101 @@ const check = (name: string, ok: boolean, detail = ''): void => {
 	}
 };
 
-const work = mkdtempSync(join(tmpdir(), 'morphit-bridge-'));
-try {
-	const bin = join(work, 'bin');
-	mkdirSync(bin);
-	const calls = join(work, 'calls.log');
-	const stub = (name: string, body: string): void => {
-		writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`);
-		chmodSync(join(bin, name), 0o755);
-	};
-	stub('systemctl', `echo "systemctl $*" >> "${calls}"`);
-	// A HEALTHY box — the case an operator is in when they run an old script
-	// "just in case": the relay is up and the peer probes good, so the old
-	// scripts judged their patch proven and KEPT it.
-	stub('psql', `echo "psql" >> "${calls}"; echo good`);
-	stub('sleep', 'exit 0');
-	stub('curl', `echo "curl $*" >> "${calls}"; echo '{"relay":{"up":true}}'`);
-	stub('id', 'echo 0'); // the scripts demand root; the stubs make that moot
+const DELETED = [
+	'apply-relay-fix.sh',
+	'apply-federation-fix.sh',
+	'relay-updown-proof.sh',
+	'relay-runtime-debug.sh',
+	'relay-filelog-debug.sh',
+	'find-live-file.sh',
+	'fix-stale-indexer.sh',
+	'relay-refresh-trace.sh',
+	'relay-snapshot-diag.sh',
+	'diag-relay.sh',
+	'show-indexer-runtime.sh',
+	'relay-health-fix.sh',
+	'cleanup-relay-debug.sh',
+	'fix-canary-tor.sh',
+	'fix-canary-tor2.sh',
+	'canary-fix-all.sh'
+];
 
-	const cases: Array<{ script: string; rel: string }> = [
-		{ script: 'apply-relay-fix.sh', rel: 'src/api/operationalHealth.ts' },
-		{ script: 'apply-federation-fix.sh', rel: 'src/indexer/federationProbe.ts' }
-	];
-	for (const { script, rel } of cases) {
-		const idx = join(work, `indexer-${script}`);
-		mkdirSync(join(idx, dirname(rel)), { recursive: true });
-		const target = join(idx, rel);
-		copyFileSync(join(REPO, 'apps/indexer', rel), target);
-		const before = readFileSync(target, 'utf8');
-		rmSync(calls, { force: true });
-		const r = spawnSync('bash', [join(OPS, script)], {
-			encoding: 'utf8',
-			timeout: 60_000,
-			env: {
-				PATH: `${bin}:/usr/bin:/bin`,
-				HOME: work,
-				IDXDIR: idx,
-				MORPHIT_INDEXER_DATABASE_URL: 'postgres://stub/stub'
-			}
-		});
-		const after = readFileSync(target, 'utf8');
-		const log = existsSync(calls) ? readFileSync(calls, 'utf8') : '';
-		check(
-			`${script}: exits 0 on a release that already carries its fix`,
-			r.status === 0,
-			`exit ${r.status}`
-		);
-		check(`${script}: leaves the installed source exactly as it was`, after === before);
-		check(
-			`${script}: does not restart the indexer`,
-			!log.includes('systemctl'),
-			log.trim().split('\n')[0]
-		);
-		check(
-			`${script}: says the fix is already installed`,
-			(r.stdout ?? '').includes('already part of the installed release'),
-			(r.stdout ?? '').trim().split('\n').slice(-1)[0]
-		);
+function walk(dir: string, out: string[] = []): string[] {
+	for (const name of readdirSync(dir)) {
+		const p = join(dir, name);
+		const st = statSync(p);
+		if (st.isDirectory()) walk(p, out);
+		else out.push(p);
 	}
-} finally {
-	rmSync(work, { recursive: true, force: true });
+	return out;
 }
+
+/** Comment-stripped shell text: a live patcher is identified by what it RUNS,
+ *  not by a comment that mentions a path. */
+function codeOf(text: string): string {
+	return text
+		.split('\n')
+		.filter((l) => !/^\s*#/.test(l))
+		.join('\n');
+}
+
+/** Does this shell script edit application source in place? */
+export function isSourcePatcher(text: string): boolean {
+	const code = codeOf(text);
+	const runsEditor =
+		/\bpython3?\b/.test(code) ||
+		/\bperl\s+-[a-z]*i/.test(code) ||
+		/\bsed\s+(-[a-zA-Z]*\s+)*-i/.test(code);
+	// apps/<app>/src named directly, or an apps/<app> dir variable joined to /src.
+	const namesAppSrc =
+		/apps\/[a-z0-9-]+\/src\b/.test(code) ||
+		(/apps\/[a-z0-9-]+["'}]?(\s|$|["'])/m.test(code) &&
+			/\/src\/[A-Za-z0-9_./-]+\.(ts|js|svelte)\b/.test(code));
+	return runsEditor && namesAppSrc;
+}
+
+// ── Detector self-test (so the scan below can't pass vacuously) ──
+const syntheticPatcher = [
+	'#!/usr/bin/env bash',
+	'IDXDIR="${IDXDIR:-/opt/morphit/apps/indexer}"',
+	'OH="$IDXDIR/src/api/operationalHealth.ts"',
+	'python3 - "$OH" <<\'PY\'',
+	'print(1)',
+	'PY'
+].join('\n');
+const benign = [
+	'#!/usr/bin/env bash',
+	'# edits apps/indexer/src/x.ts? no — this comment must not count',
+	'python3 -c "import json,sys; print(json.load(sys.stdin))"',
+	'"$TSX" apps/indexer/scripts/snapshot-export.ts'
+].join('\n');
+check(
+	'detector flags a synthetic live patcher (python3 + apps/<app>/src)',
+	isSourcePatcher(syntheticPatcher)
+);
+check(
+	'detector does not flag a benign script (JSON-only python3, apps/*/scripts)',
+	!isSourcePatcher(benign)
+);
+
+// ── A. the deleted scripts stay deleted ──
+const files = walk(OPS);
+const byBase = new Map<string, string[]>();
+for (const f of files) {
+	const base = f.split('/').pop() ?? '';
+	byBase.set(base, [...(byBase.get(base) ?? []), relative(REPO, f)]);
+}
+for (const name of DELETED) {
+	const found = byBase.get(name) ?? [];
+	check(`${name} is not shipped`, found.length === 0, found.join(', '));
+}
+
+// ── B. no shipped ops script patches application source ──
+const patchers = files
+	.filter((f) => f.endsWith('.sh') && !f.includes('/ops/test/'))
+	.filter((f) => isSourcePatcher(readFileSync(f, 'utf8')))
+	.map((f) => relative(REPO, f));
+check('no ops/ shell script edits apps/*/src in place', patchers.length === 0, patchers.join(', '));
 
 console.log(
 	fail === 0

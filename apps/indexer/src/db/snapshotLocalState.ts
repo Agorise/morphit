@@ -39,7 +39,16 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	// pool at boot, before the indexer has re-verified it against the signed
 	// op (rv2-4). A restored row is the publisher's word, so it never travels:
 	// the node picks the directory up again from the next signed directory op.
-	'rpc_directory'
+	'rpc_directory',
+	// Which fee ops THIS node already re-judged with a chain re-fetch (G1,
+	// v1.20.0). Bookkeeping about this node's own RPC work, not chain state;
+	// the verdicts themselves travel in orders / stranger_fees / ops.
+	'fee_reverify_done',
+	// MK-H2 (v1.20.0): the BTC fee-address numbering is a CACHE of a pure
+	// function of `ops` + `releases`. It is never taken on a snapshot's word:
+	// the restoring node rebuilds it from its own (op-log-checked) event log
+	// on the next BTC-fee order (fee/btcFeeAddressIndex.ts).
+	'btc_fee_address_log'
 ];
 
 /** Tables rebuilt from the chain (ops, derived views, detector output over
@@ -66,6 +75,10 @@ export const CHAIN_DERIVED_TABLES: readonly string[] = [
 	'operator_attribution_events',
 	'operator_blocks',
 	'operator_earnings',
+	// G1 (v1.20.0): the on-chain fee_recipient history, rebuilt identically by
+	// replay or by the boot back-fill from `ops`. A fast-synced node needs it to
+	// judge fees exactly as the publisher did.
+	'operator_fee_recipients',
 	'operator_registration_events',
 	'operators',
 	'ops',
@@ -94,7 +107,8 @@ export function exportExclusionArgs(): string[] {
 /**
  * Wipe local-only state a restored snapshot brought with it (an older
  * snapshot, or one from a publisher on an older build, still carries it).
- * Returns the number of rows removed. Tables absent from an older schema are
+ * Returns the number of rows removed (or, for known_instances, reset to
+ * unprobed). Tables absent from an older schema are
  * skipped.
  */
 export async function scrubRestoredLocalState(db: Database): Promise<number> {
@@ -107,6 +121,24 @@ export async function scrubRestoredLocalState(db: Database): Promise<number> {
 	for (const t of LOCAL_ONLY_TABLES) {
 		if (!have.has(t)) continue;
 		const r = await db.query(`DELETE FROM ${t}`);
+		removed += r.rowCount ?? 0;
+	}
+	// known_instances is chain-derived (the register op writes its rows), but
+	// its PROBE columns are the publisher's own network observations — status
+	// ('mismatch' is an accusation), failure counts toward the 7-day prune, the
+	// error text, and each peer's self-description as the publisher cached it.
+	// This node forms its own (v1.20.0, E12): every row starts unprobed, and the
+	// probe re-classifies them within a few scans.
+	if (have.has('known_instances')) {
+		const r = await db.query(
+			`UPDATE known_instances SET
+			    last_probe_status = 'never', last_probed_at = NULL, last_probe_error = NULL,
+			    consecutive_failures = 0, cached_name = NULL, cached_tagline = NULL,
+			    cached_contact_url = NULL, cached_alt_networks = NULL,
+			    cached_indexed_block = NULL, cached_chain_lag_sec = NULL,
+			    cached_clearnet_eliminated = FALSE
+			  WHERE last_probe_status IS DISTINCT FROM 'never' OR last_probed_at IS NOT NULL`
+		);
 		removed += r.rowCount ?? 0;
 	}
 	if (have.has('operator_blocks')) {

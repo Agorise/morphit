@@ -8,27 +8,46 @@
  * active key, and marks the row broadcast_at + broadcast_trx_id
  * on success.
  *
- * Failure model:
- *   - Transport failures (RPC down, network timeout): increment
- *     error_count, leave broadcast_at NULL. Next poll retries.
- *   - Chain-rejection errors (malformed op, insufficient
- *     balance, etc.): same treatment — these are usually fixable
- *     by operator intervention (refund the relay's BLURT balance,
- *     correct a bad row). Auto-retry is harmless until the root
- *     cause is addressed.
- *   - Rows with error_count >= queueMaxRetries are SKIPPED by
- *     the drain query. They stay in the table as evidence; an
- *     operator dashboard surfaces them for manual investigation.
+ * Failure model (v1.20.0 fix wave 4 — the previous text here described a
+ * retry-on-any-error design that paid twice):
+ *   - Before anything is signed, nothing has left the process: a failure there
+ *     (chain unreachable for the head read, validation, bookkeeping) is a
+ *     DEFINITE failure — error_count + 1, retried with backoff.
+ *   - Once the signed bytes may have reached ANY node, no answer except
+ *     "accepted"/"duplicate" is trusted: a timeout may hide an acceptance, and
+ *     a hostile node can relay a transaction and still answer "rejected". The
+ *     row is then UNSETTLED and is settled from the chain before anything else
+ *     (see NEVER PAY TWICE).
+ *   - Rows with error_count >= queueMaxRetries are SKIPPED by the drain query
+ *     — they stay as evidence (last_error says why) for the operator.
  *
- * Each row is broadcast in its own transaction. A poison row
- * that consistently fails does NOT block subsequent rows from
- * being tried.
+ * Each row is processed on its own. A poison row that consistently
+ * fails does NOT block subsequent rows from being tried, and rows that have
+ * never been attempted are taken BEFORE unsettled ones, so a batch full of
+ * unsettled rows cannot starve new payments.
+ *
+ * NEVER PAY TWICE (v1.20.0 fix wave, D1 + wave 4).
+ *   1. The row is CLAIMED by an atomic compare-and-set on
+ *      broadcast_attempt_at, committed on its own (it also keeps two drainers
+ *      off one row).
+ *   2. The transfer is signed ONCE; its txid and SIGNED expiration are
+ *      committed ('in_flight trx_id=… exp=…') BEFORE any node is sent the
+ *      bytes. If that write fails, nothing is sent.
+ *   3. An unconfirmed send becomes 'outcome_unknown trx_id=… exp=… checks=N'.
+ *   4. An unsettled row is settled (BlurtClient.settleTransfer) only once the
+ *      signed expiration has passed: found in history → done; absent per >= 2
+ *      operators whose OWN irreversible block is past the signed expiration →
+ *      that attempt failed (error_count + 1) and the row is re-sent next
+ *      cycle; otherwise → checked again later, and after queueMaxSettleChecks
+ *      checks ESCALATED (error_count set to the cap, last_error 'escalated: …',
+ *      logged, counted on /v1/health) — never re-sent blind.
+ * Delegations SET an absolute amount, so re-sending one is harmless and
+ * they are not settled from history.
  */
 
-import type pg from 'pg';
 import type { UnlockedConfig } from '$config';
 import type { Database } from '$db/pool';
-import type { BlurtClient } from '$blurt/client';
+import { BroadcastOutcomeUnknownError, type BlurtClient } from '../blurt/client.ts';
 import { logger } from '$log';
 
 const log = logger('relay-drainer');
@@ -59,6 +78,61 @@ interface PendingTransferRow {
 	amount_bp: string | null;
 	reason: string;
 	error_count: number;
+	broadcast_attempt_at: Date | null;
+	/** broadcast_attempt_at as Postgres text (full microsecond precision) —
+	 *  the compare-and-set token; a JS Date would drop the microseconds. */
+	attempt_token: string | null;
+	last_error: string | null;
+}
+
+/** last_error at claim time, before anything is signed: nothing sent yet. */
+const IN_FLIGHT = 'in_flight';
+/** last_error prefixes of an attempt whose bytes may be on the network. */
+const IN_FLIGHT_SIGNED = 'in_flight trx_id=';
+const OUTCOME_UNKNOWN = 'outcome_unknown';
+/** A settle check is not attempted until this long after the signed
+ *  expiration (an irreversible block must pass it). */
+const SETTLE_GRACE_MS = 30_000;
+/** History is searched back to this long before the signed expiration. */
+const HISTORY_LOOKBACK_MS = 15 * 60_000;
+/** Default number of undecided settle checks before a row is escalated. */
+const DEFAULT_MAX_SETTLE_CHECKS = 30;
+
+/** The attempt a row's last_error describes. */
+type Attempt =
+	| { readonly kind: 'none' }
+	| {
+			readonly kind: 'unsettled';
+			readonly txid: string | null;
+			readonly expirationMs: number;
+			readonly checks: number;
+	  };
+
+function parseAttempt(row: PendingTransferRow): Attempt {
+	const e = row.last_error ?? '';
+	if (!(e.startsWith(IN_FLIGHT_SIGNED) || e.startsWith(OUTCOME_UNKNOWN))) return { kind: 'none' };
+	const txid = /trx_id=([0-9a-f]{40})/.exec(e)?.[1] ?? null;
+	const exp = Number(/\bexp=(\d+)/.exec(e)?.[1]);
+	const checks = Number(/\bchecks=(\d+)/.exec(e)?.[1] ?? 0);
+	// No recorded expiration (a row written before wave 4): assume the latest
+	// it could be — the claim stamp plus a generous signing delay + window.
+	const stampMs =
+		row.broadcast_attempt_at == null ? Date.now() : new Date(row.broadcast_attempt_at).getTime();
+	return {
+		kind: 'unsettled',
+		txid,
+		expirationMs: Number.isFinite(exp) && exp > 0 ? exp : stampMs + 15 * 60_000,
+		checks: Number.isFinite(checks) ? checks : 0
+	};
+}
+
+/** Counts surfaced on the relay's /v1/health (verbose). */
+export interface QueueStats {
+	/** Rows whose last payment attempt may be on chain, awaiting settlement. */
+	readonly unsettled: number;
+	/** Rows escalated to the operator: outcome still unknown after the
+	 *  maximum number of settle checks. Never re-sent automatically. */
+	readonly escalated: number;
 }
 
 export interface QueueDrainResult {
@@ -73,6 +147,7 @@ export interface QueueDrainResult {
 export class RelayQueueDrainer {
 	private abort = new AbortController();
 	private runningLoop: Promise<void> | null = null;
+	private stats: QueueStats | null = null;
 
 	constructor(
 		private readonly config: UnlockedConfig,
@@ -107,49 +182,48 @@ export class RelayQueueDrainer {
 	 *  who want to force an immediate drain (e.g. a manual
 	 *  operator trigger via /admin).
 	 *
-	 *  Concurrency: the whole cycle runs in a single transaction
-	 *  with SELECT ... FOR UPDATE SKIP LOCKED on the candidate
-	 *  rows.  Multiple drainers pointed at the same DB (e.g. HA
-	 *  setups) will see disjoint row sets — no double-broadcast.
-	 *  See Finding N23. */
+	 *  Concurrency: no transaction is held across a broadcast. Each row is
+	 *  CLAIMED by an atomic compare-and-set on broadcast_attempt_at (committed
+	 *  at once), so two drainers pointed at the same DB can never both send a
+	 *  row (Finding N23), and a crash leaves a durable "we were sending this"
+	 *  mark (D1). */
 	async drainOnce(): Promise<QueueDrainResult> {
-		const client = await this.db.connect();
 		let succeeded = 0;
 		let failed = 0;
-		let attempted = 0;
-		try {
-			await client.query('BEGIN');
-			const rows = await this.selectPendingLocked(client);
-			attempted = rows.length;
-			for (const row of rows) {
-				// Each row: its own savepoint inside the outer
-				// transaction.  Poison rows don't poison their
-				// neighbors, but the row-level lock is still held
-				// to the end of the cycle.
-				const sp = `row_${row.id}`;
-				await client.query(`SAVEPOINT ${sp}`);
-				try {
-					await this.processRow(client, row);
-					await client.query(`RELEASE SAVEPOINT ${sp}`);
-					succeeded++;
-				} catch (err) {
-					await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
-					failed++;
-					await this.recordFailure(client, row, err);
-				}
-			}
-			await client.query('COMMIT');
-		} catch (err) {
+		const rows = await this.selectPending();
+		for (const row of rows) {
 			try {
-				await client.query('ROLLBACK');
-			} catch {
-				// Already rolled back; ignore.
+				const outcome = await this.processRow(row);
+				if (outcome === 'done') succeeded++;
+				else if (outcome === 'failed') failed++;
+			} catch (err) {
+				failed++;
+				await this.recordFailure(row, err);
 			}
-			throw err;
-		} finally {
-			client.release();
 		}
-		return { attempted, succeeded, failed };
+		await this.refreshStats();
+		return { attempted: rows.length, succeeded, failed };
+	}
+
+	/** Latest queue counts (null before the first cycle). */
+	queueStats(): QueueStats | null {
+		return this.stats;
+	}
+
+	private async refreshStats(): Promise<void> {
+		try {
+			const r = await this.db.query<{ unsettled: string; escalated: string }>(
+				`SELECT
+				   count(*) FILTER (WHERE broadcast_at IS NULL
+				     AND (last_error LIKE 'outcome_unknown%' OR last_error LIKE 'in_flight trx_id=%'))::text AS unsettled,
+				   count(*) FILTER (WHERE broadcast_at IS NULL AND last_error LIKE 'escalated:%')::text AS escalated
+				 FROM relay_pending_transfers`
+			);
+			const row = r.rows[0];
+			if (row) this.stats = { unsettled: Number(row.unsettled), escalated: Number(row.escalated) };
+		} catch {
+			/* stats are best-effort */
+		}
 	}
 
 	// ─── Internals ────────────────────────────────────────────────
@@ -172,40 +246,29 @@ export class RelayQueueDrainer {
 		}
 	}
 
-	private async selectPendingLocked(client: pg.PoolClient): Promise<PendingTransferRow[]> {
+	private async selectPending(): Promise<PendingTransferRow[]> {
 		// FIFO by created_at. Skip rows that have already hit the
 		// retry ceiling — they need operator attention, not another
-		// auto-retry.  FOR UPDATE SKIP LOCKED claims the rows so
-		// concurrent drainers see disjoint sets (see N23).
+		// auto-retry. No row lock here: processRow claims each row with
+		// an atomic compare-and-set before touching the chain.
 		//
-		// The broadcast_attempt_at filter combines two purposes:
-		//
-		// 1. Post-N23 residual window: if a row was marked "about
-		//    to send" but the post-success UPDATE then failed
-		//    mid-flight, the row has broadcast_attempt_at set but
-		//    broadcast_at still NULL.  We hold off long enough for
-		//    a transient PG hiccup to clear.
-		//
-		// 2. REVISIT-LIST §G item — exponential backoff between
-		//    retries.  An upstream RPC outage shouldn't get hammered
-		//    every 10 minutes by a stuck row.  Cooldown grows with
-		//    error_count: minute(2^error_count) capped at 240m (4h).
-		//    error_count = 0  →  cooldown 1m   (first retry: fast)
+		// Exponential backoff between attempts, keyed on the COMMITTED
+		// broadcast_attempt_at (it used to be rolled back with the failed
+		// attempt, which made every retry immediate): cooldown
+		// minute(2^error_count) capped at 240m (4h).
+		//    error_count = 0  →  cooldown 1m   (also the first settle check)
 		//    error_count = 1  →  cooldown 2m
 		//    error_count = 2  →  cooldown 4m
-		//    error_count = 3  →  cooldown 8m   (default cap reached
-		//                                       at queueMaxRetries=3,
-		//                                       row escalates to
-		//                                       operator)
-		//    error_count = 8+ →  cooldown 240m (operators with
-		//                                       higher max-retries
-		//                                       tunings hit this cap)
+		//    error_count = 3  →  cooldown 8m   (default cap reached at
+		//                                       queueMaxRetries=3, row
+		//                                       escalates to operator)
+		//    error_count = 8+ →  cooldown 240m
 		//
-		// First attempt (error_count=0 AND broadcast_attempt_at IS
-		// NULL) bypasses the wait — we drain fresh rows immediately.
-		const result = await client.query<PendingTransferRow>(
+		// A never-attempted row (broadcast_attempt_at IS NULL) is taken at once.
+		const result = await this.db.query<PendingTransferRow>(
 			`SELECT id, recipient, kind, amount_blurt::text,
-			        amount_bp::text AS amount_bp, reason, error_count
+			        amount_bp::text AS amount_bp, reason, error_count,
+			        broadcast_attempt_at, broadcast_attempt_at::text AS attempt_token, last_error
 			   FROM relay_pending_transfers
 			  WHERE broadcast_at IS NULL
 			    AND error_count < $1
@@ -215,15 +278,99 @@ export class RelayQueueDrainer {
 			        INTERVAL '1 minute' * LEAST(POWER(2, error_count)::numeric, 240)
 			      )
 			    )
-			  ORDER BY created_at ASC, id ASC
-			  LIMIT $2
-			  FOR UPDATE SKIP LOCKED`,
+			  -- Never-attempted rows first (A3): a batch full of unsettled rows
+			  -- must not starve new payments.
+			  ORDER BY (broadcast_attempt_at IS NOT NULL) ASC, created_at ASC, id ASC
+			  LIMIT $2`,
 			[this.config.queueMaxRetries, this.config.queueBatchSize]
 		);
 		return Array.from(result.rows);
 	}
 
-	private async processRow(client: pg.PoolClient, row: PendingTransferRow): Promise<void> {
+	/** Settle an attempt that may be on chain. 'done' = it landed (row marked);
+	 *  'failed' = proven never to land (counted; re-sent next cycle);
+	 *  'wait' = not decidable yet (or escalated). */
+	private async settle(
+		row: PendingTransferRow,
+		att: Extract<Attempt, { kind: 'unsettled' }>,
+		amount: number
+	): Promise<'done' | 'failed' | 'wait'> {
+		if (Date.now() < att.expirationMs + SETTLE_GRACE_MS) return 'wait';
+		const asset = `${amount.toFixed(3)} BLURT`;
+		const want = row.kind === 'liquid' ? 'transfer' : 'transfer_to_vesting';
+		const result = await this.blurt
+			.settleTransfer({
+				account: this.config.relayAccount,
+				sinceMs: att.expirationMs - HISTORY_LOOKBACK_MS,
+				expirationMs: att.expirationMs,
+				match: (op, body, trxId) => {
+					if (att.txid !== null && trxId !== undefined) return trxId === att.txid;
+					if (op !== want || body.from !== this.config.relayAccount || body.to !== row.recipient)
+						return false;
+					if (body.amount !== asset) return false;
+					return row.kind === 'vesting' || body.memo === `morphit:${row.reason}`;
+				}
+			})
+			.catch(() => 'unknown' as const);
+		if (result === 'found') {
+			await this.db.query(
+				`UPDATE relay_pending_transfers
+				    SET broadcast_at = NOW(),
+				        broadcast_trx_id = $2,
+				        last_error = NULL
+				  WHERE id = $1 AND broadcast_at IS NULL`,
+				[row.id, att.txid ?? 'settled-from-history']
+			);
+			log.info('row_settled_found_on_chain', { row_id: row.id, trx_id: att.txid });
+			return 'done';
+		}
+		if (result === 'absent') {
+			await this.db.query(
+				`UPDATE relay_pending_transfers
+				    SET last_error = $2, last_error_at = NOW(), error_count = error_count + 1
+				  WHERE id = $1 AND broadcast_at IS NULL`,
+				[
+					row.id,
+					`not_landed trx_id=${att.txid ?? '?'} (absent past its expiration per 2+ operators)`
+				]
+			);
+			log.warn('row_attempt_not_landed', { row_id: row.id, trx_id: att.txid });
+			return 'failed';
+		}
+		const checks = att.checks + 1;
+		const max = this.config.queueMaxSettleChecks ?? DEFAULT_MAX_SETTLE_CHECKS;
+		if (checks >= max) {
+			await this.db.query(
+				`UPDATE relay_pending_transfers
+				    SET last_error = $2, last_error_at = NOW(), error_count = GREATEST(error_count, $3)
+				  WHERE id = $1 AND broadcast_at IS NULL`,
+				[
+					row.id,
+					`escalated: outcome of trx_id=${att.txid ?? '?'} still unknown after ${checks} checks — check the relay account's history for it before re-queueing`,
+					this.config.queueMaxRetries
+				]
+			);
+			log.error('row_escalated_outcome_unknown', {
+				row_id: row.id,
+				trx_id: att.txid,
+				checks,
+				hint: 'The chain could not tell whether this payment landed (no two RPC nodes could settle it). It is NOT re-sent automatically. Look the txid up in a block explorer; if it is absent, reset error_count on the row to re-queue it.'
+			});
+			return 'wait';
+		}
+		await this.db.query(
+			`UPDATE relay_pending_transfers SET last_error = $2, last_error_at = NOW()
+			  WHERE id = $1 AND broadcast_at IS NULL`,
+			[
+				row.id,
+				`${OUTCOME_UNKNOWN} trx_id=${att.txid ?? '?'} exp=${att.expirationMs} checks=${checks}`
+			]
+		);
+		log.info('row_unsettled_waiting', { row_id: row.id, trx_id: att.txid, checks });
+		return 'wait';
+	}
+
+	private async processRow(row: PendingTransferRow): Promise<'done' | 'failed' | 'wait'> {
 		// Defense-in-depth: validate the recipient shape even
 		// though upstream writers already did so. A queue row
 		// with an invalid recipient is a signal that something
@@ -236,19 +383,6 @@ export class RelayQueueDrainer {
 				`row ${row.id}: recipient does not match account-name regex: ${JSON.stringify(row.recipient).slice(0, 64)}`
 			);
 		}
-
-		// Mark "we are about to broadcast" BEFORE the chain call.
-		// If the broadcast lands but the post-success UPDATE then
-		// fails (transient PG hiccup, savepoint rollback), the row
-		// has broadcast_attempt_at set, and the next drain cycle
-		// can decide whether to retry or hold for operator review.
-		// This closes a residual double-broadcast window from N23.
-		await client.query(
-			`UPDATE relay_pending_transfers
-			    SET broadcast_attempt_at = NOW()
-			  WHERE id = $1`,
-			[row.id]
-		);
 
 		// Defense-in-depth: validate reason shape.  All current
 		// writers use lowercase identifiers like
@@ -268,74 +402,132 @@ export class RelayQueueDrainer {
 		const MAX_AMOUNT_BLURT = 10_000;
 		const MAX_AMOUNT_BP = 10_000;
 
-		// Dispatch based on kind. For liquid/vesting, amount_blurt
-		// is the payable amount. For delegation, amount_bp is —
-		// amount_blurt is a sentinel 0 per the v6 schema.
-		let confirmation;
+		let amount = 0;
+		let bp = 0;
 		if (row.kind === 'liquid' || row.kind === 'vesting') {
-			const amount = Number(row.amount_blurt);
+			amount = Number(row.amount_blurt);
 			if (!Number.isFinite(amount) || amount <= 0) {
 				throw new Error(`row ${row.id}: invalid amount_blurt ${row.amount_blurt}`);
 			}
 			if (amount > MAX_AMOUNT_BLURT) {
 				throw new Error(`row ${row.id}: amount_blurt ${amount} exceeds cap ${MAX_AMOUNT_BLURT}`);
 			}
-			if (row.kind === 'liquid') {
-				confirmation = await this.blurt.broadcastTransfer({
-					from: this.config.relayAccount,
-					fromActiveWif: this.config.relayActiveKeyWif,
-					to: row.recipient,
-					amountBlurt: amount,
-					memo: `morphit:${row.reason}`
-				});
-			} else {
-				confirmation = await this.blurt.broadcastTransferToVesting({
-					from: this.config.relayAccount,
-					fromActiveWif: this.config.relayActiveKeyWif,
-					to: row.recipient,
-					amountBlurt: amount
-				});
-			}
 		} else if (row.kind === 'delegation') {
 			if (row.amount_bp === null) {
 				throw new Error(`row ${row.id}: delegation kind missing amount_bp`);
 			}
-			const bp = Number(row.amount_bp);
+			bp = Number(row.amount_bp);
 			if (!Number.isFinite(bp) || bp <= 0) {
 				throw new Error(`row ${row.id}: invalid amount_bp ${row.amount_bp}`);
 			}
 			if (bp > MAX_AMOUNT_BP) {
 				throw new Error(`row ${row.id}: amount_bp ${bp} exceeds cap ${MAX_AMOUNT_BP}`);
 			}
-			confirmation = await this.blurt.broadcastDelegation({
-				delegator: this.config.relayAccount,
-				delegatorActiveWif: this.config.relayActiveKeyWif,
-				delegatee: row.recipient,
-				amountBp: bp
-			});
 		} else {
 			throw new Error(`row ${row.id}: unknown kind ${JSON.stringify(row.kind)}`);
 		}
 
-		// Success — mark broadcast.  Runs inside the cycle's
-		// transaction; the row-level lock held since
-		// selectPendingLocked guarantees no other drainer can
-		// interleave.  Conditional WHERE is paranoid defense in
-		// depth, not strictly necessary now (see Finding N23).
-		await client.query(
+		// A previous attempt may already be on chain: settle it FIRST (D1).
+		if (row.kind !== 'delegation') {
+			const att = parseAttempt(row);
+			if (att.kind === 'unsettled') return this.settle(row, att, amount);
+		}
+
+		// Claim + stamp, committed BEFORE anything is signed: an atomic
+		// compare-and-set on the attempt stamp we read, so a concurrent
+		// drainer (or a second cycle) that already claimed the row loses.
+		const claim = await this.db.query(
 			`UPDATE relay_pending_transfers
-			    SET broadcast_at = NOW(),
-			        broadcast_trx_id = $2
-			  WHERE id = $1 AND broadcast_at IS NULL`,
-			[row.id, confirmation.id]
+			    SET broadcast_attempt_at = clock_timestamp(),
+			        last_error = $3
+			  WHERE id = $1
+			    AND broadcast_at IS NULL
+			    AND broadcast_attempt_at::text IS NOT DISTINCT FROM $2::text`,
+			[row.id, row.attempt_token ?? null, IN_FLIGHT]
 		);
+		if ((claim.rowCount ?? 0) !== 1) return 'wait';
+
+		// Record WHICH signed transaction is about to go out — txid and signed
+		// expiration — BEFORE any node sees it. If this write fails, the client
+		// sends nothing (BroadcastNotSentError).
+		const onSigned = async (info: { txid: string; expirationMs: number }): Promise<void> => {
+			const w = await this.db.query(
+				`UPDATE relay_pending_transfers SET last_error = $2
+				  WHERE id = $1 AND broadcast_at IS NULL`,
+				[row.id, `${IN_FLIGHT_SIGNED}${info.txid} exp=${info.expirationMs}`]
+			);
+			if ((w.rowCount ?? 0) !== 1)
+				throw new Error('could not record the signed transaction; not sending');
+		};
+		let confirmation;
+		try {
+			if (row.kind === 'liquid') {
+				confirmation = await this.blurt.broadcastTransfer({
+					from: this.config.relayAccount,
+					fromActiveWif: this.config.relayActiveKeyWif,
+					to: row.recipient,
+					amountBlurt: amount,
+					memo: `morphit:${row.reason}`,
+					onSigned
+				});
+			} else if (row.kind === 'vesting') {
+				confirmation = await this.blurt.broadcastTransferToVesting({
+					from: this.config.relayAccount,
+					fromActiveWif: this.config.relayActiveKeyWif,
+					to: row.recipient,
+					amountBlurt: amount,
+					onSigned
+				});
+			} else {
+				confirmation = await this.blurt.broadcastDelegation({
+					delegator: this.config.relayAccount,
+					delegatorActiveWif: this.config.relayActiveKeyWif,
+					delegatee: row.recipient,
+					amountBp: bp,
+					onSigned
+				});
+			}
+		} catch (err) {
+			if (err instanceof BroadcastOutcomeUnknownError) {
+				// It may be on chain. Record WHICH signed transaction, so the
+				// settle step can find it exactly; NOT counted as an error.
+				await this.db.query(
+					`UPDATE relay_pending_transfers
+					    SET last_error = $2,
+					        last_error_at = NOW()
+					  WHERE id = $1 AND broadcast_at IS NULL`,
+					[row.id, `${OUTCOME_UNKNOWN} trx_id=${err.txid} exp=${err.expirationMs} checks=0`]
+				);
+				log.warn('row_outcome_unknown', { row_id: row.id, trx_id: err.txid });
+				return 'wait';
+			}
+			// BroadcastNotSentError — nothing left this process (head read,
+			// signing or the bookkeeping above failed): a definite failure,
+			// counted and retried with backoff.
+			throw err;
+		}
+
+		// Success — mark broadcast. If THIS write fails the payment is on chain
+		// but the row still says 'in_flight': it must not go to recordFailure
+		// (which would make it look like a definite failure and re-send it).
+		// Left as is, the next cycle settles it from the history.
+		try {
+			await this.db.query(
+				`UPDATE relay_pending_transfers
+				    SET broadcast_at = NOW(),
+				        broadcast_trx_id = $2,
+				        last_error = NULL
+				  WHERE id = $1 AND broadcast_at IS NULL`,
+				[row.id, confirmation.id]
+			);
+		} catch (dbErr) {
+			log.error('row_success_write_failed', { row_id: row.id, trx_id: confirmation.id }, dbErr);
+			return 'wait';
+		}
+		return 'done';
 	}
 
-	private async recordFailure(
-		client: pg.PoolClient,
-		row: PendingTransferRow,
-		err: unknown
-	): Promise<void> {
+	private async recordFailure(row: PendingTransferRow, err: unknown): Promise<void> {
 		const message = err instanceof Error ? err.message : String(err);
 		log.error(
 			'row_failed',
@@ -349,7 +541,9 @@ export class RelayQueueDrainer {
 			err
 		);
 		try {
-			await client.query(
+			// A definite failure (validation, or the chain REJECTED the signed
+			// transaction): nothing landed. Counted toward queueMaxRetries.
+			await this.db.query(
 				`UPDATE relay_pending_transfers
 				    SET last_error = $2,
 				        last_error_at = NOW(),

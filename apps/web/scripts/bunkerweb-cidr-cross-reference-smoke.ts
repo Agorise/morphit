@@ -94,6 +94,27 @@ function readCanonicalCidr(): string {
 	return m[1];
 }
 
+/** The relay's own default trusted set (apps/relay/src/middleware/ip.ts),
+ *  used when group_vars leaves morphit_relay_trusted_proxy_ips EMPTY
+ *  (v1.20.0 wave 5/6: empty = the code default, like the indexer's). */
+function relayDefaultTrustedCidrs(): string[] {
+	const src = readFileSync(join(REPO_ROOT, 'apps/relay/src/middleware/ip.ts'), 'utf-8');
+	const m = src.match(/DEFAULT_TRUSTED_PROXY_CIDRS[^=]*=\s*\[([^\]]*)\]/);
+	if (!m) throw new Error('Cannot find DEFAULT_TRUSTED_PROXY_CIDRS in apps/relay/src/middleware/ip.ts');
+	return [...m[1].matchAll(/['"]([\d./]+)['"]/g)].map((x) => x[1]);
+}
+/** Does IPv4 CIDR `outer` contain every address of `inner`? */
+function cidrContains(outer: string, inner: string): boolean {
+	const toInt = (ip: string): number => ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
+	const [on, ob] = outer.split('/');
+	const [inn, ib] = inner.split('/');
+	const obits = Number(ob ?? 32);
+	const ibits = Number(ib ?? 32);
+	if (!/^\d+\.\d+\.\d+\.\d+$/.test(on) || !/^\d+\.\d+\.\d+\.\d+$/.test(inn) || obits > ibits) return false;
+	const mask = obits === 0 ? 0 : (~0 << (32 - obits)) >>> 0;
+	return ((toInt(on) & mask) >>> 0) === ((toInt(inn) & mask) >>> 0);
+}
+
 const CANONICAL_CIDR = readCanonicalCidr();
 console.log(`SOURCE OF TRUTH: ops/bunkerweb/docker-compose.yml subnet = ${CANONICAL_CIDR}\n`);
 
@@ -121,15 +142,20 @@ function checkAnsibleBunkerwebRole(): void {
 function checkAnsibleTrustedProxyDefault(): void {
 	const path = 'ops/ansible/group_vars/all.yml';
 	const src = readFileSync(join(REPO_ROOT, path), 'utf-8');
-	const m = src.match(/morphit_relay_trusted_proxy_ips:\s*["']?([\d./,\s]+?)["']?\s*(?:#|$)/m);
+	const m = src.match(/^morphit_relay_trusted_proxy_ips:\s*(?:"([^"]*)"|'([^']*)'|([\d./,]*))\s*(?:#.*)?$/m);
 	if (!m) {
 		fail(`Ansible group_vars trusted_proxy_ips default present`, `Variable not found in ${path}`);
 		return;
 	}
-	const defaultVal = m[1].trim();
-	// Accept comma-separated lists — canonical CIDR must appear as one of them.
-	const entries = defaultVal.split(',').map((s) => s.trim()).filter(Boolean);
-	if (!entries.includes(CANONICAL_CIDR)) {
+	const defaultVal = (m[1] ?? m[2] ?? m[3] ?? '').trim();
+	// EMPTY = the relay's code default (loopback + DEFAULT_TRUSTED_PROXY_CIDRS);
+	// a value REPLACES it. Either way some entry must CONTAIN the bunkerweb
+	// bridge (a wider pool that covers it is correct; a different subnet is not).
+	const entries =
+		defaultVal === ''
+			? relayDefaultTrustedCidrs()
+			: defaultVal.split(',').map((s) => s.trim()).filter(Boolean);
+	if (!entries.some((e) => cidrContains(e, CANONICAL_CIDR))) {
 		fail(
 			`Ansible group_vars default trusts bunkerweb CIDR`,
 			`Default morphit_relay_trusted_proxy_ips '${defaultVal}' does not include canonical bunkerweb CIDR '${CANONICAL_CIDR}'.\n      ` +
@@ -139,7 +165,7 @@ function checkAnsibleTrustedProxyDefault(): void {
 		);
 	} else {
 		pass(
-			`Ansible group_vars default trusts canonical bunkerweb CIDR (entries: ${entries.join(', ')})`
+			`Ansible group_vars default trusts canonical bunkerweb CIDR (${defaultVal === '' ? 'empty = the relay default: ' : ''}${entries.join(', ')} ⊇ ${CANONICAL_CIDR})`
 		);
 	}
 }

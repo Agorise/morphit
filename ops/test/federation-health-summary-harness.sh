@@ -73,8 +73,8 @@ run_tests(){
 }
 
 verdict(){ # <output> -> pass | fail | crash
-	if printf '%s' "$1" | grep -qE 'Tests +[0-9]+ failed'; then echo fail
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ passed'; then echo pass
+	if grep -qE 'Tests +[0-9]+ failed' <<<"$1"; then echo fail
+	elif grep -qE 'Tests +[0-9]+ passed' <<<"$1"; then echo pass
 	else echo crash; fi
 }
 

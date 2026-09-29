@@ -107,44 +107,28 @@
     group: "{{ morphit_service_group }}"
     recurse: true
 
-# The warrant-canary upload can target the morphit@ service account (it owns the
-# served apps/web/build dir). On a fresh OS + Morphit reinstall, only root gets
-# re-keyed, so the morphit user has no authorized_keys and the upload fails with
-# "Permission denied (publickey)" (the maintainer/morphit.io v1.17.0). Mirror the operator's
-# real LOGIN keys — root's, plus any non-root sudo user's — into the morphit user
-# so the upload just works, and keeps working across reinstalls with no manual
-# step. Multi-source + idempotent + self-healing: it degrades quietly if no keys
-# are present yet (a later re-run picks them up), and never clobbers a key the
-# operator added by hand (existing morphit keys are merged in).
-- name: Propagate operator SSH login keys to the morphit service user (canary upload survives a reinstall)
-  ansible.builtin.shell: |
-    set -o pipefail
-    dest_dir="{{ morphit_service_home }}/.ssh"
-    dest="$dest_dir/authorized_keys"
-    tmp="$(mktemp)"
-    # Every place a human login key legitimately lives on this box.
-    for f in /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys; do
-      [ -s "$f" ] && cat "$f" >> "$tmp"
-    done
-    # Keep any key already on the morphit user (do not clobber a manual add).
-    [ -s "$dest" ] && cat "$dest" >> "$tmp"
-    # Real key lines only, deduped; ignore blanks/comments.
-    merged="$(grep -E '^(ssh-|ecdsa-|sk-)' "$tmp" 2>/dev/null | sort -u || true)"
-    rm -f "$tmp"
-    if [ -z "$merged" ]; then echo NOKEYS; exit 0; fi
-    install -d -o "{{ morphit_service_user }}" -g "{{ morphit_service_group }}" -m 700 "$dest_dir"
-    before=""; [ -f "$dest" ] && before="$(cat "$dest")"
-    printf '%s\n' "$merged" > "$dest"
-    chown "{{ morphit_service_user }}:{{ morphit_service_group }}" "$dest"
-    chmod 600 "$dest"
-    [ "$before" = "$merged" ] && echo UNCHANGED || echo UPDATED
-  register: morphit_key_propagate
-  changed_when: "'UPDATED' in (morphit_key_propagate.stdout | default(''))"
-  failed_when: false
-
-- name: Note operator-key propagation outcome
-  ansible.builtin.debug:
-    msg: "morphit service-user authorized_keys: {{ morphit_key_propagate.stdout | default('') | trim }} [UPDATED = refreshed from your login keys so canary upload works; UNCHANGED = already current; NOKEYS = none found yet, add your key to root and re-run, or upload the canary as root]"
+# WARRANT-CANARY UPLOAD ACCOUNT (review B4).
+#
+# An earlier version copied the operator's SSH login keys into the `morphit`
+# service user's authorized_keys, on the theory that the canary upload targets
+# morphit@ (it owns the served apps/web/build dir). That NEVER worked: `morphit`
+# is created with shell /usr/sbin/nologin (see the "Create morphit service user"
+# task above), and sshd runs every session — including scp/sftp — through the
+# login shell, so `ssh morphit@host` / `scp … morphit@host:` is rejected with
+# "This account is currently not available." regardless of any key. Worse, the
+# task wrote root-as-root into /var/lib/morphit/.ssh, a directory the (untrusted)
+# morphit user owns, so a symlink planted there could redirect that root write to
+# any file on the box.
+#
+# The canary is therefore uploaded as a REAL-SHELL user — root (the operator logs into
+# morphit.io as root@; the morphit user is nologin) — which scripts/canary/setup.sh
+# does: its remote mode targets the login the operator gives and its dedicated
+# passphrase-less upload key aliases to that same real-shell user. root can write
+# the served build/ dir whatever its owner, so no key needs to reach the morphit
+# user. We deliberately do NOT propagate keys into morphit's .ssh: it cannot help
+# a nologin account and it is an attack surface. (The build/ dir's ownership for
+# the upload is handled by the morphit role's chown + the upgrade's canary-owner
+# restore, not here.)
 
 # Part 122 cp5 F12 — the shipped morphit-relay.service specifies
 # `User=morphit-relay / Group=morphit-relay`.  Without this task,

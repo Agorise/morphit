@@ -42,6 +42,14 @@ export interface I2pDestinationResult {
 	readonly keyfile: Buffer;
 }
 
+/** The host loopback port the frontend container publishes for hidden-service
+ *  fan-out (cp695 / group_vars morphit_onion_frontend_port). Tor + I2P tunnels
+ *  MUST target this, NOT the bare relay on 8080: the relay trusts X-Real-IP from
+ *  its caller, so pointing a hidden service straight at it would let a visitor
+ *  set their own client IP, and it 404s every non-relay path (the site).
+ *  (review D11) */
+export const HIDDEN_FRONTEND_PORT = 8090;
+
 /** The i2pd server-tunnel stanza we write to the host's tunnels.conf.  Points
  *  the given local web port at an I2P HTTP server tunnel backed by `keys`.
  *  Admins edit or delete this stanza to change/remove the address. */
@@ -77,7 +85,7 @@ export async function generateI2pDestination(
 	const dir = mkdtempSync(join(tmpdir(), 'morphit-i2p-'));
 	const tun = join(dir, 'tunnels.conf');
 	const keyPath = join(dir, I2P_KEYFILE_NAME);
-	writeFileSync(tun, i2pTunnelStanza(I2P_KEYFILE_NAME, 8080), { mode: 0o600 });
+	writeFileSync(tun, i2pTunnelStanza(I2P_KEYFILE_NAME, HIDDEN_FRONTEND_PORT), { mode: 0o600 });
 	// Seed certificates so router init reaches the clients subsystem promptly.
 	const certs = findI2pdCertificates();
 	if (certs) {

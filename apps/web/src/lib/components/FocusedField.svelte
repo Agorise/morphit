@@ -80,10 +80,10 @@
 	@keyframes pulse-soft-border {
 		0%,
 		100% {
-			box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+			box-shadow: 0 0 0 0 rgb(var(--brand-soft-rgb) / 0.35);
 		}
 		50% {
-			box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+			box-shadow: 0 0 0 6px rgb(var(--brand-soft-rgb) / 0);
 		}
 	}
 </style>

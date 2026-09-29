@@ -53,8 +53,12 @@
 	    users hear "Privacy first — learn more in our FAQ" rather
 	    than just the title.
 	  - Card #1's anchor border is decorative; no SR impact.
-	  - Focus-visible ring is the standard Tailwind morphit-
-	    emerald color, 2px solid, 2px offset.
+	  - Focus-visible ring is the theme's focus-ring colour
+	    (--focus-ring-rgb; Morphit emerald), 2px solid, 2px offset.
+
+	COLOURS: every colour here is a theme token from src/theme.css
+	(per-instance theming, docs/BRANDING.md). The card uses the
+	slate-* neutral tokens (not ink-*), exactly as it always has.
 
 	BUDGET (priorities #3 + #4)
 
@@ -98,13 +102,13 @@
 	);
 </script>
 
-<section class="priorities-section" aria-labelledby="priorities-heading">
-	<header class="priorities-header">
-		<h2 id="priorities-heading" class="priorities-heading">
-			{$_('home.priorities.heading')}
-		</h2>
-	</header>
-
+<!-- No section heading: "What Morphit is built around" was removed (v1.20.0);
+     the cards speak for themselves. So each card title is an <h2> (was <h3>
+     under that heading): the homepage outline goes h1 → h2 with no skipped
+     level. Its look comes from .priorities-card-title, not the tag.
+     heading-hierarchy-smoke follows this component and also fails if the
+     removed heading's locale key comes back. -->
+<section class="priorities-section">
 	<ul class="priorities-grid">
 		{#each PRIORITIES as p, i (p.key)}
 			<li>
@@ -176,9 +180,9 @@
 						{/if}
 					</div>
 
-					<h3 class="priorities-card-title">
+					<h2 class="priorities-card-title">
 						{$_(`home.priorities.${p.key}.title`)}
-					</h3>
+					</h2>
 					<p class="priorities-card-body">
 						{$_(`home.priorities.${p.key}.body`)}
 					</p>
@@ -199,28 +203,6 @@
 	.priorities-section {
 		margin-top: 4rem;
 		margin-bottom: 4rem;
-	}
-
-	.priorities-header {
-		text-align: center;
-		margin-bottom: 2rem;
-	}
-
-	.priorities-eyebrow {
-		font-size: 0.75rem;
-		font-weight: 600;
-		letter-spacing: 0.15em;
-		text-transform: uppercase;
-		color: rgb(100 116 139); /* ink-500 */
-		margin: 0;
-	}
-
-	.priorities-heading {
-		margin: 0.5rem 0 0;
-		font-size: 1.875rem;
-		font-weight: 800;
-		line-height: 1.2;
-		letter-spacing: -0.02em;
 	}
 
 	.priorities-grid {
@@ -262,7 +244,7 @@
 		gap: 0.75rem;
 		padding: 1.5rem;
 		border-radius: 1rem;
-		border: 1px solid rgb(226 232 240); /* ink-200 */
+		border: 1px solid rgb(var(--slate-200-rgb));
 		background: white;
 		min-height: 12rem;
 		position: relative;
@@ -280,8 +262,8 @@
 	}
 
 	:global(.dark) .priorities-card {
-		background: rgb(15 23 42); /* ink-900 */
-		border-color: rgb(30 41 59); /* ink-800 */
+		background: rgb(var(--slate-900-rgb));
+		border-color: rgb(var(--slate-800-rgb));
 	}
 
 	/* HOVER: lift 2 px, intensify border, brighten title.
@@ -289,11 +271,11 @@
 	 * is a real <a href>. */
 	.priorities-card:hover {
 		transform: translateY(-2px);
-		border-color: rgb(148 163 184); /* ink-400 */
-		box-shadow: 0 6px 18px -8px rgb(2 6 23 / 0.12);
+		border-color: rgb(var(--slate-400-rgb));
+		box-shadow: 0 6px 18px -8px rgb(var(--slate-950-rgb) / 0.12);
 	}
 	:global(.dark) .priorities-card:hover {
-		border-color: rgb(71 85 105); /* ink-600 */
+		border-color: rgb(var(--slate-600-rgb));
 		box-shadow: 0 6px 18px -8px rgb(0 0 0 / 0.5);
 	}
 
@@ -304,13 +286,13 @@
 		transform: translateY(-2px);
 		box-shadow:
 			0 0 0 2px rgb(255 255 255),
-			0 0 0 4px rgb(0 218 105), /* morphit-emerald */
-			0 6px 18px -8px rgb(2 6 23 / 0.12);
+			0 0 0 4px rgb(var(--focus-ring-rgb)),
+			0 6px 18px -8px rgb(var(--slate-950-rgb) / 0.12);
 	}
 	:global(.dark) .priorities-card:focus-visible {
 		box-shadow:
-			0 0 0 2px rgb(15 23 42),
-			0 0 0 4px rgb(0 218 105),
+			0 0 0 2px rgb(var(--slate-900-rgb)),
+			0 0 0 4px rgb(var(--focus-ring-rgb)),
 			0 6px 18px -8px rgb(0 0 0 / 0.5);
 	}
 
@@ -351,14 +333,14 @@
 	.priorities-card-body {
 		font-size: 0.9375rem;
 		line-height: 1.5;
-		color: rgb(71 85 105); /* ink-600 */
+		color: rgb(var(--slate-600-rgb));
 		margin: 0;
 		/* Push the CTA to the bottom of the card. */
 		flex: 1;
 	}
 
 	:global(.dark) .priorities-card-body {
-		color: rgb(203 213 225); /* ink-300 */
+		color: rgb(var(--slate-300-rgb));
 	}
 
 	/* "Learn more →" affordance.  Sits at the bottom of the card. */
@@ -368,29 +350,31 @@
 		gap: 0.25rem;
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: rgb(100 116 139); /* ink-500 */
+		color: rgb(var(--slate-500-rgb));
 		margin-top: 0.5rem;
 	}
 	:global(.dark) .priorities-card-cta {
-		color: rgb(148 163 184); /* ink-400 */
+		color: rgb(var(--slate-400-rgb));
 	}
 
 	/* On hover the CTA text shifts to the brand color; the arrow glyph
 	 * slides + greens via the global .nav-arrow rules in app.css. */
 	.priorities-card:hover .priorities-card-cta,
 	.priorities-card:focus-visible .priorities-card-cta {
-		color: rgb(0 218 105); /* morphit-emerald */
+		color: rgb(var(--brand-primary-rgb));
 	}
 
-	/* Brand-color accent rotation per card. */
+	/* Brand-color accent rotation per card (theme tokens card-accent-1/2/3:
+	 * the three gradient stops, lifted to ≥ 3:1 on the card if a theme needs
+	 * it — packages/operator-config/src/theme.ts). */
 	.priorities-card-lime .priorities-icon {
-		color: #8eef26;
+		color: rgb(var(--card-accent-1-rgb));
 	}
 	.priorities-card-green .priorities-icon {
-		color: #00da69;
+		color: rgb(var(--card-accent-2-rgb));
 	}
 	.priorities-card-teal .priorities-icon {
-		color: #02a6b2;
+		color: rgb(var(--card-accent-3-rgb));
 	}
 
 	/* Priority #1 (Privacy first) anchored with the brand-gradient
@@ -404,9 +388,9 @@
 		height: 3px;
 		background: linear-gradient(
 			to right,
-			#8eef26,
-			#00da69,
-			#02a6b2
+			rgb(var(--brand-1-rgb)),
+			rgb(var(--brand-2-rgb)),
+			rgb(var(--brand-3-rgb))
 		);
 		border-top-left-radius: 1rem;
 		border-top-right-radius: 1rem;

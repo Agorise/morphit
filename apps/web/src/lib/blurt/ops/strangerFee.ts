@@ -27,6 +27,11 @@
  *      directly — no client-side conversion, no price-feed
  *      dependency.  The amount the user sees is the amount
  *      that gets transferred.
+ *
+ * Cross-instance (v1.20.0, G1): the fee is verified on the RECIPIENT's
+ * instance. That indexer accepts the 90 % leg to THIS instance's fees account
+ * only when the op carries this instance's `operator_tag` (whose operator
+ * registered that account on chain), so the payload now carries it.
  */
 
 import { prepareUnsignedOrderWithFee, broadcastSignedTransaction } from '$blurt/sign';
@@ -35,13 +40,18 @@ import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { OP_IDS } from '$net/config';
 import { FEE_RECIPIENT, feeTransfersFor } from '$lib/orders/fee';
 import type { LiveIdentity } from '$crypto/keygen';
+import { getInstanceSnapshot } from '$lib/stores/instance';
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
+/** The indexer's operator-tag shape; anything else would be ignored there. */
+const OPERATOR_TAG_RE = /^[a-z0-9._-]{1,64}$/;
 
 export interface StrangerFeePayload {
 	readonly v: 1;
 	readonly recipient: string;
 	readonly amount_blurt: number;
+	/** v1.20.0 (G1) — this instance's operator tag, when it has one. */
+	readonly operator_tag?: string;
 }
 
 /**
@@ -96,10 +106,14 @@ export async function broadcastStrangerFee(
 		throw new Error('broadcastStrangerFee: invalid amountBlurt');
 	}
 
+	const operatorTag = getInstanceSnapshot().operator_tag;
 	const payload: StrangerFeePayload = {
 		v: 1,
 		recipient,
-		amount_blurt: amountBlurt
+		amount_blurt: amountBlurt,
+		...(typeof operatorTag === 'string' && OPERATOR_TAG_RE.test(operatorTag)
+			? { operator_tag: operatorTag }
+			: {})
 	};
 
 	// Phase F.5 audit fix (F-18) — three-phase split:

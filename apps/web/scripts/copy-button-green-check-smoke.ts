@@ -32,7 +32,13 @@ function check(name: string, ok: boolean): void {
 
 // ── Shared component ────────────────────────────────────────────────────────
 const cb = comp('CopyButton');
-check('CopyButton owns the clipboard write', /navigator\.clipboard\.writeText\(value\)/.test(cb));
+// v1.20.0 (F-9): the write goes through the feature-detecting copyText()
+// ($lib/security/secureContext), and "Copied ✓" shows only when it succeeded.
+check(
+	'CopyButton owns the clipboard write (via copyText)',
+	/import \{ copyText \} from '\$lib\/security\/secureContext'/.test(cb) && /copyText\(value\)/.test(cb)
+);
+check('CopyButton flashes "Copied" only when the copy happened', /copied = ok;/.test(cb));
 check('CopyButton copied state is green', /copied \?\s*'text-green-600 dark:text-green-400'/.test(cb));
 check('CopyButton copied state shows a ✓', /aria-hidden="true">\s*✓/.test(cb));
 check('CopyButton reverts the flash on a timer', /setTimeout\([\s\S]*copied = false/.test(cb));

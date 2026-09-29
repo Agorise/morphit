@@ -10,7 +10,12 @@ import {
 	minAcceptablePiconero,
 	minAcceptableSatoshis
 } from '@morphit/asset-registry';
-import { boundedBlurtBase, boundedPiconero, boundedSatoshis } from './feeQuoteFloor';
+import {
+	boundedBlurtBase,
+	boundedPiconero,
+	boundedSatoshis,
+	resolveQuoteBase
+} from './feeQuoteFloor';
 import { computeFee } from './fee';
 
 const PIN = 125;
@@ -56,5 +61,24 @@ describe('boundedSatoshis / boundedPiconero', () => {
 		expect(BigInt(q)).toBeGreaterThanOrEqual(minAcceptablePiconero(BigInt(pin)));
 		expect(boundedPiconero('781250001', pin)).toBe('781250001');
 		expect(boundedPiconero(undefined, pin)).toBeUndefined();
+	});
+});
+
+/**
+ * v1.20.0 fix wave, G10 — with no indexer figure AND no chain pin, the page
+ * quoted the bundled 60-BLURT fallback while an unpinned indexer enforces its
+ * env default 125 × 0.85 = 106.25: every such listing landed `underpaid`.
+ */
+describe('resolveQuoteBase (G10)', () => {
+	it('refuses to quote when neither the indexer figure nor a pin is known', () => {
+		expect(resolveQuoteBase(undefined, 60, null)).toBeNull();
+	});
+	it('uses the fallback only inside a known pinned band', () => {
+		expect(resolveQuoteBase(undefined, 60, PIN)).toBeGreaterThanOrEqual(
+			PIN * (1 - FEE_PRICE_TOLERANCE)
+		);
+	});
+	it('uses a live indexer figure (unpinned → as-is)', () => {
+		expect(resolveQuoteBase(118, 60, null)).toBe(118);
 	});
 });

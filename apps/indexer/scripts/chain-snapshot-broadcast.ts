@@ -24,8 +24,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { Client, PrivateKey } from '@beblurt/dblurt';
-import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { PrivateKey } from '@beblurt/dblurt';
+import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
 import {
 	buildChainSnapshotOp,
 	CHAIN_SNAPSHOT_OP_ID,
@@ -49,7 +49,7 @@ function flag(n: string): string | undefined {
 
 async function main(): Promise<void> {
 	const file = process.argv[2];
-	if (!file || file.startsWith('--')) die('usage: chain-snapshot-broadcast.ts <payload.json> [--dry-run] [--signer morphit]');
+	if (!file || file.startsWith('--')) die('usage: chain-snapshot-broadcast.ts <payload.json> [--dry-run] [--signer morphit] [--node <url>] [--include-hidden]');
 	const signer = flag('signer') ?? CHAIN_SNAPSHOT_SIGNER_DEFAULT;
 
 	let payloadJson: string;
@@ -92,24 +92,24 @@ async function main(): Promise<void> {
 		id: op.id,
 		json: op.json
 	};
-	let lastErr: unknown;
-	for (const url of DEFAULT_BLURT_RPC_ENDPOINTS) {
-		try {
-			process.stderr.write(`\nBroadcasting via ${url} …\n`);
-			const client = new Client(url, { timeout: 20_000 });
-			const conf = (await client.broadcast.customJson(opData, priv)) as { id?: string; block_num?: number };
-			process.stdout.write(
-				`\n✓ Broadcast accepted.\n  trx_id    : ${conf.id ?? '(unknown)'}\n` +
-					`  block_num : ${conf.block_num ?? '(pending)'}\n  op id     : ${CHAIN_SNAPSHOT_OP_ID}\n\n` +
-					'New nodes reading the latest chain_snapshot_v1 from @' + signer + ' will bootstrap from it.\n'
-			);
-			return;
-		} catch (e) {
-			lastErr = e;
-			process.stderr.write(`  ✗ ${url}: ${errMsg(e)}\n`);
-		}
+	// v1.20.0 (D12): signed ONCE, offered to health-ranked nodes in turn;
+	// --node pins one, --include-hidden adds the hidden nodes (off by default).
+	const nodeOverride = flag('node') ?? null;
+	const includeHidden = has('include-hidden');
+	let res: Awaited<ReturnType<typeof broadcastCustomJsonOnce>>;
+	try {
+		res = await broadcastCustomJsonOnce(opData, priv, { nodeOverride, includeHidden });
+	} catch (e) {
+		die(errMsg(e));
 	}
-	die(`every endpoint failed. Last error: ${errMsg(lastErr)}`);
+	process.stdout.write(
+		`\n✓ Broadcast accepted${res.duplicate ? ' (an earlier attempt had already landed)' : ''}.\n` +
+			`  trx_id    : ${res.trxId}\n` +
+			`  block_num : ${res.blockNum ?? '(pending)'}\n` +
+			`  via       : ${res.via}\n` +
+			`  op id     : ${CHAIN_SNAPSHOT_OP_ID}\n\n` +
+			'New nodes reading the latest chain_snapshot_v1 from @' + signer + ' will bootstrap from it.\n'
+	);
 }
 
 main().catch((e) => die(errMsg(e)));

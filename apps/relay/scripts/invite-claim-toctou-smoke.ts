@@ -21,7 +21,7 @@
  *   - verify() rejects a claimed (in-flight) nonce as invite_already_used
  *   - releaseClaim() frees the invite for a legitimate retry
  *   - consume() is permanent (claim AND future verify rejected)
- *   - a stale claim (crashed request) is swept after CLAIM_TTL_MS
+ *   - a claim held by a running create survives the sweep until the invite expires
  */
 import { InviteTokenService } from '../src/policy/inviteToken.ts';
 import { ManualClock } from '../src/policy/clock.ts';
@@ -102,27 +102,27 @@ check('consume() is permanent — claim and future verify both rejected', () => 
 	assert(svc.tryClaim(r.payload) === false, 'consumed invite must not be re-claimable');
 });
 
-check('a stale claim (crashed request) is swept so the invite is never permanently locked', () => {
+check('a claim held by a still-running create survives the sweep; it is freed only once the invite expired', () => {
+	// v1.20.0 fix wave (D6): claims used to be swept 120 s after claiming,
+	// while a create can legitimately still be broadcasting — freeing the
+	// invite mid-flight let ONE invite create TWO accounts. The create endpoint
+	// consumes or releases its claim on every path (try/finally); the sweep
+	// only frees a claim once the invite itself has expired.
 	const clock = new ManualClock('2026-08-21T00:00:00Z');
-	// short TTL so the janitor interval is small; sweep runs on its own timer,
-	// but we exercise the sweep indirectly by advancing the clock past the
-	// 120s claim TTL and issuing a new verify after the janitor fires.
-	const svc = new InviteTokenService({ secret: SECRET, ttlMs: 3_600_000, clock });
+	const svc = new InviteTokenService({ secret: SECRET, ttlMs: 600_000, clock });
 	const { token } = svc.issue(IP);
 	const r = svc.verify(token, IP);
 	assert(r.ok, 'verify ok');
 	assert(svc.tryClaim(r.payload) === true, 'claim ok');
-	// request "crashes" — never consumes or releases. Advance past CLAIM_TTL_MS.
 	clock.advance(121_000);
-	// Force a sweep the way the janitor would. tryClaim itself doesn't sweep,
-	// so we assert the design contract: after the TTL, a re-claim is possible.
-	// Since sweep() is private and timer-driven, emulate its effect by checking
-	// that the claim TTL is the documented 120s and the invite is still within
-	// its own 1h TTL (so only the CLAIM lock, not the invite, could block).
-	const stillValid = svc.verify(token, IP);
-	// The nonce is still claimed until a sweep runs; verify reports already_used.
-	// This asserts the lock EXISTS (not permanent loss) — the janitor clears it.
-	assert(!stillValid.ok && stillValid.code === 'invite_already_used', 'claim lock holds until swept');
+	(svc as unknown as { sweep(): void }).sweep();
+	const midFlight = svc.verify(token, IP);
+	assert(!midFlight.ok && midFlight.code === 'invite_already_used', 'claim must hold while the invite is still valid');
+	clock.advance(600_000);
+	(svc as unknown as { sweep(): void }).sweep();
+	assert((svc as unknown as { claimedNonces: Map<string, number> }).claimedNonces.size === 0, 'expired invite claim swept');
+	const expired = svc.verify(token, IP);
+	assert(!expired.ok && expired.code === 'invite_expired', 'an expired invite stays unusable');
 	svc.close();
 });
 

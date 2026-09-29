@@ -237,3 +237,21 @@ export function wipeLiveIdentity(id: LiveIdentity): void {
 	sodium.memzero(id.posting.privateKey);
 	if (id.memo) sodium.memzero(id.memo.privateKey);
 }
+
+/** Zero EVERY secret a decrypted FullIdentity carries — all four private
+ *  keys, the seed entropy and the TOTP secret. For a decrypt whose result is
+ *  NOT handed to toLiveIdentity (an unlock the 2FA gate stopped, say).
+ *  Kept here, sodium-only, so the identity store need not import keygen. */
+export function wipeDecryptedIdentity(full: FullIdentity): void {
+	for (const role of KEY_ROLES) {
+		const kp = full.keys[role];
+		if (kp) sodium.memzero(kp.privateKey);
+	}
+	if (full.seedBytes) sodium.memzero(full.seedBytes);
+	if (full.totpSecret) sodium.memzero(full.totpSecret);
+}
+
+/** Zero just the TOTP secret (after a successful 2FA gate). */
+export function wipeTotpSecret(full: FullIdentity): void {
+	if (full.totpSecret) sodium.memzero(full.totpSecret);
+}

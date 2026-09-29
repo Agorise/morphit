@@ -23,8 +23,12 @@
  *   :keepalive
  *
  * Implementation strategy: poll-based.  Every POLL_INTERVAL_MS
- * the connection re-queries known_instances + operators and
- * diffs against its in-memory cursor.  Volume is low enough
+ * ONE shared poller re-queries known_instances + operators and hands
+ * the rows to every open connection, each of which diffs them against
+ * its own in-memory cursor.  (v1.20.0, E4: each connection used to run
+ * its OWN full query every five seconds, so the database load grew with
+ * the number of open tabs — 300 idle streams were ~60 queries a second —
+ * and the streams had no cap; see streamCaps.ts.)  Volume is low enough
  * (≤200 instances, infrequent state changes) that this is
  * cheaper than wiring an in-process EventEmitter through every
  * mutation site, and impossible to miss an event from a
@@ -37,6 +41,7 @@
  */
 
 import { Hono } from 'hono';
+import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
 
 import type { Database } from '$db/pool';
 import { logger } from '$log';
@@ -74,6 +79,7 @@ async function fetchAllRows(db: Database): Promise<DirectoryRow[]> {
 			ki.cached_alt_networks,
 			op.reg_alt_networks,
 			ki.last_probe_status,
+			ki.last_probe_error,
 			ki.registered_at_time,
 			ki.last_probed_at,
 			ki.cached_indexed_block,
@@ -88,25 +94,78 @@ async function fetchAllRows(db: Database): Promise<DirectoryRow[]> {
 	return result.rows;
 }
 
+/**
+ * One directory poll for every open stream (v1.20.0, E4).
+ *
+ * Runs only while someone is subscribed. A tick that overlaps a slow previous
+ * one is skipped (F-15). The last answer is kept for POLL_INTERVAL_MS so a
+ * connection's snapshot can reuse it instead of issuing its own query.
+ */
+function sharedDirectoryPoller(db: Database): {
+	subscribe(fn: (rows: DirectoryRow[]) => void): () => void;
+	snapshotRows(): Promise<DirectoryRow[]>;
+} {
+	const subs = new Set<(rows: DirectoryRow[]) => void>();
+	let timer: ReturnType<typeof setInterval> | null = null;
+	let inFlight = false;
+	let last: { rows: DirectoryRow[]; at: number } | null = null;
+	const tick = async (): Promise<void> => {
+		if (inFlight) return;
+		inFlight = true;
+		try {
+			const rows = await fetchAllRows(db);
+			last = { rows, at: Date.now() };
+			for (const fn of [...subs]) fn(rows);
+		} catch (err) {
+			// Transient DB hiccup; the next tick recovers. Not a client event.
+			log.warn('poll_failed', {}, err);
+		} finally {
+			inFlight = false;
+		}
+	};
+	return {
+		subscribe(fn) {
+			subs.add(fn);
+			if (timer === null) {
+				timer = setInterval(() => void tick(), POLL_INTERVAL_MS);
+				timer.unref?.();
+			}
+			return () => {
+				subs.delete(fn);
+				if (subs.size === 0 && timer !== null) {
+					clearInterval(timer);
+					timer = null;
+				}
+			};
+		},
+		async snapshotRows() {
+			if (last !== null && Date.now() - last.at < POLL_INTERVAL_MS) return last.rows;
+			const rows = await fetchAllRows(db);
+			last = { rows, at: Date.now() };
+			return rows;
+		}
+	};
+}
+
 export function instancesStreamRoute(db: Database): Hono {
 	const app = new Hono();
+	const poller = sharedDirectoryPoller(db);
 
 	app.get('/', (c) => {
+		// v1.20.0 (E4): a slot under the open-stream caps, released exactly
+		// once when this stream ends however it ends.
+		const releaseSlot = acquireStreamSlot(c);
+		if (releaseSlot === null) return streamCapResponse(c);
+
 		const encoder = new TextEncoder();
 
 		// Per-connection state.  Re-allocated per request so
 		// connections don't share signature maps.
 		const cursor = new Map<string, string>(); // origin → signature
 
-		let pollTimer: ReturnType<typeof setInterval> | null = null;
+		let unsubscribePoll: (() => void) | null = null;
 		let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 		let cancelled = false;
-		// In-flight guard: prevents overlapping poll ticks if a
-		// poll runs longer than POLL_INTERVAL_MS (slow DB, large
-		// directory, etc.).  Without this, two concurrent ticks
-		// would both query and could race-emit the same diff
-		// twice.  (F-15 audit fix.)
-		let pollInFlight = false;
 
 		const stream = new ReadableStream<Uint8Array>({
 			async start(controller) {
@@ -122,9 +181,10 @@ export function instancesStreamRoute(db: Database): Hono {
 
 				const cleanup = (): void => {
 					cancelled = true;
-					if (pollTimer !== null) {
-						clearInterval(pollTimer);
-						pollTimer = null;
+					releaseSlot();
+					if (unsubscribePoll !== null) {
+						unsubscribePoll();
+						unsubscribePoll = null;
 					}
 					if (keepaliveTimer !== null) {
 						clearInterval(keepaliveTimer);
@@ -151,7 +211,7 @@ export function instancesStreamRoute(db: Database): Hono {
 
 				// ─── Initial snapshot ────
 				try {
-					const rows = await fetchAllRows(db);
+					const rows = await poller.snapshotRows();
 					const entries: InstanceDirectoryEntry[] = rows.map(rowToEntry);
 					for (const e of entries) {
 						cursor.set(e.origin, rowSignature(e));
@@ -174,47 +234,33 @@ export function instancesStreamRoute(db: Database): Hono {
 					return;
 				}
 
-				// ─── Diff polling loop ────
-				pollTimer = setInterval(async () => {
+				// ─── Diff against the shared poll ────
+				unsubscribePoll = poller.subscribe((rows) => {
 					if (cancelled) return;
-					if (pollInFlight) return; // previous tick still running
-					pollInFlight = true;
-					try {
-						const rows = await fetchAllRows(db);
-						const seen = new Set<string>();
-						for (const r of rows) {
-							const entry = rowToEntry(r);
-							const sig = rowSignature(entry);
-							seen.add(entry.origin);
-							const prev = cursor.get(entry.origin);
-							if (prev === undefined) {
-								safePush(sseEvent('instance_added', entry));
-								cursor.set(entry.origin, sig);
-							} else if (prev !== sig) {
-								safePush(sseEvent('instance_updated', entry));
-								cursor.set(entry.origin, sig);
-							}
+					const seen = new Set<string>();
+					for (const r of rows) {
+						const entry = rowToEntry(r);
+						const sig = rowSignature(entry);
+						seen.add(entry.origin);
+						const prev = cursor.get(entry.origin);
+						if (prev === undefined) {
+							safePush(sseEvent('instance_added', entry));
+							cursor.set(entry.origin, sig);
+						} else if (prev !== sig) {
+							safePush(sseEvent('instance_updated', entry));
+							cursor.set(entry.origin, sig);
 						}
-						// Detect removals: anything in our cursor that's
-						// not in this poll's result has been deleted from
-						// known_instances (probe scheduler dropped a peer
-						// after 7 consecutive failure days).
-						for (const origin of cursor.keys()) {
-							if (!seen.has(origin)) {
-								safePush(sseEvent('instance_removed', { origin }));
-								cursor.delete(origin);
-							}
-						}
-					} catch (err) {
-						// Transient DB hiccup; log and keep the stream
-						// alive — next poll will recover.  We do not
-						// emit an 'error' event for these because they
-						// don't reflect any user-actionable state.
-						log.warn('poll_failed', {}, err);
-					} finally {
-						pollInFlight = false;
 					}
-				}, POLL_INTERVAL_MS);
+					// Detect removals: anything in our cursor that's not in this
+					// poll's result has been deleted from known_instances (probe
+					// scheduler dropped a peer after 7 consecutive failure days).
+					for (const origin of cursor.keys()) {
+						if (!seen.has(origin)) {
+							safePush(sseEvent('instance_removed', { origin }));
+							cursor.delete(origin);
+						}
+					}
+				});
 
 				// ─── Keepalive ────
 				keepaliveTimer = setInterval(() => {
@@ -229,9 +275,10 @@ export function instancesStreamRoute(db: Database): Hono {
 				// Browser disconnected (tab closed, navigation,
 				// network drop).  Clean up timers so we don't leak.
 				cancelled = true;
-				if (pollTimer !== null) {
-					clearInterval(pollTimer);
-					pollTimer = null;
+				releaseSlot();
+				if (unsubscribePoll !== null) {
+					unsubscribePoll();
+					unsubscribePoll = null;
 				}
 				if (keepaliveTimer !== null) {
 					clearInterval(keepaliveTimer);

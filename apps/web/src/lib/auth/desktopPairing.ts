@@ -66,6 +66,8 @@
 
 import sodium from 'libsodium-wrappers-sumo';
 
+import { isHiddenHostname } from '../net/transportBudget';
+
 // ─── Constants ──────────────────────────────────────────────────
 
 /** Protocol version.  Phone and desktop must match. */
@@ -139,12 +141,15 @@ export interface PairingQrPayload {
 	 *  with standard padding for 32-byte input). */
 	readonly epk: string;
 	/** Origin the user is trying to log into.  Phone shows this
-	 *  faithfully on the confirmation card. */
+	 *  faithfully on the confirmation card.  `https://`, or `http://`
+	 *  for a hidden (.onion / .i2p / .loki) host. */
 	readonly origin: string;
 	/** Unix-seconds expiry.  Capped at +5min from generation. */
 	readonly exp: number;
-	/** Relay URL the phone POSTs to.  Lets a federated user route
-	 *  through the operator the desktop is sitting on. */
+	/** The desktop's instance's indexer, where the desktop waits.  A
+	 *  phone on the SAME instance POSTs its bundle here directly; a
+	 *  phone on another federation instance hands it to its own
+	 *  instance, which forwards it (see ./pairingDelivery.ts). */
 	readonly relay: string;
 }
 
@@ -400,10 +405,10 @@ export function validateQrWireForm(compactWire: string, nowSeconds: number): QrV
 	} catch {
 		return { kind: 'reject', reason: { kind: 'bad_epk' } };
 	}
-	if (typeof p.origin !== 'string' || !isValidHttpsUrl(p.origin)) {
+	if (typeof p.origin !== 'string' || !isValidPairingUrl(p.origin)) {
 		return { kind: 'reject', reason: { kind: 'bad_origin' } };
 	}
-	if (typeof p.relay !== 'string' || !isValidHttpsUrl(p.relay)) {
+	if (typeof p.relay !== 'string' || !isValidPairingUrl(p.relay)) {
 		return { kind: 'reject', reason: { kind: 'bad_relay' } };
 	}
 	if (typeof p.exp !== 'number' || !Number.isFinite(p.exp)) {
@@ -428,16 +433,23 @@ export function validateQrWireForm(compactWire: string, nowSeconds: number): QrV
 	};
 }
 
-function isValidHttpsUrl(s: string): boolean {
+/** `https://` with a host — or, for a Tor / I2P / Lokinet host, `http://`.
+ *
+ *  v1.20.0: this was https-only, and a desktop on an instance's `.onion` page
+ *  (whose origin is `http://…onion` — onion services carry their own
+ *  encryption and are served over plain HTTP) produced a QR every phone
+ *  rejected as `bad_origin`: QR sign-in did not work on any hidden page, same
+ *  instance or not. Plain `http://` stays refused for every clearnet host. */
+export function isValidPairingUrl(s: string): boolean {
 	let u: URL;
 	try {
 		u = new URL(s);
 	} catch {
 		return false;
 	}
-	if (u.protocol !== 'https:') return false;
 	if (!u.host) return false;
-	return true;
+	if (u.protocol === 'https:') return true;
+	return u.protocol === 'http:' && isHiddenHostname(u.hostname);
 }
 
 // ─── Phone-side: build & sign & encrypt ─────────────────────────

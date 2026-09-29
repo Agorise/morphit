@@ -86,6 +86,7 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	{ key: 'morphit.keystore.first_persist_at', tier: 'session', note: 'When the envelope was first written.' },
 	{ key: 'morphit.paired.session', tier: 'session', note: 'Paired read-only session marker.' },
 	{ key: 'morphit.import.needs_account_name', tier: 'session', note: 'In-flight import/login state: the key was accepted but the account name is still needed. Belongs to the sign-in attempt, not the person.' },
+	{ key: 'morphit.session.reload-stash-v1', tier: 'session', note: 'Per-tab sessionStorage: the decrypted posting/memo keys handed from pagehide to the next load for a Remember-me RELOAD only (identity.ts). Written only when the session is unlocked with Remember-me on; carries its write time and is consumed (always removed) on the next load, honoured only on a reload within 30 s (v1.20.0, F-4). Never written with Remember-me off. (Not caught by the literal-key scan: the hyphen ends its match.)' },
 
 	// ─── DEVICE ───────────────────────────────────────────────────────
 	// Kept on an explicit sign-out. Nothing here may name a person or their
@@ -101,6 +102,7 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	{ key: 'morphit.userPreferences.v1', tier: 'account', protection: 'mirrored', note: 'Fiat + region. THE ORIGINAL LEAK: a global key, so the maintainer saw his tester3 region in a fresh testowner session.' },
 	{ key: 'morphit.preferredLangs.v1', tier: 'account', protection: 'mirrored', note: 'v1.15.0 — local mirror of the on-chain profile preferred_langs (primary first). Mirrored: the chain profile is the source of truth; re-seeded from it on settings load.' },
 	{ key: 'morphit.lastPostLang.v1', tier: 'device', note: 'v1.15.0 — the last language used to post an order on THIS browser; the default for the next post. Browser-local convenience.' },
+	{ key: 'morphit.insecureContextNotice.dismissed', tier: 'device', note: 'v1.20.0 (F-9) — sessionStorage flag: this browser tab dismissed the "plain-HTTP I2P turns some features off" notice. Whether a page is a secure context is a property of the browser and the address it is on, not of the person; it resets when the browser session ends.' },
 	
 	{ key: 'morphit.notifications.prefs.v1', tier: 'account', protection: 'mirrored', note: 'Categories, channels, quiet hours.' },
 	{ key: 'morphit.hiddenAccounts.v1', tier: 'account', protection: 'mirrored', note: 'Accounts hidden from the user\'s own views.' },

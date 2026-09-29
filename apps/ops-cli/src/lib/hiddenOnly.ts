@@ -75,6 +75,23 @@ function readEnvValue(files: readonly string[], key: string): string | null {
 	return null;
 }
 
+/** The node's configured CLEARNET Blurt RPC list — the OS environment first,
+ *  then indexer.env (the same key the indexer reads) — or null when none is
+ *  configured (callers then use the shipped default list). Never throws. */
+export function configuredClearnetRpcEndpoints(
+	files: readonly string[] = indexerEnvFiles()
+): string[] | null {
+	const raw =
+		(process.env.MORPHIT_INDEXER_RPC_ENDPOINTS ?? '').trim() ||
+		readEnvValue(files, 'MORPHIT_INDEXER_RPC_ENDPOINTS') ||
+		'';
+	const list = raw
+		.split(',')
+		.map((s) => s.trim())
+		.filter((s) => /^https?:\/\//i.test(s));
+	return list.length > 0 ? list : null;
+}
+
 /** Local indexer base URLs: the address indexer.env says it listens on (a
  *  wildcard bind is reached on loopback), then the standard ones. Every entry
  *  is a loopback or private-bridge literal, never a name. */

@@ -135,14 +135,10 @@ function makeDb(rows: readonly Row[]): {
 
 	const db: Database = {
 		connect: async () => fakeClient,
-		query: async () =>
-			({
-				rows: [],
-				rowCount: 0,
-				command: 'SELECT',
-				oid: 0,
-				fields: []
-			}) as pg.QueryResult,
+		// v1.20.0 (D1): the drainer issues every statement through db.query
+		// (each committed on its own), so route it to the same recorder.
+		query: ((text: string, params: readonly unknown[] = []) =>
+			fakeClient.query(text, params as unknown[])) as unknown as Database['query'],
 		withTx: async () => {
 			throw new Error('not used');
 		},
@@ -347,17 +343,24 @@ await scenario('G1.7: reason 64 chars at boundary accepted', async () => {
 
 // ─── G1.4: FIFO tie-breaker (verified via SELECT shape) ────────
 
-await scenario('G1.4: SELECT clause includes ORDER BY created_at ASC, id ASC', async () => {
-	const { db, queries } = makeDb([]);
-	const { blurt } = makeBlurt();
-	const drainer = new RelayQueueDrainer(makeConfig(), db, blurt);
-	await drainer.drainOnce();
-	const select = queries.find((q) => q.text.includes('SELECT id, recipient, kind'));
-	if (!select) throw new Error('no SELECT query found');
-	if (!select.text.includes('ORDER BY created_at ASC, id ASC')) {
-		throw new Error(`expected "ORDER BY created_at ASC, id ASC", got: ${select.text}`);
+await scenario(
+	'G1.4: SELECT orders fresh rows first, then FIFO (created_at ASC, id ASC)',
+	async () => {
+		const { db, queries } = makeDb([]);
+		const { blurt } = makeBlurt();
+		const drainer = new RelayQueueDrainer(makeConfig(), db, blurt);
+		await drainer.drainOnce();
+		const select = queries.find((q) => q.text.includes('SELECT id, recipient, kind'));
+		if (!select) throw new Error('no SELECT query found');
+		// Wave 4 (A3): never-attempted rows sort ahead of unsettled ones so a
+		// batch of stuck outcome-unknown rows cannot starve new payouts; FIFO
+		// with an id tie-breaker within each group.
+		const want = 'ORDER BY (broadcast_attempt_at IS NOT NULL) ASC, created_at ASC, id ASC';
+		if (!select.text.replace(/\s+/g, ' ').includes(want)) {
+			throw new Error(`expected "${want}", got: ${select.text}`);
+		}
 	}
-});
+);
 
 // ─── Recipient regex (already-shipped defense, regression-test) ─
 

@@ -98,7 +98,13 @@ export interface Queryable {
  *  start accepting the same op.  API callers that serve
  *  real-time quotes can omit `now`; only handlers replaying
  *  history need to pass `ctx.blockTime`.  See P4-10 audit
- *  finding for context. */
+ *  finding for context.
+ *
+ *  The window is bounded ABOVE by `now` too (v1.20.0, G1): a fee
+ *  op re-judged after the fact (the cross-instance re-verification,
+ *  blurtFeeReverify.ts) must not see payments the sender made
+ *  LATER. In live indexing no later row exists yet, so this changes
+ *  nothing there. */
 export async function getStrangerFeeQuote(
 	client: Queryable,
 	sender: string,
@@ -113,7 +119,8 @@ export async function getStrangerFeeQuote(
 			: `SELECT COUNT(*)::text AS count
 			   FROM stranger_fees
 			  WHERE sender = $1
-			    AND paid_at > $3::timestamptz - $2::interval`,
+			    AND paid_at > $3::timestamptz - $2::interval
+			    AND paid_at <= $3::timestamptz`,
 		now === undefined
 			? [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`]
 			: [sender, `${STRANGER_FEE_WINDOW_MINUTES} minutes`, now]

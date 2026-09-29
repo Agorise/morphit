@@ -1,0 +1,38 @@
+[Unit]
+Description=Morphit tor-only OS — finish (verify or undo) a switch of apt to Tor that was left unchecked
+Documentation=https://git.agorise.net/agorise/morphit
+After=tor.service network.target
+Wants=tor.service
+
+[Service]
+Type=oneshot
+# Installed ONLY on tor-only nodes (Ansible tor role, `morphit-ops upgrade`).
+# Nothing to do unless /var/lib/morphit-tor-only/apt.pending exists — left
+# when an upgrade was stopped while it was still checking that apt works over
+# Tor. Then apt's package lists are refreshed over Tor; if that works the
+# switch is kept, otherwise every apt file is put back from its backup.
+# Root-owned script copy in /usr/local/lib/morphit.
+User=root
+Group=root
+Environment=MORPHIT_APT_VERIFY_TIMEOUT=900
+ExecStart=/usr/local/lib/morphit/morphit-tor-only-os.sh apt-recover
+TimeoutStartSec=1200
+Nice=10
+
+# ─── Hardening ─────────────────────────────────────────────────
+# It edits apt's sources and refreshes apt's lists, so those stay writable.
+ProtectSystem=full
+ReadWritePaths=/etc/apt -/var/lib/morphit-tor-only
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

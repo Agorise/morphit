@@ -43,8 +43,8 @@
  *      `fixed_price_required`, `fixed_price_invalid`,
  *      `fixed_price_too_large`).
  *   3. /post canonical reassembly — submit path builds
- *      `{ kind: 'spread', percent: Number(spreadPercent) || 0 }`
- *      OR `{ kind: 'fixed', price: Number(fixedPrice) }` and
+ *      `{ kind: 'spread', percent: spreadParse.ok ? spreadParse.number : 0 }`
+ *      OR `{ kind: 'fixed', price: fixedPriceParse.ok ? … : NaN }` and
  *      passes the result to `OrderFormInput.priceModel`.
  *   4. /post picker UI — fieldset with radio group bound to
  *      `priceModelKind`, conditional spread% input, conditional
@@ -120,8 +120,9 @@ const SCENARIOS: readonly Scenario[] = [
 		name: '3 — /post canonical reassembly: { kind: spread | fixed, percent | price }',
 		file: 'src/routes/[lang]/post/+page.svelte',
 		mustHave: [
-			"{ kind: 'spread', percent: Number(spreadPercent) || 0 }",
-			"{ kind: 'fixed', price: Number(fixedPrice) }"
+			// v1.20.0 G6: the typed text is parsed locale-aware first.
+			"{ kind: 'spread', percent: spreadParse.ok ? spreadParse.number : 0 }",
+			"{ kind: 'fixed', price: fixedPriceParse.ok ? fixedPriceParse.number : Number.NaN }"
 		]
 	},
 	{
@@ -171,8 +172,9 @@ const SCENARIOS: readonly Scenario[] = [
 		name: '7 — /post/edit canonical reassembly mirrors /post submission shape',
 		file: 'src/routes/[lang]/post/edit/[permlink]/+page.svelte',
 		mustHave: [
-			"{ kind: 'spread', percent: Number(spreadPercent) || 0 }",
-			"{ kind: 'fixed', price: Number(fixedPrice) }"
+			// v1.20.0 G6: the typed text is parsed locale-aware first.
+			"{ kind: 'spread', percent: spreadParse.ok ? spreadParse.number : 0 }",
+			"{ kind: 'fixed', price: fixedPriceParse.ok ? fixedPriceParse.number : Number.NaN }"
 		]
 	},
 	{

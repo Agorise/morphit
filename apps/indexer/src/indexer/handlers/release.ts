@@ -15,7 +15,9 @@
  * `treasury` shape (Part 106; corrected Part 107) — every field
  * optional within:
  *   {
- *     "btc": { "address": "bc1q...", "satoshis": 416 } | null,
+ *     "btc": { "address": "bc1q...", "satoshis": 416,
+ *              "xpub"?: "xpub..." (v1.20.0, MK-H2: treasury BIP84
+ *                        account key; per-order fee addresses) } | null,
  *     "xmr": { "address": "4..." | "8...",
  *              "piconero": "781250000" } | null
  *   }
@@ -56,6 +58,7 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { resolveSignerPostingPubkey } from '$blurt/verify';
 import { checkJsonbSize } from '$indexer/payloadSize';
+import { parseAccountXpub, parseXmrPrimaryAddress } from '@morphit/release-schema';
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -111,7 +114,7 @@ function validateTreasury(
 	if (!isPlainObject(t)) return { reason: 'treasury_not_object' };
 
 	// btc: { address, satoshis } | null | undefined
-	let btc: { address: string; satoshis: number } | null = null;
+	let btc: { address: string; satoshis: number; xpub?: string } | null = null;
 	if (t.btc !== undefined && t.btc !== null) {
 		if (!isPlainObject(t.btc)) return { reason: 'treasury_btc_not_object' };
 		const addr = t.btc.address;
@@ -133,7 +136,19 @@ function validateTreasury(
 			// Sanity ceiling: 1000 BTC per listing fee is absurd.
 			return { reason: 'treasury_btc_satoshis_too_large' };
 		}
-		btc = { address: addr, satoshis: sat };
+		// v1.20.0 (MK-H2) — optional treasury BIP84 account xpub, the key
+		// every per-order BTC fee address is derived from. The crypto check
+		// (checksum, mainnet, PUBLIC, account depth, valid point) is the
+		// shared parser — the one the frontend validator and the address
+		// derivation also use — and the canonical `xpub…` spelling is what
+		// gets persisted. Attached only when present (legacy shape otherwise).
+		if (t.btc.xpub !== undefined && t.btc.xpub !== null) {
+			const parsed = parseAccountXpub(t.btc.xpub);
+			if (!parsed.ok) return { reason: 'treasury_btc_xpub_invalid' };
+			btc = { address: addr, satoshis: sat, xpub: parsed.value.xpub };
+		} else {
+			btc = { address: addr, satoshis: sat };
+		}
 	}
 
 	// xmr: { address, piconero } | null | undefined
@@ -156,7 +171,7 @@ function validateTreasury(
 	// field (e.g. from a Part 106-vintage release op being
 	// replayed), it is silently stripped — not stored in the
 	// JSONB column, not stored anywhere.
-	let xmr: { address: string; piconero: string } | null = null;
+	let xmr: { address: string; piconero: string; primary_address?: string } | null = null;
 	if (t.xmr !== undefined && t.xmr !== null) {
 		if (!isPlainObject(t.xmr)) return { reason: 'treasury_xmr_not_object' };
 		const addr = t.xmr.address;
@@ -177,7 +192,15 @@ function validateTreasury(
 		if (pn.length > 16) {
 			return { reason: 'treasury_xmr_piconero_too_large' };
 		}
-		xmr = { address: addr, piconero: pn };
+		// v1.20.0 (MK-H2) — optional treasury PRIMARY address for bound XMR
+		// fees (shared parser: mainnet standard address, checksum).
+		if (t.xmr.primary_address !== undefined && t.xmr.primary_address !== null) {
+			const prim = parseXmrPrimaryAddress(t.xmr.primary_address);
+			if (!prim.ok) return { reason: 'treasury_xmr_primary_invalid' };
+			xmr = { address: addr, piconero: pn, primary_address: prim.value.address };
+		} else {
+			xmr = { address: addr, piconero: pn };
+		}
 	}
 
 	// cp372 — optional chain-pinned BLURT fee base.  No address
@@ -477,5 +500,9 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	return { ok: true };
 };
+
+/** (v1.20.0, V3-1) The payload validator, for the upgrade backfill
+ *  (reconcileUpgrade.ts) — the SAME function the handler runs. */
+export { validate as validateReleaseOp };
 
 export default handle;

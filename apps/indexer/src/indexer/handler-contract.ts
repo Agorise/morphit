@@ -169,6 +169,12 @@ export interface OpContext {
 		readonly hi: string;
 		readonly messageId: number;
 	}) => void;
+	/** v1.20.0 (G1 legacy grace) — extra accounts whose transfers count as the
+	 *  OWNER leg of a BLURT fee. Set ONLY by the background re-verifier
+	 *  (blurtFeeReverify.ts) when it re-runs a fee handler for an op older than
+	 *  the moment its operator's fees account became accepted; never by the
+	 *  live dispatcher. Absent = none. */
+	readonly extraOwnerRecipients?: readonly string[];
 }
 
 /** Return `{ ok: true }` to apply state changes. Return `{ ok: false,

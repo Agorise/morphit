@@ -4,6 +4,7 @@
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { formatRating } from '$lib/i18n/formatters';
 	/**
 	 * Profile page — /@{account}
 	 *
@@ -805,7 +806,7 @@
 				     (no included feedback, or an older indexer). -->
 				<div class="flex flex-none flex-col items-center sm:items-start">
 					<span class="font-display text-4xl font-extrabold">
-						{headlineRating.toFixed(2)}
+						{formatRating(headlineRating)}
 					</span>
 					<span aria-hidden="true" class="text-morphit-emerald">
 						{starString(Math.round(headlineRating) as 1 | 2 | 3 | 4 | 5)}
@@ -825,7 +826,7 @@
 					{#if reputationScore !== null}
 						<span class="mt-1 text-xs text-ink-500">
 							{$_('profile.average_rating_detail', {
-								values: { avg: feedback.summary.weighted_rating.toFixed(2) }
+								values: { avg: formatRating(feedback.summary.weighted_rating) }
 							})}
 						</span>
 					{/if}
@@ -864,7 +865,7 @@
 						>
 							<span class="text-ink-500">{$_('profile.as_buyer')}</span>
 							<span class="ml-2 font-semibold tabular-nums">
-								{feedback.summary.by_side.buy.weighted_rating.toFixed(2)}★
+								{formatRating(feedback.summary.by_side.buy.weighted_rating)}★
 							</span>
 							<span class="ml-1 text-ink-500">
 								({feedback.summary.by_side.buy.count})
@@ -877,7 +878,7 @@
 						>
 							<span class="text-ink-500">{$_('profile.as_seller')}</span>
 							<span class="ml-2 font-semibold tabular-nums">
-								{feedback.summary.by_side.sell.weighted_rating.toFixed(2)}★
+								{formatRating(feedback.summary.by_side.sell.weighted_rating)}★
 							</span>
 							<span class="ml-1 text-ink-500">
 								({feedback.summary.by_side.sell.count})

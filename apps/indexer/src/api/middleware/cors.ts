@@ -1,7 +1,12 @@
 /**
  * Morphit indexer — CORS middleware.
  *
- * Read-only API — allows GET + OPTIONS from ANY origin. The orderbook and other
+ * Cross-origin: GET + OPTIONS only, from ANY origin. The API is NOT read-only —
+ * /v1/broadcast, /v1/federation/chat-fast, /v1/chain (condenser, key
+ * references), login-pairing delivery and order views take POSTs — but those
+ * are called same-origin (the instance's own frontend) or server-to-server
+ * (peers). A page on another origin cannot pass the preflight a JSON POST
+ * needs, and cannot read the answer to any POST. The orderbook and other
  * /v1 reads are PUBLIC data with NO credentials (no cookies, no auth), so
  * `Access-Control-Allow-Origin: *` is safe — and it's REQUIRED for the
  * cross-instance features (the /compare orderbook diff fetches a *peer's*

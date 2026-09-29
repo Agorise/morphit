@@ -400,37 +400,61 @@ results.push({
 	const has4001 = /port:\s*"4001"/.test(ufwSrc);
 	const bothProtos = /loop:\s*\n\s*-\s*tcp\s*\n\s*-\s*udp/.test(ufwSrc);
 	const gatedDefaultTrue = /enable_ipfs \| default\(true\)/.test(ufwSrc);
+	// The 4001 block (from its name to the end) must ALSO gate on not-tor-only: a
+	// hidden-only node runs Kubo with no public swarm, so opening 4001 there is
+	// attack surface for a port nothing listens on (review B7).
+	const block4001 = ufwSrc.slice(ufwSrc.indexOf('Allow the IPFS swarm port'));
+	const gatedNotTorOnly = /not \(morphit_tor_only \| default\(false\) \| bool\)/.test(block4001);
 	results.push({
-		name: 'IPFS origin host opens swarm port 4001 tcp+udp (gated on enable_ipfs default true)',
-		ok: has4001 && bothProtos && gatedDefaultTrue,
+		name: 'IPFS origin host opens swarm port 4001 tcp+udp (gated on enable_ipfs, not tor-only)',
+		ok: has4001 && bothProtos && gatedDefaultTrue && gatedNotTorOnly,
 		detail: !has4001
 			? 'ufw.yml does not open port 4001'
 			: !bothProtos
 				? 'ufw.yml must open 4001 for BOTH tcp and udp (Kubo QUIC)'
 				: !gatedDefaultTrue
 					? 'the 4001 rule must gate on enable_ipfs | default(true) — else a default IPFS-hosting install leaves 4001 closed'
-					: undefined
+					: !gatedNotTorOnly
+						? 'the 4001 rule must also gate on not tor-only (a hidden-only node has no public swarm)'
+						: undefined
+	});
+	// The 4001 SELF-TEST must require BOTH protocols (a udp-missing box must FAIL
+	// it), not tcp OR udp — QUIC peers dial udp/4001 (review B7).
+	const verifySrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'verify.yml'), 'utf-8');
+	const selfTestRequiresBoth =
+		/4001\/tcp/.test(verifySrc) && /4001\/udp/.test(verifySrc) && !/4001\(\/\(tcp\|udp\)\)\?/.test(verifySrc);
+	results.push({
+		name: 'the 4001 UFW self-test requires BOTH tcp and udp (not either)',
+		ok: selfTestRequiresBoth,
+		detail: selfTestRequiresBoth
+			? undefined
+			: 'verify.yml must confirm 4001 is allowed on BOTH tcp AND udp — the old `4001(/(tcp|udp))?` regex passed a udp-missing box'
 	});
 }
 
-// ─── Scenario 9f: the morphit service user inherits the operator's login keys ──
-// The warrant-canary upload can target morphit@ (it owns the served build dir). A
-// fresh OS + reinstall only re-keys root, so without this the upload fails
-// "Permission denied (publickey)" until the operator hand-adds the key
-// (the maintainer/morphit.io v1.17.0). base/tasks/main.yml mirrors root's + any sudo user's
-// login keys into the morphit user, idempotently, so it survives a reinstall.
+// ─── Scenario 9f: root never writes SSH keys into the nologin morphit user ──
+// The canary upload must NOT target morphit@ — that user is nologin, so sshd
+// rejects every scp/ssh to it whatever key it has; the upload goes as root (a
+// real shell). An earlier task copied login keys into /var/lib/morphit/.ssh as
+// root, which could never work AND let the (untrusted) morphit-owned dir redirect
+// a root write via a symlink (review B4). So the base role must NOT write an
+// authorized_keys under morphit_service_home, and morphit must stay nologin.
 {
 	const baseSrc = readFileSync(join(ROLES_DIR, 'base', 'tasks', 'main.yml'), 'utf-8');
-	const propagates =
-		/Propagate operator SSH login keys to the morphit service user/.test(baseSrc) &&
-		/\/root\/\.ssh\/authorized_keys/.test(baseSrc) &&
-		/morphit_service_home/.test(baseSrc);
+	// Any task writing authorized_keys into the morphit service home is the bug.
+	const writesMorphitKeys =
+		/morphit_service_home\s*}}\/\.ssh/.test(baseSrc) ||
+		/Propagate operator SSH login keys to the morphit service user/.test(baseSrc);
+	const morphitIsNologin =
+		/name:\s*"?\{\{\s*morphit_service_user\s*}}"?[\s\S]{0,200}?shell:\s*\/usr\/sbin\/nologin/.test(baseSrc);
 	results.push({
-		name: 'morphit service user inherits operator login keys (canary upload survives a reinstall)',
-		ok: propagates,
-		detail: propagates
-			? undefined
-			: 'base/tasks/main.yml must mirror root/sudo login keys into the morphit service user'
+		name: 'root does not write SSH keys into the nologin morphit user (canary uploads as root)',
+		ok: !writesMorphitKeys && morphitIsNologin,
+		detail: writesMorphitKeys
+			? 'base/tasks/main.yml still writes authorized_keys into the morphit service user — that user is nologin (ssh can never work) and the write follows symlinks in a morphit-owned dir (review B4)'
+			: !morphitIsNologin
+				? 'the morphit service user should be created with shell /usr/sbin/nologin'
+				: undefined
 	});
 }
 

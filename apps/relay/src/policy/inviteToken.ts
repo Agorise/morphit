@@ -82,9 +82,13 @@ export class InviteTokenService {
 	 *  We use a Map<nonce, exp> rather than Set<nonce> so the
 	 *  janitor can drop expired entries deterministically. */
 	private readonly consumedNonces = new Map<string, number>();
-	/** F3 — nonces claimed by an in-flight create (tryClaim), value is
-	 *  claim time. Cleared by consume()/releaseClaim(); swept after
-	 *  CLAIM_TTL_MS so a crashed request never permanently locks an invite. */
+	/** F3 — nonces claimed by an in-flight create (tryClaim); value is the
+	 *  INVITE's expiry. Cleared by consume()/releaseClaim() — the create
+	 *  endpoint does one or the other on every path (try/finally). A claim is
+	 *  swept only once its invite has EXPIRED, when verify() rejects the token
+	 *  anyway. (v1.20.0, D6: it used to be swept 120 s after claiming, while
+	 *  a create can legitimately still be broadcasting — freeing the invite
+	 *  mid-flight let one invite create two accounts.) */
 	private readonly claimedNonces = new Map<string, number>();
 	private janitor: NodeJS.Timeout | null = null;
 
@@ -207,13 +211,14 @@ export class InviteTokenService {
 	 * Sequence: verify() → tryClaim() → broadcast →
 	 *   success: consume()  (claim → consumed, permanent)
 	 *   failure: releaseClaim()  (claim freed, invite retryable)
-	 * A crashed request that neither consumes nor releases is swept
-	 * after CLAIM_TTL_MS so an invite is never permanently locked.
+	 * A claim that is never consumed or released (a request that died
+	 * mid-flight without its finally running) is swept once the invite itself
+	 * has expired — never while the invite is still usable.
 	 */
 	tryClaim(payload: InvitePayload): boolean {
 		if (this.consumedNonces.has(payload.nonce)) return false;
 		if (this.claimedNonces.has(payload.nonce)) return false;
-		this.claimedNonces.set(payload.nonce, this.clock.now());
+		this.claimedNonces.set(payload.nonce, payload.exp);
 		return true;
 	}
 
@@ -250,11 +255,11 @@ export class InviteTokenService {
 		for (const [nonce, exp] of this.consumedNonces) {
 			if (exp <= now) this.consumedNonces.delete(nonce);
 		}
-		// F3 — free claims from requests that crashed without consuming or
-		// releasing. CLAIM_TTL_MS (2 min) comfortably exceeds any broadcast.
-		const CLAIM_TTL_MS = 120_000;
-		for (const [nonce, claimedAt] of this.claimedNonces) {
-			if (claimedAt + CLAIM_TTL_MS <= now) this.claimedNonces.delete(nonce);
+		// Free claims whose INVITE has expired (verify() rejects it anyway).
+		// Never earlier: a still-running create holds its claim until it
+		// consumes or releases it (D6).
+		for (const [nonce, exp] of this.claimedNonces) {
+			if (exp <= now) this.claimedNonces.delete(nonce);
 		}
 	}
 

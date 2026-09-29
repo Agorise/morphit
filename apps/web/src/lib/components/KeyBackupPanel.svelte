@@ -178,7 +178,7 @@
 		<button
 			type="button"
 			onclick={downloadTxt}
-			class="inline-flex items-center gap-2 rounded-lg bg-morphit-btn px-4 py-2 font-semibold text-white transition hover:brightness-110"
+			class="inline-flex items-center gap-2 rounded-lg bg-morphit-btn px-4 py-2 font-semibold text-morphit-btn-text transition hover:brightness-110"
 		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"

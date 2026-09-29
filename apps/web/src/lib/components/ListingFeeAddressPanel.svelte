@@ -47,6 +47,9 @@
 	import QrPanel from '$lib/components/QrPanel.svelte';
 	import CopyButton from '$lib/components/CopyButton.svelte';
 	import type { AddressPayload } from '$lib/chat/payload';
+	import { btcFeeAddressMode } from '$lib/orders/btcFeeMode';
+	import { xmrBoundPrimary } from '$lib/orders/xmrFeeMode';
+	import { xmrBoundPayTo } from '$lib/orders/xmrFeeAddress';
 
 	interface Props {
 		/** Which fee asset is the user paying with. */
@@ -65,6 +68,9 @@
 		feeFiat?: number;
 		/** Fiat ticker the `feeFiat` value is expressed in (default USD). */
 		denominationFiat?: string;
+		/** v1.20.0 (MK-H2) — the listing (signed-in account + the permlink
+		 *  chosen for it) a bound XMR fee is for. Null until both are known. */
+		xmrPayFor?: { account: string; permlink: string } | null;
 	}
 
 	let {
@@ -72,10 +78,28 @@
 		liveSatoshis = undefined,
 		livePiconero = undefined,
 		feeFiat = undefined,
-		denominationFiat = 'USD'
+		denominationFiat = 'USD',
+		xmrPayFor = null
 	}: Props = $props();
 
 	let qrShown = $state(false);
+
+	/** v1.20.0 (MK-H2) — once the chain-pinned release carries the treasury
+	 *  xpub, a BTC fee is paid to an address made for THAT order, shown after
+	 *  posting (BtcFeePayPanel). The shared `btc.address` must then NOT be
+	 *  offered: new orders can no longer claim a payment to it. */
+	const perOrderAddress = $derived(method === 'btc' && btcFeeAddressMode($chainPinnedTreasury));
+	/** v1.20.0 (MK-H2) — once the release pins the treasury's Monero MAIN
+	 *  address, the XMR fee goes to the integrated address made for this
+	 *  listing (computed here from the chain-verified value); the shared
+	 *  `xmr.address` must then NOT be offered — indexers no longer accept a
+	 *  new order's payment to it. */
+	const xmrBound = $derived(method === 'xmr' && xmrBoundPrimary($chainPinnedTreasury) !== null);
+	const xmrBoundTo = $derived(
+		xmrBound && xmrPayFor !== null
+			? xmrBoundPayTo($chainPinnedTreasury, xmrPayFor.account, xmrPayFor.permlink)
+			: null
+	);
 
 	/** The canonical address + amount for the chosen method,
 	 *  resolved from the chain-pinned treasury block.  Null when
@@ -120,9 +144,10 @@
 		const xmrFractionalPart = piconeroBig % 1_000_000_000_000n;
 		const fracStr = xmrFractionalPart.toString().padStart(12, '0').replace(/0+$/, '');
 		const xmrStr = fracStr.length > 0 ? `${xmrIntegerPart}.${fracStr}` : `${xmrIntegerPart}`;
+		if (xmrBound && xmrBoundTo === null) return null;
 		return {
 			method,
-			address: t.xmr.address,
+			address: xmrBoundTo !== null ? xmrBoundTo.address : t.xmr.address,
 			amount: xmrStr,
 			satoshis: undefined as number | undefined
 		};
@@ -166,7 +191,27 @@
 	}
 </script>
 
-{#if resolved === null}
+{#if perOrderAddress && resolved !== null}
+	<section class="card mb-4">
+		<h2 class="mb-3 font-display text-lg font-bold">
+			{$_('post_order.fee_method.btc_per_order_heading')}
+		</h2>
+		<p class="mb-3 text-sm text-ink-600 dark:text-ink-300">
+			{$_('post_order.fee_method.btc_per_order_body', {
+				values: { amount: resolved.amount }
+			})}
+			{#if feeFiatEcho !== null}
+				<span class="text-ink-500 dark:text-ink-400">(≈&nbsp;{feeFiatEcho})</span>
+			{/if}
+		</p>
+	</section>
+{:else if xmrBound && xmrBoundTo === null}
+	<section class="card mb-4">
+		<p class="text-sm text-ink-600 dark:text-ink-300">
+			{$_('post_order.fee_method.xmr_bound_need_account')}
+		</p>
+	</section>
+{:else if resolved === null}
 	<section class="card mb-4 border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950/30">
 		<p class="text-sm text-red-800 dark:text-red-200">
 			{$_('post_order.fee_method.fee_address_unavailable', {
@@ -179,10 +224,17 @@
 		<h2 class="mb-3 font-display text-lg font-bold">
 			{#if method === 'btc'}
 				{$_('post_order.fee_method.fee_address_heading_btc')}
+			{:else if xmrBoundTo !== null}
+				{$_('post_order.fee_method.xmr_bound_heading')}
 			{:else}
 				{$_('post_order.fee_method.fee_address_heading_xmr')}
 			{/if}
 		</h2>
+		{#if xmrBoundTo !== null && xmrPayFor !== null}
+			<p class="mb-3 text-sm text-ink-600 dark:text-ink-300">
+				{$_('post_order.fee_method.xmr_bound_body', { values: { permlink: xmrPayFor.permlink } })}
+			</p>
+		{/if}
 
 		<!-- Address (selectable, monospaced, breakable for long XMR addresses) -->
 		<div class="mb-3">

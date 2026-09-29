@@ -24,6 +24,7 @@ import {
 	validateMatrixAddress,
 	validateAlertMxid,
 	matrixToContactUrl,
+	resolveOperatorTag,
 	type AnsibleInstallInputs,
 	type InstallMode
 } from './ansibleVars.ts';
@@ -313,7 +314,12 @@ export async function collectInstallInputs(
 		instanceTagline: instanceTagline.length > 0 ? instanceTagline : undefined,
 		contactUrl,
 		operatorAccount: known.operatorAccount,
-		operatorTag: known.operatorTag,
+		// Never bake the reserved relay account name (or any reserved/invalid tag)
+		// as the earnings tag — that silently drifted a reinstall onto
+		// `morphit-relay`, which the on-chain register rejects so the relay earned
+		// nothing (review B1). Derive a valid tag from the domain when the proposed
+		// one won't do; the operator confirms it via `morphit-ops edit` → register.
+		operatorTag: resolveOperatorTag(known.operatorTag, domain),
 		feesAccount: known.feesAccount,
 		keystorePath: known.keystorePath,
 		acmeEmail,

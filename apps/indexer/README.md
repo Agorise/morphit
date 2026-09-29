@@ -83,7 +83,7 @@ npm run start    # one-shot, no watch
 Healthcheck:
 
 ```bash
-curl http://127.0.0.1:8080/v1/health
+curl http://127.0.0.1:8081/v1/health   # the indexer listens on 8081 by default (8080 is the relay)
 ```
 
 ## Configuration
@@ -194,7 +194,7 @@ concern.
 ```json
 {
   "status": "ok",
-  "version": "1.19.0",
+  "version": "1.20.0",
   "uptime_sec": 12345,
   "chain_head_block": 80123456,
   "indexed_block": 80123441,

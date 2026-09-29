@@ -20,6 +20,11 @@
  * apt-installing Ansible live in the (a mini PC-validated) install runner.
  */
 import { randomBytes } from 'node:crypto';
+import { isReservedTag, tagImpersonatesReserved } from '../../../indexer/src/indexer/confusables.ts';
+
+/** Operator-tag charset + length (mirrors the on-chain handler + the wizard). */
+const OPERATOR_TAG_PATTERN = /^[a-z0-9._-]+$/;
+const OPERATOR_TAG_MAX = 64;
 
 export type InstallMode = 'home' | 'vps';
 
@@ -116,6 +121,49 @@ export function validateDdnsUrl(url: string): true | string {
 export function validateOperatorAccount(name: string): true | string {
 	return /^[a-z0-9.-]{3,16}$/.test(name.trim()) ? true : 'is not a valid BLURT account name (3\u201316 chars, a\u2013z 0\u20139 . -)';
 }
+/** The federation operator tag (MORPHIT_INSTANCE_OPERATOR_TAG). Must pass the
+ *  SAME rules the on-chain register handler enforces, or the deferred first-online
+ *  register (and every later `morphit-ops register`) is rejected and the relay
+ *  attributes NO earnings \u2014 the exact trap of defaulting the tag to the reserved
+ *  relay account name after a reinstall (review B1). PURE. */
+export function validateOperatorTag(tag: string): true | string {
+	const t = tag.trim();
+	if (t.length === 0) return 'is required (the relay attributes order earnings by it)';
+	if (t.length > OPERATOR_TAG_MAX) return `must be ${OPERATOR_TAG_MAX} characters or fewer`;
+	if (!OPERATOR_TAG_PATTERN.test(t)) return 'may use only a\u2013z 0\u20139 . _ -';
+	if (isReservedTag(t) || tagImpersonatesReserved(t)) {
+		return `"${t}" is reserved by the Morphit project (the on-chain register rejects it); use a tag that identifies YOUR node, e.g. your domain`;
+	}
+	return true;
+}
+
+/** Resolve the operator tag to write, given whatever the wizard proposed and the
+ *  clearnet domain (if any). A valid, non-reserved proposal is kept; otherwise it
+ *  is derived from the domain, and failing that a neutral placeholder \u2014 never the
+ *  reserved relay account name, which is what silently drifted a reinstall onto
+ *  `morphit-relay` (review B1). The operator confirms/edits it via `morphit-ops
+ *  edit` \u2192 register. PURE. */
+export function resolveOperatorTag(proposed: string, domain: string): string {
+	if (validateOperatorTag(proposed) === true) return proposed.trim();
+	const fromDomain = slugifyOperatorTag(domain);
+	if (fromDomain !== '' && validateOperatorTag(fromDomain) === true) return fromDomain;
+	return 'independent-node';
+}
+
+/** Slug a bare domain / origin into the operator-tag charset. PURE. */
+function slugifyOperatorTag(raw: string): string {
+	let host = raw.trim().toLowerCase();
+	try {
+		if (/^[a-z]+:\/\//.test(host)) host = new URL(host).hostname;
+	} catch {
+		/* not a URL \u2014 treat as a host token */
+	}
+	host = host.replace(/^www\./, '');
+	let out = '';
+	for (const ch of host) if (/[a-z0-9._-]/.test(ch)) out += ch;
+	out = out.replace(/^[._-]+|[._-]+$/g, '');
+	return out.length > OPERATOR_TAG_MAX ? out.slice(0, OPERATOR_TAG_MAX) : out;
+}
 /** The alert recipient MUST be a PRIVATE personal MXID (@user:server), never a
  *  #room alias — operator alerts (low balance, service down, security events)
  *  are sensitive and a room would broadcast them. The matrix-bot config
@@ -191,6 +239,8 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	}
 	const acct = validateOperatorAccount(inputs.operatorAccount);
 	if (acct !== true) problems.push(`operatorAccount "${inputs.operatorAccount}" ${acct}.`);
+	const otag = validateOperatorTag(inputs.operatorTag);
+	if (otag !== true) problems.push(`operator tag ${otag}.`);
 	const title = validateInstanceTitle(inputs.instanceName);
 	if (title !== true) problems.push(`instance title ${title}.`);
 	// Optional contact link — when present it must pass the same scheme guard the

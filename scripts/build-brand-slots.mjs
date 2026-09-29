@@ -35,6 +35,10 @@
  * Docker bind mount, release tarball) but nginx never serves it (dotfiles are
  * denied). It is hashed into verify.json like every other build file.
  *
+ *   5. records each page's COLOUR-THEME slots (themeSlots below): the
+ *      theme-color meta value and the insertion point for the theme <style>,
+ *      under the map's separate `theme_files` key (see MAP_SCHEMA for why).
+ *
  * Idempotent: a build with no markers left (e.g. the release's prebuilt
  * frontend) and an existing map is left untouched.
  *
@@ -48,7 +52,16 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BUILD_DIR = resolve(process.argv[2] ?? resolve(__dirname, '..', 'apps', 'web', 'build'));
 
-export const MAP_SCHEMA = 1;
+/**
+ * 2 (v1.20.0): the map also has `theme_files` — per page, the colour-theme
+ * slots ('theme-color', 'theme-style'). They are deliberately NOT in `files`:
+ * `morphit-ops upgrade` runs the PREVIOUS release's ops-cli branding against a
+ * new build before the new CLI takes over, and a v1.19.x CLI treats every
+ * `files` entry as a site-name slot (it would write the brand name into the
+ * theme-color meta and before </head>). `files` keeps exactly the v1.19 shape
+ * and meaning; only a theme-aware CLI reads `theme_files`.
+ */
+export const MAP_SCHEMA = 2;
 /** Marker as a raw character or as the HTML entity app.html uses. */
 const MARK = '(?:\\u2060|&#8288;)';
 /** A bracketed slot: the DEFAULT form between two markers — the software
@@ -61,6 +74,37 @@ const ANY_MARK_RE = /\u2060|&#8288;/;
 /** The data attributes a canonical page is stamped with. `morphit-ops branding
  *  apply` rewrites exactly this string (keep in sync with ops-cli branding.ts). */
 export const CANONICAL_HTML_ATTRS = 'data-brand-name="Morphit" data-brand-beta="on"';
+/** The canonical <meta name="theme-color"> value (src/app.html) — the Morphit
+ *  gradient's middle stop. Keep in sync with THEME_TOKENS brand-2. */
+export const CANONICAL_THEME_COLOR = '#00DA69';
+const THEME_COLOR_META = '<meta name="theme-color" content="';
+
+/**
+ * Colour-theme slots of a (clean, stamped) page (docs/BRANDING.md, "Colours"):
+ *   [offset, 7, '#00DA69', 'theme-color']  the theme-color meta value;
+ *   [offset, 0, '', 'theme-style']         where `morphit-ops branding apply`
+ *                                          inserts `<style id="morphit-theme">`
+ *                                          (just before </head>, so it follows —
+ *                                          and overrides — the app's stylesheet).
+ * Pure — exported for the smoke test. Throws if a page has no </head>.
+ */
+export function themeSlots(text) {
+	const out = [];
+	const meta = text.indexOf(THEME_COLOR_META);
+	if (meta >= 0) {
+		const at = meta + THEME_COLOR_META.length;
+		if (text.slice(at, at + CANONICAL_THEME_COLOR.length) !== CANONICAL_THEME_COLOR) {
+			throw new Error(
+				`theme-color meta is not ${CANONICAL_THEME_COLOR} (keep src/app.html and this script in sync)`
+			);
+		}
+		out.push([at, CANONICAL_THEME_COLOR.length, CANONICAL_THEME_COLOR, 'theme-color']);
+	}
+	const head = text.search(/<\/head\s*>/i);
+	if (head < 0) throw new Error('no </head> for the theme <style> slot');
+	out.push([head, 0, '', 'theme-style']);
+	return out;
+}
 
 function walk(dir) {
 	const out = [];
@@ -145,7 +189,10 @@ export function processPage(input, { stamp }) {
 			`unpaired brand-slot marker near: ${JSON.stringify(out.slice(Math.max(0, at - 40), at + 40))}`
 		);
 	}
-	return { text: out, slots };
+	// A stamped page (every prerendered page except the SPA shell) also gets
+	// the colour-theme slots — returned SEPARATELY: they go to the map's
+	// `theme_files`, never into `files` (see MAP_SCHEMA).
+	return { text: out, slots, theme: stamp ? themeSlots(out) : [] };
 }
 
 /**
@@ -167,7 +214,7 @@ export function processBuild(buildDir, log = console.log) {
 		log('[brand-slots] no markers left and a slot map exists — already processed.');
 		return;
 	}
-	const map = { schema: MAP_SCHEMA, attrs: CANONICAL_HTML_ATTRS, files: {} };
+	const map = { schema: MAP_SCHEMA, attrs: CANONICAL_HTML_ATTRS, files: {}, theme_files: {} };
 	let slotCount = 0;
 	for (const abs of htmlFiles.sort()) {
 		const rel = relative(buildDir, abs).split('\\').join('/');
@@ -182,7 +229,7 @@ export function processBuild(buildDir, log = console.log) {
 		} catch (err) {
 			throw new Error(`${rel}: ${err instanceof Error ? err.message : String(err)}`);
 		}
-		const { text, slots } = result;
+		const { text, slots, theme } = result;
 		if (text !== before) {
 			writeFileSync(abs, text);
 			recompress(abs);
@@ -190,6 +237,7 @@ export function processBuild(buildDir, log = console.log) {
 		if (!isShell && (slots.length > 0 || text.includes(CANONICAL_HTML_ATTRS))) {
 			map.files[rel] = slots;
 			slotCount += slots.length;
+			if (theme.length > 0) map.theme_files[rel] = theme;
 		}
 	}
 	// Belt and braces: no marker may survive in ANY emitted text asset.

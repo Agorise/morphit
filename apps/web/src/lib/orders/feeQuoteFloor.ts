@@ -18,6 +18,9 @@
 
 import { FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 
+/** One milliBLURT — the smallest amount the chain can carry. */
+const BLURT_QUOTE_HEADROOM = 0.001;
+
 function usable(n: number | null | undefined): n is number {
 	return typeof n === 'number' && Number.isFinite(n) && n > 0;
 }
@@ -31,7 +34,11 @@ export function boundedBlurtBase(
 ): number {
 	const base = usable(quoted) ? quoted : fallback;
 	if (!usable(pinnedBase)) return base;
-	const lo = pinnedBase * (1 - FEE_PRICE_TOLERANCE);
+	// (v1.20.0, G8) +1 milliBLURT of headroom above the exact floor: a quote
+	// clamped onto the floor used to land ON the indexer's float boundary
+	// (0.2% of pins were rejected as underpaid). The indexer now compares in
+	// integer milliBLURT too; this keeps a margin on both sides.
+	const lo = pinnedBase * (1 - FEE_PRICE_TOLERANCE) + BLURT_QUOTE_HEADROOM;
 	const hi = pinnedBase * (1 + FEE_PRICE_TOLERANCE);
 	return Math.min(hi, Math.max(lo, base));
 }
@@ -63,4 +70,24 @@ export function boundedPiconero(
 	const hi = (pin * (1000n + permille)) / 1000n;
 	const v = BigInt(live);
 	return (v < lo ? lo : v > hi ? hi : v).toString();
+}
+
+/**
+ * (v1.20.0 fix wave, G10) The BLURT base to quote, or null when there is no
+ * SAFE quote. The bundled fallback constant (BASE_FEE_BLURT, 60) was used
+ * whenever /v1/listing-fee failed — but with no chain pin the indexer
+ * enforces ITS env base (MORPHIT_INDEXER_FEE_BASE_BLURT, default 125) minus
+ * 15% = 106.25, so a 60-BLURT payment landed `underpaid` and the fee was lost.
+ * Rule: a live indexer figure is used (clamped to the pin band when a pin is
+ * known); with no indexer figure the fallback is used ONLY inside a known
+ * pinned band; with neither, refuse to quote (the page shows its friendly
+ * "couldn't load the fee" message instead of letting the user pay a guess).
+ */
+export function resolveQuoteBase(
+	quoted: number | null | undefined,
+	fallback: number,
+	pinnedBase: number | null | undefined
+): number | null {
+	if (!usable(quoted) && !usable(pinnedBase)) return null;
+	return boundedBlurtBase(quoted, fallback, pinnedBase);
 }

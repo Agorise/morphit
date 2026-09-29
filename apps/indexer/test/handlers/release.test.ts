@@ -763,3 +763,127 @@ describe('release validator parity — frontend ↔ indexer', () => {
 		});
 	}
 });
+
+// ─── v1.20.0 (MK-H2) — treasury btc.xpub: handler ↔ frontend parity ─────
+//
+// The pinned treasury account xpub decides every BTC fee address, so the
+// indexer handler and the frontend validator must accept exactly the same
+// keys AND store/return the same canonical spelling. Each case runs through
+// BOTH: the real handler (persisted JSON) and validateReleasePayload.
+describe('release — treasury btc.xpub (handler and frontend agree)', () => {
+	const BIP84_ZPUB =
+		'zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs';
+	const BIP84_XPUB =
+		'xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V';
+	const BIP84_ZPRV =
+		'zprvAdG4iTXWBoARxkkzNpNh8r6Qag3irQB8PzEMkAFeTRXxHpbF9z4QgEvBRmfvqWvGp42t42nvgGpNgYSJA9iefm1yYNZKEm7z6qUWCroSQnE';
+	const VPUB =
+		'vpub5YFAPkuWn7i4tYUFkwqKpdSoxES92E4f2Antqkz27cPNYbhF76ZzXzN8ML8tHS446MnD5sdzEndTT2WLVwicrH4DFGGZNvto2Hz8R7qT4Ef';
+	const MASTER =
+		'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8';
+
+	const cases: Array<{ name: string; xpub: unknown; expect: { stored: string | null } | string }> = [
+		{ name: 'zpub → accepted, stored as canonical xpub', xpub: BIP84_ZPUB, expect: { stored: BIP84_XPUB } },
+		{ name: 'xpub → accepted unchanged', xpub: BIP84_XPUB, expect: { stored: BIP84_XPUB } },
+		{ name: 'xpub null → legacy shape, no xpub key', xpub: null, expect: { stored: null } },
+		{ name: 'zprv (PRIVATE) → treasury_btc_xpub_invalid', xpub: BIP84_ZPRV, expect: 'treasury_btc_xpub_invalid' },
+		{ name: 'vpub (testnet) → treasury_btc_xpub_invalid', xpub: VPUB, expect: 'treasury_btc_xpub_invalid' },
+		{ name: 'master key (depth 0) → treasury_btc_xpub_invalid', xpub: MASTER, expect: 'treasury_btc_xpub_invalid' },
+		{ name: 'typo → treasury_btc_xpub_invalid', xpub: BIP84_ZPUB.slice(0, -1) + 'x', expect: 'treasury_btc_xpub_invalid' },
+		{ name: 'number → treasury_btc_xpub_invalid', xpub: 7, expect: 'treasury_btc_xpub_invalid' }
+	];
+
+	for (const c of cases) {
+		it(c.name, async () => {
+			const treasury = {
+				btc: { address: VALID_BTC_ADDR, satoshis: 416, ...(c.xpub === null ? {} : { xpub: c.xpub }) },
+				xmr: null
+			};
+			const mock = makeMockClient();
+			const r = await handler(
+				makeCtx({
+					signer: 'morphit',
+					payload: payloadWithTreasury(treasury),
+					blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
+					config: fakeConfig({ officialPostingPubkey: OFFICIAL_PUBKEY, officialAccountName: 'morphit' })
+				}),
+				mock.client
+			);
+			const fe = validateReleasePayload(payloadWithTreasury(treasury));
+			if (typeof c.expect === 'string') {
+				expect(r).toEqual({ ok: false, reason: c.expect });
+				expect(fe.ok).toBe(false);
+				if (!fe.ok) expect(fe.reason).toBe(c.expect);
+				return;
+			}
+			expect(r).toEqual({ ok: true });
+			const persisted = JSON.parse(mock.queries.at(-1)!.params[10] as string);
+			expect(fe.ok).toBe(true);
+			if (!fe.ok) return;
+			if (c.expect.stored === null) {
+				expect('xpub' in persisted.btc).toBe(false);
+				expect(fe.value.treasury?.btc && 'xpub' in fe.value.treasury.btc).toBe(false);
+			} else {
+				expect(persisted.btc.xpub).toBe(c.expect.stored);
+				expect(fe.value.treasury?.btc?.xpub).toBe(c.expect.stored);
+			}
+			// Byte-for-byte: what the indexer stores is what the frontend returns.
+			expect(JSON.stringify(persisted)).toBe(JSON.stringify(fe.value.treasury));
+		});
+	}
+});
+
+// ─── v1.20.0 (MK-H2) — treasury xmr.primary_address: handler ↔ frontend ─────
+// Pinning a primary address switches XMR fees to integrated addresses that
+// carry the order's payment ID; both validators must accept exactly the same
+// addresses (mainnet STANDARD only) and store the same value.
+describe('release — treasury xmr.primary_address (handler and frontend agree)', () => {
+	// Built with the PyPI `monero` package (see test/lib/xmrAddress.test.ts).
+	const PRIMARY = '447UAtPLv7u8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL49CyFBGy';
+	const INTEGRATED = '4Dp9BhCqXPR8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL4D5AqWT5Do24HzptoQp';
+	const SUBADDRESS =
+		'84bwu2PWp3NaRudAKTadmeZPBLTjL5f4bKU8F6NJKqxgUvwth6QxUVSUNFAQnHbbuQcMRNR4baYUKNcZXQtKMMKm4aVE3Fe';
+	const TESTNET =
+		'9uvyLnpzBSV84B29APC8AQ4Qmx7nd2X4eX79cxtmXecv76exk4mG7YyDeH15hKJkJ7Y5q26GZoo3V64qL6Fs1A1A7D9oaFf';
+	const cases: Array<{ name: string; primary: unknown; expect: { stored: string | null } | string }> = [
+		{ name: 'mainnet primary → accepted and stored', primary: PRIMARY, expect: { stored: PRIMARY } },
+		{ name: 'absent → legacy shape, no key', primary: null, expect: { stored: null } },
+		{ name: 'subaddress (8…) → treasury_xmr_primary_invalid', primary: SUBADDRESS, expect: 'treasury_xmr_primary_invalid' },
+		{ name: 'integrated → treasury_xmr_primary_invalid', primary: INTEGRATED, expect: 'treasury_xmr_primary_invalid' },
+		{ name: 'testnet → treasury_xmr_primary_invalid', primary: TESTNET, expect: 'treasury_xmr_primary_invalid' },
+		{ name: 'checksum typo → treasury_xmr_primary_invalid', primary: PRIMARY.slice(0, -1) + (PRIMARY.endsWith('a') ? 'b' : 'a'), expect: 'treasury_xmr_primary_invalid' },
+		{ name: 'number → treasury_xmr_primary_invalid', primary: 4, expect: 'treasury_xmr_primary_invalid' }
+	];
+	for (const c of cases) {
+		it(c.name, async () => {
+			const treasury = {
+				btc: null,
+				xmr: { address: SUBADDRESS, piconero: '781250000', ...(c.primary === null ? {} : { primary_address: c.primary }) }
+			};
+			const mock = makeMockClient();
+			const r = await handler(
+				makeCtx({
+					signer: 'morphit',
+					payload: payloadWithTreasury(treasury),
+					blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
+					config: fakeConfig({ officialPostingPubkey: OFFICIAL_PUBKEY, officialAccountName: 'morphit' })
+				}),
+				mock.client
+			);
+			const fe = validateReleasePayload(payloadWithTreasury(treasury));
+			if (typeof c.expect === 'string') {
+				expect(r).toEqual({ ok: false, reason: c.expect });
+				expect(fe.ok).toBe(false);
+				if (!fe.ok) expect(fe.reason).toBe(c.expect);
+				return;
+			}
+			expect(r).toEqual({ ok: true });
+			const persisted = JSON.parse(mock.queries.at(-1)!.params[10] as string);
+			expect(fe.ok).toBe(true);
+			if (!fe.ok) return;
+			if (c.expect.stored === null) expect('primary_address' in persisted.xmr).toBe(false);
+			else expect(persisted.xmr.primary_address).toBe(c.expect.stored);
+			expect(JSON.stringify(persisted)).toBe(JSON.stringify(fe.value.treasury));
+		});
+	}
+});

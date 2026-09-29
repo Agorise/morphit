@@ -74,6 +74,11 @@ import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { hasVerifiedChat } from '$indexer/chatGates';
 import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
+import {
+	reconciledColumnLookup,
+	trxSignedByPostingKey,
+	type TrxSignerCheck
+} from '$indexer/chainTrxSignature';
 import { logger } from '$log';
 
 const log = logger('head-tailer');
@@ -385,6 +390,9 @@ export interface HeadTailerStatus {
 	readonly scannedHead: number;
 	/** Messages emitted on the fast path since start. */
 	readonly emitted: number;
+	/** Head-block ops refused because their signature could not be verified
+	 *  against the signer's posting key (v1.20.0, E1). */
+	readonly unverified: number;
 	readonly lastError: string | null;
 	readonly lastErrorAt: Date | null;
 }
@@ -397,17 +405,44 @@ export class HeadTailer {
 	private lastError: string | null = null;
 	private lastErrorAt: Date | null = null;
 
+	/**
+	 * Did the op's signer really sign this head-block transaction? (v1.20.0,
+	 * E1.) The block comes from ONE RPC endpoint, so its content is that
+	 * endpoint's word; the signature is the one part of it that endpoint cannot
+	 * fake. main.ts injects the intake's lookup (quorum refresher included);
+	 * without one, only a chain-CONFIRMED key on file is trusted.
+	 */
+	private readonly signedBySigner: TrxSignerCheck;
+	/** Head-block ops shown/notified WITHOUT a verifiable signature: refused. */
+	private unverified = 0;
+
 	constructor(
 		private readonly config: Config,
 		private readonly db: Database,
-		private readonly blurt: BlurtClient
-	) {}
+		private readonly blurt: BlurtClient,
+		opts: { readonly signedBySigner?: TrxSignerCheck } = {}
+	) {
+		this.signedBySigner = opts.signedBySigner ?? trxSignedByPostingKey(reconciledColumnLookup(db));
+	}
+
+	/** Verify, never throwing: a failure to verify is a "no". */
+	private async verified(trx: unknown, signer: string): Promise<boolean> {
+		try {
+			const ok = await this.signedBySigner(trx as never, signer);
+			if (!ok) this.unverified++;
+			return ok;
+		} catch {
+			this.unverified++;
+			return false;
+		}
+	}
 
 	getStatus(): HeadTailerStatus {
 		return {
 			running: this.running,
 			scannedHead: this.scannedHead,
 			emitted: this.emitted,
+			unverified: this.unverified,
 			lastError: this.lastError,
 			lastErrorAt: this.lastErrorAt
 		};
@@ -526,6 +561,13 @@ export class HeadTailer {
 				// locateOrderStatusOp for why exactly two op ids qualify.
 				const orderOp = locateOrderStatusOp(op);
 				if (orderOp !== null) {
+					// E1: an order disappears from every open orderbook on this
+					// signal, so it must be the owner's signal, not a node's.
+					const owner = orderOp.orderId.slice(0, orderOp.orderId.indexOf('/'));
+					if (!(await this.verified(trx, owner))) {
+						tailerDbg('tailer.DROP.orderStatusUnverified', { order: orderOp.orderId });
+						continue;
+					}
 					orderbookEventBus.emitProvisional({ orderId: orderOp.orderId, kind: orderOp.kind });
 					this.emitted++;
 					tailerDbg('tailer.EMIT.orderStatus', { order: orderOp.orderId, kind: orderOp.kind });
@@ -535,7 +577,7 @@ export class HeadTailer {
 				const feedbackOp = locateFeedbackOp(op);
 				if (feedbackOp !== null) {
 					const trxIdFb = block.transaction_ids[ti];
-					if (trxIdFb !== undefined) {
+					if (trxIdFb !== undefined && (await this.verified(trx, feedbackOp.reviewer))) {
 						await this.maybeFastFeedbackNotify(feedbackOp, trxIdFb, createdAt);
 					}
 					continue;
@@ -604,6 +646,20 @@ export class HeadTailer {
 				// the common case, which is that the fast path got there first.
 				if (trxId !== undefined && wasFastEmitted(trxId)) {
 					tailerDbg('tailer.SKIP_ALREADY_FAST_LATE', { trxId });
+					continue;
+				}
+
+				// E1 (v1.20.0): the op NAMES its signer; only the signature proves
+				// it. Checked last, after the cheap skips, so a message the fast
+				// path already delivered costs no key recovery. Unverifiable here
+				// (unknown or unconfirmed key, a rotation not yet recorded) means
+				// not shown LIVE from this block — a peer's verified push or the
+				// durable poller still brings it.
+				if (!(await this.verified(trx, located.signer))) {
+					tailerDbg('tailer.DROP.unverified', {
+						sender: located.signer,
+						recipient: located.recipient
+					});
 					continue;
 				}
 

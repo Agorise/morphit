@@ -194,7 +194,30 @@ export interface OrderRecord {
 		// only the 4 values above.
 		| 'unverified'
 		| 'missing'
-		| 'underpaid';
+		| 'underpaid'
+		// v1.20.0 (MK-H2): a BTC-fee order posted with its OWN fee
+		// address (see `btc_fee`), not yet paid.  Not on the orderbook.
+		| 'awaiting_payment'
+		// v1.20.0 (M-X1): an XMR-fee order that carried only a wallet
+		// OutProof, which no explorer can check. Never re-checked; the
+		// payer can post again with the payment's transaction key.
+		| 'proof_unsupported';
+	/** v1.20.0 (MK-H2) — only on a BTC-fee order posted after the
+	 *  treasury xpub pin (from /v1/orders/:account): the order's own
+	 *  fee address, its receive index under the pinned xpub, the
+	 *  amount asked (satoshis) and what the explorers last saw arrive,
+	 *  confirmed and still unconfirmed.  The frontend re-derives the
+	 *  address from the chain-verified xpub + index before showing it. */
+	readonly btc_fee?: {
+		readonly index: number;
+		readonly address: string;
+		readonly sats: number;
+		readonly received_sats: number;
+		readonly unconfirmed_sats: number;
+		/** (V3-10) The treasury key (canonical xpub) the order was numbered
+		 *  under — the pin in force at its block. */
+		readonly xpub?: string;
+	};
 	/** ADR-0011: how the fee was paid. Omitted on legacy
 	 *  ADR-0009 orders (which were always BLURT). Values:
 	 *    'blurt'              — standard sibling-transfer path
@@ -1264,6 +1287,10 @@ export interface InstanceResponse {
 		readonly nostr: string | null;
 	};
 	readonly fee_recipient: string;
+	/** v1.20.0 (G1) — true when fee_recipient is the canonical treasury or
+	 *  matches this operator's on-chain registration; false when it is not
+	 *  registered; null when the indexer could not tell. Absent on older indexers. */
+	readonly fee_recipient_registered?: boolean | null;
 	readonly relay_account: string;
 	/** v1.16.1 — this instance proved zero clearnet use (every private-transport leg). */
 	readonly clearnet_eliminated: boolean;

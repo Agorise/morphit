@@ -193,6 +193,31 @@ function failBroadcast(c: Context, err: unknown): Response {
 	return c.json(errorBody('bad_request', msg), 400);
 }
 
+/** The block a transaction is in, asked a few times one block apart (it may
+ *  still be in a node's pending pool). Null when not found. */
+async function lookupBlock(
+	blurt: BlurtClient,
+	trxId: string,
+	delayMs: number
+): Promise<number | null> {
+	for (let i = 0; i < 4; i++) {
+		try {
+			const tx = await blurt.callCondenser<{ block_num?: unknown } | null>(
+				'get_transaction',
+				[trxId],
+				{
+					hedge: false
+				}
+			);
+			if (tx !== null && typeof tx.block_num === 'number' && tx.block_num > 0) return tx.block_num;
+		} catch {
+			/* not indexed yet, or this node has no transaction lookup — ask again */
+		}
+		await new Promise((r) => setTimeout(r, delayMs));
+	}
+	return null;
+}
+
 function isChatMessageOnly(trx: { operations: readonly (readonly [string, unknown])[] }): boolean {
 	if (trx.operations.length === 0) return false;
 	return trx.operations.every(
@@ -223,8 +248,12 @@ export function broadcastRoute(
 	 * federation endpoint's own signature recovery, so no crypto is repeated
 	 * here.
 	 */
-	localChatDeliver?: (located: LocatedChatOp, trxId: string) => void
+	localChatDeliver?: (located: LocatedChatOp, trxId: string) => void,
+	/** Tuning, for tests. `duplicateLookupDelayMs` spaces the block lookups
+	 *  made after a duplicate answer (default 3 s, one block). */
+	opts: { readonly duplicateLookupDelayMs?: number } = {}
 ): Hono {
+	const lookupDelayMs = opts.duplicateLookupDelayMs ?? 3_000;
 	const app = new Hono();
 
 	app.post('/', async (c) => {
@@ -314,6 +343,30 @@ export function broadcastRoute(
 				result = { trx_id: (await computeTrxId(trx)) ?? undefined };
 				// The chain has these exact signed bytes: as good as accepted.
 				fast?.chainAccepted();
+			} else if (isDuplicateTransactionError(err)) {
+				// v1.20.0 fix wave (D8): the same holds for EVERY op, not just
+				// chat. A node took this transaction and its reply was lost, then
+				// the pool offered the same bytes to the next node, which already
+				// had them. Answering 400 told the user their order / transfer
+				// FAILED and invited a retry — a second, freshly-signed copy on
+				// chain. The caller needs the block number, so look it up.
+				const trxId = (await computeTrxId(trx)) ?? undefined;
+				const block = trxId === undefined ? null : await lookupBlock(blurt, trxId, lookupDelayMs);
+				if (trxId !== undefined && block !== null) {
+					result = { trx_id: trxId, block_num: block };
+					fast?.chainAccepted();
+				} else {
+					// Still not in a block we could find: say what is TRUE — the
+					// network has it — so nobody signs a second copy.
+					return c.json(
+						errorBody(
+							'bad_request',
+							`This transaction is already on the Blurt network${trxId ? ` (id ${trxId})` : ''} and is being confirmed. ` +
+								'It will appear shortly — do not send it again.'
+						),
+						400
+					);
+				}
 			} else {
 				return failBroadcast(c, err);
 			}

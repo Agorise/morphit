@@ -33,6 +33,11 @@
 	 */
 
 	import { _, locale } from 'svelte-i18n';
+	import {
+		formatAmountForInput,
+		localeDecimalSeparator,
+		parseAmountInput
+	} from '$lib/orders/amountInput';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
@@ -141,8 +146,11 @@
 			: ''
 	);
 
-	/** The entered amount as a number, for validation + conversion. */
-	const amountNum = $derived(Number(enteredAmount.trim()));
+	/** The entered amount as a number, for validation + conversion. v1.20.0
+	 *  G6 — read with the active locale's conventions (either decimal mark,
+	 *  any digit script); an ambiguous "1,234" (en) is refused, not guessed. */
+	const amountParse = $derived(parseAmountInput(enteredAmount, $locale));
+	const amountNum = $derived(amountParse.ok ? amountParse.number : Number.NaN);
 
 	/** Valid iff a finite positive number that does not exceed the
 	 *  available balance (a hair of float tolerance on the ceiling). */
@@ -159,7 +167,7 @@
 		// FLOOR (not toFixed's round) so the fill never exceeds the real
 		// ceiling. On confirm, power-down uses the exact vesting_shares string
 		// (usingFullBalance), so this never reaches the chain for "everything".
-		enteredAmount = availableFloor;
+		enteredAmount = formatAmountForInput(Number(availableFloor), $locale);
 		usingFullBalance = mode === 'down';
 	}
 
@@ -387,7 +395,17 @@
 					{$_('profile.wallet.use_full')}
 				</button>
 			</div>
-			{#if enteredAmount.trim().length > 0 && !amountValid}
+			{#if enteredAmount.trim().length > 0 && !amountParse.ok}
+				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+					{amountParse.reason === 'ambiguous' && amountParse.readings
+						? $_('common.amount_input.ambiguous', {
+								values: { a: amountParse.readings[0], b: amountParse.readings[1] }
+							})
+						: $_('common.amount_input.invalid', {
+								values: { sep: localeDecimalSeparator($locale) }
+							})}
+				</p>
+			{:else if enteredAmount.trim().length > 0 && !amountValid}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 					{$_('profile.wallet.error_amount')}
 				</p>
@@ -434,7 +452,7 @@
 					</button>
 					<button
 						type="button"
-						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110 disabled:opacity-50"
 						onclick={confirm}
 						disabled={!canConfirm}
 					>

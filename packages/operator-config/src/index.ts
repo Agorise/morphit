@@ -481,6 +481,18 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INSTANCE_BRAND_NAME',
 	'MORPHIT_INSTANCE_BRAND_SHORT_NAME',
 	'MORPHIT_INSTANCE_BETA_BADGE',
+	// MORPHIT_INSTANCE_THEME: a colour-theme preset (morphit | champagne-gold);
+	// MORPHIT_INSTANCE_THEME_FROM / _MID / _TO / _BACKGROUND: '#rrggbb' gradient
+	//   stops and page background, overriding the preset's. The whole palette is
+	//   derived from them (packages/operator-config/src/theme.ts) and applied by
+	//   `morphit-ops branding apply` without rebuilding. Unset = Morphit colours.
+	'MORPHIT_INSTANCE_THEME',
+	'MORPHIT_INSTANCE_THEME_FROM',
+	'MORPHIT_INSTANCE_THEME_MID',
+	'MORPHIT_INSTANCE_THEME_TO',
+	'MORPHIT_INSTANCE_THEME_BACKGROUND',
+	// MORPHIT_INSTANCE_THEME_BUTTON: deep | bright — primary-button style.
+	'MORPHIT_INSTANCE_THEME_BUTTON',
 	'MORPHIT_INSTANCE_TOR_ADDRESS',
 	'MORPHIT_INSTANCE_LOKINET_ADDRESS',
 	'MORPHIT_INSTANCE_I2P_ADDRESS',
@@ -541,7 +553,13 @@ export const INSTANCE_ENV = {
 	CONTACT_URL: 'MORPHIT_INSTANCE_CONTACT_URL',
 	BRAND_NAME: 'MORPHIT_INSTANCE_BRAND_NAME',
 	BRAND_SHORT_NAME: 'MORPHIT_INSTANCE_BRAND_SHORT_NAME',
-	BETA_BADGE: 'MORPHIT_INSTANCE_BETA_BADGE'
+	BETA_BADGE: 'MORPHIT_INSTANCE_BETA_BADGE',
+	THEME: 'MORPHIT_INSTANCE_THEME',
+	THEME_FROM: 'MORPHIT_INSTANCE_THEME_FROM',
+	THEME_MID: 'MORPHIT_INSTANCE_THEME_MID',
+	THEME_TO: 'MORPHIT_INSTANCE_THEME_TO',
+	THEME_BACKGROUND: 'MORPHIT_INSTANCE_THEME_BACKGROUND',
+	THEME_BUTTON: 'MORPHIT_INSTANCE_THEME_BUTTON'
 } as const;
 
 export interface LoadResult {
@@ -744,3 +762,7 @@ export * from './contact.js';
 // Browser-safe like ./contact (the web frontend imports
 // `@morphit/operator-config/brand` directly). Re-exported for Node consumers.
 export * from './brand.js';
+
+// ── Per-instance colour theme (docs/BRANDING.md) ─────────────────────────────
+// Browser-safe (`@morphit/operator-config/theme`). Re-exported for Node consumers.
+export * from './theme.js';

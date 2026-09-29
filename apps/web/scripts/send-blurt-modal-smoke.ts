@@ -113,7 +113,9 @@ const sendValidationSrc = readFileSync(
 );
 check(
 	'the amount is bounded to the balance + reaches the signer via the throwing formatter',
-	/validateBlurtAmount\(amountInput, blurtBalance\)/.test(modal) &&
+	// v1.20.0 G6: the TYPED text is parsed locale-aware first; the shared
+	// validator sees its canonical ASCII form.
+	/validateBlurtAmount\(amountParse\.value, blurtBalance\)/.test(modal) &&
 		/n <= balance \+ 1e-6/.test(sendValidationSrc) &&
 		/formatBlurtAmount\(amountNum\)/.test(modal)
 );

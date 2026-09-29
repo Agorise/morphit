@@ -54,9 +54,16 @@ function urlOf(input: unknown): string {
 }
 
 /** Read a body up to `max` bytes; past that, cancel it and throw. */
-export async function readCappedBytes(res: Response, max: number, url = ''): Promise<Uint8Array> {
+export async function readCappedBytes(
+	res: Response,
+	max: number,
+	url = ''
+): Promise<Uint8Array<ArrayBuffer>> {
+	// Returns a FRESH ArrayBuffer-backed array (never a view of a shared
+	// buffer), which is what `new Response(body)` requires under the DOM lib's
+	// BodyInit — the looser Uint8Array<ArrayBufferLike> did not typecheck there.
 	const reader = res.body?.getReader();
-	if (reader === undefined) return new Uint8Array(0);
+	if (reader === undefined) return new Uint8Array(new ArrayBuffer(0));
 	const chunks: Uint8Array[] = [];
 	let total = 0;
 	for (;;) {
@@ -69,7 +76,7 @@ export async function readCappedBytes(res: Response, max: number, url = ''): Pro
 		}
 		chunks.push(value);
 	}
-	const out = new Uint8Array(total);
+	const out = new Uint8Array(new ArrayBuffer(total));
 	let at = 0;
 	for (const c of chunks) {
 		out.set(c, at);

@@ -483,6 +483,52 @@ describe('orderReplace handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'replace_below_waiver_floor' });
 	});
 
+	// v1.20.0 fix wave, G5 — an amount in a currency this node cannot convert
+	// used to be compared AS IF it were USD ("1000 ZZZ" ≥ $1), so the verdict
+	// depended on which FX rates a node happened to hold. Unconvertible now
+	// fails the floor outright.
+	it('G5: rejects replace of a waived order when its fiat cannot be converted to USD', async () => {
+		const createdAt = new Date('2026-05-01T12:00:00Z');
+		const blockTime = new Date('2026-05-01T12:01:00Z');
+		const mock = makeMockClient([
+			{
+				match: 'SELECT status, created_at',
+				rows: [
+					{
+						status: 'live',
+						created_at: createdAt,
+						side: 'buy',
+						asset: 'BLURT',
+						asset_network: null,
+						fiat_currency: 'ZZZ',
+						fee_method: 'waived_first_buy'
+					}
+				]
+			},
+			{ match: 'UPDATE orders', rowCount: 1 }
+		]);
+		const r = await handler(
+			makeCtx({
+				signer: 'alice',
+				blockTime,
+				fiatToUsd: () => null,
+				payload: {
+					permlink: 'first-buy-blurt-2026-05',
+					side: 'buy',
+					asset: 'BLURT',
+					asset_network: null,
+					fiat_currency: 'ZZZ',
+					amount_min: 1000,
+					amount_max: 5000,
+					price_model: { kind: 'fixed', price: 0.002 },
+					payment_methods: ['sepa']
+				}
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: false, reason: 'replace_below_waiver_floor' });
+	});
+
 	it('B1: BLURT-paid orders can replace with any positive amount_min', async () => {
 		// Sanity check: the floor check ONLY applies to waived orders.
 		// A normal BLURT-paid order can still dial amount_min wherever.

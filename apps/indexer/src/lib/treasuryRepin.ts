@@ -222,6 +222,14 @@ function decideBlurt(
 export interface CurrentTreasuryAddresses {
 	readonly btcAddress: string | null;
 	readonly xmrAddress: string | null;
+	/** v1.20.0 (MK-H2) — the pinned treasury BTC account xpub, carried
+	 *  unchanged: dropping it would switch BTC fees back to the shared-
+	 *  address txid path for every order after the re-pin. Optional so
+	 *  older callers keep compiling; absent/null = none pinned. */
+	readonly btcXpub?: string | null;
+	/** v1.20.0 (MK-H2) — the pinned treasury XMR PRIMARY address (bound
+	 *  fees), carried unchanged like btcXpub. */
+	readonly xmrPrimary?: string | null;
 }
 
 /**
@@ -246,15 +254,21 @@ export function buildRepinnedTreasury(
 ): ReleaseTreasuryBlock {
 	// computed is `number` for btc, `bigint` for xmr, `number` for blurt.
 	const btcSats = (decision.btc.computed as number | null) ?? current.btcSatoshis;
+	const btcXpub = addresses.btcXpub ?? null;
 	const btc =
 		addresses.btcAddress !== null && btcSats !== null && btcSats > 0
-			? { address: addresses.btcAddress, satoshis: Math.round(btcSats) }
+			? btcXpub !== null
+				? { address: addresses.btcAddress, satoshis: Math.round(btcSats), xpub: btcXpub }
+				: { address: addresses.btcAddress, satoshis: Math.round(btcSats) }
 			: null;
 
 	const xmrPico = (decision.xmr.computed as bigint | null) ?? current.xmrPiconero;
+	const xmrPrimary = addresses.xmrPrimary ?? null;
 	const xmr =
 		addresses.xmrAddress !== null && xmrPico !== null && xmrPico > 0n
-			? { address: addresses.xmrAddress, piconero: xmrPico.toString() }
+			? xmrPrimary !== null
+				? { address: addresses.xmrAddress, piconero: xmrPico.toString(), primary_address: xmrPrimary }
+				: { address: addresses.xmrAddress, piconero: xmrPico.toString() }
 			: null;
 
 	const base = (decision.blurt.computed as number | null) ?? current.blurtBase;
@@ -283,7 +297,7 @@ export interface ParsedReleaseTreasury {
  */
 export function parseReleaseTreasury(treasury: unknown): ParsedReleaseTreasury {
 	const empty: ParsedReleaseTreasury = {
-		addresses: { btcAddress: null, xmrAddress: null },
+		addresses: { btcAddress: null, xmrAddress: null, btcXpub: null, xmrPrimary: null },
 		pinned: { btcSatoshis: null, xmrPiconero: null, blurtBase: null }
 	};
 	if (treasury === null || typeof treasury !== 'object' || Array.isArray(treasury)) {
@@ -293,9 +307,13 @@ export function parseReleaseTreasury(treasury: unknown): ParsedReleaseTreasury {
 
 	let btcAddress: string | null = null;
 	let btcSatoshis: number | null = null;
+	let btcXpub: string | null = null;
 	if (t.btc !== null && typeof t.btc === 'object') {
 		const btc = t.btc as Record<string, unknown>;
 		if (typeof btc.address === 'string' && btc.address.length > 0) btcAddress = btc.address;
+		// Carried verbatim; the re-pin payload is re-validated as a whole
+		// (validateReleasePayload) before anything is signed.
+		if (typeof btc.xpub === 'string' && btc.xpub.length > 0) btcXpub = btc.xpub;
 		if (typeof btc.satoshis === 'number' && Number.isFinite(btc.satoshis) && btc.satoshis > 0) {
 			btcSatoshis = btc.satoshis;
 		}
@@ -303,9 +321,13 @@ export function parseReleaseTreasury(treasury: unknown): ParsedReleaseTreasury {
 
 	let xmrAddress: string | null = null;
 	let xmrPiconero: bigint | null = null;
+	let xmrPrimary: string | null = null;
 	if (t.xmr !== null && typeof t.xmr === 'object') {
 		const xmr = t.xmr as Record<string, unknown>;
 		if (typeof xmr.address === 'string' && xmr.address.length > 0) xmrAddress = xmr.address;
+		if (typeof xmr.primary_address === 'string' && xmr.primary_address.length > 0) {
+			xmrPrimary = xmr.primary_address;
+		}
 		if (typeof xmr.piconero === 'string' && /^\d+$/.test(xmr.piconero) && xmr.piconero !== '0') {
 			try {
 				xmrPiconero = BigInt(xmr.piconero);
@@ -324,7 +346,7 @@ export function parseReleaseTreasury(treasury: unknown): ParsedReleaseTreasury {
 	}
 
 	return {
-		addresses: { btcAddress, xmrAddress },
+		addresses: { btcAddress, xmrAddress, btcXpub, xmrPrimary },
 		pinned: { btcSatoshis, xmrPiconero, blurtBase }
 	};
 }

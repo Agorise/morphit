@@ -17,6 +17,8 @@
  */
 
 import type { ReleasePayloadV1 } from './release.js';
+import { parseAccountXpub } from './btcXpub.js';
+import { parseXmrPrimaryAddress } from './xmrAddress.js';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 
@@ -76,11 +78,19 @@ export type ReleaseValidateError =
 	| 'treasury_btc_address_not_mainnet'
 	| 'treasury_btc_satoshis_invalid'
 	| 'treasury_btc_satoshis_too_large'
+	// v1.20.0 (MK-H2) — the optional treasury account xpub is not a valid
+	// mainnet BIP84 account-level PUBLIC key (private, testnet, wrong script
+	// type, wrong depth, bad checksum…). btcXpub.ts parseAccountXpub decides.
+	| 'treasury_btc_xpub_invalid'
 	| 'treasury_xmr_not_object'
 	| 'treasury_xmr_address_missing'
 	| 'treasury_xmr_address_not_mainnet'
 	| 'treasury_xmr_piconero_invalid'
 	| 'treasury_xmr_piconero_too_large'
+	// v1.20.0 (MK-H2) — the optional treasury PRIMARY address for bound XMR
+	// fees is not a valid mainnet standard (`4…`) address (a subaddress,
+	// integrated, testnet/stagenet, or a checksum typo).
+	| 'treasury_xmr_primary_invalid'
 	| 'treasury_blurt_not_object'
 	| 'treasury_blurt_base_invalid'
 	| 'treasury_blurt_base_too_large'
@@ -416,7 +426,7 @@ export function validateTreasury(t: unknown):
 	if (t === undefined || t === null) return { ok: true, value: null };
 	if (!isPlainObject(t)) return { ok: false, reason: 'treasury_not_object' };
 
-	let btc: { address: string; satoshis: number } | null = null;
+	let btc: { address: string; satoshis: number; xpub?: string } | null = null;
 	if (t.btc !== undefined && t.btc !== null) {
 		if (!isPlainObject(t.btc)) return { ok: false, reason: 'treasury_btc_not_object' };
 		const addr = t.btc.address;
@@ -436,10 +446,20 @@ export function validateTreasury(t: unknown):
 		if (sat > BTC_SATOSHIS_MAX) {
 			return { ok: false, reason: 'treasury_btc_satoshis_too_large' };
 		}
-		btc = { address: addr, satoshis: sat };
+		// v1.20.0 (MK-H2) — optional treasury account xpub. Accepted as
+		// `xpub…` or `zpub…`, returned in the canonical `xpub…` spelling so
+		// every consumer compares one string. Attached only when present, so
+		// a release without it keeps the exact legacy shape.
+		if (t.btc.xpub !== undefined && t.btc.xpub !== null) {
+			const parsed = parseAccountXpub(t.btc.xpub);
+			if (!parsed.ok) return { ok: false, reason: 'treasury_btc_xpub_invalid' };
+			btc = { address: addr, satoshis: sat, xpub: parsed.value.xpub };
+		} else {
+			btc = { address: addr, satoshis: sat };
+		}
 	}
 
-	let xmr: { address: string; piconero: string } | null = null;
+	let xmr: { address: string; piconero: string; primary_address?: string } | null = null;
 	if (t.xmr !== undefined && t.xmr !== null) {
 		if (!isPlainObject(t.xmr)) return { ok: false, reason: 'treasury_xmr_not_object' };
 		const addr = t.xmr.address;
@@ -462,7 +482,16 @@ export function validateTreasury(t: unknown):
 		if (pn.length > XMR_PICONERO_MAX_LEN) {
 			return { ok: false, reason: 'treasury_xmr_piconero_too_large' };
 		}
-		xmr = { address: addr, piconero: pn };
+		// v1.20.0 (MK-H2) — optional primary address: from the block after
+		// the release carrying it, XMR fees go to integrated addresses of it
+		// that carry the order's payment ID. Attached only when present.
+		if (t.xmr.primary_address !== undefined && t.xmr.primary_address !== null) {
+			const prim = parseXmrPrimaryAddress(t.xmr.primary_address);
+			if (!prim.ok) return { ok: false, reason: 'treasury_xmr_primary_invalid' };
+			xmr = { address: addr, piconero: pn, primary_address: prim.value.address };
+		} else {
+			xmr = { address: addr, piconero: pn };
+		}
 	}
 
 	// cp372 — optional chain-pinned BLURT fee base.  No address

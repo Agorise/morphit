@@ -45,12 +45,15 @@ const LIVE_CDN =
 const LIVE_OFF = 'http {\n  server {\n    listen 8443 ssl;\n  }\n}\n';
 
 // `docker` stub. State lives in $STUB_STATE: live.conf is what `nginx -T`
-// shows; calls.log records every invocation.
+// shows; calls.log records every invocation. The containers carry the image
+// and Compose labels the heal identifies BunkerWeb by (wave 5: by image, never
+// by name); `compose … config` reports the env file BunkerWeb reads.
 const DOCKER_STUB = `#!/bin/sh
 S="$STUB_STATE"
 echo "docker $*" >> "$S/calls.log"
 case "$1" in
   ps) printf 'bunkerweb\\nbunkerweb-scheduler\\n'; exit 0 ;;
+  inspect) cat "$S/inspect.json"; exit 0 ;;
   restart) exit 0 ;;
   exec)
     cmd="$5"
@@ -61,14 +64,43 @@ case "$1" in
       *) exit 0 ;;
     esac ;;
   compose)
-    f="$3"
+    case " $* " in
+      *" config "*) cat "$S/model.json"; exit 0 ;;
+    esac
     [ -f "$S/compose-broken" ] && exit 1
-    envf="$(dirname "$f")/bunkerweb.env"
-    if grep -q '^USE_REAL_IP=no' "$envf"; then printf 'http {\\n  server {\\n    listen 8443 ssl;\\n  }\\n}\\n' > "$S/live.conf"; fi
+    if grep -q '^USE_REAL_IP=no' "$(cat "$S/envpath")"; then printf 'http {\\n  server {\\n    listen 8443 ssl;\\n  }\\n}\\n' > "$S/live.conf"; fi
     exit 0 ;;
 esac
 exit 0
 `;
+
+/** `docker inspect` JSON for the shipped stack, labelled from `etc`. */
+function inspectJson(etc: string): string {
+	const labels = (service: string) => ({
+		'com.docker.compose.project': 'bunkerweb',
+		'com.docker.compose.service': service,
+		'com.docker.compose.project.config_files': join(etc, 'docker-compose.yml'),
+		'com.docker.compose.project.working_dir': etc
+	});
+	const c = (
+		name: string,
+		image: string,
+		service: string,
+		ports: Record<string, unknown> = {}
+	) => ({
+		Name: `/${name}`,
+		Config: { Image: image, Labels: labels(service), Env: [] },
+		State: { Running: true },
+		NetworkSettings: { Ports: ports, Networks: {} },
+		Mounts: []
+	});
+	return JSON.stringify([
+		c('bunkerweb', 'bunkerity/bunkerweb:1.5.10', 'bunkerweb', {
+			'8443/tcp': [{ HostIp: '0.0.0.0', HostPort: '443' }]
+		}),
+		c('bunkerweb-scheduler', 'bunkerity/bunkerweb-scheduler:1.5.10', 'bunkerweb-scheduler')
+	]);
+}
 
 function scenario(env: string, live: string, opts: { composeBroken?: boolean } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), 'bw-realip-'));
@@ -88,6 +120,17 @@ function scenario(env: string, live: string, opts: { composeBroken?: boolean } =
 	const envPath = join(etc, 'bunkerweb.env');
 	writeFileSync(envPath, env);
 	writeFileSync(join(etc, 'docker-compose.yml'), 'services: {}\n');
+	writeFileSync(join(state, 'inspect.json'), inspectJson(etc));
+	writeFileSync(join(state, 'envpath'), envPath);
+	writeFileSync(
+		join(state, 'model.json'),
+		JSON.stringify({
+			services: {
+				bunkerweb: { env_file: [{ path: envPath }] },
+				'bunkerweb-scheduler': { env_file: [{ path: envPath }] }
+			}
+		})
+	);
 
 	const oldPath = process.env.PATH;
 	const oldState = process.env.STUB_STATE;
@@ -113,7 +156,13 @@ function scenario(env: string, live: string, opts: { composeBroken?: boolean } =
 	return result;
 }
 
-const recreated = (calls: string): boolean => /compose -f \S+ up -d --force-recreate/.test(calls);
+// Only BunkerWeb's own services, from its own project, never a whole-stack up.
+const recreated = (calls: string): boolean =>
+	/compose -p bunkerweb .*-f \S+ up -d --no-deps --force-recreate bunkerweb bunkerweb-scheduler/.test(
+		calls
+	);
+const wholeStackUp = (calls: string): boolean =>
+	calls.split('\n').some((l) => / up -d/.test(l) && !/--no-deps/.test(l));
 
 console.log('\n── BunkerWeb real-IP self-heal (H1) ─────────────────\n');
 
@@ -135,6 +184,10 @@ console.log('\n── BunkerWeb real-IP self-heal (H1) ────────�
 		recreated(r.calls)
 	);
 	check('…and the RUNNING nginx no longer trusts the header', !/set_real_ip_from/.test(r.live));
+	check(
+		'…never with a whole-stack `compose up` (it can recreate the database)',
+		!wholeStackUp(r.calls)
+	);
 	check('…without throwing', !r.threw);
 }
 {

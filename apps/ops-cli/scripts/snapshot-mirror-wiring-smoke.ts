@@ -678,7 +678,6 @@ ok('…that runs BEFORE the restore guards (nothing is written, so they do not a
 // it ran on the handful baked into its config. That is backwards: the relay is
 // the component that BROADCASTS (signups, transfers), so during a clearnet
 // outage it is the one that most needs the hidden-service nodes to fall back on.
-const relayMain = read('apps/relay/src/main.ts');
 const indexerMain = read('apps/indexer/src/main.ts');
 
 // v1.18.0 deep-deep (rv2-4): the boot merge now goes through the chain-verified
@@ -688,12 +687,13 @@ ok(
 	/keepReloadingRpcDirectory\(/.test(indexerMain) &&
 		/mergeRpcEndpoints\(\s*directoryEndpointUrls\(/.test(read('apps/indexer/src/indexer/rpcDirectoryReload.ts'))
 );
-ok('the RELAY merges it too (it is the one that broadcasts)', /mergeRpcEndpoints\(dirEndpoints\)/.test(relayMain));
-ok('…and its client exposes the merge', /mergeRpcEndpoints\(urls: readonly string\[\]\)/.test(relayClient));
-ok(
-	'…best-effort, so a split deployment keeps its configured endpoints rather than failing to boot',
-	/rpc_directory WHERE id = 1[\s\S]{0,600}catch \{/.test(relayMain)
-);
+// The RELAY's merge of the on-chain RPC directory is no longer checked here by
+// source regex: D12 replaced the boot-only read with a LIVE sync
+// (apps/relay/src/blurt/rpcDirectorySync.ts, every 10 min, best-effort), and the
+// BEHAVIOUR — a node published to the directory after boot joins the relay pool,
+// and a failed read keeps the configured endpoints — is exercised for real by
+// apps/relay/scripts/signup-state-persistence-smoke.ts ("D12: a node published
+// to the on-chain directory after boot joins the relay pool").
 
 // ── W. node health is SHARED, not relearned blind every run ─────────
 // Health was in-memory only, so every one-shot process (mirror, fast-sync, any

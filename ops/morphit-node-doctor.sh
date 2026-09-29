@@ -161,20 +161,25 @@ else info "i2pd HTTP proxy not running (:4444) — .i2p endpoints inactive. Fine
 
 # ── 6. WARRANT CANARY (report) ───────────────────────────────────────
 hdr "Warrant canary"
+# Report only. The canary is signed on the operator's OWN computer and uploaded
+# here (OPERATIONS.md §36) — a server that signs its own canary would keep
+# signing "all clear" after a seizure. So this never suggests signing on this
+# box. (v1.20.0, C10)
 if [ -f "$REPO/apps/web/build/canary.txt" ]; then ok "canary is being served (apps/web/build/canary.txt present)"
-else warn "no canary published — set one up (cp763-fixed, tor-safe):  cd $REPO && bash scripts/canary/setup.sh   (pick 'this computer / home hosting')"; fi
+else info "no warrant canary is served from this box (optional). It is signed on YOUR OWN computer and uploaded here: on that computer run  bash scripts/canary/setup.sh  and choose 'a remote server / VPS'."; fi
 
 # ── 7. SYNC STATUS (report) ──────────────────────────────────────────
 hdr "Sync status"
 H=$(curl -s "http://127.0.0.1:$PORT/v1/health" 2>/dev/null)
 if [ -n "$H" ]; then
-  state=$(printf '%s' "$H" | grep -o '"sync_state":"[a-z]*"' | head -1 | cut -d'"' -f4)
+  # The indexer reports `stale` and `sync.behind` (there is no `sync_state`
+  # field — reading one made this say "state: unknown" on every box; v1.20.0, C10).
+  behind=$(printf '%s' "$H" | grep -o '"behind":[a-z]*' | head -1 | cut -d: -f2)
+  stale=$(printf '%s' "$H" | grep -o '"stale":[a-z]*' | head -1 | cut -d: -f2)
   lag=$(printf '%s' "$H" | grep -o '"lag_blocks":[0-9]*' | head -1 | cut -d: -f2)
-  case "$state" in
-    synced)  ok "indexer synced${lag:+ (lag ${lag} blocks)}";;
-    behind)  info "indexer catching up${lag:+ — lag ${lag} blocks} (normal on a fresh/restarted box; re-check later)";;
-    *)       info "indexer reachable (state: ${state:-unknown})";;
-  esac
+  if [ "$behind" = "false" ] && [ "$stale" != "true" ]; then ok "indexer synced${lag:+ (lag ${lag} blocks)}"
+  elif [ "$behind" = "true" ] || [ "$stale" = "true" ]; then info "indexer catching up${lag:+ — lag ${lag} blocks} (normal on a fresh/restarted box; re-check later)"
+  else info "indexer reachable (its health does not report sync progress)"; fi
 else info "health API not answering (see verify step above)"; fi
 
 # ── SUMMARY ──────────────────────────────────────────────────────────

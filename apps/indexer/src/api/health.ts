@@ -15,6 +15,7 @@
  * or "why are BLURT fees verifying as underpaid" questions.
  */
 
+import { openStreamCount } from '$api/streamCaps';
 import { Hono } from 'hono';
 
 import type { Config } from '$config';
@@ -43,7 +44,7 @@ import { fastNotifyBudgetSize } from '$indexer/fastNotifyBudget';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.19.0';
+export const INDEXER_VERSION = '1.20.0';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -524,7 +525,10 @@ export function healthRoute(
 				// (F-1 audit fix.)
 				sse_subscribers: {
 					orderbook: orderbookEventBus.subscriberCount,
-					chat: chatEventBus.subscriberCount
+					orderbook_provisional: orderbookEventBus.provisionalSubscriberCount,
+					chat: chatEventBus.subscriberCount,
+					// v1.20.0 (E4): every open SSE stream, under the caps.
+					open_streams: openStreamCount()
 				}
 			};
 		}

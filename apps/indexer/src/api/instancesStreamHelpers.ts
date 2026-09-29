@@ -14,6 +14,21 @@
  * and this module.
  */
 
+import {
+	altNetworksFromUntrusted,
+	contactUrlOrNull,
+	textOrNull,
+	CACHED_NAME_MAX,
+	CACHED_TAGLINE_MAX
+} from '$indexer/instanceCacheSanitize';
+
+/** The reasons `federationProbe.persistListedNotProbed` records beside a
+ *  `good` it did not verify (kept in step with chatFastFederation's copy). */
+const LISTED_NOT_PROBED_REASONS: ReadonlySet<string> = new Set([
+	'hidden_service_not_network_probed',
+	'clearnet_peer_not_probed_hidden_only'
+]);
+
 export interface InstanceDirectoryEntry {
 	origin: string;
 	operator_account: string;
@@ -54,6 +69,8 @@ export interface DirectoryRow {
 	 *  Fallback for the pills when a censored node has never been successfully probed. */
 	reg_alt_networks?: unknown | null;
 	last_probe_status: string | null;
+	/** Read so a 'good' the probe did not verify is not shown as good (E14). */
+	last_probe_error?: string | null;
 	registered_at_time: Date;
 	last_probed_at: Date | null;
 	cached_indexed_block: string | number | null;
@@ -62,52 +79,25 @@ export interface DirectoryRow {
 	consecutive_failures: number;
 }
 
-/** Normalize alt_networks from the JSONB cache.  Pre-2026-05
- *  records stored just `{tor, lokinet, i2p, nostr}`; post-2026-05
- *  records store `{tor, lokinet, i2p_b32, i2p_name, nostr}`.
- *  This shim materializes the new shape for both, routing a
- *  legacy `i2p` value to either `i2p_b32` (suffix `.b32.i2p`) or
- *  `i2p_name` (any other `.i2p` suffix).  Old probes get re-cached
- *  the next time they succeed, so this code path goes cold once
- *  every instance has been re-probed (~10 min for `good`
- *  instances, up to a few hours for `stale`). */
+/** Normalize alt_networks from the JSONB cache or the on-chain registration.
+ *  Pre-2026-05 records stored just `{tor, lokinet, i2p, nostr}`; the legacy
+ *  `i2p` value is routed to `i2p_b32` or `i2p_name` by shape. Since v1.20.0
+ *  (E7) EVERY value is re-checked against its network's shape on the way out
+ *  (instanceCacheSanitize): the cache holds what a PEER said about itself, and
+ *  rows cached before the probe validated anything are cleaned here without
+ *  waiting for a re-probe. */
 function normalizeAltNetworks(raw: unknown): InstanceDirectoryEntry['alt_networks'] {
-	if (raw === null || raw === undefined || typeof raw !== 'object') {
-		return null;
-	}
-	const r = raw as Record<string, unknown>;
-	const get = (k: string): string | null => {
-		const v = r[k];
-		return typeof v === 'string' && v.length > 0 ? v : null;
-	};
-	let i2pB32 = get('i2p_b32');
-	let i2pName = get('i2p_name');
-	const legacy = get('i2p');
-	if (legacy !== null && i2pB32 === null && i2pName === null) {
-		// Route legacy by suffix.
-		if (legacy.toLowerCase().endsWith('.b32.i2p')) {
-			i2pB32 = legacy;
-		} else if (legacy.toLowerCase().endsWith('.i2p')) {
-			i2pName = legacy;
-		}
-		// If neither suffix matches, drop the legacy value rather
-		// than guess — better to show no link than a broken one.
-	}
-	return {
-		tor: get('tor'),
-		lokinet: get('lokinet'),
-		i2p_b32: i2pB32,
-		i2p_name: i2pName,
-		ens: get('ens'),
-		i2p: null, // never re-emit legacy on the wire
-		nostr: get('nostr')
-	};
+	const a = altNetworksFromUntrusted(raw);
+	if (a === null) return null;
+	return { ...a, i2p: null }; // never re-emit legacy on the wire
 }
 
 /** v1.15.3 — merge the probe-cached alt_networks with the operator's ON-CHAIN
- *  published ones. Cached (a live probe) wins per field; the on-chain values fill
- *  any gap so a clearnet-censored node that's never been successfully probed
- *  still shows its Tor/I2P pills (and is reachable) from what it published. */
+ *  published ones. v1.20.0 (E7): the ON-CHAIN value wins per field. It is the
+ *  one the operator SIGNED; the cached one is whatever the origin answered, and
+ *  letting it win meant a peer's own /v1/instance could repoint the "Tor" pill
+ *  of a signed registration. The cache still fills fields the registration does
+ *  not carry (nostr) or left empty. */
 function mergeAltNetworks(
 	cached: InstanceDirectoryEntry['alt_networks'],
 	reg: InstanceDirectoryEntry['alt_networks']
@@ -117,13 +107,13 @@ function mergeAltNetworks(
 	const c = cached ?? empty;
 	const g = reg ?? empty;
 	return {
-		tor: c.tor ?? g.tor,
-		lokinet: c.lokinet ?? g.lokinet,
-		i2p_b32: c.i2p_b32 ?? g.i2p_b32,
-		i2p_name: c.i2p_name ?? g.i2p_name,
-		ens: c.ens ?? g.ens,
+		tor: g.tor ?? c.tor,
+		lokinet: g.lokinet ?? c.lokinet,
+		i2p_b32: g.i2p_b32 ?? c.i2p_b32,
+		i2p_name: g.i2p_name ?? c.i2p_name,
+		ens: g.ens ?? c.ens,
 		i2p: null,
-		nostr: c.nostr ?? g.nostr
+		nostr: g.nostr ?? c.nostr
 	};
 }
 
@@ -137,15 +127,27 @@ export function rowToEntry(r: DirectoryRow): InstanceDirectoryEntry {
 		operator_account: r.operator_account,
 		operator_tag: r.operator_tag,
 		operator_display_name: r.operator_display_name,
-		name: r.cached_name,
-		tagline: r.cached_tagline,
-		contact_url: r.cached_contact_url,
+		// Re-checked on the way out (E7): see instanceCacheSanitize.
+		name: textOrNull(r.cached_name, CACHED_NAME_MAX),
+		tagline: textOrNull(r.cached_tagline, CACHED_TAGLINE_MAX),
+		contact_url: contactUrlOrNull(r.cached_contact_url),
 		clearnet_eliminated: r.cached_clearnet_eliminated ?? false,
 		alt_networks: mergeAltNetworks(
 			normalizeAltNetworks(r.cached_alt_networks),
 			normalizeAltNetworks(r.reg_alt_networks ?? null)
 		),
-		status: r.last_probe_status ?? 'never',
+		// A peer LISTED without a probe (this node's proxy for it was down, or
+		// it is clearnet-only and this node hidden-only) is stored 'good' so it
+		// stays in the directory — but nothing verified it, and telling a user
+		// "Good" about it was a claim nobody had checked (v1.20.0, E14). Shown
+		// as not-yet-checked instead.
+		status:
+			r.last_probe_status === 'good' &&
+			r.last_probe_error !== undefined &&
+			r.last_probe_error !== null &&
+			LISTED_NOT_PROBED_REASONS.has(r.last_probe_error)
+				? 'never'
+				: (r.last_probe_status ?? 'never'),
 		registered_at: r.registered_at_time.toISOString(),
 		last_probed_at: r.last_probed_at !== null ? r.last_probed_at.toISOString() : null,
 		indexed_block: r.cached_indexed_block !== null ? Number(r.cached_indexed_block) : null,

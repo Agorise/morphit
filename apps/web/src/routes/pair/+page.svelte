@@ -53,5 +53,7 @@
 </svelte:head>
 
 <div style="display: flex; align-items: center; justify-content: center; min-height: 50vh;">
-	<p style="color: #666; font-family: system-ui, sans-serif;">Opening {$brandName}…</p>
+	<p style="color: rgb(var(--gray-666-rgb)); font-family: system-ui, sans-serif;">
+		Opening {$brandName}…
+	</p>
 </div>

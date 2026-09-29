@@ -19,9 +19,6 @@ import {
 	type HiddenUpgradeTarget,
 	type HiddenUpgradeDeps
 } from '../src/init/hiddenUpgradeFetch.ts';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 let pass = 0;
 const fails: string[] = [];
@@ -137,21 +134,9 @@ async function main(): Promise<void> {
 		ok('fail-closed message surfaces the offline --from-file private path', /--from-file/.test(msg) && /on-chain/i.test(msg));
 	}
 
-	// v1.17.2 — a hidden-federation fetch is anchored by the ON-CHAIN sha256, so it
-	// carries no sibling .asc by design. Warning "an unsigned tarball will be
-	// refused" there is FALSE and alarming (it printed moments before the upgrade
-	// verified and proceeded, the maintainer/morphitlat). The warning must be gated so it only
-	// fires for a hand-supplied --from-file tarball, which really does need the sig.
-	{
-		const upSrc = readFileSync(
-			join(fileURLToPath(new URL('.', import.meta.url)), '..', 'src', 'commands', 'upgrade.ts'),
-			'utf8'
-		);
-		ok(
-			'the missing-.asc warning is suppressed on the hidden on-chain-verified path',
-			/offline\.sigPath === null && hiddenResolution === null/.test(upSrc)
-		);
-	}
+	// (v1.17.2's "no false .asc warning on the hidden path" is exercised for real in
+	// test/upgradeHiddenAscWarning.test.ts, which drives runUpgrade and asserts on
+	// its output — a source regex here passed with the warning re-enabled.)
 
 	// No peers → fail-closed throw.
 	{

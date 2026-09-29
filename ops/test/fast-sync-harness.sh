@@ -161,7 +161,7 @@ case "$SRC_LINE" in
 		no "hidden-only source list was '$SRC_LINE' — a clearnet source leaked in"
 		printf '%s\n' "$OUT_FC" | sed 's/^/      /' | tail -4 ;;
 esac
-if printf '%s' "$OUT_FC" | grep -qE 'fetching from (127\.0\.0\.1|ipfs\.io|dweb\.link|cloudflare)'; then
+if grep -qE 'fetching from (127\.0\.0\.1|ipfs\.io|dweb\.link|cloudflare)' <<<"$OUT_FC"; then
 	no "  …but it ATTEMPTED a clearnet source anyway"
 else
 	ok "  …and never attempted one"

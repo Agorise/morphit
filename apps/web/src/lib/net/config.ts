@@ -214,14 +214,29 @@ export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
  *  without a dedicated I2P proxy — those endpoints are reached server-side by
  *  the indexer (via its i2pd) and belong to the indexer pool, not this seed.
  *
- *  Live seed pool: the Star + Jade hidden-rpc nodes
- *  (git.agorise.net/agorise/hidden-rpc). Same self-authenticating addresses the
- *  indexer pool and the on-chain `morphit_rpc_v1` directory will carry. */
+ *  Every public hidden-rpc node's .onion (git.agorise.net/agorise/hidden-rpc)
+ *  — the .onion half of @morphit/operator-config's
+ *  DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, same order. v1.20.0 (D12): this listed
+ *  only Star + Jade, so on a .onion page the release check failed whenever
+ *  those two were down although five more nodes were up.
+ *  apps/web/scripts/hidden-rpc-browser-tier-canon-smoke.ts pins the match, and
+ *  the hidden-origin CSP connect-src in ops/bunkerweb/frontend/nginx.conf must
+ *  list the same origins (scripts/csp-header-consistency-smoke.ts). */
 export const DEFAULT_HIDDEN_RPC_ENDPOINTS: readonly string[] = [
 	// Star
 	'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
 	// Jade
-	'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091'
+	'http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091',
+	// kc
+	'http://xpqyoeap42iwmi6c6ew6svvtv2qwnkrbxpcshqitwmb3z2jqcvjb2nid.onion:8091',
+	// oldpc
+	'http://iarstejtiqofqs7hamflujy3fjwitxfoyysj6cngwpzdzermwm6hteid.onion:8091',
+	// mama
+	'http://lr444djiignckmq3y2mhl2zplcy7lwxfxamv2irc2lt5jpmfybshhzid.onion:8091',
+	// j2
+	'http://ukbumluqrinql6dw7l2mbtdioygodnrloob22cqfa4tvl3pspn5qzhid.onion:8091',
+	// s2
+	'http://qci6a2fsuljqk2q3coeyqiipmzv3yqykvgibbktt6fcojysl2yw3gaad.onion:8091'
 ] as const;
 
 /** The canonical Blurt RPC node(s) the indexer + relay use SERVER-side but a

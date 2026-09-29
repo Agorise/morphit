@@ -45,19 +45,21 @@ WORDMARK_SVG="apps/web/static/brand/morphit-wordmark.svg"
 # change to this PNG must regenerate the zip (mediakit-freshness-smoke tracks
 # it as a source).
 COMPARISON_PNG="apps/web/static/morphit-comparison.png"
-# Canonical brand palette lives in the Tailwind config; the README's
-# "Color standards" section (appended below) is DERIVED from it so the
-# kit always reflects the live brand colors.  It's also a freshness
-# source (mediakit-freshness-smoke), so a color change without a
-# rebuild fails CI.
-TAILWIND_CONFIG="apps/web/tailwind.config.js"
+# Canonical brand palette lives in apps/web/src/theme.css (the one file
+# that holds the frontend's colour values since per-instance colour
+# theming — tailwind.config.js only maps names to its tokens); the
+# README's "Color standards" section (appended below) is DERIVED from it
+# so the kit always reflects the live brand colors.  It's also a
+# freshness source (mediakit-freshness-smoke), so a color change without
+# a rebuild fails CI.
+THEME_CSS="apps/web/src/theme.css"
 
 # ─── Destination ───────────────────────────────────────────────────
 OUTPUT_DIR="apps/web/static"
 OUTPUT_ZIP="${OUTPUT_DIR}/morphit-mediakit.zip"
 
 # ─── Preflight ─────────────────────────────────────────────────────
-for f in "$BRAG_LIST" "$MARK_SVG" "$WORDMARK_SVG" "$COMPARISON_PNG" "$TAILWIND_CONFIG"; do
+for f in "$BRAG_LIST" "$MARK_SVG" "$WORDMARK_SVG" "$COMPARISON_PNG" "$THEME_CSS"; do
 	if [ ! -f "$f" ]; then
 		echo "ERROR: missing source file: $f" >&2
 		exit 1
@@ -139,20 +141,29 @@ EOF
 # ─── Color standards (DERIVED from the canonical Tailwind palette so
 #     the kit always reflects the live brand colors) ────────────────
 readme="$stage/morphit-mediakit/README.txt"
-# Isolate the `morphit: { … }` palette block, then pull each
-# `name: '#RRGGBB'` pair.  Guarded: if the count drifts from 7 the
-# build fails loudly rather than shipping a half-empty section.
-# (cp264 added `btn` — the deepened-teal primary button face used by
-# every filled primary CTA site-wide — taking the palette from 6 to 7.)
-palette="$(sed -n '/morphit: {/,/}/p' "$TAILWIND_CONFIG" | grep -oE "[a-z]+: '#[0-9A-Fa-f]{6}'" || true)"
+# Each named Morphit colour is a theme token (`--<token>-rgb: R G B;` in
+# theme.css); "Paper" is the kit's off-white, not a site colour. Guarded:
+# if a token is missing the build fails loudly rather than shipping a
+# half-empty section.
+tok() {
+	sed -n "s/^[[:space:]]*--$1-rgb:[[:space:]]*\([0-9]*\) \([0-9]*\) \([0-9]*\);.*/\1 \2 \3/p" "$THEME_CSS" |
+		head -1 | awk '{ printf "#%02X%02X%02X", $1, $2, $3 }'
+}
+palette=""
+for pair in lime:brand-1 accent:brand-accent emerald:brand-2 teal:brand-3 btn:brand-btn-face ink:shadow; do
+	hex="$(tok "${pair#*:}")"
+	palette="${palette}${pair%%:*}: '${hex}'
+"
+done
+palette="${palette}paper: '#FEFEFE'"
 palette_count="$(printf '%s\n' "$palette" | grep -cE "#[0-9A-Fa-f]{6}" || true)"
 if [ "$palette_count" -ne 7 ]; then
-	echo "ERROR: expected 7 Morphit palette colors in $TAILWIND_CONFIG, found $palette_count." >&2
-	echo "       build-mediakit.sh's color extraction is out of sync with the config." >&2
+	echo "ERROR: expected 7 Morphit palette colors from $THEME_CSS, found $palette_count." >&2
+	echo "       build-mediakit.sh's color extraction is out of sync with the theme tokens." >&2
 	echo "       Fix the extraction so the README Color standards stay accurate." >&2
 	exit 1
 fi
-gradient="$(grep -oE "linear-gradient\([^']+\)" "$TAILWIND_CONFIG" | head -1 || true)"
+gradient="linear-gradient(90deg, $(tok brand-1) 0%, $(tok brand-2) 50%, $(tok brand-3) 100%)"
 {
 	echo ""
 	echo "Color standards"

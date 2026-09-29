@@ -16,6 +16,16 @@
  *   bidder (they chose to pay more) but still just buys
  *   hours_requested hours of featured-slot time.
  *
+ *   DELIBERATELY PER-INSTANCE (v1.20.0, G1). Listing fees and stranger
+ *   fees now verify across instances (the owner leg may go to the fee
+ *   account of the instance the user posted through). Feature bids do
+ *   NOT: a featured slot is THIS instance's ad space, priced by THIS
+ *   operator (MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR) and auctioned
+ *   against THIS instance's other bids. Accepting a bid whose 90 % went
+ *   to another operator would let that instance's users fill and
+ *   displace this instance's featured slots while this operator is paid
+ *   nothing for them. So only this indexer's own recipient counts here.
+ *
  * Effect:
  *   Inserts one row into `featured_slot_bids`. No state mutation on
  *   the referenced order — queries against /v1/orderbook/featured
@@ -44,7 +54,7 @@
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { validateOrderPermlink } from '$indexer/permlink';
-import { canonicalShareOk, sumFeeTransfers } from '$indexer/fee';
+import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/fee';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { logger } from '$log';
 import { localize, normalizeLocale } from '$indexer/pushLocalize';
@@ -183,7 +193,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// BLURT arithmetic on the client side can produce ±0.001
 	// rounding, so we accept within config.feeTolerance.
 	const minAcceptable = expectedBlurt * (1 - ctx.config.feeTolerance);
-	if (fee.totalBlurt < minAcceptable) {
+	// G8 — exact milliBLURT comparison (no float-sum boundary error).
+	if (!meetsMinimumMilli(fee.totalMilli, minAcceptable)) {
 		return { ok: false, reason: 'fee_underpaid' };
 	}
 	if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) {

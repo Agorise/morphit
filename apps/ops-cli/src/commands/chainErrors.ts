@@ -35,14 +35,8 @@
  */
 
 import { sanitizeForTerm } from '../render/term.ts';
-import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import {
-	isHiddenOnlyNode,
-	localCondenser,
-	localIndexerJson,
-	localIndexerBases,
-	LocalIndexerAnswerError
-} from '../lib/hiddenOnly.ts';
+import { signOnceAndBroadcast, type ChainAccessDeps } from '../lib/chainAccess.ts';
+import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
 
 /** Normalize an unknown thrown value to a string message. */
 export function errMsg(err: unknown): string {
@@ -50,55 +44,35 @@ export function errMsg(err: unknown): string {
 }
 
 /**
- * Broadcast a single `custom_json` op to the Blurt chain, trying
- * each RPC endpoint in turn (cp182).
+ * Broadcast a single `custom_json` op to the Blurt chain (v1.20.0, D12).
  *
- * Returns the trx id only.  blurtd's async `broadcast_transaction`
- * does NOT return a block number — dblurt's TransactionConfirmation
- * is `{ id, ...errorFields }`, and `block_num` lives only on the
- * SIGNED tx input, never on the confirmation — so any caller that
- * tried to print `result.block_num` was always printing `undefined`.
+ * The transaction is built and SIGNED ONCE, locally (the key never leaves this
+ * process), then routed by lib/chainAccess.ts:
+ *   1. this node's own indexer POST /v1/broadcast (it holds the full 20-node
+ *      pool, and treats a duplicate as success);
+ *   2. if the indexer cannot carry it AND the node is not hidden-only, the SAME
+ *      signed object to a health-ordered EndpointPool over the clearnet list
+ *      (condenser_api.broadcast_transaction_synchronous; duplicate = success).
+ * A hidden-only node never falls back to clearnet.
  *
- * dblurt also writes its own RPC chatter straight to the console: a
- * "Switched Blurt RPC: …" line (gated by `consoleOnFailover`, which
- * we leave false) and an UNCONDITIONAL
- * `console.error("Didn't failover for error …: [HTTP 429 …]")` on any
- * non-timeout endpoint error.  dblurt only fails over internally on
- * timeout-class errors, so an HTTP 429 from one endpoint makes it
- * throw and THIS loop does the real failover to the next RPC — i.e.
- * that 429 line is expected noise on a path we recover from.  Leaking
- * it to the operator's stdout right next to "broadcast successfully"
- * is alarming and wrong, so we capture console.log/console.error for
- * the duration of the loop, buffer what dblurt emits, and surface it
- * ONLY if every endpoint fails (folded into the thrown error).
+ * WHAT IT REPLACED: a for-loop over DEFAULT_BLURT_RPC_ENDPOINTS calling dblurt's
+ * `sendOperations` per endpoint, which re-signed on every failover (a new
+ * transaction each time) and always started on the same node.
+ *
+ * Returns the trx id only (a synchronous broadcast knows its block, but callers
+ * print the id). Errors keep the strings chainErrors' classifier matches: the
+ * chain's own rejection reason, or `all Blurt RPC endpoints rejected the
+ * broadcast. Last error: …` when nothing could be reached.
  */
 export async function broadcastCustomJson(args: {
 	account: string;
 	wif: string;
 	opId: string;
 	payload: Record<string, unknown>;
+	/** Test seam: routing dependencies (default: this box's real config). */
+	deps?: ChainAccessDeps;
 }): Promise<{ trx_id: string }> {
-	interface DblurtModule {
-		Client: new (
-			endpoint: string,
-			opts: { addressPrefix: string; chainId: string; consoleOnFailover?: boolean }
-		) => {
-			broadcast: {
-				sendOperations(ops: unknown[], priv: unknown): Promise<{ id: string }>;
-			};
-		};
-		PrivateKey: { fromString(wif: string): unknown };
-	}
-	type CustomJsonOp = [
-		'custom_json',
-		{
-			required_auths: string[];
-			required_posting_auths: string[];
-			id: string;
-			json: string;
-		}
-	];
-	const buildOp = (): CustomJsonOp => [
+	const op = [
 		'custom_json',
 		{
 			required_auths: [],
@@ -107,136 +81,16 @@ export async function broadcastCustomJson(args: {
 			json: JSON.stringify(args.payload)
 		}
 	];
-	let dblurt: DblurtModule;
 	try {
-		dblurt = (await import('@beblurt/dblurt')) as unknown as DblurtModule;
+		await import('@beblurt/dblurt');
 	} catch (err) {
-		// dblurt is bundled into the compiled CLI; an import failure
-		// here is almost always an ESM/CJS-interop problem in the
-		// bundle, NOT a missing install.  Surface the real cause so the
-		// diagnostics layer classifies it correctly.
+		// dblurt is bundled into the compiled CLI; an import failure here is
+		// almost always an ESM/CJS-interop problem in the bundle, NOT a missing
+		// install. Surface the real cause so the diagnostics classify it right.
 		throw new Error(`could not load the Blurt broadcast library: ${errMsg(err)}`);
 	}
-
-	// v1.18.0 deep-deep, H1: a HIDDEN-ONLY node signs here and hands the signed
-	// transaction to its OWN indexer's /v1/broadcast, which carries it to the
-	// chain over Tor/I2P. This used to go to the six clearnet defaults whatever
-	// the node was, so `register` sent the node's .onion from its home IP to a
-	// clearnet RPC operator: the one pairing a tor-only node exists to prevent.
-	// No clearnet fallback: if the indexer cannot do it, the broadcast fails.
-	if (isHiddenOnlyNode()) {
-		return broadcastViaLocalIndexer(dblurt, buildOp(), args.wif);
-	}
-
-	const endpoints = [...DEFAULT_BLURT_RPC_ENDPOINTS];
-
-	const dblurtNoise: string[] = [];
-	const realConsoleLog = console.log;
-	const realConsoleError = console.error;
-	const capture =
-		(sink: (line: string) => void) =>
-		(...callArgs: unknown[]): void => {
-			sink(callArgs.map((a) => (typeof a === 'string' ? a : String(a))).join(' '));
-		};
-
-	let lastError: unknown = null;
-	try {
-		console.log = capture((l) => dblurtNoise.push(l));
-		console.error = capture((l) => dblurtNoise.push(l));
-		for (const endpoint of endpoints) {
-			try {
-				const client = new dblurt.Client(endpoint, {
-					addressPrefix: 'BLT',
-					chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f',
-					consoleOnFailover: false
-				});
-				const op = buildOp();
-				const priv = dblurt.PrivateKey.fromString(args.wif);
-				const result = await client.broadcast.sendOperations([op], priv);
-				return { trx_id: result.id };
-			} catch (err) {
-				lastError = err;
-				continue;
-			}
-		}
-	} finally {
-		console.log = realConsoleLog;
-		console.error = realConsoleError;
-	}
-
-	const noise = dblurtNoise.length > 0 ? `  (RPC detail: ${dblurtNoise.join(' | ')})` : '';
-	throw new Error(
-		`all Blurt RPC endpoints rejected the broadcast.  Last error: ${errMsg(lastError)}${noise}`
-	);
-}
-
-/** Build, sign and broadcast one op through this node's own indexer
- *  (hidden-only nodes; v1.18.0 deep-deep, H1). The chain head comes from the
- *  indexer's read whitelist, the signing is local crypto with the key never
- *  leaving this process, and the signed transaction goes to /v1/broadcast,
- *  whose op whitelist admits every `morphit_*` custom_json. A chain rejection
- *  comes back as the chain's own reason, so the diagnostics still match. */
-async function broadcastViaLocalIndexer(
-	dblurt: {
-		Client: new (
-			endpoint: string,
-			opts: { addressPrefix: string; chainId: string; consoleOnFailover?: boolean }
-		) => unknown;
-		PrivateKey: { fromString(wif: string): unknown };
-	},
-	op: unknown,
-	wif: string
-): Promise<{ trx_id: string }> {
-	const props = await localCondenser<{
-		head_block_number?: unknown;
-		head_block_id?: unknown;
-		time?: unknown;
-	} | null>('get_dynamic_global_properties', []);
-	if (
-		props === null ||
-		typeof props.head_block_number !== 'number' ||
-		typeof props.head_block_id !== 'string' ||
-		typeof props.time !== 'string'
-	) {
-		throw new Error(
-			"this node's own indexer returned no chain head; the Blurt network may be unreachable over Tor/I2P right now"
-		);
-	}
-	const tx = {
-		ref_block_num: props.head_block_number & 0xffff,
-		ref_block_prefix: Buffer.from(props.head_block_id, 'hex').readUInt32LE(4),
-		// 60 s after the head block, as dblurt and the web wallet do.
-		expiration: new Date(new Date(props.time + 'Z').getTime() + 60_000).toISOString().slice(0, -5),
-		operations: [op],
-		extensions: [] as unknown[]
-	};
-	// Signing is local crypto: this client only holds the chain id and is never
-	// asked to send anything. Its address is this node's own indexer anyway, so
-	// not even a misuse could reach clearnet.
-	const signer = new dblurt.Client(localIndexerBases()[0]!, {
-		addressPrefix: 'BLT',
-		chainId: 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f',
-		consoleOnFailover: false
-	}) as { broadcast: { sign(tx: unknown, key: unknown): unknown } };
-	const signed = signer.broadcast.sign(tx, dblurt.PrivateKey.fromString(wif));
-	let res: { trx_id?: unknown; id?: unknown } | null;
-	try {
-		// A signed write over Tor waits for its block: allow it time.
-		res = await localIndexerJson<{ trx_id?: unknown; id?: unknown } | null>(
-			'/v1/broadcast',
-			{ method: 'POST', body: { trx: signed } },
-			{ timeoutMs: 120_000 }
-		);
-	} catch (err) {
-		if (err instanceof LocalIndexerAnswerError && err.status >= 500) {
-			throw new Error(
-				`this node's own indexer could not reach the Blurt network over Tor/I2P (${err.message})`
-			);
-		}
-		throw err;
-	}
-	const id = typeof res?.trx_id === 'string' ? res.trx_id : typeof res?.id === 'string' ? res.id : '';
-	return { trx_id: id };
+	const { trx_id } = await signOnceAndBroadcast({ op, wif: args.wif }, args.deps ?? {});
+	return { trx_id };
 }
 
 export interface DiagnoseCtx {
@@ -263,7 +117,8 @@ export type ChainErrorKind =
 	| 'invalid_tag' // tag failed a format/length check (too short/long/bad chars)
 	| 'invalid_display_name' // display name impersonates a reserved name / bad chars / length
 	| 'invalid_origin' // origin URL rejected (loopback/private/path/scheme/etc.)
-	| 'already_registered'
+	| 'tag_immutable' // re-register under a DIFFERENT tag than the account's first (rejected, changes nothing)
+	| 'already_registered' // legacy: the pre-UPSERT one-time reject (no longer emitted; kept for old error strings)
 	| 'key_mismatch'
 	| 'insufficient_fee' // not enough LIQUID BLURT to pay the small per-op fee (NOT mana/RC)
 	| 'rpc_unreachable'
@@ -320,6 +175,11 @@ export function classifyChainError(message: string): ChainErrorKind {
 		m.includes('tag already')
 	)
 		return 'tag_taken';
+	// The register op is an UPSERT keyed on the account: the ONLY thing it now
+	// refuses on a re-register is a CHANGED tag (the tag is immutable). The old
+	// one-time `account_already_registered` reject no longer exists on-chain, but
+	// we still map its string (an old indexer / cached error) for a clear message.
+	if (m.includes('tag_immutable')) return 'tag_immutable';
 	if (m.includes('account_already_registered') || m.includes('already registered'))
 		return 'already_registered';
 	// Tag format/length failures (operator typo'd or hand-edited the tag).
@@ -499,18 +359,29 @@ export function printChainErrorHelp(
 			log('    only — no trailing path), then re-run.');
 			break;
 
+		case 'tag_immutable':
+			log(`@${sanitizeForTerm(ctx.account)} is already registered under a DIFFERENT tag.`);
+			log('Your federation TAG is permanent once claimed, so a re-register that');
+			log('tries to change it is rejected and changes nothing (your display name,');
+			log('origin and contact would NOT update).');
+			log('');
+			log('What to do (on this box):');
+			log('  - Run `sudo morphit-ops edit` → Operator tag and set it to the tag you');
+			log('    ALREADY registered under, then re-run `sudo morphit-ops register` —');
+			log('    that updates your display name / origin / contact / alt addresses.');
+			break;
+
 		case 'already_registered':
-			log(`The account @${sanitizeForTerm(ctx.account)} is already registered as an`);
-			log('operator on-chain.  A second registration for the same account');
-			log('is rejected by design — registration is one-time.');
+			// Legacy path: current chain code is an UPSERT, so this reject is no longer
+			// emitted. If an old error string reaches here, a re-register would simply
+			// UPDATE the mutable fields, so this is not a failure to act on.
+			log(`@${sanitizeForTerm(ctx.account)} is already registered as an operator.`);
+			log('Re-running register just UPDATES your display name, origin, contact and');
+			log('alt addresses (the tag stays fixed) — nothing further is needed.');
 			log('');
 			log('What to do:');
-			log('  - Nothing, if your details are correct: you are already');
-			log('    discoverable.  Check any node\'s /instances page to confirm');
-			log(`    @${sanitizeForTerm(ctx.account)} is listed.`);
-			log('  - To change your origin/display name/contact later, use the');
-			log('    `morphit-ops update` subcommand once it ships (registration');
-			log('    details will be editable then; today they are immutable).');
+			log('  - Check any node\'s /instances page to confirm');
+			log(`    @${sanitizeForTerm(ctx.account)} is listed with the details you expect.`);
 			break;
 
 		case 'key_mismatch':
@@ -567,9 +438,11 @@ export function printChainErrorHelp(
 			log('This is a connectivity problem between THIS server and the Blurt');
 			log('network, not a problem with your account or keys.');
 			log('');
-			log('What to do:');
-			log('  - Check this server\'s outbound network / DNS and that it can');
-			log('    reach https://rpc.blurt.blog (curl it).  Then re-run.');
+			log('What to do (on this server):');
+			log('  - Check the indexer is running — broadcasts go through it first,');
+			log('    and it uses the full Blurt node pool:  sudo systemctl status morphit-indexer');
+			log('  - Check this server\'s outbound HTTPS / DNS: `sudo morphit-ops doctor`');
+			log('    probes the configured Blurt RPC nodes. Then re-run.');
 			log('  - If your firewall restricts egress, allow HTTPS to the Blurt');
 			log('    RPC hosts.');
 			break;

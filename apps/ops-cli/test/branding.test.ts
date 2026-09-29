@@ -31,6 +31,16 @@ import {
 	writeFileSync
 } from 'node:fs';
 import { applyBrandToString } from '../../../packages/operator-config/src/brand.ts';
+import {
+	brandForCompound,
+	continuesAsCompound
+} from '../../../packages/operator-config/src/brand.ts';
+import {
+	deriveTheme,
+	themeCssDeclarations,
+	type ThemePalette
+} from '../../../packages/operator-config/src/theme.ts';
+import { themeUpdates, mergeTheme, themeUpdateProblem } from '../src/commands/branding.ts';
 import { createHash } from 'node:crypto';
 import { gunzipSync, brotliDecompressSync, gzipSync } from 'node:zlib';
 import { join, relative, sep } from 'node:path';
@@ -44,6 +54,7 @@ import {
 	rasterizeSvg,
 	brandPage,
 	brandNameProblem,
+	htmlEscape,
 	readBrandingSettings,
 	CANONICAL_HTML_ATTRS,
 	type BrandingSettings
@@ -61,7 +72,7 @@ const M = '\u2060';
 const slot = (form = 'Morphit'): string => `${M}${form}${M}`;
 
 const LOGIN_PAGE =
-	`<!doctype html><html lang="en"><head><title>Sign in to ${slot()}</title>` +
+	`<!doctype html><html lang="en"><head><meta name="theme-color" content="#00DA69"><title>Sign in to ${slot()}</title>` +
 	`<meta property="og:site_name" content="${slot()}">` +
 	`<script type="application/ld+json">{"@type":"WebSite","name":"${slot()}"}</script>` +
 	`</head><body><h1>Sign in to ${slot()}</h1><p>Run a Morphit node.</p></body></html>`;
@@ -179,8 +190,24 @@ describe('build-brand-slots (prerender post-processing)', () => {
 		);
 		const map = JSON.parse(read('.brand-slots.json')) as {
 			files: Record<string, Array<[number, number, string, string]>>;
+			theme_files: Record<string, Array<[number, number, string, string]>>;
 		};
 		expect(Object.keys(map.files).sort()).toEqual(['en/login.html', 'pl.html']);
+		// `files`: site-name slots only (the v1.19 shape an older CLI reads);
+		// the colour-theme slots live in `theme_files`: the theme-color meta
+		// value and the </head> insertion point for the theme <style>.
+		expect(Object.keys(map.theme_files).sort()).toEqual(['en/login.html', 'pl.html']);
+		expect(map.theme_files['en/login.html']!.map((s) => s[3])).toEqual([
+			'theme-color',
+			'theme-style'
+		]);
+		expect(map.theme_files['pl.html']!.map((s) => s[3])).toEqual(['theme-style']);
+		const head = map.theme_files['en/login.html']![1]![0];
+		expect(read('en/login.html').slice(head, head + 7)).toBe('</head>');
+		for (const [rel, slots] of Object.entries(map.theme_files)) {
+			const text = read(rel);
+			for (const [off, len, form] of slots) expect(text.slice(off, off + len)).toBe(form);
+		}
 		expect(map.files['en/login.html']!.map((s) => s[3])).toEqual(['html', 'html', 'raw', 'html']);
 		expect(map.files['pl.html']!.map((s) => s[2])).toEqual(['Morphit', 'Morphita']);
 		for (const [rel, slots] of Object.entries(map.files)) {
@@ -595,6 +622,35 @@ describe('site-name rules', () => {
 		expect(m.short_name).toBe('Vigi');
 		expect(m.name).toBe('Morphit');
 	});
+
+	// review H-15: the CLI `--beta off` / `--short-name` flags write these config
+	// KEYS; prove the config-key → settings → served-effect path end to end (the
+	// link the flags feed), not just applyBranding with a hand-built settings obj.
+	it('BETA_BADGE=off in config turns the BETA marker off in the served build', () => {
+		writeFileSync(
+			join(root, 'morphit.config.env'),
+			'MORPHIT_INSTANCE_BRAND_NAME=Vigi Market\nMORPHIT_INSTANCE_BETA_BADGE=off\n'
+		);
+		const s = readBrandingSettings(root, { MORPHIT_ETC_DIR: join(root, 'etc') });
+		expect(s.betaBadge).toBe('off');
+		applyBranding({ buildDir, settings: s });
+		expect(JSON.parse(read('brand/brand.json')).beta_badge).toBe(false);
+		// The prerendered pages carry data-brand-beta="off".
+		expect(read('en/login.html')).toContain('data-brand-beta="off"');
+	});
+
+	it('BRAND_SHORT_NAME in config sets the manifest short_name', () => {
+		writeFileSync(
+			join(root, 'morphit.config.env'),
+			'MORPHIT_INSTANCE_BRAND_NAME=Vigi Market\nMORPHIT_INSTANCE_BRAND_SHORT_NAME=Vigi\n'
+		);
+		const s = readBrandingSettings(root, { MORPHIT_ETC_DIR: join(root, 'etc') });
+		expect(s.shortName).toBe('Vigi');
+		applyBranding({ buildDir, settings: s });
+		const m = JSON.parse(read('manifest.webmanifest')) as Record<string, unknown>;
+		expect(m.short_name).toBe('Vigi');
+		expect(m.name).toBe('Vigi Market');
+	});
 });
 
 describe('isProtectedPath', () => {
@@ -689,6 +745,11 @@ describe('morphit-ops branding apply --logo/--icon/--name (one-command setup)', 
 				MORPHIT_ETC_DIR: etc,
 				MORPHIT_BRANDING_DIR: '',
 				MORPHIT_INSTANCE_BRAND_NAME: '',
+				MORPHIT_INSTANCE_THEME: '',
+				MORPHIT_INSTANCE_THEME_FROM: '',
+				MORPHIT_INSTANCE_THEME_MID: '',
+				MORPHIT_INSTANCE_THEME_TO: '',
+				MORPHIT_INSTANCE_THEME_BACKGROUND: '',
 				MORPHIT_WEB_ROOT: join(root, 'no-web-root'),
 				NO_COLOR: '1'
 			}
@@ -776,6 +837,311 @@ describe('morphit-ops branding apply --logo/--icon/--name (one-command setup)', 
 		expect(r4.status).toBe(2);
 		expect(snapshot()).toEqual(before);
 	});
+
+	it('--theme-from/--theme-to: validated, saved, applied, shown by status, undone by --theme morphit', () => {
+		const canonical = snapshot();
+		// Refused before anything is written: not a colour; unreadable on the background.
+		const bad = cli('apply', '--theme-from', 'gold', '--theme-to', '#bb872f');
+		expect(bad.status).toBe(1);
+		expect(bad.out).toMatch(/not a colour/);
+		const dark = cli('apply', '--theme-from', '#302000', '--theme-to', '#bb872f');
+		expect(dark.status).toBe(1);
+		expect(dark.out).toMatch(/too dark to read.*try #/);
+		const light = cli('apply', '--theme', 'champagne-gold', '--theme-background', '#777777');
+		expect(light.status).toBe(1);
+		expect(light.out).toMatch(/too light for readable text.*try a darker background such as #/);
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).not.toContain('THEME');
+		expect(snapshot()).toEqual(canonical);
+
+		const r = cli(
+			'apply',
+			'--theme-from',
+			'#F3DCA0',
+			'--theme-to',
+			'#bb872f',
+			'--theme-background',
+			'#181818'
+		);
+		expect(r.status, r.out).toBe(0);
+		const cfg = readFileSync(join(root, 'morphit.config.env'), 'utf8');
+		expect(cfg).toMatch(/^MORPHIT_INSTANCE_THEME_FROM='#f3dca0'$/m);
+		expect(cfg).toMatch(/^MORPHIT_INSTANCE_THEME_TO='#bb872f'$/m);
+		expect(cfg).toMatch(/^MORPHIT_INSTANCE_THEME_BACKGROUND='#181818'$/m);
+		const login = read('en/login.html');
+		expect(login).toMatch(
+			/<style id="morphit-theme">html:root\{--brand-1-rgb:243 220 160;[^<]*<\/style><\/head>/
+		);
+		expect(login).toContain('<meta name="theme-color" content="#d6b26a">');
+		for (const rel of ['index.html', 'service-worker.js', '_app/immutable/entry/start.js'])
+			expect(snapshot().get(rel), rel).toBe(canonical.get(rel));
+
+		const st = cli('status');
+		expect(st.status, st.out).toBe(0);
+		expect(st.out).toMatch(/Colours:\s+custom: #f3dca0 → #d6b26a → #bb872f on #181818/);
+		expect(st.out).toMatch(/matches this configuration/);
+
+		const off = cli('apply', '--theme', 'morphit');
+		expect(off.status, off.out).toBe(0);
+		expect(readFileSync(join(root, 'morphit.config.env'), 'utf8')).not.toMatch(
+			/^MORPHIT_INSTANCE_THEME/m
+		);
+		expect(snapshot()).toEqual(canonical);
+	});
+});
+
+/**
+ * FROZEN copy of v1.19.x ops-cli's brandPage (apps/ops-cli/src/lib/branding.ts
+ * as released). `morphit-ops upgrade` step 9b3 runs the OLD CLI's branding
+ * against the NEW build before the new CLI takes over, so whatever the new slot
+ * builder writes into `files` must still be understood by this code.
+ */
+function brandPageV1_19(
+	canonical: string,
+	slots: ReadonlyArray<readonly [number, number, string, string]>,
+	brandName: string | null,
+	beta: boolean
+): string {
+	let out = canonical;
+	if (brandName !== null) {
+		for (let i = slots.length - 1; i >= 0; i--) {
+			const [off, len, form, ctx] = slots[i]!;
+			if (out.slice(off, off + len) !== form) {
+				throw new Error(`slot ${i} is "${out.slice(off, off + len)}", expected "${form}"`);
+			}
+			const text = continuesAsCompound(out, off + len) ? brandForCompound(brandName) : brandName;
+			out = out.slice(0, off) + (ctx === 'raw' ? text : htmlEscape(text)) + out.slice(off + len);
+		}
+	}
+	const attrs = `data-brand-name="${htmlEscape(brandName ?? 'Morphit')}" data-brand-beta="${beta ? 'on' : 'off'}"`;
+	if (attrs !== CANONICAL_HTML_ATTRS) {
+		const at = out.indexOf(CANONICAL_HTML_ATTRS);
+		out = out.slice(0, at) + attrs + out.slice(at + CANONICAL_HTML_ATTRS.length);
+	}
+	return out;
+}
+
+describe('slot map stays readable by a v1.19.x ops-cli (upgrade step 9b3)', () => {
+	it('the old CLI brands only site-name slots — never the theme-color meta or </head>', () => {
+		const map = JSON.parse(read('.brand-slots.json')) as {
+			files: Record<string, Array<[number, number, string, string]>>;
+		};
+		const name = 'Acme Swap';
+		for (const [rel, slots] of Object.entries(map.files)) {
+			const canonical = read(rel);
+			const old = brandPageV1_19(canonical, slots, name, false);
+			// Exactly what the new CLI writes for the same name and NO theme.
+			expect(old, rel).toBe(
+				brandPage(canonical, slots as Parameters<typeof brandPage>[1], name, false)
+			);
+			expect(old, rel).not.toContain(`${name}</head>`);
+			if (canonical.includes('name="theme-color"'))
+				expect(old, rel).toContain('<meta name="theme-color" content="#00DA69">');
+		}
+		// The theme slots exist — just not where an old CLI looks.
+		expect(Object.keys(map.files).length).toBeGreaterThan(0);
+		for (const slots of Object.values(map.files))
+			for (const s of slots) expect(['html', 'raw'], JSON.stringify(s)).toContain(s[3]);
+	});
+});
+
+describe('colour theme (docs/BRANDING.md, "Colours")', () => {
+	const GOLD = { preset: 'champagne-gold' } as const;
+	const gold = (): ThemePalette => {
+		const d = deriveTheme(GOLD);
+		if (!d.ok) throw new Error(d.problems.join('; '));
+		return d.palette;
+	};
+
+	it('applies a theme to every prerendered page, brand.json, the manifest and verify.json — never the protected files', () => {
+		const before = snapshot();
+		const r = applyBranding({ buildDir, settings: settings({ theme: GOLD }) });
+		expect(r.theme?.tokens['brand-1']).toBe('#f3dca0');
+		const p = gold();
+		const style = `<style id="morphit-theme">html:root{${themeCssDeclarations(p)}}</style>`;
+		for (const rel of ['en/login.html', 'pl.html']) {
+			const page = read(rel);
+			// Exactly one theme <style>, immediately before </head>.
+			expect(page.split('id="morphit-theme"').length - 1, rel).toBe(1);
+			expect(page, rel).toContain(`${style}</head>`);
+			// Site-name slots untouched when no name is set.
+			expect(page, rel).toContain('data-brand-name="Morphit"');
+			expect(gunzipSync(readFileSync(join(buildDir, `${rel}.gz`))).toString(), rel).toBe(page);
+		}
+		expect(read('en/login.html')).toContain(
+			`<meta name="theme-color" content="${p.tokens['brand-2']}">`
+		);
+		expect(read('en/login.html')).toContain('<title>Sign in to Morphit</title>');
+		const bj = JSON.parse(read('brand/brand.json')) as {
+			theme: { tokens: Record<string, string>; grid_opacity: number; preset: string };
+		};
+		expect(bj.theme.tokens).toEqual(p.tokens);
+		expect(bj.theme.grid_opacity).toBe(0.05);
+		expect(bj.theme.preset).toBe('champagne-gold');
+		const manifest = JSON.parse(read('manifest.webmanifest')) as Record<string, unknown>;
+		expect(manifest.theme_color).toBe(p.tokens['brand-2']);
+		expect(manifest.background_color).toBe(p.tokens['surface-page']);
+		expect(manifest.name).toBe('Morphit');
+		// The files the on-chain integrity check covers are byte-identical.
+		const after = snapshot();
+		for (const rel of before.keys()) {
+			if (isProtectedPath(rel) && rel !== 'verify.json')
+				expect(after.get(rel), rel).toBe(before.get(rel));
+		}
+		expect(read('index.html')).not.toContain('morphit-theme');
+		const v = JSON.parse(read('verify.json')) as {
+			hash_manifest: Record<string, string>;
+			operator_branding: { colour_theme: { from: string; to: string } };
+		};
+		expect(v.operator_branding.colour_theme).toMatchObject({ from: '#f3dca0', to: '#bb872f' });
+		for (const [rel, sha] of Object.entries(v.hash_manifest)) expect(after.get(rel), rel).toBe(sha);
+	});
+
+	it('name + theme together; status (dry run) sees pending work; re-apply is a no-op; reset is exact', () => {
+		const canonical = snapshot();
+		const want = settings({ brandName: 'Vigilante Trading', theme: GOLD });
+		const dry = applyBranding({ buildDir, settings: want, dryRun: true });
+		expect(dry.touched).toContain('en/login.html');
+		expect(snapshot()).toEqual(canonical);
+		applyBranding({ buildDir, settings: want });
+		const login = read('en/login.html');
+		expect(login).toContain('<title>Sign in to Vigilante Trading</title>');
+		expect(login).toContain('"name":"Vigilante Trading"');
+		expect(login).toContain('id="morphit-theme"');
+		expect(read('pl.html')).toContain('Otwórz Vigilante Trading na telefonie');
+		const branded = snapshot();
+		expect(applyBranding({ buildDir, settings: want, dryRun: true }).touched).toEqual([]);
+		expect(applyBranding({ buildDir, settings: want }).touched).toEqual([]);
+		expect(snapshot()).toEqual(branded);
+		// Dropping just the theme restores the canonical colours, keeps the name.
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(read('en/login.html')).not.toContain('morphit-theme');
+		expect(read('en/login.html')).toContain('content="#00DA69"');
+		expect(read('en/login.html')).toContain('Sign in to Vigilante Trading');
+		applyBranding({ buildDir, settings: settings(), reset: true });
+		expect(snapshot()).toEqual(canonical);
+	});
+
+	it('the Morphit preset is "no theme": nothing changes', () => {
+		const before = snapshot();
+		const r = applyBranding({ buildDir, settings: settings({ theme: { preset: 'morphit' } }) });
+		expect(r.touched).toEqual([]);
+		expect(snapshot()).toEqual(before);
+		// Explicit Morphit colours are the default too.
+		const r2 = applyBranding({
+			buildDir,
+			settings: settings({ theme: { from: '#8eef26', mid: '#00da69', to: '#02a6b2' } })
+		});
+		expect(r2.touched).toEqual([]);
+	});
+
+	it('an unusable theme keeps the Morphit colours and says why', () => {
+		const before = snapshot();
+		const r = applyBranding({
+			buildDir,
+			settings: settings({ theme: { from: '#f3dca0', to: '#bb872f', background: '#888888' } })
+		});
+		expect(r.theme).toBeNull();
+		expect(r.warnings.join(' ')).toMatch(/colour theme is not usable.*too light/);
+		expect(r.touched).toEqual([]);
+		expect(snapshot()).toEqual(before);
+	});
+
+	it('generated app icons sit on the theme background', () => {
+		writeFileSync(join(brandDir, 'icon.svg'), LOGO_SVG);
+		applyBranding({ buildDir, settings: settings({ theme: GOLD }) });
+		expect(read('app-icon.svg')).toContain(`fill="${gold().tokens['surface-page']}"`);
+		applyBranding({ buildDir, settings: settings() });
+		expect(read('app-icon.svg')).toContain('fill="#0a0e16"');
+	});
+
+	it('reads the theme from the config file; "morphit" alone means unthemed', () => {
+		const install = join(root, 'install');
+		mkdirSync(install);
+		const env = { MORPHIT_ETC_DIR: join(root, 'no-etc') } as NodeJS.ProcessEnv;
+		writeFileSync(
+			join(install, 'morphit.config.env'),
+			"MORPHIT_INSTANCE_THEME=champagne-gold\nMORPHIT_INSTANCE_THEME_BACKGROUND='#101010'\n"
+		);
+		expect(readBrandingSettings(install, env).theme).toEqual({
+			preset: 'champagne-gold',
+			from: null,
+			mid: null,
+			to: null,
+			background: '#101010',
+			button: null
+		});
+		writeFileSync(join(install, 'morphit.config.env'), 'MORPHIT_INSTANCE_THEME=morphit\n');
+		expect(readBrandingSettings(install, env).theme).toBeNull();
+	});
+
+	it('a build without theme slots (older slot map) warns instead of half-theming silently', () => {
+		const map = JSON.parse(read('.brand-slots.json')) as {
+			schema: number;
+			theme_files?: unknown;
+		};
+		map.schema = 1;
+		delete map.theme_files;
+		writeFileSync(join(buildDir, '.brand-slots.json'), JSON.stringify(map));
+		const r = applyBranding({ buildDir, settings: settings({ theme: GOLD }), dryRun: true });
+		expect(r.warnings.join(' ')).toMatch(/no colour-theme slots/);
+		expect(r.touched).toContain('brand/brand.json');
+		expect(r.touched).not.toContain('en/login.html');
+	});
+
+	it('the theme flags: a preset replaces the whole theme; colours override one line; morphit removes all', () => {
+		expect(themeUpdates({ theme: 'champagne-gold' })).toEqual({
+			updates: new Map([
+				['MORPHIT_INSTANCE_THEME', 'champagne-gold'],
+				['MORPHIT_INSTANCE_THEME_FROM', null],
+				['MORPHIT_INSTANCE_THEME_MID', null],
+				['MORPHIT_INSTANCE_THEME_TO', null],
+				['MORPHIT_INSTANCE_THEME_BACKGROUND', null],
+				['MORPHIT_INSTANCE_THEME_BUTTON', null]
+			])
+		});
+		// Prototype keys are not presets (T2).
+		for (const p of ['__proto__', 'constructor', 'toString', 'hasOwnProperty'])
+			expect(themeUpdates({ theme: p }), p).toMatchObject({
+				error: expect.stringMatching(/not a theme/)
+			});
+		expect(themeUpdates({ 'theme-button': 'Bright' })).toEqual({
+			updates: new Map([['MORPHIT_INSTANCE_THEME_BUTTON', 'bright']])
+		});
+		expect(themeUpdates({ 'theme-button': '' })).toEqual({
+			updates: new Map([['MORPHIT_INSTANCE_THEME_BUTTON', null]])
+		});
+		expect(themeUpdates({ 'theme-button': 'neon' })).toMatchObject({
+			error: expect.stringMatching(/deep or bright/)
+		});
+		const m = themeUpdates({ theme: 'morphit' });
+		expect('updates' in m && [...m.updates.values()].every((v) => v === null)).toBe(true);
+		expect(themeUpdates({ 'theme-to': '#ABC' })).toEqual({
+			updates: new Map([['MORPHIT_INSTANCE_THEME_TO', '#aabbcc']])
+		});
+		expect(themeUpdates({ theme: 'neon' })).toMatchObject({
+			error: expect.stringMatching(/not a theme/)
+		});
+		expect(themeUpdates({ 'theme-from': 'true' })).toMatchObject({
+			error: expect.stringMatching(/needs a colour/)
+		});
+		expect(
+			mergeTheme(
+				{ preset: 'champagne-gold', from: null, mid: null, to: null, background: null },
+				new Map([['MORPHIT_INSTANCE_THEME_BACKGROUND', '#101010']])
+			)
+		).toEqual({
+			preset: 'champagne-gold',
+			from: null,
+			mid: null,
+			to: null,
+			background: '#101010',
+			button: null
+		});
+		expect(
+			themeUpdateProblem({ 'theme-background': '#eeeeee' }, { preset: 'champagne-gold' })
+		).toMatch(/too light/);
+		expect(themeUpdateProblem({ theme: 'champagne-gold' }, null)).toBeNull();
+	});
 });
 
 describe('resolveCallerPath — a relative --logo resolves where the operator typed it', () => {
@@ -815,16 +1181,38 @@ describe('resolveCallerPath — a relative --logo resolves where the operator ty
 });
 
 describe('upgrade rollback re-attaches a container frontend', () => {
-	it('every rollback after the frontend container is recreated passes the container', () => {
-		const src = readFileSync(join(__dirname, '..', 'src', 'commands', 'upgrade.ts'), 'utf8');
-		const recreated = src.indexOf('restartFrontendContainer(plan.restartContainer, installDir);');
-		expect(recreated).toBeGreaterThan(0);
-		const fn = src.indexOf('export function rollback(');
-		const later = src.slice(recreated, fn);
-		const calls = later.match(/return rollback\([\s\S]*?\);/g) ?? [];
-		expect(calls.length).toBeGreaterThan(0);
-		for (const c of calls) expect(c).toMatch(/container: plan\.restartContainer/);
-		// …and rollback() actually uses it.
-		expect(src.slice(fn)).toMatch(/restartFrontendContainer\(web\.container, installDir\)/);
+	// review H-9: behavioural, not a source regex — inject a spy and prove
+	// rollback actually restarts the recreated frontend container. A mutation
+	// that skips the call (e.g. `if (web?.container && false)`) fails this.
+	it('restarts the passed container so it re-binds the restored install', async () => {
+		const { rollback } = await import('../src/commands/upgrade.ts');
+		const rroot = mkdtempSync(join(tmpdir(), 'morphit-rb-container-'));
+		try {
+			const install = join(rroot, 'install');
+			const backup = join(rroot, 'backup');
+			mkdirSync(install, { recursive: true });
+			mkdirSync(backup, { recursive: true });
+			writeFileSync(join(backup, 'marker'), 'prev');
+			let restarted: string | null = null;
+			const code = rollback(
+				install,
+				backup,
+				join(rroot, 'tmp'),
+				new Error('boom'),
+				{ webRoot: join(rroot, 'web'), webRootBackup: null, container: 'bunkerweb-frontend-1' },
+				[],
+				{
+					restartContainer: (name: string) => {
+						restarted = name;
+					},
+					systemctl: () => ({ status: 1 }) // no units installed in the fixture
+				}
+			);
+			expect(code).toBe(3);
+			expect(restarted).toBe('bunkerweb-frontend-1');
+			expect(existsSync(join(install, 'marker'))).toBe(true);
+		} finally {
+			rmSync(rroot, { recursive: true, force: true });
+		}
 	});
 });

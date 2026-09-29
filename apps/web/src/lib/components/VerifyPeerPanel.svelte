@@ -63,6 +63,7 @@
 	import { fetchPeerChatPubChainVerified } from '$lib/chat/peerPubFetch';
 	import { identity, isUnlocked } from '$stores/identity';
 	import { get } from 'svelte/store';
+	import { webCryptoAvailable } from '$lib/security/secureContext';
 
 	interface Props {
 		readonly me: string;
@@ -177,6 +178,15 @@
 					break;
 			}
 
+			// v1.20.0 (F-9): the safety-number hash needs WebCrypto, which a
+			// plain-HTTP I2P address (not a secure context) does not have.
+			if (!webCryptoAvailable()) {
+				panelState = {
+					kind: 'error',
+					message: $_('chat.verify_peer.error_insecure_context') as string
+				};
+				return;
+			}
 			const words = await computeFingerprint(mine.pub, peerResult.pub);
 			if (aborted) return;
 			panelState = { kind: 'ready', words };

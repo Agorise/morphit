@@ -27,7 +27,7 @@ must expose — and we've stripped that to the bone.
 | **Your keys** | Private keys never leave your browser. The project could not decrypt your chats if a regulator demanded it. The operator's hot key is encrypted at rest (scrypt N=2^17 + AES-GCM). |
 | **Your IP address** | Never logged, written to disk, transmitted, or retained anywhere. The relay uses the client IP only as an in-memory rate-limit bucket that is discarded when the window passes (`apps/relay/src/middleware/ip.ts`). |
 | **Your behavior** | No Google Analytics, no Hotjar, no Facebook Pixel, no cookies, no third-party telemetry. Fonts and assets are self-hosted (no Google Fonts, no CDNs). The `order_views` table stores aggregate counts only — never per-viewer rows. |
-| **Monero/privacy-coin view keys** | The XMR treasury **view key does not exist on any Morphit indexer** — it was removed entirely (no chain field, no API, no logs, no env var). Fee verification uses Monero's own selective-disclosure `tx_proof` instead (see section 3). |
+| **Monero/privacy-coin view keys** | The XMR treasury **view key does not exist on any Morphit indexer** — it was removed entirely (no chain field, no API, no logs, no env var). Fee verification uses the payment's own transaction key instead (see section 3). |
 
 **Federation is the meta-protection:** because anyone can run an indexer
 (`morphit-ops init`, roughly 23 prompts), you can be the only party that sees your own
@@ -121,12 +121,13 @@ four, the on-chain story is *cleaner than Monero's*.
 **Monero's single, optional, opt-out-able cross-chain touch.** XMR is one of
 three assets (with BLURT and BTC) you *may* use to pay the ~$0.25 listing fee.
 If you do, that fee payment's TxID is recorded in your order on Blurt so any
-operator can verify it — **using Monero's native `tx_proof` selective
-disclosure** (`get_tx_proof`), which proves "this txid paid this address this
-amount" and nothing else. **No view key is involved, transmitted, or logged**
-(the proof string is per-payment, single-use, and excluded from logs; the
-explorer API's confusingly-named `viewkey=` parameter carries this proof, not a
-key — see OPERATIONS section 12 / section 40.2). This is the *only* place an XMR
+operator can verify it — using the payment's **transaction key**, which proves
+that fee output and cannot spend. It is published in the order op. Caveat:
+someone who also knows the payer's own wallet address can use it to find that
+payment's change output, so pay the fee from an address you have not shared, or
+in BLURT. No treasury view key is involved, transmitted, or logged (the explorer
+API's confusingly-named `viewkey=` parameter carries this tx key — see
+OPERATIONS §40.13). This is the *only* place an XMR
 TxID touches Blurt, and it's a fee to a public address, never your trade. **Want
 zero Monero-to-Blurt linkage? Pay the listing fee in BLURT** — it's the default
 and half the price.
@@ -158,4 +159,5 @@ a leak surface it doesn't cover, open an issue at
 order permlinks and day-floored expiry (cp175); chat/orderbook SSE buffer caps;
 CoinGecko + federation-probe body caps; CSP `connect-src` allowlist at runtime
 and build time; chat-route and backup-keys `noindex`; and the removal of the
-XMR fee view key in favor of `tx_proof` verification.
+XMR fee view key in favor of per-payment tx-key verification (v1.20.0; the
+earlier `tx_proof` strings could not be checked by the explorers).

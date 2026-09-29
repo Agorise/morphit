@@ -8,7 +8,9 @@
  *   }
  *
  * Effect: flip the order's status from 'live' to 'completed', bump
- * updated_at. Row is preserved (no DELETE) so the audit trail and
+ * updated_at. (v1.20.0, G7) On an order the signer ALREADY completed with no
+ * counterparty, a later complete op naming a PROVEN counterparty fills it in
+ * (never overwrites) — the auto-complete path completes without a name first. Row is preserved (no DELETE) so the audit trail and
  * any feedback linked to the order both keep working.
  *
  * Posted by the SELLER (order owner) once a trade's payment is
@@ -122,6 +124,26 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	);
 
 	if (res.rowCount === 0) {
+		// (v1.20.0 fix wave, G7) The seller's client auto-completes a paid order
+		// WITHOUT naming anyone (/my/orders), and the review form then sends a
+		// second completion that names the proven counterparty. That second op
+		// used to hit `target_already_completed`, so the buyer never got the
+		// trade credit. The OWNER may now fill a still-NULL counterparty on
+		// their own completed order — same provable-conversation bar as above
+		// (`counterparty` is non-null only if it passed), never overwriting one
+		// already recorded.
+		if (counterparty !== null) {
+			const fill = await client.query(
+				`UPDATE orders SET completed_counterparty = $3, updated_at = $4
+				 WHERE account = $1 AND permlink = $2 AND status = 'completed'
+				   AND completed_counterparty IS NULL`,
+				[ctx.signer, permlink, counterparty, ctx.blockTime]
+			);
+			if ((fill.rowCount ?? 0) > 0) {
+				ctx.recordOrderbookChange(`${ctx.signer}/${permlink}`);
+				return { ok: true };
+			}
+		}
 		const probe = await client.query<{ status: string }>(
 			`SELECT status FROM orders WHERE account = $1 AND permlink = $2`,
 			[ctx.signer, permlink]

@@ -17,6 +17,7 @@
 	 * that trader's pill, not a stand-in.
 	 */
 	import { t } from '$lib/i18n';
+	import { formatRating } from '$lib/i18n/formatters';
 	import { portal } from '$lib/ui/portal';
 
 	interface Props {
@@ -28,7 +29,7 @@
 
 	const { score, open, onClose }: Props = $props();
 
-	const shown = $derived(score.toFixed(2));
+	const shown = $derived(formatRating(score)); // G12 — locale digits/marks
 
 	/** Focus the OK button when the dialog opens, so keyboard and screen-reader
 	 *  users land inside it and Enter closes. Defined locally: the codebase has

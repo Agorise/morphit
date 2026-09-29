@@ -148,6 +148,22 @@ case "$IPFS_STRATEGY" in
 esac
 ok "kubo reachable (strategy: $IPFS_STRATEGY, IPFS_PATH=$IPFS_PATH)"
 
+# HIDDEN-ONLY node? (v1.20.0, C8) Then nothing below may touch the public IPFS
+# network or clearnet: no DHT provide (it names this box's home IP as a Morphit
+# host in a list anyone can read) and no ipfs.io probe (a clearnet request from
+# this box, naming the snapshot). Its peers fetch the snapshot by CID from its
+# .onion/.b32.i2p gateway instead. Same two signals the release seeder uses:
+# Kubo's own Routing.Type=none (set on every tor-only node), or an empty clearnet
+# RPC list in the indexer env.
+HIDDEN_ONLY=no
+[ "$(IPFS config Routing.Type 2>/dev/null || true)" = "none" ] && HIDDEN_ONLY=yes
+_idxenv="${MORPHIT_INDEXER_ENV:-/etc/morphit/indexer.env}"
+if [ -r "$_idxenv" ] && grep -q '^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=' "$_idxenv" \
+	&& [ -z "$(sed -n 's/^[[:space:]]*MORPHIT_INDEXER_RPC_ENDPOINTS=//p' "$_idxenv" | tail -n1 | tr -d "\"' \t\r")" ]; then
+	HIDDEN_ONLY=yes
+fi
+[ "$HIDDEN_ONLY" = yes ] && ok "hidden-only node: nothing is announced to the public IPFS network or fetched over clearnet"
+
 [ -d "$IPFS_PATH" ] || IPFS_PATH="/var/lib/ipfs"
 [ -d "$IPFS_PATH" ] || die "could not locate the IPFS repo root."
 WORKDIR="${WORKDIR:-$IPFS_PATH/indexer-snapshots}"
@@ -214,8 +230,12 @@ IPFS name publish --key="$IPNS_KEY" --allow-offline "/ipfs/$CID" >/dev/null || w
 ok "IPNS name: $IPNS_NAME"
 
 hdr "6. Announce to the DHT"
-( IPFS routing provide "$CID" >/dev/null 2>&1 || IPFS dht provide "$CID" >/dev/null 2>&1 ) &
-ok "provide kicked off (public-gateway propagation can take a few minutes)"
+if [ "$HIDDEN_ONLY" = yes ]; then
+	ok "not announced (hidden-only node) — peers fetch it by CID over this node's .onion/.b32.i2p"
+else
+	( IPFS routing provide "$CID" >/dev/null 2>&1 || IPFS dht provide "$CID" >/dev/null 2>&1 ) &
+	ok "provide kicked off (public-gateway propagation can take a few minutes)"
+fi
 
 hdr "7. Emit the indexer_snapshot_v1 payload"
 # forgejo_url is OPTIONAL; only include the line if the operator set FORGEJO_URL.
@@ -250,7 +270,9 @@ echo ""; sed 's/^/    /' "$PAYLOAD"
 hdr "8. Verify public-gateway reachability BEFORE broadcasting (guard)"
 # Reuse the release guard shape: only anchor a CID the public web can actually
 # fetch. Non-fatal here (propagation lag), but tells you whether to wait.
-if command -v curl >/dev/null 2>&1; then
+if [ "$HIDDEN_ONLY" = yes ]; then
+	ok "public-gateway check skipped (hidden-only node: it would be a clearnet request from this box)"
+elif command -v curl >/dev/null 2>&1; then
 	if curl -fsSL --max-time 45 -o /dev/null "https://ipfs.io/ipfs/$CID" 2>/dev/null; then
 		ok "CID reachable on a public gateway"
 	else
@@ -260,7 +282,9 @@ fi
 
 hdr "DONE — next: broadcast from your laptop"
 echo "  1. Copy the payload down:"
-echo "       scp morphit@<this-node>:$PAYLOAD ."
+# root@: the payload sits inside the IPFS repo, and the morphit service user has
+# no login shell. -O: hardened boxes turn SSH's SFTP off, which plain scp needs.
+echo "       scp -O root@<this-node>:$PAYLOAD ."
 echo "  2. In the Morphit repo (dry-run, then real — prompts for the @morphit POSTING WIF):"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json --dry-run"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json"

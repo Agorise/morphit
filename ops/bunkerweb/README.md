@@ -32,9 +32,9 @@ BunkerWeb source code.
 
 - `docker-compose.yml` — pinned BunkerWeb + scheduler images plus a
   `frontend` nginx service, on a dedicated `bunkerweb_net` Docker
-  network whose CIDR is fixed at `172.20.0.0/16` so the relay's
-  `MORPHIT_RELAY_TRUSTED_PROXY_IPS` can be hard-coded without
-  re-inspecting after rebuilds.  A `bw-init` one-shot container runs
+  network whose CIDR is fixed at `172.20.0.0/16` — inside the
+  `172.16.0.0/12` Docker pool the relay and indexer trust by default, so
+  neither needs a trusted-proxy setting.  A `bw-init` one-shot container runs
   first (as root) to fix `bw-data` + Let's Encrypt cert ownership for
   the image-default UID, then exits — see the compose comments and the
   troubleshooting note in Quick Start step 6.
@@ -43,8 +43,11 @@ BunkerWeb source code.
   container serves the built SvelteKit static site AND reverse-proxies
   the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream`
   paths) to the relay + indexer on the host.  Its routing mirrors
-  `ops/nginx/web.conf` minus the TLS + security headers (BunkerWeb owns
-  those).
+  `ops/nginx/web.conf` minus TLS (BunkerWeb terminates it). It sends the
+  security headers itself (CSP, Permissions-Policy, X-Frame-Options,
+  nosniff, Referrer-Policy) because Tor/I2P visitors reach it directly,
+  without BunkerWeb; on a `.onion`/`.i2p` name its CSP's `connect-src` is
+  narrowed to the hidden Blurt RPC nodes. It keeps no access log.
 - `bunkerweb.env.example` — environment variables with sensible
   defaults: a single `REVERSE_PROXY_HOST` pointing BunkerWeb at the
   `frontend` container, OWASP CRS paranoia level 3, anti-`Referer:
@@ -52,9 +55,11 @@ BunkerWeb source code.
   stubs for cheap-VPS providers (§38.6 item c, commented in; uncomment
   to activate), Real-IP forwarding wired for the relay's trusted-proxy
   chain, and the **security headers** (`CONTENT_SECURITY_POLICY`,
-  `REFERRER_POLICY`, `X_FRAME_OPTIONS`, `PERMISSIONS_POLICY`) — BunkerWeb
-  owns these since the
-  frontend nginx.conf sets none. The CSP mirrors `ops/nginx/web.conf`
+  `REFERRER_POLICY`, `X_FRAME_OPTIONS`, `PERMISSIONS_POLICY`) for clearnet
+  visitors. BunkerWeb keeps the frontend's own values for these headers
+  where the frontend sends them (its default `KEEP_UPSTREAM_HEADERS`) —
+  that is how the strict "never runs anything" policy on SVG images reaches
+  browsers. The CSP mirrors `ops/nginx/web.conf`
   exactly; **leave `CONTENT_SECURITY_POLICY` set**, because BunkerWeb's
   default (`default-src 'self'`) breaks the in-browser WASM crypto. See
   docs/OPERATIONS.md §15.
@@ -109,13 +114,13 @@ sudo certbot certonly --standalone -d <your-morphit-domain>
 #    the bridge can reach them.  A loopback-only bind is unreachable
 #    from the frontend container and every proxied call returns 502.
 
-# 5. CRITICAL: set MORPHIT_RELAY_TRUSTED_PROXY_IPS in
-#    /etc/morphit/relay.env to the Docker network CIDR
-#    (172.20.0.0/16 by default in this compose — it covers BOTH the
-#    BunkerWeb and frontend containers):
-sudoedit /etc/morphit/relay.env
-#   Add:  MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16
-sudo systemctl restart morphit-relay
+# 5. Trusted proxies: nothing to do.  Since v1.20.0 the relay and the
+#    indexer trust forwarded headers from loopback + 172.16.0.0/12
+#    (Docker's default bridge pool), which covers this compose's
+#    172.20.0.0/16.  Only if you moved bunkerweb_net outside that pool
+#    (a 10.x pool, say), set MORPHIT_RELAY_TRUSTED_PROXY_IPS (in
+#    /etc/morphit/relay.env) and MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS
+#    (in /etc/morphit/indexer.env) to its CIDR and restart both.
 
 # 6. Bring the stack up.  `up -d` builds the frontend image on first
 #    run.  After editing frontend/nginx.conf, rebuild it explicitly:
@@ -139,12 +144,20 @@ cd /etc/bunkerweb && sudo docker compose up -d
 #     cd /etc/bunkerweb && sudo docker compose up -d
 
 # 7. Verify — the easy way: a single health check.
-npx morphit-ops bunkerweb
+sudo morphit-ops bunkerweb
 #   Reports whether the containers are running + healthy, or what's
 #   wrong. (Also in the interactive menu: "Web firewall (BunkerWeb)
 #   status".)  Or inspect directly — the site root should serve the
 #   app, and the API paths should reach the services:
-sudo docker compose logs --tail 50
+sudo docker compose logs --tail 50 bunkerweb-scheduler frontend
+#   The `bunkerweb` container itself keeps NO log (privacy: its error, ban
+#   and ModSecurity lines name visitors), so `docker compose logs bunkerweb`
+#   shows nothing — unless CrowdSec (or another tool) reads its log, in
+#   which case it keeps a small `local` log (5 MB × 1) and LOG_FORMAT keeps
+#   the address (see the compose comments). To watch it live while
+#   debugging, with nothing stored:
+#     sudo docker attach --no-stdin --sig-proxy=false bunkerweb
+#   (Ctrl-C detaches; the container keeps running.)
 curl -v https://<your-morphit-domain>/                  # SvelteKit app
 curl -v https://<your-morphit-domain>/v1/instance       # indexer JSON
 ```
@@ -171,21 +184,28 @@ BunkerWeb proxies everything to the `frontend` container, and the
 `host.docker.internal:<port>` (Linux: `host-gateway`).  The compose
 sets this up automatically.
 
-## Trusted-proxy CIDR — the critical setting
+## Client addresses and trusted proxies
 
-The relay only trusts `X-Forwarded-For` from IPs in
-`MORPHIT_RELAY_TRUSTED_PROXY_IPS`.  Behind this BunkerWeb compose,
-that value MUST be `172.20.0.0/16` (or whatever CIDR you change
-the `bunkerweb_net` network to use).  The relay's immediate peer is
-the `frontend` container (requests flow BunkerWeb → frontend →
-relay), and BOTH containers live on `172.20.0.0/16`, so that one CIDR
-is all the relay needs.  BunkerWeb sets the real client as the
-leftmost `X-Forwarded-For` entry and the frontend appends to the
-chain, so the relay reads the real client from `XFF[0]`.
+BunkerWeb (`USE_REAL_IP=no`) is the public edge: the address on its socket
+IS the visitor, which it passes to the frontend as `X-Real-IP`. It proxies
+to the frontend's **edge listener `:8088`** (`REVERSE_PROXY_HOST=http://frontend:8088`).
+Only a request arriving on `:8088` from Docker's address pool
+(`172.16.0.0/12`) may name the visitor; the frontend then sends that one
+address as the only `X-Forwarded-For` entry to the relay and indexer.
+Everything else — Tor/I2P through the port published on the host's
+`127.0.0.1` (→ `:80`), or another container on the bridge — is keyed on its
+own socket address, so a Tor visitor can never inject an `X-Real-IP` and
+pick a rate-limit bucket (all Tor/I2P visitors share one). **Never publish
+`:8088`, and never point a Tor/I2P proxy at it.** A BunkerWeb still on
+`frontend:80` fails safe (every clearnet visitor shares one bucket);
+`morphit-ops upgrade` switches it to `:8088` once the frontend serves the
+new config, and checks the site still answers.
 
-**Too narrow:** the relay sees every user as the BunkerWeb
-container's IP → one abuser exhausts the daily rate limit for
-everyone.
+The relay and the indexer trust forwarded headers from loopback plus
+`172.16.0.0/12` by default (v1.20.0), so this compose needs no
+`MORPHIT_RELAY_TRUSTED_PROXY_IPS` / `MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS`.
+Set them (each REPLACES its default; loopback stays trusted) only for a
+proxy outside that pool.
 
 **Too wide** (e.g., `0.0.0.0/0`): anyone can forge
 `X-Forwarded-For` → rate limits bypassed entirely.
@@ -193,6 +213,24 @@ everyone.
 Verify after deploy by sending a spoofed `X-Forwarded-For` from
 an IP that is NOT in the trusted CIDR — the relay should ignore
 it.  See `docs/OPERATIONS.md` §37.19 for the concrete curl test.
+
+## What `morphit-ops upgrade` does to these containers
+
+- It finds BunkerWeb by its image (`bunkerity/bunkerweb`, publishing 443),
+  never by container name. A plain-nginx edge, several candidates, or a
+  container not started by Compose is left alone, with a calm note.
+- It recreates only the edge, a BunkerWeb scheduler that reads the same env
+  file, and the frontend — `docker compose up -d --no-deps` with every `-f`
+  file and the recorded `--env-file`.
+- Visitor-address logging: BunkerWeb keeps no Docker log (`logging: driver:
+  none`) and its `LOG_FORMAT` names no address — except when CrowdSec reads
+  BunkerWeb's log (or that cannot be checked), in which case it keeps a
+  `local` 5 MB × 1 Docker log and the address stays in `LOG_FORMAT`, so
+  CrowdSec keeps working.
+- It switches `REVERSE_PROXY_HOST` from `frontend:80` to `frontend:8088`
+  (see "Client addresses and trusted proxies").
+- It finishes within 120 s, and if it is stopped mid-change it restores the
+  files byte for byte.
 
 ## Version pinning + drift
 
@@ -207,11 +245,13 @@ testing in staging.
 
 - `SERVER_NAME` — your instance's public domain.
 - ASN block list (`BLACKLIST_ASN`) — uncomment and populate based
-  on your rejection logs.
+  on what you see while watching BunkerWeb live
+  (`sudo docker attach --no-stdin --sig-proxy=false bunkerweb`; nothing is
+  stored).
 - Country block list (`BLACKLIST_COUNTRY`) — empty by default;
   populate only under active attack (§38.6 item b).
 - OWASP CRS paranoia level — defaults to 3.  Drop to 2 if you
-  see real-user false positives in WAF rejection logs; raise to
+  see real-user false positives (watch BunkerWeb live as above); raise to
   4 only if you can verify it doesn't break legitimate traffic.
 - `LIMIT_REQ_RATE_1` — the COARSE edge ceiling on `/v1/`, set to
   `1800r/m`.  This is deliberately well above the indexer's own
@@ -254,8 +294,9 @@ install surfaced):
   mounts the Docker socket (read-only) into the scheduler with a
   `group_add` for the socket's GID.  That wires BunkerWeb's explicit
   **scheduler↔instance API mode**.  This manual config omits those:
-  it relies on the simpler shared-`bw-data`-volume coordination, which
-  is what the reference `morphit.io` manual install runs on.  If a
+  it relies on the simpler shared-`bw-data`-volume coordination (which
+  morphit.io's hand-made stack ran on until it was reinstalled with the
+  standard Ansible install on v1.17.0 release night).  If a
   **fresh** manual install shows the scheduler falling back to Docker
   discovery or failing to push config (check
   `docker compose logs bunkerweb-scheduler` for "Sending nginx

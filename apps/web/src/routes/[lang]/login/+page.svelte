@@ -322,6 +322,13 @@
 						needTotp = true;
 						errorMsg = '';
 						break;
+					case 'totp_unavailable':
+						// v1.20.0 (F-9): plain-HTTP I2P has no WebCrypto, so an
+						// authenticator code cannot be checked here. Not a wrong
+						// code — no fail count; a backup code still works.
+						totpCode = '';
+						errorMsg = $_('settings.totp.unlock_prompt.err_unavailable_insecure');
+						break;
 					case 'totp_invalid':
 						// Wrong TOTP code (or wrong backup code).
 						// Increment fail count; lock out after 5

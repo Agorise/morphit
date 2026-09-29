@@ -77,7 +77,7 @@ check('the Pay-now button is NOT hidden (the user learns why, not that it vanish
 // ─── #24 password + amount validation ────────────────────────────────
 check('canPay requires a non-empty password', /passwordFilled/.test(code(pay)) && /canPay = \$derived\([\s\S]{0,240}passwordFilled/.test(code(pay)));
 check('the Pay button is disabled unless canPay', /disabled=\{!canPay \|\| phase\.kind === 'paying'\}/.test(pay));
-check('typed amounts go through the shared validator', /validateBlurtAmount\(enteredAmount, Number\.POSITIVE_INFINITY\)/.test(pay));
+check('typed amounts go through the shared validator', /validateBlurtAmount\(enteredCanonical, Number\.POSITIVE_INFINITY\)/.test(pay) && /parseAmountInput\(enteredAmount, \$locale\)/.test(pay));
 check('pill-supplied amounts are checked against the 3-decimal grid too', /hasBlurtPrecision\(amount\)/.test(pay));
 check('hasBlurtPrecision exists and tolerates float error', /export function hasBlurtPrecision/.test(validation) && /1e-6/.test(validation));
 check('a precision error has its own message', /chat\.pay_blurt\.error_amount_precision/.test(pay));

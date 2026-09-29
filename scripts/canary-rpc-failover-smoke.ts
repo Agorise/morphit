@@ -27,7 +27,8 @@ import {
 	type BlurtHead,
 	fetchBlurtHeadWithFailover,
 	parseHead,
-	resolveCanaryNodes
+	resolveCanaryNodes,
+	canaryDefaultNodes
 } from './canary/blurtHeadFailover.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -108,10 +109,51 @@ async function run(): Promise<void> {
 		resolveCanaryNodes(undefined, canonical).join(',') === canonical.join(',') &&
 			resolveCanaryNodes('   ', canonical).join(',') === canonical.join(',')
 	);
+	// review D12: an override is PREFERRED-FIRST, not exclusive — the walk falls
+	// through to the rest so one down node never stalls the canary.
 	check(
-		'an explicit override pins exactly that one node',
-		resolveCanaryNodes('https://pinned.example', canonical).join(',') === 'https://pinned.example'
+		'a single override is tried FIRST, then the full list (deduped)',
+		resolveCanaryNodes('https://two.example', canonical).join(',') ===
+			['https://two.example', 'https://one.example', 'https://three.example'].join(',')
 	);
+	check(
+		'a comma-separated override (all hidden onions) is preferred-first, then the list',
+		resolveCanaryNodes('http://a.onion, http://b.onion', canonical).join(',') ===
+			['http://a.onion', 'http://b.onion', ...canonical].join(',')
+	);
+	check(
+		'a brand-new override node prepends without dropping the fallback list',
+		resolveCanaryNodes('https://pinned.example', canonical).join(',') ===
+			['https://pinned.example', ...canonical].join(',')
+	);
+
+	// D12 contract: on a tor-only node the default list is EVERY hidden .onion
+	// (never clearnet, never just the first); clearnet nodes keep the clearnet list.
+	{
+		const clear = ['https://c1.example', 'https://c2.example'];
+		const hid = [
+			'http://aaa.onion',
+			'http://aaa.b32.i2p',
+			'http://bbb.onion',
+			'http://bbb.b32.i2p'
+		];
+		const tor = canaryDefaultNodes(true, clear, hid);
+		check(
+			'tor-only default = all .onion entries (not just the first)',
+			tor.join(',') === 'http://aaa.onion,http://bbb.onion'
+		);
+		check('tor-only default never contains clearnet', !tor.some((u) => u.startsWith('https://c')));
+		check(
+			'clearnet default = the clearnet list',
+			canaryDefaultNodes(false, clear, hid).join(',') === clear.join(',')
+		);
+		// ops/fix-canary-tor2.sh writes a comma list: every entry becomes a node, first.
+		check(
+			'a comma-list override on tor-only = each onion first, then the rest of the onions',
+			resolveCanaryNodes('http://bbb.onion,http://ccc.onion', tor).join(',') ===
+				'http://bbb.onion,http://ccc.onion,http://aaa.onion'
+		);
+	}
 
 	// ─── parseHead shape guard ───────────────────────────────────
 	check('parseHead accepts a well-formed result', parseHead(GOOD) !== null);

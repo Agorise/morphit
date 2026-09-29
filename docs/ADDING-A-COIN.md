@@ -267,7 +267,7 @@ migration contract.
 
 Pattern for the verifier code: see how
 `bitcoinExplorerVerifier.ts` and `moneroProofVerifier.ts`
-write their state.  (Monero uses per-payment tx_proof
+write their state.  (Monero uses per-payment tx-key
 verification rather than view-key-based explorer scraping
 since Part 108++; the BTC verifier remains the canonical
 explorer-style template.)

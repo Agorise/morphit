@@ -25,6 +25,7 @@ import { emitJson } from '../render/json.ts';
 import { section, row, blank, info, fmt } from '../render/term.ts';
 import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CANONICAL_BLURT_TREASURY, localFeeView, type LocalFeeView } from '../lib/operatorFeeRecipient.ts';
 
 // ─── Query result types ──────────────────────────────────────────
 
@@ -100,6 +101,9 @@ interface StatusSnapshot {
 	/** The most recent on-disk DB backups, read from the filesystem
 	 *  (not the DB), so the operator can confirm backups are actually
 	 *  running and grab the file path to download or hand to a dev. */
+	/** v1.20.0 (G1) — this instance's fees account and whether other
+	 *  instances accept it (from this node's own /v1/instance). */
+	fees_account: FeesAccountStatus;
 	backups: {
 		/** Directory the backups live in — where to scp/download from. */
 		dir: string;
@@ -123,8 +127,55 @@ export async function runStatus(ctx: CommandCtx): Promise<number> {
 	return 0;
 }
 
+/** v1.20.0 (G1) — what `status` says about the fees account. */
+export interface FeesAccountStatus {
+	readonly account: string | null;
+	/** null = this node's indexer did not say (not running, or older). */
+	readonly registered: boolean | null;
+	/** One calm sentence for the operator, or null when nothing to say. */
+	readonly note: string | null;
+	readonly status: 'ok' | 'warn' | 'info';
+}
+
+/** PURE — turn this node's /v1/instance fee view into the dashboard row.
+ *  Only a condition the indexer actually REPORTED is stated; "could not read"
+ *  says exactly that. */
+export function feesAccountStatus(view: LocalFeeView | null): FeesAccountStatus {
+	if (view === null || view.feeRecipient === null) {
+		return {
+			account: null,
+			registered: null,
+			note: "Could not read it from this node's indexer (is morphit-indexer running?).",
+			status: 'info'
+		};
+	}
+	const account = view.feeRecipient;
+	if (!view.reportsRegistration || view.registered === null) {
+		return {
+			account,
+			registered: null,
+			note: "This node's indexer did not report whether it is registered on chain.",
+			status: 'info'
+		};
+	}
+	if (!view.registered) {
+		return {
+			account,
+			registered: false,
+			note:
+				`@${account} is not in your on-chain operator registration, so other Morphit instances hide ` +
+				'the orders your users pay to it in BLURT and drop their first messages to strangers there. ' +
+				'To publish it, run on this server:  sudo morphit-ops register',
+			status: 'warn'
+		};
+	}
+	return { account, registered: true, note: null, status: 'ok' };
+}
+
 async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 	const midnight = utcMidnightToday();
+	// Asked in parallel with the DB queries below; never throws.
+	const feeViewP = localFeeView({ timeoutMs: 4_000 });
 	const last24h = new Date(Date.now() - 24 * 3600 * 1000);
 
 	// Run all queries in parallel.  Each is a tiny indexed lookup;
@@ -260,6 +311,7 @@ async function collectSnapshot(ctx: CommandCtx): Promise<StatusSnapshot> {
 		failed_broadcasts_24h: {
 			count: failed !== undefined ? parseInt(failed.count, 10) : 0
 		},
+		fees_account: feesAccountStatus(await feeViewP),
 		backups: collectBackups()
 	};
 }
@@ -382,6 +434,25 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 			status: 'warn'
 		});
 	}
+	blank();
+
+	// ── Fees account (v1.20.0, G1) ──
+	section('Fees account (federation)');
+	const fa = snap.fees_account;
+	row({
+		label: 'BLURT fees go to:',
+		value: fa.account !== null ? `@${fa.account}` : '(unknown)',
+		status: fa.status,
+		detail:
+			fa.registered === true
+				? fa.account === CANONICAL_BLURT_TREASURY
+					? 'shared treasury — accepted everywhere'
+					: 'registered on chain — accepted by other instances'
+				: fa.registered === false
+					? 'not registered on chain'
+					: undefined
+	});
+	if (fa.note !== null) info(`  ${fa.note}`);
 	blank();
 
 	// ── Relay drain queue ──

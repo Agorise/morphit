@@ -17,10 +17,17 @@
  *   3. Recover the transaction digest and match it against the
  *      transaction's signatures
  *
- * In practice we can skip step 3 because the Blurt consensus nodes
- * have already verified every signature in every block we're
- * reading. If the block made it into `last_irreversible_block_num`,
- * its signatures were valid for the posting keys at that time.
+ * The durable poller skips step 3 ON A TRUST ASSUMPTION, stated plainly
+ * (v1.20.0, E1): that the RPC endpoint serving a block is honest. Consensus
+ * nodes did verify every signature in every irreversible block — but the
+ * indexer reads each block from ONE endpoint of its pool, and nothing
+ * re-checks either the signatures or the block's identity against the chain
+ * (the pool's quorum cross-check samples one block every five minutes and
+ * only logs). A hostile endpoint can therefore serve ops nobody signed. What
+ * limits the damage today: the head tailer verifies each op's signature before
+ * showing it live (chainTrxSignature.ts), and posting-key rotations read from
+ * blocks are recorded UNCONFIRMED until two agreeing operators confirm them
+ * (postingKeyBackfill.ts). Full block verification is a separate design.
  *
  * What we DO verify ourselves is:
  *   - The op claims an authorized signer (required_posting_auths
@@ -76,6 +83,19 @@ export type SignerRejectReason =
  * signers; mix posting + active; or declare zero signers — are rejected.
  * The dispatcher lands them in the event log with status='rejected'.
  */
+/**
+ * The Morphit ops signed with ACTIVE authority (v1.20.0: one list, shared by
+ * the dispatcher and the snapshot op-log verifier). Each carries its fee
+ * `transfer` in the same transaction, and Blurt forbids mixing posting and
+ * active authority in one transaction — so these, and only these, may name
+ * their signer in `required_auths`. Every other op is posting-only.
+ */
+export const ACTIVE_AUTH_OP_IDS: ReadonlySet<string> = new Set([
+	'morphit_order_v1',
+	'morphit_feature_bid_v1',
+	'morphit_stranger_fee_v1'
+]);
+
 export function extractSigner(op: CustomJsonOp, allowActiveAuth = false): SignerResult {
 	if (!Array.isArray(op.required_posting_auths) || !Array.isArray(op.required_auths)) {
 		return { ok: false, reason: 'missing_required_auths_field' };

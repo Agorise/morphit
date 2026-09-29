@@ -362,8 +362,8 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-31',
-			re: /up', '-d', '--build', '--force-recreate', service/,
-			desc: 'v1.17.1: compose-managed frontend is rebuilt with --force-recreate (a byte-identical image otherwise leaves the container bound to the STALE pre-upgrade build inode)'
+			re: /'up', '-d', '--no-deps', '--build', '--force-recreate', ref\.service/,
+			desc: 'v1.17.1: compose-managed frontend is rebuilt with --force-recreate (a byte-identical image otherwise leaves the container bound to the STALE pre-upgrade build inode); wave 5: only its own service (--no-deps), its whole Compose project — behaviour in test/bunkerwebWafIdentify.test.ts'
 		},
 		{
 			id: 'FD-33',

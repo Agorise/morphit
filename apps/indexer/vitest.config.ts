@@ -24,13 +24,23 @@ export default defineConfig({
 		testTimeout: 30_000
 	},
 	resolve: {
-		alias: {
-			$config: src('config/index.ts'),
-			$db: src('db'),
-			$blurt: src('blurt'),
-			$indexer: src('indexer'),
-			$api: src('api'),
-			$log: src('log/index.ts')
-		}
+		// Same regex aliases as vitest.integration.config.ts (mirroring
+		// tsconfig.json "paths", bare AND subpath forms): the object form
+		// mapped `$config` to the config/index.ts FILE, so a unit test that
+		// imported the config module failed on its own
+		// `$config/canonicalTreasury` import. Exact `$config` before the prefix.
+		alias: [
+			{ find: /^\$config$/, replacement: src('config/index.ts') },
+			{ find: /^\$config\/(.*)$/, replacement: `${src('config')}/$1` },
+			{ find: /^\$db$/, replacement: src('db') },
+			{ find: /^\$db\/(.*)$/, replacement: `${src('db')}/$1` },
+			{ find: /^\$blurt$/, replacement: src('blurt') },
+			{ find: /^\$blurt\/(.*)$/, replacement: `${src('blurt')}/$1` },
+			{ find: /^\$indexer$/, replacement: src('indexer') },
+			{ find: /^\$indexer\/(.*)$/, replacement: `${src('indexer')}/$1` },
+			{ find: /^\$api$/, replacement: src('api') },
+			{ find: /^\$api\/(.*)$/, replacement: `${src('api')}/$1` },
+			{ find: /^\$log$/, replacement: src('log/index.ts') }
+		]
 	}
 });

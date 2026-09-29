@@ -187,7 +187,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			       updated_at = $3
 			 WHERE account = $1
 			   AND permlink = $2
-			   AND fee_status = 'pending_external'`,
+			   AND fee_status = 'pending_external'
+			   -- (v1.20.0, MK-H2) payments bound to their order (XMR payment
+			   -- ID, BTC per-order address) are proven by explorers only:
+			   -- attestations must not stand in for the binding check.
+			   AND xmr_payment_id IS NULL
+			   AND btc_fee_address IS NULL`,
 			[orderAccount, orderPermlink, ctx.blockTime]
 		);
 		// Only emit if the UPDATE actually flipped a row.  A

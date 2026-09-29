@@ -5,15 +5,16 @@ process, please see [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Reporting a vulnerability
 
-Two channels, in order of preference:
+1. **Matrix DM** to **`@agorise:matrix.org`** (a user, not a room) — the
+   channel for every vulnerability report. End-to-end encrypted by default in
+   Element / most Matrix clients.
+2. If you cannot use Matrix DMs: post in the public room
+   **`#agorise:matrix.org`** that you have a security report — **with no
+   details** — and a maintainer will DM you.
 
-1. **Matrix DM** to **`@agorise:matrix.org`** — fastest path to a real human
-   on the project. End-to-end encrypted by default in Element / most Matrix
-   clients. Use this for anything sensitive enough that a passive observer
-   shouldn't see it.
-2. **Confidential issue** at
-   [git.agorise.net/agorise/morphit](https://git.agorise.net/agorise/morphit) —
-   Forgejo supports the **Confidential** flag on issues.
+Never post an exploitable problem as a public issue on
+[git.agorise.net/agorise/morphit](https://git.agorise.net/agorise/morphit):
+issues there are public.
 
 We commit to:
 

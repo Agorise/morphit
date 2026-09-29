@@ -9,6 +9,13 @@
 	 * on confirmation builds + signs + delivers the encrypted
 	 * pairing bundle to the relay.
 	 *
+	 * Cross-instance (v1.20.0): a QR from ANOTHER federation
+	 * instance is first checked against the Morphit directory by
+	 * this phone's own indexer, and the bundle is handed to that
+	 * indexer to forward — the page never contacts the other
+	 * instance itself (see $lib/auth/pairingDelivery.ts).  A QR
+	 * from this phone's own instance is delivered exactly as before.
+	 *
 	 * The user must already be unlocked on this phone (we use
 	 * their posting key to sign).  If they're not unlocked, we
 	 * route them to /login first.
@@ -18,6 +25,9 @@
 	 *   2. 'camera_denied' — user said no
 	 *   3. 'no_camera' — device has no camera at all
 	 *   4. 'scanning' — camera live, looking for a QR
+	 *   4b. 'checking' — QR from another instance; asking our own
+	 *       indexer whether it is in the Morphit directory
+	 *   4c. 'not_in_directory' — it is not; refuse calmly
 	 *   5. 'review' — QR decoded; show confirmation card
 	 *   6. 'invalid_qr' — decoded something but it failed
 	 *      validation; show "this isn't a Morphit QR" + retry
@@ -47,7 +57,12 @@
 		type PairingQrPayload
 	} from '$lib/auth/desktopPairing';
 	import { isUnlocked } from '$stores/identity';
-	import { fetchWithTimeout } from '$net/fetchWithTimeout';
+	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
+	import {
+		checkPairingTarget,
+		deliverPairingBundle,
+		pairingRouteFor
+	} from '$lib/auth/pairingDelivery';
 	import { gotoLocale } from '$i18n/navigate';
 
 	type Phase =
@@ -55,6 +70,8 @@
 		| 'camera_denied'
 		| 'no_camera'
 		| 'scanning'
+		| 'checking'
+		| 'not_in_directory'
 		| 'review'
 		| 'invalid_qr'
 		| 'sending'
@@ -117,9 +134,35 @@
 			}
 			return;
 		}
-		validatedQr = validated.payload;
+		const qr = validated.payload;
 		qrSignedSeconds = Math.floor(Date.now() / 1000);
-		phase = 'review';
+		// Same instance → straight to the card, as always.  Another
+		// instance → only if the Morphit directory knows it, asked of
+		// OUR indexer before the user is asked to approve anything.
+		const ownIndexer = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
+		const route = pairingRouteFor(qr, ownIndexer);
+		if (route.kind === 'not_in_directory') {
+			phase = 'not_in_directory';
+			return;
+		}
+		if (route.kind === 'same_instance') {
+			validatedQr = qr;
+			phase = 'review';
+			return;
+		}
+		phase = 'checking';
+		void checkPairingTarget(route.target, ownIndexer).then((known) => {
+			if (phase !== 'checking') return;
+			if (known === 'known') {
+				validatedQr = qr;
+				phase = 'review';
+			} else if (known === 'unknown') {
+				phase = 'not_in_directory';
+			} else {
+				phase = 'failed';
+				failureReason = 'send_failed';
+			}
+		});
 	}
 
 	/** Begin (or retry) the camera flow.  Driven by an explicit user
@@ -216,23 +259,23 @@
 				desktopEpkPub
 			});
 
-			// POST to the relay specified in the QR.  The relay
-			// URL is part of the signed payload, so a hostile
-			// QR pointing to a fake relay would still reach
-			// that relay — but the relay can't decrypt the
-			// bundle (encrypted to the desktop's epk_pub) nor
-			// forge the signature.  The cost of a wrong relay
-			// is just delivery failure, not data leak.
-			const url = new URL(
-				`/v1/login-pairing/${encodeURIComponent(validatedQr.pid)}/deliver`,
-				validatedQr.relay
-			);
-			const resp = await fetchWithTimeout(url.toString(), {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(delivery)
+			// Same instance: POST to the QR's relay (this page's own
+			// indexer), as always.  Another instance: hand it to our
+			// own indexer, which forwards it only to a directory
+			// instance.  Either way nobody on the path can decrypt
+			// the bundle (sealed to the desktop's epk_pub) or forge
+			// its signature; a wrong relay costs a failed delivery,
+			// never a leak.
+			const outcome = await deliverPairingBundle({
+				qr: validatedQr,
+				delivery,
+				ownIndexerBase: resolveOrigin(MORPHIT_INDEXER_ORIGIN)
 			});
-			if (!resp.ok) {
+			if (outcome === 'not_in_directory') {
+				phase = 'not_in_directory';
+				return;
+			}
+			if (outcome !== 'delivered') {
 				phase = 'failed';
 				failureReason = 'delivery_rejected';
 				return;
@@ -417,6 +460,22 @@
 				{$_('scan_login.confirm_yes')}
 			</button>
 		</div>
+	{:else if phase === 'checking'}
+		<div class="py-8 text-center text-sm text-ink-500" aria-busy="true">
+			{$_('scan_login.checking')}
+		</div>
+	{:else if phase === 'not_in_directory'}
+		<header class="text-center">
+			<h1 class="font-display text-xl font-bold">
+				{$_('scan_login.not_in_directory_heading')}
+			</h1>
+			<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
+				{$_('scan_login.not_in_directory_body')}
+			</p>
+			<button type="button" class="btn-primary mt-4" onclick={rescan}>
+				{$_('common.retry')}
+			</button>
+		</header>
 	{:else if phase === 'invalid_qr'}
 		<header class="text-center">
 			<h1 class="font-display text-xl font-bold">

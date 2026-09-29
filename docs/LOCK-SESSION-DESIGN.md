@@ -50,6 +50,10 @@ that do the same thing is misleading.
 - **Sign Out**: clear in-memory privates AND wipe envelope from
   localStorage → user needs full re-import next time.
 
+> **v1.20.0:** "Lock session" now locks EVERY open tab of the site (each
+> wipes its keys; the Remember-me envelope is kept). The idle auto-lock
+> still locks only the tab that went idle.
+
 For this distinction to be real, the envelope must actually live in
 localStorage between sessions.
 

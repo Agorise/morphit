@@ -137,7 +137,7 @@ psql "$MORPHIT_INDEXER_DATABASE_URL" -c "
 # patterns tend to show up.  Review them — and optionally
 # block an account on this instance — from the moderation
 # screen:
-#   npx morphit-ops moderation
+#   sudo morphit-ops moderation
 # A flag is a SIGNAL, not a verdict; investigate before
 # acting.  Blocking is instance-local + reversible (it hides
 # the account's listings on YOUR instance only, broadcasts
@@ -332,7 +332,7 @@ are BLURT-native; USD prices are display-only).
    `morphit.config.env`, restart the indexer.  You can
    also use the wizard:
    ```bash
-   morphit-ops edit
+   sudo morphit-ops edit
    ```
    and navigate to "Fallback BLURT price."
 
@@ -367,7 +367,8 @@ What they should do:
 - Wait — the next polling cycle will retry, often
   successfully.
 - Lower their `MORPHIT_INDEXER_{BTC,XMR}_MIN_SUCCESSFUL_RESPONSES`
-  to 1 (back-compat mode, weaker guarantee).
+  to 1 (weaker guarantee: one explorer's word; XMR defaults to 2
+  since v1.20.0).
 - Or add more explorers to their configured list.
 
 There's nothing for *you* to do; it's their

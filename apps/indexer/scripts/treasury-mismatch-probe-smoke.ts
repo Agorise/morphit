@@ -115,7 +115,9 @@ if (pollerSrc.includes('currentTreasuryAddresses()') && pollerSrc.includes('cano
 	ok('poller exposes currentTreasuryAddresses + feeds it to the probe scheduler');
 else bad('poller no longer feeds the resolved treasury to the probe', 'canonical reference lost');
 const mainSrc = readFileSync(join(REPO, 'apps/indexer/src/main.ts'), 'utf-8');
-if (mainSrc.includes('instanceRoute(config, () => poller.currentTreasuryAddresses())'))
+// (v1.20.0: the route also takes the DB for fee_recipient_registered — a
+// trailing argument is fine; the treasury getter must still be the second.)
+if (/instanceRoute\(config, \(\) => poller\.currentTreasuryAddresses\(\)[,)]/.test(mainSrc))
 	ok('main.ts wires the resolved treasury getter into /v1/instance');
 else bad('main.ts no longer wires the treasury getter', '/v1/instance treasury would be null');
 

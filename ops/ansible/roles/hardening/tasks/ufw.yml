@@ -11,11 +11,19 @@
     policy: allow
 
 - name: Allow inbound on required ports
+  # A Tor-only node has NO clearnet listener, so opening 80/443 on it is pure
+  # attack surface (nothing answers, but the ports advertise the box). SSH (22)
+  # and any operator-added port stay open; the clearnet web ports are opened only
+  # when this node actually serves clearnet (review B7). ufw_allowed_inbound_ports
+  # lives in group_vars, so gate here rather than editing that shared list.
   community.general.ufw:
     rule: allow
     port: "{{ item }}"
     proto: tcp
   loop: "{{ ufw_allowed_inbound_ports }}"
+  when: >-
+    not (morphit_tor_only | default(false) | bool)
+    or (item | string) not in ['80', '443']
 
 # An IPFS origin host must accept inbound swarm connections on 4001, or public
 # gateways can't dial in to fetch the seeded release and the on-chain CID never
@@ -24,6 +32,9 @@
 # v1.17.0). Open it automatically — BOTH tcp and udp (Kubo uses QUIC on udp/4001)
 # — whenever this box hosts IPFS.
 - name: Allow the IPFS swarm port (4001 tcp+udp) when this box hosts IPFS
+  # NOT on a Tor-only node: it runs Kubo with Addresses.Swarm=[] (no public swarm
+  # — the privacy heal enforces that), so opening 4001 there advertises a port
+  # nothing listens on (review B7).
   community.general.ufw:
     rule: allow
     port: "4001"
@@ -31,7 +42,9 @@
   loop:
     - tcp
     - udp
-  when: enable_ipfs | default(true) | bool
+  when:
+    - enable_ipfs | default(true) | bool
+    - not (morphit_tor_only | default(false) | bool)
 
 - name: Rate-limit SSH (auto-block brute-force from same source)
   community.general.ufw:

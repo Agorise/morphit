@@ -4,8 +4,11 @@
  * fawazahmed0's currency-api — a free, no-key dataset served from
  * the jsDelivr CDN (and a pages.dev mirror).  CDN-hosted means very
  * high availability and no rate-limit account.  Covers ~150 fiat +
- * crypto codes; we keep only the fiat ones the composite's
- * plausibility filter accepts.  Privacy-respecting (static CDN
+ * crypto codes; the composite drops every entry outside the
+ * plausible-rate window per currency (dropImplausibleRates, G5)
+ * before judging the table, so a crypto code such as `btc`
+ * (~1e-5 per USD) no longer disqualifies the whole response.
+ * Privacy-respecting (static CDN
  * file, base=USD).
  *
  * Endpoint: GET /v1/currencies/usd.json

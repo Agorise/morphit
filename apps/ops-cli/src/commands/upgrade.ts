@@ -119,6 +119,21 @@ import {
 import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
 import { withSpinner, startDotsSpinner } from '../init/spinner.ts';
 import { healIpfsPrivacy } from '../lib/ipfsPrivacyHeal.ts';
+import { healIpfsGc } from '../lib/ipfsGcHeal.ts';
+import { healTorOnlyOs } from '../lib/torOnlyOsHeal.ts';
+import {
+	healProxyConfig,
+	SELF_HEAL_CHILD_TIMEOUT_MS,
+	parseDockerInspect,
+	identifyContainers,
+	composeRefOf,
+	composeArgs,
+	composeCommand,
+	parseComposeModel,
+	type ContainerInfo,
+	type ComposeRef
+} from '../lib/proxyConfigHeal.ts';
+import { healFeeRecipientRegistration } from '../lib/feeRecipientHeal.ts';
 import { isHiddenOnlyNode, readLocalRelease } from '../lib/hiddenOnly.ts';
 import { healNpmUpdateNotice as healNpmNoticeGlobal } from '../lib/npmNotice.ts';
 import {
@@ -128,7 +143,7 @@ import {
 	syncTouchedToWebRoot,
 	BRAND_SLOTS_FILE
 } from '../lib/branding.ts';
-import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
+import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync, openSync, readSync, writeSync, closeSync, fstatSync, constants as fsConstants } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -136,6 +151,7 @@ import { tmpdir } from 'node:os';
 
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
+import { refreshHelperScripts, DEFAULT_HELPER_DIR, HELPER_SCRIPTS } from '../lib/refreshHelperScripts.ts';
 import {
 	applyAndVerifyRelayHeal,
 	relayHealBackupPath,
@@ -1202,32 +1218,36 @@ function findFrontendContainer(buildDir: string): string | null {
  *  pre-upgrade inode after the install dir was renamed).  BEST-EFFORT — a
  *  failure here must NOT roll the upgrade back (the backend is already
  *  upgraded and the build is fresh on disk); we warn with the manual
- *  command instead.  No compose file, no name assumption — just restart the
- *  exact container we detected.  IMPURE. */
-function restartFrontendContainer(name: string, installDir: string): void {
+ *  command instead.  No name assumption: the exact container we detected,
+ *  rebuilt through its own Compose project (from its labels) when it has one.
+ *  Exported for its test.  IMPURE. */
+export function restartFrontendContainer(name: string, installDir: string): void {
 	// The frontend nginx.conf is BAKED into the image at build time, so a plain
 	// restart keeps a STALE config (the maintainer/timeapp: the `/v1/` 4 KB body cap that
 	// 413'd every avatar upload survived every restart + every backend upgrade).
 	// When the container is compose-managed, REBUILD it after refreshing its
 	// build-context nginx.conf from the upgraded repo, so config fixes actually
 	// ship. Falls back to a plain restart when it isn't compose-managed.
-	const label = (key: string): string =>
-		(
-			spawnSync('docker', ['inspect', name, '--format', `{{ index .Config.Labels "${key}" }}`], {
-				encoding: 'utf8',
-				timeout: 10_000
-			}).stdout ?? ''
-		).trim();
-	const configFile = (label('com.docker.compose.project.config_files').split(',')[0] ?? '').trim();
-	const workDir = label('com.docker.compose.project.working_dir');
-	const service = label('com.docker.compose.service');
+	//
+	// Wave 5 (B-from-C §4): address the container's WHOLE Compose project (every
+	// file, env file, project name and directory, from its labels — a first-file
+	// -only `-f` drops overrides) and rebuild ONLY its service (`--no-deps`), so
+	// the rebuild never brings up or recreates anything else in the stack.
+	let ref: ComposeRef | null = null;
+	try {
+		const insp = spawnSync('docker', ['inspect', name], { encoding: 'utf8', timeout: 10_000, maxBuffer: 16 * 1024 * 1024 });
+		const c = insp.status === 0 ? parseDockerInspect(insp.stdout ?? '[]')[0] : undefined;
+		ref = c ? composeRefOf(c) : null;
+	} catch {
+		ref = null;
+	}
 
-	if (configFile !== '' && existsSync(configFile) && service !== '') {
+	if (ref !== null && existsSync(ref.files[0]!)) {
 		try {
 			// Build context is <workdir>/frontend; refresh its nginx.conf from the
 			// upgraded repo so the rebuild bakes the CURRENT config.
 			const srcConf = join(installDir, 'ops', 'bunkerweb', 'frontend', 'nginx.conf');
-			const dstConf = join(workDir !== '' ? workDir : dirname(configFile), 'frontend', 'nginx.conf');
+			const dstConf = join(ref.workDir !== '' ? ref.workDir : dirname(ref.files[0]!), 'frontend', 'nginx.conf');
 			if (existsSync(srcConf) && existsSync(dirname(dstConf))) {
 				copyFileSync(srcConf, dstConf);
 				info('Refreshed the frontend nginx.conf from the upgraded release.');
@@ -1243,9 +1263,10 @@ function restartFrontendContainer(name: string, installDir: string): void {
 		// so it serves the STALE build (the maintainer/morphitir v1.17.0: upgrade reported
 		// success while /verify.json stayed 1.16.13). Forcing the recreate re-binds
 		// the mount to the freshly-extracted build, fixing config AND content.
+		const up = composeArgs(ref, ['up', '-d', '--no-deps', '--build', '--force-recreate', ref.service]);
 		const rebuilt =
-			spawnSync('docker', ['compose', '-f', configFile, 'up', '-d', '--build', '--force-recreate', service], { stdio: 'inherit', timeout: 300_000 }).status === 0 ||
-			spawnSync('docker-compose', ['-f', configFile, 'up', '-d', '--build', '--force-recreate', service], { stdio: 'inherit', timeout: 300_000 }).status === 0;
+			spawnSync('docker', up, { stdio: 'inherit', timeout: 300_000 }).status === 0 ||
+			spawnSync('docker-compose', up.slice(1), { stdio: 'inherit', timeout: 300_000 }).status === 0;
 		if (rebuilt) {
 			info(`\u2713 Frontend container "${name}" rebuilt (config changes applied).`);
 			return;
@@ -2089,6 +2110,26 @@ async function runStepWithSpinner(
 	// warning then is a false alarm that invites an unnecessary DB reset.
 	const schemaChanged = schemaChangedWithoutMigration(backupDir, installDir);
 
+	// Secure the box's global npmrc BEFORE any root `npm` runs below (review B8).
+	// The self-heal phase (step 10) also repairs it, but that is AFTER this
+	// upgrade's own `npm ci`/`npm install` — too late to matter if the file had
+	// been left world-writable and a code-execution key planted in it, since that
+	// npm would already have run it as root. Doing it here strips such a key
+	// first. Best-effort; never throws.
+	try {
+		const npmrc = healNpmNoticeGlobal();
+		if (npmrc && npmrc.strippedKeys.length > 0) {
+			warn(
+				`Removed unexpected setting(s) from the box's global npmrc (${npmrc.path}) that had been ` +
+					`left writable by a non-root account and could run code as root: ${npmrc.strippedKeys.join(', ')}. ` +
+					`The file is now root-owned 0644. If you added any of these deliberately, re-add them with ` +
+					`\`sudo npm config set --location=global …\` and then \`sudo chmod 644 ${npmrc.path}\`.`
+			);
+		}
+	} catch {
+		/* best-effort — never fail an upgrade over the npmrc repair */
+	}
+
 	// ─── 9. Install workspace dependencies ─────────────────────
 	try {
 		// A self-contained OFFLINE tarball ships a prebuilt node_modules carrying
@@ -2547,14 +2588,7 @@ async function runStepWithSpinner(
 		//
 		// So: the first time a canary is seen, write a marker and never ask again.
 		const canaryMarker = '/var/lib/morphit/canary-seen';
-		if (servedCanary || backupHadCanary) {
-			try {
-				mkdirSync(dirname(canaryMarker), { recursive: true });
-				writeFileSync(canaryMarker, `seen ${new Date().toISOString()}\n`);
-			} catch {
-				/* best-effort; the checks below still work without it */
-			}
-		}
+		if (servedCanary || backupHadCanary) recordCanarySeen(canaryMarker);
 		const everHadCanary = existsSync(canaryMarker);
 
 		// And ask the LIVE SITE, which is what the footer link actually hits. The
@@ -2687,6 +2721,27 @@ async function runStepWithSpinner(
 		);
 	}
 
+	// ─── 9f. Refresh the helper scripts Ansible copied into /usr/local/lib/morphit ──
+	// Same rule as the units above: the timers/units run COPIES Ansible made
+	// once, so a fix to morphit-first-online.sh / morphit-ipfs-pin.sh /
+	// ipns-rebroadcast / ipfs-privacy / backup never reached an installed box
+	// (wave 2, C3/C17). Only installed + differing files are replaced (with a
+	// .bak, atomically, 0755 root:root, never through a link) and each is read
+	// back to verify. A rollback puts the previous copy back. Best-effort.
+	try {
+		const helperDir = process.env.MORPHIT_HELPER_DIR ?? DEFAULT_HELPER_DIR;
+		for (const r of refreshHelperScripts({ releaseRoot: installDir, helperDir, log: info })) {
+			if (r.action === 'refreshed' && r.backupPath) {
+				restoreOnRollback.push({ target: join(helperDir, r.name), backup: r.backupPath });
+			}
+		}
+	} catch (err) {
+		warn(
+			`Could not refresh the helper scripts in /usr/local/lib/morphit (continuing): ` +
+				`${err instanceof Error ? err.message : String(err)}`
+		);
+	}
+
 	// ─── 10. Restart services ──────────────────────────────────
 	// First, self-heal the advertised Tor onion: on some boxes the onion is
 	// generated after the install-time config write, leaving the config value
@@ -2740,12 +2795,21 @@ async function runStepWithSpinner(
 	// rollback restores exactly the files THIS run's heals changed.
 	const envRoot = process.env.MORPHIT_ENV_ROOT ?? '';
 	const healSnapshot = snapshotSelfHealBackups(RELAY_ENV_TARGETS.map((f) => `${envRoot}${f}`));
+	// Wave 4 (P7): the self-heal phase now also refreshes the /usr/local/lib/morphit
+	// helpers (`<name>.bak` first) — note their backups too, so a rollback after
+	// the phase puts the previous helpers back like every other healed file.
+	const helperDirForSnap = process.env.MORPHIT_HELPER_DIR ?? DEFAULT_HELPER_DIR;
+	const helperSnapshot = snapshotSelfHealBackups(
+		HELPER_SCRIPTS.map((h) => join(helperDirForSnap, h.name)),
+		(t) => `${t}.bak`
+	);
 	try {
 		const newCli = join(installDir, 'apps', 'ops-cli', 'dist', 'main.js');
 		if (existsSync(newCli)) {
 			const r = spawnSync(process.execPath, [newCli, '__post-upgrade-selfheal'], {
 				stdio: 'inherit',
-				timeout: 300_000
+				// Shared with the web-proxy heal, which finishes (or rolls back) before it.
+				timeout: SELF_HEAL_CHILD_TIMEOUT_MS
 			});
 			selfHealReexeced = r.status === 0;
 		}
@@ -2756,6 +2820,7 @@ async function runStepWithSpinner(
 		await runSelfHeals();
 	}
 	restoreOnRollback.push(...selfHealRestoreList(healSnapshot, installDir));
+	restoreOnRollback.push(...selfHealRestoreList(helperSnapshot, installDir));
 
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
@@ -2764,6 +2829,7 @@ async function runStepWithSpinner(
 			continue;
 		}
 		info(`Restarting ${svc}...`);
+		const restartsBefore = readUnitRestarts(svc);
 		try {
 			runOrThrow('systemctl', ['restart', svc]);
 		} catch (err) {
@@ -2773,6 +2839,25 @@ async function runStepWithSpinner(
 				backupDir,
 				tmpDir,
 				err,
+				{ webRoot, webRootBackup, container: plan.restartContainer },
+				restoreOnRollback
+			);
+		}
+		// `systemctl restart` on a Type=simple unit returns success the instant it
+		// forks the process — it does NOT mean the new code STAYED up. VERIFY by
+		// observing the running state (the heal mandate): a unit that crashed on the
+		// new code flips to `failed`, or auto-restarts (NRestarts climbs). Poll a
+		// short window; `activating`/a slow first chain read over Tor is NOT a
+		// failure. Only a confirmed `failed`/crash-loop rolls back — so a
+		// half-upgraded box is never left running the new code down.
+		const outcome = await verifyUnitStayedUp(svc, restartsBefore);
+		if (outcome === 'down') {
+			warn(`${svc} did not stay up after restarting on the new version; rolling back.`);
+			return rollback(
+				installDir,
+				backupDir,
+				tmpDir,
+				new Error(`${svc} failed to come up after the upgrade restart`),
 				{ webRoot, webRootBackup, container: plan.restartContainer },
 				restoreOnRollback
 			);
@@ -3378,28 +3463,99 @@ async function runStepWithSpinner(
  * heal after it, silently. Each is now isolated and a failure is said out loud.
  */
 export async function runSelfHeals(): Promise<void> {
-	const heals: Array<[string, () => unknown]> = [
-		['the relay RPC heal', () => healRelayClearnet()],
-		// v1.18.0 deep-deep, H3: existing nodes get the Kubo privacy settings a
-		// fresh install now gets (tor-only: off the public IPFS network).
-		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],
-		['the BunkerWeb WAF heal', () => healBunkerWebWaf()],
-		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
-		['the frontend config heal', () => healFrontendConfig()],
-		// npm's "New major version of npm available!" notice, box-wide.
-		['the npm notice heal', () => healNpmUpdateNotice()],
-		// Per-instance branding (docs/BRANDING.md). Runs here too so an upgrade
-		// DRIVEN BY AN OLDER morphit-ops (whose upgrade flow predates branding)
-		// still goes live branded; idempotent when the new flow already applied it.
-		['the branding heal', () => healBranding()]
-	];
-	for (const [name, heal] of heals) {
+	for (const [name, heal] of selfHealSteps()) {
 		try {
 			await heal();
 		} catch (err) {
 			warn(`Skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	}
+}
+
+/** The self-heal steps, in order (exported so the ORDER and each step's effect
+ *  are tested for real). This phase is the only part of an upgrade that runs
+ *  the NEW binary on the upgrade that ships it, so every fix that must reach an
+ *  installed box on THIS upgrade belongs here. */
+export function selfHealSteps(): Array<[string, () => unknown]> {
+	return [
+		['the relay RPC heal', () => healRelayClearnet()],
+		// Wave 4 (P7): refresh the helpers Ansible copied into /usr/local/lib/morphit
+		// HERE, so C3 (first-online ran a user's canary script as root) and C17
+		// (ipfs-pin's 900 s stall on hidden-only nodes) are fixed on the upgrade that
+		// ships them — the old orchestrator's step 9f only exists from the NEXT one.
+		// Idempotent: a helper already refreshed by step 9f is 'unchanged'.
+		['the helper-script refresh', () => healHelperScripts()],
+		// v1.20.0 (C13, owned by lib/torOnlyOsHeal.ts): on a TOR-ONLY node only,
+		// apt over Tor (verified by a real refresh over Tor, put back if it cannot
+		// be), no clearnet NTP (only once the Tor time check is seen working), no
+		// Ubuntu news fetches. Early, before the slow network heals, and bounded:
+		// in the re-exec'd child it stops itself in time (never leaving apt
+		// switched but unchecked), and morphit-tor-only-recover.timer finishes or
+		// undoes any switch a kill still interrupts.
+		['the tor-only OS heal', () => healTorOnlyOs({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		// v1.18.0 deep-deep, H3: existing nodes get the Kubo privacy settings a
+		// fresh install now gets (tor-only: off the public IPFS network).
+		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		['the BunkerWeb WAF heal', () => healBunkerWebWaf()],
+		// A template fix is not a fix for INSTALLED nodes (upgrade does not re-run
+		// Ansible), so open the IPFS swarm port here too (review B7).
+		['the IPFS swarm firewall heal', () => healIpfsSwarmFirewall()],
+		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
+		['the frontend config heal', () => healFrontendConfig()],
+		// v1.20.0 (C1/C2/B11, owned by lib/proxyConfigHeal.ts): the web containers'
+		// Docker logs stop keeping visitor addresses, BunkerWeb gets Morphit's
+		// headers, host.docker.internal → the real bridge gateway. After the
+		// frontend config heal, so the frontend already runs the current config.
+		[
+			'the web-proxy privacy heal',
+			() =>
+				healProxyConfig({
+					info,
+					warn,
+					spinner: (l) => startDotsSpinner(l),
+					buildDir: join(
+						/^(.*)\/apps\/ops-cli\/dist\//.exec(process.argv[1] ?? '')?.[1] ?? '/opt/morphit',
+						'apps',
+						'web',
+						'build'
+					)
+				})
+		],
+		// npm's "New major version of npm available!" notice, box-wide.
+		['the npm notice heal', () => healNpmUpdateNotice()],
+		// Per-instance branding (docs/BRANDING.md). Runs here too so an upgrade
+		// DRIVEN BY AN OLDER morphit-ops (whose upgrade flow predates branding)
+		// still goes live branded; idempotent when the new flow already applied it.
+		['the branding heal', () => healBranding()],
+		// v1.20.0 (G1, owned by lib/feeRecipientHeal.ts): other instances accept
+		// the 90 % leg of BLURT fees paid through this node only to the fees
+		// account in its ON-CHAIN registration, which every pre-v1.20 one lacks.
+		// Re-publishes it unattended (relay key via its sealed credential) and
+		// reads it back, else one calm line with the command. Late in the phase:
+		// it needs no restarted service, and it stops itself before the
+		// child's kill.
+		// v1.20.0 (C16, owned by lib/ipfsGcHeal.ts): every IPFS node gets the
+		// weekly clean-up (superseded releases + indexer snapshots) and runs it
+		// once now. Needs no network, so it is the same on a tor-only node.
+		['the IPFS clean-up', () => healIpfsGc({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		[
+			'the fees-account registration heal',
+			() => healFeeRecipientRegistration({ info, warn, spinner: (l) => startDotsSpinner(l) })
+		]
+	];
+}
+
+/** Self-heal: refresh /usr/local/lib/morphit helpers from the release this
+ *  binary belongs to (see lib/refreshHelperScripts.ts for the rules). */
+export function healHelperScripts(): void {
+	let installDir = (process.env.MORPHIT_INSTALL_DIR ?? '').trim() || '/opt/morphit';
+	const m = /^(.*)\/apps\/ops-cli\/(?:dist|src)\//.exec(process.argv[1] ?? '');
+	if (m && m[1] && existsSync(join(m[1], 'ops'))) installDir = m[1];
+	refreshHelperScripts({
+		releaseRoot: installDir,
+		helperDir: process.env.MORPHIT_HELPER_DIR ?? DEFAULT_HELPER_DIR,
+		log: info
+	});
 }
 
 export async function healRelayClearnet(): Promise<void> {
@@ -3579,6 +3735,102 @@ export function healFrontendConfig(): void {
 	}
 }
 
+/** Deps for the IPFS swarm-firewall heal — injectable so the behaviour is
+ *  testable without a live ufw/systemd/Kubo. */
+export interface IpfsSwarmFirewallDeps {
+	/** Does this box host IPFS (a Kubo repo is present)? */
+	kuboPresent?: () => boolean;
+	/** Is this a hidden-only node (no public swarm — 4001 must stay closed)? */
+	hiddenOnly?: () => boolean;
+	/** Run a command; returns exit status + stdout. */
+	run?: (cmd: string, args: readonly string[]) => { status: number | null; stdout: string };
+	info?: (m: string) => void;
+	warn?: (m: string) => void;
+}
+
+/** Is ufw enforcing at all? `ufw status` prints "Status: inactive" when off. */
+export function ufwIsActive(ufwStatus: string): boolean {
+	return /^\s*Status:\s*active\b/im.test(ufwStatus);
+}
+
+/** Parse `ufw status` and decide whether 4001 is ALLOWED on BOTH tcp and udp.
+ *  PURE (review B7; wave 4). Only rules whose Action is ALLOW count (a DENY /
+ *  REJECT / LIMIT line naming 4001 is not an opening). A bare `4001` rule (no
+ *  proto) covers both; otherwise both `4001/tcp` and `4001/udp` must be allowed. */
+export function ufwAllows4001Both(ufwStatus: string): boolean {
+	const allowed = (port: string): boolean =>
+		ufwStatus
+			.split('\n')
+			.some((l) => new RegExp(`^\\s*${port.replace('/', '\\/')}(?:\\s+\\(v6\\))?\\s+ALLOW\\b`, 'i').test(l));
+	if (allowed('4001')) return true;
+	return allowed('4001/tcp') && allowed('4001/udp');
+}
+
+/**
+ * SELF-HEAL: open the IPFS swarm port 4001 (BOTH tcp and udp — Kubo swarms over
+ * TCP and QUIC/UDP) on a CLEARNET IPFS-hosting box, on upgrade (review B7). The
+ * Ansible ufw role opens it, but a template fix never reaches an already-
+ * installed node (upgrade does not re-run Ansible), and morphit.io is a manual
+ * /opt/morphit install Ansible never touches — the same defect class that left
+ * the gateway firewall rule undelivered. VERIFY, then log: read `ufw status`
+ * back and only claim success when BOTH protocols are actually allowed. A
+ * hidden-only node (no public swarm) and a box with no Kubo are left untouched.
+ */
+export function healIpfsSwarmFirewall(deps: IpfsSwarmFirewallDeps = {}): void {
+	const say = deps.info ?? info;
+	const warnFn = deps.warn ?? warn;
+	const run =
+		deps.run ??
+		((cmd: string, args: readonly string[]) => {
+			const r = spawnSync(cmd, [...args], { encoding: 'utf8', timeout: 20_000 });
+			return { status: r.status, stdout: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+		});
+	const kuboPresent =
+		deps.kuboPresent ??
+		(() =>
+			['/var/lib/ipfs/.ipfs', '/var/lib/ipfs', '/opt/ipfs/.ipfs'].some((c) => {
+				try {
+					return existsSync(join(c, 'config'));
+				} catch {
+					return false;
+				}
+			}));
+	const hiddenOnly = deps.hiddenOnly ?? (() => isHiddenOnlyNode());
+
+	try {
+		if (!kuboPresent()) return; // not an IPFS host — nothing to open
+		if (hiddenOnly()) return; // no public swarm on a hidden-only node
+		if (run('sh', ['-c', 'command -v ufw >/dev/null 2>&1']).status !== 0) return; // no ufw here
+
+		const status = run('ufw', ['status']).stdout;
+		// ufw installed but switched OFF: it blocks nothing, so there is no rule to
+		// open — say so once, calmly, instead of "could not confirm" every upgrade.
+		if (!ufwIsActive(status)) {
+			say('IPFS: ufw is not active on this box, so nothing blocks the swarm port 4001 — no firewall rule to add.');
+			return;
+		}
+		const already = ufwAllows4001Both(status);
+		if (already) return; // steady state
+
+		// Primary: open both protocols.
+		run('ufw', ['allow', '4001/tcp']);
+		run('ufw', ['allow', '4001/udp']);
+
+		// VERIFY by observing ufw's own state, not the exit codes.
+		if (ufwAllows4001Both(run('ufw', ['status']).stdout)) {
+			say('IPFS: opened the swarm port 4001 (tcp+udp) so public gateways + QUIC peers can fetch your seeded releases.');
+		} else {
+			warnFn(
+				'IPFS: could not confirm the swarm port 4001 is open on BOTH tcp and udp. If public ' +
+					'gateways cannot fetch your seeded releases, run on this box: ' +
+					'sudo ufw allow 4001/tcp && sudo ufw allow 4001/udp && sudo systemctl restart ipfs'
+			);
+		}
+	} catch {
+		/* best-effort — never fail the self-heal phase over the swarm firewall */
+	}
+}
+
 /** v1.16.10 — SELF-HEAL: expose this box's Kubo gateway over Tor/I2P so it is a
  *  federation seeder, automatically, on upgrade (the maintainer's mandate: every instance a
  *  hidden seeder, zero manual steps). Safe because Gateway.NoFetch=true means the
@@ -3656,11 +3908,16 @@ export function healIpfsGatewayExposure(): void {
 			{ encoding: 'utf8', timeout: 10000 }
 		);
 		const code = (probe.stdout ?? '').trim();
-		// Any HTTP response (even 404/400) proves the gateway is now listening.
+		// A host-side 127.0.0.1 probe only proves the gateway is LISTENING \u2014 NOT
+		// that a container or a Tor/I2P peer can reach it (the v1.17.1 false-\u2713 was
+		// exactly this: it passed for weeks while UFW dropped the container\u2192host
+		// connect). The real peer path (frontend \u2192 gateway) is confirmed by the
+		// firewall heal + the seeder's per-transport self-verify, so claim only
+		// what THIS probe shows (review B9).
 		info(
 			/^[0-9]{3}$/.test(code)
-				? 'IPFS: gateway is live on the bridge \u2014 this instance now serves the release over Tor/I2P.'
-				: 'IPFS: gateway restart done; it should be reachable shortly over Tor/I2P.'
+				? 'IPFS: gateway is listening on the host bridge (:8082). Whether peers can reach it over Tor/I2P is confirmed by the gateway-firewall heal + the seeder self-verify later in this upgrade.'
+				: 'IPFS: gateway restart done; it should begin listening shortly (the seeder self-verify later checks the real Tor/I2P peer path).'
 		);
 	} catch {
 		/* verification is best-effort */
@@ -3678,18 +3935,135 @@ function parseNginxSize(s: string): number | null {
 	return Number(m[1]) * factor;
 }
 
-/** First running docker container whose name matches `want` but not `avoid`. */
-function dockerContainer(want: RegExp, avoid: RegExp | null): string | null {
-	try {
-		const out = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8', timeout: 8000 });
-		if (out.status !== 0) return null;
-		for (const name of (out.stdout ?? '').split('\n').map((x) => x.trim()).filter(Boolean)) {
-			if (want.test(name) && (avoid === null || !avoid.test(name))) return name;
-		}
-	} catch {
-		/* docker not present */
+/** Classify a curl `%{http_code}` from the /v1/broadcast body-limit probe. PURE
+ *  (review B9). Only a real HTTP answer is conclusive: 413 = still too large;
+ *  any other 2xx/4xx = the body fits; `000`/empty (connect failure, e.g. a box
+ *  whose clearnet is filtered upstream) or a 5xx edge error = we could NOT check,
+ *  so the caller must NOT report "OK". */
+export function classifyBroadcastProbe(code: string): 'fits' | 'too-large' | 'unreachable' {
+	const c = (code ?? '').trim();
+	if (c === '413') return 'too-large';
+	if (/^[0-9]{3}$/.test(c) && c !== '000' && !c.startsWith('5')) return 'fits';
+	return 'unreachable';
+}
+
+/** The install's apps/web/build for the binary that is running (the self-heal
+ *  child runs <install>/apps/ops-cli/dist/…), so the frontend container can be
+ *  told apart from BunkerWeb by its mount. */
+function runningInstallBuildDir(): string {
+	const root = /^(.*)\/apps\/ops-cli\/dist\//.exec(process.argv[1] ?? '')?.[1] ?? '/opt/morphit';
+	return join(root, 'apps', 'web', 'build');
+}
+
+const BUNKERWEB_IMAGE = /(^|\/)bunkerity\/bunkerweb(?=$|[:@])/;
+
+/** BunkerWeb's own containers on this server (wave 5, B-from-C §4). Found the
+ *  way the web-proxy heal finds them (lib/proxyConfigHeal.ts): the edge by IMAGE
+ *  bunkerity/bunkerweb, tie-broken by host port 443; schedulers by image, and
+ *  only those in the edge's Compose project. NEVER by name: on morphit.io every
+ *  container is called bunkerweb-<service>-1 (frontend, onion service,
+ *  crowdsec, db…), and the old name match picked the frontend. */
+export interface BunkerWebStack {
+	readonly edge: ContainerInfo;
+	/** The edge's Compose project (all files, env files, directory), or null
+	 *  when it was not started by Docker Compose. */
+	readonly ref: ComposeRef | null;
+	/** The Compose services to reload/recreate: the edge's and its scheduler's —
+	 *  never the whole stack (a plain `up` can recreate the database). */
+	readonly services: readonly string[];
+	/** The scheduler to drop config files into, when there is exactly one. */
+	readonly scheduler: ContainerInfo | null;
+}
+
+export function findBunkerWebStack(
+	buildDir: string
+): { stack: BunkerWebStack | null; note: string | null } {
+	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8', timeout: 8000 });
+	if (ps.error || ps.status !== 0) return { stack: null, note: null };
+	const names = (ps.stdout ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
+	if (names.length === 0) return { stack: null, note: null };
+	const insp = spawnSync('docker', ['inspect', ...names], {
+		encoding: 'utf8',
+		timeout: 15000,
+		maxBuffer: 64 * 1024 * 1024
+	});
+	const list = parseDockerInspect(insp.stdout || '[]');
+	const id = identifyContainers(list, buildDir);
+	const edge = id.edge;
+	if (edge === null) {
+		const bws = list.filter((c) => c.running && BUNKERWEB_IMAGE.test(c.image)).map((c) => c.name);
+		return {
+			stack: null,
+			note:
+				bws.length > 1
+					? `WAF: found several BunkerWeb containers on this server (${bws.join(', ')}) and could not tell which one is the public one, so the WAF settings were left alone.`
+					: null
+		};
 	}
-	return null;
+	const ref = composeRefOf(edge);
+	const sameProject = (c: ContainerInfo): ComposeRef | null => {
+		const r = composeRefOf(c);
+		return r !== null && ref !== null && r.project === ref.project && r.files.join(',') === ref.files.join(',') ? r : null;
+	};
+	const schedulers = ref !== null ? id.schedulers.filter((s) => sameProject(s) !== null) : id.schedulers;
+	return {
+		stack: {
+			edge,
+			ref,
+			services: ref !== null ? [...new Set([ref.service, ...schedulers.map((s) => sameProject(s)!.service)])] : [],
+			scheduler: schedulers.length === 1 ? schedulers[0]! : null
+		},
+		note: null
+	};
+}
+
+/** The settings file BunkerWeb's edge reads, as Docker Compose declares it
+ *  (`env_file`). When this Compose is too old to show it, `fallback` counts only
+ *  if it sits in the edge's own Compose directory. null (with a calm note) when
+ *  it cannot be told — then the WAF settings are left alone. */
+function bunkerWebEnvFile(stack: BunkerWebStack, fallback: string): { path: string | null; note: string | null } {
+	const ref = stack.ref;
+	if (ref === null)
+		return existsSync(fallback)
+			? { path: fallback, note: null }
+			: { path: null, note: `WAF: ${stack.edge.name} was not started by Docker Compose and ${fallback} does not exist, so the WAF settings were left alone.` };
+	const r = spawnSync('docker', composeArgs(ref, ['config', '--format', 'json', '--no-env-resolution']), {
+		encoding: 'utf8',
+		timeout: 30000,
+		maxBuffer: 64 * 1024 * 1024
+	});
+	const model = r.status === 0 && (r.stdout ?? '') !== '' ? parseComposeModel(r.stdout) : null;
+	const ef = model?.get(ref.service)?.envFiles ?? null;
+	if (ef !== null && ef.length > 0) {
+		const named = ef.filter((p) => /(^|\/)bunkerweb\.env$/.test(p));
+		const path = named.length === 1 ? named[0]! : ef.length === 1 ? ef[0]! : null;
+		return path !== null
+			? { path, note: null }
+			: { path: null, note: `WAF: BunkerWeb reads several settings files (${ef.join(', ')}), so the WAF settings were left alone.` };
+	}
+	const dirs = new Set([ref.workDir, ...ref.files.map((f) => dirname(f))].filter(Boolean));
+	if (existsSync(fallback) && dirs.has(dirname(fallback))) return { path: fallback, note: null };
+	return {
+		path: null,
+		note:
+			ef === null
+				? `WAF: could not tell which settings file BunkerWeb reads (Docker Compose did not say), so the WAF settings were left alone.`
+				: `WAF: BunkerWeb's settings are not in a file Docker Compose reads for it, so the WAF settings were left alone.`
+	};
+}
+
+/** `docker compose … <args>` for exactly this project, then the old
+ *  `docker-compose` binary with the same arguments. true on the first success. */
+function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): boolean {
+	const a = composeArgs(ref, args);
+	for (const [cmd, argv] of [['docker', a], ['docker-compose', a.slice(1)]] as Array<[string, string[]]>) {
+		try {
+			if (spawnSync(cmd, argv, { encoding: 'utf8', timeout }).status === 0) return true;
+		} catch {
+			/* try the next binary */
+		}
+	}
+	return false;
 }
 
 /** v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work.
@@ -3706,16 +4080,37 @@ function dockerContainer(want: RegExp, avoid: RegExp | null): string | null {
  *     public edge believe every visitor's X-Forwarded-For, so anyone could pick
  *     their own address per request (past BunkerWeb's bans and the relay's per-IP
  *     signup limits). Templates aren't re-rendered on upgrade, so turn it off here.
- *  `bwEnv` is a parameter only so the smoke can run this against a temp dir. */
-export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
+ *
+ *  Wave 5 (B-from-C §4): BunkerWeb is found by IMAGE (findBunkerWebStack), its
+ *  settings file is the one Docker Compose says it reads, and reloads touch only
+ *  BunkerWeb's own services (`up -d --no-deps <edge> <scheduler>`) — never a
+ *  whole-stack `up`, never another container. Can't tell which container or
+ *  file → change nothing and say so calmly.
+ *  `bwEnv` (used only when Compose can't say) and `buildDir` are parameters so
+ *  the tests can run this against a temp dir. */
+export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDir = runningInstallBuildDir()): void {
+	let found: ReturnType<typeof findBunkerWebStack>;
 	try {
-		if (!existsSync(bwEnv)) return; // not a BunkerWeb deployment — nothing to heal
+		found = findBunkerWebStack(buildDir);
 	} catch {
 		return;
 	}
+	if (found.note !== null) info(found.note);
+	const stack = found.stack;
+	if (stack === null) {
+		// Not a BunkerWeb deployment, or BunkerWeb isn't running right now.
+		if (found.note === null && existsSync(bwEnv))
+			info('WAF: BunkerWeb is not running on this server, so its settings were left as they are; the next `morphit-ops upgrade` checks them again.');
+		return;
+	}
+	const envFile = bunkerWebEnvFile(stack, bwEnv);
+	if (envFile.note !== null) info(envFile.note);
+	if (envFile.path === null) return;
+	bwEnv = envFile.path;
 
-	const bw = dockerContainer(/bunkerweb/i, /scheduler|ui|db|redis|autoconf/i);
-	const sched = dockerContainer(/scheduler/i, null);
+	const bw = stack.edge.name;
+	const sched = stack.scheduler?.name ?? null;
+	const ref = stack.ref;
 	const RULE_ID = '1990001';
 	const MODSEC_RULE =
 		`SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"`;
@@ -3836,19 +4231,13 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
 	//    413) — so we must observe the running limit, not trust `changed`.
 	let reloaded = false;
 	if (changed) {
-		const composeFiles = ['/etc/bunkerweb/docker-compose.yml', '/opt/morphit/docker-compose.yml'];
+		// Only BunkerWeb's own containers/services: a whole-stack `up` can recreate
+		// the database, and a name-picked restart hit the wrong container (wave 5).
 		const strategies: Array<() => boolean> = [
-		() => sched !== null && spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
-		...composeFiles.flatMap((f) =>
-			existsSync(f)
-				? [
-						() => spawnSync('docker', ['compose', '-f', f, 'up', '-d'], { encoding: 'utf8', timeout: 120000 }).status === 0,
-						() => spawnSync('docker-compose', ['-f', f, 'up', '-d'], { encoding: 'utf8', timeout: 120000 }).status === 0
-					]
-				: []
-		),
-		() => bw !== null && spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 }).status === 0
-	];
+			() => sched !== null && spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
+			() => ref !== null && composeRun(ref, ['up', '-d', '--no-deps', ...stack.services], 120000),
+			() => spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 }).status === 0
+		];
 		let ok = false;
 		for (const strat of strategies) {
 			try {
@@ -3862,15 +4251,21 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
 		}
 		reloaded = ok;
 		if (!reloaded) {
-			info('WAF: settings written; could not auto-reload — they apply on the next `docker compose up -d`.');
+			info(
+				ref !== null
+					? `WAF: settings written; could not reload BunkerWeb automatically. To apply them, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', ...stack.services])}`
+					: `WAF: settings written; could not reload BunkerWeb automatically. To apply them, run on this server: sudo docker restart ${bw}`
+			);
 		}
 	}
 
 	// ── VERIFY against the RUNNING container — ALWAYS, even in steady state,
 	//    because an env value can be present yet never rendered into nginx (the
 	//    recurring 413). Observe the real limits; don't trust that setting = applied.
-	if (bw === null) return;
-	if (reloaded) spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
+	if (reloaded) {
+		info('WAF: waiting about 20 seconds for BunkerWeb to load the new settings...');
+		spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
+	}
 
 	// (1) ModSec /v1/ + /relay/ exemption actually loaded?
 	try {
@@ -3932,10 +4327,16 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
 				spawnSync('sleep', ['20'], { timeout: 25000 });
 				code = probe();
 			}
+			const verdict = classifyBroadcastProbe(code);
 			info(
-				code === '413'
+				verdict === 'too-large'
 					? `WAF: broadcast body limit STILL 413 after escalation — capture \`docker exec ${bw} nginx -T 2>/dev/null | grep client_max_body_size\` and send it.`
-					: `WAF: broadcast body limit OK (a ~50 KB POST returned ${code || '?'}, not 413) — avatar/order uploads fit.`
+					: verdict === 'fits'
+						? `WAF: broadcast body limit OK (a ~50 KB POST returned ${code}, not 413) — avatar/order uploads fit.`
+						: // 000 / empty / 5xx: we could NOT reach the edge to check (e.g.
+							// morphitir, whose clearnet is filtered upstream). Never claim OK for
+							// an unverified condition (review B9).
+							`WAF: could not reach ${origin} to check the broadcast body limit (curl returned ${code || 'no response'}); the WAF settings were still applied. If this box's clearnet is filtered upstream this is expected — re-check from a working network with a ~50 KB POST to /v1/broadcast.`
 			);
 		}
 	} catch {
@@ -3946,8 +4347,8 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
 	//     nginx has no `set_real_ip_from` left. `docker restart` (the first reload
 	//     strategy above) keeps a container's old environment, so an env change
 	//     can sit on disk unapplied; recreating the containers from compose is what
-	//     makes them read the file again. Try each compose file, re-checking after
-	//     each. (v1.18.0 deep-deep, H1)
+	//     makes them read the file again: BunkerWeb's own services only, from its
+	//     own Compose project, then re-check. (v1.18.0 deep-deep, H1; wave 5)
 	try {
 		if (unq(getVal('USE_REAL_IP')).toLowerCase() !== 'yes') {
 			const liveTrustsXff = (): boolean | null => {
@@ -3962,29 +4363,26 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env'): void {
 			};
 			let live = liveTrustsXff();
 			if (live === true) {
-				info('WAF: recreating the BunkerWeb containers so they pick up USE_REAL_IP=no (about half a minute)...');
-				const files = [...new Set([join(dirname(bwEnv), 'docker-compose.yml'), '/etc/bunkerweb/docker-compose.yml', '/opt/morphit/docker-compose.yml'])];
-				const attempts: Array<[string, string[]]> = files
-					.filter((f) => existsSync(f))
-					.flatMap((f): Array<[string, string[]]> => [
-						['docker', ['compose', '-f', f, 'up', '-d', '--force-recreate']],
-						['docker-compose', ['-f', f, 'up', '-d', '--force-recreate']]
-					]);
-				for (const [cmd, args] of attempts) {
+				// Only BunkerWeb's own services, from its own Compose project (every
+				// file, env file and directory), with --no-deps: never the database.
+				if (ref !== null) {
+					info('WAF: recreating the BunkerWeb containers so they pick up USE_REAL_IP=no (about half a minute)...');
 					try {
-						if (spawnSync(cmd, args, { encoding: 'utf8', timeout: 180000 }).status !== 0) continue;
-						spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
-						live = liveTrustsXff();
-						if (live !== true) break;
+						if (composeRun(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services], 180000)) {
+							spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
+							live = liveTrustsXff();
+						}
 					} catch {
-						/* try the next one */
+						/* reported below */
 					}
 				}
 			}
 			if (live === false) info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
 			else if (live === true)
 				info(
-					`WAF: BunkerWeb still has the old real-IP setting loaded. Run \`cd ${dirname(bwEnv)} && docker compose up -d --force-recreate\` when convenient.`
+					ref !== null
+						? `WAF: BunkerWeb still has the old real-IP setting loaded. When convenient, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+						: `WAF: BunkerWeb still has the old real-IP setting loaded. ${bw} was not started by Docker Compose; recreate it on this server the way it was started so it reads ${bwEnv} again.`
 				);
 		}
 	} catch {
@@ -4097,15 +4495,68 @@ function readOperatorTagFromConfig(): string | null {
 	return null;
 }
 
+/** Remember that this box has served a warrant canary (see step 9d-bis).
+ *  Best-effort; never throws. */
+/** Write `data` to `path` WITHOUT following a symbolic link at `path` — the
+ *  upgrade runs as root and these targets live in directories a non-root
+ *  account owns (/var/lib/morphit, apps/web/build), so a planted link must be
+ *  refused by the kernel, never followed (review B5). O_NOFOLLOW makes open()
+ *  fail with ELOOP on a link; O_CREAT|O_TRUNC create-or-replace the real file.
+ *  Throws on a link or any other open failure. */
+function writeNoFollow(path: string, data: string): void {
+	const fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o644);
+	try {
+		const buf = Buffer.from(data, 'utf8');
+		let off = 0;
+		while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off);
+	} finally {
+		closeSync(fd);
+	}
+}
+
+/** Read a regular file WITHOUT following a symbolic link at `path`; null if it
+ *  is a link, is absent, or is not a regular file. */
+function readNoFollow(path: string): string | null {
+	let fd: number;
+	try {
+		fd = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+	} catch {
+		return null; // ELOOP (a link) / ENOENT — nothing safe to read
+	}
+	try {
+		if (!fstatSync(fd).isFile()) return null;
+		const chunks: Buffer[] = [];
+		const b = Buffer.alloc(65536);
+		for (;;) {
+			const n = readSync(fd, b, 0, b.length, null);
+			if (n === 0) break;
+			chunks.push(Buffer.from(b.subarray(0, n)));
+		}
+		return Buffer.concat(chunks).toString('utf8');
+	} finally {
+		closeSync(fd);
+	}
+}
+
+export function recordCanarySeen(marker: string): void {
+	try {
+		mkdirSync(dirname(marker), { recursive: true });
+		writeNoFollow(marker, `seen ${new Date().toISOString()}\n`);
+	} catch {
+		/* best-effort; the checks in step 9d-bis still work without it */
+	}
+}
+
 /** Stamp `operator_tag` into a build's verify.json without disturbing its
- *  formatting or the (asset) hash_manifest. Returns true if it changed the file. */
-function patchVerifyJsonOperatorTag(buildDir: string, tag: string): boolean {
+ *  formatting or the (asset) hash_manifest. Returns true if it changed the file.
+ *  Never follows a link at verify.json (the build dir may be non-root-owned). */
+export function patchVerifyJsonOperatorTag(buildDir: string, tag: string): boolean {
 	const p = join(buildDir, 'verify.json');
-	if (!existsSync(p)) return false;
-	const txt = readFileSync(p, 'utf8');
+	const txt = readNoFollow(p);
+	if (txt === null) return false;
 	const patched = txt.replace(/("operator_tag"[ \t]*:[ \t]*)(null|"[^"]*")/, `$1${JSON.stringify(tag)}`);
 	if (patched === txt) return false;
-	writeFileSync(p, patched);
+	writeNoFollow(p, patched);
 	return true;
 }
 
@@ -4291,10 +4742,13 @@ function computeSha256(path: string): string {
 	return h.digest('hex');
 }
 
-function mkTempDir(): string {
-	const dir = join(tmpdir(), `morphit-upgrade-${Date.now()}`);
-	mkdirSync(dir, { recursive: true });
-	return dir;
+/** The download scratch dir: always a NEW directory with an unpredictable name,
+ *  mode 0700 (mkdtemp). It holds the release tarball between the integrity
+ *  check and extraction, as root, so it must never be a directory — or a link
+ *  to one — that something else created first (review B2: the old
+ *  `morphit-upgrade-<Date.now()>` + mkdirSync({recursive}) adopted one). */
+export function mkTempDir(): string {
+	return mkdtempSync(join(tmpdir(), 'morphit-upgrade-'));
 }
 
 function cleanupTmp(dir: string): void {
@@ -4365,10 +4819,11 @@ export interface RollbackRestore {
  *  mtime changes (or that appears) during the phase was written by THIS run.
  *  (v1.18.0 deep-deep, ops-5) */
 export function snapshotSelfHealBackups(
-	targets: readonly string[]
+	targets: readonly string[],
+	backupOf: (target: string) => string = relayHealBackupPath
 ): ReadonlyArray<{ target: string; backup: string; mtimeMs: number | null }> {
 	return targets.map((target) => {
-		const backup = relayHealBackupPath(target);
+		const backup = backupOf(target);
 		let mtimeMs: number | null = null;
 		try {
 			mtimeMs = statSync(backup).mtimeMs;
@@ -4401,14 +4856,112 @@ export function selfHealRestoreList(
 	return out;
 }
 
+/** Injectable seams for rollback, so the recovery path is testable without a
+ *  live systemd or docker. Both default to the real implementations. */
+export interface RollbackDeps {
+	restartContainer?: (name: string, installDir: string) => void;
+	systemctl?: (args: readonly string[]) => { status: number | null };
+}
+
+/** NRestarts for a unit right now, or 0 when it can't be read. */
+function readUnitRestarts(svc: string): number {
+	const r = spawnSync('systemctl', ['show', '-p', 'NRestarts', '--value', svc], {
+		encoding: 'utf8',
+		timeout: 10_000
+	});
+	const n = Number((r.stdout ?? '').trim());
+	return r.status === 0 && Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+/** How many AUTOMATIC restarts inside the verification window count as a
+ *  crash-loop. morphit-indexer.service deliberately exits + retries while
+ *  Postgres is still coming up, so ONE (even two) restart is normal and must
+ *  never roll back a good upgrade (wave 4, P6). */
+export const CRASH_LOOP_RESTARTS = 3;
+/** How long to watch a just-restarted unit, and how many consecutive steady
+ *  "active" polls end the watch early. */
+const RESTART_WINDOW_MS = 45_000;
+const RESTART_POLL_MS = 1_500;
+const STABLE_POLLS = 4;
+
+/** Classify ONE observation of a unit after the upgrade restarted it. PURE
+ *  (v1.20.0, B6; wave 4, P6). `failed`, or CRASH_LOOP_RESTARTS+ automatic
+ *  restarts since the upgrade's own restart, = down. `active` = up. Anything
+ *  else (activating / auto-restart pending) = wait — until the window is over,
+ *  when a unit that is still not active = down. */
+export function classifyUnitOutcome(
+	activeState: string,
+	restartsBefore: number,
+	restartsNow: number,
+	windowOver = false
+): 'up' | 'down' | 'wait' {
+	if (activeState === 'failed') return 'down';
+	if (restartsNow - restartsBefore >= CRASH_LOOP_RESTARTS) return 'down';
+	if (activeState === 'active') return 'up';
+	return windowOver ? 'down' : 'wait';
+}
+
+/** Decide from the samples seen so far. PURE. 'down' as soon as any sample is
+ *  down; 'up' once the last STABLE_POLLS samples are all active with no new
+ *  restart between them (steady), or when the window is over and the last
+ *  sample is up; otherwise 'wait'. */
+export function evaluateRestartSamples(
+	restartsBefore: number,
+	samples: ReadonlyArray<{ activeState: string; restarts: number }>,
+	windowOver: boolean
+): 'up' | 'down' | 'wait' {
+	if (samples.length === 0) return windowOver ? 'down' : 'wait';
+	for (const x of samples) {
+		if (classifyUnitOutcome(x.activeState, restartsBefore, x.restarts) === 'down') return 'down';
+	}
+	const tail = samples.slice(-STABLE_POLLS);
+	if (
+		tail.length === STABLE_POLLS &&
+		tail.every((x) => x.activeState === 'active' && x.restarts === tail[0]!.restarts)
+	) {
+		return 'up';
+	}
+	if (windowOver) {
+		const last = samples[samples.length - 1]!;
+		return classifyUnitOutcome(last.activeState, restartsBefore, last.restarts, true);
+	}
+	return 'wait';
+}
+
+/** Observe whether a just-restarted unit came up and STAYED up, polling its
+ *  running state (not the restart exit code) under a spinner so the pause is
+ *  never silent. Returns 'up' or 'down'. */
+async function verifyUnitStayedUp(svc: string, restartsBefore: number): Promise<'up' | 'down'> {
+	const stop = startDotsSpinner(`Checking ${svc} came up on the new version…`);
+	try {
+		const samples: Array<{ activeState: string; restarts: number }> = [];
+		const deadline = Date.now() + RESTART_WINDOW_MS;
+		for (;;) {
+			const r = spawnSync('systemctl', ['show', '-p', 'ActiveState', '--value', svc], {
+				encoding: 'utf8',
+				timeout: 10_000
+			});
+			samples.push({ activeState: (r.stdout ?? '').trim(), restarts: readUnitRestarts(svc) });
+			const verdict = evaluateRestartSamples(restartsBefore, samples, Date.now() >= deadline);
+			if (verdict !== 'wait') return verdict;
+			await new Promise((res) => setTimeout(res, RESTART_POLL_MS));
+		}
+	} finally {
+		stop();
+	}
+}
+
 export function rollback(
 	installDir: string,
 	backupDir: string,
 	tmpDir: string,
 	err: unknown,
 	web?: { webRoot: string; webRootBackup: string | null; container?: string | null },
-	restore: readonly RollbackRestore[] = []
+	restore: readonly RollbackRestore[] = [],
+	deps: RollbackDeps = {}
 ): number {
+	const restartContainer = deps.restartContainer ?? restartFrontendContainer;
+	const systemctl = deps.systemctl ?? ((args: readonly string[]) => spawnSync('systemctl', [...args]));
 	printError(`Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
 	info(`Rolling back: removing partial extract at ${installDir}`);
 	try {
@@ -4453,7 +5006,7 @@ export function rollback(
 	// and nginx 500-loops). Re-bind it to the restored install.
 	if (web?.container) {
 		try {
-			restartFrontendContainer(web.container, installDir);
+			restartContainer(web.container, installDir);
 			info(`Re-attached the frontend container "${web.container}" to the restored install.`);
 		} catch (ctErr) {
 			warn(
@@ -4486,10 +5039,18 @@ export function rollback(
 		warn('Could not run `systemctl daemon-reload`; run it by hand so the restored units take effect.');
 	}
 	// Best-effort: restart services after rollback so the old version is running.
+	// Restart every INSTALLED unit, not only the ones reporting is-active: a unit
+	// that CRASHED on the new code (the very reason we are rolling back) reports
+	// INACTIVE, and the old is-active-only gate then skipped it — leaving that
+	// service DOWN on a box the rollback otherwise restored (review B6). An
+	// enabled unit is one this box runs; a genuinely-absent unit fails both checks
+	// and is skipped.
 	for (const svc of SERVICES_TO_RESTART) {
-		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
-		if (!isActive) continue;
-		spawnSync('systemctl', ['restart', svc]);
+		const installed =
+			systemctl(['is-enabled', '--quiet', svc]).status === 0 ||
+			systemctl(['is-active', '--quiet', svc]).status === 0;
+		if (!installed) continue;
+		systemctl(['restart', svc]);
 	}
 	cleanupTmp(tmpDir);
 	info(`Rolled back to previous install at ${installDir}.`);

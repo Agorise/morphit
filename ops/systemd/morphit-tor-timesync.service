@@ -1,0 +1,45 @@
+[Unit]
+Description=Morphit Tor time check — keep a tor-only node's clock right from onion Date headers (no clearnet NTP)
+Documentation=https://git.agorise.net/agorise/morphit
+After=tor.service
+Wants=tor.service
+
+[Service]
+Type=oneshot
+# Installed ONLY on tor-only (hidden-only) nodes, by the Ansible tor role and by
+# `morphit-ops upgrade`. Root because stepping the clock needs CAP_SYS_TIME; the
+# script is a root-owned copy in /usr/local/lib/morphit (never the
+# service-user-owned /opt/morphit tree). It talks only to Tor's SocksPort on
+# loopback. Exit 1 ("no consensus right now") is a normal outcome, not a
+# failure: the next run tries again.
+User=root
+Group=root
+EnvironmentFile=-/etc/morphit/tor-timesync.env
+ExecStart=/usr/local/lib/morphit/morphit-tor-timesync.sh
+SuccessExitStatus=0 1
+TimeoutStartSec=300
+
+# ─── Hardening ─────────────────────────────────────────────────
+# NOT ProtectClock: setting the clock is this unit's job.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+LimitCORE=0
+# Loopback TCP to Tor only (curl needs AF_INET; AF_UNIX for logging).
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=localhost
+CapabilityBoundingSet=CAP_SYS_TIME
+# hwclock --systohc records its drift in /etc/adjtime (when the box has one).
+ReadWritePaths=-/etc/adjtime
+
+[Install]
+WantedBy=multi-user.target

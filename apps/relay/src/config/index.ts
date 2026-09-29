@@ -203,26 +203,20 @@ const envSchema = z.object({
 	 *  (ceiling × chain fee). Default 50 — conservative for
 	 *  launch; operators raise as their instance grows. */
 	MORPHIT_RELAY_SIGNUP_DAILY_CEILING: z.coerce.number().int().positive().default(50),
-	/** Optional path for persisting the daily-ceiling counter
-	 *  across relay restarts (Audit 2026-05 Finding 5-4
-	 *  hardening). Unset → counter is in-memory only (matches
-	 *  the historical behavior; restart resets the bucket).
-	 *  Set → file is read at boot, written on every successful
-	 *  signup, holds AGGREGATE counts only (no IPs, no user
-	 *  data). Recommended location: `/var/lib/morphit/relay/
-	 *  daily-ceiling.json` — under the relay's data dir, mode
-	 *  0600. Operator must ensure the dir exists and is writable
-	 *  by the relay process user. */
+	/** Path of the persisted daily-ceiling counter (Audit 2026-05 Finding
+	 *  5-4). Defaults to `${MORPHIT_RELAY_DATA_DIR}/signup-ceiling.json`.
+	 *  Read at boot, written on every successful signup; AGGREGATE counts
+	 *  only (no IPs, no user data), mode 0600. v1.20.0 (D3): this used to
+	 *  default to "not persisted", and no installer set it, so every restart
+	 *  of every installed relay reset the day's ceiling to zero. */
 	MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH: z.string().optional(),
-	/** Data directory for runtime operator-actionable state.
-	 *  Currently used for:
-	 *    - kill-switch sentinel file (`SIGNUPS_DISABLED`).  Operator
-	 *      under incident response touches this file and the next
-	 *      signup poll (within 1s) sees the file and rejects.
-	 *  Recommended location: `/var/lib/morphit/relay/`, mode 0700,
-	 *  owned by the relay process user.  Operator must ensure the
-	 *  dir exists and is writable.  When unset, the kill-switch
-	 *  feature is disabled (env-var disable still works). */
+	/** Data directory for runtime operator-actionable state: the kill-switch
+	 *  sentinel file (`touch <dir>/SIGNUPS_DISABLED` pauses signups within 1 s,
+	 *  no restart) and the persisted daily-ceiling counter. Defaults to
+	 *  DEFAULT_RELAY_DATA_DIR; the relay creates it (mode 0700) at boot and
+	 *  logs whether it is writable. v1.20.0 (D3): it used to default to
+	 *  "disabled", so the documented kill-switch file did nothing on every
+	 *  installed relay. */
 	MORPHIT_RELAY_DATA_DIR: z.string().optional(),
 	/** Minimum minutes between successful signups from the same
 	 *  IP. In addition to the N-per-day cap, the two must be at
@@ -298,19 +292,20 @@ const envSchema = z.object({
 	MORPHIT_RELAY_SEQUENTIAL_THRESHOLD: z.coerce.number().int().min(1).max(20).default(2),
 	MORPHIT_RELAY_SEQUENTIAL_MIN_PREFIX: z.coerce.number().int().min(2).max(8).default(3),
 
-	/** Additional trusted-proxy IPs / CIDR ranges that may set
+	/** Trusted-proxy IPs / CIDR ranges that may set
 	 *  X-Forwarded-For / X-Real-IP for this relay.  Comma-
-	 *  separated.  Default empty (loopback `127.0.0.1` and
-	 *  `::1` are always trusted; this var ADDS to the default).
+	 *  separated.  UNSET or empty (v1.20.0 wave 5): the code default,
+	 *  loopback + 172.16.0.0/12 (Docker's default bridge pool — the
+	 *  ansible compose is 172.20.0.0/16, morphit.io's bridge 172.18.0.0/24),
+	 *  the same set the indexer and the frontend nginx geo use.  SET: it
+	 *  REPLACES that CIDR default (loopback is always trusted).
 	 *
-	 *  Most operators leave this UNSET — the recommended
-	 *  topology has nginx on the same host as the relay,
-	 *  connecting via loopback.
+	 *  Most operators leave this UNSET — bare-metal nginx on this
+	 *  host (loopback) and the shipped BunkerWeb compose on any
+	 *  default Docker bridge are both covered.
 	 *
-	 *  Set this when:
-	 *    - You run BunkerWeb in Docker — the BunkerWeb container
-	 *      connects from the Docker bridge IP range (typically
-	 *      `172.18.0.0/16`).  Pass that CIDR.
+	 *  Set this when your proxy lives OUTSIDE those ranges:
+	 *    - a Docker daemon configured with a 10.x / 192.168.x pool;
 	 *    - You run nginx on a different host than the relay —
 	 *      pass the nginx host's IP.
 	 *    - You sit behind a CDN / TLS terminator (Cloudflare,
@@ -354,13 +349,16 @@ const envSchema = z.object({
 	/** Operator-tunable mirror of the Blurt chain's
 	 *  account_creation_fee, in BLURT.  Set by witness consensus
 	 *  on chain (currently 100 BLURT).  Used as: (1) fallback
-	 *  when chain RPC is unavailable, (2) sanity threshold —
-	 *  the relay refuses to broadcast if the chain's reported
-	 *  fee is more than 10% above this value, protecting against
-	 *  a witness emergency-raise quietly draining the relay,
-	 *  and (3) read by ops-cli + setup wizard for balance
-	 *  planning math.  Operators update this if witnesses ever
-	 *  change the chain fee. */
+	 *  when the chain returns an unparseable fee, (2) a warn-log
+	 *  when the live fee differs by more than 10%, (3) a HARD
+	 *  REFUSAL — the relay will not broadcast an account_create
+	 *  while the live fee is more than 1.5x this value (code
+	 *  `relay_fee_spike`, FEE_REFUSE_MULTIPLIER in
+	 *  blurt/client.ts), so a witness emergency-raise cannot
+	 *  quietly drain the relay, and (4) read by ops-cli + setup
+	 *  wizard for balance planning math.  Operators update this
+	 *  when witnesses change the chain fee — signups resume once
+	 *  the live fee is back within 1.5x of it. */
 	MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT: z.coerce.number().positive().default(100),
 
 	// ── Web Push (Part 122 cp13) ───────────────────────────────
@@ -471,20 +469,15 @@ export interface Config {
 	// ── Signup-drain prevention (layered defenses) ──
 	readonly signupEnabled: boolean;
 	readonly signupDailyCeiling: number;
-	/** Optional path for persisting the daily-ceiling counter
-	 *  across relay restarts (Audit 2026-05 Finding 5-4
-	 *  hardening). When unset, the counter is in-memory only —
-	 *  matches the historical behavior. When set, the counter
-	 *  survives restarts so an attacker can't bypass the daily
-	 *  cap by triggering a process restart. The persisted file
-	 *  contains AGGREGATE counts only (no IPs, no user data).
-	 *  Recommended location: a file under the relay's data dir,
-	 *  e.g. `/var/lib/morphit/relay/daily-ceiling.json`. */
+	/** Where the daily-ceiling counter is persisted so it survives relay
+	 *  restarts (an attacker must not reset the cap by forcing a restart).
+	 *  AGGREGATE counts only. Always set (defaults under dataDir, D3); the
+	 *  `null` in the type is kept for tests that want an in-memory ceiling. */
 	readonly signupCeilingPersistPath: string | null;
 
-	/** Data directory for runtime operator-actionable state
-	 *  (kill-switch sentinel, future runtime flags).  When unset,
-	 *  the kill-switch feature is disabled. */
+	/** Data directory for runtime operator-actionable state (kill-switch
+	 *  sentinel, persisted ceiling). Always set by loadConfig (D3); `null`
+	 *  disables the kill-switch file in tests. */
 	readonly dataDir: string | null;
 	readonly createSpacingMinutes: number;
 	readonly altchaTriggerCount: number;
@@ -513,6 +506,10 @@ export interface Config {
 	readonly queuePollIntervalMs: number;
 	readonly queueBatchSize: number;
 	readonly queueMaxRetries: number;
+	/** Undecided settle checks before a pending transfer whose outcome is
+	 *  unknown is escalated to the operator (never re-sent blind). Default 30
+	 *  (drainer). v1.20.0 fix wave 4, A3. */
+	readonly queueMaxSettleChecks?: number;
 
 	readonly verboseHealth: boolean;
 
@@ -700,8 +697,8 @@ export function loadConfig(): Config {
 		// Signup-drain prevention (see env schema for rationale).
 		signupEnabled: env.MORPHIT_RELAY_SIGNUP_ENABLED,
 		signupDailyCeiling: env.MORPHIT_RELAY_SIGNUP_DAILY_CEILING,
-		signupCeilingPersistPath: env.MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH ?? null,
-		dataDir: env.MORPHIT_RELAY_DATA_DIR ?? null,
+		signupCeilingPersistPath: resolveCeilingPersistPath(env),
+		dataDir: resolveDataDir(env),
 		createSpacingMinutes: env.MORPHIT_RELAY_CREATE_SPACING_MINUTES,
 		altchaTriggerCount: env.MORPHIT_RELAY_ALTCHA_TRIGGER_COUNT,
 		altchaMaxnumber: env.MORPHIT_RELAY_ALTCHA_MAXNUMBER,
@@ -749,6 +746,27 @@ export function loadConfig(): Config {
 		pushMaxConsecutiveFailures: env.MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES,
 		pushRequireSigned: env.MORPHIT_RELAY_PUSH_REQUIRE_SIGNED
 	};
+}
+
+/** Default relay data directory (kill-switch sentinel + persisted ceiling).
+ *  Also created by the relay unit's StateDirectory=morphit/relay. */
+export const DEFAULT_RELAY_DATA_DIR = '/var/lib/morphit/relay';
+
+/** The data dir: the env value when non-empty, else the default. PURE. */
+export function resolveDataDir(env: { MORPHIT_RELAY_DATA_DIR?: string | undefined }): string {
+	const v = env.MORPHIT_RELAY_DATA_DIR?.trim();
+	return v !== undefined && v !== '' ? v : DEFAULT_RELAY_DATA_DIR;
+}
+
+/** The ceiling persist path: explicit env value, else
+ *  `<dataDir>/signup-ceiling.json`. PURE. */
+export function resolveCeilingPersistPath(env: {
+	MORPHIT_RELAY_DATA_DIR?: string | undefined;
+	MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH?: string | undefined;
+}): string {
+	const v = env.MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH?.trim();
+	if (v !== undefined && v !== '') return v;
+	return `${resolveDataDir(env).replace(/\/+$/, '')}/signup-ceiling.json`;
 }
 
 /**

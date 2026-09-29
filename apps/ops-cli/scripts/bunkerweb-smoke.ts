@@ -97,7 +97,12 @@ expect(
 	const cmds = bunkerwebCommands();
 	expect('commands: bring-up uses docker compose up -d', cmds.bringUp.some((l) => l.includes('docker compose up -d')));
 	expect('commands: bring-up copies shipped config', cmds.bringUp.some((l) => l.includes('cp -r ops/bunkerweb /etc/bunkerweb')));
-	expect('commands: logs targets bunkerweb', cmds.logs.includes('docker compose logs') && cmds.logs.includes('bunkerweb'));
+	// BunkerWeb runs with logging driver `none` (nothing stored), so the only way to
+// see it is a live attach that never forwards signals/stdin to the container.
+expect(
+	'commands: logs is the live attach view (docker compose logs cannot read a none-driver container)',
+	/docker attach --no-stdin --sig-proxy=false bunkerweb/.test(cmds.logs) && !cmds.logs.includes('docker compose logs')
+);
 	expect('commands: down present', cmds.down.includes('docker compose down'));
 }
 

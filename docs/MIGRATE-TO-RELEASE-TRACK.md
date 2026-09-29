@@ -2,14 +2,14 @@
 
 **Who this is for:** operators whose Morphit install came from
 `git clone` + `git pull` (rather than from extracting an official
-release tarball). If `npx morphit-ops upgrade` told you
+release tarball). If `sudo morphit-ops upgrade` told you
 
 ```
 [ERR] No release-info.json at <yourdir>/release-info.json
 ```
 
 this page is for you. After a one-time manual step you'll be on
-the release track, and `npx morphit-ops upgrade` will work for
+the release track, and `sudo morphit-ops upgrade` will work for
 every future version automatically.
 
 ## Why this happens
@@ -104,17 +104,22 @@ sudo systemctl restart morphit-matrix-bot 2>/dev/null || true
 
 # 9. Confirm you're on the release track.
 cat "$INSTALL_DIR/release-info.json"     # should show your tag, e.g. v1.0.0-beta.25
-npx morphit-ops status                   # should run cleanly
+sudo npm exec --offline --workspace apps/ops-cli morphit-ops -- status   # from $INSTALL_DIR; should run cleanly
 ```
 
 ## From now on
 
 You never `git pull` to upgrade again. To update to a future
-release, from your install directory:
+release, on the server:
 
 ```
-npx morphit-ops upgrade
+sudo morphit-ops upgrade
 ```
+
+(If your install has no `morphit-ops` shortcut on the PATH, run
+`cd /opt/morphit && sudo npm exec --offline --workspace apps/ops-cli morphit-ops -- upgrade`
+— never `npx morphit-ops`, which outside the repo looks the name up on the
+public npm registry.)
 
 It downloads the new release, verifies it, backs up your current
 install, **carries your config and keys forward automatically**,

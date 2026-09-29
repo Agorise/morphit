@@ -54,8 +54,14 @@ describe('operatorRegister origin — hidden services accept http', () => {
 		// service → http rejected.
 		expect(reason(validate({ ...base, origin: 'http://short.onion' }))).toBe('origin_bad_scheme');
 	});
-	it('still accepts an https onion (TLS-fronted, rare but legal)', () => {
-		expect(reason(validate({ ...base, origin: `https://${ONION}` }))).toBeNull();
+	// v1.20.0 (S9): an https:// hidden origin is REFUSED. The federation's hidden
+	// transports dial a hidden origin as plain HTTP through the tunnel (the
+	// network authenticates and encrypts), so an https onion was dialled on port
+	// 80; one serving only 443 failed every push and probe as the peer's fault.
+	it('refuses an https onion, i2p or loki origin (S9)', () => {
+		expect(reason(validate({ ...base, origin: `https://${ONION}` }))).toBe('origin_bad_scheme');
+		expect(reason(validate({ ...base, origin: 'https://node.i2p' }))).toBe('origin_bad_scheme');
+		expect(reason(validate({ ...base, origin: 'https://node.loki' }))).toBe('origin_bad_scheme');
 	});
 });
 

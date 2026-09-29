@@ -376,7 +376,7 @@ export const BUNDLED_BTC_CHAT_LINK_URLS: readonly string[] = [
 
 export const BUNDLED_XMR_CHAT_LINK_URLS: readonly string[] = [
 	BUNDLED_XMR_CHAT_LINK_URL,
-	'https://localmonero.co/blocks/tx/{txid}',
+	// (v1.20.0) localmonero.co/blocks now redirects here — one explorer, not two.
 	'https://moneroblocks.info/tx/{txid}',
 	'https://monero.com/tx/{txid}'
 ];

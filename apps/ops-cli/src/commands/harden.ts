@@ -81,7 +81,9 @@ function loadExistingInstance(configPath: string): ExistingInstance {
 	// A non-commented MORPHIT_RELAY_TRUSTED_PROXY_IPS set to the
 	// pinned BunkerWeb network is our signal that BunkerWeb was
 	// chosen at setup.  (When BunkerWeb is off, init writes that
-	// line commented out.)
+	// line commented out.)  This only picks the checklist wording: an
+	// empty value no longer means "no proxy" — the relay then trusts
+	// loopback + 172.16.0.0/12, which includes 172.20.0.0/16.
 	const trusted = kv.get('MORPHIT_RELAY_TRUSTED_PROXY_IPS') ?? '';
 	return {
 		instanceName: kv.get('MORPHIT_INSTANCE_NAME') ?? 'my Morphit instance',
@@ -136,12 +138,12 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 		} else if (choice === 2) {
 			await stepBunkerWeb();
 			console.log(
-				'  Note: enabling BunkerWeb also means the relay should trust its\n' +
-					'  Docker network so it sees real client IPs.  On a fresh setup the\n' +
-					'  wizard wires MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 for you;\n' +
-					'  if you are adding BunkerWeb to an existing instance, set that key\n' +
-					'  in morphit.config.env by hand (or re-run `morphit-ops init`) and\n' +
-					'  restart the relay.  See OPERATIONS.md §32.\n'
+				'  Note: the relay must trust BunkerWeb\'s Docker network to see real\n' +
+					'  client IPs.  With MORPHIT_RELAY_TRUSTED_PROXY_IPS unset it already\n' +
+					'  does (it trusts loopback + Docker\'s default pool 172.16.0.0/12).\n' +
+					'  If that key IS set in morphit.env on this server, make sure it\n' +
+					'  includes BunkerWeb\'s network (172.20.0.0/16 for the shipped\n' +
+					'  compose), then restart the relay.  See OPERATIONS.md §32.\n'
 			);
 		} else if (choice === 3) {
 			// Pass the deployed connection URL so the backup targets the real DB

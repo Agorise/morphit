@@ -176,7 +176,7 @@ fi
 
 # P2 — a proxy answering 500 to everything is never a PASS.
 run MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:$PORT_err500" MORPHIT_I2P_HTTP_PROXY="127.0.0.1:$PORT_err500" bash "$PROBE" "http://$B32" --samples 3
-if [ "$RC" -ne 0 ] && ! printf '%s' "$OUT" | grep -q '^PASS'; then
+if [ "$RC" -ne 0 ] && ! grep -q '^PASS' <<<"$OUT"; then
 	ok 'P2 a local proxy answering 500 to everything is reported as unreachable, never PASS'
 else
 	no "P2 a proxy that answered only errors produced exit $RC: $(printf '%s' "$OUT" | grep -E 'PASS|MOSTLY|SLOWER' | head -1)"
@@ -185,7 +185,7 @@ fi
 # P3 — I2P goes through a CONNECT tunnel, like the indexer, and measures.
 : > "$W/connect.log"
 run MORPHIT_INDEXER_I2P_HTTP_PROXY="http://127.0.0.1:$PORT_connect/" bash "$PROBE" "http://$B32" --samples 3
-if grep -q "^PROXY CONNECT $B32:80 " "$W/connect.log" && [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q '^PASS'; then
+if grep -q "^PROXY CONNECT $B32:80 " "$W/connect.log" && [ "$RC" -eq 0 ] && grep -q '^PASS' <<<"$OUT"; then
 	ok 'P3 I2P is measured through a CONNECT tunnel, as the indexer dials it (and a scheme in the setting is accepted)'
 else
 	no "P3 I2P path: exit $RC; proxy saw: $(head -1 "$W/connect.log")"
@@ -193,7 +193,7 @@ fi
 
 # P3b — a router that REFUSES the tunnel is a failure, not a timing.
 run MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:$PORT_refuse" MORPHIT_I2P_HTTP_PROXY="127.0.0.1:$PORT_refuse" bash "$PROBE" "http://$B32" --samples 3
-if [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q 'could not be reached'; then
+if [ "$RC" -eq 1 ] && grep -q 'could not be reached' <<<"$OUT"; then
 	ok 'P3b a router that refuses the tunnel is reported as unreachable'
 else
 	no "P3b a refused tunnel produced exit $RC"
@@ -211,7 +211,7 @@ fi
 
 # P5 — the peer's own error answer is not a timing either.
 run MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:$PORT_socks503" MORPHIT_TOR_SOCKS="127.0.0.1:$PORT_socks503" bash "$PROBE" "http://$ONION" --samples 3
-if [ "$RC" -ne 0 ] && ! printf '%s' "$OUT" | grep -q '^PASS'; then
+if [ "$RC" -ne 0 ] && ! grep -q '^PASS' <<<"$OUT"; then
 	ok 'P5 a peer answering 503 is not counted as a round trip'
 else
 	no "P5 a peer answering only 503 produced exit $RC"
@@ -225,7 +225,7 @@ fi
 # exited 1.
 for bad in 'http://127.0.0.1?.loki' 'http://127.0.0.1#.onion' 'http://127.0.0.1/x?.i2p' "http://$ONION@127.0.0.1"; do
 	run bash "$PROBE" "$bad" --samples 3
-	if [ "$RC" -eq 2 ] && ! printf '%s' "$OUT" | grep -q 'NOTE: .loki\|could not be reached'; then
+	if [ "$RC" -eq 2 ] && ! grep -q 'NOTE: .loki\|could not be reached' <<<"$OUT"; then
 		ok "L2a '$bad' is refused before anything is contacted"
 	else
 		no "L2a '$bad' was classified as hidden and tried (exit $RC)"
@@ -236,13 +236,13 @@ done
 # the indexer; it used to fall back to 127.0.0.1:9050 and the "switched off"
 # message could never print.
 run MORPHIT_INDEXER_TOR_SOCKS= bash "$PROBE" "http://$ONION" --samples 3
-if [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q 'Tor is switched off'; then
+if [ "$RC" -eq 2 ] && grep -q 'Tor is switched off' <<<"$OUT"; then
 	ok 'L2b a blank MORPHIT_INDEXER_TOR_SOCKS is read as Tor switched off'
 else
 	no "L2b a blank Tor setting was not read as off (exit $RC)"
 fi
 run MORPHIT_INDEXER_I2P_HTTP_PROXY= bash "$PROBE" "http://$B32" --samples 3
-if [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q 'I2P is switched off'; then
+if [ "$RC" -eq 2 ] && grep -q 'I2P is switched off' <<<"$OUT"; then
 	ok 'L2b a blank MORPHIT_INDEXER_I2P_HTTP_PROXY is read as I2P switched off'
 else
 	no "L2b a blank I2P setting was not read as off (exit $RC)"
@@ -250,7 +250,7 @@ fi
 
 # P6 — the probe says which machine to run it on, in its own output.
 run MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:$PORT_socks503" bash "$PROBE" "http://$ONION" --samples 3
-if printf '%s' "$OUT" | grep -qi 'run on the SENDING box'; then
+if grep -qi 'run on the SENDING box' <<<"$OUT"; then
 	ok 'P6 the output names the machine it is meant to run on'
 else
 	no 'P6 the output does not say which machine it is for'

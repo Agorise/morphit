@@ -23,8 +23,9 @@
 
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
 import { guardDblurtClient } from '@morphit/hidden-transport/rpc-fetch';
-import { Client, PrivateKey } from '@beblurt/dblurt';
-import { EndpointPool } from '@morphit/rpc-pool';
+import { Client, PrivateKey, cryptoUtils } from '@beblurt/dblurt';
+import { EndpointPool, isTransportError } from '@morphit/rpc-pool';
+import { rpcEndpointOperator } from '@morphit/operator-config';
 import { VERSION } from '../api/health.ts';
 import { morphitUserAgent } from './userAgent.ts';
 
@@ -69,13 +70,18 @@ export interface AccountInfo {
 	readonly created: string;
 	/** Liquid balance string, e.g. "423.000 BLURT". */
 	readonly balance: string;
-	/** Number of pre-minted Account Creation Tokens held by this
-	 *  account, available for use by `create_claimed_account`.
-	 *  The relay tracks this on its own account to gate signups
-	 *  on ACT availability rather than BLURT balance — per
-	 *  ADR-0010 §4 the relay never directly pays the chain
-	 *  account-creation fee, so balance alone is the wrong gate. */
+	/** The chain's `pending_claimed_accounts` field, passed through for
+	 *  diagnostics only. NOTHING gates on it: Blurt disabled the
+	 *  Account-Creation-Token model (claim_account / create_claimed_account)
+	 *  at HF2, so this is always 0 there. The relay pays the
+	 *  account_creation_fee inline from its LIQUID balance on every
+	 *  `account_create`, and signups are gated on that balance against the
+	 *  LIVE fee (HealthService.canAcceptCreation). */
 	readonly pending_claimed_accounts: number;
+	/** First OWNER public key of the account (undefined if absent). Lets the
+	 *  create endpoint tell "the account our broadcast created" (same owner
+	 *  key the user asked for) from "someone else's account" (v1.20.0, D2). */
+	readonly owner_pubkey?: string | undefined;
 	/** First posting public key (BLURT-prefix base58) from the
 	 *  account's posting authority.  Part 122 cp14 — needed so
 	 *  the relay can verify posting-key signatures on
@@ -176,6 +182,118 @@ export type FeeDivergenceAnalysis =
  *  fee by 50%+. */
 export const FEE_DIVERGENCE_WARN_THRESHOLD = 0.1;
 
+/** v1.20.0 fix wave (D4) — the relay REFUSES to broadcast an `account_create`
+ *  while the chain's live account_creation_fee is more than this multiple of
+ *  the operator-configured fee (MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT).
+ *  The chain requires the EXACT live fee, so the relay cannot pay less; the
+ *  only safe answer to a witness-driven spike is to stop spending until the
+ *  operator has looked and updated the configured value. Without this a fee
+ *  raised to 1000 BLURT was paid on every signup, up to the daily ceiling. */
+export const FEE_REFUSE_MULTIPLIER = 1.5;
+
+/** Stable error code for the fee-spike refusal (create endpoint → 503). */
+export const FEE_SPIKE_CODE = 'relay_fee_spike';
+
+/** Thrown by broadcastAccountCreate when the live fee is above
+ *  FEE_REFUSE_MULTIPLIER × the configured fee. Nothing was broadcast. */
+export class FeeSpikeRefusedError extends Error {
+	readonly code = FEE_SPIKE_CODE;
+	constructor(
+		readonly observedBlurt: number,
+		readonly configuredBlurt: number
+	) {
+		super(
+			`relay_fee_spike: live account_creation_fee ${observedBlurt} BLURT is more than ` +
+				`${FEE_REFUSE_MULTIPLIER}x the configured ${configuredBlurt} BLURT — refusing to broadcast`
+		);
+		this.name = 'FeeSpikeRefusedError';
+	}
+}
+
+/** The signed transaction went to at least one node but NO node confirmed it,
+ *  and the chain could not be asked (or had not yet answered) whether it
+ *  landed. It MAY have landed: the caller must NOT sign a replacement. `txid`
+ *  identifies the exact signed transaction, so a later check is exact. */
+export class BroadcastOutcomeUnknownError extends Error {
+	readonly code = 'broadcast_outcome_unknown';
+	constructor(
+		readonly txid: string,
+		readonly expirationMs: number,
+		cause: string
+	) {
+		super(`broadcast outcome unknown for ${txid}: ${cause}`);
+		this.name = 'BroadcastOutcomeUnknownError';
+	}
+}
+
+/** The chain PROVED the transaction did not land: at least TWO independent
+ *  operators, each past the transaction's signed expiration, report its effect
+ *  absent — so it can never land. Safe to retry. `cause` is what the nodes
+ *  answered to the send (e.g. a rejection reason). */
+export class BroadcastNotLandedError extends Error {
+	readonly code = 'broadcast_not_landed';
+	constructor(
+		readonly txid: string,
+		readonly cause_: string = ''
+	) {
+		super(`broadcast ${txid} did not land and has expired${cause_ ? ` (${cause_})` : ''}`);
+		this.name = 'BroadcastNotLandedError';
+	}
+}
+
+/** Nothing left this process: the failure happened before any node was sent
+ *  the signed transaction (reading the chain head or fee, signing, or the
+ *  caller's own pre-send bookkeeping). Safe to retry; nothing to settle. */
+export class BroadcastNotSentError extends Error {
+	readonly code = 'broadcast_not_sent';
+	constructor(readonly cause_: string) {
+		super(`broadcast not sent: ${cause_}`);
+		this.name = 'BroadcastNotSentError';
+	}
+}
+
+/** The account name exists with a DIFFERENT owner key — confirmed by at least
+ *  two independent operators (one node's word is never enough to release
+ *  the relay's limits). */
+export class AccountTakenError extends Error {
+	readonly code = 'account_already_exists';
+	constructor(readonly accountName: string) {
+		super(`account_already_exists: '${accountName}' exists with a different owner key`);
+		this.name = 'AccountTakenError';
+	}
+}
+
+/** What the drainer records BEFORE any node is sent the bytes. */
+export interface SignedTxInfo {
+	readonly txid: string;
+	/** The transaction's SIGNED expiration (chain time, ms). After the chain's
+	 *  irreversible block passes it, the transaction can never land. */
+	readonly expirationMs: number;
+}
+
+/** Is this RPC error the chain saying it already has these exact signed bytes? */
+export function isDuplicateTransactionError(err: unknown): boolean {
+	const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+	return (
+		m.includes('duplicate transaction') ||
+		m.includes('tx_duplicate') ||
+		m.includes('duplicate_transaction') ||
+		m.includes('already in blockchain')
+	);
+}
+
+/** Tuning knobs, overridable in tests. */
+export interface BlurtClientOptions {
+	/** Per-endpoint budget for ONE broadcast attempt (clearnet; hidden endpoints
+	 *  get the pool's hidden-network floor on top). Default 10 s. */
+	readonly broadcastAttemptTimeoutMs?: number;
+	/** Seconds from the chain head to the transaction's expiration. Short, so
+	 *  "did it land?" is decidable soon. Default 60. */
+	readonly expireSeconds?: number;
+	/** How often the outcome check re-asks the chain. Default 3 s. */
+	readonly verifyPollMs?: number;
+}
+
 /** Pure analysis function — given a chain-returned
  *  `account_creation_fee` value and the operator's configured
  *  fallback, classify the situation for the warn-log decision.
@@ -248,7 +366,15 @@ export class BlurtClient {
 	 *  config will see a fresh check on the first poll. */
 	private divergenceWarned = false;
 
-	constructor(endpointUrls: readonly string[], fallbackAccountCreationFeeBlurt: number) {
+	private readonly broadcastAttemptTimeoutMs: number;
+	private readonly expireSeconds: number;
+	private readonly verifyPollMs: number;
+
+	constructor(
+		endpointUrls: readonly string[],
+		fallbackAccountCreationFeeBlurt: number,
+		options: BlurtClientOptions = {}
+	) {
 		if (endpointUrls.length === 0) {
 			throw new Error('BlurtClient: at least one endpoint required');
 		}
@@ -262,9 +388,15 @@ export class BlurtClient {
 			// Same shared health file as the indexer: both learn which of the
 			// configured nodes are fast and which are down, and one-shot processes
 			// start from that knowledge instead of trying endpoints in config order.
-			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json'
+			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json',
+			// Quorum checks (did a spend land?) count OPERATORS, not URLs: a
+			// hidden node's .onion and .b32.i2p are one operator.
+			operatorOf: (url) => rpcEndpointOperator(url)
 		});
 		this.fallbackAccountCreationFeeBlurt = fallbackAccountCreationFeeBlurt;
+		this.broadcastAttemptTimeoutMs = options.broadcastAttemptTimeoutMs ?? 10_000;
+		this.expireSeconds = options.expireSeconds ?? 60;
+		this.verifyPollMs = options.verifyPollMs ?? 3_000;
 	}
 
 	/** Expose pool snapshot for /v1/health diagnostics. */
@@ -283,8 +415,8 @@ export class BlurtClient {
 	 *
 	 * Returns the URLs actually added (already-known ones are ignored).
 	 */
-	mergeRpcEndpoints(urls: readonly string[]): string[] {
-		return this.pool.mergeEndpoints(urls);
+	mergeRpcEndpoints(urls: readonly string[], operators?: Readonly<Record<string, string>>): string[] {
+		return this.pool.mergeEndpoints(urls, operators);
 	}
 
 	/**
@@ -311,11 +443,9 @@ export class BlurtClient {
 		);
 		if (!Array.isArray(result) || result.length === 0) return null;
 		const acct = result[0] as Record<string, unknown>;
-		// pending_claimed_accounts is a uint32 on chain.  Some
-		// older Steem-derived chains don't include the field
-		// (HF20-pre); coalesce to 0 in that case so the gate
-		// just denies signups (the operator can't have ACTs on
-		// a chain that doesn't support them).
+		// pending_claimed_accounts is a uint32 on chain; coalesce a missing
+		// or malformed value to 0. Diagnostic only — nothing gates on it
+		// (ACTs are disabled on Blurt since HF2; see AccountInfo).
 		const pcaRaw = acct.pending_claimed_accounts;
 		const pca =
 			typeof pcaRaw === 'number' && Number.isInteger(pcaRaw) && pcaRaw >= 0
@@ -323,6 +453,13 @@ export class BlurtClient {
 				: typeof pcaRaw === 'string' && /^\d+$/.test(pcaRaw)
 					? Number(pcaRaw)
 					: 0;
+
+		const ownerAuth = acct.owner as { key_auths?: unknown } | undefined;
+		let ownerPubkey: string | undefined;
+		if (ownerAuth && Array.isArray(ownerAuth.key_auths)) {
+			const first = ownerAuth.key_auths[0];
+			if (Array.isArray(first) && typeof first[0] === 'string') ownerPubkey = first[0];
+		}
 
 		// Part 122 cp14 — extract first posting public key (if any).
 		// Authority shape: { weight_threshold, account_auths,
@@ -345,15 +482,16 @@ export class BlurtClient {
 			created: String(acct.created ?? ''),
 			balance: String(acct.balance ?? '0.000 BLURT'),
 			pending_claimed_accounts: pca,
-			posting_pubkey: postingPubkey
+			posting_pubkey: postingPubkey,
+			owner_pubkey: ownerPubkey
 		};
 	}
 
 	/** Get current witness-consensus chain properties. */
 	async getChainProperties(): Promise<ChainProperties> {
-		const result = await this.callWithRotation<unknown>(async (client) => {
+		const result = await this.callWithRotation<unknown>(async (client, signal) => {
 			// dblurt exposes this as a direct RPC call on the condenser API.
-			return await client.call('condenser_api', 'get_chain_properties', []);
+			return await withSignal(client.call('condenser_api', 'get_chain_properties', []), signal);
 		});
 		const props = result as Record<string, unknown>;
 		// Format the operator's configured fallback as a Graphene
@@ -398,7 +536,7 @@ export class BlurtClient {
 							hint:
 								'Chain account_creation_fee differs from MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT by >10%. ' +
 								'If this divergence is persistent (witnesses changed the fee), update the env variable to the chain value. ' +
-								'The relay will continue using the chain value for live signups regardless; this warning is purely advisory so the operator-config stays accurate.'
+								`Signups keep using the chain value while it is within ${FEE_REFUSE_MULTIPLIER}x the configured fee; above that the relay REFUSES to create accounts (code ${FEE_SPIKE_CODE}) until the configured value is updated.`
 						})
 					);
 				}
@@ -427,51 +565,71 @@ export class BlurtClient {
 	 * (claim_account / create_claimed_account) at HF2, so direct
 	 * account_create is the ONLY way to create an account on Blurt.
 	 *
-	 * The fee is read fresh from the chain per call (see body) because
-	 * the account_create_evaluator asserts
-	 * `o.fee == median account_creation_fee` exactly.
+	 * The fee is read fresh from the chain per call because the
+	 * account_create_evaluator asserts `o.fee == median account_creation_fee`
+	 * exactly. A live fee above FEE_REFUSE_MULTIPLIER × the configured fee is
+	 * REFUSED (FeeSpikeRefusedError) before anything is signed (v1.20.0, D4).
 	 *
-	 * The creator (signer) is the relay itself; its active key is
-	 * passed in as a WIF string. We convert to dblurt's PrivateKey
-	 * exactly once per call — no long-lived key object.
-	 *
-	 * Returns the chain's confirmation once the transaction is in a
-	 * block. Throws on any failure (chain error, signing error,
-	 * all-endpoints-down, including "Insufficient balance to create
-	 * account" if the relay's liquid BLURT is below the fee — the
-	 * create endpoint gates on this up front via
-	 * HealthService.canAcceptCreation()).
+	 * SIGNED ONCE, SENT AS THE SAME BYTES (v1.20.0, D2). Any answer other than
+	 * accepted / duplicate is NOT trusted as a failure — a node may have taken
+	 * the bytes (a timeout), or be hostile (relay it, then say "rejected"). The
+	 * outcome is then decided from the chain (fix wave 4, A1):
+	 *   - the account exists with the owner key we asked for (any one node) →
+	 *     success, `recovered: true`;
+	 *   - absent, reported by >= 2 operators whose head is past the signed
+	 *     expiration → BroadcastNotLandedError (safe to retry);
+	 *   - exists with ANOTHER owner key per >= 2 operators → AccountTakenError;
+	 *   - anything else by the deadline → BroadcastOutcomeUnknownError (it MAY
+	 *     have landed: the caller counts it as spent).
 	 */
 	async broadcastAccountCreate(args: {
 		creator: string;
 		creatorActiveWif: string;
 		authorities: NewAccountAuthorities;
-	}): Promise<AccountCreateResult> {
+	}): Promise<AccountCreateResult & { readonly recovered?: boolean }> {
 		const priv = PrivateKey.fromString(args.creatorActiveWif);
 
-		// account_create requires the EXACT current account_creation_fee
-		// (the chain evaluator asserts equality, not >=). Read it live so
-		// a witness fee change can't desync us into a rejected broadcast.
-		const fee = (await this.getChainProperties()).account_creation_fee;
+		let fee: string;
+		try {
+			fee = (await this.getChainProperties()).account_creation_fee;
+		} catch (err) {
+			throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
+		}
+		const observed = parseBlurtAssetNumber(fee);
+		if (observed !== null && observed > this.fallbackAccountCreationFeeBlurt * FEE_REFUSE_MULTIPLIER) {
+			throw new FeeSpikeRefusedError(observed, this.fallbackAccountCreationFeeBlurt);
+		}
 
 		const op = buildAccountCreateOp(args.creator, fee, args.authorities);
+		const name = args.authorities.newAccountName;
+		const owner = args.authorities.ownerPubkey;
+		try {
+			return await this.broadcastSignedOnce([op], priv, {
+				confirm: (expirationMs) => this.accountCreateState(name, owner, expirationMs)
+			});
+		} catch (err) {
+			if (err instanceof AccountTakenError) throw new AccountTakenError(name);
+			throw err;
+		}
+	}
 
-		const confirmation = await this.callWithRotation(async (client) => {
-			return await client.broadcast.sendOperations([op], priv);
-		});
-
-		return {
-			id: String((confirmation as { id?: string }).id ?? ''),
-			block_num: Number((confirmation as { block_num?: number }).block_num ?? 0),
-			trx_num: Number((confirmation as { trx_num?: number }).trx_num ?? 0),
-			expired: Boolean((confirmation as { expired?: boolean }).expired ?? false)
-		};
+	/** The chain's live account_creation_fee in BLURT (one RPC read), or null
+	 *  when the chain returned an unparseable value. Throws when unreachable. */
+	async liveAccountCreationFeeBlurt(): Promise<number | null> {
+		return parseBlurtAssetNumber((await this.getChainProperties()).account_creation_fee);
 	}
 
 	/** Build, sign, and broadcast a `transfer` op sending BLURT from
 	 *  the relay to `to`. Used by the welcome-bonus queue drainer
 	 *  (ADR-0011 §8) to deliver 10 BLURT liquid to a new trader, and
-	 *  by the low-balance auto-refill to send 1 BLURT dust.
+	 *  by the signup path to send 2 BLURT dust.
+	 *
+	 *  Signed ONCE (v1.20.0, D2). `onSigned` (the drainer's bookkeeping) runs
+	 *  after signing and BEFORE any node is sent the bytes; if it throws,
+	 *  nothing is sent. Any non-success after sending throws
+	 *  BroadcastOutcomeUnknownError with the txid and signed expiration — the
+	 *  caller must never sign a replacement until settleTransfer() proves the
+	 *  first can no longer land.
 	 *
 	 *  `amountBlurt` is a plain decimal (e.g. 10 or 1.5); we
 	 *  format to the "N.NNN BLURT" asset shape at the edge. */
@@ -481,6 +639,7 @@ export class BlurtClient {
 		to: string;
 		amountBlurt: number;
 		memo?: string;
+		onSigned?: (info: SignedTxInfo) => Promise<void>;
 	}): Promise<AccountCreateResult> {
 		if (!(args.amountBlurt > 0)) {
 			throw new Error(`broadcastTransfer: amount must be > 0, got ${args.amountBlurt}`);
@@ -495,27 +654,19 @@ export class BlurtClient {
 				memo: args.memo ?? ''
 			}
 		];
-
-		const confirmation = await this.callWithRotation(async (client) => {
-			// dblurt accepts the raw op tuple as sendOperations's
-			// first arg when typed broadly. Cast required because
-			// its TS types are narrower than its runtime behavior.
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			return await client.broadcast.sendOperations([op as any], priv);
-		});
-
-		return this.shapeConfirmation(confirmation);
+		return this.broadcastSignedOnce([op], priv, { onSigned: args.onSigned });
 	}
 
 	/** Build, sign, and broadcast a `transfer_to_vesting` op —
 	 *  powers up `amountBlurt` of BLURT into the recipient's vesting
 	 *  balance (BP). Used for the 10 BLURT welcome-bonus BP stake
-	 *  and loyalty-milestone BP rewards (sub-phase 4c). */
+	 *  and loyalty-milestone BP rewards (sub-phase 4c). Signed once (D2). */
 	async broadcastTransferToVesting(args: {
 		from: string;
 		fromActiveWif: string;
 		to: string;
 		amountBlurt: number;
+		onSigned?: (info: SignedTxInfo) => Promise<void>;
 	}): Promise<AccountCreateResult> {
 		if (!(args.amountBlurt > 0)) {
 			throw new Error(`broadcastTransferToVesting: amount must be > 0, got ${args.amountBlurt}`);
@@ -529,13 +680,236 @@ export class BlurtClient {
 				amount: `${args.amountBlurt.toFixed(3)} BLURT`
 			}
 		];
+		return this.broadcastSignedOnce([op], priv, { onSigned: args.onSigned });
+	}
 
-		const confirmation = await this.callWithRotation(async (client) => {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			return await client.broadcast.sendOperations([op as any], priv);
-		});
+	// ─── Sign once, send the same bytes everywhere (v1.20.0, D2 + wave 4) ───
 
-		return this.shapeConfirmation(confirmation);
+	/**
+	 * Sign `ops` exactly once, then offer the SAME signed transaction to the
+	 * pool's endpoints until one accepts it (or answers "duplicate" — it
+	 * already has these bytes). Each attempt honours a real deadline (the pool
+	 * aborts it at `broadcastAttemptTimeoutMs`, raised to the hidden-network
+	 * floor for .onion/.i2p), and nothing is sent once the transaction is
+	 * within 3 s of its expiration.
+	 *
+	 * WHY. dblurt's `sendOperations` fetches a head block and signs INSIDE the
+	 * call, so running it once per endpoint produced a NEW transaction (new
+	 * txid) on every failover. The same bytes resent are harmless.
+	 *
+	 * TRUST (fix wave 4, A1). Once the bytes have left this process, NO single
+	 * node's "rejected" is taken as a failure: a timed-out node may have taken
+	 * them, and a hostile node can relay them and still answer "rejected".
+	 * Without `confirm`, every non-success throws BroadcastOutcomeUnknownError.
+	 * With it, the chain is asked (see broadcastAccountCreate) until the
+	 * deadline — two blocks past the signed expiration.
+	 */
+	private async broadcastSignedOnce(
+		ops: unknown[],
+		priv: PrivateKey,
+		opts: {
+			onSigned?: ((info: SignedTxInfo) => Promise<void>) | undefined;
+			confirm?: (expirationMs: number) => Promise<'landed' | 'absent' | 'taken' | null>;
+		} = {}
+	): Promise<AccountCreateResult & { readonly recovered?: boolean }> {
+		let signed: unknown;
+		let txid: string;
+		let expirationMs: number;
+		try {
+			const props = await this.callWithRotation<Record<string, unknown>>(async (client, signal) => {
+				return (await withSignal(client.condenser.getDynamicGlobalProperties(), signal)) as unknown as Record<
+					string,
+					unknown
+				>;
+			});
+			if (
+				typeof props.head_block_number !== 'number' ||
+				typeof props.head_block_id !== 'string' ||
+				typeof props.time !== 'string'
+			) {
+				throw new Error('chain returned no usable head block');
+			}
+			expirationMs = new Date(props.time + 'Z').getTime() + this.expireSeconds * 1000;
+			const tx = {
+				expiration: new Date(expirationMs).toISOString().slice(0, -5),
+				extensions: [] as unknown[],
+				operations: ops,
+				ref_block_num: props.head_block_number & 0xffff,
+				ref_block_prefix: Buffer.from(props.head_block_id, 'hex').readUInt32LE(4)
+			};
+			// Local crypto only — the client here is never asked to send anything.
+			signed = cryptoUtils.signTransaction(tx as never, priv, clientFor(this.anyEndpoint()).chainId);
+			txid = cryptoUtils.generateTrxId(signed as never);
+			if (opts.onSigned) await opts.onSigned({ txid, expirationMs });
+		} catch (err) {
+			throw new BroadcastNotSentError(err instanceof Error ? err.message : String(err));
+		}
+		const ok = (recovered: boolean) => ({ id: txid, block_num: 0, trx_num: 0, expired: false, ...(recovered ? { recovered } : {}) });
+
+		let lastCause = 'no endpoint confirmed the broadcast';
+		const deadline = expirationMs + 2 * 3000 + this.verifyPollMs;
+		for (let round = 0; ; round++) {
+			if (round === 0 || Date.now() < expirationMs - 3000) {
+				try {
+					await this.sendSigned(signed, expirationMs);
+					return ok(false);
+				} catch (err) {
+					if (isDuplicateTransactionError(err)) return ok(false);
+					lastCause = err instanceof Error ? err.message : String(err);
+				}
+			}
+			// The bytes may be on the network. Never read a rejection as proof.
+			if (opts.confirm === undefined) throw new BroadcastOutcomeUnknownError(txid, expirationMs, lastCause);
+			const state = await opts.confirm(expirationMs).catch(() => null);
+			if (state === 'landed') return ok(true);
+			if (state === 'absent') throw new BroadcastNotLandedError(txid, lastCause);
+			if (state === 'taken') throw new AccountTakenError('');
+			if (Date.now() > deadline) throw new BroadcastOutcomeUnknownError(txid, expirationMs, lastCause);
+			await sleep(this.verifyPollMs);
+		}
+	}
+	/**
+	 * Did our account_create land? Asked of several OPERATORS at once (a node's
+	 * accounts and head read together, on one connection):
+	 *   'landed' — any node shows the name with OUR owner key;
+	 *   'absent' — >= 2 operators, each with a head past `expirationMs`, show
+	 *              no such account (it can never appear now);
+	 *   'taken'  — >= 2 operators show it with a different owner key;
+	 *   null     — not decidable yet.
+	 */
+	private async accountCreateState(
+		name: string,
+		owner: string,
+		expirationMs: number
+	): Promise<'landed' | 'absent' | 'taken' | null> {
+		const r = await this.pool.quorumCall<string>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const [accts, dgp] = (await withSignal(
+					Promise.all([client.condenser.getAccounts([name]), client.condenser.getDynamicGlobalProperties()]),
+					signal
+				)) as unknown as [Array<Record<string, unknown>>, Record<string, unknown>];
+				const acct = Array.isArray(accts) ? accts.find((a) => a && a.name === name) : undefined;
+				if (acct !== undefined) {
+					const keys = (acct.owner as { key_auths?: unknown } | undefined)?.key_auths;
+					const first = Array.isArray(keys) && Array.isArray(keys[0]) ? keys[0][0] : undefined;
+					return first === owner ? 'present:ours' : 'present:other';
+				}
+				const headMs = typeof dgp?.time === 'string' ? new Date(dgp.time + 'Z').getTime() : 0;
+				return headMs > expirationMs + 3000 ? 'absent' : null;
+			},
+			{ equivalenceKey: (v) => v, minAgree: 2, maxOperators: 3 }
+		);
+		if (r.responses.includes('present:ours')) return 'landed';
+		if (r.agreedKey === 'absent') return 'absent';
+		if (r.agreedKey === 'present:other') return 'taken';
+		return null;
+	}
+
+	/**
+	 * Settle a transfer whose outcome is unknown (fix wave 4, A2/A3). Each
+	 * OPERATOR is asked, on ONE connection, for its irreversible block AND its
+	 * account history — never a head from one node and a history from another:
+	 *   'found'   — any node's history holds the operation (`match`);
+	 *   'absent'  — >= 2 operators whose last irreversible block is past the
+	 *               SIGNED expiration searched back past `sinceMs` and found
+	 *               nothing: it can never land;
+	 *   'unknown' — anything else (lagging nodes, no history API anywhere,
+	 *               errors). A node without the history API (or erroring) is
+	 *               failed over to the next operator.
+	 */
+	async settleTransfer(args: {
+		account: string;
+		sinceMs: number;
+		expirationMs: number;
+		match: (op: string, body: Record<string, unknown>, trxId: string | undefined) => boolean;
+		maxPages?: number;
+	}): Promise<'found' | 'absent' | 'unknown'> {
+		const maxPages = args.maxPages ?? 20;
+		const r = await this.pool.quorumCall<string>(
+			async (url, signal) => {
+				const client = clientFor(url);
+				const call = <T>(method: string, params: unknown[]): Promise<T> =>
+					// Any failure of THIS node (no history API, an RPC error) makes the
+					// quorum move on to the next operator. Only a real transport
+					// failure (its own message says so) marks the node unhealthy —
+					// a node without the history API is still a good broadcast node.
+					withSignal(client.call('condenser_api', method, params), signal) as Promise<T>;
+				const dgp = await call<Record<string, unknown>>('get_dynamic_global_properties', []);
+				if (typeof dgp.time !== 'string' || typeof dgp.head_block_number !== 'number') {
+					throw new Error('malformed head from this node');
+				}
+				const headMs = new Date(dgp.time + 'Z').getTime();
+				const lib = typeof dgp.last_irreversible_block_num === 'number' ? dgp.last_irreversible_block_num : 0;
+				const libMs = headMs - Math.max(0, dgp.head_block_number - lib) * 3000;
+				let start = -1;
+				let reachedSince = false;
+				for (let page = 0; page < maxPages; page++) {
+					const limit = start === -1 ? 1000 : Math.min(1000, start);
+					const rows = await call<unknown>('get_account_history', [args.account, start, limit]);
+					if (!Array.isArray(rows) || rows.length === 0) {
+						reachedSince = true;
+						break;
+					}
+					let oldestIdx = Number.POSITIVE_INFINITY;
+					let oldestMs = Number.POSITIVE_INFINITY;
+					for (const row of rows) {
+						if (!Array.isArray(row) || typeof row[0] !== 'number') continue;
+						const e = row[1] as { timestamp?: unknown; op?: unknown; trx_id?: unknown } | undefined;
+						oldestIdx = Math.min(oldestIdx, row[0]);
+						const ts = typeof e?.timestamp === 'string' ? new Date(e.timestamp + 'Z').getTime() : NaN;
+						if (Number.isFinite(ts)) oldestMs = Math.min(oldestMs, ts);
+						const op = e?.op;
+						if (Array.isArray(op) && typeof op[0] === 'string' && op[1] && typeof op[1] === 'object') {
+							const trxId = typeof e?.trx_id === 'string' ? e.trx_id : undefined;
+							if (args.match(op[0], op[1] as Record<string, unknown>, trxId)) return 'found';
+						}
+					}
+					if (oldestMs < args.sinceMs || oldestIdx <= 0) {
+						reachedSince = true;
+						break;
+					}
+					start = oldestIdx - 1;
+				}
+				// Absent is only meaningful from a node whose OWN irreversible block
+				// is past the signed expiration (a lagging node is simply undecided).
+				return reachedSince && libMs > args.expirationMs + 3000 ? 'absent' : null;
+			},
+			{ equivalenceKey: (v) => v, minAgree: 2, maxOperators: 3 }
+		);
+		if (r.responses.includes('found')) return 'found';
+		if (r.agreedKey === 'absent') return 'absent';
+		return 'unknown';
+	}
+
+	/** Offer one signed transaction to the pool: each endpoint gets the same
+	 *  bytes, bounded by a real per-attempt deadline. Throws the node's own
+	 *  error on a rejection, or an UnconfirmedBroadcast when no endpoint
+	 *  confirmed (transport failures / timeouts / window closed). */
+	private async sendSigned(signed: unknown, expirationMs: number): Promise<void> {
+		try {
+			await this.pool.call(
+				async (url, signal) => {
+					if (Date.now() >= expirationMs - 3000) throw new UnconfirmedBroadcast('transaction window closed');
+					const client = clientFor(url);
+					return await withSignal(client.call('condenser_api', 'broadcast_transaction', [signed]), signal);
+				},
+				{ timeoutMs: this.broadcastAttemptTimeoutMs }
+			);
+		} catch (err) {
+			if (err instanceof UnconfirmedBroadcast) throw err;
+			if (isDuplicateTransactionError(err)) throw err;
+			const msg = err instanceof Error ? err.message : String(err);
+			if (isTransportError(err) || msg.startsWith('all RPC endpoints unavailable')) {
+				throw new UnconfirmedBroadcast(msg);
+			}
+			throw err;
+		}
+	}
+
+	/** Any endpoint URL — only used to fetch a Client for its chain id. */
+	private anyEndpoint(): string {
+		return this.pool.snapshot()[0]!.url;
 	}
 
 	/** Current VESTS-per-BLURT conversion factors from the chain's
@@ -544,10 +918,10 @@ export class BlurtClient {
 	 *  Fetched on each call — the ratio drifts slowly (~few bps per
 	 *  day) but it's not safe to cache across broadcasts. */
 	async getVestingInfo(): Promise<VestingInfo> {
-		const result = await this.callWithRotation<unknown>(async (client) => {
+		const result = await this.callWithRotation<unknown>(async (client, signal) => {
 			// dblurt exposes this on the condenser API helper, not
 			// the database API helper.
-			return await client.condenser.getDynamicGlobalProperties();
+			return await withSignal(client.condenser.getDynamicGlobalProperties(), signal);
 		});
 		const dgp = result as Record<string, unknown>;
 		if (
@@ -567,8 +941,8 @@ export class BlurtClient {
 	 *  head_block_time as ISO-without-Z, matching dblurt's convention.
 	 *  Throws on RPC failure or missing time field. */
 	async getDynamicGlobalProperties(): Promise<{ time: string }> {
-		const result = await this.callWithRotation<unknown>(async (client) => {
-			return await client.condenser.getDynamicGlobalProperties();
+		const result = await this.callWithRotation<unknown>(async (client, signal) => {
+			return await withSignal(client.condenser.getDynamicGlobalProperties(), signal);
 		});
 		const dgp = result as Record<string, unknown>;
 		if (typeof dgp.time !== 'string') {
@@ -594,6 +968,7 @@ export class BlurtClient {
 		delegatorActiveWif: string;
 		delegatee: string;
 		amountBp: number;
+		onSigned?: (info: SignedTxInfo) => Promise<void>;
 	}): Promise<AccountCreateResult> {
 		if (!(args.amountBp > 0)) {
 			throw new Error(`broadcastDelegation: amountBp must be > 0, got ${args.amountBp}`);
@@ -616,11 +991,9 @@ export class BlurtClient {
 				vesting_shares: vestsStr
 			}
 		];
-		const confirmation = await this.callWithRotation(async (client) => {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			return await client.broadcast.sendOperations([op as any], priv);
-		});
-		return this.shapeConfirmation(confirmation);
+		// Signed once (D2). A delegation SETS an absolute amount, so even a
+		// duplicate would be harmless — but one code path for every write.
+		return this.broadcastSignedOnce([op], priv, { onSigned: args.onSigned });
 	}
 
 	/** BP-to-VESTS conversion. Pure BigInt arithmetic — no float
@@ -664,18 +1037,6 @@ export class BlurtClient {
 		return `${formatBigIntWithScale(vestsBase, shares.scale)} VESTS`;
 	}
 
-	/** Narrow the loose confirmation object we get from dblurt into
-	 *  our AccountCreateResult shape. Shared by all broadcast
-	 *  methods. */
-	private shapeConfirmation(confirmation: unknown): AccountCreateResult {
-		return {
-			id: String((confirmation as { id?: string }).id ?? ''),
-			block_num: Number((confirmation as { block_num?: number }).block_num ?? 0),
-			trx_num: Number((confirmation as { trx_num?: number }).trx_num ?? 0),
-			expired: Boolean((confirmation as { expired?: boolean }).expired ?? false)
-		};
-	}
-
 	// ─── Endpoint rotation ─────────────────────────────────────────
 
 	/**
@@ -691,11 +1052,9 @@ export class BlurtClient {
 	 * Hedging policy on this client:
 	 *   - User-facing reads (availability check, getAccount during
 	 *     signup): hedge on — instant failover under degradation.
-	 *   - Broadcasts: hedge OFF unconditionally.  Two parallel
-	 *     broadcasts of the same transaction would either land
-	 *     twice (chain rejects the duplicate but burns a roundtrip)
-	 *     or race-condition.  The single-broadcast latency is the
-	 *     cost of correctness.
+	 *   - Broadcasts do not come through here: they go through
+	 *     broadcastSignedOnce → sendSigned (signed once, same bytes to
+	 *     every endpoint, never hedged).
 	 *
 	 * The `signal` passed to `fn` lets callers bridge dblurt's
 	 * non-cancellable API: wrap any awaited dblurt call in
@@ -741,6 +1100,25 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 			}
 		);
 	});
+}
+
+/** Internal: no endpoint confirmed a broadcast (transport failure, timeout,
+ *  or the transaction's window closed before it could be sent). */
+class UnconfirmedBroadcast extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'UnconfirmedBroadcast';
+	}
+}
+function sleep(ms: number): Promise<void> {
+	return new Promise((r) => setTimeout(r, ms));
+}
+/** "123.456 BLURT" → 123.456; null when unparseable. */
+export function parseBlurtAssetNumber(s: string): number | null {
+	const m = /^([\d.]+)\s+BLURT$/.exec(String(s).trim());
+	if (!m) return null;
+	const n = Number(m[1]);
+	return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /** Per-endpoint dblurt Client instance cache.  Reuse Clients across

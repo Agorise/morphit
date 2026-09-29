@@ -56,13 +56,14 @@ ExecStart=/usr/bin/env npm start --silent
 KillSignal=SIGTERM
 TimeoutStopSec=10s
 
-# Always bring the MCP back up; the start-limit below is the circuit
-# breaker against a misconfig crash-loop.  The server only exits 0 on
-# SIGTERM, so this never fights a deliberate `systemctl stop`.
+# Always bring the MCP back up, every 5 s, with no start limit (the [Unit]
+# StartLimitIntervalSec=0 above — reboot recovery).  The server only exits 0
+# on SIGTERM, so this never fights a deliberate `systemctl stop`.
+# (v1.20.0, C11: a StartLimitBurst/StartLimitIntervalSec pair used to sit here
+# as a "circuit breaker"; systemd ignores StartLimitIntervalSec in [Service]
+# and the [Unit] value disables the limit, so it never did anything.)
 Restart=always
 RestartSec=5s
-StartLimitBurst=10
-StartLimitIntervalSec=120
 
 # ─── Hardening ───────────────────────────────────────────────────────
 # Defence-in-depth: MCP is the most exposed surface (AI agents reach it
@@ -94,7 +95,10 @@ SystemCallArchitectures=native
 # and resource-control syscalls.  @system-service is V8-compatible — the
 # MemoryDenyWriteExecute carve-out above keeps the JIT working.
 SystemCallFilter=@system-service
-SystemCallFilter=~@privileged ~@resources
+# ONE leading `~` negates the whole list.  (`~@privileged ~@resources` made
+# systemd drop "~@resources" as an unknown name, so @resources was never
+# filtered — v1.20.0, C11.)
+SystemCallFilter=~@privileged @resources
 SystemCallErrorNumber=EPERM
 
 # Further isolation: private file-creation mask, no host identity / clock

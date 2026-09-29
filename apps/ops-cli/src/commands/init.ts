@@ -903,7 +903,10 @@ function printNextSteps(
 		console.log('  → copy it to e.g. /var/lib/tor/morphit/ (owned by the tor user,');
 		console.log('    mode 0700), then in torrc:');
 		console.log('      HiddenServiceDir /var/lib/tor/morphit/');
-		console.log('      HiddenServicePort 80 127.0.0.1:8080');
+		// 8090 = the frontend fan-out (cp695), NOT the bare relay on 8080: the
+		// relay trusts X-Real-IP from its caller (a Tor visitor could set their
+		// own client IP) and 404s the site (review D11).
+		console.log('      HiddenServicePort 80 127.0.0.1:8090');
 		console.log('  and restart Tor.  The Ansible "tor" role (enable_tor in');
 		console.log('  group_vars/all.yml) does this for you.  Keep the secret key safe;');
 		console.log('  losing it means a new address.');

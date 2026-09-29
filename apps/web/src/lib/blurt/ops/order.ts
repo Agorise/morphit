@@ -24,6 +24,7 @@
 import { getUserBlurtAccount, BroadcastError } from '$blurt/ops/profile';
 import { assertKeyControlsAccount, resolveBroadcastAccount } from '../accountBinding';
 import { OP_IDS } from '$net/config';
+import { externalTxidRequired } from '$lib/orders/btcFeeMode';
 import type { LiveIdentity } from '$crypto/keygen';
 import type { Transaction, SignedTransaction } from '@beblurt/dblurt';
 
@@ -31,6 +32,7 @@ import { FEE_RECIPIENT, computeFee, feeMemoFor, feeTransfersFor, type FeeQuote }
 import {
 	buildOrderPayload,
 	makeOrderPermlink,
+	PERMLINK_RE,
 	type OrderFormInput,
 	type OrderPayload
 } from '$lib/orders/payload';
@@ -127,7 +129,20 @@ export async function broadcastNewOrder(
 	await assertKeyControlsAccount(live, account);
 
 	const feeMethod = input.feeMethod ?? 'blurt';
-	const permlink = makeOrderPermlink(input.side, input.asset, input.fiatCurrency);
+	// v1.20.0 (MK-H2) — a bound XMR fee was paid for THIS permlink and account
+	// (the fee address depends on both), so the order must be posted under
+	// exactly those: a different permlink or account would make the payment
+	// count for nothing.
+	if (input.permlink !== undefined && (!PERMLINK_RE.test(input.permlink) || input.permlink.length > 32)) {
+		throw new Error(`invalid pre-chosen permlink: ${input.permlink}`);
+	}
+	if (input.xmrBoundAccount !== undefined && input.xmrBoundAccount !== account) {
+		throw new BroadcastError(
+			'key_mismatch',
+			`The Monero fee was paid for @${input.xmrBoundAccount}, but this key signs for @${account}. Sign in as @${input.xmrBoundAccount} to post this listing.`
+		);
+	}
+	const permlink = input.permlink ?? makeOrderPermlink(input.side, input.asset, input.fiatCurrency);
 	const payload = buildOrderPayload(permlink, input);
 
 	// ─── ADR-0011 waived-first-buy path ───────────────────────────
@@ -153,7 +168,12 @@ export async function broadcastNewOrder(
 	// with fee_method + external_tx_id is broadcast. Posting key
 	// is sufficient; no active-key unlock needed.
 	if (feeMethod === 'btc' || feeMethod === 'xmr') {
-		if (!input.externalTxId || input.externalTxId.length === 0) {
+		// v1.20.0 (MK-H2): a BTC order in per-order-address mode carries no
+		// txid (it is paid after posting, to its own address).
+		if (
+			externalTxidRequired(feeMethod, input.btcFeeAddressMode) &&
+			(!input.externalTxId || input.externalTxId.length === 0)
+		) {
 			throw new BroadcastError(
 				'missing_external_tx_id',
 				'external transaction id required for btc/xmr orders'

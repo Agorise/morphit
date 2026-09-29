@@ -89,9 +89,17 @@
 	import { broadcastErrorMessage } from '$blurt/broadcastErrorClass';
 	import { addPendingOrder } from '$lib/stores/pendingOrders';
 	import { orderPayloadToRecord, type OrderPayload } from '$lib/orders/payload';
-	import { computeFee, BASE_FEE_BLURT, resolveFeeRecipient, type FeeQuote } from '$lib/orders/fee';
-	import { boundedBlurtBase, boundedPiconero, boundedSatoshis } from '$lib/orders/feeQuoteFloor';
+	import {
+		computeFee,
+		BASE_FEE_BLURT,
+		resolveFeeRecipient,
+		sybilTierCount,
+		type FeeQuote
+	} from '$lib/orders/fee';
+	import { resolveQuoteBase, boundedPiconero, boundedSatoshis } from '$lib/orders/feeQuoteFloor';
 	import { chainPinnedTreasury } from '$stores/release';
+	import { checkXmrTxKey, xmrBoundPrimary } from '$lib/orders/xmrFeeMode';
+	import { btcFeeAddressMode } from '$lib/orders/btcFeeMode';
 	import { onDestroy } from 'svelte';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import {
@@ -106,12 +114,26 @@
 		fetchListingFee,
 		type WaiverEligibility
 	} from '$lib/orders/listingFee';
-	import { fetchFxRates, fiatToUsd, firstOrderMinInFiat, usdMinInFiat, usdToFiat } from '$lib/orders/fx';
+	import {
+		filterAmountTyping,
+		formatAmountForInput,
+		localeDecimalSeparator,
+		parseAmountInput,
+		type AmountParse
+	} from '$lib/orders/amountInput';
+	import {
+		fetchFxRates,
+		fiatToUsd,
+		firstOrderMinInFiat,
+		usdMinInFiat,
+		usdToFiat,
+		waiverFloorStatus
+	} from '$lib/orders/fx';
 	import type { FxResponse } from '@morphit/indexer-client';
 	import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { resolvePostDefaultLang, noteUsedPostLang, readLocalPreferredLangs } from '$lib/stores/preferredLangs';
-	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
+	import { makeExpiryFlooredUtcDay, makeOrderPermlink } from '$lib/orders/payload';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 	import { sanitizeBarterTitle, SPECIFIC_BARTER_TITLE_MAX } from '$lib/orders/payload';
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
@@ -146,6 +168,9 @@
 	// cp165 lazy-loaders
 	const loadListingFeeAddressPanel = () =>
 		import('$components/ListingFeeAddressPanel.svelte').then((m) => m.default);
+	// v1.20.0 (MK-H2) — the "pay your order's own BTC address" card.
+	const loadBtcFeePayPanel = () =>
+		import('$components/BtcFeePayPanel.svelte').then((m) => m.default);
 	const loadPrivateKeyWarningModal = () =>
 		import('$components/PrivateKeyWarningModal.svelte').then((m) => m.default);
 	// cp376 step lazy-loaders — defer step-2 / step-3 / stablecoin-branch
@@ -458,10 +483,13 @@
 		syndicateToBlog: boolean;
 		feeMethodChoice: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
 		externalTxId: string;
-		/** Part 108++ — XMR per-payment proof.  Persisted so the
-		 *  user doesn't have to re-generate it from their wallet
-		 *  if they close the tab between paying and submitting. */
-		txProof: string;
+		/** v1.20.0 (M-X1) — the XMR fee payment's transaction key. Persisted
+		 *  so a tab closed between paying and posting loses nothing. */
+		txKey?: string;
+		/** v1.20.0 (MK-H2) — the listing name a bound XMR fee was (or is
+		 *  about to be) paid for. Persisted: the fee address depends on it,
+		 *  so a tab closed after paying must post under the same one. */
+		xmrPermlink?: string;
 	}
 
 	function snapshotDraft(): ComposeDraft {
@@ -475,13 +503,12 @@
 		// broadcast time (apps/web/src/lib/orders/payload.ts) — this
 		// is the parallel defense-in-depth for the persistence path.
 		//
-		// Note on txProof: the proof is per-payment, single-use,
-		// reveals only "this txid paid this address this amount"
-		// — substantially less sensitive than a private key, and
-		// not subject to redaction.  We persist it so a tab-close
-		// between proof generation and submission doesn't force
-		// the user to regenerate from their wallet (grandma-
-		// friendly recovery).
+		// Note on txKey: the XMR fee's transaction key is per-payment and
+		// goes on chain in the order op anyway (it is how every indexer
+		// checks the payment) — not a wallet secret, not subject to
+		// redaction. Persisted so a tab-close between paying and posting
+		// doesn't send the user back to their wallet (grandma-friendly
+		// recovery).
 		return {
 			side,
 			asset,
@@ -501,7 +528,8 @@
 			syndicateToBlog,
 			feeMethodChoice,
 			externalTxId,
-			txProof
+			txKey,
+			xmrPermlink
 		};
 	}
 
@@ -559,7 +587,9 @@
 				? d.feeMethodChoice
 				: 'blurt';
 		externalTxId = str(d.externalTxId);
-		txProof = str(d.txProof);
+		txKey = str(d.txKey);
+		// Only a well-formed name is restored (it becomes the on-chain permlink).
+		xmrPermlink = /^order-[a-z0-9]{12}$/.test(str(d.xmrPermlink)) ? str(d.xmrPermlink) : '';
 	}
 
 	/** Heuristic: does the draft actually contain anything worth
@@ -588,7 +618,7 @@
 			d.region.length > 0 ||
 			d.terms.length > 0 ||
 			d.externalTxId.length > 0 ||
-			(d.txProof?.length ?? 0) > 0
+			(d.txKey?.length ?? 0) > 0
 		);
 	}
 
@@ -618,7 +648,8 @@
 		syndicateToBlog = isOrderBlogDefaultEnabled();
 		feeMethodChoice = 'blurt';
 		externalTxId = '';
-		txProof = '';
+		txKey = '';
+		xmrPermlink = '';
 		// Re-baseline to the cleared state: the next auto-save only fires
 		// once the user starts composing again.
 		baselineDraftJson = JSON.stringify(snapshotDraft());
@@ -705,6 +736,13 @@
 	 *  more loudly + tells the user what to expect next when their
 	 *  free first buy just went live. Resets on postAnother(). */
 	let successUsedWaiver = $state(false);
+	/** v1.20.0 (MK-H2) — the order just posted pays its BTC fee to its own
+	 *  address: the success card shows that address (BtcFeePayPanel). */
+	let successBtcFeeAddress = $state(false);
+	/** v1.20.0 (MK-H2) — the chain-pinned treasury carries the account xpub:
+	 *  BTC fees go to a per-order address shown AFTER posting, so no txid is
+	 *  asked for and the shared address is not offered. */
+	const btcPerOrderAddress = $derived(btcFeeAddressMode($chainPinnedTreasury));
 	/** Sally finding M1/M8 (Part 68): timestamp the moment we
 	 *  flipped phase to 'success' so the success card can show
 	 *  a live edit-window countdown.  Otherwise the user sees an
@@ -922,41 +960,41 @@
 	 *  give immediate feedback). Empty when the method is blurt or
 	 *  waived. */
 	let externalTxId: string = $state('');
-	/** Per-payment Monero proof string (Part 108++).  Required
-	 *  when feeMethodChoice='xmr'.  Generated by the user's own
-	 *  Monero wallet via `get_tx_proof` (CLI), the GUI's "Prove
-	 *  transaction" dialog, or the equivalent in Cake / Feather.
-	 *  Empty when fee method is anything other than XMR.
-	 *
-	 *  Privacy invariant: the proof reveals only "this txid paid
-	 *  this address this amount" — exactly the public information
-	 *  needed for verification, no more.  It does NOT reveal
-	 *  other payments to the address, other transactions in the
-	 *  user's wallet, or any wallet metadata.  The user is the
-	 *  ONLY party that needs to hold any verification secret
-	 *  (their tx_key from their own wallet, never published);
-	 *  the indexer holds nothing. */
-	let txProof: string = $state('');
-	/** Client-side validation of txProof for fee_method=xmr.
-	 *  Mirrors the indexer's order-handler structural validator
-	 *  so the user gets immediate feedback instead of a chain
-	 *  rejection later. */
-	const txProofError = $derived.by(() => {
+	/** v1.20.0 (M-X1) — the XMR fee payment's transaction key (64 hex), as
+	 *  the payer's wallet shows it. Every indexer checks the payment with it
+	 *  (explorer "txprove"), and — once fees are order-bound — decrypts the
+	 *  payment's hidden listing code with it. It proves this one payment and
+	 *  cannot spend anything. */
+	let txKey: string = $state('');
+	/** v1.20.0 (MK-H2) — the permlink this listing will be posted under,
+	 *  chosen before a bound XMR fee is paid (its address depends on it). */
+	let xmrPermlink: string = $state('');
+	/** Order-bound XMR fees: the chain-verified release pins the treasury's
+	 *  main address, so the fee goes to an address made for this listing. */
+	const xmrBound = $derived(xmrBoundPrimary($chainPinnedTreasury) !== null);
+	$effect(() => {
+		if (feeMethodChoice === 'xmr' && xmrBound && xmrPermlink === '') {
+			xmrPermlink = makeOrderPermlink('sell', 'XMR', 'USD');
+		}
+	});
+	const xmrPayFor = $derived(
+		feeMethodChoice === 'xmr' && xmrBound && blurtAccount && xmrPermlink !== ''
+			? { account: blurtAccount, permlink: xmrPermlink }
+			: null
+	);
+	/** Client-side check of the tx key; 'ok' or a localized message. */
+	const txKeyError = $derived.by(() => {
 		if (feeMethodChoice !== 'xmr') return '';
-		const trimmed = txProof.trim();
-		if (trimmed.length === 0) {
-			return $_('post_order.fee_method.tx_proof_required');
+		switch (checkXmrTxKey(txKey)) {
+			case 'ok':
+				return 'ok';
+			case 'empty':
+				return $_('post_order.fee_method.tx_key_required');
+			case 'several':
+				return $_('post_order.fee_method.tx_key_several');
+			default:
+				return $_('post_order.fee_method.tx_key_malformed');
 		}
-		if (!trimmed.startsWith('OutProofV1') && !trimmed.startsWith('OutProofV2')) {
-			return $_('post_order.fee_method.tx_proof_malformed_prefix');
-		}
-		if (trimmed.length < 64 || trimmed.length > 4096) {
-			return $_('post_order.fee_method.tx_proof_malformed_length');
-		}
-		if (!/^[A-Za-z0-9]+$/.test(trimmed)) {
-			return $_('post_order.fee_method.tx_proof_malformed_charset');
-		}
-		return 'ok';
 	});
 	/** Client-side validation of externalTxId. Empty string for
 	 *  blurt/waived paths; 'ok' when shape passes; any other
@@ -969,6 +1007,8 @@
 	 *  meantime. */
 	const externalTxIdError = $derived.by(() => {
 		if (feeMethodChoice !== 'btc' && feeMethodChoice !== 'xmr') return '';
+		// v1.20.0 (MK-H2): per-order BTC address — nothing to paste.
+		if (feeMethodChoice === 'btc' && btcPerOrderAddress) return '';
 		const trimmed = externalTxId.trim();
 		if (trimmed.length === 0) {
 			return $_('post_order.fee_method.txid_required');
@@ -1160,20 +1200,14 @@
 			if (!result.ok) {
 				throw new Error(result.message);
 			}
-			const cutoff = Date.now() - 24 * 3600 * 1000;
-			const activeCount = result.data.items.filter((o) => {
-				const createdMs = new Date(o.created_at).getTime();
-				// Order counts toward tier if it's currently live OR
-				// was created in the last 24h (even if cancelled).
-				return o.status === 'live' || createdMs >= cutoff;
-			}).length;
+			// Order counts toward tier if it's currently live (stored 'live'
+			// AND not past expires_at — v1.20.0 G2) OR was created in the
+			// last 24h (even if cancelled). Same rule as the indexer.
+			const activeCount = sybilTierCount(result.data.items, Date.now());
 
-			// Read operator's base from the listing-fee fetch.
-			// Don't fail-hard on a flaky indexer — fall back to the
-			// bundled default and let the user proceed.  If the
-			// operator has changed their fee from the default, the
-			// indexer will reject as fee_underpaid and the user
-			// gets clear status feedback in their My Orders page.
+			// Read operator's base from the listing-fee fetch.  On a flaky
+			// indexer the bundled default is used ONLY inside a known
+			// chain-pinned band (v1.20.0, G10 — see resolveQuoteBase).
 			const lf = await lfPromise;
 			// (v1.18.0 deep-deep, M1) never quote outside the chain-pinned band.
 			// The indexer's /v1/listing-fee figure (on a hidden-only node, a
@@ -1207,8 +1241,24 @@
 				xmrFeeFiat = typeof lf.quote.xmr_fee_fiat === 'number' ? lf.quote.xmr_fee_fiat : undefined;
 			}
 
-			operatorBaseBlurt = boundedBlurtBase(operatorBaseBlurt, BASE_FEE_BLURT, pinned?.blurt?.base);
-			feeQuote = computeFee(activeCount + 1, operatorBaseBlurt);
+			// v1.20.0 (G10) — never quote the bundled fallback against an
+			// UNPINNED indexer (it enforces its own env base, default 125, and a
+			// 60-BLURT guess landed `underpaid`). No indexer figure + no pin →
+			// no quote: the friendly "couldn't load the fee" message shows.
+			const safeBase = resolveQuoteBase(
+				lf.kind === 'ok' ? lf.quote.base_fee_blurt : undefined,
+				BASE_FEE_BLURT,
+				pinned?.blurt?.base
+			);
+			if (safeBase === null) {
+				// BLURT fee only; BTC/XMR amounts above and the FX table below
+				// still load.
+				feeQuote = null;
+				feeError = lf.kind === 'ok' ? 'listing fee unavailable' : lf.message;
+			} else {
+				operatorBaseBlurt = safeBase;
+				feeQuote = computeFee(activeCount + 1, operatorBaseBlurt);
+			}
 
 			// cp372: settle the FX table (best-effort).
 			const fx = await fxPromise;
@@ -1379,7 +1429,7 @@
 				if (params.get('welcome') === '1') {
 					if (side === null) side = 'buy';
 					if (asset === null) asset = 'BLURT';
-					if (amountMin === '') amountMin = String(WAIVER_SUGGESTED_DEFAULT);
+					if (amountMin === '') amountMin = formatAmountForInput(WAIVER_SUGGESTED_DEFAULT, amountLocale);
 				}
 			}
 		} catch {
@@ -1482,30 +1532,34 @@
 			(asset !== 'DAI' || daiNetwork !== null)
 	);
 
-	/** Strip a raw input string down to a bare decimal — digits and at
-	 *  most one dot.  Applied on the amount + fixed-price fields so a
-	 *  user physically cannot type letters, a second dot, currency
-	 *  symbols, or scientific-notation "e": the field only ever holds a
-	 *  clean number-shaped string (or '').  Pairs with inputmode
-	 *  "decimal" (numeric keypad on mobile) and a maxlength cap. */
-	function keepDecimal(raw: string): string {
-		let seenDot = false;
-		let out = '';
-		for (const ch of raw) {
-			if (ch >= '0' && ch <= '9') out += ch;
-			else if (ch === '.' && !seenDot) {
-				out += ch;
-				seenDot = true;
-			}
-		}
-		return out;
+	/** v1.20.0 fix wave, G6 — amount fields keep what the user TYPED (any digit
+	 *  script, either decimal mark, thousands grouping) and are parsed with the
+	 *  active locale's conventions by `parseAmountInput` ($lib/orders/amountInput).
+	 *  The old keepDecimal() dropped every "," as it was typed, so a German
+	 *  "12,50" became "1250" — 100× the amount — and Persian digits vanished. An
+	 *  ambiguous "1,234" (en) / "1.234" (de) is refused with a message, never
+	 *  guessed. */
+	const amountLocale = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as string);
+	const amountMinParse = $derived(parseAmountInput(amountMin, amountLocale));
+	const amountMaxParse = $derived(parseAmountInput(amountMax, amountLocale));
+	const spreadParse = $derived(parseAmountInput(spreadPercent, amountLocale, { signed: true }));
+	const fixedPriceParse = $derived(parseAmountInput(fixedPrice, amountLocale));
+	/** Parsed field value: null when blank, NaN when it can't be read. */
+	function parsedOrNull(raw: string, p: AmountParse): number | null {
+		if (raw.trim() === '') return null;
+		return p.ok ? p.number : Number.NaN;
 	}
-
-	/** Like keepDecimal but allows a single leading minus — the spread
-	 *  field accepts negative percentages (e.g. -5 = 5% below market). */
-	function keepSignedDecimal(raw: string): string {
-		const neg = raw.trimStart().startsWith('-');
-		return (neg ? '-' : '') + keepDecimal(raw);
+	/** The localized "can't read this amount" message, or '' when fine/blank. */
+	function amountParseMessage(p: AmountParse): string {
+		if (p.ok || p.reason === 'empty') return '';
+		if (p.reason === 'ambiguous' && p.readings) {
+			return $_('common.amount_input.ambiguous', {
+				values: { a: p.readings[0], b: p.readings[1] }
+			}) as string;
+		}
+		return $_('common.amount_input.invalid', {
+			values: { sep: localeDecimalSeparator(amountLocale) }
+		}) as string;
 	}
 
 	const fiatError = $derived.by(() => {
@@ -1517,21 +1571,30 @@
 		return '';
 	});
 
-	const amountMinNum = $derived(amountMin === '' ? null : Number(amountMin));
+	const amountMinNum = $derived(parsedOrNull(amountMin, amountMinParse));
 
 	/** cp372 — the entered minimum converted to USD for the
 	 *  first-order ($1) floor.  amount_min is denominated in the
 	 *  selected `fiat`, so "1.20" on an AUD order is 1.20 AUD ≈
-	 *  $0.79 — below the floor.  This MUST mirror the indexer's
-	 *  authoritative check (order.ts): `fiatToUsd(amount_min, fiat)
-	 *  ?? amount_min` — i.e. convert via the FX table, and on an
-	 *  unknown currency / disabled feed fall back to treating the
-	 *  amount as already-USD (no worse than pre-cp372, exact for
-	 *  USD).  Null only when nothing is entered yet. */
+	 *  $0.79 — below the floor.  Null when nothing is entered or the
+	 *  fiat cannot be converted here (display only — the gate is
+	 *  `waiverFloor` below). */
 	const waiverMinUsd = $derived(
-		amountMinNum === null ? null : (fiatToUsd(fxTable, amountMinNum, fiat) ?? amountMinNum)
+		amountMinNum === null
+			? null
+			: fiat.trim().toUpperCase() === 'USD'
+				? amountMinNum
+				: fiatToUsd(fxTable, amountMinNum, fiat)
 	);
-	const amountMaxNum = $derived(amountMax === '' ? null : Number(amountMax));
+	/** The waiver floor verdict — MUST mirror the indexer (order.ts).
+	 *  (v1.20.0 fix wave, G5) An unconvertible fiat is no longer treated as
+	 *  already-USD: the indexer rejects it (`waiver_fiat_unconvertible`), so
+	 *  the form says so instead of broadcasting a free first buy that no
+	 *  node will list. */
+	const waiverFloor = $derived(
+		waiverFloorStatus(fxTable, amountMinNum, fiat, WAIVER_MIN_FIAT_USD)
+	);
+	const amountMaxNum = $derived(parsedOrNull(amountMax, amountMaxParse));
 
 	/** Sanity cap.  Mirror of indexer's MAX_AMOUNT in
 	 *  apps/indexer/src/indexer/handlers/order.ts.  Beyond
@@ -1542,6 +1605,8 @@
 	const MAX_AMOUNT = 1e12;
 
 	const amountError = $derived.by(() => {
+		const unreadable = amountParseMessage(amountMinParse) || amountParseMessage(amountMaxParse);
+		if (unreadable) return unreadable;
 		if (amountMinNum !== null) {
 			if (!Number.isFinite(amountMinNum) || amountMinNum < 0) {
 				return $_('post_order.errors.amount_min_negative');
@@ -1586,10 +1651,10 @@
 					: $_('post_order.errors.waiver_min_required', {
 							values: { amount: String(floor), fiat }
 						});
-			if (amountMinNum === null) {
-				return msg;
+			if (waiverFloor === 'unconvertible' && fiat.trim() !== '') {
+				return $_('post_order.errors.waiver_fiat_unconvertible', { values: { fiat } });
 			}
-			if (waiverMinUsd !== null && waiverMinUsd < WAIVER_MIN_FIAT_USD) {
+			if (waiverFloor !== 'ok') {
 				return msg;
 			}
 		}
@@ -1609,8 +1674,7 @@
 			if (amountMinNum > MAX_AMOUNT) return true;
 		}
 		if (feeMethodChoice === 'waived_first_buy') {
-			if (amountMinNum === null || (waiverMinUsd !== null && waiverMinUsd < WAIVER_MIN_FIAT_USD))
-				return true;
+			if (waiverFloor !== 'ok') return true;
 		}
 		return false;
 	});
@@ -1640,7 +1704,7 @@
 		if (fiat === lastSeededFiat) return;
 		const seed = firstOrderMinInFiat(fxTable, fiat);
 		if (seed === null) return;
-		amountMin = String(seed);
+		amountMin = formatAmountForInput(seed, amountLocale);
 		lastSeededFiat = fiat;
 	});
 
@@ -1656,7 +1720,7 @@
 		if (fiat === lastSeededFiat) return;
 		const seed = usdMinInFiat(fxTable, topupUsdMin, fiat);
 		if (seed === null) return;
-		amountMin = String(seed);
+		amountMin = formatAmountForInput(seed, amountLocale);
 		lastSeededFiat = fiat;
 	});
 
@@ -1703,8 +1767,8 @@
 	 *  USD-equivalent ("At least 100 MXN worth (≈ $5.00)"), replacing the
 	 *  plain "Leave blank for no limit." once a value is present.  Empty
 	 *  (no minimum set) → '' so the optional-limit line shows instead.
-	 *  `waiverMinUsd` is the entered min converted to USD (falls back to
-	 *  treating it as USD when the fiat is unknown / feed is off). */
+	 *  `waiverMinUsd` is the entered min converted to USD (null — no hint —
+	 *  when the fiat can't be converted; it is never guessed as USD, G5). */
 	const returningMinHint = $derived.by(() => {
 		if (isFirstTrade || fiat === '') return '';
 		if (amountMinNum === null || !Number.isFinite(amountMinNum) || amountMinNum <= 0) return '';
@@ -1732,24 +1796,24 @@
 	}
 	function handleAmountMinInput(e: Event & { currentTarget: HTMLInputElement }): void {
 		amountTouched = true;
-		const clean = keepDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value);
 		syncCleaned(e.currentTarget, clean);
 		amountMin = clean;
 	}
 	function handleAmountMaxInput(e: Event & { currentTarget: HTMLInputElement }): void {
 		amountTouched = true;
-		const clean = keepDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value);
 		syncCleaned(e.currentTarget, clean);
 		amountMax = clean;
 	}
 	function handleSpreadInput(e: Event & { currentTarget: HTMLInputElement }): void {
-		const clean = keepSignedDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value, { signed: true });
 		syncCleaned(e.currentTarget, clean);
 		spreadPercent = clean;
 	}
 	function handleFixedPriceInput(e: Event & { currentTarget: HTMLInputElement }): void {
 		fixedPriceTouched = true;
-		const clean = keepDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value);
 		syncCleaned(e.currentTarget, clean);
 		fixedPrice = clean;
 	}
@@ -1787,10 +1851,10 @@
 		if (priceModelKind === 'spread') {
 			// Empty spread is OK — it means "market price" (0%).
 			if (spreadPercent.trim() === '') return '';
-			const n = Number(spreadPercent);
-			if (!Number.isFinite(n)) {
-				return $_('post_order.errors.spread_not_a_number');
+			if (!spreadParse.ok) {
+				return amountParseMessage(spreadParse) || $_('post_order.errors.spread_not_a_number');
 			}
+			const n = spreadParse.number;
 			if (n < -50 || n > 50) {
 				return $_('post_order.errors.spread_out_of_range');
 			}
@@ -1800,7 +1864,10 @@
 		if (fixedPrice.trim() === '') {
 			return $_('post_order.errors.fixed_price_required');
 		}
-		const n = Number(fixedPrice);
+		if (!fixedPriceParse.ok) {
+			return amountParseMessage(fixedPriceParse) || $_('post_order.errors.fixed_price_invalid');
+		}
+		const n = fixedPriceParse.number;
 		if (!Number.isFinite(n) || n <= 0) {
 			return $_('post_order.errors.fixed_price_invalid');
 		}
@@ -2056,8 +2123,8 @@
 				// accepted cryptos, never by this model.
 				{ kind: 'spread', percent: 0 }
 			: priceModelKind === 'spread'
-				? { kind: 'spread', percent: Number(spreadPercent) || 0 }
-				: { kind: 'fixed', price: Number(fixedPrice) };
+				? { kind: 'spread', percent: spreadParse.ok ? spreadParse.number : 0 }
+				: { kind: 'fixed', price: fixedPriceParse.ok ? fixedPriceParse.number : Number.NaN };
 
 		const input: OrderFormInput = {
 			side: side!,
@@ -2092,13 +2159,20 @@
 			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
 			lang: postLang || undefined,
 			feeMethod: feeMethodChoice,
+			btcFeeAddressMode: feeMethodChoice === 'btc' && btcPerOrderAddress,
+			// v1.20.0 (MK-H2): with the treasury xpub pinned a BTC order carries
+			// NO txid — it gets its own address once posted.
 			externalTxId:
-				feeMethodChoice === 'btc' || feeMethodChoice === 'xmr'
+				(feeMethodChoice === 'btc' && !btcPerOrderAddress) || feeMethodChoice === 'xmr'
 					? externalTxId.trim().toLowerCase()
 					: undefined,
-			// Part 108++ — XMR per-payment proof.  Required for
-			// fee_method=xmr; ignored for everything else.
-			txProof: feeMethodChoice === 'xmr' ? txProof.trim() : undefined,
+			// v1.20.0 (M-X1) — the XMR fee's transaction key.
+			txKey: feeMethodChoice === 'xmr' ? txKey.trim() : undefined,
+			// v1.20.0 (MK-H2) — a bound XMR fee was paid for this permlink
+			// and account; post under exactly those.
+			...(feeMethodChoice === 'xmr' && xmrPayFor !== null
+				? { permlink: xmrPayFor.permlink, xmrBoundAccount: xmrPayFor.account }
+				: {}),
 			// Part 121 / cp30 / cp31 — sub-network for multi-network
 			// assets.  USDT, USDC, and DAI all carry a network
 			// discriminator; single-network assets (BTC/XMR/BLURT/BCH/
@@ -2145,6 +2219,11 @@
 					BASE_FEE_BLURT // unused for non-BLURT paths; sane default if reached
 				);
 				successPermlink = result.permlink;
+				if (feeMethodChoice === 'xmr') {
+					// The bound listing name is used up; the next XMR post gets a new one.
+					xmrPermlink = '';
+					txKey = '';
+				}
 				// v1.15.0 — remember this post language (next-post default) + widen the
 				// local preferred set so these orders show in the filter. Chain profile is
 				// updated on the next Settings save (no extra broadcast here).
@@ -2155,6 +2234,7 @@
 				// not-found for the ~45-63s the indexer needs to reach irreversibility.
 				stagePostedOrder(result.payload);
 				successUsedWaiver = feeMethodChoice === 'waived_first_buy';
+				successBtcFeeAddress = feeMethodChoice === 'btc' && btcPerOrderAddress;
 				// Sally finding M1/M8: stamp success time so the
 				// edit-window countdown chip can render live.
 				successFiredAt = Date.now();
@@ -2418,8 +2498,8 @@
 			counterAsset: fiat.trim().toUpperCase(),
 			// Blank stays blank: '' must become null (an "any amount" listing),
 			// never 0, which would read as a real bound of zero.
-			amountMin: amountMin.trim() === '' ? null : Number(amountMin),
-			amountMax: amountMax.trim() === '' ? null : Number(amountMax),
+			amountMin: amountMinNum,
+			amountMax: amountMaxNum,
 			// v1.9.0 (the maintainer) — the fields the redesigned announcement body mirrors from
 			// the order detail page. Canonical method display names (no instance
 			// lookup needed for the blog), the just-broadcast created time + derived
@@ -2468,6 +2548,7 @@
 		syndicationStatus = null;
 		successPermlink = null;
 		successUsedWaiver = false;
+		successBtcFeeAddress = false;
 		// Sally finding M1/M8: clear the success-stamp so the
 		// next post's countdown starts fresh, not from now-relative-
 		// to-the-prior-broadcast.
@@ -2514,8 +2595,8 @@
 				side: side ?? 'buy',
 				asset: asset ?? '',
 				fiat_currency: fiat.trim().toUpperCase(),
-				amount_min: minRaw !== '' && Number.isFinite(Number(minRaw)) ? Number(minRaw) : null,
-				amount_max: maxRaw !== '' && Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : null,
+				amount_min: minRaw !== '' && amountMinParse.ok ? amountMinParse.number : null,
+				amount_max: maxRaw !== '' && amountMaxParse.ok ? amountMaxParse.number : null,
 				// value-free barter → "…for {cryptos}"; the '…' placeholder keeps the
 				// sentence readable before any crypto is ticked.
 				accepted_assets: acceptedAssets.length > 0 ? [...acceptedAssets] : ['…']
@@ -2577,8 +2658,8 @@
 				side: side ?? 'buy',
 				asset: asset ?? '',
 				fiat_currency: fiatCode,
-				amount_min: minRaw !== '' && Number.isFinite(Number(minRaw)) ? Number(minRaw) : null,
-				amount_max: maxRaw !== '' && Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : null,
+				amount_min: minRaw !== '' && amountMinParse.ok ? amountMinParse.number : null,
+				amount_max: maxRaw !== '' && amountMaxParse.ok ? amountMaxParse.number : null,
 				// '…' placeholder keeps the sentence readable before any method is ticked
 				payment_methods: paymentMethods.length > 0 ? [...paymentMethods] : ['…']
 			},
@@ -3609,7 +3690,11 @@
 									<span class="text-sm">
 										<span class="font-semibold">{$_('post_order.fee_method.btc_label')}</span>
 										<span class="block text-xs text-ink-500">
-											{$_('post_order.fee_method.btc_hint')}
+											{#if btcPerOrderAddress}
+												{$_('post_order.fee_method.btc_hint_per_order')}
+											{:else}
+												{$_('post_order.fee_method.btc_hint')}
+											{/if}
 										</span>
 									</span>
 								</label>
@@ -3681,7 +3766,11 @@
 						<span class="text-sm">
 							<span class="font-semibold">{$_('post_order.fee_method.btc_label')}</span>
 							<span class="block text-xs text-ink-500">
-								{$_('post_order.fee_method.btc_hint')}
+								{#if btcPerOrderAddress}
+									{$_('post_order.fee_method.btc_hint_per_order')}
+								{:else}
+									{$_('post_order.fee_method.btc_hint')}
+								{/if}
 							</span>
 						</span>
 					</label>
@@ -3715,6 +3804,7 @@
 					method={feeMethodChoice}
 					liveSatoshis={feeMethodChoice === 'btc' ? btcFeeSatoshisLive : undefined}
 					livePiconero={feeMethodChoice === 'xmr' ? xmrFeePiconeroLive : undefined}
+					xmrPayFor={feeMethodChoice === 'xmr' ? xmrPayFor : null}
 					feeFiat={feeMethodChoice === 'btc' ? btcFeeFiat : xmrFeeFiat}
 					{denominationFiat}
 				/>
@@ -3722,6 +3812,7 @@
 				<LazyLoadError />
 			{/await}
 
+			{#if !(feeMethodChoice === 'btc' && btcPerOrderAddress)}
 			<section class="card mb-4" aria-labelledby="txid-heading">
 				<div class="mb-3 flex items-center gap-2">
 					<h2 id="txid-heading" class="font-display text-lg font-bold">
@@ -3759,115 +3850,108 @@
 					{/if}
 				</p>
 			</section>
+			{/if}
 		{/if}
 
 		{#if feeMethodChoice === 'xmr'}
-			<!-- Part 108++ — XMR per-payment tx_proof.  Eliminates
-			     the need for any indexer (canonical or community)
-			     to hold the treasury wallet's view key.  The user
-			     generates a per-payment proof from their own wallet
-			     after paying; any indexer verifies the proof
-			     against the txid + treasury address using a public
-			     explorer endpoint or local monerod RPC.  Privacy
-			     invariant: the proof reveals only "this txid paid
-			     this address this amount" — exactly the public
-			     information needed for verification, no more.
-			     Decentralization invariant: every indexer can
-			     verify every payment independently. -->
-			<section class="card mb-4" aria-labelledby="tx-proof-heading">
+			<!-- v1.20.0 (M-X1) — the XMR fee's TRANSACTION KEY. The explorers
+			     every indexer asks (onion-monero-blockchain-explorer
+			     /api/outputs?txprove=1) prove a payment with this 64-hex key and
+			     nothing else; the "payment proof" (OutProof…) strings asked for
+			     before could never be checked there. Once fees are order-bound
+			     (MK-H2) the same key also decrypts the payment's hidden listing
+			     code. Per-wallet steps are only what each wallet's own source
+			     shows (Monero CLI get_tx_key, GUI History, Feather TxInfoDialog,
+			     Cake Wallet, Monerujo tx_key). -->
+			<section class="card mb-4" aria-labelledby="tx-key-heading">
 				<div class="mb-3 flex items-center gap-2">
-					<h2 id="tx-proof-heading" class="font-display text-lg font-bold">
-						{$_('post_order.fee_method.tx_proof_label')}
+					<h2 id="tx-key-heading" class="font-display text-lg font-bold">
+						{$_('post_order.fee_method.tx_key_label')}
 					</h2>
 					<Tooltip
-						textKey="post_order.fee_method.tx_proof_tooltip"
+						textKey="post_order.fee_method.tx_key_tooltip"
 						faqKey="xmr_tx_proof"
-						ariaLabel={$_('post_order.fee_method.tx_proof_tooltip_aria')}
+						ariaLabel={$_('post_order.fee_method.tx_key_tooltip_aria')}
 					/>
 				</div>
 
-				<!-- Privacy reassurance: the proof reveals only this
-				     one payment, nothing else about the user's
-				     wallet.  Render BEFORE the textarea so the user
-				     understands what they're sharing. -->
 				<p
-					class="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+					class="mb-3 rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-xs text-ink-700 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-300"
 				>
-					{$_('post_order.fee_method.tx_proof_privacy_note')}
+					{$_('post_order.fee_method.tx_key_privacy_note')}
 				</p>
 
-				<!-- Per-wallet "How to generate your proof"
-				     instructions.  Inline expandable so the user
-				     doesn't have to leave the page (grandma-friendly:
-				     no required external doc lookup).  Default
-				     collapsed to keep the page short for users who
-				     already know the flow. -->
 				<details
 					class="mb-3 rounded-lg border border-ink-200 bg-ink-50 dark:border-ink-700 dark:bg-ink-900"
 				>
 					<summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold">
-						{$_('post_order.fee_method.tx_proof_how_to_label')}
+						{$_('post_order.fee_method.tx_key_how_to_label')}
 					</summary>
 					<div
 						class="space-y-3 border-t border-ink-200 px-3 py-3 text-xs text-ink-700 dark:border-ink-700 dark:text-ink-300"
 					>
 						<div>
 							<div class="font-semibold">
-								{$_('post_order.fee_method.tx_proof_how_to_cli_heading')}
+								{$_('post_order.fee_method.tx_key_how_to_cli_heading')}
 							</div>
-							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_cli_body')}</div>
+							<div class="mt-1">{$_('post_order.fee_method.tx_key_how_to_cli_body')}</div>
 						</div>
 						<div>
 							<div class="font-semibold">
-								{$_('post_order.fee_method.tx_proof_how_to_gui_heading')}
+								{$_('post_order.fee_method.tx_key_how_to_gui_heading')}
 							</div>
-							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_gui_body')}</div>
+							<div class="mt-1">{$_('post_order.fee_method.tx_key_how_to_gui_body')}</div>
 						</div>
 						<div>
 							<div class="font-semibold">
-								{$_('post_order.fee_method.tx_proof_how_to_cake_heading')}
+								{$_('post_order.fee_method.tx_key_how_to_feather_heading')}
 							</div>
-							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_cake_body')}</div>
+							<div class="mt-1">{$_('post_order.fee_method.tx_key_how_to_feather_body')}</div>
 						</div>
 						<div>
 							<div class="font-semibold">
-								{$_('post_order.fee_method.tx_proof_how_to_feather_heading')}
+								{$_('post_order.fee_method.tx_key_how_to_cake_heading')}
 							</div>
-							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_feather_body')}</div>
+							<div class="mt-1">{$_('post_order.fee_method.tx_key_how_to_cake_body')}</div>
 						</div>
 						<div>
 							<div class="font-semibold">
-								{$_('post_order.fee_method.tx_proof_how_to_other_heading')}
+								{$_('post_order.fee_method.tx_key_how_to_monerujo_heading')}
 							</div>
-							<div class="mt-1">{$_('post_order.fee_method.tx_proof_how_to_other_body')}</div>
+							<div class="mt-1">{$_('post_order.fee_method.tx_key_how_to_monerujo_body')}</div>
+						</div>
+						<div>
+							<div class="font-semibold">
+								{$_('post_order.fee_method.tx_key_how_to_other_heading')}
+							</div>
+							<div class="mt-1">{$_('post_order.fee_method.tx_key_how_to_other_body')}</div>
 						</div>
 					</div>
 				</details>
 
-				<textarea
-					dir="auto"
-					id="tx-proof"
-					rows="4"
+				<input
+					id="tx-key"
+					type="text"
 					autocomplete="off"
 					autocapitalize="none"
 					spellcheck="false"
-					bind:value={txProof}
-					maxlength="1000"
-					placeholder={$_('post_order.fee_method.tx_proof_placeholder')}
-					class="w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-xs tracking-tight dark:border-ink-600 dark:bg-ink-900"
-					aria-invalid={txProofError !== '' && txProofError !== 'ok'}
-					aria-describedby="tx-proof-msg"
-				></textarea>
+					bind:value={txKey}
+					maxlength="400"
+					placeholder={$_('post_order.fee_method.tx_key_placeholder')}
+					class="w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm tracking-tight dark:border-ink-600 dark:bg-ink-900"
+					aria-invalid={txKeyError !== '' && txKeyError !== 'ok'}
+					aria-describedby="tx-key-msg"
+				/>
 				<p
-					id="tx-proof-msg"
-					class="mt-2 text-xs {txProofError !== '' && txProofError !== 'ok'
+					id="tx-key-msg"
+					class="mt-2 text-xs {txKeyError !== '' && txKeyError !== 'ok'
 						? 'text-red-600 dark:text-red-400'
 						: 'text-ink-500'}"
 				>
-					{#if txProofError !== '' && txProofError !== 'ok'}
-						{txProofError}
+					{#if txKey.trim() !== '' && txKeyError !== '' && txKeyError !== 'ok'}
+						{txKeyError}
 					{:else}
-						{$_('post_order.fee_method.tx_proof_hint')}
+						{$_('post_order.fee_method.tx_key_hint')}
 					{/if}
 				</p>
 			</section>
@@ -3941,8 +4025,9 @@
 			<BusyButton
 				variant="primary"
 				disabled={(feeMethodChoice === 'blurt' && !feeQuote) ||
-					(feeMethodChoice === 'btc' && externalTxIdError !== 'ok') ||
-					(feeMethodChoice === 'xmr' && (externalTxIdError !== 'ok' || txProofError !== 'ok'))}
+					(feeMethodChoice === 'btc' && !btcPerOrderAddress && externalTxIdError !== 'ok') ||
+					(feeMethodChoice === 'xmr' &&
+						(externalTxIdError !== 'ok' || txKeyError !== 'ok' || (xmrBound && xmrPayFor === null)))}
 				onclick={goToPasswordPrompt}
 			>
 				{#if feeMethodChoice === 'waived_first_buy'}
@@ -4043,6 +4128,18 @@
 						<li>{$_('post_order.success.waiver_step_2')}</li>
 						<li>{$_('post_order.success.waiver_step_3')}</li>
 					</ol>
+				</div>
+			{:else if successBtcFeeAddress && successPermlink && blurtAccount}
+				<!-- v1.20.0 (MK-H2): posted, but not on the orderbook until its own
+				     BTC fee address is paid. -->
+				<h2 class="font-display text-2xl font-extrabold">{$_('post_order.success.btc_title')}</h2>
+				<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('post_order.success.btc_body')}</p>
+				<div class="mx-auto mt-5 max-w-prose">
+					{#await loadBtcFeePayPanel() then BtcFeePayPanel}
+						<BtcFeePayPanel account={blurtAccount} permlink={successPermlink} />
+					{:catch}
+						<LazyLoadError />
+					{/await}
 				</div>
 			{:else}
 				<h2 class="font-display text-2xl font-extrabold">{$_('post_order.success.title')}</h2>

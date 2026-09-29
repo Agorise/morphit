@@ -164,10 +164,20 @@ Fields:
 - `exp` — Unix-seconds expiry. Capped at 5 minutes
   after generation (validated by the relay; bundles
   delivered after `exp` are rejected).
-- `relay` — the relay URL the phone POSTs to. In a
-  federated world this lets a user on Operator A pair
-  into Operator B's instance — phone delivers the
-  bundle to the operator the desktop is sitting on.
+- `relay` — the desktop's instance's indexer, where the
+  desktop waits. A phone signed in on the SAME instance
+  POSTs its bundle there directly. A phone signed in on
+  ANOTHER federation instance never contacts it: it
+  hands the bundle to its own instance's indexer
+  (`POST /v1/pairing/forward`, same origin), which
+  forwards it to the desktop's instance — see "v1.20.0
+  amendment" below. For a cross-instance QR, `relay`
+  and `origin` must be the same origin. (Before v1.20.0
+  this field said the phone would deliver straight to
+  another operator's relay; that never worked
+  cross-origin — the phone page's CSP `connect-src` is
+  `'self'` plus the RPC nodes, and the target indexer's
+  CORS allows only GET/OPTIONS.)
 
 QR encodes this as a single base64url string of compact
 JSON. ~250 bytes — comfortably within QR limits even at
@@ -181,11 +191,15 @@ Phone parses the QR. Rejects if:
 - `v !== 1`.
 - `pid` is not 64 hex chars.
 - `epk` is not 32 bytes after base64url decode.
-- `origin` is not a valid `https://` URL with a host
-  component.
+- `origin` / `relay` is not `https://` with a host — or
+  `http://` with a Tor / I2P / Lokinet host (`.onion`,
+  `.i2p`, `.loki`). Plain `http://` is refused for every
+  clearnet host. (Before v1.20.0 this was https-only, so
+  a desktop on an instance's `.onion` page — origin
+  `http://…onion` — produced a QR every phone rejected:
+  QR sign-in did not work on any hidden page.)
 - `exp` is in the past or more than 5 minutes in the
   future.
-- `relay` is not a valid `https://` URL.
 
 If any of the above fails, phone shows a generic "this
 QR isn't a valid Morphit login QR" error and refuses to
@@ -790,3 +804,41 @@ For Option A specifically:
 - ✅ All 10 locales at parity.
 
 Option A is complete and shippable as of Part 114.
+
+## v1.20.0 amendment — pairing across instances
+
+A desktop on instance A shows a QR; a phone signed in on instance B scans it.
+
+1. **Phone → its own instance only.** The phone compares the QR's `relay` with its own indexer. Same →
+   `POST /v1/login-pairing/:pid/deliver` exactly as before. Different → the phone first asks its own
+   indexer `GET /v1/pairing/target?origin=<QR origin>` whether that origin is a Morphit directory
+   instance. If not, the phone shows "This QR code is from an instance that isn't in the Morphit
+   directory" and stops — before the confirmation card. If it is, the card is shown as usual and, on
+   "Yes", the sealed delivery payload goes to `POST /v1/pairing/forward` on the phone's own instance.
+2. **B's indexer → A.** The target must be a registered directory instance: its registered origin, or a
+   hidden address (tor / i2p_b32 / i2p_name / lokinet) its operator published on chain; rows the probe
+   marked `mismatch` are excluded. B dials A's registered addresses with the federation chat fan-out's
+   transport rules: hidden addresses first (Tor / I2P / Lokinet via the pooled hidden transport), the
+   clearnet origin through the resolve-and-pin path (https only, every resolved address public, no
+   redirects followed, reply read bounded), falling over to the next address only on a local transport
+   fault; a hidden-only node never dials clearnet. Only one path is ever requested:
+   `/v1/login-pairing/<pid>/deliver`. A target that is B itself under another of its names (phone on B's
+   clearnet name, desktop on B's onion) is delivered into B's own registry with no network.
+3. **A's deliver endpoint is unchanged.** It never bound anything to the requester's IP or Origin, so a
+   forwarded delivery is accepted like a direct one; its per-IP rate limit keys on B (or the shared
+   Tor/I2P gateway).
+
+Limits on the forward: 4 KiB request (the reverse proxies' `/v1/` cap), exact v1 delivery shape,
+per-client `list` rate tier, 20 forwards/minute per target instance, 600/minute in all. In flight: at
+most 2 per target instance, 4 in all for targets the probe has not verified (last status `never`,
+`stale`, `unreachable`, or a `good` it could not actually probe), 32 in all — so one silent instance
+cannot starve everyone else's sign-in. Timeouts: 45 s per hidden attempt, 10 s per clearnet attempt,
+60 s overall; for an unverified target 15 s / 5 s / 20 s.
+
+**Privacy.** The phone's IP reaches only its own instance; A sees B. B learns that one of its users
+paired with A at time T — metadata B could already infer from serving the phone. Nothing is logged
+with an address, a pid or a target. The CSP is NOT widened anywhere.
+
+**Limitation.** A split-topology desktop instance (indexer on its own `indexer.` subdomain, so its QR's
+`relay` differs from its `origin`) cannot be paired into from another instance: the directory lists
+site origins, and the phone refuses a foreign QR whose relay is not the site it shows.

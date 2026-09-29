@@ -88,6 +88,10 @@ cp -r "$REPO/apps" "$WORK/apps"
 cp -r "$REPO/packages" "$WORK/packages"
 cp "$REPO/tsconfig.json" "$WORK/" 2>/dev/null || true
 cp "$REPO/package.json" "$WORK/" 2>/dev/null || true
+# apps/web/svelte.config.js (which vitest loads) imports the repo-root
+# scripts/build-brand-slots.mjs; without it the baseline cannot even start.
+mkdir -p "$WORK/scripts"
+cp "$REPO/scripts/build-brand-slots.mjs" "$WORK/scripts/"
 ln -s "$REPO/node_modules" "$WORK/node_modules"
 
 CHAT="$WORK/apps/web/src/lib/chat/chatService.ts"
@@ -104,8 +108,8 @@ run_tests(){
 }
 
 verdict(){ # <output> -> pass | fail | crash
-	if printf '%s' "$1" | grep -qE 'Tests +[0-9]+ failed'; then echo fail
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ passed'; then echo pass
+	if grep -qE 'Tests +[0-9]+ failed' <<<"$1"; then echo fail
+	elif grep -qE 'Tests +[0-9]+ passed' <<<"$1"; then echo pass
 	else echo crash; fi
 }
 

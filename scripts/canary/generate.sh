@@ -155,11 +155,16 @@ if [ "$CANARY_TOR_ONLY" = 1 ]; then
 		if [ -z "$_hidden" ] && [ -r /etc/morphit/indexer.env ]; then
 			_hidden="$(grep -E '^MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=' /etc/morphit/indexer.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')" || true
 		fi
-		_onion="$(printf '%s' "${_hidden:-}" | tr ',' '\n' | grep -i '\.onion' | head -1 | tr -d '[:space:]')" || true
-		: "${_onion:=}"
-		if [ -n "$_onion" ]; then
-			export MORPHIT_CANARY_BLURT_RPC="$_onion"
-			echo "canary: tor-only — auto-selected hidden Blurt RPC $_onion for the chain-head fetch" >&2
+		# ALL the hidden .onion RPCs, comma-joined — NOT just the first (review D12).
+		# resolveCanaryNodes honours a comma-separated override PREFERRED-FIRST and
+		# fails over across every entry, so one down onion no longer stalls the
+		# weekly canary refresh (the old `head -1` pinned exactly one, exclusively).
+		_onions="$(printf '%s' "${_hidden:-}" | tr ',' '\n' | grep -i '\.onion' | tr -d '[:space:]' | grep -v '^$' | paste -sd, -)" || true
+		: "${_onions:=}"
+		if [ -n "$_onions" ]; then
+			export MORPHIT_CANARY_BLURT_RPC="$_onions"
+			_onion_count="$(printf '%s' "$_onions" | tr ',' '\n' | grep -c .)" || true
+			echo "canary: tor-only — auto-selected $_onion_count hidden Blurt RPC(s) for the chain-head fetch (fails over across all)" >&2
 		else
 			echo "canary: tor-only but no hidden .onion Blurt RPC found — the head fetch may fail over Tor. Set MORPHIT_CANARY_BLURT_RPC to a hidden node." >&2
 		fi

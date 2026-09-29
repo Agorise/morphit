@@ -28,20 +28,47 @@ export interface BlurtHead {
 /**
  * Resolve the ORDERED list of nodes to try.
  *
- * An explicit `MORPHIT_CANARY_BLURT_RPC` override is honoured EXCLUSIVELY —
- * the operator named a specific node on purpose, the same rule
- * release-broadcast.ts applies to its `--node` flag. With no override we
- * walk the full canonical list, which is the failover behaviour we want by
- * default. So: the fix for "one dead node stalls the canary" is simply to
- * leave the override unset, which is the default.
+ * An `MORPHIT_CANARY_BLURT_RPC` override is honoured PREFERRED-FIRST, NOT
+ * exclusively (review D12): the operator's / tor-only auto-pick node(s) are
+ * tried first, then the walk FALLS THROUGH to the rest of the canonical list.
+ * The override may name several nodes (comma-separated) — on a tor-only node
+ * generate.sh passes ALL the hidden .onion RPCs, so one down onion no longer
+ * stalls the whole canary refresh (the old code pinned exactly one, exclusively,
+ * and a single dead onion let the canary go stale). Deduped, order preserved,
+ * blanks dropped.
  */
 export function resolveCanaryNodes(
 	override: string | undefined,
 	defaultList: readonly string[]
 ): string[] {
-	const trimmed = override?.trim();
-	if (trimmed) return [trimmed];
-	return [...defaultList];
+	const preferred = (override ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter((s) => s !== '');
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const url of [...preferred, ...defaultList]) {
+		const u = url.trim();
+		if (u === '' || seen.has(u)) continue;
+		seen.add(u);
+		out.push(u);
+	}
+	return out;
+}
+
+/**
+ * The DEFAULT node list the canary falls through to (D12 contract): on a
+ * tor-only node, EVERY .onion in the default hidden Blurt RPC set — never a
+ * clearnet node (pushed through a Tor exit their WAFs answer 400/403, and a
+ * tor-only node must not rely on clearnet at all); on a clearnet node, the
+ * clearnet default list. The override (resolveCanaryNodes) is still tried first.
+ */
+export function canaryDefaultNodes(
+	torOnly: boolean,
+	clearnet: readonly string[],
+	hidden: readonly string[]
+): string[] {
+	return torOnly ? hidden.filter((u) => /\.onion(?::\d+)?(?:\/|$)/i.test(u)) : [...clearnet];
 }
 
 /**

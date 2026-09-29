@@ -1,89 +1,63 @@
 # morphit-ops
 
-Operator command-line tool for a Morphit instance. Read-mostly
-view into the indexer + relay shared database: status snapshot,
-drain queue depth, recent signups, abuse signals, moderation
-flags. Designed to be run on the same VPS that hosts the
-indexer and relay, over SSH.
+The operator tool for a Morphit instance: guided install, settings,
+branding, upgrades, hardening, health, and read-only views into the
+indexer + relay database (status, drain queue, signups, abuse signals,
+moderation flags). Run it **on the server**, as `sudo morphit-ops …`
+(the guided install puts a `morphit-ops` shortcut on the PATH that always
+runs the copy in `/opt/morphit`; the instance's settings are readable only
+by root). `sudo morphit-ops` with no arguments opens a menu of everything;
+`sudo morphit-ops --help` lists every subcommand.
 
-The CLI does NOT mutate state. Everything it shows is sourced
-from queries against the same Postgres the indexer and relay
-write to; no admin endpoints are involved. This keeps the
-attack surface small (read-only Postgres connection is the only
-auth the CLI needs).
+Many subcommands change the server (install, upgrade, harden, edit,
+branding, register, block, …); the database views (status, signups,
+drain-queue, abuse, failed-broadcasts, loyalty, attestations, flags) only
+read.
 
-The `init` subcommand is the exception — it's a first-time
-setup wizard that writes `morphit.config.env` and a posting-key
-keystore to disk. See "First-time setup" below.
+Don't run `npx morphit-ops` outside the install folder: `npx` then looks the
+name up on the public npm registry, which is not where Morphit comes from.
 
 ## First-time setup
 
-Run on a fresh checkout to generate your `morphit.config.env`
-and active-key keystore:
+Use the guided install — `sudo bash morphit-setup.sh` in the extracted
+release, choose *Full guided install*
+([`docs/RUN-A-MORPHIT-NODE.md`](../../docs/RUN-A-MORPHIT-NODE.md)). It runs
+the setup wizard (`init`) for you, writes `morphit.config.env`,
+`morphit.env` and the encrypted relay keystore (`apps/relay/keystore.json`,
+mode 0600), and installs everything else.
+
+To check only whether this machine's hardware/OS meets the bar:
 
 ```sh
-cd apps/ops-cli
-npx tsx src/main.ts init
+sudo morphit-ops init --check-only
 ```
-
-The wizard:
-
-1. Runs a system check (CPU, RAM, disk, OS version, Postgres
-   reachability, outbound HTTPS). Catches issues before you
-   commit time to interactive prompts.
-2. Walks you through 18 setup steps with ELI5 explanations.
-3. Validates each input (Blurt account names checked against
-   the chain, database URL parsed, etc.).
-4. Shows a review and asks for confirmation.
-5. Writes `morphit.config.env` and `apps/relay/keystore.{wif,json}`
-   with `0600` permissions.
-
-If you only want to verify your hardware/OS meets the bar
-before committing time to setup:
-
-```sh
-npx tsx src/main.ts init --check-only
-```
-
-`init` works on a fresh checkout where `npm install` hasn't
-been run yet — it has no third-party dependencies beyond what
-ships in Node.js.
 
 ## Publish your instance to the federation
 
-After your indexer + relay + frontend are up and serving
-correctly at your public origin, run:
+After your node is up and serving at its public origin, on the server:
 
 ```sh
-# Source your wizard-generated env files so register can
-# read them:
-set -a; . ./morphit.env; . ./morphit.config.env; set +a
-
-npx tsx apps/ops-cli/src/main.ts register
+sudo morphit-ops register
 ```
 
-This posts a `morphit_operator_register_v1` op on the Blurt
-chain. Within ~10 minutes every Morphit indexer (including
-morphit.io and your own) will see it via chain replay,
-probe your origin to verify it's serving correctly, and add
-your instance to their `/instances` directory.
+This posts a `morphit_operator_register_v1` op on the Blurt chain, signed
+by your relay account. Within ~10 minutes every Morphit indexer (including
+morphit.io and your own) sees it via chain replay, probes your origin, and
+lists your instance in its `/instances` directory.
 
-You can verify your registration landed by visiting your
-own `/instances` page — you should appear with status
-`good` and a "You are here" badge.
+Registration is an update keyed on your relay account: run `register`
+again after changing your display name, origin, contact or Tor/I2P
+addresses and the new values replace the old ones. Only the **tag** is
+permanent once claimed.
 
-The `register` subcommand requires `npm install` to have run
-(it dynamically loads `@beblurt/dblurt` for chain
-broadcasting).
-
-## Quick start (after init)
+## Quick start (after install)
 
 ```sh
-cd apps/ops-cli
-npm install
-export MORPHIT_OPS_DATABASE_URL=postgres://morphit:secret@localhost:5432/morphit
-npx tsx src/main.ts status
+sudo morphit-ops status
 ```
+
+It finds the database URL in the instance's own env files; set
+`MORPHIT_OPS_DATABASE_URL` only to point it somewhere else.
 
 You should see a multi-section dashboard summarizing indexer
 health, drain queue, today's signups, and 24h moderation flags.
@@ -126,18 +100,38 @@ Override any of them via env:
 
 ## Subcommands
 
-| Subcommand                                          | What it shows                                                                         |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `init`                                              | First-time setup wizard (run on a fresh install)                                      |
-| `register`                                          | Publish operator registration on-chain (Phase D.5)                                    |
-| `status`                                            | One-screen dashboard: indexer state, drain queue, signups today, moderation flags 24h |
-| `drain-queue [--age=DUR]`                           | Pending relay transfers, oldest first. `--age=1h` shows entries waiting >1h           |
-| `signups [--since=DUR]`                             | Accounts created via this relay. Default window: 24h                                  |
-| `abuse [--since=DUR]`                               | Combined view: persistent broadcast failures + new reciprocity/related-account flags  |
-| `failed-broadcasts [--since=DUR]`                   | Relay broadcasts that errored, with error messages                                    |
-| `loyalty [--since=DUR]`                             | Loyalty milestone delegations triggered. Default window: 7d                           |
-| `attestations`                                      | Orders awaiting fee-attestation verification (BTC/XMR fee path)                       |
-| `flags [--type=reciprocity\|related] [--since=DUR]` | Moderation flags drill-down                                                           |
+`sudo morphit-ops --help` is the authoritative list. The main ones:
+
+| Subcommand | What it does |
+| --- | --- |
+| `install` | Guided first-time install |
+| `doctor` | Read-only check: will the indexer + relay start with this config? |
+| `init [--check-only]` | Setup wizard (run for you by `install`) |
+| `edit` | Change settings: origin, alt-network addresses, SEO, fees account, operator tag, RPC endpoints |
+| `branding [status\|setup\|apply\|reset]` | Your logo, icons and site name (`docs/BRANDING.md`) |
+| `alt-address` | Guided Tor / Lokinet / I2P address setup |
+| `register` | Publish (or update) your operator registration on-chain |
+| `show-key` | Show the public key your saved active key derives to |
+| `edit-active-key` | Rotate the relay account's active key |
+| `import-altnet-key` / `export-altnet-key --network=tor\|lokinet\|i2p` | Encrypt / decrypt an alt-network service key |
+| `payment-method [add\|remove\|list]` | Instance-specific payment methods |
+| `upgrade [--check-only] [--yes] [--json] [--from-file=PATH] [--allow-downgrade]` | Check for and apply a newer release |
+| `harden` | Server-hardening wizard |
+| `ssl [status\|setup]` | HTTPS certificate status / setup steps |
+| `bunkerweb` | BunkerWeb WAF status / install |
+| `health [--json]` | Node health: indexer, relay, services, canary |
+| `mcp` / `matrix [set <mxid>\|clear\|test]` | MCP server on/off; Matrix alert username |
+| `status` | One-screen dashboard: indexer state, drain queue, signups today, moderation flags 24h |
+| `drain-queue [--age=DUR]` | Pending relay transfers, oldest first |
+| `signups [--since=DUR]` | Accounts created via this relay (default 24h) |
+| `abuse [--since=DUR]` | Persistent broadcast failures + new reciprocity/related-account flags |
+| `failed-broadcasts [--since=DUR]` | Relay broadcasts that errored |
+| `loyalty [--since=DUR]` | Loyalty milestone delegations (default 7d) |
+| `attestations` | Orders awaiting fee-attestation verification (BTC/XMR fee path) |
+| `flags [--type=reciprocity\|related] [--since=DUR]` | Moderation flags drill-down |
+| `moderation` | Review flags, block/unblock accounts (interactive) |
+| `block <account> [reason]` / `unblock <account>` | Hide / un-hide an account's listings on this instance |
+| `fast-sync [--from-file PATH]` / `fast-forward [BLOCK]` | Restore a federation snapshot / skip ahead |
 
 ### Global flags
 
@@ -164,10 +158,10 @@ to stdout, suitable for piping. Examples:
 
 ```sh
 # How many failed broadcasts had errors > 5 minutes ago?
-morphit-ops failed-broadcasts --json | jq '.entries | map(select(.error_count >= 5)) | length'
+sudo morphit-ops failed-broadcasts --json | jq '.entries | map(select(.error_count >= 5)) | length'
 
 # Recent signups as a CSV-like list
-morphit-ops signups --json | jq -r '.entries[] | [.name, .created_block_time] | @tsv'
+sudo morphit-ops signups --json | jq -r '.entries[] | [.name, .created_block_time] | @tsv'
 
 # Alert if drain queue oldest age > 1 hour
 oldest=$(morphit-ops status --json | jq '.drain_queue.oldest_age_sec // 0')
@@ -194,15 +188,12 @@ don't appear here. Check the relay's structured logs for those.
 Some basic SSH sessions have spotty UTF-8 support. Pass
 `--no-color` for ASCII-only output (`[OK]`, `[WARN]`, `[ERR]`).
 
-## What's NOT in v1
+## What it deliberately does not do
 
-The following are deliberately deferred until a follow-up phase:
-
-- **Operations subcommands** (`drain-now`, `pause-signups`,
-  `set-ceiling`, `top-up-balance`). These would mutate live
-  state and require either a relay HTTP admin endpoint with
-  signed-challenge auth, or a coordination mechanism through
-  Postgres. v1 is read-only by intent.
+- **Live relay controls** (`drain-now`, `pause-signups`, `set-ceiling`,
+  `top-up-balance`). These would need a relay admin endpoint. To pause
+  signups, on the relay's server: `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED`
+  (see `docs/INCIDENT-RUNBOOK.md`).
 - **Operator monitoring web UI.** We deliberately ship a CLI
   instead — fewer attack surfaces, scriptable, fits the
   operator's SSH-into-the-VPS workflow.
@@ -211,35 +202,11 @@ The following are deliberately deferred until a follow-up phase:
   invoke the CLI multiple times with different
   `MORPHIT_OPS_RELAY_ACCOUNT` values.
 
-## Source map
+## Source
 
-```
-src/
-├── main.ts                       Entry point + tiny arg parser
-├── config.ts                     Env vars + threshold tunables
-├── db.ts                         pg.Pool wrapper
-├── render/
-│   ├── term.ts                   ANSI colors, glyphs, sections
-│   └── json.ts                   --json emitter
-├── lib/
-│   ├── ctx.ts                    Shared CommandCtx type
-│   └── time.ts                   Duration/time formatting helpers
-└── commands/
-    ├── status.ts                 Dashboard
-    ├── drainQueue.ts             Pending transfers
-    ├── signups.ts                Recent signups
-    ├── abuse.ts                  Combined abuse signals
-    ├── failedBroadcasts.ts       Errored broadcasts
-    ├── loyalty.ts                Milestones
-    ├── attestations.ts           Pending fee attestations
-    └── flags.ts                  Moderation flags
-
-scripts/
-└── ops-cli-smoke.ts              35-scenario smoke runner
-
-test/
-└── time.test.ts                  Vitest mirror of the smoke (for when vitest is installed)
-```
+Entry point and argument parser: `src/main.ts`; one file per subcommand in
+`src/commands/`; shared helpers in `src/lib/`; the install wizard in
+`src/init/`. Tests are in `test/` (vitest) and `scripts/` (smokes).
 
 ## License
 

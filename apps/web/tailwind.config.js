@@ -1,5 +1,8 @@
 import tailwindPlugin from 'tailwindcss/plugin';
 
+/** A theme colour: `--<name>-rgb` from src/theme.css, alpha-aware. */
+const token = (name) => `rgb(var(--${name}-rgb) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
 	content: ['./src/**/*.{html,js,svelte,ts}'],
@@ -10,51 +13,56 @@ export default {
 				sans: ['Comfortaa', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
 				display: ['Comfortaa', 'system-ui', 'sans-serif']
 			},
+			// Every colour is a CSS custom property from src/theme.css (the one
+			// colour source of truth — per-instance theming, docs/BRANDING.md).
+			// `rgb(var(--x-rgb) / <alpha-value>)` keeps every opacity modifier
+			// (`bg-morphit-emerald/10`, `ring-ink-700/50`) working. The Morphit
+			// values, and why each one is what it is, live in theme.css.
 			colors: {
-				// Morphit brand palette (from the logo gradient)
 				morphit: {
-					lime: '#8EEF26',
-					accent: '#7FED2D',
-					emerald: '#00DA69',
-					// Deepened brand emerald for chat bubbles — mirrors
-					// --morphit-emerald-bubble in app.css (see the rationale there).
-					// Same pattern as `btn` below: the pure brand colour is too bright
-					// a field to read thin text on, so the bubble gets a deepened
-					// sibling rather than an opacity (which would blend with the page).
-					'emerald-bubble': '#009E51',
-					teal: '#02A6B2',
-					// Primary button face — mirrors --morphit-btn-face in app.css.
-					// A deepened brand teal (white text clears WCAG AA); this is
-					// the face used by the header Start button (.btn-primary) and,
-					// site-wide, every filled primary CTA so they all match.
-					btn: '#027c86',
-					ink: '#0B1220', // deep navy for dark-mode surfaces
-					paper: '#FEFEFE'
+					lime: token('brand-1'),
+					accent: token('brand-accent'),
+					// The primary accent (text, borders, rings, badges). On the
+					// Morphit palette it is the gradient's middle stop, #00DA69.
+					emerald: token('brand-primary'),
+					// Deepened brand emerald for chat bubbles (see theme.css / app
+					// history: a fixed deepened value, never an opacity, so it reads
+					// the same on every surface).
+					'emerald-bubble': token('brand-bubble'),
+					teal: token('brand-secondary'),
+					// Primary button face — a deepened brand teal so its text clears
+					// WCAG AA — and the text colour that goes on it.
+					btn: token('brand-btn-face'),
+					'btn-text': token('brand-btn-text'),
+					ink: token('shadow') // deep navy used for card shadows
 				},
-				// Neutral grays tuned for readability in dark mode
+				// Neutral surface/text scale, tuned for readability in dark mode.
 				ink: {
-					50: '#F7F8FA',
-					100: '#EEF1F5',
-					200: '#D9DFE7',
-					300: '#B8C2D0',
-					400: '#8A96A8',
-					500: '#5D6B80',
-					600: '#3E4A5C',
-					700: '#2A3340',
-					800: '#1A202B',
-					900: '#0F141C',
-					950: '#070A10'
+					50: token('surface-50'),
+					100: token('surface-100'),
+					200: token('surface-200'),
+					300: token('surface-300'),
+					400: token('surface-400'),
+					500: token('surface-500'),
+					600: token('surface-600'),
+					700: token('surface-700'),
+					800: token('surface-800'),
+					900: token('surface-900'),
+					950: token('surface-950')
 				}
 			},
 			backgroundImage: {
-				'morphit-gradient': 'linear-gradient(90deg, #8EEF26 0%, #00DA69 50%, #02A6B2 100%)',
+				'morphit-gradient': 'var(--morphit-gradient)',
 				'morphit-gradient-soft':
-					'linear-gradient(135deg, rgba(142,239,38,0.08) 0%, rgba(0,218,105,0.06) 50%, rgba(2,166,178,0.08) 100%)'
+					'linear-gradient(135deg, rgb(var(--brand-1-rgb) / 0.08) 0%, rgb(var(--brand-2-rgb) / 0.06) 50%, rgb(var(--brand-3-rgb) / 0.08) 100%)'
 			},
 			boxShadow: {
-				'morphit-glow': '0 0 0 1px rgba(0,218,105,0.25), 0 10px 40px -10px rgba(0,218,105,0.35)',
-				'morphit-card': '0 1px 2px rgba(11,18,32,0.04), 0 8px 24px -8px rgba(11,18,32,0.08)',
-				'morphit-card-hover': '0 2px 4px rgba(11,18,32,0.06), 0 16px 40px -12px rgba(11,18,32,0.14)'
+				'morphit-glow':
+					'0 0 0 1px rgb(var(--brand-2-rgb) / 0.25), 0 10px 40px -10px rgb(var(--brand-2-rgb) / 0.35)',
+				'morphit-card':
+					'0 1px 2px rgb(var(--shadow-rgb) / 0.04), 0 8px 24px -8px rgb(var(--shadow-rgb) / 0.08)',
+				'morphit-card-hover':
+					'0 2px 4px rgb(var(--shadow-rgb) / 0.06), 0 16px 40px -12px rgb(var(--shadow-rgb) / 0.14)'
 			},
 			borderRadius: {
 				xl2: '1.25rem'

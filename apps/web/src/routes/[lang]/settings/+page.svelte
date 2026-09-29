@@ -1572,7 +1572,7 @@
 			<div class="flex min-w-0 items-center gap-3">
 				<label
 					for="avatar-file-input"
-					class="shrink-0 cursor-pointer rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white focus-within:outline-none focus-within:ring-2 focus-within:ring-morphit-emerald hover:brightness-110 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+					class="shrink-0 cursor-pointer rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text focus-within:outline-none focus-within:ring-2 focus-within:ring-morphit-emerald hover:brightness-110 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
 					aria-disabled={avatarProcessing || avatarBroadcasting}
 				>
 					{$_('settings.avatar.file_input_label')}

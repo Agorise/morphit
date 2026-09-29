@@ -624,9 +624,12 @@ await scenario('Waiver FX: non-USD min above $1-equivalent accepted (2.00 AUD �
 });
 
 // Unconvertible currency (FX off + outside the static table):
-// fiatToUsd returns null → the handler falls back to the documented
-// direct comparison (treat amount_min as USD-equivalent).  0.5 < 1 → reject.
-await scenario('Waiver FX: unconvertible currency falls back to direct compare (0.5 rejected)', async () => {
+// fiatToUsd returns null.  (v1.20.0 fix wave, G5) The handler used to fall
+// back to comparing amount_min AS IF it were USD, so "1000 ZZZ" (or "1 IRR" on
+// a node without an IRR rate) passed the $1 floor — and a node that DID have
+// the rate rejected the same op.  Unconvertible now fails outright with its
+// own reason; the proceed-mock is supplied so a regression returns ok:true.
+await scenario('Waiver FX: unconvertible currency rejects the waiver even for a large amount', async () => {
 	const ctx = makeCtx({
 		signer: 'newbie_zz',
 		payload: makePayload({
@@ -634,7 +637,7 @@ await scenario('Waiver FX: unconvertible currency falls back to direct compare (
 			side: 'buy',
 			asset: 'BLURT',
 			fiat_currency: 'ZZZ',
-			amount_min: 0.5,
+			amount_min: 1000,
 			amount_max: null
 		}),
 		siblingOps: [],
@@ -646,7 +649,7 @@ await scenario('Waiver FX: unconvertible currency falls back to direct compare (
 		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
 	]);
 	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
+	assertEqual(r, { ok: false, reason: 'waiver_fiat_unconvertible' }, 'result');
 });
 
 // Structural belt-and-suspenders: the source must route the floor

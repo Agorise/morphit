@@ -113,8 +113,10 @@ export interface FxRateSource {
 }
 
 /** Plausibility bounds for a single USD→fiat rate.  Any rate
- *  outside this window is treated as a bad/garbage value and the
- *  whole table is rejected in favour of the next upstream.
+ *  outside this window is treated as a bad/garbage value.  The
+ *  composite DROPS such entries (dropImplausibleRates) before judging
+ *  the table; isPlausibleFxTable itself still rejects a table that
+ *  contains one, for callers that validate a table as-is.
  *
  *  Lower bound 1e-4: the strongest fiats sit near ~0.3 (KWD),
  *  ~0.38 (BHD); 1e-4 is far below any real currency and catches
@@ -140,6 +142,31 @@ export const FX_MIN_TABLE_CURRENCIES = 10;
  *  range-checks every served rate). */
 export const FX_ANCHOR_EUR_MIN = 0.5;
 export const FX_ANCHOR_EUR_MAX = 2.0;
+
+/**
+ * (v1.20.0 fix wave, G5) Copy of `table` without the entries outside
+ * [FX_RATE_PLAUSIBLE_MIN, FX_RATE_PLAUSIBLE_MAX] (and non-finite /
+ * non-positive ones). Providers such as currency-api mix crypto codes into the
+ * fiat table (`btc` ≈ 1e-5 per USD); judging the RAW table all-or-nothing threw
+ * away every fiat rate that source had. The whole-table checks (minimum size,
+ * EUR anchor) still run on the result, so a table that is wrong as a whole is
+ * still rejected. null in → null out.
+ */
+export function dropImplausibleRates(table: FxRateTable | null): FxRateTable | null {
+	if (!table || typeof table.rates !== 'object' || table.rates === null) return table;
+	const rates: Record<string, number> = {};
+	for (const [code, value] of Object.entries(table.rates)) {
+		if (
+			typeof value === 'number' &&
+			Number.isFinite(value) &&
+			value >= FX_RATE_PLAUSIBLE_MIN &&
+			value <= FX_RATE_PLAUSIBLE_MAX
+		) {
+			rates[code] = value;
+		}
+	}
+	return { ...table, rates };
+}
 
 /** True if a fetched table is structurally + numerically plausible
  *  enough to commit.  Shared by the composite and the fetchers'

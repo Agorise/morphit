@@ -63,8 +63,11 @@ const S: readonly ServiceState[] = [
 function expectedState(f: Facts): SeedingState {
 	const ni = (s: ServiceState) => s === 'not-installed';
 	if (ni(f.daemon) && ni(f.pinTimer) && ni(f.rebroadcastTimer)) return 'not-configured';
-	if (f.daemon === 'unknown' && f.pinTimer === 'unknown' && f.rebroadcastTimer === 'unknown')
-		return 'unknown';
+	// v1.20.0 fix wave (D14): a daemon whose state could not be READ is
+	// unknown — never "down", whatever the timers say. Reporting "down" (and
+	// "releases are NOT being seeded") for a state nobody observed is alarm
+	// language for an unverified condition.
+	if (f.daemon === 'unknown') return 'unknown';
 	if (f.daemon !== 'active') return 'down';
 	if (
 		f.pinTimer !== 'active' ||

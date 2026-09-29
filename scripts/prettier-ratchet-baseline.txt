@@ -26,7 +26,6 @@ apps/indexer/scripts/chat-sse-order-permlink-smoke.ts
 apps/indexer/scripts/clearnet-gate-smoke.ts
 apps/indexer/scripts/clearnet-legs-source-guard-smoke.ts
 apps/indexer/scripts/contact-protocol-smoke.ts
-apps/indexer/scripts/cors-star-smoke.ts
 apps/indexer/scripts/crypto-fetcher-smoke.ts
 apps/indexer/scripts/disabled-assets-parse-smoke.ts
 apps/indexer/scripts/disabled-payment-methods-parse-smoke.ts
@@ -701,7 +700,6 @@ apps/web/src/lib/notifications/chatUnread.ts
 apps/web/src/lib/notifications/containFit.test.ts
 apps/web/src/lib/notifications/push.ts
 apps/web/src/lib/orders/fee.ts
-apps/web/src/lib/orders/fx.test.ts
 apps/web/src/lib/orders/fx.ts
 apps/web/src/lib/orders/payload.ts
 apps/web/src/lib/orders/recentCancels.ts
@@ -717,7 +715,6 @@ apps/web/src/lib/shipping/carriers.ts
 apps/web/src/lib/storage/storageKeyRegistry.ts
 apps/web/src/lib/stores/identity.test.ts
 apps/web/src/lib/stores/identity.ts
-apps/web/src/lib/stores/instance.ts
 apps/web/src/lib/stores/pendingEcho.ts
 apps/web/src/lib/stores/pendingFeatured.test.ts
 apps/web/src/lib/stores/pendingFeatured.ts
@@ -738,7 +735,6 @@ apps/web/src/routes/+page.svelte
 apps/web/src/routes/[lang]/+layout.svelte
 apps/web/src/routes/[lang]/+page.svelte
 apps/web/src/routes/[lang]/[x+40][account=account]/[permlink=permlink]/+page.svelte
-apps/web/src/routes/[lang]/about-this-instance/+page.svelte
 apps/web/src/routes/[lang]/admin/setup-wizard/+page.svelte
 apps/web/src/routes/[lang]/chat/+page.svelte
 apps/web/src/routes/[lang]/dev/icons/+page.svelte

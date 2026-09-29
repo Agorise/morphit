@@ -48,6 +48,10 @@ const classifyCases: Array<[string, string]> = [
 	['origin_private', 'invalid_origin'],
 	['origin_has_path', 'invalid_origin'],
 	['contact_url_bad_scheme', 'invalid_origin'],
+	// The register op is now an UPSERT: a re-register under a DIFFERENT tag is the
+	// only rejection (tag_immutable). The old one-time reject string still maps
+	// (an old indexer / cached error) but is no longer emitted by current code.
+	['tag_immutable', 'tag_immutable'],
 	['account_already_registered', 'already_registered'],
 	['already registered', 'already_registered'],
 	['private key network id mismatch', 'key_mismatch'],
@@ -299,32 +303,17 @@ scenarios.push({
 			if (/block_num/.test(src)) return `${f} still references block_num (always undefined here)`;
 			if (/Posted in block|Block:\s{2,}/.test(src)) return `${f} still prints a block line`;
 		}
-		// And the helper's return type must be trx-id-only.
-		const ce = _read('chainErrors.ts');
-		if (/Promise<\{\s*id:\s*string\s*\}>/.test(ce) === false)
-			return 'broadcastCustomJson sendOperations type should resolve { id: string } (no block_num)';
+		// (The helper's trx-id-only result is exercised for real in
+		// test/chainAccess.test.ts — D12 replaced dblurt sendOperations.)
 		return null;
 	}
 });
 
-scenarios.push({
-	name: 'cp182: dblurt console chatter is buffered during broadcast and consoleOnFailover is off',
-	run() {
-		const ce = _read('chainErrors.ts');
-		// The buffering mechanism: save + restore console.log/error around the loop.
-		if (!ce.includes('const realConsoleLog = console.log'))
-			return 'helper must capture console.log';
-		if (!ce.includes('const realConsoleError = console.error'))
-			return 'helper must capture console.error';
-		if (!/finally\s*\{[\s\S]*console\.log = realConsoleLog[\s\S]*console\.error = realConsoleError/.test(ce))
-			return 'helper must restore console.log/error in a finally block';
-		if (!ce.includes('consoleOnFailover: false'))
-			return 'helper must pass consoleOnFailover: false to the dblurt Client';
-		// On total failure the buffered noise is surfaced as diagnostics.
-		if (!ce.includes('RPC detail:')) return 'helper must fold buffered RPC noise into the failure error';
-		return null;
-	}
-});
+// cp182's "buffer dblurt's console chatter" scenario is retired: since D12 the
+// broadcast no longer uses dblurt's network Client at all — dblurt only SIGNS
+// (cryptoUtils.signTransaction), and the transport is ops-cli's own fetch via
+// lib/chainAccess.ts, which prints nothing. Routing, sign-once and the
+// no-clearnet-on-hidden-only rule are exercised in test/chainAccess.test.ts.
 
 // ─── runner ───
 console.log(`register-diagnostics smoke (cp178): ${scenarios.length} scenarios\n`);

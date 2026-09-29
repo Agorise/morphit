@@ -108,10 +108,46 @@ export function usdMinInFiat(table: FxResponse | null, usd: number, fiat: string
 	return Math.ceil(raw * 100) / 100;
 }
 
+/** (v1.20.0 fix wave, G5) Headroom added to the SEEDED first-order minimum
+ *  for a non-USD fiat.  The $1 floor is checked by every indexer with ITS
+ *  OWN FX table (refreshed hourly; independent nodes average their own
+ *  sources, which agree within FX_OUTLIER_TOLERANCE = 2%).  A seed that sits
+ *  exactly on the floor at this browser's rate is rejected by any node whose
+ *  rate is a hair higher; 3% absorbs that spread plus an hour of drift.
+ *  USD needs none (1:1 everywhere). */
+export const FIRST_ORDER_SEED_HEADROOM = 0.03;
+
 /** The first-order minimum ($1 USD-equivalent) expressed in `fiat`,
- *  rounded to a clean, grandma-friendly value for seeding the
- *  Min-value field.  null when the fiat is unknown (caller seeds the
- *  raw USD figure / leaves the field blank).  Pure + total. */
+ *  plus FIRST_ORDER_SEED_HEADROOM for non-USD, rounded to a clean,
+ *  grandma-friendly value for seeding the Min-value field.  null when the
+ *  fiat is unknown (caller seeds the raw USD figure / leaves the field
+ *  blank).  Pure + total. */
 export function firstOrderMinInFiat(table: FxResponse | null, fiat: string): number | null {
-	return usdMinInFiat(table, FIRST_ORDER_MIN_USD, fiat);
+	const isUsd = fiat.trim().toUpperCase() === 'USD';
+	return usdMinInFiat(
+		table,
+		isUsd ? FIRST_ORDER_MIN_USD : FIRST_ORDER_MIN_USD * (1 + FIRST_ORDER_SEED_HEADROOM),
+		fiat
+	);
+}
+
+/** Client-side mirror of the indexer's first-buy floor (order.ts):
+ *  - 'missing'       no minimum entered (the waiver needs one);
+ *  - 'unconvertible' the fiat cannot be valued in USD here (unknown code,
+ *                    or no FX table for a non-USD fiat) — the indexer
+ *                    rejects this (`waiver_fiat_unconvertible`, G5); it is
+ *                    NOT treated as already-USD any more;
+ *  - 'below' / 'ok'  the converted amount vs the $1 floor.
+ *  USD always converts 1:1, even with no table.  Pure + total. */
+export function waiverFloorStatus(
+	table: FxResponse | null,
+	amount: number | null,
+	fiat: string,
+	floorUsd: number = FIRST_ORDER_MIN_USD
+): 'missing' | 'unconvertible' | 'below' | 'ok' {
+	if (amount === null || !Number.isFinite(amount)) return 'missing';
+	const usd =
+		fiat.trim().toUpperCase() === 'USD' ? amount : fiatToUsd(table, amount, fiat);
+	if (usd === null) return 'unconvertible';
+	return usd < floorUsd ? 'below' : 'ok';
 }

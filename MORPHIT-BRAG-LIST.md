@@ -299,7 +299,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 128. **Subaddress nudge.** When you try to share a standard Monero address (starts with `4`), Morphit gently suggests using a subaddress (starts with `8`) instead. Standard addresses link every received payment to the same view key; "Stealth" subaddresses break that linkage. Not paternalistic — it's a soft nudge with a brief explanation.
 
-129. **Multi-explorer attestation for XMR proofs — five independent explorers by default.** When verifying that a Monero payment landed, Morphit queries five Monero block explorers in parallel (xmrchain.net, localmonero.co/blocks, monerohash.com/explorer, exploremonero.com, moneroexplorer.org — all running the same `onion-monero-blockchain-explorer` reference codebase, but operated by independent parties) and rejects when responding explorers disagree on the proven amount. Operator-configurable to any compatible list, including self-hosted instances for maximum independence (see `OPERATIONS.md §40.4`). No single explorer can lie about a verification undetected.
+129. **Multi-explorer verification for XMR fees — three independent explorers by default, two kinds.** Morphit asks three Monero block explorers run by independent parties: xmrchain.net and moneroexplorer.org prove the payment; moneroblocks.info only serves the raw transaction, which Morphit checks itself (hash to the txid, find the output with the tx key, decode the amount, open the commitment), so the tx key never reaches it. Two must agree by default (`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`), so one lying explorer is outvoted or the check is rejected. Configurable, self-hosted explorers included (see `OPERATIONS.md §40.4`).
 
 130. **The "I sent the funds" flow includes XMR-specific tooling.** TxID copy-paste, view-key-handling explanations, integrated subaddress hints — Monero-aware throughout, not just "another asset on the dropdown."
 
@@ -441,7 +441,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 194. **No Monero "lite" client logic.** Morphit does NOT try to interpret your Monero wallet. It's a coordination layer; your wallet is your wallet.
 
-195. **Five independent Monero block explorers in the default config** (xmrchain.net, localmonero.co/blocks, monerohash.com/explorer, exploremonero.com, moneroexplorer.org) — operator-configurable to any list of compatible explorers, including self-hosted instances.
+195. **Three independent Monero block explorers in the default config** (xmrchain.net, moneroexplorer.org, moneroblocks.info — the last one verified locally from the raw transaction, commitment check included) — operator-configurable to any list of compatible explorers, including self-hosted instances.
 
 196. **Trade verification logic is per-asset.** Bitcoin uses one path (multi-explorer cross-check on UTXO confirmation), Monero uses another (TxID + amount-match against the recipient's expected, no view key required) — designed for each chain's actual privacy model.
 

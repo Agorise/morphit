@@ -20,7 +20,7 @@
  * who closed the tab for 10 minutes would get auto-locked on reopen.)
  */
 
-import { writable, type Readable, get } from 'svelte/store';
+import { writable, type Readable } from 'svelte/store';
 import { safeLocal } from '../utils/safeStorage';
 
 const TIMEOUT_KEY = 'morphit.autoLock.timeoutMinutes';
@@ -96,18 +96,21 @@ const ACTIVITY_EVENTS: Array<keyof DocumentEventMap> = [
 export function startAutoLockTimer(onTimeout: () => void): () => void {
 	if (typeof window === 'undefined') return () => undefined;
 
-	const minutes = get(timeoutStore);
-	if (minutes === NEVER || minutes <= 0) {
-		// Disabled. Do nothing — no timer, no listeners.
-		return () => undefined;
-	}
-
 	const teardowns: Array<() => void> = [];
 
-	const timeoutMs = minutes * 60 * 1000;
+	// v1.20.0 review (F-7): FOLLOW the setting instead of reading it once.
+	// The +layout effect starts this timer once per unlock, so a value read
+	// here at start used to stick for the whole session — choosing "15
+	// minutes" in Settings did nothing until the next unlock, and choosing
+	// "Never" still locked on the old schedule. The subscription below
+	// re-arms (from the moment of the change) or disarms on every change.
+	// null = disabled ("Never").
+	let timeoutMs: number | null = null;
 
 	const arm = (): void => {
 		if (timeoutId !== null) clearTimeout(timeoutId);
+		timeoutId = null;
+		if (timeoutMs === null) return;
 		timeoutId = setTimeout(() => {
 			// Timer fired — invoke the caller's lock handler. They
 			// manage identity state; we just detected idle.
@@ -128,16 +131,22 @@ export function startAutoLockTimer(onTimeout: () => void): () => void {
 
 	// Visibility: coming back to the tab resets the timer (user is
 	// clearly present again). Leaving doesn't — the timer keeps
-	// counting, because "closed tab and came back 10 hours later"
-	// should auto-lock.
+	// counting, because "switched to another tab and came back 10
+	// hours later" should auto-lock.
 	const onVisibility = (): void => {
 		if (document.visibilityState === 'visible') arm();
 	};
 	document.addEventListener('visibilitychange', onVisibility);
 	teardowns.push(() => document.removeEventListener('visibilitychange', onVisibility));
 
-	// Initial arm — timer starts from the moment startAutoLockTimer is called.
-	arm();
+	// Initial arm (subscribe fires immediately with the current setting) —
+	// the timer starts from the moment startAutoLockTimer is called — and a
+	// re-arm/disarm on every later change of the setting.
+	const unsubscribe = timeoutStore.subscribe((minutes) => {
+		timeoutMs = minutes === NEVER || minutes <= 0 ? null : minutes * 60 * 1000;
+		arm();
+	});
+	teardowns.push(unsubscribe);
 
 	return (): void => {
 		if (timeoutId !== null) {

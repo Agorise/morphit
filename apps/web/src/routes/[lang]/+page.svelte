@@ -115,7 +115,7 @@
 	<div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
 		<div class="absolute inset-0 bg-morphit-gradient-soft"></div>
 		<div
-			class="absolute inset-0 opacity-[0.035]"
+			class="absolute inset-0 opacity-[var(--grid-opacity)]"
 			style="background-image: linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px); background-size: 48px 48px;"
 		></div>
 	</div>

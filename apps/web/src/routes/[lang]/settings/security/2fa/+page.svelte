@@ -63,6 +63,7 @@
 		NOT_RECOMMENDED_AUTHENTICATOR_APPS
 	} from '$lib/auth/recommendedAuthenticatorApps';
 	import BusyButton from '$components/BusyButton.svelte';
+	import { webCryptoAvailable } from '$lib/security/secureContext';
 
 	// Display order = alphabetical by name (the maintainer's request). The source
 	// arrays keep their own documented order for programmatic/smoke use;
@@ -109,7 +110,13 @@
 
 	// "I have saved" acknowledgment must be ticked before continuing.
 
+	/** v1.20.0 (F-9): authenticator codes need WebCrypto, which the browser
+	 *  removes on a plain-HTTP I2P address (not a secure context). Checked on
+	 *  mount so the prerendered page and hydration agree. */
+	let cryptoOk = $state(true);
+
 	onMount(async () => {
+		cryptoOk = webCryptoAvailable();
 		if (!browser) return;
 		if (!$isUnlocked) {
 			phase = 'locked';
@@ -454,6 +461,11 @@
 
 	{#if phase === 'loading'}
 		<p class="loading">…</p>
+	{:else if !cryptoOk}
+		<!-- The header's back button leads out; nothing here can work. -->
+		<section class="locked">
+			<p>{$_('settings.totp.unavailable_insecure')}</p>
+		</section>
 	{:else if phase === 'locked'}
 		<section class="locked">
 			{#if layeredKeystoreWarning}
@@ -764,7 +776,7 @@
 		transition: color 0.15s ease;
 	}
 	.back:hover {
-		color: var(--morphit-emerald, #00da69);
+		color: var(--morphit-emerald);
 	}
 	header {
 		margin-bottom: 2rem;
@@ -786,7 +798,7 @@
 		color: var(--success, #2bb24c);
 	}
 	.honest-framing {
-		background: var(--surface-2, #1a202b);
+		background: rgb(var(--surface-800-rgb));
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
 		margin: 1rem 0;
@@ -809,7 +821,7 @@
 	}
 	.app {
 		padding: 0.75rem;
-		border: 1px solid var(--border, #333);
+		border: 1px solid rgb(var(--gray-333-rgb));
 		border-radius: 0.4rem;
 		margin: 0.5rem 0;
 	}
@@ -826,7 +838,7 @@
 		line-height: 1.4;
 	}
 	.apps.not-recommended {
-		background: var(--surface-2, #1a202b);
+		background: rgb(var(--surface-800-rgb));
 		padding: 0.75rem 1rem;
 		border-radius: 0.5rem;
 	}
@@ -846,8 +858,8 @@
 		padding: 0.5rem;
 		font-size: 1rem;
 		font-family: inherit;
-		border: 1px solid var(--border, #444);
-		background: var(--surface-1, #0e0e10);
+		border: 1px solid rgb(var(--gray-444-rgb));
+		background: rgb(var(--surface-alt-1-rgb));
 		color: inherit;
 		border-radius: 0.3rem;
 		transition:
@@ -858,7 +870,7 @@
 	input[type='password']:focus {
 		outline: none;
 		border-color: var(--morphit-emerald);
-		box-shadow: 0 0 0 3px rgba(0, 218, 105, 0.25);
+		box-shadow: 0 0 0 3px rgb(var(--brand-primary-rgb) / 0.25);
 	}
 	.qr {
 		max-width: 280px;
@@ -881,7 +893,7 @@
 	}
 	.manual code {
 		font-family: ui-monospace, 'SF Mono', Consolas, monospace;
-		background: var(--surface-2, #1a202b);
+		background: rgb(var(--surface-800-rgb));
 		padding: 0.4rem 0.6rem;
 		border-radius: 0.3rem;
 		font-size: 0.95rem;
@@ -893,7 +905,7 @@
 		gap: 0.5rem;
 		list-style: none;
 		padding: 1rem;
-		background: var(--surface-2, #1a202b);
+		background: rgb(var(--surface-800-rgb));
 		border-radius: 0.5rem;
 		margin: 1rem 0;
 	}
@@ -930,7 +942,7 @@
 	.lost-device {
 		margin: 1.5rem 0;
 		padding: 0.75rem 1rem;
-		background: var(--surface-2, #1a202b);
+		background: rgb(var(--surface-800-rgb));
 		border-radius: 0.5rem;
 	}
 	.lost-device summary {
@@ -946,8 +958,8 @@
 		padding: 0.6rem 1rem;
 		font-size: 0.95rem;
 		font-family: inherit;
-		border: 1px solid var(--border, #444);
-		background: var(--surface-1, #18181a);
+		border: 1px solid rgb(var(--gray-444-rgb));
+		background: rgb(var(--surface-alt-2-rgb));
 		color: inherit;
 		border-radius: 0.3rem;
 		cursor: pointer;
@@ -975,7 +987,7 @@
 		white-space: nowrap;
 	}
 	.copy-btn:hover:not(:disabled) {
-		background: rgba(0, 218, 105, 0.12);
+		background: rgb(var(--brand-primary-rgb) / 0.12);
 	}
 	.copy-btn.copied {
 		background: var(--morphit-emerald);

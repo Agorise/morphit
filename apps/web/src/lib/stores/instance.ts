@@ -21,6 +21,7 @@
  * and choose to show a "still loading" or just-default UI.
  */
 
+import { feeRecipientRegisteredOf } from './feeRecipient';
 import { writable, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { getInstance } from '$indexer/client';
@@ -49,6 +50,11 @@ export interface InstanceState {
 		readonly nostr: string | null;
 	};
 	readonly fee_recipient: string;
+	/** v1.20.0 (G1): whether other instances accept this instance's
+	 *  fee_recipient for the 90 % leg of BLURT fees (it is in the operator's
+	 *  on-chain registration). `false` = VERIFIED not registered; `null` =
+	 *  unknown (older indexer, lookup failed) — never shown as a problem. */
+	readonly fee_recipient_registered: boolean | null;
 	readonly relay_account: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When non-null,
 	 *  the post-order form includes this in every order op so
@@ -190,6 +196,7 @@ const FALLBACK: InstanceState = {
 		nostr: null
 	},
 	fee_recipient: 'morphit-fees',
+	fee_recipient_registered: null,
 	relay_account: 'morphit-relay',
 	operator_tag: null,
 	seo: { title: null, description: null, keywords: null, twitter_site: null },
@@ -280,6 +287,7 @@ export function initInstance(): Promise<void> {
 					...result.data,
 					alt_networks: normalizeAltNetworksFromWire(result.data.alt_networks),
 					operator_tag: result.data.operator_tag ?? null,
+					fee_recipient_registered: feeRecipientRegisteredOf(result.data.fee_recipient_registered),
 					seo: result.data.seo
 						? {
 								title: result.data.seo.title ?? null,
@@ -347,7 +355,7 @@ export function initInstance(): Promise<void> {
 							},
 					disabled_assets: result.data.disabled_assets ?? [],
 					disabled_payment_methods: result.data.disabled_payment_methods ?? [],
-				operator_matrix_room: result.data.operator_matrix_room ?? null,
+					operator_matrix_room: result.data.operator_matrix_room ?? null,
 					loaded: true
 				});
 			} else {

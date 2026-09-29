@@ -140,6 +140,48 @@ expect('mixed-case "::FFFF:127.0.0.1" → IP-side rejected', isPrivateIp('::FFFF
 /* ---------------- report ---------------- */
 
 let failed = 0;
+/* ---------------- v1.20.0 fix wave (D13) ----------------
+ * Forms the probe-time check used to MISS. The registration-time check (a
+ * BlockList in hidden-transport) caught some of them, the probe did not: two
+ * homes for one decision. Each is fed exactly as a consumer sees it — the
+ * hostname from `new URL()` (which normalises ::ffff:127.0.0.1 to its hex
+ * form) and a resolver-style bare address. */
+const hostOf = (u: string) => new URL(u).hostname;
+for (const [label, url] of [
+	['IPv4-mapped loopback, hex form', 'https://[::ffff:127.0.0.1]/'],
+	['IPv4-mapped RFC1918, hex form', 'https://[::ffff:10.0.0.1]:8081/'],
+	['IPv4-mapped metadata, hex form', 'https://[::ffff:169.254.169.254]/'],
+	['NAT64 64:ff9b::/96', 'https://[64:ff9b::7f00:1]/'],
+	['6to4 2002::/16', 'https://[2002:7f00:1::1]/'],
+	['site-local fec0::/10', 'https://[fec0::1]/'],
+	['IPv6 multicast', 'https://[ff02::1]/'],
+	['IPv4-compatible ::a.b.c.d', 'https://[::127.0.0.1]/'],
+	['benchmarking 198.18.0.0/15', 'https://198.19.0.1/'],
+	['IPv4 multicast 224/4', 'https://239.1.2.3/'],
+	['0.0.0.0/8', 'https://0.0.0.1/'],
+	['CGNAT 100.64/10', 'https://100.64.0.1/']
+] as const) {
+	expect(`isPrivateHostname rejects ${label}`, isPrivateHostname(hostOf(url)), `hostname=${hostOf(url)}`);
+}
+for (const [label, ip] of [
+	['::ffff:7f00:1', '::ffff:7f00:1'],
+	['::ffff:a00:1', '::ffff:a00:1'],
+	['64:ff9b::7f00:1', '64:ff9b::7f00:1'],
+	['2002:a00:1::1', '2002:a00:1::1'],
+	['fec0::1', 'fec0::1'],
+	['ff02::1', 'ff02::1'],
+	['::7f00:1', '::7f00:1'],
+	['198.18.0.1', '198.18.0.1'],
+	['224.0.0.1', '224.0.0.1']
+] as const) {
+	expect(`isPrivateIp rejects ${label}`, isPrivateIp(ip));
+}
+// And the check must not over-reach: real public addresses stay public.
+for (const ip of ['1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '::ffff:5db8:d822']) {
+	expect(`isPrivateIp keeps ${ip} public`, !isPrivateIp(ip));
+	expect(`isPrivateHostname keeps ${ip} public`, !isPrivateHostname(ip.includes(':') ? `[${ip}]` : ip));
+}
+
 for (const r of results) {
 	if (r.passed) {
 		console.log(`  ${ANSI_GREEN}✓${ANSI_RESET} ${r.name}`);

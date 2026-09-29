@@ -21,14 +21,15 @@ import type { FeeClaim } from '$indexer/fee/verifier';
 const FEE_ADDRESS =
 	'4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skxNgYeYTRj5UzqtReoS44qo9mtmXCqY45DJ852K5Jv2bYXZKK';
 const VALID_TXID = 'a'.repeat(64);
-// A Part 108++ tx_proof string used in tests.  Real proofs come
-// from `monero-wallet-cli get_tx_proof` or the GUI's "Prove
-// transaction" dialog.  This is a synthetic string with the right
-// shape for the verifier's structural checks; the explorer's
-// cryptographic verification is mocked.
-const VALID_TX_PROOF =
+// v1.20.0 (M-X1): the payer supplies the transaction PRIVATE key (64 hex),
+// which is what the upstream explorer's /api/outputs?txprove=1 parses in its
+// `viewkey` parameter (onion-monero-blockchain-explorer page.h json_outputs →
+// parse_str_secret_key → parse_hash256: exactly 64 hex). An OutProof string
+// there fails to parse ({"status":"error"}), which is why every XMR fee order
+// used to end up `missing`.
+const VALID_TX_KEY = 'e5b4fe26ae0a3a2f7d2bbed8a0c2a1c6d66925ccdbcb6bcef67a0ad66a9b9807';
+const OUTPROOF =
 	'OutProofV2' +
-	'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789' +
 	'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789' +
 	'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789';
 
@@ -50,7 +51,8 @@ function claim(overrides: Partial<FeeClaim> = {}): FeeClaim {
 		feeMethod: 'xmr',
 		expectedAmount: 781_250_000n, // ~$0.25 at $320/XMR
 		externalTxId: VALID_TXID,
-		txProof: VALID_TX_PROOF,
+		txProof: null,
+		txKey: VALID_TX_KEY,
 		permlink: 'my-order-02',
 		signer: 'bob',
 		...overrides
@@ -63,6 +65,23 @@ function mockFetchJson(body: unknown, status = 200): typeof fetch {
 		status,
 		json: async () => body
 	})) as unknown as typeof fetch;
+}
+
+/** Per-host fetch mock (module scope; the quorum-gate block has its own). */
+function fetchByHost(
+	responses: Record<string, { body?: unknown; status?: number; throws?: Error }>
+): typeof fetch {
+	return vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+		const url = typeof input === 'string' ? input : input.toString();
+		for (const [match, cfg] of Object.entries(responses)) {
+			if (url.includes(match)) {
+				if (cfg.throws) throw cfg.throws;
+				const status = cfg.status ?? 200;
+				return { ok: status >= 200 && status < 300, status, json: async () => cfg.body };
+			}
+		}
+		throw new Error(`unmocked URL: ${url}`);
+	}) as unknown as typeof fetch;
 }
 
 describe('MoneroProofFeeVerifier — construction', () => {
@@ -194,41 +213,21 @@ describe('MoneroProofFeeVerifier — rejection paths', () => {
 		}
 	});
 
-	it('rejects missing tx_proof (Part 108++ invariant)', async () => {
-		const v = new MoneroProofFeeVerifier(baseConfig(), mockFetchJson({}));
-		const r = await v.verify(claim({ txProof: null }));
-		expect(r.kind).toBe('rejected');
-		if (r.kind === 'rejected') {
-			expect(r.reason).toBe('missing_tx_proof');
-		}
+	it('rejects a claim without a tx key, never asking an explorer', async () => {
+		const f = mockFetchJson({});
+		const v = new MoneroProofFeeVerifier(baseConfig(), f);
+		const r = await v.verify(claim({ txKey: null }));
+		expect(r).toEqual({ kind: 'rejected', reason: 'missing_tx_key' });
+		expect(f).not.toHaveBeenCalled();
 	});
 
-	it('rejects tx_proof with wrong prefix', async () => {
-		const v = new MoneroProofFeeVerifier(baseConfig(), mockFetchJson({}));
-		const r = await v.verify(claim({ txProof: 'NotARealProofPrefix' + 'a'.repeat(64) }));
-		expect(r.kind).toBe('rejected');
-		if (r.kind === 'rejected') {
-			expect(r.reason).toBe('malformed_tx_proof_prefix');
-		}
-	});
-
-	it('rejects tx_proof that is too long', async () => {
-		const v = new MoneroProofFeeVerifier(baseConfig(), mockFetchJson({}));
-		const r = await v.verify(
-			claim({ txProof: 'OutProofV2' + 'a'.repeat(5000) })
-		);
-		expect(r.kind).toBe('rejected');
-		if (r.kind === 'rejected') {
-			expect(r.reason).toBe('tx_proof_too_long');
-		}
-	});
-
-	it('rejects tx_proof with bad charset (e.g. control chars)', async () => {
-		const v = new MoneroProofFeeVerifier(baseConfig(), mockFetchJson({}));
-		const r = await v.verify(claim({ txProof: 'OutProofV2' + 'a\nb' + 'c'.repeat(60) }));
-		expect(r.kind).toBe('rejected');
-		if (r.kind === 'rejected') {
-			expect(r.reason).toBe('malformed_tx_proof_charset');
+	it('rejects an OutProof or any non-64-hex value as the tx key, never asking an explorer', async () => {
+		for (const bad of [OUTPROOF, 'ab'.repeat(31), 'ab'.repeat(64), 'g'.repeat(64)]) {
+			const f = mockFetchJson({});
+			const v = new MoneroProofFeeVerifier(baseConfig(), f);
+			const r = await v.verify(claim({ txKey: bad }));
+			expect(r).toEqual({ kind: 'rejected', reason: 'malformed_tx_key' });
+			expect(f).not.toHaveBeenCalled();
 		}
 	});
 
@@ -268,7 +267,7 @@ describe('MoneroProofFeeVerifier — rejection paths', () => {
 		const r = await v.verify(claim());
 		expect(r.kind).toBe('rejected');
 		if (r.kind === 'rejected') {
-			expect(r.reason).toBe('tx_proof_did_not_prove_any_match');
+			expect(r.reason).toBe('tx_key_did_not_prove_any_match');
 		}
 	});
 
@@ -320,15 +319,46 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 		expect(r.kind).toBe('pending_external');
 	});
 
-	it('treats explorer status=error as data_not_found (user claim wrong, explorer healthy)', async () => {
+	// v1.20.0 fix wave, G4 — the MK-H1 fix (a quorum of explorers answering
+	// "no such transaction" is a definitive MISSING, not pending) was applied to
+	// the BTC verifier only. An XMR order with a made-up txid/proof stayed
+	// `pending_external` forever — the state attestation can promote and the
+	// re-check re-derives as `verified_by_attestation`.
+	it('a quorum of explorers answering status=error is a definitive rejection (tx_not_found)', async () => {
 		const v = new MoneroProofFeeVerifier(
 			baseConfig(),
 			mockFetchJson({ status: 'error', message: 'invalid proof' })
 		);
 		const r = await v.verify(claim());
-		// Single explorer, returned data_not_found → no successful
-		// responses → pending_external.  The data path treats this
-		// as a healthy-explorer-says-no, doesn't trip the breaker.
+		expect(r.kind).toBe('rejected');
+		if (r.kind === 'rejected') expect(r.reason).toMatch(/^tx_not_found/);
+	});
+
+	it('a quorum of explorers answering HTTP 404 is a definitive rejection (tx_not_found)', async () => {
+		const v = new MoneroProofFeeVerifier(
+			baseConfig({
+				explorerUrls: ['https://xmrchain.net', 'https://explorer-d.example'],
+				minSuccessfulResponses: 2
+			}),
+			mockFetchJson({}, 404)
+		);
+		const r = await v.verify(claim());
+		expect(r.kind).toBe('rejected');
+		if (r.kind === 'rejected') expect(r.reason).toMatch(/^tx_not_found/);
+	});
+
+	it('not-found below the quorum stays pending (one says no, the other is unreachable)', async () => {
+		const v = new MoneroProofFeeVerifier(
+			baseConfig({
+				explorerUrls: ['https://xmrchain.net', 'https://explorer-d.example'],
+				minSuccessfulResponses: 2
+			}),
+			fetchByHost({
+				'xmrchain.net': { body: { status: 'error', message: 'tx not found' } },
+				'explorer-d.example': { throws: new Error('connection reset') }
+			})
+		);
+		const r = await v.verify(claim());
 		expect(r.kind).toBe('pending_external');
 	});
 
@@ -392,7 +422,7 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 });
 
 describe('MoneroProofFeeVerifier — privacy invariants', () => {
-	it('does NOT include the proof string in any log line', async () => {
+	it('sends the tx key only as the explorer\'s viewkey parameter', async () => {
 		// We can't easily intercept the structured logger here, but
 		// we can confirm the URL-construction path uses the proof
 		// only as a query parameter to fetchImpl (not in any log
@@ -424,13 +454,13 @@ describe('MoneroProofFeeVerifier — privacy invariants', () => {
 		// The URL contains the proof in the viewkey= parameter
 		// (xmrchain's API surface; it's the proof in proof-mode).
 		// That's the ONLY place the proof appears in the request.
-		expect(seenUrls[0]).toContain(`viewkey=${VALID_TX_PROOF}`);
+		expect(seenUrls[0]).toContain(`viewkey=${VALID_TX_KEY}`);
 		// Privacy invariant: the proof ONLY appears in the URL once,
 		// not in any header, not in any body.  (Proof not echoed
 		// back to the caller.)
 	});
 
-	it('uses txprove=1 mode (proof verification, NOT view-key decryption)', async () => {
+	it('uses txprove=1 mode (tx-key proof, NOT view-key decryption)', async () => {
 		const seenUrls: string[] = [];
 		const v = new MoneroProofFeeVerifier(
 			baseConfig(),
@@ -495,15 +525,15 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 			baseConfig({
 				explorerUrls: [
 					'https://xmrchain.net',
-					'https://localmonero.co/blocks',
-					'https://exploremonero.com'
+					'https://explorer-b.example/blocks',
+					'https://explorer-d.example'
 				],
 				minSuccessfulResponses: 2
 			}),
 			mockFetchByUrl({
 				'xmrchain.net': { body: SUCCESSFUL_BODY },
-				'localmonero.co': { throws: new Error('network boom') },
-				'exploremonero.com': { throws: new Error('connection reset') }
+				'explorer-b.example': { throws: new Error('network boom') },
+				'explorer-d.example': { throws: new Error('connection reset') }
 			})
 		);
 		const result = await v.verify(claim());
@@ -521,15 +551,15 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 			baseConfig({
 				explorerUrls: [
 					'https://xmrchain.net',
-					'https://localmonero.co/blocks',
-					'https://exploremonero.com'
+					'https://explorer-b.example/blocks',
+					'https://explorer-d.example'
 				],
 				minSuccessfulResponses: 2
 			}),
 			mockFetchByUrl({
 				'xmrchain.net': { body: SUCCESSFUL_BODY },
-				'localmonero.co': { body: SUCCESSFUL_BODY },
-				'exploremonero.com': { throws: new Error('still down') }
+				'explorer-b.example': { body: SUCCESSFUL_BODY },
+				'explorer-d.example': { throws: new Error('still down') }
 			})
 		);
 		const result = await v.verify(claim());
@@ -542,12 +572,12 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 	it('quorum=1 (default back-compat) with 2 URLs, only 1 responds → verified', async () => {
 		const v = new MoneroProofFeeVerifier(
 			baseConfig({
-				explorerUrls: ['https://xmrchain.net', 'https://localmonero.co/blocks'],
+				explorerUrls: ['https://xmrchain.net', 'https://explorer-b.example/blocks'],
 				minSuccessfulResponses: 1
 			}),
 			mockFetchByUrl({
 				'xmrchain.net': { body: SUCCESSFUL_BODY },
-				'localmonero.co': { throws: new Error('network boom') }
+				'explorer-b.example': { throws: new Error('network boom') }
 			})
 		);
 		const result = await v.verify(claim());
@@ -562,18 +592,18 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 			baseConfig({
 				explorerUrls: [
 					'https://xmrchain.net',
-					'https://localmonero.co/blocks',
-					'https://monerohash.com/explorer',
-					'https://exploremonero.com',
+					'https://explorer-b.example/blocks',
+					'https://explorer-c.example/explorer',
+					'https://explorer-d.example',
 					'https://moneroexplorer.org'
 				],
 				minSuccessfulResponses: 3
 			}),
 			mockFetchByUrl({
 				'xmrchain.net': { body: SUCCESSFUL_BODY },
-				'localmonero.co': { body: SUCCESSFUL_BODY },
-				'monerohash.com': { body: SUCCESSFUL_BODY },
-				'exploremonero.com': { body: SUCCESSFUL_BODY },
+				'explorer-b.example': { body: SUCCESSFUL_BODY },
+				'explorer-c.example': { body: SUCCESSFUL_BODY },
+				'explorer-d.example': { body: SUCCESSFUL_BODY },
 				'moneroexplorer.org': { body: SUCCESSFUL_BODY }
 			})
 		);

@@ -32,7 +32,9 @@ import {
 import { keepReloadingRpcDirectory } from '$indexer/rpcDirectoryReload';
 import { seedFederationDirectory } from '$indexer/federationSeed';
 import { installHiddenServiceDispatcher, indexerRouterPolicy } from '$indexer/hiddenServiceDispatcher';
-import { hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
+import { fetchJsonViaHiddenService, hiddenServiceProxyConfigFromEnv } from '$indexer/hiddenServiceFetch';
+import { fetchJson as federationFetchJson } from '$indexer/federationProbe';
+import { fastPeersFromDirectory } from '$indexer/chatFastFederation';
 import { BlurtClient } from '$blurt/client';
 import { Poller } from '$indexer/poller';
 import { HeadTailer } from '$indexer/headTailer';
@@ -49,7 +51,7 @@ import type { BlurtPriceSource } from '$indexer/price/source';
 import { bodyCap } from '$api/middleware/bodyCap';
 import { security } from '$api/middleware/security';
 import { cors } from '$api/middleware/cors';
-import { rateLimit } from '$api/middleware/ratelimit';
+import { rateLimit, configureTrustedProxies } from '$api/middleware/ratelimit';
 
 import { healthRoute, INDEXER_VERSION } from '$api/health';
 import { morphitUserAgent } from '$blurt/userAgent';
@@ -65,7 +67,10 @@ import { featuredRoute } from '$api/featuredOrderbook';
 import { featuredBidsRoute } from '$api/featuredBids';
 import { clearingPriceHistoryRoute } from '$api/clearingPriceHistory';
 import { loginPairingRoute, PairingRegistry } from '$api/loginPairing';
+import { pairingForwardRoute, selfPairingAddresses } from '$api/pairingForward';
 import { ordersByAccountRoute } from '$api/orders';
+import { feeCheckRoute } from '$api/feeCheck';
+import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { orderViewsRoute } from '$api/orderViews';
 import { orderCounterpartiesRoute } from '$api/orderCounterparties';
 import { profilesRoute } from '$api/profiles';
@@ -78,10 +83,13 @@ import { federationChatFastRoute, gatesFromDb } from '$api/federationChatFast';
 import {
 	deliverVerifiedPush,
 	durableIsCurrentFor,
-	chainPostingKeyRefresher
+	chainPostingKeyRefresher,
+	postingKeyLookupFromDb
 } from '$indexer/chatFastFederation';
+import { trxSignedByPostingKey } from '$indexer/chainTrxSignature';
+import { postClearnetPinned, closePinnedClearnet } from '$indexer/pinnedClearnetPost';
 import { ChatFastDispatcher } from '$indexer/chatFastDispatcher';
-import { closePool, readCappedText } from '$indexer/hiddenServicePool';
+import { closePool } from '$indexer/hiddenServicePool';
 import { feedbackByAccountRoute } from '$api/feedback';
 import { reputationReceiptRoute } from '$api/reputationReceipt';
 import { releaseRoute } from '$api/release';
@@ -100,6 +108,7 @@ import { strangerFeeQuoteRoute } from '$api/strangerFeeQuote';
 import { conversationsRoute } from '$api/conversations';
 import { rssOrderbookRoute } from '$api/rssOrderbook';
 import { operatorsRoute } from '$api/operators';
+import { operatorRegistrationRoute } from '$api/operatorRegistration';
 import { activityRoute } from '$api/activity';
 import { statsRoute } from '$api/stats';
 import {
@@ -345,9 +354,9 @@ async function main(): Promise<void> {
 	// in step 3-bis). This step only POPULATES it: fills posting_pubkey for
 	// accounts created before the column existed, from the chain, in the
 	// background so the poller isn't blocked. New accounts already get their key
-	// at ingest from the account_create op. Fire-and-forget: a failure here only
-	// leaves some rows' key NULL or unconfirmed, and never blocks indexing or the
-	// orderbook.
+	// at ingest from the account_create op (unconfirmed since v1.20.0, E1).
+	// Fire-and-forget: a failure here only leaves some rows' key NULL or
+	// unconfirmed, and never blocks indexing or the orderbook.
 	//
 	// v1.18.0 (F37) — it also confirms, once, every key recorded before this
 	// release against the chain. The column is NOT display-only any more: the
@@ -362,21 +371,32 @@ async function main(): Promise<void> {
 				bootLog.info('posting_key_backfill_done', { ...r, reconciled: rc ? { ...rc } : undefined });
 			}
 			// v1.18.0 review (D5): rows the boot pass could not confirm — RPC not
-			// ready yet, no two endpoints agreeing — are retried with backoff
-			// rather than left until the next restart.
-			if (rc !== undefined && rc.remaining > 0) {
-				stopPostingKeyRetry = keepReconcilingPostingKeys(db, blurt, {
-					onPass: (p) =>
-						bootLog.info('posting_key_reconcile_retry', {
-							checked: p.checked,
-							corrected: p.corrected,
-							remaining: p.remaining
-						})
-				});
-			}
+			// ready yet, no two endpoints agreeing — are retried with backoff.
+			// v1.20.0 (E1): and the loop runs for the life of the process, because
+			// the dispatcher now records every posting key it reads from a block
+			// (account create or rotation) UNCONFIRMED — a block is one RPC
+			// endpoint's word — and those rows need the quorum confirmation too. An idle pass is one indexed query.
+			stopPostingKeyRetry ??= startReconcileLoop();
 		},
-		(e) => bootLog.warn('posting_key_backfill_failed', { error: String(e) })
+		(e) => {
+			bootLog.warn('posting_key_backfill_failed', { error: String(e) });
+			stopPostingKeyRetry ??= startReconcileLoop();
+		}
 	);
+	function startReconcileLoop(): () => void {
+		return keepReconcilingPostingKeys(db, blurt, {
+			onPass: (p) => {
+				// Quiet when there was nothing to do; the loop runs every minute.
+				if (p.checked > 0 || p.remaining > 0) {
+					bootLog.info('posting_key_reconcile_pass', {
+						checked: p.checked,
+						corrected: p.corrected,
+						remaining: p.remaining
+					});
+				}
+			}
+		});
+	}
 
 	// ─── 5. Optional price sources (cp130 multi-asset; cp131 consolidated) ──
 	//
@@ -531,37 +551,14 @@ async function main(): Promise<void> {
 		// the durable poller uses.
 		selfOrigin: config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//'),
 		proxies: hiddenServiceProxyConfigFromEnv(process.env),
-		// Clearnet peers go through the ordinary fetch; hidden peers go through
-		// the pooled, kept-warm dispatcher inside the federation module.
-		// The same two defences the hidden-service path already has, because the
-		// clearnet path faces the same peer:
-		//
-		//   redirect: 'manual' — a peer that answers 307 with a Location of
-		//     http://127.0.0.1:6379/ would otherwise have us re-POST the whole
-		//     signed body to a service on our own loopback. The peer list is
-		//     on-chain and validated, but "registered" is not "trustworthy", and
-		//     following a redirect is a decision, not a default worth inheriting.
-		//
-		//   a bounded read — the abort above bounds this call in TIME, not in
-		//     bytes. A peer that answers 202 and then streams indefinitely costs
-		//     us whatever fits in the timeout, per push, per peer, resident in
-		//     memory. We never read anything but the status here anyway.
-		postClearnet: async (url, body, timeoutMs) => {
-			const ctrl = new AbortController();
-			const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-			try {
-				const res = await fetch(url, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json', accept: 'application/json' },
-					body: JSON.stringify(body),
-					redirect: 'manual',
-					signal: ctrl.signal
-				});
-				return { status: res.status, body: await readCappedText(res) };
-			} finally {
-				clearTimeout(timer);
-			}
-		}
+		// Clearnet peers: resolved, every answer checked public, and the
+		// connection PINNED to the checked address — the probe's own SSRF path
+		// (v1.20.0, S7). It used the global fetch, so a registered name that
+		// resolved to 127.0.0.1 had this box connect to its own loopback for
+		// every relayed chat message. Also: no redirects followed, the reply read
+		// bounded (see pinnedClearnetPost.ts). Hidden peers go through the
+		// pooled, kept-warm dispatcher inside the federation module.
+		postClearnet: (url, body, timeoutMs) => postClearnetPinned(url, body, timeoutMs)
 	});
 	chatFastDispatcher.start();
 
@@ -591,13 +588,36 @@ async function main(): Promise<void> {
 	// gets no easier ride than one from a peer.
 	const localChatGates = gatesFromDb(db);
 
-	const headTailer = new HeadTailer(config, db, blurt);
+	// v1.20.0 (E1): the tailer verifies every head-block op's signature against
+	// the signer's posting key before showing it — the block is ONE endpoint's
+	// word. Same lookup the intake uses: an unconfirmed key is confirmed through
+	// the quorum refresher (in the background; that message is not shown live).
+	const headTailer = new HeadTailer(config, db, blurt, {
+		signedBySigner: trxSignedByPostingKey(
+			postingKeyLookupFromDb(db, chainPostingKeyRefresher(blurt), {
+				durableIsCurrent: () => durableIsCurrentFor(poller.getStatus())
+			})
+		)
+	});
 	const headTailerPromise = headTailer.run().catch((err) => {
 		pollerLog.error('chat_fastpath_fatal', {}, err);
 	});
 
 	// ─── 7. HTTP app ───────────────────────────────────────────
 	const app = new Hono();
+
+	// v1.20.0 (E2): which reverse proxies the per-IP limiter believes. The code
+	// default already covers the shipped BunkerWeb frontend; an operator value
+	// replaces it. Entries that do not parse are named, never silently dropped.
+	{
+		const rejected = configureTrustedProxies(config.trustedProxyCidrs);
+		if (rejected.length > 0) {
+			bootLog.warn('trusted_proxy_cidrs_rejected', {
+				rejected,
+				note: 'MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS entries that are not an address or CIDR were ignored'
+			});
+		}
+	}
 
 	// Middleware chain, applied to every request in order.
 	app.use('*', security);
@@ -617,9 +637,17 @@ async function main(): Promise<void> {
 	// single-resource endpoints (profile, release) at the higher
 	// `resource` limit.
 	app.route('/v1/health', healthRoute(config, poller, priceSource, disagreementMonitors, peerMonitorResults, fxSource, multiAssetSources, headTailer, chatFastDispatcher, chatFastIntake));
-	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses()));
+	app.route('/v1/instance', instanceRoute(config, () => poller.currentTreasuryAddresses(), db));
+	// v1.20.0 (E4): the directory and every SSE stream connect are rate-limited
+	// on the `list` tier (a connect costs a snapshot query), and open streams are
+	// capped in streamCaps.ts. /v1/instances used to be unlimited: one full
+	// directory query and a full-directory response per request.
+	app.use('/v1/instances/stream', rateLimit('list', config.listRatePerMin));
 	app.route('/v1/instances/stream', instancesStreamRoute(db));
-	app.route('/v1/instances', instancesRoute(db));
+	const instancesApp = new Hono();
+	instancesApp.use('*', rateLimit('list', config.listRatePerMin));
+	instancesApp.route('/', instancesRoute(db));
+	app.route('/v1/instances', instancesApp);
 
 	// /v1/chain-fee — current account_creation_fee from Blurt
 	// chain, cached 24h.  Frontend renders the live value in
@@ -661,6 +689,7 @@ async function main(): Promise<void> {
 	// sets MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME separately, filtering by
 	// officialAccountName would silently ignore every block (the rows are
 	// keyed by operatorAccountName). cp257 fix.
+	app.use('/v1/orderbook/stream', rateLimit('list', config.listRatePerMin));
 	app.route('/v1/orderbook/stream', orderbookStreamRoute(db, poller, config.operatorAccountName));
 
 	const orderbookApp = new Hono();
@@ -691,6 +720,36 @@ async function main(): Promise<void> {
 	loginPairingApp.route('/', loginPairingRoute(pairingRegistry));
 	app.route('/v1/login-pairing', loginPairingApp);
 
+	// v1.20.0 — cross-instance QR sign-in. A phone signed in HERE that scans a
+	// desktop's QR from ANOTHER federation instance posts the bundle to this
+	// indexer (same origin, so the page's CSP stays 'self'), and this indexer
+	// carries it to that instance's /v1/login-pairing/:pid/deliver — over its
+	// hidden address when it published one, the resolve-and-pin clearnet path
+	// otherwise, never clearnet from a hidden-only node. Only registered
+	// directory instances, only that one path. A target that is THIS instance
+	// under another of its names goes straight into the registry above.
+	// Per-client `list` tier here; per-target and instance-wide budgets inside.
+	const pairingForwardApp = new Hono();
+	pairingForwardApp.use('*', rateLimit('list', config.listRatePerMin));
+	pairingForwardApp.route(
+		'/',
+		pairingForwardRoute({
+			db,
+			self: selfPairingAddresses([
+				config.instanceOrigin,
+				config.publicOrigin,
+				config.publicOrigin.replace(/\/\/indexer\./, '//'),
+				config.instanceTorAddress,
+				config.instanceI2pB32Address,
+				config.instanceI2pNameAddress,
+				config.instanceLokinetAddress
+			]),
+			proxies: hiddenServiceProxyConfigFromEnv(process.env),
+			deliverLocal: (pid, bundleJson, nowMs) => pairingRegistry.deliver(pid, bundleJson, nowMs)
+		})
+	);
+	app.route('/v1/pairing', pairingForwardApp);
+
 	const ordersApp = new Hono();
 	ordersApp.use('*', rateLimit('list', config.listRatePerMin));
 	ordersApp.route('/', ordersByAccountRoute(db, config.operatorAccountName));
@@ -703,6 +762,33 @@ async function main(): Promise<void> {
 	// gate the "Mark complete / review" button + prefill the trade
 	// partner. Same :account/:permlink/... shape, same 'list' tier.
 	ordersApp.route('/', orderCounterpartiesRoute(db));
+	// v1.20.0 (V3-3) — "check my payment now" for a per-order BTC fee address:
+	// POST /:account/:permlink/check-fee. Per-order cooldown + an instance-wide
+	// budget inside the route, on top of the 'list' tier above.
+	ordersApp.route(
+		'/',
+		feeCheckRoute({
+			db,
+			current: () => poller.feeCheckCurrent(),
+			onChange: (orderId) => orderbookEventBus.emit(orderId),
+			// (V3-5) ask up to two directory peers which fee address they gave an
+			// order: hidden addresses over the hidden transport, clearnet only via
+			// the SSRF-hardened pinned fetch (which refuses on a hidden-only node).
+			crossCheck: {
+				peers: () =>
+					fastPeersFromDirectory(
+						db,
+						config.instanceOrigin ?? config.publicOrigin.replace(/\/\/indexer\./, '//'),
+						hiddenServiceProxyConfigFromEnv(process.env),
+						6
+					),
+				fetchJson: (url, hidden) =>
+					hidden
+						? fetchJsonViaHiddenService<unknown>(url, hiddenServiceProxyConfigFromEnv(process.env))
+						: federationFetchJson<unknown>(url)
+			}
+		})
+	);
 	app.route('/v1/orders', ordersApp);
 
 	const profilesApp = new Hono();
@@ -785,17 +871,21 @@ async function main(): Promise<void> {
 
 	// Phase E.5 — chat SSE.  Mounted at /v1/chat/:a/:b/stream
 	// BEFORE the rate-limited /v1/chat so the more-specific
-	// path wins.  Long-lived SSE connections shouldn't share a
-	// per-minute budget with REST GETs.  Per-IP open-connection
-	// caps belong at the reverse-proxy layer.
+	// path wins.  v1.20.0 (E4): the CONNECT is rate-limited like any list
+	// read (it costs a snapshot query); the open stream is then held under
+	// the per-client and instance-wide caps in streamCaps.ts — the shipped
+	// reverse proxies set no connection cap, and over Tor they cannot tell
+	// visitors apart.
+	app.use('/v1/chat/:a/:b/stream', rateLimit('list', config.listRatePerMin));
 	app.route('/v1/chat', chatStreamRoute(db, poller));
 
 	// Global (all-conversations) chat-activity SSE for one account. Its own
 	// /v1/chat-activity prefix so it can't collide with /v1/chat/:a/:b (an
-	// account could be named "stream"/"events"). Not rate-limited — long-lived
-	// SSE; per-IP connection caps belong at the reverse proxy. Pushes only a
-	// peer-account ping (on-chain-public), never ciphertext — see the file
-	// header for the full privacy rationale.
+	// account could be named "stream"/"events"). Connect rate-limited and the
+	// open stream capped, as above (v1.20.0, E4). Pushes only a peer-account
+	// ping (on-chain-public), never ciphertext — see the file header for the
+	// full privacy rationale.
+	app.use('/v1/chat-activity/*', rateLimit('list', config.listRatePerMin));
 	app.route('/v1/chat-activity', chatActivityStreamRoute());
 
 	const chatApp = new Hono();
@@ -893,6 +983,12 @@ async function main(): Promise<void> {
 	operatorsApp.use('*', rateLimit('list', config.listRatePerMin));
 	operatorsApp.route('/', operatorsRoute(db));
 	app.route('/v1/operators', operatorsApp);
+	// v1.20.0 (G1/V3-4) — the newest APPLIED register payload of an account,
+	// which `morphit-ops upgrade` re-publishes (adding the fees account).
+	const operatorRegistrationApp = new Hono();
+	operatorRegistrationApp.use('*', rateLimit('resource', config.resourceRatePerMin));
+	operatorRegistrationApp.route('/', operatorRegistrationRoute(db));
+	app.route('/v1/operator-registration', operatorRegistrationApp);
 
 	// Aggregated trade-activity stats (Batch K).  Used by the
 	// /activity page and by RSS-feed clients reporting volume
@@ -1062,6 +1158,7 @@ async function main(): Promise<void> {
 		// Bounded as well (v1.18.0 review, S6): `close()` waits for in-flight
 		// requests, and a warm-up already under way can run for a minute.
 		await closePool(2_000).catch(() => undefined);
+		await closePinnedClearnet().catch(() => undefined);
 		// Give the poller up to 10 seconds to wrap up. If it's stuck
 		// on a slow RPC call, we've told it to abort via AbortSignal
 		// but the underlying fetch might not honor that in time.

@@ -1,3 +1,7 @@
+/* Colour tokens — the ONE place colours are defined (per-instance theming,
+ * docs/BRANDING.md). Must stay the first statement. */
+@import './theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -65,51 +69,12 @@
 }
 
 /* -----------------------------------------------------------------------------
- * Design tokens (CSS custom properties for non-Tailwind contexts)
+ * Design tokens. Every COLOUR token (--morphit-emerald, --morphit-btn-face,
+ * --focus-ring, the brand/surface palette …) lives in ./theme.css, together with
+ * the history of why each Morphit value is what it is (the deepened chat-bubble
+ * emerald, the deepened button teal, …).
  * -------------------------------------------------------------------------- */
 :root {
-	--morphit-lime: #8eef26;
-	--morphit-accent: #7fed2d;
-	--morphit-emerald: #00da69;
-	/* t155 (the maintainer): "all of the green bubbles (the Payment Receipts too) on the
-	 * chatroom page are a bit too bright and it makes the thin black text hard
-	 * for me to see. maybe dim that green just a bit."
-	 *
-	 * A DEEPENED brand emerald for chat bubbles — same move, and same reason, as
-	 * --morphit-btn-face below (a deepened brand teal). The problem isn't the
-	 * contrast RATIO: near-black ink on #00da69 already measures ~11:1, way past
-	 * WCAG AAA. It's glare — a large saturated field at that luminance is
-	 * fatiguing to read thin text on, which is exactly what the maintainer described.
-	 *
-	 * Deliberately NOT an opacity (`/85`): translucency blends with whatever is
-	 * behind, so on a LIGHT page it would wash toward white and make the black
-	 * text harder to read, not easier — the opposite of the ask. A fixed
-	 * deepened value behaves the same on both themes.
-	 *
-	 * v1.8.0 (the maintainer): dimmed one more step, #00b85a → #009e51, because the
-	 * previous green still read as too bright behind the thin bubble text. The
-	 * new value measures ~5.8:1 against the bubble's ink (ink-950 #070A10) —
-	 * still comfortably past WCAG AA (4.5:1) with the now-heavier bubble weight,
-	 * so the extra dim costs no readability. Kept a fixed value (not an opacity)
-	 * for the theme-stable reason above. */
-	--morphit-emerald-bubble: #009e51;
-	--morphit-teal: #02a6b2;
-	--morphit-gradient: linear-gradient(90deg, #8eef26 0%, #00da69 50%, #02a6b2 100%);
-
-	/* Button face — a DEEPENED brand teal. The pure brand teal
-	 * (--morphit-teal #02a6b2, the gradient's right-hand stop) is only
-	 * ~2.96:1 against white text — below WCAG AA's 4.5:1 for normal
-	 * text — so the .btn-primary face is darkened to #027c86 (white
-	 * text ≈5:1, clears AA) while the vivid #02a6b2 still lives in the
-	 * animated gradient border + brand accents.
-	 * NOTE: do NOT try to get "darker" via opacity here. The face layer
-	 * sits OVER the bright gradient (border-box covers the whole box),
-	 * so a translucent face bleeds the gradient THROUGH the interior
-	 * and LIGHTENS it. Deepen this hex instead. */
-	--morphit-btn-face: #027c86;
-
-	--focus-ring: 0 0 0 3px rgba(0, 218, 105, 0.35);
-
 	/* Motion — honor user preference */
 	--ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -163,10 +128,14 @@ html {
  * Fixed background-attachment so scrolling doesn't reveal the seam.
  * -------------------------------------------------------------------------- */
 body {
-	background-color: #0a0e16; /* ink-950 fallback */
+	background-color: rgb(var(--surface-page-rgb)); /* fallback under the bg-ink-950 class */
 	background-image:
-		radial-gradient(ellipse 120% 80% at 0% 0%, rgba(0, 218, 105, 0.06) 0%, transparent 60%),
-		radial-gradient(ellipse 120% 80% at 100% 100%, rgba(2, 166, 178, 0.055) 0%, transparent 60%);
+		radial-gradient(ellipse 120% 80% at 0% 0%, rgb(var(--glow-tl-rgb) / 0.06) 0%, transparent 60%),
+		radial-gradient(
+			ellipse 120% 80% at 100% 100%,
+			rgb(var(--glow-br-rgb) / 0.055) 0%,
+			transparent 60%
+		);
 	background-attachment: fixed;
 }
 
@@ -274,7 +243,7 @@ body {
 	}
 
 	.btn-primary {
-		@apply btn text-white shadow-morphit-glow;
+		@apply btn text-morphit-btn-text shadow-morphit-glow;
 		/* Solid brand-teal face. cp406 (the maintainer) — the 1px animated green gradient
 		 * border was removed site-wide; the 1px border is kept but transparent
 		 * (over a solid teal fill, background-clip default border-box) so button
@@ -289,7 +258,7 @@ body {
 	 * in the header.  Deliberately NOT built on .btn (which forces
 	 * min-height:44px + py-3 + text-base, making it taller than the pill). */
 	.btn-primary-sm {
-		@apply inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-sm font-semibold text-white transition-all duration-150;
+		@apply inline-flex items-center justify-center gap-1 rounded-xl px-2.5 py-2 text-sm font-semibold text-morphit-btn-text transition-all duration-150;
 		@apply focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald;
 		/* cp406 (the maintainer) — green gradient border removed; transparent 1px border
 		 * kept so the pill-height match with the LanguageSwitcher is preserved. */
@@ -425,8 +394,8 @@ body {
 		):not([aria-invalid='true']):not([class*='border-red']):not([class*='no-app-focus-ring']):focus-visible,
 	textarea:not([aria-invalid='true']):not([class*='border-red']):focus-visible,
 	select:not([aria-invalid='true']):not([class*='border-red']):focus-visible {
-		border-color: theme('colors.morphit.emerald');
-		box-shadow: 0 0 0 1px theme('colors.morphit.emerald');
+		border-color: rgb(var(--focus-ring-rgb));
+		box-shadow: 0 0 0 1px rgb(var(--focus-ring-rgb));
 		outline: 2px solid transparent;
 	}
 
@@ -450,12 +419,12 @@ body {
 	textarea:autofill:focus,
 	select:autofill,
 	select:autofill:focus {
-		box-shadow: 0 0 0 1000px #0f141c inset !important;
-		background-color: #0f141c !important;
+		box-shadow: 0 0 0 1000px rgb(var(--surface-900-rgb)) inset !important;
+		background-color: rgb(var(--surface-900-rgb)) !important;
 		background-image: none !important;
 		filter: none;
-		color: #eef1f5;
-		caret-color: #eef1f5;
+		color: rgb(var(--surface-100-rgb));
+		caret-color: rgb(var(--surface-100-rgb));
 		/* Defeat the animated re-tint AND the initial paint on a pre-filled
 		 * field: an effectively-infinite delay never lets the UA colour show. */
 		transition: background-color 600000s ease-in-out 0s;
@@ -470,8 +439,8 @@ body {
 	textarea:-webkit-autofill:focus,
 	select:-webkit-autofill,
 	select:-webkit-autofill:focus {
-		-webkit-box-shadow: 0 0 0 1000px #0f141c inset !important;
-		-webkit-text-fill-color: #eef1f5 !important;
+		-webkit-box-shadow: 0 0 0 1000px rgb(var(--surface-900-rgb)) inset !important;
+		-webkit-text-fill-color: rgb(var(--surface-100-rgb)) !important;
 		transition: background-color 600000s ease-in-out 0s;
 	}
 
@@ -479,7 +448,7 @@ body {
 	input:-moz-autofill,
 	textarea:-moz-autofill,
 	select:-moz-autofill {
-		box-shadow: 0 0 0 1000px #0f141c inset !important;
+		box-shadow: 0 0 0 1000px rgb(var(--surface-900-rgb)) inset !important;
 		background-image: none !important;
 		filter: none;
 	}

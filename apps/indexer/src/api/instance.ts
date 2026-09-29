@@ -21,6 +21,13 @@
  * Includes operator_tag (REVISIT-LIST item 5) so the frontend
  * can include it in every order op posted from this instance,
  * which credits 90% of BLURT-paid listing fees to the operator.
+ *
+ * v1.20.0 (G1): fee_recipient is the RESOLVED fees account (after the
+ * canonical-treasury fallback) the frontend pays the 90 % leg to, and
+ * fee_recipient_registered says whether it is in this operator's on-chain
+ * registration — i.e. whether OTHER instances accept that leg, so this
+ * instance's users' BLURT-paid orders and first-contact DMs are visible
+ * federation-wide. Read from the local DB (cached 30 s).
  */
 
 import { Hono } from 'hono';
@@ -30,6 +37,8 @@ import { computeClearnetEliminated, clearnetEliminationMissing, clearnetLegsFrom
 import { relayReportsHiddenOnly } from '$indexer/relayPosture';
 import { getOperationalSnapshot } from '$api/operationalHealth';
 import { hiddenHostNetworkOf } from '@morphit/hidden-transport';
+import { cachedInstanceFeeRecipientStatus, type Queryable } from '$indexer/feeRecipients';
+import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
 export interface InstanceResponse {
 	name: string | null;
@@ -58,7 +67,16 @@ export interface InstanceResponse {
 		i2p: string | null;
 		nostr: string | null;
 	};
+	/** The resolved BLURT fees account (MORPHIT_INDEXER_FEE_RECIPIENT, or the
+	 *  canonical treasury when unset/malformed) — the frontend pays the 90 %
+	 *  owner leg of BLURT fees here. */
 	fee_recipient: string;
+	/** v1.20.0 (G1). true: `fee_recipient` IS the canonical treasury (one
+	 *  100 % leg, nothing to register), or it equals the fee_recipient the
+	 *  account owning `operator_tag` registered on chain. false: it is not
+	 *  registered — `sudo morphit-ops register` on the server fixes it.
+	 *  null: could not be read right now (never report as false). */
+	fee_recipient_registered: boolean | null;
 	relay_account: string;
 	/** REVISIT-LIST item 5 — operator earnings.  When non-null,
 	 *  the frontend includes this on every order op as
@@ -262,11 +280,23 @@ export function instanceRoute(
 	getTreasuryAddresses: () => { btc: string | null; xmr: string | null } = () => ({
 		btc: null,
 		xmr: null
-	})
+	}),
+	/** v1.20.0 (G1) — the indexer DB, for fee_recipient_registered. Absent
+	 *  (unit tests) → that field is null ("could not tell"). */
+	db?: Queryable
 ): Hono {
 	const app = new Hono();
+	const feeRecipientStatus = db
+		? cachedInstanceFeeRecipientStatus(
+				db,
+				config.feeRecipient,
+				config.instanceOperatorTag,
+				CANONICAL_TREASURY.blurt
+			)
+		: async () => null;
 
-	app.get('/', (c) => {
+	app.get('/', async (c) => {
+		const feeStatus = await feeRecipientStatus();
 		// The relay leg comes from what the relay last reported; asking for the
 		// operational snapshot keeps that sample fresh (a background refresh at
 		// most every 15 s, never on the request path).
@@ -294,6 +324,7 @@ export function instanceRoute(
 				nostr: config.instanceNostrPubkey ?? null
 			},
 			fee_recipient: config.feeRecipient,
+			fee_recipient_registered: feeStatus?.registered ?? null,
 			relay_account: config.relayAccount,
 			operator_tag: config.instanceOperatorTag ?? null,
 			// Keystone gate — an HONEST strict-AND of every private-transport leg

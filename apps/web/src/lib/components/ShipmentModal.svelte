@@ -312,7 +312,7 @@
 					type="button"
 					onclick={handleShare}
 					disabled={!canShare || sending}
-					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+					class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110 disabled:opacity-50"
 				>
 					{sending ? $_('common.sending') : $_('shipment_modal.share_button')}
 				</button>

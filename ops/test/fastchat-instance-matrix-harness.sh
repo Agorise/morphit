@@ -77,8 +77,8 @@ run_smoke(){
 }
 
 verdict(){ # <output> -> pass | fail | crash
-	if printf '%s' "$1" | grep -q 'scenarios passed'; then echo pass
-	elif printf '%s' "$1" | grep -q 'FAILED'; then echo fail
+	if grep -q 'scenarios passed' <<<"$1"; then echo pass
+	elif grep -q 'FAILED' <<<"$1"; then echo fail
 	else echo crash; fi
 }
 
@@ -111,7 +111,7 @@ expect_caught(){ # <label> <file> <needle-or-empty>
 			# is satisfied by any failure whatsoever — which is the same as
 			# not checking the reason at all. Several needles in these
 			# harnesses were exactly that, and looked rigorous.
-			if [ -z "$needle" ] || printf '%s\n' "$out" | grep '✗' | grep -qi -- "$needle"; then
+			if [ -z "$needle" ] || grep -qi -- "$needle" <<<"$(grep '✗' <<<"$out")"; then
 				ok "$label — caught"
 			else
 				no "$label — the smoke failed, but not for the expected reason"

@@ -59,28 +59,40 @@
     - not (morphit_tor_only | default(false))
     - (morphit_web_ports.stdout | default('') | trim) != 'OK'
 
-- name: Self-test — UFW allows the IPFS swarm port (4001) when this box hosts IPFS
+- name: Self-test — UFW allows the IPFS swarm port (4001) BOTH tcp and udp when this box hosts IPFS
   ansible.builtin.shell: |
     set -o pipefail
     s=$(ufw status 2>/dev/null || true)
-    echo "$s" | grep -qE '(^|[[:space:]])4001(/(tcp|udp))?([[:space:]]|$)' && echo OK || echo MISSING
+    # BOTH protocols must be allowed: Kubo swarms over TCP and (QUIC) UDP on 4001.
+    # A bare `4001` rule with no proto covers both; separate rules must each be
+    # present. Requiring only one (the old regex matched tcp OR udp) let a
+    # udp-missing box pass while QUIC peers could not dial in (review B7). ufw
+    # prints either "4001" (both) or "4001/tcp" / "4001/udp" (per-proto) lines.
+    both=0
+    if echo "$s" | grep -qE '(^|[[:space:]])4001([[:space:]]|$)'; then both=1
+    elif echo "$s" | grep -qE '(^|[[:space:]])4001/tcp([[:space:]]|$)' \
+      && echo "$s" | grep -qE '(^|[[:space:]])4001/udp([[:space:]]|$)'; then both=1
+    fi
+    [ "$both" = 1 ] && echo OK || echo MISSING
   register: morphit_ipfs_port
   changed_when: false
   failed_when: false
-  # Only meaningful on an IPFS origin host. Stock ufw opens 22/80/443 only, so a
-  # reinstalled seeder silently went publicly-dark on IPFS (the maintainer/morphit.io v1.17.0)
-  # — the ufw role now opens 4001 automatically, and this proves it actually took.
-  when: enable_ipfs | default(true) | bool
+  # Only meaningful on a clearnet IPFS origin host. A Tor-only node runs Kubo with
+  # no public swarm, so 4001 is deliberately closed there.
+  when:
+    - enable_ipfs | default(true) | bool
+    - not (morphit_tor_only | default(false) | bool)
 
-- name: WARN if the IPFS swarm port is not open on an IPFS host
+- name: WARN if the IPFS swarm port is not open (both protocols) on an IPFS host
   ansible.builtin.debug:
     msg: >-
-      Post-harden self-test: this box hosts IPFS but UFW does not appear to allow
-      4001 — public gateways can't fetch your seeded releases, so the on-chain
-      distribution CID won't resolve. Fix with:
+      Post-harden self-test: this box hosts IPFS but UFW does not allow 4001 on
+      BOTH tcp and udp — public gateways (and QUIC peers over udp) can't fetch your
+      seeded releases, so the on-chain distribution CID won't resolve. Fix with:
       sudo ufw allow 4001/tcp && sudo ufw allow 4001/udp && sudo systemctl restart ipfs
   when:
     - enable_ipfs | default(true) | bool
+    - not (morphit_tor_only | default(false) | bool)
     - (morphit_ipfs_port.stdout | default('') | trim) != 'OK'
 
 - name: Self-test — the box serves HTTPS to itself (proxy/frontend alive)

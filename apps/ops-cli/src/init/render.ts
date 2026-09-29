@@ -34,7 +34,7 @@
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
 import type { OnionV3 } from './torOnion.ts';
 import type { I2pDestinationResult } from './i2pGenerate.ts';
-import { i2pTunnelStanza, I2P_KEYFILE_NAME } from './i2pGenerate.ts';
+import { i2pTunnelStanza, I2P_KEYFILE_NAME, HIDDEN_FRONTEND_PORT } from './i2pGenerate.ts';
 import { join, isAbsolute, resolve } from 'node:path';
 import { MORPHIT_GENESIS_BLOCK } from '@morphit/operator-config';
 import { safeCwd } from '../lib/repoRoot.ts';
@@ -101,9 +101,10 @@ export interface WizardAnswers {
 	/** cp182 — BunkerWeb reverse-proxy/WAF decision.  When enabled,
 	 *  renders MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 (the
 	 *  pinned BunkerWeb Docker network) so the relay honours the
-	 *  real client IP BunkerWeb forwards.  Written ONLY when enabled
-	 *  — trusting a proxy range with no proxy in front would let a
-	 *  direct client spoof X-Forwarded-For. */
+	 *  real client IP BunkerWeb forwards.  Written ONLY when enabled;
+	 *  otherwise the relay's default applies (loopback + Docker's
+	 *  default bridge pool 172.16.0.0/12 — a peer there can only be
+	 *  inside the operator's own network). */
 	readonly bunkerWeb: BunkerWebResult;
 	/** cp182 — host-hardening checklist.  When generateChecklist is
 	 *  true, writeWizardOutput emits a personalized
@@ -290,7 +291,7 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		// The stanza points at the keyfile by its bare name — valid once the
 		// operator copies morphit-web.dat into i2pd's datadir.  webPort is the
 		// origin's port (i2pd proxies I2P → the local site).
-		writeFileSync(stanzaPath, i2pTunnelStanza(I2P_KEYFILE_NAME, 8080), { mode: 0o644 });
+		writeFileSync(stanzaPath, i2pTunnelStanza(I2P_KEYFILE_NAME, HIDDEN_FRONTEND_PORT), { mode: 0o644 });
 		chmodSync(stanzaPath, 0o644);
 	}
 
@@ -779,9 +780,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	// 172.20.0.0/16 Docker network, the relay must trust that range so
 	// the real client IP in X-Forwarded-For is honoured by rate limits
 	// and abuse defenses. Written as a live value ONLY when the operator
-	// opted into BunkerWeb — otherwise the relay reads the socket peer
-	// IP directly, and trusting a phantom proxy range would let a direct
-	// client spoof its source IP.
+	// opted into BunkerWeb. Unset, the relay trusts loopback + Docker's
+	// default bridge pool 172.16.0.0/12 (v1.20.0 wave 5); a set value
+	// REPLACES that range (loopback stays trusted).
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# Reverse proxy / trusted client IPs');
 	lines.push('# ──────────────────────────────────────────────────────');
@@ -791,10 +792,12 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		lines.push('# X-Forwarded-For only from this range.  See OPERATIONS.md §32.');
 		lines.push('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16');
 	} else {
-		lines.push('# No reverse proxy was selected at setup — the relay reads the');
-		lines.push('# socket peer IP directly.  If you front this instance with your');
-		lines.push('# own proxy/CDN, set this to that proxy CIDR so the relay honours');
-		lines.push('# the forwarded client IP.  See RUN-A-MORPHIT-NODE.md §6.');
+		lines.push('# No reverse proxy was selected at setup.  Left unset, the relay');
+		lines.push('# trusts X-Forwarded-For from loopback and from Docker\'s default');
+		lines.push('# bridge pool (172.16.0.0/12), which covers nginx on this server');
+		lines.push('# and any proxy container here.  Set this only for a proxy/CDN');
+		lines.push('# outside those ranges (a set value replaces 172.16.0.0/12).');
+		lines.push('# See RUN-A-MORPHIT-NODE.md §6.');
 		lines.push('# MORPHIT_RELAY_TRUSTED_PROXY_IPS=');
 	}
 	lines.push('');
@@ -902,10 +905,10 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#');
 	lines.push('# BTC: must be Esplora-API-compatible.  Defaults:');
 	lines.push('#   blockstream.info/api + mempool.space/api');
-	lines.push('# XMR: must run the onion-monero-blockchain-explorer');
-	lines.push('# reference codebase exposing /api/outputs?txprove=1.');
-	lines.push('# Five defaults: xmrchain.net, localmonero.co/blocks,');
-	lines.push('# monerohash.com/explorer, exploremonero.com, moneroexplorer.org.');
+	lines.push('# XMR: https://… = onion-monero-blockchain-explorer with its JSON');
+	lines.push('# API (/api/outputs?txprove=1); raw-tx+https://… = raw transactions');
+	lines.push('# (moneroblocks.info API), verified by the indexer itself.');
+	lines.push('# Defaults: xmrchain.net, moneroexplorer.org, raw-tx+moneroblocks.info.');
 	lines.push('#');
 	lines.push('# For maximum independence, self-host both — see');
 	lines.push('# docs/OPERATIONS.md §40.4 for a docker-compose recipe.');

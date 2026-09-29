@@ -6,15 +6,14 @@
  * exists and report the current balance.  Catches typos
  * before they cause confusing errors at relay startup.
  *
- * Tries multiple public RPC endpoints; first response wins.
- * 5-second hard timeout per endpoint.  Returns null on
+ * Routed via lib/chainAccess.ts (local indexer first, then the
+ * health-ordered pool — see lookupBlurtAccount).  Returns null on
  * "account doesn't exist" (Blurt returns an empty array, not
  * an error).  Throws on network/RPC failure so the caller
  * can decide whether to abort or let the operator proceed.
  */
 
-import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { isHiddenOnlyNode, localCondenser } from '../lib/hiddenOnly.ts';
+import { chainRead, type ChainAccessDeps } from '../lib/chainAccess.ts';
 
 export interface AccountInfo {
 	readonly name: string;
@@ -30,34 +29,28 @@ interface BlurtAccountRow {
 /** Look up an account by name.  Returns AccountInfo on hit,
  *  null on "no such account", throws on transport failure.
  *
- *  v1.18.0 deep-deep, H1: with no explicit endpoint list, a HIDDEN-ONLY node
- *  (empty clearnet pool in indexer.env) asks its own indexer instead of the
- *  clearnet defaults. This lookup runs on every interactive menu launch (the
- *  relay-balance marker), in the install summary and in the wizard, and it used
- *  to send the relay account name from the box's home IP to six clearnet RPC
- *  operators each time. It never falls back to clearnet: if the indexer does
- *  not answer, this throws and each caller already treats that as "unknown". */
+ *  v1.20.0 (D12): reads go through lib/chainAccess.ts — this node's own indexer
+ *  first (it holds the full 20-node pool and its learned health); if it does not
+ *  answer AND the node is not hidden-only, a health-ordered EndpointPool over
+ *  the configured clearnet list (shared health file) — never a fixed-order walk
+ *  that always starts on the same node. A HIDDEN-ONLY node never falls back to
+ *  clearnet (v1.18.0 deep-deep, H1): if its indexer does not answer this throws,
+ *  and every caller already treats that as "unknown". An explicit `endpoints`
+ *  list (tests / a wizard probing a candidate list) is used as the pool. */
 export async function lookupBlurtAccount(
 	accountName: string,
-	endpoints?: readonly string[]
+	endpoints?: readonly string[],
+	deps: ChainAccessDeps = {}
 ): Promise<AccountInfo | null> {
-	if (endpoints === undefined && isHiddenOnlyNode()) {
-		const result = await localCondenser<unknown>('get_accounts', [[accountName]], { timeoutMs: 20_000 });
-		return accountInfoFromRows(result, accountName);
+	let result: unknown;
+	try {
+		result = await chainRead<unknown>('get_accounts', [[accountName]], deps, endpoints);
+	} catch (err) {
+		throw new Error(
+			`Could not reach the Blurt network (local indexer or any configured RPC node). Last error: ${err instanceof Error ? err.message : String(err)}`
+		);
 	}
-	let lastError: unknown = null;
-	for (const endpoint of endpoints ?? DEFAULT_BLURT_RPC_ENDPOINTS) {
-		try {
-			const result = await callRpc(endpoint, 'condenser_api.get_accounts', [[accountName]]);
-			return accountInfoFromRows(result, accountName);
-		} catch (err) {
-			lastError = err;
-			continue;
-		}
-	}
-	throw new Error(
-		`Could not reach any Blurt RPC endpoint.  Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`
-	);
+	return accountInfoFromRows(result, accountName);
 }
 
 /** Shape a get_accounts result into AccountInfo (null = no such account). */
@@ -128,8 +121,8 @@ async function callRpc(
 // connectivity + a valid chain response. Used by both `morphit-ops
 // init` (warn before the operator finishes setup) and `doctor` (catch
 // the all-endpoints-dead case that froze a real node's sync, before it
-// ever stalls). Reuses the same `callRpc` primitive the account lookup
-// uses — one RPC code path in ops-cli.
+// ever stalls). A probe deliberately asks EACH endpoint directly (that is
+// what it measures); ordinary reads go through lib/chainAccess.ts instead.
 
 export interface RpcProbeResult {
 	readonly url: string;
@@ -220,23 +213,36 @@ export function formatRpcProbeLines(summary: RpcProbeSummary): string[] {
 		if (r.ok) {
 			lines.push(`  OK   ${r.url}  (${r.latencyMs} ms, head ${r.headBlock})`);
 		} else {
-			lines.push(`  DEAD ${r.url}  (${r.error})`);
+			// "down now", not "DEAD": a node blipping is NORMAL — the pool routes
+			// around it and re-tests it. Alarm language for a routine, self-healing
+			// condition is a false alarm (review D12).
+			lines.push(`  down now  ${r.url}  (${r.error})`);
 		}
 	}
+	// IMPORTANT: this probe only reaches the CLEARNET endpoints in the config from
+	// THIS host. It cannot reach the node's hidden (Tor/I2P) RPC nodes, and the
+	// pool automatically picks the fastest reachable node, so a host-side count is
+	// never the whole story. The authoritative healthy/total (clearnet + hidden)
+	// is the indexer's own /v1/health rpc_endpoints_healthy/total — never conclude
+	// "cannot sync/broadcast" from this partial view, and never hand-prune a node.
 	if (summary.total === 0) {
 		lines.push('No RPC endpoints are configured to probe.');
 	} else if (summary.healthy === 0) {
 		lines.push(
-			`All ${summary.total} RPC endpoints are unreachable. The node CANNOT sync or ` +
-				`broadcast until at least one works — fix the endpoint list and re-check.`
+			`None of the ${summary.total} clearnet RPC endpoints answered this host-side probe. ` +
+				`That is not the full picture: this node also uses hidden (Tor/I2P) RPC nodes a host ` +
+				`probe cannot reach, and the pool routes around any that are down. Check the ` +
+				`authoritative count at the indexer's /v1/health (rpc_endpoints_healthy/total) before ` +
+				`concluding anything.`
 		);
 	} else if (summary.healthy < summary.total) {
 		lines.push(
-			`${summary.healthy} of ${summary.total} RPC endpoints reachable. The node will ` +
-				`work, but redundancy is reduced — consider replacing the dead one(s).`
+			`${summary.healthy} of ${summary.total} clearnet RPC endpoints answered. Nodes going ` +
+				`down for a while is normal — the pool picks the fastest reachable one automatically, ` +
+				`so there is nothing to prune by hand. /v1/health shows the full count including hidden nodes.`
 		);
 	} else {
-		lines.push(`All ${summary.total} RPC endpoints reachable.`);
+		lines.push(`All ${summary.total} probed clearnet RPC endpoints answered.`);
 	}
 	return lines;
 }

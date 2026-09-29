@@ -167,13 +167,7 @@ const sampleAnswers: WizardAnswers = {
 	altNetworks: { tor: null, lokinet: null, i2pB32: null, i2pName: null, nostr: null, ens: null },
 	feeExplorers: {
 		btc: ['https://blockstream.info/api', 'https://mempool.space/api'],
-		xmr: [
-			'https://xmrchain.net',
-			'https://localmonero.co/blocks',
-			'https://monerohash.com/explorer',
-			'https://exploremonero.com',
-			'https://moneroexplorer.org'
-		]
+		xmr: ['https://xmrchain.net', 'https://moneroexplorer.org', 'raw-tx+https://moneroblocks.info']
 	},
 	chatLinkExplorers: {
 		btc: 'https://mempool.space/tx/{txid}',

@@ -8,7 +8,7 @@ This repository carries the full source for the indexer, relay, frontend, operat
 
 ## Status
 
-Pre-launch, currently in the `v1.0.0-beta` release series. The canonical public instance is **morphit.io**; community operators are welcome to launch their own nodes alongside. There are no production deployments yet — the codebase has been through an intensive multi-month pre-launch hardening campaign documented in `docs/AUDIT-2026-05.md`.
+Live. The canonical public instance is **morphit.io** (clearnet, Tor and I2P); other instances run alongside it, including Tor-only ones, and community operators are welcome to launch their own. Releases are signed, published on Forgejo and anchored on-chain; the release notes for each version are the `RELEASE-NOTES-v*.md` files at the repo root. The hardening history is in the `docs/AUDIT-*.md` files.
 
 ## New here? Start here 👇
 
@@ -19,9 +19,9 @@ to open for what you want to do:
 
 > ### 👉 [`docs/start-here/`](docs/start-here/README.md)
 
-The two commands you'll use most, from your install directory:
-`npx morphit-ops` (opens a menu of everything) and
-`npx morphit-ops upgrade` (updates to the latest version). The
+The two commands you'll use most, on your server:
+`sudo morphit-ops` (opens a menu of everything) and
+`sudo morphit-ops upgrade` (updates to the latest version). The
 rest of *this* README is a technical overview for people
 evaluating or building the software.
 
@@ -44,9 +44,10 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 | `apps/web/` | SvelteKit frontend, fully prerendered per locale (10 locales × dozens of indexable routes; the canonical list of routes is whatever `apps/web/src/routes/[lang]/**/+page.svelte` enumerates at build time) |
 | `apps/indexer/` | Reads Blurt blocks, materializes orderbook + chat + reputation, exposes `/v1/*` HTTP API |
 | `apps/relay/` | Holds the operator's relay active key; signup broadcasts, welcome-bonus payouts, Web Push delivery |
-| `apps/ops-cli/` | `morphit-ops init / edit / upgrade` — operator setup wizard and release apply tool |
+| `apps/ops-cli/` | `morphit-ops` — the operator tool: guided install, settings, branding, upgrade, health, moderation (`sudo morphit-ops --help`) |
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
-| `packages/` | Shared TypeScript packages: `asset-registry`, `indexer-client`, `relay-client`, `operator-config`, `release-schema`, `net-defense`, `rpc-pool` |
+| `apps/mcp-server/` | Read-only MCP server exposing the orderbook to AI agents |
+| `packages/` | Shared TypeScript packages: `asset-registry`, `hidden-transport`, `indexer-client`, `net-defense`, `node-health`, `operator-config`, `relay-client`, `release-schema`, `rpc-pool` |
 | `docs/` | ADRs (`docs/adr/0001-…` through `0052-…`), audit logs, operator runbooks |
 | `ops/` | Ansible role, systemd units, env templates, nginx + BunkerWeb configs, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
@@ -55,13 +56,13 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 
 The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPHIT-NODE.md)**. The short version:
 
-1. Provision a $5/mo Ubuntu 24.04 VPS with Postgres reachable.
-2. `git clone` this repo (or extract a signed release tarball — see `docs/UPGRADING.md`).
-3. `npm ci` from the repo root (workspace install — must be run from the root).
-4. `npm run build --workspaces --if-present` to build the artifacts: the static web app nginx serves, plus the `morphit-ops` and `morphit-mcp` bundles. (The relay and indexer run from TypeScript source and have no build step; the web app **must** be built before nginx has anything to serve.)
-5. `npx morphit-ops init` to walk the setup wizard (~23 prompts; configures treasury addresses, fee targets, explorer URLs, operator tag, VAPID keys for Web Push).
-6. `bash scripts/run-smokes.sh` to confirm the self-checks (~358 runners, several thousand scenarios) pass against your environment.
-7. Follow **[`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md)** and **[`docs/LAUNCH-DAY.md`](docs/LAUNCH-DAY.md)** before opening to traffic.
+1. Get an Ubuntu 24.04 machine (a VPS, or an old PC at home — 2+ CPUs, 4+ GB RAM, 80+ GB SSD) and point a domain at it (or skip the domain and run Tor-only).
+2. Download a signed release from [morphit.io/en/download](https://morphit.io/en/download#source-code) onto that machine and extract it.
+3. In that folder, run `sudo bash morphit-setup.sh` and choose **Full guided install**: it installs Node.js, PostgreSQL, the services, HTTPS, BunkerWeb, Tor/I2P and the hardening, asking a few plain-language questions.
+4. Register your instance on-chain: `sudo morphit-ops register` (on the server).
+5. Updating later: `sudo morphit-ops upgrade` — see [`docs/UPGRADING.md`](docs/UPGRADING.md).
+
+Installing by hand (Ansible yourself, or "configure only", where you run the full setup wizard — `morphit-ops init`, ~23 prompts: treasury addresses, fee targets, explorer URLs, operator tag, Web Push keys) and every operator setting are in [`docs/OPERATIONS.md`](docs/OPERATIONS.md). Before opening to traffic, see [`docs/PRE-LAUNCH-CHECKLIST.md`](docs/PRE-LAUNCH-CHECKLIST.md) and [`docs/LAUNCH-DAY.md`](docs/LAUNCH-DAY.md).
 
 ## For developers
 
@@ -74,7 +75,7 @@ The complete walkthrough is in **[`docs/RUN-A-MORPHIT-NODE.md`](docs/RUN-A-MORPH
 - Adding a tradable coin: `docs/ADDING-A-COIN.md`
 - Locale graduation (PLANNED → SUPPORTED): `docs/LOCALE-GRADUATION.md`
 
-The smoke suite is the source of truth for behavior:
+The smoke suite (700+ runners, 20,000+ scenarios) is the source of truth for behavior — run it on a development machine, not on a production node:
 
 ```
 bash scripts/run-smokes.sh

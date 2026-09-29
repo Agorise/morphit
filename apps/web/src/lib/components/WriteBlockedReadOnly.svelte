@@ -213,7 +213,7 @@
 					{$_(bodyKey)}
 				</p>
 				<a
-					class="mt-3 inline-block rounded-xl border-2 border-morphit-btn bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+					class="mt-3 inline-block rounded-xl border-2 border-morphit-btn bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110"
 					href={deepLink}
 				>
 					{$_('paired_readonly.write_blocked_action_label')}

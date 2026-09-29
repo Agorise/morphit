@@ -131,9 +131,20 @@ cannot forge: the account-create endpoint needs the user's four
 new public keys, which the user generates locally and which are not
 available to any other origin.
 
-An exact-match CORS allowlist provides defense-in-depth — the
-browser blocks `fetch()` from any origin not on the list — but the
-fundamental reason CSRF does not apply is structural.
+The relay's exact-match origin allowlist provides defense-in-depth — its
+server rejects a signup whose `Origin` is not on the list, and the browser
+will not let another origin read the relay's answers — but the fundamental
+reason CSRF does not apply is structural.
+
+The indexer's public API is different: it answers
+`Access-Control-Allow-Origin: *` (GET and OPTIONS, never credentials),
+because the federation reads peers' orderbooks from the browser. CORS only
+stops another site from *reading* a response — it does not stop a page on
+any website from making a visitor's browser *send* a request, including to
+the indexer's `/v1` POST routes (`/v1/broadcast`, the federation chat push,
+`/v1/chain`, login pairing). Whatever protects those routes must
+come from what each one accepts and from its rate limits — never from CORS
+(v1.20.0 note).
 
 #### Authentication vulnerabilities (AUTH-VULN-n, nOAuth)
 

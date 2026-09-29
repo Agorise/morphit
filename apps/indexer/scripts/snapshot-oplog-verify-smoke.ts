@@ -100,6 +100,61 @@ check('permlink mismatch (points at a REAL op of a different order) → mismatch
 	const s2 = pickVerificationSample(rows, 40);
 	check('sampler is deterministic', JSON.stringify(s) === JSON.stringify(s2));
 }
+// ── v1.20.0 (V3-7): the authority the DISPATCHER accepted, per op ──
+// BLURT-paid orders, feature bids and stranger fees are signed with ACTIVE
+// authority (their fee transfer sits in the same tx, and Blurt forbids mixing
+// posting and active in one tx), so their signer is in required_auths. The
+// verifier checked only required_posting_auths and quarantined every honest
+// snapshot holding one of them.
+{
+	const at = (id: string, auths: { active?: string[]; posting?: string[] }) => ({
+		transactions: [
+			{
+				operations: [
+					[
+						'custom_json',
+						{
+							required_auths: auths.active ?? [],
+							required_posting_auths: auths.posting ?? [],
+							id,
+							json: JSON.stringify({ permlink: 'p1', fee_method: 'blurt' })
+						}
+					],
+					['transfer', { from: 'alice', to: 'morphit-fees', amount: '62.500 BLURT', memo: 'morphit-fee:p1' }]
+				]
+			}
+		]
+	});
+	const stored = (opId: string, signer = 'alice', permlink: string | null = 'p1') => ({
+		blockNum: 1,
+		trxInBlock: 0,
+		opInTrx: 0,
+		signer,
+		opId,
+		permlink
+	});
+	for (const id of ['morphit_order_v1', 'morphit_feature_bid_v1', 'morphit_stranger_fee_v1']) {
+		const r = verifyStoredOpAgainstBlock(stored(id), at(id, { active: ['alice'] }) as never);
+		check(`V3-7: an ACTIVE-signed ${id} (signer in required_auths) verifies`, r.ok);
+		check(
+			`V3-7: an ACTIVE-signed ${id} recorded under another signer → mismatch`,
+			!verifyStoredOpAgainstBlock(stored(id, 'mallory'), at(id, { active: ['alice'] }) as never).ok
+		);
+	}
+	check(
+		'V3-7: an ACTIVE-signed chat op (the dispatcher never applies one) → mismatch',
+		!verifyStoredOpAgainstBlock(stored('morphit_chat_v1', 'alice', null), at('morphit_chat_v1', { active: ['alice'] }) as never).ok
+	);
+	check(
+		'V3-7: a posting-signed order still verifies (posting auth is the other valid form)',
+		verifyStoredOpAgainstBlock(stored('morphit_order_v1'), at('morphit_order_v1', { posting: ['alice'] }) as never).ok
+	);
+	check(
+		'V3-7: two posting auths (the dispatcher rejects: multiple_posting_auths) → mismatch',
+		!verifyStoredOpAgainstBlock(stored('morphit_order_v1'), at('morphit_order_v1', { posting: ['alice', 'bob'] }) as never).ok
+	);
+}
+
 check('sample of 0 rows is empty', pickVerificationSample([], 40).length === 0);
 check('k >= pool returns all rows', pickVerificationSample([ref], 40).length === 1);
 check('k <= 0 returns empty', pickVerificationSample([ref], 0).length === 0);

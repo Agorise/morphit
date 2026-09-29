@@ -13,14 +13,26 @@
  *   MORPHIT_INSTANCE_NAME
  *   MORPHIT_INSTANCE_ORIGIN
  *   MORPHIT_INSTANCE_CONTACT_URL  (optional)
+ *   MORPHIT_INDEXER_FEE_RECIPIENT (optional; resolved exactly as the indexer
+ *                                  service resolves it — see below)
+ *
+ * v1.20.0 (G1): the op carries `fee_recipient`, the RESOLVED fees account the
+ * frontend pays the 90 % leg of BLURT fees to. Other Morphit instances accept
+ * that leg only when it matches this registration, so without it your users'
+ * BLURT-paid orders are hidden and their first-contact DMs dropped on every
+ * other instance. `morphit-ops upgrade` re-publishes it unattended when the
+ * chain disagrees (lib/feeRecipientHeal.ts).
  *
  * Reads keystore from disk; if encrypted, prompts for the
  * unlock passphrase same way the relay does at startup.
  *
- * Idempotent at the chain level: a second register op for the
- * same account is rejected by the on-chain handler with reason
- * 'account_already_registered'.  We surface that as a
- * recognizable error rather than a confusing chain rejection.
+ * Re-registrable: the on-chain handler is an UPSERT keyed on the
+ * signing account, so re-running `register` UPDATES the mutable
+ * fields (display_name, origin, contact_url, alt addresses). Only
+ * the TAG is immutable — a re-register that changes it is rejected
+ * as 'tag_immutable' and changes nothing (we pre-flight that below
+ * so the operator never broadcasts a doomed op). There is no
+ * 'account_already_registered' rejection any more.
  *
  * Dependencies are lazy-imported so the ops-cli's other
  * subcommands (init, status) don't fail to load when dblurt
@@ -45,6 +57,8 @@ import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import { loadInstanceEnv } from '../lib/instanceEnv.ts';
 import { operatorTagConflict, fetchRegisteredTag } from '../lib/operatorTagGuard.ts';
 import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
+import { CANONICAL_BLURT_TREASURY, configuredFeeRecipient } from '../lib/operatorFeeRecipient.ts';
+import { RELAY_ENV_FILES, readEffectiveEnv } from '../lib/relayHiddenHeal.ts';
 
 export interface RegisterCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -76,7 +90,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log(`✗ ${sanitizeForTerm(env.error)}`);
 		return 1;
 	}
-	const { account, keyFile, instanceName, origin, contactUrl, operatorTag, altAddresses } = env;
+	const { account, keyFile, instanceName, origin, contactUrl, operatorTag, altAddresses, feeRecipient } = env;
 
 	console.log(`  Account:      @${sanitizeForTerm(account)}`);
 	console.log(`  Origin:       ${sanitizeForTerm(origin)}`);
@@ -84,6 +98,12 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	if (contactUrl !== null) {
 		console.log(`  Contact URL:  ${sanitizeForTerm(contactUrl)}`);
 	}
+	console.log(`  Fees account: @${sanitizeForTerm(feeRecipient)}`);
+	console.log(
+		feeRecipient === CANONICAL_BLURT_TREASURY
+			? '    (the shared Morphit treasury — you have no fees account of your own)'
+			: '    (other Morphit instances accept your users\u2019 fees paid to this account)'
+	);
 	// SHOW the alt addresses this op will publish, before it is signed.
 	//
 	// They were carried into the payload but never displayed, so an operator
@@ -135,8 +155,9 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	console.log('   identity. It is what attributes orders to you for fee');
 	console.log('   earnings, and — once registered — what other nodes list you');
 	console.log('   under in the public /instances directory and on your');
-	console.log('   /about-this-instance page. It cannot be changed once');
-	console.log('   registered, only superseded by a future update op.)');
+	console.log('   /about-this-instance page. The TAG cannot be changed once');
+	console.log('   registered; the other fields — display name, origin, contact,');
+	console.log('   alt addresses — you update just by running register again.)');
 	console.log('');
 
 	// Pre-flight: reject a project-reserved tag NOW, before the
@@ -194,7 +215,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// ─── 2. Confirm ────
 	if (!nonInteractive) {
 		const ok = await askYesNo(
-			'Publish this registration on-chain now? This is permanent — register ops cannot be reversed (only superseded by a fresh register op)',
+			'Publish this registration on-chain now? Your TAG is permanent once claimed; the other fields you can change later by running register again',
 			false
 		);
 		if (!ok) {
@@ -223,7 +244,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		// Load the key for THIS attempt.
 		let wif: string;
 		try {
-			wif = await loadKeyWif(keyFile, nonInteractive);
+			wif = nonInteractive ? await loadRelayKeyUnattended(keyFile) : await loadKeyWif(keyFile);
 		} catch (err) {
 			console.log(`✗ Failed to load relay account key: ${sanitizeForTerm(errMsg(err))}`);
 			return 1;
@@ -269,66 +290,8 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 			// display-name slug fallback) computed by the caller — the
 			// SAME tag the relay attributes earnings to.  display_name is
 			// the friendlier free-form variant.
-			const payload: Record<string, unknown> = {
-				v: 1,
-				tag,
-				display_name: instanceName,
-				origin
-			};
-			if (contactUrl !== null) {
-				payload.contact_url = contactUrl;
-			}
-			// v1.15.3 — publish hidden-service addresses ON-CHAIN so the federation
-			// can reach a clearnet-censored node over Tor/I2P without a (blocked)
-			// clearnet probe. Only include fields that are actually set.
-			{
-				const alt: Record<string, string> = {};
-				if (altAddresses.tor) alt.tor = altAddresses.tor;
-				if (altAddresses.i2p_b32) alt.i2p_b32 = altAddresses.i2p_b32;
-				if (altAddresses.i2p_name) alt.i2p_name = altAddresses.i2p_name;
-				if (altAddresses.lokinet) alt.lokinet = altAddresses.lokinet;
-				if (altAddresses.ens) alt.ens = altAddresses.ens;
-				if (Object.keys(alt).length > 0) payload.alt_addresses = alt;
-			}
-			// v1.18.0 deep-deep, H1: a hidden-only node broadcasts through its own
-			// indexer over Tor/I2P (see broadcastCustomJson), where a round trip
-			// plus the wait for a block routinely takes longer than 15 s. The old
-			// 15 s limit would report a timeout for a registration that then lands.
-			const hiddenOnly = isHiddenOnlyNode();
-			const limitMs = hiddenOnly ? 200_000 : 15_000;
-			result = await withSpinner(
-				hiddenOnly
-					? 'Broadcasting your registration through this node\u2019s indexer over Tor/I2P (can take a minute)…'
-					: 'Broadcasting your registration to the chain…',
-				() =>
-				Promise.race([
-				broadcastCustomJson({
-					account,
-					wif,
-					opId: 'morphit_operator_register_v1',
-					payload
-				}),
-				// Offline / air-gapped: the broadcast's RPC calls have no upstream to
-				// answer and would otherwise BLOCK FOREVER (the operator had to Ctrl-C).
-				// Fail after 15s with a clear message instead — the caller then arms the
-				// deferred first-online register, or the operator retries when online.
-				new Promise<never>((_, reject) =>
-					setTimeout(
-						() =>
-							reject(
-								new Error(
-									(hiddenOnly
-										? `No answer from this node's own indexer over Tor/I2P after ${limitMs / 1000}s — the hidden route may still be warming up. `
-										: `Timed out reaching a Blurt RPC after ${limitMs / 1000}s — this box may not be online yet. `) +
-										'Your registration is unchanged; re-run `sudo morphit-ops register` once you are online ' +
-										'(a fresh install also lists itself automatically on first connection).'
-								)
-							),
-						limitMs
-					)
-				)
-				])
-			);
+			const payload = buildRegisterPayload(env, tag);
+			result = await broadcastRegistration(account, wif, payload);
 		} catch (err) {
 			broadcastErr = err;
 		} finally {
@@ -412,6 +375,86 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+/**
+ * The register payload for `env` under `tag`. Exported for the upgrade's
+ * fee-recipient heal, which publishes the SAME record `register` would (every
+ * field, so a peer still on an older indexer — whose handler overwrites the
+ * origin and addresses with whatever the op carries — keeps them).
+ */
+export function buildRegisterPayload(env: ValidEnv, tag: string): Record<string, unknown> {
+	const payload: Record<string, unknown> = {
+		v: 1,
+		tag,
+		display_name: env.instanceName,
+		origin: env.origin,
+		// v1.20.0 (G1) — the resolved fees account (see the module doc).
+		fee_recipient: env.feeRecipient
+	};
+	if (env.contactUrl !== null) {
+		payload.contact_url = env.contactUrl;
+	}
+	// v1.15.3 — publish hidden-service addresses ON-CHAIN so the federation
+	// can reach a clearnet-censored node over Tor/I2P without a (blocked)
+	// clearnet probe. Only include fields that are actually set.
+	const a = env.altAddresses;
+	const alt: Record<string, string> = {};
+	if (a.tor) alt.tor = a.tor;
+	if (a.i2p_b32) alt.i2p_b32 = a.i2p_b32;
+	if (a.i2p_name) alt.i2p_name = a.i2p_name;
+	if (a.lokinet) alt.lokinet = a.lokinet;
+	if (a.ens) alt.ens = a.ens;
+	if (Object.keys(alt).length > 0) payload.alt_addresses = alt;
+	return payload;
+}
+
+/**
+ * Sign once and broadcast a register op, with a spinner and a hard limit.
+ * v1.18.0 deep-deep, H1: a hidden-only node broadcasts through its own indexer
+ * over Tor/I2P (see broadcastCustomJson), where a round trip plus the wait for
+ * a block routinely takes longer than 15 s — so 200 s there, 15 s elsewhere.
+ * Offline / air-gapped, the RPC calls would otherwise BLOCK FOREVER (the
+ * operator had to Ctrl-C); fail with a clear message instead.
+ */
+export async function broadcastRegistration(
+	account: string,
+	wif: string,
+	payload: Record<string, unknown>,
+	/** Cap on the wait (the upgrade heal passes what its phase has left). */
+	maxLimitMs?: number
+): Promise<{ trx_id: string }> {
+	const hiddenOnly = isHiddenOnlyNode();
+	const limitMs = Math.min(hiddenOnly ? 200_000 : 15_000, maxLimitMs ?? Number.POSITIVE_INFINITY);
+	let timer: NodeJS.Timeout | undefined;
+	try {
+		return await withSpinner(
+			hiddenOnly
+				? 'Broadcasting your registration through this node\u2019s indexer over Tor/I2P (can take a minute)…'
+				: 'Broadcasting your registration to the chain…',
+			() =>
+				Promise.race([
+					broadcastCustomJson({ account, wif, opId: 'morphit_operator_register_v1', payload }),
+					new Promise<never>((_, reject) => {
+						timer = setTimeout(
+							() =>
+								reject(
+									new Error(
+										(hiddenOnly
+											? `No answer from this node's own indexer over Tor/I2P after ${Math.round(limitMs / 1000)}s — the hidden route may still be warming up. `
+											: `Timed out reaching a Blurt RPC after ${Math.round(limitMs / 1000)}s — this box may not be online yet. `) +
+											'Your registration is unchanged; re-run `sudo morphit-ops register` once you are online ' +
+											'(a fresh install also lists itself automatically on first connection).'
+									)
+								),
+							limitMs
+						);
+					})
+				])
+		);
+	} finally {
+		if (timer !== undefined) clearTimeout(timer);
+	}
+}
+
 function printHeader(): void {
 	const rule = '━'.repeat(58);
 	console.log('');
@@ -428,7 +471,7 @@ function printHeader(): void {
 	);
 }
 
-interface ValidEnv {
+export interface ValidEnv {
 	readonly account: string;
 	readonly keyFile: string;
 	readonly instanceName: string;
@@ -447,6 +490,14 @@ interface ValidEnv {
 		lokinet: string | null;
 		ens: string | null;
 	};
+	/** v1.20.0 (G1) — the fees account the indexer SERVICE resolves
+	 *  (MORPHIT_INDEXER_FEE_RECIPIENT, or the canonical treasury). */
+	readonly feeRecipient: string;
+}
+
+/** The register inputs from the environment (exported for the upgrade heal). */
+export function readRegisterEnv(): ValidEnv | { error: string } {
+	return readEnv();
 }
 
 function readEnv(): ValidEnv | { error: string } {
@@ -495,7 +546,8 @@ function readEnv(): ValidEnv | { error: string } {
 				(legacyI2p && legacyI2p.endsWith('.i2p') && !legacyI2p.endsWith('.b32.i2p') ? legacyI2p : null),
 			lokinet: (process.env.MORPHIT_INSTANCE_LOKINET_ADDRESS ?? '').trim() || null,
 			ens: (process.env.MORPHIT_INSTANCE_ENS_NAME ?? '').trim() || null
-		}
+		},
+		feeRecipient: configuredFeeRecipient().recipient
 	};
 }
 
@@ -528,7 +580,58 @@ function trySealedRelayPassphrase(): string | null {
 	}
 }
 
-async function loadKeyWif(keyFile: string, nonInteractive = false): Promise<string> {
+/**
+ * Unlock the relay's active key with NO human present, the way the relay
+ * service and morphit-first-online do: a plaintext WIF as is; an encrypted
+ * envelope with the relay's host-sealed credential
+ * (/etc/morphit/relay_passphrase.cred, root only), else with the passphrase
+ * FILE the relay is configured with (MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE,
+ * from this environment or the relay service's env files). Reading files (not
+ * an env var) keeps the secret out of /proc/<pid>/environ. Throws, saying why,
+ * when none of those can unlock it — the key then needs its owner.
+ */
+export async function loadRelayKeyUnattended(keyFile: string): Promise<string> {
+	const raw = readFileSync(keyFile, 'utf8').trim();
+	// Heuristic: encrypted envelopes are JSON; plaintext WIFs start with '5'
+	// (the relay's looksLikeEnvelope check).
+	if (!raw.startsWith('{')) return raw;
+	const envelope = JSON.parse(raw);
+	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
+	const sealed = trySealedRelayPassphrase();
+	if (sealed !== null) {
+		try {
+			return decryptEnvelope(envelope, sealed);
+		} catch {
+			// The sealed passphrase does not open THIS keystore; try the file.
+		}
+	}
+	let passFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE;
+	if (!passFile) {
+		try {
+			const root = process.env.MORPHIT_ENV_ROOT ?? '';
+			passFile = readEffectiveEnv(
+				RELAY_ENV_FILES.map((f) => `${root}${f}`),
+				['MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE']
+			).get('MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE');
+		} catch {
+			passFile = undefined;
+		}
+	}
+	if (!passFile) {
+		throw new Error(
+			'encrypted relay key, and neither the relay\u2019s sealed credential nor a passphrase file ' +
+				'(MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE) can unlock it unattended.  Register by hand ' +
+				'with `sudo morphit-ops register` on this server.'
+		);
+	}
+	const passphrase = readFileSync(passFile, 'utf8').replace(/\r?\n$/, '');
+	if (passphrase.length === 0) {
+		throw new Error(`passphrase file ${JSON.stringify(passFile)} is empty`);
+	}
+	return decryptEnvelope(envelope, passphrase);
+}
+
+async function loadKeyWif(keyFile: string): Promise<string> {
 	const raw = readFileSync(keyFile, 'utf8').trim();
 	// Heuristic: encrypted envelopes are JSON.  Plaintext WIFs start
 	// with '5'.  This matches the relay's looksLikeEnvelope check.
@@ -539,27 +642,6 @@ async function loadKeyWif(keyFile: string, nonInteractive = false): Promise<stri
 	const envelope = JSON.parse(raw);
 	// Lazy import — relay's keyEnvelope module decrypts.
 	const { decryptEnvelope } = await import('../../../relay/src/crypto/keyEnvelope.ts');
-
-	if (nonInteractive) {
-		// Unattended unlock — read the passphrase from the SAME credential file the
-		// relay service uses to unlock this key at startup (MORPHIT_RELAY_ACTIVE_KEY_-
-		// PASSPHRASE_FILE).  Reading a file (not an env var) keeps the secret out of
-		// /proc/<pid>/environ, exactly as the relay does.  If it isn't set, the key
-		// can't be unlocked with no human — say so clearly and stop.
-		const passFile = process.env.MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE;
-		if (!passFile) {
-			throw new Error(
-				'encrypted relay key, but MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE is not set — ' +
-					'cannot unlock unattended.  Register by hand with `morphit-ops register`, or point that ' +
-					'variable at the passphrase file the relay uses.'
-			);
-		}
-		const passphrase = readFileSync(passFile, 'utf8').replace(/\r?\n$/, '');
-		if (passphrase.length === 0) {
-			throw new Error(`passphrase file ${JSON.stringify(passFile)} is empty`);
-		}
-		return decryptEnvelope(envelope, passphrase);
-	}
 
 	// Interactive.  FIRST try the relay's own host-sealed credential: an operator
 	// running this ON the box should never have to re-type a passphrase the relay

@@ -1,24 +1,21 @@
 /**
  * Morphit indexer — Sybil fee multiplier.
  *
- * BLURT-native: fees are denominated directly in BLURT, not derived
- * from a USD anchor at verification time.  Both indexer and frontend
- * use the same `feeBaseBlurt × sybilMultiplier(nth)` formula; the
- * tolerance band absorbs floating-point rounding in the BLURT amount
- * formatting.
+ * BLURT-native ENFORCEMENT: the order handler checks the paid BLURT
+ * against `base × sybilMultiplier(nth) × (1 − max(feeTolerance,
+ * FEE_PRICE_TOLERANCE))` with NO price read, so the floor is deterministic
+ * across the federation (no TOCTOU). `base` is the chain-pinned
+ * `treasury.blurt.base` (cp372 Model A; auto-re-pinned by the maintainer as
+ * BLURT/USD drifts), falling back to MORPHIT_INDEXER_FEE_BASE_BLURT when no
+ * pin exists. What the UI QUOTES tracks the canonical USD target live
+ * (`LISTING_FEE_USD.blurt` in `@morphit/asset-registry`, ~12.5¢); the 15%
+ * FEE_PRICE_TOLERANCE absorbs the drift between that live quote and the pin
+ * between re-pins. Amounts are compared in exact integer milliBLURT
+ * (`meetsMinimumMilli`, v1.20.0 G8).
  *
- * NB (cp370): the canonical USD TARGET for the BLURT fee lives in
- * the canonical economics in `@morphit/asset-registry` (`LISTING_FEE_USD.blurt`,
- * ~12.5¢).  `feeBaseBlurt` is currently a fixed BLURT amount that
- * approximates that target at the reference price — verification is
- * still BLURT-native (no price feed, no TOCTOU window).  Making the
- * amount track the live price so it stays exactly on-target is the
- * deliberately-deferred live-tracking work: it would derive the base
- * from `listingFeeBlurtBase(blurtUsdPrice)` and widen the tolerance
- * to `FEE_PRICE_TOLERANCE` to absorb the quote→pay drift.  Until then
- * this comment, not the USD target, describes runtime behaviour.
- *
- * Tier schedule (per-account, rolling 24-hour window):
+ * Tier schedule (per account; n counts orders currently LIVE — stored live
+ * and not past expires_at — plus any created in the last 24h, see the order
+ * handler's countForSybilTier):
  *   tiers 1-3 (orders 1, 2, 3): 1.00×
  *   tier 4 (4th):   1.25×
  *   tier 5 (5th):   1.5625×
@@ -33,7 +30,7 @@
  * normal users (1-3 listings/day) on the baseline rate.
  */
 
-import { FEE_TREASURY_SHARE_BLURT } from '@morphit/asset-registry';
+import { FEE_PRICE_TOLERANCE, FEE_TREASURY_SHARE_BLURT } from '@morphit/asset-registry';
 
 const MULTIPLIERS: readonly number[] = [
 	1.0, 1.0, 1.0, 1.25, 1.5625, 1.953125, 2.44140625, 3.0517578125, 3.814697265625, 4.76837158203125
@@ -49,11 +46,10 @@ export function sybilMultiplier(nth: number): number {
 	return base * Math.pow(1.5, extras);
 }
 
-/** Expected BLURT amount for the nth order. Same formula both
- *  sides compute; the tolerance band in config.feeTolerance
- *  absorbs floating-point rounding (Graphene serializes BLURT
- *  amounts at 3 decimal places, so multiplications can drift
- *  by a fractional millibBLURT). */
+/** Expected BLURT amount for the nth order (before tolerance). Same
+ *  formula both sides compute. The caller applies the acceptance band
+ *  (order handler: max(feeTolerance, FEE_PRICE_TOLERANCE)) and compares the
+ *  paid amount in whole milliBLURT via `meetsMinimumMilli`. */
 export function expectedFeeBlurt(nth: number, baseBlurt: number): number {
 	if (baseBlurt <= 0) {
 		throw new Error(`invalid baseBlurt: ${baseBlurt}`);
@@ -102,6 +98,11 @@ export function canonicalShareOk(totalBlurt: number, toCanonicalBlurt: number): 
  *
  * A fee is one or two sibling transfers that share `expectedMemo`: the owner
  * leg (to `feeRecipient`) and the canonical leg (to `canonicalTreasury`).
+ * `feeRecipient` may be a SET of owner accounts (v1.20.0, G1): the listing and
+ * stranger-fee handlers pass this indexer's own recipient plus the fee account
+ * the op's tagged operator registered on chain (`ownerRecipientsFor` in
+ * $indexer/feeRecipients), so a fee paid through another instance verifies
+ * here too. The feature-bid handler still passes only its own recipient.
  * Returns the total paid across both legs plus how much reached the canonical
  * treasury, or null if no matching transfer exists in the transaction.
  *
@@ -118,10 +119,18 @@ export function canonicalShareOk(totalBlurt: number, toCanonicalBlurt: number): 
 export function sumFeeTransfers(
 	siblingOps: readonly (readonly [string, Record<string, unknown>])[],
 	signer: string,
-	feeRecipient: string,
+	feeRecipient: string | readonly string[],
 	canonicalTreasury: string,
 	expectedMemo: string
-): { totalBlurt: number; toCanonicalBlurt: number } | null {
+): {
+	totalBlurt: number;
+	toCanonicalBlurt: number;
+	/** (v1.20.0, G8) Exact integer milliBLURT totals — compare with these. */
+	totalMilli: number;
+	toCanonicalMilli: number;
+} | null {
+	const owners: readonly string[] =
+		typeof feeRecipient === 'string' ? [feeRecipient] : feeRecipient;
 	let toOwner = 0;
 	let toCanonical = 0;
 	let found = false;
@@ -138,13 +147,11 @@ export function sumFeeTransfers(
 		if (b.from !== signer) continue;
 		if (b.memo !== expectedMemo) continue;
 		const toCanonicalLeg = b.to === canonicalTreasury;
-		const toOwnerLeg = b.to === feeRecipient;
+		const toOwnerLeg = typeof b.to === 'string' && owners.includes(b.to);
 		if (!toCanonicalLeg && !toOwnerLeg) continue;
 		if (typeof b.amount !== 'string') continue;
-		const match = /^(\d+(?:\.\d+)?)\s+BLURT$/.exec(b.amount);
-		if (!match) continue;
-		const amount = Number(match[1]);
-		if (!Number.isFinite(amount) || amount <= 0) continue;
+		const amount = parseBlurtMilli(b.amount);
+		if (amount === null || amount <= 0) continue;
 		if (toCanonicalLeg) {
 			toCanonical += amount;
 		} else {
@@ -153,5 +160,59 @@ export function sumFeeTransfers(
 		found = true;
 	}
 	if (!found) return null;
-	return { totalBlurt: toOwner + toCanonical, toCanonicalBlurt: toCanonical };
+	const totalMilli = toOwner + toCanonical;
+	return {
+		totalBlurt: totalMilli / 1000,
+		toCanonicalBlurt: toCanonical / 1000,
+		totalMilli,
+		toCanonicalMilli: toCanonical
+	};
+}
+
+/**
+ * (v1.20.0 fix wave, G8) Parse a Graphene BLURT asset string ("56.250 BLURT")
+ * into an exact INTEGER count of milliBLURT, or null if malformed. The chain
+ * serialises BLURT with exactly 3 decimals; more than 3 is not a valid amount.
+ * Parsing the decimal string directly avoids binary-float error entirely.
+ */
+export function parseBlurtMilli(s: string): number | null {
+	const m = /^(\d+)(?:\.(\d{1,3}))?\s+BLURT$/.exec(s);
+	if (!m) return null;
+	const milli = Number(m[1]) * 1000 + Number(((m[2] ?? '') + '000').slice(0, 3));
+	return Number.isSafeInteger(milli) ? milli : null;
+}
+
+/**
+ * (v1.20.0 fix wave, G8) Did `paidMilli` (exact milliBLURT) meet a floor
+ * expressed in BLURT? The floor is a float product (base × tier × (1 − T));
+ * paying EXACTLY that amount rounded up to the milli must pass, so the floor
+ * is taken to whole milliBLURT with a tiny epsilon for the product's own float
+ * error. Previously `31.304 + 3.478` (= 34.781999…) was compared against
+ * `40.92 × 0.85` (= 34.782000…04) and a payment exactly at the floor was
+ * rejected as underpaid.
+ */
+export function meetsMinimumMilli(paidMilli: number, minBlurt: number): boolean {
+	if (!Number.isFinite(minBlurt)) return false;
+	return paidMilli >= Math.ceil(minBlurt * 1000 - 1e-6);
+}
+
+/**
+ * The BLURT listing-fee verdict, shared by the order handler and the G1
+ * re-verification (v1.20.0) so both reach the same answer from the same
+ * inputs. `fee` is the `sumFeeTransfers` result (non-null), `nth` the order's
+ * Sybil tier position, `baseBlurt` the pinned base in effect. The floor is
+ * base × tier × (1 − max(feeTolerance, FEE_PRICE_TOLERANCE)) compared in exact
+ * milliBLURT (G8); then the canonical treasury's ~10 % leg must be there.
+ */
+export function listingFeeStatus(
+	fee: { totalBlurt: number; toCanonicalBlurt: number; totalMilli: number },
+	nth: number,
+	baseBlurt: number,
+	feeTolerance: number
+): 'verified' | 'underpaid' {
+	const expected = expectedFeeBlurt(nth, baseBlurt);
+	const tolerance = Math.max(feeTolerance, FEE_PRICE_TOLERANCE);
+	if (!meetsMinimumMilli(fee.totalMilli, expected * (1 - tolerance))) return 'underpaid';
+	if (!canonicalShareOk(fee.totalBlurt, fee.toCanonicalBlurt)) return 'underpaid';
+	return 'verified';
 }

@@ -17,6 +17,8 @@ import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, hiddenRouterPol
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { unlockActiveKey } from './config/unlock.ts';
 import { BlurtClient } from './blurt/client.ts';
+import { startRpcDirectorySync } from './blurt/rpcDirectorySync.ts';
+import { prepareSignupStateDir } from './policy/signupState.ts';
 import { checkClockDrift } from './clock/driftCheck.ts';
 import { createDatabase } from './db/pool.ts';
 import { RelayQueueDrainer } from './queue/drainer.ts';
@@ -29,7 +31,7 @@ import { InviteTokenService } from './policy/inviteToken.ts';
 import { AltchaService } from './policy/altcha.ts';
 import { KillSwitch } from './policy/killSwitch.ts';
 import { SequentialDetector } from './policy/sequentialDetector.ts';
-import { configureTrustedProxies } from './middleware/ip.ts';
+import { configureTrustedProxies, DEFAULT_TRUSTED_PROXY_CIDRS } from './middleware/ip.ts';
 import { Limiter } from './middleware/ratelimit.ts';
 import { PushSubscriptionStore } from './policy/pushSubscriptions.ts';
 import { PushSender } from './policy/pushSender.ts';
@@ -151,18 +153,19 @@ async function main(): Promise<void> {
 
 	// Configure trusted-proxy IPs / CIDRs that may set
 	// X-Forwarded-For for this relay.  MUST happen before any
-	// request handler runs.  Default (loopback only) is correct
-	// for the canonical single-host nginx topology; Docker /
-	// BunkerWeb / multi-host nginx operators set
-	// MORPHIT_RELAY_TRUSTED_PROXY_IPS.  See OPERATIONS.md §32
-	// for guidance.
-	if (cfg.trustedProxyIps && cfg.trustedProxyIps.trim().length > 0) {
-		const specs = cfg.trustedProxyIps
+	// request handler runs.  Unset/empty → the code default,
+	// loopback + 172.16.0.0/12 (Docker's default bridge pool, same as
+	// the indexer); set → it REPLACES the CIDR default (loopback stays).
+	// See OPERATIONS.md §32 for guidance.
+	{
+		const specs = (cfg.trustedProxyIps ?? '')
 			.split(',')
 			.map((s) => s.trim())
 			.filter((s) => s.length > 0);
 		const result = configureTrustedProxies(specs);
 		cfgLog.info('trusted_proxies_configured', {
+			source: specs.length > 0 ? 'MORPHIT_RELAY_TRUSTED_PROXY_IPS' : 'default',
+			cidrs: specs.length > 0 ? specs : DEFAULT_TRUSTED_PROXY_CIDRS,
 			exact_count: result.exactCount,
 			cidr_count: result.cidrCount,
 			rejected: result.rejected
@@ -221,32 +224,48 @@ async function main(): Promise<void> {
 
 	const db = createDatabase(cfg);
 
-	// ─── Merge the on-chain RPC directory into the relay's pool ──────────
-	// The indexer has always re-hydrated this on boot; the relay never did, so it
-	// ran on the handful of nodes baked into its config while the indexer used
-	// every published one. The relay is the component that BROADCASTS, so during
-	// a clearnet outage it is the one that most needs the hidden-service nodes.
-	//
-	// Best-effort by design: the table lives in the indexer's schema, which is the
-	// SAME database in the default single-box deployment. On a split deployment
-	// the query simply fails and the relay keeps its configured endpoints — no
-	// worse than before, never a boot failure.
-	try {
-		const dir = await db.query<{ endpoints: string[] }>(
-			`SELECT endpoints FROM rpc_directory WHERE id = 1`
-		);
-		const dirEndpoints = dir.rows[0]?.endpoints ?? [];
-		if (dirEndpoints.length > 0) {
-			const added = blurt.mergeRpcEndpoints(dirEndpoints);
-			if (added.length > 0) {
-				bootLog.info('rpc_directory_merged', {
-					added: added.length,
-					total: blurt.endpointSnapshot().length
-				});
+	// ─── Keep the relay's pool in step with the on-chain RPC directory ───
+	// The indexer has always re-hydrated this on boot and merged new directory
+	// nodes live; the relay read it once at boot (v1.20.0, D12), so a node
+	// @morphit published later reached the relay only at its next restart. The
+	// relay is the component that BROADCASTS, so during a clearnet outage it is
+	// the one that most needs the hidden-service nodes. Re-read every ten
+	// minutes; best-effort (a split deployment has no table — the configured
+	// endpoints stay, never a boot failure).
+	const rpcDirSync = startRpcDirectorySync(db, blurt, (added) => {
+		bootLog.info('rpc_directory_merged', {
+			added: added.length,
+			total: blurt.endpointSnapshot().length
+		});
+	});
+	await rpcDirSync.first;
+
+	// ─── Signup-state directory: persisted ceiling + kill-switch file (D3) ──
+	// Both protections need a writable directory. Create it and PROVE it is
+	// writable, then say plainly which protections are active.
+	let ceilingPersistPath = cfg.signupCeilingPersistPath;
+	if (cfg.dataDir !== null) {
+		const st = prepareSignupStateDir(cfg.dataDir);
+		if (st.writable) {
+			bootLog.info('signup_state_dir_ready', {
+				data_dir: st.dir,
+				ceiling_persisted_at: ceilingPersistPath ?? '(in memory only)',
+				kill_switch_file: `${st.dir}/SIGNUPS_DISABLED`
+			});
+		} else {
+			bootLog.warn('signup_state_dir_not_writable', {
+				data_dir: st.dir,
+				error: st.error,
+				effect:
+					'The daily signup ceiling is kept in memory only (a relay restart resets it) until this directory is writable by the relay. The kill-switch file is still read if it exists.',
+				fix: `On this server: sudo mkdir -p ${st.dir} && sudo chmod 700 ${st.dir}, then sudo systemctl restart morphit-relay`
+			});
+			// Only drop persistence when the file would live in the dir we just
+			// failed to write; an explicit path elsewhere is still tried.
+			if (ceilingPersistPath !== null && ceilingPersistPath.startsWith(`${st.dir.replace(/\/+$/, '')}/`)) {
+				ceilingPersistPath = null;
 			}
 		}
-	} catch {
-		/* split deployment or pre-migration DB — keep the configured endpoints */
 	}
 	const availLimiter = new Limiter(cfg.availabilityRatePerMin, 60_000);
 	const createLimiter = new Limiter(cfg.createRatePerHour, 60 * 60_000);
@@ -262,7 +281,7 @@ async function main(): Promise<void> {
 	const globalCeiling = new GlobalDailyCeiling(
 		cfg.signupDailyCeiling,
 		undefined,
-		cfg.signupCeilingPersistPath
+		ceilingPersistPath
 	);
 	const inviteTokens = new InviteTokenService({
 		secret: cfg.inviteHmacSecret ? Buffer.from(cfg.inviteHmacSecret, 'utf8') : null
@@ -324,6 +343,7 @@ async function main(): Promise<void> {
 		sequentialDetector
 	);
 	const queueDrainer = new RelayQueueDrainer(cfg, db, blurt);
+	healthService.setQueueStatsProvider(() => queueDrainer.queueStats());
 
 	// ── Web Push (Part 122 cp13) ───────────────────────────────
 	// Subscriptions store is always created (used by the endpoints
@@ -504,6 +524,7 @@ async function main(): Promise<void> {
 		inviteTokens.close();
 		altcha.close();
 		healthService.close();
+		rpcDirSync.stop();
 		// Stop the queue drainer (awaits in-flight broadcasts).
 		// We don't await here because the callback pattern of
 		// server.close expects a sync handler; instead we let the

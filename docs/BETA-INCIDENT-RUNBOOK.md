@@ -7,6 +7,9 @@ work top-to-bottom.
 The mental model: every layer is a gate.  Find which gate is
 saying "no," fix it, signups resume.
 
+Run every command below **on the server that runs your relay**
+(as root or with `sudo`).
+
 ---
 
 ## 0. First, is the relay even running?
@@ -62,12 +65,13 @@ Look for the tester's request.  Each line shows:
 | `invalid_pubkey` | Frontend sent a malformed BLT key | Real bug; collect their browser console + relay logs and send to me |
 | `malformed_operation` | Body shape doesn't match the schema | Real bug, same as above |
 | `name_not_allowed` | Account name failed validation (reserved, bad chars, etc.) | Tester picks a different name |
-| `already_registered` | Name is taken | Tester picks a different name |
+| `already_registered` | Name is taken (HTTP 409 — also when a retry after `broadcast_outcome_unknown` finds the name created with a DIFFERENT owner key) | Tester picks a different name |
 | `invite_expired` / `invite_already_used` / `invite_ip_mismatch` | Invite token problem | Tester refreshes the page (gets a fresh invite) |
 | `altcha_required` | PoW puzzle delivered; tester's frontend should solve it | If the frontend doesn't solve it, that's a frontend bug — escalate |
 | `altcha_bad_solution` | Tester's frontend solved the puzzle wrong | Frontend bug, escalate |
 | `origin_required` / `origin_not_allowed` | Tester's frontend Origin header isn't in the allowlist | Add their frontend's origin to `MORPHIT_RELAY_ALLOWED_ORIGINS` and restart |
-| `fee_higher_than_configured` | Chain fee jumped above your configured budget | Update `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT` and restart |
+| `relay_fee_spike` | The chain's live `account_creation_fee` is more than 1.5× your configured `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`; the relay refuses and spends nothing (journal: `relay_fee_spike_refused`) | Confirm the witnesses really changed the fee (`condenser_api.get_chain_properties` or a Blurt explorer), then set the new value in `/etc/morphit/relay.env` and `sudo systemctl restart morphit-relay` |
+| `broadcast_outcome_unknown` | No RPC node confirmed the `account_create` and the chain can't yet say whether it landed. The relay counts it as spent and never re-signs it | Tester waits a minute and retries with the SAME name. The relay checks the chain first: if the account exists with the tester's owner key it answers success (`note: "already_created"`) before any invite, spacing or ceiling check; the tester's per-IP slot is held 30 min so the retry is not refused for spacing. The register page keeps that name submittable even though availability shows it "taken" |
 | `broadcast_failed` | Chain rejected the tx for an unmapped reason | Real bug or chain weirdness; check journalctl for the upstream error |
 | `chunked_unsupported` | Tester's frontend used chunked encoding | Frontend bug, escalate |
 | `request_too_large` | Body > 64KB | Almost certainly a malformed/malicious request; ignore |
@@ -80,8 +84,12 @@ Look for the tester's request.  Each line shows:
 # Is the kill-switch file present?
 ls -la /var/lib/morphit/relay/SIGNUPS_DISABLED 2>/dev/null
 
-# Is the env-var disable on?
+# Is the env-var disable on?  (The unit reads this file; a systemd
+# Environment= override does NOT win over it.)
 grep MORPHIT_RELAY_SIGNUP_ENABLED /etc/morphit/relay.env
+
+# Is the kill-switch file watched at all? (Since v1.20.0: always.)
+sudo journalctl -u morphit-relay -b | grep -E 'kill_switch_armed|signup_state_dir'
 
 # What does today's ceiling status look like?
 # Note: the relay's /v1/health is on port 8080 (the indexer
@@ -96,19 +104,20 @@ Three ways signups get paused:
    incident, removing it resumes signups within ~1 second.
    `sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED`
 
-2. **Env-var is `false`** → edit relay.env, set
+2. **Env-var is `false`** → edit `/etc/morphit/relay.env`, set
    `MORPHIT_RELAY_SIGNUP_ENABLED=true`, restart:
    `sudo systemctl restart morphit-relay`.  Note: env-var
    change requires restart; the kill-switch file does NOT.
 
 3. **Daily ceiling reached** → from `signup_stats`, if
    `successful_today >= daily_ceiling`, the cap is hit until
-   UTC midnight.  Real `signup_stats` shape:
+   UTC midnight (the count survives relay restarts: it is kept in
+   `/var/lib/morphit/relay/signup-ceiling.json`).  Real `signup_stats` shape:
    `{enabled, daily_ceiling, successful_today,
    current_hour_count, peak_hour_count, peak_other_hours,
    resets_at}`.  This is normal during high beta volume.
    Either wait, or raise `MORPHIT_RELAY_SIGNUP_DAILY_CEILING`
-   and restart (think about whether the higher number is
+   in `/etc/morphit/relay.env` and restart (think about whether the higher number is
    covered by your wallet — see §6).
 
 ---
@@ -158,15 +167,21 @@ Fixes:
 ## 6. Relay out of funds
 
 ```sh
-# What's the current balance?
-# (relay's /v1/health is on port 8080)
-curl -s http://localhost:8080/v1/health?verbose=1 | jq .blurt_balance
+# What's the current balance, and the live chain fee the relay
+# checks it against? (relay's /v1/health is on port 8080)
+curl -s http://localhost:8080/v1/health?verbose=1 | jq '{blurt_balance, account_creation_fee_blurt, stale}'
 
 # How many more signups can we afford?
 # Compute as daily_ceiling - successful_today:
 curl -s http://localhost:8080/v1/health?verbose=1 \
   | jq '.signup_stats | (.daily_ceiling - .successful_today)'
 ```
+
+Each signup costs the live `account_creation_fee` (~100 BLURT)
+plus a 2 BLURT dust transfer, so ~102 BLURT; the relay refuses a
+signup unless it holds the fee plus a 3 BLURT margin.  `stale: true`
+means the last balance poll is over 90 s old — signups are refused
+until a poll succeeds again.
 
 If the headroom is low or zero, the relay account
 needs more BLURT.  Transfer in BLURT from your operator
@@ -184,26 +199,38 @@ refilling.
 
 ## 7. Chain RPC unavailable
 
-The relay talks to Blurt via HTTP RPC.  If the configured
-endpoint is down or slow:
+The relay reads and broadcasts through the whole default Blurt
+RPC pool — 6 clearnet nodes plus 14 hidden ones (7 nodes, each as
+`.onion` and `.b32.i2p`) — and picks the healthiest.  A shell on the
+host cannot probe the hidden ones directly, so ask the services
+themselves:
 
 ```sh
-# The env var is a comma-separated list of HTTPS endpoints
-grep MORPHIT_RELAY_BLURT_RPC /etc/morphit/relay.env
+# The relay's view of its pool (port 8080): healthy / total,
+# then each endpoint's circuit state.
+curl -s http://localhost:8080/v1/health?verbose=1 \
+  | jq '{rpc_endpoints_healthy, rpc_endpoints_total, hidden_only}, [.rpc_endpoints[]? | {url, state, consecutive_failures}]'
 
-# Pick the first one, test it directly
-endpoint=$(grep MORPHIT_RELAY_BLURT_RPC /etc/morphit/relay.env | cut -d= -f2- | tr -d "'\"" | cut -d, -f1)
-curl -m 5 -X POST -H 'Content-Type: application/json' \
-    -d '{"jsonrpc":"2.0","method":"condenser_api.get_dynamic_global_properties","params":[],"id":1}' \
-    "$endpoint"
+# The indexer's view (port 8081) — the same pool, read independently.
+curl -s http://localhost:8081/v1/health | jq '{rpc_endpoints_healthy, rpc_endpoints_total}'
 ```
 
-If the curl fails or times out, that specific RPC node is
-down.  The relay rotates through all endpoints in the
-comma-separated list, so as long as one of them works the
-relay keeps going.  Add a fallback endpoint to the list and
-restart — or rotate out a dead one — pick from the Blurt
-witness directory or community channels.
+- **Some endpoints unhealthy, at least one healthy** → nothing to
+  do; the pool routes around them and retries them later.
+- **Zero healthy on a clearnet node** → check the box's outbound
+  internet (`curl -sI https://rpc.beblurt.com`), then Tor
+  (`systemctl status tor`) and i2pd (`systemctl status i2pd`).
+- **Zero healthy on a Tor-only node** → check Tor and i2pd only.
+  **Never add a clearnet endpoint to a Tor-only node's relay**: an
+  empty `MORPHIT_RELAY_BLURT_RPC=` is what keeps it hidden-only, and
+  a clearnet entry would make the relay contact public servers from
+  your own address.
+
+Custom lists live in `/etc/morphit/relay.env`
+(`MORPHIT_RELAY_BLURT_RPC` for clearnet, `MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS`
+for hidden, comma-separated); when a variable is absent the relay
+uses the built-in default set.  Change them only if you know an
+endpoint is permanently gone, then `sudo systemctl restart morphit-relay`.
 
 ---
 
@@ -246,7 +273,8 @@ sudo journalctl -u morphit-relay --since "5m ago" | grep '\[access\]'
 # Recent errors only
 sudo journalctl -u morphit-relay --since "5m ago" -p err
 
-# Who's hammering me right now?
+# What is being refused right now? (counts by response code — the
+# access log deliberately records no IP addresses)
 sudo journalctl -u morphit-relay --since "5m ago" \
-    | grep '\[access\]' | awk '{print $NF}' | sort | uniq -c | sort -rn | head
+    | grep '\[access\]' | grep -o 'code=[a-z_]*' | sort | uniq -c | sort -rn | head
 ```

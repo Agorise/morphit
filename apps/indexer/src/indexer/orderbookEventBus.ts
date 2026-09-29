@@ -174,6 +174,12 @@ class OrderbookEventBus {
 	get subscriberCount(): number {
 		return this.listeners.size;
 	}
+
+	/** Number of provisional (head-block) subscribers. Must return to zero as
+	 *  streams close — a stream that leaked this listener was v1.20.0's E3. */
+	get provisionalSubscriberCount(): number {
+		return this.provisionalListeners.size;
+	}
 }
 
 /** Process-wide singleton bus.  Imported by both the

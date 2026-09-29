@@ -213,7 +213,7 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 			colorEnabled: ctx.colorEnabled
 		});
 	} else {
-		console.log('  Skipped. Run `npx morphit-ops harden` any time.');
+		console.log('  Skipped. Run `sudo morphit-ops harden` any time.');
 	}
 
 	// ─── 5. Warrant canary (transparency signal) ───────────────
@@ -252,9 +252,9 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('');
 	console.log('  Next:');
 	console.log('   • Start/enable your services (see docs/RUN-A-MORPHIT-NODE.md).');
-	console.log('   • Register on-chain:  npx morphit-ops register');
-	console.log('   • Check status:       npx morphit-ops status');
-	console.log('   • Update later:       npx morphit-ops upgrade');
+	console.log('   • Register on-chain:  sudo morphit-ops register');
+	console.log('   • Check status:       sudo morphit-ops status');
+	console.log('   • Update later:       sudo morphit-ops upgrade');
 	console.log('');
 	return 0;
 }

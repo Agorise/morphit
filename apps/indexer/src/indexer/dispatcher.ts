@@ -30,11 +30,18 @@ import type pg from 'pg';
 
 import type { BlockHeader, BlockTransaction, BlurtClient, ChainOperation } from '$blurt/client';
 import type { Config } from '$config';
-import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
+import {
+	ACTIVE_AUTH_OP_IDS,
+	extractSigner,
+	parseJsonPayload,
+	type CustomJsonOp
+} from '$blurt/verify';
 import type { Handler, OpContext } from '$indexer/handler-contract';
 import { parseBlurtAmount, parseMemoPermlink } from '$indexer/fee-transfer';
 import { forgetFreshKey } from '$indexer/chatFastFederation';
 import { signingPostingKey } from '$indexer/postingKeyBackfill';
+import { confirmFeeRelevantTransactions } from '$indexer/fee/btcFeeBlockConfirm';
+import { pgSafeBlock, pgSafeDeep } from '$db/pgText';
 
 import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
@@ -125,6 +132,14 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
 };
 
 const KNOWN_OP_IDS: ReadonlySet<string> = new Set(Object.values(OP_IDS));
+
+// The active-authority list lives in $blurt/verify (the snapshot op-log verifier
+// shares it); it must name exactly the three fee-bearing ops above.
+for (const id of [OP_IDS.order, OP_IDS.featureBid, OP_IDS.strangerFee]) {
+	if (!ACTIVE_AUTH_OP_IDS.has(id)) throw new Error(`ACTIVE_AUTH_OP_IDS is missing ${id}`);
+}
+if (ACTIVE_AUTH_OP_IDS.size !== 3)
+	throw new Error('ACTIVE_AUTH_OP_IDS names an op that is not fee-bearing');
 
 // ─── Event-log write ────────────────────────────────────────────────
 
@@ -361,18 +376,28 @@ function collectAccountCreates(
 	return out;
 }
 
-/** Bulk-insert account rows. ON CONFLICT only fills a NULL
- *  posting_pubkey (COALESCE keeps any value we already have),
- *  otherwise does nothing — so (a) the poller may retry a block,
- *  and (b) re-observing an account can backfill a posting key we
- *  hadn't captured, without disturbing the first-observed create
- *  metadata.
+/** Bulk-insert account rows. ON CONFLICT only fills a NULL posting_pubkey on
+ *  a row nobody has confirmed (COALESCE keeps any value we already have),
+ *  otherwise does nothing — so (a) the poller may retry a block, and (b)
+ *  re-observing an account can backfill a posting key we hadn't captured,
+ *  without disturbing the first-observed create metadata.
  *
- *  v1.18.0 (F37) — a key taken from the create op is the chain's key as of
- *  this block, so the row is written reconciled, and the fast path trusts it
- *  without a chain read. On conflict the flag moves only when THIS write is
- *  the one that supplies the key; a key some earlier write left there is not
- *  vouched for by this op. */
+ *  Recorded UNCONFIRMED (v1.20.0, E1 residual). v1.18.0 (F37) wrote a
+ *  create-derived key confirmed, as "the chain's key as of this block" — but a
+ *  block is ONE RPC endpoint's word, exactly as for an account_update (see
+ *  writePostingKeyUpdates), so a hostile node serving a forged create could
+ *  plant a key the fast path then trusted with no chain read. Unconfirmed, the
+ *  fast path asks the chain through its quorum refresher and the steady
+ *  reconcile (keepReconcilingPostingKeys, every minute) confirms the row
+ *  against two agreeing operators. The cost is one quorum `get_accounts` per
+ *  100 new accounts, and account creation on Blurt costs its creator the
+ *  chain's account-creation fee, so it is a trickle; a restored snapshot
+ *  already hands this node's reconcile the whole table (distrustRestoredPostingKeys).
+ *
+ *  On conflict the flag never moves, and a CONFIRMED row's key is never
+ *  touched: a confirmed NULL is an owner who disowned the key (authority moved
+ *  to another account), and a replayed create — a poller rewind is the
+ *  documented way to re-process a block — must not re-arm that key. */
 async function writeAccountCreates(
 	client: pg.PoolClient,
 	rows: readonly AccountCreateRow[]
@@ -383,11 +408,12 @@ async function writeAccountCreates(
 			`INSERT INTO accounts (
 				name, creator, created_block_num, created_block_time,
 				created_trx_id, posting_pubkey, posting_key_reconciled
-			) VALUES ($1, $2, $3, $4, $5, $6, $6::text IS NOT NULL)
+			) VALUES ($1, $2, $3, $4, $5, $6, FALSE)
 			ON CONFLICT (name) DO UPDATE SET
-				posting_pubkey = COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey),
-				posting_key_reconciled = accounts.posting_key_reconciled
-					OR (accounts.posting_pubkey IS NULL AND EXCLUDED.posting_pubkey IS NOT NULL)`,
+				posting_pubkey = CASE WHEN accounts.posting_key_reconciled
+					THEN accounts.posting_pubkey
+					ELSE COALESCE(accounts.posting_pubkey, EXCLUDED.posting_pubkey) END,
+				posting_key_reconciled = accounts.posting_key_reconciled`,
 			[r.newAccountName, r.creator, r.blockNum, r.blockTime, r.trxId, r.postingPubkey]
 		);
 	}
@@ -472,13 +498,37 @@ async function writePostingKeyUpdates(
 	rows: readonly PostingKeyUpdateRow[]
 ): Promise<void> {
 	for (const r of rows) {
-		// Reconciled: an account_update IS the chain's key as of this block (F37).
+		// Recorded UNCONFIRMED (v1.20.0, E1). This used to write
+		// `posting_key_reconciled = TRUE` on the theory that an account_update
+		// IS the chain's key as of this block (F37). It is the key ONE RPC
+		// endpoint said the block holds: blocks are read from a single
+		// endpoint and nothing re-checks the signatures inside them, so a
+		// hostile node could plant any key here as confirmed, and the fast path
+		// trusted a confirmed row with no chain read — its owner's pushed chat
+		// then verified for the attacker. Unconfirmed, the fast path asks the
+		// chain through its quorum refresher, and the reconcile (which now runs
+		// for the life of the process, not just at boot) confirms it against
+		// two agreeing operators.
 		await client.query(
-			'UPDATE accounts SET posting_pubkey = $2, posting_key_reconciled = TRUE WHERE name = $1',
+			'UPDATE accounts SET posting_pubkey = $2, posting_key_reconciled = FALSE WHERE name = $1',
 			[r.account, r.postingPubkey]
 		);
 		forgetFreshKey(r.account);
 	}
+}
+
+/** Advance an operator's last on-chain activity (v1.20.0, E6). Forward only;
+ *  a no-op for every account that is not a registered operator. */
+async function markOperatorActivity(
+	client: pg.PoolClient,
+	account: string,
+	blockNum: number
+): Promise<void> {
+	await client.query(
+		`UPDATE operators SET last_action_block_num = $2
+		  WHERE account = $1 AND (last_action_block_num IS NULL OR last_action_block_num < $2)`,
+		[account, blockNum]
+	);
 }
 
 /** Update first_activity_at for an account if it's not already set.
@@ -537,6 +587,18 @@ function collectMorphitOps(block: BlockHeader, trxIds: readonly string[]): Morph
 			});
 		}
 	}
+	return out;
+}
+
+/** Positions (`trx:op`) of custom_json ops whose body — JSON text, auths, id —
+ *  holds a NUL or an unpaired surrogate as it came from the chain (V3-11). */
+function customJsonWithInvalidText(block: BlockHeader): Set<string> {
+	const out = new Set<string>();
+	block.transactions.forEach((trx, ti) => {
+		trx?.operations.forEach((op, oi) => {
+			if (op?.[0] === 'custom_json' && pgSafeDeep(op[1]) !== op[1]) out.add(`${ti}:${oi}`);
+		});
+	});
 	return out;
 }
 
@@ -614,6 +676,24 @@ export async function applyBlock(
 }> {
 	const blockTime = new Date(block.timestamp + (block.timestamp.endsWith('Z') ? '' : 'Z'));
 
+	// v1.20.0 (MK-H2 / V3-6) — a block holding an op that moves the per-order
+	// BTC fee-address numbering (or a release op, which can move the pin) is
+	// applied only when two independent RPC operators serve the same
+	// transactions at those positions; otherwise this throws BEFORE any write,
+	// the poller rolls the block back and fetches it again. No-op (no RPC call)
+	// for every other block. See fee/btcFeeBlockConfirm.ts for the limits.
+	await confirmFeeRelevantTransactions(client, blurt, blockNum, block);
+
+	// v1.20.0 (V3-11) — from here on, the block as Postgres can store it: every
+	// NUL and unpaired UTF-16 surrogate in its transactions becomes U+FFFD. One
+	// op carrying either used to fail its INSERT, roll the whole block back and
+	// halt every indexer at that block for good. Deterministic, so every node
+	// stores the same thing; the same object (no copy) for a normal block. The
+	// confirmation above compares the RAW block with other operators, so it
+	// runs first. See db/pgText.ts.
+	const rawInvalidOps = customJsonWithInvalidText(block);
+	block = pgSafeBlock(block);
+
 	// Pre-pass: record every observed BLURT transfer to the fee-
 	// collection account. Populates `fee_transfers` for audit and
 	// for the Sybil-counting query (even though the order handler
@@ -679,9 +759,7 @@ export async function applyBlock(
 		// an active-authority fee `transfer` in the SAME tx, and Blurt forbids
 		// mixing posting + active in one tx — so those ops are active-level.
 		// Allow active auth for exactly those; every other op stays posting-only.
-		const feeBearing =
-			op.id === OP_IDS.order || op.id === OP_IDS.featureBid || op.id === OP_IDS.strangerFee;
-		const signerResult = extractSigner(op, feeBearing);
+		const signerResult = extractSigner(op, ACTIVE_AUTH_OP_IDS.has(op.id));
 		if (!signerResult.ok) {
 			await writeEventLog(client, {
 				blockNum,
@@ -700,9 +778,31 @@ export async function applyBlock(
 		}
 		const signer = signerResult.signer;
 
+		// v1.20.0 (V3-11) — the op's own text (its JSON, its auths) held a NUL or
+		// an unpaired surrogate on chain. What reached this loop is the U+FFFD
+		// copy, which is not what the signer wrote: rejected, never parsed into
+		// state. (A raw NUL in JSON text is not even JSON; a raw lone surrogate
+		// would parse.)
+		if (rawInvalidOps.has(`${trxInBlock}:${opInTrx}`)) {
+			await writeEventLog(client, {
+				blockNum,
+				trxInBlock,
+				opInTrx,
+				blockTime,
+				trxId,
+				signer,
+				opId: op.id,
+				payload: { _raw: op.json },
+				status: 'rejected',
+				rejectReason: 'invalid_text'
+			});
+			rejected++;
+			continue;
+		}
+
 		// Step 2: parse the payload.
-		const payload = parseJsonPayload(op);
-		if (payload === null) {
+		const parsed = parseJsonPayload(op);
+		if (parsed === null) {
 			await writeEventLog(client, {
 				blockNum,
 				trxInBlock,
@@ -714,6 +814,28 @@ export async function applyBlock(
 				payload: { _raw: op.json },
 				status: 'rejected',
 				rejectReason: 'malformed_json'
+			});
+			rejected++;
+			continue;
+		}
+		// v1.20.0 (V3-11) — a payload whose JSON escapes decode to a NUL or an
+		// unpaired surrogate (`"\u0000"`, `"\ud800"`) is REJECTED, not repaired:
+		// no Morphit client writes one, and nothing is materialised from text
+		// other than what its signer signed. Recorded like every rejection, with
+		// the payload as Postgres can store it (U+FFFD in place of each).
+		const payload = pgSafeDeep(parsed);
+		if (payload !== parsed) {
+			await writeEventLog(client, {
+				blockNum,
+				trxInBlock,
+				opInTrx,
+				blockTime,
+				trxId,
+				signer,
+				opId: op.id,
+				payload,
+				status: 'rejected',
+				rejectReason: 'invalid_text'
 			});
 			rejected++;
 			continue;
@@ -864,6 +986,13 @@ export async function applyBlock(
 			// are no-ops. Signal A reads this field to find pairs
 			// of close-timed first activities under a shared creator.
 			await markFirstActivity(client, signer, blockTime);
+			// E6 (v1.20.0): an operator that signs ANY Morphit op is alive on
+			// chain. The federation probe reads this to tell a censored-but-alive
+			// instance (clearnet_blocked, never pruned) from a dead one. Only the
+			// register op moved it before, so an active operator whose instance
+			// was unreachable from here became "dead" one day after its last
+			// registration and was deleted from the directory.
+			await markOperatorActivity(client, signer, blockNum);
 		} else {
 			// Op-level rollback discards both the DB writes and any
 			// orderbook / chat change notifications the handler

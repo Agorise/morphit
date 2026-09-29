@@ -332,6 +332,75 @@ async function main(): Promise<void> {
 		expectEq(r.reason.kind, 'bad_origin');
 	});
 
+	// v1.20.0: a desktop on an instance's .onion / .i2p page. Its origin is
+	// plain http:// (onion services carry their own encryption), and the phone
+	// used to reject every such QR as bad_origin — QR sign-in did not work on a
+	// hidden page at all.
+	for (const hiddenOrigin of [
+		'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion',
+		'http://morphitexampleexampleexampleexampleexampleexampleaaaa.b32.i2p'
+	]) {
+		await scenario(
+			`hidden-page desktop (${hiddenOrigin.slice(-9)}): QR → phone → verify OK`,
+			async () => {
+				const { signer, verifier, account } = await makeSignerPair();
+				const desktopKeys = await generateDesktopEphemeralKeys();
+				const now = 1714867200;
+				const { payload, compactWire } = await buildQrPayload({
+					epk_pub: desktopKeys.epk_pub,
+					origin: hiddenOrigin,
+					relay: hiddenOrigin,
+					nowSeconds: now
+				});
+				const validated = validateQrWireForm(compactWire, now + 5);
+				assert(validated.kind === 'ok', `hidden-origin QR rejected: ${JSON.stringify(validated)}`);
+				const bundle = buildPairingBundle({
+					qr: validated.payload,
+					account,
+					accountChatPubkey: 'chatPubkey-stub-base64',
+					nowSeconds: now + 5,
+					deviceLabel: 'phone'
+				});
+				const delivery = await buildDeliveryPayload({
+					bundle,
+					signer,
+					desktopEpkPub: desktopKeys.epk_pub
+				});
+				const result = await verifyDeliveryPayload({
+					delivery,
+					desktopEpkPriv: new Uint8Array(desktopKeys.epk_priv),
+					desktopEpkPub: desktopKeys.epk_pub,
+					desktopOrigin: hiddenOrigin,
+					expectedPid: payload.pid,
+					nowSeconds: now + 10,
+					verifier
+				});
+				assert(result.kind === 'ok', `verify failed: ${JSON.stringify(result)}`);
+			}
+		);
+	}
+
+	await scenario('QR validation: plain-http CLEARNET relay → reject (hidden hosts only)', () => {
+		for (const relay of ['http://morphit.io', 'http://onion.example', 'http://127.0.0.1']) {
+			const wire = sodium.to_base64(
+				new TextEncoder().encode(
+					JSON.stringify({
+						v: 1,
+						pid: 'a'.repeat(64),
+						epk: sodium.to_base64(new Uint8Array(32), sodium.base64_variants.ORIGINAL),
+						origin: 'https://morphit.io',
+						relay,
+						exp: 1714867200 + 60
+					})
+				),
+				sodium.base64_variants.URLSAFE_NO_PADDING
+			);
+			const r = validateQrWireForm(wire, 1714867200);
+			assert(r.kind === 'reject', `${relay} accepted`);
+			expectEq(r.reason.kind, 'bad_relay');
+		}
+	});
+
 	await scenario('QR validation: expired → reject', async () => {
 		const desktopKeys = await generateDesktopEphemeralKeys();
 		const { compactWire } = await buildQrPayload({

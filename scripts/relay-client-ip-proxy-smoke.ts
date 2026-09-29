@@ -136,42 +136,71 @@ const FRONTEND = read('ops/bunkerweb/frontend/nginx.conf');
 		`got xff=${fe.get('x-forwarded-for')} real=${fe.get('x-real-ip')}`
 	);
 }
-function evalFrontendXff(peer: string): string | null {
+/** The port BunkerWeb sends to (bunkerweb.env's REVERSE_PROXY_HOST). */
+const EDGE_PORT = Number(
+	/^REVERSE_PROXY_HOST=http:\/\/[^:/\s]+(?::(\d+))?/m.exec(
+		read('ops/bunkerweb/bunkerweb.env.example')
+	)?.[1] ?? '80'
+);
+/**
+ * The value of an nginx variable of the frontend for a request from `peer` on
+ * local port `port`, evaluated the way nginx does: `geo` = longest prefix on
+ * the peer; `map <source>` = the source string (its variables resolved,
+ * $server_port = the port) matched exactly against the (unquoted) keys.
+ */
+function frontendVar(name: string, peer: string, port: number, depth = 0): string | null {
+	if (depth > 6) return null;
+	if (name === '$server_port') return String(port);
+	if (name === '$remote_addr') return peer;
+	const text = uncomment(FRONTEND);
+	const esc = name.replace(/\$/g, '\\$');
+	const geoBody = block(FRONTEND, new RegExp(`geo\\s+${esc}\\s*\\{`));
+	if (geoBody !== null) {
+		const toInt = (ip: string): number =>
+			ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
+		let val: string | null = null;
+		let best = -1;
+		for (const m of geoBody.matchAll(/^\s*(\S+)\s+(\S+?)\s*;/gm)) {
+			const [key, v] = [m[1]!, m[2]!];
+			if (key === 'default') {
+				if (best < 0) val = v;
+				continue;
+			}
+			const [net, bitsStr] = key.split('/');
+			const bits = Number(bitsStr ?? 32);
+			const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+			if ((toInt(peer) & mask) >>> 0 === (toInt(net!) & mask) >>> 0 && bits > best) {
+				best = bits;
+				val = v;
+			}
+		}
+		return val;
+	}
+	const head = new RegExp(`map\\s+("[^"]*"|\\S+)\\s+${esc}\\s*\\{`);
+	const src = head.exec(text)?.[1];
+	const body = block(FRONTEND, head);
+	if (!src || body === null) return null;
+	let key = src.replace(/^"|"$/g, '');
+	for (const v of key.match(/\$[a-z_]+/g) ?? []) {
+		const r = frontendVar(v, peer, port, depth + 1);
+		if (r === null) return null;
+		key = key.replace(v, r);
+	}
+	const entries = [...body.matchAll(/^\s*("[^"]*"|\S+)\s+(\S+?)\s*;/gm)].map(
+		(m) => [m[1]!.replace(/^"|"$/g, ''), m[2]!] as const
+	);
+	const hit = entries.find(([k]) => k === key) ?? entries.find(([k]) => k === 'default');
+	if (!hit) return null;
+	// A map value may itself be a variable; the relay-facing one is the
+	// variable NAME ($http_x_real_ip / $remote_addr), which is what we report.
+	return hit[1];
+}
+function evalFrontendXff(peer: string, port = 80): string | null {
 	const relay = headers(block(FRONTEND, /location\s+\/relay\/\s*\{/) ?? '');
 	const xff = relay.get('x-forwarded-for');
 	if (xff === undefined) return null;
 	if (!xff.startsWith('$morphit_')) return xff;
-	// map <src> <var> { ... }
-	const mapHead = new RegExp(`map\\s+(\\$\\S+)\\s+\\${xff}\\s*\\{`);
-	const src = mapHead.exec(uncomment(FRONTEND))?.[1];
-	const mapBody = block(FRONTEND, mapHead);
-	if (!src || mapBody === null) return null;
-	const entries = [...mapBody.matchAll(/^\s*(\S+)\s+(\S+?)\s*;/gm)].map(
-		(m) => [m[1]!, m[2]!] as const
-	);
-	// geo <var> { ... } — longest-prefix match on the peer
-	const geoBody = block(FRONTEND, new RegExp(`geo\\s+\\${src}\\s*\\{`));
-	if (geoBody === null) return null;
-	const toInt = (ip: string): number =>
-		ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
-	let geoVal: string | null = null;
-	let best = -1;
-	for (const m of geoBody.matchAll(/^\s*(\S+)\s+(\S+?)\s*;/gm)) {
-		const [key, val] = [m[1]!, m[2]!];
-		if (key === 'default') {
-			if (best < 0) geoVal = val;
-			continue;
-		}
-		const [net, bitsStr] = key.split('/');
-		const bits = Number(bitsStr ?? 32);
-		const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-		if ((toInt(peer) & mask) >>> 0 === (toInt(net!) & mask) >>> 0 && bits > best) {
-			best = bits;
-			geoVal = val;
-		}
-	}
-	const hit = entries.find(([k]) => k === geoVal) ?? entries.find(([k]) => k === 'default');
-	return hit ? hit[1] : null;
+	return frontendVar(xff, peer, port);
 }
 {
 	const gateway = evalFrontendXff('172.20.0.1');
@@ -180,19 +209,34 @@ function evalFrontendXff(peer: string): string | null {
 		gateway === '$remote_addr',
 		`got ${gateway}`
 	);
-	const bw = evalFrontendXff('172.20.0.2');
-	check(
-		"frontend: from BunkerWeb → the one address BunkerWeb wrote (its X-Real-IP), not the visitor's header",
-		bw === '$http_x_real_ip',
-		`got ${bw}`
-	);
-	for (const peer of ['127.0.0.1', '203.0.113.9', '10.0.0.5']) {
+	for (const bwPeer of ['172.20.0.2', '172.18.0.2']) {
+		const bw = evalFrontendXff(bwPeer, EDGE_PORT);
+		check(
+			`frontend: from BunkerWeb (${bwPeer}, on its port :${EDGE_PORT}) → the one address BunkerWeb wrote (its X-Real-IP), not the visitor's header`,
+			bw === '$http_x_real_ip',
+			`got ${bw}`
+		);
+	}
+	for (const peer of ['127.0.0.1', '203.0.113.9', '10.0.0.5', '172.18.0.1', '172.18.0.7']) {
 		const v = evalFrontendXff(peer);
 		check(`frontend: from ${peer} → $remote_addr`, v === '$remote_addr', `got ${v}`);
 	}
-	const all = ['172.20.0.1', '172.20.0.2', '172.20.255.254', '127.0.0.1', '8.8.8.8'].map(
-		evalFrontendXff
-	);
+	for (const peer of ['127.0.0.1', '203.0.113.9', '10.0.0.5']) {
+		const v = evalFrontendXff(peer, EDGE_PORT);
+		check(
+			`frontend: from ${peer} on :${EDGE_PORT} → $remote_addr`,
+			v === '$remote_addr',
+			`got ${v}`
+		);
+	}
+	const all = [
+		'172.20.0.1',
+		'172.20.0.2',
+		'172.20.255.254',
+		'172.18.0.7',
+		'127.0.0.1',
+		'8.8.8.8'
+	].flatMap((p) => [evalFrontendXff(p), evalFrontendXff(p, EDGE_PORT)]);
 	check(
 		'frontend: no path forwards a client-controlled X-Forwarded-For',
 		all.every((v) => v !== null && !CLIENT_CONTROLLED.has(v))
@@ -277,9 +321,13 @@ async function part2(nginx: string): Promise<void> {
 			/proxy_pass\s+\S+;/,
 			`proxy_pass http://127.0.0.1:${up};`
 		);
-		const frontend = uncomment(FRONTEND)
-			.replace(/host\.docker\.internal:\d+/g, `127.0.0.1:${up}`)
-			.replace(/listen\s+80\s*;/, `listen 127.0.0.1:${0};`);
+		// Both listeners move to free loopback ports — the edge one consistently in
+		// its `listen` and in the map that recognises it — so nothing binds a
+		// host port.
+		const frontendRaw = uncomment(FRONTEND).replace(
+			/host\.docker\.internal:\d+/g,
+			`127.0.0.1:${up}`
+		);
 		// Pick two free ports.
 		const free = async (): Promise<number> => {
 			const s = createServer();
@@ -290,9 +338,13 @@ async function part2(nginx: string): Promise<void> {
 		};
 		const pWeb = await free();
 		const pFe = await free();
+		const pEdge = await free();
+		const frontend = frontendRaw
+			.replace(/listen\s+80\s*;/, `listen 127.0.0.1:${pFe}; ${shim}`)
+			.replace(new RegExp(`listen\\s+${EDGE_PORT}\\s*;`), `listen 127.0.0.1:${pEdge};`)
+			.replace(new RegExp(`"${EDGE_PORT}:1"`), `"${pEdge}:1"`);
 		const site =
-			`server { listen 127.0.0.1:${pWeb}; ${shim} location /relay/ {${webRelay}} }\n` +
-			frontend.replace(`listen 127.0.0.1:0;`, `listen 127.0.0.1:${pFe}; ${shim}`);
+			`server { listen 127.0.0.1:${pWeb}; ${shim} location /relay/ {${webRelay}} }\n` + frontend;
 		writeFileSync(join(dir, 'site.conf'), site);
 		const t = join(dir, 'tmp');
 		writeFileSync(
@@ -313,6 +365,7 @@ async function part2(nginx: string): Promise<void> {
 		});
 		await waitUp(pWeb);
 		await waitUp(pFe);
+		await waitUp(pEdge);
 
 		const REAL = '198.51.100.9';
 		// Bare metal, loopback-trusted relay.
@@ -335,12 +388,13 @@ async function part2(nginx: string): Promise<void> {
 		// BunkerWeb topology: the relay trusts the bridge.
 		configureTrustedProxies(['172.20.0.0/16']);
 		const viaBw = new Set<string>();
-		for (let i = 0; i < 5; i++) {
+		for (let i = 0; i < 6; i++) {
 			// What BunkerWeb (USE_REAL_IP=no) sends: X-Real-IP = the real visitor,
-			// X-Forwarded-For = the visitor's own header + the real visitor.
+			// X-Forwarded-For = the visitor's own header + the real visitor. On
+			// the Ansible bridge and on morphit.io's.
 			viaBw.add(
-				await get(pFe, {
-					'X-Test-Peer': '172.20.0.2',
+				await get(pEdge, {
+					'X-Test-Peer': i % 2 ? '172.18.0.2' : '172.20.0.2',
 					'X-Real-IP': REAL,
 					'X-Forwarded-For': `10.${i}.0.1, ${REAL}`
 				})
@@ -365,6 +419,20 @@ async function part2(nginx: string): Promise<void> {
 			'frontend: via Tor/I2P (bridge gateway) nothing typed gets through — one shared bucket',
 			viaTor.size === 1 && viaTor.has('172.20.0.1'),
 			[...viaTor].join(' ')
+		);
+		const viaOnion = new Set<string>();
+		for (let i = 0; i < 5; i++)
+			viaOnion.add(
+				await get(pFe, {
+					'X-Test-Peer': '172.18.0.7',
+					'X-Real-IP': `10.${i}.9.9`,
+					'X-Forwarded-For': `10.${i}.0.1`
+				})
+			);
+		check(
+			"frontend: via an onion-proxy container on the bridge (not BunkerWeb's port) nothing typed gets through",
+			viaOnion.size === 1 && viaOnion.has('172.18.0.7'),
+			[...viaOnion].join(' ')
 		);
 	} finally {
 		configureTrustedProxies([]);

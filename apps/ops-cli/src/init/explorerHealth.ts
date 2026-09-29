@@ -87,18 +87,20 @@ export async function probeBitcoinExplorer(
 	}
 }
 
-/** Probe a Monero explorer URL.  Expects the
+/** Probe a Monero explorer URL.  `https://…` expects the
  *  `moneroexamples/onion-monero-blockchain-explorer` API
- *  surface — same one xmrchain.net, localmonero.co/blocks,
- *  etc. use.  We hit `/api/networkinfo` which returns a
- *  small JSON object and exists on every compatible
- *  instance.  No txid, no address, no proof sent.
+ *  surface (xmrchain.net, moneroexplorer.org): `/api/networkinfo`
+ *  returns a small JSON object on every instance with its JSON API
+ *  on.  `raw-tx+https://…` (v1.20.0) expects the moneroblocks.info
+ *  API: `/api/get_stats` returns `{ height, … }`.  No txid, no
+ *  address, no key sent.
  *
- *  baseUrl: e.g. `https://xmrchain.net`. */
+ *  baseUrl: e.g. `https://xmrchain.net` or `raw-tx+https://moneroblocks.info`. */
 export async function probeMoneroExplorer(
 	baseUrl: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<ProbeStatus> {
+	if (baseUrl.startsWith('raw-tx+')) return probeRawTxMoneroExplorer(baseUrl.slice('raw-tx+'.length), fetchImpl);
 	const url = `${baseUrl.replace(/\/+$/, '')}/api/networkinfo`;
 	const started = Date.now();
 	const ac = new AbortController();
@@ -149,6 +151,31 @@ export async function probeMoneroExplorer(
 					? `timeout after ${PROBE_TIMEOUT_MS}ms`
 					: err.message
 				: String(err);
+		return { kind: 'unreachable', reason };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/** (v1.20.0) A raw-tx Monero explorer (moneroblocks.info API): `/api/get_stats`
+ *  must answer JSON with a numeric `height`. */
+async function probeRawTxMoneroExplorer(baseUrl: string, fetchImpl: typeof fetch): Promise<ProbeStatus> {
+	const url = `${baseUrl.replace(/\/+$/, '')}/api/get_stats`;
+	const started = Date.now();
+	const ac = new AbortController();
+	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
+	try {
+		const res = await fetchImpl(url, { method: 'GET', headers: { accept: 'application/json' }, signal: ac.signal });
+		const latencyMs = Date.now() - started;
+		if (!res.ok) return { kind: 'wrong_shape', latencyMs, reason: `HTTP ${res.status}` };
+		const body = (await res.json()) as { height?: unknown } | null;
+		if (typeof body?.height !== 'number') {
+			return { kind: 'wrong_shape', latencyMs, reason: 'no numeric height from /api/get_stats (not the moneroblocks.info API?)' };
+		}
+		return { kind: 'ok', latencyMs };
+	} catch (err) {
+		const reason =
+			err instanceof Error ? (err.name === 'AbortError' ? `timeout after ${PROBE_TIMEOUT_MS}ms` : err.message) : String(err);
 		return { kind: 'unreachable', reason };
 	} finally {
 		clearTimeout(timer);

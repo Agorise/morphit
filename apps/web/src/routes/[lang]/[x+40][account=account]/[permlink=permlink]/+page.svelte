@@ -822,6 +822,18 @@
 									<span class="text-ink-500">
 										{$_('order_detail.fee_unverified')}
 									</span>
+								{:else if order.fee_status === 'proof_unsupported'}
+									<!-- v1.20.0 (M-X1): XMR fee sent with an OutProof only,
+									     which no explorer can check. -->
+									<span class="text-red-700 dark:text-red-300">
+										⚠ {$_('order_detail.fee_proof_unsupported')}
+									</span>
+								{:else if order.fee_status === 'awaiting_payment'}
+									<!-- v1.20.0 (MK-H2): posted with its own BTC fee address,
+									     not paid yet. The owner pays it from My orders. -->
+									<span class="text-ink-600 dark:text-ink-300">
+										⏳ {$_('order_detail.fee_awaiting_payment')}
+									</span>
 								{:else}
 									<!-- Future-proof: if the indexer adds a new
 									     fee_status we don't know about, fall

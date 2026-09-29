@@ -22,7 +22,9 @@
 	 * explorers, BLURT → /explorer).
 	 */
 
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
+	import { get } from 'svelte/store';
+	import { formatAmountForInput, parseAmountInput } from '$lib/orders/amountInput';
 	import {
 		encodeFundsSentPayload,
 		isValidTxid,
@@ -199,13 +201,23 @@
 	const daiNetworkPinned = initialDaiNetwork !== null;
 	let txid = $state('');
 	// svelte-ignore state_referenced_locally
-	let amount = $state(initialAmount);
+	// v1.20.0 G6 — a pre-filled (canonical ASCII) amount is shown in the
+	// active locale's decimal mark so the locale-aware parse reads it back
+	// exactly; the user may type either mark or native digits.
+	let amount = $state(
+		initialAmount !== '' && Number.isFinite(Number(initialAmount))
+			? formatAmountForInput(Number(initialAmount), get(locale))
+			: initialAmount
+	);
 	let note = $state('');
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
 
 	const trimmedTxid = $derived(txid.trim().toLowerCase());
-	const trimmedAmount = $derived(amount.trim());
+	/** Canonical ASCII amount ('' when blank; the raw text when unreadable,
+	 *  so the shape check below still fails it). */
+	const amountParse = $derived(parseAmountInput(amount, $locale));
+	const trimmedAmount = $derived(amountParse.ok ? amountParse.value : amount.trim());
 	const trimmedNote = $derived(note.trim());
 
 	const txidLooksValid = $derived(
@@ -530,7 +542,13 @@
 			{#if payHint}
 				<p class="mt-1 text-xs text-morphit-teal dark:text-morphit-emerald">{payHint}</p>
 			{/if}
-			{#if !amountLooksValid && trimmedAmount.length > 0}
+			{#if !amountParse.ok && amountParse.reason === 'ambiguous' && amountParse.readings}
+				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+					{$_('common.amount_input.ambiguous', {
+						values: { a: amountParse.readings[0], b: amountParse.readings[1] }
+					})}
+				</p>
+			{:else if !amountLooksValid && trimmedAmount.length > 0}
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 					{$_('chat.address.amount_invalid')}
 				</p>
@@ -573,7 +591,7 @@
 			</button>
 			<button
 				type="button"
-				class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+				class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110 disabled:opacity-50"
 				onclick={handleSubmit}
 				disabled={!canSubmit}
 			>

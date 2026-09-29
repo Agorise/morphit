@@ -8,7 +8,9 @@
  *
  * Security contract: forwarded-address headers (X-Forwarded-For,
  * X-Real-IP) are ONLY honored when the immediate socket peer is a
- * loopback address — i.e. nginx on the same host. A direct-
+ * trusted proxy — loopback (nginx on the same host) or, by default,
+ * the Docker bridge pool 172.16.0.0/12 (the BunkerWeb frontend
+ * container); X-Real-IP only from loopback. A direct-
  * connection client cannot forge these headers to get a fresh
  * rate-limit bucket per request, because we ignore their headers
  * and use their real socket address instead.
@@ -38,15 +40,27 @@ import type { Context } from 'hono';
  *    drain the relay's BLURT.
  *
  *  See OPERATIONS.md §32 (BunkerWeb) for deployment-specific
- *  guidance on which IP/CIDRs to trust.  The default trusts
- *  ONLY loopback. */
+ *  guidance on which IP/CIDRs to trust.
+ *
+ *  DEFAULT (v1.20.0 wave 5): loopback + 172.16.0.0/12, Docker's default
+ *  bridge pool — the same set as the indexer (MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS)
+ *  and the frontend nginx `geo $morphit_edge_peer`. Until then it was loopback
+ *  only and the installers pinned 172.20.0.0/16 (the ansible compose subnet);
+ *  morphit.io's bridge is 172.18.0.0/24, so a relay without a matching env
+ *  value saw the frontend container as the client of EVERY request and the
+ *  per-IP signup limits (2/day, spacing) applied to the whole site at once.
+ *  A peer in 172.16/12 is inside the operator's own network (the internet
+ *  cannot complete a TCP connection from RFC 1918 space) and the relay binds
+ *  loopback or the bridge gateway behind UFW; the most such a host can do is
+ *  choose its own bucket. MORPHIT_RELAY_TRUSTED_PROXY_IPS, when set, REPLACES
+ *  the CIDR default; loopback is always trusted. */
 const DEFAULT_LOOPBACK_PEERS: readonly string[] = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+export const DEFAULT_TRUSTED_PROXY_CIDRS: readonly string[] = ['172.16.0.0/12'];
 
 /** Module-level mutable state — the set of trusted-peer
- *  addresses.  Initialized to loopback only.  Operators behind
- *  BunkerWeb / Docker / a multi-host reverse proxy must call
- *  configureTrustedProxies() at boot to add their proxy's IP
- *  range.
+ *  addresses.  Initialized to the default (loopback + 172.16.0.0/12).
+ *  Operators whose proxy lives elsewhere set MORPHIT_RELAY_TRUSTED_PROXY_IPS
+ *  and main.ts calls configureTrustedProxies() at boot.
  *
  *  Why module-level rather than per-call: the `clientIp()`
  *  function is invoked from middleware where we don't have a
@@ -93,8 +107,10 @@ function parseV4Cidr(s: string): { network: number; mask: number } | null {
 }
 
 /**
- * Configure additional trusted-proxy addresses / CIDR ranges
- * beyond the default loopback set.  Call ONCE at relay boot,
+ * Configure the trusted-proxy addresses / CIDR ranges.  Loopback is
+ * always trusted; the given list REPLACES the CIDR default.  A list with
+ * no non-blank entries (MORPHIT_RELAY_TRUSTED_PROXY_IPS unset or empty)
+ * restores the default, loopback + 172.16.0.0/12.  Call ONCE at relay boot,
  * BEFORE any request handler runs.  Subsequent calls are
  * idempotent in production but no concurrency guarantee is
  * made for in-flight requests during reconfiguration.
@@ -110,15 +126,18 @@ function parseV4Cidr(s: string): { network: number; mask: number } | null {
  * SECURITY: this is the most dangerous knob in the relay's
  * config.  An overly-broad CIDR (e.g. 0.0.0.0/0) lets ANY
  * client forge X-Forwarded-For and bypass per-IP rate limits,
- * draining the relay's BLURT.  The default value (loopback only)
- * is correct for the recommended single-host nginx topology.
- * Only widen this when you actually have a non-loopback proxy.
+ * draining the relay's BLURT.  The default (loopback + 172.16.0.0/12)
+ * covers bare-metal nginx and every Docker bridge the daemon creates by
+ * default; set the env value only for a proxy outside those ranges.
  */
 export function configureTrustedProxies(specs: readonly string[]): {
 	exactCount: number;
 	cidrCount: number;
 	rejected: readonly string[];
 } {
+	// No entries at all → the default (same rule as the indexer: an empty
+	// env value means "unset").
+	if (!specs.some((s) => s.trim().length > 0)) specs = DEFAULT_TRUSTED_PROXY_CIDRS;
 	// Reset to default loopback set — operators who reconfigure
 	// don't accidentally retain old entries.
 	trustedExactPeers.clear();
@@ -163,6 +182,9 @@ export function configureTrustedProxies(specs: readonly string[]): {
 		rejected
 	};
 }
+
+// Module default: loopback + Docker's default bridge pool.
+configureTrustedProxies(DEFAULT_TRUSTED_PROXY_CIDRS);
 
 /** Predicate: is `peer` in the trusted-proxy set?  Used by
  *  clientIp() before honoring forwarded-address headers. */

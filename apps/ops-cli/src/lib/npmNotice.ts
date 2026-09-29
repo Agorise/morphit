@@ -59,26 +59,85 @@ export function withNpmrcSettings(
 	return out;
 }
 
+/**
+ * npmrc keys that make npm RUN CODE, or repoint where it reads its config. If
+ * the global npmrc was ever group/other-writable (npm's own `npm config set
+ * --location=global` leaves it 0666), a local account could have added one of
+ * these, and the next time ROOT runs npm — the very `npm ci` this upgrade runs —
+ * it would execute their code as root (review B8). When we find the file was
+ * insecure, we strip these before repairing the mode, so a planted line can
+ * never fire. Ordinary quiet settings and benign operator config are kept.
+ */
+export const DANGEROUS_NPMRC_KEYS: readonly string[] = [
+	'script-shell',
+	'shell',
+	'node-options',
+	'globalconfig',
+	'userconfig',
+	'prefix',
+	'cache',
+	'init-module',
+	'onload-script',
+	'ignore-scripts', // an operator's `true` is fine, but a planted `false` re-enables lifecycle scripts
+	'unsafe-perm'
+];
+
+/** Remove any npmrc line whose key is in `keys` (case-insensitive, tolerating
+ *  `export`/whitespace/quotes). Returns {text, removed}. PURE. */
+export function stripNpmrcKeys(
+	text: string,
+	keys: readonly string[]
+): { text: string; removed: string[] } {
+	const removed: string[] = [];
+	const out: string[] = [];
+	const lowerKeys = new Set(keys.map((k) => k.toLowerCase()));
+	for (const line of text.split('\n')) {
+		const m = /^[ \t]*(?:export[ \t]+)?([A-Za-z0-9_.-]+)[ \t]*=/.exec(line);
+		if (m && lowerKeys.has((m[1] ?? '').toLowerCase())) {
+			removed.push(m[1]!);
+			continue;
+		}
+		out.push(line);
+	}
+	return { text: out.join('\n'), removed };
+}
+
 export interface NpmrcResult {
 	readonly path: string;
 	readonly changed: boolean;
 	readonly permsFixed: boolean;
+	/** Code-execution keys stripped because the file had been left writable by
+	 *  non-root (tamper vector). Empty on a normal, secure file. */
+	readonly strippedKeys: string[];
 }
 
 /**
  * Ensure the npmrc at `path` carries the quiet settings and is root-owned
- * 0644. Refuses to follow a symbolic link. Returns what it did.
+ * 0644. Refuses to follow a symbolic link. If the file was group/other-writable
+ * (a tamper vector), any code-execution key is stripped first. Returns what it
+ * did.
  */
 export function ensureQuietNpmrc(path: string): NpmrcResult {
 	if (!isAbsolute(path)) throw new Error(`not an absolute path: ${path}`);
 	if (existsSync(path) && lstatSync(path).isSymbolicLink()) {
 		throw new Error(`${path} is a symbolic link — refusing to write through it`);
 	}
-	const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
-	const after = withNpmrcSettings(before, NPM_QUIET_SETTINGS);
+	const existed = existsSync(path);
+	// Was it writable by anyone but the owner BEFORE we repair the mode? If so, a
+	// local account could have planted a code-execution key while it was 0666.
+	const wasInsecure = existed && (lstatSync(path).mode & 0o022) !== 0;
+	const before = existed ? readFileSync(path, 'utf8') : '';
+	let strippedKeys: string[] = [];
+	let base = before;
+	if (wasInsecure) {
+		const s = stripNpmrcKeys(before, DANGEROUS_NPMRC_KEYS);
+		base = s.text;
+		strippedKeys = s.removed;
+	}
+	const after = withNpmrcSettings(base, NPM_QUIET_SETTINGS);
 	const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
 	let changed = false;
-	if (after !== before || !existsSync(path)) {
+	if (after !== before || !existed) {
 		mkdirSync(dirname(path), { recursive: true, mode: 0o755 });
 		atomicWrite(path, after, 0o644);
 		changed = true;
@@ -93,7 +152,7 @@ export function ensureQuietNpmrc(path: string): NpmrcResult {
 		chownSync(path, 0, 0);
 		permsFixed = true;
 	}
-	return { path, changed, permsFixed };
+	return { path, changed, permsFixed, strippedKeys };
 }
 
 /** The global npmrc path of the box's npm, or null if npm can't say. */

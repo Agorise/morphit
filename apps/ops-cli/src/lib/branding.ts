@@ -30,7 +30,10 @@
  *     static/…          optional: any other static file, same relative path
  *   morphit.config.env
  *     MORPHIT_INSTANCE_BRAND_NAME, MORPHIT_INSTANCE_BRAND_SHORT_NAME,
- *     MORPHIT_INSTANCE_BETA_BADGE
+ *     MORPHIT_INSTANCE_BETA_BADGE,
+ *     MORPHIT_INSTANCE_THEME (preset) + MORPHIT_INSTANCE_THEME_FROM / _MID /
+ *     _TO / _BACKGROUND (colour theme — every brand/surface colour is derived
+ *     from these by @morphit/operator-config/theme)
  *
  * HOW. `applyBranding` computes the desired bytes of every overridable file from
  * the CANONICAL bytes (kept in <apps/web>/.brand-pristine the first time a file
@@ -43,10 +46,19 @@
  * Brand-name TEXT uses build/.brand-slots.json (written by
  * scripts/build-brand-slots.mjs): the exact offset of every place a prerendered
  * page names the SITE — software mentions of Morphit are never touched.
+ *
+ * COLOUR THEME: the compiled CSS (under _app/, integrity-covered) only ever
+ * reads colours from CSS custom properties (apps/web/src/theme.css). A theme is
+ * applied by (a) an `<style id="morphit-theme">html:root{--brand-1-rgb:…}</style>`
+ * inserted at each prerendered page's 'theme-style' slot (just before </head>)
+ * plus its 'theme-color' meta slot — right on first paint, with no JavaScript,
+ * in Tor Browser; (b) a `theme` block in brand.json, which the SPA shell applies
+ * at runtime; (c) the manifest's theme_color / background_color; and (d) the
+ * canvas colour of icons/launch screens generated from the operator's SVGs.
  */
 
 import {
-	chownSync,
+	lchownSync,
 	closeSync,
 	constants as fsc,
 	existsSync,
@@ -76,6 +88,14 @@ import {
 	sanitizeBrandName,
 	INSTANCE_ENV
 } from '@morphit/operator-config';
+import {
+	deriveTheme,
+	themeStyleElement,
+	themePreset,
+	DEFAULT_THEME_PRESET,
+	type ThemeInput,
+	type ThemePalette
+} from '@morphit/operator-config/theme';
 import { impersonatesReservedOperatorName } from '../../../indexer/src/indexer/confusables.ts';
 import { sanitizeSvg, HostileSvgError } from './svgSanitize.ts';
 
@@ -86,7 +106,8 @@ export const BRAND_SLOTS_FILE = '.brand-slots.json';
 /** The attributes build-brand-slots.mjs stamps on every prerendered <html>. */
 export const CANONICAL_HTML_ATTRS = 'data-brand-name="Morphit" data-brand-beta="on"';
 
-/** Page background (ink-950) — the app icons' canvas, as in the canonical icons. */
+/** The app icons' / launch screens' canvas, as in the canonical icons (the
+ *  theme token surface-page; a colour theme supplies its own). */
 const ICON_BACKGROUND = '#0a0e16';
 
 /** Files the operator may replace in place. Keep in sync with
@@ -166,6 +187,10 @@ export interface BrandingSettings {
 	readonly betaBadge: 'on' | 'off' | null;
 	/** Directory holding the operator's logo/icon files. */
 	readonly dir: string;
+	/** Colour-theme inputs, or null/absent for the Morphit colours. Validated
+	 *  (derived) at apply time; an unusable one keeps the Morphit colours with
+	 *  a warning, like an unusable name. */
+	readonly theme?: ThemeInput | null;
 }
 
 /** /etc/morphit/branding, relocatable like the rest of /etc/morphit. */
@@ -261,6 +286,14 @@ export function readBrandingSettings(
 	const name = effectiveName(readConfigValue(installDir, INSTANCE_ENV.BRAND_NAME, env));
 	const short = effectiveName(readConfigValue(installDir, INSTANCE_ENV.BRAND_SHORT_NAME, env));
 	const beta = (readConfigValue(installDir, INSTANCE_ENV.BETA_BADGE, env) ?? '').toLowerCase();
+	const themeIn: ThemeInput = {
+		preset: readConfigValue(installDir, INSTANCE_ENV.THEME, env),
+		from: readConfigValue(installDir, INSTANCE_ENV.THEME_FROM, env),
+		mid: readConfigValue(installDir, INSTANCE_ENV.THEME_MID, env),
+		to: readConfigValue(installDir, INSTANCE_ENV.THEME_TO, env),
+		background: readConfigValue(installDir, INSTANCE_ENV.THEME_BACKGROUND, env),
+		button: readConfigValue(installDir, INSTANCE_ENV.THEME_BUTTON, env)
+	};
 	return {
 		brandName: name.name,
 		invalidBrandName: name.invalid ?? short.invalid,
@@ -270,8 +303,51 @@ export function readBrandingSettings(
 			: ['off', 'false', '0', 'no'].includes(beta)
 				? 'off'
 				: null,
-		dir: brandingDir(env)
+		dir: brandingDir(env),
+		theme: themeSettingOf(themeIn)
 	};
+}
+
+/** Null when nothing is configured, or when it is exactly the default preset
+ *  with no colour overrides ("morphit" means "not themed"). */
+export function themeSettingOf(t: ThemeInput): ThemeInput | null {
+	const set = (v: string | null | undefined): boolean =>
+		v !== undefined && v !== null && v.trim() !== '';
+	const colours = set(t.from) || set(t.mid) || set(t.to) || set(t.background) || set(t.button);
+	const preset = set(t.preset) ? t.preset!.trim().toLowerCase() : null;
+	if (!colours && (preset === null || preset === DEFAULT_THEME_PRESET)) return null;
+	return {
+		preset,
+		from: set(t.from) ? t.from!.trim() : null,
+		mid: set(t.mid) ? t.mid!.trim() : null,
+		to: set(t.to) ? t.to!.trim() : null,
+		background: set(t.background) ? t.background!.trim() : null,
+		button: set(t.button) ? t.button!.trim().toLowerCase() : null
+	};
+}
+
+/** The palette a theme setting yields: the palette, the problems that make it
+ *  unusable, or null for "Morphit colours" (unset or the default). */
+export function resolveTheme(theme: ThemeInput | null | undefined): {
+	palette: ThemePalette | null;
+	problems: readonly string[];
+} {
+	if (theme === null || theme === undefined) return { palette: null, problems: [] };
+	// Colours without a preset build on the default preset's background.
+	const r = deriveTheme(theme);
+	if (!r.ok) return { palette: null, problems: r.problems };
+	return { palette: r.palette.isDefault ? null : r.palette, problems: [] };
+}
+
+/** Short human description of a theme setting (status / notes). */
+export function describeTheme(
+	theme: ThemeInput | null | undefined,
+	palette: ThemePalette | null
+): string {
+	if (theme === null || theme === undefined || palette === null) return 'Morphit colours (default)';
+	const i = palette.inputs;
+	const name = i.preset !== null && themePreset(i.preset) !== null ? `${i.preset}: ` : 'custom: ';
+	return `${name}${i.from} → ${i.mid} → ${i.to} on ${i.background}, ${i.button} buttons`;
 }
 
 /** The operator files `morphit-ops branding apply --logo/--logo-footer/--icon`
@@ -328,6 +404,7 @@ export function atomicWrite(dest: string, data: Buffer | string, mode = 0o644): 
  *  apply step, which recompresses every page and takes a little while). */
 export function brandingConfigured(s: BrandingSettings): boolean {
 	if (s.brandName !== null || s.invalidBrandName !== null || s.betaBadge !== null) return true;
+	if (s.theme !== null && s.theme !== undefined) return true;
 	try {
 		return existsSync(s.dir) && readdirSync(s.dir).some((n) => !n.startsWith('.'));
 	} catch {
@@ -438,7 +515,12 @@ export function normalizeSvg(source: string | Buffer, label: string): Normalized
  * icons (64% for "any", 49% inside the maskable safe zone). The icon is nested
  * as an <svg> with its own viewBox, so its drawing is never distorted.
  */
-export function composeAppIconSvg(icon: NormalizedSvg, size: number, fill: number): string {
+export function composeAppIconSvg(
+	icon: NormalizedSvg,
+	size: number,
+	fill: number,
+	background: string = ICON_BACKGROUND
+): string {
 	const open = /<svg\b[^>]*>/i.exec(icon.svg)!;
 	const inner = icon.svg.slice(open.index + open[0].length, icon.svg.lastIndexOf('</svg>'));
 	let tag = open[0];
@@ -466,7 +548,7 @@ export function composeAppIconSvg(icon: NormalizedSvg, size: number, fill: numbe
 	);
 	return (
 		`<svg xmlns="http://www.w3.org/2000/svg"${nsDecls} width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
-		`<rect width="${size}" height="${size}" fill="${ICON_BACKGROUND}"/>` +
+		`<rect width="${size}" height="${size}" fill="${background}"/>` +
 		nested +
 		inner +
 		'</svg></svg>\n'
@@ -477,7 +559,12 @@ export function composeAppIconSvg(icon: NormalizedSvg, size: number, fill: numbe
  * An iOS launch screen: the operator's logo, contain-fitted (never distorted)
  * into SPLASH_LOGO_BOX, centred on the dark page background, width×height.
  */
-export function composeSplashSvg(logo: NormalizedSvg, width: number, height: number): string {
+export function composeSplashSvg(
+	logo: NormalizedSvg,
+	width: number,
+	height: number,
+	background: string = ICON_BACKGROUND
+): string {
 	const open = /<svg\b[^>]*>/i.exec(logo.svg)!;
 	const inner = logo.svg.slice(open.index + open[0].length, logo.svg.lastIndexOf('</svg>'));
 	const nsDecls = [...open[0].matchAll(/\sxmlns:[a-z0-9_-]+\s*=\s*("[^"]*"|'[^']*')/gi)]
@@ -490,7 +577,7 @@ export function composeSplashSvg(logo: NormalizedSvg, width: number, height: num
 	const y = round((height - bh) / 2);
 	return (
 		`<svg xmlns="http://www.w3.org/2000/svg"${nsDecls} width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
-		`<rect width="${width}" height="${height}" fill="${ICON_BACKGROUND}"/>` +
+		`<rect width="${width}" height="${height}" fill="${background}"/>` +
 		`<svg x="${x}" y="${y}" width="${bw}" height="${bh}" viewBox="${logo.viewBox}" preserveAspectRatio="xMidYMid meet">` +
 		inner +
 		'</svg></svg>\n'
@@ -570,7 +657,43 @@ export function htmlEscape(s: string): string {
 		.replace(/'/g, '&#39;');
 }
 
-type Slot = [offset: number, length: number, form: string, ctx: 'html' | 'raw'];
+type Slot = [
+	offset: number,
+	length: number,
+	form: string,
+	ctx: 'html' | 'raw' | 'theme-color' | 'theme-style'
+];
+
+/**
+ * build/.brand-slots.json. `files`: site-name slots only (the v1.19 shape — an
+ * older ops-cli reads it during an upgrade). `theme_files` (schema 2): the
+ * colour-theme slots, which only this CLI knows.
+ */
+export interface SlotMap {
+	readonly files: Record<string, Slot[]>;
+	readonly theme_files?: Record<string, Slot[]>;
+}
+
+/** Every page's name + theme slots, merged in document order. */
+export function pageSlots(map: SlotMap): Array<[string, Slot[]]> {
+	const out = new Map<string, Slot[]>();
+	for (const [rel, slots] of Object.entries(map.files)) out.set(rel, [...slots]);
+	for (const [rel, slots] of Object.entries(map.theme_files ?? {})) {
+		// A theme slot on a page without a name entry is ignored: the name map
+		// is the list of pages branding may rewrite.
+		const cur = out.get(rel);
+		if (cur !== undefined) cur.push(...slots);
+	}
+	return [...out].map(([rel, s]) => [rel, s.sort((a, b) => a[0] - b[0])]);
+}
+
+/** What a colour theme writes into a prerendered page. */
+export interface PageTheme {
+	/** The complete `<style id="morphit-theme">…</style>` element. */
+	readonly style: string;
+	/** '#rrggbb' for the theme-color meta. */
+	readonly color: string;
+}
 
 /**
  * Brand one prerendered page: every recorded slot → the brand (HTML-escaped in
@@ -582,20 +705,35 @@ export function brandPage(
 	canonical: string,
 	slots: readonly Slot[],
 	brandName: string | null,
-	beta: boolean
+	beta: boolean,
+	theme: PageTheme | null = null
 ): string {
 	let out = canonical;
-	if (brandName !== null) {
-		for (let i = slots.length - 1; i >= 0; i--) {
-			const [off, len, form, ctx] = slots[i]!;
-			if (out.slice(off, off + len) !== form) {
-				throw new Error(`slot ${i} is "${out.slice(off, off + len)}", expected "${form}"`);
-			}
-			// A compound word ("{brand}-Passwort") gets the name hyphenated
-			// throughout — exactly what the browser's applyBrandToString writes.
-			const text = continuesAsCompound(out, off + len) ? brandForCompound(brandName) : brandName;
-			out = out.slice(0, off) + (ctx === 'raw' ? text : htmlEscape(text)) + out.slice(off + len);
+	// Last slot first, so earlier offsets stay valid.
+	for (let i = slots.length - 1; i >= 0; i--) {
+		const [off, len, form, ctx] = slots[i]!;
+		if (ctx === 'theme-style') {
+			if (theme === null) continue;
+			if (!/^<\/head\s*>/i.test(out.slice(off, off + 7)))
+				throw new Error(`slot ${i} (theme style) is not at </head>`);
+			out = out.slice(0, off) + theme.style + out.slice(off);
+			continue;
 		}
+		// Only slots that change are verified (an unbranded name slot is left
+		// alone, as before colour themes existed).
+		const want = ctx === 'theme-color' ? (theme?.color ?? null) : brandName;
+		if (want === null) continue;
+		if (out.slice(off, off + len) !== form) {
+			throw new Error(`slot ${i} is "${out.slice(off, off + len)}", expected "${form}"`);
+		}
+		if (ctx === 'theme-color' || brandName === null) {
+			out = out.slice(0, off) + want + out.slice(off + len);
+			continue;
+		}
+		// A compound word ("{brand}-Passwort") gets the name hyphenated
+		// throughout — exactly what the browser's applyBrandToString writes.
+		const text = continuesAsCompound(out, off + len) ? brandForCompound(brandName) : brandName;
+		out = out.slice(0, off) + (ctx === 'raw' ? text : htmlEscape(text)) + out.slice(off + len);
 	}
 	const attrs = `data-brand-name="${htmlEscape(brandName ?? DEFAULT_BRAND_NAME)}" data-brand-beta="${beta ? 'on' : 'off'}"`;
 	if (attrs !== CANONICAL_HTML_ATTRS) {
@@ -732,6 +870,8 @@ export interface BrandingPlan {
 	readonly notes: string[];
 	/** Some PNGs could not be made: no rsvg-convert / ImageMagick on this box. */
 	readonly rasterizerMissing: boolean;
+	/** The applied colour theme, or null for the Morphit colours. */
+	readonly theme: ThemePalette | null;
 }
 
 export interface BrandingState {
@@ -833,7 +973,7 @@ export function planBranding(
 	paths: BrandingPaths,
 	settings: BrandingSettings,
 	state: BrandingState,
-	slotMap: { files: Record<string, Slot[]> }
+	slotMap: SlotMap
 ): BrandingPlan {
 	const files = new Map<string, Buffer>();
 	const warnings: string[] = [];
@@ -873,6 +1013,21 @@ export function planBranding(
 		);
 	}
 
+	// Colour theme.
+	const themeRes = resolveTheme(settings.theme);
+	const palette = themeRes.palette;
+	if (themeRes.problems.length > 0) {
+		warnings.push(
+			`The colour theme is not usable: ${themeRes.problems.join('; ')}. Keeping the Morphit colours. ` +
+				"Fix it and re-run: sudo morphit-ops branding apply --theme-from '#…' --theme-to '#…'"
+		);
+	}
+	const canvas = palette !== null ? palette.tokens['surface-page']! : ICON_BACKGROUND;
+	const pageTheme: PageTheme | null =
+		palette === null
+			? null
+			: { style: themeStyleElement(palette), color: palette.tokens['brand-2']! };
+
 	// PNGs this box could not rasterize (no rsvg-convert / ImageMagick).
 	const missingPngs: string[] = [];
 
@@ -905,7 +1060,11 @@ export function planBranding(
 			if (dim === null) continue;
 			const png = rasterizerMissing
 				? null
-				: rasterizeSvg(composeSplashSvg(logo, dim.width, dim.height), dim.width, dim.height);
+				: rasterizeSvg(
+						composeSplashSvg(logo, dim.width, dim.height, canvas),
+						dim.width,
+						dim.height
+					);
 			if (png) {
 				put(rel, png);
 				splashDone++;
@@ -929,8 +1088,8 @@ export function planBranding(
 	if (has('icon.svg')) {
 		const icon = svgInput('icon.svg');
 		put(BRAND_TARGETS.favicon, Buffer.from(icon.svg));
-		put(BRAND_TARGETS.appIconSvg, Buffer.from(composeAppIconSvg(icon, 512, 0.64)));
-		put(BRAND_TARGETS.appIconMaskableSvg, Buffer.from(composeAppIconSvg(icon, 512, 0.49)));
+		put(BRAND_TARGETS.appIconSvg, Buffer.from(composeAppIconSvg(icon, 512, 0.64, canvas)));
+		put(BRAND_TARGETS.appIconMaskableSvg, Buffer.from(composeAppIconSvg(icon, 512, 0.49, canvas)));
 		const missing: string[] = [];
 		for (const [rel, size, fill] of PNG_ICONS) {
 			if (has(rel)) {
@@ -945,7 +1104,7 @@ export function planBranding(
 				put(rel, buf);
 				continue;
 			}
-			const png = rasterizeSvg(composeAppIconSvg(icon, size, fill), size);
+			const png = rasterizeSvg(composeAppIconSvg(icon, size, fill, canvas), size);
 			if (png) put(rel, png);
 			else missing.push(rel);
 		}
@@ -1013,12 +1172,34 @@ export function planBranding(
 	// Brand name + BETA marker.
 	const brandName = settings.brandName;
 	const beta = settings.betaBadge === null ? !customLogo : settings.betaBadge === 'on';
-	const brandJson =
-		JSON.stringify(
-			{ schema: 1, name: brandName ?? DEFAULT_BRAND_NAME, beta_badge: beta },
-			null,
-			'\t'
-		) + '\n';
+	const brandDoc: Record<string, unknown> = {
+		schema: 1,
+		name: brandName ?? DEFAULT_BRAND_NAME,
+		beta_badge: beta
+	};
+	if (palette !== null) {
+		// Applied by the SPA shell (apps/web/src/lib/brand/brand.ts applyTheme);
+		// prerendered pages carry the same values in their theme <style> slot.
+		brandDoc.theme = {
+			preset: palette.inputs.preset,
+			inputs: {
+				from: palette.inputs.from,
+				mid: palette.inputs.mid,
+				to: palette.inputs.to,
+				background: palette.inputs.background,
+				button: palette.inputs.button
+			},
+			tokens: palette.tokens,
+			grid_opacity: palette.gridOpacity
+		};
+		notes.push(`colour theme: ${describeTheme(settings.theme, palette)}`);
+		if (palette.adjusted.length > 0) {
+			notes.push(
+				`  (lifted for readable contrast on your background: ${palette.adjusted.join(', ')})`
+			);
+		}
+	}
+	const brandJson = JSON.stringify(brandDoc, null, '\t') + '\n';
 	put(BRAND_TARGETS.brandJson, Buffer.from(brandJson));
 	if (brandName !== null)
 		notes.push(`brand name: "${brandName}" (every place the UI names the site)`);
@@ -1026,24 +1207,43 @@ export function planBranding(
 		`BETA marker: ${beta ? 'on' : 'off'}${settings.betaBadge === null ? ' (automatic)' : ''}`
 	);
 
-	if (brandName !== null || settings.shortName !== null) {
+	if (brandName !== null || settings.shortName !== null || palette !== null) {
 		const m = canon(BRAND_TARGETS.manifest);
 		if (m !== null) {
 			const manifest = JSON.parse(m.toString('utf8')) as Record<string, unknown>;
 			if (brandName !== null) manifest.name = brandName;
 			manifest.short_name = settings.shortName ?? brandName ?? manifest.short_name;
+			if (palette !== null) {
+				// Android's splash + title bar colours (the manifest is not on the
+				// on-chain tamper manifest — branding already rewrites it).
+				manifest.theme_color = palette.tokens['brand-2'];
+				manifest.background_color = palette.tokens['surface-page'];
+			}
 			const nl = m.toString('utf8').endsWith('\n') ? '\n' : '';
 			put(BRAND_TARGETS.manifest, Buffer.from(JSON.stringify(manifest, null, '\t') + nl));
 		}
 	}
 
 	// Prerendered pages.
-	for (const [rel, slots] of Object.entries(slotMap.files)) {
+	if (
+		palette !== null &&
+		!Object.values(slotMap.theme_files ?? {}).some((sl) => sl.some((x) => x[3] === 'theme-style'))
+	) {
+		warnings.push(
+			'This frontend build has no colour-theme slots (it predates colour themes), so only the pages the app ' +
+				'draws in the browser get your colours. Upgrade Morphit (sudo morphit-ops upgrade) — the upgrade ' +
+				're-applies your branding.'
+		);
+	}
+	for (const [rel, slots] of pageSlots(slotMap)) {
 		if (isProtectedPath(rel)) continue;
 		const c = canon(rel);
 		if (c === null) continue;
 		try {
-			put(rel, Buffer.from(brandPage(c.toString('utf8'), slots, brandName, beta), 'utf8'));
+			put(
+				rel,
+				Buffer.from(brandPage(c.toString('utf8'), slots, brandName, beta, pageTheme), 'utf8')
+			);
 		} catch (err) {
 			throw new Error(
 				`${rel}: ${err instanceof Error ? err.message : String(err)} — the build does not match its brand-slot map`
@@ -1063,7 +1263,8 @@ export function planBranding(
 		active: files.size > 0,
 		warnings,
 		notes,
-		rasterizerMissing: missingPngs.length > 0
+		rasterizerMissing: missingPngs.length > 0,
+		theme: palette
 	};
 }
 
@@ -1081,12 +1282,21 @@ export interface BrandingResult {
 	readonly unsupported: boolean;
 	/** Some PNGs could not be made: no rsvg-convert / ImageMagick on this box. */
 	readonly rasterizerMissing: boolean;
+	/** The applied colour theme, or null for the Morphit colours. */
+	readonly theme: ThemePalette | null;
 }
 
-function matchOwner(path: string, ref: string): void {
+export function matchOwner(path: string, ref: string): void {
 	try {
 		const st = lstatSync(ref);
-		chownSync(path, st.uid, st.gid);
+		// lchownSync, never chownSync: `path` was just renamed into a directory a
+		// NON-root account owns (the canary-upload build dir, or the web root), so
+		// that account can swap the freshly-written file for a symlink in the
+		// window before this chown. chownSync would then dereference it and hand
+		// the LINK'S TARGET (any root-owned file) to that account — a root
+		// privilege escalation (review B3). lchown affects the link itself, so a
+		// planted link is harmless, and a real regular file is chowned identically.
+		lchownSync(path, st.uid, st.gid);
 	} catch {
 		/* not root, or same owner — fine */
 	}
@@ -1163,7 +1373,8 @@ export function applyBranding(opts: {
 			warnings: [],
 			notes: [],
 			unsupported: true,
-			rasterizerMissing: false
+			rasterizerMissing: false,
+			theme: null
 		};
 	}
 	const release = opts.dryRun ? (): void => {} : acquireLock(paths);
@@ -1180,7 +1391,7 @@ function applyLocked(
 	opts: { settings: BrandingSettings; dryRun?: boolean; reset?: boolean }
 ): BrandingResult {
 	const dryRun = opts.dryRun === true;
-	const slotMap = JSON.parse(slotsBuf.toString('utf8')) as { files: Record<string, Slot[]> };
+	const slotMap = JSON.parse(slotsBuf.toString('utf8')) as SlotMap;
 	const state = loadState(paths, buildIdOf(paths), dryRun);
 	const trackedBefore = [...state.modified, ...state.added];
 
@@ -1190,7 +1401,8 @@ function applyLocked(
 				invalidBrandName: null,
 				shortName: null,
 				betaBadge: 'on',
-				dir: join(paths.pristineDir, '__none__')
+				dir: join(paths.pristineDir, '__none__'),
+				theme: null
 			}
 		: opts.settings;
 	const plan = planBranding(paths, settings, state, slotMap);
@@ -1232,7 +1444,8 @@ function applyLocked(
 		warnings: plan.warnings,
 		notes: plan.notes,
 		unsupported: false,
-		rasterizerMissing: plan.rasterizerMissing
+		rasterizerMissing: plan.rasterizerMissing,
+		theme: plan.theme
 	});
 	if (dryRun) return result();
 
@@ -1347,6 +1560,18 @@ function updateVerifyJson(
 		doc.operator_branding = {
 			brand_name: plan.brandName ?? DEFAULT_BRAND_NAME,
 			beta_badge: plan.beta,
+			...(plan.theme !== null
+				? {
+						colour_theme: {
+							preset: plan.theme.inputs.preset,
+							from: plan.theme.inputs.from,
+							mid: plan.theme.inputs.mid,
+							to: plan.theme.inputs.to,
+							background: plan.theme.inputs.background,
+							button: plan.theme.inputs.button
+						}
+					}
+				: {}),
 			note: 'Files this operator re-branded in place (docs/BRANDING.md). The on-chain release manifest (index.html, service-worker, _app entry) is never modified.',
 			files: overridden
 		};

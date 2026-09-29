@@ -226,8 +226,8 @@ run_smoke(){
 }
 
 verdict(){ # <output> -> pass | fail | crash
-	if printf '%s' "$1" | grep -q 'scenarios passed'; then echo pass
-	elif printf '%s' "$1" | grep -q 'FAILED'; then echo fail
+	if grep -q 'scenarios passed' <<<"$1"; then echo pass
+	elif grep -q 'FAILED' <<<"$1"; then echo fail
 	else echo crash; fi
 }
 
@@ -268,7 +268,7 @@ expect_caught(){ # <label> <file> <needle-or-empty>
 			# is satisfied by any failure whatsoever — which is the same as
 			# not checking the reason at all. Several needles in these
 			# harnesses were exactly that, and looked rigorous.
-			if [ -z "$needle" ] || printf '%s\n' "$out" | grep '✗' | grep -qi -- "$needle"; then
+			if [ -z "$needle" ] || grep -qi -- "$needle" <<<"$(grep '✗' <<<"$out")"; then
 				ok "$label — caught"
 			else
 				no "$label — the smoke failed, but not for the expected reason"
@@ -947,9 +947,9 @@ if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	# reading that as "survived" would be wrong in the same way as reading it as
 	# "caught" — it is no verdict at all. This cost a debugging round when the
 	# harness did not copy ops/ and the smoke died on a missing file.
-	if printf '%s' "$out" | grep -q 'checks failed'; then
+	if grep -q 'checks failed' <<<"$out"; then
 		ok 'M33 the chain correction is persisted — caught by fastpath-always-on'
-	elif printf '%s' "$out" | grep -q 'fastpath-always-on checks passed'; then
+	elif grep -q 'fastpath-always-on checks passed' <<<"$out"; then
 		no 'M33 SURVIVED. A write on the fast path is no longer detected.'
 	else
 		no 'M33 — fastpath-always-on CRASHED; no verdict. Not counted as a catch.'
@@ -991,12 +991,15 @@ snapshot "$FED"
 #
 # Re-aimed after the v1.18.0 deep-deep (TP-C1): the origin is now added under a
 # hidden-only condition, so the mutation adds the old "only if nothing hidden
-# was found" guard to that line.
+# was found" guard to that condition. Re-aimed again in v1.20.0: a hidden
+# origin is now dialled as http (S9, hiddenOriginForDial) and the call wraps.
 cat > "$WORK/.needle" <<'NEEDLE'
-	if (originHidden || !hiddenOnly) add(row.origin, originHidden);
+	if (originHidden || !hiddenOnly)
+		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
 NEEDLE
 cat > "$WORK/.repl" <<'REPL'
-	if (addresses.length === 0 && (originHidden || !hiddenOnly)) add(row.origin, originHidden);
+	if (addresses.length === 0 && (originHidden || !hiddenOnly))
+		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
 REPL
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
 	expect_caught 'M35 a hidden address discards the clearnet origin' "$FED" 'did not reach the peer'
@@ -1117,9 +1120,9 @@ if mutate "$ROUTE" "$WORK/.needle" "$WORK/.repl"; then
 	# Caught by the INVARIANT smoke, like M33 — the federation smoke has no
 	# opinion about who fans out, and would stay green.
 	out="$( ( cd "$WORK" && unset TSX_TSCONFIG_PATH && timeout 300 "$TSX" --tsconfig tsconfig.smoke.json apps/ops-cli/scripts/fastpath-always-on-smoke.ts 2>&1 ) )"
-	if printf '%s' "$out" | grep -q 'checks failed'; then
+	if grep -q 'checks failed' <<<"$out"; then
 		ok 'M41 a received message is re-fanned to every peer — caught by fastpath-always-on'
-	elif printf '%s' "$out" | grep -q 'fastpath-always-on checks passed'; then
+	elif grep -q 'fastpath-always-on checks passed' <<<"$out"; then
 		no 'M41 SURVIVED. The one-hop fan-out is no longer guarded.'
 	else
 		no 'M41 — fastpath-always-on CRASHED; no verdict. Not counted as a catch.'

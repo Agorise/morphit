@@ -2,11 +2,11 @@
 # SvelteKit static site AND reverse-proxies the API paths to the
 # relay + indexer on the host.
 #
-# It sits BEHIND BunkerWeb (which terminates TLS, runs the WAF, sets
-# the real client IP in X-Forwarded-For, and adds the security
-# headers), so this nginx listens on plain :80 inside the
-# bunkerweb_net Docker network and intentionally does NONE of that —
-# its only jobs are static-file serving + path routing.
+# It sits BEHIND BunkerWeb (which terminates TLS, runs the WAF and sets
+# the real client IP), so this nginx listens on plain :80 inside the
+# bunkerweb_net Docker network.  It does send Morphit's security headers
+# and keeps no access log itself (v1.20.0): Tor/I2P visitors reach it
+# directly, without BunkerWeb — see nginx.conf.
 #
 # The SvelteKit production build is bind-mounted at
 # /usr/share/nginx/html (see ../docker-compose.yml), so this image

@@ -627,10 +627,15 @@ export class EndpointPool {
 
 		for (let i = 0; i < primaryOrder.length; i++) {
 			const ep = primaryOrder[i]!;
+			// Already asked in this call — as the hedge of the previous attempt
+			// (v1.20.0, D9). Asking it again doubles the wait on a failing node.
+			if (triedUrls.has(ep.url)) continue;
 			triedUrls.add(ep.url);
-			const next = primaryOrder[i + 1];
+			const next = primaryOrder.slice(i + 1).find((e) => !triedUrls.has(e.url));
 			try {
-				const result = await this.attempt(ep, next, fn, timeoutMs, hedge);
+				const result = await this.attempt(ep, next, fn, timeoutMs, hedge, (url) =>
+					triedUrls.add(url)
+				);
 				return result;
 			} catch (err) {
 				if (isTransportError(err)) {
@@ -679,7 +684,8 @@ export class EndpointPool {
 		hedgeAgainst: EndpointState | undefined,
 		fn: (url: string, signal: AbortSignal) => Promise<T>,
 		timeoutMs: number,
-		hedge: boolean
+		hedge: boolean,
+		onHedgeDispatched: (url: string) => void = () => {}
 	): Promise<T> {
 		const primaryEwma = primary.ewmaLatencyMs;
 		const shouldHedge =
@@ -689,7 +695,13 @@ export class EndpointPool {
 			primaryEwma > this.hedgeThresholdMs;
 
 		if (!shouldHedge) {
-			return this.attemptSingle(primary, fn, timeoutMs, true);
+			// `hedge` doubles as "a person is waiting": it picks the hidden-network
+			// floor (25 s user-facing, 60 s background). This used to pass `true`
+			// unconditionally, so every background call — the poller, backfills,
+			// one-shot scripts, signed-write proxying — was cut off at 25 s on a
+			// .onion/.i2p endpoint, and MORPHIT_HIDDEN_RPC_TIMEOUT_MS could not raise
+			// it (v1.20.0 fix wave, D7).
+			return this.attemptSingle(primary, fn, timeoutMs, hedge);
 		}
 
 		// Hedged path: fire primary, schedule hedge after stagger,
@@ -732,7 +744,13 @@ export class EndpointPool {
 				this.recordSuccess(ep, latency);
 				return { ep, result };
 			} catch (err) {
-				if (isTransportError(err)) {
+				// The loser of the race is aborted BY US once the other leg wins.
+				// That says nothing about its health, so it must not be recorded
+				// as a failure (cooldown + wiped EWMA would push a healthy node out
+				// of rotation). Only the shared deadline is a real timeout
+				// (v1.20.0 fix wave, D9 — quorumCall already made this distinction).
+				const abortedByUs = ctl.signal.aborted && !timeoutCtl.signal.aborted;
+				if (!abortedByUs && isTransportError(err)) {
 					this.recordFailure(ep, isRateLimitError(err));
 				}
 				throw err;
@@ -746,6 +764,7 @@ export class EndpointPool {
 			(resolve, reject) => {
 				const handle = setTimeout(() => {
 					hedgeStarted = true;
+					onHedgeDispatched(hedgeAgainst.url);
 					wrappedFn(hedgeAgainst, hedgeCtl).then(resolve, reject);
 				}, stagger);
 				// If the timeout signal fires before we even dispatch the

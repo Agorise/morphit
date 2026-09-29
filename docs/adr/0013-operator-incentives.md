@@ -460,6 +460,18 @@ Net effect: Agorise (the project's operating org) ends Phase
 5b with zero accumulated earnings, same as a brand-new operator
 who registers tomorrow.
 
+## Amendment v1.20.0 — `fee_recipient` in the registration (G1)
+
+`morphit_operator_register_v1` gains an OPTIONAL field `fee_recipient`
+(a Blurt account name). A malformed value rejects the whole op
+(`fee_recipient_invalid`); absent, `null` or `""` leaves the previous value
+(registration is an upsert keyed on the signing account; only the tag is
+immutable). Other instances accept the 90 % owner leg of a BLURT listing or
+stranger fee at that account for ops tagged with this operator's tag, from
+the block after the registration. The history is append-only
+(`operator_fee_recipients`). Full rule: FEES-AND-REWARDS.md, "Across
+instances (v1.20.0)".
+
 ## References
 
 - PHASE-5-BACKLOG.md item 3

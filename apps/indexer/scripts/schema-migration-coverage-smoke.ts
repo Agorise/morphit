@@ -79,7 +79,18 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // present in BOTH schema.sql (banner at the end) and MIGRATIONS[] — checked.
 // v1.18.0: 60 → 61. v61 = accounts.posting_key_reconciled (F37), present in BOTH
 // schema.sql (banner at the end) and MIGRATIONS[] — checked.
-const SCHEMA_HEAD_VERSION = 61;
+// v1.20.0: 61 → 62. v62 = accounts unconfirmed-posting-key partial index +
+// corrected posting_key_reconciled comment (E1), present in BOTH schema.sql
+// (banner at the end) and MIGRATIONS[] — checked.
+// v1.20.0: 62 → 63. v63 = orders.fee_rechecked_at + idx_orders_fee_recheck (G3,
+// fair persistent BTC/XMR fee re-check), present in BOTH schema.sql (banner at
+// the end) and MIGRATIONS[] — checked.
+// v1.20.0: 63 → 65. v64 = operator_fee_recipients + fee_reverify_done (G1, P);
+// v65 = per-order BTC fee addresses: btc_fee_address_log, orders.btc_fee_*,
+// fee_status 'awaiting_payment' (MK-H2, M), orders.xmr_{tx_key,payment_id,fee_address},
+// fee_status 'proof_unsupported' (M-X1). Both present in schema.sql (banners
+// at the end) and MIGRATIONS[] — checked.
+const SCHEMA_HEAD_VERSION = 65;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  cp131 DEEP-002 — bumped 27 → 35 when
@@ -90,7 +101,10 @@ const SCHEMA_HEAD_VERSION = 61;
 // v1.5.0 (cp471): 43 → 45, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.18.0: 59 → 60, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.18.0: 60 → 61, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 61;
+// v1.20.0: 61 → 62, in lockstep with SCHEMA_HEAD_VERSION above.
+// v1.20.0: 62 → 63 (G3), in lockstep with SCHEMA_HEAD_VERSION above.
+// v1.20.0: 63 → 65 (G1 v64, MK-H2 v65), in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 65;
 
 interface ScenarioResult {
 	readonly name: string;

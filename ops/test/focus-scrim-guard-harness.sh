@@ -62,8 +62,8 @@ restore(){ mv "$1.orig" "$1"; }
 # printed neither, and must never be read as "passed" or as "survived the
 # mutation" — those are conclusions about code that never ran.
 verdict(){ # <output> -> pass | fail | crash
-	if printf '%s' "$1" | grep -q 'scenarios passed'; then echo pass
-	elif printf '%s' "$1" | grep -q 'FAILED'; then echo fail
+	if grep -q 'scenarios passed' <<<"$1"; then echo pass
+	elif grep -q 'FAILED' <<<"$1"; then echo fail
 	else echo crash; fi
 }
 
@@ -91,7 +91,7 @@ PY
 	local base; base="${needle:-$(basename "$file")}"
 	case "$(verdict "$out")" in
 		fail)
-			if printf '%s' "$out" | grep -qF "$base"; then
+			if grep -qF "$base" <<<"$out"; then
 				ok "$label — guard fails, reporting \"$base\""
 			else
 				no "$label — guard fails but never reports \"$base\" (would not tell you where to look)"

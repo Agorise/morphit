@@ -37,7 +37,7 @@ for operators who set up before that fix landed.
    `morphit-ops` (the same user that ran the install).
 3. `morphit-ops` itself is at the cp167 build or later. Check:
    ```
-   morphit-ops --help | grep edit-active-key
+   sudo morphit-ops --help | grep edit-active-key
    ```
    If that returns nothing, pull the latest source and rebuild:
    ```
@@ -54,7 +54,7 @@ directory you ran `morphit-ops init` in):
 
 ```
 cd /path/to/morphit
-morphit-ops edit-active-key
+sudo morphit-ops edit-active-key
 ```
 
 The command will:
@@ -165,7 +165,7 @@ alternative.
 Non-interactive equivalent (CI/scripted):
 
 ```
-morphit-ops edit-active-key --wipe-prior
+sudo morphit-ops edit-active-key --wipe-prior
 ```
 
 This skips the interactive "was the previous key compromised?" prompt
@@ -175,7 +175,7 @@ passphrase. (Those are required and have no safe default.)
 To force the safe path (keep `.bak` even for a wrong-key scenario):
 
 ```
-morphit-ops edit-active-key --keep-backup
+sudo morphit-ops edit-active-key --keep-backup
 ```
 
 Mutually exclusive with `--wipe-prior`.

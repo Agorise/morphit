@@ -136,8 +136,9 @@ for (const fn of LOADERS) {
 // ─── 4. the headline matches what order cards + chat show ────────
 check(
 	'the reputation headline renders the composite score, not the raw average',
-	/headlineRating\.toFixed\(2\)/.test(code) &&
-		!/\{feedback\.summary\.weighted_rating\.toFixed\(2\)\}/.test(code),
+	// v1.20.0 G12: rendered in the reader's number format via formatRating.
+	/formatRating\(headlineRating\)/.test(code) &&
+		!/\{(?:formatRating\()?feedback\.summary\.weighted_rating(?:\.toFixed\(2\)|\))\}/.test(code),
 	'the profile must not show a different number than the order card for one trader'
 );
 check(

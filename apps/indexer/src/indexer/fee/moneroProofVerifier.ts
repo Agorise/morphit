@@ -1,105 +1,51 @@
 /**
- * Morphit indexer — Monero fee verifier (Part 108++).
+ * Morphit indexer — Monero fee verifier.
  *
- * This verifier confirms an XMR fee payment using the user's
- * per-payment `tx_proof` string — Monero's standard selective-
- * transparency mechanism for proof-of-payment.  No view key is
- * required by any indexer; canonical morphit.io is one indexer
- * among many, with no privileged role in verification.
+ * Proves an XMR listing-fee payment from public data and the payer's
+ * per-payment TRANSACTION KEY r (in the order op since v1.20.0, M-X1). No
+ * indexer holds any view key; every indexer verifies every payment on its own.
  *
- * Replaces the Part 106/107-era `MoneroExplorerFeeVerifier` which
- * required the indexer to hold the treasury wallet's private view
- * key in env (read at boot, sent over HTTPS to the explorer for
- * each verification).  That design forced community operators
- * inheriting canonical's chain-pinned XMR address into one of
- * three options: trust canonical's verdict (federation-trust
- * path, never built), run their own treasury, or disable XMR.
- * Part 108++ eliminates that constraint: every indexer can verify
- * every payment independently, using the same public information.
+ * Two kinds of explorer, one quorum (v1.20.0, wave 4):
+ *   - 'txprove' (plain `https://…`): an onion-monero-blockchain-explorer
+ *     instance. `/api/outputs?txhash&address&viewkey=<r>&txprove=1` returns
+ *     the outputs r proves for the address, with amounts and confirmations;
+ *     for a bound fee `/api/transaction/<txid>` gives the encrypted payment
+ *     ID (`payment_id8`) and the raw `extra`.
+ *   - 'raw-tx' (`raw-tx+https://…`): an explorer that serves the RAW
+ *     transaction (moneroblocks.info `/api/get_transaction_data/<txid>`) but
+ *     no txprove. This node verifies the payment itself (xmrRawTx.ts): the
+ *     served content must hash to the txid, outputs are matched with r, and
+ *     every amount is opened against the chain's Pedersen commitment.
+ *     Confirmations: the block the tx page links to, checked in the block's
+ *     JSON (`/api/get_block_data/<height>`: tx_hashes, depth).
+ * Both kinds reduce to the same answer — (amount proven for the address,
+ * payment-ID verdict, confirmations) — and agreeing answers from EITHER kind
+ * count toward MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES alike.
  *
- * Verification flow:
- *   1. User pays Morphit's fee address from their own Monero
- *      wallet.
- *   2. User generates a tx_proof from their wallet via:
- *        - `monero-wallet-cli`: get_tx_proof <txid> <address>
- *        - Monero GUI: Advanced → Prove transaction
- *        - Cake Wallet: Settings → Privacy → Verify a transaction
- *        - Feather: Tools → Prove/check transaction
- *      The proof is a base58-ish string starting with
- *      'OutProofV1' or 'OutProofV2'.
- *   3. User posts an order op carrying fee_method='xmr', the
- *      txid in `external_tx_id`, and the proof in `tx_proof`.
- *   4. Indexer calls the explorer's `/api/outputs` endpoint with
- *      `txprove=1` and the tx_proof string in place of a viewkey.
- *      The explorer (or local monerod RPC) verifies the proof
- *      against the txid + address and returns the proven amount.
- *   5. Standard verified / underpaid / pending_external mapping.
+ * Bound fees (MK-H2): the amount is proven at the pinned PRIMARY address and
+ * the encrypted payment ID must decrypt, with the same r, to the order's ID.
  *
- * Privacy properties:
- *   - The proof reveals only "this txid paid this address this
- *     amount" — exactly the public information needed for
- *     verification, no more.
- *   - It does NOT reveal: other payments to the address, other
- *     transactions in the user's wallet, the user's other
- *     addresses, or wallet metadata.
- *   - One-time, per-payment.  Possessing one proof tells you
- *     nothing about other payments or future inflows.
- *   - The user is the ONLY party that needs to hold any
- *     verification secret (their tx key from their own wallet,
- *     never published).  The indexer holds NOTHING.
+ * Defaults (checked live 2026-09-28): xmrchain.net and moneroexplorer.org
+ * answer the onion-explorer JSON API; moneroblocks.info serves raw
+ * transactions. Dropped: localmonero.co/blocks (now redirects to
+ * moneroblocks.info — a different API — and redirects are not followed),
+ * monerohash.com/explorer (explorer UI, but /api/* answers 404: JSON API
+ * off), exploremonero.com (a JavaScript front end; /api/* serves its HTML
+ * shell). See docs/OPERATIONS.md §40.4.
  *
- * Decentralization properties:
- *   - Every indexer in the federation can independently verify
- *     every order using publicly-available block data + the
- *     proof string included in the order op.
- *   - No central instance.  No "morphit.io must be up"
- *     dependency for XMR verification.
- *   - Self-hostable: operators can point at a local monerod
- *     RPC instead of a third-party explorer (recommended for
- *     maximum independence).
- *
- * Multi-explorer cross-check:
- *   Same pattern as the BTC verifier — multiple explorer URLs,
- *   results compared for agreement, single-source-of-truth
- *   manipulation rejected.  Default ships with FIVE
- *   independent Monero explorers (all running the
- *   `moneroexamples/onion-monero-blockchain-explorer`
- *   reference codebase, same `/api/outputs?txprove=1`
- *   surface): xmrchain.net, localmonero.co/blocks,
- *   monerohash.com/explorer, exploremonero.com,
- *   moneroexplorer.org.  Operators can substitute their
- *   own list via `MORPHIT_INDEXER_XMR_EXPLORER_URLS`,
- *   including self-hosted instances for priority #2
- *   maximum independence.
- *
- * Confirmations: default 1.  Monero blocks are ~2 min apart so
- * 1 confirm takes a few minutes.  Morphit's fee tier is small
- * enough (~$0.25) that deep-reorg anxiety doesn't apply.
- *
- * Operator-side constraint (privacy invariant):
- *   The proof string IS sent over HTTPS to the configured
- *   explorer (required by Monero's design — the explorer
- *   needs the proof to verify the transaction).  This is
- *   acceptable because the proof reveals only the public-
- *   verifiable claim about that one payment.  Compare with
- *   the Part 106/107 design where the VIEW KEY was sent over
- *   HTTPS to the explorer; the view key revealed the entire
- *   incoming history of the wallet.  Per-payment proofs are
- *   strictly less leaky than view keys.
- *
- *   HTTPS-only is enforced by the config validator — see
- *   apps/indexer/src/config/index.ts MORPHIT_INDEXER_XMR_EXPLORER_URLS.
- *
- *   For maximum independence (Priority #2 — decentralization),
- *   operators can run their own monerod + monero-block-explorer
- *   on the same box and point the verifier at it.  See
- *   docs/OPERATIONS.md §40.4.
+ * Privacy: the txid and r (both already public in the order op) go over HTTPS
+ * to each explorer; only base URLs are logged. HTTPS-only is enforced by the
+ * config validator and again at construction.
  */
 
 import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { minAcceptablePiconero, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { logger } from '$log';
+import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from '$indexer/fee/xmrPaymentId';
+import { moneroTxHash, scanRawTxForAddress } from '$indexer/fee/xmrRawTx';
+import { parseXmrAddress } from '@morphit/release-schema';
+import { DEFAULT_XMR_EXPLORERS, parseXmrExplorer, type XmrExplorerKind } from '../../config/xmrExplorers';
 
 const log = logger('xmr-verify');
 
@@ -108,10 +54,9 @@ export interface MoneroProofFeeVerifierConfig {
 	 *  the user paid TO; the verifier confirms the proof was
 	 *  generated for this exact address. */
 	readonly feeAddress: string;
-	/** Explorer base URLs that expose an /api/outputs endpoint
-	 *  with `txprove=1` mode.  xmrchain.net is the reference;
-	 *  operators can substitute their own self-hosted Monero
-	 *  block-explorer instance for maximum independence. */
+	/** Explorers: `https://…` = an onion-monero-blockchain-explorer
+	 *  (txprove); `raw-tx+https://…` = an explorer serving raw
+	 *  transactions (moneroblocks.info API), verified locally. */
 	readonly explorerUrls: readonly string[];
 	/** Minimum confirmations required.  Default 1. */
 	readonly minConfirmations: number;
@@ -128,29 +73,21 @@ export interface MoneroProofFeeVerifierConfig {
 	readonly minSuccessfulResponses: number;
 }
 
+export { DEFAULT_XMR_EXPLORERS, parseXmrExplorer, type XmrExplorerKind };
+
 export const DEFAULT_MONERO_PROOF_VERIFIER_CONFIG: Omit<
 	MoneroProofFeeVerifierConfig,
 	'feeAddress'
 > = {
-	// Default explorer list — five independent instances all
-	// running the same `onion-monero-blockchain-explorer`
-	// reference codebase.  Multi-explorer cross-check rejects
-	// single-source manipulation; if a verifier-construction
-	// code path uses this default (vs. reading config), it
-	// still gets a 5-way cross-check out of the box.
-	explorerUrls: [
-		'https://xmrchain.net',
-		'https://localmonero.co/blocks',
-		'https://monerohash.com/explorer',
-		'https://exploremonero.com',
-		'https://moneroexplorer.org'
-	],
+	// Three independent operators, two kinds (see the header): the same
+	// list as MORPHIT_INDEXER_XMR_EXPLORER_URLS' default.
+	explorerUrls: [...DEFAULT_XMR_EXPLORERS],
 	minConfirmations: 1,
 	requestTimeoutMs: 10_000,
 	// Default of 1 preserves pre-Part-109 behavior.  Operators with
 	// the default 5-explorer list should bump to 2 or 3 in their
 	// indexer.env for true cross-source check on every payment.
-	minSuccessfulResponses: 1
+	minSuccessfulResponses: 2
 };
 
 /** Shape of xmrchain.net's /api/outputs response when called with
@@ -194,9 +131,9 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		// old view key (per-payment vs. wallet-lifetime), but still
 		// publicly verifiable claim and still warrants TLS.
 		for (const u of config.explorerUrls) {
-			if (!u.startsWith('https://')) {
+			if (parseXmrExplorer(u) === null) {
 				throw new Error(
-					`MoneroProofFeeVerifier: explorer URL must be https://, got ${u}`
+					`MoneroProofFeeVerifier: explorer URL must be https:// (or raw-tx+https://), got ${u}`
 				);
 			}
 		}
@@ -225,72 +162,111 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		if (claim.externalTxId === null || claim.externalTxId.length === 0) {
 			return { kind: 'rejected', reason: 'missing_external_tx_id' };
 		}
-		// Monero tx hashes are 32-byte hex = 64 chars.
 		if (!/^[0-9a-f]{64}$/i.test(claim.externalTxId)) {
 			return { kind: 'rejected', reason: 'malformed_tx_id' };
 		}
-		// Part 108++ — tx_proof is required.
-		if (claim.txProof === null || claim.txProof.length === 0) {
-			return { kind: 'rejected', reason: 'missing_tx_proof' };
+		// (v1.20.0, M-X1) The explorer's txprove mode takes the transaction
+		// PRIVATE key in its `viewkey` parameter and parses exactly 64 hex
+		// (page.h json_outputs → parse_str_secret_key → parse_hash256). An
+		// OutProof string cannot be parsed there, so it is never sent.
+		const txKey = claim.txKey ?? null;
+		if (txKey === null || txKey.length === 0) {
+			return { kind: 'rejected', reason: 'missing_tx_key' };
 		}
-		// Order-handler structural validator already enforced shape
-		// (OutProofV1/V2 prefix, length, charset) but defense-in-
-		// depth check here too — a verifier that trusts upstream
-		// validation entirely is a verifier with a hidden
-		// constraint.
-		if (
-			!claim.txProof.startsWith('OutProofV1') &&
-			!claim.txProof.startsWith('OutProofV2')
-		) {
-			return { kind: 'rejected', reason: 'malformed_tx_proof_prefix' };
+		if (!/^[0-9a-f]{64}$/i.test(txKey)) {
+			return { kind: 'rejected', reason: 'malformed_tx_key' };
 		}
-		if (claim.txProof.length > 4096) {
-			return { kind: 'rejected', reason: 'tx_proof_too_long' };
-		}
-		if (!/^[A-Za-z0-9]+$/.test(claim.txProof)) {
-			return { kind: 'rejected', reason: 'malformed_tx_proof_charset' };
-		}
-		// claim.expectedAmount for XMR is a bigint in piconero.
 		if (typeof claim.expectedAmount !== 'bigint') {
 			return {
 				kind: 'rejected',
 				reason: 'expected_amount_not_bigint_for_xmr'
 			};
 		}
+		// (v1.20.0, MK-H2) Bound fee: amount proven at the pinned PRIMARY
+		// address, and the transaction's encrypted payment ID must decrypt
+		// (with the same tx key) to this order's ID.
+		const binding = claim.xmrBinding ?? null;
+		const address = binding !== null ? binding.primaryAddress : this.config.feeAddress;
 
-		// cp166: quorum-with-early-return.  Fire to all healthy
-		// explorers in parallel; return the moment
-		// `minSuccessfulResponses` agree on the proven piconero
-		// amount.  Slow / dead explorers don't gate completion.
 		const totalUrls = this.config.explorerUrls.length;
 		const quorumTimeoutMs = this.config.requestTimeoutMs * 2;
+		let notFoundCount = 0;
 
-		const quorumResult = await this.pool.quorumCall<ExplorerProofResponse>(
-			async (base, signal) => {
+		/** One explorer's answer, whatever its kind. `confirmations` null =
+		 *  that explorer could not say (a raw-tx explorer whose tx page did
+		 *  not lead to a block); it then does not vote on depth. */
+		type Answer = { sum: bigint; pid: 'match' | 'mismatch' | 'unbound'; confirmations: number | null };
+		const pidOf = (enc: string): 'match' | 'mismatch' => {
+			if (binding === null || enc === '') return 'mismatch';
+			return xmrDecryptPaymentId(binding.viewPub, txKey.toLowerCase(), enc) === binding.paymentId
+				? 'match'
+				: 'mismatch';
+		};
+		const quorumResult = await this.pool.quorumCall<Answer>(
+			async (spec, signal) => {
+				const ex = parseXmrExplorer(spec);
+				if (ex === null) return null;
+				if (ex.kind === 'raw-tx') {
+					const r = await this.rawTxAnswer(ex.base, claim.externalTxId!, address, txKey.toLowerCase(), signal);
+					switch (r.kind) {
+						case 'transport_failure':
+							throw new Error('transport_failure');
+						case 'data_not_found':
+							notFoundCount++;
+							return null;
+						case 'data_malformed':
+							return null;
+					}
+					return {
+						sum: r.amount,
+						pid: binding === null ? 'unbound' : pidOf(r.encryptedPaymentIds[0] ?? ''),
+						confirmations: r.confirmations
+					};
+				}
+				const base = ex.base;
 				const r = await this.fetchProofVerification(
 					base,
 					claim.externalTxId!,
-					claim.txProof!,
+					address,
+					txKey.toLowerCase(),
 					signal
 				);
 				switch (r.kind) {
-					case 'ok':
-						return r.body;
 					case 'transport_failure':
 						throw new Error('transport_failure');
 					case 'data_not_found':
+						notFoundCount++;
+						return null;
 					case 'data_malformed':
-						// Explorer responded healthily; data issue is
-						// the user's problem.  Don't penalize the
-						// endpoint (per Finding S12); don't bucket.
 						return null;
 				}
+				const sum = this.sumMatchedOutputs(r.body);
+				const confirmations = r.body.data?.tx_confirmations ?? 0;
+				if (binding === null) return { sum, pid: 'unbound', confirmations };
+				const t = await this.fetchTransaction(base, claim.externalTxId!, signal);
+				switch (t.kind) {
+					case 'transport_failure':
+						throw new Error('transport_failure');
+					case 'data_not_found':
+						notFoundCount++;
+						return null;
+					case 'data_malformed':
+						return null;
+				}
+				if (t.paymentId8 === '') return { sum, pid: 'mismatch', confirmations };
+				// Cross-check the explorer's payment_id8 against the raw extra
+				// it returned: the ID must be the encrypted-ID nonce in there.
+				if (t.extra !== '') {
+					const inExtra = encryptedPaymentIdsFromExtra(t.extra);
+					if (inExtra === null || !inExtra.includes(t.paymentId8)) {
+						log.warn('explorer_payment_id_not_in_extra', { explorer: base });
+						return null;
+					}
+				}
+				return { sum, pid: pidOf(t.paymentId8), confirmations };
 			},
 			{
-				// Agreement key = proven piconero amount.  Explorers
-				// that compute the same matched-output sum end up in
-				// the same bucket.  BigInt → string for keying.
-				equivalenceKey: (r) => this.sumMatchedOutputs(r).toString(),
+				equivalenceKey: (x) => `${x.sum.toString()}|${x.pid}`,
 				minAgree: this.config.minSuccessfulResponses,
 				timeoutMs: quorumTimeoutMs
 			}
@@ -304,28 +280,35 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		}
 
 		if (quorumResult.kind === 'all_responses_in') {
+			// (v1.18.0 deep-deep, H1) A quorum answering "no such tx" is
+			// definitive only when nothing usable contradicted it.
+			if (
+				notFoundCount >= this.config.minSuccessfulResponses &&
+				quorumResult.responses.length === 0
+			) {
+				return {
+					kind: 'rejected',
+					reason: `tx_not_found: ${notFoundCount} explorer(s) found no such transaction`
+				};
+			}
 			return {
 				kind: 'pending_external',
 				reason: `quorum not met: best group had < ${this.config.minSuccessfulResponses} agreeing explorers (${quorumResult.responses.length} usable responses, ${quorumResult.cooledDown} in cooldown)`
 			};
 		}
 
-		// Quorum met.  Filter responses down to the agreeing bucket.
 		const agreedKey = quorumResult.agreedKey!;
-		const successful = quorumResult.responses.filter(
-			(r) => this.sumMatchedOutputs(r).toString() === agreedKey
-		);
+		const [sumStr, pidVerdict] = agreedKey.split('|') as [string, Answer['pid']];
+		const successful = quorumResult.responses.filter((x) => `${x.sum.toString()}|${x.pid}` === agreedKey);
 
-		const observed = BigInt(agreedKey);
+		const observed = BigInt(sumStr);
 		if (observed === 0n) {
-			// Proof verified to an existing tx but no outputs matched
-			// our address — the proof is for a different payment, or
-			// proves a payment to a different recipient.
-			return { kind: 'rejected', reason: 'tx_proof_did_not_prove_any_match' };
+			return { kind: 'rejected', reason: 'tx_key_did_not_prove_any_match' };
 		}
-		// Model-A tolerance (cp372): accept within FEE_PRICE_TOLERANCE
-		// below the chain-pinned expected piconero (see the BTC
-		// verifier for the rationale).  bigint-safe lower bound.
+		if (pidVerdict === 'mismatch') {
+			// A real payment to the treasury, but for another order (or none).
+			return { kind: 'rejected', reason: 'payment_id_mismatch' };
+		}
 		const minPico = minAcceptablePiconero(claim.expectedAmount);
 		if (observed < minPico) {
 			return {
@@ -334,11 +317,12 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		// Confirmation check.
-		const minConfirmedAcross = successful.reduce<number>((acc, r) => {
-			const c = r.data?.tx_confirmations ?? 0;
-			return acc === -1 ? c : Math.min(acc, c);
-		}, -1);
+		// Depth: the least any agreeing explorer that could say reports.
+		const depths = successful.map((x) => x.confirmations).filter((c): c is number => c !== null);
+		if (depths.length === 0) {
+			return { kind: 'pending_external', reason: 'confirmations unknown (no agreeing explorer reported the block)' };
+		}
+		const minConfirmedAcross = Math.min(...depths);
 		if (minConfirmedAcross < this.config.minConfirmations) {
 			return {
 				kind: 'pending_external',
@@ -346,8 +330,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		const usableContributors = quorumResult.responses.length;
-		if (usableContributors < quorumResult.contacted) {
+		if (quorumResult.responses.length < quorumResult.contacted) {
 			log.info('partial_explorer_agreement', {
 				permlink: claim.permlink,
 				contacted: quorumResult.contacted,
@@ -359,12 +342,182 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		return { kind: 'verified', observedAmount: observed };
 	}
 
-	// ─── Internals ────────────────────────────────────────────────
+	/** (wave 4) A raw-tx explorer's answer, verified here (xmrRawTx.ts). */
+	private async rawTxAnswer(
+		base: string,
+		txid: string,
+		address: string,
+		txKey: string,
+		poolSignal?: AbortSignal
+	): Promise<
+		| { kind: 'ok'; amount: bigint; encryptedPaymentIds: readonly string[]; confirmations: number | null }
+		| { kind: 'transport_failure' }
+		| { kind: 'data_not_found' }
+		| { kind: 'data_malformed' }
+	> {
+		const dest = parseXmrAddress(address);
+		if (!dest.ok) return { kind: 'data_malformed' };
+		const got = await this.getJsonFrom(`${base}/api/get_transaction_data/${txid}`, poolSignal);
+		if (got.kind !== 'ok') return got;
+		const b = got.body as { status?: unknown; error?: unknown; transaction_data?: unknown } | null;
+		if (b !== null && typeof b === 'object' && b.status === 'ERROR') {
+			return /not found/i.test(String(b.error)) ? { kind: 'data_not_found' } : { kind: 'data_malformed' };
+		}
+		if (b === null || typeof b !== 'object' || b.status !== 'OK') return { kind: 'data_malformed' };
+		// The served content must BE the transaction the payer named.
+		if (moneroTxHash(b.transaction_data) !== txid.toLowerCase()) {
+			log.warn('explorer_tx_content_mismatch', { explorer: base });
+			return { kind: 'data_malformed' };
+		}
+		const scan = scanRawTxForAddress(b.transaction_data, txKey, {
+			viewPub: dest.value.viewPub,
+			spendPub: dest.value.spendPub
+		});
+		if ('error' in scan) {
+			if (scan.error === 'commitment_mismatch') log.warn('explorer_commitment_mismatch', { explorer: base });
+			return scan.error === 'bad_key' ? { kind: 'data_not_found' } : { kind: 'data_malformed' };
+		}
+		const confirmations = await this.rawTxConfirmations(base, txid, poolSignal);
+		return { kind: 'ok', amount: scan.amount, encryptedPaymentIds: scan.encryptedPaymentIds, confirmations };
+	}
+
+	/** Depth of `txid` on a raw-tx explorer: its API has no tx → block
+	 *  lookup, so the block number comes from the explorer's tx page
+	 *  (`/tx/<txid>` links `/block/<height>`), and is then CHECKED in the
+	 *  block's JSON: `get_block_data/<height>` must list the txid and gives
+	 *  the block's depth (confirmations = depth + 1, as monerod counts). 0 when
+	 *  the page names no block (still in the pool); null when it cannot tell. */
+	private async rawTxConfirmations(base: string, txid: string, poolSignal?: AbortSignal): Promise<number | null> {
+		let page: string;
+		try {
+			const res = await this.fetchImpl(`${base}/tx/${txid}`, {
+				method: 'GET',
+				headers: { accept: 'text/html' },
+				signal: poolSignal ?? null,
+				redirect: 'manual'
+			} as RequestInit);
+			if (!res.ok) return null;
+			page = (await res.text()).slice(0, 500_000);
+		} catch {
+			return null;
+		}
+		const heights = [...new Set([...page.matchAll(/\/block\/(\d{1,9})(?!\d)/g)].map((m) => Number(m[1])))].slice(0, 3);
+		if (heights.length === 0) return /\bconfirmations\b/i.test(page) ? 0 : null;
+		for (const h of heights) {
+			const got = await this.getJsonFrom(`${base}/api/get_block_data/${h}`, poolSignal);
+			if (got.kind !== 'ok') continue;
+			const result = (got.body as { block_data?: { result?: Record<string, unknown> } } | null)?.block_data?.result;
+			const header = result?.block_header as { height?: unknown; depth?: unknown } | undefined;
+			const hashes = result?.tx_hashes;
+			if (
+				header?.height === h &&
+				typeof header.depth === 'number' &&
+				Number.isSafeInteger(header.depth) &&
+				header.depth >= 0 &&
+				Array.isArray(hashes) &&
+				hashes.some((x) => typeof x === 'string' && x.toLowerCase() === txid.toLowerCase())
+			) {
+				return header.depth + 1;
+			}
+		}
+		return null;
+	}
+
+	/** GET JSON with the verifier's timeout; never follows redirects. */
+	private async getJsonFrom(
+		url: string,
+		poolSignal?: AbortSignal
+	): Promise<{ kind: 'ok'; body: unknown } | { kind: 'transport_failure' } | { kind: 'data_malformed' }> {
+		const ac = new AbortController();
+		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
+		const onPoolAbort = (): void => ac.abort();
+		if (poolSignal !== undefined) {
+			if (poolSignal.aborted) ac.abort();
+			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
+		}
+		try {
+			const res = await this.fetchImpl(url, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				signal: ac.signal,
+				redirect: 'manual'
+			} as RequestInit);
+			if (!res.ok) return { kind: 'transport_failure' };
+			try {
+				return { kind: 'ok', body: (await res.json()) as unknown };
+			} catch {
+				return { kind: 'data_malformed' };
+			}
+		} catch (err) {
+			log.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
+			return { kind: 'transport_failure' };
+		} finally {
+			clearTimeout(timer);
+			if (poolSignal !== undefined) poolSignal.removeEventListener('abort', onPoolAbort);
+		}
+	}
+
+	/** (v1.20.0, MK-H2) GET /api/transaction/<txid>: the RAW encrypted
+	 *  payment ID (`payment_id8`, 16 hex, or '' when the tx has none) and the
+	 *  tx extra hex, per page.h get_tx_json. */
+	private async fetchTransaction(
+		baseUrl: string,
+		txid: string,
+		poolSignal?: AbortSignal
+	): Promise<
+		| { kind: 'ok'; paymentId8: string; extra: string }
+		| { kind: 'transport_failure' }
+		| { kind: 'data_not_found' }
+		| { kind: 'data_malformed' }
+	> {
+		const url = `${baseUrl.replace(/\/+$/, '')}/api/transaction/${txid}`;
+		const ac = new AbortController();
+		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
+		const onPoolAbort = (): void => ac.abort();
+		if (poolSignal !== undefined) {
+			if (poolSignal.aborted) ac.abort();
+			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
+		}
+		try {
+			const res = await this.fetchImpl(url, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				signal: ac.signal
+			});
+			if (res.status === 404) return { kind: 'data_not_found' };
+			if (!res.ok) return { kind: 'transport_failure' };
+			let body: unknown;
+			try {
+				body = (await res.json()) as unknown;
+			} catch {
+				return { kind: 'data_malformed' };
+			}
+			if (typeof body !== 'object' || body === null) return { kind: 'data_malformed' };
+			const b = body as { status?: unknown; data?: Record<string, unknown> };
+			if (b.status !== 'success') return { kind: 'data_not_found' };
+			const d = b.data;
+			if (typeof d !== 'object' || d === null) return { kind: 'data_malformed' };
+			if (typeof d.tx_hash !== 'string' || d.tx_hash.toLowerCase() !== txid.toLowerCase()) {
+				return { kind: 'data_malformed' };
+			}
+			const pid8 = typeof d.payment_id8 === 'string' ? d.payment_id8.toLowerCase() : '';
+			if (pid8 !== '' && !/^[0-9a-f]{16}$/.test(pid8)) return { kind: 'data_malformed' };
+			const extra = typeof d.extra === 'string' ? d.extra.toLowerCase() : '';
+			return { kind: 'ok', paymentId8: pid8, extra };
+		} catch (err) {
+			log.warn('explorer_fetch_failed', { explorer: baseUrl, txid }, err);
+			return { kind: 'transport_failure' };
+		} finally {
+			clearTimeout(timer);
+			if (poolSignal !== undefined) poolSignal.removeEventListener('abort', onPoolAbort);
+		}
+	}
 
 	private async fetchProofVerification(
 		baseUrl: string,
 		txid: string,
-		txProof: string,
+		address: string,
+		txKey: string,
 		poolSignal?: AbortSignal
 	): Promise<
 		| { kind: 'ok'; body: ExplorerProofResponse }
@@ -375,20 +528,19 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		// xmrchain endpoint with proof-mode:
 		//   /api/outputs?txhash={txid}&address={addr}&viewkey={proof}&txprove=1
 		//
-		// In proof-mode, the `viewkey` query parameter actually
-		// receives the tx_proof string (yes, the parameter name is
-		// confusing; this is xmrchain.net's API surface, not ours).
-		// The `txprove=1` flag tells the explorer to interpret the
-		// value as a proof rather than a wallet view key.
+		// In prove mode (`txprove=1`) the `viewkey` query parameter
+		// carries the transaction PRIVATE key r (v1.20.0, M-X1: the
+		// explorer parses exactly 64 hex there — page.h json_outputs;
+		// the OutProof strings sent before could never parse). The
+		// name is the explorer's API surface, not ours.
 		//
-		// We do NOT log the full URL — only the base URL.  The
-		// proof string is less sensitive than a view key (per-
-		// payment, single-use), but still excluded from logs as
-		// part of the project's privacy posture.
+		// We do NOT log the full URL — only the base URL. The tx key
+		// is per-payment (it is also in the public order op), but is
+		// still kept out of logs as part of the privacy posture.
 		const params = new URLSearchParams({
 			txhash: txid,
-			address: this.config.feeAddress,
-			viewkey: txProof,
+			address,
+			viewkey: txKey,
 			txprove: '1'
 		});
 		const url = `${baseUrl.replace(/\/+$/, '')}/api/outputs?${params}`;

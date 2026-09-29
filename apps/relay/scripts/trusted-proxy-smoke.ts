@@ -10,8 +10,9 @@
  *
  * Coverage:
  *   1. Default (no configureTrustedProxies call) trusts loopback
- *      only — direct-from-the-internet attackers cannot forge
- *      X-Forwarded-For.
+ *      + 172.16.0.0/12 (v1.20.0 wave 5; the pool is proven in
+ *      test/middleware/trustedProxyDefault.test.ts) — direct-from-
+ *      the-internet attackers cannot forge X-Forwarded-For.
  *   2. After configureTrustedProxies(['172.18.0.0/16']) the Docker
  *      bridge IPs are accepted as proxies (typical BunkerWeb
  *      compose deployment).
@@ -52,8 +53,8 @@ function check(label: string, condition: boolean, detail = ''): void {
 
 console.log('\n── trusted-proxy CIDR smoke ────────────────────────────\n');
 
-// 1. Reset to default loopback-only state (an empty configure call
-//    re-initializes from defaults).
+// 1. Reset to the default (loopback + 172.16.0.0/12; an empty configure
+//    call re-initializes from defaults).
 configureTrustedProxies([]);
 {
 	// A direct-from-internet attacker setting X-Forwarded-For must

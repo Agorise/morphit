@@ -41,7 +41,7 @@
 		pairedReadOnly,
 		hasAnySession,
 		broadcastSignOut,
-		lockSession
+		lockAllTabs
 	} from '$stores/identity';
 	import { persistedKeystorePresent } from '$crypto/persistentKeystore';
 	import { unreadCount, totalUnread, markRead } from '$lib/notifications';
@@ -291,7 +291,9 @@
 		showLockConfirm = false;
 		const { runExplicitLockExtras } = await import('$lib/chat/explicitLock');
 		runExplicitLockExtras();
-		lockSession();
+		// Explicit Lock locks EVERY tab of this site (v1.20.0, F-5); the idle
+		// auto-lock in +layout stays per-tab.
+		lockAllTabs();
 		await gotoLocale('/login');
 	}
 

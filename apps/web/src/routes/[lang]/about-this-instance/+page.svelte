@@ -33,7 +33,11 @@
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import { instance } from '$stores/instance';
+	import { showFeeRecipientUnregistered } from '$stores/feeRecipient';
+	import { chainPinnedTreasury } from '$stores/release';
+	import { btcFeeKeyId } from '$lib/orders/btcFeeAddress';
 	import { findPaymentMethod } from '$lib/payments/registry';
+	import { webCryptoAvailable } from '$lib/security/secureContext';
 
 	interface VerifyPayload {
 		schema_version: number;
@@ -127,6 +131,12 @@
 
 	$effect(() => {
 		if (!verify) return;
+		// v1.20.0 (F-9): no WebCrypto on a plain-HTTP I2P address (not a secure
+		// context) — say so instead of showing "computing…" forever.
+		if (!webCryptoAvailable()) {
+			aggregateHash = $_('about_this_instance.field.aggregate_hash_unavailable');
+			return;
+		}
 		void (async () => {
 			const sortedKeys = Object.keys(verify.hash_manifest).sort();
 			const sorted: Record<string, string> = {};
@@ -204,7 +214,7 @@
 					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
 						{$_('about_this_instance.field.commit')}
 					</dt>
-					<dd class="font-mono break-all">
+					<dd class="break-all font-mono">
 						{#if verify.git_commit}
 							{verify.git_commit}
 						{:else}
@@ -238,6 +248,22 @@
 						</dd>
 					</div>
 				{/if}
+				{#if btcFeeKeyId($chainPinnedTreasury) !== null}
+					<!-- v1.20.0 (MK-H2): the chain-pinned treasury BTC key that every BTC
+					     listing fee address is derived from. Only its short public id is
+					     shown here (the full key is public in the release op anyway). -->
+					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
+						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
+							{$_('about_this_instance.field.btc_fee_key')}
+						</dt>
+						<dd>
+							<span class="font-mono">{btcFeeKeyId($chainPinnedTreasury)}</span>
+							<span class="ml-2 text-ink-500">
+								{$_('about_this_instance.field.btc_fee_key_hint')}
+							</span>
+						</dd>
+					</div>
+				{/if}
 				{#if $instance.operator_matrix_room}
 					<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
 						<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
@@ -255,6 +281,19 @@
 					</div>
 				{/if}
 			</dl>
+			{#if showFeeRecipientUnregistered($instance.fee_recipient_registered)}
+				<!-- v1.20.0 (G1): only on a VERIFIED "not registered" (never on
+				     null = unknown). Informational, not an alarm: it is the
+				     operator's to-do, and visitors' funds are unaffected. -->
+				<p
+					class="mt-4 rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm text-ink-800 dark:text-ink-100"
+					data-testid="fee-recipient-unregistered"
+				>
+					{$_('about_this_instance.fee_recipient_unregistered', {
+						values: { account: $instance.fee_recipient }
+					})}
+				</p>
+			{/if}
 		</section>
 
 		<!-- Item 3 / Part 121 cp6 — operator-stance surfacing.

@@ -505,13 +505,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (target.fee_method === 'waived_first_buy') {
 		// cp372: FX-aware floor, identical conversion to create-time in
 		// order.ts — amount_min is in v.fiat_currency; convert to USD
-		// before the $1 check.  null (unconvertible) falls back to the
-		// direct comparison (documented).  A null amount_min still fails
-		// the floor outright (can't claim the waiver on an unbounded min).
+		// before the $1 check.  A null amount_min fails the floor outright
+		// (can't claim the waiver on an unbounded min), and so (v1.20.0,
+		// G5) does an amount this node cannot convert — it used to be
+		// compared as if it were already USD.
 		const minUsd =
-			v.amount_min === null
-				? null
-				: (ctx.fiatToUsd(v.amount_min, v.fiat_currency) ?? v.amount_min);
+			v.amount_min === null ? null : ctx.fiatToUsd(v.amount_min, v.fiat_currency);
 		if (minUsd === null || minUsd < WAIVER_MIN_FIAT_USD) {
 			return { ok: false, reason: 'replace_below_waiver_floor' };
 		}

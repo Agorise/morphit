@@ -36,12 +36,15 @@ Five read-only tools:
 
 ## Installation
 
-> **Beta status:** Until the v1.0.0 stable release, `morphit-mcp` is
-> installed from source (instructions below).  The npm + Docker
-> distribution pipeline lands with the v1.0.0 release tag —
-> follow `git.agorise.net/agorise/morphit/releases` for the cut.
+`morphit-mcp` is installed from source. It is **not** published on the npm
+registry or as a container image: a package called `morphit-mcp` on npm, or
+`morphit-mcp` on any image registry, is not from this project — do not
+install it.
 
-### From source (currently the only option)
+On a Morphit node it is already there: the guided install deploys it as the
+`morphit-mcp` service (`sudo morphit-ops mcp` turns it on or off).
+
+### From source
 
 ```sh
 git clone https://git.agorise.net/agorise/morphit
@@ -53,22 +56,8 @@ node apps/mcp-server/dist/main.js
 
 Wire that absolute path into your MCP client config (next
 section); the server speaks stdio so the client invokes it
-directly.
-
-### npm (forthcoming, v1.0.0 stable)
-
-```sh
-npm install -g morphit-mcp
-```
-
-### Docker (forthcoming, v1.0.0 stable)
-
-```sh
-docker run --rm -i ghcr.io/agorise/morphit-mcp:1.0.0
-```
-
-(stdio-piped — MCP clients invoke this directly.  Pin to a
-specific tag like `:1.0.0`; never `:latest` for reproducibility.)
+directly. Verify the checkout first (`git verify-tag <tag>`, see
+`docs/VERIFY-YOUR-DOWNLOAD.md`) and build from a release tag.
 
 ## Configuration
 

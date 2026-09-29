@@ -34,6 +34,7 @@ import {
 	type FxFetch,
 	type FxRateTable,
 	isPlausibleFxTable,
+	dropImplausibleRates,
 	FX_RATE_PLAUSIBLE_MIN,
 	FX_RATE_PLAUSIBLE_MAX
 } from '$indexer/fx/source';
@@ -217,7 +218,9 @@ export class CompositeCachedFxSource implements FxRateSource {
 			stat.lastTriedAt = now;
 			let table: FxRateTable | null = null;
 			if (res.status === 'fulfilled') {
-				table = res.value;
+				// G5 — drop out-of-range entries (e.g. a crypto code in a fiat
+				// table) instead of letting one of them sink the whole table.
+				table = dropImplausibleRates(res.value);
 			} else {
 				// FxFetch contract says "never throws"; a buggy impl
 				// shouldn't crash the refresher.

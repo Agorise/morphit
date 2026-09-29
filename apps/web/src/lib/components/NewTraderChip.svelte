@@ -47,11 +47,11 @@
 		0%,
 		100% {
 			transform: scale(1);
-			filter: drop-shadow(0 0 0 rgba(0, 218, 105, 0));
+			filter: drop-shadow(0 0 0 rgb(var(--brand-2-rgb) / 0));
 		}
 		50% {
 			transform: scale(1.12);
-			filter: drop-shadow(0 0 4px rgba(0, 218, 105, 0.55));
+			filter: drop-shadow(0 0 4px rgb(var(--brand-2-rgb) / 0.55));
 		}
 	}
 

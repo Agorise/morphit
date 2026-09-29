@@ -91,13 +91,25 @@ for (const m of orderHandlerSrc.matchAll(assignRe)) {
 for (const m of feeAttestSrc.matchAll(assignRe)) {
 	writtenViaAssign.add(m[1]);
 }
+// v1.20.0 (G1): the BLURT branch assigns `feeStatus = listingFeeStatus(...)`,
+// the verdict shared with the cross-instance re-verification. Read that
+// function's `return '<status>'` literals from $indexer/fee as what the
+// handler can write through it.
+if (/\bfeeStatus\s*=\s*listingFeeStatus\(/.test(orderHandlerSrc)) {
+	const feeSrc = readFileSync(join(REPO_ROOT, 'apps/indexer/src/indexer/fee.ts'), 'utf-8');
+	const body = /export function listingFeeStatus\([^]*?\n\}/.exec(feeSrc)?.[0] ?? '';
+	for (const m of body.matchAll(/\breturn\s+'([a-z_]+)'/g)) writtenViaAssign.add(m[1]);
+}
 
 // (b) literal strings in VALUES (...) fragments where the
 //     INSERT column list contains fee_status.  We grep for
 //     SQL fragments that mention fee_status and extract the
 //     literal-string values that appear in them.
+// v1.20.0 (MK-H2): 'awaiting_payment' — a BTC order with its own fee address,
+// written by the order handler's per-order-address INSERT. (M-X1):
+// 'proof_unsupported' — an XMR order carrying only an OutProof.
 const sqlLiteralRe =
-	/'(verified|verified_by_attestation|pending_external|reused|missing|underpaid|unverified)'/g;
+	/'(verified|verified_by_attestation|pending_external|reused|missing|underpaid|unverified|awaiting_payment|proof_unsupported)'/g;
 const writtenViaSql = new Set<string>();
 for (const file of [orderHandlerSrc, feeAttestSrc]) {
 	// crude but effective: find INSERT INTO orders blocks

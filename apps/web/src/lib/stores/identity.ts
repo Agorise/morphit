@@ -38,7 +38,13 @@
 import { writable, derived, get, type Readable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { decryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
-import { toLiveIdentity, wipeLiveIdentity, type LiveIdentity } from '$crypto/identity-core';
+import {
+	toLiveIdentity,
+	wipeLiveIdentity,
+	wipeDecryptedIdentity,
+	wipeTotpSecret,
+	type LiveIdentity
+} from '$crypto/identity-core';
 import { KEYSTORE_ENVELOPE_STORAGE_KEY, clearKeystore, hasPersistedKeystore } from '$crypto/persistentKeystore';
 import { sweepAccountStorageOnSignOut } from '$lib/storage/signOutSweep';
 import { safeSession } from '../utils/safeStorage';
@@ -193,44 +199,61 @@ export async function bootFromEnvelope(
 	totpCode?: string
 ): Promise<void> {
 	const full = await decryptIdentity(env, password);
-
-	// 2FA gate — if this keystore has TOTP enrolled, require a
-	// verified TOTP code or backup code before exposing the keys
-	// to the rest of the app via the identity store.  Caller is
-	// expected to handle the 'totp_required' error by prompting
-	// the user and re-calling bootFromEnvelope with the code.
-	if (full.totpSecret) {
-		if (!totpCode) {
-			const { KeystoreError } = await import('$crypto/keystore');
-			throw new KeystoreError(
-				'totp_required',
-				'This keystore has 2FA enabled. Provide your authenticator code or a backup code.'
-			);
+	// v1.20.0 review (F-8): `full` holds EVERY secret (owner/active/memo/
+	// posting private keys, seed entropy, TOTP secret). If the 2FA gate stops
+	// the unlock ('totp_required' on every 2FA user's first attempt,
+	// 'totp_invalid' on a typo) or anything else throws before the keys are
+	// handed to the live session, zero it here — like every other decrypt
+	// site does — instead of leaving it for the garbage collector.
+	let handedOff = false;
+	try {
+		// 2FA gate — if this keystore has TOTP enrolled, require a
+		// verified TOTP code or backup code before exposing the keys
+		// to the rest of the app via the identity store.  Caller is
+		// expected to handle the 'totp_required' error by prompting
+		// the user and re-calling bootFromEnvelope with the code.
+		if (full.totpSecret) {
+			if (!totpCode) {
+				const { KeystoreError } = await import('$crypto/keystore');
+				throw new KeystoreError(
+					'totp_required',
+					'This keystore has 2FA enabled. Provide your authenticator code or a backup code.'
+				);
+			}
+			const { verifyTotpOrBackup } = await import('$crypto/keystoreTotp');
+			const result = await verifyTotpOrBackup(full, totpCode);
+			if (result.kind === 'backup_redeemed') {
+				// A backup code was consumed — re-encrypt and persist the
+				// updated identity so the same code can't be replayed by
+				// an attacker who reads the keystore before the user
+				// notices the redemption.
+				const { encryptIdentity } = await import('$crypto/keystore');
+				const { writeEnvelope } = await import('$crypto/persistentKeystore');
+				const newEnv = await encryptIdentity(result.updatedIdentity, password);
+				writeEnvelope(newEnv);
+				env = newEnv;
+			}
 		}
-		const { verifyTotpOrBackup } = await import('$crypto/keystoreTotp');
-		const result = await verifyTotpOrBackup(full, totpCode);
-		if (result.kind === 'backup_redeemed') {
-			// A backup code was consumed — re-encrypt and persist the
-			// updated identity so the same code can't be replayed by
-			// an attacker who reads the keystore before the user
-			// notices the redemption.
-			const { encryptIdentity } = await import('$crypto/keystore');
-			const { writeEnvelope } = await import('$crypto/persistentKeystore');
-			const newEnv = await encryptIdentity(result.updatedIdentity, password);
-			writeEnvelope(newEnv);
-			env = newEnv;
+
+		const live = toLiveIdentity(full);
+		// If we were paired-readonly, an envelope unlock is an upgrade.
+		// Wipe the paired marker so the next reload doesn't ambiguously
+		// have both anchors set.
+		const prev = get(internal);
+		if (prev.state === 'paired-readonly') {
+			clearPairedSession();
+		}
+		internal.set({ state: 'unlocked', live, envelope: env });
+		handedOff = true;
+	} finally {
+		if (!handedOff) {
+			wipeDecryptedIdentity(full);
+		} else if (full.totpSecret) {
+			// toLiveIdentity zeroed owner/active/seed and the live session now
+			// owns posting/memo; the TOTP secret is not needed past the gate.
+			wipeTotpSecret(full);
 		}
 	}
-
-	const live = toLiveIdentity(full);
-	// If we were paired-readonly, an envelope unlock is an upgrade.
-	// Wipe the paired marker so the next reload doesn't ambiguously
-	// have both anchors set.
-	const prev = get(internal);
-	if (prev.state === 'paired-readonly') {
-		clearPairedSession();
-	}
-	internal.set({ state: 'unlocked', live, envelope: env });
 }
 
 /**
@@ -699,7 +722,8 @@ export function handleStorageEvent(e: StorageEvent): void {
 type SessionHandoffMessage =
 	| { t: 'request' }
 	| { t: 'offer'; payload: IdentityState }
-	| { t: 'signout' };
+	| { t: 'signout' }
+	| { t: 'lock' };
 
 const SESSION_HANDOFF_CHANNEL = 'morphit-session-handoff-v1';
 let sessionHandoffChannel: BroadcastChannel | null = null;
@@ -756,6 +780,14 @@ export function handleSessionHandoffMessage(
 		}
 	} else if (msg.t === 'offer') {
 		adoptOfferedSession(msg.payload);
+	} else if (msg.t === 'lock') {
+		// v1.20.0 review (F-5): another tab's user EXPLICITLY locked (avatar
+		// menu → Lock session). Lock here too, keeping the Remember-me
+		// envelope — this is a lock, not a sign-out. Without it this tab stayed
+		// unlocked and handed its keys straight back to the locked tab on its
+		// next load. Only an unlocked session is locked: lockSession() on a
+		// paired-readonly tab would sign that one out. Never re-broadcasts.
+		if (get(internal).state === 'unlocked') lockSession();
 	} else if (msg.t === 'signout') {
 		// Another tab's user EXPLICITLY signed out. Wipe our in-memory
 		// session too — this is the whole point of the signout message
@@ -781,6 +813,33 @@ function initSessionHandoff(): void {
 	ch.onmessage = (ev: MessageEvent) => {
 		handleSessionHandoffMessage(ev.data, (m) => ch.postMessage(m));
 	};
+}
+
+/** Post one message to the other open tabs of this site (no-op without a
+ *  BroadcastChannel). */
+function postToOtherTabs(msg: SessionHandoffMessage): void {
+	const ch = getSessionHandoffChannel();
+	if (ch) ch.postMessage(msg);
+}
+
+/** EXPLICIT, user-initiated Lock (avatar menu → Lock session): lock this tab
+ *  AND every other open tab of this site. (v1.20.0 review, F-5.)
+ *
+ *  lockSession() alone locks one tab; the others kept their keys and, since a
+ *  freshly loaded tab asks its siblings for a session, reloading the locked
+ *  tab got them straight back without a password. The Remember-me envelope
+ *  stays on disk everywhere (Lock is not Sign Out). The idle auto-lock keeps
+ *  calling lockSession() directly — it stays per-tab, so a tab you are using
+ *  is not locked because another one sat idle.
+ *
+ *  `post` is injectable for tests; production uses the handoff channel. */
+export function lockAllTabs(post: (msg: SessionHandoffMessage) => void = postToOtherTabs): void {
+	try {
+		post({ t: 'lock' });
+	} catch {
+		// Channel unavailable — this tab still locks below.
+	}
+	lockSession();
 }
 
 /** Ask any already-open tab for its session. Fire-and-forget: if a sibling
@@ -816,20 +875,39 @@ export function requestSessionFromOpenTabs(): void {
 // so a privacy-max user (Remember-me OFF) never has a decrypted session
 // written anywhere.
 //
-// TRADE-OFF, made deliberately on the maintainer's call: while the stash exists, the
-// decrypted session sits in per-tab sessionStorage (cleared when the tab
-// closes, never shared cross-tab, and — honoring the Keypair "never serialize
-// to network" contract — NEVER sent anywhere off the device). A same-origin
-// XSS that could read it could already read the live in-memory session, and
-// the app's CSP + no-eval + SRI + on-chain release manifest make that
-// marginal. Remember-me OFF stays pure in-memory.
+// TRADE-OFF, made deliberately: between the pagehide and the
+// next load, the decrypted posting (and memo) key sits in this tab's
+// sessionStorage. It is never shared cross-tab and — honoring the Keypair
+// "never serialize to network" contract — NEVER sent anywhere off the device.
+// It is NOT "cleared when the tab closes": pagehide cannot tell a reload from
+// a tab close or a navigation to another site, browsers keep a closed tab's
+// sessionStorage for "Reopen closed tab" / session restore, and Firefox's
+// session store may write sessionStorage to its session file on disk. So
+// (v1.20.0 review, F-4) the stash is bounded instead:
+//   • not written at all when the page goes into the back/forward cache
+//     (pagehide `persisted` — that is never a reload);
+//   • stamped with its write time and honoured for RELOAD_STASH_MAX_AGE_MS
+//     only;
+//   • consumed only when this load's navigation type is 'reload' — a new
+//     visit, a restored tab or Back gets the password prompt;
+//   • always removed on the next load, used or not.
+// Same-origin script could read it, as it could read the live in-memory
+// session; the site's CSP still allows 'unsafe-inline' and 'unsafe-eval', so
+// that is not a boundary this relies on. Remember-me OFF stays pure in-memory.
 //
 // Hard-reload detection: a hard reload BYPASSES the service worker, so
 // `navigator.serviceWorker.controller` is null on that load; a normal reload
-// keeps it set. We FAIL CLOSED — null controller (hard reload, or the rare
-// pre-SW-activation first load) → discard the stash and lock.
+// keeps it set. We FAIL CLOSED — null controller (hard reload, the rare
+// pre-SW-activation first load, or a browser with service workers off, e.g.
+// Tor Browser) → discard the stash and lock.
 
 const RELOAD_STASH_KEY = 'morphit.session.reload-stash-v1';
+
+/** A stash older than this is discarded unused. A reload re-runs this module
+ *  within a second or two; 30 s leaves room for a slow Tor/I2P reload while
+ *  making a stash that outlived its tab (Reopen closed tab, session restore)
+ *  worthless. */
+export const RELOAD_STASH_MAX_AGE_MS = 30_000;
 
 // structured clone (the cross-tab handoff) preserves typed arrays; JSON does
 // not, and LiveIdentity carries Uint8Array key bytes — so base64 them.
@@ -851,11 +929,27 @@ function reloadStashReviver(_k: string, v: unknown): unknown {
 	return v;
 }
 
+/** How this document was loaded ('reload', 'navigate', 'back_forward', …),
+ *  or null when the browser does not say. */
+function currentNavigationType(): string | null {
+	try {
+		if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') {
+			return null;
+		}
+		const nav = performance.getEntriesByType('navigation')[0] as
+			| { type?: unknown }
+			| undefined;
+		return typeof nav?.type === 'string' ? nav.type : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Stash the live session for a same-tab reload. Called from `pagehide`
- *  BEFORE reset() wipes the in-memory keys. No-op unless the session is
- *  UNLOCKED and Remember-me is on (hasPersistedKeystore()); a paired-readonly
- *  session has its own disk marker (autoRestorePairedSession) and is never
- *  stashed here. */
+ *  (see handlePageHide) BEFORE reset() wipes the in-memory keys. No-op unless
+ *  the session is UNLOCKED and Remember-me is on (hasPersistedKeystore()); a
+ *  paired-readonly session has its own disk marker (autoRestorePairedSession)
+ *  and is never stashed here. */
 export function stashSessionForReload(): void {
 	// No `browser` guard: safeSession/safeLocal are SSR-safe (return null/false
 	// off-window) and the sole caller is the browser-gated pagehide listener.
@@ -871,7 +965,7 @@ export function stashSessionForReload(): void {
 	try {
 		safeSession.set(
 			RELOAD_STASH_KEY,
-			JSON.stringify({ live: s.live, envelope: s.envelope }, reloadStashReplacer)
+			JSON.stringify({ at: Date.now(), live: s.live, envelope: s.envelope }, reloadStashReplacer)
 		);
 	} catch {
 		safeSession.remove(RELOAD_STASH_KEY);
@@ -879,11 +973,13 @@ export function stashSessionForReload(): void {
 }
 
 /** Consume a reload stash on the next load. CONSUME-ONCE: the key is removed
- *  before anything else, so a parse error or a hard reload can never leave the
- *  decrypted session lingering. Restores only when (a) we're still locked
- *  (never clobber a live session, e.g. a sibling handoff already won) and
- *  (b) a service-worker controller is present (a hard reload has none → lock,
- *  failing closed). */
+ *  before anything else, so a parse error, a hard reload or a refusal can
+ *  never leave the decrypted session lingering. Restores only when ALL hold:
+ *  (a) we're still locked (never clobber a live session, e.g. a sibling
+ *  handoff already won); (b) a service-worker controller is present (a hard
+ *  reload has none → lock, failing closed); (c) this load IS a reload
+ *  (navigation type 'reload'); (d) the stash is at most
+ *  RELOAD_STASH_MAX_AGE_MS old. */
 export function restoreSessionFromReloadStash(): void {
 	// No `browser` guard — see stashSessionForReload. safeSession is SSR-safe
 	// and the navigator.serviceWorker access below is typeof-guarded.
@@ -898,11 +994,18 @@ export function restoreSessionFromReloadStash(): void {
 	) {
 		return; // hard reload (Ctrl+Shift+R) or pre-activation → lock
 	}
+	// A new visit, a reopened/restored tab, Back/Forward → password prompt.
+	if (currentNavigationType() !== 'reload') return;
 	try {
 		const parsed = JSON.parse(raw, reloadStashReviver) as {
+			at?: unknown;
 			live?: LiveIdentity;
 			envelope?: KeystoreEnvelope;
 		};
+		const age = typeof parsed.at === 'number' ? Date.now() - parsed.at : NaN;
+		// No write time (an older build's stash), too old, or from the future
+		// (clock moved back by more than a little) → stay locked.
+		if (!(age >= -5_000 && age <= RELOAD_STASH_MAX_AGE_MS)) return;
 		if (parsed.live && parsed.envelope) {
 			internal.set({ state: 'unlocked', live: parsed.live, envelope: parsed.envelope });
 		}
@@ -910,6 +1013,15 @@ export function restoreSessionFromReloadStash(): void {
 		// Malformed stash — stay locked; the envelope is still persisted, so
 		// the user can unlock with their password.
 	}
+}
+
+/** The `pagehide` handler. Wipes the in-memory keys (reset) on every
+ *  pagehide; stashes them for a reload first — but NOT when the page is
+ *  going into the back/forward cache (`persisted`), which is never a reload.
+ *  Exported for tests. */
+export function handlePageHide(persisted: boolean): void {
+	if (!persisted) stashSessionForReload();
+	reset();
 }
 
 /** Explicit, user-initiated Sign Out that propagates to every open tab.
@@ -1034,19 +1146,14 @@ if (browser) {
 	// keys sit in freed-but-not-scrubbed heap. We STASH first (Remember-me-
 	// gated, a no-op otherwise) so a plain refresh can re-establish the
 	// session on the next load, THEN reset() wipes the in-memory copy.
-	window.addEventListener('pagehide', () => {
-		stashSessionForReload();
-		reset();
+	window.addEventListener('pagehide', (e) => {
+		handlePageHide((e as PageTransitionEvent).persisted === true);
 	});
 
-	// bfcache restore (back/forward, or a mobile tab resumed from the page
-	// cache) re-runs neither module init nor onMount, so consume the stash
-	// here too. The session usually survived bfcache intact (still unlocked),
-	// in which case restoreSessionFromReloadStash() just clears the stash and
-	// returns without clobbering the live session.
-	window.addEventListener('pageshow', (e) => {
-		if ((e as PageTransitionEvent).persisted) restoreSessionFromReloadStash();
-	});
+	// A page restored from the back/forward cache comes back LOCKED: pagehide
+	// wiped its keys and (v1.20.0, F-4) left no stash, because going into the
+	// bfcache is never a reload. The user unlocks with their password (or a
+	// sibling tab hands the session over on the next full load).
 
 	// Cross-tab unlock state propagation (§F.17 + Part 114 for paired).
 	//

@@ -140,5 +140,5 @@
      because we haven't loaded a locale bundle yet (and loading
      one would defeat the no-FOUC purpose of the [lang] subtree). -->
 <div style="display: flex; align-items: center; justify-content: center; min-height: 50vh;">
-	<p style="color: #666; font-family: system-ui, sans-serif;">Loading…</p>
+	<p style="color: rgb(var(--gray-666-rgb)); font-family: system-ui, sans-serif;">Loading…</p>
 </div>

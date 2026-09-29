@@ -90,8 +90,25 @@ Per-IP, per-minute, enforced by the indexer's middleware:
 
 | Tier        | Default      | Endpoints                                         |
 |---|---|---|
-| `resource`  | 600 req/min  | Single-record lookups, fee quotes, health         |
-| `list`      | 120 req/min  | Listings, search, history pagination, RSS         |
+| `resource`  | 600 req/min  | Single-record lookups, fee quotes                 |
+| `list`      | 120 req/min  | Listings, search, history pagination, RSS, the federation directory `/v1/instances`, and CONNECTING to any SSE stream (`/v1/orderbook/stream`, `/v1/chat/:a/:b/stream`, `/v1/chat-activity/:account/stream`, `/v1/instances/stream`) |
+
+`/v1/health` and `/v1/instance` are not rate-limited (in-memory, no
+database work).
+
+Open SSE streams are capped: at most 24 per client and 2,000 per
+instance. Past a cap the connect answers `503 {code: "stream_capacity"}`
+with `Retry-After: 30`. Visitors arriving over Tor/I2P share one client
+identity (the proxy's), so only the instance-wide cap applies to them. The same holds for an untrusted private
+proxy that forwards a client address (a proxy the instance wasn't told
+about): its address stands for everyone behind it, so only the
+instance-wide cap applies — the per-client cap never becomes a cap on the
+whole site. A public peer gains nothing by sending forwarding headers.
+
+"Per-IP": behind a reverse proxy the client is read from
+`X-Forwarded-For` (the rightmost address not in the trusted-proxy set) —
+trusted by default: loopback and Docker's bridge pool `172.16.0.0/12` —
+see `MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS` in `OPERATIONS.md`.
 
 Defaults are operator-tunable via `MORPHIT_INDEXER_LIST_RATE_PER_MIN`
 and `MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN`.  An instance running
@@ -130,7 +147,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.19.0",
+  "version": "1.20.0",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -551,10 +568,21 @@ Directory of all known Morphit instances the indexer has probed.
 }
 ```
 
-- `last_probe_status` is one of: `good` (all checks pass), `quiet`
+- `last_probe_status` is one of: `good` (all checks pass), `syncing`
+  (the peer is still catching up with the chain), `quiet`
   (live but no recent orders), `stale` (lagging chain), `unreachable`
-  (probe couldn't connect), `mismatch` (relay account doesn't match
-  what's recorded on-chain), `never` (never probed).
+  (probe couldn't connect), `clearnet_blocked` (unreachable over
+  clearnet but the operator signed a Morphit op — any kind — in the
+  last ~day: "censored but alive"; not counted toward the 7-day
+  prune), `mismatch` (relay account doesn't match what's recorded
+  on-chain), `never` (not checked yet — also shown for a peer this
+  node cannot ask, e.g. its proxy for that network is down, or the
+  peer is clearnet-only and this node is hidden-only).
+- `?status=` filters by any of these values.
+- The name, tagline, contact and alt addresses a peer reports in its
+  own `/v1/instance` are validated like the register op (length,
+  type, contact scheme, address shape); the on-chain alt addresses
+  win over self-reported ones.
 
 #### `GET /v1/instances/stream`
 
@@ -669,9 +697,11 @@ served and the client picks its own currency locally — there is
 deliberately no per-currency lookup, so the indexer never learns
 which fiat any individual user chose (the same privacy posture as
 the server-side FX fetch). `404` when the FX feed is disabled on
-the instance (`MORPHIT_INDEXER_FX_FEED_ENABLED=false`); clients
-then treat amounts as already-USD and the indexer's own floor
-still applies.
+the instance (`MORPHIT_INDEXER_FX_FEED_ENABLED=false`). Clients can
+then only check a USD amount against the $1 first-order minimum; the
+indexer rejects a free first buy whose currency it cannot convert
+(`waiver_fiat_unconvertible`) instead of treating the amount as
+already-USD (v1.20.0).
 
 #### `GET /v1/profiles/:account`
 
@@ -869,6 +899,10 @@ to be useful:
   client and its phone; documenting the protocol publicly would
   invite confusion about whether arbitrary third parties can
   initiate it (they shouldn't).
+- **`/v1/pairing`** — `GET /v1/pairing/target?origin=` and `POST /v1/pairing/forward`: the phone's
+  same-origin half of cross-instance QR sign-in (ADR-0022, v1.20.0 amendment). The forward carries one
+  sealed pairing delivery to `/v1/login-pairing/<pid>/deliver` on a registered directory instance and
+  nowhere else; it is not a general relay.
 
 If you have a genuine third-party use case for any of these,
 open an issue and we'll consider promoting it to a documented

@@ -54,6 +54,7 @@
 import type { Identity } from './keygen';
 import { KeystoreError } from './keystore';
 import { verifyCode as verifyTotpCode } from '../auth/totp';
+import { webCryptoAvailable } from '$lib/security/secureContext';
 import {
 	canonicalize as canonicalizeBackup,
 	redeemBackupCode,
@@ -81,9 +82,23 @@ export async function verifyTotpOrBackup(
 
 	// TOTP code: 6 digits (with optional whitespace/dashes — verifyCode strips ws).
 	if (/^[\d\s]+$/.test(trimmed)) {
-		const result = await verifyTotpCode(identity.totpSecret, trimmed);
-		if (result.valid) {
-			return { kind: 'ok' };
+		// v1.20.0 review (F-9): authenticator codes need WebCrypto (HMAC-SHA1),
+		// which the browser removes outside a secure context — a plain-HTTP
+		// I2P address. Say so specifically instead of crashing with a
+		// TypeError. An all-digit 8-char entry may still be a backup code
+		// (Argon2id via libsodium, available everywhere), so let it through.
+		if (!webCryptoAvailable()) {
+			if (canonicalizeBackup(trimmed).length !== BACKUP_CODE_LENGTH) {
+				throw new KeystoreError(
+					'totp_unavailable',
+					'Authenticator codes cannot be checked over this connection (no WebCrypto outside a secure context). Use a backup code, or open the site over https:// or its .onion address.'
+				);
+			}
+		} else {
+			const result = await verifyTotpCode(identity.totpSecret, trimmed);
+			if (result.valid) {
+				return { kind: 'ok' };
+			}
 		}
 		// Fall through — could still be a backup code with all-digit chars,
 		// though Crockford-base32 alphabet doesn't include 0/1, so a pure

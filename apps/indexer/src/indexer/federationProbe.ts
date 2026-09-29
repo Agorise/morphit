@@ -23,10 +23,15 @@
  * If 1-3 hold but 4 fails, status='quiet' — still listed in the
  * directory, but flagged so users can pick a busier instance.
  *
- * Privacy note (deferred to Phase F+): probes go out from this
- * indexer's IP address.  Aggregate cross-instance traffic is
- * inherent to federation discovery.  Tor-routing the probes is
- * possible but not v1 scope.
+ * Privacy / transports: a hidden-service origin is probed THROUGH this
+ * node's Tor / i2pd / Lokinet (never directly); a clearnet peer that failed
+ * over clearnet is retried over every hidden address it published on chain;
+ * and a hidden-only node never contacts a clearnet origin at all — it goes
+ * straight to the peer's hidden addresses, and lists (never blames) a peer it
+ * has no route to. Clearnet probes are resolved, checked public and pinned
+ * (fetchJson). This header used to say every probe left from this indexer's
+ * own IP and that Tor-routing was "not v1 scope"; both stopped being true in
+ * v1.15.3–v1.18.0.
  */
 
 import type pg from 'pg';
@@ -46,6 +51,14 @@ import { clearnetRefused, ClearnetRefusedError } from '$indexer/hiddenServiceDis
 import type { Database } from '$db/pool';
 import { logger } from '$log';
 import { isReservedTag } from '$indexer/confusables';
+import { hiddenOriginForDial } from '$indexer/hiddenOriginForDial';
+import {
+	altNetworksFromUntrusted,
+	contactUrlOrNull,
+	textOrNull,
+	CACHED_NAME_MAX,
+	CACHED_TAGLINE_MAX
+} from '$indexer/instanceCacheSanitize';
 
 const log = logger('federation-probe');
 
@@ -90,9 +103,11 @@ const FETCH_TIMEOUT_MS = 5_000;
 /** Bounded concurrency for the probe pool.  Caps memory + outbound
  *  socket count.  Operators in dense federations can raise via env. */
 const DEFAULT_CONCURRENCY = 10;
-/** Cap on the number of instances we'll track at all.  Beyond this,
- *  the indexer skips populating new known_instances rows and emits
- *  a warning.  Won't matter for years; sized for "small federation". */
+/** Cap on the number of ESTABLISHED (already-probed) rows one scan picks
+ *  as due. It is only a LIMIT on that query — it does not cap how many rows
+ *  known_instances holds (nothing does; every register op with an origin adds
+ *  one), and nothing warns. This comment used to say the indexer "skips
+ *  populating new rows and emits a warning" beyond it; it never did. */
 const MAX_TRACKED_INSTANCES = 200;
 /** (v1.18.0 deep-deep, M4) Cap on NEVER-probed rows per scan. What was wrong:
  *  registrations are free, and never-probed rows sorted first
@@ -104,7 +119,9 @@ const MAX_TRACKED_INSTANCES = 200;
  *  registrations a minute. */
 export const MAX_NEW_PROBES_PER_SCAN = 20;
 
-/** v1.15.3 — how recent an operator's last on-chain action must be for an
+/** v1.15.3 — how recent an operator's last Morphit op (any op it signs; the
+ *  dispatcher advances `operators.last_action_block_num` on every applied one
+ *  since v1.20.0, E6 — before that only the register op did) must be for an
  *  unreachable-over-clearnet node to count as 'clearnet_blocked' (censored, still
  *  alive) rather than 'unreachable' (dead). ~1 day of Blurt blocks (3s each). */
 const CLEARNET_BLOCKED_WINDOW_BLOCKS = 28_800;
@@ -205,12 +222,9 @@ function normalizeOrigin(origin: string): string {
 }
 
 /** True when an origin is a Tor/I2P/Lokinet hidden-service address rather than
- *  a clearnet host.  A clearnet indexer can't reach these over plain HTTP (they
- *  need a Tor/I2P router), so the scheduler lists them on the strength of their
- *  signed on-chain advertisement instead of firing a network probe that would
- *  always time out and spuriously mark an otherwise-healthy onion-only node
- *  'unreachable'.  Real cross-network verification is the Phase-F+ Tor-routed
- *  probe (see the module header). */
+ *  a clearnet host. Such an origin is probed THROUGH the matching local proxy
+ *  (fetchJsonViaHiddenService); only when OUR proxy for it is down is it listed
+ *  unprobed (persistListedNotProbed), never blamed. */
 /**
  * The hidden addresses an operator has published on chain, in the order this
  * indexer would rather try them, and only those that still look like addresses
@@ -372,7 +386,7 @@ export class FederationProbeScheduler {
 		// in SQL via CASE for a single round-trip.
 		//
 		// (v1.18.0 deep-deep, M4) Two queries now: at most
-		// MAX_NEW_PROBES_PER_SCAN never-probed rows (oldest on-chain
+		// MAX_NEW_PROBES_PER_SCAN never-probed rows (NULL last_probed_at; oldest on-chain
 		// registration first), then the established rows that are due. Before,
 		// never-probed rows sorted first under one LIMIT, so free throwaway
 		// registrations could starve real peers of their re-probe. Both
@@ -391,7 +405,7 @@ export class FederationProbeScheduler {
 			`SELECT ${cols}
 			 FROM known_instances ki
 			 LEFT JOIN operators o ON o.account = ki.operator_account
-			 WHERE ki.last_probe_status = 'never' OR ki.last_probed_at IS NULL
+			 WHERE ki.last_probed_at IS NULL
 			 ORDER BY ki.registered_at_block, ki.origin
 			 LIMIT ${MAX_NEW_PROBES_PER_SCAN}`,
 			[]
@@ -400,11 +414,14 @@ export class FederationProbeScheduler {
 			`SELECT ${cols}
 			 FROM known_instances ki
 			 LEFT JOIN operators o ON o.account = ki.operator_account
-			 WHERE ki.last_probe_status <> 'never'
-			   AND ki.last_probed_at IS NOT NULL
+			 WHERE ki.last_probed_at IS NOT NULL
 			   AND (
 			    (
-			        ki.last_probe_status IN ('good', 'quiet', 'syncing')
+			        -- 'never' WITH a probe time is a hidden peer whose first
+			        -- probes failed and are held by the hysteresis below: probed at
+			        -- the ordinary cadence, not on every scan tick as a "fresh" row
+			        -- (v1.20.0, E14).
+			        ki.last_probe_status IN ('good', 'quiet', 'syncing', 'never')
 			        AND ki.last_probed_at < NOW() - INTERVAL '${Math.floor(goodMs / 1000)} seconds'
 			    )
 			    OR (
@@ -488,8 +505,10 @@ export class FederationProbeScheduler {
 					const hiddenFetch = <T>(url: string): Promise<T> =>
 						fetchJsonViaHiddenService<T>(url, proxies);
 					try {
+						// Dialled as http even when registered https (v1.20.0, S9);
+						// the outcome is persisted under the registered origin.
 						const outcome = await probeOne(
-							inst,
+							{ ...inst, origin: hiddenOriginForDial(inst.origin) },
 							treasuryForProbe,
 							hiddenFetch,
 							selfCheck
@@ -698,7 +717,12 @@ export class FederationProbeScheduler {
 			await this.db.query(
 				`UPDATE known_instances SET
 					last_probed_at = NOW(),
-					consecutive_failures = consecutive_failures + 1,
+					-- clearnet_blocked = alive on chain: it is not a step toward the
+					-- 7-day prune (v1.20.0, E6). Counting it meant the week spent
+					-- censored-but-active was already "served" the moment the
+					-- operator went quiet, and the row was deleted on the next scan.
+					consecutive_failures = CASE WHEN $2 = 'clearnet_blocked' THEN 0
+					                            ELSE consecutive_failures + 1 END,
 					last_probe_status = CASE
 						WHEN $4::boolean AND consecutive_failures + 1 < $5 THEN last_probe_status
 						ELSE $2
@@ -800,17 +824,13 @@ export class FederationProbeScheduler {
 		);
 	}
 
-	/** Persist a hidden-service peer (.onion/.b32.i2p/.loki) as listed WITHOUT a
-	 *  network probe.  A clearnet indexer can't reach it, so 'unreachable' would
-	 *  be wrong; we list it on the strength of its signed on-chain registration.
-	 *  Status 'good' keeps it in the directory; last_probe_error records that it
-	 *  wasn't network-verified so the reason is auditable. A future Tor-routed
-	 *  probe (Phase F+) will verify it for real and can downgrade a dead onion. */
 	/** List a peer this node could not ask about — no route of ours reaches it
 	 *  (our proxy is down, or it is clearnet-only and we are hidden-only) — on the
 	 *  strength of its signed on-chain registration, with the reason recorded.
 	 *  Never 'unreachable': that is a claim about the peer, and nothing was
-	 *  learned about the peer. */
+	 *  learned about the peer. Stored 'good' so it stays listed, with the reason
+	 *  in last_probe_error; the directory shows it as not-yet-checked and the
+	 *  fast-chat ranking as unverified (v1.20.0, E14; v1.18.0 S2). */
 	private async persistListedNotProbed(inst: KnownInstanceRow, reason: string): Promise<void> {
 		await this.db.query(
 			`UPDATE known_instances SET
@@ -1158,13 +1178,20 @@ export { isPrivateIp };
  *
  * Cp3 of Part 122 — DNS-rebinding closure.
  */
-async function resolveAndValidatePublicIp(hostname: string): Promise<{
+export async function resolveAndValidatePublicIp(
+	hostname: string,
+	/** Injectable for tests (the federation chat POST's pin reuses this). */
+	lookup: (
+		host: string,
+		opts: { all: true; verbatim: true }
+	) => Promise<Array<{ address: string; family: number }>> = dnsLookup
+): Promise<{
 	address: string;
 	family: 4 | 6;
 }> {
 	let records: Array<{ address: string; family: number }>;
 	try {
-		records = await dnsLookup(hostname, { all: true, verbatim: true });
+		records = await lookup(hostname, { all: true, verbatim: true });
 	} catch (err) {
 		throw new Error(
 			`fetchJson: DNS lookup failed for ${hostname}: ${
@@ -1262,7 +1289,7 @@ export function makePinnedLookup(
 	};
 }
 
-function buildPinnedAgent(
+export function buildPinnedAgent(
 	expectedHostname: string,
 	pinnedIp: string,
 	pinnedFamily: 4 | 6
@@ -1426,39 +1453,19 @@ function errMsg(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-/** Normalize the alt_networks blob from a probed instance into the
- *  post-2026-05 shape (i2p_b32 + i2p_name, no legacy `i2p`).  Stored
- *  in cached_alt_networks; the directory's row→entry shim
- *  (instancesStreamHelpers.normalizeAltNetworks) ALSO normalizes
- *  on read, so older cache rows still deliver the right shape until
- *  they get re-cached on the next successful probe.  Doing it on
- *  WRITE means cache rows go cold faster — once an instance has
- *  been re-probed, all callers see the new shape. */
-function normalizeAltNetworksForCache(an: InstanceShape['alt_networks']): {
-	tor: string | null;
-	lokinet: string | null;
-	i2p_b32: string | null;
-	i2p_name: string | null;
-	ens: string | null;
-	nostr: string | null;
-} {
-	let i2pB32 = an.i2p_b32 ?? null;
-	let i2pName = an.i2p_name ?? null;
-	const legacy = an.i2p ?? null;
-	if (legacy !== null && i2pB32 === null && i2pName === null) {
-		if (legacy.toLowerCase().endsWith('.b32.i2p')) {
-			i2pB32 = legacy;
-		} else if (legacy.toLowerCase().endsWith('.i2p')) {
-			i2pName = legacy;
-		}
-	}
+/** The peer-supplied fields, validated before they are cached (v1.20.0, E7).
+ *  See instanceCacheSanitize.ts: anything that fails its rule is dropped as
+ *  null — never the whole probe — and a legacy single `i2p` field is routed by
+ *  shape into i2p_b32 / i2p_name. */
+function cachedFieldsOf(inst: InstanceShape): Pick<
+	ProbeOutcome,
+	'cachedName' | 'cachedTagline' | 'cachedContactUrl' | 'cachedAltNetworks'
+> {
 	return {
-		tor: an.tor,
-		lokinet: an.lokinet,
-		i2p_b32: i2pB32,
-		i2p_name: i2pName,
-		ens: an.ens ?? null,
-		nostr: an.nostr
+		cachedName: textOrNull(inst.name, CACHED_NAME_MAX),
+		cachedTagline: textOrNull(inst.tagline, CACHED_TAGLINE_MAX),
+		cachedContactUrl: contactUrlOrNull(inst.contact_url),
+		cachedAltNetworks: altNetworksFromUntrusted(inst.alt_networks)
 	};
 }
 
@@ -1466,11 +1473,8 @@ function mkGood(inst: InstanceShape, health: HealthShape, chainLagSec: number): 
 	return {
 		status: 'good',
 		error: null,
-		cachedName: inst.name,
-		cachedTagline: inst.tagline,
-		cachedContactUrl: inst.contact_url,
+		...cachedFieldsOf(inst),
 		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
-		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
 	};
@@ -1480,11 +1484,8 @@ function mkQuiet(inst: InstanceShape, health: HealthShape, chainLagSec: number):
 	return {
 		status: 'quiet',
 		error: null,
-		cachedName: inst.name,
-		cachedTagline: inst.tagline,
-		cachedContactUrl: inst.contact_url,
+		...cachedFieldsOf(inst),
 		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
-		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
 	};
@@ -1501,11 +1502,8 @@ function mkSyncing(inst: InstanceShape, health: HealthShape, chainLagSec: number
 	return {
 		status: 'syncing',
 		error: null,
-		cachedName: inst.name,
-		cachedTagline: inst.tagline,
-		cachedContactUrl: inst.contact_url,
+		...cachedFieldsOf(inst),
 		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
-		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
 	};
@@ -1522,11 +1520,8 @@ function mkStaleBehind(inst: InstanceShape, health: HealthShape, chainLagSec: nu
 	return {
 		status: 'stale',
 		error: 'health_degraded_not_advancing',
-		cachedName: inst.name,
-		cachedTagline: inst.tagline,
-		cachedContactUrl: inst.contact_url,
+		...cachedFieldsOf(inst),
 		cachedClearnetEliminated: inst.clearnet_eliminated ?? false,
-		cachedAltNetworks: normalizeAltNetworksForCache(inst.alt_networks),
 		cachedIndexedBlock: health.indexed_block,
 		cachedChainLagSec: chainLagSec
 	};

@@ -389,8 +389,12 @@ else
 	ssh "${SSH_MUX[@]}" "$REMOTE_SSH" "mkdir -p '$REMOTE_PATH/apps/web/build'"
 fi
 SELFHEAL
-		printf 'scp -q -o ControlPath="$CANARY_SSH_CTL" "$SIGNED" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/canary.txt"\n'
-		printf 'scp -q -o ControlPath="$CANARY_SSH_CTL" "$PUBKEY" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/pgp_keys.asc"\n'
+		# scp -O (legacy exec-channel transfer): hardened Morphit boxes DISABLE the
+		# SSH SFTP subsystem, and modern scp defaults to SFTP, so a plain `scp`
+		# fails with "Connection closed" right after auth. -O forces the legacy
+		# protocol, which still works. (review B4 / D12)
+		printf 'scp -O -q -o ControlPath="$CANARY_SSH_CTL" "$SIGNED" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/canary.txt"\n'
+		printf 'scp -O -q -o ControlPath="$CANARY_SSH_CTL" "$PUBKEY" "$REMOTE_SSH:$REMOTE_PATH/apps/web/build/pgp_keys.asc"\n'
 		printf 'ssh -O exit -o ControlPath="$CANARY_SSH_CTL" "$REMOTE_SSH" 2>/dev/null || true\n'
 		printf 'echo "canary: uploaded to $REMOTE_SSH:$REMOTE_PATH/apps/web/build/"\n'
 	fi

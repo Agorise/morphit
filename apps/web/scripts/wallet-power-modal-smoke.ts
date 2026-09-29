@@ -211,7 +211,9 @@ check('every locale has a non-empty header title', titleStillBalance === 0);
 check(
 	'"Use full balance" fills the FLOORED ceiling (availableFloor via floorToBlurtPrecision)',
 	/const availableFloor = \$derived\(floorToBlurtPrecision\(available\)\)/.test(modal) &&
-		/enteredAmount = availableFloor;/.test(modal) &&
+		// v1.20.0 G6: written in the reader's decimal mark so the locale-aware
+		// parser reads it back exactly ("74,817" in de, not ambiguous "74.817").
+		/enteredAmount = formatAmountForInput\(Number\(availableFloor\), \$locale\);/.test(modal) &&
 		/import \{ floorToBlurtPrecision \}/.test(modal)
 );
 check(

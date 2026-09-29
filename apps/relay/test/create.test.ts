@@ -14,11 +14,13 @@ import { CreateEndpoint } from '../src/api/create.ts';
 import { Limiter } from '../src/middleware/ratelimit.ts';
 import { GlobalDailyCeiling } from '../src/policy/globalDailyCeiling.ts';
 import { InviteTokenService } from '../src/policy/inviteToken.ts';
-import type {
-	BlurtClient,
-	AccountInfo,
-	ChainProperties,
-	AccountCreateResult
+import {
+	BroadcastNotLandedError,
+	BroadcastOutcomeUnknownError,
+	type BlurtClient,
+	type AccountInfo,
+	type ChainProperties,
+	type AccountCreateResult
 } from '../src/blurt/client.ts';
 import type { HealthService } from '../src/api/health.ts';
 import type { Config, UnlockedConfig } from '../src/config/index.ts';
@@ -309,7 +311,10 @@ describe('POST /v1/account/create', () => {
 		const { status, body } = await post(app, validOp(), { inviteTokens });
 		expect(status).toBe(503);
 		expect(body.code).toBe('relay_out_of_funds');
-		expect(stub.getAccount).not.toHaveBeenCalled();
+		// One read-only account lookup happens first (fix wave 4, A4: a
+		// same-name retry must be answered "already created" before any
+		// limit); nothing is broadcast.
+		expect(stub.getAccount).toHaveBeenCalledTimes(1);
 		expect(stub.broadcastAccountCreate).not.toHaveBeenCalled();
 	});
 
@@ -424,65 +429,50 @@ describe('POST /v1/account/create', () => {
 		expect(body.code).toBe('already_registered');
 	});
 
-	it('O1: duplicate-transaction after retry is treated as success', async () => {
-		// Failure mode: callWithRotation retries broadcastAccountCreate
-		// after a transport timeout, but the FIRST broadcast actually
-		// landed.  The chain rejects the retry with a "duplicate
-		// transaction" error.  Pre-O1, this fell through to a generic
-		// broadcast_failed and the user retried with a different name
-		// while their original account quietly existed on-chain.
-		// Post-O1, we look up the account and surface success if it
-		// exists.
-
+	// v1.20.0 fix wave (D2). The client now signs ONCE and resends the SAME
+	// bytes, treating a "duplicate" as success and asking the chain (account
+	// exists with OUR owner key?) when no node confirmed. The endpoint maps
+	// the three outcomes the client can report.
+	it('O1: a create the client recovered after a lost reply is a success, counted once, no second dust', async () => {
 		const stub = makeStubBlurt({
-			broadcastAccountCreate: new Error('duplicate transaction in pending pool')
+			broadcastAccountCreate: { id: 'abc123', block_num: 0, trx_num: 0, expired: false, recovered: true } as AccountCreateResult
 		});
-		// Override getAccount so the FIRST call (availability pre-check)
-		// returns null but the POST-broadcast verification call returns
-		// the account on-chain.
-		stub.getAccount.mockReset();
-		stub.getAccount
-			.mockResolvedValueOnce(null) // pre-check: free
-			.mockResolvedValueOnce({
-				name: 'sally',
-				created: '2026-05-06T00:00:00',
-				balance: '0.000 BLURT',
-				pending_claimed_accounts: 0,
-			posting_pubkey: undefined
-			}); // post-failure: account does exist
-
-		const { app, limiter, dailyLimiter, inviteTokens } = makeApp(stub, makeStubHealth(true));
+		const { app, limiter, dailyLimiter, inviteTokens, ceiling } = makeApp(stub, makeStubHealth(true));
 		limiters.push(limiter, dailyLimiter);
-
 		const { status, body } = await post(app, validOp(), { inviteTokens });
 		expect(status).toBe(200);
 		expect(body.status).toBe('broadcast');
-		expect(body.note).toBe('duplicate_after_retry');
+		expect(body.note).toBe('recovered_after_lost_reply');
+		expect(ceiling.currentCount()).toBe(1);
+		// No dust on a RECOVERED create (fix wave 4): the account may have been
+		// made by an earlier attempt that already sent it — never pay it twice.
+		expect(stub.broadcastTransfer).not.toHaveBeenCalled();
 	});
 
-	it('O1: duplicate-transaction with no on-chain account falls through', async () => {
-		// Failure mode where the chain reports "duplicate" but the
-		// account isn't actually present (e.g. the duplicate refers to
-		// some unrelated tx with a colliding id, or the chain RPC is
-		// simply broken).  Should fall through to the generic error
-		// path so the user can retry with a different name rather than
-		// being told they succeeded when they didn't.
-
+	it('O1: outcome unknown → 503 broadcast_outcome_unknown, and it COUNTS (it may have landed)', async () => {
 		const stub = makeStubBlurt({
-			broadcastAccountCreate: new Error('duplicate transaction')
+			broadcastAccountCreate: new BroadcastOutcomeUnknownError('a'.repeat(40), Date.now(), 'fetch failed')
 		});
-		stub.getAccount.mockReset();
-		stub.getAccount
-			.mockResolvedValueOnce(null) // pre-check: free
-			.mockResolvedValueOnce(null); // post-failure: still no account
-
-		const { app, limiter, dailyLimiter, inviteTokens } = makeApp(stub, makeStubHealth(true));
+		const { app, limiter, dailyLimiter, inviteTokens, ceiling } = makeApp(stub, makeStubHealth(true));
 		limiters.push(limiter, dailyLimiter);
+		const token = inviteTokens.issue('unknown').token;
+		const { status, body } = await post(app, { invite_token: token, ...validOp() }, { raw: true });
+		expect(status).toBe(503);
+		expect(body.code).toBe('broadcast_outcome_unknown');
+		expect(ceiling.currentCount()).toBe(1);
+		// The invite is spent: a second account cannot ride on it.
+		const again = await post(app, { invite_token: token, ...validOp() }, { raw: true });
+		expect(again.status).toBe(410);
+	});
 
+	it('O1: the chain proved it did not land → 502 broadcast_failed, nothing counted', async () => {
+		const stub = makeStubBlurt({ broadcastAccountCreate: new BroadcastNotLandedError('b'.repeat(40)) });
+		const { app, limiter, dailyLimiter, inviteTokens, ceiling } = makeApp(stub, makeStubHealth(true));
+		limiters.push(limiter, dailyLimiter);
 		const { status, body } = await post(app, validOp(), { inviteTokens });
-		// Falls through to the generic broadcast_failed path.
 		expect(status).toBe(502);
 		expect(body.code).toBe('broadcast_failed');
+		expect(ceiling.currentCount()).toBe(0);
 	});
 
 	it('dedupes identical submissions within the window', async () => {

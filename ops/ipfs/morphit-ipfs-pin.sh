@@ -87,13 +87,22 @@ if ipfs --timeout=20s pin ls --type=recursive "$CID" >/dev/null 2>&1; then
 	exit 0
 fi
 
+# 4b. HIDDEN-ONLY node (v1.20.0, C17): it takes no part in the public IPFS
+# network (Routing.Type=none, no peers), so `pin add` of a CID it does not hold
+# can only wait out its whole timeout and fail — every hour. It gets the release
+# another way: `morphit-ops upgrade` fetches it over Tor/I2P and seeds it here.
+if [ "${MORPHIT_IPFS_HIDDEN_ONLY:-no}" = "yes" ] || [ "$(ipfs config Routing.Type 2>/dev/null || true)" = "none" ]; then
+	log "hidden-only node: release ${VER:-?} ($CID) is not held yet; it is added here when this node upgrades to it (nothing is fetched from the public IPFS network)."
+	exit 0
+fi
+
 # 5. Pin it (fetches the exact anchored bytes, then keeps them).
 log "pinning release ${VER:-?} → $CID (timeout ${PIN_TIMEOUT}s)…"
 if ipfs --timeout="${PIN_TIMEOUT}s" pin add --progress=false "$CID" >/dev/null 2>&1; then
 	log "pinned $CID — this node now serves release ${VER:-?} over IPFS."
-	# Best-effort: drop stale pins from older releases so the repo doesn't grow
-	# unbounded. Only unpins recursive roots that are NOT the current CID and
-	# look like release dirs we pinned; GC actually frees the blocks.
+	# Older releases are NOT unpinned here: morphit-ipfs-gc.sh (weekly timer +
+	# every upgrade, v1.20.0 C16) lets go of superseded ones, keeping the
+	# anchored release, the previous one, anything newer and the running one.
 	exit 0
 else
 	log "pin add did not finish for $CID (network slow / content not yet reachable) — will retry next run."

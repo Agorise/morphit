@@ -460,7 +460,7 @@ The more people who run Morphit, the harder it is for anyone to take it away fro
 
 **FAQ key:** `security_attack_vectors`
 
-The best defense is the design itself. Morphit is non-custodial — your private keys never leave your device and are never transmitted to our servers, so there is no key database for anyone to steal. There are no accounts, no passwords, no sessions, and no login state, which means no credential phishing, no session hijacking, and no account-takeover class of attack. We do not collect KYC and we do not log IPs, so there is no personal-information database that could be breached or subpoenaed. The orderbook lives on the blockchain itself — any user can run their own indexer and their own frontend — so censorship and takedowns cannot delete orders, only hide them from one particular mirror. Standard web attack surfaces (XSS, CSRF, SSRF, RCE, SQL injection, parameter pollution) are addressed through a combination of strict Content Security Policy headers, exact-origin CORS allowlists, schema-validated request bodies with bounded field lengths, no eval / no dynamic code paths, no server-side database queries on user input, and a relay service that only speaks to pre-configured blockchain endpoints. We also have no PHP, no WordPress, no xmlrpc.php, and no OAuth layer, so entire vulnerability classes that plague other platforms simply do not apply here. Volumetric (network-level) DDoS is beyond the reach of any application to solve alone — that belongs to the VPS provider or an upstream scrubbing service — but application-layer abuse is mitigated by per-IP rate limits, 64 KiB request body caps, and tight resource ceilings. The full threat model is documented in SECURITY.md and ADR-0006 in the project repository.
+The best defense is the design itself. Morphit is non-custodial — your private keys never leave your device and are never transmitted to our servers, so there is no key database for anyone to steal. There are no accounts, no passwords, no sessions, and no login state, which means no credential phishing, no session hijacking, and no account-takeover class of attack. We do not collect KYC and we do not log IPs, so there is no personal-information database that could be breached or subpoenaed. The orderbook lives on the blockchain itself — any user can run their own indexer and their own frontend — so censorship and takedowns cannot delete orders, only hide them from one particular mirror. Standard web attack surfaces (XSS, CSRF, SSRF, RCE, SQL injection, parameter pollution) are addressed through a combination of strict Content Security Policy headers, an exact-origin allowlist on the relay's signup endpoint, schema-validated request bodies with bounded field lengths, no eval / no dynamic code paths, no server-side database queries on user input, and a relay service that only speaks to pre-configured blockchain endpoints. We also have no PHP, no WordPress, no xmlrpc.php, and no OAuth layer, so entire vulnerability classes that plague other platforms simply do not apply here. Volumetric (network-level) DDoS is beyond the reach of any application to solve alone — that belongs to the VPS provider or an upstream scrubbing service — but application-layer abuse is mitigated by per-IP rate limits, 64 KiB request body caps, and tight resource ceilings. The full threat model is documented in SECURITY.md and ADR-0006 in the project repository.
 
 ---
 
@@ -1077,36 +1077,21 @@ The TxID is public information (it's visible to anyone with a blockchain explore
 
 ---
 
-## What is a Monero tx_proof and why does Morphit ask for one?
+## What is the Monero transaction key and why does Morphit ask for it?
 
 **FAQ key:** `xmr_tx_proof`
 
-A Monero tx_proof (transaction proof) is a short string from your own wallet that proves you paid a specific transaction to a specific address — without revealing anything else about your wallet. It looks like `OutProofV2…` followed by a long base58 string.
+Every Monero payment has a **transaction key**: a 64-character code (0–9, a–f) that the sending wallet keeps. With the transaction ID and this key, anyone can check that the payment reached a given address and how much it carried. The key cannot move any money.
 
-**Why Morphit asks for one.** Morphit verifies your XMR fee by checking on the blockchain that your payment landed at the treasury address with the right amount. To do that without holding the treasury wallet's view key (publishing a view key would deanonymize every fee payment forever — see the privacy invariant in OPERATIONS.md §40.2), every Morphit instance asks YOU to generate a per-payment proof from your own wallet. Any indexer can verify your proof using public data; no privileged party is needed.
+**Why Morphit asks for it.** When you pay the listing fee in XMR, your listing carries the transaction ID and the transaction key, so every Morphit server — the main one and every community one — can check the payment on its own with public Monero explorers. Nobody needs the treasury wallet's secret view key.
 
-**What it reveals.** The proof reveals only:
-• That this specific transaction (the txid you supplied) paid this specific address (Morphit's treasury), and
-• The amount that was paid.
+**The fee address is made for your listing.** Once the treasury's main Monero address is published on chain, the fee goes to an address made for your one listing. That address carries a hidden listing code that only your transaction key unlocks, so nobody can copy your transaction ID and key onto their own listing, and your payment cannot be used twice.
 
-**What it does NOT reveal.** It does NOT reveal:
-• Your other transactions
-• Your wallet balance
-• Your other addresses
-• Any wallet metadata
-• Anything about future payments
+**Where to find the key.** Monero CLI: `get_tx_key <transaction ID>`. Monero GUI: Transactions → the payment's details → "Transaction key". Feather: History → right-click the payment → Show details → Copy Tx Secret Key. Cake Wallet: tap the payment → "Transaction Key". Monerujo: tap the payment → "TX Key". Only the wallet that sent the payment has the key; an exchange cannot give it to you.
 
-The proof is one-time and per-payment. Possessing one proof tells an outsider nothing about other payments to the address (yours or anyone else's) or any other wallet activity.
+**Privacy.** The key is published with your listing. It shows only this payment to Morphit's address — but someone who also knows your own wallet address could use it to see the change from this payment. For the most privacy, pay the fee from an address you have not shared with anyone, or pay in BLURT.
 
-**How to generate one.**
-• **Monero CLI**: `get_tx_proof <txid> <treasury-address>`
-• **Monero GUI**: Advanced → Prove transaction → fill in txid + address → Generate
-• **Cake Wallet**: Settings → Privacy → Verify a transaction → Generate proof
-• **Feather Wallet**: Tools → Prove/check transaction → Generate
-
-You'll get a string starting with `OutProofV1` or `OutProofV2`. Paste that into the Payment proof field.
-
-**Why this is better than a view key.** A view key would let any holder see every payment to the address forever. A tx_proof reveals one payment, period. This means every Morphit instance — yours, the canonical one, a community operator's — can verify XMR fees independently without needing a shared secret. That's the federation working as intended.
+**"Payment proofs" (OutProof…) no longer work.** The public explorers cannot check them. A listing that was sent with one shows "fee can't be checked"; post it again with the payment's transaction key.
 
 ---
 

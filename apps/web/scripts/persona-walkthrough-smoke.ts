@@ -926,12 +926,16 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'D-11 — RUN-A-NODE §9.1 uses real `morphit-ops register` invocation',
 		file: 'docs/RUN-A-MORPHIT-NODE.md',
 		rootRelative: true,
-		mustHave: ['npx morphit-ops register'],
+		mustHave: ['sudo morphit-ops register'],
 		// Pre-fix referenced a fictitious flag-driven invocation
-		// against a nonexistent dist/ path.
+		// against a nonexistent dist/ path. v1.20.0: `npx morphit-ops`
+		// run outside the install looks the name up on the public npm
+		// registry (and without sudo cannot read the root-only config),
+		// so the documented form is the installed `sudo morphit-ops`.
 		mustNotHave: [
 			'node apps/ops-cli/dist/index.js register-operator',
-			'morphit_register_operator'
+			'morphit_register_operator',
+			'npx morphit-ops register'
 		]
 	},
 	{

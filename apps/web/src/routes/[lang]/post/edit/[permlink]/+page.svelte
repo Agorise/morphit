@@ -51,6 +51,13 @@
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import {
+		filterAmountTyping,
+		formatAmountForInput,
+		localeDecimalSeparator,
+		parseAmountInput,
+		type AmountParse
+	} from '$lib/orders/amountInput';
 	import { resolvePostDefaultLang, noteUsedPostLang, readLocalPreferredLangs } from '$lib/stores/preferredLangs';
 	import { termsHasForbiddenChar } from '$lib/orders/termsForbiddenChars';
 	import type { OrderRecord } from '@morphit/indexer-client';
@@ -246,8 +253,8 @@
 		side = order.side;
 		asset = order.asset;
 		fiat = order.fiat_currency;
-		amountMin = order.amount_min === null ? '' : String(order.amount_min);
-		amountMax = order.amount_max === null ? '' : String(order.amount_max);
+		amountMin = order.amount_min === null ? '' : formatAmountForInput(order.amount_min, currentLangEdit);
+		amountMax = order.amount_max === null ? '' : formatAmountForInput(order.amount_max, currentLangEdit);
 		paymentMethods = [...order.payment_methods];
 		// cp425 — prefill the accepted-crypto set for a barter order (null/
 		// absent on crypto orders → empty). The accept-picker below renders it.
@@ -280,10 +287,10 @@
 			const obj = pm as Record<string, unknown>;
 			if (obj.kind === 'spread' && typeof obj.percent === 'number') {
 				priceModelKind = 'spread';
-				spreadPercent = String(obj.percent);
+				spreadPercent = formatAmountForInput(obj.percent, currentLangEdit);
 			} else if (obj.kind === 'fixed' && typeof obj.price === 'number') {
 				priceModelKind = 'fixed';
-				fixedPrice = String(obj.price);
+				fixedPrice = formatAmountForInput(obj.price, currentLangEdit);
 			} else {
 				// Unknown / legacy shape — default to 'spread 0'.
 				priceModelKind = 'spread';
@@ -344,8 +351,30 @@
 	});
 
 	// ─── Validation (lightweight — handler re-validates) ───────────
-	const amountMinNum = $derived(amountMin === '' ? null : Number(amountMin));
-	const amountMaxNum = $derived(amountMax === '' ? null : Number(amountMax));
+	// v1.20.0 fix wave, G6 — fields keep what the user typed and are parsed
+	// with the active locale's conventions (shared with /post). The old
+	// keepDecimal() dropped every "," as typed ("12,50" → "1250").
+	const amountMinParse = $derived(parseAmountInput(amountMin, currentLangEdit));
+	const amountMaxParse = $derived(parseAmountInput(amountMax, currentLangEdit));
+	const spreadParse = $derived(parseAmountInput(spreadPercent, currentLangEdit, { signed: true }));
+	const fixedPriceParse = $derived(parseAmountInput(fixedPrice, currentLangEdit));
+	function parsedOrNull(raw: string, p: AmountParse): number | null {
+		if (raw.trim() === '') return null;
+		return p.ok ? p.number : Number.NaN;
+	}
+	function amountParseMessage(p: AmountParse): string {
+		if (p.ok || p.reason === 'empty') return '';
+		if (p.reason === 'ambiguous' && p.readings) {
+			return $_('common.amount_input.ambiguous', {
+				values: { a: p.readings[0], b: p.readings[1] }
+			}) as string;
+		}
+		return $_('common.amount_input.invalid', {
+			values: { sep: localeDecimalSeparator(currentLangEdit) }
+		}) as string;
+	}
+	const amountMinNum = $derived(parsedOrNull(amountMin, amountMinParse));
+	const amountMaxNum = $derived(parsedOrNull(amountMax, amountMaxParse));
 
 	// The order's sub-network (USDT/USDC/DAI only), shown read-only in the
 	// locked-substance chip. Immutable in a replace, like side/asset/fiat.
@@ -363,6 +392,8 @@
 	const MAX_AMOUNT = 1e12;
 
 	const amountError = $derived.by(() => {
+		const unreadable = amountParseMessage(amountMinParse) || amountParseMessage(amountMaxParse);
+		if (unreadable) return unreadable;
 		if (amountMinNum !== null) {
 			if (!Number.isFinite(amountMinNum) || amountMinNum < 0) {
 				return $_('post_order.errors.amount_min_negative');
@@ -414,8 +445,10 @@
 		if (isBarter) return '';
 		if (priceModelKind === 'spread') {
 			if (spreadPercent.trim() === '') return '';
-			const n = Number(spreadPercent);
-			if (!Number.isFinite(n)) return $_('post_order.errors.spread_not_a_number');
+			if (!spreadParse.ok) {
+				return amountParseMessage(spreadParse) || $_('post_order.errors.spread_not_a_number');
+			}
+			const n = spreadParse.number;
 			if (n < -50 || n > 50) return $_('post_order.errors.spread_out_of_range');
 			return '';
 		}
@@ -423,7 +456,10 @@
 		if (fixedPrice.trim() === '') {
 			return $_('post_order.errors.fixed_price_required');
 		}
-		const n = Number(fixedPrice);
+		if (!fixedPriceParse.ok) {
+			return amountParseMessage(fixedPriceParse) || $_('post_order.errors.fixed_price_invalid');
+		}
+		const n = fixedPriceParse.number;
 		if (!Number.isFinite(n) || n <= 0) {
 			return $_('post_order.errors.fixed_price_invalid');
 		}
@@ -441,51 +477,32 @@
 		return '';
 	});
 
-	// ── Number-input hygiene: grandma-friendly cleaned inputmode
-	//    "decimal" fields, mirroring /post (cp360 + the cp368 DOM-sync
-	//    fix). Strips anything that is not a number-shaped string so the
-	//    box only ever shows digits + a single dot; keepSignedDecimal
-	//    additionally allows a leading minus for the spread field. These
-	//    mirror the identical helpers in /post — a candidate for a shared
-	//    util (see REVISIT-LIST). syncCleaned forces currentTarget.value
-	//    so a rejected keystroke can't linger on screen under one-way
-	//    value={…} binding. ─────────────────────────────────────
-	function keepDecimal(raw: string): string {
-		let seenDot = false;
-		let out = '';
-		for (const ch of raw) {
-			if (ch >= '0' && ch <= '9') out += ch;
-			else if (ch === '.' && !seenDot) {
-				out += ch;
-				seenDot = true;
-			}
-		}
-		return out;
-	}
-	function keepSignedDecimal(raw: string): string {
-		const neg = raw.trimStart().startsWith('-');
-		return (neg ? '-' : '') + keepDecimal(raw);
-	}
+	// ── Number-input hygiene: keystrokes that can never be part of an
+	//    amount (letters, symbols) are dropped by filterAmountTyping; digits
+	//    of any script, both decimal marks and grouping stay visible and are
+	//    read by parseAmountInput (v1.20.0 G6 — shared with /post).
+	//    syncCleaned forces currentTarget.value so a rejected keystroke can't
+	//    linger on screen under one-way value={…} binding. ─────────────
 	function syncCleaned(el: HTMLInputElement, clean: string): void {
 		if (el.value !== clean) el.value = clean;
 	}
 	function handleAmountMinInput(e: Event & { currentTarget: HTMLInputElement }): void {
-		const clean = keepDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value);
 		syncCleaned(e.currentTarget, clean);
 		amountMin = clean;
 	}
 	function handleAmountMaxInput(e: Event & { currentTarget: HTMLInputElement }): void {
-		const clean = keepDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value);
 		syncCleaned(e.currentTarget, clean);
 		amountMax = clean;
 	}
 	function handleSpreadInput(e: Event & { currentTarget: HTMLInputElement }): void {
-		const clean = keepSignedDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value, { signed: true });
 		syncCleaned(e.currentTarget, clean);
 		spreadPercent = clean;
 	}
 	function handleFixedPriceInput(e: Event & { currentTarget: HTMLInputElement }): void {
-		const clean = keepDecimal(e.currentTarget.value);
+		const clean = filterAmountTyping(e.currentTarget.value);
 		syncCleaned(e.currentTarget, clean);
 		fixedPrice = clean;
 	}
@@ -552,8 +569,8 @@
 				// positive-price check). Value is the fiat amount range.
 				{ kind: 'spread', percent: 0 }
 			: priceModelKind === 'spread'
-				? { kind: 'spread', percent: Number(spreadPercent) || 0 }
-				: { kind: 'fixed', price: Number(fixedPrice) };
+				? { kind: 'spread', percent: spreadParse.ok ? spreadParse.number : 0 }
+				: { kind: 'fixed', price: fixedPriceParse.ok ? fixedPriceParse.number : Number.NaN };
 
 		const input: OrderFormInput = {
 			side,

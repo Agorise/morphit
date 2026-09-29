@@ -8,10 +8,22 @@
 - Storage: encrypted with Argon2id (KDF) + XSalsa20-Poly1305 (AEAD) using
   a user-chosen password. Ciphertext lives in `localStorage` (or
   `sessionStorage` in Privacy Mode)
+- Reload hand-off (v1.20.0): with **Remember me** on, a plain page reload
+  (F5) keeps you signed in. At `pagehide` the decrypted posting/memo keys
+  are written to that tab's `sessionStorage` and read back on the next load
+  ONLY if it is a reload (navigation type `reload`), a service worker
+  controls the page (so not a hard reload) and the copy is at most 30
+  seconds old; otherwise it is deleted unused. It is never written when the
+  page goes into the back/forward cache. Browsers may keep a closed tab's
+  `sessionStorage` for "Reopen closed tab" (Firefox may also save it in its
+  session file on disk); after 30 s such a copy is refused. With Remember me
+  off, nothing is ever written.
 - Signing: happens in browser memory, key material zeroed after use where
   the JS engine permits
-- Transmission: **forbidden by architecture** (CSP `connect-src 'self'`),
-  **forbidden by code review checklist**, **forbidden by SRI-pinned deps**
+- Transmission: **forbidden by architecture** (the CSP's `connect-src`
+  allows only this site and the Blurt RPC nodes), by the code-review
+  checklist, and by locked dependency versions; the served bundle is
+  checked against the chain-signed release manifest.
 
 #### 1a. Only posting + memo keys live in session memory
 
@@ -50,9 +62,13 @@ never touch `active`** — payment happens directly on those chains; no
 Blurt `transfer` op is involved.
 
 **Account creation** uses **none** of the user's keys.  The
-relay's active key signs a `create_claimed_account` op
-(consuming one ACT from the relay's pre-minted pool per
-ADR-0010 §4); the user supplies only the **public keys**
+relay's active key signs a direct `account_create` op that
+pays the chain's live `account_creation_fee` (~100 BLURT)
+from the relay's own liquid balance, plus a 2 BLURT dust
+transfer — ~102 BLURT per signup (Blurt disabled
+`claim_account` / `create_claimed_account` at hard fork 2, so
+there are no pre-minted ACTs; see "Account-creation key
+handling" below). The user supplies only the **public keys**
 they want their new account governed by.  Their `owner`
 private key never touches the network — the user generates
 it locally, encrypts it under their password, and the
@@ -194,7 +210,15 @@ audit's invariants must be re-checked against any new call site.
 
 - No cookies (encrypted keystore uses localStorage / sessionStorage)
 - No analytics, no third-party scripts, no telemetry
-- nginx configured with no access logs on user-facing vhosts
+- No web server keeps visitor addresses: every shipped nginx server block
+  sets `access_log off` (`ops/nginx/*.conf`,
+  `ops/bunkerweb/frontend/nginx.conf`); BunkerWeb's `LOG_FORMAT` names no
+  address, and its container keeps no Docker log at all (its error, ban and
+  ModSecurity lines would name visitors). The one exception: when CrowdSec
+  reads BunkerWeb's log, BunkerWeb keeps a small local log (5 MB, one file)
+  with addresses, because CrowdSec needs them. Existing installs are brought to
+  this by `morphit-ops upgrade` (v1.20.0; before, the shipped configs did
+  log visitor addresses).
 - Rate limiting is memory-only per time window, no IP persisted to disk
 
 ### 5. Reproducible builds
@@ -208,15 +232,24 @@ audit's invariants must be re-checked against any new call site.
 ### In scope
 
 - **Passive network adversary**: reads traffic between user and Morphit.
-  Mitigation: TLS, hidden services, CSP, SRI, no third-party origins.
+  Mitigation: TLS, hidden services, CSP, no third-party origins.
 - **Active MitM**: attempts to inject malicious JS. Mitigation: TLS +
-  HSTS + SRI on all scripts + CSP restricting script sources.
+  HSTS + CSP restricting script sources to this site + the running-bundle
+  check against the chain-signed release manifest.
 - **Compromised Morphit server**: attacker controls morphit.io host.
   Mitigation: cannot steal user keys (never sent); can serve malicious JS
-  (partially mitigated by SRI + reproducible builds + PWA cache + PGP-signed
+  (partially mitigated by the chain-signed release manifest the app checks
+  its own bundle against + reproducible builds + PWA cache + PGP-signed
   release pointers on Blurt; user community can detect divergence).
 - **Compromised relay**: cannot forge user ops (signatures); can refuse to
   broadcast. Mitigation: multi-relay client-side failover.
+- **Cross-site requests to the indexer**: the indexer's public API sends
+  `Access-Control-Allow-Origin: *` (GET/OPTIONS, no credentials). That stops
+  other sites from reading responses, not from making a visitor's browser
+  send requests — including to the `/v1` POST routes (`/v1/broadcast`, the
+  federation chat push, `/v1/chain`, login pairing). Mitigation: must come
+  from what each route accepts and from the rate limits — nothing may rely
+  on CORS to keep a POST route private.
 - **Compromised indexer**: can serve stale or filtered orderbook.
   Mitigation: peer gossip + client-side fallback indexer list + users can
   consume RSS or run their own indexer.
@@ -312,9 +345,11 @@ purely local and uses the more storage-compact secretbox form.
 
 ## Subresource integrity
 
-All `<script>` and `<link rel="stylesheet">` tags on Morphit pages include
-an `integrity="sha384-..."` attribute. The build pipeline generates these
-automatically and rejects builds where any asset is served without SRI.
+Morphit pages do **not** carry `integrity="sha384-…"` (SRI) attributes: the
+build emits none, and every script and stylesheet is same-origin. The
+integrity backstop is the release manifest broadcast on-chain by `@morphit`:
+the app hashes the bundle it is running and warns ("Build integrity check
+failed") when it does not match the signed release.
 
 ## CSP (per-vhost)
 
@@ -385,7 +420,8 @@ account using a published GPG key (Phase 5 deliverable).
       a specific candidate address has been used before
     - `morphit.locale` — the user's chosen UI language
     - `morphit.updateDismissed` — a flag (sessionStorage only)
-  **Mitigation:** no private-key material is stored here. An attacker
+  **Mitigation:** no private-key material is stored in `localStorage`
+  (see the reload hand-off in §1 for the 30-second `sessionStorage` copy). An attacker
   with a local-script vector (XSS, supply-chain compromise) can read
   these values but cannot impersonate the user, broadcast ops, or
   recover addresses. The only key material in process memory is the
@@ -402,9 +438,11 @@ account using a published GPG key (Phase 5 deliverable).
   The LiveIdentity's posting and memo private keys are in browser heap
   while the user is signed in. A rogue script in the same origin can
   read them via the identity store's exported subscriber. **Mitigation:**
-  strict CSP (no `'unsafe-inline'`, no `'unsafe-eval'`, no third-party
-  origins), SRI on every external resource, reproducible builds that
-  let the community detect a compromised host. Phase 4 adds the
+  CSP with no third-party script origins (it still allows
+  `'unsafe-inline'` and `'unsafe-eval'` for same-origin code, so it is not
+  a boundary against script already running on the page), no external
+  resources at all, and reproducible builds plus the chain-signed release
+  manifest that let the community detect a compromised host. Phase 4 adds the
   WhaleVault / Gravity extension path which removes these keys from
   Morphit's origin entirely. See ADR-0002 for the full key-handling
   policy.
@@ -1129,8 +1167,10 @@ channels in order of preference:
    we run handles the message in cleartext.  Use this for
    anything sensitive enough you wouldn't want a passive
    observer to see.
-2. **Confidential issue** at git.agorise.net/agorise/morphit
-   (Forgejo supports private issues; mark them as `Confidential`)
+2. If you cannot use Matrix: say so in the public room
+   **`#agorise:matrix.org`** WITHOUT any details, and ask a maintainer to
+   DM you. Do not open a public issue on git.agorise.net for an
+   exploitable problem — issues there are public.
 
 For **non-sensitive** questions, general security discussion,
 or hardening suggestions that aren't actively exploitable

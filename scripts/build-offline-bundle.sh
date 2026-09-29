@@ -163,12 +163,16 @@ log "4/6  Downloading the apt dependency closure in a clean ubuntu:24.04 contain
 # librsvg2-bin is not a role install: `morphit-ops branding apply` offers it to
 # draw the phone icons and launch screens, and an offline node must be able to
 # say yes without a network (docs/BRANDING.md).
+# apt-transport-tor (v1.20.0, C13): the tor role installs it on a tor-only node
+# so apt fetches over Tor. A tor-only node must get it with NO clearnet, and on
+# an offline install this closure is its only source; `morphit-ops upgrade`
+# also looks for it here (vendor/apt) before fetching it over Tor.
 PKGS="ca-certificates curl wget gnupg git lsb-release jq age rsync build-essential \
 chrony cron ufw fail2ban auditd audispd-plugins aide aide-common apparmor apparmor-utils \
 rkhunter libpam-pwquality unattended-upgrades apt-listchanges postfix libsasl2-modules \
 certbot postgresql postgresql-client postgresql-contrib python3-psycopg2 tor i2pd \
 apt-transport-https docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin ansible \
-librsvg2-bin"
+librsvg2-bin apt-transport-tor"
 docker run --rm -e PKGS="${PKGS}" -v "${VENDOR}/apt:/out" \
 	ubuntu:24.04 bash -c '
 		set -eu

@@ -659,7 +659,7 @@ async function main(): Promise<void> {
 			const scrubbed = await scrubRestoredLocalState(db);
 			if (scrubbed > 0) {
 				process.stderr.write(
-					`  local-only rows from the publisher left out: ${scrubbed.toLocaleString()}.\n`
+					`  publisher-local rows left out or reset (push queues, probe opinions): ${scrubbed.toLocaleString()}.\n`
 				);
 			}
 			const schemaSql = readFileSync(

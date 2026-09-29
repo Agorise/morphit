@@ -407,7 +407,7 @@
 						type="button"
 						onclick={onConfirm}
 						disabled={phase.kind === 'paying'}
-						class="rounded-xl border-2 border-morphit-btn bg-morphit-btn px-4 py-2 font-semibold text-white hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
+						class="rounded-xl border-2 border-morphit-btn bg-morphit-btn px-4 py-2 font-semibold text-morphit-btn-text hover:brightness-110 disabled:cursor-wait disabled:opacity-60"
 					>
 						{#if phase.kind === 'paying'}
 							{$_('chat.stranger_fee.paying')}

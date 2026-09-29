@@ -14,12 +14,13 @@
  * exits 0 having done nothing irreversible.
  */
 import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync, readdirSync, mkdirSync, chmodSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
-const SCRIPT = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
+// MORPHIT_FIRST_ONLINE_SCRIPT=<older copy> runs these checks against it.
+const SCRIPT = process.env.MORPHIT_FIRST_ONLINE_SCRIPT ?? join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 
 const ANSI_GREEN = '\x1b[32m';
 const ANSI_RED = '\x1b[31m';
@@ -237,6 +238,106 @@ process.exit(7);
 	// which also proves the recorder sees a clearnet probe when one happens.
 	r = runFo('MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=\n', {});
 	check('control: key ABSENT (clearnet install) still probes the baked clearnet fallback list', clearnet(r.curls).length >= 1, JSON.stringify(r.curls).slice(0, 200));
+}
+
+// ── Warrant canary step: never a searched-for script, never as root (v1.20.0, C3) ──
+// It used to run the first `/home/*/.morphit/update-canary.sh` (or root's) AS
+// ROOT, every 5 minutes until it published: any local account could get root by
+// dropping that file, and the real refresh never succeeded as root (the owner's
+// signing key is not in root's keyring). These run the real script: an armed
+// refresh must run as its OWNER with the owner's HOME; nothing unarmed runs.
+if (src.length > 0) {
+	const runCanary = (opts: { refresh: string | null; homeRoot: string | null }): { out: string; marker: string | null; exit: number } => {
+		const dir = mkdtempSync(join(tmpdir(), 'morphit-fo-canary-'));
+		try {
+			const bin = join(dir, 'bin');
+			mkdirSync(bin);
+			// curl answers → "online"; everything else a no-op recorder.
+			writeFileSync(join(bin, 'curl'), '#!/bin/sh\nexit 0\n');
+			for (const name of ['systemctl', 'logger', 'apt-get', 'certbot', 'docker']) writeFileSync(join(bin, name), '#!/bin/sh\nexit 0\n');
+			for (const f of readdirSync(bin)) chmodSync(join(bin, f), 0o755);
+			mkdirSync(join(dir, 'build'));
+			mkdirSync(join(dir, 'state'));
+			// TLS + RPC already done, no auto-register: only the canary step runs.
+			writeFileSync(join(dir, 'state', 'tls.done'), '');
+			writeFileSync(join(dir, 'state', 'rpc.done'), '');
+			writeFileSync(
+				join(dir, 'first-online.env'),
+				`MORPHIT_DOMAIN=\nMORPHIT_AUTO_REGISTER=no\nMORPHIT_OPS_DIR=${dir}\nMORPHIT_CANARY_SERVE_DIR=${join(dir, 'build')}\nMORPHIT_CANARY_REFRESH=${opts.refresh ?? ''}\n`
+			);
+			const env = {
+				PATH: `${bin}:${process.env.PATH}`,
+				HOME: dir,
+				MORPHIT_FIRST_ONLINE_STATE_DIR: join(dir, 'state'),
+				MORPHIT_FIRST_ONLINE_ENV: join(dir, 'first-online.env'),
+				MORPHIT_FIRST_ONLINE_INDEXER_ENV: join(dir, 'indexer.env'),
+				MORPHIT_FIRST_ONLINE_RELAY_ENV: join(dir, 'relay.env')
+			};
+			let r;
+			if (opts.homeRoot !== null) {
+				// A private mount namespace puts a planted script at /home/<user>/… and
+				// /root/… for this run only; the host's own dirs are never touched. The
+				// script under test is copied out first (the checkout may live in /home).
+				writeFileSync(join(dir, 'fo.sh'), readFileSync(SCRIPT));
+				r = spawnSync(
+					'unshare',
+					['-m', '--propagation', 'private', 'sh', '-c', `mount --bind "${opts.homeRoot}/home" /home && mount --bind "${opts.homeRoot}/root" /root && exec sh "${join(dir, 'fo.sh')}"`],
+					{ encoding: 'utf-8', timeout: 120_000, env }
+				);
+			} else {
+				r = spawnSync('sh', [SCRIPT], { encoding: 'utf-8', timeout: 120_000, env });
+			}
+			const markerPath = opts.refresh ? join(dirname(opts.refresh), 'ran-as') : join(opts.homeRoot ?? dir, 'ran-as');
+			const marker = existsSync(markerPath) ? readFileSync(markerPath, 'utf-8').trim() : null;
+			return { out: `${r.stdout ?? ''}${r.stderr ?? ''}`, marker, exit: r.status ?? -1 };
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	};
+	const isRoot = process.getuid?.() === 0;
+	const canUnshare = isRoot && spawnSync('unshare', ['-m', 'true']).status === 0;
+	if (!isRoot) {
+		console.log('  (not root: the canary owner/namespace scenarios need root to chown and mount — skipped)');
+	} else {
+		// A refresh owned by uid 4243 (no passwd entry needed), in <home>/.morphit/.
+		const t = mkdtempSync(join(tmpdir(), 'morphit-fo-owner-'));
+		try {
+			const home = join(t, 'user');
+			mkdirSync(join(home, '.morphit'), { recursive: true });
+			const refresh = join(home, '.morphit', 'update-canary.sh');
+			writeFileSync(refresh, `echo "uid=$(id -u) home=$HOME" > "${join(home, '.morphit', 'ran-as')}"\n`);
+			chmodSync(t, 0o755);
+			execFileSync('chown', ['-R', '4243:4243', home]);
+			const r = runCanary({ refresh, homeRoot: null });
+			check(
+				'canary: an armed refresh runs as its OWNER (uid 4243) with the owner’s HOME — never as root',
+				r.marker === `uid=4243 home=${home}`,
+				`ran as: ${r.marker ?? 'did not run'} | ${r.out.slice(0, 200)}`
+			);
+		} finally {
+			rmSync(t, { recursive: true, force: true });
+		}
+		if (!canUnshare) {
+			console.log('  (no mount namespaces here: the "never searched for" scenario is skipped)');
+		} else {
+			const t2 = mkdtempSync(join(tmpdir(), 'morphit-fo-planted-'));
+			try {
+				for (const d of ['home/zed/.morphit', 'root/.morphit']) mkdirSync(join(t2, d), { recursive: true });
+				const plant = `echo "uid=$(id -u)" > "${join(t2, 'ran-as')}"\n`;
+				writeFileSync(join(t2, 'home/zed/.morphit/update-canary.sh'), plant);
+				writeFileSync(join(t2, 'root/.morphit/update-canary.sh'), plant);
+				execFileSync('chown', ['-R', '4243:4243', join(t2, 'home/zed')]);
+				const r = runCanary({ refresh: null, homeRoot: t2 });
+				check(
+					'canary: with no refresh armed, a script planted in /home/*/.morphit or /root/.morphit is NEVER run',
+					r.marker === null && r.exit === 0,
+					`planted script ran as: ${r.marker} | ${r.out.slice(0, 200)}`
+				);
+			} finally {
+				rmSync(t2, { recursive: true, force: true });
+			}
+		}
+	}
 }
 
 // ── RPC-endpoint var name must MATCH what the install writes (cp660) ──

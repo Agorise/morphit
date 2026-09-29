@@ -367,10 +367,16 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 					delete c.become;
 					delete c.become_user;
 					delete c.notify;
-					const cmd = c['ansible.builtin.command'] as { cmd: string };
-					c['ansible.builtin.command'] = {
-						cmd: cmd.cmd.replace('/usr/local/lib/morphit/morphit-ipfs-privacy.sh', PRIVACY)
-					};
+					// `command` or `shell` (v1.20.0, C12: "Keep the node small" is a
+					// check-then-set shell script so its notify can fire), with the
+					// script as `cmd:` or as the module's bare value.
+					const mod = ['ansible.builtin.command', 'ansible.builtin.shell'].find((m) => m in c);
+					if (mod === undefined)
+						throw new Error(`task "${String(t.name)}" is neither command nor shell`);
+					const v = c[mod] as string | { cmd: string };
+					const swap = (s: string): string =>
+						s.replace('/usr/local/lib/morphit/morphit-ipfs-privacy.sh', PRIVACY);
+					c[mod] = typeof v === 'string' ? swap(v) : { ...v, cmd: swap(v.cmd) };
 					return c;
 				});
 				const book = [

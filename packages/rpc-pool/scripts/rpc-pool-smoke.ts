@@ -1512,6 +1512,88 @@ let failed = 0;
 	else fail('quorumCall proven-first order', `asked=${asked.join(',')}`);
 }
 
+// ── v1.20.0 fix wave (D7): a BACKGROUND call's abort timer on a hidden endpoint
+// is the 60 s background floor, not the 25 s user-facing one. The pool's primary
+// pass used to hard-code userFacing=true, so every poller / backfill / one-shot
+// call to a .onion was cut at 25 s and MORPHIT_HIDDEN_RPC_TIMEOUT_MS could not
+// raise it. Observed by capturing the delay the pool hands setTimeout.
+{
+	const onion = 'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091';
+	const realSetTimeout = globalThis.setTimeout;
+	const capture = async (hedge: boolean): Promise<number[]> => {
+		const delays: number[] = [];
+		(globalThis as { setTimeout: unknown }).setTimeout = ((fn: () => void, ms?: number, ...a: unknown[]) => {
+			if (typeof ms === 'number' && ms >= 1000) delays.push(ms);
+			return realSetTimeout(fn, ms, ...(a as []));
+		}) as typeof setTimeout;
+		try {
+			const p = new EndpointPool({ endpoints: [onion], maxRequestsPerSecond: 0 });
+			await p.call(async () => 'ok', { hedge });
+		} finally {
+			globalThis.setTimeout = realSetTimeout;
+		}
+		return delays;
+	};
+	const bg = await capture(false);
+	const uf = await capture(true);
+	if (bg[0] === DEFAULT_HIDDEN_TIMEOUT_MS && uf[0] === DEFAULT_HIDDEN_USER_FACING_TIMEOUT_MS)
+		pass('call(): a background call to a hidden endpoint gets the 60 s floor; a user-facing one 25 s');
+	else fail('call() hidden timeout floor by call type', `background=${bg.join(',')} userFacing=${uf.join(',')}`);
+}
+
+// ── v1.20.0 fix wave (D9): the LOSER of a hedge race was aborted BY US, which
+// says nothing about its health. It used to be recorded as a transport failure
+// (cooldown + EWMA wiped), pushing a healthy-but-slower node out of rotation, and
+// the hedge endpoint was then tried a second time on the primary pass.
+{
+	const A = 'https://hedge-a.example';
+	const B = 'https://hedge-b.example';
+	const p = new EndpointPool({
+		endpoints: [A, B],
+		maxRequestsPerSecond: 0,
+		hedgeStaggerFloorMs: 10,
+		cooldownJitterFraction: 0
+	});
+	const eps = (p as unknown as { endpoints: { url: string; ewmaLatencyMs: number | null }[] }).endpoints;
+	eps[0]!.ewmaLatencyMs = 800;
+	eps[1]!.ewmaLatencyMs = 900;
+	const r = await p.call(
+		(u, s) =>
+			new Promise<string>((res, rej) => {
+				const t = setTimeout(() => res(u), u === A ? 2000 : 50);
+				s.addEventListener('abort', () => {
+					clearTimeout(t);
+					rej(new Error('aborted'));
+				});
+			}),
+		{ hedge: true }
+	);
+	await sleep(20);
+	const a = p.snapshot().find((e) => e.url === A)!;
+	if (r === B && a.consecutiveFailures === 0 && a.cooldownUntil <= Date.now() && a.ewmaLatencyMs === 800)
+		pass('hedge: the aborted loser keeps its health (no cooldown, EWMA intact)');
+	else fail('hedge loser health', `winner=${r} A.fails=${a.consecutiveFailures} A.ewma=${a.ewmaLatencyMs}`);
+
+	const C = 'https://hedge-c.example';
+	const p2 = new EndpointPool({ endpoints: [A, B, C], maxRequestsPerSecond: 0, hedgeStaggerFloorMs: 10 });
+	const eps2 = (p2 as unknown as { endpoints: { ewmaLatencyMs: number | null }[] }).endpoints;
+	eps2[0]!.ewmaLatencyMs = 600;
+	eps2[1]!.ewmaLatencyMs = 600;
+	eps2[2]!.ewmaLatencyMs = 700;
+	const asked: string[] = [];
+	await p2.call(
+		async (u) => {
+			asked.push(u);
+			if (u !== C) throw new Error('fetch failed');
+			return 'c';
+		},
+		{ hedge: true }
+	);
+	if (asked.filter((u) => u === B).length === 1)
+		pass('hedge: the hedge endpoint is not asked a second time on the primary pass');
+	else fail('hedge endpoint re-tried', `asked=${asked.join(',')}`);
+}
+
 for (const r of results) {
 	if (r.passed) {
 		console.log('  ' + ANSI_GREEN + '✓' + ANSI_RESET + ' ' + r.name);

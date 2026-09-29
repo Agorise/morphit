@@ -1,0 +1,18 @@
+[Unit]
+Description=Morphit Tor time check timer — every 6 hours (tor-only nodes)
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-tor-timesync.service
+
+[Timer]
+# Soon after boot (the RTC may have drifted while the box was off; Tor needs a
+# few minutes to build circuits first), then every 6 hours. A home server's
+# clock drifts seconds a day, so this keeps it well inside the 30 s step
+# threshold, and each run is six small HEAD requests over Tor.
+OnBootSec=10min
+OnUnitActiveSec=6h
+RandomizedDelaySec=15min
+Persistent=true
+Unit=morphit-tor-timesync.service
+
+[Install]
+WantedBy=timers.target

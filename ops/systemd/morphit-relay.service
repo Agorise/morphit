@@ -58,6 +58,13 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=morphit-relay
 
+# v1.20.0 (D3): the relay's state directory — the kill-switch sentinel
+# (SIGNUPS_DISABLED) and the persisted daily signup ceiling. systemd creates it
+# (mode 0700) before start; the relay also creates it and logs whether it is
+# writable. Matches the code default MORPHIT_RELAY_DATA_DIR.
+StateDirectory=morphit/relay
+StateDirectoryMode=0700
+
 # --- Hardening (safe with User=root) -------------------------------
 NoNewPrivileges=yes
 ProtectHome=yes

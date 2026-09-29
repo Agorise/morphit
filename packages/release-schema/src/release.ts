@@ -82,14 +82,17 @@ export interface ReleaseEndpoints {
  * design"; that framing was wrong for privacy (publishing the
  * view key reveals every incoming payment, amount, timing, and
  * subaddress to the treasury wallet, forever).  Part 107
- * removes the view key from this block.  Each operator's
- * indexer holds the view key locally in its env config and
- * uses it ONLY in-memory for verification.  Community
- * operators who can't access the canonical view key cannot
- * independently verify XMR payments — they trust canonical's
- * federated verdict, run their own treasury, or disable XMR
- * fee acceptance.  See docs/adr/0011-dynamic-fee-model.md
- * Part 107 amendment for the full rationale.
+ * removes the view key from this block.  Since Part 108++/109
+ * NO indexer holds any view key: XMR fees are verified from the
+ * payer's per-payment transaction key (v1.20.0, M-X1: the 64-hex
+ * tx private key the explorers' txprove takes — the OutProof strings
+ * used before could never be checked there; carried in the order op)
+ * against public explorers, so every federated indexer verifies
+ * every XMR payment independently
+ * (apps/indexer/src/indexer/fee/moneroProofVerifier.ts; the old
+ * MORPHIT_INDEXER_XMR_FEE_VIEWKEY env var was removed).  See
+ * docs/adr/0011-dynamic-fee-model.md (Part 107 and later
+ * amendments) for the history.
  *
  * See docs/OPERATIONS.md §40 for the operator ceremony.
  */
@@ -101,6 +104,20 @@ export interface ReleaseTreasuryBlock {
 		readonly address: string;
 		/** Listing fee amount in satoshis.  Positive integer. */
 		readonly satoshis: number;
+		/** v1.20.0 (MK-H2) — OPTIONAL treasury BIP84 ACCOUNT extended
+		 *  public key (`m/84'/0'/0'`), canonicalised to the `xpub…`
+		 *  prefix (the validator also accepts `zpub…` and normalises it).
+		 *  When the pin in force carries it, every BTC-fee order gets its
+		 *  OWN address `<xpub>/0/n` at a sequential index n computed from
+		 *  chain replay (apps/indexer/src/indexer/fee/btcFeeAddressIndex.ts),
+		 *  and the old paste-a-txid-to-the-shared-address path is refused
+		 *  for new orders.  `address` stays REQUIRED next to it: releases
+		 *  are read by pre-v1.20 validators that reject a btc block without
+		 *  one, and txid-mode orders posted before the pin are still
+		 *  verified against it.  Public information only (the whole point is
+		 *  that every indexer can derive the addresses); a private key
+		 *  (xprv/zprv) is refused by the validator. */
+		readonly xpub?: string;
 	} | null;
 	readonly xmr: {
 		/** Mainnet Monero address — primary (95 chars, starts
@@ -111,6 +128,16 @@ export interface ReleaseTreasuryBlock {
 		 *  because typical values exceed Number.MAX_SAFE_INTEGER
 		 *  for large fees. */
 		readonly piconero: string;
+		/** v1.20.0 (MK-H2) — OPTIONAL treasury PRIMARY address (mainnet
+		 *  standard, `4…`). When the pin in force carries it, each XMR fee
+		 *  is paid to the INTEGRATED address primary + payment ID
+		 *  (xmrFeePaymentId(account, permlink)); the indexer decrypts the
+		 *  payment ID with the payer's tx key and accepts the payment only
+		 *  for that order. `address` stays required next to it (older
+		 *  validators need it; unbound orders from before the pin are
+		 *  verified against it). Subaddresses cannot be pinned here:
+		 *  integrated addresses only exist for primary addresses. */
+		readonly primary_address?: string;
 	} | null;
 	/** cp372 — chain-pinned BLURT listing-fee base (tier-1 amount,
 	 *  before the Sybil multiplier).  Unlike BTC/XMR there is no

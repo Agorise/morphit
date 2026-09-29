@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import handler from '$indexer/handlers/order';
-import { makeCtx } from '../testutils/context';
+import { fakeConfig, makeCtx } from '../testutils/context';
 import { makeMockClient } from '../testutils/mockClient';
 import type { ChainOperation } from '$blurt/client';
 
@@ -625,7 +625,7 @@ describe('order handler — waived_first_buy (ADR-0011)', () => {
 		});
 	});
 
-	it('Part 108++: rejects fee_method=xmr when tx_proof is missing', async () => {
+	it('v1.20.0 (M-X1): rejects fee_method=xmr with neither tx_key nor tx_proof', async () => {
 		const mock = makeMockClient();
 		const r = await handler(
 			makeCtx({
@@ -639,9 +639,29 @@ describe('order handler — waived_first_buy (ADR-0011)', () => {
 		);
 		expect(r).toEqual({
 			ok: false,
-			reason: 'tx_proof_required_for_xmr'
+			reason: 'tx_key_required_for_xmr'
 		});
 	});
+
+	for (const bad of ['b'.repeat(63), 'b'.repeat(65), 'g'.repeat(64), 'OutProofV2' + 'a'.repeat(60), 42, '']) {
+		it(`v1.20.0 (M-X1): rejects a malformed XMR tx_key (${JSON.stringify(bad).slice(0, 20)})`, async () => {
+			const mock = makeMockClient();
+			const r = await handler(
+				makeCtx({
+					payload: {
+						...validPayload(),
+						fee_method: 'xmr',
+						external_tx_id: 'a'.repeat(64),
+						tx_key: bad,
+						// a valid legacy proof alongside must not rescue a bad key
+						tx_proof: 'OutProofV2' + 'a'.repeat(60)
+					}
+				}),
+				mock.client
+			);
+			expect(r).toEqual({ ok: false, reason: 'tx_key_malformed' });
+		});
+	}
 
 	it('Part 108++: rejects fee_method=xmr when tx_proof has wrong prefix', async () => {
 		const mock = makeMockClient();
@@ -759,5 +779,40 @@ describe('order handler — waived_first_buy (ADR-0011)', () => {
 		expect(r).toEqual({ ok: true });
 		// Only the orders INSERT — no accounts UPSERT (not a waiver).
 		expect(mock.queries).toHaveLength(1);
+	});
+
+	// v1.20.0 fix wave, G8 — a fee paid EXACTLY at the floor must verify.
+	// The frontend clamps its quote to the pinned base × (1 − 15%) when BLURT
+	// rose past the band, splits it 90/10 in milliBLURT, and the indexer used
+	// to add the two legs as floats and compare with a float product:
+	// 31.304 + 3.478 = 34.781999… < 40.92 × 0.85 = 34.782000…04 → 'underpaid'.
+	it('G8: verifies a split fee paid exactly at the tolerance floor (float boundary)', async () => {
+		for (const [pinned, owner, canon] of [
+			[40.92, '31.304', '3.478'],
+			[40.02, '30.615', '3.402'],
+			[1.6, '1.224', '0.136']
+		] as const) {
+			const mock = makeMockClient([
+				{ match: 'SELECT COUNT', rows: [{ n: '0' }] },
+				{ match: 'INSERT INTO orders' }
+			]);
+			const payload = validPayload();
+			const memo = `morphit-fee:${payload.permlink}`;
+			const r = await handler(
+				makeCtx({
+					signer: 'alice',
+					payload,
+					config: fakeConfig({ feeRecipient: 'op-fees' }),
+					feeAmounts: { blurtBase: pinned },
+					siblingOps: [
+						['transfer', { from: 'alice', to: 'op-fees', amount: `${owner} BLURT`, memo }],
+						['transfer', { from: 'alice', to: 'morphit-fees', amount: `${canon} BLURT`, memo }]
+					] as ChainOperation[]
+				}),
+				mock.client
+			);
+			expect(r).toEqual({ ok: true });
+			expect(mock.queries[1]!.params[14]).toBe('verified');
+		}
 	});
 });

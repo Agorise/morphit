@@ -8,7 +8,7 @@
  * resulting identity store state.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
 import {
@@ -20,7 +20,8 @@ import {
 	pairedReadOnly,
 	reset,
 	stashSessionForReload,
-	restoreSessionFromReloadStash
+	restoreSessionFromReloadStash,
+	handlePageHide
 } from './identity';
 import { encryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
 import { generateFullIdentity } from '$crypto/keygen';
@@ -317,7 +318,7 @@ describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve
 	const STASH_KEY = 'morphit.session.reload-stash-v1';
 	// btoa('AB') = base64 of bytes [65,66]; btoa('CD') = [67,68]. Used to prove
 	// the binary serializer round-trips key bytes back to Uint8Array.
-	const liveStash = {
+	const liveStashBody = {
 		live: {
 			createdAt: 1,
 			origin: 'posting-only',
@@ -328,6 +329,34 @@ describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve
 		},
 		envelope: { scheme: 'simple' }
 	};
+	// v1.20.0 review (F-4): every stash carries its write time.
+	const stashAt = (at: number): string => JSON.stringify({ ...liveStashBody, at });
+	const freshStash = (): string => stashAt(Date.now());
+
+	/** What `performance.getEntriesByType('navigation')[0].type` reports for
+	 *  this load: 'reload' for F5, 'navigate' for a new visit or a restored
+	 *  tab, 'back_forward' for history navigation. */
+	function setNavigationType(type: string | null): void {
+		vi.spyOn(performance, 'getEntriesByType').mockImplementation(((kind: string) =>
+			kind === 'navigation' && type !== null ? [{ type }] : []) as unknown as typeof performance.getEntriesByType);
+	}
+
+	/** A structurally valid "Remember me" envelope on disk (hasPersistedKeystore). */
+	function rememberMeOn(): void {
+		window.localStorage.setItem('morphit.keystore.mode', 'password');
+		window.localStorage.setItem(
+			KEYSTORE_ENVELOPE_STORAGE_KEY,
+			JSON.stringify({
+				v: 1,
+				kdf: 'argon2id',
+				kdfParams: { opslimit: 64, memlimit: 1 << 30 },
+				salt: 'c2FsdA==',
+				nonce: 'bm9uY2U=',
+				ciphertext: 'Y3Q=',
+				createdAt: 1
+			})
+		);
+	}
 
 	function stubController(): void {
 		Object.defineProperty(navigator, 'serviceWorker', {
@@ -355,7 +384,10 @@ describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve
 	afterEach(() => {
 		reset();
 		window.sessionStorage.removeItem(STASH_KEY);
+		window.localStorage.clear();
 		clearController();
+		vi.restoreAllMocks();
+		vi.useRealTimers();
 	});
 
 	it('stashSessionForReload writes nothing while locked', () => {
@@ -369,7 +401,8 @@ describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve
 	});
 
 	it('discards the stash and stays LOCKED when there is no SW controller (hard reload)', () => {
-		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		setNavigationType('reload');
+		window.sessionStorage.setItem(STASH_KEY, freshStash());
 		restoreSessionFromReloadStash();
 		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // consumed once
 		expect(get(identity).state).toBe('locked'); // fail closed — not restored
@@ -377,7 +410,8 @@ describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve
 
 	it('adopts the stash and round-trips key bytes when a SW controller is present (normal reload)', () => {
 		stubController();
-		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		setNavigationType('reload');
+		window.sessionStorage.setItem(STASH_KEY, freshStash());
 		restoreSessionFromReloadStash();
 		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // consumed once
 		const st = get(identity);
@@ -391,13 +425,77 @@ describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve
 
 	it('consumes but does NOT clobber an already-live session', () => {
 		stubController();
-		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		setNavigationType('reload');
+		window.sessionStorage.setItem(STASH_KEY, freshStash());
 		restoreSessionFromReloadStash();
 		expect(get(identity).state).toBe('unlocked');
 		// A second stash arrives while we're already unlocked.
-		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStash));
+		window.sessionStorage.setItem(STASH_KEY, freshStash());
 		restoreSessionFromReloadStash();
 		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // still consumed
 		expect(get(identity).state).toBe('unlocked'); // live session preserved
+	});
+	// ─── v1.20.0 review (F-4): only a REAL reload, and only a fresh stash ───
+	// The stash used to be written on EVERY pagehide (tab close, leaving for
+	// another site) with no timestamp, and restored on any later load — so
+	// Back, a restored tab or a restored browser session came back UNLOCKED,
+	// with no password, days later, past the idle auto-lock.
+
+	it('discards a stash older than 30 s, even on a reload', () => {
+		stubController();
+		setNavigationType('reload');
+		window.sessionStorage.setItem(STASH_KEY, stashAt(Date.now() - 31_000));
+		restoreSessionFromReloadStash();
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
+		expect(get(identity).state).toBe('locked');
+	});
+
+	it('discards a stash that has no write time (written by an older build)', () => {
+		stubController();
+		setNavigationType('reload');
+		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStashBody));
+		restoreSessionFromReloadStash();
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
+		expect(get(identity).state).toBe('locked');
+	});
+
+	for (const type of ['navigate', 'back_forward', 'prerender', null]) {
+		it(`discards a fresh stash when this load is not a reload (${String(type)})`, () => {
+			stubController();
+			setNavigationType(type);
+			window.sessionStorage.setItem(STASH_KEY, freshStash());
+			restoreSessionFromReloadStash();
+			expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
+			expect(get(identity).state).toBe('locked');
+		});
+	}
+
+	it('pagehide into the back/forward cache stashes nothing; a real unload stashes a timed copy that expires', () => {
+		rememberMeOn();
+		stubController();
+		setNavigationType('reload');
+		window.sessionStorage.setItem(STASH_KEY, freshStash());
+		restoreSessionFromReloadStash();
+		expect(get(identity).state).toBe('unlocked');
+
+		// Leaving for another page that keeps this one in the bfcache.
+		handlePageHide(true);
+		expect(get(identity).state).toBe('locked');
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
+
+		// Unlock again, then a real unload (reload, or a tab close — the two
+		// are indistinguishable at pagehide).
+		window.sessionStorage.setItem(STASH_KEY, freshStash());
+		restoreSessionFromReloadStash();
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-27T12:00:00Z'));
+		handlePageHide(false);
+		expect(get(identity).state).toBe('locked');
+		expect(window.sessionStorage.getItem(STASH_KEY)).not.toBeNull();
+		// Reopened 45 s later (Ctrl+Shift+T, session restore): too late.
+		vi.setSystemTime(new Date('2026-09-27T12:00:45Z'));
+		restoreSessionFromReloadStash();
+		expect(get(identity).state).toBe('locked');
+		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
 	});
 });

@@ -44,7 +44,14 @@
 	 * password input is also wiped after the call.
 	 */
 
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
+	import { get } from 'svelte/store';
+	import {
+		filterAmountTyping,
+		formatAmountForInput,
+		localeDecimalSeparator,
+		parseAmountInput
+	} from '$lib/orders/amountInput';
 	import { untrack } from 'svelte';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
@@ -142,7 +149,9 @@
 	 *  (≤3 decimals, no trailing zeros / scientific notation) so a pre-filled
 	 *  value can never fail the shape check through float representation. */
 	function seedToInput(n: number): string {
-		return String(Number(n.toFixed(3)));
+		// v1.20.0 G6 — written in the active locale's decimal mark so the
+		// locale-aware parser reads it back exactly ("12,5" in de).
+		return formatAmountForInput(Number(n.toFixed(3)), get(locale));
 	}
 
 	/** cp402 [7b] — the in-modal amount for the composer flow. Ignored
@@ -163,7 +172,17 @@
 	/** cp402 [7b] — the amount that will actually be sent: the entered
 	 *  value in composer mode, otherwise the pill-provided prop. Parsed
 	 *  to a number so the SAME validation + formatting applies to both. */
-	const effectiveAmount = $derived(amountEditable ? Number(enteredAmount.trim()) : amount);
+	/** v1.20.0 fix wave, G6 — the field keeps what the user typed (either
+	 *  decimal mark, any digit script); this reads it with the active locale's
+	 *  conventions. The old sanitizer deleted every "," as it was typed, so a
+	 *  German "12,5" paid 125 BLURT. Ambiguous input ("1,234" in en) is
+	 *  refused, never guessed. */
+	const enteredParse = $derived(parseAmountInput(enteredAmount, $locale));
+	/** Canonical ASCII form of the typed amount ('' when unreadable). */
+	const enteredCanonical = $derived(enteredParse.ok ? enteredParse.value : '');
+	const effectiveAmount = $derived(
+		amountEditable ? (enteredParse.ok ? enteredParse.number : Number.NaN) : amount
+	);
 	const formattedAmount = $derived(
 		formatBlurtAmount(Number.isFinite(effectiveAmount) && effectiveAmount > 0 ? effectiveAmount : 0)
 	);
@@ -198,7 +217,11 @@
 	 *  A pill-provided amount is a number, not typed text; it gets the same
 	 *  grid check, because rounding an amount the user didn't type is the same
 	 *  bug with no field to complain in. */
-	const amountCheck = $derived(validateBlurtAmount(enteredAmount, Number.POSITIVE_INFINITY));
+	const amountCheck = $derived(
+		enteredParse.ok
+			? validateBlurtAmount(enteredCanonical, Number.POSITIVE_INFINITY)
+			: { precisionOk: true, valid: false }
+	);
 	const amountPrecisionOk = $derived(amountEditable ? amountCheck.precisionOk : true);
 
 	/** cp470 — the order's minimum in BLURT (the seed passed via `amount` in
@@ -209,7 +232,7 @@
 	const orderMinBlurt = $derived(
 		amountEditable && Number.isFinite(amount) && amount > 0 ? amount : MIN_BLURT
 	);
-	const enteredNum = $derived(Number(enteredAmount.trim()));
+	const enteredNum = $derived(enteredParse.ok ? enteredParse.number : Number.NaN);
 	const aboveOrderMin = $derived(
 		!amountEditable || (Number.isFinite(enteredNum) && enteredNum + 1e-9 >= orderMinBlurt)
 	);
@@ -252,18 +275,16 @@
 	/** cp470 — the order minimum, formatted for the below-minimum message. */
 	const minBlurtDisplay = $derived(formatBlurtAmount(orderMinBlurt));
 
-	/** cp470 — keep the amount field numeric: digits + at most one dot + ≤3
-	 *  decimals (BLURT precision). Letters and stray characters never appear
-	 *  (belt-and-suspenders with the shape check, which also rejects them).
+	/** cp470 / v1.20.0 G6 — drop keystrokes that can never be part of an
+	 *  amount (letters, symbols). Digits of any script, both decimal marks and
+	 *  grouping stay visible; `parseAmountInput` reads them and the precision
+	 *  check (≤3 decimals) reports too many decimals instead of silently
+	 *  truncating. The old version deleted every "," — "12,5" became "125".
 	 *  Reads the DOM value (not the bound state) so it is independent of
 	 *  listener ordering; reflects the cleaned value immediately. */
 	function sanitizeAmount(e: Event): void {
 		const el = e.currentTarget as HTMLInputElement;
-		let v = el.value.replace(/[^0-9.]/g, '');
-		const dot = v.indexOf('.');
-		if (dot !== -1) {
-			v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '').slice(0, 3);
-		}
+		const v = filterAmountTyping(el.value);
 		enteredAmount = v;
 		if (el.value !== v) el.value = v;
 	}
@@ -437,7 +458,17 @@
 				     also requires the password and an active key, so keying off it
 				     would shout "invalid amount" at someone whose amount is fine and
 				     whose password is merely still empty. -->
-				{#if enteredAmount.trim().length > 0 && !amountPrecisionOk}
+				{#if enteredAmount.trim().length > 0 && !enteredParse.ok}
+					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+						{enteredParse.reason === 'ambiguous' && enteredParse.readings
+							? $_('common.amount_input.ambiguous', {
+									values: { a: enteredParse.readings[0], b: enteredParse.readings[1] }
+								})
+							: $_('common.amount_input.invalid', {
+									values: { sep: localeDecimalSeparator($locale) }
+								})}
+					</p>
+				{:else if enteredAmount.trim().length > 0 && !amountPrecisionOk}
 					<p class="mt-1 text-xs text-red-600 dark:text-red-400">
 						{$_('chat.pay_blurt.error_amount_precision')}
 					</p>
@@ -605,7 +636,7 @@
 					     sat enabled over an empty password and an unvalidated amount. -->
 					<button
 						type="button"
-						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110 disabled:opacity-50"
 						onclick={confirm}
 						disabled={!canPay || phase.kind === 'paying'}
 					>

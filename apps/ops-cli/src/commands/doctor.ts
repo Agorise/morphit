@@ -334,7 +334,9 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 		const lines = formatRpcProbeLines(rpc);
 		// Last line is the verdict; the rest are per-endpoint.
 		for (const line of lines.slice(0, -1)) {
-			const tagged = line.includes('DEAD') ? c.red(line) : c.green(line);
+			// A reachable endpoint starts "OK"; anything else is down-now (amber, not
+			// red — a blip is normal and the pool routes around it) (review D12).
+			const tagged = line.trimStart().startsWith('OK') ? c.green(line) : c.yellow(line);
 			console.log(`  ${tagged}`);
 		}
 		console.log(`    ${verdictColor(lines[lines.length - 1]!)}`);

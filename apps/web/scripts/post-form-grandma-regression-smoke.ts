@@ -165,17 +165,20 @@ const SCENARIOS: Scenario[] = [
 		}
 	},
 	{
-		name: 'amount + price inputs are numeric-only (sanitised) with a decimal keypad',
+		name: 'amount + price inputs are filtered + parsed locale-aware (v1.20.0 G6) with a decimal keypad',
 		check: () => {
-			if (!/function keepDecimal\b/.test(src)) return 'keepDecimal sanitiser missing';
-			if (!/function keepSignedDecimal\b/.test(src)) return 'keepSignedDecimal sanitiser missing';
+			// G6 — the old keepDecimal() dropped every "," ("12,50" → "1250").
+			// The behaviour lives in $lib/orders/amountInput (unit-tested in
+			// amountInput.test.ts); here we pin that the page wires every
+			// amount/price field through it and never back to keepDecimal.
+			if (/function keepDecimal\b/.test(src)) return 'legacy keepDecimal sanitiser is back';
 			if (!/inputmode="decimal"/.test(src)) return 'no inputmode="decimal" on the number fields';
-			// The four sanitised fields each wire oninput through a keeper.
-			const keepCalls = (src.match(/keepDecimal\(e\.currentTarget\.value\)/g) ?? []).length;
-			const signedCalls = (src.match(/keepSignedDecimal\(e\.currentTarget\.value\)/g) ?? []).length;
-			if (keepCalls < 3)
-				return `expected ≥3 keepDecimal-wired inputs (min/max/fixed), found ${keepCalls}`;
-			if (signedCalls < 1) return `expected the spread field wired through keepSignedDecimal`;
+			const filterCalls = (src.match(/filterAmountTyping\(e\.currentTarget\.value/g) ?? []).length;
+			if (filterCalls < 4)
+				return `expected 4 filterAmountTyping-wired inputs (min/max/fixed/spread), found ${filterCalls}`;
+			for (const f of ['amountMin', 'amountMax', 'spreadPercent', 'fixedPrice'])
+				if (!new RegExp(`parseAmountInput\\(${f}, amountLocale`).test(src))
+					return `${f} is not parsed with parseAmountInput(…, amountLocale)`;
 			return null;
 		}
 	},
@@ -311,16 +314,16 @@ const SCENARIOS: Scenario[] = [
 			)
 				return 'FIRST_ORDER_MIN_USD not imported from @morphit/asset-registry';
 			if (/WAIVER_MIN_BLURT/.test(src)) return 'stale WAIVER_MIN_BLURT constant remains';
-			if (!/waiverMinUsd[^\n]*<\s*WAIVER_MIN_FIAT_USD/.test(src))
-				return 'floor check does not compare the (FX-converted) minimum to WAIVER_MIN_FIAT_USD';
-			// cp372: the floor MUST be FX-aware — convert the entered
-			// minimum (in the selected fiat) to USD via fiatToUsd, with a
-			// `?? amountMinNum` fallback that mirrors the indexer's order.ts
-			// (`ctx.fiatToUsd(amount_min, fiat) ?? amount_min`) so the
-			// client pre-submit check and the on-chain check agree for ANY
-			// currency, not just USD.
-			if (!/fiatToUsd\(fxTable, amountMinNum, fiat\)\s*\?\?\s*amountMinNum/.test(src))
-				return 'floor is not FX-aware (waiverMinUsd must be `fiatToUsd(fxTable, amountMinNum, fiat) ?? amountMinNum`, matching the indexer)';
+			// cp372 + v1.20.0 (G5): the gate is the shared, unit-tested
+			// `waiverFloorStatus` (apps/web/src/lib/orders/fx.test.ts covers its
+			// behaviour: FX-aware, USD 1:1, and an UNCONVERTIBLE fiat is its own
+			// state — never treated as already-USD, matching the indexer's
+			// `waiver_fiat_unconvertible`). Here we only pin that the page
+			// gates on it with the canonical floor.
+			if (!/waiverFloorStatus\(fxTable, amountMinNum, fiat, WAIVER_MIN_FIAT_USD\)/.test(src))
+				return 'floor check does not use waiverFloorStatus(fxTable, amountMinNum, fiat, WAIVER_MIN_FIAT_USD)';
+			if (/fiatToUsd\(fxTable, amountMinNum, fiat\)\s*\?\?\s*amountMinNum/.test(src))
+				return 'waiver floor still treats an unconvertible fiat as USD (`?? amountMinNum`)';
 			return null;
 		}
 	},

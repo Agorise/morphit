@@ -34,7 +34,12 @@
  * improvement on the attack surface too.
  */
 
-import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
+import type {
+	AddressPaymentResult,
+	FeeClaim,
+	FeeVerifier,
+	FeeVerifyResult
+} from '$indexer/fee/verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { minAcceptableSatoshis, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { logger } from '$log';
@@ -345,6 +350,174 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		}
 
 		return { kind: 'verified', observedAmount: observedSats };
+	}
+
+	/**
+	 * v1.20.0 (MK-H2) — has this order's OWN fee address been paid?
+	 *
+	 * Asks the same explorers as the txid path for Esplora's
+	 * `GET /address/:address` and needs `minSuccessfulResponses` of them to
+	 * agree on the CONFIRMED total received (chain_stats.funded_txo_sum —
+	 * every confirmed output ever paid to the address, so dust sent later
+	 * cannot push the real payment off a paginated list). With
+	 * minConfirmations > 1 each explorer's total is first reduced by outputs
+	 * in blocks shallower than that, using its own tx list and tip height.
+	 *
+	 *   paid       — a quorum agrees the confirmed total ≥ the amount (with
+	 *                the same FEE_PRICE_TOLERANCE floor as the txid path);
+	 *   not_yet    — a quorum agrees on a smaller total (maybe 0);
+	 *                `unconfirmedSats` says whether a payment is on its way;
+	 *   no_answer  — explorers unreachable, malformed, or disagreeing.
+	 *
+	 * The address itself binds the payment to the order: nobody can present
+	 * another order's payment here, so there is no txid and no reuse check.
+	 */
+	async checkAddressPayment(address: string, expectedSats: number): Promise<AddressPaymentResult> {
+		if (!Number.isSafeInteger(expectedSats) || expectedSats <= 0) {
+			return { kind: 'no_answer', reason: 'expected_amount_invalid' };
+		}
+		const quorum = await this.pool.quorumCall<{
+			base: string;
+			confirmed: number;
+			unconfirmed: number;
+		}>(
+			async (base, signal) => {
+				const r = await this.fetchAddressTotals(base, address, signal);
+				if (r.kind === 'transport_failure') throw new Error('transport_failure');
+				if (r.kind !== 'ok') return null;
+				return { base, confirmed: r.confirmed, unconfirmed: r.unconfirmed };
+			},
+			{
+				equivalenceKey: (x) => String(x.confirmed),
+				minAgree: this.config.minSuccessfulResponses,
+				timeoutMs: this.config.requestTimeoutMs * 2
+			}
+		);
+		if (quorum.kind === 'no_endpoints') {
+			return { kind: 'no_answer', reason: 'all explorers in cooldown' };
+		}
+		if (quorum.kind === 'all_responses_in') {
+			return {
+				kind: 'no_answer',
+				reason: `quorum not met (${quorum.responses.length} usable responses, ${quorum.cooledDown} in cooldown)`
+			};
+		}
+		const confirmedSats = Number(quorum.agreedKey);
+		const agreeing = quorum.responses.filter((x) => x.confirmed === confirmedSats);
+		const unconfirmedSats = Math.max(0, ...agreeing.map((x) => x.unconfirmed));
+		if (confirmedSats >= minAcceptableSatoshis(expectedSats)) {
+			return { kind: 'paid', confirmedSats, unconfirmedSats };
+		}
+		return { kind: 'not_yet', confirmedSats, unconfirmedSats };
+	}
+
+	/** One explorer's view of an address: confirmed (depth-qualified) and
+	 *  unconfirmed totals received. */
+	private async fetchAddressTotals(
+		baseUrl: string,
+		address: string,
+		poolSignal?: AbortSignal
+	): Promise<
+		| { kind: 'ok'; confirmed: number; unconfirmed: number }
+		| { kind: 'transport_failure' }
+		| { kind: 'data_malformed' }
+	> {
+		const base = baseUrl.replace(/\/+$/, '');
+		const got = await this.getJson(`${base}/address/${address}`, poolSignal);
+		if (got.kind !== 'ok')
+			return got.kind === 'transport_failure' ? got : { kind: 'data_malformed' };
+		const b = got.body as Record<string, unknown> | null;
+		if (typeof b !== 'object' || b === null || b.address !== address) {
+			log.warn('explorer_address_bad_shape', { explorer: baseUrl });
+			return { kind: 'data_malformed' };
+		}
+		const funded = (s: unknown): number | null => {
+			if (typeof s !== 'object' || s === null) return null;
+			const v = (s as Record<string, unknown>).funded_txo_sum;
+			return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+		};
+		const chain = funded(b.chain_stats);
+		const mempool = funded(b.mempool_stats);
+		if (chain === null || mempool === null) {
+			log.warn('explorer_address_bad_amounts', { explorer: baseUrl });
+			return { kind: 'data_malformed' };
+		}
+		if (this.config.minConfirmations <= 1 || chain === 0) {
+			return { kind: 'ok', confirmed: chain, unconfirmed: mempool };
+		}
+		// Depth-qualify: subtract outputs mined fewer than minConfirmations
+		// blocks ago. Esplora lists the newest confirmed txs first (up to 25
+		// per page); the shallow ones are therefore all on the first page
+		// unless there are 25+ of them, in which case we cannot tell.
+		const txs = await this.getJson(`${base}/address/${address}/txs`, poolSignal);
+		if (txs.kind !== 'ok')
+			return txs.kind === 'transport_failure' ? txs : { kind: 'data_malformed' };
+		const tip = await this.fetchTipHeight(base);
+		if (tip.kind !== 'ok')
+			return tip.kind === 'transport_failure' ? tip : { kind: 'data_malformed' };
+		if (!Array.isArray(txs.body)) return { kind: 'data_malformed' };
+		let shallow = 0;
+		let confirmedListed = 0;
+		let oldestListedDepth = Infinity;
+		for (const tx of txs.body as unknown[]) {
+			if (typeof tx !== 'object' || tx === null) return { kind: 'data_malformed' };
+			const t = tx as { status?: { confirmed?: unknown; block_height?: unknown }; vout?: unknown };
+			if (t.status?.confirmed !== true) continue;
+			const h = t.status.block_height;
+			if (typeof h !== 'number' || !Number.isSafeInteger(h) || !Array.isArray(t.vout)) {
+				return { kind: 'data_malformed' };
+			}
+			confirmedListed++;
+			const depth = tip.tipHeight + 1 - h;
+			oldestListedDepth = Math.min(oldestListedDepth, depth);
+			if (depth >= this.config.minConfirmations) continue;
+			for (const out of t.vout as { value?: unknown; scriptpubkey_address?: unknown }[]) {
+				if (out.scriptpubkey_address !== address) continue;
+				if (typeof out.value === 'number' && Number.isSafeInteger(out.value) && out.value > 0) {
+					shallow += out.value;
+				}
+			}
+		}
+		if (confirmedListed >= 25 && oldestListedDepth < this.config.minConfirmations) {
+			return { kind: 'data_malformed' };
+		}
+		return { kind: 'ok', confirmed: Math.max(0, chain - shallow), unconfirmed: mempool };
+	}
+
+	/** GET a JSON body with the verifier's timeout, wired to the pool's abort. */
+	private async getJson(
+		url: string,
+		poolSignal?: AbortSignal
+	): Promise<
+		{ kind: 'ok'; body: unknown } | { kind: 'transport_failure' } | { kind: 'data_malformed' }
+	> {
+		const ac = new AbortController();
+		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
+		const onPoolAbort = (): void => ac.abort();
+		if (poolSignal !== undefined) {
+			if (poolSignal.aborted) ac.abort();
+			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
+		}
+		try {
+			const res = await this.fetchImpl(url, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				signal: ac.signal
+			});
+			if (res.status === 404 || res.status === 400) return { kind: 'data_malformed' };
+			if (!res.ok) return { kind: 'transport_failure' };
+			try {
+				return { kind: 'ok', body: (await res.json()) as unknown };
+			} catch {
+				return { kind: 'data_malformed' };
+			}
+		} catch (err) {
+			log.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
+			return { kind: 'transport_failure' };
+		} finally {
+			clearTimeout(timer);
+			if (poolSignal !== undefined) poolSignal.removeEventListener('abort', onPoolAbort);
+		}
 	}
 
 	// ─── Internals ────────────────────────────────────────────────

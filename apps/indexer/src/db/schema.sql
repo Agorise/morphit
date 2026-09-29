@@ -2592,21 +2592,23 @@ ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
 -- string) so order cards can show the truncated "(BLT5vw…7Bjw)"
 -- identity anchor WITHOUT the frontend resolving it per-card from
 -- the chain (which for a whole orderbook list would be N lookups —
--- against the tiny-footprint priority). This is DISPLAY-ONLY data;
--- signature verification still resolves keys live from the chain
--- authority (apps/indexer/src/blurt/verify.ts) and never trusts
--- this column.
+-- against the tiny-footprint priority). NOT display-only any more
+-- (v1.18.0): the federated fast path verifies pushed chat against this
+-- column, so a stale or planted key here is a security fault. See
+-- posting_key_reconciled (v61, v62) for when it is trusted as it stands.
 --
 -- Population is two-pronged (see dispatcher.ts + the startup
 -- backfill in main.ts / postingKeyBackfill.ts):
 --   1. On account_create ingest, the primary posting key is read
---      straight from the op's posting authority.
+--      straight from the op's posting authority (unconfirmed since
+--      v62 — the reconcile loop confirms it against the chain).
 --   2. A bounded startup backfill fetches the key from the chain
 --      (condenser_api.get_accounts) for any account still NULL —
 --      covering accounts created before this migration. Keys that
---      rotate later are refreshed by the same backfill on the next
---      restart. NULL simply means "not captured yet"; the card
---      omits the posting-key line for that trader until it fills.
+--      rotate later are recorded by the dispatcher from account_update
+--      ops (unconfirmed) and confirmed by the reconcile loop
+--      (postingKeyBackfill.ts). NULL simply means "not captured yet";
+--      the card omits the posting-key line for that trader until it fills.
 ALTER TABLE accounts
     ADD COLUMN IF NOT EXISTS posting_pubkey TEXT;
 -- ─── v37: orders.accepted_assets (cp425 barter accepted-crypto set) ───
@@ -3002,9 +3004,10 @@ COMMENT ON COLUMN push_pending.source_trx_id IS
 -- Rows written before v1.18.0 recorded the posting key at first observation and
 -- never again, so an account that rotated away from a leaked key before the
 -- upgrade still holds the leaked key, and the fast path verifies against it.
--- FALSE until the key is confirmed against the chain: the dispatcher writes TRUE
--- with the keys it records, the boot backfill reconciles the rest, and the fast
--- path re-reads the chain before trusting a FALSE row.
+-- FALSE until the key is confirmed against the chain. v1.18.0 had the dispatcher
+-- write TRUE with a key from an account create; since v62 every key it reads
+-- from a block (create or rotation) is FALSE — see v62. The reconcile confirms
+-- them, and the fast path re-reads the chain before trusting a FALSE row.
 ALTER TABLE accounts
     ADD COLUMN IF NOT EXISTS posting_key_reconciled BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -3014,3 +3017,234 @@ COMMENT ON COLUMN accounts.posting_key_reconciled IS
     'backfill from a chain read. FALSE rows date from before v1.18.0, when the '
     'key was recorded once and never updated, and may hold a key the owner has '
     'since rotated away from; the fast path re-reads the chain before trusting one.';
+
+-- ─── v62: accounts unconfirmed-posting-key index (E1: block keys are one endpoint's word) ───
+-- Every posting key the dispatcher records — from an account create or an
+-- account_update — is now UNCONFIRMED (a block is one RPC endpoint's word;
+-- v1.20.0, E1), and the reconcile runs every minute
+-- for the life of the process to confirm them against two agreeing operators.
+-- This partial index keeps that idle pass one cheap lookup instead of a scan of
+-- every account.
+CREATE INDEX IF NOT EXISTS idx_accounts_posting_key_unreconciled
+    ON accounts (name)
+    WHERE posting_key_reconciled = FALSE;
+
+COMMENT ON COLUMN accounts.posting_key_reconciled IS
+    'TRUE once posting_pubkey is known to match the chain as confirmed by two '
+    'agreeing RPC operators (the reconcile loop, or the boot fill of a NULL key). '
+    'A key read from a block (an account create or an account_update) is written '
+    'FALSE: blocks come from ONE endpoint, so it is that endpoint''s word until the '
+    'reconcile confirms it (v1.20.0). The fast path re-reads the chain, through its '
+    'quorum refresher, before trusting a FALSE row.';
+
+COMMENT ON COLUMN operators.last_action_block_num IS
+    'Block of the most recent applied Morphit op this operator account signed '
+    '(any op — the dispatcher advances it; the register op too). The federation '
+    'probe compares it to chain head to tell a clearnet-censored-but-alive node '
+    '(clearnet_blocked) from a dead one (unreachable). Until v1.20.0 only the '
+    'register op moved it, so it measured time since the last registration.';
+
+-- ─── v63: orders.fee_rechecked_at (G3: fair, persistent BTC/XMR fee re-check) ───
+-- The BTC/XMR fee re-check (apps/indexer/src/indexer/fee/externalFeeRecheck.ts)
+-- records WHEN it last asked the explorers about an order, in the row, so it
+-- can visit candidates least-recently-checked first IN SQL and survive a
+-- restart. Before (v1.20.0, G3) the schedule lived in process memory and took
+-- the oldest / never-checked rows first, so a steady or bursty flood of fake
+-- orders starved a real payer's order forever. NULL = never re-checked.
+-- Deliberately separate from updated_at, which the orderbook stream polls:
+-- a re-check that changes nothing must not look like an order change.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fee_rechecked_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN orders.fee_rechecked_at IS
+    'When the BTC/XMR external-fee re-check last queried the explorers for this '
+    'order (NULL = never). Drives least-recently-checked scheduling and the '
+    'per-order spacing; never touches updated_at (v1.20.0, G3).';
+
+-- Candidate lookup for the re-check: live BTC/XMR rows with a txid, in the
+-- states the re-check visits, ordered by last check.
+CREATE INDEX IF NOT EXISTS idx_orders_fee_recheck
+    ON orders (fee_rechecked_at NULLS FIRST, created_at)
+    WHERE status = 'live'
+      AND fee_method IN ('btc', 'xmr')
+      AND external_tx_id IS NOT NULL
+      AND fee_status IN ('pending_external', 'verified_by_attestation', 'missing');
+
+-- ─── v64: operator_fee_recipients + fee_reverify_done (G1: cross-instance BLURT fees) ───
+-- v1.20.0 (G1) — cross-instance BLURT fees. The account each operator's
+-- instance pays the 90 % owner leg of BLURT fees to, as registered on chain in
+-- morphit_operator_register_v1's optional fee_recipient. APPEND-ONLY history:
+-- one row per accepted register op carrying the field, at that op's block, so
+-- a fee op is judged against the value in force AS OF its block and a later
+-- change never flips an older verdict (replay-deterministic). Rows written live
+-- by the register handler and rows back-filled at boot from ops (register
+-- ops an older build applied without reading the field) are identical.
+CREATE TABLE IF NOT EXISTS operator_fee_recipients (
+    account TEXT NOT NULL,
+    fee_recipient TEXT NOT NULL,
+    effective_block BIGINT NOT NULL,
+    effective_trx TEXT NOT NULL,
+    -- Position inside the block, so "the latest row before block N" is
+    -- chain order even with two registrations by one account in one block.
+    trx_in_block INT NOT NULL DEFAULT 0,
+    op_in_trx INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (account, effective_block, effective_trx)
+);
+CREATE INDEX IF NOT EXISTS operator_fee_recipients_latest_idx
+    ON operator_fee_recipients (account, effective_block DESC, trx_in_block DESC, op_in_trx DESC);
+
+COMMENT ON TABLE operator_fee_recipients IS
+    'On-chain fee_recipient history per operator account (morphit_operator_register_v1, '
+    'v1.20.0 G1). The owner leg of a BLURT fee op at block N may go to the tagged '
+    'operator''s latest row with effective_block < N. Append-only.';
+
+-- The one-shot G1 re-verification (apps/indexer/src/indexer/blurtFeeReverify.ts)
+-- re-judges, with the original transaction fetched again from the chain, BLURT
+-- fee ops this node judged BEFORE it knew the tagged operator's fee account
+-- (orders stored underpaid, stranger fees rejected fee_underpaid). This
+-- records which op it already re-judged, so each is fetched once. Local
+-- bookkeeping: never exported in a snapshot.
+CREATE TABLE IF NOT EXISTS fee_reverify_done (
+    block_num BIGINT NOT NULL,
+    trx_in_block INT NOT NULL,
+    op_in_trx INT NOT NULL,
+    op_id TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (block_num, trx_in_block, op_in_trx)
+);
+
+-- Candidate lookup for the order re-verification: live BLURT-fee orders this
+-- node stored as underpaid.
+CREATE INDEX IF NOT EXISTS idx_orders_blurt_underpaid
+    ON orders (created_at DESC)
+    WHERE status = 'live' AND fee_method = 'blurt' AND fee_status = 'underpaid';
+
+-- ─── v65: per-order BTC fee addresses (MK-H2) ───
+-- v1.20.0 (MK-H2) — per-order BTC fee addresses. Once a release op pins the
+-- treasury's BIP84 account xpub (treasury.btc.xpub), each BTC-fee order op
+-- without a txid gets its own receive address n of that xpub, n numbered in
+-- chain order from the event log (apps/indexer/src/indexer/fee/
+-- btcFeeAddressIndex.ts). A payment to address n only ever verifies the order
+-- that owns n, so a watcher can no longer claim someone else's payment.
+
+-- The numbering, one row per participating order op (allocated or refused).
+-- A CACHE of a pure function of `ops` + `releases`: safe to truncate, it is
+-- rebuilt in chain order on the next BTC-fee order.
+CREATE TABLE IF NOT EXISTS btc_fee_address_log (
+    block_num BIGINT NOT NULL,
+    trx_in_block INT NOT NULL,
+    op_in_trx INT NOT NULL,
+    block_time TIMESTAMPTZ NOT NULL,
+    account TEXT NOT NULL,
+    permlink TEXT NOT NULL,
+    -- The treasury xpub in force for this op (canonical xpub… spelling).
+    xpub TEXT NOT NULL,
+    -- Receive index allocated, or NULL when refused.
+    idx INT,
+    -- Why no index: btc_fee_permlink_reused | btc_fee_daily_limit.
+    refused TEXT,
+    PRIMARY KEY (block_num, trx_in_block, op_in_trx),
+    CHECK ((idx IS NULL) <> (refused IS NULL))
+);
+-- One owner per address, ever.
+CREATE UNIQUE INDEX IF NOT EXISTS btc_fee_address_log_idx_uniq
+    ON btc_fee_address_log (xpub, idx) WHERE idx IS NOT NULL;
+CREATE INDEX IF NOT EXISTS btc_fee_address_log_account_time_idx
+    ON btc_fee_address_log (account, block_time);
+CREATE INDEX IF NOT EXISTS btc_fee_address_log_account_permlink_idx
+    ON btc_fee_address_log (account, permlink);
+
+COMMENT ON TABLE btc_fee_address_log IS
+    'MK-H2 (v1.20.0): chain-order numbering of BTC-fee order ops that pay to a '
+    'per-order address of the pinned treasury xpub. Derived from ops + releases '
+    'only (never from instance settings), so every indexer numbers alike; a cache '
+    'that is rebuilt from the event log when truncated.';
+
+-- The order's own copy of its address and what has been seen paid to it.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS btc_fee_xpub TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS btc_fee_index INT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS btc_fee_address TEXT;
+-- Amount asked for when the order was posted (the pin in force at its block).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS btc_fee_sats BIGINT;
+-- Last explorer answer: confirmed total received, and still-unconfirmed total.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS btc_fee_received_sats BIGINT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS btc_fee_unconfirmed_sats BIGINT;
+
+COMMENT ON COLUMN orders.btc_fee_address IS
+    'MK-H2: this order''s own BTC fee address (receive index btc_fee_index of '
+    'btc_fee_xpub). NULL for every other fee path, incl. txid-mode BTC orders.';
+
+-- An address belongs to exactly one order.
+CREATE UNIQUE INDEX IF NOT EXISTS orders_btc_fee_address_uniq
+    ON orders (btc_fee_address) WHERE btc_fee_address IS NOT NULL;
+
+-- New fee_status values: 'awaiting_payment' (M-X1 adds 'proof_unsupported',
+-- below). 'awaiting_payment': the order is posted and waiting for its BTC payment. Not
+-- 'pending_external' on purpose — that state can be promoted by attestation,
+-- and a per-order address needs no attestation: the explorers answer.
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_fee_status_check;
+ALTER TABLE orders ADD CONSTRAINT orders_fee_status_check CHECK (
+    fee_status IN (
+        'unverified',
+        'verified',
+        'missing',
+        'underpaid',
+        'pending_external',
+        'verified_by_attestation',
+        'reused',
+        'awaiting_payment',
+        'proof_unsupported'
+    )
+);
+
+-- Candidate lookup for the re-check of per-order addresses.
+CREATE INDEX IF NOT EXISTS idx_orders_btc_fee_awaiting
+    ON orders (fee_rechecked_at NULLS FIRST, created_at)
+    WHERE status = 'live'
+      AND fee_method = 'btc'
+      AND btc_fee_address IS NOT NULL
+      AND fee_status = 'awaiting_payment';
+
+-- (v1.20.0, M-X1) XMR fees are proven with the payer's transaction PRIVATE
+-- key: the upstream explorer's txprove mode parses exactly a 64-hex key, so
+-- the OutProof strings orders carried until now could never verify.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS xmr_tx_key TEXT;
+-- (MK-H2) Bound XMR fees: the payment ID the payment must carry (16 hex) and
+-- the pinned primary address it was proven at. NULL for unbound orders.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS xmr_payment_id TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS xmr_fee_address TEXT;
+
+COMMENT ON COLUMN orders.xmr_payment_id IS
+    'MK-H2: for an XMR fee paid after the treasury primary address was pinned, '
+    'the order''s payment ID (keccak256("morphit-fee-v1|account/permlink")[0..8], hex). '
+    'The payment only verifies if its encrypted payment ID decrypts to this.';
+
+-- A bound payment can only ever verify for the order whose payment ID it
+-- carries, so it needs no first-claim-wins rule — and must not have one: a
+-- front-runner copying the txid would otherwise make the real payer's row
+-- collide. The one-claim-per-txid index now covers unbound rows only.
+DROP INDEX IF EXISTS orders_external_tx_id_uniq;
+CREATE UNIQUE INDEX IF NOT EXISTS orders_external_tx_id_uniq
+    ON orders (fee_method, external_tx_id)
+    WHERE external_tx_id IS NOT NULL AND xmr_payment_id IS NULL;
+-- ...and among bound rows, one (txid, payment ID) pair pays one order: two
+-- permlinks of one account can be made to share an 8-byte payment ID by a
+-- birthday search, and one payment would otherwise pay for both. The order
+-- handler stores the later claim as 'reused' (txid NULL) before this fires.
+CREATE UNIQUE INDEX IF NOT EXISTS orders_xmr_bound_payment_uniq
+    ON orders (external_tx_id, xmr_payment_id)
+    WHERE external_tx_id IS NOT NULL AND xmr_payment_id IS NOT NULL;
+
+-- Stored XMR orders that carry only an OutProof can never verify (see above):
+-- say so with their own status instead of the misleading 'missing' /
+-- 'pending_external', and take them out of the re-check rotation. A pure
+-- function of each row, so every node lands on the same status; a node that
+-- replays the op stores the same row at intake. The txid is released (NULL,
+-- like a 'reused' row) so the payer can re-post the same payment with its tx
+-- key; the proof string stays for the record.
+UPDATE orders
+   SET fee_status = 'proof_unsupported', external_tx_id = NULL, updated_at = NOW()
+ WHERE fee_method = 'xmr'
+   AND xmr_tx_key IS NULL
+   AND tx_proof LIKE 'OutProof%'
+   AND fee_status IN ('unverified', 'missing', 'pending_external', 'verified_by_attestation');

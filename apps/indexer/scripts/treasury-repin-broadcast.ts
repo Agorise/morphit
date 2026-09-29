@@ -25,6 +25,16 @@
  * │      Plan-B path that always works without any key online.      │
  * └───────────────────────────────────────────────────────────────┘
  *
+ * WHERE THE CURRENT OP COMES FROM (v1.20.0, V3-1). /v1/release only says
+ * WHICH release op is current (block + trx id); the op itself is read from
+ * that block on chain, from two RPC endpoints that must agree, and the node's
+ * served treasury must equal it — otherwise the tool REFUSES (exit 1) and names
+ * the fields the node is missing. A node that indexed the pin release while on
+ * v1.19 serves the treasury without btc.xpub / xmr.primary_address; building
+ * from that would have broadcast a release dropping them for everyone. The
+ * next op keeps every field of the chain op (distribution, …) and
+ * changes only the treasury amounts.
+ *
  * FAILSAFES (belt + suspenders, mostly inherited from the pure core):
  *   • EITHER fetch (release / prices) fails → abort, exit 1, NOTHING
  *     broadcast.  A network blip can never trigger a re-pin.
@@ -67,6 +77,7 @@ import {
 	DEFAULT_REPIN_DRIFT_THRESHOLD,
 	type RepinPrices
 } from '../src/lib/treasuryRepin.ts';
+import { checkServedAgainstChain, fetchReleasePayloadFromChain } from '../src/lib/repinSource.ts';
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
@@ -85,6 +96,7 @@ let enableAutoBroadcast = false;
 let unattended = false;
 let dryRun = false;
 let broadcastNode: string | null = null;
+const rpcNodes: string[] = [];
 for (let i = 0; i < argv.length; i++) {
 	const a = argv[i];
 	if (a === '--node') node = argv[++i] ?? null;
@@ -95,12 +107,13 @@ for (let i = 0; i < argv.length; i++) {
 	else if (a === '--unattended') unattended = true;
 	else if (a === '--dry-run') dryRun = true;
 	else if (a === '--broadcast-node') broadcastNode = argv[++i] ?? null;
+	else if (a === '--rpc') rpcNodes.push(argv[++i] ?? '');
 }
 if (node === null) {
 	out(
 		'usage: tsx treasury-repin-broadcast.ts --node <indexer-url> [--threshold 0.1]\n' +
 			'         [--enable-auto-broadcast --unattended] [--key-file <path>]\n' +
-			'         [--signer morphit] [--broadcast-node <rpc>] [--dry-run]\n' +
+			'         [--signer morphit] [--broadcast-node <rpc>] [--rpc <rpc> …] [--dry-run]\n' +
 			'  default (no --enable-auto-broadcast) = DETECT-ONLY, no key, exit 3 if due.'
 	);
 	process.exit(1);
@@ -191,8 +204,48 @@ async function main(): Promise<void> {
 		hash_manifest?: unknown;
 		endpoints?: unknown;
 		treasury?: unknown;
+		source_block_num?: unknown;
+		source_trx_id?: unknown;
 	} | null;
-	const parsed = parseReleaseTreasury(rel?.treasury ?? null);
+	// (V3-1) The op itself, from chain, from two agreeing RPC endpoints.
+	if (typeof rel?.source_block_num !== 'number' || typeof rel?.source_trx_id !== 'string') {
+		out('✗ /v1/release did not say which op is current (source_block_num / source_trx_id) — aborting.');
+		process.exit(1);
+	}
+	const chain = await fetchReleasePayloadFromChain(
+		rel.source_block_num,
+		rel.source_trx_id,
+		signer,
+		rpcNodes.length > 0 ? rpcNodes : [...DEFAULT_BLURT_RPC_ENDPOINTS],
+		async (url, body) => {
+			const ac = new AbortController();
+			const t = setTimeout(() => ac.abort(), 15_000);
+			try {
+				const res = await fetch(url, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json', accept: 'application/json' },
+					body: JSON.stringify(body),
+					signal: ac.signal
+				});
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				return (await res.json()) as { result?: unknown };
+			} finally {
+				clearTimeout(t);
+			}
+		}
+	);
+	if (!chain.ok) {
+		out(`✗ could not read the current release op from chain: ${chain.reason} — aborting (no recommendation).`);
+		process.exit(1);
+	}
+	const served = checkServedAgainstChain(rel, chain.payload);
+	if (!served.ok) {
+		out(`✗ refusing: ${served.reason}.`);
+		if (served.missing.length > 0) out(`  missing or different on ${node}: ${served.missing.join(', ')}`);
+		out('  Point --node at an indexer running the current version (it re-reads stored releases at boot).');
+		process.exit(1);
+	}
+	const parsed = parseReleaseTreasury(served.chainTreasury);
 	const decision = decideRepin(parsed.pinned, prices, threshold);
 
 	out('Treasury auto-re-pin');
@@ -211,12 +264,7 @@ async function main(): Promise<void> {
 	// Build the fresh full payload: keep version / hash_manifest /
 	// endpoints, swap only the treasury amounts.
 	const next = buildRepinnedTreasury(decision, parsed.addresses, parsed.pinned);
-	const payload = {
-		version: rel?.version,
-		hash_manifest: rel?.hash_manifest,
-		endpoints: rel?.endpoints,
-		treasury: next
-	};
+	const payload = { ...served.base, treasury: next };
 	const payloadJson = JSON.stringify(payload);
 
 	// Validate the WHOLE payload (incl. the new treasury) BEFORE we

@@ -111,9 +111,21 @@
   environment:
     IPFS_PATH: "{{ morphit_ipfs_repo }}"
 
+# Check, then set only what differs, and report THAT as the change. (v1.20.0,
+# C12: this used to set every value with changed_when false, so its notify never
+# fired and a changed bind waited for some unrelated restart of Kubo.)
 - name: Keep the node small — bind API loopback, cap connections, serve-only-pinned
-  ansible.builtin.command:
-    cmd: "ipfs config --json {{ item.key }} {{ item.value }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      have="$(ipfs config {{ item.key }} 2>/dev/null | tr -d ' \t\r\n"')" || have=""
+      want="$(printf '%s' {{ item.value }} | tr -d ' \t\r\n"')"
+      if [ "$have" != "$want" ]; then
+        ipfs config --json {{ item.key }} {{ item.value }}
+        echo CHANGED
+      fi
+    executable: /bin/sh
+  register: morphit_ipfs_small
   become: true
   become_user: "{{ morphit_ipfs_user }}"
   environment:
@@ -138,7 +150,7 @@
     # Setting "auto" here and "none" there on every run would flap the config.
     - key: "Routing.Type"
       value: "'\"{{ (morphit_tor_only | default(false) | bool) | ternary('none', 'auto') }}\"'"
-  changed_when: false
+  changed_when: "'CHANGED' in morphit_ipfs_small.stdout"
   notify: Restart ipfs
 
 - name: Ensure /etc/morphit exists (env dir)
@@ -213,6 +225,16 @@
     IPFS_PATH: "{{ morphit_ipfs_repo }}"
   when: morphit_ipfs_privacy_check.rc != 0
   notify: Restart ipfs
+
+- name: Install the IPFS clean-up script (unpins superseded releases + snapshots)
+  # v1.20.0 (C16). A root-owned copy: its weekly unit runs as root. `morphit-ops
+  # upgrade` refreshes it (and installs it on nodes that predate it).
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../ipfs/morphit-ipfs-gc.sh"
+    dest: /usr/local/lib/morphit/morphit-ipfs-gc.sh
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Install the pin service env file
   ansible.builtin.template:
@@ -366,3 +388,31 @@
     daemon_reload: true
   failed_when: false
   when: morphit_snapshot_publisher | default(false) | bool
+
+# ─── IPFS clean-up (every instance) — v1.20.0, C16 ───────────────────
+# Every upgrade adds a ~35 MB release and the publisher adds a snapshot a day;
+# nothing let go of the old ones. This weekly job unpins what is superseded —
+# keeping the anchored release, the previous one, anything newer and the one
+# running; the anchored snapshot, anything newer and two older ones — then
+# reclaims the space. It decides from this node's own state (no network), so it
+# is the same on a tor-only node. See ops/ipfs/morphit-ipfs-gc.sh.
+- name: Install the IPFS clean-up service + weekly timer
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  loop:
+    - morphit-ipfs-gc.service
+    - morphit-ipfs-gc.timer
+  notify: Reload systemd
+
+- name: Enable + start the weekly IPFS clean-up timer
+  ansible.builtin.systemd:
+    name: morphit-ipfs-gc.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  failed_when: false

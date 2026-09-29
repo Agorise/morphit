@@ -298,6 +298,24 @@ export function formatPercent(value: number, fractionDigits = 2): string {
 	return `${formatted}%`;
 }
 
+// ─── Rating formatter ──────────────────────────────────────────
+
+/**
+ * (v1.20.0 fix wave, G12) A star rating / reputation score at its stored
+ * NUMERIC(3,2) precision in the active locale: "4.50" en, "4,50" de,
+ * "۴٫۵۰" fa. Rating chips and profile headlines used `toFixed(2)`, which
+ * shows "4.50" to every locale — a German reads that as four-and-a-half
+ * only by luck, and fa loses its digits.
+ */
+export function formatRating(value: number): string {
+	if (!Number.isFinite(value)) return '—';
+	return getNumberFormat(activeLocale(), {
+		style: 'decimal',
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2
+	}).format(value);
+}
+
 // ─── BLURT amount formatter ────────────────────────────────────
 
 /**

@@ -20,6 +20,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { i2pTunnelStanza, HIDDEN_FRONTEND_PORT } from '../src/init/i2pGenerate.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const initSrc = readFileSync(join(here, '../src/commands/init.ts'), 'utf8');
@@ -92,6 +93,24 @@ expect(
 	'the keyfile write is gated on a generated destination (skip when preserved)',
 	renderSrc.includes('answers.i2pDestination')
 );
+
+// ─── D11: the hidden-service tunnel targets the frontend fan-out (8090), NOT ──
+// the bare relay (8080), which trusts X-Real-IP from its caller and 404s the
+// site. Exercise the REAL stanza builder + the shared constant, not a regex.
+{
+	const stanza = i2pTunnelStanza('morphit.dat', HIDDEN_FRONTEND_PORT);
+	expect('HIDDEN_FRONTEND_PORT is the frontend fan-out (8090), not the relay (8080)', HIDDEN_FRONTEND_PORT === 8090);
+	expect('the emitted i2p tunnel stanza targets port 8090', /(^|\n)port = 8090(\n|$)/.test(stanza));
+	expect('the emitted i2p tunnel stanza does NOT target the relay 8080', !/port = 8080/.test(stanza));
+	// render.ts + i2pGenerate.ts must pass the constant, never a literal 8080.
+	const i2pGenSrc = readFileSync(join(here, '../src/init/i2pGenerate.ts'), 'utf8');
+	expect('render passes HIDDEN_FRONTEND_PORT to the stanza', /i2pTunnelStanza\([^)]*HIDDEN_FRONTEND_PORT\)/.test(renderSrc));
+	expect('i2pGenerate passes HIDDEN_FRONTEND_PORT to the stanza', /i2pTunnelStanza\([^)]*HIDDEN_FRONTEND_PORT\)/.test(i2pGenSrc));
+	// The printed Tor + I2P instructions point at 8090 too.
+	expect('init.ts Tor HiddenServicePort instruction targets 8090', /HiddenServicePort 80 127\.0\.0\.1:8090/.test(initSrc) && !/HiddenServicePort 80 127\.0\.0\.1:8080/.test(initSrc));
+	const genI2pSh = readFileSync(join(here, '../../../scripts/generate-i2p.sh'), 'utf8');
+	expect('generate-i2p.sh instruction targets port 8090', /port = 8090/.test(genI2pSh) && !/port = 8080/.test(genI2pSh));
+}
 
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);

@@ -21,6 +21,14 @@
  *      service worker) before the page renders. Nothing was server-rendered on
  *      those routes, so there is nothing to flash.
  *
+ * COLOUR THEME (docs/BRANDING.md, "Colours"). Every brand/surface colour is a
+ * CSS custom property (src/theme.css). A themed instance's prerendered pages
+ * carry an `<style id="morphit-theme">html:root{…}</style>` written by
+ * `morphit-ops branding apply` — correct on first paint, without JavaScript and
+ * in Tor Browser. The SPA shell can't carry it (index.html is on the tamper
+ * manifest), so there `ensureBrand()` applies brand.json's `theme.tokens` to
+ * <html> as inline custom properties (applyTheme) before the page renders.
+ *
  * During PRERENDER (`building`), every brand slot is bracketed by an invisible
  * sentinel so scripts/build-brand-slots.mjs can find it in the emitted HTML (it
  * records the slots, then strips the sentinels).
@@ -35,6 +43,9 @@ import {
 	sanitizeBrandName,
 	type BrandRenderer
 } from './brandName';
+import { applyTheme } from './applyTheme';
+
+export { applyTheme };
 
 export interface BrandState {
 	/** The site's brand name ("Morphit" on an unbranded instance). */
@@ -147,7 +158,8 @@ export function ensureBrand(): Promise<BrandState> {
 			if (res.ok) {
 				const body: unknown = await res.json();
 				if (body !== null && typeof body === 'object') {
-					const b = body as { name?: unknown; beta_badge?: unknown };
+					const b = body as { name?: unknown; beta_badge?: unknown; theme?: unknown };
+					applyTheme(b.theme);
 					next = {
 						name: sanitizeBrandName(b.name) ?? DEFAULT_BRAND_NAME,
 						betaBadge: b.beta_badge !== false,

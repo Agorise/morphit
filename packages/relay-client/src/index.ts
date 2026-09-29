@@ -82,6 +82,15 @@ export type RelayErrorCode =
 	| 'rate_limited_daily'
 	| 'spacing_cooldown'
 	| 'relay_out_of_funds'
+	/** v1.20.0 (D4) — the chain's live account_creation_fee is more than 1.5x
+	 *  the operator-configured fee; signups are paused until the operator
+	 *  reviews it. HTTP 503. Nothing was spent. */
+	| 'relay_fee_spike'
+	/** v1.20.0 (D2) — no node confirmed the account_create and the chain could
+	 *  not yet say whether it landed. HTTP 503. The user should retry with the
+	 *  SAME name in a minute: if it was created, the retry answers success
+	 *  (`note: 'already_created'`). */
+	| 'broadcast_outcome_unknown'
 	// ─── /v1/account/create — invite-token codes (apps/relay/src/policy/inviteToken.ts) ───
 	| 'invite_malformed'
 	| 'invite_bad_signature'

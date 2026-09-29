@@ -52,7 +52,7 @@ check(
 
 // 2. All three override paths are present (standard + each prefix), so every
 //    engine is actually covered.
-check('standard :autofill override present', /input:autofill[\s\S]{0,400}?background-color:\s*#0f141c\s*!important/.test(css));
+check('standard :autofill override present', /input:autofill[\s\S]{0,400}?background-color:\s*rgb\(var\(--surface-900-rgb\)\)\s*!important/.test(css));
 check('WebKit -webkit-autofill override present', /input:-webkit-autofill[\s\S]{0,400}?-webkit-box-shadow:[^;]*inset\s*!important/.test(css));
 check('Firefox -moz-autofill override present', /input:-moz-autofill[\s\S]{0,300}?inset\s*!important/.test(css));
 

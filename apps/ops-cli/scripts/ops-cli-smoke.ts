@@ -261,7 +261,9 @@ scenario('cp186: edit reminds operator to re-register after an origin/tag/name/c
 	assertEqual(e.includes('tagChanged = true'), true, 'edit tracks tag change');
 	assertEqual(e.includes('nameChanged = true'), true, 'edit tracks display-name (title) change');
 	assertEqual(e.includes('contactChanged = true'), true, 'edit tracks contact-URL change (also on-chain)');
-	assertEqual(/if \(originChanged \|\| tagChanged \|\| nameChanged \|\| contactChanged\)/.test(e), true, 'edit gates reminder on origin/tag/name/contact change');
+	// v1.20.0 (G1): the fees account rides in the register record too (the
+	// behaviour is driven for real in test/editFeesAccountRegister.test.ts).
+	assertEqual(/if \(originChanged \|\| tagChanged \|\| nameChanged \|\| contactChanged \|\| feesChanged\)/.test(e), true, 'edit gates reminder on origin/tag/name/contact/fees-account change');
 	assertEqual(e.includes("parts.push('contact URL')"), true, 'edit names contact URL in the re-register reminder');
 	assertEqual(e.includes('runRegister('), true, 'edit can broadcast the re-registration inline');
 	assertEqual(e.includes('Broadcast this change to the chain now'), true, 'edit offers to broadcast right there');

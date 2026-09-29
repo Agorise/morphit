@@ -84,7 +84,7 @@ export interface SeedingClassification {
  * Branch order (first match wins) — this is the invariant both the CLI
  * and the public endpoint must obey:
  *   1. nothing installed at all      → not-configured (optional feature)
- *   2. everything unreadable         → unknown (no systemctl?)
+ *   2. daemon state unreadable       → unknown (never "down")
  *   3. daemon not active             → down (nothing is being seeded)
  *   4. any timer down / last run failed → degraded (with problem list)
  *   5. otherwise                     → ok
@@ -96,8 +96,12 @@ export function classifySeeding(f: SeedingFacts): SeedingClassification {
 	if (notInstalled(f.daemon) && notInstalled(f.pinTimer) && notInstalled(f.rebroadcastTimer)) {
 		return { state: 'not-configured', reason: 'not-configured', problems: [] };
 	}
-	// 2. systemctl unreadable everywhere → don't alarm.
-	if (f.daemon === 'unknown' && f.pinTimer === 'unknown' && f.rebroadcastTimer === 'unknown') {
+	// 2. The daemon's state could not be read → unknown, never "down": nobody
+	//    observed it down, and "releases are NOT being seeded" would be alarm
+	//    language for an unverified condition (v1.20.0 fix wave, D14 — this
+	//    used to require ALL THREE units unreadable, so one failed read of the
+	//    daemon alone fell through to 'down').
+	if (f.daemon === 'unknown') {
 		return { state: 'unknown', reason: 'unreadable', problems: [] };
 	}
 	// 3. Daemon down while configured → nothing is being seeded.

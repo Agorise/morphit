@@ -1,0 +1,16 @@
+[Unit]
+Description=Morphit tor-only OS — check for an unverified apt switch (after boot, then every 6 hours)
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-tor-only-recover.service
+
+[Timer]
+# A few minutes after boot (Tor needs a moment), then every 6 hours. When no
+# switch is pending it only checks for one file and exits.
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=morphit-tor-only-recover.service
+
+[Install]
+WantedBy=timers.target

@@ -28,18 +28,24 @@
  *
  * THE FIX (bounded + safe).  Replay ONLY the `operator_register` ops
  * that this indexer already recorded as 'rejected', straight from the
- * local `ops` table — no chain access, no other handler touched.  The
- * operatorRegister handler is idempotent by construction (it guards on
- * `account_already_registered` and every insert is `ON CONFLICT DO
- * NOTHING`), so:
+ * local `ops` table — no chain access, no other handler touched.
+ *
+ * THE REGISTER OP IS AN UPSERT keyed on the signing account (a
+ * re-registration UPDATES origin, name, contact and addresses), so a replay is
+ * NOT idempotent by construction. What keeps it safe (v1.20.0, E5):
+ *   - rows whose signer has an APPLIED registration at a LATER block are never
+ *     selected — the operator's newer registration is the truth, and replaying
+ *     the older one over it reverted it (origin, name, directory row and probe
+ *     history) the first time a validator fix made the old op acceptable;
+ *   - the handler itself refuses a registration older than the newest one it
+ *     applied (`superseded_by_newer_registration`), as a second line;
+ * and then:
  *   - a previously-rejected op that a validator fix now accepts →
  *     materialises the operator and flips its `ops` row to 'applied'
  *     (atomically, in one transaction);
  *   - an op that's STILL genuinely invalid (bad payload, tag really
- *     taken) → re-rejects, no state change, row stays 'rejected';
- *   - an op whose account is already registered (e.g. the operator
- *     re-broadcast in the meantime) → `account_already_registered`,
- *     no-op.
+ *     taken, tag_immutable) → re-rejects, no state change, row stays
+ *     'rejected'.
  *
  * So reconciliation is a safe no-op whenever there's nothing to heal,
  * and it self-heals the validator-bug case the moment the fixed indexer
@@ -51,6 +57,17 @@
  * registrations.  operator_register ops are rare (one per operator per
  * instance, ever), so in practice every rejected row is covered; the
  * cap only guards against a pathological flood.
+ *
+ * FEE-RECIPIENT HISTORY (v1.20.0, G1). A healed registration that carries
+ * `fee_recipient` records it through the handler, at the op's ORIGINAL block.
+ * Separately, `backfillFeeRecipientHistory` (run at the end of every
+ * reconcile) records the field for register ops an OLDER build APPLIED
+ * without reading it — every v1.19.x indexer accepted the field and kept the
+ * whole payload in `ops`, so an operator who re-registers while a box still
+ * runs v1.19.x is not lost when that box upgrades, and a node restored from a
+ * pre-v1.20 snapshot rebuilds the history from the event log it carries. Only
+ * payloads the CURRENT validator accepts are recorded, keyed exactly as the
+ * live handler keys them, so the rows are identical to a live replay's.
  *
  * SCOPE NOTE: this reconciles ops the indexer RECORDED-as-rejected.  A
  * truly *missed* op (a block the indexer never processed at all) is out
@@ -64,8 +81,11 @@ import type pg from 'pg';
 import type { BlurtClient } from '$blurt/client';
 import type { Config } from '$config';
 import type { Handler, OpContext } from '$indexer/handler-contract';
-import operatorRegisterHandler from '$indexer/handlers/operatorRegister';
+import operatorRegisterHandler, {
+	validate as validateRegistration
+} from '$indexer/handlers/operatorRegister';
 import { OP_IDS } from '$indexer/dispatcher';
+import { recordFeeRecipient } from '$indexer/feeRecipients';
 
 /** Cap on rejected registrations replayed per boot.  Generous — these
  *  ops are rare — but bounded so a flood can't turn boot into a scan. */
@@ -166,6 +186,12 @@ export async function reconcileOperatorRegistrations(
 	// Uses the existing ops_op_id_idx (op_id, block_num DESC).  Only
 	// rejected operator_register rows — never any other handler's ops.
 	//
+	// EXCLUDE superseded rows (v1.20.0, E5): a later APPLIED registration by the
+	// same signer is the operator's current word; replaying an older op over it
+	// is a revert, whatever the older op's reject reason was (the original
+	// validator reason is kept on a row that stayed rejected, so the
+	// `account_already_registered` filter below never caught these).
+	//
 	// EXCLUDE historical `account_already_registered` rejections: since register
 	// is now an account-keyed UPSERT (a re-registration updates the origin), those
 	// old rows would re-apply as updates on reboot. In block-ASC order that would
@@ -180,6 +206,14 @@ export async function reconcileOperatorRegistrations(
 		 FROM ops
 		 WHERE op_id = $1 AND status = 'rejected'
 		   AND reject_reason IS DISTINCT FROM 'account_already_registered'
+		   -- v1.20.0 (V3-11): a payload that held a NUL or an unpaired surrogate is
+		   -- stored with U+FFFD in their place. That copy is not what the signer
+		   -- signed, and no validator fix makes it so: never healed.
+		   AND reject_reason IS DISTINCT FROM 'invalid_text'
+		   AND NOT EXISTS (
+		       SELECT 1 FROM ops later
+		        WHERE later.op_id = $1 AND later.status = 'applied'
+		          AND later.signer = ops.signer AND later.block_num > ops.block_num)
 		 ORDER BY block_num ASC
 		 LIMIT $2`,
 		[OP_IDS.operatorRegister, maxRows]
@@ -236,5 +270,84 @@ export async function reconcileOperatorRegistrations(
 	if (rows.length > 0) {
 		log('reconcile_summary', { ...summary });
 	}
+
+	// G1 — after the heals (which record their own history rows), record the
+	// fee_recipient of registrations an older build applied. Best-effort: a
+	// failure here must not fail the reconcile.
+	try {
+		const backfilled = await backfillFeeRecipientHistory(deps.db, maxRows);
+		if (backfilled > 0) log('fee_recipient_history_backfilled', { rows: backfilled });
+	} catch (err) {
+		log('fee_recipient_history_backfill_error', {
+			error: err instanceof Error ? err.message : String(err)
+		});
+	}
 	return summary;
+}
+
+/** One applied operator_register row carrying `fee_recipient`. */
+interface AppliedRegisterRow {
+	readonly block_num: string | number;
+	readonly trx_in_block: number;
+	readonly op_in_trx: number;
+	readonly trx_id: string;
+	readonly signer: string;
+	readonly payload: unknown;
+}
+
+/**
+ * v1.20.0 (G1) — record `fee_recipient` for APPLIED register ops that have no
+ * history row yet (applied by an older build, which ignored the field; or
+ * carried in from a pre-v1.20 snapshot). Idempotent: rows already recorded
+ * are not selected, and a payload the current validator refuses is skipped —
+ * exactly the ops the live handler would not have recorded. Returns how many
+ * rows it wrote.
+ *
+ * (V3-8) Only rows whose `fee_recipient` HAS the account-name shape are
+ * selected (empty / null / malformed ones can never be recorded), and the scan
+ * walks the event log in chain order in pages of `pageSize` with a cursor, so
+ * a row the validator refuses for another reason is passed over — it can no
+ * longer sit in a LIMIT window forever hiding every later registration.
+ */
+export async function backfillFeeRecipientHistory(
+	db: ReconcileDb,
+	pageSize: number = RECONCILE_MAX_ROWS
+): Promise<number> {
+	let written = 0;
+	let cursor: [string, number, number] = ['-1', 0, 0];
+	for (;;) {
+		const { rows } = await db.query<AppliedRegisterRow>(
+			`SELECT block_num::text AS block_num, trx_in_block, op_in_trx, trx_id, signer, payload
+			   FROM ops
+			  WHERE op_id = $1 AND status = 'applied'
+			    AND jsonb_typeof(payload) = 'object'
+			    AND jsonb_typeof(payload->'fee_recipient') = 'string'
+			    AND payload->>'fee_recipient' ~ '^[a-z][a-z0-9.-]{1,14}[a-z0-9]$'
+			    AND (block_num, trx_in_block, op_in_trx) > ($3::bigint, $4::int, $5::int)
+			    AND NOT EXISTS (
+			        SELECT 1 FROM operator_fee_recipients f
+			         WHERE f.account = ops.signer AND f.effective_block = ops.block_num
+			           AND f.effective_trx = ops.trx_id)
+			  ORDER BY block_num ASC, trx_in_block ASC, op_in_trx ASC
+			  LIMIT $2`,
+			[OP_IDS.operatorRegister, pageSize, cursor[0], cursor[1], cursor[2]]
+		);
+		for (const row of rows) {
+			const v = validateRegistration(row.payload);
+			if ('reason' in v || v.fee_recipient === null) continue;
+			await recordFeeRecipient(db, {
+				account: row.signer,
+				feeRecipient: v.fee_recipient,
+				blockNum: Number(row.block_num),
+				trxId: row.trx_id,
+				trxInBlock: row.trx_in_block,
+				opInTrx: row.op_in_trx
+			});
+			written++;
+		}
+		if (rows.length < pageSize) break;
+		const last = rows[rows.length - 1]!;
+		cursor = [String(last.block_num), last.trx_in_block, last.op_in_trx];
+	}
+	return written;
 }

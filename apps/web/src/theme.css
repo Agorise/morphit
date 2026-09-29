@@ -1,0 +1,126 @@
+/* -----------------------------------------------------------------------------
+ * Morphit — THE colour source of truth for the frontend (per-instance theming).
+ *
+ * Every brand and surface colour the app paints is one of the custom
+ * properties below. Components, app.css and tailwind.config.js only ever say
+ * `rgb(var(--<token>-rgb) / <alpha>)` (Tailwind: `bg-ink-900`, `text-morphit-emerald/40`
+ * …, mapped in tailwind.config.js) — never a colour literal. The guard
+ * scripts/theme-literal-scan-smoke.ts fails the battery if a brand/surface literal
+ * appears anywhere else; genuinely non-brand colours (error red, coin colours,
+ * print styles) are allow-listed there with a reason.
+ *
+ * WHY custom properties: every federated instance serves this same compiled
+ * CSS byte-for-byte (it is covered by the on-chain build-integrity check), so
+ * an operator can't recompile it with their colours. `morphit-ops branding
+ * apply --theme-from … --theme-to …` instead overrides these properties at
+ * runtime: an `html:root{…}` <style> slot in every prerendered page (right on
+ * first paint, without JavaScript, in Tor Browser) and /brand/brand.json for
+ * the pages the app draws in the browser (src/lib/brand/brand.ts). The values
+ * are derived from 2–3 input colours by packages/operator-config/src/theme.ts.
+ *
+ * The values here ARE the Morphit palette and must equal THEME_TOKENS' `ref`
+ * values in theme.ts exactly (scripts/theme-tokens-smoke.ts) — that is what
+ * keeps an unthemed instance pixel-identical to the pre-theming release.
+ *
+ * Format: "R G B" (0–255, space-separated) so every Tailwind opacity modifier
+ * and every `/ alpha` keeps working.
+ * -------------------------------------------------------------------------- */
+:root {
+	--brand-1-rgb: 142 239 38; /* gradient first stop (hero heading, logo-style gradients, priority-#1 bar) */
+	--brand-2-rgb: 0 218 105; /* gradient middle stop; browser theme-color + manifest theme_color */
+	--brand-3-rgb: 2 166 178; /* gradient last stop */
+	--brand-accent-rgb: 127 237 45; /* --morphit-accent (legacy alias) */
+	--brand-primary-rgb: 0 218 105; /* primary accent: links, accent text, borders, rings, badges (Tailwind morphit-emerald); ≥ 4.5:1 on every dark surface */
+	--brand-secondary-rgb: 2 166 178; /* secondary accent text/borders (Tailwind morphit-teal); ≥ 4.5:1 on every dark surface */
+	--brand-soft-rgb: 16 185 129; /* soft attention tint: FAQ search highlight, focused-field pulse */
+	/* t155 (the maintainer): "all of the green bubbles (the Payment Receipts too) on the
+	 * chatroom page are a bit too bright and it makes the thin black text hard
+	 * for me to see. maybe dim that green just a bit."
+	 *
+	 * A DEEPENED brand emerald for chat bubbles — same move, and same reason, as
+	 * --brand-btn-face below (a deepened brand teal). The problem isn't the
+	 * contrast RATIO: near-black ink on #00da69 already measures ~11:1, way past
+	 * WCAG AAA. It's glare — a large saturated field at that luminance is
+	 * fatiguing to read thin text on, which is exactly what the maintainer described.
+	 *
+	 * Deliberately NOT an opacity (`/85`): translucency blends with whatever is
+	 * behind, so on a LIGHT page it would wash toward white and make the black
+	 * text harder to read, not easier — the opposite of the ask. A fixed
+	 * deepened value behaves the same on both themes.
+	 *
+	 * v1.8.0 (the maintainer): dimmed one more step, #00b85a → #009e51, because the
+	 * previous green still read as too bright behind the thin bubble text. The
+	 * new value measures ~5.8:1 against the bubble's ink (ink-950 #070A10) —
+	 * still comfortably past WCAG AA (4.5:1) with the now-heavier bubble weight,
+	 * so the extra dim costs no readability. Kept a fixed value (not an opacity)
+	 * for the theme-stable reason above. */
+	--brand-bubble-rgb: 0 158 81; /* outgoing chat bubble face (dark text on it ≥ 4.5:1) */
+	/* Button face — a DEEPENED brand teal. The pure brand teal
+	 * (--brand-3 #02a6b2, the gradient's right-hand stop) is only
+	 * ~2.96:1 against white text — below WCAG AA's 4.5:1 for normal
+	 * text — so the .btn-primary face is darkened to #027c86 (white
+	 * text ≈5:1, clears AA) while the vivid #02a6b2 still lives in the
+	 * animated gradient border + brand accents.
+	 * NOTE: do NOT try to get "darker" via opacity here. The face layer
+	 * sits OVER the bright gradient (border-box covers the whole box),
+	 * so a translucent face bleeds the gradient THROUGH the interior
+	 * and LIGHTENS it. Deepen this hex instead. */
+	--brand-btn-face-rgb: 2 124 134; /* primary button face (.btn-primary, Tailwind morphit-btn) */
+	--brand-btn-text-rgb: 255 255 255; /* text on the primary button (white or dark, whichever passes WCAG AA) */
+	--focus-ring-rgb: 0 218 105; /* keyboard focus ring (35% alpha glow / solid field ring) */
+	--card-accent-1-rgb: 142 239 38; /* homepage priority cards 1, 4, 7 icon colour (≥ 3:1 on the card) */
+	--card-accent-2-rgb: 0 218 105; /* homepage priority cards 2, 5 icon colour */
+	--card-accent-3-rgb: 2 166 178; /* homepage priority cards 3, 6 icon colour */
+	--glow-tl-rgb: 0 218 105; /* page background top-left glow (6% alpha) */
+	--glow-br-rgb: 2 166 178; /* page background bottom-right glow (5.5% alpha) */
+	--surface-50-rgb: 247 248 250; /* ink-50 */
+	--surface-100-rgb: 238 241 245; /* ink-100: body text, autofill text */
+	--surface-200-rgb: 217 223 231; /* ink-200: hero body text, secondary text */
+	--surface-300-rgb: 184 194 208; /* ink-300 */
+	--surface-400-rgb: 138 150 168; /* ink-400: muted text */
+	--surface-500-rgb: 93 107 128; /* ink-500 */
+	--surface-600-rgb: 62 74 92; /* ink-600: field hover borders */
+	--surface-700-rgb: 42 51 64; /* ink-700: borders */
+	--surface-800-rgb: 26 32 43; /* ink-800: raised surfaces, secondary buttons, incoming chat bubble */
+	--surface-900-rgb: 15 20 28; /* ink-900: cards, inputs, autofill face */
+	--surface-950-rgb: 7 10 16; /* ink-950: page background (the --theme-background input), dark text on accents */
+	--surface-page-rgb: 10 14 22; /* body background fallback, manifest background_color, app-icon / launch-screen canvas */
+	--shadow-rgb: 11 18 32; /* card shadows (Tailwind morphit-ink) */
+	--slate-200-rgb: 226 232 240; /* priority card border (light scheme) */
+	--slate-300-rgb: 203 213 225; /* priority card body text */
+	--slate-400-rgb: 148 163 184; /* priority card CTA text / hover border (light), textarea hint */
+	--slate-500-rgb: 100 116 139; /* priority card CTA (light), coin carousel label, textarea hint (light) */
+	--slate-600-rgb: 71 85 105; /* priority card hover border */
+	--slate-800-rgb: 30 41 59; /* priority card border */
+	--slate-900-rgb: 15 23 42; /* priority card face */
+	--slate-950-rgb: 2 6 23; /* priority card shadow (light scheme) */
+	--gray-100-rgb: 243 244 246; /* expired-order chip (light scheme) */
+	--gray-400-rgb: 156 163 175; /* expired-order chip text */
+	--gray-500-rgb: 107 114 128; /* expired-order chip text (light scheme) */
+	--gray-800-rgb: 31 41 55; /* expired-order chip face */
+	--gray-333-rgb: 51 51 51; /* 2FA page app-card border */
+	--gray-444-rgb: 68 68 68; /* 2FA page field/button border */
+	--gray-666-rgb: 102 102 102; /* pre-hydration "Loading…" text */
+	--surface-alt-1-rgb: 14 14 16; /* 2FA page code field */
+	--surface-alt-2-rgb: 24 24 26; /* 2FA page buttons */
+
+	/* Homepage hero grid: lines drawn in the text colour at this opacity. */
+	--grid-opacity: 0.035;
+
+	/* Named colours / composites the hand-written CSS uses — all built from the
+	 * tokens above, so a theme recolours them too. */
+	--morphit-lime: rgb(var(--brand-1-rgb));
+	--morphit-accent: rgb(var(--brand-accent-rgb));
+	--morphit-emerald: rgb(var(--brand-primary-rgb));
+	--morphit-emerald-bubble: rgb(var(--brand-bubble-rgb));
+	--morphit-teal: rgb(var(--brand-3-rgb));
+	--morphit-gradient: linear-gradient(
+		90deg,
+		rgb(var(--brand-1-rgb)) 0%,
+		rgb(var(--brand-2-rgb)) 50%,
+		rgb(var(--brand-3-rgb)) 100%
+	);
+	--morphit-btn-face: rgb(var(--brand-btn-face-rgb));
+	--morphit-btn-text: rgb(var(--brand-btn-text-rgb));
+	--focus-ring: 0 0 0 3px rgb(var(--focus-ring-rgb) / 0.35);
+}

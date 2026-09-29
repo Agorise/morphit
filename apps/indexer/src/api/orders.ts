@@ -70,7 +70,13 @@ interface OrderRow {
 		// Order-placement audit Finding O19: the external_tx_id
 		// claimed by this order was already used by a prior
 		// order.  Recorded for audit; excluded from the orderbook.
-		| 'reused';
+		| 'reused'
+		// v1.20.0 (MK-H2): posted with its own BTC fee address, which
+		// has not (yet) received the fee.  Excluded from the orderbook.
+		| 'awaiting_payment'
+		// v1.20.0 (M-X1): an XMR order carrying only an OutProof, which no
+		// explorer can check. Never re-checked; excluded from the orderbook.
+		| 'proof_unsupported';
 	/** ADR-0011 — how this order's listing fee was paid. */
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
 	/** v1.5.5: the OTHER party of this completed trade, as named by the owner
@@ -103,6 +109,15 @@ interface OrderRow {
 	created_at: Date;
 	updated_at: Date;
 	expires_at: Date | null;
+	/** v1.20.0 (MK-H2) — this order's own BTC fee address (NULL unless it
+	 *  was posted after the treasury xpub pin), its receive index, the
+	 *  amount asked, and what the explorers last saw arrive. */
+	btc_fee_index: number | null;
+	btc_fee_address: string | null;
+	btc_fee_xpub: string | null;
+	btc_fee_sats: string | null;
+	btc_fee_received_sats: string | null;
+	btc_fee_unconfirmed_sats: string | null;
 }
 
 function rowToWire(r: OrderRow) {
@@ -139,7 +154,24 @@ function rowToWire(r: OrderRow) {
 		is_new_trader: r.is_new_trader,
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
-		expires_at: r.expires_at === null ? null : r.expires_at.toISOString()
+		expires_at: r.expires_at === null ? null : r.expires_at.toISOString(),
+		// v1.20.0 (MK-H2) — present only for per-order-address BTC fees. The
+		// browser derives the address itself from the chain-pinned xpub and
+		// this index, and refuses to show it unless the two match.
+		...(r.btc_fee_address !== null && r.btc_fee_index !== null
+			? {
+					btc_fee: {
+						index: r.btc_fee_index,
+						address: r.btc_fee_address,
+						sats: Number(r.btc_fee_sats),
+						received_sats: r.btc_fee_received_sats === null ? 0 : Number(r.btc_fee_received_sats),
+						unconfirmed_sats:
+							r.btc_fee_unconfirmed_sats === null ? 0 : Number(r.btc_fee_unconfirmed_sats),
+						// (V3-10) the treasury key the order was numbered under
+						...(r.btc_fee_xpub !== null ? { xpub: r.btc_fee_xpub } : {})
+					}
+				}
+			: {})
 	};
 }
 
@@ -205,7 +237,9 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 			          SELECT 1 FROM suspicious_reciprocity sr
 			           WHERE sr.account_a = o.account OR sr.account_b = o.account
 			        ) AS reciprocity_flagged,
-			        o.created_at, o.updated_at, o.expires_at
+			        o.created_at, o.updated_at, o.expires_at,
+			        o.btc_fee_index, o.btc_fee_address, o.btc_fee_xpub, o.btc_fee_sats::text,
+			        o.btc_fee_received_sats::text, o.btc_fee_unconfirmed_sats::text
 			 FROM orders o
 			 ${feedbackAggregateJoin('o')}
 ${tradeCountJoin('o')}

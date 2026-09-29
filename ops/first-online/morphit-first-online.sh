@@ -319,37 +319,56 @@ fi
 
 # ── Step 4: warrant canary — publish it now that freshness proofs can be fetched. ──
 # The canary embeds a live Blurt chain-head + BTC price + news headline, so it
-# CANNOT be signed on an offline box. setup.sh armed the refresh script + the
-# weekly timer at install; run that refresh the first time we are online so the
-# canary is served promptly instead of waiting out the weekly timer. Best-effort
-# + idempotent: a canary already on disk is a no-op, and a failed publish just
-# leaves the marker unset to retry next tick.
+# CANNOT be signed on an offline box. When THIS machine is the operator's signing
+# computer (a home node set up with `scripts/canary/setup.sh`, "this computer"),
+# run its refresh once the box is online, so the canary is served promptly.
+#
+# v1.20.0 (C3). This used to fall back to ANY `/home/*/.morphit/update-canary.sh`
+# (or root's) and run it AS ROOT, every 5 minutes until it succeeded: any local
+# account could get root by dropping a file there, and a real refresh run as root
+# with HOME=/root never found its owner's signing key, so it never succeeded and
+# first-online never retired. Now:
+#   - only the refresh named in MORPHIT_CANARY_REFRESH runs — nothing is searched
+#     for. The warrant canary is signed on the operator's own computer, never on
+#     a server (OPERATIONS.md §36); on a server this is unset and the step is done.
+#     (setup.sh's own timer also publishes a few minutes after every boot, so a
+#     home node's canary appears without this step too.)
+#   - it runs as the file's OWNER with the owner's HOME (setpriv, no privilege
+#     kept), so it signs with the owner's key; a file owned by nobody we can run
+#     as is refused, never run as root in its place.
+# Best-effort + idempotent: a canary already on disk is a no-op, and a failed
+# publish leaves the marker unset to retry next tick.
 if [ ! -f "${DONE_CANARY}" ]; then
 	_canary_served="${MORPHIT_CANARY_SERVE_DIR}/canary.txt"
+	_refresh="${MORPHIT_CANARY_REFRESH}"
 	if [ -f "${_canary_served}" ]; then
 		touch "${DONE_CANARY}"
+	elif [ -z "${_refresh}" ]; then
+		log 'no canary refresh is set for this machine (the canary is signed on your own computer) — nothing to publish here'
+		touch "${DONE_CANARY}"
+	elif [ ! -f "${_refresh}" ]; then
+		log "MORPHIT_CANARY_REFRESH points at ${_refresh}, which does not exist — skipping the canary step"
+		touch "${DONE_CANARY}"
 	else
-		# Prefer the explicit armed path; else discover the refresh script setup.sh
-		# writes under an operator/root home (~/.morphit/update-canary.sh).
-		_refresh="${MORPHIT_CANARY_REFRESH}"
-		if [ -z "${_refresh}" ] || [ ! -f "${_refresh}" ]; then
-			_refresh="$(ls /root/.morphit/update-canary.sh /home/*/.morphit/update-canary.sh 2>/dev/null | head -n1)"
-		fi
-		if [ -n "${_refresh}" ] && [ -f "${_refresh}" ]; then
-			log "publishing the warrant canary now that we are online (${_refresh})"
+		_uid="$(stat -c %u "${_refresh}" 2>/dev/null || echo '')"
+		_gid="$(stat -c %g "${_refresh}" 2>/dev/null || echo '')"
+		_home="$(getent passwd "${_uid}" 2>/dev/null | cut -d: -f6)"
+		# setup.sh writes it as <home>/.morphit/update-canary.sh.
+		[ -n "${_home}" ] || _home="$(dirname "$(dirname "${_refresh}")")"
+		if [ -z "${_uid}" ] || [ -z "${_gid}" ] || ! command -v setpriv >/dev/null 2>&1; then
+			log "cannot run ${_refresh} as its owner here (setpriv or file owner unavailable) — not running it; the canary's own timer will publish it"
+			touch "${DONE_CANARY}"
+		else
+			log "publishing the warrant canary now that we are online (${_refresh}, as uid ${_uid})"
 			# The refresh script is bash (set -euo pipefail) — run it with bash, not
 			# sh (dash), or it dies on `set -o pipefail` before publishing anything.
-			if ( set +e; bash "${_refresh}" ) >/dev/null 2>&1 && [ -f "${_canary_served}" ]; then
+			if ( set +e; cd "${_home}" 2>/dev/null || cd /; setpriv --reuid="${_uid}" --regid="${_gid}" --clear-groups \
+				env HOME="${_home}" bash "${_refresh}" ) >/dev/null 2>&1 && [ -f "${_canary_served}" ]; then
 				log 'warrant canary published'
 				touch "${DONE_CANARY}"
 			else
 				log 'canary publish did not complete yet — will retry'
 			fi
-		else
-			# Nothing armed to publish — don't spin forever; the operator can set one
-			# up any time with `sudo morphit-ops harden`.
-			log 'no armed canary refresh script found — skipping'
-			touch "${DONE_CANARY}"
 		fi
 	fi
 fi

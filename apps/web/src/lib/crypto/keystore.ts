@@ -73,7 +73,13 @@ export type KeystoreEnvelope = SimplePassphraseEnvelope | LayeredCekEnvelope;
  *                             is the caller's responsibility
  *                             (typically a per-session in-memory
  *                             attempts counter that locks out
- *                             after N consecutive failures). */
+ *                             after N consecutive failures).
+ *  - 'totp_unavailable'     — an authenticator code was entered
+ *                             but this browser context has no
+ *                             WebCrypto (plain-HTTP I2P is not a
+ *                             secure context), so it cannot be
+ *                             checked here. Backup codes still
+ *                             work (v1.20.0, F-9). */
 export type KeystoreErrorKind =
 	| 'bad_password'
 	| 'envelope_corrupt'
@@ -81,7 +87,8 @@ export type KeystoreErrorKind =
 	| 'no_passphrase_wrap'
 	| 'unsupported'
 	| 'totp_required'
-	| 'totp_invalid';
+	| 'totp_invalid'
+	| 'totp_unavailable';
 
 export class KeystoreError extends Error {
 	readonly kind: KeystoreErrorKind;

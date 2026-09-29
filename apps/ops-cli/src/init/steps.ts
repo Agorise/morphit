@@ -1076,13 +1076,16 @@ export async function stepRpcEndpoints(
 			'\n' +
 			'  sudo systemctl restart morphit-indexer\n' +
 			'\n' +
-			'A good practice: include 2-3 endpoints from independent\n' +
-			'operators.  When a witness updates rotate, having the\n' +
-			'spread protects you from any single endpoint going stale.\n' +
+			'Best practice: KEEP THE FULL SHIPPED DEFAULT SET (many\n' +
+			'clearnet nodes plus hidden Tor/I2P nodes). The pool tests\n' +
+			'them for uptime and latency and always picks the fastest\n' +
+			'reachable one, routing around any that are down — a node\n' +
+			'blipping is normal and needs no action. Only ADD endpoints\n' +
+			'you trust; do not trim the list to a handful, and never\n' +
+			'hand-remove one just because it is momentarily down.\n' +
 			'\n' +
-			'You can find the current set of community RPC endpoints\n' +
-			'by checking the Blurt witness network or asking in the\n' +
-			'project Matrix channel.'
+			'You can find more community RPC endpoints by checking the\n' +
+			'Blurt witness network or asking in the project Matrix channel.'
 	);
 
 	while (true) {
@@ -1137,16 +1140,17 @@ export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = [
 	'https://mempool.space/api'
 ];
 
-/** Default XMR fee-verifier explorers — five independent
- *  instances of the moneroexamples/onion-monero-blockchain-explorer
- *  reference codebase.  Matches the indexer's config-default
- *  (Part 108++ Finding D-1 fix). */
+/** Default XMR fee-verifier explorers — matches the indexer's
+ *  config default (apps/indexer/src/config/xmrExplorers.ts), checked
+ *  live 2026-09-28: two onion-monero-blockchain-explorer instances
+ *  (txprove) and moneroblocks.info, whose raw transactions the indexer
+ *  verifies itself (`raw-tx+`). localmonero.co/blocks (now a redirect),
+ *  monerohash.com/explorer (JSON API off) and exploremonero.com (a JS
+ *  front end, no API) were dropped. */
 export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = [
 	'https://xmrchain.net',
-	'https://localmonero.co/blocks',
-	'https://monerohash.com/explorer',
-	'https://exploremonero.com',
-	'https://moneroexplorer.org'
+	'https://moneroexplorer.org',
+	'raw-tx+https://moneroblocks.info'
 ];
 
 /** Default chat-link URL templates — for the frontend's
@@ -1319,7 +1323,10 @@ export interface FeeExplorersResult {
 /** Parse a comma-separated URL list with the same rules as
  *  parseRpcEndpoints (HTTPS-only, no user:pass, de-duped).
  *  Returns the list on success, an error message on failure. */
-export function parseExplorerUrlList(raw: string): readonly string[] | string {
+export function parseExplorerUrlList(
+	raw: string,
+	opts: { readonly allowRawTx?: boolean } = {}
+): readonly string[] | string {
 	const list = raw
 		.split(',')
 		.map((u) => u.trim())
@@ -1336,11 +1343,14 @@ export function parseExplorerUrlList(raw: string): readonly string[] | string {
 		// invisible content-injection) would otherwise reach the
 		// terminal interpreter.
 		const safeU = sanitizeForTerm(u);
-		if (!u.startsWith('https://')) {
+		// XMR only: `raw-tx+https://…` = an explorer serving raw transactions
+		// (moneroblocks.info API), verified by the indexer itself.
+		const url = opts.allowRawTx === true && u.startsWith('raw-tx+') ? u.slice('raw-tx+'.length) : u;
+		if (!url.startsWith('https://')) {
 			return `Explorer URL must start with https:// — got "${safeU}"`;
 		}
 		try {
-			const parsed = new URL(u);
+			const parsed = new URL(url);
 			if (parsed.protocol !== 'https:') {
 				return `Explorer URL must be https — got "${safeU}"`;
 			}
@@ -1399,11 +1409,10 @@ export async function stepFeeExplorers(): Promise<FeeExplorersResult> {
 			'Defaults:\n' +
 			'  • BTC: blockstream.info + mempool.space\n' +
 			'    (Esplora-API-compatible, independent operators)\n' +
-			'  • XMR: 5 independent instances of the\n' +
-			"    onion-monero-blockchain-explorer reference codebase\n" +
-			'    (xmrchain.net, localmonero.co/blocks,\n' +
-			'    monerohash.com/explorer, exploremonero.com,\n' +
-			'    moneroexplorer.org)\n' +
+			'  • XMR: xmrchain.net + moneroexplorer.org\n' +
+			'    (onion-monero-blockchain-explorer API) and\n' +
+			'    moneroblocks.info (raw transactions, checked by your\n' +
+			'    indexer itself: write it as raw-tx+https://…)\n' +
 			'\n' +
 			'You can keep the defaults (recommended for new\n' +
 			'operators), or customize the list now.  For maximum\n' +
@@ -1430,7 +1439,8 @@ export async function stepFeeExplorers(): Promise<FeeExplorersResult> {
 	const xmr = await editExplorerList(
 		'XMR fee-verifier explorers',
 		DEFAULT_XMR_FEE_EXPLORERS,
-		probeMoneroExplorer
+		probeMoneroExplorer,
+		{ allowRawTx: true }
 	);
 
 	return { btc, xmr };
@@ -1442,7 +1452,8 @@ export async function stepFeeExplorers(): Promise<FeeExplorersResult> {
 async function editExplorerList(
 	label: string,
 	defaults: readonly string[],
-	probe: (u: string) => Promise<ProbeStatus>
+	probe: (u: string) => Promise<ProbeStatus>,
+	opts: { readonly allowRawTx?: boolean } = {}
 ): Promise<readonly string[]> {
 	let current: readonly string[] = defaults;
 	while (true) {
@@ -1466,7 +1477,7 @@ async function editExplorerList(
 			`${label} (comma-separated)`,
 			defaultDisplay
 		);
-		const result = parseExplorerUrlList(raw);
+		const result = parseExplorerUrlList(raw, opts);
 		if (typeof result === 'string') {
 			console.log(`  ✗ ${result}  Try again.\n`);
 			continue;
@@ -2333,8 +2344,9 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 			'    other node displays, and on your own /about-this-\n' +
 			'    instance page (e.g. "Operator: ' + suggestedDefault + '").\n' +
 			'    It is NOT secret, but it IS permanent: once registered\n' +
-			'    on chain it cannot be changed (only superseded later by\n' +
-			'    an update op).  So choose one you are happy to keep.\n' +
+			'    on chain the TAG cannot be changed (your display name,\n' +
+			'    origin and contact you can update anytime by running\n' +
+			'    register again).  So choose a tag you are happy to keep.\n' +
 			'\n' +
 			(domainTag !== null && domainTag.length > 0
 				? 'We have defaulted it to your domain (' +
@@ -2688,9 +2700,10 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 // the relay must trust that range so X-Forwarded-For client IPs are
 // honoured (rate limits, abuse defenses key off the real client IP,
 // not the proxy).  That is MORPHIT_RELAY_TRUSTED_PROXY_IPS — which
-// the wizard sets for you here, and ONLY when you opt in (trusting a
-// proxy range you don't actually have in front of you would let a
-// direct client spoof its source IP).
+// the wizard sets for you here, and ONLY when you opt in.  Unset, the
+// relay trusts loopback + Docker's default bridge pool 172.16.0.0/12
+// (v1.20.0 wave 5): a peer there can only be inside the operator's own
+// network, so it can at most choose its own rate-limit bucket.
 export interface BunkerWebResult {
 	readonly enabled: boolean;
 }
@@ -2736,7 +2749,7 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 				'      3. Start it:\n' +
 				'           cd /etc/bunkerweb && docker compose up -d\n' +
 				'      4. Confirm it came up healthy:\n' +
-				'           npx morphit-ops bunkerweb\n' +
+				'           sudo morphit-ops bunkerweb\n' +
 				'\n' +
 				'    BunkerWeb terminates TLS, serves your apps/web/build, and\n' +
 				'    reverse-proxies /v1/* to the relay + indexer.  Quick Start:\n' +
@@ -2746,10 +2759,11 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 		console.log(
 			'  ⓘ No BunkerWeb.  Serve directly: point nginx (ops/nginx/) or\n' +
 				'    Caddy at apps/web/build and reverse-proxy /v1/* to the relay\n' +
-				'    + indexer.  MORPHIT_RELAY_TRUSTED_PROXY_IPS stays empty (the\n' +
-				'    relay reads the socket peer IP directly).  If you DO front it\n' +
-				'    with your own proxy/CDN, set that variable to the proxy CIDR\n' +
-				'    by hand — see docs/RUN-A-MORPHIT-NODE.md §6.\n'
+				'    + indexer.  MORPHIT_RELAY_TRUSTED_PROXY_IPS stays empty: the\n' +
+				'    relay then trusts forwarded client IPs from this server\n' +
+				'    (loopback) and Docker\'s default networks (172.16.0.0/12).\n' +
+				'    Set it by hand only for a proxy/CDN outside those — see\n' +
+				'    docs/RUN-A-MORPHIT-NODE.md §6.\n'
 		);
 	}
 	return { enabled };

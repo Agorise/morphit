@@ -90,7 +90,7 @@ check('proxy args are only populated inside the tor-only branch', /if \[ "\$CANA
 // ── Node helpers install the dispatcher before fetching ───────────
 const blurt = read('scripts/canary/fetch-blurt-head.ts');
 const btc = read('scripts/canary/fetch-btc-head.ts');
-check('fetch-blurt-head imports the tor dispatcher installer', /import \{ installTorDispatcherIfTorOnly \} from '\.\/torSocksDispatcher\.js'/.test(blurt));
+check('fetch-blurt-head imports the tor dispatcher installer', /import \{[^}]*\binstallTorDispatcherIfTorOnly\b[^}]*\} from '\.\/torSocksDispatcher\.js'/.test(blurt));
 check('fetch-blurt-head calls installTorDispatcherIfTorOnly() in main', /installTorDispatcherIfTorOnly\(\)/.test(blurt));
 check('fetch-btc-head imports the tor dispatcher installer', /import \{ installTorDispatcherIfTorOnly \} from '\.\/torSocksDispatcher\.js'/.test(btc));
 check('fetch-btc-head calls installTorDispatcherIfTorOnly() in main', /installTorDispatcherIfTorOnly\(\)/.test(btc));

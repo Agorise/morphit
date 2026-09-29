@@ -18,6 +18,7 @@
 	import SeedBackupNudge from '$components/SeedBackupNudge.svelte';
 	import InstallBanner from '$components/InstallBanner.svelte';
 	import PairedReadOnlyBanner from '$components/PairedReadOnlyBanner.svelte';
+	import InsecureContextNotice from '$components/InsecureContextNotice.svelte';
 	import NeedsAccountNameBanner from '$components/NeedsAccountNameBanner.svelte';
 	import ToastRegion from '$components/ToastRegion.svelte';
 	import { startAmbientChannels } from '$lib/notifications/ambient';
@@ -264,7 +265,7 @@
 	<!-- Skip link for keyboard users -->
 	<a
 		href="#main"
-		class="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-morphit-btn focus:px-4 focus:py-2 focus:text-white"
+		class="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-morphit-btn focus:px-4 focus:py-2 focus:text-morphit-btn-text"
 	>
 		{$_('a11y.skip_to_content')}
 	</a>
@@ -357,6 +358,7 @@
 	     READ everything but can't BROADCAST anything; signing
 	     happens on the phone. -->
 	<PairedReadOnlyBanner />
+	<InsecureContextNotice />
 
 	<!-- Signed-in-but-no-account-name persistent banner.  Visible when
 	     the session is fully unlocked but no Blurt account name has been

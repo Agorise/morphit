@@ -493,36 +493,95 @@ describe.skipIf(!INTEGRATION_ENABLED)('keys recorded before the upgrade', () => 
 			}
 		};
 		const r = await reconcilePostingKeys(fx.db, racing, { pauseMs: 0 });
-		expect(r.checked, 'the dispatcher confirmed it first').toBe(0);
+		expect(r.checked, 'the older read must not be written over the rotation').toBe(0);
+		// v1.20.0 (E1): the rotation is recorded UNCONFIRMED; the next pass asks
+		// the chain about pubC itself.
+		expect(await row()).toEqual({ posting_pubkey: pubC, posting_key_reconciled: false });
+		const next = await reconcilePostingKeys(fx.db, chain({ [ACCOUNT]: pubC }), { pauseMs: 0 });
+		expect(next).toEqual({ checked: 1, corrected: 0, remaining: 0 });
 		expect(await row()).toEqual({ posting_pubkey: pubC, posting_key_reconciled: true });
 	});
 
-	it('a key the dispatcher records is confirmed, so the fast path needs no chain read', async () => {
+	it('a key the dispatcher records is NOT trusted on one endpoint’s word — the chain is asked (v1.20.0, E1)', async () => {
 		await apply([accountUpdate(ACCOUNT, pubB)]);
-		expect((await row())?.posting_key_reconciled).toBe(true);
+		expect((await row())?.posting_key_reconciled).toBe(false);
+		let asked = 0;
 		const lookup = postingKeyLookupFromDb(fx.db, async () => {
-			throw new Error('the chain must not be asked about a confirmed row');
+			asked++;
+			return pubB;
 		});
 		expect((await verifyPushedChatOp({ trx: chatSignedWith(keyB) }, lookup)).ok).toBe(true);
+		expect(asked, 'the quorum refresher must vouch for a block-recorded key').toBe(1);
 	});
 
-	it('an account created through the block stream is born confirmed', async () => {
-		await apply([
-			[
-				'account_create',
-				{
-					fee: '3.000 BLURT',
-					creator: 'morphit-relay',
-					new_account_name: 'newbie',
-					owner: { weight_threshold: 1, account_auths: [], key_auths: [[pubA, 1]] },
-					active: { weight_threshold: 1, account_auths: [], key_auths: [[pubA, 1]] },
-					posting: { weight_threshold: 1, account_auths: [], key_auths: [[pubC, 1]] },
-					memo_key: pubA,
-					json_metadata: ''
-				}
-			]
-		]);
+	const accountCreate = (name: string, posting: string): [string, unknown] => [
+		'account_create',
+		{
+			fee: '3.000 BLURT',
+			creator: 'morphit-relay',
+			new_account_name: name,
+			owner: { weight_threshold: 1, account_auths: [], key_auths: [[pubA, 1]] },
+			active: { weight_threshold: 1, account_auths: [], key_auths: [[pubA, 1]] },
+			posting: { weight_threshold: 1, account_auths: [], key_auths: [[posting, 1]] },
+			memo_key: pubA,
+			json_metadata: ''
+		}
+	];
+
+	// v1.20.0 (E1 residual). A create op is ONE endpoint's word, exactly like an
+	// account_update: a hostile node serving a forged block could otherwise plant
+	// a confirmed key for a new account, and the fast path trusts a confirmed row
+	// with no chain read.
+	it('an account created through the block stream is NOT born confirmed — the chain is asked', async () => {
+		await apply([accountCreate('newbie', pubC)]);
+		expect(
+			await row('newbie'),
+			'a create-derived key was stored confirmed on one endpoint’s word'
+		).toEqual({ posting_pubkey: pubC, posting_key_reconciled: false });
+		let asked = 0;
+		const lookup = postingKeyLookupFromDb(fx.db, async () => {
+			asked++;
+			return pubC;
+		});
+		expect(await lookup('newbie')).toBe(pubC);
+		expect(asked, 'the quorum refresher must vouch for a create-derived key').toBe(1);
+		// The steady reconcile confirms it against the chain.
+		// (The fixture's pre-upgrade row for ACCOUNT is pending too.)
+		const r = await reconcilePostingKeys(fx.db, chain({ newbie: pubC, [ACCOUNT]: pubA }), {
+			pauseMs: 0
+		});
+		expect(r).toEqual({ checked: 2, corrected: 0, remaining: 0 });
 		expect(await row('newbie')).toEqual({ posting_pubkey: pubC, posting_key_reconciled: true });
+	});
+
+	it('a replayed account_create cannot re-arm a key the reconcile disowned', async () => {
+		// The chain said this account has no single posting key (authority moved
+		// to another account): the reconcile wrote NULL, confirmed. A rewind of
+		// the poller — the documented way to re-process a block — replays the
+		// create op, whose key is the one the owner disowned.
+		await fx.db.query(
+			`INSERT INTO accounts
+			     (name, creator, created_block_num, created_block_time, created_trx_id,
+			      posting_pubkey, posting_key_reconciled)
+			   VALUES ('newbie', 'morphit-relay', 1, now(), 'seed', NULL, TRUE)`
+		);
+		await apply([accountCreate('newbie', pubC)]);
+		expect(await row('newbie'), 'a replayed create refilled a disowned key').toEqual({
+			posting_pubkey: null,
+			posting_key_reconciled: true
+		});
+	});
+
+	it('a create op never touches a row that already holds a key', async () => {
+		await fx.db.query(
+			`INSERT INTO accounts
+			     (name, creator, created_block_num, created_block_time, created_trx_id,
+			      posting_pubkey, posting_key_reconciled)
+			   VALUES ('newbie', 'morphit-relay', 1, now(), 'seed', $1, TRUE)`,
+			[pubB]
+		);
+		await apply([accountCreate('newbie', pubC)]);
+		expect(await row('newbie')).toEqual({ posting_pubkey: pubB, posting_key_reconciled: true });
 	});
 });
 

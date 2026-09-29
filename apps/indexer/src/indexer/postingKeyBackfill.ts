@@ -20,9 +20,12 @@
  * dispatcher record rotations from then on, and F37 is the rest of it: rows
  * written BEFORE that still hold whatever key they were first seen with,
  * including a key the owner has since rotated away from because it leaked.
- * `reconcilePostingKeys` below confirms every such row against the chain once
+ * `reconcilePostingKeys` below confirms every such row against the chain
  * (`posting_key_reconciled`, migration v61), and the fast path re-reads the
- * chain before trusting a row not yet confirmed.
+ * chain before trusting a row not yet confirmed. Since v1.20.0 (E1) every key
+ * the dispatcher records from a block — an account create's as well as a
+ * rotation's — is unconfirmed too (a block is one RPC endpoint's word), so
+ * `keepReconcilingPostingKeys` runs for the life of the process rather than once.
  *
  * On the collapsed-baseline migration phase: the migration runner tracks
  * versions by number and won't re-run v1 when schema.sql changes, and the
@@ -131,11 +134,15 @@ const RECONCILE_PAUSE_MS = 250;
  *     exists to close, and NULL makes the fast path refuse and fall back to
  *     chain delivery: slower, never wrong;
  *   - batch not answered → left unconfirmed; the fast path keeps re-reading
- *     those accounts itself, and the next boot tries again.
+ *     those accounts itself, and the next pass of keepReconcilingPostingKeys
+ *     tries again.
  *
- * The UPDATE is guarded on the flag still being FALSE, so a rotation the
- * dispatcher recorded meanwhile — from the block stream, and so later than any
- * read made before it — is never overwritten.
+ * The UPDATE is guarded on the row being exactly as it was read: still
+ * unconfirmed AND still holding the key this pass started from. Since v1.20.0
+ * (E1) the dispatcher records a rotation UNCONFIRMED — it is one RPC
+ * endpoint's word — so the flag alone no longer shows that the row moved; the
+ * key does. A rotation recorded meanwhile is left for the next pass, which
+ * reads it and asks the chain about it.
  */
 export async function reconcilePostingKeys(
 	db: Database,
@@ -189,8 +196,9 @@ export async function reconcilePostingKeys(
 			const chainKey = primaryPostingKey(acc);
 			const res = await db.query(
 				`UPDATE accounts SET posting_pubkey = $2, posting_key_reconciled = TRUE
-				  WHERE name = $1 AND posting_key_reconciled = FALSE`,
-				[row.name, chainKey]
+				  WHERE name = $1 AND posting_key_reconciled = FALSE
+				    AND posting_pubkey IS NOT DISTINCT FROM $3`,
+				[row.name, chainKey, row.posting_pubkey]
 			);
 			if ((res.rowCount ?? 0) === 0) continue; // the dispatcher got there first
 			checked++;
@@ -357,7 +365,7 @@ export async function backfillPostingKeys(
 }
 
 /**
- * Keep reconciling until every row is confirmed (v1.18.0 review, D5).
+ * Keep reconciling for the life of the process (v1.18.0 review, D5; v1.20.0, E1).
  *
  * The reconcile used to run ONCE per boot. A box whose RPC was not ready at
  * boot — a hidden-only node whose Tor is still building circuits, the common
@@ -366,9 +374,14 @@ export async function backfillPostingKeys(
  * fast path a budgeted chain read (30 a minute across all accounts), so until
  * then fast chat quietly fell back to chain timing for most people.
  *
- * Retries with backoff — a minute, doubling, capped at thirty — and stops the
- * moment nothing is left. The timer is unref'd so it never holds a shutdown.
- * Returns a stop function.
+ * It no longer stops when nothing is left (E1). The dispatcher records every
+ * posting key it reads from a block (account create or rotation) UNCONFIRMED,
+ * because a block is one RPC endpoint's word;
+ * those rows appear at runtime and are what this loop is for. So: failures and
+ * leftovers back off — a minute, doubling, capped at thirty — and a pass that
+ * leaves nothing unconfirmed schedules the next one at the steady cadence
+ * (a minute), where an idle pass is one indexed query that finds no rows.
+ * The timer is unref'd so it never holds a shutdown. Returns a stop function.
  */
 export function keepReconcilingPostingKeys(
 	db: Database,
@@ -376,10 +389,15 @@ export function keepReconcilingPostingKeys(
 	opts: {
 		readonly firstDelayMs?: number;
 		readonly maxDelayMs?: number;
+		/** Delay after a pass that left nothing unconfirmed. */
+		readonly steadyDelayMs?: number;
+		/** Passed to each reconcile pass (tests use 0). */
+		readonly pauseMs?: number;
 		readonly onPass?: (r: ReconcileResult) => void;
 	} = {}
 ): () => void {
 	const maxDelay = opts.maxDelayMs ?? 30 * 60 * 1000;
+	const steadyDelay = opts.steadyDelayMs ?? 60 * 1000;
 	let delay = opts.firstDelayMs ?? 60 * 1000;
 	let stopped = false;
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -394,7 +412,11 @@ export function keepReconcilingPostingKeys(
 		if (stopped) return;
 		let r: ReconcileResult;
 		try {
-			r = await reconcilePostingKeys(db, blurt);
+			r = await reconcilePostingKeys(
+				db,
+				blurt,
+				opts.pauseMs !== undefined ? { pauseMs: opts.pauseMs } : {}
+			);
 		} catch (err) {
 			log.warn('reconcile_retry_failed', {
 				error: err instanceof Error ? err.message : String(err)
@@ -404,8 +426,8 @@ export function keepReconcilingPostingKeys(
 			return;
 		}
 		opts.onPass?.(r);
-		if (r.remaining === 0) return; // done: nothing left to confirm
-		delay = Math.min(delay * 2, maxDelay);
+		// Nothing left: wait the steady cadence for rotations recorded meanwhile.
+		delay = r.remaining === 0 ? steadyDelay : Math.min(delay * 2, maxDelay);
 		schedule();
 	};
 	schedule();

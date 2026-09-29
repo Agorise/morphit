@@ -149,6 +149,41 @@ export class Limiter {
 	}
 
 	/**
+	 * Like `peekWithSpacing`, but when allowed it RESERVES the slot at once
+	 * (records the event now) and hands back `release()` to undo exactly that
+	 * reservation. Concurrent callers therefore see each other: the second of
+	 * two simultaneous requests is refused by the spacing rule instead of both
+	 * peeking an empty bucket (v1.20.0, D5). Callers keep the reservation when
+	 * the downstream work spent money, and release it when it did not (name
+	 * taken, validation failed, broadcast provably did not land).
+	 */
+	reserveWithSpacing(
+		key: string,
+		minGapMs: number
+	):
+		| { allowed: true; release: () => void }
+		| { allowed: false; reason: 'quota_exhausted' }
+		| { allowed: false; reason: 'spacing'; retryAfterMs: number } {
+		const decision = this.peekWithSpacing(key, minGapMs);
+		if (!decision.allowed) return decision;
+		this.commit(key);
+		const events = this.buckets.get(key)!;
+		const stamp = events[events.length - 1]!;
+		let released = false;
+		return {
+			allowed: true,
+			release: () => {
+				if (released) return;
+				released = true;
+				const cur = this.buckets.get(key);
+				if (!cur) return;
+				const i = cur.lastIndexOf(stamp);
+				if (i >= 0) cur.splice(i, 1);
+			}
+		};
+	}
+
+	/**
 	 * Same as `peekWithSpacing` but without the spacing check —
 	 * pure quota-only peek.  Pair with `commit(key)` after
 	 * downstream work succeeds.

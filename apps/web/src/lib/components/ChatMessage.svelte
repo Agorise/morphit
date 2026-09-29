@@ -138,8 +138,10 @@
 		 *  parent supplies only that sender's avatar + posting key. */
 		showWhoami?: boolean;
 		/** cp402 [4] — the sender's sanitized avatar SVG (if they set one).
-		 *  Rendered via {@html} exactly like IdentityLabel; sanitized
-		 *  upstream in profileProps/selfProfile. */
+		 *  Passed to IdentityLabel, which shows it as an <img> (data: URI) —
+		 *  NEVER inline it with {@html}: an inlined SVG's own style/class can
+		 *  escape its frame and cover the page (v1.18.0 deep-deep, M1).
+		 *  Sanitized upstream in profileProps/selfProfile. */
 		senderAvatarSvg?: string | null;
 		/** cp402 [4] — the sender's raster avatar data URI (mutually
 		 *  exclusive with senderAvatarSvg). */
@@ -288,13 +290,18 @@
 
 	function copyText(text: string, kind: 'address' | 'memo' | 'txid'): void {
 		if (typeof navigator === 'undefined' || !navigator.clipboard) return;
-		void navigator.clipboard.writeText(text).then(() => {
-			copiedKind = kind;
-			if (copyTimer !== null) clearTimeout(copyTimer);
-			copyTimer = setTimeout(() => {
-				copiedKind = null;
-			}, 2000);
-		});
+		void navigator.clipboard
+			.writeText(text)
+			.then(() => {
+				copiedKind = kind;
+				if (copyTimer !== null) clearTimeout(copyTimer);
+				copyTimer = setTimeout(() => {
+					copiedKind = null;
+				}, 2000);
+			})
+			.catch(() => {
+				// Refused (permissions / no user gesture) — no "copied" flash.
+			});
 	}
 
 	/** Batch K — build the right explorer URL for a funds-sent
@@ -1030,7 +1037,7 @@
 						{#if canPayNow}
 							<button
 								type="button"
-								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
+								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-morphit-btn-text hover:brightness-110"
 								onclick={() =>
 									onPayNow?.({
 										recipient: p.address,
@@ -1045,7 +1052,7 @@
 						{#if canMarkSent}
 							<button
 								type="button"
-								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-white hover:brightness-110"
+								class="rounded-md border-2 border-morphit-btn bg-morphit-btn px-3 py-1 text-xs font-semibold text-morphit-btn-text hover:brightness-110"
 								onclick={() =>
 									onMarkSent?.({
 										method: p.method as

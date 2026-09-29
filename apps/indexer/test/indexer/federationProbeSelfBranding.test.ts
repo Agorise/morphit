@@ -42,8 +42,10 @@ function makeMockDb(): { db: Database; queries: CapturedQuery[] } {
 		if (t.startsWith('SELECT')) {
 			// v1.18.0 deep-deep (M4): pickDueInstances runs a never-probed query
 			// and a due-established query. This row is never-probed, so the
-			// established query (which excludes 'never') returns nothing.
-			if (text.includes("<> 'never'")) return { rows: [], rowCount: 0 };
+			// established query returns nothing. Since v1.20.0 (E14) the two are
+			// told apart by last_probed_at (a row listed as 'never' but already
+			// probed is established), not by the status.
+			if (text.includes('last_probed_at IS NOT NULL')) return { rows: [], rowCount: 0 };
 			return {
 				rows: [
 					{

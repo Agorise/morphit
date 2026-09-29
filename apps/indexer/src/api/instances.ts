@@ -9,8 +9,9 @@
  *
  * Query parameters:
  *   ?status=good   — only instances currently classified 'good'.
- *                    Other valid values: quiet, stale, unreachable,
- *                    mismatch, never.  Omit to return all.
+ *                    Other valid values: quiet, syncing, stale,
+ *                    clearnet_blocked, unreachable, mismatch, never.
+ *                    Omit (or pass anything else) to return all.
  *
  * Cache-Control: public, max-age=60.  Probe results refresh every
  * 10min for healthy instances; a 1-min CDN cache is plenty.
@@ -40,9 +41,14 @@ export interface InstanceDirectoryResponse {
 	instances: readonly InstanceDirectoryEntry[];
 }
 
+// Every status the probe writes (federationProbe.ProbeStatus). `syncing` and
+// `clearnet_blocked` were missing, so asking for them silently returned EVERY
+// row (v1.20.0, E8).
 const VALID_STATUS_FILTERS = new Set([
 	'good',
 	'quiet',
+	'syncing',
+	'clearnet_blocked',
 	'stale',
 	'unreachable',
 	'mismatch',
@@ -70,6 +76,7 @@ export function instancesRoute(db: Database): Hono {
 				ki.cached_alt_networks,
 				op.reg_alt_networks,
 				ki.last_probe_status,
+				ki.last_probe_error,
 				ki.registered_at_time,
 				ki.last_probed_at,
 				ki.cached_indexed_block,

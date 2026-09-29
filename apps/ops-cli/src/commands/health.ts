@@ -1565,7 +1565,12 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 					'not set up — optional; enable with morphit-ops harden \u2192 \u201cSet up IPFS release hosting\u201d'
 			};
 		case 'unreadable':
-			return { state: 'unknown', detail: 'could not read systemd state (no systemctl?)' };
+			// One failed read of the ipfs daemon's state lands here too (node-health
+			// D14), so do not guess at a cause: just say it could not be read.
+			return {
+				state: 'unknown',
+				detail: 'could not read the IPFS service state from systemd right now'
+			};
 		case 'daemon-down':
 			return {
 				state: 'down',

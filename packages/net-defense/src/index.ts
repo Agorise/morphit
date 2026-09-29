@@ -41,6 +41,92 @@
  * eliminate).
  */
 
+import { BlockList, isIP } from 'node:net';
+
+// ─── THE non-public address set (v1.20.0 fix wave, D13) ─────────────────────
+//
+// One definition for every "is this address public?" decision in the repo:
+// this package's two checks below, and @morphit/hidden-transport's
+// isNonPublicAddressLiteral (which delegates here). There used to be two —
+// regexes here, a BlockList there — and they disagreed: the probe-time check
+// (these regexes, "the authoritative one") passed `[::ffff:7f00:1]`, which is
+// how `new URL()` writes ::ffff:127.0.0.1, and NAT64 / 6to4 / fec0:: /
+// multicast / 198.18/15 forms. A BlockList matches by VALUE, so every textual
+// form of an address (including IPv4-mapped IPv6 in dotted or hex form) is
+// judged the same. Pure node:net — this package stays dependency-free (the
+// mcp-server deploy vendors it alone).
+
+/** IPv4 ranges that are not public unicast destinations. */
+export const NON_PUBLIC_V4: ReadonlyArray<readonly [string, number]> = [
+	['0.0.0.0', 8], // "this network"
+	['10.0.0.0', 8], // RFC 1918
+	['100.64.0.0', 10], // CGNAT (RFC 6598)
+	['127.0.0.0', 8], // loopback
+	['169.254.0.0', 16], // link-local, cloud metadata
+	['172.16.0.0', 12], // RFC 1918
+	['192.0.0.0', 24], // IETF protocol assignments
+	['192.168.0.0', 16], // RFC 1918
+	['198.18.0.0', 15], // benchmarking
+	['224.0.0.0', 4], // multicast
+	['240.0.0.0', 4] // reserved + 255.255.255.255 broadcast
+];
+/** IPv6 ranges that are not public unicast destinations, or that embed an
+ *  IPv4 address a gateway would translate to (so they can reach anything the
+ *  IPv4 list blocks). */
+export const NON_PUBLIC_V6: ReadonlyArray<readonly [string, number]> = [
+	['::', 96], // unspecified, loopback ::1, IPv4-compatible ::a.b.c.d
+	// (IPv4-MAPPED ::ffff:0:0/96 is deliberately NOT listed: node's BlockList
+	// treats a mapped address and its IPv4 as the same value, so listing the
+	// whole /96 would block every IPv4. Mapped forms are judged by the IPv4
+	// they carry — see isNonPublicIpLiteral.)
+	['64:ff9b::', 96], // NAT64 well-known prefix
+	['64:ff9b:1::', 48], // NAT64 local-use
+	['2001::', 32], // Teredo (embeds an IPv4 server + client)
+	['2002::', 16], // 6to4 (embeds an IPv4)
+	['fc00::', 7], // unique-local
+	['fe80::', 10], // link-local
+	['fec0::', 10], // site-local (deprecated, still routed on some LANs)
+	['ff00::', 8] // multicast
+];
+
+const NON_PUBLIC = (() => {
+	const b = new BlockList();
+	for (const [a, p] of NON_PUBLIC_V4) b.addSubnet(a, p, 'ipv4');
+	for (const [a, p] of NON_PUBLIC_V6) b.addSubnet(a, p, 'ipv6');
+	return b;
+})();
+
+/**
+ * Is `host` an IP LITERAL (bare or `[bracketed]`) that is NOT a public unicast
+ * address? A DNS name is never judged here (returns false) — names are for the
+ * resolver + {@link isPrivateIp} on every answer. PURE.
+ */
+export function isNonPublicIpLiteral(host: string): boolean {
+	const h = host
+		.trim()
+		.toLowerCase()
+		.replace(/^\[|\]$/g, '');
+	const fam = isIP(h);
+	if (fam === 0) return false;
+	if (NON_PUBLIC.check(h, fam === 4 ? 'ipv4' : 'ipv6')) return true;
+	// IPv4-mapped IPv6 in any form: judge the embedded IPv4 by value too.
+	if (fam === 6) {
+		const mapped = /^::ffff:(?:([0-9a-f]{1,4}):([0-9a-f]{1,4})|(\d+\.\d+\.\d+\.\d+))$/.exec(h);
+		if (mapped) {
+			const v4 =
+				mapped[3] ??
+				[
+					parseInt(mapped[1]!, 16) >> 8,
+					parseInt(mapped[1]!, 16) & 255,
+					parseInt(mapped[2]!, 16) >> 8,
+					parseInt(mapped[2]!, 16) & 255
+				].join('.');
+			return NON_PUBLIC.check(v4, 'ipv4');
+		}
+	}
+	return false;
+}
+
 /**
  * Check whether a hostname string (as it appears in a URL) is
  * one of the obviously-private literal forms.  This is the FIRST
@@ -69,6 +155,8 @@ export function isPrivateHostname(hostnameRaw: string): boolean {
 	if (h.endsWith('.local')) return true;
 	if (h.endsWith('.localhost')) return true;
 	if (h.endsWith('.internal')) return true;
+	// Every other IP-literal form, judged by value (D13).
+	if (isNonPublicIpLiteral(h)) return true;
 	return false;
 }
 
@@ -107,8 +195,7 @@ export function isPrivateIp(ip: string): boolean {
 	// IPv4-mapped IPv6 (::ffff:a.b.c.d) — unwrap + re-validate as IPv4
 	const v4mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v);
 	if (v4mapped !== null) return isPrivateIp(v4mapped[1]!);
-	// IPv6 loopback in compressed form (`::1` already caught above)
-	// and the unspecified address `::` (caught above).  All other
-	// public-routable IPv6 falls through to public.
-	return false;
+	// Every remaining form — hex IPv4-mapped, NAT64, 6to4, Teredo,
+	// site-local, multicast, benchmarking, reserved — by value (D13).
+	return isNonPublicIpLiteral(v);
 }

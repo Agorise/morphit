@@ -343,17 +343,17 @@ run_tests(){
 	# Three suites, three verdicts. One that never reported is a crash, never a
 	# pass carried by the others: a relay run that died on an import must not
 	# read as green because the indexer's was.
-	if ! printf '%s' "$a" | grep -qE 'Tests +[0-9]+' || ! printf '%s' "$b" | grep -qE 'Tests +[0-9]+' \
-		|| ! printf '%s' "$c" | grep -qE 'Tests +[0-9]+'; then
+	if ! grep -qE 'Tests +[0-9]+' <<<"$a" || ! grep -qE 'Tests +[0-9]+' <<<"$b" \
+		|| ! grep -qE 'Tests +[0-9]+' <<<"$c"; then
 		echo 'RUN-INCOMPLETE'
 	fi
 }
 
 verdict(){ # <output> -> pass | fail | crash
-	if printf '%s' "$1" | grep -q 'RUN-INCOMPLETE'; then echo crash
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ (failed|passed).*failed'; then echo fail
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ failed'; then echo fail
-	elif printf '%s' "$1" | grep -qE 'Tests +[0-9]+ passed'; then echo pass
+	if grep -q 'RUN-INCOMPLETE' <<<"$1"; then echo crash
+	elif grep -qE 'Tests +[0-9]+ (failed|passed).*failed' <<<"$1"; then echo fail
+	elif grep -qE 'Tests +[0-9]+ failed' <<<"$1"; then echo fail
+	elif grep -qE 'Tests +[0-9]+ passed' <<<"$1"; then echo pass
 	else echo crash; fi
 }
 
@@ -447,10 +447,14 @@ try 'T5  the cause chain is walked without cycle protection' "$HT" \
 # Re-aimed after the v1.18.0 deep-deep (TP-C1): the origin is now added under a
 # hidden-only condition; the mutation adds the old "only if nothing hidden was
 # found" guard to that line (as M35 in federation-chat-fast-harness).
+# Re-aimed in v1.20.0: a hidden origin is dialled as http (S9,
+# hiddenOriginForDial) and the call wraps; same mutation as before.
 try 'T6  a hidden address discards the clearnet origin' "$FED" \
-	'	if (originHidden || !hiddenOnly) add(row.origin, originHidden);
+	'	if (originHidden || !hiddenOnly)
+		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
 ' \
-	'	if (addresses.length === 0 && (originHidden || !hiddenOnly)) add(row.origin, originHidden);
+	'	if (addresses.length === 0 && (originHidden || !hiddenOnly))
+		add(originHidden ? hiddenOriginForDial(row.origin) : row.origin, originHidden);
 '
 
 try 'T7  the operator off-switch is ignored' "$FED" \

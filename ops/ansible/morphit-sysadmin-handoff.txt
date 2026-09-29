@@ -38,7 +38,8 @@ need an outside-perspective view).
     → expect:  "Permission denied (publickey)."
 
 ──────────────────────────────────────────────────────────────────
-1.3  Only 22/80/443 externally reachable (UFW + BunkerWeb)
+1.3  Only 22/80/443 externally reachable (UFW + BunkerWeb) — plus 4001 tcp+udp
+     (IPFS swarm) when this box hosts IPFS; leave 4001 open.
 
     nmap -p 1-1024 <host>
     → expect:  ONLY 22/tcp ssh, 80/tcp http, 443/tcp https
@@ -116,7 +117,7 @@ need an outside-perspective view).
 ──────────────────────────────────────────────────────────────────
 2.5  BunkerWeb container running (if enable_bunkerweb)
 
-    sudo docker compose -f /opt/bunkerweb/docker-compose.yml ps
+    sudo docker compose -f /etc/bunkerweb/docker-compose.yml ps
     → expect:  bunkerweb container "Up" and healthy
 
 ──────────────────────────────────────────────────────────────────
@@ -173,6 +174,12 @@ by this playbook:
 
 ──────────────────────────────────────────────────────────────────
 "npx morphit-ops <cmd> returns command not found"
+
+    On an Ansible or guided install the tool is the shortcut
+    /usr/local/bin/morphit-ops: run `sudo morphit-ops <cmd>` from any
+    folder and never `npx morphit-ops` (outside the repo npx looks the
+    name up on the public npm registry, where anyone could publish a
+    package called morphit-ops).
 
     Worked once, then stopped after a `git pull` — or never worked
     on a fresh clone / manual checkout on the host.
@@ -265,10 +272,12 @@ by this playbook:
 ──────────────────────────────────────────────────────────────────
 "X-Forwarded-For shows BunkerWeb's IP, not the real client IP"
 
-    The relay's trusted-proxy IPs setting needs BunkerWeb's
-    Docker bridge IP added.  See group_vars/all.yml for
-    `morphit_relay_trusted_proxy_ips` and verify it includes
-    the Docker bridge subnet (e.g. "172.16.0.0/12").
+    Empty `morphit_relay_trusted_proxy_ips` (group_vars/all.yml)
+    already trusts Docker's bridge pool 172.16.0.0/12; if you set
+    it, it must still include the bridge subnet.  Also check that
+    BunkerWeb's REVERSE_PROXY_HOST targets the frontend's edge
+    port (http://frontend:8088): only requests there carry the
+    visitor's address (`sudo morphit-ops upgrade` switches it).
 
 ──────────────────────────────────────────────────────────────────
 "Daily AIDE check emails are not arriving"

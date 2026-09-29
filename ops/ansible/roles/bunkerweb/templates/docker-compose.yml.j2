@@ -17,7 +17,7 @@
 #
 # The morphit relay + indexer run on the HOST (not in this compose),
 # reachable from the `frontend` container via host.docker.internal
-# (Linux: host-gateway).  They bind on all interfaces (group_vars
+# (= this network's gateway, 172.20.0.1).  They bind on all interfaces (group_vars
 # morphit_*_bind_host) because a loopback-only bind is unreachable
 # from the bridge; UFW (default-deny + the bunkerweb-role bridge
 # allow) keeps the public out.
@@ -60,6 +60,19 @@ services:
   bunkerweb:
     image: {{ bunkerweb_image }}
     container_name: bunkerweb
+    # PRIVACY (v1.20.0, C1): no Docker log for the public edge.  BunkerWeb's
+    # access lines (before LOG_FORMAT in bunkerweb.env drops the address), its
+    # error lines ("client: <address>"), its ban notices and ModSecurity's audit
+    # entries all name visitors, and Docker keeps a container's log on disk with
+    # no size limit.  To watch it live while you debug, with nothing stored:
+    #   sudo docker attach --no-stdin --sig-proxy=false bunkerweb
+    # (Ctrl-C detaches; the container keeps running.)
+    # If CrowdSec (or anything else) reads this container's log through
+    # Docker, `none` blinds it: use `driver: local` with options
+    # max-size: "5m" and max-file: "1" instead, and keep LOG_FORMAT's
+    # $remote_addr (morphit-ops upgrade does exactly that when it finds one).
+    logging:
+      driver: none
     restart: unless-stopped
     ports:
       - "80:8080"
@@ -71,10 +84,14 @@ services:
       # Let's Encrypt certs from the host.
       - /etc/letsencrypt:/etc/letsencrypt:ro
     extra_hosts:
-      # So BunkerWeb can reach the relay + indexer on the host's
-      # loopback.  Linux: host-gateway resolves to the host's
-      # docker-internal IP.
-      - "host.docker.internal:host-gateway"
+      # So BunkerWeb can reach the relay + indexer on the host.
+      # host.docker.internal = THIS network's gateway (172.20.0.1, the first
+      # address of the pinned subnet below), i.e. the host as seen from
+      # bunkerweb_net.  `host-gateway` resolved to docker0 (172.17.0.1), a
+      # different bridge that only worked because the host routes between
+      # them, and does not exist at all when Docker runs without docker0.
+      # (v1.20.0, B11)
+      - "host.docker.internal:172.20.0.1"
     networks:
       - bunkerweb_net
     depends_on:
@@ -113,12 +130,20 @@ services:
 {% endif %}
   # Serves the built SvelteKit site + reverse-proxies the API paths to
   # the relay + indexer on the host.  BunkerWeb proxies everything here
-  # (REVERSE_PROXY_HOST=http://frontend:80).  The build context is
+  # (REVERSE_PROXY_HOST=http://frontend:8088).  The build context is
   # copied to /etc/bunkerweb/frontend by tasks/main.yml.
   frontend:
     build:
       context: ./frontend
     container_name: morphit-frontend
+    # No visitor address reaches this log (the frontend's access log is off
+    # and its error lines name BunkerWeb or the bridge gateway), so keep it —
+    # bounded, so it can never fill the disk.  (v1.20.0, C1)
+    logging:
+      driver: local
+      options:
+        max-size: "1m"
+        max-file: "2"
     restart: unless-stopped
     # cp695 — publish the frontend (the nginx that serves the site AND fans out
     # /v1 -> indexer, /relay -> relay) on a HOST LOOPBACK port so the Tor + I2P
@@ -131,7 +156,7 @@ services:
       # The SvelteKit production build from the cloned repo, read-only.
       - {{ morphit_repo_path }}/apps/web/build:/usr/share/nginx/html:ro
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:172.20.0.1"
     networks:
       - bunkerweb_net
     healthcheck:
@@ -152,4 +177,10 @@ networks:
         # Pin the CIDR so the operator can hard-code it in
         # MORPHIT_RELAY_TRUSTED_PROXY_IPS without having to
         # re-inspect after a rebuild.
+        # The gateway is not listed: Docker gives a pinned subnet's first
+        # address (172.20.0.1) to the gateway by default, and adding a key
+        # to an EXISTING network's config would make compose want to
+        # recreate the network on installed boxes.  host.docker.internal
+        # above relies on it being 172.20.0.1; `morphit-ops upgrade` reads
+        # the real gateway before it relies on it.
         - subnet: 172.20.0.0/16

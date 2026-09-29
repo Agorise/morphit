@@ -45,4 +45,29 @@ export type {
 } from './releaseValidate.js';
 
 export { checkPinnedKeyInAuthority } from './releaseTrustAnchor.js';
+
+// v1.20.0 (MK-H2) — per-order BTC fee addresses derived from the pinned
+// treasury account xpub. One implementation for the validator, the indexer
+// and the browser, so they agree byte-for-byte on every address.
+export {
+	parseAccountXpub,
+	deriveBtcFeeAddress,
+	deriveChildXpub,
+	p2wpkhAddress,
+	BTC_FEE_MAX_INDEX
+} from './btcXpub.js';
+export type { AccountXpub, XpubParseError } from './btcXpub.js';
 export type { PubkeyAuthorityCheck } from './releaseTrustAnchor.js';
+
+// v1.20.0 (MK-H2) — bound XMR fees: integrated address = pinned treasury
+// primary address + a payment ID derived from the order (account/permlink).
+export {
+	moneroBase58Encode,
+	moneroBase58Decode,
+	parseXmrAddress,
+	parseXmrPrimaryAddress,
+	xmrFeePaymentId,
+	xmrIntegratedAddress,
+	xmrPrimaryFromIntegrated
+} from './xmrAddress.js';
+export type { XmrAddressParts, XmrAddressError, XmrPrimaryError } from './xmrAddress.js';

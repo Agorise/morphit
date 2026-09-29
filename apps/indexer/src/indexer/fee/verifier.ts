@@ -22,9 +22,11 @@
  *     Bitcoin block explorers (Blockstream, mempool.space).
  *   - `MoneroProofFeeVerifier` (Part 108++, REPLACES the old
  *     view-key-based MoneroExplorerFeeVerifier) — verifies a
- *     per-payment tx_proof submitted with the order op.  No
- *     view key required on any indexer.  Uses the explorer's
- *     `prove_tx`-style endpoint or local monerod RPC.
+ *     payment with the payer's transaction key (v1.20.0, M-X1)
+ *     submitted with the order op, and — once the treasury primary
+ *     address is pinned — its order-bound payment ID (MK-H2).  No
+ *     view key required on any indexer.  Uses the explorers'
+ *     `/api/outputs?txprove=1` and `/api/transaction/<txid>`.
  *   - `AttestationFeeVerifier` (4b, new) — reads
  *     `morphit_fee_attest_v1` ops to promote `pending_external`
  *     orders.
@@ -48,16 +50,29 @@ export interface FeeClaim {
 	 *  For BTC/XMR, this is the txid the payer says landed their
 	 *  payment. For waived_first_buy, unused. */
 	readonly externalTxId: string | null;
-	/** Per-payment Monero proof string (Part 108++).  Required
-	 *  when feeMethod='xmr', null otherwise.  The MoneroProofFee-
-	 *  Verifier uses this to verify the payment without holding
-	 *  the treasury's view key.  Reveals only "this txid paid
-	 *  this address this amount" — exactly the public information
-	 *  needed for verification, no more.  See
-	 *  apps/indexer/src/indexer/fee/moneroProofVerifier.ts. */
+	/** Legacy per-payment Monero OutProof string (Part 108++). Kept on
+	 *  the claim for the record only: since v1.20.0 (M-X1) no verifier
+	 *  reads it — the explorers cannot check it — and orders that carry
+	 *  only this are stored `proof_unsupported` without a verifier call. */
 	readonly txProof: string | null;
-	/** Permlink of the order — used in memos (BLURT) or to derive
-	 *  per-order addresses (BTC/XMR if ever supported). */
+	/** (v1.20.0, M-X1) XMR: the transaction PRIVATE key (64 hex) the payer
+	 *  copied from their wallet. It is what the explorer's txprove mode can
+	 *  actually check (an OutProof cannot be checked there). Optional so
+	 *  non-XMR claims need not carry it. */
+	readonly txKey?: string | null;
+	/** (v1.20.0, MK-H2) XMR, only once the treasury primary address is
+	 *  pinned: the payment must be to that primary address AND carry, in its
+	 *  encrypted payment ID, this order's ID (xmrFeePaymentId). */
+	readonly xmrBinding?: {
+		readonly primaryAddress: string;
+		/** Public view key of primaryAddress, 64 hex. */
+		readonly viewPub: string;
+		/** Expected payment ID, 16 hex. */
+		readonly paymentId: string;
+	} | null;
+	/** Permlink of the order — used in memos (BLURT) and logs.  (Per-
+	 *  order BTC addresses, v1.20.0, are numbered from the event log and
+	 *  checked through checkAddressPayment, not through this claim.) */
 	readonly permlink: string;
 	/** The account that posted the order. Used by some verifiers
 	 *  as a cross-check against observed transaction senders. */
@@ -83,4 +98,20 @@ export interface FeeVerifier {
 	/** Short human-readable name for logs. e.g. 'blurt', 'btc',
 	 *  'xmr', 'attestation'. */
 	readonly name: string;
+
+	/** v1.20.0 (MK-H2) — BTC only: has this order's own fee address
+	 *  (derived from the pinned treasury xpub) received the amount?
+	 *  Present on the explorer-backed BTC verifier; the re-check loop
+	 *  skips per-order-address rows when it is absent. */
+	checkAddressPayment?(address: string, expectedSats: number): Promise<AddressPaymentResult>;
 }
+
+/** v1.20.0 (MK-H2) — outcome of checking a per-order BTC fee address.
+ *  `confirmedSats` is the total a quorum of explorers agree the address
+ *  received in blocks at least minConfirmations deep; `unconfirmedSats`
+ *  is what they see still in the mempool (shown to the payer as "on its
+ *  way"). */
+export type AddressPaymentResult =
+	| { readonly kind: 'paid'; readonly confirmedSats: number; readonly unconfirmedSats: number }
+	| { readonly kind: 'not_yet'; readonly confirmedSats: number; readonly unconfirmedSats: number }
+	| { readonly kind: 'no_answer'; readonly reason: string };

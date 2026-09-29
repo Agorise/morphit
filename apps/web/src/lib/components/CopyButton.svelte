@@ -12,6 +12,7 @@
 	 * NOT put a text colour in `class` or it'll fight the green.
 	 */
 	import { _ } from 'svelte-i18n';
+	import { copyText } from '$lib/security/secureContext';
 
 	interface Props {
 		/** The exact text written to the clipboard. */
@@ -45,23 +46,28 @@
 	}: Props = $props();
 
 	let copied = $state(false);
+	/** The copy did NOT happen (no clipboard API — e.g. a plain-HTTP I2P
+	 *  address, which is not a secure context — or the browser refused). */
+	let copyFailed = $state(false);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
 	async function doCopy(): Promise<void> {
-		try {
-			await navigator.clipboard.writeText(value);
-		} catch {
-			// Clipboard API unavailable (insecure context / very old browser).
-			// Still flash so the user gets feedback; they can select the text
-			// manually. Deliberately silent — nothing sensitive to log.
-		}
-		copied = true;
+		// v1.20.0 (F-9): never flash "Copied ✓" when nothing was copied — the
+		// user would paste whatever was on the clipboard before (an old
+		// address, say). Say "select the text to copy" instead.
+		const ok = await copyText(value);
+		copied = ok;
+		copyFailed = !ok;
 		oncopied?.();
 		if (timer !== null) clearTimeout(timer);
-		timer = setTimeout(() => {
-			copied = false;
-			timer = null;
-		}, 1500);
+		timer = setTimeout(
+			() => {
+				copied = false;
+				copyFailed = false;
+				timer = null;
+			},
+			ok ? 1500 : 4000
+		);
 	}
 </script>
 
@@ -76,6 +82,8 @@
 	{#if copied}
 		<span aria-hidden="true">✓</span>
 		{copiedLabel ?? $_('common.copied')}
+	{:else if copyFailed}
+		{$_('common.copy_unavailable')}
 	{:else}
 		{label ?? $_('common.copy')}
 	{/if}

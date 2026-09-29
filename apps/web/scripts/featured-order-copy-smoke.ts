@@ -78,8 +78,22 @@ check('EN reads "above the main orderbook, and on the homepage for …"', /above
 check('EN reads "Only {slots} slots are available; highest per-hour bid wins:"', /Only \{slots\} slots are available; highest per-hour bid wins:$/.test(en));
 
 // ─── homepage eyebrow removed, a11y preserved ────────────────────────
-check('no visible "Featured right now" heading remains', !/id="featured-heading"/.test(featured) && !/<h2[\s\S]{0,160}featured\.heading/.test(featured));
-check('the section keeps an accessible name', /<section aria-label=\{\$_\('featured\.heading'\)\}/.test(featured));
+// v1.20.0: the name is now a visually-hidden <h2 class="sr-only"> the section
+// is labelled by, so the cards' <h3> titles sit under an <h2> in the page
+// outline (heading-hierarchy-smoke). Visible = any featured.heading <h2>
+// without the sr-only class.
+const featuredH2s = [...featured.matchAll(/<h2\b([^>]*)>\s*\{\$_\('featured\.heading'\)\}/g)];
+check(
+	'no visible "Featured right now" heading remains',
+	!/id="featured-heading"/.test(featured) && featuredH2s.every((m) => /class="[^"]*\bsr-only\b/.test(m[1]!))
+);
+const labelledBy = /<section aria-labelledby="([\w-]+)"/.exec(featured)?.[1];
+check(
+	'the section keeps an accessible name',
+	/<section aria-label=\{\$_\('featured\.heading'\)\}/.test(featured) ||
+		(labelledBy !== undefined &&
+			featuredH2s.some((m) => new RegExp(`id="${labelledBy}"`).test(m[1]!)))
+);
 
 console.log('');
 if (fail === 0) {

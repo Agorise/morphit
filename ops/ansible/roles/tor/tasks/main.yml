@@ -94,3 +94,11 @@
     state: started
     enabled: true
     daemon_reload: true
+
+# v1.20.0 (C13): on a TOR-ONLY node the OS itself stays off clearnet too — apt
+# over Tor, no clearnet NTP, no Ubuntu news fetches (each verified, and put back
+# if it did not take). Existing tor-only nodes get the same from
+# `morphit-ops upgrade` (apps/ops-cli/src/lib/torOnlyOsHeal.ts).
+- name: Tor-only node — keep the operating system itself off clearnet
+  ansible.builtin.include_tasks: tor-only-os.yml
+  when: morphit_tor_only | default(false) | bool

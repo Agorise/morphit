@@ -694,6 +694,6 @@
 		highlight pseudo lives on the document, not this component's subtree.
 	*/
 	:global(::highlight(faq-search)) {
-		background-color: rgba(16, 185, 129, 0.28);
+		background-color: rgb(var(--brand-soft-rgb) / 0.28);
 	}
 </style>

@@ -151,11 +151,15 @@ const bootstrap = readFileSync(resolve(HERE, 'snapshot-bootstrap.ts'), 'utf8');
 		'snapshot-bootstrap.ts must await distrustRestoredPostingKeys(db) right after the restore is confirmed'
 	);
 }
-// v1.18.0 review (D5): rows the boot reconcile could not confirm are retried,
-// from the backfill's own completion handler.
+// v1.18.0 review (D5): rows the boot reconcile could not confirm are retried.
+// v1.20.0 (E1): the loop starts whatever the boot pass found — on success AND on
+// failure — because rotations recorded at runtime are unconfirmed too. That the
+// loop keeps going after an empty pass is asserted as behaviour in
+// test/integration/forged-block-trust.test.ts; this pins the wiring.
 check(
-	'17 rows left unconfirmed at boot are retried rather than left for the next restart',
-	/rc\.remaining > 0\)\s*\{[\s\S]{0,400}keepReconcilingPostingKeys\(db, blurt/.test(main)
+	'17 the reconcile loop is started after the boot pass, whether it succeeded or failed',
+	/void backfillPostingKeys\(db, blurt\)\.then\(\s*\(r\) => \{[\s\S]{0,1200}?startReconcileLoop\(\);\s*\},\s*\(e\) => \{[\s\S]{0,200}?startReconcileLoop\(\);/.test(main) &&
+		/function startReconcileLoop\(\)[\s\S]{0,120}keepReconcilingPostingKeys\(db, blurt/.test(main)
 );
 
 // The key invariant: verification must NOT read this display column.

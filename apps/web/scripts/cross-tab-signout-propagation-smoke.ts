@@ -27,8 +27,10 @@
  * `pagehide` tab-close handler, or `lockSession()`. `reset()` is itself
  * called from `pagehide`, so a signout broadcast inside `reset()` would mean
  * "closing one tab signs the user out of every other tab", and the idle
- * auto-lock / per-tab Lock route through `lockSession()`, which must not
- * sign sibling tabs out either. vitest cannot exercise the pagehide path
+ * auto-lock routes through `lockSession()`, which must not sign sibling
+ * tabs out either. (v1.20.0: the EXPLICIT Lock uses `lockAllTabs()`, which
+ * broadcasts a `'lock'` — never `'signout'` — so sibling tabs lock and keep
+ * the Remember-me envelope; #11 pins that.) vitest cannot exercise the pagehide path
  * (the listener is registered only under the SvelteKit `browser` flag, false
  * in jsdom), so this source-level guard is the regression net for it.
  *
@@ -46,6 +48,9 @@
  *   7. SAFETY: 'signout' is posted from EXACTLY ONE place (broadcastSignOut).
  *   8. AvatarMenu.svelte's confirmSignOut calls broadcastSignOut() and
  *      not a bare reset()/resetIdentity().
+ *  11. lockAllTabs() (explicit Lock) broadcasts { t: 'lock' } and never
+ *      'signout'; the handler's 'lock' branch locks (lockSession) and never
+ *      clears the disk. (Behaviour is covered by identity.lockAllTabs.test.ts.)
  *
  * Tamper tests (each must turn the smoke red):
  *   - Move the postMessage({ t:'signout' }) from broadcastSignOut into
@@ -177,7 +182,15 @@ if (!resetBody) {
 }
 
 // ── #5: SAFETY — pagehide handler must NOT broadcast signout ────────────────
-const pagehideBody = extractBody(store, /addEventListener\s*\(\s*['"]pagehide['"]\s*,\s*\(\s*\)\s*=>/);
+// The listener may take the event (`(e) =>`) and delegate to the exported
+// handlePageHide(); check both bodies.
+const listenerBody = extractBody(
+	store,
+	/addEventListener\s*\(\s*['"]pagehide['"]\s*,\s*\(\s*\w*\s*\)\s*=>/
+);
+const handlePageHideBody = extractBody(store, /export\s+function\s+handlePageHide\s*\([^)]*\)\s*:/);
+const pagehideBody =
+	listenerBody === null ? null : listenerBody + '\n' + (handlePageHideBody ?? '');
 if (!pagehideBody) {
 	fail(`pagehide handler body not found`, `brace-match failed`);
 } else if (SIGNOUT_BROADCAST_RE.test(pagehideBody) || /postMessage\s*\(/.test(pagehideBody)) {
@@ -237,6 +250,19 @@ if (!importsBroadcast) {
 			`use broadcastSignOut() exclusively so the in-memory-only case propagates`
 		);
 	}
+}
+
+// ── #11: explicit Lock broadcasts 'lock' (never 'signout') ──────────────────
+const lockAllBody = extractBody(store, /export\s+function\s+lockAllTabs\s*\(/);
+const lockBranch = /msg\.t\s*===\s*['"]lock['"]\s*\)\s*\{([\s\S]*?)\}\s*else\s+if/.exec(store)?.[1] ?? null;
+if (!lockAllBody) {
+	fail(`lockAllTabs() body not found`, `the explicit Lock must reach sibling tabs (v1.20.0 F-5)`);
+} else if (SIGNOUT_BROADCAST_RE.test(lockAllBody) || !/\{\s*t\s*:\s*['"]lock['"]\s*\}/.test(lockAllBody)) {
+	fail(`lockAllTabs() must post { t: 'lock' } and never 'signout'`, `Lock is not Sign Out`);
+} else if (lockBranch === null || !/\blockSession\s*\(/.test(lockBranch) || /clearDisk|reset\s*\(/.test(lockBranch)) {
+	fail(`the handler's 'lock' branch must call lockSession() and never clear the disk`, `Lock keeps the Remember-me envelope`);
+} else {
+	pass(`explicit Lock broadcasts 'lock' (not 'signout') and siblings lock without clearing the disk`);
 }
 
 // ── #9: broadcastSignOut clears the cached self-avatar (cp351) ───────────────

@@ -241,7 +241,8 @@ Implementations:
   explorer (configurable: blockchain.info / blockstream.info /
   mempool.space). Shipped in sub-phase 4b.
 - `MoneroExplorerFeeVerifier` — queries a public Monero
-  explorer (configurable: xmrchain.net / localmonero.co).
+  explorer (configurable: xmrchain.net / moneroexplorer.org, and moneroblocks.info as a raw-tx
+  explorer — v1.20.0).
   Uses Monero's tx-key proof mechanism for confirmation.
   Shipped in sub-phase 4b.
 - `AttestationFeeVerifier` — flips orders from
@@ -897,6 +898,8 @@ builder script enforces this; the handler strips it
 defense-in-depth).
 
 ### 2026-05-10 (Part 108++) — XMR per-payment tx_proof verification (no view key required by any indexer)
+
+> **Superseded in v1.20.0 (M-X1):** the `tx_proof` / OutProof input below could never be verified by the explorers (their `txprove` takes the transaction private key). Orders now carry the payment's `tx_key`; see "v1.20.0 amendments" at the end of this ADR and OPERATIONS.md §40.13.
 
 **Background.**  Part 107 corrected the Part 106 design
 error of broadcasting the treasury wallet's private
@@ -1623,3 +1626,66 @@ previous-part invariants remain in force:
 - **Part 111: Federation-cost attribution via
   `operator_tag` gating.  Each operator's relay
   pays only for ops served by their own instance.**
+
+## v1.20.0 amendments (MK-H2, M-X1, V3)
+
+**Amendment v1.20.0 (MK-H2) — per-order BTC fee addresses.** With
+`treasury.btc.xpub` pinned, a BTC fee is paid to receive address n of the
+treasury account key, n numbered from the event log in chain order (3 per
+account per 24 h; reused permlinks refused). Orders are posted with
+`fee_method: 'btc'` and no `external_tx_id` and land as `awaiting_payment`
+until the address holds the amount (FEE_PRICE_TOLERANCE floor) with 1
+confirmation. A txid claim after the pin is refused
+(`btc_fee_txid_after_xpub_pin`). No attestation path for these orders: the
+address itself is the proof. See OPERATIONS.md §40.12.
+
+**Amendment v1.20.0 (M-X1, MK-H2) — XMR.** The Part 108++ `tx_proof`
+design never worked: the explorers' `txprove` takes the transaction PRIVATE key
+(64 hex), not an OutProof. Orders now carry `tx_key`; OutProof-only orders are
+`proof_unsupported` (intake and the v65 upgrade, deterministic, txid
+released). Once `treasury.xmr.primary_address` is pinned, XMR fees are
+order-bound: paid to the integrated address with payment ID
+Keccak("morphit-fee-v1|account/permlink")[0..8], verified by txprove at the
+main address plus decryption of `payment_id8` with the same key; bound orders
+have no reuse rule and no attestation promotion. Trade-off accepted: the tx
+key is public in the op and lets anyone who knows the payer's address find
+the change output. Binding ships disabled until the maintainer runs the OPERATIONS §40.13
+checklist.
+
+**Amendment v1.20.0 (V3).** Among bound XMR claims, one (txid, payment ID)
+pair pays one order: the first claim in chain order wins, a later one is
+stored `reused` (unique index `orders_xmr_bound_payment_uniq`) — two permlinks
+of one account can share an 8-byte payment ID after a ~2^32 birthday search.
+A copied txid carries another payment ID and is simply `missing`, so the rule
+never lets a copier knock out the payer. BTC address numbering blocks are
+confirmed by two RPC operators; releases are re-validated from the event log
+at boot; /v1/orders returns the key an order was numbered under.
+
+**v1.20.0 amendment (raw-tx explorers).** localmonero.co/blocks now redirects to
+moneroblocks.info, which has no txprove. Rather than lose an independent operator,
+the verifier gained a second explorer kind, `raw-tx+https://…`: fetch the raw
+transaction, require that it hashes to the txid, and verify the payment locally with
+the tx private key r — derivation D = 8·r·A, per-output
+Hs = H_s(D‖varint(i)), P = Hs·G + B (view tags only as a filter), amount =
+Keccak("amount"‖Hs)[0..8] ⊕ ecdhInfo, mask = H_s("commitment_mask"‖Hs), and the
+Pedersen check mask·G + amount·H = outPk. The encrypted payment ID for integrated
+addresses is decrypted from the same extra bytes. Checked against Monero source
+(src/ringct/rctTypes.h:646 H; src/crypto/crypto.cpp:252 derivation_to_scalar,
+:851 derive_view_tag; src/ringct/rctOps.cpp:695 genAmountEncodingFactor, :709
+genCommitmentMask, :734 ecdhDecode; src/cryptonote_basic/cryptonote_format_utils.cpp:1499
+calculate_transaction_hash), a real mainnet transaction, and vectors from the PyPI
+`monero` package (1.1.1). monerohash.com/explorer (JSON API returns 404) and
+exploremonero.com (no JSON API) were dropped from the default list at the same time;
+the default is now xmrchain.net, moneroexplorer.org (txprove) and moneroblocks.info
+(raw-tx).
+
+**Additional tx keys: not accepted.** wallet2 adds per-output tx keys only when a
+transfer has a subaddress destination AND another destination
+(src/cryptonote_core/cryptonote_tx_utils.cpp:440,
+`need_additional_txkeys = num_subaddresses > 0 && (num_stdaddresses > 0 || num_subaddresses > 1)`;
+change is excluded from the count at :79–101, and a single subaddress destination
+gets R = r·D instead, :424–426). A fee paid on its own — to the main address, an
+integrated address, or a subaddress, plus change — therefore never has additional
+keys, and the tx key stays exactly 64 hex. A fee sent in a batch with other payments
+can't be verified with the main key alone; the order page already tells the user to
+send the fee on its own.

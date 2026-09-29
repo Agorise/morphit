@@ -50,6 +50,7 @@ import { logger } from '$log';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { errorBody } from '$api/shared';
+import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
 import {
 	accountsJoin,
 	profileJoin,
@@ -303,6 +304,11 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 			}
 		}
 
+		// v1.20.0 (E4): a slot under the open-stream caps, released exactly
+		// once when this stream ends however it ends.
+		const releaseSlot = acquireStreamSlot(c);
+		if (releaseSlot === null) return streamCapResponse(c);
+
 		const encoder = new TextEncoder();
 
 		// Per-connection state.
@@ -374,6 +380,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 
 				const cleanup = (): void => {
 					cancelled = true;
+					releaseSlot();
 					if (unsubscribeBus !== null) {
 						unsubscribeBus();
 						unsubscribeBus = null;
@@ -563,10 +570,20 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 			},
 
 			cancel(): void {
+				// The client left. EVERY subscription goes, the provisional one
+				// included: it was missing here (v1.20.0, E3), and since cleanup()
+				// only runs on a failed write — which never comes once the
+				// keepalive below is stopped — each disconnected client left its
+				// provisional listener subscribed for the life of the process.
 				cancelled = true;
+				releaseSlot();
 				if (unsubscribeBus !== null) {
 					unsubscribeBus();
 					unsubscribeBus = null;
+				}
+				if (unsubscribeProvisional !== null) {
+					unsubscribeProvisional();
+					unsubscribeProvisional = null;
 				}
 				if (pollTimer !== null) {
 					clearInterval(pollTimer);

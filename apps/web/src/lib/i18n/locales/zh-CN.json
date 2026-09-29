@@ -30,7 +30,10 @@
 			"aggregate_hash_computing": "计算中…",
 			"operator_matrix": "Matrix 群聊",
 			"branding": "自有名称和标志",
-			"branding_value": "“{name}”——此运营者更改了 {count} 个文件的品牌。应用代码本身没有改变，因此完整性检查仍然覆盖它。"
+			"branding_value": "“{name}”——此运营者更改了 {count} 个文件的品牌。应用代码本身没有改变，因此完整性检查仍然覆盖它。",
+			"aggregate_hash_unavailable": "此连接下不可用——浏览器会在 I2P 等纯 HTTP 地址上关闭其哈希工具。下方的 verify.json 链接仍然可用。",
+			"btc_fee_key": "BTC 费用密钥",
+			"btc_fee_key_hint": "每笔 BTC 挂单费用都会付到这个密钥的独立地址,该密钥已固定在 Blurt 区块链上。"
 		},
 		"integrity": {
 			"explain": "此实例提供 {count} 个文件。每个都已被哈希,并在下面的完整清单中列出。将下面的聚合哈希与区块链上最新签名发布中公布的哈希进行比较(@morphit 在每次构建后发布一个 morphit_release_v1 op)。如果匹配,则包与官方发布逐字节相同。",
@@ -58,7 +61,8 @@
 			"disabled_label": "已禁用的方式",
 			"disabled_none": "无——此实例提供所有支付方式。",
 			"disabled_suffix": "（运营者已在此实例禁用；在对等实例上仍可使用）"
-		}
+		},
+		"fee_recipient_unregistered": "本实例的手续费账户 @{account} 尚未写入其运营商的链上注册,因此联盟中的其他实例会隐藏在此以 BLURT 支付的订单,也不会把从这里发出的首条消息送达其用户。运营商在服务器上运行 sudo morphit-ops register 即可解决。"
 	},
 	"admin": {
 		"setup_wizard": {
@@ -703,7 +707,8 @@
 			"why_show": "为什么这很重要？",
 			"why_hide": "隐藏说明",
 			"why_body": "默认情况下，Morphit 聊天信任索引器递送的对方聊天密钥。恶意索引器可能换上攻击者控制的密钥并读取你的消息。8 个词的指纹是基于双方真实聊天密钥在本地计算的——如果双方看到相同的词，则不存在中间人攻击。这只防御中间人攻击；它不能证明电话另一端的人就是其声称的身份。",
-			"error_chain_unreachable": "无法连接到区块链来核对该联系人的密钥。在 Tor 和 I2P 上这很常见，因为建立连接需要更长时间。密钥本身没有问题——请稍后再试。"
+			"error_chain_unreachable": "无法连接到区块链来核对该联系人的密钥。在 Tor 和 I2P 上这很常见，因为建立连接需要更长时间。密钥本身没有问题——请稍后再试。",
+			"error_insecure_context": "此连接下无法进行指纹核对——浏览器会在 I2P 等纯 HTTP 地址上关闭该功能。请通过 https:// 或 .onion 地址打开此聊天进行比对。"
 		},
 		"boot_failed": "无法加载聊天。请刷新页面。",
 		"mailing_address": {
@@ -867,6 +872,11 @@
 			"duplicate": "看起来这已经成功了。请刷新页面查看你的头像后再重试。（链上：{reason}）",
 			"waf_too_large": "你所在实例的 Web 防火墙以过大为由拒绝了此次上传（413）。请运营者调高请求体大小限制——升级 Morphit 会自动修复。",
 			"waf_blocked": "你所在实例的 Web 防火墙拦截了此请求（403）。请运营者放行 /v1/ API——升级 Morphit 会自动修复。"
+		},
+		"copy_unavailable": "请选中文本进行复制",
+		"amount_input": {
+			"ambiguous": "这个金额可能是 {a}，也可能是 {b}。请去掉千位分隔符后重新输入。",
+			"invalid": "请输入数字——小数请用“{sep}”。"
 		}
 	},
 	"compare": {
@@ -1289,7 +1299,7 @@
 			},
 			"security_attack_vectors": {
 				"q": "Morphit 是否易受黑客攻击、数据窃取或封禁?",
-				"a": "最好的防御就是设计本身。Morphit 是非托管的——您的私钥永远不会离开您的设备,也永远不会传输到我们的服务器,因此不存在任何可供窃取的密钥数据库。没有账户,没有密码,没有会话,也没有登录状态,这意味着凭证钓鱼、会话劫持和整个账户接管类别的攻击都不存在。我们不收集 KYC,也不记录 IP 地址,因此没有任何个人信息数据库可能被攻破或被法庭传票调取。订单簿存在于区块链本身——任何用户都可以运行自己的索引器和自己的前端——因此审查和封禁无法删除订单,只能在某个特定的镜像上隐藏它们。标准 Web 攻击面(XSS、CSRF、SSRF、RCE、SQL 注入、参数污染)通过严格的 CSP 头、精确匹配来源的 CORS 白名单、字段长度受限的模式验证请求体、无 eval 或动态代码路径、无基于用户输入的服务器端数据库查询,以及一个只与预配置的 RPC 端点通信的中继服务组合来应对。我们没有 PHP、没有 WordPress、没有 xmlrpc.php、没有 OAuth 层——困扰其他平台的整个漏洞类别在这里根本不适用。容量型(网络层)DDoS 超出任何单一应用能解决的范围——那属于 VPS 提供商或上游清洗服务的责任——但应用层滥用通过每 IP 速率限制、64 KiB 请求体上限和紧凑的资源上限来缓解。完整的威胁模型记录在项目仓库的 SECURITY.md 和 ADR-0006 中。"
+				"a": "最好的防御就是设计本身。Morphit 是非托管的——您的私钥永远不会离开您的设备,也永远不会传输到我们的服务器,因此不存在任何可供窃取的密钥数据库。没有账户,没有密码,没有会话,也没有登录状态,这意味着凭证钓鱼、会话劫持和整个账户接管类别的攻击都不存在。我们不收集 KYC,也不记录 IP 地址,因此没有任何个人信息数据库可能被攻破或被法庭传票调取。订单簿存在于区块链本身——任何用户都可以运行自己的索引器和自己的前端——因此审查和封禁无法删除订单,只能在某个特定的镜像上隐藏它们。标准 Web 攻击面(XSS、CSRF、SSRF、RCE、SQL 注入、参数污染)通过严格的 CSP 头、中继服务注册端点上的精确来源白名单、字段长度受限的模式验证请求体、无 eval 或动态代码路径、无基于用户输入的服务器端数据库查询,以及一个只与预配置的 RPC 端点通信的中继服务组合来应对。我们没有 PHP、没有 WordPress、没有 xmlrpc.php、没有 OAuth 层——困扰其他平台的整个漏洞类别在这里根本不适用。容量型(网络层)DDoS 超出任何单一应用能解决的范围——那属于 VPS 提供商或上游清洗服务的责任——但应用层滥用通过每 IP 速率限制、64 KiB 请求体上限和紧凑的资源上限来缓解。完整的威胁模型记录在项目仓库的 SECURITY.md 和 ADR-0006 中。"
 			},
 			"security_engineering_rigor": {
 				"q": "Morphit 的安全审查流程有多严格？",
@@ -1444,8 +1454,8 @@
 				"a": "Monero TxID(交易 ID)是一个 64 字符的十六进制字符串,在 XMR 区块链上唯一标识单笔 Monero 交易。看起来像:`c1a2b3…deadbeef`。{brand} 在你需要证明发送或接收了 Monero 付款时要求 TxID — 例如证明对方声称的 XMR 转账真的到账了。\n\n在哪里找到:\n• 在 **Monero GUI 钱包**:打开交易,点击需要的交易,TxID 是详情面板顶部的长十六进制字符串。复制按钮就在那里。\n• 在 **Cake Wallet / Monero.com 手机版**:点击历史中的交易;TxID 出现在顶部,带复制图标。\n• 在 **Feather Wallet**:Transactions 标签 → 右键或点击一行 → Copy → Transaction ID。\n• 在 **monero-wallet-cli 命令行**:运行 `show_transfers out` 时会打印 TxID。\n\nTxID 是公开信息。在 {brand} 上发布它来证明交易,不会透露你是谁、你的 view key 或你的余额 — 只是某个特定交易发生了。\n\n**给隐私至上者的一句实话。**如果你选择用门罗币支付*挂单费*，该费用交易的 TxID 会记录在你发布到公开区块链上的订单操作中（这样任何索引器都能在不持有金库查看密钥的情况下验证费用）。这是门罗币 TxID 唯一会触及 Blurt 链的地方——而且它只是支付给公开金库地址的约 0.25 美元手续费，绝不是你实际的交易结算（你卖给对手方的 XMR 是点对点转移的，永不触及 Blurt 链）。如果你想让门罗币与区块链之间*零*关联，只需用 BLURT 支付挂单费即可——这是默认选项，价格只有一半，而且根本不会广播任何门罗币 TxID。"
 			},
 			"xmr_tx_proof": {
-				"q": "什么是 Monero tx_proof,为什么 {brand} 要求它?",
-				"a": "Monero tx_proof(交易证明)是来自你自己钱包的一段简短字符串,可以证明你向特定地址支付了特定的交易 —— 而不会泄漏关于你钱包的任何其他信息。它的形式是 `OutProofV2…` 后跟一长串 base58 字符。\n\n**{brand} 为什么要求它。** {brand} 通过在区块链上确认你的付款已以正确金额到达国库地址来验证你的 XMR 手续费。要在不持有国库的查看密钥(view key)的前提下做到这一点(发布查看密钥会让每一笔手续费付款永远去匿名化 —— 详见 OPERATIONS.md §40.2 的隐私不变量),每个 Morphit 实例都要求由你自己用钱包生成每笔付款的证明。任何索引器都可以使用公开数据来验证你的证明;无需任何特权方参与。\n\n**它会披露什么。** 证明仅披露:\n• 该具体交易(你提供的 txid)向该具体地址(Morphit 国库)进行了付款,以及\n• 支付的金额。\n\n**它不会披露什么。**\n• 你的其他交易\n• 钱包余额\n• 你的其他地址\n• 任何钱包元数据\n• 任何关于未来付款的信息\n\n该证明是一次性的、按付款生成。拥有它不会让外人了解关于此地址的其他付款(无论是你的还是别人的)或任何其他钱包活动的任何信息。\n\n**如何生成。**\n• **Monero CLI**:`get_tx_proof <txid> <国库地址>`\n• **Monero GUI**:Advanced → Prove transaction → 填入 txid + 地址 → Generate\n• **Cake Wallet**:Settings → Privacy → Verify a transaction → Generate proof\n• **Feather Wallet**:Tools → Prove/check transaction → Generate\n\n你将得到一个以 `OutProofV1` 或 `OutProofV2` 开头的字符串。把它粘贴到付款证明字段。\n\n**为什么这比查看密钥更好。** 查看密钥会让任何持有者永远看到该地址上的所有付款。tx_proof 只揭示一笔付款,仅此而已。这意味着每个 Morphit 实例 —— 你的、官方的或社区运营者的 —— 都可以独立验证 XMR 手续费,而无需共享秘密。这才是联邦化按预期工作的样子。"
+				"q": "什么是 Monero 交易密钥？{brand} 为什么需要它？",
+				"a": "每笔 Monero 付款都有一个**交易密钥**：由发送方钱包保存的 64 位代码（0–9、a–f）。凭交易 ID 和这个密钥，任何人都能核实这笔付款是否到达某个地址以及金额多少。这个密钥无法动用任何资金。\n\n**{brand} 为什么需要它。** 当您用 XMR 支付挂单手续费时，挂单会附带交易 ID 和交易密钥，这样每台 {brand} 服务器——主服务器和任何社区服务器——都能用公开的 Monero 区块浏览器自行核实付款。任何人都不需要金库钱包的秘密查看密钥。\n\n**手续费地址专为您的挂单生成。** 金库的 Monero 主地址在链上公布后，手续费将付到专为您这条挂单生成的地址。该地址带有一个隐藏的挂单代码，只有您的交易密钥才能解开，因此没有人能把您的交易 ID 和密钥抄到自己的挂单上，您的付款也不能被用两次。\n\n**在哪里找到密钥。** Monero CLI：`get_tx_key <交易 ID>`。Monero GUI：Transactions → 付款详情 → \"Transaction key\"。Feather：History → 右键点击付款 → Show details → Copy Tx Secret Key。Cake Wallet：点击付款 → \"Transaction Key\"。Monerujo：点击付款 → \"TX Key\"。只有发出付款的钱包才有这个密钥；交易所无法提供。\n\n**隐私。** 密钥会随挂单公开。它只显示这笔付往 {brand} 地址的付款——但如果有人同时知道您自己的钱包地址，就能用它看到这笔付款的找零。为获得最佳隐私，请从未与任何人分享过的地址付款，或用 BLURT 支付。\n\n**\"付款证明\"（OutProof…）已不再可用。** 公开的区块浏览器无法核实它们。用它发送的挂单会显示\"手续费无法核实\"；请用该笔付款的交易密钥重新发布。"
 			},
 			"morphit_mirrors": {
 				"q": "为什么 Morphit 的源代码要镜像到这么多代码托管站点？",
@@ -1797,7 +1807,7 @@
 			"subject_label": "对方(他的账户名)",
 			"subject_placeholder": "例如 bob",
 			"rating_label": "评分",
-			"rating_n_stars": "{n} 星",
+			"rating_n_stars": "{n, plural, other {#}} 星",
 			"comment_label": "评论（可选）",
 			"comment_placeholder": "关于这笔交易进行情况的任何内容。",
 			"submit": "提交反馈",
@@ -2092,7 +2102,6 @@
 			}
 		},
 		"priorities": {
-			"heading": "Morphit 围绕什么构建",
 			"privacy": {
 				"title": "隐私优先",
 				"body": "无 KYC、邮箱、手机/短信、Cookie、分析或自拍。挑一个酷酷的用户名，就这样,真的。"
@@ -2364,7 +2373,9 @@
 			"action_complete": "标记为已完成",
 			"feedback_no_counterparty": "尚未与任何交易对手聊天",
 			"posting": "发布中…",
-			"feature_arming_hint": "订单上线后即可使用"
+			"feature_arming_hint": "订单上线后即可使用",
+			"fee_awaiting_payment": "等待您的 BTC 费用",
+			"fee_proof_unsupported": "不在订单簿中 — 手续费无法核实；请用交易密钥重新发布"
 		},
 		"cancel": {
 			"confirm_title": "取消此订单?",
@@ -2531,7 +2542,7 @@
 				"seed_word_count": "Blurt 助记词恰好是 12 个单词——你输入了 {count} 个。请确保 12 个单词齐全，每个之间用一个空格分隔。",
 				"seed_invalid": "该助记词无效。检查单词是否有拼写错误后重试。",
 				"keyfile_password_wrong": "Keyfile 密码错误。请重试。",
-				"keyfile_corrupt": "Keyfile 损坏或不是有效的 Morphit keyfile。",
+				"keyfile_corrupt": "这个文件不是有效的 Morphit keyfile，或者已经损坏。请上传你创建账户时保存的 'morphit-keyfile-….json' 文件——不要上传截图或其他文件。",
 				"generic": "导入失败。检查输入后重试。",
 				"network": "无法连接到 Blurt 网络。请检查你的网络连接后重试。"
 			},
@@ -2611,7 +2622,7 @@
 				"broadcast_failed": "注册被拒绝。请换一个名字,或暂时跳过。",
 				"unreachable": "无法连接到注册服务。请检查网络后重试。",
 				"rate_limited_daily": "您已达到每日注册限制。请明天再试。",
-				"spacing_cooldown": "您刚刚创建了一个账户。请再等待 {minutes} 分钟后再创建新账户。",
+				"spacing_cooldown": "您刚刚创建了一个账户。请再等待 {minutes, plural, other {#}} 分钟后再创建新账户。",
 				"signups_disabled": "此实例暂时禁用注册。请尝试其他 Morphit 镜像或稍后再来。",
 				"daily_ceiling_reached": "此实例已达到每日注册上限。请明天再试,或尝试其他 Morphit 镜像。",
 				"invite_problem": "您的注册令牌已过期或已被使用。请重试。",
@@ -2623,7 +2634,9 @@
 				"daily_ceiling_voucher_step_3": "回到 {brand}，用你刚生成的密钥登录。可以开始交易了。",
 				"name_high_value": "该名称保留待合法主张审核(过短、品牌名或常见词汇)。请尝试更长或更个性化的名称。如有合法主张,请联系运营者。",
 				"name_sequential_pattern": "最近从你的网络发起的账户创建呈现序列化模式,可能为自动化。请尝试不同前缀的名称,或一小时后重试。",
-				"daily_ceiling_voucher_external_warning": "blurtplugin.online 是 Blurt 社区服务,不由 {brand} 运营。您正在离开 {brand}。如果链接无效,请手动输入 URL:"
+				"daily_ceiling_voucher_external_warning": "blurtplugin.online 是 Blurt 社区服务,不由 {brand} 运营。您正在离开 {brand}。如果链接无效,请手动输入 URL:",
+				"relay_fee_spike": "此服务器的注册已暂停，运营者正在核查 Blurt 开户费用的变动。请稍后再试，或暂时跳过。",
+				"broadcast_outcome_unknown": "Blurt 网络未能及时确认你的账户是否已创建。请等待一分钟后用同一个名称重试——如果已创建，系统会告诉你。"
 			},
 			"success": {
 				"title": "欢迎来到 {brand}",
@@ -2761,7 +2774,9 @@
 		"action_edit_countdown": "编辑（剩余：{remaining}）",
 		"status_completed": "已完成并已付款",
 		"status_settling": "不再可用 — 确认中",
-		"status_confirming": "正在区块链上确认"
+		"status_confirming": "正在区块链上确认",
+		"fee_awaiting_payment": "等待 BTC 费用",
+		"fee_proof_unsupported": "手续费无法核实：此挂单附带的是 Monero“付款证明”，Morphit 服务器无法验证。请改用该笔付款的交易密钥重新发布。"
 	},
 	"orderbook": {
 		"heading": "订单簿",
@@ -2816,8 +2831,8 @@
 		"order": {
 			"new_trader_aria": "新交易者 — 尚未完成首次交易",
 			"new_trader_tooltip": "这位交易者是 Morphit 的新人。帮助他们起步吧!",
-			"rating_aria": "{rating} 星,共 {count} 次完成的交易",
-			"rating_tooltip": "{count} 次完成交易的平均评分 {rating}",
+			"rating_aria": "{rating} 星,共 {count, plural, other {#}} 次完成的交易",
+			"rating_tooltip": "{count, plural, other {#}} 次完成交易的平均评分 {rating}",
 			"engagement_aria": "过去 24 小时内有 {count} 位其他人就此订单与该卖家联系",
 			"engagement_tooltip": "现在还有 {count} 位其他人在就此订单与该卖家交谈。尽快联系——热门订单成交很快。",
 			"expired": "已过期",
@@ -3237,7 +3252,8 @@
 			"amount_min_too_large": "最小值太大。请选择较小的值。",
 			"amount_max_too_large": "最大值太大。请选择较小的值。",
 			"fixed_price_too_large": "固定价格太大。请选择较小的值。",
-			"waiver_min_required_usd": "上架费减免需要最低订单规模。请将最低值设置为至少 1 美元。"
+			"waiver_min_required_usd": "上架费减免需要最低订单规模。请将最低值设置为至少 1 美元。",
+			"waiver_fiat_unconvertible": "此服务器目前无法将 {fiat} 换算成美元，因此无法核对免费首次购买的 1 美元最低额。请选择常见货币（例如 USD），或改为支付少量上架费。"
 		},
 		"fee": {
 			"heading": "挂单费",
@@ -3273,7 +3289,9 @@
 			"feature_upsell_cta": "设置特色出价",
 			"edit_window_countdown": "{remaining} 内可编辑",
 			"edit_window_tooltip": "编辑仅可在发布后 15 分钟内进行。之后请取消并重新发布。",
-			"edit_window_expired": "编辑窗口已过"
+			"edit_window_expired": "编辑窗口已过",
+			"btc_title": "已发布!还差一步:支付费用",
+			"btc_body": "一旦 Bitcoin 费用付清并得到确认,您的订单就会自动进入订单簿。"
 		},
 		"broadcast_error": {
 			"title": "订单未能成交",
@@ -3299,7 +3317,7 @@
 			"btc_label": "用 BTC 支付",
 			"btc_hint": "将费用发送到我们的 Bitcoin 地址,然后在下方粘贴交易 ID。",
 			"xmr_label": "用 XMR 支付",
-			"xmr_hint": "将手续费发送到我们的 Monero 地址，然后在下方粘贴交易 ID 和证明。",
+			"xmr_hint": "从您的 Monero 钱包发送手续费，然后在下方粘贴交易 ID 和交易密钥。",
 			"txid_label": "交易 ID",
 			"txid_placeholder": "粘贴 64 位十六进制交易 ID",
 			"txid_required": "需要交易 ID 或 Hash。",
@@ -3307,27 +3325,6 @@
 			"txid_hint": "您的订单在付款在其链上确认之前不会出现在订单簿中。",
 			"txid_tooltip": "你钱包中的交易 ID — 一长串十六进制字符,证明你的付款。点击查看在哪里找到它的详细信息。",
 			"txid_tooltip_aria": "什么是交易 ID?",
-			"tx_proof_label": "付款证明",
-			"tx_proof_placeholder": "粘贴钱包生成的证明字符串(以 OutProofV1 或 OutProofV2 开头)",
-			"tx_proof_required": "Monero 订单需要付款证明。",
-			"tx_proof_malformed_prefix": "证明必须以 OutProofV1 或 OutProofV2 开头 —— 这是任何 Monero 钱包证明生成器输出的前缀。",
-			"tx_proof_malformed_length": "证明字符串太短或太长。请从钱包重新生成。",
-			"tx_proof_malformed_charset": "证明包含不应有的字符。请从钱包的证明对话框完整复制。",
-			"tx_proof_hint": "你的钱包免费生成。证明仅披露这一次付款 —— 不涉及任何其他钱包活动。",
-			"tx_proof_tooltip": "来自你的 Monero 钱包的简短字符串,用于证明你确实向我们的地址支付了这一笔特定交易 —— 不会暴露你钱包的任何其他信息。点击查看各钱包的说明。",
-			"tx_proof_tooltip_aria": "什么是付款证明?",
-			"tx_proof_privacy_note": "隐私:此证明仅披露向此地址的这一次付款。不会披露你的其他交易、余额、其他地址或任何钱包元数据。",
-			"tx_proof_how_to_label": "如何生成证明(按钱包)",
-			"tx_proof_how_to_cli_heading": "Monero CLI",
-			"tx_proof_how_to_cli_body": "运行:get_tx_proof <你的txid> <我们的地址>。钱包会打印一长串以 OutProofV2 开头的字符 —— 复制它。",
-			"tx_proof_how_to_gui_heading": "Monero GUI",
-			"tx_proof_how_to_gui_body": "打开 Advanced → Prove transaction。填入交易 ID 和我们的地址。点 Generate。复制得到的证明字符串。",
-			"tx_proof_how_to_cake_heading": "Cake Wallet",
-			"tx_proof_how_to_cake_body": "Settings → Privacy → Verify a transaction → Generate proof。填入 txid 和我们的地址;复制证明。",
-			"tx_proof_how_to_feather_heading": "Feather Wallet",
-			"tx_proof_how_to_feather_body": "Tools → Prove/check transaction → Generate。填入 txid 和我们的地址;复制证明字符串。",
-			"tx_proof_how_to_other_heading": "其他 Monero 钱包",
-			"tx_proof_how_to_other_body": "大多数现代 Monero 钱包在高级或隐私设置中都有 \"Prove transaction\" 或 \"Generate proof\" 功能。请在 Tools、Privacy 或 Advanced 下查找。详见关于付款证明的 FAQ 条目。",
 			"fee_address_heading_btc": "请将您的 BTC 费用发送到此地址",
 			"fee_address_heading_xmr": "请将您的 XMR 费用发送到此地址",
 			"fee_address_amount_btc": "金额:{amount} BTC ({sats} 聪)",
@@ -3338,7 +3335,35 @@
 			"fee_address_chain_pinned": "由 {account} 在链上锚定 — 每个 Morphit 实例都依据此地址验证费用。",
 			"fee_address_chain_pinned_aria": "链上锚定地址的真实性",
 			"fee_address_unavailable": "此运营商未配置 {asset} 费用地址。请改选 BLURT,或在另一个 Morphit 实例上发布您的订单。",
-			"blurt_needs_active_key": "需要你的 Active 密钥。你目前使用 Posting 密钥登录——发布时 {brand} 会向你索取 Active 密钥，你已填写的内容不会丢失。"
+			"blurt_needs_active_key": "需要你的 Active 密钥。你目前使用 Posting 密钥登录——发布时 {brand} 会向你索取 Active 密钥，你已填写的内容不会丢失。",
+			"btc_hint_per_order": "先发布,再付款:您会得到一个专为这条挂单生成的 Bitcoin 地址。",
+			"btc_per_order_heading": "BTC 费用如何支付",
+			"btc_per_order_body": "发布后,您会看到一个专为这条挂单生成的 Bitcoin 地址和需要发送的准确金额(约 {amount} BTC)。用任意 Bitcoin 钱包付款,您的订单就会自动进入订单簿。无需复制交易 ID。",
+			"tx_key_label": "交易密钥",
+			"tx_key_tooltip": "您的 Monero 钱包为每笔发出的付款显示的 64 位代码。任何人都能用它核实这一笔付款已到达我们，它无法动用任何资金。点击查看在钱包中哪里找到它。",
+			"tx_key_tooltip_aria": "什么是交易密钥？",
+			"tx_key_privacy_note": "请注意：此密钥会随挂单一起公开，以便每台 Morphit 服务器都能核实您的付款。它只证明这一笔付款，无法动用任何资金。如果有人同时知道您的钱包地址，就能用它看到这笔付款的找零；为获得最佳隐私，请从未与任何人分享过的地址支付手续费。",
+			"tx_key_how_to_label": "在哪里找到交易密钥？",
+			"tx_key_how_to_cli_heading": "Monero CLI (monero-wallet-cli)",
+			"tx_key_how_to_cli_body": "输入 get_tx_key 加上交易 ID，然后复制它输出的密钥。",
+			"tx_key_how_to_gui_heading": "Monero GUI",
+			"tx_key_how_to_gui_body": "打开 Transactions，打开该笔付款的详情，复制“Transaction key”。",
+			"tx_key_how_to_feather_heading": "Feather",
+			"tx_key_how_to_feather_body": "在 History 中右键点击该笔付款，选择“Show details”，再点“Copy Tx Secret Key”。",
+			"tx_key_how_to_cake_heading": "Cake Wallet",
+			"tx_key_how_to_cake_body": "在交易列表中点击该笔付款，复制“Transaction Key”。",
+			"tx_key_how_to_monerujo_heading": "Monerujo",
+			"tx_key_how_to_monerujo_body": "点击该笔付款，复制“TX Key”。",
+			"tx_key_how_to_other_heading": "其他 Monero 钱包",
+			"tx_key_how_to_other_body": "在付款详情中查找“transaction key”、“tx key”或“tx secret key”。只有发出这笔付款的钱包才有它——交易所无法提供。如果您的钱包不显示它，请用上面的某个钱包付款，或用 BLURT 支付手续费。",
+			"tx_key_placeholder": "64 个字符，0–9 和 a–f",
+			"tx_key_hint": "请从发出这笔付款的同一个钱包中复制。",
+			"tx_key_required": "请粘贴这笔付款的交易密钥。",
+			"tx_key_malformed": "这不是交易密钥：它正好 64 个字符，只含 0–9 和 a–f。“付款证明”（以 OutProof 开头）无法使用。",
+			"tx_key_several": "您的钱包显示了不止一个密钥，说明这笔付款还发往了其他地址。请单独用一笔付款支付挂单手续费，然后使用该笔付款的 ID 和密钥。",
+			"xmr_bound_heading": "将 Monero 手续费发送到此挂单专属地址",
+			"xmr_bound_body": "此地址专为这一条挂单生成（挂单代码 {permlink}），因此其他人无法冒领您的付款。请将下方金额单独用一笔付款发送一次，然后在下方粘贴该笔付款的交易 ID 和交易密钥。关闭此页面后，草稿会保留同一个地址。",
+			"xmr_bound_need_account": "请先登录：Monero 手续费地址是为您的账户和这条挂单生成的。"
 		},
 		"draft": {
 			"restored_banner": "已恢复 {age} 前的草稿。从上次停下的地方继续——或者重新开始。",
@@ -3579,7 +3604,7 @@
 		"trade_history_with": "与 @{account}",
 		"loading_feedback": "加载反馈中…",
 		"feedback_error": "现在无法加载反馈。",
-		"rating_count": "{n} 条评分",
+		"rating_count": "{n, plural, other {#}} 条评分",
 		"no_feedback_yet": "暂无反馈。还没有对方评价过该用户。",
 		"reviews_heading": "@{account} 收到了来自以下用户的评价",
 		"review_order_link": "查看订单",
@@ -3760,7 +3785,7 @@
 		"step2_title": "运行一条命令",
 		"step2_body": "下载最新版本，解压到 /morphit/ 文件夹，在其中打开终端并运行 sudo bash morphit-setup.sh——然后选择「Full guided install」。一个简短的向导会用通俗语言问你几个问题（你的域名、你的 Blurt 账户、用于 HTTPS 的邮箱），并为你配置好一切：Node.js、PostgreSQL、应用及其服务、自动续期的 HTTPS、防火墙，以及你的 Tor 和 I2P 地址。无需编辑任何文件。",
 		"step3_title": "注册为运营者",
-		"step3_body": "运行 npx morphit-ops register，以先到先得的方式在链上认领你的标签。你的实例会出现在 /operators 目录中，并开始自动赚取你那 90% 的以 Blurt 支付的挂单费，直接在链上发放。经济细节请见常见问题解答中的运营者收益条目。",
+		"step3_body": "运行 sudo morphit-ops register，以先到先得的方式在链上认领你的标签。你的实例会出现在 /operators 目录中，并开始自动赚取你那 90% 的以 Blurt 支付的挂单费，直接在链上发放。经济细节请见常见问题解答中的运营者收益条目。",
 		"asset_policy_heading": "你的实例,你的资产政策",
 		"asset_policy_body": "Morphit 的联邦让每个运营方选择其实例为哪些可交易资产接受新订单。新资产默认在实例范围内开启交付——运营方通过 `MORPHIT_INDEXER_DISABLED_ASSETS` 环境变量按资产逐个禁用。这样一个实例联邦可以服务不同的用户偏好,而无需任何人 fork 代码。",
 		"asset_policy_default_label": "新资产默认开启。",
@@ -3808,7 +3833,7 @@
 			"err_contact_url_too_long": "联系 URL 太长。",
 			"err_contact_url_bad_scheme": "联系 URL 必须使用 https:// 或 http://。",
 			"err_contact_url_not_url": "联系 URL 不是有效的 URL。",
-			"err_account_already_registered": "此账户已注册为运营商。你可以通过未来的设置页面更新显示名称或联系 URL,但你的标签一旦认领即不可变。",
+			"err_account_already_registered": "此账户已注册为运营商。重新注册会更新你的显示名称、联系方式和来源(origin);只有标签一经认领即固定不变。",
 			"err_tag_reserved": "该标签已为 Morphit 项目保留。请选择其他标签。"
 		},
 		"beginner_label": "第一次?",
@@ -3859,7 +3884,10 @@
 		"failed_posting_key_not_authorized": "你的登录密钥目前未被此账户授权。账户密钥可能在你导入后已更改。重新导入助记词或联系账户所有者。",
 		"failed_account_not_found": "在区块链上找不到此账户。请在设置中检查账户名。",
 		"failed_chain_unreachable": "无法连接区块链来检查你的账户。检查网络后再试。",
-		"failed_back_home": "返回首页"
+		"failed_back_home": "返回首页",
+		"checking": "正在检查此码…",
+		"not_in_directory_heading": "未知的 Morphit 实例",
+		"not_in_directory_body": "此二维码来自一个不在 Morphit 目录中的实例。为了你的安全，你的手机不会在那里登录。"
 	},
 	"security": {
 		"heading": "安全姿态",
@@ -4493,7 +4521,7 @@
 			"status": {
 				"not_enrolled": "双因素身份验证已关闭。",
 				"enrolled": "双因素身份验证已开启。",
-				"backup_codes_remaining": "剩余 {count} 个备份代码",
+				"backup_codes_remaining": "剩余 {count, plural, other {#}} 个备份代码",
 				"backup_codes_low": "您的备份代码即将用尽。重新生成一组新的并将它们放在安全的地方。",
 				"backup_codes_exhausted": "您没有剩余的备份代码。如果您丢失了身份验证器,您需要您的种子短语来恢复。"
 			},
@@ -4539,7 +4567,8 @@
 				"code_label": "身份验证器代码或备份代码",
 				"code_placeholder": "000000 或 XXXX-XXXX",
 				"err_invalid_code": "该代码未能验证。检查您的设备时间是否同步,或尝试备份代码。",
-				"err_locked_out": "太多无效尝试。在 {seconds} 秒后重试。"
+				"err_locked_out": "太多无效尝试。在 {seconds} 秒后重试。",
+				"err_unavailable_insecure": "无法通过此连接核验身份验证器代码——浏览器会在 I2P 等纯 HTTP 地址上关闭该功能。请改为输入一个备份代码，或通过 {brand} 的 https:// 或 .onion 地址解锁。"
 			},
 			"recommended_apps": {
 				"heading": "推荐的身份验证器应用(开源)",
@@ -4576,7 +4605,8 @@
 			},
 			"confirm_password_to_begin": "确认您的密码以开始",
 			"confirm_password": "确认您的密码",
-			"yubikey_protected": "此 keystore 受 YubiKey 保护。此版本不支持将基于 TOTP 的 2FA 添加到受 YubiKey 保护的 keystore。您的 YubiKey 已经提供了比 TOTP 更强的加密身份验证。"
+			"yubikey_protected": "此 keystore 受 YubiKey 保护。此版本不支持将基于 TOTP 的 2FA 添加到受 YubiKey 保护的 keystore。您的 YubiKey 已经提供了比 TOTP 更强的加密身份验证。",
+			"unavailable_insecure": "设置两步验证需要一项浏览器功能，而该功能在此连接（I2P 等纯 HTTP 地址）上已被关闭。如需开启或关闭 2FA，或获取新的备份代码，请通过 {brand} 的 https:// 地址打开，或在 Tor Browser 中通过其 .onion 地址打开。"
 		},
 		"visibility": {
 			"public": "公开",
@@ -4825,5 +4855,30 @@
 		"email": "电子邮件",
 		"nostr": "Nostr",
 		"web": "网页"
+	},
+	"insecure_context": {
+		"notice": "您的浏览器不把这个地址视为安全连接（例如纯 HTTP 的 I2P 地址），因此在这里关闭了几项功能：身份验证器（2FA）代码、复制按钮、聊天中的指纹核对、离线模式和通知。您的密钥、交易和聊天仍可正常使用。如需使用这些功能，请通过 {brand} 的 https:// 地址打开，或在 Tor Browser 中通过其 .onion 地址打开。",
+		"dismiss": "知道了"
+	},
+	"btc_fee_pay": {
+		"heading": "支付挂单费用",
+		"intro": "请把下面的金额发送到这个 Bitcoin 地址。这个地址只属于这条挂单,别人无法使用您的付款。",
+		"amount": "发送金额:{amount} BTC",
+		"address_label": "这条挂单的 Bitcoin 地址",
+		"copy": "复制地址",
+		"open_wallet": "在我的钱包中打开",
+		"waiting_address": "正在获取您的付款地址……大约需要一分钟,等待 Blurt 网络确认您的订单。",
+		"checking": "正在核对付款信息……",
+		"mismatch": "我们无法复核这个付款地址,因此不予显示。请先不要付款:几分钟后再试,或使用其他实例。",
+		"on_its_way": "我们看到 {amount} BTC 正在到账。Bitcoin 网络通常会在 10 到 60 分钟内确认。",
+		"received_partial": "目前已收到:{amount} BTC。",
+		"all_sent": "已收到付款。Bitcoin 网络确认后,您的订单会自动上线。",
+		"paid": "费用已支付。您的订单已进入订单簿。",
+		"when_live": "您可以关闭此页面:付款确认后,订单会自动上线。请在 7 天内付款。您也可以在“我的订单”中找到这个地址。",
+		"slow": "仍然没有地址?说明您的订单未被接受,而您也没有支付任何费用。可能的原因之一是每天最多 3 条使用 Bitcoin 付费的挂单。请稍后再试,或改用 BLURT 支付费用。",
+		"peer_disagrees": "另一台 Morphit 服务器给这条挂单的 Bitcoin 地址不同，说明本服务器的区块链副本可能不同步。为保护您的资金，我们暂不显示地址。请稍后再试，或在另一台 Morphit 服务器上打开这条挂单。",
+		"check_now": "我已付款 — 立即检查",
+		"checking_now": "正在检查…",
+		"check_again_in": "{seconds} 秒后可再次检查"
 	}
 }

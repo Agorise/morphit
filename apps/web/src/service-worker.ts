@@ -47,21 +47,18 @@
  *
  * ─── What does hit the network ───────────────────────────────────────────
  *
- *   • Data endpoints (indexer, relay) — but those requests go to origins
- *     the app config lists, not necessarily the install origin.
- *   • Navigations that land on routes prerendered into the cache are
- *     served offline-first.
- *   • Unknown same-origin requests fall through to network. If the network
- *     is unreachable, the cached shell is served for navigations.
+ *   • Data endpoints (/v1, /relay, /rss, /verify.json, /canary.txt) are
+ *     never cached here — see isDynamicDataPath.
+ *   • EVERY navigation (the HTML document) is NETWORK-FIRST, prerendered
+ *     route or not; the cached copy is only the offline fallback.
+ *   • Operator-replaceable brand assets are stale-while-revalidate.
+ *   • Other same-origin GETs (hashed chunks, /static) are cache-first and
+ *     refetched on a miss.
  *
- * ─── Phase staging ────────────────────────────────────────────────────────
+ * ─── Update UI ────────────────────────────────────────────────────────────
  *
- *   • Phase 1 (this): aggressive precache + pinned version; messaging
- *     surface (`CHECK_UPDATE`, `APPLY_UPDATE`, `RELEASE_INFO`) is wired
- *     up but there's no dedicated update UI yet.
- *   • Phase 2: endpoint-rotation client uses this SW as a passive cache.
- *   • Phase 5: background-sync for pending signed ops; IPFS fallback for
- *     static assets when origin is unreachable.
+ *   The message surface (`CHECK_UPDATE`, `APPLY_UPDATE`, `RELEASE_INFO`)
+ *   drives UpdateBanner.svelte's "Load it now / Later" snackbar.
  */
 
 /// <reference lib="webworker" />
@@ -563,11 +560,13 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
 	// Same risk with `javascript:` schemes, `data:` URLs, etc.
 	//
 	// The sanitizer below resolves the input and rejects anything
-	// not resolving to our own http(s) origin, falling back to '/'.
-	// `WindowClient.navigate()` already enforces same-origin per
-	// spec, but `clients.openWindow()` does not uniformly across
-	// browsers — Chrome will open cross-origin tabs.  This defense
-	// closes the operator-phishing primitive.
+	// not resolving to our own http(s) origin — including a path such
+	// as `/.//evil.com` that only turns cross-origin when resolved a
+	// second time, as on the next line — falling back to '/'.
+	// Neither `WindowClient.navigate()` (it navigates, then resolves
+	// null for a cross-origin result) nor `clients.openWindow()`
+	// refuses a cross-origin URL, so this check is the only defense
+	// against the operator-phishing primitive.
 	//
 	// Sanitizer is extracted to $lib/notifications/sanitizeClickPath
 	// so the validation logic can be unit-tested.

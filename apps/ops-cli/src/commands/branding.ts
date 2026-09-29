@@ -34,15 +34,39 @@
  *   --name "TEXT"        the site's name             → MORPHIT_INSTANCE_BRAND_NAME
  *   --short-name "TEXT"  home-screen label           → MORPHIT_INSTANCE_BRAND_SHORT_NAME
  *   --beta on|off|auto   the red BETA marker         → MORPHIT_INSTANCE_BETA_BADGE
+ * Colour theme (every other colour is derived from these; docs/BRANDING.md):
+ *   --theme NAME         preset: morphit (default) | champagne-gold
+ *                                                    → MORPHIT_INSTANCE_THEME
+ *   --theme-from '#hex'  gradient first stop         → MORPHIT_INSTANCE_THEME_FROM
+ *   --theme-mid '#hex'   gradient middle stop (optional; derived otherwise)
+ *   --theme-to '#hex'    gradient last stop          → MORPHIT_INSTANCE_THEME_TO
+ *   --theme-background '#hex'  page background (dark) → MORPHIT_INSTANCE_THEME_BACKGROUND
+ *   --theme-button deep|bright  primary buttons: the last colour deepened with
+ *                        white text (deep, Morphit's) or the middle colour with
+ *                        dark text (bright)       → MORPHIT_INSTANCE_THEME_BUTTON
+ *   A --theme preset replaces the whole theme (colour flags given with it
+ *   override its values); `--theme morphit` goes back to the Morphit colours.
+ *   The combination is validated (hex only, readable contrast) BEFORE anything
+ *   is written; a theme that can't be made readable is refused with a
+ *   suggestion.
  * Each file is validated before it is copied; config lines are written to the
  * install's morphit.config.env (backed up first), like `morphit-ops edit`.
  * An empty value (--name=) removes the setting.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, accessSync, constants as fsConstants } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { isAbsolute, join, resolve } from 'node:path';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName, INSTANCE_ENV } from '@morphit/operator-config';
+import {
+	deriveTheme,
+	normalizeHex,
+	THEME_PRESETS,
+	THEME_BUTTON_STYLES,
+	themePreset,
+	DEFAULT_THEME_PRESET,
+	type ThemeInput
+} from '@morphit/operator-config/theme';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
 import {
 	applyBranding,
@@ -54,6 +78,9 @@ import {
 	buildDirOf,
 	normalizeSvg,
 	readBrandingSettings,
+	resolveTheme,
+	describeTheme,
+	themeSettingOf,
 	syncTouchedToWebRoot,
 	type BrandingResult,
 	type BrandingSettings
@@ -92,6 +119,17 @@ function describeSettings(s: BrandingSettings): void {
 	}
 	if (s.shortName !== null) info(`  Home-screen:    "${sanitizeForTerm(s.shortName)}"`);
 	info(`  BETA marker:    ${s.betaBadge ?? 'automatic (off when you supply logo.svg)'}`);
+	const theme = resolveTheme(s.theme);
+	info(`  Colours:        ${sanitizeForTerm(describeTheme(s.theme, theme.palette))}`);
+	if (theme.problems.length > 0) {
+		warn(`  The colour theme is not usable: ${sanitizeForTerm(theme.problems.join('; '))}`);
+	} else if (theme.palette !== null) {
+		const t = theme.palette.tokens;
+		info(
+			`    accent ${t['brand-primary']}, button ${t['brand-btn-face']} with ${t['brand-btn-text'] === '#ffffff' ? 'white' : 'dark'} text, ` +
+				`page ${t['surface-950']}, cards ${t['surface-900']}, text ${t['surface-100']}`
+		);
+	}
 	info(`  Branding files: ${s.dir}`);
 	const hasIcon = existsSync(`${s.dir}/icon.svg`);
 	for (const f of INPUT_FILES) {
@@ -193,16 +231,32 @@ async function offerRasterizer(): Promise<boolean> {
 		info('  Later: sudo apt install librsvg2-bin && sudo morphit-ops branding apply');
 		return false;
 	}
-	const r = spawnSync('apt-get', ['install', '-y', '--no-install-recommends', 'librsvg2-bin'], {
-		stdio: 'inherit',
-		env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' },
-		timeout: 15 * 60_000
-	});
-	if (r.status !== 0) {
-		warn('Could not install librsvg2-bin. Try: sudo apt update && sudo apt install librsvg2-bin');
-		return false;
+	const apt = (args: readonly string[], timeoutMs: number): number =>
+		spawnSync('apt-get', [...args], {
+			stdio: 'inherit',
+			env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' },
+			timeout: timeoutMs
+		}).status ?? 1;
+	const rsvgPresent = (): boolean =>
+		spawnSync('sh', ['-c', 'command -v rsvg-convert'], { stdio: 'ignore' }).status === 0;
+
+	// Primary: install straight away (a fresh box often has a usable cache). If
+	// that fails — usually a stale/empty apt cache — `apt-get update` then retry.
+	let ok = apt(['install', '-y', '--no-install-recommends', 'librsvg2-bin'], 15 * 60_000) === 0;
+	if (!ok) {
+		info('  Refreshing the package list and trying once more…');
+		apt(['update'], 10 * 60_000);
+		ok = apt(['install', '-y', '--no-install-recommends', 'librsvg2-bin'], 15 * 60_000) === 0;
 	}
-	return true;
+	// VERIFY the binary is actually callable now — a 0 exit is not proof the tool
+	// landed (a derivative could ship the package without rsvg-convert), and we
+	// only want to claim success when the converter really runs.
+	if (ok && rsvgPresent()) return true;
+	warn(
+		'Could not get a working rsvg-convert (librsvg2-bin). Install it by hand, then re-run: ' +
+			'sudo apt update && sudo apt install librsvg2-bin && sudo morphit-ops branding apply'
+	);
+	return false;
 }
 
 /** Ask for an SVG file until it is valid, or Enter (keep what is there). */
@@ -272,6 +326,36 @@ async function runSetup(ctx: BrandingCtx, installDir: string): Promise<number> {
 	);
 	if (icon !== null) flags.icon = icon;
 	for (;;) {
+		const cur = resolveTheme(settings.theme);
+		const raw = (
+			await ask(
+				`Your colours? A preset (${Object.keys(THEME_PRESETS).join(', ')}), or your gradient's colours as ` +
+					`hex: "#f3dca0 #bb872f" (first and last), optionally a third for the page background.\n` +
+					`  (Enter keeps: ${describeTheme(settings.theme, cur.palette)})`
+			)
+		).trim();
+		if (raw === '') break;
+		const parts = raw.split(/[\s,]+/).filter((x) => x.length > 0);
+		const themeFlags: Record<string, string> = {};
+		if (parts.length === 1 && themePreset(parts[0]!.toLowerCase()) !== null) {
+			themeFlags.theme = parts[0]!.toLowerCase();
+		} else if (parts.length >= 2 && parts.length <= 3) {
+			themeFlags['theme-from'] = parts[0]!;
+			themeFlags['theme-to'] = parts[1]!;
+			if (parts[2] !== undefined) themeFlags['theme-background'] = parts[2];
+		} else {
+			warn('  Type a preset name, or two or three colours like: #f3dca0 #bb872f #121212');
+			continue;
+		}
+		const problem = themeUpdateProblem(themeFlags, settings.theme ?? null);
+		if (problem !== null) {
+			warn(`  ${sanitizeForTerm(problem)}. Try again.`);
+			continue;
+		}
+		Object.assign(flags, themeFlags);
+		break;
+	}
+	for (;;) {
 		const current = settings.brandName ?? 'Morphit';
 		const raw = (
 			await ask(
@@ -310,6 +394,120 @@ const CONFIG_FLAGS = {
 	beta: INSTANCE_ENV.BETA_BADGE
 } as const;
 
+/** Colour-theme settings `apply` can write, by flag. */
+export const THEME_FLAGS = {
+	theme: INSTANCE_ENV.THEME,
+	'theme-from': INSTANCE_ENV.THEME_FROM,
+	'theme-mid': INSTANCE_ENV.THEME_MID,
+	'theme-to': INSTANCE_ENV.THEME_TO,
+	'theme-background': INSTANCE_ENV.THEME_BACKGROUND,
+	'theme-button': INSTANCE_ENV.THEME_BUTTON
+} as const;
+const THEME_COLOUR_FIELD = {
+	'theme-from': 'from',
+	'theme-mid': 'mid',
+	'theme-to': 'to',
+	'theme-background': 'background'
+} as const;
+
+/**
+ * The config lines a set of theme flags writes (null value = remove the line),
+ * or an error message. PURE. A `--theme` preset replaces the whole theme (the
+ * colour flags given with it override its values); `--theme morphit` (or
+ * `--theme=`) removes every theme line — the Morphit colours. Colour flags
+ * alone change only their own line; an empty value removes it.
+ */
+export function themeUpdates(
+	flags: Readonly<Record<string, string>>
+): { updates: Map<string, string | null> } | { error: string } {
+	const updates = new Map<string, string | null>();
+	const preset = flags.theme;
+	if (preset !== undefined) {
+		if (preset === 'true')
+			return { error: `--theme needs a name: ${Object.keys(THEME_PRESETS).join(' | ')}` };
+		const p = preset.trim().toLowerCase();
+		if (p !== '' && themePreset(p) === null) {
+			return {
+				error: `--theme "${sanitizeForTerm(preset)}" is not a theme — use one of: ${Object.keys(THEME_PRESETS).join(', ')} (or your own colours: --theme-from '#…' --theme-to '#…')`
+			};
+		}
+		for (const key of Object.values(THEME_FLAGS)) updates.set(key, null);
+		if (p !== '' && p !== DEFAULT_THEME_PRESET) updates.set(INSTANCE_ENV.THEME, p);
+	}
+	for (const [flag, field] of Object.entries(THEME_COLOUR_FIELD)) {
+		const raw = flags[flag];
+		if (raw === undefined) continue;
+		if (raw === 'true')
+			return {
+				error: `--${flag} needs a colour: --${flag} '#${field === 'background' ? '121212' : 'f3dca0'}'`
+			};
+		const key = THEME_FLAGS[flag as keyof typeof THEME_FLAGS];
+		if (raw.trim() === '') {
+			updates.set(key, null);
+			continue;
+		}
+		const hex = normalizeHex(raw);
+		if (hex === null) {
+			return {
+				error: `--${flag} "${sanitizeForTerm(raw)}" is not a colour — give a hex colour like '#f3dca0' (quote it: the shell treats # as a comment)`
+			};
+		}
+		updates.set(key, hex);
+	}
+	const button = flags['theme-button'];
+	if (button !== undefined) {
+		const b = button.trim().toLowerCase();
+		if (b === 'true' || (b !== '' && !(THEME_BUTTON_STYLES as readonly string[]).includes(b))) {
+			return {
+				error: `--theme-button takes ${THEME_BUTTON_STYLES.join(' or ')} (--theme-button= goes back to the theme's own)`
+			};
+		}
+		updates.set(INSTANCE_ENV.THEME_BUTTON, b === '' ? null : b);
+	}
+	return { updates };
+}
+
+/** Apply theme config updates to the current theme setting. PURE. */
+export function mergeTheme(
+	current: ThemeInput | null,
+	updates: ReadonlyMap<string, string | null>
+): ThemeInput | null {
+	const base: Record<'preset' | 'from' | 'mid' | 'to' | 'background' | 'button', string | null> = {
+		preset: current?.preset ?? null,
+		from: current?.from ?? null,
+		mid: current?.mid ?? null,
+		to: current?.to ?? null,
+		background: current?.background ?? null,
+		button: current?.button ?? null
+	};
+	const field: Record<string, keyof typeof base> = {
+		[INSTANCE_ENV.THEME]: 'preset',
+		[INSTANCE_ENV.THEME_FROM]: 'from',
+		[INSTANCE_ENV.THEME_MID]: 'mid',
+		[INSTANCE_ENV.THEME_TO]: 'to',
+		[INSTANCE_ENV.THEME_BACKGROUND]: 'background',
+		[INSTANCE_ENV.THEME_BUTTON]: 'button'
+	};
+	for (const [k, v] of updates) {
+		const f = field[k];
+		if (f !== undefined) base[f] = v;
+	}
+	return themeSettingOf(base);
+}
+
+/** Why the theme these flags would produce can't be used, or null. PURE. */
+export function themeUpdateProblem(
+	flags: Readonly<Record<string, string>>,
+	current: ThemeInput | null
+): string | null {
+	const u = themeUpdates(flags);
+	if ('error' in u) return u.error;
+	const merged = mergeTheme(current, u.updates);
+	if (merged === null) return null;
+	const r = deriveTheme(merged);
+	return r.ok ? null : `That colour theme can't be used: ${r.problems.join('; ')}`;
+}
+
 /**
  * `apply --logo … --name …`: install the operator's inputs before applying.
  * Every value is validated first; nothing is written unless all are valid.
@@ -347,6 +545,18 @@ function installInputs(ctx: BrandingCtx, installDir: string, brandDir: string): 
 		// inflected forms to the Latin word).
 		updates.set(key, clean === DEFAULT_BRAND_NAME ? null : clean);
 	}
+	// Colour theme: validate the RESULTING theme (current settings + these
+	// flags) before anything is written.
+	if (Object.keys(THEME_FLAGS).some((f) => ctx.flags[f] !== undefined)) {
+		const tu = themeUpdates(ctx.flags);
+		if ('error' in tu) return tu.error;
+		const merged = mergeTheme(readBrandingSettings(installDir).theme ?? null, tu.updates);
+		if (merged !== null) {
+			const r = deriveTheme(merged);
+			if (!r.ok) return `that colour theme can't be used: ${r.problems.join('; ')}`;
+		}
+		for (const [k, v] of tu.updates) updates.set(k, v);
+	}
 	const configPath = join(installDir, 'morphit.config.env');
 	if (updates.size > 0 && !existsSync(configPath)) {
 		return `No morphit.config.env at ${configPath} — run this on the Morphit server (or set it with: sudo morphit-ops edit).`;
@@ -372,6 +582,32 @@ function installInputs(ctx: BrandingCtx, installDir: string, brandDir: string): 
 	return null;
 }
 
+/** True when at least one of `files` EXISTS but cannot be read by this user
+ *  (root-owned config, no sudo) — the case where readBrandingSettings silently
+ *  returns "unset" and `branding status` would report a false picture (review
+ *  H-17). Injectable `exists`/`access` so the decision is testable (as root,
+ *  accessSync never denies, so the real branch only fires for a non-root
+ *  operator). PURE given its deps. */
+export function anyExistingFileUnreadable(
+	files: readonly string[],
+	deps: {
+		exists?: (p: string) => boolean;
+		access?: (p: string) => void;
+	} = {}
+): boolean {
+	const exists = deps.exists ?? existsSync;
+	const access = deps.access ?? ((p: string) => accessSync(p, fsConstants.R_OK));
+	return files.some((f) => {
+		if (!exists(f)) return false;
+		try {
+			access(f);
+			return false;
+		} catch {
+			return true; // exists but unreadable (EACCES/EPERM)
+		}
+	});
+}
+
 export async function runBranding(ctx: BrandingCtx): Promise<number> {
 	const sub = ctx.positional[0] ?? 'status';
 	const json = ctx.flags.json === 'true';
@@ -392,9 +628,11 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 		return 2;
 	}
 
-	const inputFlags = [...Object.keys(BRANDING_FILE_FLAGS), ...Object.keys(CONFIG_FLAGS)].filter(
-		(f) => ctx.flags[f] !== undefined
-	);
+	const inputFlags = [
+		...Object.keys(BRANDING_FILE_FLAGS),
+		...Object.keys(CONFIG_FLAGS),
+		...Object.keys(THEME_FLAGS)
+	].filter((f) => ctx.flags[f] !== undefined);
 	if (inputFlags.length > 0) {
 		if (sub !== 'apply' || dryRun) {
 			printError(
@@ -417,6 +655,30 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 			return 1;
 		}
 	}
+	// A config file that EXISTS but we cannot READ (root-owned, no sudo) makes
+	// readBrandingSettings silently return "unset" for every value — so `status`
+	// would tell the operator nothing is branded and the build differs, when in
+	// truth we just could not see their settings. Detect that and say to re-run
+	// with sudo instead of reporting a false picture (review H-17).
+	const configUnreadable = anyExistingFileUnreadable(brandConfigFiles(installDir));
+	if (configUnreadable && sub === 'status') {
+		if (json) {
+			info(
+				JSON.stringify({
+					ok: false,
+					needs_sudo: true,
+					message: 'branding config is not readable as this user'
+				})
+			);
+		} else {
+			warn(
+				"Can't read this instance's branding config as the current user, so its settings " +
+					'cannot be shown. Re-run with sudo: sudo morphit-ops branding status'
+			);
+		}
+		return 1;
+	}
+
 	const settings = readBrandingSettings(installDir);
 	// A value saved here can still be shadowed by the OS environment or a later
 	// env file (the services source them last-wins) — say so rather than let the
@@ -480,6 +742,10 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 				warnings: result.warnings,
 				notes: result.notes,
 				rasterizer_missing: result.rasterizerMissing,
+				theme:
+					result.theme === null
+						? null
+						: { inputs: result.theme.inputs, tokens: result.theme.tokens },
 				published_to_web_root: published
 			})
 		);
@@ -540,8 +806,9 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 			'`morphit-ops upgrade` will apply them again — to stop that, remove the MORPHIT_INSTANCE_BRAND_*'
 		);
 		info(
-			`/ MORPHIT_INSTANCE_BETA_BADGE lines from morphit.config.env and the files in ${settings.dir}.`
+			`/ MORPHIT_INSTANCE_BETA_BADGE / MORPHIT_INSTANCE_THEME* lines from morphit.config.env and the files in ${settings.dir}.`
 		);
+		info('(Just the colours: sudo morphit-ops branding apply --theme morphit)');
 	}
 	return 0;
 }

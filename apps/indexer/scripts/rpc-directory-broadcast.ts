@@ -17,15 +17,19 @@
  *        npx tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json
  *
  * Flags: --dry-run (print the op, no key, no network), --signer <acct>,
- *        --node <rpc-url> (override the broadcast node).
+ *        --node <rpc-url> (use exactly this node), --include-hidden (also rank the
+ *        hidden nodes through this machine's Tor/i2pd; off by default).
+ * Signed ONCE and offered to health-ranked nodes in turn (v1.20.0, D12).
  *
  * The JSON file (when given) is the payload: { "v": 1, "ts": "<ISO>",
  * "nodes": [ { "onion": "http://…onion:8091", "i2p": "http://…b32.i2p:8091", "name": "oldpc" }  // name is OPTIONAL, … ] }.
  */
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { Client, PrivateKey } from '@beblurt/dblurt';
+import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+
 import {
 	buildRpcDirectoryCustomJsonOp,
 	validateRpcDirectoryPayload,
@@ -97,12 +101,14 @@ const argv = process.argv.slice(2);
 let dryRun = false;
 let signer = RPC_DIRECTORY_SIGNER_DEFAULT;
 let nodeOverride: string | null = null;
+let includeHidden = false;
 let fileArg: string | null = null;
 for (let i = 0; i < argv.length; i++) {
 	const a = argv[i]!;
 	if (a === '--dry-run') dryRun = true;
 	else if (a === '--signer') signer = argv[++i] ?? signer;
 	else if (a === '--node') nodeOverride = argv[++i] ?? null;
+	else if (a === '--include-hidden') includeHidden = true;
 	else if (!a.startsWith('--') && fileArg === null) fileArg = a;
 }
 
@@ -135,7 +141,9 @@ try {
 	die(errMsg(e));
 }
 
-const nodes = nodeOverride ? [nodeOverride] : [...DEFAULT_BLURT_RPC_ENDPOINTS];
+const nodes = nodeOverride
+	? [nodeOverride]
+	: [...DEFAULT_BLURT_RPC_ENDPOINTS, ...(includeHidden ? ['(+ 14 hidden nodes)'] : [])];
 
 process.stderr.write(
 	'\n\u250c\u2500 rpc-directory-broadcast \u2014 LAPTOP ONLY (uses the @morphit PRIVATE posting key). \u2500\u2510\n' +
@@ -214,28 +222,20 @@ async function main(): Promise<void> {
 		json: op.json
 	};
 
-	let lastErr: unknown;
-	for (const url of nodes) {
-		try {
-			process.stderr.write(`\nBroadcasting via ${url} \u2026\n`);
-			const client = new Client(url, { timeout: 20_000 });
-			const conf = (await client.broadcast.customJson(opData, priv)) as {
-				id?: string;
-				block_num?: number;
-			};
-			process.stdout.write(
-				`\n\u2713 Broadcast accepted.\n  trx_id    : ${conf.id ?? '(unknown)'}\n` +
-					`  block_num : ${conf.block_num ?? '(pending)'}\n` +
-					`  op id     : ${RPC_DIRECTORY_OP_ID}\n\n` +
-					'Every trusting Morphit instance merges these nodes into its hidden RPC pool within a block.\n'
-			);
-			return;
-		} catch (e) {
-			lastErr = e;
-			process.stderr.write(`  \u2717 ${url}: ${errMsg(e)}\n`);
-		}
+	let res: Awaited<ReturnType<typeof broadcastCustomJsonOnce>>;
+	try {
+		res = await broadcastCustomJsonOnce(opData, priv, { nodeOverride, includeHidden });
+	} catch (e) {
+		die(errMsg(e));
 	}
-	die(`all RPC nodes failed. Last error: ${errMsg(lastErr)}`);
+	process.stdout.write(
+		`\n✓ Broadcast accepted${res.duplicate ? ' (an earlier attempt had already landed)' : ''}.\n` +
+			`  trx_id    : ${res.trxId}\n` +
+			`  block_num : ${res.blockNum ?? '(pending)'}\n` +
+			`  via       : ${res.via}\n` +
+			`  op id     : ${RPC_DIRECTORY_OP_ID}\n\n` +
+			'Every trusting Morphit instance merges these nodes into its hidden RPC pool within a block.\n'
+	);
 }
 
 void main();

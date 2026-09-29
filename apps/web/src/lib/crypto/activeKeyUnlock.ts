@@ -123,12 +123,17 @@ export async function resolveActiveKey(
 		const pub = await pubKeyOf(scalar);
 		if (pub === null) return { ok: false, reason: 'invalid_wif' };
 
+		// Order matters: owner is the dangerous one, so it is checked FIRST and
+		// wins a tie. A key that is in the owner authority is refused even when
+		// the (indexer-supplied) active list also contains it — otherwise a
+		// hostile indexer, or an account reusing one key for owner and active,
+		// would get the OWNER key signed with (and, on "keep", stored).
+		// Same privileged-wins rule as verifyPostingKey (audit 2026-05, 1-9).
+		if (matches(authorities.owner, pub)) return { ok: false, reason: 'is_owner_key' };
 		if (matches(authorities.active, pub)) {
 			handedOff = true;
 			return { ok: true, scalar, source: 'wif' };
 		}
-		// Order matters: owner is the dangerous one, name it first.
-		if (matches(authorities.owner, pub)) return { ok: false, reason: 'is_owner_key' };
 		if (matches(authorities.posting, pub)) return { ok: false, reason: 'is_posting_key' };
 		return { ok: false, reason: 'not_this_account' };
 	} finally {

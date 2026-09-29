@@ -104,6 +104,11 @@ fee-recipient account.
   10th ≈ 4.77×), and **×1.5 per additional order beyond the 10th**.
   See `apps/indexer/src/indexer/fee.ts` — `sybilMultiplier(nth)` /
   `expectedFeeBlurt(nth, base)`.
+  An order counts toward the tier while it is live (not cancelled,
+  completed or past its expiry) or for 24 h after it was created; an
+  order that simply expired stops counting 24 h after creation
+  (v1.20.0 — before, expired orders counted forever and compounded
+  the fee 1.5× each).
 - User can also pay in BTC or XMR (operator-configured equivalent),
   see `apps/indexer/src/indexer/handlers/feeAttest.ts`.
 - First-time waiver: free, buy-side only, once per account.  See
@@ -134,6 +139,9 @@ fee-recipient account.
 - Auctioned: highest-bidder takes the slot; earlier bidders' hours
   are NOT refunded (they bought "right to participate," not
   "guaranteed slot")
+- Featured-slot bids are verified only against the instance's own
+  fees account: a featured slot is that instance's ad space, priced
+  by that operator (this does not change across instances in v1.20.0).
 
 ### Total income: only these three.  That's it.
 
@@ -170,6 +178,74 @@ transaction that carries the order op. There is no separate
   Shares are computed in integer milliBLURT and always sum back to
   the exact total.
 
+### Across instances (v1.20.0)
+
+An order or a first-contact (stranger) fee posted through instance A is
+also verified by every other instance B. Before v1.20.0, B accepted the
+90 % owner leg only at B's OWN fees account, so A's BLURT-paid orders and
+first-contact messages were hidden everywhere but on A. Now every indexer
+accepts the 90 % owner leg when it goes to EITHER:
+
+- its own fees account, OR
+- the `fee_recipient` that the operator owning the op's `operator_tag`
+  registered on chain (`morphit_operator_register_v1`, optional field)
+  in a block BEFORE the op's block.
+
+The 10 % canonical leg to `@morphit-fees` stays mandatory everywhere, and a
+leg to any other account is ignored. The history of registered fees
+accounts is append-only (`operator_fee_recipients`, migration v64), so a
+later change of fees account never re-judges older orders. The web client
+puts `operator_tag` on stranger-fee ops too (orders already carried it).
+Feature bids stay per-instance (see §3 above).
+
+**Who is accepted across instances.** Every operator whose on-chain
+registration names a fees account — the same registrations the Operators
+page lists. There is no maintainer list and no stake, so a new instance
+needs nothing from anyone. On purpose: someone could register an
+"operator" whose fees account is their own and get the 90 % of their own
+fee back, which is exactly what running an instance already gives them.
+It costs nobody else anything, and the 10 % treasury leg still has to be
+paid.
+
+**Orders paid before the operator registered (legacy grace).** On v1.19
+every BLURT order paid through an instance sent its 90 % to that instance's
+own fees account, which no other instance could know. Once the operator has
+registered a fees account (its v1.20 upgrade does it), call **E** the block
+right after its FIRST registration — the first block at which the rule above
+accepts it. An op BEFORE E is judged as if that first registered account had
+been in force at the op's block. It is
+accepted only if the 90 % leg went exactly to that account and everything
+else passes as it would live: the 10 % canonical leg, the amount (the
+listing base pinned then, the Sybil tier by chain position), the memo. Ops
+at/after E follow the rule above, as of their block. So existing live orders
+of every operator appear on every upgraded instance once that operator has
+upgraded.
+
+- E and the account an op is judged against come only from chain data (the
+  registration history), and E never moves once it exists. So an instance that indexed the order on v1.19 and upgraded, a
+  fresh v1.20 instance that synced from before the order, and a fast-synced
+  one all reach the same verdict.
+- A leg paid to an account the operator used BEFORE it first registered and
+  then changed away from matches nothing: that order stays visible only on
+  its own instance, by design (nothing on chain ties that account to the
+  operator). An operator planning to change fees account should upgrade
+  first.
+- Only live, unexpired orders are re-checked; an expired or closed order
+  does not come back. Stranger fees from before v1.20.0 carried no
+  `operator_tag`, so they cannot be attributed and stay rejected; tagged
+  ones from the last 30 days are re-checked the same way.
+
+**How it is re-checked.** The indexer re-judges, once each, the live
+BLURT-fee orders it stored `underpaid` and the tagged stranger fees it
+rejected in the last 30 days whose operator has registered a fees account. It
+fetches the original transaction through its own RPC pool (a hidden-only
+node uses only its hidden pool) and checks the transaction's id before
+trusting it; a failed fetch changes nothing and is retried. A check runs as
+soon as a fees-account registration lands, then every
+30 seconds while any are left (20 transactions per pass), otherwise every 10
+minutes. First-contact messages already dropped stay lost; once the fee is
+applied, the sender's next message is delivered.
+
 ### BTC- and XMR-paid listing fees: 100% to the canonical treasury, from every instance
 
 - BTC/XMR fees land in cold-stored, canonical Morphit-controlled
@@ -184,6 +260,21 @@ transaction that carries the order op. There is no separate
 - Source: `apps/indexer/src/indexer/handlers/order.ts` verifies the
   BLURT split; the BTC/XMR fee paths verify a single 100%-to-canonical
   transfer.
+- A BTC/XMR order whose payment is not yet confirmed is re-checked
+  against the explorers every ~10 min, fairly (least-recently checked
+  first), for up to 7 days; the amount is checked against the lower of
+  the treasury pin in force when the order was posted and today's pin.
+  A txid that a quorum of explorers reports as non-existent is
+  `missing` for BTC and (since v1.20.0) XMR alike.
+- **Bound to the order (v1.20.0, once the maintainer pins the keys).** With
+  `treasury.btc.xpub` pinned, each BTC fee goes to its own address
+  derived for that order, and the order goes live when that address
+  holds the amount — no txid to paste (OPERATIONS.md §40.12). XMR fees
+  are verified with the payment's transaction key (`get_tx_key`); the
+  earlier `tx_proof` could never be checked by the explorers. With
+  `treasury.xmr.primary_address` pinned, the XMR fee goes to an
+  integrated address whose payment ID is derived from the order
+  (OPERATIONS.md §40.13).
 
 ### Delivery mechanics — direct, at payment
 

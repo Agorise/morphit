@@ -20,10 +20,14 @@
  *            stays clean and machine-parseable)
  *   exit   — 0 on success, 1 if EVERY endpoint failed
  */
-import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { installTorDispatcherIfTorOnly } from './torSocksDispatcher.js';
+import {
+	DEFAULT_BLURT_RPC_ENDPOINTS,
+	DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS
+} from '@morphit/operator-config';
+import { canaryIsTorOnly, installTorDispatcherIfTorOnly } from './torSocksDispatcher.js';
 import {
 	type BlurtHead,
+	canaryDefaultNodes,
 	fetchBlurtHeadWithFailover,
 	parseHead,
 	resolveCanaryNodes
@@ -77,9 +81,15 @@ async function main(): Promise<void> {
 	// not publish) — it never falls back to a direct clearnet connection.
 	const route = installTorDispatcherIfTorOnly();
 	process.stderr.write(`canary: chain-head fetch route = ${route}\n`);
+	// Override (comma list) PREFERRED-FIRST, then the default list — which on a
+	// tor-only node is every default hidden .onion, never clearnet (D12).
 	const nodes = resolveCanaryNodes(
 		process.env.MORPHIT_CANARY_BLURT_RPC,
-		DEFAULT_BLURT_RPC_ENDPOINTS
+		canaryDefaultNodes(
+			canaryIsTorOnly(),
+			DEFAULT_BLURT_RPC_ENDPOINTS,
+			DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS
+		)
 	);
 	process.stderr.write(
 		`canary: fetching Blurt chain head (failover across ${nodes.length} node(s))...\n`

@@ -1,0 +1,18 @@
+[Unit]
+Description=Morphit IPFS clean-up timer — weekly
+Documentation=https://git.agorise.net/agorise/morphit
+Requires=morphit-ipfs-gc.service
+
+[Timer]
+# Weekly: a release lands every week or two and a snapshot every day, so a
+# week's worth is a few tens of MB at most. `morphit-ops upgrade` also runs it
+# once, in its post-upgrade self-heal phase. An hour after boot, not at boot:
+# the pin and mirror jobs go first.
+OnBootSec=1h
+OnUnitActiveSec=7d
+RandomizedDelaySec=6h
+Persistent=true
+Unit=morphit-ipfs-gc.service
+
+[Install]
+WantedBy=timers.target

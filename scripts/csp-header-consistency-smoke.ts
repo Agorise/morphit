@@ -11,6 +11,17 @@
  *   1. ops/nginx/web.conf                  (the shipped reverse-proxy)
  *   2. docs/OPERATIONS.md §15              (the reference copy)
  *   3. ops/bunkerweb/bunkerweb.env.example (the WAF deploy path)
+ *   4. ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2 (what an
+ *      Ansible/`morphit-ops install` BunkerWeb box is actually given —
+ *      v1.20.0, H-11: this smoke used to check only the .example, and the
+ *      deployed template carried no CSP at all)
+ *   5. ops/bunkerweb/frontend/nginx.conf (the container every BunkerWeb and
+ *      tor-only box serves from; Tor/I2P visitors reach it directly, so it
+ *      must send the headers itself — v1.20.0, C2). Its page CSP comes from a
+ *      `map $host $morphit_csp`: the default is the canonical CSP, and .onion
+ *      / .i2p names get the same policy with connect-src narrowed to the hidden
+ *      Blurt RPC nodes (DEFAULT_HIDDEN_RPC_ENDPOINTS in apps/web/src/lib/net/
+ *      config.ts, what selectRpcPool uses on a hidden origin).
  *
  * (RUN-A-MORPHIT-NODE.md is now grandma-only — the verbatim security
  * headers live in OPERATIONS.md §15, not in the friendly quick-start.)
@@ -51,6 +62,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
+import { DEFAULT_HIDDEN_RPC_ENDPOINTS } from '../apps/web/src/lib/net/config';
+import { addHeaders, findBlocks, mapEntries, parseNginx } from './lib/nginx-conf';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
@@ -58,6 +71,8 @@ const REPO = join(HERE, '..');
 const WEB_CONF = 'ops/nginx/web.conf';
 const OPERATIONS = 'docs/OPERATIONS.md';
 const BUNKERWEB = 'ops/bunkerweb/bunkerweb.env.example';
+const BUNKERWEB_J2 = 'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2';
+const FRONTEND = 'ops/bunkerweb/frontend/nginx.conf';
 
 let pass = 0;
 let fail = 0;
@@ -71,7 +86,10 @@ const bad = (m: string, detail = '') => {
 	if (detail) console.log(`      ${detail}`);
 };
 
-const read = (rel: string) => readFileSync(join(REPO, rel), 'utf8');
+// MORPHIT_CSP_ROOT=<another tree> checks that tree's files (watch it fail on an
+// older release); the hidden RPC list always comes from this checkout.
+const ROOT = process.env.MORPHIT_CSP_ROOT ?? REPO;
+const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
 
 /**
  * Extract every `add_header <Header> "<value>" ...;` value from an nginx
@@ -99,6 +117,10 @@ console.log('\n── csp-header-consistency smoke ─────────�
 const webConf = read(WEB_CONF);
 const operations = read(OPERATIONS);
 const bunkerweb = read(BUNKERWEB);
+const bunkerwebJ2 = read(BUNKERWEB_J2);
+const frontendTree = parseNginx(read(FRONTEND));
+const frontendServer = findBlocks(frontendTree, 'server')[0]?.block ?? [];
+const frontendCspMap = mapEntries(frontendTree, '$morphit_csp');
 
 // ─── Collect CSP values from every surface ───────────────────────────
 // SVGs are served under their own, stricter policy (v1.19.0: an operator's
@@ -127,17 +149,24 @@ const cspWeb = cspWebAll.filter((v) => v !== SVG_IMAGE_CSP);
 }
 const cspOps = nginxHeaderValues(operations, 'Content-Security-Policy');
 const cspBw = envValue(bunkerweb, 'CONTENT_SECURITY_POLICY');
+const cspBwJ2 = envValue(bunkerwebJ2, 'CONTENT_SECURITY_POLICY');
+// The frontend's page CSP for every clearnet name = the map's default.
+const cspFe = frontendCspMap?.get('default') ?? null;
 
 // ─── Collect Permissions-Policy values from every surface ────────────
 const ppWeb = nginxHeaderValues(webConf, 'Permissions-Policy');
 const ppOps = nginxHeaderValues(operations, 'Permissions-Policy');
 const ppBw = envValue(bunkerweb, 'PERMISSIONS_POLICY');
+const ppBwJ2 = envValue(bunkerwebJ2, 'PERMISSIONS_POLICY');
+const ppFe = addHeaders(frontendServer).get('permissions-policy') ?? null;
 
 // ── A. every surface defines each header ─────────────────────────────
 const cspSurfaces: Array<[string, string[]]> = [
 	[WEB_CONF, cspWeb],
 	[OPERATIONS, cspOps],
-	[BUNKERWEB, cspBw === null ? [] : [cspBw]]
+	[BUNKERWEB, cspBw === null ? [] : [cspBw]],
+	[BUNKERWEB_J2, cspBwJ2 === null ? [] : [cspBwJ2]],
+	[`${FRONTEND} (map $morphit_csp default)`, cspFe === null ? [] : [cspFe]]
 ];
 for (const [name, vals] of cspSurfaces) {
 	if (vals.length > 0) ok(`CSP present on surface: ${name} (${vals.length} occurrence(s))`);
@@ -146,7 +175,9 @@ for (const [name, vals] of cspSurfaces) {
 const ppSurfaces: Array<[string, string[]]> = [
 	[WEB_CONF, ppWeb],
 	[OPERATIONS, ppOps],
-	[BUNKERWEB, ppBw === null ? [] : [ppBw]]
+	[BUNKERWEB, ppBw === null ? [] : [ppBw]],
+	[BUNKERWEB_J2, ppBwJ2 === null ? [] : [ppBwJ2]],
+	[`${FRONTEND} (server level)`, ppFe === null ? [] : [ppFe]]
 ];
 for (const [name, vals] of ppSurfaces) {
 	if (vals.length > 0) ok(`Permissions-Policy present on surface: ${name} (${vals.length} occurrence(s))`);
@@ -154,10 +185,16 @@ for (const [name, vals] of ppSurfaces) {
 }
 
 // ── B. all CSP occurrences byte-identical; all Permissions-Policy too ─
-const allCsp = [...cspWeb, ...cspOps, ...(cspBw === null ? [] : [cspBw])];
+const allCsp = [
+	...cspWeb,
+	...cspOps,
+	...(cspBw === null ? [] : [cspBw]),
+	...(cspBwJ2 === null ? [] : [cspBwJ2]),
+	...(cspFe === null ? [] : [cspFe])
+];
 const distinctCsp = [...new Set(allCsp)];
 if (allCsp.length > 0 && distinctCsp.length === 1) {
-	ok(`all ${allCsp.length} CSP occurrences are byte-identical across all 4 surfaces`);
+	ok(`all ${allCsp.length} CSP occurrences are byte-identical across all ${cspSurfaces.length} surfaces`);
 } else {
 	bad(
 		`CSP DRIFT — ${distinctCsp.length} distinct CSP values found (expected exactly 1)`,
@@ -165,10 +202,16 @@ if (allCsp.length > 0 && distinctCsp.length === 1) {
 	);
 }
 
-const allPp = [...ppWeb, ...ppOps, ...(ppBw === null ? [] : [ppBw])];
+const allPp = [
+	...ppWeb,
+	...ppOps,
+	...(ppBw === null ? [] : [ppBw]),
+	...(ppBwJ2 === null ? [] : [ppBwJ2]),
+	...(ppFe === null ? [] : [ppFe])
+];
 const distinctPp = [...new Set(allPp)];
 if (allPp.length > 0 && distinctPp.length === 1) {
-	ok(`all ${allPp.length} Permissions-Policy occurrences are byte-identical across all 4 surfaces`);
+	ok(`all ${allPp.length} Permissions-Policy occurrences are byte-identical across all ${cspSurfaces.length} surfaces`);
 } else {
 	bad(
 		`Permissions-Policy DRIFT — ${distinctPp.length} distinct values found (expected exactly 1)`,
@@ -254,6 +297,67 @@ if (cspWebAll.length === ppWeb.length && cspWeb.length >= 1) {
 	);
 }
 
+// ── F. the frontend container (Tor/I2P path + BunkerWeb upstream) ───
+{
+	// F1. hidden names get the canonical policy with connect-src = 'self' + the
+	// hidden RPC nodes the app uses on a hidden origin — derived, not typed.
+	const hiddenOrigins = DEFAULT_HIDDEN_RPC_ENDPOINTS.map((u) => u.replace(/\/+$/, ''));
+	const expectHidden = canonicalCsp.replace(/connect-src[^;]*/, `connect-src 'self' ${hiddenOrigins.join(' ')}`);
+	for (const key of ['~*\\.onion$', '~*\\.i2p$']) {
+		const v = frontendCspMap?.get(key);
+		if (v === expectHidden) ok(`${FRONTEND}: ${key} gets the canonical CSP with connect-src = 'self' + the ${hiddenOrigins.length} hidden RPC node(s)`);
+		else bad(`${FRONTEND}: ${key} hidden CSP wrong or missing`, `expected: ${expectHidden.slice(0, 120)}…\n      got:      ${String(v).slice(0, 120)}…`);
+	}
+	// F2. server-level header set; no HSTS (plain-http hidden services).
+	const srv = addHeaders(frontendServer);
+	const want: Array<[string, string]> = [
+		['content-security-policy', '$morphit_csp'],
+		['x-frame-options', 'DENY'],
+		['x-content-type-options', 'nosniff'],
+		['referrer-policy', 'no-referrer']
+	];
+	for (const [h, v] of want) {
+		if (srv.get(h) === v) ok(`${FRONTEND}: server level sends ${h}: ${v}`);
+		else bad(`${FRONTEND}: server level does not send ${h}: ${v}`, `got ${String(srv.get(h))}`);
+	}
+	const hsts = findBlocks(frontendTree, 'server').concat(findBlocks(frontendTree, 'location'))
+		.some((b) => addHeaders(b.block).has('strict-transport-security'));
+	if (!hsts) ok(`${FRONTEND}: no Strict-Transport-Security (its Tor/I2P hop is plain http)`);
+	else bad(`${FRONTEND}: sends Strict-Transport-Security`, 'HSTS on a plain-http hidden service is wrong; BunkerWeb adds it on https');
+	// F3. every location with its own add_header repeats the full set (nginx
+	// drops server-level add_header inheritance there). SVG locations use the
+	// sandbox policy instead of the page policy.
+	const locs = findBlocks(frontendServer, 'location').filter((l) => addHeaders(l.block).size > 0);
+	for (const l of locs) {
+		const h = addHeaders(l.block);
+		const isSvg = h.get('content-security-policy') === SVG_IMAGE_CSP;
+		const cspOk = isSvg || h.get('content-security-policy') === '$morphit_csp';
+		const rest =
+			h.get('x-frame-options') === 'DENY' &&
+			h.get('x-content-type-options') === 'nosniff' &&
+			h.get('referrer-policy') === 'no-referrer' &&
+			h.get('permissions-policy') === canonicalPp;
+		if (cspOk && rest) ok(`${FRONTEND}: location ${l.args.join(' ')} repeats every security header${isSvg ? ' (SVG sandbox CSP)' : ''}`);
+		else bad(`${FRONTEND}: location ${l.args.join(' ')} drops a security header`, JSON.stringify([...h.keys()]));
+	}
+	// F4. the SVG sandbox covers both SVG-serving locations (brand + any .svg).
+	const svgLocs = locs.filter((l) => addHeaders(l.block).get('content-security-policy') === SVG_IMAGE_CSP).map((l) => l.args.join(' '));
+	if (svgLocs.some((a) => a.includes('.svg$') && a.includes('_app')) && svgLocs.some((a) => a.includes('brand/')))
+		ok(`${FRONTEND}: the SVG sandbox CSP covers the brand location and every SVG outside /_app/`);
+	else bad(`${FRONTEND}: SVG sandbox CSP missing from the brand or .svg location`, svgLocs.join(' | '));
+}
+
+// ── G. the BunkerWeb env files carry the other two headers ───────────
+for (const [rel, text] of [
+	[BUNKERWEB, bunkerweb],
+	[BUNKERWEB_J2, bunkerwebJ2]
+] as const) {
+	const rp = envValue(text, 'REFERRER_POLICY');
+	const xf = envValue(text, 'X_FRAME_OPTIONS');
+	if (rp === 'no-referrer' && xf === 'DENY') ok(`${rel}: REFERRER_POLICY=no-referrer and X_FRAME_OPTIONS=DENY`);
+	else bad(`${rel}: REFERRER_POLICY / X_FRAME_OPTIONS not set`, `REFERRER_POLICY=${rp} X_FRAME_OPTIONS=${xf} (BunkerWeb's defaults leak the origin cross-site)`);
+}
+
 // ─── Report ──────────────────────────────────────────────────────────
 console.log('');
 console.log('──────────────────────────────────────────────────────');
@@ -261,6 +365,6 @@ if (fail > 0) {
 	console.log(`✗ ${fail}/${pass + fail} scenarios failed`);
 	process.exit(1);
 }
-console.log('✓ CSP + Permissions-Policy byte-identical across web.conf / RUN-A / OPERATIONS / BunkerWeb,');
+console.log('✓ CSP + Permissions-Policy byte-identical across web.conf / OPERATIONS / both BunkerWeb env files / the frontend container,');
 console.log('✓ and the canonical policies retain every security-critical directive');
 console.log(`✓ all ${pass} scenarios passed`);

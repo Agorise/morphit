@@ -76,6 +76,21 @@ describe('resolveActiveKey — the gate in front of the money', () => {
 		expect(r).toEqual({ ok: false, reason: 'is_owner_key' });
 	});
 
+	// v1.20.0 review (F-6): the OWNER check must win a tie. A key that sits in
+	// the owner authority AND is listed under active (a hostile indexer
+	// injecting it, or an account that reuses one key for both roles) was
+	// accepted as "active" — Morphit then signed with, and on "keep" stored,
+	// the owner key. Same privileged-wins rule as verifyPostingKey (audit 1-9).
+	it('REFUSES an Owner key even when the owner pubkey is also listed as active', async () => {
+		const tie: AccountAuthorityKeys = {
+			active: [...auth.active, ...auth.owner],
+			posting: auth.posting,
+			owner: auth.owner
+		};
+		const r = await resolveActiveKey(ACCOUNT, ownerWif, tie);
+		expect(r).toEqual({ ok: false, reason: 'is_owner_key' });
+	});
+
 	it('rejects a valid key belonging to a different account', async () => {
 		const r = await resolveActiveKey(ACCOUNT, strangerWif, auth);
 		expect(r).toEqual({ ok: false, reason: 'not_this_account' });

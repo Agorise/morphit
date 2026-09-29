@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { signupErrorI18nKey } from '$lib/auth/signupErrorKey';
 	import { page } from '$app/stores';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { localePath } from '$i18n/path';
@@ -33,7 +34,12 @@
 	 * case the orderbook is read-only for them until they register.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import {
+		canSubmitSignup,
+		pendingRetryAfterError,
+		submitKindAfterNameEdit
+	} from '$lib/auth/signupSubmitGate';
 	import { _ } from 'svelte-i18n';
 	import { fetchWithTimeout } from '$net/fetchWithTimeout';
 	import { beforeNavigate, goto } from '$app/navigation';
@@ -123,6 +129,10 @@
 	let name = $state('');
 	let availability = $state<AvailabilityState>({ kind: 'idle' });
 	let submit = $state<SubmitState>({ kind: 'ready' });
+	/** Wave 4 (A4): the name whose last attempt ended
+	 *  `broadcast_outcome_unknown`. It may now read "taken" because it landed
+	 *  with OUR owner key; it stays submittable (the relay answers success). */
+	let pendingRetryName = $state<string | null>(null);
 
 	/** Debounce handle for the availability check. */
 	let checkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -132,7 +142,12 @@
 
 	/** Derived: whether the submit button is actionable right now. */
 	const canSubmit = $derived(
-		submit.kind === 'ready' && availability.kind === 'available' && normalizedName.length >= 3
+		canSubmitSignup({
+			submitKind: submit.kind,
+			availabilityKind: availability.kind,
+			name: normalizedName,
+			pendingRetryName
+		})
 	);
 
 	/** Derived: the typed name is invalid — either already taken or
@@ -213,6 +228,13 @@
 		// Rerun on every keystroke. Debounce by 350ms so we don't hammer
 		// the relay while the user is typing.
 		const candidate = normalizedName;
+		// Wave 4 (A4): an edit clears a stale error so the button is live
+		// again. untrack: this effect must re-run on name edits only, not
+		// when `submit` itself changes (that would erase the error at once).
+		untrack(() => {
+			const next = submitKindAfterNameEdit(submit.kind);
+			if (next !== submit.kind) submit = { kind: 'ready' };
+		});
 		if (checkTimer !== null) clearTimeout(checkTimer);
 		if (candidate.length < 3) {
 			availability = { kind: 'idle' };
@@ -321,6 +343,7 @@
 			});
 
 			setUserBlurtAccount(normalizedName);
+			pendingRetryName = null;
 			submit = {
 				kind: 'done',
 				blockNum: result.blockNum,
@@ -332,6 +355,7 @@
 			setTimeout(() => gotoLocale('/orderbook'), 3000);
 		} catch (err) {
 			const signupErr = err as SignupError;
+			pendingRetryName = pendingRetryAfterError(signupErr.code, normalizedName, pendingRetryName);
 			const messageKey = mapErrorCode(signupErr.code);
 
 			// Rename wire fields into the short names the i18n strings
@@ -371,63 +395,14 @@
 		}
 	}
 
+	/** Relay error code → i18n key ($lib/auth/signupErrorKey, unit-tested).
+	 *  An 'already_registered' also marks the name as taken so the user can
+	 *  pick another. */
 	function mapErrorCode(code: string): string {
-		switch (code) {
-			case 'already_registered':
-				// Fall through to availability state; user can rename.
-				availability = { kind: 'taken', reason: 'already_registered' };
-				return 'onboarding.register_name.errors.already_registered';
-			case 'name_not_allowed':
-				return 'onboarding.register_name.errors.name_not_allowed';
-			case 'name_high_value':
-				return 'onboarding.register_name.errors.name_high_value';
-			case 'name_sequential_pattern':
-				return 'onboarding.register_name.errors.name_sequential_pattern';
-			case 'invalid_pubkey':
-				return 'onboarding.register_name.errors.invalid_pubkey';
-			case 'rate_limited':
-			case 'invite_rate_limited':
-				return 'onboarding.register_name.errors.rate_limited';
-			case 'rate_limited_daily':
-				return 'onboarding.register_name.errors.rate_limited_daily';
-			case 'spacing_cooldown':
-				// Uses {minutes} interpolation from messageArgs.
-				return 'onboarding.register_name.errors.spacing_cooldown';
-			case 'signups_disabled':
-				return 'onboarding.register_name.errors.signups_disabled';
-			case 'daily_ceiling_reached':
-				return 'onboarding.register_name.errors.daily_ceiling_reached';
-			case 'relay_out_of_funds':
-				return 'onboarding.register_name.errors.relay_out_of_funds';
-			case 'chain_unavailable':
-				return 'onboarding.register_name.errors.chain_unavailable';
-			case 'duplicate_submission':
-				return 'onboarding.register_name.errors.duplicate_submission';
-			// Invite-token failures — all surface the same user-facing
-			// message: "your signup token expired, please try again."
-			// The relay's differentiated codes help operators debug
-			// server-side; users just need to know "retry and it'll work."
-			case 'invite_required':
-			case 'invite_malformed':
-			case 'invite_bad_signature':
-			case 'invite_expired':
-			case 'invite_ip_mismatch':
-			case 'invite_already_used':
-				return 'onboarding.register_name.errors.invite_problem';
-			// Altcha failures — similarly folded to one user message.
-			case 'altcha_bad_solution':
-			case 'altcha_bad_signature':
-			case 'altcha_expired':
-			case 'altcha_malformed':
-			case 'altcha_replayed':
-			case 'altcha_unsolvable':
-				return 'onboarding.register_name.errors.altcha_problem';
-			case 'unreachable':
-				return 'onboarding.register_name.errors.unreachable';
-			case 'broadcast_failed':
-			default:
-				return 'onboarding.register_name.errors.broadcast_failed';
+		if (code === 'already_registered') {
+			availability = { kind: 'taken', reason: 'already_registered' };
 		}
+		return signupErrorI18nKey(code);
 	}
 
 	// ─── Skip for now ────────────────────────────────────────────────

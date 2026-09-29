@@ -58,10 +58,13 @@ file in the same turn.
       up offline.  End-to-end sanity check: after the
       indexer is running with the address configured,
       have a trusted contact send a small test payment
-      with a tx_proof and submit it through the real
-      Morphit UI.  *(Origin: Part 106; view-key
-      requirement removed in Part 108++; previous
-      diagnostic script retired in Part 110.)*
+      and submit it with the payment's tx key
+      (`get_tx_key <txid>`) through the real Morphit UI —
+      or run the self-test in OPERATIONS.md §40.13
+      (`xmr-fee-selftest.ts --unbound`).  *(Origin: Part
+      106; view-key requirement removed in Part 108++;
+      previous diagnostic script retired in Part 110;
+      tx key instead of tx_proof since v1.20.0.)*
 
 - [ ] **[recommended]** Generate the `@morphit-fees`
       Blurt account if you want a distinct treasury
@@ -174,7 +177,7 @@ file in the same turn.
       computed at wizard-run time may be stale by
       launch day.  Quick refresh:
       ```
-      morphit-ops edit  →  Listing fee + fallback BLURT price
+      sudo morphit-ops edit  →  Listing fee + fallback BLURT price
       ```
       The wizard re-fetches live Coingecko prices and
       recomputes amounts targeting your USD value.
@@ -256,6 +259,10 @@ file in the same turn.
       npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
       npx tsx apps/indexer/scripts/release-broadcast.ts release.json
       ```
+      The transaction is signed once and offered to the nodes in
+      turn; if it expires unconfirmed the script prints its id —
+      look it up on a block explorer before running again (see
+      OPERATIONS.md, "How the broadcast is sent (v1.20.0)").
       *(Origin: Part 106 + Part 107 + Part 108++; broadcast
       helper cp317; SRI manifest pipeline fix cp319.)*
 
@@ -275,7 +282,7 @@ file in the same turn.
 ## C. Operator-config files (on the morphit.io production box)
 
 - [ ] **[blocking]** Run the setup wizard:
-      `npx morphit-ops init`.  As of Part 122 cp22+ the wizard
+      `sudo morphit-ops init` (on the server).  As of Part 122 cp22+ the wizard
       covers ~23 prompts including the fee-verifier
       explorer URLs (BTC + XMR) and chat-link explorer
       URLs (BTC + XMR + BCH + LTC + DASH + DOGE + ZEC + ARRR + DCR + SOL + ETH + XRP; USDT, USDC, DAI have per-network explorers configured separately) with live health-checks,
@@ -316,14 +323,14 @@ file in the same turn.
       matches your actual reverse-proxy posture.  §32 CRITICAL:
       mis-setting this is the difference between functional
       per-IP rate limiting and trivially-spoofable signups.
-      - If you run BunkerWeb colocated on the same host (the
-        canonical `ops/bunkerweb/` deploy), set to the
-        Docker bridge subnet `172.20.0.0/16` (or whatever the
-        compose pins as the BunkerWeb network).
-      - If you run nginx/Caddy/another proxy on the same host,
-        set to `127.0.0.1` (loopback only).
-      - If your relay is internet-facing (no proxy), leave UNSET
-        (default empty — uses socket peer IP directly).
+      - Unset (the default since v1.20.0), the relay trusts
+        loopback + `172.16.0.0/12` (Docker's default bridge pool).
+        That covers the canonical `ops/bunkerweb/` deploy
+        (`172.20.0.0/16`) and nginx/Caddy on the same host
+        (loopback) — leave it UNSET for both.
+      - Set it (it REPLACES the default; loopback stays trusted)
+        only for a proxy outside that pool: a 10.x Docker pool,
+        a proxy on another host, a CDN.
       Verify by sending a request with a forged `X-Forwarded-For:
       1.2.3.4` header from a NON-trusted IP: the relay must
       ignore the header and use the actual peer IP.  *(Origin:

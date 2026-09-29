@@ -73,10 +73,12 @@ function makeConfig(overrides: Partial<UnlockedConfig> = {}): UnlockedConfig {
 }
 
 /** Build a Database mock that returns the given rows on the SELECT,
- *  and records UPDATE statements for assertion.  The drainer uses
- *  db.connect() for transactional access (BEGIN/SAVEPOINT/COMMIT),
- *  so the mock returns a client object with query() + release() and
- *  silently absorbs the transaction-control statements. */
+ *  and records UPDATE statements for assertion.  Since v1.20.0 (D1)
+ *  the drainer runs every statement through db.query() — each one
+ *  committed on its own, no transaction held across a broadcast; the
+ *  connect() client is kept only for older call patterns. The real
+ *  commit/claim semantics are exercised against Postgres by
+ *  scripts/drainer-no-double-pay-smoke.ts. */
 function makeDb(rows: Row[]): {
 	db: Database;
 	updates: Array<{ text: string; params: readonly unknown[] }>;
@@ -189,14 +191,12 @@ describe('RelayQueueDrainer', () => {
 				amountBlurt: 10
 			})
 		);
-		// Two UPDATEs: phase 1 sets broadcast_attempt_at BEFORE
-		// the chain call (closes the N23 residual double-broadcast
-		// window), phase 2 sets broadcast_at + broadcast_trx_id
-		// after success.  Find the success update by content.
-		expect(updates.length).toBeGreaterThanOrEqual(1);
-		const successUpdate = updates.find(
-			(u) => u.text.includes('broadcast_at') && !u.text.includes('attempt_at = NOW()')
-		);
+		// Two UPDATEs: phase 1 CLAIMS the row by stamping
+		// broadcast_attempt_at (committed BEFORE the chain call — D1),
+		// phase 2 sets broadcast_at + broadcast_trx_id after success.
+		// Find the success update by content.
+		expect(updates.length).toBeGreaterThanOrEqual(2);
+		const successUpdate = updates.find((u) => u.text.includes('SET broadcast_at = NOW()'));
 		expect(successUpdate).toBeDefined();
 		expect(successUpdate!.params[0]).toBe(1);
 		expect(successUpdate!.params[1]).toBe('tx-liquid');
@@ -239,10 +239,9 @@ describe('RelayQueueDrainer', () => {
 		const result = await drainer.drainOnce();
 		expect(result.succeeded).toBe(0);
 		expect(result.failed).toBe(1);
-		// Two UPDATEs: phase 1 sets broadcast_attempt_at BEFORE
-		// the chain call, phase 2 records the failure (after the
-		// chain call threw, the savepoint rolls back phase 1 and
-		// the recordFailure path emits the error update).
+		// Two UPDATEs: phase 1 claims the row (broadcast_attempt_at,
+		// committed BEFORE the chain call — it stays, D1), phase 2
+		// records the definite failure (error_count + 1).
 		expect(updates.length).toBeGreaterThanOrEqual(1);
 		const errorUpdate = updates.find((u) => u.text.includes('error_count = error_count + 1'));
 		expect(errorUpdate).toBeDefined();
@@ -318,7 +317,8 @@ describe('RelayQueueDrainer', () => {
 		async function fakeQuery<R extends pg.QueryResultRow>(
 			text: string
 		): Promise<pg.QueryResult<R>> {
-			if (text.includes('SELECT')) capturedSelect = text;
+			// The pending-row SELECT (a later stats SELECT counts rows only).
+			if (text.includes('SELECT id, recipient')) capturedSelect = text;
 			return {
 				rows: rows as unknown as R[],
 				rowCount: 0
@@ -338,7 +338,11 @@ describe('RelayQueueDrainer', () => {
 		const drainer = new RelayQueueDrainer(makeConfig(), db, makeBlurt());
 		await drainer.drainOnce();
 		expect(capturedSelect).toContain('error_count <');
-		expect(capturedSelect).toContain('ORDER BY created_at ASC');
+		// Never-attempted rows first, then FIFO (fix wave 4, A3: unsettled rows
+		// must not starve new payments).
+		expect(capturedSelect).toContain(
+			'ORDER BY (broadcast_attempt_at IS NOT NULL) ASC, created_at ASC'
+		);
 		expect(capturedSelect).toContain('broadcast_at IS NULL');
 	});
 });

@@ -33,10 +33,22 @@
  *   - Persist anything (a restart loses in-flight pairings;
  *     users retry).
  *
+ * Who calls /deliver (v1.20.0): the phone's browser when the phone is
+ * signed in on THIS instance (same origin), or — for a desktop on this
+ * instance and a phone on ANOTHER federation instance — that instance's
+ * indexer, forwarding on the phone's behalf (POST /v1/pairing/forward,
+ * see pairingForward.ts).  Nothing here binds to the requester's IP or
+ * Origin header, so a forwarded delivery is accepted exactly like a
+ * direct one; the only per-address state is the resource-tier rate
+ * limit, which then keys on the forwarding instance (or the shared
+ * Tor/I2P gateway), never on the phone.
+ *
  * Threat model:
  *   - The indexer learns: that a pairing happened at time T,
  *     bundle size N bytes (~1 KB always for a v1 pairing), and
- *     which IP delivered which IP fetched.
+ *     which IP delivered which IP fetched.  For a cross-instance
+ *     pairing the delivering IP is the phone's INSTANCE, not the
+ *     phone.
  *   - The indexer does NOT learn: account names, signatures,
  *     plaintext bundle contents, origin URLs.
  *   - A hostile indexer can DROP pairings (DoS — federated
@@ -73,7 +85,7 @@ import { logger } from '$log';
 const log = logger('login-pairing');
 
 const PID_REGISTRY_MAX_ENTRIES = 10_000;
-const DELIVER_BODY_MAX_BYTES = 4096;
+export const DELIVER_BODY_MAX_BYTES = 4096;
 const JANITOR_INTERVAL_MS = 30_000;
 const PID_TTL_MAX_MS = 5 * 60_000;
 /** SSE keep-alive cadence for the /wait stream. A reverse proxy
@@ -85,7 +97,7 @@ const PID_TTL_MAX_MS = 5 * 60_000;
 const PAIRING_KEEPALIVE_INTERVAL_MS = 25_000;
 
 /** PID format: 64 lowercase hex chars (SHA-256 output). */
-const PID_RE = /^[0-9a-f]{64}$/;
+export const PID_RE = /^[0-9a-f]{64}$/;
 
 /** Per-pid registry entry.  Either a delivered bundle is
  *  parked (if the deliver came first), or a waiter callback

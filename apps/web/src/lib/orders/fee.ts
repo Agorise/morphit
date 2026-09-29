@@ -36,17 +36,14 @@
 
 import { splitListingFeeBlurt } from '@morphit/asset-registry';
 
-/** Fallback BLURT base fee used when the indexer's reported
- *  rate is unavailable.  The compose page and the broadcast
- *  path read the operator's actual rate from
- *  `/v1/listing-fee.base_fee_blurt` and pass it into
- *  `computeFee()`; this constant is the bundled-in default
- *  matching MORPHIT_INDEXER_FEE_BASE_BLURT's default value, used
- *  only when the indexer fetch fails.  An operator who has
- *  changed their listing fee from the default will still cause
- *  fee_underpaid rejections on frontends that fall back to this
- *  constant — but those are recoverable (user retries) and the
- *  indexer's clear `fee_underpaid` status surfaces the issue. */
+/** Bundled seed for the BLURT base fee (~12¢ at the reference price).
+ *  The compose page quotes `/v1/listing-fee.base_fee_blurt`; this constant
+ *  is used ONLY when that fetch fails AND a chain-pinned base is known, and
+ *  then only after clamping into the pinned band (`resolveQuoteBase` in
+ *  ./feeQuoteFloor). It does NOT match the indexer's unpinned env default
+ *  (MORPHIT_INDEXER_FEE_BASE_BLURT = 125), which is why an unpinned + failed
+ *  fetch now refuses to quote instead of guessing (v1.20.0, G10 — a paid fee
+ *  below the floor lands `underpaid` and is lost; a user retry pays again). */
 export const BASE_FEE_BLURT = 60;
 
 /** Display-side reference for the indexer's fee-acceptance band.
@@ -243,6 +240,43 @@ export function computeFee(nth: number, baseBlurt: number): FeeQuote {
 		multiplier,
 		nth
 	};
+}
+
+/** The minimal order shape the Sybil-tier count needs (an OrderRecord fits). */
+export interface SybilTierOrderFields {
+	/** Optional because the indexer client's OrderRecord types it optional;
+	 *  a record without a status is not live. */
+	readonly status?: string;
+	readonly created_at: string;
+	readonly expires_at?: string | null;
+}
+
+/**
+ * v1.20.0 (G2) — does this existing order count toward the poster's Sybil fee
+ * tier? ADR-0009 §4: currently LIVE, or created in the last 24h (even if since
+ * cancelled/expired). "Live" means stored status 'live' AND not past
+ * `expires_at` — the indexer never writes status='expired', so an order that
+ * simply ran out keeps status 'live' forever. Counting those compounded the
+ * fee 1.5× per expired order. MUST match the indexer's `countForSybilTier`
+ * (apps/indexer/src/indexer/handlers/order.ts), which evaluates the same rule
+ * at the op's block time. A malformed timestamp fails toward counting the
+ * order (quote high → never underpaid).
+ */
+export function countsTowardSybilTier(o: SybilTierOrderFields, nowMs: number): boolean {
+	const created = Date.parse(o.created_at);
+	if (Number.isFinite(created) && created >= nowMs - 24 * 3600 * 1000) return true;
+	if (o.status !== 'live') return false;
+	if (o.expires_at === null || o.expires_at === undefined) return true;
+	const exp = Date.parse(o.expires_at);
+	return !Number.isFinite(exp) || exp > nowMs;
+}
+
+/** Number of existing orders counting toward the tier; the next order is
+ *  this + 1. */
+export function sybilTierCount(orders: readonly SybilTierOrderFields[], nowMs: number): number {
+	let n = 0;
+	for (const o of orders) if (countsTowardSybilTier(o, nowMs)) n++;
+	return n;
 }
 
 /** Format a permlink-bound memo for the fee transfer. Matches the

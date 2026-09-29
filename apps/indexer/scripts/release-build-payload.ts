@@ -41,8 +41,10 @@
  *   #   MORPHIT_BUILD_VERSION=1.0.0
  *   #   MORPHIT_BUILD_BTC_ADDRESS=bc1q...
  *   #   MORPHIT_BUILD_BTC_SATOSHIS=416
+ *   #   MORPHIT_BUILD_BTC_XPUB=zpub...   (v1.20.0 MK-H2; default: CANONICAL_TREASURY.btcXpub)
  *   #   MORPHIT_BUILD_XMR_ADDRESS=4...
  *   #   MORPHIT_BUILD_XMR_PICONERO=781250000
+ *   #   MORPHIT_BUILD_XMR_PRIMARY=4...   (v1.20.0 MK-H2; default: CANONICAL_TREASURY.xmrPrimary)
  *   #   MORPHIT_BUILD_HASH_MANIFEST_FILE=/path/to/manifest.json
  *   #   MORPHIT_BUILD_ENDPOINTS_FILE=/path/to/endpoints.json
  *   #   tsx apps/indexer/scripts/release-build-payload.ts > release.json
@@ -63,6 +65,8 @@ import type {
 	ReleaseDistributionBlock
 } from '@morphit/release-schema';
 import { CANONICAL_TREASURY } from '../src/config/canonicalTreasury.ts';
+import { checkTreasuryXpubInput } from '../src/lib/treasuryXpubInput.ts';
+import { checkTreasuryXmrPrimaryInput } from '../src/lib/treasuryXmrPrimaryInput.ts';
 
 function fail(reason: string): never {
 	process.stderr.write(`\n✗ ${reason}\n`);
@@ -121,8 +125,12 @@ interface Inputs {
 	endpoints?: Record<string, unknown>;
 	btcAddress: string;
 	btcSatoshis: string;
+	/** v1.20.0 (MK-H2) — treasury BTC account xpub/zpub (PUBLIC). Empty = omit. */
+	btcXpub: string;
 	xmrAddress: string;
 	xmrPiconero: string;
+	/** v1.20.0 (MK-H2) — treasury Monero PRIMARY address (`4…`). Empty = omit. */
+	xmrPrimary?: string;
 	/** cp372 — chain-pinned BLURT fee base (tier-1).  Empty = omit. */
 	blurtBase: string;
 	/** cp556 — decentralized-distribution anchor.  All empty = omit the
@@ -187,6 +195,15 @@ async function gatherInputs(): Promise<Inputs> {
 		'BTC fee amount (satoshis)',
 		process.env.MORPHIT_BUILD_BTC_SATOSHIS ?? '416'
 	);
+	// v1.20.0 (MK-H2) — the treasury wallet's ACCOUNT public key. Once pinned,
+	// every BTC-fee order gets its own address of this key. Set once with
+	// scripts/set-treasury-btc-xpub.ts (it lands in CANONICAL_TREASURY.btcXpub
+	// and so rides along in every later release op); MORPHIT_BUILD_BTC_XPUB
+	// overrides. Never a private key — buildTreasury() refuses one.
+	const btcXpub = await ask(
+		'BTC treasury account PUBLIC key, xpub/zpub (optional; empty to omit)',
+		process.env.MORPHIT_BUILD_BTC_XPUB ?? CANONICAL_TREASURY.btcXpub
+	);
 
 	const xmrAddress = await ask(
 		'XMR fee address (mainnet 4.../8...)',
@@ -195,6 +212,14 @@ async function gatherInputs(): Promise<Inputs> {
 	const xmrPiconero = await ask(
 		'XMR fee amount (piconero)',
 		process.env.MORPHIT_BUILD_XMR_PICONERO ?? '781250000'
+	);
+	// v1.20.0 (MK-H2) — the treasury wallet's MAIN address. Once pinned, every
+	// XMR-fee order pays the integrated address carrying its own payment ID.
+	// Set once with scripts/set-treasury-xmr-primary.ts (after the pre-pin
+	// checklist, docs/OPERATIONS.md §40.13); MORPHIT_BUILD_XMR_PRIMARY overrides.
+	const xmrPrimary = await ask(
+		'XMR treasury MAIN address 4... (optional; empty to omit)',
+		process.env.MORPHIT_BUILD_XMR_PRIMARY ?? CANONICAL_TREASURY.xmrPrimary
 	);
 
 	// cp372 — chain-pinned BLURT fee base.  Empty omits it (older
@@ -255,8 +280,10 @@ async function gatherInputs(): Promise<Inputs> {
 		endpoints,
 		btcAddress,
 		btcSatoshis,
+		btcXpub,
 		xmrAddress,
 		xmrPiconero,
+		xmrPrimary,
 		blurtBase,
 		sourceSha256,
 		offlineSha256,
@@ -364,12 +391,28 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 	const hasBlurt = i.blurtBase.trim() !== '';
 	if (!hasBtc && !hasXmr && !hasBlurt) return null;
 
-	const btc = hasBtc
+	let btc: ReleaseTreasuryBlock['btc'] = hasBtc
 		? {
 				address: i.btcAddress,
 				satoshis: Number.parseInt(i.btcSatoshis, 10)
 			}
 		: null;
+
+	// v1.20.0 (MK-H2) — pin the treasury account xpub next to the address.
+	// The address stays: pre-v1.20 validators require it, and txid-mode
+	// orders from before the pin are still verified against it.
+	const xpubInput = (i.btcXpub ?? '').trim();
+	if (xpubInput !== '') {
+		if (btc === null) fail('a BTC treasury xpub needs the BTC fee address and amount too');
+		const check = checkTreasuryXpubInput(xpubInput);
+		// Never echo the input: it could be a private key.
+		if (!check.ok) fail(`BTC treasury key refused — ${check.message}`);
+		btc = { ...btc!, xpub: check.xpub };
+		process.stderr.write('\n── BTC treasury key (MK-H2) ──────────────────────────────\n');
+		process.stderr.write(`key id ${check.keyId}. Receive addresses #0-#2 — these MUST be the first\n`);
+		process.stderr.write("three rows of the treasury wallet's Addresses tab (Receive Addresses):\n");
+		check.receive.forEach((a, n) => process.stderr.write(`  #${n}  ${a}\n`));
+	}
 
 	let xmr: ReleaseTreasuryBlock['xmr'] = null;
 	if (hasXmr) {
@@ -378,6 +421,20 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 			address: i.xmrAddress,
 			piconero: i.xmrPiconero
 		};
+	}
+	// v1.20.0 (MK-H2) — pin the treasury MAIN address next to the fee address.
+	// The fee address stays: pre-v1.20 validators require it, and XMR orders
+	// posted before the pin are still verified against it.
+	const primaryInput = (i.xmrPrimary ?? '').trim();
+	if (primaryInput !== '') {
+		if (xmr === null) fail('an XMR treasury main address needs the XMR fee address and amount too');
+		const check = checkTreasuryXmrPrimaryInput(primaryInput);
+		if (!check.ok) fail(`XMR treasury main address refused — ${check.message}`);
+		xmr = { ...xmr!, primary_address: check.address };
+		process.stderr.write('\n── XMR treasury main address (MK-H2) ─────────────────────\n');
+		process.stderr.write('In the treasury wallet (monero-wallet-cli), `integrated_address ' + check.sample.paymentId + '`\n');
+		process.stderr.write('MUST print exactly:\n');
+		process.stderr.write(`  ${check.sample.integrated}\n`);
 	}
 
 	// cp372 — optional BLURT base.  Parsed as a float (BLURT has

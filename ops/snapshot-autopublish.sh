@@ -15,12 +15,19 @@
 #               indexer_snapshot_v1 non-interactively. Otherwise emit the payload
 #               and log the exact manual broadcast command (safe default — no key
 #               on the box).
-#   5. ROTATE — keep the last KEEP snapshots on disk; unpin superseded CIDs.
+#   5. ROTATE — keep the last KEEP exported tarballs in MORPHIT_SNAPSHOT_OUT.
+#               (Superseded snapshot CIDs, and the copy each run stages inside
+#               the IPFS repo for `ipfs add --nocopy`, are let go by
+#               ops/ipfs/morphit-ipfs-gc.sh — weekly timer + every upgrade,
+#               v1.20.0 C16 — which keeps the anchored snapshot, every newer one
+#               and two older ones.)
 #
 # Config (env, e.g. /etc/morphit/snapshot-publish.env):
 #   MORPHIT_REPO_PATH          (default /opt/morphit)
 #   MORPHIT_INDEXER_ENV        (default /etc/morphit/indexer.env)
-#   MORPHIT_HEALTH_URL         (default http://127.0.0.1:8080/v1/health)
+#   MORPHIT_HEALTH_URL         (default: the INDEXER's /v1/health, from its
+#                               MORPHIT_INDEXER_LISTEN_HOST/PORT in the indexer
+#                               env; 127.0.0.1:8081 when unset)
 #   MORPHIT_SNAPSHOT_OUT       (default /opt/morphit/snapshots)
 #   MORPHIT_SNAPSHOT_KEEP      (default 3)
 #   MORPHIT_SNAPSHOT_FORGEJO_URL   (optional https mirror recorded in the op)
@@ -29,7 +36,14 @@
 set -uo pipefail
 REPO="${MORPHIT_REPO_PATH:-/opt/morphit}"
 INDEXER_ENV="${MORPHIT_INDEXER_ENV:-/etc/morphit/indexer.env}"
-HEALTH_URL="${MORPHIT_HEALTH_URL:-http://127.0.0.1:8080/v1/health}"
+# The indexer's health, not the relay's (v1.20.0, C4). The default used to be
+# :8080 — the RELAY — whose /v1/health has no `sync` block, so the caught-up
+# guard below read "not behind" every time and published from a lagging DB.
+_idx_env_val() { sed -n "s/^[[:space:]]*$1=//p" "$INDEXER_ENV" 2>/dev/null | tail -1 | tr -d "\"' \t\r"; }
+_IDX_HOST="$(_idx_env_val MORPHIT_INDEXER_LISTEN_HOST)"
+case "$_IDX_HOST" in '' | 0.0.0.0 | '::' | '[::]') _IDX_HOST=127.0.0.1 ;; esac
+_IDX_PORT="$(_idx_env_val MORPHIT_INDEXER_LISTEN_PORT)"
+HEALTH_URL="${MORPHIT_HEALTH_URL:-http://${_IDX_HOST}:${_IDX_PORT:-8081}/v1/health}"
 OUT="${MORPHIT_SNAPSHOT_OUT:-/opt/morphit/snapshots}"
 KEEP="${MORPHIT_SNAPSHOT_KEEP:-3}"
 TSX="$REPO/node_modules/.bin/tsx"
@@ -46,17 +60,23 @@ command -v python3 >/dev/null 2>&1 || die "python3 is required"
 # ── 1. GUARD: caught up + healthy ──────────────────────────────────
 log "checking sync state at $HEALTH_URL …"
 HEALTH="$(curl -fsS --max-time 15 "$HEALTH_URL" 2>/dev/null)" || skip "indexer /v1/health not reachable"
+# Only the indexer's body proves "caught up": it must carry `indexed_block` and a
+# `sync` object whose `behind` is exactly false. Anything else — another
+# service's health, an older indexer, a stale flag — is not proof, so skip.
 BEHIND="$(printf '%s' "$HEALTH" | python3 -c 'import json,sys
 try:
     h=json.load(sys.stdin)
 except Exception:
     print("err"); sys.exit(0)
-s=h.get("sync") or {}
-print("true" if s.get("behind") else "false")' 2>/dev/null)"
+s=h.get("sync")
+if "indexed_block" not in h or not isinstance(s, dict) or "behind" not in s:
+    print("nosync"); sys.exit(0)
+print("false" if s.get("behind") is False and not h.get("stale") else "true")' 2>/dev/null)"
 case "$BEHIND" in
-	false) log "indexer is caught up — proceeding" ;;
-	true)  skip "indexer is still catching up (sync.behind=true) — not publishing a partial snapshot" ;;
-	*)     skip "could not read sync state from /v1/health" ;;
+	false)  log "indexer is caught up — proceeding" ;;
+	true)   skip "indexer is still catching up (sync.behind or stale) — not publishing a partial snapshot" ;;
+	nosync) skip "$HEALTH_URL is not the indexer's health (no sync state) — set MORPHIT_HEALTH_URL in /etc/morphit/snapshot-publish.env" ;;
+	*)      skip "could not read sync state from $HEALTH_URL" ;;
 esac
 
 # Load the indexer env (INERTLY — never source; values may contain spaces).
@@ -140,7 +160,7 @@ if [ -n "${MORPHIT_SNAPSHOT_SIGNING_WIF:-}" ]; then
 else
 	log "no MORPHIT_SNAPSHOT_SIGNING_WIF set — snapshot pinned but NOT anchored."
 	log "  broadcast manually from your laptop (prompts for the @morphit POSTING WIF):"
-	log "    scp <this-node>:$PAYLOAD ."
+	log "    scp -O root@<this-node>:$PAYLOAD .      (-O: hardened boxes turn SFTP off)"
 	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $(basename "$PAYLOAD")"
 fi
 

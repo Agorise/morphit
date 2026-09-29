@@ -584,6 +584,19 @@ edit` → **Fees account** (or by editing
 `MORPHIT_INDEXER_FEE_RECIPIENT` directly and restarting
 the indexer).
 
+**Across instances (v1.20.0).** Your fees account is also published in your on-chain registration (`sudo morphit-ops register` does it; upgrades re-publish it for you when needed). Other Morphit instances accept the 90 % share of fees your users pay only at the account in that registration, so if you change it, re-register — `sudo morphit-ops edit` → **Fees account** offers to do it. Once it is registered, your users' EARLIER orders appear on the other instances too — including those paid on v1.19 before you ever registered a fees account — provided the order is still live and its 90 % went to the first fees account you register; every upgraded instance re-checks them from the chain within minutes of your registration landing. Orders whose 90 % went to a fees account you switched away from before registering stay on your instance only, so if you plan to change your fees account, upgrade first (details: FEES-AND-REWARDS.md, "Orders paid before the operator registered"). On the server,
+`sudo morphit-ops status` → "Fees account (federation)" shows whether
+your registration carries the account — which is what makes other
+instances accept it (`/v1/instance` reports the same as
+`fee_recipient_registered`; `null` = could not tell). `sudo morphit-ops register` prints `Fees account: @…` before
+it broadcasts. Every `morphit-ops upgrade` runs "the fees-account
+registration heal": if this node is registered and its on-chain
+registration lacks or differs from the resolved fees account, it
+re-publishes the registration unattended (exactly the payload this
+indexer last applied — `/v1/operator-registration/<account>` — plus
+`fee_recipient`) and reads it back; otherwise it prints one line telling
+you to run `sudo morphit-ops register` on the server.
+
 **Fallback / safety.** If you leave
 `MORPHIT_INDEXER_FEE_RECIPIENT` empty or set it to a
 malformed Blurt account name, the indexer does **not**
@@ -610,13 +623,13 @@ fee transfer fails, the order doesn't promote to
 | Account | Role | Upfront funding | Signing key location |
 |---|---|---|---|
 | `@morphit` | Trust anchor (release pin) | ~10 BLURT | Operator's laptop (OFF prod) |
-| `@morphit-relay` | Service account (account-creation fees + bonuses + refills + payouts) | ~700 BLURT (testers) – ~12,000 BLURT (100 signups/week) | Encrypted on prod box at `/etc/morphit/keys/relay-active.key` mode 0400 |
+| `@morphit-relay` | Service account (account-creation fees + bonuses + refills + payouts) | ~700 BLURT (testers) – ~12,000 BLURT (100 signups/week) | Encrypted keystore on the prod box (`MORPHIT_RELAY_ACTIVE_KEY_FILE`, `/etc/morphit/relay.keystore` on a guided/Ansible install), mode 0600 |
 | `@morphit-fees` | Receive-only treasury | ~0 BLURT | Not on any production box |
 
 The `@morphit-relay` figure dominates because of the
 ~100 BLURT chain account-creation fee the relay pays
-inline per signup.  Plan ~100 BLURT per expected
-signup plus a safety margin.
+inline per signup, plus the 2 BLURT it sends each new account.
+Plan ~102 BLURT per expected signup plus a safety margin.
 
 ### Long-term funding — see §1
 
@@ -678,7 +691,7 @@ curl -s "http://127.0.0.1:8081/v1/health?verbose=1" \
 > **If your indexer does not bind loopback:** `morphit-ops health`
 > tries `127.0.0.1:8081` first and then auto-probes your host's own
 > bridge-gateway addresses (docker0 / br-*), so a container deployment
-> that binds the bridge gateway (e.g. `172.18.0.1`) so its frontend
+> that binds the bridge gateway (e.g. `172.20.0.1`, the shipped compose's) so its frontend
 > container can reach it is found automatically — no flag needed. If
 > it still can't reach it (an unusual bind address), pass
 > `--url http://<host>:8081/v1/health` or set `MORPHIT_OPS_HEALTH_URL`.
@@ -1064,8 +1077,8 @@ The key file must be an encrypted envelope produced by
 a plaintext WIF file (dev / legacy), migrate now:
 
 ```sh
-cd /opt/morphit/apps/relay
-tsx apps/relay/scripts/encrypt-active-key.ts \
+cd /opt/morphit
+sudo node_modules/.bin/tsx apps/relay/scripts/encrypt-active-key.ts \
   /etc/morphit/keys/relay-active.key \
   /etc/morphit/keys/relay-active.enc
 ```
@@ -1148,6 +1161,13 @@ it observes a change in Blurt's `account_creation_fee`. The
 listing fee formula (ADR-0011) auto-adjusts; the alert is
 informational.
 
+The relay is the one place a fee change is not informational: it pays
+the live fee on every signup, and above **1.5×** your configured
+`MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT` it refuses to create
+accounts (code `relay_fee_spike`, journal `relay_fee_spike_refused`)
+until you set the new value in `/etc/morphit/relay.env` and restart it —
+see §18, "Fee-spike refusal".
+
 To grep for this specifically in journalctl:
 
 ```sh
@@ -1215,6 +1235,26 @@ sudo journalctl -u morphit-indexer.service \
 If you notice rows in `relay_pending_transfers` with
 `error_count` near the `queueMaxRetries` ceiling (default 3),
 something is stuck.
+
+**What the `last_error` states mean (v1.20.0).** The drainer writes
+`broadcast_attempt_at` as a committed claim *before* it signs, records the
+transaction id *before* it sends, and signs each transfer once:
+
+| `last_error` | Meaning |
+|---|---|
+| `in_flight` | Claimed; nothing signed yet |
+| `in_flight trx_id=<id> exp=<ms>` | Signed; the id was recorded before sending |
+| `outcome_unknown trx_id=<id> exp=<ms> checks=<n>` | Sent, but no node confirmed it; being settled from the relay account's history |
+| `not_landed trx_id=<id> …` | At least two independent RPC operators agree it is absent after the signed expiration — only then is it re-sent |
+| `escalated: …` | Could not be settled after `queueMaxSettleChecks` (default 30) checks |
+
+An unknown outcome does NOT count toward `error_count`, so do not "fix"
+such a row by hand — it settles itself (found → marked broadcast). An
+**escalated** row is taken OUT of the queue and never re-sent
+automatically; it is logged at error level with its `trx_id`. Check the
+recipient's history for that id on a block explorer and send by hand only
+if it is really absent. The relay's verbose `/v1/health` carries
+`transfer_queue: { unsettled, escalated }` — non-zero `escalated` means act.
 
 ### Inspect the queue
 
@@ -1307,10 +1347,10 @@ many legitimate users review each other or sign up together.
 ### Reviewing flags
 
 ```bash
-morphit-ops moderation              # last 7d, both signals
-morphit-ops moderation --since=30d  # wider window
-morphit-ops moderation --type=related
-morphit-ops moderation --json       # machine-readable, no prompt
+sudo morphit-ops moderation              # last 7d, both signals
+sudo morphit-ops moderation --since=30d  # wider window
+sudo morphit-ops moderation --type=related
+sudo morphit-ops moderation --json       # machine-readable, no prompt
 ```
 
 Or run bare `morphit-ops` on a terminal and pick **Moderation —
@@ -1325,8 +1365,8 @@ then offers block/unblock as the resolution action.
 ### Blocking an account (instance-local)
 
 ```bash
-morphit-ops block <account> "optional reason"
-morphit-ops unblock <account>
+sudo morphit-ops block <account> "optional reason"
+sudo morphit-ops unblock <account>
 ```
 
 Blocking is **instance-local and reversible.** It is NOT a chain
@@ -1643,11 +1683,12 @@ correctly configured:**
 2. Query `/v1/release` and confirm the returned
    `treasury.xmr.address` matches what you configured.
 3. Ask a trusted contact to send a small amount of XMR to
-   your fee address and generate a tx_proof from their own
-   wallet (`get_tx_proof <txid> <address>` in monero-wallet-
-   cli, or the equivalent menu item in any modern Monero
-   wallet).
-4. Submit the txid + proof through the public Morphit UI
+   your fee address and copy the payment's tx key from their
+   own wallet (`get_tx_key <txid>` in monero-wallet-cli, or the
+   equivalent item in any modern Monero wallet — see §40.13).
+   Better: run the §40.13 self-test on that payment
+   (`xmr-fee-selftest.ts --unbound`, on a laptop).
+4. Submit the txid + tx key through the public Morphit UI
    the same way a real user would.  If the order verifies,
    your config is correct.
 
@@ -1954,9 +1995,12 @@ correctness bug.
 ## 14. Deployment topology requirement — apps MUST be behind a loopback proxy
 
 The indexer and relay rate-limiters derive the client IP
-from forwarded-address headers (`X-Real-IP`,
-`X-Forwarded-For`) only when the immediate socket peer is
-a loopback address. This is a security property
+from forwarded-address headers only when the immediate
+socket peer is a trusted proxy: loopback (where `X-Real-IP`
+wins) or, since v1.20.0, Docker's bridge pool
+`172.16.0.0/12` (the BunkerWeb frontend container; only its
+`X-Forwarded-For` is read) — see "Relay client IP" in §32.
+This is a security property
 (preventing rate-limit bypass via forged headers) and it
 dictates a deployment requirement:
 
@@ -1975,8 +2019,12 @@ headers were honored unconditionally — a direct
 connection could forge a fresh IP per request and bypass
 the rate limiter.
 
-The fix now discards forwarded headers from non-loopback
-peers. This closes the vulnerability **only if the
+The fix now discards forwarded headers from untrusted
+peers. Because the default trusted set includes
+`172.16.0.0/12`, the relay and indexer ports must also be
+unreachable from anything on the Docker bridges except your
+own frontend container (UFW allows only the BunkerWeb
+network). This closes the vulnerability **only if the
 deployment actually fronts the apps with a loopback
 proxy**. If you deploy the apps directly on a public
 port, the socket peer will be the real attacker IP and
@@ -2672,8 +2720,10 @@ you're ready to also serve `https://`:
 2. Obtain the certificate and bring up the clearnet edge with
    `morphit-ops ssl setup <domain>` (this runs the TLS role + BunkerWeb for
    the domain; the onion keeps working alongside it).
-3. Update your advertised origin: `morphit-ops register` (or, if already
-   registered, the operator-update flow) with `MORPHIT_INSTANCE_ORIGIN=https://<domain>`.
+3. Update your advertised origin: set `MORPHIT_INSTANCE_ORIGIN=https://<domain>`
+   and run `sudo morphit-ops register` again — registration is an update keyed
+   on your relay account, so the re-run replaces the old origin (only the tag
+   is fixed).
    The onion stays advertised as an alt-network address, so nothing you've
    published breaks — you're adding clearnet, not replacing Tor.
 
@@ -2734,6 +2784,69 @@ that file and follow it. No new setting is involved.
   (not empty) still means "not configured", and a clearnet node keeps using
   the clearnet list.
 
+#### The operating system itself stays off clearnet too (v1.20.0)
+
+On a tor-only node the operating system under Morphit used to reach the normal internet on its own: apt
+(the daily security updates) fetched from the Ubuntu mirrors directly, every apt refresh started Ubuntu
+Pro's "apt news" fetch, the login-message news job fetched motd.ubuntu.com, and chrony asked public
+time servers for the time. From v1.20.0:
+
+- **apt goes over Tor.** Every apt source is switched to its `tor+http://` / `tor+https://` form
+  (the `apt-transport-tor` package), and `/etc/apt/apt.conf.d/99morphit-tor-only.conf` points apt's
+  proxies at Tor's SocksPort, so a repository added later still goes through Tor. Names are resolved
+  inside Tor, never by the box. Unattended security updates keep working, over Tor.
+- **The clock comes from onion services, over Tor.** NTP cannot go over Tor (it is UDP), so
+  `morphit-tor-timesync` (every 6 hours) reads the time from the web servers of six unrelated,
+  long-lived onion services, and sets the clock only when at least three answer and more than two
+  thirds agree within 10 seconds, and only if the clock is more than 30 seconds off. Each site's time
+  is compared with this node's clock at the moment the request actually went out and the answer came
+  back (curl's own timings), so a slow first Tor circuit cannot make a correct clock look wrong; an
+  answer that took more than 8 s from request to first byte is not used
+  (`MORPHIT_TOR_TIME_MAX_GAP`, seconds); and while Tor is still starting up (no "Bootstrapped 100%"
+  since it last started) the clock is never changed on that run (`result=tor-starting`). chrony stays
+  installed (it keeps the hardware clock) but no longer asks public time servers — and that change is
+  made only after the Tor time check has been seen to work. Your own list of sources:
+  `MORPHIT_TOR_TIME_SOURCES="http://… http://…"` in `/etc/morphit/tor-timesync.env` (at least three;
+  `MORPHIT_TOR_TIME_MAX_GAP` goes in the same file). The Blurt RPC onions are not used: their web
+  server sends no time.
+- **Ubuntu's news fetches are off** (`/etc/default/motd-news` `ENABLED=0`, and `pro config set apt_news=false`).
+
+New installs get this from the Ansible tor role; existing tor-only nodes get it on their next
+`sudo morphit-ops upgrade`. Each part is checked on the running system: apt must actually refresh its
+package lists over Tor, or its previous settings are put back byte for byte; chrony must show no time
+source at all, or it is stopped (the Tor check keeps the clock), or put back. A clearnet node is never
+touched.
+
+During `morphit-ops upgrade` the tor-only step runs early and within a fixed time; if there is not
+enough time left to switch apt AND prove it works over Tor, it leaves apt as it is ("the next upgrade
+does it"). A safety net, `morphit-tor-only-recover.timer` (a few minutes after boot, then every 6
+hours), finishes any switch an interruption left unchecked: it refreshes apt over Tor and keeps the
+switch, or puts every apt file back.
+
+Check it (on the tor-only node):
+
+```sh
+sudo sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-check     # "apt is on Tor" when it prints nothing and exits 0
+systemctl list-timers morphit-tor-timesync.timer morphit-tor-only-recover.timer
+sudo journalctl -u morphit-tor-timesync -n 20
+sudo journalctl -u morphit-tor-only-recover -n 20
+sudo sh /usr/local/lib/morphit/morphit-tor-timesync.sh --check      # measure only; never changes the clock
+chronyc -n sources                                                  # empty: chrony asks no public server
+```
+
+Undo by hand (on the tor-only node) — the backups are under `/var/lib/morphit-tor-only/`:
+
+```sh
+sudo ls /var/lib/morphit-tor-only/
+sudo sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-revert /var/lib/morphit-tor-only/backup-<time>-apt
+sudo sh /usr/local/lib/morphit/morphit-tor-only-os.sh chrony-revert /var/lib/morphit-tor-only/backup-<time>-chrony && sudo systemctl restart chrony
+```
+
+What is still not covered (known, for a later release): snapd's own store checks, the Ubuntu
+release-upgrade check shown at login, fwupd's firmware-list refresh, and NetworkManager's connectivity
+check on desktop systems. An ONLINE install also still downloads its packages over clearnet before Tor
+is installed; for a zero-clearnet install use the offline bundle (it now carries `apt-transport-tor`).
+
 ---
 
 ## 15. Frontend CSP + security headers for operators
@@ -2759,6 +2872,20 @@ value is pre-filled in `ops/bunkerweb/bunkerweb.env.example`. The same
 applies to Caddy, Apache, or any other front: deliver this exact header.
 
 This addresses Finding N in docs/REVISIT-LIST.md §F.
+
+**On the hidden services (v1.20.0).** Tor and I2P visitors reach the
+BunkerWeb frontend container directly, without BunkerWeb in between, so
+that container (`ops/bunkerweb/frontend/nginx.conf`) sends the security
+headers itself. On a `.onion` / `.i2p` name it sends the same CSP with
+`connect-src` narrowed to `'self'` plus the hidden Blurt RPC nodes the app
+uses there (`DEFAULT_HIDDEN_RPC_ENDPOINTS` in
+`apps/web/src/lib/net/config.ts`), chosen per request by `map $host
+$morphit_csp` in that file. The hidden services send no HSTS (they are
+plain `http://`). The canonical clearnet policy below is unchanged, and
+the `csp-header-consistency` smoke still requires every copy of it to be
+byte-identical. Every SVG outside `/_app/` is served with its own strict
+policy (`default-src 'none'; …; sandbox`) so an image opened directly can
+run nothing.
 
 ### Required headers
 
@@ -3269,9 +3396,9 @@ sudo systemctl daemon-reload
 # 6. Set your alert username — writes MORPHIT_MATRIX_BOT_ALERT_MXID into
 #    the env file AND enables + starts the bot.  Personal @user:server
 #    MXID only (a #room alias is refused — it would leak private alerts).
-morphit-ops matrix set @you:matrix.org
-#    Later:  morphit-ops matrix clear   empties it + stops/disables the bot
-#            morphit-ops matrix         shows username, readiness, state
+sudo morphit-ops matrix set @you:matrix.org
+#    Later:  sudo morphit-ops matrix clear   empties it + stops/disables the bot
+#            sudo morphit-ops matrix         shows username, readiness, state
 
 # 7. Verify.
 sudo systemctl status morphit-matrix-bot
@@ -4212,8 +4339,9 @@ token). That's a larger design change not yet built.
 
 The relay's `/v1/account/create` endpoint pays the ~100 BLURT
 account-creation fee inline (from `@morphit-relay`'s liquid BLURT)
-to create each new Blurt account (see ADR-0010 §4, as amended), so
-each successful signup spends ~100 BLURT of your relay's balance.
+to create each new Blurt account (see ADR-0010 §4, as amended), then
+sends the new account 2 BLURT, so each successful signup spends
+~102 BLURT of your relay's balance.
 Without defenses, a third-party operator who forges the
 `Origin` header (server-side scripts can) could attribute THEIR
 users' registrations to YOUR relay, draining your relay's BLURT and
@@ -4223,36 +4351,72 @@ each layer is cheap, additive, and tunable.  None alone is
 sufficient; together they make drains **bounded, detectable fast,
 and reversible**.
 
+**Where these settings go.** Every `MORPHIT_RELAY_*` value below
+belongs in **`/etc/morphit/relay.env`** on the relay's server, as a
+plain `KEY=value` line, followed by `sudo systemctl restart
+morphit-relay`. The snippets below are written as systemd
+`Environment=` lines for readability only: the relay's unit reads
+`/etc/morphit/relay.env` itself *after* systemd sets the
+environment, so a value that file sets (the installer writes
+`MORPHIT_RELAY_SIGNUP_ENABLED` and `MORPHIT_RELAY_SIGNUP_DAILY_CEILING`
+there) **always wins over** an `Environment=` line in a drop-in.
+Edit the file.
+
 ### Layer 1: Kill-switch
 
-Instant halt. When something goes wrong, flip this first.
-
-```ini
-# Default: true (signups enabled). Flip to false to halt ALL
-# account creation immediately.
-Environment="MORPHIT_RELAY_SIGNUP_ENABLED=false"
-```
-
-Reload + restart:
+Instant halt. When something goes wrong, flip this first — on the
+relay's server, no restart:
 
 ```sh
-sudo systemctl daemon-reload
-sudo systemctl restart morphit-relay.service
+sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED    # pause (within 1 s)
+sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED       # resume
 ```
 
-While `SIGNUP_ENABLED=false`, both `/v1/account/invite` and
-`/v1/account/create` return `503` with `code:
-"signups_disabled"`. The frontend shows a "signups temporarily
-unavailable, please try another Morphit mirror" message.
+The relay keeps its state in `MORPHIT_RELAY_DATA_DIR`, by default
+`/var/lib/morphit/relay` (created by the relay at boot, mode 0700,
+and by the unit's `StateDirectory=morphit/relay`), and polls for
+the `SIGNUPS_DISABLED` file there every second. At boot it logs
+`signup_state_dir_ready` and `kill_switch_armed` (with the watched
+path), or `signup_state_dir_not_writable` with the exact fix
+command. Before v1.20.0 no installer set this directory, so the
+file did nothing and the daily ceiling reset on every restart;
+the upgrade brings existing nodes onto the default.
+
+The slower alternative (needs a restart) is
+`MORPHIT_RELAY_SIGNUP_ENABLED=false` in `/etc/morphit/relay.env`,
+then `sudo systemctl restart morphit-relay`.
+
+Either way, both `/v1/account/invite` and `/v1/account/create`
+return `503` with `code: "signups_disabled"`. The frontend shows a
+"signups temporarily unavailable, please try another Morphit
+mirror" message.
 
 ### Layer 2: Global daily ceiling
 
 Hard cap on successful signups per UTC day.  Bounds worst-case
 spend to `ceiling` signups per day; in BLURT terms that's
-`ceiling × account_creation_fee` BLURT at risk (where the fee
+`ceiling × (account_creation_fee + 2)` BLURT at risk (where the fee
 is whatever the chain's `account_creation_fee`
-witness-parameter is at claim time, typically ~100 BLURT).  Reset
-at UTC midnight.
+witness-parameter is at claim time, typically ~100 BLURT, and the
+2 BLURT is the transfer to each new account).  Reset
+at UTC midnight. The count is persisted in
+`/var/lib/morphit/relay/signup-ceiling.json`
+(`MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH` overrides it), so a
+relay restart does not reset it.
+
+**Fee-spike refusal (v1.20.0).** The relay pays the chain's *live*
+`account_creation_fee`. If that fee is more than **1.5×** your
+configured `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`, it refuses
+to broadcast any `account_create` (`503`, code `relay_fee_spike`;
+journal event `relay_fee_spike_refused` with `observed_blurt` and
+`configured_blurt`) and spends nothing (`FEE_REFUSE_MULTIPLIER` in
+`apps/relay/src/blurt/client.ts`). Above a 10% difference it also
+logs a warning once per boot. When the witnesses really changed
+the fee (check `condenser_api.get_chain_properties` or any Blurt
+block explorer), set the new value in `/etc/morphit/relay.env` and
+`sudo systemctl restart morphit-relay`; signups resume once the
+live fee is within 1.5× of it. The relay's verbose `/v1/health`
+reports the live fee as `account_creation_fee_blurt`.
 
 ```ini
 # Default 50/day. Start conservative at launch — raise as you
@@ -4551,9 +4715,10 @@ disable.
 
 ### Tuning playbook during a suspected attack
 
-1. **Flip the kill-switch.** `MORPHIT_RELAY_SIGNUP_ENABLED=false`
-   and restart. This stops the bleeding immediately with zero
-   risk.
+1. **Flip the kill-switch.** On the relay's server:
+   `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED` (takes
+   effect within a second, no restart). This stops the bleeding
+   immediately with zero risk.
 2. **Check the anomaly alert.** Was signup volume actually
    abnormal? If yes, you're under attack. If no, the
    low-balance alert was organic — top up and re-enable.
@@ -4580,7 +4745,9 @@ disable.
    if it isn't already. Lower the sequential threshold to 1
    (`MORPHIT_RELAY_SEQUENTIAL_THRESHOLD=1`) so the SECOND
    sequential signup is the one blocked, not the third.
-8. **Re-enable.** `MORPHIT_RELAY_SIGNUP_ENABLED=true`, restart.
+8. **Re-enable.** `sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED`
+   (and, if you also set `MORPHIT_RELAY_SIGNUP_ENABLED=false` in
+   `/etc/morphit/relay.env`, set it back to `true` and restart).
 9. **Watch for 24-48h.** Anomaly alerts will tell you if the
    attacker is still at it.
 
@@ -4593,8 +4760,9 @@ drain up to the daily ceiling. What you DON'T have:
 - **Unlimited signups**: ceiling caps it.
 - **Zero-friction drain**: per-IP + Altcha forces cost.
 - **Undetected drain**: the anomaly detector raises the flag.
-- **Unstoppable drain**: the kill-switch is one env var flip
-  away.
+- **Unstoppable drain**: the kill-switch is one `touch` away.
+- **Fee-spike drain**: above 1.5× the configured fee the relay
+  creates no accounts at all.
 - **Squatter-resellable names**: Layer 7 + 8 mean an attacker
   who DOES drain the ceiling walks away with names that have
   little resale value (long-prefix non-brand names that
@@ -5088,8 +5256,8 @@ easiest to most low-level:
    who deploy via Docker/SystemD `Environment=` directives
    instead won't see this option.
 
-   (Don't remember the subcommand?  Run bare `npx morphit-ops`
-   on a terminal — cp186 — and pick **Edit settings → Blurt RPC
+   (Don't remember the subcommand?  Run bare `sudo morphit-ops`
+   on the server — cp186 — and pick **Edit settings → Blurt RPC
    endpoints** from the menu.  The menu lists every action with
    a one-line description; non-interactive/piped runs still
    print help as before.)
@@ -5278,8 +5446,12 @@ it during prolonged outages so the indexer's emergency fallback
 matches reality. See §13 for the full price-feed runbook.
 
 **Registration kill-switch.** `MORPHIT_RELAY_SIGNUP_ENABLED`
-(default `true`). Flip to `false` to immediately stop new
-account onboarding while existing users continue normally.
+(default `true`), set in `/etc/morphit/relay.env` (a value there
+wins over `morphit.config.env` and over systemd `Environment=`).
+Flip to `false` and restart the relay to stop new account
+onboarding while existing users continue normally. For an instant
+stop with no restart, `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED`
+(§18).
 Use during active spam-account waves, maintenance, or
 suspected drain attacks (§7, §18).
 
@@ -5386,16 +5558,17 @@ outages start from a better baseline.
 Health endpoint shows abnormal signup velocity. You want
 to stop the bleeding while you investigate.
 
-1. Edit `morphit.config.env`:
-   ```
-   MORPHIT_RELAY_SIGNUP_ENABLED=false
-   ```
-2. `sudo systemctl restart morphit-relay.service`.
-3. New signups now return a clear "registration
-   temporarily disabled" message. Existing users keep
-   working.
-4. Investigate (§7, §18).
-5. When safe, flip back to `true` and restart again.
+1. On the relay's server:
+   `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED`
+   (no restart). Don't set `MORPHIT_RELAY_SIGNUP_ENABLED`
+   in `morphit.config.env` for this: the relay reads
+   `/etc/morphit/relay.env` after it, and the installer
+   sets the same variable to `true` there, which wins.
+2. New signups now return a clear "registration
+   temporarily disabled" message within a second.
+   Existing users keep working.
+3. Investigate (§7, §18).
+4. When safe: `sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED`.
 
 ### Example workflow — operator with strict deployment automation
 
@@ -6010,6 +6183,12 @@ means the order never reached `fee_status='verified'`:
    explorer: it should contain a `transfer` of ~90% of the fee to
    your account and ~10% to `@morphit-fees` (or a single 100%
    transfer to `@morphit-fees` if you run the canonical account).
+4. **Is your fees account in your on-chain registration?**
+   `sudo morphit-ops status` (on the server) says so. If it is not,
+   other instances hide your users' BLURT-paid orders (they still
+   show on yours) — run `sudo morphit-ops register` on the server.
+   Once it is, your earlier live orders appear there too, within minutes (FEES-AND-REWARDS.md, "Orders paid
+   before the operator registered").
 
 ### If the dashboard attribution is missing (but the money arrived)
 
@@ -6282,7 +6461,7 @@ ops/systemd/morphit-backup.timer    # daily at 04:00 local
 
 ### Verifying backups ran (status dashboard)
 
-`morphit-ops status` (main-menu item #10, "Status dashboard") ends with a **Backups** section that lists the backup directory and the **3 most recent** backup files — each with its age and size — so you can confirm at a glance that the timer is actually producing backups. It resolves the directory from `MORPHIT_BACKUP_DIR`, else `BACKUP_DIR` in `/etc/morphit/backup.env`, else the default `/home/morphit/backups`. The section prints the on-disk path so you can copy a file off the host (e.g. `scp`) to download it or hand it to a developer. It is read-only — it never creates, deletes, or rotates backups; rotation stays the timer's job. (`--json` includes the same data under a `backups` key for scripting.)
+`morphit-ops status` (main-menu item #10, "Status dashboard") ends with a **Backups** section that lists the backup directory and the **3 most recent** backup files — each with its age and size — so you can confirm at a glance that the timer is actually producing backups. It resolves the directory from `MORPHIT_BACKUP_DIR`, else `BACKUP_DIR` in `/etc/morphit/backup.env`, else the default `/home/morphit/backups`. The section prints the on-disk path so you can copy a file off the host (e.g. `scp -O root@<server>:<file> .` — `-O` because hardened servers turn SFTP off) to download it or hand it to a developer. It is read-only — it never creates, deletes, or rotates backups; rotation stays the timer's job. (`--json` includes the same data under a `backups` key for scripting.)
 
 ### Wizard flow
 
@@ -6381,7 +6560,7 @@ docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > backup.sql
 driven by one field in `/etc/morphit/backup.env`:
 
 ```
-DB_CONTAINER=bunkerweb-db-1   # set → docker-exec path; empty → host pg_dump
+DB_CONTAINER=bunkerweb-db-1   # an example name; set → docker-exec path; empty → host pg_dump
 ```
 
 **You do not set this by hand.** `morphit-ops init` and **every** `morphit-ops upgrade` auto-detect a containerized Postgres and fill `DB_CONTAINER` for you — detection is name-agnostic (it finds a running Postgres-family container that actually hosts the morphit database via the same trust/peer path the backup will use, never a hard-coded name). `DB_NAME` and `DB_USER` are likewise **derived from your `MORPHIT_INDEXER_DATABASE_URL`** at setup (init and harden), so a non-standard box — e.g. a BunkerWeb DB on `morphit_user`/`morphit_db` — is backed up correctly without any hand-editing; probing the container under the real identity also makes detection a provable match rather than a best-guess. On the container path, `pg_dump` runs *inside* the container against its own local socket, so `DB_HOST`/`DB_PORT` are ignored and no password is needed (container-local trust/peer auth).
@@ -6466,11 +6645,15 @@ The local timer keeps a 30-day rolling backup. If the server burns down, you los
 
 ## 32. BunkerWeb — recommended WAF / reverse-proxy hardening
 
-[BunkerWeb](https://www.bunkerweb.io) is an open-source AGPLv3-licensed reverse proxy with built-in Web Application Firewall (WAF) features. Same license as Morphit; no licensing concern. **Recommended for any public-facing Morphit instance** — the morphit repo ships a canonical, tested-shape BunkerWeb deployment at `ops/bunkerweb/` (paralleling `ops/nginx/`, `ops/systemd/`, etc.).  Copy + edit + `docker compose up -d` and you have a WAF-fronted instance with OWASP CRS at paranoia 3, anti-`Referer: none` on the invite endpoint, real-IP forwarding wired correctly to the relay's trusted-proxy chain, and a fixed Docker network CIDR (`172.20.0.0/16`) you can hard-code into `MORPHIT_RELAY_TRUSTED_PROXY_IPS` without re-inspecting after rebuilds.
+[BunkerWeb](https://www.bunkerweb.io) is an open-source AGPLv3-licensed reverse proxy with built-in Web Application Firewall (WAF) features. Same license as Morphit; no licensing concern. **Recommended for any public-facing Morphit instance** — the morphit repo ships a canonical, tested-shape BunkerWeb deployment at `ops/bunkerweb/` (paralleling `ops/nginx/`, `ops/systemd/`, etc.).  Copy + edit + `docker compose up -d` and you have a WAF-fronted instance with OWASP CRS at paranoia 3, anti-`Referer: none` on the invite endpoint, real-IP forwarding wired correctly to the relay's trusted-proxy chain, and a fixed Docker network CIDR (`172.20.0.0/16`, inside the `172.16.0.0/12` pool the relay and indexer trust by default, so no trusted-proxy setting is needed).
 
 The Ansible playbook's `bunkerweb` role deploys this directory verbatim.  Operators not using Ansible follow the Quick Start in `ops/bunkerweb/README.md`.
 
-**Canonical topology (what `ops/bunkerweb/` ships):** `client ──TLS──> bunkerweb ──> frontend nginx ──> host relay (8080) / indexer (8081)`. BunkerWeb is the only public entry — it terminates TLS, runs the WAF + rate limits, sets the real client IP, then proxies EVERY path (a single `REVERSE_PROXY_HOST=http://frontend:80`) to a lightweight `frontend` nginx container. That container serves the built SvelteKit site for page routes AND reverse-proxies the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream` paths) to the relay + indexer on the host — its routing mirrors `ops/nginx/web.conf` minus the TLS + security headers BunkerWeb owns (see `ops/bunkerweb/frontend/nginx.conf`). Doing all the static-serving + SPA fallback + per-path proxy + SSE in one nginx is far easier to get right than expressing it in BunkerWeb env vars. The relay + indexer therefore bind on an address the Docker bridge can reach (NOT loopback-only — a `127.0.0.1` bind is unreachable from the `frontend` container and every proxied call 502s); UFW's default-deny keeps the public out and the `bunkerweb` role adds an allow for the `172.20.0.0/16` bridge CIDR only. The illustrative BunkerWeb env-var snippets further down show BunkerWeb's setting shapes; the authoritative morphit config is `ops/bunkerweb/` + its `README.md`.
+**Canonical topology (what `ops/bunkerweb/` ships):** `client ──TLS──> bunkerweb ──> frontend nginx ──> host relay (8080) / indexer (8081)`. BunkerWeb is the only public entry — it terminates TLS, runs the WAF + rate limits, sets the real client IP, then proxies EVERY path (a single `REVERSE_PROXY_HOST=http://frontend:8088`) to a lightweight `frontend` nginx container. That container serves the built SvelteKit site for page routes AND reverse-proxies the API paths (`/v1/`, `/relay/`, `/rss/`, and the SSE `.../stream` paths) to the relay + indexer on the host — its routing mirrors `ops/nginx/web.conf` minus TLS (see `ops/bunkerweb/frontend/nginx.conf`); it sends the security headers itself, because Tor/I2P visitors reach it directly. Doing all the static-serving + SPA fallback + per-path proxy + SSE in one nginx is far easier to get right than expressing it in BunkerWeb env vars. The relay + indexer therefore bind on an address the Docker bridge can reach (NOT loopback-only — a `127.0.0.1` bind is unreachable from the `frontend` container and every proxied call 502s); UFW's default-deny keeps the public out and the `bunkerweb` role adds an allow for the `172.20.0.0/16` bridge CIDR only. The illustrative BunkerWeb env-var snippets further down show BunkerWeb's setting shapes; the authoritative morphit config is `ops/bunkerweb/` + its `README.md`.
+
+**Why `:8088` (v1.20.0).** The frontend listens on two ports. `:8088` is BunkerWeb's edge listener: only a request arriving there from Docker's address pool (`172.16.0.0/12`) may name the visitor, by BunkerWeb's `X-Real-IP`. Everything else — Tor/I2P through the port published on the host's `127.0.0.1` (→ `:80`), or any other container on the bridge — is keyed on its own socket address, so a Tor visitor coming in through the bridge gateway can never inject an `X-Real-IP` and pick a rate-limit bucket. `:8088` must never be published, and no Tor/I2P proxy may point at it. `morphit-ops upgrade` switches an installed BunkerWeb whose `REVERSE_PROXY_HOST` still sends to this frontend on `:80` — only once the frontend serves this release's config, and it checks the site still answers afterwards; if it cannot switch, it says why in a calm note. A BunkerWeb left on `:80` fails safe: every clearnet visitor shares one bucket.
+
+**What the upgrade does to the web containers (v1.20.0).** It finds BunkerWeb by image (`bunkerity/bunkerweb`, publishing 443), never by name; a plain-nginx edge, several candidates or a non-Compose container are left alone with a calm note. It recreates only the edge, a scheduler reading the same env file, and the frontend (`up -d --no-deps` with every `-f` file and the recorded `--env-file`), finishes within 120 s, and restores the files byte for byte if stopped mid-change. BunkerWeb keeps no Docker log and its `LOG_FORMAT` names no visitor address — unless CrowdSec reads its log (or that cannot be checked), when it keeps a `local` 5 MB × 1 log and the address, so CrowdSec keeps working. To watch BunkerWeb live with nothing stored: `sudo docker attach --no-stdin --sig-proxy=false bunkerweb` (Ctrl-C detaches).
 
 > **Concurrent-connection caps for the chat SSE paths (`/v1/chat/:a/:b/stream`, `/v1/chat-activity`).** The indexer deliberately does NOT apply its per-minute REST rate limiter to these two long-lived SSE endpoints (a persistent stream shouldn't share a per-request budget) — it defers the limit to this proxy layer, on purpose. The relevant DoS surface here is not request *rate* but concurrent-connection *count*: one client (or a botnet) holding thousands of open streams. So the proxy in front of the indexer must enforce a **per-IP concurrent-connection cap** on those paths — BunkerWeb's connection-rate + slow-loris guards cover the common case; if you want an explicit ceiling, the `frontend` nginx (`ops/bunkerweb/frontend/nginx.conf`) is the natural place for an nginx `limit_conn` zone keyed on the real client IP scoped to the `.../stream` and `/v1/chat-activity` locations (a generous cap — e.g. a few dozen per IP — so legitimate multi-tab / multi-device users are unaffected while a single source can't exhaust connection slots). This does not touch fast-path latency: the stream itself is server-push, and the cap only bounds how many streams one source may hold open at once. If you run WITHOUT BunkerWeb, this cap is your responsibility to add at whatever proxy fronts the indexer.
 
@@ -6670,23 +6853,15 @@ Leave `USE_REAL_IP=no` (the shipped value). BunkerWeb is the public edge, so the
 
 ### CRITICAL: trusted-proxy IPs for BunkerWeb deployments
 
-Out of the box, the relay only trusts `X-Forwarded-For` headers from loopback addresses (`127.0.0.1`, `::1`). This is correct for the canonical single-host nginx topology where nginx and the relay run side-by-side and connect via loopback. **It is WRONG for BunkerWeb deployments** in several common topologies:
+Since v1.20.0 the relay (like the indexer) trusts forwarded headers by default from loopback **plus `172.16.0.0/12`** — Docker's default bridge pool, which covers the shipped compose (`172.20.0.0/16`) and the other bridges Docker hands out (`172.17`–`172.31`). So a Docker-compose BunkerWeb needs **no** `MORPHIT_RELAY_TRUSTED_PROXY_IPS`. Before v1.20.0 the default was loopback only, and a relay on a bridge not listed in its env saw the frontend container as the client of every request: the per-IP signup limits (2 a day, the spacing) applied to the whole site.
 
-| Topology | Relay sees socket peer as | What happens without config |
+| Topology | Relay sees socket peer as | Setting needed |
 |---|---|---|
-| BunkerWeb in Docker compose alongside the relay | Docker bridge IP (e.g., `172.18.0.5`) | All signups from BunkerWeb users share ONE rate-limit bucket — one abuser exhausts the daily limit for everyone |
-| BunkerWeb on a separate host from the relay | BunkerWeb's host IP (e.g., `10.0.0.5`) | Same — every user shares one bucket |
-| BunkerWeb in front of nginx (Option B) on same host | Loopback (nginx is the trusted hop) | OK — nginx already trusted; X-Forwarded-For chain works |
+| BunkerWeb in Docker compose alongside the relay (shipped) | Docker bridge IP in `172.16.0.0/12` | None (default) |
+| Docker with a `10.x` address pool, a LAN proxy, a proxy on another host, a CDN | That proxy's address | `MORPHIT_RELAY_TRUSTED_PROXY_IPS=<its CIDR>` |
+| nginx on the same host (bare metal) | Loopback | None — loopback is always trusted |
 
-To fix the Docker-compose case, set `MORPHIT_RELAY_TRUSTED_PROXY_IPS` to the Docker bridge CIDR.
-
-**If you deploy the canonical morphit-shipped BunkerWeb compose** (`ops/bunkerweb/docker-compose.yml`, also deployed by the Ansible `bunkerweb` role), the CIDR is **PINNED at `172.20.0.0/16`** — set:
-
-```
-MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16
-```
-
-The Ansible playbook's group_vars default already sets this. The compose was deliberately pinned to `172.20.0.0/16` (instead of letting Docker auto-assign) precisely so this CIDR is stable and operators can hard-code it without re-inspecting after rebuilds. In the canonical topology the relay's immediate socket peer is the `frontend` container (requests flow BunkerWeb → frontend → relay), but BOTH containers live on `172.20.0.0/16`, so the single pinned CIDR is all the relay needs. BunkerWeb (with `USE_REAL_IP=no`) passes the visitor it saw on its socket as `X-Real-IP`; the `frontend` forwards exactly that one address as `X-Forwarded-For`, and the relay takes the right-most address in the chain that is not a trusted proxy. See "Relay client IP (v1.18.0)" below.
+`MORPHIT_RELAY_TRUSTED_PROXY_IPS` (in `/etc/morphit/relay.env`), when set, REPLACES the default (loopback stays trusted). At boot the relay logs `trusted_proxies_configured` with `source: default` or `source: MORPHIT_RELAY_TRUSTED_PROXY_IPS` and the CIDRs in force. In the canonical topology the relay's immediate socket peer is the `frontend` container (requests flow BunkerWeb → frontend → relay). BunkerWeb (with `USE_REAL_IP=no`) passes the visitor it saw on its socket as `X-Real-IP`; the `frontend` forwards exactly that one address as `X-Forwarded-For`, and the relay takes the right-most address in the chain that is not a trusted proxy. See "Relay client IP (v1.18.0)" below.
 
 #### Relay client IP (v1.18.0)
 
@@ -6699,13 +6874,15 @@ The Ansible playbook's group_vars default already sets this. The compose was del
 3. If every entry is a trusted address (a visitor who reached the proxy from a local address, such as Tor through the frontend container), it uses the right-most entry, which your own proxy wrote.
 4. If nothing is usable, it uses the socket peer. `X-Real-IP` from a non-loopback proxy is ignored, because the BunkerWeb frontend does not set it.
 
-**What the shipped configs do now.** `ops/nginx/web.conf` and `ops/nginx/relay.conf` send `X-Forwarded-For $remote_addr` to the relay (overwrite, never append). `ops/bunkerweb/frontend/nginx.conf` sends the address BunkerWeb wrote (its `X-Real-IP`) for requests from BunkerWeb, and `$remote_addr` for everything else, including Tor/I2P through the published `127.0.0.1` port (the Docker bridge gateway `172.20.0.1`). It also clears `X-Real-IP`. The `geo` block in that file names `172.20.0.0/16`. If you change the Docker subnet, change it there too. A mismatch fails safe: everyone shares one bucket, and nobody gets to pick their address. BunkerWeb ships `USE_REAL_IP=no`.
+**What the shipped configs do now.** `ops/nginx/web.conf` and `ops/nginx/relay.conf` send `X-Forwarded-For $remote_addr` to the relay (overwrite, never append). `ops/bunkerweb/frontend/nginx.conf` sends the address BunkerWeb wrote (its `X-Real-IP`) as the only `X-Forwarded-For` entry for requests on its edge listener `:8088` from `172.16.0.0/12`, and `$remote_addr` for everything else, including Tor/I2P through the published `127.0.0.1` port (the Docker bridge gateway) and other containers on the bridge. It also clears `X-Real-IP`. If BunkerWeb still targets `:80`, everyone shares one bucket (fail-safe); nobody gets to pick their address. BunkerWeb ships `USE_REAL_IP=no`.
+
+**Until the box runs this release's frontend config** (the old `$proxy_add_x_forwarded_for` form), a Tor visitor could type an `X-Forwarded-For` entry that the relay and indexer now reach, because the gateway hop is trusted. `morphit-ops upgrade` refreshes the frontend config and verifies the served `/v1/` and `/relay/` blocks carry the new form — upgrade rather than leaving an old frontend running.
 
 **Tor and I2P.** Everyone arriving over Tor or I2P still shares one bucket (`127.0.0.1` on bare metal, the bridge gateway behind BunkerWeb), exactly as before. The difference is that they can no longer type their way out of it.
 
 **Existing nodes.** `morphit-ops upgrade` refreshes the frontend `nginx.conf` as before. Its BunkerWeb WAF heal now also sets `USE_REAL_IP=no` in `/etc/bunkerweb/bunkerweb.env` when it trusts `X-Forwarded-For` from a `/0` range or from BunkerWeb's default private ranges (`REAL_IP_FROM` unset). A `REAL_IP_FROM` that lists specific ranges, as for a deliberate CDN, is left alone. The heal then checks the running container (`nginx -T` inside BunkerWeb). `docker restart` keeps a container's old environment, so if `set_real_ip_from` is still loaded, the heal recreates the containers from compose (`docker compose up -d --force-recreate`), waits and checks again. If that still doesn't take, it prints the one command to run. Bare-metal `ops/nginx/web.conf` is not re-rendered by the upgrade. It doesn't need to be for this fix: the shipped `/relay/` block has always set `X-Real-IP $remote_addr`, and the relay now prefers that from a loopback peer. That covers clearnet and Tor visitors alike. You can still copy the new `/relay/` block (`X-Forwarded-For $remote_addr`) into your vhost and run `nginx -s reload` to keep it in step with the repo.
 
-**If you deploy your OWN compose** with a different network CIDR, the default Docker bridge networks are typically `172.17.0.0/16` (the default `bridge` network) and `172.18.0.0/16` through `172.31.0.0/16` for user-defined networks. To find YOUR bridge network's CIDR:
+**If you deploy your OWN compose** on a network outside `172.16.0.0/12` (Docker's usual pools — `172.17.0.0/16` for the default `bridge`, `172.18–31.x` for user-defined networks — are all inside it and need nothing), find YOUR bridge network's CIDR:
 
 ```sh
 docker network inspect <your-compose-network> --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
@@ -6715,8 +6892,8 @@ docker network inspect <your-compose-network> --format '{{range .IPAM.Config}}{{
 Then set it in the relay's environment:
 
 ```ini
-# /etc/morphit/relay.env (or your systemd Environment= directive)
-MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.18.0.0/16
+# /etc/morphit/relay.env (a systemd Environment= line would lose to this file)
+MORPHIT_RELAY_TRUSTED_PROXY_IPS=10.10.0.0/16
 ```
 
 For multi-host BunkerWeb (BunkerWeb on a separate machine):
@@ -6738,6 +6915,8 @@ MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.18.0.0/16,10.0.0.5
 
 To verify the trust chain is working end-to-end after configuring, hit any rate-limited endpoint from two different real client IPs (your phone on cell + your laptop on Wi-Fi) and confirm the relay logs show DIFFERENT bucket keys per request. If both show the proxy's IP, the trust chain is broken.
 
+**The indexer too (v1.20.0).** Until v1.20.0 the indexer believed forwarded headers only from loopback, so on every BunkerWeb box the frontend container (172.20.0.x) was the "client" of every request: ONE rate-limit bucket for the whole instance (120 list reads a minute shared by all visitors). The indexer now trusts `127.0.0.0/8`, `::1` and `172.16.0.0/12` (Docker's default bridge pool) by default — no env change needed on the shipped compose — and reads the client from `X-Forwarded-For`, rightmost address first, skipping trusted hops. Set `MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS` (comma-separated CIDRs; it REPLACES the default, loopback stays trusted) only if your frontend container is outside `172.16.0.0/12`. Tor/I2P visitors still share one bucket (the bridge gateway), as before.
+
 ### Compatibility with §37 server hardening
 
 BunkerWeb interacts with several of §37's hardening directives. Check these before deploying both:
@@ -6748,9 +6927,9 @@ BunkerWeb interacts with several of §37's hardening directives. Check these bef
 
 **§37.5 Systemd hardening.** BunkerWeb's official systemd unit ships with reasonable isolation defaults. If you've applied a custom `hardening.conf` drop-in to ALL services, audit BunkerWeb's drop-in too — `ProtectSystem=strict` is fine but `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` MUST allow `AF_NETLINK` if BunkerWeb's traffic-shaping plugin is loaded (it queries iptables via netlink).
 
-**§37.13 Outbound egress allowlist.** BunkerWeb makes outbound connections to: Let's Encrypt (TCP 80 + 443), Maxmind GeoIP database updates (TCP 443), and DNSBL queries (TCP/UDP 53). If you applied the relay-host egress allowlist, those work. The BunkerWeb-bot-database refresh (`USE_BAD_BEHAVIOR=yes` enables a daily download from the BunkerWeb cloud) hits 443; also fine. If you see `geoip_update_failed` or `dnsbl_update_failed` in BunkerWeb logs, your egress policy is the likely culprit.
+**§37.13 Outbound egress allowlist.** BunkerWeb makes outbound connections to: Let's Encrypt (TCP 80 + 443), Maxmind GeoIP database updates (TCP 443), and DNSBL queries (TCP/UDP 53). If you applied the relay-host egress allowlist, those work. The BunkerWeb-bot-database refresh (`USE_BAD_BEHAVIOR=yes` enables a daily download from the BunkerWeb cloud) hits 443; also fine. If you see `geoip_update_failed` or `dnsbl_update_failed` while watching BunkerWeb (`sudo docker attach --no-stdin --sig-proxy=false bunkerweb` — it keeps no stored log; Ctrl-C detaches) or in `docker compose logs bunkerweb-scheduler`, your egress policy is the likely culprit.
 
-**§34 fail2ban.** Most fail2ban rules watch `/var/log/auth.log` (SSH) — no conflict. If you've added a Morphit-specific fail2ban rule that watches the relay's HTTP error log for `429`s, double-check the log format: BunkerWeb's nginx writes a different format than stock nginx. The simpler approach is to write fail2ban rules against BunkerWeb's own logs (`/var/log/bunkerweb/access.log` and `/var/log/bunkerweb/error.log`) which include the original client IP (BunkerWeb is the edge, so the socket address it logs is the visitor).
+**§34 fail2ban.** Most fail2ban rules watch `/var/log/auth.log` (SSH) — no conflict. If you've added a Morphit-specific fail2ban rule that watches the relay's HTTP error log for `429`s, double-check the log format: BunkerWeb's nginx writes a different format than stock nginx. Since v1.20.0 the shipped BunkerWeb keeps no visitor addresses at all (its `LOG_FORMAT` names none and its container has no Docker log), so there is no address log for fail2ban to watch — rely on BunkerWeb's own bad-behavior bans, which work in memory.
 
 **§37.8 Postgres hardening.** No interaction. BunkerWeb doesn't touch the Postgres port.
 
@@ -7022,8 +7201,7 @@ key file, or a key-file permission complaint — the fastest path is
 the read-only preflight:
 
 ```
-cd /opt/morphit          # the install directory
-npx morphit-ops doctor   # or: morphit-ops doctor, if symlinked onto PATH
+sudo morphit-ops doctor   # on the server, from any folder
 ```
 
 What it does, and why it's trustworthy:
@@ -7113,53 +7291,46 @@ show all green here. `--json` includes a `security` array.
 
 ### Troubleshooting: `morphit-ops` says "command not found"
 
-If `npx morphit-ops init` (or `register`, `edit`, `upgrade`) worked once and then stopped — or never worked on a fresh clone — there are two causes, in order of how often they bite:
-
-**Cause 1 (most common): you're not in the repo directory, or `npm install` hasn't populated `node_modules` yet.**
-
-`morphit-ops` is a workspace-local tool — it is *not* published to the public npm registry; it lives in this repo under `apps/ops-cli/`. `npx` finds it only when you run from **inside the Morphit repo** (it searches upward from your current directory for the workspace) **and** after `npm install` has populated `node_modules` at the repo root. If you run it from your home directory, from a subdirectory outside the repo, or from a fresh clone where you haven't installed yet, `npx` finds no local tool, falls through to the public registry, and you see something like:
-
-```
-npm error code E404
-npm error 404 Not Found - GET https://registry.npmjs.org/morphit-ops - Not found
-```
-
-That E404 *is* the "command not found" — npx looked for a published package named `morphit-ops` (there is none — it's private to this repo).
-
-The classic trap: yesterday you ran it from `~/morphit` and it worked; today after a `git pull` you happened to be in a different directory, or you're on a freshly-cloned second server where you haven't run `npm install` yet.
-
-**Cause 2: the workspace bin symlink went stale.**
-
-`npm install` creates a symlink at `node_modules/.bin/morphit-ops` pointing into the workspace. If a `git pull` changed `package.json` / `package-lock.json` / the workspace layout (this repo regenerates the lockfile at meaningful milestones), that symlink can be invalidated until you re-run `npm install`.
-
-**Both causes have the same fix — run from the repo root, after installing:**
+**On a guided or Ansible install** the command is a shortcut at
+`/usr/local/bin/morphit-ops` that always runs the copy in `/opt/morphit`.
+Run it on the server, from any folder, as `sudo morphit-ops …` (the
+instance's settings and keys are readable only by root). If the shortcut is
+missing — the install did not finish — run what it runs:
 
 ```
-cd ~/morphit          # wherever you cloned it
-npm install           # re-creates node_modules/.bin/morphit-ops
-npx morphit-ops init  # now resolves the local bin
+cd /opt/morphit && sudo npm exec --offline --workspace apps/ops-cli morphit-ops -- <command>
 ```
 
-The rule: **re-run `npm install` after every `git pull`.** The repo's update procedure (§12 here and `RUN-A-MORPHIT-NODE.md §12`) already does this for `npm run build`; the same `npm install` is what restores the `morphit-ops` bin.
-
-Two more things worth knowing:
-
-- **Run it from inside the repo.** `npx` searches upward from your current directory for `node_modules/.bin`. If you `cd` somewhere outside the Morphit tree first, it won't find the local bin. Always run `morphit-ops` from the repo root.
-- **It needs `tsx`.** The CLI runs from TypeScript source via `tsx`, which is a **production dependency** of `apps/ops-cli` (since cp161 — previously a devDependency, which broke the CLI under `NODE_ENV=production` or `npm install --omit=dev`). A plain `npm install` at the repo root installs it. If you deliberately install with `--omit=dev`, `tsx` is still present because it is a production dep.
-
-If `npm install` doesn't fix it, you can bypass the symlink entirely and invoke the workspace directly:
+**On a hand-built checkout** (§49b, "Configure only") there is no shortcut
+until the installer offers to create one. Run the tool from inside the Morphit repo
+(its root), after `npm install` has populated `node_modules`, through
+`npm exec --offline` — it resolves the tool only from the local workspace
+and never contacts the npm registry:
 
 ```
-npm exec --workspace apps/ops-cli morphit-ops -- init
+cd ~/morphit                               # wherever the checkout is
+npm install                                # (re)creates node_modules/.bin/morphit-ops
+sudo npm exec --offline --workspace apps/ops-cli morphit-ops -- <command>
 ```
 
-or
+**Why never `npx morphit-ops`:** `morphit-ops` is a workspace-local tool,
+not published on the public npm registry. Outside the repo (or before
+`npm install`) `npx morphit-ops` falls through to the public registry, where
+anyone could publish a package under that name, and `sudo npx` would run it as
+root. A registry lookup is also a clearnet request, and it never runs Morphit. `npx --no-install` refuses to install it but still asks the registry
+first (a clearnet request, even from a Tor-only box), so it is not the fix
+either; `npm exec --offline --workspace apps/ops-cli` is. If a `git pull`
+changed the workspace layout, re-run `npm install`.
+
+Also possible, from the repo root:
 
 ```
 cd apps/ops-cli && npm start -- init
 ```
 
-Both run `tsx src/main.ts init` against the local source without relying on the root `node_modules/.bin` symlink.
+Both run the local source without relying on the root `node_modules/.bin`
+symlink. (`tsx`, which runs it, is a production dependency of
+`apps/ops-cli`, so `npm install --omit=dev` keeps it.)
 
 **Ansible operators:** the playbook (`ops/ansible/`) handles `npm install` for you on each run, and since cp161 it verifies the `morphit-ops` bin is runnable as a post-install step — so a broken install fails the play with a clear error rather than surfacing later. If you re-deploy after a repo change, re-run the playbook; don't `git pull` on the target host out-of-band.
 
@@ -7511,7 +7682,8 @@ in step 5, to upload the finished files.
    ```sh
    # copy up to a temp spot first (the served dir is root-owned),
    # then move both into place on the server:
-   scp apps/web/static/canary.txt /tmp/pgp_keys.asc you@your-server:/tmp/
+   # scp -O: hardened servers turn SFTP off, which plain scp needs.
+   scp -O apps/web/static/canary.txt /tmp/pgp_keys.asc you@your-server:/tmp/
    ssh you@your-server \
      'sudo cp /tmp/canary.txt /tmp/pgp_keys.asc /opt/morphit/apps/web/build/'
 
@@ -8936,7 +9108,7 @@ ssh youruser@host sudo sshd -T | grep -E '^(permitrootlogin|passwordauthenticati
 
 ```sh
 # Only expected ports should be open externally
-nmap -Pn -p 1-65535 host      # expect: 22, 80, 443 only
+nmap -Pn -p 1-65535 host      # expect: 22, 80, 443 — and 4001 (tcp+udp, IPFS swarm) on a box that hosts IPFS
 
 # Postgres NOT reachable externally (§37.8)
 psql -h host -U morphit_indexer -d morphit_indexer
@@ -9472,7 +9644,7 @@ This section is the tactical guide for an operator who wants their relay locked 
 
 ### 38.1 Set strict defaults for every squatter-relevant knob
 
-Drop these into your relay's `Environment=` directives or `/etc/morphit/relay.env`:
+Put these in `/etc/morphit/relay.env` on the relay's server (replacing any line that sets the same variable), then `sudo systemctl restart morphit-relay`. Not in a systemd `Environment=` line: the relay reads `/etc/morphit/relay.env` after systemd sets the environment, so a value the file sets (the installer sets the signup ceiling there) wins.
 
 ```ini
 # Layer 2 — global daily ceiling.  50 is the default; lower is
@@ -9589,13 +9761,15 @@ If you see a pattern that's NOT being caught:
    MORPHIT_RELAY_SIGNUP_DAILY_CEILING=10
    ```
 
-3. **If you're STILL bleeding** — flip the kill-switch:
+   (in `/etc/morphit/relay.env`, then `sudo systemctl restart morphit-relay`; the day's signup count survives the restart)
 
-   ```ini
-   MORPHIT_RELAY_SIGNUP_ENABLED=false
+3. **If you're STILL bleeding** — flip the kill-switch, on the relay's server:
+
+   ```sh
+   sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED
    ```
 
-   Restart. Investigate. Don't re-enable until you understand what changed.
+   No restart needed. Investigate. Don't re-enable (`sudo rm` the file) until you understand what changed.
 
 4. **Refill BLURT only when needed.** Don't auto-top-up during an active attack — you're handing the attacker more ammunition. Wait until the kill-switch is on, attack subsides, then refill.
 
@@ -9627,7 +9801,7 @@ This is friction-only — not a real defense — but it filters the bot-script-u
 
 ### 38.7 The "diamond-hardened" preset
 
-If you want maximum squatter defense and accept the user-friction tradeoff, copy this entire block into your relay's environment:
+If you want maximum squatter defense and accept the user-friction tradeoff, put this block into `/etc/morphit/relay.env` on the relay's server (replacing any line that sets the same variable), then `sudo systemctl restart morphit-relay`:
 
 ```ini
 # === DIAMOND-HARDENED SQUATTER DEFENSE ===
@@ -9773,8 +9947,11 @@ canonical Morphit operator** (currently `@morphit`) to
 broadcast and rotate the treasury chain-pin shipped in Part
 106 (2026-05-10), corrected in Part 107 (privacy fix —
 view key removed from chain-pinned data), and structurally
-improved in Part 108++ (per-payment tx_proof verification —
-no view key required by any indexer).
+improved in Part 108++ (per-payment verification — no view key
+required by any indexer). **v1.20.0 correction:** the Part 108++
+`tx_proof` (OutProof) input never worked against the explorers;
+since v1.20.0 an XMR fee is proven with the payment's transaction
+key (§40.13).
 
 If you are a **community operator** running your own
 Morphit instance, skip to §40.7.  Part 108++ removed the
@@ -9802,6 +9979,11 @@ Every federated indexer prefers the chain-pinned canonical
 over its own env-var fallback.  The frontend reads the
 same chain-pinned addresses and renders them with copy +
 QR + chain-pinned badge.
+
+Since v1.20.0 the BTC block may also carry `xpub` (the treasury
+account public key); see §40.12. It only ever holds a PUBLIC key.
+Since v1.20.0 the XMR block may also carry `primary_address` (the
+treasury wallet's main address); see §40.13.
 
 ### 40.2 Three priorities: how Part 108++ realizes them
 
@@ -9842,19 +10024,21 @@ verifies the proof against the txid + treasury address
 using a public Monero block explorer (or a local
 `monerod` for maximum independence).  Properties:
 
-- **Privacy:** the proof reveals only "this txid paid
-  this address this amount."  No other wallet activity,
-  no other payments to the address, no metadata.  The
-  user is the only party that holds any verification
-  secret (their tx_key, in their own wallet, never
-  published).  Indexers hold nothing.
+- **Privacy:** since v1.20.0 the user supplies the
+  payment's transaction key, published with the order op
+  (§40.13). It proves that fee output and cannot spend;
+  someone who also knows the payer's own wallet address
+  can use it to find that payment's change output, so pay
+  the fee from an address you have not shared, or in BLURT.
+  Indexers hold nothing.
 - **Decentralization:** every indexer verifies every
   payment independently using public information.  No
   shared secret, no central instance.  Canonical
   morphit.io is one indexer among many.
 - **Grandma-friendliness:** trade-off — the user must
-  generate a proof from their wallet (one extra step
-  vs. just pasting a txid).  Mitigated by inline
+  copy the payment's tx key from their wallet (one extra
+  step vs. just pasting a txid; §40.13 lists where each
+  wallet shows it).  Mitigated by inline
   per-wallet instructions (CLI / GUI / Cake / Feather)
   in 10 locales, expandable on the post-order page.
 
@@ -9914,57 +10098,77 @@ version (no spurious update banner), updating only the amounts.
 
 ### 40.4 Choosing your XMR explorer backend
 
-The XMR fee verifier sends `(txid, address, proof)`
-over HTTPS to one or more Monero block explorers'
-`/api/outputs?txprove=1` endpoint to verify each
-per-payment proof.  You choose how many explorers to
-ask, and which.
+The XMR fee verifier asks one or more Monero block explorers
+over HTTPS about each payment: a txprove explorer gets
+`(txid, address, tx key)` at its `/api/outputs?txprove=1`
+endpoint; a raw-tx explorer gets only the txid (both kinds
+below).  You choose how many explorers to ask, and which.
 
-**The default ships with five.**  How strong the cross-check
+**The default ships with three.**  How strong the cross-check
 actually is depends on `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`
 — the number of explorers that must AGREE on the proven amount
-before a result is accepted.  **Its default is `1`**, which means
-any single responding explorer's amount is trusted (the verifier
-takes the largest agreeing group, and a group of one qualifies).
-**For real cross-check — so that a single compromised or coerced
-explorer cannot decide a verification — raise it to `2` or more**
-(`3` is a strong setting against the five-explorer default).  At
+before a result is accepted.  **Since v1.20.0 its default is
+`2`** (when unset, and when at least two explorers are configured),
+so a single compromised or coerced explorer cannot decide a
+verification on its own.  If your own explorer list has only one
+entry, the quorum drops to `1` and the indexer says so at boot.
+**Set `3` to require all three default explorers**
+(`2` is a strong setting against the three-explorer default; `3` needs all three).  At
 the default of 1 you get availability, not agreement-based
 defense.
 
 ```bash
-MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://localmonero.co/blocks,https://monerohash.com/explorer,https://exploremonero.com,https://moneroexplorer.org
+MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://moneroexplorer.org,raw-tx+https://moneroblocks.info
 ```
 
-These five all run the
-`moneroexamples/onion-monero-blockchain-explorer`
-reference codebase — same API surface, same JSON shape.
-They are operated by independent parties.  If you want
-to add more or use different ones, the only constraint
-is API compatibility: the URL must expose
-`/api/outputs?txhash=…&address=…&viewkey=…&txprove=1`
-returning JSON with `status: "success"` and
-`data.outputs[*]: {amount, match}`.
+The list holds two kinds of explorer.
+
+- **`https://…` (txprove):** an explorer running the
+  `moneroexamples/onion-monero-blockchain-explorer` code. The indexer asks it to
+  prove the payment: `/api/outputs?txhash=…&address=…&viewkey=…&txprove=1`
+  returning JSON with `status: "success"` and `data.outputs[*]: {amount, match}`,
+  and, for order-bound fees (§40.13), `/api/transaction/<txid>` returning
+  `data.payment_id8` and `data.extra`. The payment's tx key is sent to it.
+- **`raw-tx+https://…` (raw transaction):** an explorer with moneroblocks.info's API
+  (`/api/get_transaction_data/<txid>`, `/api/get_block_data/<height>`,
+  `/api/get_stats`). The indexer fetches only the raw transaction and checks the
+  payment itself: it hashes the served transaction and requires the txid (so the
+  explorer cannot serve a made-up one), finds the output(s) paying the fee address
+  with the tx key, decodes the amount, and checks it against the output's amount
+  commitment. **The tx key never leaves the indexer.** Confirmations come from the
+  block the explorer's transaction page links to, checked against that block's JSON
+  (the block must list the txid). Only current (RingCT type 6, 2022+) transactions
+  are accepted this way.
+
+A raw-tx answer counts as one independent explorer in the
+`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` quorum, exactly like a txprove answer.
 
 > **Monero note — that `viewkey=` parameter does NOT carry a real
 > view key.** It is the `onion-monero-blockchain-explorer`'s own
 > API naming. Combined with `txprove=1`, the explorer interprets
-> the value as a **single-use transaction proof** (the
-> `OutProof…` string the payer generated with `get_tx_proof`),
+> the value as the payment's transaction private key (the 64-hex
+> key the payer's wallet shows, e.g. `get_tx_key <txid>`),
 > NOT a wallet view key. Morphit never holds, transmits, or logs
 > a treasury view key — there isn't one (see §12 and §40.2). The
-> indexer puts the payer's per-payment proof in that slot; it
-> reveals only "this txid paid this address this amount" and
-> nothing else about any wallet. (The indexer also logs only the
-> explorer's base URL, never the full URL with the proof.)
+> indexer puts the payer's per-payment tx key (also in the public
+> order op) in that slot; see §40.13 for what it reveals. (The
+> indexer logs only the explorer's base URL, never the full URL
+> with the key.)
 
-**Explorers known to be API-compatible (5):**
-- `https://xmrchain.net` (reference instance, run by
-  moneroexamples)
-- `https://localmonero.co/blocks`
-- `https://monerohash.com/explorer`
-- `https://exploremonero.com`
-- `https://moneroexplorer.org`
+**Default explorers (checked 2026-09-28):**
+- `https://xmrchain.net` — txprove (reference instance, run by moneroexamples)
+- `https://moneroexplorer.org` — txprove
+- `raw-tx+https://moneroblocks.info` — raw transaction (no txprove)
+
+**Dropped from the default (2026-09-28):**
+- `https://localmonero.co/blocks` — now redirects to moneroblocks.info (listed above
+  as a raw-tx explorer)
+- `https://monerohash.com/explorer` — the explorer page is up but its JSON API
+  (`/explorer/api/…`) returns 404
+- `https://exploremonero.com` — a JavaScript page with no JSON API
+
+If you run an older config that still names them, remove them: the §40.13 self-test
+(which needs every listed explorer to answer) fails on them.
 
 **Explorers known to be NOT API-compatible:**
 - `https://xmrscan.org` — different codebase
@@ -9981,17 +10185,17 @@ returning JSON with `status: "success"` and
   a sidebar tool, not a verification source.
 
 **Option 1: Public multi-explorer (default).**  No
-operator setup.  Cross-check among five independent
-parties.  Each one sees the same per-payment data
-(txid, address, proof) at verification time; none of
-them accumulates any wallet-level secret (the proof is
-single-payment).  This is the recommended default for
+operator setup.  Cross-check among three independent
+parties.  The two txprove explorers see the per-payment data
+(txid, address, tx key); moneroblocks.info sees only the txid.
+None of them accumulates any wallet-level secret (the tx key
+is single-payment).  This is the recommended default for
 new operators.
 
 ```bash
 # (this IS the default — set explicitly only if
 # you want to customize the list)
-MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://localmonero.co/blocks,https://monerohash.com/explorer,https://exploremonero.com,https://moneroexplorer.org
+MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://moneroexplorer.org,raw-tx+https://moneroblocks.info
 ```
 
 **Option 2: Self-hosted Monero block explorer + local
@@ -10068,7 +10272,7 @@ self-hosted result ever disagrees with the public ones,
 you have evidence.
 
 ```bash
-MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://localhost:8081,https://xmrchain.net,https://localmonero.co/blocks
+MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://localhost:8081,https://xmrchain.net,raw-tx+https://moneroblocks.info
 ```
 
 **How disagreement is handled.**  The verifier groups the
@@ -10076,7 +10280,7 @@ responding explorers by the amount each one proves and takes the
 **largest agreeing group** ("bucket").  It accepts that bucket's
 amount once the bucket has at least
 `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` members (default
-`1`); a minority reporting a different amount is simply outvoted,
+`2` since v1.20.0); a minority reporting a different amount is simply outvoted,
 not treated as a hard error.  Non-responding explorers (timeout,
 network error, circuit-breaker open) are skipped — they don't
 block the verification, and the breaker handles per-explorer
@@ -10095,19 +10299,18 @@ stale view at one explorer.
   undetected.
 - 2 explorers: outages tolerated by either; lies
   detectable as long as both don't lie identically.
-- 5 explorers (default): high availability + strong
-  cross-check.  Two would need to be compromised
+- 3 explorers (default): high availability + cross-check.
+  With the quorum at `2`, two would need to be compromised
   collude-style to lie undetected.
-- 5 explorers including self-hosted: as above PLUS
+- Several explorers including self-hosted: as above PLUS
   the self-hosted result is authoritative-to-you;
   divergence is evidence rather than a coin-flip.
 
-**These detection properties assume you have raised
-`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` to ≥2.** At the
-default of `1`, the largest single response is trusted and a lie
-from a lone responding explorer is NOT detected — more explorers
-only add availability, not cross-check, until the quorum is
-raised.
+**These detection properties hold with
+`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` ≥2 — the default
+since v1.20.0.** Only if you set it to `1` (or configure a single
+explorer) is the largest single response trusted, so that a lie
+from a lone responding explorer is NOT detected.
 
 ### 40.5 Generating the keys (one-time, before first broadcast)
 
@@ -10152,11 +10355,11 @@ alone.
 diagnostic-only helper script was retired in Part 110.**
 Wallet creation can be sanity-checked end-to-end with the
 modern flow: configure `MORPHIT_INDEXER_XMR_FEE_ADDRESS`,
-restart the indexer, have a trusted contact send a small
-test payment with a tx_proof, and submit it through the
-real Morphit UI.  If the order verifies, your XMR
-configuration is correct.  This exercises the exact code
-path users will hit.
+restart the indexer, send a small test payment and run the
+§40.13 self-test on it (`xmr-fee-selftest.ts --unbound`, on
+the laptop), or have a trusted contact post a real order with
+the payment's tx key (`get_tx_key <txid>`) through the Morphit
+UI. If it verifies, your XMR configuration is correct.
 
 ### 40.6 Broadcasting the release op
 
@@ -10270,6 +10473,20 @@ across the default RPC nodes.  **LAPTOP ONLY** — never run it
 on the production server; that box must never hold the posting
 key.
 
+**How the broadcast is sent (v1.20.0)** — the same for
+`release-broadcast.ts`, `rpc-directory-`, `chain-snapshot-` and
+`indexer-snapshot-broadcast`: the transaction is **signed once** and that
+exact transaction is offered to the RPC nodes in health order (they are
+checked first — a line says so — for up to 5 s). It used to be re-signed
+per node, so a lost acceptance could put a SECOND op on chain. A node that
+answers "duplicate transaction" counts as success (an earlier attempt
+landed). If the transaction expires before any node confirms it, the
+script stops with the transaction id and asks you to look it up on a
+block explorer BEFORE running again — never re-run blindly. The optional
+`--include-hidden` flag also uses the 14 hidden nodes through your
+laptop's Tor/i2pd (off by default; a laptop may run neither); `--node
+<url>` still pins one node.
+
 ### 40.7 For community operators (running your own Morphit instance)
 
 Default behavior:
@@ -10286,17 +10503,22 @@ Default behavior:
 3. **You still get your 90% operator share on
    BLURT-paid fees** (separate pipeline, see §28).
    Only BTC/XMR fees go 100% to canonical's treasury;
-   BLURT fees split 90/10 to you.
+   BLURT fees split 90/10 to you. Other instances show
+   your BLURT-paid orders once your fees account is in
+   your on-chain registration and your operator account
+   is listed in a release (or staked) — including the
+   live orders paid before that ("Across instances
+   (v1.20.0)" in the fees-account section).
 
 4. **Choose your XMR explorer backend** (§40.4 above).
-   Default ships with FIVE independent Monero explorers
-   (xmrchain.net, localmonero.co/blocks,
-   monerohash.com/explorer, exploremonero.com,
-   moneroexplorer.org) running the same reference codebase
-   but operated by independent parties.  With
-   `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` raised to ≥2 this
-   cross-check rejects single-source manipulation (§40.4; the
-   default of 1 trusts a single responding explorer).
+   Default ships with THREE independent Monero explorers
+   (xmrchain.net and moneroexplorer.org, which prove the
+   payment, and moneroblocks.info, whose raw transaction the
+   indexer checks itself), operated by independent parties.  Two
+   of them must agree by default
+   (`MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`, default `2`
+   since v1.20.0), so this cross-check rejects single-source
+   manipulation (§40.4).
    Self-host a `monero-block-explorer` Docker container
    against your own `monerod` for maximum independence.
 
@@ -10365,11 +10587,13 @@ flight can wait out the transition.
 | Key | Account | Where it lives | Used for | Frequency |
 |---|---|---|---|---|
 | Posting | `@morphit` | YOUR personal laptop, OFF the morphit.io server | Release ops (incl. treasury chain-pin) | Rare (4-12/year) |
-| Active | `@morphit-relay` | `/etc/morphit/keys/relay-active.key`, mode 0400, encrypted envelope | Account creation, operator payouts, all relay broadcasts | Constant (hundreds/day at scale) |
+| Active | `@morphit-relay` | The file `MORPHIT_RELAY_ACTIVE_KEY_FILE` names (`/etc/morphit/relay.keystore` on a guided/Ansible install), mode 0600, encrypted envelope | Account creation, operator payouts, all relay broadcasts | Constant (hundreds/day at scale) |
 | Owner (both accounts) | `@morphit` and `@morphit-relay` | Paper, in a safe, off any networked machine | Active-key rotation, posting-key rotation | Almost never |
 | **XMR private view key** | **morphit-treasury wallet** | **NOT REQUIRED on operator box (Part 108++; env var removed Part 109).**  Stays in your wallet's seed/keystore for personal access only. | None — diagnostic script retired Part 110. | **Generated once, never read by indexer code, never on chain, never in any API.** |
 | Posting (per-user, syndication) | Each individual user | User's own keychain / in-page WIF unlock | Their own syndication posts | Per-user |
-| **XMR tx_proof** | **The user, per payment** | User's own Monero wallet (CLI / GUI / Cake / Feather) | Verifying THIS specific XMR fee payment.  Submitted with the order op, per payment. | Per-payment, user-generated |
+| **XMR tx key** | **The user, per payment** | User's own wallet (CLI `get_tx_key` / GUI / Feather / Cake / Monerujo) | Proving THIS fee payment (and, once bound, its order) | Per-payment, public in the order op |
+| XMR treasury main address (`primary_address`) | the maintainer | Treasury wallet, `address` #0 | Order-bound XMR fees (§40.13) | Public, chain-pinned |
+| BTC treasury account public key (`xpub`) | the maintainer | Sparrow "Morphit BTC fees" wallet (zpub) | Per-order BTC fee addresses (§40.12) | Public, chain-pinned |
 
 The treasury chain-pin specifically uses the
 `@morphit` posting key — the key you keep off the
@@ -10377,10 +10601,8 @@ production server.
 
 The Part 108++ design eliminates the operator's role
 in holding any XMR-specific secret on the production
-box.  The user is the only party that holds anything
-verification-related (their per-payment tx_key in their
-own wallet, used to generate proofs and never
-published).
+box.  The only verification input is the user's
+per-payment tx key, published with the order (§40.13).
 
 ### 40.11 Migration path from Part 107
 
@@ -10414,6 +10636,247 @@ impact migration concern.  Post-launch, the same
 upgrade path would require coordinating with users
 about the new tx_proof requirement — but that
 coordination simply doesn't apply yet.
+
+(v1.20.0: the `tx_proof` input described here never verified against
+the explorers. XMR orders now carry `tx_key` and are refused without it
+as `tx_key_required_for_xmr`; OutProof-only orders are
+`proof_unsupported`. See §40.13.)
+
+### 40.12 Per-order BTC fee addresses (v1.20.0, MK-H2)
+
+**Why.** Until v1.20.0 a BTC listing fee was a payment to ONE treasury address,
+claimed by pasting its txid into the order op. Anyone watching that address
+could paste a victim's txid into their own order first (v1.18.0 only made the
+victim's order say `reused`). Now the release op can pin the treasury wallet's
+BIP84 *account* public key (`treasury.btc.xpub`). From the block after that
+release, every BTC-fee order gets its own address — receive address *n* of that
+key — and a payment to it can only ever verify that one order. The user posts
+first (no txid), then sees the address, the exact amount and a `bitcoin:` QR
+code; the indexers watch the address and put the order on the orderbook once
+the payment has 1 confirmation.
+
+**How n is chosen.** n counts the earlier BTC-fee order ops without a txid under
+the same key, in chain order, taken from the `ops` event log (every indexer,
+every version, stores every op there), so every indexer computes the same n.
+Rules (frozen): at most 3 such orders per account per 24 h of block time, and a
+reused permlink gets no address. The browser re-derives address n itself from
+the chain-verified release op and shows it only if it matches its indexer.
+
+**Where things live.** Derivation: `packages/release-schema/src/btcXpub.ts`
+(shared by validator, indexer and browser). Numbering:
+`apps/indexer/src/indexer/fee/btcFeeAddressIndex.ts` (table
+`btc_fee_address_log`, a rebuildable cache; migration v65). Watching:
+`externalFeeRecheck.ts` (every 30 min for 7 days after posting, then once a day
+up to 90 days). UI: `BtcFeePayPanel.svelte` (post success card + My orders).
+
+**What the maintainer does (all on the LAPTOP unless it says server):**
+
+1. Make a wallet used ONLY for Morphit BTC fees (Sparrow, laptop):
+   File → New Wallet → name it "Morphit BTC fees" → Create Wallet. Leave
+   Policy Type = Single Signature and Script Type = Native Segwit (P2WPKH).
+   Click "New or Imported Software Wallet" → Generate New → write the words
+   down → Confirm Backup… → Create Keystore → Import Keystore → Apply (set a
+   password). Never receive anything else in this wallet: its public key
+   will be on the blockchain, so everyone can see every address of it.
+2. Copy its public key (Sparrow, laptop): Settings tab → Keystores → right-click
+   the long key in the "xpub / zpub:" field → **Copy zpub**. (Never the seed
+   words, never anything starting with xprv/zprv.)
+3. Save it into the repo (laptop, repo root):
+   ```
+   npx tsx apps/indexer/scripts/set-treasury-btc-xpub.ts 'PASTE-THE-ZPUB-HERE'
+   ```
+   It refuses private, testnet, nested-segwit and non-account keys and changes
+   nothing then. It prints addresses #0, #1, #2 — they must be the first three
+   rows of Sparrow's Addresses tab (Receive Addresses table). If not:
+   `git checkout apps/indexer/src/config/canonicalTreasury.ts` and start again.
+4. Ship it in the FIRST release AFTER v1.20.0 is running on all three boxes
+   (morphit.io, morphitir, morphitlat) — an older frontend still asks users
+   to pay the shared address first and paste the txid, which v1.20.0 indexers
+   refuse after the pin. The normal ELI5 ceremony does the rest: Block 4's
+   `release-build-payload.ts` reads the key from `canonicalTreasury.ts`, pins
+   it next to the old address, and prints addresses #0-#2 again — compare them
+   with Sparrow once more before Block 5 broadcasts.
+5. Keep the wallet seeing every payment (server, as root, any time):
+   ```
+   sudo morphit-ops treasury btc
+   ```
+   It prints the key id, how many addresses were handed out, the longest run
+   of unused ones, and the gap limit to set: Sparrow → the fee wallet →
+   Settings → Advanced… → Gap limit. Add `--addresses` for the full list.
+6. When you move the fees out, send the WHOLE balance ("Max") to your main
+   wallet, so no change stays in the fee wallet (its change addresses are
+   public too, because the key is).
+
+The old shared address stays in every release op (older software needs it, and
+BTC orders posted before the pin are still verified against it) — keep
+watching it in its old wallet.
+
+**Upgrading a node that saw the pin release while on v1.19 (V3-1).** The
+ceremony order means morphitir and morphitlat index the v1.20.0 release op
+while still running v1.19. v1.19 stores that release's treasury WITHOUT
+`btc.xpub` / `xmr.primary_address`, and rejects the BTC orders without a txid
+and the XMR orders with a tx key posted before it upgrades. Nothing to do by
+hand: at every boot, before applying a block, a v1.20 indexer re-validates
+every stored release from the raw op in its event log and replays the order
+ops an older version refused for reasons the current one no longer gives (and
+the cancels/replaces of those orders), in chain order
+(`apps/indexer/src/indexer/reconcileUpgrade.ts`). Its logs say
+`upgrade_release_rows_backfilled` / `upgrade_rejections_reapplied` when it did
+something. After that the node numbers and binds exactly like the others
+(proven against a node that indexed the same blocks on v1.20).
+
+**The re-pin tool reads the chain, not the node (V3-1).** On the maintainer's laptop,
+`treasury-repin-broadcast.ts --node <indexer>` now takes only WHICH release op
+is current from `/v1/release`, reads that op from its block via two RPC
+endpoints that must agree (`--rpc <url>` to choose them), and REFUSES (exit 1,
+nothing built) if the node's served treasury differs — naming the missing
+fields, e.g. `treasury.btc.xpub` on a node that has not upgraded. The next op
+keeps every field of the chain op (`distribution`, `federation`, …) and only
+re-prices the treasury amounts.
+
+**Watching addresses (V3-3).** Address checks have their own budget (40 per
+10-minute pass), separate from txid re-checks. A new order's address is
+checked on the next pass; an address with money seen (confirmed or in the
+mempool) every pass; an address with nothing seen after half the order's age
+at the last look, between 5 minutes and 12 hours (24 hours after 7 days); up
+to 90 days. The payer's panel has an "I've paid — check now" button:
+`POST /v1/orders/<account>/<permlink>/check-fee`, at most once per order per
+minute and 30 per minute per instance (plus the usual per-client limit).
+
+**Cross-check with other instances (V3-5, V3-6).** Before showing a fee
+address, the pay panel asks its own indexer to ask up to two directory peers
+which address THEY gave the order (`GET …/btc-fee-crosscheck`; peers answer
+`GET …/btc-fee`). If any peer disagrees, no address is shown and the payer is
+told calmly to try later or use another instance. If no peer answers (a
+hidden-only node with no hidden peers, or all peers down), the address is shown
+from this node alone. The browser also asks for no more than the chain-pinned
+`treasury.btc.satoshis`, whatever the indexer says, and after a key rotation
+derives an older order's address from that order's own key only if the key is
+found in @morphit's release history on chain.
+
+**Forged blocks (V3-6).** A block holding a per-order-address BTC order op
+(after an xpub pin) or any release op is applied only when two independent
+RPC operators serve the same transactions at those positions; otherwise the
+block is fetched again (log `block_not_confirmed`, and
+`fee_relevant_block_forged` when two operators agree on different content).
+Counting only ops whose signature verifies was considered and rejected: an
+attacker can sign an op with their own key and never broadcast it — the
+signature verifies, the op was never on chain. **Residual risk, stated:** a
+node whose RPC pool has fewer than two operators applies such blocks
+single-source (log `fee_relevant_block_single_source`); a pair of operators
+that never agree is given up on after 5 tries (log
+`fee_relevant_block_unconfirmed_applied`, an error); a block with a real op
+WITHHELD is not detected here; and the browser's cross-check comes from the
+payer's own indexer, so it protects against an honest node with a divergent
+log, not against a lying operator — who, bound by the browser's own
+derivation from the chain-pinned key and amount, can at worst point at
+another treasury address. Operators: keep at least two RPC operators in the
+pool.
+
+### 40.13 XMR fees: the transaction key, and order-bound payments (v1.20.0, M-X1 + MK-H2)
+
+**What changed for every XMR fee (M-X1, live as soon as v1.20.0 runs).** Until
+v1.20.0 the order op carried a wallet "payment proof" (`OutProof…` from
+`get_tx_proof`) and the indexer sent it to the explorers as `viewkey=` with
+`txprove=1`. The explorers cannot use it: `onion-monero-blockchain-explorer`
+parses that parameter as a 64-hex **transaction private key** and nothing else
+(`src/page.h` `json_outputs` → `parse_str_secret_key`), so every XMR order ended
+`missing`. Since v1.20.0 the order op carries `tx_key` — the payment's
+transaction key, 64 hex, from the payer's wallet (`get_tx_key <txid>` in
+monero-wallet-cli; "Transaction key" in the GUI's transaction details;
+"Copy Tx Secret Key" in Feather; "Transaction Key" in Cake Wallet; "TX Key" in
+Monerujo). Orders that still carry only an OutProof are stored
+`proof_unsupported` — never sent to an explorer, never re-checked — and the
+v65 upgrade marks already-stored ones the same way (their txid is released so
+the payer can post again with the tx key). Posting with neither is refused
+(`tx_key_required_for_xmr`).
+
+**Privacy of the tx key.** The key goes on chain in the order op. It proves
+the fee output to anyone, and it cannot spend. It is more revealing than an
+OutProof in one way: someone who ALSO knows the payer's own wallet address can
+use it to find the change output of that fee payment (and its amount). The post
+page says so and advises paying the fee from an address the payer has not
+shared (or paying in BLURT).
+
+**Order-bound XMR fees (MK-H2) — off until the maintainer pins the main address.** Once a
+release op carries `treasury.xmr.primary_address` (the treasury wallet's MAIN
+address, `4…`), from the next block on an XMR fee must be paid to the
+INTEGRATED address of that main address carrying the order's payment ID,
+`Keccak-256("morphit-fee-v1|" + account + "/" + permlink)[0..8]`. Each indexer
+proves the amount with the tx key at the main address (`/api/outputs?txprove=1`)
+and decrypts the transaction's encrypted payment ID (`/api/transaction/<txid>`
+→ `payment_id8`, checked against the raw `extra`) with the same key:
+`pid XOR Keccak(8·r·A ‖ 0x8d)[0..8]`. Only the order whose payment ID it
+carries can be paid by a transaction, so a txid + key copied from someone's op
+pays for nothing (the copier's order is `missing`) and cannot knock the payer
+out as `reused`; the first-claim-wins rule is not applied to bound orders, and
+attestations never promote them. The browser picks the listing's permlink
+BEFORE the payment (kept in the draft) and shows the integrated address,
+computed from the chain-verified release. The pre-pin shared address stays in
+every release op; orders posted before the pin are still checked against it.
+
+**Offline verification done (builder M).** Address encoding, integrated
+addresses and encrypted-payment-ID vectors were generated with the PyPI
+`monero` package and compared byte-for-byte; the tx-extra walk was checked
+against its `ExtraParser`; explorer field semantics were read from
+`onion-monero-blockchain-explorer` source. What could NOT be checked offline:
+that the explorers in `MORPHIT_INDEXER_XMR_EXPLORER_URLS` actually run a
+version that answers this way for a real transaction. Hence the checklist.
+
+#### Before pinning — the maintainer's one-time checklist
+
+All on **the maintainer's laptop**, in the repo root, with the **treasury wallet** open
+in `monero-wallet-cli` (the wallet that owns the current XMR fee subaddress)
+and a separate small **payer wallet** (any wallet that shows tx keys).
+Run the self-test through Tor (`torsocks npx tsx …`) if the laptop's IP should
+not be seen asking explorers about a treasury payment.
+
+1. **Unbound path first (what v1.20.0 does before any pin).** From the payer
+   wallet, send the XMR fee amount (default 781250000 piconero) to the
+   current fee address (`CANONICAL_TREASURY.xmr`), in a payment of its own.
+   After 1+ confirmation, `get_tx_key <txid>` in the payer wallet, then:
+   `npx tsx apps/indexer/scripts/xmr-fee-selftest.ts --txid <txid> --txkey <key> --unbound <fee address>`
+   Must print `✓ PASS`. If it fails only because some explorers do not answer,
+   re-run with `--explorer <url>` for each live one and fix
+   `MORPHIT_INDEXER_XMR_EXPLORER_URLS` accordingly (all listed explorers must
+   agree in the self-test). A `raw-tx+https://…` explorer is checked the same way
+   the indexer does (the self-test prints 'content hashes to the txid: yes' and
+   'commitments open').
+2. **Main address.** In the treasury wallet: `account switch 0`, then
+   `address` (no arguments) — it prints one line, index 0, labelled
+   "Primary address": copy that address (starts with `4`, 95 characters).
+   `address all` should also list the current fee subaddress, proving it is
+   the same wallet.
+3. `npx tsx apps/indexer/scripts/set-treasury-xmr-primary.ts <4…address>` — it
+   refuses a subaddress / integrated / testnet / stagenet address and prints a
+   payment ID and an integrated address. In the treasury wallet run
+   `integrated_address <that payment id>`: it must print **exactly** that
+   address. (If not: `git checkout apps/indexer/src/config/canonicalTreasury.ts`.)
+4. **Bound path, real payment.** Pick your own Blurt account and a throwaway
+   permlink (e.g. `order-selftest01`):
+   `npx tsx apps/indexer/scripts/xmr-fee-selftest.ts --account <you> --permlink order-selftest01 --primary <4…address>`
+   prints where to pay. From the payer wallet send the fee amount there, in a
+   payment of its own. After 1+ confirmation:
+   `npx tsx apps/indexer/scripts/xmr-fee-selftest.ts --txid <txid> --txkey <key> --account <you> --permlink order-selftest01 --primary <4…address>`
+   Must print `✓ PASS`: for every explorer `in tx extra: yes`, `decrypts to …
+   ✓ this order`, the proven amount equal to what you sent; step 3 `verified`,
+   step 4 `rejected — payment_id_mismatch`.
+5. In the treasury wallet: `payments <payment id from step 4>` must list that
+   payment — the wallet itself decrypted the same payment ID.
+6. Only if 1–5 all pass: commit `canonicalTreasury.ts` and broadcast the next
+   release op as usual (the builder pins `primary_address`, printing the
+   integrated-address check again). If anything fails, do not pin: XMR keeps
+   working unbound, as in step 1.
+
+**Timing note.** Once pinned, orders posted through a pre-v1.20 frontend
+(OutProof, shared address) can no longer verify, and a payer whose old
+OutProof order became `proof_unsupported` can only re-post that same payment
+while fees are still unbound. Leave some time between shipping v1.20.0 and
+pinning.
+
+**Undo.** A later release op without `primary_address` turns binding off for
+orders posted after it; bound orders already stored keep their binding.
+(`treasuryRepin` carries the value forward, so it is only dropped on purpose.)
 
 ## 41. Federation-cost attribution — only paying for ops served by YOUR instance
 
@@ -10529,8 +10992,8 @@ For a community operator standing up
    the federated `/instances` directory and on your
    `/about-this-instance` page.  It's permanent once
    registered.
-2. **Register on chain.**  Run `npx morphit-ops
-   register`.  It broadcasts
+2. **Register on chain.**  On the server, run
+   `sudo morphit-ops register`.  It broadcasts
    `morphit_operator_register_v1` from your operator
    account claiming the tag — using
    `MORPHIT_INSTANCE_OPERATOR_TAG` (so the registered
@@ -10547,8 +11010,22 @@ For a community operator standing up
    place — no full re-run.  See the
    morphit_operator_register_v1 handler in
    apps/indexer/src/indexer/handlers for the op shape.
+   - **Re-running it updates your registration.** The op is an
+     upsert keyed on the signing account: a later
+     `sudo morphit-ops register` replaces display name, origin,
+     contact URL and alt-network addresses (a field the new op does
+     not carry is left as it was; an origin sent empty withdraws it,
+     and your directory row with it). Only the tag is immutable — a
+     different tag is rejected (`tag_immutable`).
+   - A hidden-service origin must be `http://…onion` /
+     `http://….b32.i2p` / `http://….loki`: `https://` is refused (the
+     network already authenticates and encrypts). An instance
+     registered earlier with an https onion is dialled as http by
+     peers; re-register it with `http://`. `alt_addresses.i2p_name` /
+     `lokinet` must be real host names (letters, digits, hyphens,
+     dots).
    - To verify the saved key at any time:
-     `npx morphit-ops show-key` prints the public key
+     `sudo morphit-ops show-key` prints the public key
      it derives to (never the private key) so you can
      compare it to your account's active authority on
      a Blurt explorer.
@@ -11711,7 +12188,8 @@ strictly a discovery surface.
 (`MORPHIT_MCP_TRANSPORT=http`, set in the unit) in stateless,
 JSON-response mode — no sessions, no long-lived SSE.  It binds `127.0.0.1:8124` by default and is **fail-closed**: it accepts
 loopback or a private/bridge address — e.g. set
-`MORPHIT_MCP_HTTP_HOST=172.18.0.1` in `/etc/morphit/mcp.env` so a
+`MORPHIT_MCP_HTTP_HOST=<your Docker bridge gateway>` (`172.20.0.1` on the
+shipped compose) in `/etc/morphit/mcp.env` so a
 dockerized reverse proxy (BunkerWeb) can reach it across the Docker
 bridge, exactly as you do for the indexer/relay listen host — but
 refuses `0.0.0.0`/`::` or a public address unless you explicitly set
@@ -11795,15 +12273,17 @@ bare stdio process would:
 ```
 curl http://127.0.0.1:8124/health     # → {"status":"ok","transport":"http"}
 ss -ltnp | grep 8124                    # systemd-owned listener on loopback
-morphit-ops health                       # Services: mcp — running
+sudo morphit-ops health                       # Services: mcp — running
 ```
 
 > `morphit-ops upgrade` runs this same `/health` check for you after it
 > redeploys and restarts the MCP — but it probes the **configured** bind
 > read from `/etc/morphit/mcp.env` (`MORPHIT_MCP_HTTP_HOST`/`_PORT`), not a
-> hard-coded loopback. On a dockerized-BunkerWeb host that bind is the Docker
-> bridge gateway (`172.18.0.1:8124`), so the probe follows the service wherever
-> it actually listens. A failed probe only prints a warning (the MCP is
+> hard-coded loopback. The standard install (Ansible) binds `0.0.0.0:8124`
+> behind the firewall, which the probe asks on `127.0.0.1:8124`; a hand-built
+> dockerized-BunkerWeb host may bind the Docker bridge gateway (e.g.
+> `172.20.0.1:8124`) instead, and the probe follows the service wherever it
+> actually listens. A failed probe only prints a warning (the MCP is
 > isolated, read-only, and non-critical — a miss never rolls back an otherwise
 > good upgrade); it tells you to check `journalctl -u morphit-mcp` and confirm
 > the bind in `mcp.env`.
@@ -11868,13 +12348,19 @@ discover this via the federation directory and configure their
 clients accordingly.
 
 **Dockerized reverse proxy (e.g. BunkerWeb).** If your proxy runs in a
-container it can't reach the host's `127.0.0.1`, so — exactly as for the
-indexer and relay — bind the MCP to the Docker bridge gateway instead:
-set `MORPHIT_MCP_HTTP_HOST=172.18.0.1` in `/etc/morphit/mcp.env`, point
-the proxy at `http://172.18.0.1:8124/`, and verify with
-`curl http://172.18.0.1:8124/health`.  No `MORPHIT_MCP_ALLOW_PUBLIC_BIND`
-is needed (the bridge gateway is a private address, not a public bind),
-and the default Host allowlist already accepts `172.18.0.1:8124`.
+container it can't reach the host's `127.0.0.1`. The standard install
+(`morphit-ops install`, Ansible) handles this for you: it binds the MCP to
+`0.0.0.0:8124` with `MORPHIT_MCP_ALLOW_PUBLIC_BIND=1` and lets only the
+BunkerWeb network's CIDR through the firewall to that port, exactly as for
+the relay and indexer. On a hand-built stack, bind the MCP to your Docker
+bridge gateway instead (`docker network inspect <network>` shows it;
+`172.20.0.1` on the shipped compose): on the server, set
+`MORPHIT_MCP_HTTP_HOST=<gateway>` in `/etc/morphit/mcp.env`, point the
+proxy at `http://<gateway>:8124/`, and verify with
+`curl http://<gateway>:8124/health`.  No `MORPHIT_MCP_ALLOW_PUBLIC_BIND`
+is needed there (the bridge gateway is a private address, not a public
+bind), and the default Host allowlist already accepts the address it
+binds.
 
 ### Disabling
 
@@ -12065,7 +12551,7 @@ separately and are **not** touched by any of this.
    a while. To jump the cursor close to the chain head instead:
 
    ```
-   morphit-ops fast-forward
+   sudo morphit-ops fast-forward
    ```
 
    (You can pass a specific block number — `morphit-ops fast-forward BLOCK` —
@@ -12074,7 +12560,7 @@ separately and are **not** touched by any of this.
 5. **Confirm:**
 
    ```
-   morphit-ops doctor
+   sudo morphit-ops doctor
    ```
 
    You want `Database schema (matches this version)`.
@@ -12150,7 +12636,8 @@ it is also on eighteen git mirrors and anchored on-chain — but this keeps the
    IPNS name; instances just *provide* the content it resolves to.
 3. The node is deliberately light (priority #4): the Kubo **`lowpower`
    profile**, a small connection cap, loopback-only API/gateway, and
-   periodic GC. The only content it keeps is the ~12 MB release directory.
+   periodic GC. The content it keeps is the release directory it runs (plus
+   the previous one and the fast-sync snapshots — see "Clean-up" below).
 
 ### Setup
 
@@ -12179,6 +12666,27 @@ journalctl -u morphit-ipfs-pin -e --no-pager
 **Where the pinner asks for the release.** It reads `MORPHIT_RELEASE_URL` from `/etc/morphit/ipfs-pin.env`, default `http://127.0.0.1:8081/v1/release`, your indexer's own port. If that does not answer, it tries the indexer on the Docker bridge addresses (`172.18.0.1:8081`, then `172.17.0.1:8081`; override the list with `MORPHIT_RELEASE_URL_FALLBACKS`). When a fallback works, it logs which one and the line to put in `ipfs-pin.env`. The IPNS rebroadcast does the same.
 
 Until the final v1.18.0 review the default port was **8088**, where nothing listens. Every run then failed to reach the indexer, logged it, and exited 0, so the timer looked healthy while nothing was pinned. The setup script, the Ansible role and the desktop upgrade notice had the same wrong port, and all now use 8081. If `ipfs pin ls --type=recursive` on your box shows no release CID, run `sudo systemctl start morphit-ipfs-pin.service` once after upgrading. The journal line says which address answered.
+
+### Clean-up (v1.20.0)
+
+Nothing used to let go of old releases (each ~35 MB) or of the daily indexer snapshots (and the copy the
+snapshot publisher stages inside the IPFS repo), so the IPFS repo only grew. `morphit-ipfs-gc` now runs
+weekly (and once during every `morphit-ops upgrade`) and unpins what is superseded, then reclaims the space:
+
+- releases: it keeps the one the chain anchors now, the previous one, anything newer (a release seeded
+  before its broadcast), and the one the node is running. If the node's indexer does not say which
+  release is current, it keeps them all.
+- snapshots: it keeps the one the chain anchors (as the snapshot mirror last verified it), everything
+  newer, and two older ones. If the mirror has not recorded one yet, it keeps them all.
+- anything else pinned on the node is never touched. It needs no network (safe on a tor-only node).
+
+See what it would do (on the node):
+
+```sh
+sudo sh /usr/local/lib/morphit/morphit-ipfs-gc.sh --dry-run
+```
+
+Its runs (on the node): `sudo journalctl -u morphit-ipfs-gc` and `systemctl list-timers morphit-ipfs-gc.timer`.
 
 ### Verifying + footprint
 
@@ -12236,7 +12744,7 @@ npm run build --workspaces --if-present
 Now run the installer and choose **"Configure only"** when it asks:
 
 ```sh
-npx morphit-ops install
+sudo npm exec --offline --workspace apps/ops-cli morphit-ops -- install   # from the repo root, after npm install
 ```
 
 It checks your prerequisites (Node 22, PostgreSQL, git), runs the **setup wizard**, and offers to harden the server. On this path it deliberately does **not** install Node/PostgreSQL or the background services for you — that is what the guided install (or the playbook in §49a) is for — so set up the database and services next.
@@ -12264,7 +12772,7 @@ sudo systemctl enable --now morphit-indexer morphit-relay
 
 **nginx.** Serve the built website over HTTPS and proxy the API to the local services. The shipped `ops/nginx/web.conf` is a complete, ready-to-adapt server block — copy it and change `yourdomain.com` to your domain. Keep its security headers and no-cache rules byte-for-byte (§15 for the headers; "Caching the update surface" / §14 for the no-cache blocks and the header-inheritance caveat). One thing worth setting while you are in there: the live-chat endpoints (`/v1/chat/…/stream` and `/v1/chat-activity`) are held-open "streaming" connections, so instead of the usual per-minute request limit they want a **per-visitor cap on how many streams one address can hold open at once** (a generous number — a few dozen). The exact `limit_conn` snippet is in the BunkerWeb / reverse-proxy section (§32).
 
-Then turn on HTTPS with a free Let's Encrypt certificate — `npx morphit-ops ssl setup` prints the exact `certbot` line for your domain (§35) — and register as an operator (`RUN-A-MORPHIT-NODE.md` §9).
+Then turn on HTTPS with a free Let's Encrypt certificate — `sudo morphit-ops ssl setup` prints the exact `certbot` line for your domain (§35) — and register as an operator (`RUN-A-MORPHIT-NODE.md` §9).
 
 ## 50. How your indexer treats the public Blurt RPC nodes (User-Agent + rate limits)
 
@@ -12381,7 +12889,7 @@ These change what your node does on the network without any setting to change.
 
 **Chain RPC nodes cannot redirect you.** The indexer's and relay's Blurt RPC calls, the batch block reads and the RPC health probe no longer follow redirects, and they stop reading a reply past 32 MiB (1 MiB for the health probe). A node that answers with a redirect is treated as failing and the pool moves to another one. Before, a node listed in the on-chain directory could send your indexer or relay to an address on your own machine.
 
-**The router is always installed.** It used to be installed only when hidden RPC endpoints were configured. But the on-chain RPC directory adds `.onion` and `.i2p` nodes to every node's pool, and without the router those names were looked up with your ISP's resolver. A node with clearnet RPC endpoints runs it in `allow` mode, where clearnet works exactly as before. A node whose clearnet list `MORPHIT_INDEXER_RPC_ENDPOINTS` is empty now counts as hidden-only even when it reads only from a co-located blurtd and has no hidden endpoints: it contacts no clearnet host (loopback is still allowed), and says so at boot with `local_chain_only`. The rest of the indexer already treated an empty clearnet list as hidden-only (federated price, peer sampling); the probe, chat and FX sources now agree with it.
+**The router is always installed.** It used to be installed only when hidden RPC endpoints were configured. But the on-chain RPC directory adds `.onion` and `.i2p` nodes to every node's pool, and without the router those names were looked up with your ISP's resolver. A node with clearnet RPC endpoints runs it in `allow` mode, where clearnet works exactly as before. A node whose clearnet list `MORPHIT_INDEXER_RPC_ENDPOINTS` is empty now counts as hidden-only even when it reads only from a co-located blurtd and has no hidden endpoints: it contacts no clearnet host (loopback is still allowed), and says so at boot with `local_chain_only`. The rest of the indexer already treated an empty clearnet list as hidden-only (federated price, peer sampling); the probe, chat and FX sources now agree with it. The relay re-reads the on-chain RPC directory every 10 minutes (before v1.20.0, only at boot).
 
 **The "no clearnet Matrix" leg reads the alert bot's real settings.** `clearnet_eliminated` used to check `MORPHIT_INSTANCE_MATRIX_HOMESERVER`, which nothing sets, so it always passed. It now reads `/etc/morphit/matrix-bot.env`, the file the bot's unit loads. The leg (`matrixClean` in `clearnet_eliminated_missing`) passes only when:
 
@@ -12403,7 +12911,7 @@ Your indexer now recognises a refused `CONNECT` as possibly its own fault and re
 
 Why the caution: a status alone cannot tell "I refuse all tunnels" (yours) from "I cannot reach that destination" (theirs), and which status means which differs between routers. Rather than guess, the indexer waits for a second address to agree. If you want to check the setting directly rather than read it off the health block, that is faster: look for `i2ptunnel.httpclient.allowInternalSSL` on the HTTP client tunnel.
 
-> **Trust reminder:** reaching a node over Tor/I2P hides *where* you read, not *whether* the data is true. That's exactly why hidden endpoints go through the same quorum cross-check as clearnet ones — a node that serves a forged block is caught regardless of transport.
+> **Trust reminder:** reaching a node over Tor/I2P hides *where* you read, not *whether* the data is true. The indexer reads each block from one RPC endpoint and trusts its content; a periodic quorum check (one sampled block every five minutes, logged as `chain_consistency_disagreement`) is an alarm, not a filter. Since v1.20.0 two things no single endpoint can fake are enforced: the head tailer shows a chat message, review notification or order cancel live only if its signature recovers to the signer's posting key, and a posting-key rotation read from a block is stored UNCONFIRMED until two independent RPC operators agree on it. Keep your RPC list to operators you trust; `chain_consistency_disagreement` in the log means one of them served a different chain.
 
 ---
 
@@ -12699,9 +13207,17 @@ sudo systemctl start morphit-snapshot-publish.service
 ```
 
 The job exports, pins, announces and writes a payload, then stops and prints two
-commands. Run those on a machine that holds the publisher's key: copy the payload
-down and broadcast it. Nothing exists on-chain until you sign there, which is why
-the key never has to live on the server.
+commands. Run those on a machine that holds the publisher's key (your own
+computer): copy the payload down — `scp -O root@<server>:<payload> .` (the
+payload sits inside the IPFS repo; the `morphit` service user has no login
+shell, and `-O` because hardened servers turn SFTP off) — and broadcast it.
+Nothing exists on-chain until you sign there, which is why the key never has to
+live on the server.
+
+The job reads the indexer's own address from `/etc/morphit/indexer.env` to check
+it is in sync (`MORPHIT_HEALTH_URL` in `/etc/morphit/snapshot-publish.env`
+overrides it). Before v1.20.0 it defaulted to the relay's `:8080` and so never
+saw the indexer's sync state.
 
 **Automating it.** Put a *dedicated* posting key — never your release-signing key
 — in `/etc/morphit/snapshot-publish.env` as `MORPHIT_SNAPSHOT_SIGNING_WIF=…`, and
@@ -12794,7 +13310,7 @@ period, hidden by its other address still working. Do not skip this check.
 ## 53. Per-instance branding — your logo, icons and site name
 
 Every instance serves the same signed frontend, but it can carry the operator's
-own logo, icons and site name, without a rebuild and without tripping visitors'
+own logo, icons, site name and (since v1.20.0) colours, without a rebuild and without tripping visitors'
 build-integrity check. The full guide is [`BRANDING.md`](BRANDING.md); this is the
 operator summary.
 
@@ -12816,6 +13332,12 @@ forward, so every `morphit-ops upgrade` re-applies them. `--short-name` sets the
 Android home-screen label (iPhones use the name) and `--beta on|off|auto` the red
 BETA marker (automatic: off once you supply a logo). `--name=` or `--name Morphit`
 removes the name.
+**Colours (v1.20.0):** `--theme-from '#f3dca0' --theme-to '#bb872f'` (optional
+`--theme-mid`, `--theme-background`, `--theme-button bright|deep`), or a preset
+`--theme champagne-gold`; `--theme morphit` goes back. Keep the quotes (an unquoted
+`#` starts a shell comment). Unreadable colours are refused before anything is
+saved; the values go into `morphit.config.env` as `MORPHIT_INSTANCE_THEME*`. See
+[BRANDING.md "Colours"](BRANDING.md#colours).
 Restart the indexer (`sudo systemctl restart morphit-indexer`) for RSS feed titles
 to pick up a new name.
 
@@ -12824,7 +13346,7 @@ to pick up a new name.
 | Command | What it does |
 |---|---|
 | `sudo morphit-ops branding status` | What is configured, and whether the build directory matches it |
-| `sudo morphit-ops branding setup` | Guided: asks for each file and the name, then applies (the menu's *Branding* item) |
+| `sudo morphit-ops branding setup` | Guided: asks for each file, the name and the colours, then applies (the menu's *Branding* item) |
 | `sudo morphit-ops branding apply` | Apply again (after editing the files or the config by hand) |
 | `sudo morphit-ops branding apply --dry-run` | Show what would change |
 | `sudo morphit-ops branding reset` | Serve the plain Morphit look again (config kept) |

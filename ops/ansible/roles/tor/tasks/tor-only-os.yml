@@ -1,0 +1,303 @@
+---
+# v1.20.0 (C13) — a TOR-ONLY node's own operating system stays off clearnet:
+# apt over Tor, no clearnet NTP, no Ubuntu news fetches. Included from main.yml
+# only when morphit_tor_only is set, AFTER Tor is running (apt and the time
+# check both go through its SocksPort). The changes themselves live in
+# ops/tor-only/morphit-tor-only-os.sh, the same script `morphit-ops upgrade`
+# uses to heal nodes installed before this existed, so both do exactly the same.
+#
+# Each part is VERIFIED on the running system and put back if it did not take:
+#   apt     switched, then an `apt-get update` must fetch over Tor; otherwise
+#           the sources and the proxy file are restored byte for byte.
+#   time    the Tor time check (onion Date headers) must reach a consensus
+#           BEFORE chrony loses its public NTP servers; chrony must then show
+#           zero sources (else it is stopped; else its config is restored).
+#   news    motd news + Ubuntu Pro apt news off, checked after.
+
+- name: Tor-only OS — the apt Tor transport (tor+http / tor+https)
+  ansible.builtin.apt:
+    name: apt-transport-tor
+    state: present
+
+- name: Tor-only OS — install the shared script and the Tor time check (root-owned copies)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../tor-only/{{ item }}"
+    dest: "/usr/local/lib/morphit/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - morphit-tor-only-os.sh
+    - morphit-tor-timesync.sh
+
+- name: Tor-only OS — a root-only place for backups and progress markers
+  ansible.builtin.file:
+    path: /var/lib/morphit-tor-only
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Tor-only OS — the safety net for an interrupted switch (verify it or put apt back; after boot, then every 6 hours)
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+    remote_src: true
+  loop:
+    - morphit-tor-only-recover.service
+    - morphit-tor-only-recover.timer
+
+- name: Tor-only OS — turn the safety net on
+  ansible.builtin.systemd:
+    name: morphit-tor-only-recover.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Tor-only OS — make sure Tor has applied its configuration before using it
+  ansible.builtin.meta: flush_handlers
+
+- name: Tor-only OS — wait for the Tor SocksPort
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ morphit_tor_socks_port | default(9050) }}"
+    timeout: 120
+  register: morphit_toros_socks
+  # Reported below, calmly; a timeout here must not stop the install. (wait_for
+  # returns `port` only when the port answered.)
+  failed_when: false
+
+# ── apt ──────────────────────────────────────────────────────────────────────
+- name: Tor-only OS — where this run keeps its backups
+  ansible.builtin.set_fact:
+    morphit_toros_apt_bk: "/var/lib/morphit-tor-only/backup-ansible-{{ ansible_date_time.epoch }}-apt"
+    morphit_toros_chrony_bk: "/var/lib/morphit-tor-only/backup-ansible-{{ ansible_date_time.epoch }}-chrony"
+
+- name: Tor-only OS — is apt already on Tor?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-check
+  environment:
+    MORPHIT_TOR_SOCKS: "127.0.0.1:{{ morphit_tor_socks_port | default(9050) }}"
+  register: morphit_toros_apt_check
+  changed_when: false
+  failed_when: false
+
+# No block/rescue here on purpose: "apt could not fetch over Tor right now" is
+# an expected outcome with a calm answer (put it back), not a failure to print
+# in red. Every step registers its result and the next one decides.
+- name: Tor-only OS — record the switch before making it (the safety net finishes it if this run is stopped)
+  ansible.builtin.copy:
+    dest: /var/lib/morphit-tor-only/apt.pending
+    content: "{{ morphit_toros_apt_bk }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is defined
+
+- name: Tor-only OS — switch the apt sources to tor+ and point apt at Tor
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-apply {{ morphit_toros_apt_bk }}"
+  environment:
+    MORPHIT_TOR_SOCKS: "127.0.0.1:{{ morphit_tor_socks_port | default(9050) }}"
+  register: morphit_toros_apt_apply
+  changed_when: morphit_toros_apt_apply.rc == 0
+  failed_when: false
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is defined
+
+- name: Tor-only OS — prove apt fetches over Tor (a real package-list refresh; one retry after 20 s)
+  # 0 = fetched over Tor; 10 = offline-install phase (configuration checked,
+  # the first fetch over Tor is checked by the next upgrade); 3 = apt stayed
+  # busy; 1 = no repository answered over Tor.
+  ansible.builtin.shell:
+    cmd: |
+      sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-verify
+      rc=$?
+      case "$rc" in 0 | 3 | 10) exit "$rc" ;; esac
+      sleep 20
+      sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-verify
+  environment:
+    MORPHIT_TOR_SOCKS: "127.0.0.1:{{ morphit_tor_socks_port | default(9050) }}"
+  register: morphit_toros_apt_verify
+  changed_when: false
+  failed_when: false
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is defined
+    - morphit_toros_apt_apply.rc == 0
+
+- name: Tor-only OS — note an offline-phase switch for the next upgrade to verify
+  ansible.builtin.copy:
+    dest: /var/lib/morphit-tor-only/apt.unverified
+    content: "{{ morphit_toros_apt_bk }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+  when:
+    - morphit_toros_apt_verify.rc is defined
+    - morphit_toros_apt_verify.rc == 10
+
+- name: Tor-only OS — apt did not work over Tor just now, so put it back exactly as it was
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-only-os.sh apt-revert {{ morphit_toros_apt_bk }}"
+  changed_when: true
+  failed_when: false
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is defined
+    - (morphit_toros_apt_apply.rc | default(1)) != 0 or (morphit_toros_apt_verify.rc | default(1)) not in [0, 10]
+
+- name: Tor-only OS — the switch has its verdict (kept, or put back above)
+  ansible.builtin.file:
+    path: /var/lib/morphit-tor-only/apt.pending
+    state: absent
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is defined
+
+- name: Tor-only OS — apt keeps its previous settings for now
+  ansible.builtin.debug:
+    msg: >-
+      apt could not refresh its package lists over Tor just now, so its
+      previous settings were put back exactly as they were (nothing else
+      changed). The next `sudo morphit-ops upgrade` on this node tries again.
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is defined
+    - (morphit_toros_apt_apply.rc | default(1)) != 0 or (morphit_toros_apt_verify.rc | default(1)) not in [0, 10]
+
+- name: Tor-only OS — Tor was not answering, so apt keeps its settings for now
+  ansible.builtin.debug:
+    msg: >-
+      Tor did not answer on its SocksPort within two minutes, so apt keeps its
+      current settings for now. The next `sudo morphit-ops upgrade` on this node
+      switches apt to Tor.
+  when:
+    - morphit_toros_apt_check.rc != 0
+    - morphit_toros_socks.port is not defined
+
+# ── time ─────────────────────────────────────────────────────────────────────
+- name: Tor-only OS — install the Tor time check units
+  ansible.builtin.copy:
+    src: "{{ morphit_repo_path | default('/opt/morphit') }}/ops/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+    remote_src: true
+  loop:
+    - morphit-tor-timesync.service
+    - morphit-tor-timesync.timer
+
+- name: Tor-only OS — run the Tor time check every 6 hours
+  ansible.builtin.systemd:
+    name: morphit-tor-timesync.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Tor-only OS — does chrony still name public NTP servers?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-only-os.sh chrony-check
+  register: morphit_toros_chrony_check
+  changed_when: false
+  failed_when: false
+
+- name: Tor-only OS — check the clock against onion time sources over Tor (measure only; up to 4 tries while Tor warms up)
+  # A fresh Tor may need a few minutes before onion services answer. A loop,
+  # not until/retries: waiting for Tor is not a failure and must not print as one.
+  ansible.builtin.shell:
+    cmd: |
+      for try in 1 2 3 4; do
+        sh /usr/local/lib/morphit/morphit-tor-timesync.sh --check && exit 0
+        [ "$try" -lt 4 ] && sleep 30
+      done
+      exit 1
+  environment:
+    MORPHIT_TOR_SOCKS: "127.0.0.1:{{ morphit_tor_socks_port | default(9050) }}"
+  register: morphit_toros_time
+  changed_when: false
+  failed_when: false
+  when: morphit_toros_chrony_check.rc != 0
+
+# Again no block/rescue: each outcome has a calm next step.
+- name: Tor-only OS — take chrony off public NTP servers (only now that Tor time works)
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-only-os.sh chrony-apply {{ morphit_toros_chrony_bk }}"
+  register: morphit_toros_chrony_apply
+  changed_when: morphit_toros_chrony_apply.rc == 0
+  failed_when: false
+  when:
+    - morphit_toros_chrony_check.rc != 0
+    - morphit_toros_time.rc is defined
+    - morphit_toros_time.rc == 0
+
+- name: Tor-only OS — restart chrony on its new settings, then it must show no time source at all
+  # The count is trusted only while chronyd answers (`chronyc tracking`): a
+  # chronyd that is not running also lists no sources.
+  ansible.builtin.shell:
+    cmd: |
+      systemctl restart chrony || exit 2
+      for try in 1 2 3 4 5; do
+        n="$(chronyc -n -c sources 2>/dev/null | grep -c .)"
+        [ "$n" = "0" ] && chronyc -n tracking >/dev/null 2>&1 && exit 0
+        sleep 2
+      done
+      exit 1
+  register: morphit_toros_chrony_sources
+  changed_when: morphit_toros_chrony_sources.rc == 0
+  failed_when: false
+  when:
+    - morphit_toros_chrony_apply.rc is defined
+    - morphit_toros_chrony_apply.rc == 0
+
+- name: Tor-only OS — chrony still lists a source, so stop chrony (the Tor time check keeps the clock)
+  ansible.builtin.shell:
+    cmd: "systemctl disable --now chrony && ! systemctl is-active --quiet chrony"
+  register: morphit_toros_chrony_stop
+  changed_when: morphit_toros_chrony_stop.rc == 0
+  failed_when: false
+  when:
+    - morphit_toros_chrony_sources.rc is defined
+    - morphit_toros_chrony_sources.rc == 1
+
+- name: Tor-only OS — put chrony back as it was and restart it (it keeps its time servers)
+  ansible.builtin.shell:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-only-os.sh chrony-revert {{ morphit_toros_chrony_bk }}; systemctl restart chrony"
+  changed_when: true
+  failed_when: false
+  when: >-
+    ((morphit_toros_chrony_apply.rc | default(0)) != 0)
+    or ((morphit_toros_chrony_sources.rc | default(0)) == 2)
+    or ((morphit_toros_chrony_stop.rc | default(0)) != 0)
+
+- name: Tor-only OS — the clock keeps its current time servers for now
+  ansible.builtin.debug:
+    msg: >-
+      The Tor time check could not get agreeing answers from enough onion time
+      sources yet (Tor may still be starting), so chrony keeps its current time
+      servers for now. The check runs every 6 hours, and the next
+      `sudo morphit-ops upgrade` on this node finishes the switch.
+  when:
+    - morphit_toros_chrony_check.rc != 0
+    - morphit_toros_time.rc is not defined or morphit_toros_time.rc != 0
+
+# ── news ─────────────────────────────────────────────────────────────────────
+- name: Tor-only OS — are the Ubuntu news fetches already off?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-only-os.sh news-check
+  register: morphit_toros_news_check
+  changed_when: false
+  failed_when: false
+
+- name: Tor-only OS — turn off motd news and Ubuntu Pro apt news (clearnet fetches)
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-only-os.sh news-apply /var/lib/morphit-tor-only/backup-ansible-{{ ansible_date_time.epoch }}-news"
+  when: morphit_toros_news_check.rc != 0
+  changed_when: true

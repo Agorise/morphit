@@ -997,7 +997,7 @@
 						type="button"
 						onclick={claimRewards}
 						disabled={claiming}
-						class="flex-none rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+						class="flex-none rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
 					>
 						{claiming
 							? $_('profile.my_balance.claiming')
@@ -1021,7 +1021,7 @@
 				<button
 					type="button"
 					onclick={topUpBlurt}
-					class="rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+					class="rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text transition hover:brightness-110 active:scale-[0.98]"
 				>
 					{$_('profile.my_balance.top_up_blurt')}
 				</button>
@@ -1058,7 +1058,7 @@
 			<button
 				type="button"
 				onclick={openSend}
-				class="inline-flex items-center justify-center gap-2 rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98]"
+				class="inline-flex items-center justify-center gap-2 rounded-xl bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text transition hover:brightness-110 active:scale-[0.98]"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"

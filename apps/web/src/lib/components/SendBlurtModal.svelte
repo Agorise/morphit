@@ -26,7 +26,12 @@
 	 */
 
 	import { onDestroy } from 'svelte';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
+	import {
+		formatAmountForInput,
+		localeDecimalSeparator,
+		parseAmountInput
+	} from '$lib/orders/amountInput';
 	import { runWithActiveKey } from '$crypto/runWithActiveKey';
 	import { liveIdentity } from '$stores/identity';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
@@ -110,13 +115,22 @@
 	}
 
 	const normalizedRecipient = $derived(normalizeAccount(recipient));
-	const amountNum = $derived(Number(amountInput.trim()));
+	/** v1.20.0 fix wave, G6 — read the typed amount with the active locale's
+	 *  conventions (either decimal mark, any digit script). A German "12,5"
+	 *  used to be rejected as "not a number"; an ambiguous "1,234" (en) is
+	 *  refused with its own message rather than guessed. */
+	const amountParse = $derived(parseAmountInput(amountInput, $locale));
+	const amountNum = $derived(amountParse.ok ? amountParse.number : Number.NaN);
 
 	/** Shape + range validation lives in `$lib/blurt/sendValidation` so it can be
 	 *  unit-tested: BLURT has 3 decimals and `formatBlurtAmount` ROUNDS, so
 	 *  `1.0006` would silently broadcast `1.001` and `0.0004` would build
 	 *  `0.000 BLURT`. Money is never rounded up behind the user's back. */
-	const amountCheck = $derived(validateBlurtAmount(amountInput, blurtBalance));
+	const amountCheck = $derived(
+		amountParse.ok
+			? validateBlurtAmount(amountParse.value, blurtBalance)
+			: { precisionOk: true, valid: false }
+	);
 	const amountPrecisionOk = $derived(amountCheck.precisionOk);
 	const amountValid = $derived(amountCheck.valid);
 
@@ -203,7 +217,7 @@
 		// FLOOR, never round: `toFixed(3)` on a balance with more precision than
 		// the asset would fill the field with more than the user actually has,
 		// and the form would then refuse to send it.
-		amountInput = floorToBlurtPrecision(blurtBalance);
+		amountInput = formatAmountForInput(Number(floorToBlurtPrecision(blurtBalance)), $locale);
 	}
 
 	/** Sign with a just-unlocked Active key, then wipe it. The key exists for the
@@ -503,7 +517,17 @@
 					{$_('profile.wallet.use_full')}
 				</button>
 			</div>
-			{#if amountInput.trim().length > 0 && !amountPrecisionOk}
+			{#if amountInput.trim().length > 0 && !amountParse.ok}
+				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
+					{amountParse.reason === 'ambiguous' && amountParse.readings
+						? $_('common.amount_input.ambiguous', {
+								values: { a: amountParse.readings[0], b: amountParse.readings[1] }
+							})
+						: $_('common.amount_input.invalid', {
+								values: { sep: localeDecimalSeparator($locale) }
+							})}
+				</p>
+			{:else if amountInput.trim().length > 0 && !amountPrecisionOk}
 				<!-- Precision gets its OWN message: "up to your available balance" would
 				     be baffling advice for someone who typed 0.0004. -->
 				<p class="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -575,7 +599,7 @@
 					</button>
 					<button
 						type="button"
-						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+						class="rounded-lg bg-morphit-btn px-4 py-2 text-sm font-semibold text-morphit-btn-text hover:brightness-110 disabled:opacity-50"
 						onclick={confirm}
 						disabled={!canSend}
 					>

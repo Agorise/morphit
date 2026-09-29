@@ -43,6 +43,7 @@
  */
 
 import { Hono } from 'hono';
+import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
 
 import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
@@ -222,6 +223,11 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 		}
 		const filter = parsed;
 
+		// v1.20.0 (E4): a slot under the open-stream caps, released exactly
+		// once when this stream ends however it ends.
+		const releaseSlot = acquireStreamSlot(c);
+		if (releaseSlot === null) return streamCapResponse(c);
+
 		const encoder = new TextEncoder();
 
 		// Per-connection state.
@@ -264,6 +270,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 
 				const cleanup = (): void => {
 					cancelled = true;
+					releaseSlot();
 					if (unsubscribeBus !== null) {
 						unsubscribeBus();
 						unsubscribeBus = null;
@@ -361,11 +368,10 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					void processMessage(ev.messageId);
 				});
 
-				// cp403 [1] — subscribe to the head-block fast path too.
-				// Same queue-during-snapshot discipline; carries the full
-				// payload so there's no DB fetch. No-op unless an operator
-				// enabled the tailer (ADR-0048) — otherwise emitFast never
-				// fires.
+				// cp403 [1] — subscribe to the fast path too: the head tailer
+				// (always on since ADR-0051) and verified peer pushes both emit
+				// here. Same queue-during-snapshot discipline; carries the full
+				// payload so there's no DB fetch.
 				unsubscribeFastBus = chatEventBus.onFast((ev) => {
 					if (cancelled) return;
 					const matches = eventMatchesFilter(ev, filter);
@@ -505,6 +511,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 
 			cancel(): void {
 				cancelled = true;
+				releaseSlot();
 				if (unsubscribeBus !== null) {
 					unsubscribeBus();
 					unsubscribeBus = null;

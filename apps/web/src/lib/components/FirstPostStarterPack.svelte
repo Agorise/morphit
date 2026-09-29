@@ -130,9 +130,10 @@
 		aria-label={$_('first_post_starter.aria_label')}
 	>
 		<div class="mb-2 flex items-start justify-between gap-2">
-			<h3 class="font-display text-base font-bold text-morphit-emerald">
+			<!-- h2, not h3: it sits directly under the page's <h1> (heading-hierarchy smoke). -->
+			<h2 class="font-display text-base font-bold text-morphit-emerald">
 				🌱 {$_('first_post_starter.heading')}
-			</h3>
+			</h2>
 			<button
 				type="button"
 				onclick={dismiss}

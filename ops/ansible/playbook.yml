@@ -362,6 +362,7 @@
           notify: Restart morphit-indexer
 
 
+    # Tell a new operator, calmly, that alerts are off, so nobody goes on
     # believing they are monitored when they are not.
     #
     # `enable_matrix_bot` CANNOT default to true: the role asserts on
@@ -416,7 +417,10 @@
 
             - ssh root@host fails
             - ssh user@host with password fails
-            - nmap shows only 22, 80, 443 open externally
+            - nmap shows only 22, 80, 443 open externally, plus
+              4001 (tcp + udp, the IPFS swarm port) when this box
+              hosts IPFS — leave 4001 open, or public gateways
+              cannot fetch the release this node seeds
             - psql -h <public-ip> -U morphit times out
             - X-Forwarded-For spoof test from an untrusted IP fails
             - systemctl status morphit-relay morphit-indexer

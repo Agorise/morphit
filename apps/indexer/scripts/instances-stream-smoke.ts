@@ -177,12 +177,29 @@ scenario('rowSignature: different alt_networks → different signatures', () => 
 	);
 	const b = rowToEntry(
 		makeRow({
-			cached_alt_networks: { tor: 'abc.onion', lokinet: null, i2p: null, nostr: null }
+			// A real v3 onion: since v1.20.0 (E7) a value without its network's
+			// shape is dropped on the way out, so `abc.onion` would read as null.
+			cached_alt_networks: { tor: `${'a'.repeat(56)}.onion`, lokinet: null, i2p: null, nostr: null }
 		})
 	);
 	if (rowSignature(a) === rowSignature(b)) {
 		throw new Error('expected different signatures when tor address added');
 	}
+});
+
+scenario('rowToEntry: a cached alt address without its network’s shape is dropped (E7)', () => {
+	const e = rowToEntry(
+		makeRow({
+			cached_alt_networks: {
+				tor: 'phish.example/login',
+				lokinet: null,
+				i2p: 'x.com/a.i2p',
+				nostr: null
+			}
+		})
+	);
+	assertEqual(e.alt_networks?.tor ?? null, null, 'a non-onion "tor" value');
+	assertEqual(e.alt_networks?.i2p_name ?? null, null, 'a path dressed as an .i2p name');
 });
 
 scenario('rowSignature: cached_indexed_block as string vs number → SAME signature', () => {

@@ -27,12 +27,18 @@
  *     land in shell history.
  *
  * USAGE (from the repo root, on the laptop that holds the key):
- *   npx tsx apps/indexer/scripts/percent-blurt-probe.ts tester3
+ *   npx tsx apps/indexer/scripts/percent-blurt-probe.ts tester3 [--node <url>] [--include-hidden]
+ *
+ * WHICH NODE (v1.20.0, D12): it used to talk to ONE hardcoded node, so a dead
+ * or lagging node read as "the chain rejected it". The project's nodes are now
+ * health-ranked first and the best one answering is used for both steps (one
+ * node, so both answers come from the same view of the chain). `--node` pins
+ * one; hidden nodes only with `--include-hidden` (needs local Tor/i2pd).
  */
 import { createInterface } from 'node:readline';
 import { Client, PrivateKey } from '@beblurt/dblurt';
+import { candidateNodes, enableHiddenTransport, rankNodes } from './lib/signOnceBroadcast.ts';
 
-const RPC = 'https://rpc.blurt.blog';
 /** Accounts this probe refuses to touch — it creates a real post. */
 const FORBIDDEN = new Set(['testowner', 'agorise', 'morphit', 'morphit-fees', 'morphit-relay']);
 /** The value v1.8.12 asks for: 100% of the author reward as liquid BLURT. */
@@ -66,7 +72,17 @@ async function main(): Promise<void> {
 	const wif = await askHidden(`Posting key (WIF) for @${account} — starts with 5, input hidden: `);
 	if (!wif.startsWith('5')) die('that does not look like a posting WIF (it should start with 5).');
 
-	const client = new Client(RPC);
+	const nodeFlag = process.argv.indexOf('--node');
+	const nodes = candidateNodes({
+		nodeOverride: nodeFlag > 0 ? (process.argv[nodeFlag + 1] ?? null) : null,
+		includeHidden: process.argv.includes('--include-hidden')
+	});
+	if (nodes.some((u) => /\.(onion|i2p)(:\d+)?(\/|$)/i.test(u))) await enableHiddenTransport();
+	process.stderr.write(`\nChecking ${nodes.length} RPC node(s) …\n`);
+	const best = (await rankNodes(nodes)).find((h) => h.ok);
+	if (best === undefined) die('no RPC node answered — nothing was posted.');
+	process.stderr.write(`     using ${best.url} (block ${best.headBlock}, ${best.ms} ms)\n`);
+	const client = new Client(best.url);
 	const key = PrivateKey.fromString(wif);
 	const permlink = `percent-blurt-probe-${Date.now().toString(36)}`;
 

@@ -223,3 +223,22 @@ export async function fetchVerifiedRelease(): Promise<ReleaseFetchResult> {
 		}
 	};
 }
+
+/**
+ * v1.20.0 (MK-H2, V3-10) — the release account's recent history, raw, for
+ * $lib/orders/btcFeeKeyHistory: after a treasury key rotation, an order
+ * numbered under the PREVIOUS key keeps its address from that key, and the
+ * browser shows it only if that key was really pinned by @morphit. Same
+ * sanctioned direct-to-chain read, same trust reasoning, same privacy-first
+ * rotator as fetchVerifiedRelease above (a node learns "some IP loaded
+ * Morphit", nothing about the user). Called ONLY when an order's key is not
+ * the current pin — normally never; at most once per session.
+ */
+export async function fetchReleaseAccountHistory(): Promise<unknown[]> {
+	const history = await getDirectChainClient().call<unknown[]>('get_account_history', [
+		RELEASE_SIGNER_ACCOUNT,
+		-1,
+		HISTORY_WALK_LIMIT
+	]);
+	return Array.isArray(history) ? history : [];
+}

@@ -99,6 +99,9 @@
 	}
 
 	// cp165 lazy-loaders for below-the-fold / behind-disclosure components
+	// v1.20.0 (MK-H2) — "pay your order's own BTC fee address" card.
+	const loadBtcFeePayPanel = () =>
+		import('$components/BtcFeePayPanel.svelte').then((m) => m.default);
 	const loadFeatureBidForm = () =>
 		import('$components/FeatureBidForm.svelte').then((m) => m.default);
 	const loadLeaveFeedbackForm = () =>
@@ -152,9 +155,15 @@
 				!autoCompletedPermlinks.has(o.permlink)
 			) {
 				autoCompletedPermlinks.add(o.permlink); // mark BEFORE await — fire once
+				// v1.20.0 (G7) — name the verified payer as the counterparty. Without
+				// it the order completed anonymously and the later review's
+				// completion (which names them) was rejected as already-completed,
+				// so the buyer never got the trade credit. The indexer still
+				// requires a provable conversation before it records the name.
+				const peer = $tradeStates.get(o.permlink)?.peer;
 				void (async () => {
 					try {
-						await broadcastOrderComplete(st.live, o.permlink);
+						await broadcastOrderComplete(st.live, o.permlink, peer || undefined);
 						recordComplete(o.permlink);
 						items = applyRecentCompletes(items);
 					} catch (err) {
@@ -575,6 +584,12 @@
 				return $_('my_orders.order.fee_verified_by_attestation');
 			case 'reused':
 				return $_('my_orders.order.fee_reused');
+			case 'awaiting_payment':
+				// v1.20.0 (MK-H2): posted with its own BTC fee address, not yet paid.
+				return $_('my_orders.order.fee_awaiting_payment');
+			case 'proof_unsupported':
+				// v1.20.0 (M-X1): an XMR order with an OutProof only — cannot be checked.
+				return $_('my_orders.order.fee_proof_unsupported');
 			case 'missing':
 				return $_('my_orders.order.fee_missing');
 			case 'underpaid':
@@ -704,7 +719,13 @@
 		completeErrorMessage = '';
 
 		try {
-			await broadcastOrderComplete(state.live, permlink);
+			// v1.20.0 (G7) — name the counterparty when it is unambiguous (one
+			// reviewable peer, else the verified payer) so the buyer is credited
+			// the trade; the indexer records it only with a provable conversation.
+			const peers = reviewableCounterparties[permlink];
+			const counterparty =
+				peers && peers.length === 1 ? peers[0] : get(tradeStates).get(permlink)?.peer;
+			await broadcastOrderComplete(state.live, permlink, counterparty || undefined);
 			// Optimistic (same bridge as cancel): flip to 'completed' so the card
 			// + Live/Paid pill counts update instantly; the indexer lags ~1min.
 			recordComplete(permlink);
@@ -1013,7 +1034,7 @@
 									>
 										{feeStatusLabel(o)}
 									</span>
-								{:else if o.fee_status === 'pending_external' || o.fee_status === 'unverified'}
+								{:else if o.fee_status === 'pending_external' || o.fee_status === 'unverified' || o.fee_status === 'awaiting_payment'}
 									<span
 										class="rounded-full border border-ink-300 bg-ink-50 px-2 py-0.5 text-ink-700 dark:bg-ink-800 dark:text-ink-200"
 									>
@@ -1385,6 +1406,17 @@
 						{:catch}
 							<LazyLoadError />
 						{/await}
+					{/if}
+					{#if o.fee_status === 'awaiting_payment' && o.btc_fee !== undefined && isLive(o) && blurtAccount}
+						<!-- v1.20.0 (MK-H2): the order waits for its own BTC fee address to
+						     be paid; show the address, amount and progress right here. -->
+						<div class="mt-3">
+							{#await loadBtcFeePayPanel() then BtcFeePayPanel}
+								<BtcFeePayPanel account={blurtAccount} permlink={o.permlink} order={o} />
+							{:catch}
+								<LazyLoadError />
+							{/await}
+						</div>
 					{/if}
 				</li>
 			{/each}

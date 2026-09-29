@@ -112,6 +112,10 @@ interface Extraction {
 	/** Optional context tag: e.g. "DATABASE_URL", "ansible default".  Used
 	 *  in diagnostics so the operator knows which line drifted. */
 	context?: string;
+	/** Compare as trusted CIDRs: the (comma-separated) consumer value must
+	 *  CONTAIN the canonical CIDR; an empty value means the relay's code default
+	 *  (v1.20.0 wave 5/6). Default comparison is exact equality. */
+	trustedCidrs?: boolean;
 }
 
 interface Invariant {
@@ -392,12 +396,34 @@ const INVARIANTS: Invariant[] = [
 		consumers: [
 			{
 				file: 'ops/ansible/group_vars/all.yml',
-				regex: /^morphit_relay_trusted_proxy_ips:\s*"([^"]+)"/m,
+				regex: /^morphit_relay_trusted_proxy_ips:\s*"([^"]*)"/m,
 				context: 'ansible default trusted_proxy_ips',
+				trustedCidrs: true,
 			},
 		],
 	},
 ];
+
+/** The relay's own default trusted set (apps/relay/src/middleware/ip.ts),
+ *  used when group_vars leaves morphit_relay_trusted_proxy_ips EMPTY
+ *  (v1.20.0 wave 5/6: empty = the code default, like the indexer's). */
+function relayDefaultTrustedCidrs(): string[] {
+	const src = readFileSync(join(REPO_ROOT, 'apps/relay/src/middleware/ip.ts'), 'utf-8');
+	const m = src.match(/DEFAULT_TRUSTED_PROXY_CIDRS[^=]*=\s*\[([^\]]*)\]/);
+	if (!m) throw new Error('Cannot find DEFAULT_TRUSTED_PROXY_CIDRS in apps/relay/src/middleware/ip.ts');
+	return [...m[1].matchAll(/['"]([\d./]+)['"]/g)].map((x) => x[1]);
+}
+/** Does IPv4 CIDR `outer` contain every address of `inner`? */
+function cidrContains(outer: string, inner: string): boolean {
+	const toInt = (ip: string): number => ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
+	const [on, ob] = outer.split('/');
+	const [inn, ib] = inner.split('/');
+	const obits = Number(ob ?? 32);
+	const ibits = Number(ib ?? 32);
+	if (!/^\d+\.\d+\.\d+\.\d+$/.test(on) || !/^\d+\.\d+\.\d+\.\d+$/.test(inn) || obits > ibits) return false;
+	const mask = obits === 0 ? 0 : (~0 << (32 - obits)) >>> 0;
+	return ((toInt(on) & mask) >>> 0) === ((toInt(inn) & mask) >>> 0);
+}
 
 function extractValue(ex: Extraction): string | null {
 	const path = join(REPO_ROOT, ex.file);
@@ -443,13 +469,19 @@ for (const inv of INVARIANTS) {
 	for (const c of inv.consumers) {
 		const consumed = extractValue(c);
 		if (consumed === null) continue;
-		if (consumed !== canonical) {
+		const effective = c.trustedCidrs
+			? (consumed.trim() === '' ? relayDefaultTrustedCidrs() : consumed.split(',').map((x) => x.trim()))
+			: null;
+		const agrees = effective ? effective.some((e) => cidrContains(e, canonical)) : consumed === canonical;
+		if (!agrees) {
 			fail(
 				`${inv.name} consumer ${c.file} matches canonical`,
 				`${c.context ?? c.file} declares '${consumed}' but canonical (${inv.source.file}) is '${canonical}'.  Both must agree or operators get a silently-broken deploy.`
 			);
 		} else {
-			pass(`${inv.name}: ${c.context ?? c.file} = '${consumed}' ✓`);
+			pass(
+				`${inv.name}: ${c.context ?? c.file} = '${consumed}'${effective ? ` (trusts ${effective.join(', ')} ⊇ ${canonical})` : ''} ✓`
+			);
 		}
 	}
 	console.log('');

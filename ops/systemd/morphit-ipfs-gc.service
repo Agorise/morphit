@@ -1,0 +1,42 @@
+[Unit]
+Description=Morphit IPFS clean-up — unpin superseded releases + indexer snapshots, reclaim space
+Documentation=https://git.agorise.net/agorise/morphit
+After=ipfs.service morphit-indexer.service
+Wants=ipfs.service
+
+[Service]
+Type=oneshot
+# Root so it can read the snapshot mirror's state (/var/lib/morphit) and remove
+# the publisher's staged snapshot copies inside the ipfs user's repo. It drives
+# Kubo only through the RUNNING daemon's API (never opens the repo itself), and
+# the script is the root-owned copy in /usr/local/lib/morphit, not the
+# service-user-owned /opt/morphit tree. Needs no network beyond the local
+# indexer's /v1/release, so it is safe on a tor-only node.
+User=root
+Group=root
+EnvironmentFile=-/etc/morphit/ipfs-pin.env
+Environment=IPFS_PATH=/var/lib/ipfs/.ipfs
+ExecStart=/usr/local/lib/morphit/morphit-ipfs-gc.sh
+TimeoutStartSec=1200
+Nice=10
+IOSchedulingClass=idle
+
+# ─── Hardening ─────────────────────────────────────────────────
+ProtectSystem=strict
+ReadWritePaths=-/var/lib/ipfs
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+LimitCORE=0
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

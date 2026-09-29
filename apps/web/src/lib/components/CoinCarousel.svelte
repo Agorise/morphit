@@ -397,7 +397,7 @@
 		font-size: 0.75rem;
 		font-weight: 500;
 		letter-spacing: 0.05em;
-		color: var(--carousel-text, rgb(100 116 139));
+		color: var(--carousel-text, rgb(var(--slate-500-rgb)));
 		/* Long network labels ("Arbitrum", "Polygon") will overrun a
 		 * 64px min-width column on small screens; clamp + ellipsis
 		 * keeps the row alignment honest without truncating mid-word

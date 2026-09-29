@@ -16,7 +16,7 @@
 
 import type { Hono } from 'hono';
 import type { Config } from '../config/index.ts';
-import type { BlurtClient } from '../blurt/client.ts';
+import { FEE_REFUSE_MULTIPLIER, type BlurtClient } from '../blurt/client.ts';
 import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
 import { logger } from '$log';
 
@@ -29,7 +29,7 @@ const log = logger('relay-acts');
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-export const VERSION = '1.19.0';
+export const VERSION = '1.20.0';
 const POLL_INTERVAL_MS = 30_000;
 /** Liquid-BLURT headroom (above the account_creation_fee) the relay
  *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
@@ -39,6 +39,10 @@ const POLL_INTERVAL_MS = 30_000;
  *  between health refresh and broadcast can't start a signup we can't
  *  fund. */
 const SIGNUP_LIQUID_MARGIN_BLURT = 3;
+/** A balance older than this (three missed polls) is no longer trusted:
+ *  canAcceptCreation refuses and /v1/health says `stale: true` (v1.20.0, D10).
+ *  It used to keep the last good balance forever once polls started failing. */
+const STALE_AFTER_SEC = 3 * (POLL_INTERVAL_MS / 1000);
 
 /** Parse a Graphene asset string ("9049.747 BLURT") to a number.
  *  Returns 0 for 'unknown'/unparseable — which fails the funding gate
@@ -51,15 +55,20 @@ function parseBlurtAmount(s: string): number {
 interface ChainSnapshot {
 	blurt_balance: string;
 	last_refresh_unix: number;
-	/** True on the initial render before the first poll completes. */
+	/** True before the first poll completes, or when the relay account is
+	 *  missing on chain. Age-based staleness is computed in isStale(). */
 	stale: boolean;
+	/** The chain's LIVE account_creation_fee in BLURT from the last poll that
+	 *  could read it, or null (then the configured fee is used). */
+	live_fee_blurt: number | null;
 }
 
 export class HealthService {
 	private snapshot: ChainSnapshot = {
 		blurt_balance: 'unknown',
 		last_refresh_unix: 0,
-		stale: true
+		stale: true,
+		live_fee_blurt: null
 	};
 	private poller: NodeJS.Timeout | null = null;
 	/** Hysteresis for the low-balance alert: true once we've alerted that
@@ -72,6 +81,9 @@ export class HealthService {
 	 *  side operator-balance scanner can detect anomalous signup
 	 *  volume when it fires a LOW_BALANCE alert. */
 	private ceiling: GlobalDailyCeiling | null = null;
+	/** Pending-transfer queue counts (unsettled / escalated) from the
+	 *  drainer; null until wired (v1.20.0 fix wave 4, A3). */
+	private queueStats: (() => { unsettled: number; escalated: number } | null) | null = null;
 	private signupEnabled: boolean = true;
 
 	constructor(
@@ -89,18 +101,38 @@ export class HealthService {
 		this.signupEnabled = opts.signupEnabled;
 	}
 
+	/** Wire the queue drainer's counts into /v1/health (verbose). */
+	setQueueStatsProvider(fn: () => { unsettled: number; escalated: number } | null): void {
+		this.queueStats = fn;
+	}
+
 	/** Returns true iff the relay holds enough liquid BLURT to fund a
 	 *  new account creation (the account_creation_fee plus a small
 	 *  margin). False means the create endpoint returns
-	 *  relay_out_of_funds without touching the chain. During startup,
-	 *  before the first poll lands, we don't know the balance; we choose
-	 *  restrictive (the chain would reject an unfunded broadcast anyway). */
+	 *  relay_out_of_funds without touching the chain. When the balance is
+	 *  unknown or too old (before the first poll, or after three missed
+	 *  polls) we choose restrictive. The fee is the chain's LIVE fee when the
+	 *  last poll could read it (v1.20.0, D4), else the configured one. */
 	canAcceptCreation(): boolean {
-		if (this.snapshot.stale) return false;
-		return (
-			parseBlurtAmount(this.snapshot.blurt_balance) >=
-			this.cfg.accountCreationFeeBlurt + SIGNUP_LIQUID_MARGIN_BLURT
-		);
+		if (this.isStale()) return false;
+		const fee = this.snapshot.live_fee_blurt ?? this.cfg.accountCreationFeeBlurt;
+		return parseBlurtAmount(this.snapshot.blurt_balance) >= fee + SIGNUP_LIQUID_MARGIN_BLURT;
+	}
+
+	/** True when the last poll saw a live fee above FEE_REFUSE_MULTIPLIER × the
+	 *  configured one — the create endpoint then answers `relay_fee_spike`
+	 *  up front instead of a misleading `relay_out_of_funds` (D4). The
+	 *  authoritative refusal is still in BlurtClient.broadcastAccountCreate. */
+	liveFeeSpiked(): boolean {
+		const f = this.snapshot.live_fee_blurt;
+		return f !== null && f > this.cfg.accountCreationFeeBlurt * FEE_REFUSE_MULTIPLIER;
+	}
+
+	/** No trustworthy balance: never polled, account missing, or the last
+	 *  successful poll is older than STALE_AFTER_SEC. */
+	private isStale(): boolean {
+		if (this.snapshot.stale) return true;
+		return Math.floor(Date.now() / 1000) - this.snapshot.last_refresh_unix > STALE_AFTER_SEC;
 	}
 
 	async startPolling(): Promise<void> {
@@ -111,9 +143,10 @@ export class HealthService {
 		this.poller = setInterval(() => {
 			this.refresh().catch(() => {
 				// Background poll failures are expected (transient chain
-				// hiccups). They flip snapshot.stale to true and the
-				// health endpoint reports accordingly. No need to log
-				// every one.
+				// hiccups) and are not logged one by one. The snapshot keeps
+				// its last_refresh_unix, so after STALE_AFTER_SEC without a
+				// good poll isStale() turns true: signups are refused and
+				// /v1/health reports stale.
 			});
 		}, POLL_INTERVAL_MS);
 		this.poller.unref?.();
@@ -135,10 +168,19 @@ export class HealthService {
 			this.snapshot = { ...this.snapshot, stale: true };
 			return;
 		}
+		// Live fee (D4): best-effort — an unreadable fee keeps the last one.
+		let liveFee = this.snapshot.live_fee_blurt;
+		try {
+			const f = parseBlurtAmount((await this.blurt.getChainProperties()).account_creation_fee);
+			if (f > 0) liveFee = f;
+		} catch {
+			/* keep the previous live fee (or the configured one) */
+		}
 		this.snapshot = {
 			blurt_balance: acct.balance,
 			last_refresh_unix: Math.floor(Date.now() / 1000),
-			stale: false
+			stale: false,
+			live_fee_blurt: liveFee
 		};
 
 		// Low-balance alert (hysteresis). On Blurt the relay pays the
@@ -151,7 +193,7 @@ export class HealthService {
 		// top up. The indexer's operator-balance scanner also alerts on
 		// low balance independently.
 		const liquid = parseBlurtAmount(acct.balance);
-		const fundingFloor = this.cfg.accountCreationFeeBlurt + SIGNUP_LIQUID_MARGIN_BLURT;
+		const fundingFloor = (liveFee ?? this.cfg.accountCreationFeeBlurt) + SIGNUP_LIQUID_MARGIN_BLURT;
 		if (liquid < fundingFloor) {
 			if (!this.lowBalanceAlerted) {
 				this.lowBalanceAlerted = true;
@@ -210,7 +252,8 @@ export class HealthService {
 				// not a token buffer — gates signup readiness.
 				body.blurt_balance = this.snapshot.blurt_balance;
 				body.last_refresh_unix = this.snapshot.last_refresh_unix;
-				if (this.snapshot.stale) body.stale = true;
+				if (this.snapshot.live_fee_blurt !== null) body.account_creation_fee_blurt = this.snapshot.live_fee_blurt;
+				if (this.isStale()) body.stale = true;
 
 				// Full per-endpoint RPC health (same shape the indexer
 				// exposes) for deep triage of broadcast failures.
@@ -232,6 +275,12 @@ export class HealthService {
 							s.lastSuccessAt > 0 ? Math.floor((nowMs - s.lastSuccessAt) / 1000) : null
 					};
 				});
+
+				// Pending-transfer queue (welcome bonus / dust / BP). `escalated`
+				// rows are payments whose outcome no two RPC nodes could settle;
+				// they are NOT re-sent and need the operator (fix wave 4, A3).
+				const q = this.queueStats?.() ?? null;
+				if (q !== null) body.transfer_queue = q;
 
 				// Signup-drain-prevention stats. Present only when
 				// setSignupContext() has wired the ceiling in — the

@@ -128,6 +128,17 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		new Set(['profileHref'])
 	],
 	[
+		'apps/web/src/lib/components/BtcFeePayPanel.svelte',
+		// v1.20.0 (MK-H2) — the "Open in my wallet" link. check.uri comes only
+		// from checkIndexerFeeAddress() ($lib/orders/btcFeeAddress.ts), which
+		// returns it ONLY after re-deriving the address itself from the
+		// chain-verified treasury xpub (@morphit/release-schema, bech32 output:
+		// [a-z0-9] only) and finding it equal to the indexer's; it is then
+		// `bitcoin:<that address>?amount=<decimal>` from buildPaymentUri. The
+		// scheme is hard-coded `bitcoin:`; no operator/peer string reaches it.
+		new Set(['check.uri'])
+	],
+	[
 		'apps/web/src/lib/components/TermsText.svelte',
 		// cp406 — TermsText renders a structured tree from parseTermsMarkdown().
 		// The only anchors it emits are `link` runs, and a `link` run's `href`

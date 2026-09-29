@@ -166,6 +166,11 @@ needs (the own-box case never needed them):
 own-box path; only the federated path requires v2. `verifyManifestCompatible()` is
 unchanged (chain-id / schema / pg gates already correct).
 
+**Tables (v1.20.0 additions).** Chain-derived tables are exported with their rows;
+node-local tables are exported empty. v1.20.0 adds `operator_fee_recipients`
+(chain-derived — each operator's registered fees account over time; exported) and
+`fee_reverify_done` (local bookkeeping for the one-time fee re-check; exported empty).
+
 ---
 
 ## 5. On-chain trust anchor: `indexer_snapshot_v1`

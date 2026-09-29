@@ -286,16 +286,16 @@
 	.near,
 	.urgent {
 		color: var(--morphit-emerald);
-		background: rgba(0, 218, 105, 0.05);
-		box-shadow: 0 0 0 1px rgba(0, 218, 105, 0.3);
+		background: rgb(var(--brand-primary-rgb) / 0.05);
+		box-shadow: 0 0 0 1px rgb(var(--brand-primary-rgb) / 0.3);
 	}
 	.expired {
-		color: rgb(107, 114, 128); /* tailwind ink-500 */
-		background: rgb(243, 244, 246); /* tailwind ink-100 */
+		color: rgb(var(--gray-500-rgb)); /* tailwind gray-500 */
+		background: rgb(var(--gray-100-rgb)); /* tailwind gray-100 */
 		text-decoration: line-through;
 	}
 	:global(.dark) .expired {
-		color: rgb(156, 163, 175); /* tailwind ink-400 */
-		background: rgba(31, 41, 55, 0.4); /* tailwind ink-800/40 */
+		color: rgb(var(--gray-400-rgb)); /* tailwind gray-400 */
+		background: rgb(var(--gray-800-rgb) / 0.4); /* tailwind gray-800/40 */
 	}
 </style>
