@@ -123,7 +123,10 @@ for url in $SOURCES; do
 		tm="$(curl -sS -I -o "$WORK/h.$i" -w '%{time_pretransfer} %{time_starttransfer}' \
 			--max-time "$TIMEOUT" --socks5-hostname "$SOCKS" \
 			--proxy-user "morphit-time-$i:x" -H 'Cache-Control: no-cache' "$url" 2>/dev/null)"
-		hdr="$(tr -d '\r' <"$WORK/h.$i" 2>/dev/null | sed -n 's/^[Dd][Aa][Tt][Ee]:[[:space:]]*//p' | head -n1)"
+		# No answer at all (Tor down, circuit refused): nothing to read, and no
+		# "cannot open" noise in the log for each source.
+		[ -s "$WORK/h.$i" ] || exit 0
+		hdr="$(tr -d '\r' <"$WORK/h.$i" | sed -n 's/^[Dd][Aa][Tt][Ee]:[[:space:]]*//p' | head -n1)"
 		[ -n "$hdr" ] || exit 0
 		srv="$(date -u -d "$hdr" +%s 2>/dev/null)" || exit 0
 		set -- $tm

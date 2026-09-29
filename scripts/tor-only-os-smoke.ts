@@ -108,7 +108,8 @@ net.createServer((c) => {
       return;
     }
   });
-}).listen(Number(port), '127.0.0.1', () => fs.appendFileSync(log, ''));
+}).on('error', (e) => { fs.writeFileSync(process.env.READY_FILE, 'err ' + e.code); process.exit(1); })
+  .listen(Number(port), '127.0.0.1', () => { fs.appendFileSync(log, ''); fs.writeFileSync(process.env.READY_FILE, 'ok'); });
 `;
 const HTTP_JS = `
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -117,33 +118,53 @@ http.createServer((q, r) => {
   const f = path.join(dir, decodeURIComponent(q.url.split('?')[0]));
   if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end(); }
   r.writeHead(200); r.end(q.method === 'HEAD' ? undefined : fs.readFileSync(f));
-}).listen(Number(port), '127.0.0.1');
+}).on('error', (e) => { fs.writeFileSync(process.env.READY_FILE, 'err ' + e.code); process.exit(1); })
+  .listen(Number(port), '127.0.0.1', () => fs.writeFileSync(process.env.READY_FILE, 'ok'));
 `;
 
 const children: ChildProcess[] = [];
+/** Where a fake server started on `port` reports "ok" (listening) or "err <code>". */
+const readyFile = (port: number | string): string => join(work, `ready-${port}`);
 function startNode(js: string, args: string[]): ChildProcess {
-	const c = spawn(process.execPath, ['-e', js, ...args], { stdio: 'ignore' });
+	const c = spawn(process.execPath, ['-e', js, ...args], {
+		stdio: 'ignore',
+		env: { ...process.env, READY_FILE: readyFile(args[0]!) }
+	});
 	children.push(c);
 	return c;
 }
 const sleepSync = (ms: number): void => {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
+// Ports BELOW the kernel's ephemeral range (32768+ on Linux), so an outgoing
+// connection elsewhere on the box can never already hold the port we pick.
 const freePort = (() => {
-	let p = 20000 + Math.floor(Math.random() * 20000);
-	return () => ++p;
+	let p = 20000 + Math.floor(Math.random() * 10000);
+	return () => (p = p >= 32000 ? 20000 : p + 1);
 })();
+/** Wait until the fake server started on `port` is LISTENING — it says so in
+ *  its ready file. It used to poll the port for 5 s and then carry on
+ *  regardless: when the server had not come up (a slow start under load, or
+ *  the port already taken), every request in the check that followed failed
+ *  with "connection refused", and the check reported a wrong verdict about the
+ *  script instead of a broken fixture (CI, 2026-09-29, pulse 3). Now a server
+ *  that cannot listen, or does not within 30 s, stops the smoke with that
+ *  reason. */
 function waitPort(port: number): void {
-	for (let i = 0; i < 50; i++) {
-		if (
-			spawnSync(process.execPath, [
-				'-e',
-				`require('net').connect(${port},'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))`
-			]).status === 0
-		)
-			return;
+	const f = readyFile(port);
+	for (let i = 0; i < 300; i++) {
+		if (existsSync(f)) {
+			const state = readFileSync(f, 'utf8');
+			if (state === 'ok') return;
+			if (state.startsWith('err')) {
+				throw new Error(
+					`fixture: the fake server on 127.0.0.1:${port} could not listen (${state})`
+				);
+			}
+		}
 		sleepSync(100);
 	}
+	throw new Error(`fixture: the fake server on 127.0.0.1:${port} was not listening after 30 s`);
 }
 
 /** `apt-get update` processes still running for the scratch root `r` — those

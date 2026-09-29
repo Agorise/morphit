@@ -126,18 +126,30 @@ http.createServer((q, r) => { if (q.url === '/v1/release') { r.writeHead(200, {'
 const children: ChildProcess[] = [];
 const sleepSync = (ms: number): void =>
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) as unknown as void;
+/** Start the fake /v1/release server and return its port once it answers with
+ *  THIS body. Ports are picked below the kernel's ephemeral range (32768+) so an
+ *  outgoing connection cannot already hold one; a port that does not come up
+ *  (taken, or a slow start) is retried on another, and after three tries the
+ *  smoke stops with that reason instead of running its checks against nothing
+ *  (it used to carry on after 5 s, turning a fixture problem into a wrong
+ *  verdict about the GC script). */
 function serveRelease(body: string): number {
-	const port = 20000 + Math.floor(Math.random() * 30000);
-	children.push(spawn(process.execPath, ['-e', HTTP_JS, String(port), body], { stdio: 'ignore' }));
-	for (let i = 0; i < 50; i++) {
-		if (
-			spawnSync('curl', ['-fsS', '--max-time', '1', `http://127.0.0.1:${port}/v1/release`])
-				.status === 0
-		)
-			break;
-		sleepSync(100);
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const port = 20000 + Math.floor(Math.random() * 12000);
+		children.push(
+			spawn(process.execPath, ['-e', HTTP_JS, String(port), body], { stdio: 'ignore' })
+		);
+		for (let i = 0; i < 100; i++) {
+			const r = spawnSync(
+				'curl',
+				['-fsS', '--max-time', '1', `http://127.0.0.1:${port}/v1/release`],
+				{ encoding: 'utf8' }
+			);
+			if (r.status === 0 && r.stdout === body) return port;
+			sleepSync(100);
+		}
 	}
-	return port;
+	throw new Error('fixture: the fake /v1/release server did not come up on any of 3 ports');
 }
 
 const b64 = (b: Buffer | string): string => Buffer.from(b).toString('base64');
