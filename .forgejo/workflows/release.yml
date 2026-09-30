@@ -181,6 +181,11 @@ jobs:
         env:
           # The `postgres` service sidecar (declared above), reachable by name.
           TEST_DATABASE_URL: postgres://morphit_test:test@postgres:5432/morphit_test
+          # This commit already passed ci.yml's STRICT npm-audit gate. A HIGH
+          # advisory published since then is reported (loudly, as a warning)
+          # instead of failing the release; a new CRITICAL still fails it.
+          # Only this step may set it (ci-workflow-hardening-smoke checks).
+          MORPHIT_AUDIT_GATE_MODE: report
         run: bash scripts/run-smokes.sh
 
       - name: Compute release version + validate tag format

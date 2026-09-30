@@ -22,12 +22,26 @@
  * a hard fail on transient network issues would mask real
  * problems.  CI environments with real audit results should
  * see a hard fail when something slips through.
+ *
+ * RELEASE REPORT MODE (v1.20.0). The registry changes under a commit: the
+ * release job re-runs this smoke on the SAME commit ci.yml already passed,
+ * and four times in two days a HIGH advisory published in the minutes
+ * between the two runs failed the release after CI was green — forcing a
+ * full re-push + re-tag for a finding that was not in the commit.
+ * release.yml therefore sets MORPHIT_AUDIT_GATE_MODE=report on its smoke
+ * step: new HIGH titles are printed loudly (plus a ::warning:: annotation
+ * for the forge UI) and the smoke still passes; a new CRITICAL still fails.
+ * ci.yml never sets it (ci-workflow-hardening-smoke enforces that), so every
+ * push is gated strictly and the next push picks the finding up.
  */
 
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
+
+/** Release-time report mode — exactly `report`, set only by release.yml. */
+const REPORT_MODE = process.env.MORPHIT_AUDIT_GATE_MODE === 'report';
 
 /** Vulnerabilities we accept with their rationale.  Each entry
  *  names a package + the severity we accept for it + the EXACT
@@ -63,12 +77,12 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'Carries CRITICAL SSRF (CVE in request) but matrix-bot only makes outbound ' +
 			'calls to operator-configured Matrix homeserver URLs — no user-controlled ' +
 			'URLs flow through this library, so the SSRF surface is bounded to operator ' +
-			'misconfiguration. Re-reviewed cp426 (2026-07-06): matrix-bot-sdk\'s LATEST ' +
+			"misconfiguration. Re-reviewed cp426 (2026-07-06): matrix-bot-sdk's LATEST " +
 			'(0.8.0) STILL depends on request@^2.88.2 + request-promise, so an SDK version ' +
 			'bump does NOT resolve this — only replacing matrix-bot-sdk with a request-free ' +
-			'client would (the bot\'s usage is a thin MatrixClient facade, so that is ' +
+			"client would (the bot's usage is a thin MatrixClient facade, so that is " +
 			'feasible future work). Overriding form-data/request to a fixed major would ' +
-			'break request\'s 2.x multipart API, so no safe transitive override exists.'
+			"break request's 2.x multipart API, so no safe transitive override exists."
 	},
 	{
 		package: 'form-data',
@@ -136,7 +150,7 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'has NO `@vitest/ui` dependency, and never starts the UI server; (2) the ' +
 			'@vitest/mocker "Redirect Mock" path-traversal/arbitrary-file-read triggers only ' +
 			'while executing a test suite that uses mocker redirects against attacker-supplied ' +
-			'paths — Morphit\'s own test files control their mocks, and vitest is never run ' +
+			"paths — Morphit's own test files control their mocks, and vitest is never run " +
 			'against untrusted test input, in CI or locally. Neither path exists in the ' +
 			'production runtime (indexer/relay/frontend ship no vitest). Reviewed cp184; ' +
 			're-reviewed 2026-09-08 for the @vitest/mocker advisory. Revisit if a vitest 2.1.x ' +
@@ -152,8 +166,8 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'used to parse ESLint config at lint time. Never shipped to operators and never ' +
 			'invoked at runtime (the production indexer/relay/frontend ship no eslint/js-yaml). ' +
 			'The advisory is a CPU-DoS parsing YAML merge keys; the only YAML js-yaml parses ' +
-			'here is Morphit\'s own committed ESLint config, which is trusted and not ' +
-			'attacker-controlled. Reviewed 2026-09-08. Drop this row once eslint\'s pinned ' +
+			"here is Morphit's own committed ESLint config, which is trusted and not " +
+			"attacker-controlled. Reviewed 2026-09-08. Drop this row once eslint's pinned " +
 			'@eslint/eslintrc moves to a js-yaml with the fix in range.'
 	},
 	{
@@ -242,9 +256,7 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 	{
 		package: 'fast-uri',
 		maxSeverity: 'high',
-		acceptedTitles: [
-			'fast-uri vulnerable to host confusion via backslash authority introducer'
-		],
+		acceptedTitles: ['fast-uri vulnerable to host confusion via backslash authority introducer'],
 		lastReviewed: '2026-08-03',
 		rationale:
 			'Transitive dependency of ajv (a JSON Schema validator), already override- ' +
@@ -287,7 +299,7 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'IPv4-mapped/NAT64 address) could land in a different rate-limit bucket than ' +
 			'intended — i.e. potential rate-limit EVASION. The MCP surface is a read-only ' +
 			'orderbook API (no writes, no funds, no personal data), so evasion there is ' +
-			'low-impact and further bounded by the operator\'s own reverse proxy. Morphit ' +
+			"low-impact and further bounded by the operator's own reverse proxy. Morphit " +
 			'does NOT use ip-address for any SSRF or trust-boundary decision of its own — ' +
 			'its outbound-request SSRF defense is the DNS-pinned undici Agent in ' +
 			'federationProbe.ts, which does not involve ip-address. Revisit if a patched ' +
@@ -305,9 +317,7 @@ interface NpmAuditOutput {
 		{
 			readonly name: string;
 			readonly severity: string;
-			readonly via?: ReadonlyArray<
-				string | { readonly title?: string; readonly name?: string }
-			>;
+			readonly via?: ReadonlyArray<string | { readonly title?: string; readonly name?: string }>;
 		}
 	>;
 	readonly metadata?: {
@@ -439,9 +449,7 @@ const meta = audit.metadata?.vulnerabilities ?? {};
 console.log(
 	`npm-audit-gate smoke — ${meta.high ?? 0} HIGH + ${meta.critical ?? 0} CRITICAL (registry totals)`
 );
-console.log(
-	`  allowlisted: ${allowedCount}; new HIGH/CRITICAL not on allowlist: ${failed}`
-);
+console.log(`  allowlisted: ${allowedCount}; new HIGH/CRITICAL not on allowlist: ${failed}`);
 console.log('');
 if (failed === 0) {
 	if (allowedCount > 0) {
@@ -454,6 +462,20 @@ if (failed === 0) {
 		console.log('');
 	}
 	console.log(`✓ all ${1 + totalConsidered} npm-audit-gate scenarios pass`);
+	process.exit(0);
+} else if (REPORT_MODE && !failures.some((f) => f.startsWith('CRITICAL'))) {
+	// Release-time only (see header): the commit passed the strict gate in
+	// ci.yml; these titles were published after that. Report, do not block.
+	console.log('⚠ RELEASE REPORT MODE — new HIGH advisory title(s) published after CI:');
+	for (const f of failures) console.log(`  ⚠ ${f}`);
+	for (const f of failures)
+		console.log(`::warning title=npm audit (after CI)::${f.replace(/\s*\n\s*/g, ' ')}`);
+	console.log('⚠ Not blocking this release. The next push fails ci.yml until each is');
+	console.log('⚠ upgraded or reviewed onto ALLOWLIST — handle it in the next patch.');
+	console.log('');
+	console.log(
+		`✓ all ${1 + totalConsidered} npm-audit-gate scenarios checked (report mode: ${failed} new HIGH not blocking)`
+	);
 	process.exit(0);
 } else {
 	console.error('Newly-introduced HIGH/CRITICAL vulnerabilities (not on allowlist):');

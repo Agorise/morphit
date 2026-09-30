@@ -175,6 +175,9 @@ that used to be valid stops being valid.
     Among them: the upgrade's temporary folder, the branding ownership change, and two marker
     files.
   - The first-boot helper ran any user's canary script as root.
+- **Patched libraries.** undici is now 7.29.1: before, a hostile peer could send the indexer a
+  compressed reply that expands until memory runs out. brace-expansion and ip-address are also
+  updated for newly published advisories.
 
 ## Fixed — upgrades and operations
 

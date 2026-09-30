@@ -507,7 +507,6 @@ apps/web/scripts/network-icon-coverage-smoke.ts
 apps/web/scripts/no-bare-root-href-in-lang-subtree-smoke.ts
 apps/web/scripts/no-real-time-settimeout-in-tests-smoke.ts
 apps/web/scripts/non-zod-env-example-consumer-parity-smoke.ts
-apps/web/scripts/npm-audit-gate-smoke.ts
 apps/web/scripts/onboarding-back-button-smoke.ts
 apps/web/scripts/onchain-user-privacy-smoke.ts
 apps/web/scripts/operator-doc-per-asset-config-example-coverage-smoke.ts

@@ -411,6 +411,44 @@ for (const wf of workflowFiles) {
 	}
 }
 
+/* ---------------- invariant 6: the audit report mode stays release-only ----------------
+ *
+ * (v1.20.0) npm-audit-gate-smoke has a release-time report mode
+ * (MORPHIT_AUDIT_GATE_MODE=report): a HIGH advisory published AFTER ci.yml
+ * passed the commit is printed as a warning instead of failing the release.
+ * That is only safe if ci.yml stays strict. Rule: no ci.yml line sets it, and
+ * release.yml sets it exactly once, to `report`, on the step that runs
+ * run-smokes.sh.
+ */
+{
+	const name = 'the npm-audit report mode is set only in release.yml, never in ci.yml';
+	const code = (f: string): string =>
+		readFileSync(join(WORKFLOWS_DIR, f), 'utf8')
+			.split('\n')
+			.filter((ln) => !/^\s*#/.test(ln))
+			.join('\n');
+	const others = readdirSync(WORKFLOWS_DIR).filter(
+		(f) => /\.ya?ml$/.test(f) && f !== 'release.yml' && /MORPHIT_AUDIT_GATE_MODE/.test(code(f))
+	);
+	const rel = code('release.yml');
+	const sets = [...rel.matchAll(/MORPHIT_AUDIT_GATE_MODE:\s*(\S+)/g)];
+	const onSmokeStep =
+		/MORPHIT_AUDIT_GATE_MODE:\s*report\s*\n\s*run:\s*bash scripts\/run-smokes\.sh/.test(rel);
+	if (others.length > 0) {
+		fail(
+			name,
+			`${others.join(', ')} sets MORPHIT_AUDIT_GATE_MODE — ci.yml must gate every push strictly`
+		);
+	} else if (sets.length !== 1 || sets[0]![1] !== 'report' || !onSmokeStep) {
+		fail(
+			name,
+			'release.yml must set `MORPHIT_AUDIT_GATE_MODE: report` exactly once, as the last env line of the step that runs `bash scripts/run-smokes.sh`'
+		);
+	} else {
+		pass(name);
+	}
+}
+
 let failed = 0;
 for (const r of results) {
 	if (r.passed) {
