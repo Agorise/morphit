@@ -296,48 +296,6 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
 			'misclassification advisories (fe80::/64 link-local, the NAT64 local-use ' +
 			'range) added at the v1.20.0 cut (2026-09-28): same consumer, same bucketing- ' +
 			'only use, so the same bounded rate-limit-evasion residual.'
-	},
-	{
-		package: 'undici',
-		maxSeverity: 'high',
-		acceptedTitles: [
-			'undici vulnerable to downstream response desynchronization via retry interceptor',
-			'undici vulnerable to cross-user information disclosure and parse-time crash via degenerate private cache directives',
-			'undici vulnerable to CRLF Injection via blob-like body \'type\' property',
-			'undici vulnerable to cross-user information disclosure via whitespace around equals in Cache-Control directives',
-			'undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields',
-			'undici vulnerable to Denial of Service via unhandled error in WebSocket permessage-deflate decompression'
-		],
-		lastReviewed: '2026-09-28',
-		rationale:
-			'Runtime dependency (override-pinned to ^7.28.0), used by the indexer and ' +
-			'relay for OUTBOUND HTTP only — Blurt RPC, FX/price feeds, and federation ' +
-			'peer probes via Node\'s built-in fetch. Morphit imports from undici ONLY the ' +
-			'Agent class (federationProbe.ts), used to build a dispatcher that PINS the ' +
-			'connect-time DNS lookup to a pre-resolved IP — a TOCTOU/SSRF DEFENSE, not a ' +
-			'vulnerable feature — plus a custom User-Agent header (userAgent.ts). Each of ' +
-			'the five advisories requires an undici feature Morphit does not use: (1) ' +
-			'downstream response desynchronization needs the RETRY interceptor / ' +
-			'RetryAgent — not used (no RetryAgent or interceptors.retry anywhere in ' +
-			'source); (2) and (4) cross-user disclosure via degenerate / whitespace ' +
-			'Cache-Control directives need undici\'s CACHE interceptor — not used; (3) ' +
-			'CRLF injection via a blob-like body type needs sending a Blob-like request ' +
-			'body — Morphit sends only JSON/string bodies to RPC and read endpoints, ' +
-			'never a Blob; (5) cookie attribute injection needs undici\'s cookie handling ' +
-			'(setCookie/getSetCookies) — these RPC/explorer/peer calls are cookieless, ' +
-			'sending and reading none. So none of the five vulnerable code paths is ' +
-			'reachable from Morphit\'s fetch-with-DNS-pinning usage. A newer 7.29.0 ' +
-			'exists but is not yet confirmed to carry all five fixes, and bumping the ' +
-			'runtime HTTP client is deferred to a dedicated review rather than folded ' +
-			'into this release; the lockfile is the tested source of truth (no npm audit ' +
-			'fix). Revisit if Morphit adopts undici\'s retry, cache, or cookie features ' +
-			'or Blob request bodies, or when a patched undici covering all five lands in ' +
-			'range. Reviewed at the v1.9.20 cut (2026-08-03). (6) WebSocket ' +
-			'permessage-deflate DoS, added at the v1.20.0 cut (2026-09-28): needs undici\'s ' +
-			'WebSocket CLIENT — no Node-side Morphit code opens a WebSocket (no ' +
-			'WebSocket anywhere in indexer, relay, ops-cli, mcp-server or the shared ' +
-			'packages; the browser uses its own). Fixed in 7.29.1; the bump waits for ' +
-			'the same dedicated review.'
 	}
 ];
 

@@ -79,11 +79,16 @@ I2P2="$(printf 'd%.0s' $(seq 52)).b32.i2p"
 
 PLOG="$WORK/proxy.log"; : > "$PLOG"
 MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" MORPHIT_STUB_RPC="$(cat "$WORK/rpc.json")" MORPHIT_STUB_FILE="$TARBALL" \
-	node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" 45951 45952 45953 "$PLOG" \
+	node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" 0 0 0 "$PLOG" \
 	> "$WORK/ready" 2>&1 &
 STUB_PID=$!
-for _i in $(seq 1 40); do grep -q stubs-ready "$WORK/ready" 2>/dev/null && break; sleep 0.25; done
-grep -q stubs-ready "$WORK/ready" || { echo "proxy stubs failed to start"; cat "$WORK/ready"; exit 1; }
+# Ports are the kernel's pick (0): fixed ones inside the ephemeral range could
+# already be held by another socket on a busy CI box, and the stubs used to say
+# "ready" before listening — so the harness tested against nothing (CI,
+# 2026-09-29). They now print their real ports only once all three listen.
+for _i in $(seq 1 120); do grep -qE '^stubs-(ready|failed)' "$WORK/ready" 2>/dev/null && break; sleep 0.25; done
+grep -q '^stubs-ready ' "$WORK/ready" || { echo "proxy stubs failed to start:"; cat "$WORK/ready"; exit 1; }
+read -r _ ORIGIN_PORT I2P_PROXY_PORT TOR_SOCKS_PORT < <(grep '^stubs-ready ' "$WORK/ready")
 
 echo "── fast-sync on a zero-clearnet node, executed ─────────────────"
 
@@ -96,10 +101,10 @@ run_bootstrap() {
 		MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="" \
 		MORPHIT_INDEXER_RPC_ENDPOINTS="" \
 		MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="$1" \
-		MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:45953" \
-		MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:45952" \
-		MORPHIT_TOR_SOCKS="127.0.0.1:45953" \
-		MORPHIT_I2P_HTTP_PROXY="http://127.0.0.1:45952" \
+		MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:$TOR_SOCKS_PORT" \
+		MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:$I2P_PROXY_PORT" \
+		MORPHIT_TOR_SOCKS="127.0.0.1:$TOR_SOCKS_PORT" \
+		MORPHIT_I2P_HTTP_PROXY="http://127.0.0.1:$I2P_PROXY_PORT" \
 		MORPHIT_LOCAL_IPFS_GATEWAY="" \
 		"$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$BOOT" \
 		--from-chain --i-trust-signer --verify-only 2>&1
@@ -142,9 +147,9 @@ OUT_FC="$(cd "$REPO" && env \
 	MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="" \
 	MORPHIT_INDEXER_RPC_ENDPOINTS="" \
 	MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="http://$I2P,http://$I2P2" \
-	MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:45953" \
-	MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:45952" \
-	MORPHIT_IPFS_GATEWAYS="http://127.0.0.1:45951" \
+	MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:$TOR_SOCKS_PORT" \
+	MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:$I2P_PROXY_PORT" \
+	MORPHIT_IPFS_GATEWAYS="http://127.0.0.1:$ORIGIN_PORT" \
 	"$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$BOOT" \
 	--from-chain --i-trust-signer --verify-only 2>&1)"
 # Assert BEHAVIOUR, not the label. The "clearnet sources omitted" text is

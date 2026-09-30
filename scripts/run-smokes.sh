@@ -770,6 +770,7 @@ SMOKES=(
 	".:ipfs-gc-smoke"
 	".:theme-literal-scan-smoke"
 	".:theme-tokens-smoke"
+	".:fixture-port-hygiene-smoke"
 )
 
 # Slow-solo smokes each run a whole toolchain — every workspace's vitest, the

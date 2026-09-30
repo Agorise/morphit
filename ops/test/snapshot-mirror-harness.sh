@@ -24,7 +24,8 @@ MIRROR_TS="$REPO/apps/indexer/scripts/snapshot-mirror.ts"
 TSX="$REPO/node_modules/.bin/tsx"
 WORK="$(mktemp -d)"
 RPC_PID=""
-cleanup(){ [ -n "$RPC_PID" ] && kill "$RPC_PID" 2>/dev/null; rm -rf "$WORK"; }
+STUB_PID=""
+cleanup(){ [ -n "$RPC_PID" ] && kill "$RPC_PID" 2>/dev/null; [ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$WORK"; }
 trap cleanup EXIT
 
 pass=0; fails=0
@@ -65,7 +66,7 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 const [,, port, rpcFile] = process.argv;
 const byMethod = JSON.parse(readFileSync(rpcFile, 'utf8'));
-createServer((req, res) => {
+const srv = createServer((req, res) => {
   let b = '';
   req.on('data', (c) => (b += c));
   req.on('end', () => {
@@ -75,9 +76,15 @@ createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ jsonrpc: '2.0', id, result: byMethod[method] ?? null }));
   });
-}).listen(Number(port), '127.0.0.1');
+});
+// Say which port once LISTENING (0 = the kernel's pick), or why not.
+srv.on('error', (e) => { console.log(`rpc-failed ${e.code ?? e.message}`); process.exit(1); });
+srv.listen(Number(port), '127.0.0.1', () => console.log(`rpc-ready ${srv.address().port}`));
 RPC
-PORT=45917
+# 0 = let the kernel pick a free port on the first start; restarts reuse it (the
+# RPC endpoints below are exported once). A fixed port inside the ephemeral range
+# could already be held by another socket on a busy CI box (2026-09-29).
+PORT=0
 # sign_fixture <sha> <chain_id> → $WORK/rpc.json, $WORK/history.json, $PINNED
 sign_fixture() {
 	local payload="{\"ipfs_cid\":\"$CID\",\"sha256\":\"$1\",\"chain_id\":\"$2\",\"schema_version\":59,\"last_applied_block\":63610645,\"size_bytes\":$SIZE,\"indexer_version\":\"1.17.8\"}"
@@ -88,11 +95,14 @@ sign_fixture() {
 }
 # start_rpc <sha> <chain_id>
 start_rpc() {
-	[ -n "$RPC_PID" ] && kill "$RPC_PID" 2>/dev/null
+	if [ -n "$RPC_PID" ]; then kill "$RPC_PID" 2>/dev/null; wait "$RPC_PID" 2>/dev/null; fi
 	sign_fixture "$1" "$2"
-	node "$WORK/rpc.mjs" "$PORT" "$WORK/rpc.json" &
+	: > "$WORK/rpc-ready"
+	node "$WORK/rpc.mjs" "$PORT" "$WORK/rpc.json" > "$WORK/rpc-ready" 2>&1 &
 	RPC_PID=$!
-	sleep 1
+	for _i in $(seq 1 120); do grep -qE '^rpc-(ready|failed)' "$WORK/rpc-ready" 2>/dev/null && break; sleep 0.25; done
+	grep -q '^rpc-ready ' "$WORK/rpc-ready" || { echo "stub RPC failed to start:"; cat "$WORK/rpc-ready"; exit 1; }
+	PORT="$(sed -n 's/^rpc-ready //p' "$WORK/rpc-ready")"
 }
 start_rpc "$DUMP_SHA" "$CHAIN_ID"
 
@@ -222,9 +232,12 @@ esac
 # request TRAVERSED a proxy rather than reaching the origin directly.
 PLOG="$WORK/proxy.log"; : > "$PLOG"
 MORPHIT_STUB_BODY="$(cat "$WORK/history.json")" MORPHIT_STUB_RPC="$(cat "$WORK/rpc.json")" node "$REPO/ops/test/lib/hidden-proxy-stubs.mjs" \
-	45941 45942 45943 "$PLOG" > "$WORK/stubs-ready" 2>&1 &
+	0 0 0 "$PLOG" > "$WORK/stubs-ready" 2>&1 &
 STUB_PID=$!
-for _i in $(seq 1 40); do grep -q stubs-ready "$WORK/stubs-ready" 2>/dev/null && break; sleep 0.2; done
+# Kernel-picked ports, announced only once all three listen (see the stubs file).
+for _i in $(seq 1 120); do grep -qE '^stubs-(ready|failed)' "$WORK/stubs-ready" 2>/dev/null && break; sleep 0.25; done
+grep -q '^stubs-ready ' "$WORK/stubs-ready" || { echo "proxy stubs failed to start:"; cat "$WORK/stubs-ready"; exit 1; }
+read -r _ _ I2P_PROXY_PORT TOR_SOCKS_PORT < <(grep '^stubs-ready ' "$WORK/stubs-ready")
 
 for net in i2p tor; do
 	if [ "$net" = "i2p" ]; then
@@ -238,8 +251,8 @@ for net in i2p tor; do
 		MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="" \
 		MORPHIT_INDEXER_RPC_ENDPOINTS="" \
 		MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS="$HIDDEN_RPC" \
-		MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:45943" \
-		MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:45942" \
+		MORPHIT_INDEXER_TOR_SOCKS="127.0.0.1:$TOR_SOCKS_PORT" \
+		MORPHIT_INDEXER_I2P_HTTP_PROXY="127.0.0.1:$I2P_PROXY_PORT" \
 		"$TSX" --tsconfig "$REPO/tsconfig.smoke.json" "$MIRROR_TS" --signer morphit 2>&1)"
 	case "$OUT_H" in
 		*"newest snapshot"*|*"already mirroring"*|*"verified against"*)
@@ -255,6 +268,7 @@ for net in i2p tor; do
 	fi
 done
 kill "$STUB_PID" 2>/dev/null
+STUB_PID=""
 
 # ── A foreign chain must be refused before any bandwidth is spent ─────
 start_rpc "$DUMP_SHA" "deadbeefdeadbeef"

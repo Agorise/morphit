@@ -22,6 +22,12 @@
  *
  * Usage:
  *   node hidden-proxy-stubs.mjs <originPort> <httpProxyPort> <socksPort> <logFile>
+ * Pass 0 for a port to let the kernel pick a free one (what the harnesses do).
+ * Once ALL THREE servers are listening it prints
+ *   stubs-ready <originPort> <httpProxyPort> <socksPort>
+ * with the real ports; if any cannot listen it prints `stubs-failed <which> <code>`
+ * and exits 1. (It used to print stubs-ready BEFORE listening and then die on a
+ * taken port, so a harness went on to test against nothing — CI, 2026-09-29.)
  * The origin server answers any request with the JSON on stdin-configured env
  * MORPHIT_STUB_BODY (defaults to '{}').
  */
@@ -30,7 +36,7 @@ import { createServer as createNetServer, connect as netConnect } from 'node:net
 import { appendFileSync, readFileSync, existsSync } from 'node:fs';
 
 const [, , originPortRaw, httpProxyPortRaw, socksPortRaw, logFile] = process.argv;
-const ORIGIN_PORT = Number(originPortRaw);
+let ORIGIN_PORT = Number(originPortRaw); // the real port once listening (0 = kernel's pick)
 const HTTP_PROXY_PORT = Number(httpProxyPortRaw);
 const SOCKS_PORT = Number(socksPortRaw);
 const BODY = process.env.MORPHIT_STUB_BODY ?? '{}';
@@ -54,7 +60,7 @@ const note = (line) => {
 // Serving both lets one stub stand in for a peer that is BOTH an RPC endpoint
 // and a snapshot mirror — which is exactly what a federation peer is.
 const SERVE_FILE = process.env.MORPHIT_STUB_FILE ?? '';
-createHttpServer((req, res) => {
+const origin = createHttpServer((req, res) => {
 	if (req.method === 'GET' || req.method === 'HEAD') {
 		note(`origin GET ${req.url}`);
 		if (SERVE_FILE === '' || !existsSync(SERVE_FILE)) {
@@ -82,7 +88,7 @@ createHttpServer((req, res) => {
 		res.writeHead(200, { 'content-type': 'application/json' });
 		res.end(JSON.stringify({ jsonrpc: '2.0', id, result }));
 	});
-}).listen(ORIGIN_PORT, '127.0.0.1');
+});
 
 // ── i2pd's HTTP proxy ────────────────────────────────────────────────
 // Handles BOTH shapes a client may use:
@@ -113,11 +119,10 @@ proxy.on('connect', (req, clientSocket, head) => {
 	target.on('error', () => clientSocket.destroy());
 	clientSocket.on('error', () => target.destroy());
 });
-proxy.listen(HTTP_PROXY_PORT, '127.0.0.1');
 
 // ── Tor's SOCKS5 port ────────────────────────────────────────────────
 // Minimal but real RFC 1928: greeting → no-auth → CONNECT → splice.
-createNetServer((sock) => {
+const socks = createNetServer((sock) => {
 	let stage = 'greeting';
 	sock.on('error', () => sock.destroy());
 	sock.on('data', (chunk) => {
@@ -160,6 +165,19 @@ createNetServer((sock) => {
 			});
 		}
 	});
-}).listen(SOCKS_PORT, '127.0.0.1');
+});
 
-process.stdout.write('stubs-ready\n');
+// Listen on all three, and say "ready" only when every one of them is.
+const listen = (name, server, port) =>
+	new Promise((resolve) => {
+		server.once('error', (e) => {
+			process.stdout.write(`stubs-failed ${name} ${e.code ?? e.message}\n`);
+			process.exit(1);
+		});
+		server.listen(port, '127.0.0.1', () => resolve(server.address().port));
+	});
+const originPort = await listen('origin', origin, ORIGIN_PORT);
+ORIGIN_PORT = originPort;
+const proxyPort = await listen('i2p-proxy', proxy, HTTP_PROXY_PORT);
+const socksPort = await listen('tor-socks', socks, SOCKS_PORT);
+process.stdout.write(`stubs-ready ${originPort} ${proxyPort} ${socksPort}\n`);
