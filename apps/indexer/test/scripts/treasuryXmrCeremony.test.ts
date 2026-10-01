@@ -137,3 +137,14 @@ describe('release-build-payload.ts pins the primary address', () => {
 		}
 	});
 });
+
+// v1.20.2 — same bug as the xpub script: without `--file` the address itself
+// was dropped ("Paste the whole main address"). Run WITHOUT `--file`, with an
+// address refused for its own reason; nothing is written.
+describe('set-treasury-xmr-primary.ts without --file (how operators run it)', () => {
+	it('the address reaches the check (a subaddress is refused as a subaddress)', () => {
+		const r = run('set-treasury-xmr-primary.ts', [SUBADDRESS]);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toContain('SUBADDRESS');
+	});
+});

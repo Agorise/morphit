@@ -918,7 +918,12 @@
 			"same_instance": "Das ist dieselbe Instanz, auf der du bist. Wähle eine andere zum Vergleichen.",
 			"local_failed": "Orderbook jener Instanz konnte nicht abgerufen werden: {reason}",
 			"remote_failed": "Orderbook von {host} konnte nicht abgerufen werden: {reason}. Die Remote-Instanz ist möglicherweise offline, unerreichbar oder blockiert diese Anfrage.",
-			"fetch_threw": "Konnte {host} nicht erreichen. Netzwerkfehler oder die Instanz ist offline."
+			"fetch_threw": "Konnte {host} nicht erreichen. Netzwerkfehler oder die Instanz ist offline.",
+			"local_timeout": "Das Orderbook hat zu lange zum Laden gebraucht. Versuche es gleich noch einmal.",
+			"unknown_instance": "{host} ist keine registrierte Morphit-Instanz und kann daher nicht verglichen werden. Wähle eine aus der Instanzliste.",
+			"remote_unreachable": "Diese Instanz konnte {host} nicht erreichen. Sie ist möglicherweise offline oder von hier aus gerade nicht erreichbar; versuche es später noch einmal.",
+			"remote_bad_answer": "{host} hat geantwortet, aber nicht mit einem Morphit-Orderbook.",
+			"busy": "Gerade laufen zu viele Vergleiche. Versuche es in einer Minute noch einmal."
 		},
 		"block_gap": {
 			"synced": "synchron",
@@ -2432,7 +2437,8 @@
 		"start": "Loslegen",
 		"glossary": "Glossar",
 		"cheat_sheet": "Spickzettel",
-		"post": "Posten"
+		"post": "Posten",
+		"start_hint": "anmelden oder ein Konto erstellen"
 	},
 	"onboarding": {
 		"title": "Richten wir deine Schlüssel ein",

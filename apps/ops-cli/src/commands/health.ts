@@ -529,6 +529,74 @@ export interface HealthSummary {
 	 *  indexer build) — the renderer then shows a one-line hint. */
 	readonly fastPath: FastPathSummary | null;
 	readonly federation: FederationSummary | null;
+	/** v1.20.2 (E1) — full block verification, report-only, from the
+	 *  operator-only `block_check` block. null on an older indexer. */
+	readonly blockCheck: BlockCheckSummary | null;
+}
+
+/** v1.20.2 (E1) — the indexer's report-only block verification counts. */
+export interface BlockCheckSummary {
+	readonly checked: number;
+	readonly matched: number;
+	readonly merkleMismatch: number;
+	readonly idMismatch: number;
+	readonly linkMismatch: number;
+	readonly txidMismatch: number;
+	readonly unsupportedOps: readonly string[];
+	readonly unsupportedBlocks: number;
+}
+
+/** Interpret `block_check` from a `/v1/health` body. PURE. */
+export function parseBlockCheck(v: unknown): BlockCheckSummary | null {
+	if (v === null || typeof v !== 'object') return null;
+	const o = v as Record<string, unknown>;
+	const n = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : 0);
+	const counts = (x: unknown): Record<string, number> =>
+		x !== null && typeof x === 'object' ? (x as Record<string, number>) : {};
+	const unsupported = counts(o.unsupported);
+	const txid = counts(o.txidMismatch);
+	return {
+		checked: n(o.checked),
+		matched: n(o.matched),
+		merkleMismatch: n(o.merkleMismatch),
+		idMismatch: n(o.idMismatch),
+		linkMismatch: n(o.linkMismatch),
+		txidMismatch: Object.values(txid).reduce((a, b) => a + n(b), 0),
+		unsupportedOps: Object.keys(unsupported)
+			.map((k) => safe(k).slice(0, 40))
+			.slice(0, 6),
+		unsupportedBlocks: Object.values(unsupported).reduce((a, b) => a + n(b), 0)
+	};
+}
+
+/** One line for `morphit-ops health`: the verdict first. PURE. */
+export function describeBlockCheck(b: BlockCheckSummary): {
+	tone: 'ok' | 'warn' | 'dim';
+	text: string;
+} {
+	const fmt = (x: number) => x.toLocaleString('en-US');
+	const real = b.merkleMismatch + b.idMismatch + b.linkMismatch;
+	if (b.checked === 0) return { tone: 'dim', text: 'report-only — no blocks checked yet' };
+	if (real > 0) {
+		const parts = [
+			b.merkleMismatch > 0 ? `merkle ${b.merkleMismatch}` : '',
+			b.idMismatch > 0 ? `id ${b.idMismatch}` : '',
+			b.linkMismatch > 0 ? `link ${b.linkMismatch}` : ''
+		].filter(Boolean);
+		return {
+			tone: 'warn',
+			text: `report-only — ${fmt(real)} block(s) did NOT match (${parts.join(', ')}) of ${fmt(b.checked)}; see: sudo journalctl -u morphit-indexer | grep block_verify_problem`
+		};
+	}
+	const notYet = b.unsupportedBlocks + b.txidMismatch;
+	if (notYet > 0) {
+		const ops = b.unsupportedOps.length > 0 ? ` (${b.unsupportedOps.join(', ')})` : '';
+		return {
+			tone: 'dim',
+			text: `report-only — ${fmt(b.matched)} of ${fmt(b.checked)} matched; ${fmt(notYet)} not checkable by this version yet${ops}`
+		};
+	}
+	return { tone: 'ok', text: `report-only — all ${fmt(b.checked)} blocks matched` };
 }
 
 /** v1.7.0 — head-block fast-path status (mirrors the indexer's
@@ -699,7 +767,8 @@ export function summarizeHealth(body: unknown): HealthSummary {
 		priceFeed: parsePriceFeed(b.price_feed),
 		priceFeeds: parsePriceFeedsHealth(b.price_feeds),
 		fastPath: parseFastPath(b.fastpath),
-		federation: parseFederation(b.fastpath)
+		federation: parseFederation(b.fastpath),
+		blockCheck: parseBlockCheck(b.block_check)
 	};
 }
 
@@ -2098,6 +2167,14 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		} else {
 			// Indexer up but no fastpath block → a pre-fast-path build.
 			console.log(`      ${c.dim('Fast path:     status unavailable (older indexer build)')}`);
+		}
+
+		// ── Block check (v1.20.2, E1, report-only) ─────────────────
+		if (s.blockCheck !== null) {
+			const d = describeBlockCheck(s.blockCheck);
+			const text =
+				d.tone === 'ok' ? c.green(d.text) : d.tone === 'warn' ? c.yellow(d.text) : c.dim(d.text);
+			console.log(`      Block check:   ${text}`);
 		}
 
 		// ── Federated chat (v1.18.0) ───────────────────────────────

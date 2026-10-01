@@ -40,6 +40,7 @@ import {
 	encodeConfig,
 	envFileEntries,
 	frontendEdgePort,
+	frontendFileMissesAre404,
 	frontendForwardsOneAddress,
 	identifyContainers,
 	nginxLogFormats,
@@ -164,6 +165,13 @@ const SERVED_STALE = dumpOf(staleV1(SHIPPED_FE));
 /** The frontend before wave 5: no edge listener. */
 const noEdge = (conf: string): string => conf.replace(/\n\s*listen 8088;/, '');
 const SERVED_NO_EDGE = dumpOf(noEdge(SHIPPED_FE));
+/** The frontend before v1.20.2: a missing file got the app page (200), not 404. */
+const no404 = (conf: string): string =>
+	conf.replace(
+		/\n {4}# ─── Files are files[\s\S]*?\n {4}location ~\* \^\/\(\?:\(\?:fonts[^\n]*\{[\s\S]*?\n {4}\}\n/,
+		'\n'
+	);
+const SERVED_NO_404 = dumpOf(no404(SHIPPED_FE));
 
 // ── a simulated Docker + Compose ────────────────────────────────────────
 
@@ -1404,6 +1412,60 @@ describe('a tor-only box (frontend only, no BunkerWeb)', () => {
 		});
 		expect((await s.run()).kind).toBe('no-proxy');
 		expect(s.ups).toEqual([]);
+	});
+});
+
+describe('the frontend answers a missing file with 404, not the app page (v1.20.2)', () => {
+	it('reads it from what nginx serves: the release config does, the v1.20.1 one does not', () => {
+		expect(no404(SHIPPED_FE)).not.toBe(SHIPPED_FE);
+		expect(no404(SHIPPED_FE)).not.toContain('/.well-known/');
+		expect(frontendFileMissesAre404(SERVED_OK)).toBe(true);
+		expect(frontendFileMissesAre404(SERVED_NO_404)).toBe(false);
+		// The location alone is not enough: it must 404 a miss.
+		expect(
+			frontendFileMissesAre404(
+				SERVED_OK.replace(
+					/(location \^~ \/\.well-known\/ \{[\s\S]*?)try_files \$uri =404;/,
+					'$1try_files $uri /index.html;'
+				)
+			)
+		).toBe(false);
+	});
+	it('an otherwise current frontend without it is rebuilt from the release once, and says so', async () => {
+		const s = oldBox();
+		s.served = SERVED_NO_404;
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		const info = s.info.join(' ');
+		expect(info).toMatch(/missing file.*404/);
+		expect(info).not.toMatch(/one address/);
+		expect(s.silent).toEqual([]);
+	});
+	it('a zero-clearnet box (frontend only, no BunkerWeb — Tor/I2P reach it directly) is rebuilt too', async () => {
+		const s = sim({
+			files: {
+				'docker-compose.yml':
+					'services:\n  frontend:\n    image: fe\n    ports:\n      - "127.0.0.1:8090:80"\n'
+			},
+			composeFiles: ['docker-compose.yml'],
+			containers: [{ name: 'morphit-frontend', service: 'frontend', image: 'fe', mounts: [BUILD] }]
+		});
+		s.served = SERVED_NO_404;
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		expect(s.info.join(' ')).toMatch(/missing file.*404/);
+	});
+	it('still without it after the rebuild: a calm warning naming it, with the command', async () => {
+		const s = oldBox();
+		s.served = SERVED_NO_404;
+		s.servedAfterRefresh = SERVED_NO_404;
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		const w = s.warn.join(' ');
+		expect(w).toMatch(/missing file/);
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
 	});
 });
 

@@ -137,6 +137,86 @@ const scenarios: Scenario[] = [
 			}
 			return null;
 		}
+	},
+	{
+		name: 'I-6 (v1.20.2): the <img> reserves its space before it loads (width + height)',
+		test: () => {
+			// PageSpeed "image elements do not have explicit width and height":
+			// without both attributes the header/hero/footer jump when the SVG
+			// arrives (layout shift). CSS keeps width:auto, so the loaded file's
+			// own proportions still win (an operator's logo is not stretched).
+			const img = src.match(/<img[\s\S]*?\/>/)?.[0] ?? '';
+			if (!/\swidth=\{/.test(img) || !/\sheight=\{/.test(img)) {
+				return 'the wordmark <img> has no width={…} and height={…} attributes';
+			}
+			if (!/\.morphit-logo-bling-wordmark\s*\{[^}]*\bwidth:\s*auto/.test(src)) {
+				return 'the wordmark CSS lost width: auto (the attributes would stretch an operator logo)';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-7 (v1.20.2): header + hero logos load first (fetchpriority via `priority`)',
+		test: () => {
+			if (!/fetchpriority=\{priority \? 'high' : undefined\}/.test(src)) {
+				return "no fetchpriority={priority ? 'high' : undefined} on the wordmark <img>";
+			}
+			const layout = readFileSync(resolve(REPO, 'apps/web/src/routes/[lang]/+layout.svelte'), 'utf8');
+			const page = readFileSync(resolve(REPO, 'apps/web/src/routes/[lang]/+page.svelte'), 'utf8');
+			if (!/<MorphitLogoBling heightPx=\{32\}[^>]*\bpriority\b/.test(layout)) {
+				return 'the header logo (+layout.svelte) does not pass `priority`';
+			}
+			if (!/<MorphitLogoBling heightClass=[^>]*\bpriority\b/.test(page)) {
+				return 'the homepage hero logo (+page.svelte) does not pass `priority`';
+			}
+			if (/variant="footer"[^>]*\bpriority\b/.test(layout)) {
+				return 'the footer logo must not compete for priority';
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-9 (v1.20.2): app.html preloads the header logo ahead of the app code',
+		test: () => {
+			// The logo is the page's largest first-screen element on a phone. In the
+			// body it is found only after the head's ~60 script preloads, which a
+			// slow link then fetches first.
+			const html = readFileSync(resolve(REPO, 'apps/web/src/app.html'), 'utf8');
+			const at = html.search(
+				/<link\s+rel="preload"\s+href="%sveltekit\.assets%\/brand\/site-logo\.svg"\s+as="image"\s+fetchpriority="high"\s+crossorigin="anonymous"\s*\/>/
+			);
+			const head = html.indexOf('%sveltekit.head%', html.indexOf('</script>'));
+			if (at < 0) return 'no <link rel="preload" … /brand/site-logo.svg as="image" fetchpriority="high"> in app.html';
+			if (head >= 0 && at > head) return 'the logo preload comes after %sveltekit.head% (the script preloads)';
+			return null;
+		}
+	},
+	{
+		name: 'I-10 (v1.20.2): the <img> is fetched in CORS mode, like the mask (one download, not two)',
+		test: () => {
+			// mask-image is always fetched in CORS mode; a plain <img> is not, so the
+			// browser downloaded (or, with no-cache, revalidated) every logo twice.
+			const img = src.match(/<img[\s\S]*?\/>/)?.[0] ?? '';
+			if (!/crossorigin=\{logoSrc\.startsWith\('\/'\) \? 'anonymous' : undefined\}/.test(img)) {
+				return "no crossorigin={logoSrc.startsWith('/') ? 'anonymous' : undefined} on the wordmark <img>";
+			}
+			return null;
+		}
+	},
+	{
+		name: 'I-8 (v1.20.2): the shine animates only transform/opacity (GPU-composited)',
+		test: () => {
+			// PageSpeed "avoid non-composited animations": animating
+			// background-position repaints the logo on the main thread every frame.
+			const frames = [...src.matchAll(/@keyframes\s+[\w-]+\s*\{([\s\S]*?)\n\t\}/g)];
+			if (frames.length === 0) return 'no @keyframes found';
+			for (const [, body] of frames) {
+				const props = [...(body ?? '').matchAll(/([\w-]+)\s*:/g)].map((m) => m[1]);
+				const bad = props.filter((p) => p !== 'transform' && p !== 'opacity');
+				if (bad.length) return `a keyframe animates ${[...new Set(bad)].join(', ')}`;
+			}
+			return null;
+		}
 	}
 ];
 

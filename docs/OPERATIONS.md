@@ -4937,6 +4937,24 @@ caller can't see it. (It is deliberately NOT in the
 `?verbose=1` diagnostics block, so the node-health view —
 which doesn't pass `verbose=1` — always sees it.)
 
+**Block check (v1.20.2, report-only).** Below the fast path,
+`morphit-ops health` shows a **Block check:** line. For every block
+it applies, the indexer recomputes the transactions' merkle root,
+the block id and the link to the block before (the chain's own
+hashes, from Steem's `calculate_merkle_root` and
+`signed_block_header::id`) and compares them with what the RPC
+node served. It only COUNTS — nothing is refused — because the
+recomputation depends on serializing every Blurt operation exactly,
+which had to be proven on real blocks first. `all N blocks matched`
+is what a healthy node shows; `N block(s) did NOT match` is the
+loud case (the journal has `block_verify_problem` lines with the
+block numbers); `not checkable by this version yet (…)` names
+operations this version cannot serialize, which is this version's
+gap, not a bad block. Once live nodes show zero mismatches, a
+later release enforces it (with a two-operator anchor per
+window). Source: `apps/indexer/src/blurt/blockVerify.ts`; the
+counts are the operator-only `block_check` block of `/v1/health`.
+
 **Upgrade note.** Fast chat is on for every instance (no off
 switch since v1.7.0), so a normal `morphit-ops upgrade` carries
 it forward automatically — confirm afterward with the **Fast
@@ -6697,9 +6715,19 @@ BunkerWeb passes an upstream `Cache-Control: no-cache` through and honors it for
 
 **Never let an edge cache override the indexer's `/v1/` cache headers.** The read API sets `Cache-Control` per response and the value is load-bearing. In particular, `GET /v1/profiles` (the batch profile lookup behind every avatar + display name) returns `public, max-age=90, stale-while-revalidate=60` only when EVERY requested account resolved to a profile row, and `no-store` when any requested account is absent — because an absent account is normally just indexer lag in the 1–2 block window after that account broadcast its profile op or signed up. If a proxy or CDN caches that negative response anyway, the affected users' display names fall back to `@account` and their avatars to the identicon, and (since the client's in-memory cache is cleared by a reload but the browser's disk cache is not) **a page refresh does not fix it** — only a hard reload does. Proxy `/v1/` through untouched.
 
-> The app no longer relies *solely* on the service-worker byte-diff: the update-version poll compares `verify.json`'s deployed version to the running bundle's version on every tab-foreground and surfaces the snackbar on a mismatch even if a proxy served the worker stale. The `no-cache` config above is still the right fix — it keeps the worker itself updating promptly and the poll cheap — but the two together mean the prompt appears regardless of proxy quirks.
+> The app no longer relies *solely* on the service-worker byte-diff: the update-version poll compares `verify.json`'s deployed version to the running bundle's version — first once the page has loaded and the browser is idle, then every five minutes and on tab-foreground, never closer than two minutes apart (v1.20.2: the file is ~80 KB on the wire) — and surfaces the snackbar on a mismatch even if a proxy served the worker stale. The `no-cache` config above is still the right fix — it keeps the worker itself updating promptly and the poll cheap — but the two together mean the prompt appears regardless of proxy quirks.
 
 **Beta gate note:** if you front the beta site with HTTP Basic Auth, **exempt `/verify.json`** from the auth (e.g. `auth_basic off;` inside its `location` block) so the version poll and auto-verify can read it. The poll sends the visitor's existing credentials, so it works through the gate either way, but the exemption is what lets the "About this instance" auto-verify succeed instead of reporting "Could not auto-verify."
+
+#### Missing files, fonts and the opener policy (v1.20.2)
+
+Three more rules in both shipped configs (`ops/bunkerweb/frontend/nginx.conf`, `ops/nginx/web.conf`), checked on a real nginx by `scripts/static-soft-404-smoke.ts`:
+
+- **A missing file is a 404.** Anything under `/.well-known/`, and any file name with a file extension at the top level or in `/fonts/`, `/icons/`, `/splash/`, `/brand/`, is served if it exists and answered `404` if not. Before, it got the app's page (`200`, HTML), so crawlers and PageSpeed were told /.well-known/ai-catalog.json, /ads.txt and /favicon.ico exist and are web pages ("malformed JSON"). Page links (`/en/orders/…`) and the proxied paths (`/v1/`, `/rss/`, `/ipfs/`, …) are unaffected.
+- **Fonts are cached a month** (`Cache-Control: public, max-age=2592000`): they never change within a release and every page uses them, so the browser no longer revalidates them on every page.
+- **`Cross-Origin-Opener-Policy: same-origin`** on every answer: a window of another site that a Morphit page opens, or that opened it, gets no handle to it.
+
+On a Docker install `morphit-ops upgrade` rebuilds the frontend container from this release's config when the running one still answers a missing file with the app page (the same check-and-rebuild it does for the visitor-address forwarding; zero-clearnet instances included, since Tor and I2P reach that same container). A bare-metal `web.conf` is yours to update: copy the new blocks in.
 
 #### If your reverse proxy serves the build directly (single-nginx topology)
 
@@ -10110,7 +10138,7 @@ over HTTPS about each payment: a txprove explorer gets
 endpoint; a raw-tx explorer gets only the txid (both kinds
 below).  You choose how many explorers to ask, and which.
 
-**The default ships with three.**  How strong the cross-check
+**The default ships with six (v1.20.2: three explorers + three public Monero nodes).**  How strong the cross-check
 actually is depends on `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES`
 — the number of explorers that must AGREE on the proven amount
 before a result is accepted.  **Since v1.20.0 its default is
@@ -10118,16 +10146,32 @@ before a result is accepted.  **Since v1.20.0 its default is
 so a single compromised or coerced explorer cannot decide a
 verification on its own.  If your own explorer list has only one
 entry, the quorum drops to `1` and the indexer says so at boot.
-**Set `3` to require all three default explorers**
-(`2` is a strong setting against the three-explorer default; `3` needs all three).  At
-the default of 1 you get availability, not agreement-based
-defense.
+A higher setting asks for more agreeing sources (`3` = any three of the six).  At
+`1` you get availability, not agreement-based defense.
 
 ```bash
-MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://moneroexplorer.org,raw-tx+https://moneroblocks.info
+MORPHIT_INDEXER_XMR_EXPLORER_URLS=https://xmrchain.net,https://moneroexplorer.org,raw-tx+https://moneroblocks.info,node+https://xmr-node.cakewallet.com:18081,node+https://node.monero.fail,node+https://xmr.cryptostorm.is
 ```
 
-The list holds two kinds of explorer.
+**When the sources do not agree, or only one answers (v1.20.2).** All configured
+sources are asked, fastest first; the first two that agree decide. A source that is
+down only goes to the pool's cooldown. A payment no two sources can confirm waits
+(`pending_external`) and is re-checked every 30 minutes — but once the order has
+waited **two hours**, if exactly ONE source can be reached and every other one was
+simply unreachable (none said "not found", none answered differently), that one
+answer is accepted when the payment is at least **10 blocks** deep (log
+`xmr_fee_accepted_on_one_explorer`). Sources that disagree are never settled by one
+of them: the order waits for more sources and the journal says
+`xmr_explorers_disagree` with what each one answered.
+
+**Upgrades keep the list current (v1.20.2).** `morphit-ops init` wrote the list of
+its day into `/opt/morphit/morphit.env`, and nodes set up before v1.20.0 still listed
+three dead explorers and none of the newer sources. The upgrade's "Monero fee-source
+heal" removes the retired explorers below and adds each current default ONCE
+(remembered in `/var/lib/morphit/fee-explorer-defaults.json`, so a default you remove
+afterwards stays removed); your own explorers stay where they are.
+
+The list holds three kinds of source.
 
 - **`https://…` (txprove):** an explorer running the
   `moneroexamples/onion-monero-blockchain-explorer` code. The indexer asks it to
@@ -10146,7 +10190,15 @@ The list holds two kinds of explorer.
   (the block must list the txid). Only current (RingCT type 6, 2022+) transactions
   are accepted this way.
 
-A raw-tx answer counts as one independent explorer in the
+- **`node+https://…` (public Monero node, v1.20.2):** a `monerod` restricted RPC (a
+  public "remote node"). The indexer POSTs `/get_transactions` with
+  `decode_as_json` and checks the returned transaction exactly like a raw-tx
+  explorer's — same hash, outputs and commitments; `confirmations` comes from the
+  node. A pruned node's copy has no signatures but carries `prunable_hash`, which is
+  enough for the txid check. **Only the txid is sent** (already public in the order
+  op). HTTPS only, so the depth it reports cannot be altered on the way.
+
+A raw-tx or node answer counts as one independent source in the
 `MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES` quorum, exactly like a txprove answer.
 
 > **Monero note — that `viewkey=` parameter does NOT carry a real
@@ -10161,10 +10213,16 @@ A raw-tx answer counts as one independent explorer in the
 > indexer logs only the explorer's base URL, never the full URL
 > with the key.)
 
-**Default explorers (checked 2026-09-28):**
+**Default sources (explorers checked 2026-09-28, nodes 2026-10-01):**
 - `https://xmrchain.net` — txprove (reference instance, run by moneroexamples)
 - `https://moneroexplorer.org` — txprove
 - `raw-tx+https://moneroblocks.info` — raw transaction (no txprove)
+- `node+https://xmr-node.cakewallet.com:18081` — public node (Cake Wallet)
+- `node+https://node.monero.fail` — public node (monero.fail)
+- `node+https://xmr.cryptostorm.is` — public node (cryptostorm)
+
+(Each node answered `/get_height` at the chain tip with `untrusted: false` on
+2026-10-01. `morphit-ops init` probes every source the same way before using it.)
 
 **Dropped from the default (2026-09-28):**
 - `https://localmonero.co/blocks` — now redirects to moneroblocks.info (listed above
@@ -10173,8 +10231,7 @@ A raw-tx answer counts as one independent explorer in the
   (`/explorer/api/…`) returns 404
 - `https://exploremonero.com` — a JavaScript page with no JSON API
 
-If you run an older config that still names them, remove them: the §40.13 self-test
-(which needs every listed explorer to answer) fails on them.
+An upgrade to v1.20.2 or later removes them from the env file by itself (see above).
 
 **Explorers known to be NOT API-compatible:**
 - `https://xmrscan.org` — different codebase
@@ -10690,6 +10747,10 @@ up to 90 days). UI: `BtcFeePayPanel.svelte` (post success card + My orders).
    down → Confirm Backup… → Create Keystore → Import Keystore → Apply (set a
    password). Never receive anything else in this wallet: its public key
    will be on the blockchain, so everyone can see every address of it.
+   A new HD account in a phone wallet works the same way (Mycelium: add a new
+   HD account and copy its zpub), as long as it is a NEW account that has
+   never received anything — not the account holding the shared treasury
+   address (v1.20.2: step 3 refuses a used one).
 2. Copy its public key (Sparrow, laptop): Settings tab → Keystores → right-click
    the long key in the "xpub / zpub:" field → **Copy zpub**. (Never the seed
    words, never anything starting with xprv/zprv.)
@@ -10699,8 +10760,22 @@ up to 90 days). UI: `BtcFeePayPanel.svelte` (post success card + My orders).
    ```
    It refuses private, testnet, nested-segwit and non-account keys and changes
    nothing then. It prints addresses #0, #1, #2 — they must be the first three
-   rows of Sparrow's Addresses tab (Receive Addresses table). If not:
+   rows of Sparrow's Addresses tab (Receive Addresses table; Mycelium shows
+   only the next unused one, which on a new account is #0). If not:
    `git checkout apps/indexer/src/config/canonicalTreasury.ts` and start again.
+
+   **v1.20.2 — it refuses an account that was ever used.** Before saving, it
+   asks blockstream.info and mempool.space (the indexers' own explorers) about
+   receive #0–#19 and saves only if none has any transaction, confirmed or
+   pending. Why: order n is paid when address n has *ever* received the fee
+   (`chain_stats.funded_txo_sum`), so an address that already received coins
+   would make its order look paid. A used account is refused with the first
+   used address named; make a new account and run it again. If no explorer
+   answers it saves nothing and says so; `--explorer <Esplora base URL>` picks
+   another one, and `--skip-history-check` saves without asking (only for an
+   account you know is brand new). Re-running with the key already saved
+   changes nothing and asks no explorer. Prefix `torsocks` if the laptop's IP
+   should not be seen asking about these addresses.
 4. Ship it in the FIRST release AFTER v1.20.0 is running on all three boxes
    (morphit.io, morphitir, morphitlat) — an older frontend still asks users
    to pay the shared address first and paste the txid, which v1.20.0 indexers
@@ -10836,6 +10911,22 @@ that the explorers in `MORPHIT_INDEXER_XMR_EXPLORER_URLS` actually run a
 version that answers this way for a real transaction. Hence the checklist.
 
 #### Before pinning — the maintainer's one-time checklist
+
+**Pinning makes the main address public — decide first (v1.20.2 note).** The
+`4…` address goes on chain in every later release op, and every integrated
+address the post page shows carries it (its spend and view keys are in the
+middle of the integrated address). It does NOT reveal the balance, the incoming
+payments, or that the published `8…` fee subaddress belongs to the same wallet
+(all of those need the private view key). What binding buys is small: without
+it, a copied txid + tx key can only beat the payer inside the same block. Not
+pinning is a supported choice: XMR fees keep working unbound, as in step 1.
+(As of v1.20.2 the treasury's XMR is deliberately NOT pinned.)
+
+The self-test runs from the repo root as written below since v1.20.2 (before,
+it stopped with "Cannot find package '$indexer'" unless run from inside
+`apps/indexer`). `--account` is
+only a label for the test's payment ID — any Blurt account name works; nothing
+is sent to Blurt.
 
 All on **the maintainer's laptop**, in the repo root, with the **treasury wallet** open
 in `monero-wallet-cli` (the wallet that owns the current XMR fee subaddress)

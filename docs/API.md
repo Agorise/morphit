@@ -147,7 +147,7 @@ Liveness check — also exposes block lag and indexer version.
 ```json
 {
   "status": "ok",
-  "version": "1.20.1",
+  "version": "1.20.2",
   "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
@@ -903,6 +903,12 @@ to be useful:
   same-origin half of cross-instance QR sign-in (ADR-0022, v1.20.0 amendment). The forward carries one
   sealed pairing delivery to `/v1/login-pairing/<pid>/deliver` on a registered directory instance and
   nowhere else; it is not a general relay.
+- **`/v1/compare`** — `GET /v1/compare/orderbook?origin=` (v1.20.2): the /compare page's
+  same-origin way to see another instance's orderbook. This indexer fetches the first page
+  (`/v1/orderbook?limit=100`) of a registered directory instance over its registered addresses and
+  returns `{status, origin, items, indexed_block, next_cursor}` (the `/v1/orderbook` shape) rebuilt from validated fields; an
+  unregistered origin is refused (`unknown_instance`). Cached 30 s per instance; it is not a
+  general relay.
 
 If you have a genuine third-party use case for any of these,
 open an issue and we'll consider promoting it to a documented

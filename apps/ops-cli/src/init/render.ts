@@ -907,8 +907,10 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   blockstream.info/api + mempool.space/api');
 	lines.push('# XMR: https://… = onion-monero-blockchain-explorer with its JSON');
 	lines.push('# API (/api/outputs?txprove=1); raw-tx+https://… = raw transactions');
-	lines.push('# (moneroblocks.info API), verified by the indexer itself.');
-	lines.push('# Defaults: xmrchain.net, moneroexplorer.org, raw-tx+moneroblocks.info.');
+	lines.push('# (moneroblocks.info API); node+https://… = a public Monero node.');
+	lines.push('# raw-tx and node answers are verified by the indexer itself.');
+	lines.push('# Defaults: xmrchain.net, moneroexplorer.org, raw-tx+moneroblocks.info,');
+	lines.push('# node+ xmr-node.cakewallet.com:18081, node.monero.fail, xmr.cryptostorm.is.');
 	lines.push('#');
 	lines.push('# For maximum independence, self-host both — see');
 	lines.push('# docs/OPERATIONS.md §40.4 for a docker-compose recipe.');

@@ -25,6 +25,7 @@ import type { Database } from '$db/pool';
 import { computeClearnetEliminated, clearnetLegsFromConfig } from './clearnetGate.ts';
 import { relayReportsHiddenOnly } from './relayPosture.ts';
 import { applyBlock } from '$indexer/dispatcher';
+import { BlockVerifyMonitor, type BlockLike, type BlockVerifyStats } from '$blurt/blockVerify';
 import { reconcileOperatorRegistrations } from '$indexer/reconcileRegistrations';
 import { consumeInOrderWithPrefetch } from '$indexer/prefetch';
 import { flowBackfill, makeGovernor } from '$indexer/flowBackfill';
@@ -155,6 +156,10 @@ const BLOCK_FETCH_BATCH = 20;
 
 export class Poller {
 	private readonly startedAt = new Date();
+	/** (v1.20.2, E1) Full block verification, REPORT-ONLY: every applied
+	 *  block's merkle root, id and link are recomputed and counted, never
+	 *  acted on (blurt/blockVerify.ts). Read by /v1/health for operators. */
+	private readonly blockVerify = new BlockVerifyMonitor();
 	private status: PollerStatus;
 	private readonly abort = new AbortController();
 	/** Last time the signal-detection pass ran (or 0 if never). */
@@ -903,6 +908,9 @@ export class Poller {
 						break;
 					}
 
+					// (v1.20.2, E1) report-only: counts, never throws, never blocks.
+					this.blockVerify.observe(n, block as unknown as BlockLike);
+
 					let result: Awaited<ReturnType<typeof applyBlock>>;
 					try {
 						result = await applyBlock(
@@ -1194,6 +1202,11 @@ export class Poller {
 
 	/** Current status snapshot — safe to call concurrently with
 	 *  run(). Returned object is immutable. */
+	/** (v1.20.2, E1) The report-only block verification counts. */
+	blockVerifyStats(): BlockVerifyStats {
+		return this.blockVerify.stats();
+	}
+
 	getStatus(): PollerStatus {
 		return this.status;
 	}

@@ -72,7 +72,8 @@ describe('set-treasury-btc-xpub.ts (laptop)', () => {
 
 	it('writes the canonical xpub into the file and prints the addresses to compare', () => {
 		const f = tempConfig();
-		const r = run('set-treasury-btc-xpub.ts', [BIP84_ZPUB, '--file', f]);
+		// (the account-history check has its own tests: treasuryXpubHistory.test.ts)
+		const r = run('set-treasury-btc-xpub.ts', [BIP84_ZPUB, '--file', f, '--skip-history-check']);
 		expect(r.status).toBe(0);
 		expect(readFileSync(f, 'utf8')).toContain(`btcXpub: '${BIP84_XPUB}'`);
 		expect(r.stdout).toContain('bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu');
@@ -122,5 +123,19 @@ describe('release-build-payload.ts pins the xpub', () => {
 			expect(r.status).not.toBe(0);
 			expect(r.stdout).toBe('');
 		}
+	});
+});
+
+// v1.20.2 — the first real run (2026-10-01) failed: without `--file` the script
+// dropped the key itself and said "Paste the whole key" to a correct 111-char
+// zpub. Every test above passes `--file`. These run it WITHOUT `--file`, with a
+// key that must be refused for its OWN reason — proof the key reached the
+// check — and nothing is written (refused keys never touch the file).
+describe('set-treasury-btc-xpub.ts without --file (how operators run it)', () => {
+	it('the key reaches the check (a testnet key is refused AS testnet)', () => {
+		const r = run('set-treasury-btc-xpub.ts', [VPUB]);
+		expect(r.status).toBe(1);
+		expect(r.stderr).toMatch(/TESTNET key/);
+		expect(r.stderr).not.toMatch(/Paste the whole key/);
 	});
 });

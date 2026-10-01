@@ -44,9 +44,9 @@
 
 	BUDGET / ACCESSIBILITY (priorities #4 + #3 + #1)
 
-	  - No canvas / RAF / observer.  The shine is pure CSS (an animated
-	    background-position) and only mounts its one extra <span> when
-	    `shine` is set; the hero pays nothing.
+	  - No canvas / RAF / observer.  The shine is pure CSS (a band slid
+	    with transform, which the GPU composites — v1.20.2) and only mounts
+	    its two extra <span>s when `shine` is set.
 	  - The shine layer is aria-hidden="true" (decorative) and the logo <img>
 	    carries alt=<the site's brand name>, so screen-reader output names the
 	    site the visitor is on.
@@ -96,6 +96,10 @@
 		/** When true, overlay the occasional shape-tracing shine. Default OFF →
 		 *  a fully static logo with no effects. */
 		shine?: boolean;
+		/** v1.20.2 — the logo is the first thing above the fold (header on
+		 *  every page, hero on the homepage): fetch it ahead of other images
+		 *  (fetchpriority="high"). The footer leaves this off and loads lazily. */
+		priority?: boolean;
 	}
 
 	const {
@@ -104,8 +108,23 @@
 		heightPx = 28,
 		heightClass = '',
 		class: cls = '',
-		shine = false
+		shine = false,
+		priority = false
 	}: Props = $props();
+
+	// v1.20.2 — the Morphit wordmark's own proportions (viewBox 0 0 4306 739).
+	// Given as width/height attributes so the browser reserves the logo's box
+	// BEFORE the SVG arrives (no layout shift). CSS keeps width:auto, so once a
+	// file loads its own proportions win — an operator's differently shaped
+	// logo is never stretched (it can only shift once, as before).
+	// crossorigin (same-origin logos only): the shine's mask-image is always
+	// fetched in CORS mode, a plain <img> is not, so each logo used to be
+	// downloaded — or, being no-cache, revalidated — twice. In the same mode
+	// (and with app.html's matching preload) one download serves both.
+	const LOGO_W = 4306;
+	const LOGO_H = 739;
+	const attrHeight = $derived(heightClass ? LOGO_H : heightPx);
+	const attrWidth = $derived(heightClass ? LOGO_W : Math.round((heightPx * LOGO_W) / LOGO_H));
 
 	const logoSrc = $derived(
 		wordmarkSrc ?? (variant === 'footer' ? SITE_LOGO_FOOTER_PATH : SITE_LOGO_PATH)
@@ -138,14 +157,19 @@
 		alt={$brandName}
 		class={`morphit-logo-bling-wordmark ${heightClass}`}
 		style={heightClass ? 'max-width: 90vw;' : `height: ${heightPx}px;`}
+		width={attrWidth}
+		height={attrHeight}
+		fetchpriority={priority ? 'high' : undefined}
+		crossorigin={logoSrc.startsWith('/') ? 'anonymous' : undefined}
+		loading={variant === 'footer' && !priority ? 'lazy' : undefined}
 		decoding="async"
 	/>
 	{#if shine}
 		<span
 			class="morphit-logo-bling-shine"
 			style={`--morphit-wordmark: url("${logoSrc}");`}
-			aria-hidden="true"
-		></span>
+			aria-hidden="true"><span class="morphit-logo-bling-band"></span></span
+		>
 	{/if}
 	<!-- cp428 — TEMPORARY beta marker (remove at stable public launch). -->
 	<span class="morphit-logo-bling-beta" style={betaFontStyle} aria-hidden="true">BETA</span>
@@ -187,6 +211,22 @@
 		mask-repeat: no-repeat;
 		-webkit-mask-position: center;
 		mask-position: center;
+		overflow: hidden;
+	}
+	/* v1.20.2 — the moving highlight band. It used to be the shine layer's own
+	 * background, swept by animating background-position, which repaints on
+	 * the main thread every frame (PageSpeed: "non-composited animation", ×3 —
+	 * header, hero, footer). Now the band is a child the GPU slides with
+	 * transform; the mask on the parent still clips it to the letterforms.
+	 * Same look: the band is 250% of the logo's width (as the old
+	 * background-size was), so the old positions map exactly —
+	 * background-position -20% ≡ translateX(12%), 120% ≡ translateX(-72%). */
+	.morphit-logo-bling-band {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 250%;
 		background-image: linear-gradient(
 			105deg,
 			transparent 36%,
@@ -195,9 +235,7 @@
 			rgba(255, 255, 255, 0.6) 55%,
 			transparent 64%
 		);
-		background-repeat: no-repeat;
-		background-size: 250% 100%;
-		background-position: -20% 0;
+		transform: translateX(12%);
 		animation: morphit-logo-bling-sweep 15s ease-in-out infinite;
 	}
 	/* Park the highlight off the RIGHT for most of the cycle (-20%), sweep it
@@ -205,25 +243,26 @@
 	 * slower than before so the eye has a moment to register the glint), then
 	 * hold off-left until the loop restarts — at which point it jumps back to
 	 * -20% while still off-screen, so only the single sweep is ever visible.
-	 * (background-size 250%: -20% ≈ band off the right edge, 120% ≈ off the
-	 * left edge, 50% ≈ band centred over the wordmark.) */
+	 * (Band 250% wide: translateX(12%) ≈ band off the right edge, -72% ≈ off
+	 * the left edge, -30% ≈ band centred over the wordmark.) */
 	@keyframes morphit-logo-bling-sweep {
 		0% {
-			background-position: -20% 0;
+			transform: translateX(12%);
 		}
 		10% {
-			background-position: -20% 0;
+			transform: translateX(12%);
 		}
 		20% {
-			background-position: 120% 0;
+			transform: translateX(-72%);
 		}
 		100% {
-			background-position: 120% 0;
+			transform: translateX(-72%);
 		}
 	}
 	/* Vestibular-disorder accessibility + low-end-device calm: no shine. */
 	@media (prefers-reduced-motion: reduce) {
-		.morphit-logo-bling-shine {
+		.morphit-logo-bling-shine,
+		.morphit-logo-bling-band {
 			animation: none;
 			display: none;
 		}

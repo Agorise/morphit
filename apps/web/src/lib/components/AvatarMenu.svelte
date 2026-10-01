@@ -1036,6 +1036,6 @@
 	     having the header CTA visible too means users tapping the
 	     avatar slot get a deterministic "do this to sign in" target. -->
 	<a href={lp('/login')} class="btn-primary-sm">
-		{signedOutCtaLabel}
+		{signedOutCtaLabel}{#if $hasAnySession || !$persistedKeystorePresent}<span class="sr-only"> — {$_('nav.start_hint')}</span>{/if}
 	</a>
 {/if}

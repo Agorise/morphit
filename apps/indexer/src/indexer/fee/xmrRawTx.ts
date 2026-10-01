@@ -47,7 +47,7 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { keccak_256 } from '@noble/hashes/sha3';
 
-import { encryptedPaymentIdsFromExtra } from '$indexer/fee/xmrPaymentId';
+import { encryptedPaymentIdsFromExtra } from './xmrPaymentId';
 
 /** rctTypes.h `static const key H` — the amount generator of RingCT commitments. */
 export const MONERO_H_HEX = '8b655970153799af2aeadc9ff1add0ea6c7251d54154cfa92c173a0dd39c1f94';
@@ -135,8 +135,16 @@ function arr(v: unknown): unknown[] {
 
 /** monerod's transaction hash of a decoded v2 / RCT-type-6 transaction (the
  *  JSON `get_transaction_data` / `decode_as_json` returns), or null when the
- *  shape is anything else. */
-export function moneroTxHash(tx: unknown): string | null {
+ *  shape is anything else.
+ *
+ *  (v1.20.2) A PRUNED node returns the transaction without its prunable part
+ *  (`rctsig_prunable`: range proofs and ring signatures) and gives that part's
+ *  hash instead (`prunable_hash`, monerod get_transaction_prunable_hash). The
+ *  txid is still computed exactly: Keccak(H(prefix) ‖ H(rct base) ‖
+ *  prunable_hash). If it equals the txid, the prefix and rct base — every
+ *  field the payment check reads (outputs, extra, ecdhInfo, outPk) — are the
+ *  chain's. Only used when the JSON has no prunable part. */
+export function moneroTxHash(tx: unknown, prunableHashHex?: string): string | null {
 	try {
 		if (!isObj(tx) || tx.version !== 2) return null;
 		const prefix: Uint8Array[] = [varint(2), varint(uint(tx.unlock_time))];
@@ -185,6 +193,18 @@ export function moneroTxHash(tx: unknown): string | null {
 		for (const k of outPk) base.push(key32(k));
 
 		const pr = tx.rctsig_prunable;
+		if (pr === undefined && prunableHashHex !== undefined) {
+			if (!HEX32.test(prunableHashHex) || /^0{64}$/.test(prunableHashHex)) return null;
+			return toHex(
+				keccak_256(
+					concat(
+						keccak_256(concat(...prefix)),
+						keccak_256(concat(...base)),
+						fromHex(prunableHashHex.toLowerCase())
+					)
+				)
+			);
+		}
 		if (!isObj(pr)) return null;
 		const bpp = arr(pr.bpp);
 		const prunable: Uint8Array[] = [varint(bpp.length)];

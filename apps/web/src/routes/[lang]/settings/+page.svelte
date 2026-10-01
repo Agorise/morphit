@@ -2454,7 +2454,7 @@
 
 		{#if hiddenList.length === 0}
 			<div
-				class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-center text-sm text-ink-500 dark:border-ink-700 dark:bg-ink-900"
+				class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-center text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-500"
 			>
 				{$_('settings.hidden_accounts.empty')}
 			</div>
@@ -2560,7 +2560,7 @@
 
 		{#if blockedList.length === 0}
 			<div
-				class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-center text-sm text-ink-500 dark:border-ink-700 dark:bg-ink-900"
+				class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4 text-center text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-500"
 			>
 				{$_('settings.blocked_accounts.empty')}
 			</div>

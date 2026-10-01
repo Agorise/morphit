@@ -68,6 +68,7 @@ import { featuredBidsRoute } from '$api/featuredBids';
 import { clearingPriceHistoryRoute } from '$api/clearingPriceHistory';
 import { loginPairingRoute, PairingRegistry } from '$api/loginPairing';
 import { pairingForwardRoute, selfPairingAddresses } from '$api/pairingForward';
+import { compareOrderbookRoute } from '$api/compareOrderbook';
 import { ordersByAccountRoute } from '$api/orders';
 import { feeCheckRoute } from '$api/feeCheck';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
@@ -749,6 +750,30 @@ async function main(): Promise<void> {
 		})
 	);
 	app.route('/v1/pairing', pairingForwardApp);
+
+	// v1.20.2 — /compare: a peer instance's orderbook page, fetched HERE for
+	// the visitor's page (whose CSP cannot reach other instances). Registered
+	// directory instances only, one path, the pairing forward's transports and
+	// budgets; see api/compareOrderbook.ts.
+	const compareApp = new Hono();
+	compareApp.use('*', rateLimit('list', config.listRatePerMin));
+	compareApp.route(
+		'/',
+		compareOrderbookRoute({
+			db,
+			self: selfPairingAddresses([
+				config.instanceOrigin,
+				config.publicOrigin,
+				config.publicOrigin.replace(/\/\/indexer\./, '//'),
+				config.instanceTorAddress,
+				config.instanceI2pB32Address,
+				config.instanceI2pNameAddress,
+				config.instanceLokinetAddress
+			]),
+			proxies: hiddenServiceProxyConfigFromEnv(process.env)
+		})
+	);
+	app.route('/v1/compare', compareApp);
 
 	const ordersApp = new Hono();
 	ordersApp.use('*', rateLimit('list', config.listRatePerMin));

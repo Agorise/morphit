@@ -918,7 +918,12 @@
 			"same_instance": "Quella è la stessa istanza su cui sei. Scegline una diversa per confrontare.",
 			"local_failed": "Impossibile recuperare l'orderbook di quell'istanza: {reason}",
 			"remote_failed": "Impossibile recuperare l'orderbook di {host}: {reason}. L'istanza remota potrebbe essere offline, irraggiungibile, o bloccare questa richiesta.",
-			"fetch_threw": "Non siamo riusciti a raggiungere {host}. Errore di rete o l'istanza è offline."
+			"fetch_threw": "Non siamo riusciti a raggiungere {host}. Errore di rete o l'istanza è offline.",
+			"local_timeout": "L'orderbook ha impiegato troppo tempo a caricarsi. Riprova tra poco.",
+			"unknown_instance": "{host} non è un'istanza Morphit registrata, quindi non può essere confrontata. Scegline una dall'elenco delle istanze.",
+			"remote_unreachable": "Questa istanza non è riuscita a raggiungere {host}. Potrebbe essere offline o irraggiungibile da qui in questo momento; riprova più tardi.",
+			"remote_bad_answer": "{host} ha risposto, ma non con un orderbook Morphit.",
+			"busy": "Troppi confronti in questo momento. Riprova tra un minuto."
 		},
 		"block_gap": {
 			"synced": "sincronizzate",
@@ -2432,7 +2437,8 @@
 		"start": "Inizia",
 		"glossary": "Glossario",
 		"cheat_sheet": "Foglio di riferimento",
-		"post": "Pubblica"
+		"post": "Pubblica",
+		"start_hint": "accedi o crea un account"
 	},
 	"onboarding": {
 		"title": "Prepariamo le tue chiavi",

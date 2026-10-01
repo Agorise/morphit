@@ -18,9 +18,26 @@
  *     every amount is opened against the chain's Pedersen commitment.
  *     Confirmations: the block the tx page links to, checked in the block's
  *     JSON (`/api/get_block_data/<height>`: tx_hashes, depth).
- * Both kinds reduce to the same answer — (amount proven for the address,
- * payment-ID verdict, confirmations) — and agreeing answers from EITHER kind
+ *   - 'node' (`node+https://…`, v1.20.2): a public Monero node (monerod's
+ *     restricted RPC). `POST /get_transactions` (decode_as_json) returns the
+ *     same JSON a raw-tx explorer serves, with `confirmations`; it is verified
+ *     here exactly the same way. A pruned node's copy lacks the signatures
+ *     and comes with `prunable_hash`, which is enough for the txid check
+ *     (xmrRawTx.ts moneroTxHash). Only the txid is sent; never the tx key.
+ * All kinds reduce to the same answer — (amount proven for the address,
+ * payment-ID verdict, confirmations) — and agreeing answers from ANY kind
  * count toward MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES alike.
+ *
+ * When the quorum cannot be met (v1.20.2). Two agreeing sources are asked
+ * for, out of all configured ones (six by default), fastest first. If only
+ * ONE source can be reached for a long time, the payer is not left waiting
+ * for days: once the order has waited `loneAnswerAfterMs` (2 h) its answer
+ * alone is accepted — but only if the payment is at least
+ * `loneAnswerMinConfirmations` (10) blocks deep and NO other source said
+ * anything else (not "not found", not a different amount, not a malformed
+ * answer). Every other source must simply have been unreachable. Sources
+ * that disagree are never settled by one of them: the order waits for more
+ * sources, and the disagreement is logged (`xmr_explorers_disagree`).
  *
  * Bound fees (MK-H2): the amount is proven at the pinned PRIMARY address and
  * the encrypted payment ID must decrypt, with the same r, to the order's ID.
@@ -38,12 +55,12 @@
  * config validator and again at construction.
  */
 
-import type { FeeClaim, FeeVerifier, FeeVerifyResult } from '$indexer/fee/verifier';
+import type { FeeClaim, FeeVerifier, FeeVerifyResult } from './verifier';
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { minAcceptablePiconero, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
-import { logger } from '$log';
-import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from '$indexer/fee/xmrPaymentId';
-import { moneroTxHash, scanRawTxForAddress } from '$indexer/fee/xmrRawTx';
+import { logger } from '../../log/index';
+import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from './xmrPaymentId';
+import { moneroTxHash, scanRawTxForAddress } from './xmrRawTx';
 import { parseXmrAddress } from '@morphit/release-schema';
 import { DEFAULT_XMR_EXPLORERS, parseXmrExplorer, type XmrExplorerKind } from '../../config/xmrExplorers';
 
@@ -71,7 +88,17 @@ export interface MoneroProofFeeVerifierConfig {
 	 *  explorer config makes a quorum of 2 (or 3) realistic for
 	 *  production deployments. */
 	readonly minSuccessfulResponses: number;
+	/** (v1.20.2) How long an order must have waited before ONE reachable
+	 *  source's answer is accepted on its own (all others unreachable).
+	 *  Default 2 h. The waiting time comes from the claim (`waitedMs`). */
+	readonly loneAnswerAfterMs?: number;
+	/** (v1.20.2) Depth required for that lone answer. Default 10. */
+	readonly loneAnswerMinConfirmations?: number;
 }
+
+/** (v1.20.2) Defaults for the lone-answer rule (see the header). */
+export const LONE_ANSWER_AFTER_MS = 2 * 60 * 60 * 1000;
+export const LONE_ANSWER_MIN_CONFIRMATIONS = 10;
 
 export { DEFAULT_XMR_EXPLORERS, parseXmrExplorer, type XmrExplorerKind };
 
@@ -191,6 +218,11 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		const totalUrls = this.config.explorerUrls.length;
 		const quorumTimeoutMs = this.config.requestTimeoutMs * 2;
 		let notFoundCount = 0;
+		/** (v1.20.2) Sources that answered but gave no usable answer (not
+		 *  found, malformed, content that did not hash to the txid…). Any one
+		 *  of these rules out accepting a lone answer. */
+		let unusableAnswers = 0;
+		const answeredBy: { base: string; key: string }[] = [];
 
 		/** One explorer's answer, whatever its kind. `confirmations` null =
 		 *  that explorer could not say (a raw-tx explorer whose tx page did
@@ -206,22 +238,29 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			async (spec, signal) => {
 				const ex = parseXmrExplorer(spec);
 				if (ex === null) return null;
-				if (ex.kind === 'raw-tx') {
-					const r = await this.rawTxAnswer(ex.base, claim.externalTxId!, address, txKey.toLowerCase(), signal);
+				if (ex.kind === 'raw-tx' || ex.kind === 'node') {
+					const r =
+						ex.kind === 'raw-tx'
+							? await this.rawTxAnswer(ex.base, claim.externalTxId!, address, txKey.toLowerCase(), signal)
+							: await this.nodeAnswer(ex.base, claim.externalTxId!, address, txKey.toLowerCase(), signal);
 					switch (r.kind) {
 						case 'transport_failure':
 							throw new Error('transport_failure');
 						case 'data_not_found':
 							notFoundCount++;
+							unusableAnswers++;
 							return null;
 						case 'data_malformed':
+							unusableAnswers++;
 							return null;
 					}
-					return {
+					const a: Answer = {
 						sum: r.amount,
 						pid: binding === null ? 'unbound' : pidOf(r.encryptedPaymentIds[0] ?? ''),
 						confirmations: r.confirmations
 					};
+					answeredBy.push({ base: ex.base, key: `${a.sum.toString()}|${a.pid}` });
+					return a;
 				}
 				const base = ex.base;
 				const r = await this.fetchProofVerification(
@@ -236,34 +275,43 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 						throw new Error('transport_failure');
 					case 'data_not_found':
 						notFoundCount++;
+						unusableAnswers++;
 						return null;
 					case 'data_malformed':
+						unusableAnswers++;
 						return null;
 				}
 				const sum = this.sumMatchedOutputs(r.body);
 				const confirmations = r.body.data?.tx_confirmations ?? 0;
-				if (binding === null) return { sum, pid: 'unbound', confirmations };
+				const answer = (a: Answer): Answer => {
+					answeredBy.push({ base, key: `${a.sum.toString()}|${a.pid}` });
+					return a;
+				};
+				if (binding === null) return answer({ sum, pid: 'unbound', confirmations });
 				const t = await this.fetchTransaction(base, claim.externalTxId!, signal);
 				switch (t.kind) {
 					case 'transport_failure':
 						throw new Error('transport_failure');
 					case 'data_not_found':
 						notFoundCount++;
+						unusableAnswers++;
 						return null;
 					case 'data_malformed':
+						unusableAnswers++;
 						return null;
 				}
-				if (t.paymentId8 === '') return { sum, pid: 'mismatch', confirmations };
+				if (t.paymentId8 === '') return answer({ sum, pid: 'mismatch', confirmations });
 				// Cross-check the explorer's payment_id8 against the raw extra
 				// it returned: the ID must be the encrypted-ID nonce in there.
 				if (t.extra !== '') {
 					const inExtra = encryptedPaymentIdsFromExtra(t.extra);
 					if (inExtra === null || !inExtra.includes(t.paymentId8)) {
 						log.warn('explorer_payment_id_not_in_extra', { explorer: base });
+						unusableAnswers++;
 						return null;
 					}
 				}
-				return { sum, pid: pidOf(t.paymentId8), confirmations };
+				return answer({ sum, pid: pidOf(t.paymentId8), confirmations });
 			},
 			{
 				equivalenceKey: (x) => `${x.sum.toString()}|${x.pid}`,
@@ -279,6 +327,8 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			};
 		}
 
+		/** (v1.20.2) Accepting ONE source's answer: see the header. */
+		let lone = false;
 		if (quorumResult.kind === 'all_responses_in') {
 			// (v1.18.0 deep-deep, H1) A quorum answering "no such tx" is
 			// definitive only when nothing usable contradicted it.
@@ -291,13 +341,33 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 					reason: `tx_not_found: ${notFoundCount} explorer(s) found no such transaction`
 				};
 			}
-			return {
-				kind: 'pending_external',
-				reason: `quorum not met: best group had < ${this.config.minSuccessfulResponses} agreeing explorers (${quorumResult.responses.length} usable responses, ${quorumResult.cooledDown} in cooldown)`
-			};
+			const keys = new Set(answeredBy.map((a) => a.key));
+			if (keys.size > 1) {
+				log.warn('xmr_explorers_disagree', {
+					permlink: claim.permlink,
+					answers: answeredBy.map((a) => ({ explorer: a.base, answer: a.key }))
+				});
+			}
+			const loneAfter = this.config.loneAnswerAfterMs ?? LONE_ANSWER_AFTER_MS;
+			const waited = claim.waitedMs ?? 0;
+			if (
+				quorumResult.responses.length === 1 &&
+				keys.size === 1 &&
+				unusableAnswers === 0 &&
+				waited >= loneAfter
+			) {
+				lone = true;
+			} else {
+				return {
+					kind: 'pending_external',
+					reason: `quorum not met: best group had < ${this.config.minSuccessfulResponses} agreeing explorers (${quorumResult.responses.length} usable responses, ${unusableAnswers} unusable, ${quorumResult.cooledDown} in cooldown)`
+				};
+			}
 		}
 
-		const agreedKey = quorumResult.agreedKey!;
+		const agreedKey = lone
+			? `${quorumResult.responses[0]!.sum.toString()}|${quorumResult.responses[0]!.pid}`
+			: quorumResult.agreedKey!;
 		const [sumStr, pidVerdict] = agreedKey.split('|') as [string, Answer['pid']];
 		const successful = quorumResult.responses.filter((x) => `${x.sum.toString()}|${x.pid}` === agreedKey);
 
@@ -323,11 +393,26 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			return { kind: 'pending_external', reason: 'confirmations unknown (no agreeing explorer reported the block)' };
 		}
 		const minConfirmedAcross = Math.min(...depths);
-		if (minConfirmedAcross < this.config.minConfirmations) {
+		const needDepth = lone
+			? Math.max(this.config.minConfirmations, this.config.loneAnswerMinConfirmations ?? LONE_ANSWER_MIN_CONFIRMATIONS)
+			: this.config.minConfirmations;
+		if (minConfirmedAcross < needDepth) {
 			return {
 				kind: 'pending_external',
-				reason: `tx only ${minConfirmedAcross} confirmations, need ${this.config.minConfirmations}`
+				reason: lone
+					? `only one explorer reachable; tx ${minConfirmedAcross} confirmations, need ${needDepth} to accept it alone`
+					: `tx only ${minConfirmedAcross} confirmations, need ${needDepth}`
 			};
+		}
+		if (lone) {
+			log.info('xmr_fee_accepted_on_one_explorer', {
+				permlink: claim.permlink,
+				explorer: answeredBy[0]?.base,
+				confirmations: minConfirmedAcross,
+				waitedMinutes: Math.floor((claim.waitedMs ?? 0) / 60_000),
+				contacted: quorumResult.contacted,
+				cooledDown: quorumResult.cooledDown
+			});
 		}
 
 		if (quorumResult.responses.length < quorumResult.contacted) {
@@ -379,6 +464,135 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		}
 		const confirmations = await this.rawTxConfirmations(base, txid, poolSignal);
 		return { kind: 'ok', amount: scan.amount, encryptedPaymentIds: scan.encryptedPaymentIds, confirmations };
+	}
+
+	/** (v1.20.2) A public Monero node's answer (monerod restricted RPC),
+	 *  verified here like a raw-tx explorer's. monerod's response (see
+	 *  core_rpc_server_commands_defs.h COMMAND_RPC_GET_TRANSACTIONS):
+	 *  `{status, untrusted, txs: [{tx_hash, as_json, prunable_hash, in_pool,
+	 *  confirmations, …}], missed_tx: [txid…]}`; `confirmations` =
+	 *  chain height − block height (1 in the top block), 0 in the pool. */
+	private async nodeAnswer(
+		base: string,
+		txid: string,
+		address: string,
+		txKey: string,
+		poolSignal?: AbortSignal
+	): Promise<
+		| { kind: 'ok'; amount: bigint; encryptedPaymentIds: readonly string[]; confirmations: number | null }
+		| { kind: 'transport_failure' }
+		| { kind: 'data_not_found' }
+		| { kind: 'data_malformed' }
+	> {
+		const dest = parseXmrAddress(address);
+		if (!dest.ok) return { kind: 'data_malformed' };
+		const want = txid.toLowerCase();
+		const got = await this.postJsonTo(
+			`${base}/get_transactions`,
+			{ txs_hashes: [want], decode_as_json: true, prune: false },
+			poolSignal
+		);
+		if (got.kind !== 'ok') return got;
+		const b = got.body as {
+			status?: unknown;
+			untrusted?: unknown;
+			txs?: unknown;
+			missed_tx?: unknown;
+		} | null;
+		if (b === null || typeof b !== 'object') return { kind: 'data_malformed' };
+		// A node still syncing answers from another node ("bootstrap daemon"):
+		// not its own word, so no answer from it this time.
+		if (b.untrusted === true) return { kind: 'transport_failure' };
+		// BUSY, "Too many transactions requested…", "Failed": the node, not the tx.
+		if (b.status !== 'OK') return { kind: 'transport_failure' };
+		if (
+			Array.isArray(b.missed_tx) &&
+			b.missed_tx.some((h) => typeof h === 'string' && h.toLowerCase() === want)
+		) {
+			return { kind: 'data_not_found' };
+		}
+		let entry: Record<string, unknown> | undefined;
+		if (Array.isArray(b.txs)) {
+			for (const t of b.txs as unknown[]) {
+				if (
+					typeof t === 'object' &&
+					t !== null &&
+					typeof (t as { tx_hash?: unknown }).tx_hash === 'string' &&
+					(t as { tx_hash: string }).tx_hash.toLowerCase() === want
+				) {
+					entry = t as Record<string, unknown>;
+					break;
+				}
+			}
+		}
+		if (entry === undefined || typeof entry.as_json !== 'string' || entry.as_json === '') {
+			return { kind: 'data_malformed' };
+		}
+		let tx: unknown;
+		try {
+			tx = JSON.parse(entry.as_json);
+		} catch {
+			return { kind: 'data_malformed' };
+		}
+		const prunableHash = typeof entry.prunable_hash === 'string' ? entry.prunable_hash : undefined;
+		if (moneroTxHash(tx, prunableHash) !== want) {
+			log.warn('explorer_tx_content_mismatch', { explorer: base });
+			return { kind: 'data_malformed' };
+		}
+		const scan = scanRawTxForAddress(tx, txKey, {
+			viewPub: dest.value.viewPub,
+			spendPub: dest.value.spendPub
+		});
+		if ('error' in scan) {
+			if (scan.error === 'commitment_mismatch') log.warn('explorer_commitment_mismatch', { explorer: base });
+			return scan.error === 'bad_key' ? { kind: 'data_not_found' } : { kind: 'data_malformed' };
+		}
+		let confirmations: number | null;
+		if (entry.in_pool === true) confirmations = 0;
+		else if (
+			typeof entry.confirmations === 'number' &&
+			Number.isSafeInteger(entry.confirmations) &&
+			entry.confirmations >= 0
+		) {
+			confirmations = entry.confirmations;
+		} else confirmations = null;
+		return { kind: 'ok', amount: scan.amount, encryptedPaymentIds: scan.encryptedPaymentIds, confirmations };
+	}
+
+	/** (v1.20.2) POST JSON with the verifier's timeout; never follows redirects. */
+	private async postJsonTo(
+		url: string,
+		body: unknown,
+		poolSignal?: AbortSignal
+	): Promise<{ kind: 'ok'; body: unknown } | { kind: 'transport_failure' } | { kind: 'data_malformed' }> {
+		const ac = new AbortController();
+		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
+		const onPoolAbort = (): void => ac.abort();
+		if (poolSignal !== undefined) {
+			if (poolSignal.aborted) ac.abort();
+			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
+		}
+		try {
+			const res = await this.fetchImpl(url, {
+				method: 'POST',
+				headers: { accept: 'application/json', 'content-type': 'application/json' },
+				body: JSON.stringify(body),
+				signal: ac.signal,
+				redirect: 'manual'
+			} as RequestInit);
+			if (!res.ok) return { kind: 'transport_failure' };
+			try {
+				return { kind: 'ok', body: (await res.json()) as unknown };
+			} catch {
+				return { kind: 'data_malformed' };
+			}
+		} catch (err) {
+			log.warn('explorer_fetch_failed', { explorer: new URL(url).origin }, err);
+			return { kind: 'transport_failure' };
+		} finally {
+			clearTimeout(timer);
+			if (poolSignal !== undefined) poolSignal.removeEventListener('abort', onPoolAbort);
+		}
 	}
 
 	/** Depth of `txid` on a raw-tx explorer: its API has no tx → block

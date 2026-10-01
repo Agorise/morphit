@@ -1,4 +1,5 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import { i18nSections } from './scripts/vite-i18n-sections.ts';
 import { defineConfig } from 'vite';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(resolve(HERE, 'package.json'), 'utf8'));
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	// i18nSections (v1.20.2): locale files served in parts, so a page downloads
+	// only the messages it shows (src/lib/i18n/lazySections.ts).
+	plugins: [i18nSections(resolve(HERE, 'src/lib/i18n/locales')), sveltekit()],
 
 	define: {
 		// Batch J: bake the package.json version into the bundle so

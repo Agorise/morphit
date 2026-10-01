@@ -186,6 +186,41 @@ if (pollCallSites >= 3) {
 }
 
 // ── #7 applyUpdate no longer early-returns without a waiting worker ───────
+// v1.20.2 (PageSpeed) — verify.json is ~80 KB on the wire. Fetched the moment
+// the banner mounts, it competed with the logo, the fonts and the page's own
+// code on a phone's first load; fetched on every tab-foreground it cost 80 KB
+// per app switch. The first poll now waits until the page has loaded and the
+// browser is idle, and polls closer together than the minimum gap are skipped.
+if (/whenPageSettled\(\s*\(\)\s*=>\s*void pollDeployedVersion\(\)/.test(banner)) {
+	pass('the first verify.json poll waits until the page has loaded (whenPageSettled)');
+} else {
+	fail(
+		'the first verify.json poll runs at mount',
+		'expected whenPageSettled(() => void pollDeployedVersion()) instead of a bare call'
+	);
+}
+const settled = body(banner, /function whenPageSettled\s*\(/);
+if (
+	settled !== null &&
+	/readyState\s*===\s*['"]complete['"]/.test(settled) &&
+	/addEventListener\(\s*['"]load['"]/.test(settled) &&
+	/requestIdleCallback/.test(settled) &&
+	/setTimeout/.test(settled)
+) {
+	pass('whenPageSettled waits for load, then idle (with a timer fallback)');
+} else {
+	fail('whenPageSettled is missing or incomplete', 'needs readyState/load + requestIdleCallback + setTimeout fallback');
+}
+if (
+	pollBody !== null &&
+	/MIN_POLL_GAP_MS/.test(pollBody) &&
+	pollBody.indexOf('MIN_POLL_GAP_MS') < pollBody.indexOf('fetchWithTimeout')
+) {
+	pass('pollDeployedVersion skips a poll closer than MIN_POLL_GAP_MS to the last one');
+} else {
+	fail('no minimum gap between verify.json polls', 'every tab-foreground would download the full manifest');
+}
+
 const applyBody = body(banner, /function applyUpdate\s*\(/);
 if (!applyBody) {
 	fail('applyUpdate not found', 'cannot verify the no-waiting-worker path');

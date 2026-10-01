@@ -19,9 +19,13 @@ delete it; keep it in any mirror).
 
 **Weight note:** Comfortaa's design axis tops out at **700** (unlike Nunito,
 which went to 900). The app's heaviest tier is `font-extrabold` (800), so
-`comfortaa-latin-800.woff2` is Comfortaa **700** (its heaviest) — the `800`
-`@font-face` block points at it so extrabold text renders as the boldest
-Comfortaa rather than a synthesized faux-bold. `400`/`600`/`700` are the real
+`comfortaa-latin-800.woff2` is Comfortaa **700** (its heaviest), byte-identical
+to `comfortaa-latin-700.woff2`. Since v1.20.2 the `800` `@font-face` block
+points at the **700 file** itself (so extrabold text still renders as the
+boldest Comfortaa rather than a synthesized faux-bold, and the browser downloads
+that file once instead of twice under two names); `comfortaa-latin-800.woff2`
+stays only for pages cached from older builds. `app.html` preloads the three
+files the CSS uses (400, 600, 700). `400`/`600`/`700` are the real
 Comfortaa weights of the same name.
 
 ## How they were generated (to regenerate or update)

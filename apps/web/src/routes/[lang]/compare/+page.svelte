@@ -49,7 +49,7 @@
 	import Head from '$components/Head.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
-	import { getOrderbook, getOrderbookFromOrigin } from '$lib/indexer/client';
+	import { getOrderbook, getPeerOrderbook } from '$lib/indexer/client';
 	import { validateInstanceUrl, type InstanceUrlError } from '$utils/instanceUrl';
 	import { safeInstanceOrigin } from '$lib/utils/safeContactUrl';
 	import { compareOrderbooks, type CompareVerdict } from '$lib/utils/compareOrderbooks';
@@ -122,21 +122,28 @@
 			// Parallel fetches — one of them failing doesn't stop the
 			// other. We report partial success with a clear indication
 			// of which side failed.
+			//
+			// v1.20.2: the OTHER instance's page is fetched by THIS instance
+			// (GET /v1/compare/orderbook). This page's Content-Security-Policy
+			// lets the browser talk only to its own origin, so asking the peer
+			// directly was refused before it left ("Failed to fetch"); see
+			// apps/indexer/src/api/compareOrderbook.ts. Our own page gets 30 s:
+			// a full 100-row page on a busy node can take longer than the usual
+			// 8 s (timeapp, 2026-10-01).
 			const [localRes, remoteRes] = await Promise.all([
-				getOrderbook({ limit: 100 }),
-				getOrderbookFromOrigin(v.origin, { limit: 100 })
+				getOrderbook({ limit: 100 }, undefined, 30_000),
+				getPeerOrderbook(v.origin)
 			]);
 
 			if (!localRes.ok) {
-				fetchError = $_('compare.error.local_failed', {
-					values: { reason: localRes.message }
-				});
+				fetchError =
+					localRes.code === 'timeout'
+						? $_('compare.error.local_timeout')
+						: $_('compare.error.local_failed', { values: { reason: localRes.message } });
 				return;
 			}
 			if (!remoteRes.ok) {
-				fetchError = $_('compare.error.remote_failed', {
-					values: { reason: remoteRes.message, host: v.origin }
-				});
+				fetchError = peerError(remoteRes.code, remoteRes.message, v.origin);
 				return;
 			}
 
@@ -170,6 +177,26 @@
 		} finally {
 			comparing = false;
 		}
+	}
+
+	/** The indexer's reason for a failed peer fetch, in the visitor's language
+	 *  (api/compareOrderbook.ts names them). */
+	function peerError(code: string, reason: string, host: string): string {
+		switch (reason) {
+			case 'unknown_instance':
+				return $_('compare.error.unknown_instance', { values: { host } });
+			case 'same_instance':
+				return $_('compare.error.same_instance');
+			case 'target_unreachable':
+				return $_('compare.error.remote_unreachable', { values: { host } });
+			case 'target_bad_answer':
+				return $_('compare.error.remote_bad_answer', { values: { host } });
+			case 'compare_rate_limited':
+				return $_('compare.error.busy');
+		}
+		if (code === 'timeout') return $_('compare.error.remote_unreachable', { values: { host } });
+		if (code === 'rate_limited') return $_('compare.error.busy');
+		return $_('compare.error.remote_failed', { values: { reason, host } });
 	}
 
 	function renderError(reason: InstanceUrlError): string {

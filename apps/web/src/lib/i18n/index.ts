@@ -1,5 +1,7 @@
 import { browser } from '$app/environment';
-import { init, register, locale, addMessages, _ } from 'svelte-i18n';
+import { init, register, locale, addMessages, waitLocale, _ } from 'svelte-i18n';
+import LOCALE_PARTS from 'virtual:morphit-i18n-loaders';
+import { CORE_PART, type LazySection, type LocalePart } from './lazySections';
 import { isolateAtHandles } from './rtlHandle';
 import { derived, get, writable } from 'svelte/store';
 import { brand, brandRenderer, brandTextNow } from '$lib/brand/brand';
@@ -49,19 +51,50 @@ import { SUPPORTED_LOCALES, DEFAULT_LOCALE, matchSupported, type LocaleCode } fr
  * re-applied in place via addMessages().
  */
 type Dictionary = Parameters<typeof addMessages>[1];
-const rawBundles = new Map<string, Dictionary>();
+/** The un-branded messages of every part loaded so far, per locale. */
+const rawBundles = new Map<string, Map<LocalePart, Dictionary>>();
 let appliedBrandText = brandTextNow();
 
-for (const { code } of SUPPORTED_LOCALES) {
-	// t.txt (the maintainer) — isolate @{handle} slots (LTR) at load time so usernames
-	// render "@alice", never "alice@", in RTL locales. See rtlHandle.ts.
-	register(code, () =>
-		import(`./locales/${code}.json`).then((m) => {
-			const raw = isolateAtHandles((m as { default?: unknown }).default ?? m) as Dictionary;
-			rawBundles.set(code, raw);
+// v1.20.2 (PageSpeed) — a locale is served in PARTS (./lazySections.ts,
+// scripts/vite-i18n-sections.ts): every page loads `core`; the FAQ, the privacy
+// guides, "run a node" and the cheat sheet load only with their own page
+// (loadI18nSections below). Each part is still one lazily imported chunk per
+// locale, so only the chosen language (and English, the fallback) is fetched.
+function loaderFor(code: string, part: LocalePart): () => Promise<Dictionary> {
+	return () => {
+		const load = LOCALE_PARTS[code]?.[part];
+		if (load === undefined) return Promise.resolve({});
+		return load().then((m) => {
+			// t.txt (the maintainer) — isolate @{handle} slots (LTR) at load time so usernames
+			// render "@alice", never "alice@", in RTL locales. See rtlHandle.ts.
+			const raw = isolateAtHandles(m.default ?? m) as Dictionary;
+			let parts = rawBundles.get(code);
+			if (parts === undefined) rawBundles.set(code, (parts = new Map()));
+			parts.set(part, raw);
 			return applyBrandToMessages(raw, brandRenderer());
-		})
-	);
+		});
+	};
+}
+
+for (const { code } of SUPPORTED_LOCALES) register(code, loaderFor(code, CORE_PART));
+
+const registeredSections = new Set<LazySection>();
+/**
+ * Load the lazy locale sections a page reads (its +page.ts calls this) for
+ * `code` and the fallback language, before the page renders. Registered once
+ * per section for EVERY locale, so an in-place language switch (FAQ links
+ * carry ?lang=) loads the new language's copy with it.
+ */
+export async function loadI18nSections(
+	code: LocaleCode,
+	...sections: readonly LazySection[]
+): Promise<void> {
+	for (const s of sections) {
+		if (registeredSections.has(s)) continue;
+		registeredSections.add(s);
+		for (const { code: c } of SUPPORTED_LOCALES) register(c, loaderFor(c, s));
+	}
+	await waitLocale(code);
 }
 
 brand.subscribe(() => {
@@ -69,7 +102,9 @@ brand.subscribe(() => {
 	if (text === appliedBrandText) return;
 	appliedBrandText = text;
 	const render = brandRenderer();
-	for (const [code, raw] of rawBundles) addMessages(code, applyBrandToMessages(raw, render));
+	for (const [code, parts] of rawBundles) {
+		for (const raw of parts.values()) addMessages(code, applyBrandToMessages(raw, render));
+	}
 });
 
 /**
@@ -94,10 +129,20 @@ brand.subscribe(() => {
 
 const STORAGE_KEY = 'morphit.locale';
 
+/** The supported locale named by a path's FIRST segment (`/it/faq` → 'it'),
+ *  or null. Exact codes only: the URL segment is always a code we emitted. PURE. */
+export function localeFromPath(pathname: string): LocaleCode | null {
+	const seg = pathname.split('/').filter((x) => x.length > 0)[0];
+	if (seg === undefined) return null;
+	const hit = SUPPORTED_LOCALES.find((l) => l.code === seg);
+	return hit ? hit.code : null;
+}
+
 /**
  * Pick the best supported locale for a first-time visitor.
  *
  * Resolution order (first match wins):
+ *   0. The page's /<lang>/ URL segment (v1.20.2 — see the function body)
  *   1. `?lang=<code>` query parameter (explicit intent — a user
  *      clicked a hreflang link expecting that language)
  *   2. Persisted preference in localStorage (explicit past choice)
@@ -114,6 +159,18 @@ const STORAGE_KEY = 'morphit.locale';
  */
 function pickInitialLocale(): LocaleCode {
 	if (!browser) return DEFAULT_LOCALE;
+
+	// ─── 0. The page's own language: its /<lang>/ URL segment (v1.20.2) ──
+	// Every page lives under /<lang>/ and was prerendered in that language,
+	// and the [lang] layout sets that locale too. svelte-i18n applies a locale
+	// only once its bundle has loaded, so when this boot-time pick DIFFERED
+	// (an Italian browser, or a saved choice, on an /en/ page) the two loads
+	// raced and the LAST one to finish won: on a slow connection the /en/ page
+	// switched itself to Italian a few seconds after it appeared (the timeapp
+	// compare page, 2026-10-01; reproduced in Chromium with a slow it bundle).
+	// Picking the URL's language here makes both agree, so there is no race.
+	const fromPath = localeFromPath(window.location.pathname);
+	if (fromPath !== null) return fromPath;
 
 	// ─── 1. URL query parameter ────────────────────────────────
 	// A ?lang=XX link from a hreflang-aware SERP, an llms.txt

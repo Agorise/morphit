@@ -3,9 +3,10 @@
  *
  * Used by the /compare page (OPERATOR-TRUST-DESIGN.md item 3)
  * where the user enters another instance's URL and we fetch its
- * orderbook for a side-by-side diff. The input then gets passed
- * to `getOrderbookFromOrigin(origin, …)` which does a `new URL(…)`
- * and fetches from it.
+ * orderbook for a side-by-side diff. The origin then goes to
+ * `getPeerOrderbook(origin)`, which asks THIS instance's indexer to
+ * fetch the peer's page (v1.20.2 — the page's CSP cannot reach other
+ * instances; the indexer accepts only registered instances).
  *
  * Rules:
  *   - Must parse as a URL

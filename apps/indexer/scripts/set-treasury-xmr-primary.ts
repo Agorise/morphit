@@ -28,17 +28,18 @@ import { fileURLToPath } from 'node:url';
 
 import { checkTreasuryXmrPrimaryInput } from '../src/lib/treasuryXmrPrimaryInput.ts';
 
+import { splitTreasuryArgs } from '../src/lib/treasuryCliArgs.ts';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LINE_RE = /^(\s*xmrPrimary:\s*)'[^'\n]*'(,?\s*)$/m;
 
 function main(): number {
-	const args = process.argv.slice(2);
-	const fileIdx = args.indexOf('--file');
+	const parsed = splitTreasuryArgs(process.argv.slice(2));
 	const file =
-		fileIdx >= 0 && args[fileIdx + 1] !== undefined
-			? resolve(args[fileIdx + 1]!)
+		parsed.file !== null
+			? resolve(parsed.file)
 			: resolve(HERE, '../src/config/canonicalTreasury.ts');
-	const input = args.filter((_, i) => i !== fileIdx && i !== fileIdx + 1)[0] ?? '';
+	const input = parsed.value;
 
 	const check = checkTreasuryXmrPrimaryInput(input);
 	if (!check.ok) {

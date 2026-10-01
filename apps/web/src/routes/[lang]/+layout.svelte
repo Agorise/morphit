@@ -291,9 +291,8 @@
 			<a
 				href={lp('/')}
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-				aria-label="{$brandName} — home"
 			>
-				<MorphitLogoBling heightPx={32} shine />
+				<MorphitLogoBling heightPx={32} shine priority />
 			</a>
 
 			<nav aria-label="Primary" class="hidden gap-1 md:flex">
@@ -404,7 +403,6 @@
 			<a
 				href={lp('/')}
 				class="flex items-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald"
-				aria-label="{$brandName} — home"
 			>
 				<MorphitLogoBling heightPx={40} variant="footer" shine />
 			</a>
@@ -609,7 +607,7 @@
 
 			<nav aria-label="Footer" class="grid w-full max-w-4xl grid-cols-2 gap-x-6 gap-y-8 text-sm sm:grid-cols-3 lg:grid-cols-5">
 				<div>
-					<h3 class={footHead}>{$_('footer.col_federation')}</h3>
+					<h2 class={footHead}>{$_('footer.col_federation')}</h2>
 					<ul class="space-y-1.5">
 						<li><a href={lp('/operators')} class={footLink}>{$_('footer.operators')}</a></li>
 						<li><a href={lp('/instances')} class={footLink}>{$_('footer.instances')}</a></li>
@@ -617,7 +615,7 @@
 					</ul>
 				</div>
 				<div>
-					<h3 class={footHead}>{$_('footer.col_resources')}</h3>
+					<h2 class={footHead}>{$_('footer.col_resources')}</h2>
 					<ul class="space-y-1.5">
 						<li><a href={lp('/download')} class={footLink}>{$_('footer.download')}</a></li>
 						<li><a href={lp('/stats')} class={footLink} title={$_('footer.stats_title')}>{$_('footer.stats')}</a></li>
@@ -626,7 +624,7 @@
 					</ul>
 				</div>
 				<div>
-					<h3 class={footHead}>{$_('footer.col_security')}</h3>
+					<h2 class={footHead}>{$_('footer.col_security')}</h2>
 					<ul class="space-y-1.5">
 						<li><a href={lp('/security')} class={footLink}>{$_('footer.security')}</a></li>
 						<li><a href={lp('/privacy-terms')} class={footLink}>{$_('nav.privacy_terms')}</a></li>
@@ -639,7 +637,7 @@
 					</ul>
 				</div>
 				<div>
-					<h3 class={footHead}>{$_('footer.col_media')}</h3>
+					<h2 class={footHead}>{$_('footer.col_media')}</h2>
 					<ul class="space-y-1.5">
 						<li><a href="/morphit-mediakit.zip" data-sveltekit-reload class={footLink} title={$_('footer.mediakit_title')} rel="noopener">{$_('footer.mediakit')}</a></li>
 						<li><a href={lp('/about-this-instance')} class={footLink} title={$_('footer.about_title')}>{$_('footer.about')}</a></li>
@@ -647,7 +645,7 @@
 					</ul>
 				</div>
 				<div>
-					<h3 class={footHead}>{$_('footer.col_support')}</h3>
+					<h2 class={footHead}>{$_('footer.col_support')}</h2>
 					<ul class="space-y-1.5">
 						<li><a href={lp('/faq')} class={footLink}>{$_('nav.faq')}</a></li>
 						<li><a href={lp('/glossary')} class={footLink}>{$_('nav.glossary')}</a></li>

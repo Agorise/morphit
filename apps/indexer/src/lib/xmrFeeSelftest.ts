@@ -21,12 +21,12 @@
  * payment. `runXmrUnboundFeeSelftest` checks the pre-pin path (M-X1): a plain
  * payment to the shared fee address, proven with its tx key.
  */
-import { MoneroProofFeeVerifier } from '$indexer/fee/moneroProofVerifier';
-import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from '$indexer/fee/xmrPaymentId';
-import { xmrBindingFor } from '$indexer/fee/xmrBinding';
+import { MoneroProofFeeVerifier } from '../indexer/fee/moneroProofVerifier';
+import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from '../indexer/fee/xmrPaymentId';
+import { xmrBindingFor } from '../indexer/fee/xmrBinding';
 import { checkTreasuryXmrPrimaryInput } from './treasuryXmrPrimaryInput';
 import { xmrIntegratedAddress } from '@morphit/release-schema';
-import { moneroTxHash, scanRawTxForAddress } from '$indexer/fee/xmrRawTx';
+import { moneroTxHash, scanRawTxForAddress } from '../indexer/fee/xmrRawTx';
 import { parseXmrExplorer } from '../config/xmrExplorers';
 
 export interface XmrFeeSelftestOptions {
@@ -40,6 +40,25 @@ export interface XmrFeeSelftestOptions {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/;
+
+async function postJson(
+	fetchImpl: typeof fetch,
+	url: string,
+	payload: unknown
+): Promise<{ status: number; body: unknown }> {
+	const res = await fetchImpl(url, {
+		method: 'POST',
+		headers: { accept: 'application/json', 'content-type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+	let body: unknown = null;
+	try {
+		body = await res.json();
+	} catch {
+		body = null;
+	}
+	return { status: res.status, body };
+}
 
 async function getJson(
 	fetchImpl: typeof fetch,
@@ -139,7 +158,7 @@ export async function runXmrFeeSelftest(
 		return false;
 	}
 	if (o.explorers.length === 0 || o.explorers.some((u) => parseXmrExplorer(u) === null)) {
-		print('✗ Give at least one explorer, each https:// (or raw-tx+https://)');
+		print('✗ Give at least one explorer, each https:// (or raw-tx+https://, node+https://)');
 		return false;
 	}
 	const binding = xmrBindingFor(primary.address, o.account, o.permlink)!;
@@ -156,22 +175,64 @@ export async function runXmrFeeSelftest(
 		const ex = parseXmrExplorer(spec)!;
 		const base = ex.base;
 		print(`   ${spec}`);
-		if (ex.kind === 'raw-tx') {
+		if (ex.kind === 'raw-tx' || ex.kind === 'node') {
 			// (wave 4) raw transaction, checked HERE: hash, outputs, commitments.
+			// (v1.20.2) A node gives the same JSON through POST /get_transactions.
 			try {
-				const t = await getJson(fetchImpl, `${base}/api/get_transaction_data/${txid}`);
-				const d = (t.body as { status?: unknown; transaction_data?: unknown } | null) ?? null;
-				if (t.status !== 200 || d?.status !== 'OK') {
+				let txData: unknown;
+				let prunableHash: string | undefined;
+				if (ex.kind === 'node') {
+					const t = await postJson(fetchImpl, `${base}/get_transactions`, {
+						txs_hashes: [txid],
+						decode_as_json: true,
+						prune: false
+					});
+					const d =
+						(t.body as {
+							status?: unknown;
+							untrusted?: unknown;
+							txs?: {
+								tx_hash?: unknown;
+								as_json?: unknown;
+								prunable_hash?: unknown;
+								in_pool?: unknown;
+								confirmations?: unknown;
+							}[];
+							missed_tx?: unknown[];
+						} | null) ?? null;
+					const e = Array.isArray(d?.txs) ? d!.txs!.find((x) => x?.tx_hash === txid) : undefined;
+					if (t.status !== 200 || d?.status !== 'OK' || d.untrusted === true || e === undefined) {
+						print(
+							`     node             : no usable answer (HTTP ${t.status}, status ${String(d?.status)}${d?.untrusted === true ? ', still syncing' : ''}${Array.isArray(d?.missed_tx) && d!.missed_tx!.includes(txid) ? ', transaction not found' : ''})`
+						);
+						continue;
+					}
+					try {
+						txData = JSON.parse(String(e.as_json));
+					} catch {
+						print('     node             : its transaction JSON does not parse');
+						continue;
+					}
+					prunableHash = typeof e.prunable_hash === 'string' ? e.prunable_hash : undefined;
 					print(
-						`     raw transaction  : no usable answer (HTTP ${t.status}, status ${String(d?.status)})`
+						`     confirmations    : ${e.in_pool === true ? '0 (still in the pool)' : String(e.confirmations ?? '?')}`
 					);
-					continue;
+				} else {
+					const t = await getJson(fetchImpl, `${base}/api/get_transaction_data/${txid}`);
+					const d = (t.body as { status?: unknown; transaction_data?: unknown } | null) ?? null;
+					if (t.status !== 200 || d?.status !== 'OK') {
+						print(
+							`     raw transaction  : no usable answer (HTTP ${t.status}, status ${String(d?.status)})`
+						);
+						continue;
+					}
+					txData = d.transaction_data;
 				}
-				const hashOk = moneroTxHash(d.transaction_data) === txid;
+				const hashOk = moneroTxHash(txData, prunableHash) === txid;
 				print(
 					`     content hashes to the txid: ${hashOk ? 'yes' : 'NO — the explorer served other content'}`
 				);
-				const scan = scanRawTxForAddress(d.transaction_data, txKey, {
+				const scan = scanRawTxForAddress(txData, txKey, {
 					viewPub: binding.viewPub,
 					spendPub: primary.spendPub
 				});

@@ -16,14 +16,16 @@
 	 *  breadcrumb display ("morphit.io › privacy"). */
 	import { page } from '$app/stores';
 	import { _ } from 'svelte-i18n';
-	import { ASSETS } from '@morphit/asset-registry';
+	import { ASSETS, isGoodsAsset } from '@morphit/asset-registry';
 	import Head from '$components/Head.svelte';
 	import { breadcrumbListSchema } from '$seo/jsonld';
 	import { localizedUrl } from '$seo/urls';
 	import type { LocaleCode } from '$i18n/locales';
 
 	const lang = $derived($page.params.lang ?? 'en');
-	const tradable = $derived(ASSETS.filter((a) => a.canBeTraded));
+	// v1.20.2 — goods (BARTER) have no on-chain privacy guide (/privacy/barter
+	// redirects here), so they get no card: the card showed a raw key.
+	const tradable = $derived(ASSETS.filter((a) => a.canBeTraded && !isGoodsAsset(a.ticker)));
 
 	/** BreadcrumbList for SERP breadcrumb display.  Two items: site
 	 *  root → privacy index.  Asset-specific subpages render their

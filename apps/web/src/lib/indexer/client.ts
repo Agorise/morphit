@@ -78,7 +78,15 @@ export type Result<T> =
  *  error body. */
 async function request<T>(
 	path: string,
-	init: { signal?: AbortSignal; query?: URLSearchParams; origin?: string; cache?: RequestCache } = {}
+	init: {
+		signal?: AbortSignal;
+		query?: URLSearchParams;
+		origin?: string;
+		cache?: RequestCache;
+		/** (v1.20.2) A longer budget for a call that waits on more than this
+		 *  indexer (the /compare peer fetch). Never shorter than the default. */
+		minTimeoutMs?: number;
+	} = {}
 ): Promise<Result<T>> {
 	const url = new URL(path, resolveOrigin(init.origin ?? MORPHIT_INDEXER_ORIGIN));
 	if (init.query) {
@@ -95,7 +103,7 @@ async function request<T>(
 	const internalAbort = new AbortController();
 	const timeoutId = setTimeout(
 		() => internalAbort.abort(),
-		indexerTimeoutMs(init.origin ?? MORPHIT_INDEXER_ORIGIN)
+		Math.max(indexerTimeoutMs(init.origin ?? MORPHIT_INDEXER_ORIGIN), init.minTimeoutMs ?? 0)
 	);
 	const combined = init.signal
 		? anySignal([init.signal, internalAbort.signal])
@@ -241,32 +249,9 @@ export function getInstances(
 /** GET /v1/orderbook — filtered, paginated live orders. */
 export function getOrderbook(
 	query: OrderbookQuery = {},
-	signal?: AbortSignal
-): Promise<Result<OrderbookResponse>> {
-	const params = new URLSearchParams();
-	if (query.asset) params.set('asset', query.asset);
-	if (query.side) params.set('side', query.side);
-	if (query.fiat_currency) params.set('fiat_currency', query.fiat_currency);
-	if (query.location_region) params.set('location_region', query.location_region);
-	if (query.payment_methods) params.set('payment_methods', query.payment_methods);
-	if (query.langs) params.set('langs', query.langs);
-	if (query.min_trades !== undefined && query.min_trades > 0)
-		params.set('min_trades', String(query.min_trades));
-	if (query.sort && query.sort !== 'recent') params.set('sort', query.sort);
-	if (query.limit !== undefined) params.set('limit', String(query.limit));
-	if (query.cursor) params.set('cursor', query.cursor);
-	return request<OrderbookResponse>('/v1/orderbook', { signal, query: params });
-}
-
-/** GET /v1/orderbook from an explicit Morphit instance origin —
- *  used by the orderbook comparison view to fetch a second
- *  instance's orderbook for diffing. The `origin` argument is a
- *  parsed URL's origin (scheme + host + optional port); the
- *  caller is responsible for sanitizing user-supplied input. */
-export function getOrderbookFromOrigin(
-	origin: string,
-	query: OrderbookQuery = {},
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	/** (v1.20.2) e.g. the compare page's full 100-row page on a busy node. */
+	minTimeoutMs?: number
 ): Promise<Result<OrderbookResponse>> {
 	const params = new URLSearchParams();
 	if (query.asset) params.set('asset', query.asset);
@@ -283,7 +268,32 @@ export function getOrderbookFromOrigin(
 	return request<OrderbookResponse>('/v1/orderbook', {
 		signal,
 		query: params,
-		origin
+		...(minTimeoutMs !== undefined ? { minTimeoutMs } : {})
+	});
+}
+
+/** How long the compare page waits for its OWN indexer to fetch a peer's
+ *  page: the indexer's overall deadline (50 s, api/compareOrderbook.ts) plus
+ *  the trip to it. */
+export const PEER_ORDERBOOK_TIMEOUT_MS = 65_000;
+
+/** (v1.20.2) Another instance's first orderbook page, fetched BY THIS
+ *  INSTANCE (`GET /v1/compare/orderbook?origin=…`, same origin). The page's
+ *  CSP `connect-src` allows only 'self' and the RPC nodes, so the browser
+ *  cannot ask the peer itself; the indexer asks it over the peer's registered
+ *  (hidden or pinned clearnet) address. Errors carry the indexer's `reason`:
+ *  `unknown_instance`, `same_instance`, `target_unreachable`,
+ *  `target_bad_answer`, `compare_rate_limited`, `bad_target`. */
+export function getPeerOrderbook(
+	origin: string,
+	signal?: AbortSignal
+): Promise<Result<OrderbookResponse & { readonly origin: string }>> {
+	const params = new URLSearchParams();
+	params.set('origin', origin);
+	return request<OrderbookResponse & { readonly origin: string }>('/v1/compare/orderbook', {
+		signal,
+		query: params,
+		minTimeoutMs: PEER_ORDERBOOK_TIMEOUT_MS
 	});
 }
 

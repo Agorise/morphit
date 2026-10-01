@@ -918,7 +918,12 @@
 			"same_instance": "To ta sama instancja, na której jesteś. Wybierz inną do porównania.",
 			"local_failed": "Nie udało się pobrać orderbooka tamtej instancji: {reason}",
 			"remote_failed": "Nie udało się pobrać orderbooka {host}: {reason}. Zdalna instancja może być offline, nieosiągalna lub blokować tę prośbę.",
-			"fetch_threw": "Nie udało się połączyć z {host}. Błąd sieci lub instancja jest offline."
+			"fetch_threw": "Nie udało się połączyć z {host}. Błąd sieci lub instancja jest offline.",
+			"local_timeout": "Ładowanie orderbooka trwało zbyt długo. Spróbuj ponownie za chwilę.",
+			"unknown_instance": "{host} nie jest zarejestrowaną instancją Morphit, więc nie można jej porównać. Wybierz jedną z listy instancji.",
+			"remote_unreachable": "Ta instancja nie mogła połączyć się z {host}. Może być offline lub w tej chwili nieosiągalna stąd; spróbuj później.",
+			"remote_bad_answer": "{host} odpowiedziała, ale nie orderbookiem Morphit.",
+			"busy": "Zbyt wiele porównań w tej chwili. Spróbuj ponownie za minutę."
 		},
 		"block_gap": {
 			"synced": "zsynchronizowane",
@@ -2432,7 +2437,8 @@
 		"start": "Zacznij",
 		"glossary": "Słowniczek",
 		"cheat_sheet": "Ściąga",
-		"post": "Opublikuj"
+		"post": "Opublikuj",
+		"start_hint": "zaloguj się lub utwórz konto"
 	},
 	"onboarding": {
 		"title": "Skonfigurujmy Twoje klucze",

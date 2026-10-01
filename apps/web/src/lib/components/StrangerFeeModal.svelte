@@ -291,7 +291,7 @@
 
 		{#if phase.kind === 'loading'}
 			<div
-				class="mt-6 rounded-xl border border-ink-200 bg-ink-50 p-4 text-center text-sm text-ink-500 dark:border-ink-700 dark:bg-ink-900"
+				class="mt-6 rounded-xl border border-ink-200 bg-ink-50 p-4 text-center text-sm text-ink-600 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-500"
 			>
 				{$_('chat.stranger_fee.quoting')}
 			</div>

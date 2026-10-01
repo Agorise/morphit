@@ -67,11 +67,14 @@ iOS 16.4+ fully supports the PWA install flow including service workers
 and Web Share Target. Older iOS versions still install the icon and
 load the page; they just lack the full PWA feature set.
 
-## Font preload
+## Font and logo preload
 
-Two `<link rel="preload" as="font">` entries for the self-hosted Nunito
-subset (latin 400 + 700, woff2, `crossorigin="anonymous"`) so first
-paint doesn't wait on a font round-trip.
+Three `<link rel="preload" as="font">` entries for the self-hosted Comfortaa
+subset (latin 400, 600 and 700 — the 800 face uses the 700 file —, woff2,
+`crossorigin="anonymous"`) so first paint doesn't wait on a font round-trip,
+and one `<link rel="preload" as="image" fetchpriority="high"
+crossorigin="anonymous">` for `/brand/site-logo.svg`, the largest element of
+a phone's first screen, fetched before the app's script preloads (v1.20.2).
 
 ## Preflight locale hint (the inline `<script>`)
 

@@ -1806,7 +1806,7 @@ export function resolveXmrQuorum(
 		note:
 			`[config] MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} XMR explorer(s) configured, ` +
 			`so a Monero fee is accepted on ${value} explorer's word. Add a second explorer to ` +
-			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has three) to require two to agree.`
+			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has six) to require two to agree.`
 	};
 }
 

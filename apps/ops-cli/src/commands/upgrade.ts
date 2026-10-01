@@ -182,6 +182,7 @@ import {
 	RELAY_ENV_TARGETS
 } from '../lib/relayHiddenHeal.ts';
 import { daemonReload } from '../lib/restartServices.ts';
+import { healXmrExplorerList } from '../lib/feeExplorerListHeal.ts';
 import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../lib/canaryDirOwner.ts';
 import {
 	detectDbContainer,
@@ -3531,6 +3532,14 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// switched but unchecked), and morphit-tor-only-recover.timer finishes or
 		// undoes any switch a kill still interrupts.
 		['the tor-only OS heal', () => healTorOnlyOs({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		// v1.20.2 (lib/feeExplorerListHeal.ts): a node set up before v1.20.0 still
+		// lists three dead XMR explorers in morphit.env and none of the newer
+		// sources, so its XMR fees hang on two websites. Quick, no network;
+		// before the restarts below, so the indexer starts on the new list.
+		[
+			'the Monero fee-source heal',
+			() => healXmrExplorerList(process.env.MORPHIT_ENV_ROOT ?? '', info, warn)
+		],
 		// v1.18.0 deep-deep, H3: existing nodes get the Kubo privacy settings a
 		// fresh install now gets (tor-only: off the public IPFS network).
 		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],

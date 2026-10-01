@@ -1324,7 +1324,12 @@ export function buildPinnedAgent(
  * that accepts a peer-supplied origin URL MUST route through this
  * helper rather than calling fetch() directly.
  */
-export async function fetchJson<T>(url: string): Promise<T> {
+export async function fetchJson<T>(
+	url: string,
+	/** (v1.20.2) Overrides for a caller that needs them (/compare fetches a
+	 *  peer's whole orderbook page, ~3 KB an order). Defaults: the probe's. */
+	opts: { readonly timeoutMs?: number; readonly maxBytes?: number; readonly userAgent?: string } = {}
+): Promise<T> {
 	// Audit 2026-05 finding 5-5: defense-in-depth re-validation
 	// of the origin host before firing.  Even if a malicious
 	// origin slipped past registration (older row, manual DB
@@ -1363,13 +1368,15 @@ export async function fetchJson<T>(url: string): Promise<T> {
 	const pinnedAgent = buildPinnedAgent(hostname, pinnedIp, pinnedFamily);
 
 	const ctrl = new AbortController();
-	const timeout = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+	const timeout = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? FETCH_TIMEOUT_MS);
 	try {
 		const resp = await fetch(url, {
 			method: 'GET',
 			headers: {
 				accept: 'application/json',
-				'user-agent': 'morphit-indexer/federation-probe'
+				'user-agent': 'morphit-indexer/federation-probe',
+				// (v1.20.2) a caller that names itself (the /compare fetch)
+				...(opts.userAgent !== undefined ? { 'user-agent': opts.userAgent } : {})
 			},
 			signal: ctrl.signal,
 			redirect: 'manual', // Audit 2026-05 finding 5-6: don't follow redirects
@@ -1397,7 +1404,7 @@ export async function fetchJson<T>(url: string): Promise<T> {
 		//     misreported.  Legitimate Morphit responses are well
 		//     under 64KB; 256KB is comfortably above that and
 		//     comfortably below pathological.
-		const MAX_BYTES = 256 * 1024;
+		const MAX_BYTES = opts.maxBytes ?? 256 * 1024;
 		const contentLength = resp.headers.get('content-length');
 		if (contentLength !== null) {
 			const declared = parseInt(contentLength, 10);

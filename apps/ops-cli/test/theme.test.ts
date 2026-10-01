@@ -45,7 +45,7 @@ const FROZEN_V1_19_1: Record<string, string> = {
 	'surface-200': '#d9dfe7',
 	'surface-300': '#b8c2d0',
 	'surface-400': '#8a96a8',
-	'surface-500': '#5d6b80',
+	'surface-500': '#7b889b', // v1.20.2: lifted from #5d6b80 for 4.5:1 on cards (PageSpeed contrast)
 	'surface-600': '#3e4a5c',
 	'surface-700': '#2a3340',
 	'surface-800': '#1a202b',
@@ -95,7 +95,7 @@ const VIGILANTE: Record<string, string> = {
 	'surface-200': '#e1e1e1',
 	'surface-300': '#c5c5c5',
 	'surface-400': '#9d9d9d',
-	'surface-500': '#747474',
+	'surface-500': '#8f8f8f', // v1.20.2: follows the lifted Morphit ink-500 (was #747474)
 	'surface-600': '#555555',
 	'surface-700': '#404040',
 	'surface-800': '#2e2e2e',

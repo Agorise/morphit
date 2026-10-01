@@ -144,6 +144,16 @@ interface Candidate {
 		btc?: { satoshis?: unknown } | null;
 		xmr?: { piconero?: unknown } | null;
 	} | null;
+	/** (v1.20.2) When the order was posted (the lone-answer rule's clock). */
+	created_at?: Date | string | null;
+}
+
+/** (v1.20.2) now − posted, ms; null when the row has no usable time. PURE. */
+export function waitedMsOf(createdAt: Date | string | null | undefined, now: Date): number | null {
+	if (createdAt === null || createdAt === undefined) return null;
+	const t = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
+	if (!Number.isFinite(t)) return null;
+	return Math.max(0, now.getTime() - t);
 }
 
 /**
@@ -215,7 +225,7 @@ export async function recheckExternalFees(
 		 )
 		 SELECT c.account, c.permlink, c.fee_status, c.fee_method, c.external_tx_id, c.tx_proof,
 		        c.btc_fee_address, c.btc_fee_sats, c.btc_fee_received_sats, c.btc_fee_unconfirmed_sats,
-		        c.xmr_tx_key, c.xmr_payment_id, c.xmr_fee_address,
+		        c.xmr_tx_key, c.xmr_payment_id, c.xmr_fee_address, c.created_at,
 		        (SELECT r.treasury FROM releases r
 		          WHERE r.valid = true AND r.treasury IS NOT NULL
 		            AND r.created_at <= c.created_at
@@ -286,6 +296,10 @@ export async function recheckExternalFees(
 				externalTxId: row.external_tx_id,
 				txProof: row.tx_proof,
 				...(row.fee_method === 'xmr' ? { txKey: row.xmr_tx_key ?? null, xmrBinding } : {}),
+				// (v1.20.2) how long it has waited — the XMR lone-answer rule
+				...(waitedMsOf(row.created_at, deps.now) !== null
+					? { waitedMs: waitedMsOf(row.created_at, deps.now)! }
+					: {}),
 				permlink: row.permlink,
 				signer: row.account
 			});

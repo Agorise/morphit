@@ -36,6 +36,7 @@ import {
 } from './chainCheck.ts';
 import { withSpinner } from './spinner.ts';
 import { isReservedTag, impersonatesReservedName } from '../../../indexer/src/indexer/confusables.ts';
+import { DEFAULT_XMR_EXPLORERS as INDEXER_DEFAULT_XMR_EXPLORERS } from '../../../indexer/src/config/xmrExplorers.ts';
 import { classifyChainError } from '../commands/chainErrors.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
@@ -1147,11 +1148,9 @@ export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = [
  *  verifies itself (`raw-tx+`). localmonero.co/blocks (now a redirect),
  *  monerohash.com/explorer (JSON API off) and exploremonero.com (a JS
  *  front end, no API) were dropped. */
-export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = [
-	'https://xmrchain.net',
-	'https://moneroexplorer.org',
-	'raw-tx+https://moneroblocks.info'
-];
+// v1.20.2: the indexer's own list (three explorers + three public Monero
+// nodes, `node+`, checked live 2026-10-01) — one source of truth.
+export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = INDEXER_DEFAULT_XMR_EXPLORERS;
 
 /** Default chat-link URL templates — for the frontend's
  *  "click a txid in chat, open in an external explorer"
@@ -1345,7 +1344,13 @@ export function parseExplorerUrlList(
 		const safeU = sanitizeForTerm(u);
 		// XMR only: `raw-tx+https://…` = an explorer serving raw transactions
 		// (moneroblocks.info API), verified by the indexer itself.
-		const url = opts.allowRawTx === true && u.startsWith('raw-tx+') ? u.slice('raw-tx+'.length) : u;
+		// v1.20.2: `node+https://…` = a public Monero node, also checked locally.
+		const url =
+			opts.allowRawTx === true && u.startsWith('raw-tx+')
+				? u.slice('raw-tx+'.length)
+				: opts.allowRawTx === true && u.startsWith('node+')
+					? u.slice('node+'.length)
+					: u;
 		if (!url.startsWith('https://')) {
 			return `Explorer URL must start with https:// — got "${safeU}"`;
 		}
@@ -1410,9 +1415,11 @@ export async function stepFeeExplorers(): Promise<FeeExplorersResult> {
 			'  • BTC: blockstream.info + mempool.space\n' +
 			'    (Esplora-API-compatible, independent operators)\n' +
 			'  • XMR: xmrchain.net + moneroexplorer.org\n' +
-			'    (onion-monero-blockchain-explorer API) and\n' +
+			'    (onion-monero-blockchain-explorer API),\n' +
 			'    moneroblocks.info (raw transactions, checked by your\n' +
-			'    indexer itself: write it as raw-tx+https://…)\n' +
+			'    indexer itself: write it as raw-tx+https://…) and\n' +
+			'    three public Monero nodes (also checked by your\n' +
+			'    indexer itself: node+https://…)\n' +
 			'\n' +
 			'You can keep the defaults (recommended for new\n' +
 			'operators), or customize the list now.  For maximum\n' +

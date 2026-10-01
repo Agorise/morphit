@@ -918,7 +918,12 @@
 			"same_instance": "C'est la même instance sur laquelle vous êtes. Choisissez-en une différente pour comparer.",
 			"local_failed": "Impossible de récupérer l'orderbook de cette instance-là : {reason}",
 			"remote_failed": "Impossible de récupérer l'orderbook de {host} : {reason}. L'instance distante est peut-être hors-ligne, inaccessible, ou bloque cette requête.",
-			"fetch_threw": "Impossible de joindre {host}. Erreur réseau ou l'instance est hors ligne."
+			"fetch_threw": "Impossible de joindre {host}. Erreur réseau ou l'instance est hors ligne.",
+			"local_timeout": "L'orderbook a mis trop de temps à se charger. Réessayez dans un instant.",
+			"unknown_instance": "{host} n'est pas une instance Morphit enregistrée, elle ne peut donc pas être comparée. Choisissez-en une dans la liste des instances.",
+			"remote_unreachable": "Cette instance n'a pas pu joindre {host}. Elle est peut-être hors ligne ou injoignable d'ici pour le moment ; réessayez plus tard.",
+			"remote_bad_answer": "{host} a répondu, mais pas avec un orderbook Morphit.",
+			"busy": "Trop de comparaisons en ce moment. Réessayez dans une minute."
 		},
 		"block_gap": {
 			"synced": "synchronisés",
@@ -2432,7 +2437,8 @@
 		"start": "Commencer",
 		"glossary": "Glossaire",
 		"cheat_sheet": "Aide-mémoire",
-		"post": "Publier"
+		"post": "Publier",
+		"start_hint": "se connecter ou créer un compte"
 	},
 	"onboarding": {
 		"title": "Créons vos clés",

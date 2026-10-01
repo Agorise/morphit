@@ -81,8 +81,10 @@ export const CANONICAL_TREASURY = {
 	 *  wallet. Public information (every indexer must derive the
 	 *  addresses); never a private key. Chain-pin ONLY: no indexer env
 	 *  var reads it, because every indexer must number addresses from the
-	 *  same on-chain value. */
-	btcXpub: '',
+	 *  same on-chain value. Kept on ONE line (prettier-ignore below):
+	 *  set-treasury-btc-xpub.ts finds and rewrites `btcXpub: '…'` as a line. */
+	// prettier-ignore
+	btcXpub: 'xpub6CcLNrHQNdy8UFduUNpM1bMCa8DUZdRKnApqBg3papGqdawVGKPu77ry8Q1FpjjevQ6nCVpSyuqC43DY7sK2vXsSz7fq5T5tjW6js61FBVp',
 	/** v1.20.0 (MK-H2) — the treasury Monero wallet's PRIMARY (main) address,
 	 *  `4…`, 95 chars — the same wallet as `xmr` above. When set, the
 	 *  release-op builder pins it (treasury.xmr.primary_address) and every
@@ -92,6 +94,9 @@ export const CANONICAL_TREASURY = {
 	 *  pinned (XMR fees stay unbound payments to `xmr`). Set it ONLY with
 	 *  `npx tsx apps/indexer/scripts/set-treasury-xmr-primary.ts <address>`
 	 *  on the laptop, and only after the pre-pin checklist in
-	 *  docs/OPERATIONS.md §40.13 passes. Public; chain-pin ONLY. */
+	 *  docs/OPERATIONS.md §40.13 passes. Public; chain-pin ONLY. Kept on ONE
+	 *  line (prettier-ignore below): set-treasury-xmr-primary.ts finds and
+	 *  rewrites `xmrPrimary: '…'` as a line. */
+	// prettier-ignore
 	xmrPrimary: ''
 } as const;

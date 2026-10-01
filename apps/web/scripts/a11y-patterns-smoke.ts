@@ -272,6 +272,20 @@ const scenarios: readonly Scenario[] = [
 	{
 		name: 'ChatComposer gives its ProtectedTextarea a name',
 		ok: CHAT_COMPOSER.includes('name="chat-message"')
+	},
+	// ─── v1.20.2 (Lighthouse sweep) ───────────────────────
+	// The logo links' name was a hard-coded English "Morphit — home" (in every
+	// language) that did not match the visible text (WCAG 2.5.3, label in name).
+	// The logo's own alt (the site's name) is the link's name now.
+	{
+		name: 'the header/footer logo links carry no hard-coded English aria-label',
+		ok: !/aria-label="\{\$brandName\} — home"/.test(LAYOUT)
+	},
+	// A page's <h1> was followed by the footer's <h3> column titles on every page
+	// without an <h2> of its own (Lighthouse "heading-order").
+	{
+		name: 'the footer column titles are <h2> (no h1 → h3 jump on any page)',
+		ok: !/<h3 class=\{footHead\}/.test(LAYOUT) && (LAYOUT.match(/<h2 class=\{footHead\}/g) ?? []).length === 5
 	}
 ];
 

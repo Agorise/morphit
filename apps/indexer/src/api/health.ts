@@ -44,7 +44,7 @@ import { fastNotifyBudgetSize } from '$indexer/fastNotifyBudget';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.20.1';
+export const INDEXER_VERSION = '1.20.2';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -296,6 +296,14 @@ export function healthRoute(
 		const localDiag = c.req.header('x-morphit-local-health') === '1';
 		if (localDiag) {
 			body.price_feeds = buildPriceFeedsHealth(fxSource, multiAssetSources);
+			// (v1.20.2, E1) full block verification, report-only: how many
+			// applied blocks matched their merkle root / id / link, what did
+			// not, and which operations this indexer cannot serialize yet.
+			// Operator-only like the rest of this block.
+			body.block_check =
+				typeof (poller as { blockVerifyStats?: () => unknown }).blockVerifyStats === 'function'
+					? poller.blockVerifyStats()
+					: null;
 			// cp403 [1] — chat head-block fast-path status, surfaced in the
 			// same operator-only top-level block as price_feeds so the
 			// morphit-ops node-health view can show admins whether fast

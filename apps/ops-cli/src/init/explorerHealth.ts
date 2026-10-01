@@ -101,6 +101,7 @@ export async function probeMoneroExplorer(
 	fetchImpl: typeof fetch = fetch
 ): Promise<ProbeStatus> {
 	if (baseUrl.startsWith('raw-tx+')) return probeRawTxMoneroExplorer(baseUrl.slice('raw-tx+'.length), fetchImpl);
+	if (baseUrl.startsWith('node+')) return probeMoneroNode(baseUrl.slice('node+'.length), fetchImpl);
 	const url = `${baseUrl.replace(/\/+$/, '')}/api/networkinfo`;
 	const started = Date.now();
 	const ac = new AbortController();
@@ -171,6 +172,36 @@ async function probeRawTxMoneroExplorer(baseUrl: string, fetchImpl: typeof fetch
 		const body = (await res.json()) as { height?: unknown } | null;
 		if (typeof body?.height !== 'number') {
 			return { kind: 'wrong_shape', latencyMs, reason: 'no numeric height from /api/get_stats (not the moneroblocks.info API?)' };
+		}
+		return { kind: 'ok', latencyMs };
+	} catch (err) {
+		const reason =
+			err instanceof Error ? (err.name === 'AbortError' ? `timeout after ${PROBE_TIMEOUT_MS}ms` : err.message) : String(err);
+		return { kind: 'unreachable', reason };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/** (v1.20.2) A public Monero node (monerod restricted RPC): `GET /get_height`
+ *  answers `{ height, status: "OK", untrusted }` (checked live 2026-10-01 on
+ *  the three default nodes). A node still syncing from another one says
+ *  `untrusted: true` — reachable, but not yet its own word. */
+async function probeMoneroNode(baseUrl: string, fetchImpl: typeof fetch): Promise<ProbeStatus> {
+	const url = `${baseUrl.replace(/\/+$/, '')}/get_height`;
+	const started = Date.now();
+	const ac = new AbortController();
+	const timer = setTimeout(() => ac.abort(), PROBE_TIMEOUT_MS);
+	try {
+		const res = await fetchImpl(url, { method: 'GET', headers: { accept: 'application/json' }, signal: ac.signal });
+		const latencyMs = Date.now() - started;
+		if (!res.ok) return { kind: 'wrong_shape', latencyMs, reason: `HTTP ${res.status}` };
+		const body = (await res.json()) as { height?: unknown; status?: unknown; untrusted?: unknown } | null;
+		if (typeof body?.height !== 'number' || body.status !== 'OK') {
+			return { kind: 'wrong_shape', latencyMs, reason: 'no height / status OK from /get_height (not a Monero node?)' };
+		}
+		if (body.untrusted === true) {
+			return { kind: 'wrong_shape', latencyMs, reason: 'the node is still syncing (untrusted)' };
 		}
 		return { kind: 'ok', latencyMs };
 	} catch (err) {

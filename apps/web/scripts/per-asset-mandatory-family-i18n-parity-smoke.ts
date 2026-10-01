@@ -220,6 +220,24 @@ if (missing.length === 0) {
 	}
 }
 
+// v1.20.2 — the skip above is only right while the privacy INDEX skips goods
+// too. It did not: /privacy listed BARTER with the raw key
+// "privacy.guides.barter.one_line" and linked to a guide that redirects back.
+{
+	const indexSrc = readFileSync(
+		join(__dirname, '..', 'src', 'routes', '[lang]', 'privacy', '+page.svelte'),
+		'utf-8'
+	);
+	if (/ASSETS\.filter\(\(a\)\s*=>\s*a\.canBeTraded\s*&&\s*!\s*isGoodsAsset\(a\.ticker\)\)/.test(indexSrc)) {
+		pass('the /privacy index lists only assets that have a guide (goods skipped)');
+	} else {
+		fail(
+			'the /privacy index lists only assets that have a guide (goods skipped)',
+			'expected ASSETS.filter((a) => a.canBeTraded && !isGoodsAsset(a.ticker)) in privacy/+page.svelte'
+		);
+	}
+}
+
 const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {

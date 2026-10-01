@@ -10,6 +10,40 @@
 		verifyJsonPollUrl
 	} from '$lib/updates/deployedVersion';
 
+	// v1.20.2 (PageSpeed) — run `fn` once the page has finished loading and the
+	// browser is idle, so the ~80 KB verify.json poll never competes with the
+	// logo, the fonts and the page's own code on a slow first load. Returns a
+	// cancel function. Browsers without requestIdleCallback (Safari) wait a
+	// fixed two seconds after load instead.
+	function whenPageSettled(fn: () => void): () => void {
+		let done = false;
+		let idleId: number | null = null;
+		let timerId: ReturnType<typeof setTimeout> | null = null;
+		const run = (): void => {
+			if (done) return;
+			done = true;
+			fn();
+		};
+		const afterLoad = (): void => {
+			if (done) return;
+			if (typeof window.requestIdleCallback === 'function') {
+				idleId = window.requestIdleCallback(run, { timeout: 5_000 });
+			} else {
+				timerId = setTimeout(run, 2_000);
+			}
+		};
+		if (document.readyState === 'complete') afterLoad();
+		else window.addEventListener('load', afterLoad, { once: true });
+		return () => {
+			done = true;
+			window.removeEventListener('load', afterLoad);
+			if (idleId !== null && typeof window.cancelIdleCallback === 'function') {
+				window.cancelIdleCallback(idleId);
+			}
+			if (timerId !== null) clearTimeout(timerId);
+		};
+	}
+
 	let waitingWorker = $state<ServiceWorker | null>(null);
 	// Set true the instant "Load it now" is clicked, so the snackbar vanishes
 	// immediately. IN-MEMORY ONLY — never persisted. A reload resets it, so it
@@ -146,8 +180,16 @@
 		// the update, even when reg.update() found no new worker because a proxy
 		// served /service-worker.js stale (the desktop case). Runs on mount, on
 		// tab-foreground, on reconnect, and on a slow timer.
+		// v1.20.2 — never closer than MIN_POLL_GAP_MS: verify.json is the full
+		// hash manifest (~80 KB on the wire), and a phone that switches apps
+		// every few seconds used to download it on every switch.
+		const MIN_POLL_GAP_MS = 2 * 60_000;
+		let lastPollAt = -Infinity;
 		async function pollDeployedVersion(): Promise<void> {
 			if (cancelled) return;
+			const now = Date.now();
+			if (now - lastPollAt < MIN_POLL_GAP_MS) return;
+			lastPollAt = now;
 			try {
 				const res = await fetchWithTimeout(
 					verifyJsonPollUrl(),
@@ -187,7 +229,7 @@
 		}
 
 		void check();
-		void pollDeployedVersion();
+		const cancelFirstPoll = whenPageSettled(() => void pollDeployedVersion());
 		// Re-check periodically while the tab is open.
 		const timer = setInterval(check, 60_000);
 		// Slower deployed-version poll: verify.json carries the full asset-hash
@@ -220,6 +262,7 @@
 
 		return () => {
 			cancelled = true;
+			cancelFirstPoll();
 			clearInterval(timer);
 			clearInterval(pollTimer);
 			document.removeEventListener('visibilitychange', onVisible);

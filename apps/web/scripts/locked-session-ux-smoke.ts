@@ -80,7 +80,8 @@ check(
 	'the header sign-in button renders {signedOutCtaLabel}, not a hardcoded nav.start',
 	/\{signedOutCtaLabel\}/.test(avatar) &&
 		// the only remaining nav.start reference is inside the derived
-		(avatar.match(/nav\.start/g) || []).length === 1
+		// (nav.start_hint, v1.20.2, is the screen-reader hint beside it)
+		(avatar.match(/nav\.start\b/g) || []).length === 1
 );
 
 // ── 2. Locked visitors on session-required pages go to the welcome-back ──────

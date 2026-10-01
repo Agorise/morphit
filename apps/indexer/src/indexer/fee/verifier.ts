@@ -70,6 +70,11 @@ export interface FeeClaim {
 		/** Expected payment ID, 16 hex. */
 		readonly paymentId: string;
 	} | null;
+	/** (v1.20.2) How long the order has been waiting for its fee to verify,
+	 *  ms (the re-check loop: now − posted). Lets the XMR verifier accept the
+	 *  one reachable explorer's answer once an order has waited long enough
+	 *  (moneroProofVerifier.ts, "When the quorum cannot be met"). Absent = 0. */
+	readonly waitedMs?: number;
 	/** Permlink of the order — used in memos (BLURT) and logs.  (Per-
 	 *  order BTC addresses, v1.20.0, are numbered from the event log and
 	 *  checked through checkAddressPayment, not through this claim.) */

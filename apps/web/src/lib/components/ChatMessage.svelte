@@ -1269,7 +1269,7 @@
 							</div>
 						{:else if verifyResult.kind === 'rpc_error'}
 							<div
-								class="rounded-md bg-ink-100 px-2 py-1.5 text-xs text-ink-500 dark:bg-ink-800 dark:text-ink-400"
+								class="rounded-md bg-ink-100 px-2 py-1.5 text-xs text-ink-600 dark:bg-ink-800 dark:text-ink-400"
 							>
 								{$_('chat.funds_sent.verify_rpc_error')}
 							</div>

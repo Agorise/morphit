@@ -185,4 +185,58 @@ describe('xmr fee self-test', () => {
 		);
 		expect(ok).toBe(true);
 	});
+
+	it('(v1.20.2) passes against a pruned public NODE, verifying its transaction locally', async () => {
+		const { readFileSync } = await import('node:fs');
+		const { resolve } = await import('node:path');
+		const V = JSON.parse(
+			readFileSync(resolve(__dirname, '../fixtures/xmr-rawtx-vectors.json'), 'utf8')
+		);
+		const v = V.vectors.find((x: { name: string }) => x.name === 'integrated-primary+change');
+		const pruned = { ...v.tx };
+		delete pruned.rctsig_prunable;
+		const posts: string[] = [];
+		const f = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+			const url = String(input);
+			let body: unknown = null;
+			if (url === 'https://node.example/get_transactions' && init?.method === 'POST') {
+				posts.push(String(init.body));
+				body = {
+					status: 'OK',
+					untrusted: false,
+					txs: [
+						{
+							tx_hash: v.txid,
+							as_json: JSON.stringify(pruned),
+							// computed separately (Python Keccak over the prunable part)
+							prunable_hash: 'ff6340d559948c296f2cc07e92bffabeb6cf3cd27f4865b95d1839fca067c47a',
+							in_pool: false,
+							confirmations: 7
+						}
+					]
+				};
+			}
+			return { ok: true, status: 200, json: async () => body } as unknown as Response;
+		}) as typeof fetch;
+		const lines: string[] = [];
+		const ok = await runXmrFeeSelftest(
+			{
+				txid: v.txid,
+				txKey: v.tx_key,
+				account: 'alice',
+				permlink: 'order-kx2mq7p4n8za',
+				primary: V.treasury.primary,
+				piconero: 781_250_000n,
+				explorers: ['node+https://node.example']
+			},
+			f,
+			(l) => lines.push(l)
+		);
+		const out = lines.join('\n');
+		expect(out).toContain('confirmations    : 7');
+		expect(out).toContain('content hashes to the txid: yes');
+		expect(out).toContain('proven amount    : 781250000 piconero (outputs 1; commitments open)');
+		expect(ok).toBe(true);
+		expect(posts.join('')).not.toContain(v.tx_key);
+	});
 });

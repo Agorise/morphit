@@ -57,8 +57,12 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 export async function fetchJsonViaHiddenService<T>(
 	url: string,
 	config: HiddenServiceProxyConfig,
-	timeoutMs: number = DEFAULT_TIMEOUT_MS
+	timeoutMs: number = DEFAULT_TIMEOUT_MS,
+	/** (v1.20.2) A larger body cap for a caller that needs one (a peer's
+	 *  orderbook page for /compare). Default: the probe cap. */
+	opts: { readonly maxBytes?: number } = {}
 ): Promise<T> {
+	const maxBytes = opts.maxBytes ?? MAX_BYTES;
 	const network = hiddenNetworkOf(url);
 	if (network === null) throw new Error(`not a hidden-service URL: ${url}`);
 
@@ -123,7 +127,7 @@ export async function fetchJsonViaHiddenService<T>(
 			if (done) break;
 			if (value) {
 				total += value.byteLength;
-				if (total > MAX_BYTES) {
+				if (total > maxBytes) {
 					await reader.cancel();
 					throw new Error('hidden-service probe: body too large');
 				}

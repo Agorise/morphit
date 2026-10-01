@@ -918,7 +918,12 @@
 			"same_instance": "Esa es la misma instancia en la que estás. Elige una diferente para comparar.",
 			"local_failed": "No se pudo obtener el orderbook de esa instancia: {reason}",
 			"remote_failed": "No se pudo obtener el orderbook de {host}: {reason}. La instancia remota puede estar caída, inalcanzable, o bloqueando esta solicitud.",
-			"fetch_threw": "No se pudo conectar con {host}. Error de red o la instancia está fuera de línea."
+			"fetch_threw": "No se pudo conectar con {host}. Error de red o la instancia está fuera de línea.",
+			"local_timeout": "El orderbook tardó demasiado en cargar. Inténtalo de nuevo en un momento.",
+			"unknown_instance": "{host} no es una instancia de Morphit registrada, así que no se puede comparar. Elige una de la lista de instancias.",
+			"remote_unreachable": "Esta instancia no pudo conectar con {host}. Puede estar fuera de línea o inalcanzable desde aquí ahora mismo; inténtalo más tarde.",
+			"remote_bad_answer": "{host} respondió, pero no con un orderbook de Morphit.",
+			"busy": "Demasiadas comparaciones en este momento. Inténtalo de nuevo en un minuto."
 		},
 		"block_gap": {
 			"synced": "en sincronía",
@@ -2432,7 +2437,8 @@
 		"start": "Empezar",
 		"glossary": "Glosario",
 		"cheat_sheet": "Hoja de referencia",
-		"post": "Publicar"
+		"post": "Publicar",
+		"start_hint": "inicia sesión o crea una cuenta"
 	},
 	"onboarding": {
 		"title": "Vamos a crear tus claves",

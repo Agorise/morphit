@@ -918,7 +918,12 @@
 			"same_instance": "那是你所在的同一實例。選擇一個不同的來比較。",
 			"local_failed": "無法取得該實例的 orderbook:{reason}",
 			"remote_failed": "無法取得 {host} 的 orderbook:{reason}。遠端實例可能處於離線、無法存取或阻擋此請求。",
-			"fetch_threw": "無法連接 {host}。網絡錯誤或實例離線。"
+			"fetch_threw": "無法連接 {host}。網絡錯誤或實例離線。",
+			"local_timeout": "orderbook 載入時間過長。請稍後再試。",
+			"unknown_instance": "{host} 不是已登記的 Morphit 實例，因此無法比較。請從實例列表中選擇一個。",
+			"remote_unreachable": "本實例無法連接 {host}。它可能已離線，或目前從這裡無法存取；請稍後再試。",
+			"remote_bad_answer": "{host} 有回應，但傳回的不是 Morphit orderbook。",
+			"busy": "目前比較請求過多。請一分鐘後再試。"
 		},
 		"block_gap": {
 			"synced": "同步",
@@ -2432,7 +2437,8 @@
 		"start": "開始",
 		"glossary": "術語表",
 		"cheat_sheet": "速查表",
-		"post": "發布"
+		"post": "發布",
+		"start_hint": "登入或建立帳戶"
 	},
 	"onboarding": {
 		"title": "嚟設定你嘅 key",

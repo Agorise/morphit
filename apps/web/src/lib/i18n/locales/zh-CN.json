@@ -918,7 +918,12 @@
 			"same_instance": "那是你所在的同一实例。选择一个不同的来比较。",
 			"local_failed": "无法获取该实例的 orderbook:{reason}",
 			"remote_failed": "无法获取 {host} 的 orderbook:{reason}。远程实例可能处于离线、无法访问或阻止此请求。",
-			"fetch_threw": "无法连接 {host}。网络错误或实例离线。"
+			"fetch_threw": "无法连接 {host}。网络错误或实例离线。",
+			"local_timeout": "orderbook 加载时间过长。请稍后再试。",
+			"unknown_instance": "{host} 不是已注册的 Morphit 实例，因此无法比较。请从实例列表中选择一个。",
+			"remote_unreachable": "本实例无法连接 {host}。它可能已离线，或目前从这里无法访问；请稍后再试。",
+			"remote_bad_answer": "{host} 有回应，但返回的不是 Morphit orderbook。",
+			"busy": "当前比较请求过多。请一分钟后再试。"
 		},
 		"block_gap": {
 			"synced": "同步",
@@ -2432,7 +2437,8 @@
 		"start": "开始",
 		"glossary": "术语表",
 		"cheat_sheet": "速查表",
-		"post": "发布"
+		"post": "发布",
+		"start_hint": "登录或创建账户"
 	},
 	"onboarding": {
 		"title": "来设置你的密钥",

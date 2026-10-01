@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { matchSupported } from './index';
+import { localeFromPath, matchSupported } from './index';
 import { SUPPORTED_LOCALES } from './locales';
 
 describe('locale auto-detection — matchSupported', () => {
@@ -79,5 +79,21 @@ describe('locale auto-detection — matchSupported', () => {
 		expect(matchSupported('')).toBeNull();
 		expect(matchSupported('x')).toBeNull();
 		expect(matchSupported('----')).toBeNull();
+	});
+});
+
+describe("localeFromPath — the page's own language wins at boot (v1.20.2)", () => {
+	it('reads the first path segment when it is a supported code', () => {
+		expect(localeFromPath('/en/compare')).toBe('en');
+		expect(localeFromPath('/it/faq')).toBe('it');
+		expect(localeFromPath('/zh-HK/orderbook')).toBe('zh-HK');
+		expect(localeFromPath('/fa')).toBe('fa');
+	});
+	it('nothing for the root, a non-locale segment, or a near miss', () => {
+		expect(localeFromPath('/')).toBeNull();
+		expect(localeFromPath('')).toBeNull();
+		expect(localeFromPath('/faq')).toBeNull();
+		expect(localeFromPath('/EN/compare')).toBeNull();
+		expect(localeFromPath('/zh/compare')).toBeNull();
 	});
 });

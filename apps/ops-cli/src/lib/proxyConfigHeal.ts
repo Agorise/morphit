@@ -792,6 +792,29 @@ export function frontendEdgePort(dump: string): number | null {
 	return null;
 }
 
+/**
+ * v1.20.2 — in an `nginx -T` dump: does the frontend answer a missing FILE
+ * with 404 rather than the app page? The release config marks it with
+ * `location ^~ /.well-known/ { … try_files $uri =404; }` (beside the
+ * root-level-file rule). Before it, /.well-known/ai-catalog.json, /ads.txt and
+ * the like came back as the app's HTML with status 200 (PageSpeed: "malformed
+ * JSON"). PURE.
+ */
+export function frontendFileMissesAre404(dump: string): boolean {
+	const walk = (list: readonly NgxDirective[]): boolean =>
+		list.some(
+			(d) =>
+				(d.name === 'location' &&
+					d.args[0] === '^~' &&
+					d.args[1] === '/.well-known/' &&
+					(d.block ?? []).some(
+						(x) => x.name === 'try_files' && x.args[x.args.length - 1] === '=404'
+					)) ||
+				(d.block ? walk(d.block) : false)
+		);
+	return walk(parseNgx(dump));
+}
+
 /** Ports whose services key per-address limits on X-Forwarded-For. */
 const XFF_PORTS = /:(8080|8081)(\/|$)/;
 
@@ -984,15 +1007,20 @@ async function verifyFrontendForwarding(
 		proxied: number;
 		missing: string[];
 		edgePort: number | null;
+		filesAre404: boolean;
 	}
 	const check = (): Seen | null => {
 		const dump = rt.nginxT(fe.name, clock.t(PROBE_MS));
 		return dump === null
 			? null
-			: { ...frontendForwardsOneAddress(dump), edgePort: frontendEdgePort(dump) };
+			: {
+					...frontendForwardsOneAddress(dump),
+					edgePort: frontendEdgePort(dump),
+					filesAre404: frontendFileMissesAre404(dump)
+				};
 	};
 	const good = (r: Seen | null): r is Seen =>
-		r !== null && r.proxied > 0 && r.missing.length === 0 && r.edgePort !== null;
+		r !== null && r.proxied > 0 && r.missing.length === 0 && r.edgePort !== null && r.filesAre404;
 	let stop = rt.spinner('Checking which client address the frontend passes to the indexer…');
 	let first: Seen | null;
 	let reloadFailed = false;
@@ -1011,6 +1039,8 @@ async function verifyFrontendForwarding(
 	// Unreadable, or not a Morphit frontend (nothing proxies to the relay or
 	// indexer): nothing to judge.
 	if (first === null || first.proxied === 0) return { state: 'unknown', edgePort: null };
+	// What was wrong before any rebuild (the type guard below narrows `first`).
+	const before: Seen = first;
 	if (good(first)) {
 		if (reloadFailed)
 			opts.warn(
@@ -1032,6 +1062,9 @@ async function verifyFrontendForwarding(
 				: '',
 			r.edgePort === null
 				? "cannot yet tell BunkerWeb's requests from others (no edge listener), so every clearnet visitor shares one rate-limit bucket"
+				: '',
+			!r.filesAre404
+				? 'answers a missing file (such as /.well-known/…) with the app page instead of 404'
 				: ''
 		]
 			.filter(Boolean)
@@ -1065,9 +1098,12 @@ async function verifyFrontendForwarding(
 		stop();
 	}
 	if (refreshed && good(after)) {
-		opts.info(
-			'✓ The frontend now sends the relay and indexer one address per visitor (X-Forwarded-For), not a list the visitor can add to.'
-		);
+		if (before.missing.length > 0 || before.edgePort === null)
+			opts.info(
+				'✓ The frontend now sends the relay and indexer one address per visitor (X-Forwarded-For), not a list the visitor can add to.'
+			);
+		if (!before.filesAre404)
+			opts.info('✓ The frontend now answers a missing file with 404 instead of the app page.');
 		return { state: 'refreshed', edgePort: after.edgePort };
 	}
 	return stale(after);

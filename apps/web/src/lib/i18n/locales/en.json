@@ -918,7 +918,12 @@
 			"same_instance": "That's the same instance you are on. Pick a different one to compare against.",
 			"local_failed": "Could not fetch that instance's orderbook: {reason}",
 			"remote_failed": "Could not fetch {host}'s orderbook: {reason}. The remote instance may be offline, unreachable, or blocking this request.",
-			"fetch_threw": "Couldn't reach {host}. Network error or the instance is offline."
+			"fetch_threw": "Couldn't reach {host}. Network error or the instance is offline.",
+			"local_timeout": "The orderbook took too long to load. Try again in a moment.",
+			"unknown_instance": "{host} is not a registered Morphit instance, so it can't be compared. Pick one from the instance list.",
+			"remote_unreachable": "This instance could not reach {host}. It may be offline or unreachable from here right now; try again later.",
+			"remote_bad_answer": "{host} answered, but not with a Morphit orderbook.",
+			"busy": "Too many comparisons right now. Try again in a minute."
 		},
 		"block_gap": {
 			"synced": "in sync",
@@ -2432,7 +2437,8 @@
 		"start": "Start",
 		"glossary": "Glossary",
 		"cheat_sheet": "Cheat-sheet",
-		"post": "Post"
+		"post": "Post",
+		"start_hint": "sign in or create an account"
 	},
 	"onboarding": {
 		"title": "Let's set up your keys",

@@ -219,7 +219,10 @@ export const THEME_TOKENS: readonly ThemeTokenDef[] = [
 	{ name: 'surface-200', ref: '#d9dfe7', rule: N, use: 'ink-200: hero body text, secondary text' },
 	{ name: 'surface-300', ref: '#b8c2d0', rule: N, use: 'ink-300' },
 	{ name: 'surface-400', ref: '#8a96a8', rule: N, use: 'ink-400: muted text' },
-	{ name: 'surface-500', ref: '#5d6b80', rule: N, use: 'ink-500' },
+	// v1.20.2: lifted from #5d6b80 (3.4:1 on cards — PageSpeed's contrast failure;
+	// hundreds of muted labels use text-ink-500) to ≥ 4.5:1 on the page, cards
+	// and raised surfaces, still a step below ink-400.
+	{ name: 'surface-500', ref: '#7b889b', rule: N, use: 'ink-500: quiet text' },
 	{ name: 'surface-600', ref: '#3e4a5c', rule: N, use: 'ink-600: field hover borders' },
 	{ name: 'surface-700', ref: '#2a3340', rule: N, use: 'ink-700: borders' },
 	{

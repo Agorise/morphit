@@ -260,7 +260,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('XMR fees: tx key (M-X1) and order binding
 		expect(e.claims).toHaveLength(1);
 		expect(e.claims[0]).toMatchObject({
 			txKey: TXKEY,
-			xmrBinding: { primaryAddress: PRIMARY, paymentId: xmrFeePaymentId('alice', 'a1') }
+			xmrBinding: { primaryAddress: PRIMARY, paymentId: xmrFeePaymentId('alice', 'a1') },
+			// (v1.20.2) how long the order has waited — the lone-answer rule's clock
+			waitedMs: 7_200_000
 		});
 		expect(await row('alice', 'a1')).toMatchObject({ fee_status: 'verified' });
 		expect(await row('bob', 'p1')).toMatchObject({ fee_status: 'proof_unsupported' });

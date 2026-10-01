@@ -49,10 +49,30 @@ const css = readFileSync(join(WEB, 'src', 'app.css'), 'utf8');
 const faceCount = (css.match(/@font-face/g) ?? []).length;
 const cssRefs = [...css.matchAll(/url\(['"]?\/fonts\/([A-Za-z0-9._-]+\.woff2)/g)].map((m) => m[1]!);
 const distinctRefs = [...new Set(cssRefs)];
-if (faceCount === 4 && distinctRefs.length === 4) {
-	ok(`FONT-1 app.css declares 4 @font-face blocks referencing 4 distinct woff2 (${distinctRefs.join(', ')})`);
+// v1.20.2 (PageSpeed): the 800 face IS Comfortaa 700 (see fonts/README.md), so
+// it points at the 700 file. Two URLs for the same bytes made every visitor
+// download that font twice (the browser caches by URL, not by content).
+if (faceCount === 4 && distinctRefs.length === 3) {
+	ok(`FONT-1 app.css declares 4 @font-face blocks over 3 distinct woff2 (${distinctRefs.join(', ')})`);
 } else {
-	bad('FONT-1', `@font-face=${faceCount}, distinct woff2 refs=${distinctRefs.length} [${distinctRefs.join(', ')}]`);
+	bad('FONT-1', `@font-face=${faceCount}, distinct woff2 refs=${distinctRefs.length} [${distinctRefs.join(', ')}] (want 4 faces over 3 files)`);
+}
+{
+	const byContent = new Map<string, string>();
+	const dupes: string[] = [];
+	for (const name of distinctRefs) {
+		const p = join(FONTS_DIR, name);
+		if (!existsSync(p)) continue;
+		const key = readFileSync(p).toString('base64');
+		const prev = byContent.get(key);
+		if (prev !== undefined) dupes.push(`${prev} = ${name}`);
+		else byContent.set(key, name);
+	}
+	if (dupes.length === 0) {
+		ok('FONT-1b no two font URLs in app.css serve the same bytes (no double download)');
+	} else {
+		bad('FONT-1b', `identical files under two URLs: ${dupes.join('; ')}`);
+	}
 }
 
 // FONT-2: every woff2 the CSS references exists in static/fonts/ and is a real woff2.
@@ -84,6 +104,23 @@ if (distinctPreloads.length > 0 && missingPreload.length === 0) {
 	bad('FONT-4', 'expected at least one font preload in app.html, found none');
 } else {
 	bad('FONT-4', `preloaded but missing/invalid: ${missingPreload.join(', ')}`);
+}
+
+// v1.20.2 (PageSpeed "network dependency tree"): a font the CSS names but the
+// page does not preload is only discovered after the stylesheet arrives — one
+// more round trip before the text can show in its real face. Every face the
+// app uses (body 400, buttons 600, headings 700/800) is on the first screen.
+{
+	const notPreloaded = distinctRefs.filter((n) => !distinctPreloads.includes(n));
+	const preloadedUnused = distinctPreloads.filter((n) => !distinctRefs.includes(n));
+	if (notPreloaded.length === 0 && preloadedUnused.length === 0) {
+		ok(`FONT-5 app.html preloads exactly the ${distinctRefs.length} files app.css uses`);
+	} else {
+		bad(
+			'FONT-5',
+			`not preloaded: [${notPreloaded.join(', ')}]; preloaded but unused: [${preloadedUnused.join(', ')}]`
+		);
+	}
 }
 
 console.log('');
