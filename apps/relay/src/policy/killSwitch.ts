@@ -32,8 +32,8 @@
  *     paused at 14:32, resumed at 14:47."
  *
  * Operator usage:
- *   touch /var/lib/morphit/relay/SIGNUPS_DISABLED   # pause
- *   rm /var/lib/morphit/relay/SIGNUPS_DISABLED      # resume
+ *   touch /var/lib/morphit-relay/SIGNUPS_DISABLED   # pause
+ *   rm /var/lib/morphit-relay/SIGNUPS_DISABLED      # resume
  */
 
 import { existsSync, statSync } from 'node:fs';

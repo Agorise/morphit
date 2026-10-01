@@ -416,6 +416,19 @@ async function main(): Promise<number> {
 		return 0;
 	}
 
+	// v1.20.1 — hidden subcommand the upgrade starts as the short-lived systemd
+	// unit morphit-web-heal (lib/webHeal.ts): the BunkerWeb WAF + web-proxy heals
+	// with the time a slow BunkerWeb needs. Not listed in help.
+	if (args.subcommand === '__web-heal') {
+		try {
+			const { runWebProxyHealsNow } = await import('./commands/upgrade.ts');
+			await runWebProxyHealsNow({ background: true });
+		} catch {
+			/* recorded in the state file */
+		}
+		return 0;
+	}
+
 	if (args.subcommand === 'init') {
 		// Color decision before init starts — TTY-aware default
 		// is fine here; operators interactive-running an init

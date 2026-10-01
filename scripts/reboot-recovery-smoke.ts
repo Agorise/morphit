@@ -65,6 +65,26 @@ for (const svc of ['morphit-indexer.service', 'morphit-relay.service', 'morphit-
 	);
 	check(`#net-order ${svc} waits for the network (After=…network-online…)`, has(d, /^After=.*network-online\.target/));
 }
+// v1.20.1 — ANY exit restarts them. morphitir's relay exited with status 0
+// (its boot awaited a chain call that never settled; Node drained its loop) and
+// Restart=on-failure left it down for three days.
+for (const svc of ['morphit-indexer.service', 'morphit-relay.service']) {
+	check(
+		`#restart-any-exit ${svc} restarts on ANY exit (Restart=always), not only on a failure`,
+		has(directives(svc), /^Restart=always$/),
+		'an exit with status 0 is not a failure to systemd; on-failure leaves the service down'
+	);
+}
+// v1.20.1 — the relay (root, EMPTY capability set) cannot enter /var/lib/morphit
+// (morphit:morphit 0750): its state directory must be outside it.
+{
+	const d = directives('morphit-relay.service');
+	check(
+		'#relay-state the relay state directory is /var/lib/morphit-relay, outside /var/lib/morphit',
+		has(d, /^StateDirectory=morphit-relay$/) && !has(d, /^StateDirectory=morphit\//),
+		'StateDirectory=morphit/relay lives inside a directory the relay cannot enter'
+	);
+}
 // indexer + relay must also wait for the Docker daemon (containerised DB).
 for (const svc of ['morphit-indexer.service', 'morphit-relay.service']) {
 	check(`#docker-order ${svc} waits for docker.service (the DB is a container)`, has(directives(svc), /^After=.*docker\.service/));

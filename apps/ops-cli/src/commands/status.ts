@@ -26,6 +26,7 @@ import { section, row, blank, info, fmt } from '../render/term.ts';
 import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CANONICAL_BLURT_TREASURY, localFeeView, type LocalFeeView } from '../lib/operatorFeeRecipient.ts';
+import { describeWebHeal, readWebHealState } from '../lib/webHeal.ts';
 
 // ─── Query result types ──────────────────────────────────────────
 
@@ -454,6 +455,20 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 	});
 	if (fa.note !== null) info(`  ${fa.note}`);
 	blank();
+
+	// ── Web proxy (v1.20.1): the background BunkerWeb heal's last result ──
+	const wh = readWebHealState();
+	if (wh !== null) {
+		section('Web proxy (BunkerWeb)');
+		const bad = wh.state === 'done' && !['applied', 'already', 'no-proxy'].includes(wh.result ?? '');
+		row({
+			label: 'Privacy settings:',
+			value: wh.state === 'running' ? 'applying' : bad ? 'not applied' : 'ok',
+			status: bad ? 'warn' : 'ok',
+			detail: describeWebHeal(wh, Date.now())
+		});
+		blank();
+	}
 
 	// ── Relay drain queue ──
 	section('Relay drain queue');

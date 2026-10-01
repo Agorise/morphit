@@ -62,9 +62,17 @@ describe('self-heal phase refreshes /usr/local/lib/morphit helpers', () => {
 		);
 		expect(names.indexOf('the tor-only OS heal')).toBeLessThan(names.indexOf('the IPFS clean-up'));
 		expect(names.indexOf('the tor-only OS heal')).toBeLessThan(
-			names.indexOf('the web-proxy privacy heal')
+			names.indexOf('the web-proxy heals')
 		);
-		expect(names[names.length - 1]).toBe('the fees-account registration heal');
+		// v1.20.1: the background web heal's result is shown last, right after the
+		// fees-account heal (which needs its time before the child's kill).
+		expect(names[names.length - 1]).toBe('the web-proxy result');
+		expect(names.indexOf('the fees-account registration heal')).toBeLessThan(
+			names.indexOf('the web-proxy result')
+		);
+		expect(names.indexOf('the web-proxy heals')).toBeLessThan(
+			names.indexOf('the web-proxy result')
+		);
 		// No Kubo here: the real clean-up heal says so and touches nothing.
 		process.env.IPFS_PATH = join(root, 'no-ipfs-here');
 		const gc = selfHealSteps().find(([n]) => n === 'the IPFS clean-up')!;

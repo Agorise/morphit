@@ -68,6 +68,7 @@
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { readSchedulerCycle, dockerLogsSince, type SchedulerCycle } from './bunkerwebScheduler.ts';
 
 // ── Canonical values (kept equal to ops/bunkerweb/bunkerweb.env.example by the
 //    vitest; the csp-header-consistency smoke keeps that file equal to the rest).
@@ -867,6 +868,14 @@ export interface ProxyHealRuntime {
 	/** Refresh the frontend's build-context nginx.conf from the release and
 	 *  `up -d --no-deps --build --force-recreate` it. */
 	refreshFrontend(ref: ComposeRef, timeoutMs: number): boolean;
+	/** BunkerWeb's own verdict (lib/bunkerwebScheduler.ts) on the config its
+	 *  scheduler(s) built since `sinceIso`. Optional: absent → not consulted. */
+	schedulerCycle?(
+		schedulers: readonly string[],
+		edge: string | null,
+		sinceIso: string,
+		timeoutMs: number
+	): SchedulerCycle;
 	/** Run `fn` if the process is told to stop; returns the unregister. */
 	onTerminate(fn: () => void): () => void;
 	sleep(ms: number): Promise<void>;
@@ -908,6 +917,8 @@ export interface HealOpts {
 	/** An absolute time the heal must be finished by (the child's kill). */
 	readonly hardStopAt?: number;
 	readonly budgetMs?: number;
+	/** Time kept back for a rollback (default ROLLBACK_RESERVE_MS). */
+	readonly rollbackReserveMs?: number;
 	readonly pollMs?: number;
 }
 
@@ -1072,6 +1083,7 @@ async function applyComposeAndEnv(
 	feEdgePort: number | null
 ): Promise<ComposeOutcome> {
 	const rt = opts.runtime;
+	const reserve = opts.rollbackReserveMs ?? ROLLBACK_RESERVE_MS;
 	const note = (m: string): void => opts.info(m);
 	for (const n of id.notes) note(n);
 	const fe = id.frontend;
@@ -1320,7 +1332,7 @@ async function applyComposeAndEnv(
 	if (feIn && (touched.has(svc.frontend!) || staleFe)) addUp(feIn);
 	if (upServices.length === 0) return { kind: 'already' };
 
-	if (clock.left() < UP_MIN_MS + VERIFY_MIN_MS + ROLLBACK_RESERVE_MS) {
+	if (clock.left() < UP_MIN_MS + VERIFY_MIN_MS + reserve) {
 		note(
 			'Not enough time was left in this upgrade to change the web containers safely, so nothing was changed; ' +
 				'the next `sudo morphit-ops upgrade` does it.'
@@ -1423,18 +1435,19 @@ async function applyComposeAndEnv(
 			? envFinal.get('REFERRER_POLICY')!
 			: null;
 		let why = '';
+		// BunkerWeb's scheduler rebuilds the config AFTER its jobs run and may
+		// refuse it (config test failed → it keeps the old one); read its verdict.
+		const upSince = new Date(rt.now() - 2_000).toISOString();
+		const schedsUp = upNames.filter((n) => schedulers.some((s) => s.name === n));
+		let refused: string | null = null;
 		try {
-			const up = rt.composeUp(
-				ref,
-				upServices,
-				clock.t(UP_MAX_MS, ROLLBACK_RESERVE_MS + VERIFY_MIN_MS)
-			);
+			const up = rt.composeUp(ref, upServices, clock.t(UP_MAX_MS, reserve + VERIFY_MIN_MS));
 			why = up ? '' : 'Docker Compose did not finish in time';
 			while (up) {
 				const problems = verifyApplied();
 				why = problems.join('; ');
-				if (problems.length === 0) break;
-				if (clock.left() - ROLLBACK_RESERVE_MS < (opts.pollMs ?? 3000)) break;
+				if (problems.length === 0 || refused !== null) break;
+				if (clock.left() - reserve < (opts.pollMs ?? 3000)) break;
 				await rt.sleep(opts.pollMs ?? 3000);
 			}
 		} finally {
@@ -1442,8 +1455,22 @@ async function applyComposeAndEnv(
 		}
 		function verifyApplied(): string[] {
 			const problems: string[] = [];
+			if (schedsUp.length > 0 && rt.schedulerCycle) {
+				const c = rt.schedulerCycle(
+					schedsUp,
+					edgeIn?.name ?? null,
+					upSince,
+					clock.t(PROBE_MS, reserve)
+				);
+				// Refused: nothing later will change that — say why, stop waiting.
+				if (c.kind === 'refused') {
+					refused = c.reason;
+					return [c.reason];
+				}
+				if (c.kind === 'pending') problems.push('BunkerWeb is still rebuilding its settings');
+			}
 			const now = new Map(
-				rt.inspect(upNames, clock.t(PROBE_MS, ROLLBACK_RESERVE_MS)).map((c) => [c.name, c] as const)
+				rt.inspect(upNames, clock.t(PROBE_MS, reserve)).map((c) => [c.name, c] as const)
 			);
 			for (const n of upNames) {
 				const c = now.get(n);
@@ -1478,14 +1505,14 @@ async function applyComposeAndEnv(
 					if (!e.env.includes(`${k}=${envFinal.get(k)}`))
 						problems.push(`${e.name} does not have the new ${k} yet`);
 			if (e && expectedLogFormat !== null) {
-				const dump = rt.nginxT(e.name, clock.t(PROBE_MS, ROLLBACK_RESERVE_MS));
+				const dump = rt.nginxT(e.name, clock.t(PROBE_MS, reserve));
 				// Unreadable: the container's environment (checked above) is the evidence.
 				if (dump !== null && nginxLogFormats(dump).get('logf') !== expectedLogFormat)
 					problems.push(`${e.name} does not use the new log format yet`);
 			}
 			const retargeted = changedKeys.some((k) => /REVERSE_PROXY_HOST/.test(k));
 			if (e && serverName && (expectedReferrer !== null || retargeted)) {
-				const got = rt.edgeProbe(serverName, clock.t(PROBE_MS, ROLLBACK_RESERVE_MS));
+				const got = rt.edgeProbe(serverName, clock.t(PROBE_MS, reserve));
 				if (got === null || got.status >= 500)
 					problems.push(
 						`the site does not answer through ${e.name} (${got?.status ?? 'no answer'})`
@@ -1496,7 +1523,7 @@ async function applyComposeAndEnv(
 			if (
 				feIn &&
 				reachedBefore &&
-				!rt.reachesHost(feIn.name, INDEXER_PORT, clock.t(PROBE_MS, ROLLBACK_RESERVE_MS))
+				!rt.reachesHost(feIn.name, INDEXER_PORT, clock.t(PROBE_MS, reserve))
 			)
 				problems.push(`${feIn.name} cannot reach the indexer through host.docker.internal`);
 			return problems;
@@ -1578,6 +1605,10 @@ export async function healProxyConfig(deps: {
 	readonly spinner: (label: string) => () => void;
 	/** The install's apps/web/build, to recognise the frontend container. */
 	readonly buildDir: string;
+	/** Overall ceiling (default HEAL_BUDGET_MS). The background web heal
+	 *  (lib/webHeal.ts) gives a slow BunkerWeb the minutes it needs. */
+	readonly budgetMs?: number;
+	readonly rollbackReserveMs?: number;
 }): Promise<ProxyHealOutcome> {
 	const stop = deps.spinner('Looking for the web containers…');
 	const up = docker(['version', '--format', '{{.Server.Version}}'], 10_000).ok;
@@ -1595,6 +1626,8 @@ export async function healProxyConfig(deps: {
 		warn: deps.warn,
 		buildDir: deps.buildDir,
 		hardStopAt,
+		budgetMs: deps.budgetMs,
+		rollbackReserveMs: deps.rollbackReserveMs,
 		runtime: {
 			now: () => Date.now(),
 			containers: (t) => {
@@ -1745,6 +1778,16 @@ export async function healProxyConfig(deps: {
 					composeArgs(ref, ['up', '-d', '--no-deps', '--build', '--force-recreate', ref.service]),
 					t
 				).ok;
+			},
+			schedulerCycle: (schedulers, edge, sinceIso, t) => {
+				const edgeLogs = edge ? dockerLogsSince(edge, sinceIso, t) : '';
+				let pending = false;
+				for (const sched of schedulers) {
+					const c = readSchedulerCycle(dockerLogsSince(sched, sinceIso, t), edgeLogs);
+					if (c.kind === 'refused') return c;
+					if (c.kind === 'pending') pending = true;
+				}
+				return pending ? { kind: 'pending' } : { kind: 'loaded' };
 			},
 			onTerminate: (fn) => {
 				const h = (): void => {

@@ -130,10 +130,31 @@ import {
 	composeArgs,
 	composeCommand,
 	parseComposeModel,
+	serverNameOf,
 	type ContainerInfo,
 	type ComposeRef
 } from '../lib/proxyConfigHeal.ts';
+import {
+	measuredSchedulerCycleMs,
+	waitForSchedulerCycle,
+	type SchedulerCycle
+} from '../lib/bunkerwebScheduler.ts';
+import {
+	copyCount,
+	listRuleCopies,
+	planRuleDedupe,
+	removeRuleCopies,
+	restoreRuleCopies,
+	type RemovedCopies
+} from '../lib/bunkerwebRuleDedupe.ts';
 import { healFeeRecipientRegistration } from '../lib/feeRecipientHeal.ts';
+import { healRelayStateDir, startIfEnabledButStopped } from '../lib/relayStateHeal.ts';
+import {
+	describeWebHeal,
+	followWebHeal,
+	launchWebHeal,
+	writeWebHealState
+} from '../lib/webHeal.ts';
 import { isHiddenOnlyNode, readLocalRelease } from '../lib/hiddenOnly.ts';
 import { healNpmUpdateNotice as healNpmNoticeGlobal } from '../lib/npmNotice.ts';
 import {
@@ -2825,14 +2846,27 @@ async function runStepWithSpinner(
 	for (const svc of SERVICES_TO_RESTART) {
 		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
 		if (!isActive) {
-			info(`Skipping ${svc} (not active on this host).`);
-			continue;
+			// v1.20.1: an ENABLED service that is not running is meant to run
+			// (morphitir's relay had exited with status 0 and been left down);
+			// start it on the new version below. Disabled / absent: skip.
+			const enabled = (spawnSync('systemctl', ['is-enabled', svc], { encoding: 'utf8' }).stdout ?? '').trim();
+			if (enabled !== 'enabled') {
+				info(`Skipping ${svc} (not active on this host).`);
+				continue;
+			}
+			info(`${svc} is enabled but was not running; starting it on the new version.`);
 		}
 		info(`Restarting ${svc}...`);
 		const restartsBefore = readUnitRestarts(svc);
 		try {
 			runOrThrow('systemctl', ['restart', svc]);
 		} catch (err) {
+			// It was down before this upgrade: the upgrade did not break it, so it
+			// does not undo the upgrade — say so and carry on.
+			if (!isActive) {
+				warn(`${svc} was not running before this upgrade and could not be started now. See: sudo journalctl -u ${svc} -n 50`);
+				continue;
+			}
 			warn(`Service restart failed for ${svc}; rolling back.`);
 			return rollback(
 				installDir,
@@ -2851,6 +2885,10 @@ async function runStepWithSpinner(
 		// failure. Only a confirmed `failed`/crash-loop rolls back — so a
 		// half-upgraded box is never left running the new code down.
 		const outcome = await verifyUnitStayedUp(svc, restartsBefore);
+		if (outcome === 'down' && !isActive) {
+			warn(`${svc} was not running before this upgrade and did not stay up when started now. See: sudo journalctl -u ${svc} -n 50`);
+			continue;
+		}
 		if (outcome === 'down') {
 			warn(`${svc} did not stay up after restarting on the new version; rolling back.`);
 			return rollback(
@@ -3496,7 +3534,6 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// v1.18.0 deep-deep, H3: existing nodes get the Kubo privacy settings a
 		// fresh install now gets (tor-only: off the public IPFS network).
 		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],
-		['the BunkerWeb WAF heal', () => healBunkerWebWaf()],
 		// A template fix is not a fix for INSTALLED nodes (upgrade does not re-run
 		// Ansible), so open the IPFS swarm port here too (review B7).
 		['the IPFS swarm firewall heal', () => healIpfsSwarmFirewall()],
@@ -3506,21 +3543,10 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// Docker logs stop keeping visitor addresses, BunkerWeb gets Morphit's
 		// headers, host.docker.internal → the real bridge gateway. After the
 		// frontend config heal, so the frontend already runs the current config.
-		[
-			'the web-proxy privacy heal',
-			() =>
-				healProxyConfig({
-					info,
-					warn,
-					spinner: (l) => startDotsSpinner(l),
-					buildDir: join(
-						/^(.*)\/apps\/ops-cli\/dist\//.exec(process.argv[1] ?? '')?.[1] ?? '/opt/morphit',
-						'apps',
-						'web',
-						'build'
-					)
-				})
-		],
+		// v1.20.1: together with the BunkerWeb WAF heal, and on a BunkerWeb box in
+		// the BACKGROUND (lib/webHeal.ts) — a slow BunkerWeb cannot finish inside
+		// this child's 300 s. The result is shown last ('the web-proxy result').
+		['the web-proxy heals', () => startWebProxyHeals()],
 		// npm's "New major version of npm available!" notice, box-wide.
 		['the npm notice heal', () => healNpmUpdateNotice()],
 		// Per-instance branding (docs/BRANDING.md). Runs here too so an upgrade
@@ -3541,8 +3567,117 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		[
 			'the fees-account registration heal',
 			() => healFeeRecipientRegistration({ info, warn, spinner: (l) => startDotsSpinner(l) })
-		]
+		],
+		// v1.20.1 (lib/relayStateHeal.ts): the relay's state moves out of
+		// /var/lib/morphit, which the capability-less relay cannot enter; an
+		// operator's SIGNUPS_DISABLED moves with it, and the old path links there.
+		[
+			'the relay state-directory heal',
+			() => healRelayStateDir(process.env.MORPHIT_ENV_ROOT ?? '', info)
+		],
+		// v1.20.1: an enabled relay that is not running (morphitir: exited with
+		// status 0 and was never restarted) is started and checked. The upgrade
+		// restarting it afterwards is harmless.
+		[
+			'the stopped-relay heal',
+			() => startIfEnabledButStopped('morphit-relay.service', info, warn)
+		],
+		// v1.20.1: last, with whatever time this child has left.
+		['the web-proxy result', () => showWebProxyResult()]
 	];
+}
+
+/** When the background web heal was started by this process (ms), or null. */
+let webHealLaunchedAt: number | null = null;
+
+function installBuildDir(): string {
+	return join(
+		/^(.*)\/apps\/ops-cli\/dist\//.exec(process.argv[1] ?? '')?.[1] ?? '/opt/morphit',
+		'apps',
+		'web',
+		'build'
+	);
+}
+
+/** The heals themselves: the WAF, then the web-proxy privacy/headers. Runs in
+ *  the background unit (`morphit-ops __web-heal`) with the time BunkerWeb
+ *  needs, or in the upgrade with bounded waits. Writes the state file. */
+export async function runWebProxyHealsNow(opts: { readonly background: boolean }): Promise<void> {
+	const startedAt = new Date().toISOString();
+	if (opts.background) writeWebHealState({ state: 'running', startedAt });
+	let result = 'error';
+	let detail: string | undefined;
+	try {
+		healBunkerWebWaf(undefined, installBuildDir(), {
+			reloadBudgetMs: opts.background ? 10 * 60_000 : 60_000
+		});
+		const out = await healProxyConfig({
+			info,
+			warn,
+			spinner: (l) => startDotsSpinner(l),
+			buildDir: installBuildDir(),
+			...(opts.background ? { budgetMs: 20 * 60_000 } : {})
+		});
+		result = out.kind;
+		detail = 'reason' in out ? out.reason : undefined;
+	} catch (err) {
+		detail = err instanceof Error ? err.message : String(err);
+		throw err;
+	} finally {
+		writeWebHealState({
+			state: 'done',
+			startedAt,
+			finishedAt: new Date().toISOString(),
+			result,
+			...(detail !== undefined ? { detail } : {})
+		});
+	}
+}
+
+/** Post-upgrade step: on a BunkerWeb box start the heals in the background;
+ *  otherwise (or when that is impossible) run them here as before. */
+async function startWebProxyHeals(): Promise<void> {
+	let bunkerweb = false;
+	try {
+		bunkerweb = findBunkerWebStack(installBuildDir()).stack !== null;
+	} catch {
+		bunkerweb = false;
+	}
+	if (bunkerweb) {
+		const at = Date.now();
+		const r = launchWebHeal();
+		if (r === 'launched' || r === 'already-running') {
+			webHealLaunchedAt = at;
+			info(
+				r === 'launched'
+					? "BunkerWeb's settings are being applied in the background — BunkerWeb rebuilds its config after every change, which takes minutes on some networks. The result is shown at the end of this upgrade."
+					: "BunkerWeb's settings are already being applied in the background; the result is shown at the end of this upgrade."
+			);
+			return;
+		}
+	}
+	await runWebProxyHealsNow({ background: false });
+}
+
+/** Post-upgrade step (last): show the background heal's progress and result
+ *  while this child has time; else say plainly that it carries on. */
+async function showWebProxyResult(): Promise<void> {
+	if (webHealLaunchedAt === null) return;
+	// Finish before the child's kill (it started process.uptime() s ago).
+	const until = Date.now() - process.uptime() * 1000 + SELF_HEAL_CHILD_TIMEOUT_MS - 25_000;
+	const s = await followWebHeal(until, webHealLaunchedAt, {
+		info,
+		spinner: (l) => startDotsSpinner(l)
+	});
+	if (s === null) {
+		info(
+			"BunkerWeb is still applying the new settings in the background (it checks them and puts the previous ones back by itself if a check fails). See the result any time with: sudo morphit-ops status"
+		);
+		return;
+	}
+	const line = `Web-proxy settings: ${describeWebHeal(s, Date.now())}.`;
+	if (s.result === 'rolled-back' || s.result === 'error' || s.result === 'apply-failed') warn(line);
+	else info(`✓ ${line}`);
 }
 
 /** Self-heal: refresh /usr/local/lib/morphit helpers from the release this
@@ -4088,7 +4223,11 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
  *  file → change nothing and say so calmly.
  *  `bwEnv` (used only when Compose can't say) and `buildDir` are parameters so
  *  the tests can run this against a temp dir. */
-export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDir = runningInstallBuildDir()): void {
+export function healBunkerWebWaf(
+	bwEnv = '/etc/bunkerweb/bunkerweb.env',
+	buildDir = runningInstallBuildDir(),
+	opts: { readonly reloadBudgetMs?: number } = {}
+): void {
 	let found: ReturnType<typeof findBunkerWebStack>;
 	try {
 		found = findBunkerWebStack(buildDir);
@@ -4161,7 +4300,12 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDi
 		/* keep going */
 	}
 
-	// ── Fix C, strategy 1: the ModSec exemption as an env var. ──
+	// ── Fix C: the ModSec exemption, as the setting BunkerWeb documents. ONE copy
+	//    only: v1.16.9–v1.20.0 also wrote it as a file, which BunkerWeb 1.5 imports
+	//    as a second custom config; with both loaded nginx refuses every new config
+	//    ("Rule id: 1990001 is duplicated") and BunkerWeb silently keeps the last one
+	//    that worked (morphitir, 2026-09-30: frozen since Sep 7). The extra copies
+	//    are removed below (lib/bunkerwebRuleDedupe.ts). ──
 	try {
 		if (!/^CUSTOM_CONF_MODSEC_morphit_json_api_off=/m.test(env)) {
 			setVal('CUSTOM_CONF_MODSEC_morphit_json_api_off', MODSEC_RULE);
@@ -4190,94 +4334,124 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDi
 		/* keep going */
 	}
 
-	if (changed) {
+	const envChanged = changed;
+	if (envChanged) {
 		try {
 			writeFileSync(bwEnv, env, 'utf8');
 		} catch {
-			/* couldn't write env — the file strategy + reload below may still apply */
+			/* couldn't write env — the reload below still applies what it can */
 		}
 	}
 
-	// ── Fix C, strategy 2 (the one PROVEN to load): drop the rule as a FILE in the
-	//    scheduler's config tree, which BunkerWeb renders even when the env var is
-	//    ignored. Only counts as a change if it wasn't already there. ──
+	// ── Extra copies of the exemption: keep exactly one (v1.20.1). ──
+	let removed: RemovedCopies | null = null;
 	if (sched !== null) {
-		try {
-			const root =
-				(spawnSync('docker', [
-					'exec', sched, 'sh', '-c',
-					'for d in /data/configs /etc/bunkerweb/configs /data/config; do [ -d "$d" ] && { echo "$d"; break; }; done'
-				], { encoding: 'utf8', timeout: 8000 }).stdout ?? '').trim() || '/data/configs';
-			const conf = `${root}/modsec/morphit-json-api-off.conf`;
-			const already =
-				(spawnSync('docker', [
-					'exec', sched, 'sh', '-c', `test -s '${conf}' && grep -q '${RULE_ID}' '${conf}' && echo yes`
-				], { encoding: 'utf8', timeout: 8000 }).stdout ?? '').includes('yes');
-			if (!already) {
-				spawnSync('docker', [
-					'exec', sched, 'sh', '-c',
-					`mkdir -p '${root}/modsec' && printf '%s\\n' ${JSON.stringify(MODSEC_RULE)} > '${conf}'`
-				], { encoding: 'utf8', timeout: 8000 });
-				changed = true;
+		const copies = listRuleCopies(sched);
+		if (copies !== null && copyCount(copies) > 1) {
+			const plan = planRuleDedupe(copies);
+			removed = removeRuleCopies(sched, plan);
+			if (removed !== null && (removed.rows.length > 0 || removed.moved.length > 0)) {
+				info(
+					`WAF: removed ${removed.rows.length + removed.moved.length} extra copy(ies) of Morphit's API firewall exception (kept: ${plan.keep ?? 'the setting'}). A second copy makes BunkerWeb refuse every new config.`
+				);
+			} else {
+				removed = null;
+				info("WAF: found Morphit's API firewall exception more than once but could not remove the extra copy; BunkerWeb may keep refusing new settings until it is removed.");
 			}
-		} catch {
-			/* keep going */
 		}
 	}
 
-	// ── Apply: reload via a fallback chain (only when we changed the env); stop at
-	//    the first that succeeds. Even in steady state we still VERIFY below, because
-	//    an env value can be present yet never rendered into nginx (the recurring
-	//    413) — so we must observe the running limit, not trust `changed`.
-	let reloaded = false;
-	if (changed) {
-		// Only BunkerWeb's own containers/services: a whole-stack `up` can recreate
-		// the database, and a name-picked restart hit the wrong container (wave 5).
-		const strategies: Array<() => boolean> = [
-			() => sched !== null && spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
-			() => ref !== null && composeRun(ref, ['up', '-d', '--no-deps', ...stack.services], 120000),
-			() => spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 }).status === 0
-		];
-		let ok = false;
+	// ── Apply. A setting change needs BunkerWeb's services RECREATED (a plain
+	//    `docker restart` keeps a container's old environment); a removed copy
+	//    only needs the scheduler to rebuild. Only BunkerWeb's own services, never
+	//    the whole stack (a whole-stack `up` can recreate the database, wave 5). ──
+	const reloadBudgetMs = opts.reloadBudgetMs ?? 8 * 60_000;
+	const measured = sched !== null ? measuredSchedulerCycleMs(sched) : null;
+	const applyAndWait = (why: string, recreate: boolean): SchedulerCycle | null => {
+		if (sched === null) return null;
+		const since = new Date(Date.now() - 2_000).toISOString();
+		const strategies: Array<() => boolean> = recreate
+			? [
+					() => ref !== null && composeRun(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services], 180000),
+					() => spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0
+				]
+			: [
+					() => spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
+					() => ref !== null && composeRun(ref, ['up', '-d', '--no-deps', ...stack.services], 180000)
+				];
+		let started = false;
 		for (const strat of strategies) {
 			try {
 				if (strat()) {
-					ok = true;
+					started = true;
 					break;
 				}
 			} catch {
 				/* try the next strategy */
 			}
 		}
-		reloaded = ok;
-		if (!reloaded) {
+		if (!started) {
 			info(
 				ref !== null
-					? `WAF: settings written; could not reload BunkerWeb automatically. To apply them, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', ...stack.services])}`
-					: `WAF: settings written; could not reload BunkerWeb automatically. To apply them, run on this server: sudo docker restart ${bw}`
+					? `WAF: ${why}, but BunkerWeb could not be restarted automatically. To apply it, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
+					: `WAF: ${why}, but BunkerWeb could not be restarted automatically. To apply it, run on this server: sudo docker restart ${sched}`
+			);
+			return null;
+		}
+		info(
+			measured !== null && measured > 60_000
+				? `WAF: ${why}; BunkerWeb is rebuilding its settings (about ${Math.round(measured / 60_000)} min here, its downloads are slow on this network)…`
+				: `WAF: ${why}; BunkerWeb is rebuilding its settings…`
+		);
+		const c = waitForSchedulerCycle({ scheduler: sched, edge: bw, sinceIso: since, budgetMs: reloadBudgetMs, note: (m) => info(`WAF: ${m}`) });
+		if (c.kind === 'loaded') info(`WAF: BunkerWeb built, tested and loaded its new settings (${Math.round(c.waitedMs / 1000)} s).`);
+		else if (c.kind === 'refused') warn(`WAF: ${c.reason}. Nothing is broken: the site runs as before.`);
+		else info(`WAF: BunkerWeb had not finished rebuilding its settings after ${Math.round(c.waitedMs / 60_000)} min; it loads them by itself when it is done.`);
+		return c;
+	};
+
+	let cycle: SchedulerCycle | null = null;
+	if (envChanged || removed !== null) {
+		cycle = applyAndWait(envChanged ? 'settings written' : 'extra copy removed', envChanged);
+	}
+
+	// ── VERIFY the exemption against the LIVE site: a request to /v1/ that the
+	//    Core Rule Set blocks everywhere else must pass, and the same request to
+	//    the home page must still be blocked (ModSecurity is on). If /v1/ is
+	//    blocked after removing a copy, put the copies back (never leave the API
+	//    without its exemption). ──
+	const site = serverNameOf(env);
+	const liveProbe = (path: string): string => {
+		if (!site) return '';
+		const q = '?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E';
+		const r = spawnSync(
+			'curl',
+			['-sk', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '15', '--resolve', `${site}:443:127.0.0.1`, `https://${site}${path}${q}`],
+			{ encoding: 'utf8', timeout: 25000 }
+		);
+		return (r.stdout ?? '').trim();
+	};
+	try {
+		const api = liveProbe('/v1/health');
+		const home = liveProbe('/');
+		if (api === '403' && home === '403') {
+			if (removed !== null && sched !== null && restoreRuleCopies(sched, removed)) {
+				warn("WAF: the API was blocked by ModSecurity after the extra exception copy was removed, so it was put back.");
+				applyAndWait('the previous exception copies restored', false);
+			} else {
+				warn(`WAF: ModSecurity blocks Morphit's API (/v1/) on ${site}. Its exception is not loaded; broadcasts from this site may fail.`);
+			}
+		} else if (home === '403' && /^[0-9]{3}$/.test(api) && api !== '000') {
+			const n = sched !== null ? listRuleCopies(sched) : null;
+			info(
+				`WAF: /v1/ + /relay/ exemption verified live (a request ModSecurity blocks elsewhere reaches the API: ${api})${n !== null ? `; stored ${copyCount(n)} time(s)` : ''}.`
 			);
 		}
-	}
-
-	// ── VERIFY against the RUNNING container — ALWAYS, even in steady state,
-	//    because an env value can be present yet never rendered into nginx (the
-	//    recurring 413). Observe the real limits; don't trust that setting = applied.
-	if (reloaded) {
-		info('WAF: waiting about 20 seconds for BunkerWeb to load the new settings...');
-		spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
-	}
-
-	// (1) ModSec /v1/ + /relay/ exemption actually loaded?
-	try {
-		const loaded =
-			(spawnSync('docker', ['exec', bw, 'sh', '-c', `grep -rl '${RULE_ID}' /etc/bunkerweb /data 2>/dev/null | head -1`], {
-				encoding: 'utf8',
-				timeout: 10000
-			}).stdout ?? '').trim().length > 0;
-		if (loaded) info('WAF: /v1/ + /relay/ exemption verified live inside BunkerWeb.');
+		// Anything else (no answer, ModSecurity off): nothing to conclude, say nothing.
 	} catch {
 		/* best-effort */
 	}
+	void cycle;
 
 	// (2) BODY SIZE — prove a real-sized broadcast is NOT rejected 413, and if it
 	//     is, ESCALATE: the MAX_CLIENT_SIZE env sometimes never renders into nginx,
@@ -4322,9 +4496,7 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDi
 					['exec', sched, 'sh', '-c', `mkdir -p '${root}/modsec' && printf '%s\\n' 'SecRequestBodyLimit 13107200' 'SecRequestBodyNoFilesLimit 1048576' 'SecRequestBodyLimitAction ProcessPartial' > '${root}/modsec/morphit-body-limit.conf'`],
 					{ encoding: 'utf8', timeout: 8000 }
 				);
-				spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 });
-				spawnSync('docker', ['restart', bw], { encoding: 'utf8', timeout: 60000 });
-				spawnSync('sleep', ['20'], { timeout: 25000 });
+				applyAndWait('body-size limits written', false);
 				code = probe();
 			}
 			const verdict = classifyBroadcastProbe(code);
@@ -4344,11 +4516,9 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDi
 	}
 
 	// (3) REAL IP (Fix D) — when the env now says USE_REAL_IP=no, prove the RUNNING
-	//     nginx has no `set_real_ip_from` left. `docker restart` (the first reload
-	//     strategy above) keeps a container's old environment, so an env change
-	//     can sit on disk unapplied; recreating the containers from compose is what
-	//     makes them read the file again: BunkerWeb's own services only, from its
-	//     own Compose project, then re-check. (v1.18.0 deep-deep, H1; wave 5)
+	//     nginx has no `set_real_ip_from` left. If it still has, BunkerWeb either
+	//     kept its old environment or refused the rebuilt config — recreate its own
+	//     services once and wait for its verdict. (v1.18.0 deep-deep, H1; wave 5)
 	try {
 		if (unq(getVal('USE_REAL_IP')).toLowerCase() !== 'yes') {
 			const liveTrustsXff = (): boolean | null => {
@@ -4362,20 +4532,9 @@ export function healBunkerWebWaf(bwEnv = '/etc/bunkerweb/bunkerweb.env', buildDi
 				return /^\s*set_real_ip_from\s/m.test(out);
 			};
 			let live = liveTrustsXff();
-			if (live === true) {
-				// Only BunkerWeb's own services, from its own Compose project (every
-				// file, env file and directory), with --no-deps: never the database.
-				if (ref !== null) {
-					info('WAF: recreating the BunkerWeb containers so they pick up USE_REAL_IP=no (about half a minute)...');
-					try {
-						if (composeRun(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services], 180000)) {
-							spawnSync('sleep', ['20'], { timeout: 25000 }); // let the scheduler regenerate
-							live = liveTrustsXff();
-						}
-					} catch {
-						/* reported below */
-					}
-				}
+			if (live === true && cycle?.kind !== 'refused' && ref !== null) {
+				const c = applyAndWait('recreating BunkerWeb so it reads USE_REAL_IP=no', true);
+				if (c !== null) live = liveTrustsXff();
 			}
 			if (live === false) info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
 			else if (live === true)

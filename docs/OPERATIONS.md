@@ -2550,8 +2550,9 @@ the per-IP velocity rules forever.
 Verify the relay's data dir and config aren't world-readable:
 
 ```bash
-chmod 700 /var/lib/morphit /var/lib/morphit/relay
+chmod 750 /var/lib/morphit
 chown -R morphit:morphit /var/lib/morphit
+chmod 700 /var/lib/morphit-relay           # the relay's own state (root-owned; systemd creates it)
 chmod 0640 /etc/morphit/relay.env          # if you use an env file
 chown root:morphit /etc/morphit/relay.env  # 0640 root:morphit, per §37.10/§37.19
 ```
@@ -4368,19 +4369,24 @@ Instant halt. When something goes wrong, flip this first — on the
 relay's server, no restart:
 
 ```sh
-sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED    # pause (within 1 s)
-sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED       # resume
+sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED    # pause (within 1 s)
+sudo rm /var/lib/morphit-relay/SIGNUPS_DISABLED       # resume
 ```
 
 The relay keeps its state in `MORPHIT_RELAY_DATA_DIR`, by default
-`/var/lib/morphit/relay` (created by the relay at boot, mode 0700,
-and by the unit's `StateDirectory=morphit/relay`), and polls for
+`/var/lib/morphit-relay` (created by the relay at boot, mode 0700,
+and by the unit's `StateDirectory=morphit-relay`), and polls for
 the `SIGNUPS_DISABLED` file there every second. At boot it logs
 `signup_state_dir_ready` and `kill_switch_armed` (with the watched
 path), or `signup_state_dir_not_writable` with the exact fix
 command. Before v1.20.0 no installer set this directory, so the
-file did nothing and the daily ceiling reset on every restart;
-the upgrade brings existing nodes onto the default.
+file did nothing and the daily ceiling reset on every restart.
+v1.20.0 used `/var/lib/morphit/relay`, which the relay could not
+enter (`/var/lib/morphit` is `morphit:morphit` 0750 and the relay
+runs as root with no capabilities), so on v1.20.0 the same was
+true. v1.20.1 moves it: the upgrade carries over anything in the
+old directory (a `SIGNUPS_DISABLED` file stays in effect) and
+leaves `/var/lib/morphit/relay` as a link to the new one.
 
 The slower alternative (needs a restart) is
 `MORPHIT_RELAY_SIGNUP_ENABLED=false` in `/etc/morphit/relay.env`,
@@ -4400,7 +4406,7 @@ is whatever the chain's `account_creation_fee`
 witness-parameter is at claim time, typically ~100 BLURT, and the
 2 BLURT is the transfer to each new account).  Reset
 at UTC midnight. The count is persisted in
-`/var/lib/morphit/relay/signup-ceiling.json`
+`/var/lib/morphit-relay/signup-ceiling.json`
 (`MORPHIT_RELAY_SIGNUP_CEILING_PERSIST_PATH` overrides it), so a
 relay restart does not reset it.
 
@@ -4716,7 +4722,7 @@ disable.
 ### Tuning playbook during a suspected attack
 
 1. **Flip the kill-switch.** On the relay's server:
-   `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED` (takes
+   `sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED` (takes
    effect within a second, no restart). This stops the bleeding
    immediately with zero risk.
 2. **Check the anomaly alert.** Was signup volume actually
@@ -4745,7 +4751,7 @@ disable.
    if it isn't already. Lower the sequential threshold to 1
    (`MORPHIT_RELAY_SEQUENTIAL_THRESHOLD=1`) so the SECOND
    sequential signup is the one blocked, not the third.
-8. **Re-enable.** `sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED`
+8. **Re-enable.** `sudo rm /var/lib/morphit-relay/SIGNUPS_DISABLED`
    (and, if you also set `MORPHIT_RELAY_SIGNUP_ENABLED=false` in
    `/etc/morphit/relay.env`, set it back to `true` and restart).
 9. **Watch for 24-48h.** Anomaly alerts will tell you if the
@@ -5450,7 +5456,7 @@ matches reality. See §13 for the full price-feed runbook.
 wins over `morphit.config.env` and over systemd `Environment=`).
 Flip to `false` and restart the relay to stop new account
 onboarding while existing users continue normally. For an instant
-stop with no restart, `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED`
+stop with no restart, `sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED`
 (§18).
 Use during active spam-account waves, maintenance, or
 suspected drain attacks (§7, §18).
@@ -5559,7 +5565,7 @@ Health endpoint shows abnormal signup velocity. You want
 to stop the bleeding while you investigate.
 
 1. On the relay's server:
-   `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED`
+   `sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED`
    (no restart). Don't set `MORPHIT_RELAY_SIGNUP_ENABLED`
    in `morphit.config.env` for this: the relay reads
    `/etc/morphit/relay.env` after it, and the installer
@@ -5568,7 +5574,7 @@ to stop the bleeding while you investigate.
    temporarily disabled" message within a second.
    Existing users keep working.
 3. Investigate (§7, §18).
-4. When safe: `sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED`.
+4. When safe: `sudo rm /var/lib/morphit-relay/SIGNUPS_DISABLED`.
 
 ### Example workflow — operator with strict deployment automation
 
@@ -9766,7 +9772,7 @@ If you see a pattern that's NOT being caught:
 3. **If you're STILL bleeding** — flip the kill-switch, on the relay's server:
 
    ```sh
-   sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED
+   sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED
    ```
 
    No restart needed. Investigate. Don't re-enable (`sudo rm` the file) until you understand what changed.
@@ -10435,6 +10441,12 @@ helper that does it from the same machine, using the same
 Blurt library the relay uses (`@beblurt/dblurt`):
 
 ```
+# first) install exactly this release's packages. Unpacking the release
+#    tarball over your repo updates the code but NOT node_modules, and the
+#    scripts below then import whatever old copies are still installed
+#    (v1.20.0: the payload builder died on an outdated @noble/curves):
+npm ci --no-audit --no-fund
+
 # 0) derive the SRI hash manifest from the VPS's SERVED /verify.json —
 #    NOT a laptop build. Vite/Rollup output is not byte-reproducible
 #    across machines, so a laptop-built manifest won't match the deployed

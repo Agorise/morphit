@@ -749,13 +749,19 @@ export function loadConfig(): Config {
 }
 
 /** Default relay data directory (kill-switch sentinel + persisted ceiling).
- *  Also created by the relay unit's StateDirectory=morphit/relay. */
-export const DEFAULT_RELAY_DATA_DIR = '/var/lib/morphit/relay';
+ *  Also created by the relay unit's StateDirectory=morphit-relay. */
+export const DEFAULT_RELAY_DATA_DIR = '/var/lib/morphit-relay';
+/** v1.20.0's default. The relay (root, no capabilities) cannot enter
+ *  /var/lib/morphit (morphit:morphit 0750), so this path never worked; an
+ *  install's env still naming it gets the new default instead. */
+export const LEGACY_RELAY_DATA_DIR = '/var/lib/morphit/relay';
 
-/** The data dir: the env value when non-empty, else the default. PURE. */
+/** The data dir: the env value when non-empty (the v1.20.0 default counts as
+ *  the new default), else the default. PURE. */
 export function resolveDataDir(env: { MORPHIT_RELAY_DATA_DIR?: string | undefined }): string {
-	const v = env.MORPHIT_RELAY_DATA_DIR?.trim();
-	return v !== undefined && v !== '' ? v : DEFAULT_RELAY_DATA_DIR;
+	const v = env.MORPHIT_RELAY_DATA_DIR?.trim().replace(/\/+$/, '');
+	if (v === undefined || v === '' || v === LEGACY_RELAY_DATA_DIR) return DEFAULT_RELAY_DATA_DIR;
+	return v;
 }
 
 /** The ceiling persist path: explicit env value, else

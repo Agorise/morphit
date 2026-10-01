@@ -28,6 +28,7 @@ import {
 	readdirSync
 } from 'node:fs';
 import { createRequire } from 'node:module';
+import type { SchedulerCycle } from '../src/lib/bunkerwebScheduler.ts';
 import { join, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -298,6 +299,9 @@ class Sim {
 	depth = 0;
 	lastCallAt = 0;
 	terminate: (() => void) | null = null;
+	/** BunkerWeb's scheduler verdict, by time since the last `up` (v1.20.1). */
+	verdict: ((sinceUpMs: number) => SchedulerCycle) | null = null;
+	lastUpAt = 0;
 	info: string[] = [];
 	warn: string[] = [];
 	readonly project: string;
@@ -385,6 +389,7 @@ class Sim {
 				this.onUp?.(n);
 				if (this.upFails.includes(n) || !inTime) return false;
 				for (const s of svcs) this.recreate(s, n);
+				this.lastUpAt = this.t;
 				return true;
 			},
 			reachesHost: (n, _p, t) => {
@@ -438,6 +443,8 @@ class Sim {
 				this.served = this.servedAfterRefresh;
 				return true;
 			},
+			schedulerCycle: () =>
+				this.verdict ? this.verdict(this.t - this.lastUpAt) : { kind: 'loaded' as const },
 			onTerminate: (fn) => ((this.terminate = fn), () => (this.terminate = null)),
 			sleep: async (ms) => {
 				this.t += ms;
@@ -491,7 +498,7 @@ class Sim {
 			this.recreated.push(name);
 		}
 	}
-	async run(extra: { hardStopAt?: number; budgetMs?: number } = {}) {
+	async run(extra: { hardStopAt?: number; budgetMs?: number; rollbackReserveMs?: number } = {}) {
 		return applyAndVerifyProxyConfig({
 			runtime: this.rt,
 			info: (m) => this.info.push(m),
@@ -1234,6 +1241,42 @@ describe('on time (P5): the self-heal child is killed at 300 s', () => {
 		expect(out.kind).toBe('rolled-back');
 		expect(s.lastCallAt).toBeLessThanOrEqual(deadline);
 		expect(readFileSync(s.path('bunkerweb.env'), 'utf8')).toBe(OLD_ENV);
+	});
+});
+
+// v1.20.1 — morphitir (2026-09-30): BunkerWeb's scheduler refused every new
+// config (a duplicated ModSecurity rule) and kept its Sep 7 one, while every
+// container ran and every setting looked applied; the heal waited out its budget
+// on "the new log format" and put the old settings back without saying why. And
+// on that network a rebuild takes ~2 minutes, longer than the heal waited.
+describe("BunkerWeb's own verdict (v1.20.1)", () => {
+	const REFUSAL =
+		'BunkerWeb\'s own config test failed ("modsecurity_rules_file" directive Rule id: 1990001 is duplicated), so it kept serving its previous config';
+	it('a refused config is rolled back at once, with nginx’s own reason — not after the whole budget', async () => {
+		const s = morphitIo();
+		const envBefore = readFileSync(s.path('bunkerweb.env'), 'utf8');
+		s.verdict = (ms) => (ms < 15_000 ? { kind: 'pending' } : { kind: 'refused', reason: REFUSAL });
+		const out = await s.run();
+		expect(out.kind).toBe('rolled-back');
+		expect((out as { reason: string }).reason).toBe(REFUSAL);
+		expect(s.warn.join(' ')).toContain('Rule id: 1990001 is duplicated');
+		// stopped waiting as soon as the verdict came, far inside the budget
+		expect(s.lastCallAt - s.start).toBeLessThan(HEAL_BUDGET_MS - 20_000);
+		expect(readFileSync(s.path('bunkerweb.env'), 'utf8')).toBe(envBefore);
+	});
+	it('a two-minute rebuild (morphitir) is waited for when the budget allows it, then verified', async () => {
+		const s = morphitIo();
+		s.verdict = (ms) => (ms < 116_000 ? { kind: 'pending' } : { kind: 'loaded' });
+		const out = await s.run({ budgetMs: 15 * 60_000, rollbackReserveMs: 180_000 });
+		expect(out.kind).toBe('applied');
+	});
+	it('the same rebuild inside the in-upgrade budget is NOT called applied while BunkerWeb is still building', async () => {
+		const s = morphitIo();
+		const envBefore = readFileSync(s.path('bunkerweb.env'), 'utf8');
+		s.verdict = (ms) => (ms < 116_000 ? { kind: 'pending' } : { kind: 'loaded' });
+		const out = await s.run();
+		expect(out.kind).toBe('rolled-back');
+		expect((out as { reason: string }).reason).toMatch(/still rebuilding its settings/);
 	});
 });
 

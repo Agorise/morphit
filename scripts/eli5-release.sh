@@ -45,6 +45,11 @@
 #     release.yml attached, so the on-chain source_sha256 is the PUBLISHED
 #     tarball's hash — not a local git-archive (that mismatch was the old
 #     release-sign.sh footgun).
+#   • BLOCK 4 starts with `npm ci`: the laptop's repo is refreshed by unpacking
+#     the release tarball over it, which updates the code but NOT node_modules.
+#     v1.20.0's payload builder imports a library whose installed copy on the
+#     laptop was older than the lockfile's, and the builder died before writing
+#     release.json (2026-09-30). `npm ci` installs exactly the lockfile.
 #   • Broadcasting (BLOCK 5) is a laptop step ONLY: the @morphit spending WIF
 #     must never live in CI.
 #   • BLOCK 6 is not optional: `morphit-ops upgrade` wipes build/canary.txt.
@@ -96,8 +101,9 @@ Then choose **option 2**. (The upgrade also self-seeds this release to IPFS if t
 
 ---
 
-**BLOCK 4** — build the on-chain payload from the VPS's served verify.json **plus** the published distribution anchor, and dry-run it (laptop, repo root). The first line fetches the anchor \`release.yml\` attached to the release; \`source\` loads the SHA-256 + fingerprint (the mirror list is baked into the payload builder):
+**BLOCK 4** — build the on-chain payload from the VPS's served verify.json **plus** the published distribution anchor, and dry-run it (laptop, repo root). The first line installs exactly this release's packages (unpacking a tarball updates the code, not \`node_modules\`); the second fetches the anchor \`release.yml\` attached to the release; \`source\` loads the SHA-256 + fingerprint (the mirror list is baked into the payload builder):
 \`\`\`
+npm ci --no-audit --no-fund
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/distribution-anchor.env -o /tmp/morphit-anchor.env
 source /tmp/morphit-anchor.env
 curl -fsSL https://morphit.io/verify.json -o ~/verify.json

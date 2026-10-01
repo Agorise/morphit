@@ -90,7 +90,8 @@ check('upgrade re-execs the JUST-BUILT binary for self-heals (v1.16.11 — no mo
 check(
 	'upgrade falls back to in-process heals if the re-exec is unavailable',
 	/if \(!selfHealReexeced\) \{\s*await runSelfHeals\(\);/.test(upgrade) &&
-		/\(\) => healBunkerWebWaf\(\)/.test(upgrade)
+		/\(\) => startWebProxyHeals\(\)/.test(upgrade) &&
+		/healBunkerWebWaf\(undefined, installBuildDir\(\)/.test(upgrade)
 );
 check('v1.16.13: the self-heal phase rebuilds the frontend (nginx.conf change applies same-upgrade)', /healFrontendConfig\(\)/.test(upgrade));
 check('resolver states "zero clearnet"', /zero clearnet/i.test(resolver));

@@ -168,13 +168,28 @@ const up = readFileSync(resolve(root, 'apps/ops-cli/src/commands/upgrade.ts'), '
 // Called from the shared heal list since the final v1.18.0 review (runSelfHeals).
 expect(
 	'self-heal: healBunkerWebWaf exists + is called',
-	/function healBunkerWebWaf\(/.test(up) && /\(\) => healBunkerWebWaf\(\)/.test(up) && /await runSelfHeals\(\)/.test(up)
+	/function healBunkerWebWaf\(/.test(up) &&
+		/healBunkerWebWaf\(undefined, installBuildDir\(\)/.test(up) &&
+		/\(\) => startWebProxyHeals\(\)/.test(up) &&
+		/await runSelfHeals\(\)/.test(up)
 );
 expect('self-heal fixes MAX_CLIENT_SIZE (413)', /MAX_CLIENT_SIZE/.test(up) && /RELAY_BODY_FLOOR/.test(up));
 expect('self-heal drops 400 from bad-behavior (403 ban)', /BAD_BEHAVIOR_STATUS_CODES/.test(up) && /c !== '400'/.test(up));
-expect('self-heal tries the ModSec exemption BOTH as env var AND as a file', /CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) && /morphit-json-api-off\.conf/.test(up));
+// v1.20.1 — ONE copy only: the file copy (v1.16.9–v1.20.0) made BunkerWeb refuse
+// every new config on morphitir ("Rule id: 1990001 is duplicated"). The behaviour
+// is driven for real in test/bunkerwebWafIdentify.test.ts.
+expect(
+	'self-heal keeps ONE copy of the ModSec exemption (the setting) and removes extra copies',
+	/CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) &&
+		!/morphit-json-api-off\.conf/.test(up) &&
+		/planRuleDedupe\(/.test(up) &&
+		/removeRuleCopies\(/.test(up)
+);
 expect('self-heal has a reload FALLBACK chain (not one method)', /strategies: Array<\(\) => boolean>/.test(up) && /docker-compose/.test(up));
-expect('self-heal VERIFIES the rule loaded in the running container', /grep -rl '\$\{RULE_ID\}'/.test(up) && /verified live inside BunkerWeb/.test(up));
+expect(
+	"self-heal reads BunkerWeb's own verdict and VERIFIES the exemption on the live site (and puts copies back if /v1/ is blocked)",
+	/waitForSchedulerCycle\(/.test(up) && /exemption verified live/.test(up) && /restoreRuleCopies\(/.test(up)
+);
 expect('self-heal PROBES a real-sized body against the live endpoint (413 detect)', /v1\/broadcast/.test(up) && /50 \* 1024|A'\.repeat/.test(up));
 expect('self-heal escalates the ModSec request-body limit (the real 413 source when client_max_body_size is generous)', /SecRequestBodyNoFilesLimit/.test(up) && /SecRequestBodyLimitAction ProcessPartial/.test(up));
 

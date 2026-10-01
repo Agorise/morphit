@@ -50,7 +50,11 @@ LoadCredentialEncrypted=relay_passphrase:/etc/morphit/relay_passphrase.cred
 ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env; do [ -f "$f" ] && . "$f"; done; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
 # With the env-var passphrase path, restart-on-crash actually succeeds now
 # (no interactive prompt to hang on).
-Restart=on-failure
+# v1.20.1: ALWAYS, not on-failure. On morphitir (2026-09-27) the relay's boot
+# awaited an RPC call that never settled; with nothing left to run, Node exited
+# with status 0, which on-failure does not restart — the relay stayed down for
+# three days. `systemctl stop` still stops it for good.
+Restart=always
 RestartSec=5
 KillSignal=SIGTERM
 TimeoutStopSec=25
@@ -62,7 +66,12 @@ SyslogIdentifier=morphit-relay
 # (SIGNUPS_DISABLED) and the persisted daily signup ceiling. systemd creates it
 # (mode 0700) before start; the relay also creates it and logs whether it is
 # writable. Matches the code default MORPHIT_RELAY_DATA_DIR.
-StateDirectory=morphit/relay
+# v1.20.1: /var/lib/morphit-relay, NOT /var/lib/morphit/relay. /var/lib/morphit
+# belongs to the `morphit` user (mode 0750) and this service runs as root with
+# an EMPTY capability set (no permission override), so it could not even enter
+# /var/lib/morphit: the ceiling was never kept and the switch never seen (all
+# three live boxes, 2026-09-30). The upgrade leaves a link at the old path.
+StateDirectory=morphit-relay
 StateDirectoryMode=0700
 
 # --- Hardening (safe with User=root) -------------------------------

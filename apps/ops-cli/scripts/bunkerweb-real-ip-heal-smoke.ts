@@ -55,6 +55,7 @@ case "$1" in
   ps) printf 'bunkerweb\\nbunkerweb-scheduler\\n'; exit 0 ;;
   inspect) cat "$S/inspect.json"; exit 0 ;;
   restart) exit 0 ;;
+  logs) printf 'Successfully sent API request to http://bunkerweb:5000/reload\\n'; exit 0 ;;
   exec)
     cmd="$5"
     case "$cmd" in

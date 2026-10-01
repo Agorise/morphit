@@ -13,9 +13,10 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 
-import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, hiddenRouterPolicy, type Config, type UnlockedConfig } from './config/index.ts';
+import { loadConfig, isValidVapidPublicKey, isValidVapidSubject, hiddenRouterPolicy, DEFAULT_RELAY_DATA_DIR, type Config, type UnlockedConfig } from './config/index.ts';
 import { loadOperatorConfig } from '@morphit/operator-config';
 import { unlockActiveKey } from './config/unlock.ts';
+import { installDrainGuard, withBootTimeout } from './lib/processGuard.ts';
 import { BlurtClient } from './blurt/client.ts';
 import { startRpcDirectorySync } from './blurt/rpcDirectorySync.ts';
 import { prepareSignupStateDir } from './policy/signupState.ts';
@@ -53,6 +54,9 @@ const cfgLog = logger('relay-config');
 const httpLog = logger('relay-http');
 const shutdownLog = logger('relay-shutdown');
 const procLog = logger('relay-process');
+
+/** v1.20.1 — see lib/processGuard.ts: an unrequested exit is a failure. */
+const drainGuard = installDrainGuard((note) => procLog.error('event_loop_drained', { note }));
 
 async function main(): Promise<void> {
 	// Drop @beblurt/dblurt's redundant internal failover chatter — our
@@ -190,7 +194,11 @@ async function main(): Promise<void> {
 	// bucketing, and ops monitoring.  Fail loud at boot rather
 	// than have weird symptoms later.
 	try {
-		const dgp = await blurt.getDynamicGlobalProperties();
+		const dgp = await withBootTimeout(
+			blurt.getDynamicGlobalProperties(),
+			30_000,
+			'the chain (clock check)'
+		);
 		const localMs = Date.now();
 		const chainMs = new Date(dgp.time + 'Z').getTime();
 		const drift = checkClockDrift(localMs, chainMs);
@@ -257,8 +265,11 @@ async function main(): Promise<void> {
 				data_dir: st.dir,
 				error: st.error,
 				effect:
-					'The daily signup ceiling is kept in memory only (a relay restart resets it) until this directory is writable by the relay. The kill-switch file is still read if it exists.',
-				fix: `On this server: sudo mkdir -p ${st.dir} && sudo chmod 700 ${st.dir}, then sudo systemctl restart morphit-relay`
+					'The daily signup ceiling is kept in memory only (a relay restart resets it), and a SIGNUPS_DISABLED file in this directory may not be seen, until the relay can write here.',
+				fix:
+					st.dir === DEFAULT_RELAY_DATA_DIR
+						? 'On this server: sudo morphit-ops upgrade (it sets up the relay state directory), or sudo systemctl restart morphit-relay (systemd creates it)'
+						: `The relay runs as root WITHOUT permission overrides: it must be able to enter every folder on the path to ${st.dir} (check each with ls -ld) and write in it — or remove MORPHIT_RELAY_DATA_DIR to use ${DEFAULT_RELAY_DATA_DIR}`
 			});
 			// Only drop persistence when the file would live in the dir we just
 			// failed to write; an explicit path elsewhere is still tried.
@@ -516,6 +527,7 @@ async function main(): Promise<void> {
 
 	// Graceful shutdown. systemd sends SIGTERM; Ctrl-C sends SIGINT.
 	const shutdown = (sig: NodeJS.Signals): void => {
+		drainGuard.shuttingDown();
 		shutdownLog.info('draining', { signal: sig });
 		availLimiter.close();
 		createLimiter.close();

@@ -192,7 +192,7 @@ Some basic SSH sessions have spotty UTF-8 support. Pass
 
 - **Live relay controls** (`drain-now`, `pause-signups`, `set-ceiling`,
   `top-up-balance`). These would need a relay admin endpoint. To pause
-  signups, on the relay's server: `sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED`
+  signups, on the relay's server: `sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED`
   (see `docs/INCIDENT-RUNBOOK.md`).
 - **Operator monitoring web UI.** We deliberately ship a CLI
   instead — fewer attack surfaces, scriptable, fits the

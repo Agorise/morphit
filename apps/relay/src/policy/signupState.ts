@@ -2,7 +2,7 @@
  * Morphit relay — the signup-state directory (v1.20.0 fix wave, D3).
  *
  * The persisted daily-ceiling counter and the kill-switch sentinel live in one
- * directory (MORPHIT_RELAY_DATA_DIR, default /var/lib/morphit/relay). Neither
+ * directory (MORPHIT_RELAY_DATA_DIR, default /var/lib/morphit-relay). Neither
  * protection works if that directory is missing or read-only: the ceiling
  * silently resets on every restart and `touch SIGNUPS_DISABLED` does nothing.
  * So at boot the relay creates it and PROVES it can write there (a probe file,

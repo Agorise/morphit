@@ -82,7 +82,7 @@ Look for the tester's request.  Each line shows:
 
 ```sh
 # Is the kill-switch file present?
-ls -la /var/lib/morphit/relay/SIGNUPS_DISABLED 2>/dev/null
+ls -la /var/lib/morphit-relay/SIGNUPS_DISABLED 2>/dev/null
 
 # Is the env-var disable on?  (The unit reads this file; a systemd
 # Environment= override does NOT win over it.)
@@ -102,7 +102,7 @@ Three ways signups get paused:
 
 1. **Kill-switch file exists** → if you put it there during an
    incident, removing it resumes signups within ~1 second.
-   `sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED`
+   `sudo rm /var/lib/morphit-relay/SIGNUPS_DISABLED`
 
 2. **Env-var is `false`** → edit `/etc/morphit/relay.env`, set
    `MORPHIT_RELAY_SIGNUP_ENABLED=true`, restart:
@@ -112,7 +112,7 @@ Three ways signups get paused:
 3. **Daily ceiling reached** → from `signup_stats`, if
    `successful_today >= daily_ceiling`, the cap is hit until
    UTC midnight (the count survives relay restarts: it is kept in
-   `/var/lib/morphit/relay/signup-ceiling.json`).  Real `signup_stats` shape:
+   `/var/lib/morphit-relay/signup-ceiling.json`).  Real `signup_stats` shape:
    `{enabled, daily_ceiling, successful_today,
    current_hour_count, peak_hour_count, peak_other_hours,
    resets_at}`.  This is normal during high beta volume.
@@ -256,10 +256,10 @@ Drop these into a chat with me and I'll start triage.
 
 ```sh
 # Pause signups RIGHT NOW
-sudo touch /var/lib/morphit/relay/SIGNUPS_DISABLED
+sudo touch /var/lib/morphit-relay/SIGNUPS_DISABLED
 
 # Resume signups
-sudo rm /var/lib/morphit/relay/SIGNUPS_DISABLED
+sudo rm /var/lib/morphit-relay/SIGNUPS_DISABLED
 
 # How many signups today? (relay's /v1/health on port 8080)
 curl -s localhost:8080/v1/health?verbose=1 | jq .signup_stats.successful_today

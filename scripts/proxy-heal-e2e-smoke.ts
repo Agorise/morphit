@@ -127,6 +127,18 @@ if (cmd === 'inspect') {
 	else if (fmt.includes('StartedAt')) out('2026-09-27T00:00:00Z\n');
 	done(0);
 }
+if (cmd === 'logs') {
+	// BunkerWeb 1.5: after its scheduler (re)starts it runs its jobs, builds the
+	// config, and the edge tests it: loaded, or refused and the old one kept.
+	const c = st.containers[args[args.length - 1]]; if (!c) done(1);
+	if (/bunkerweb-scheduler/.test(c.image) && (c.gen ?? 0) > 0) {
+		out('[GENERATOR] Generator successfully executed !\n');
+		if (st.refuses) out('[API] Error while sending API request to http://bunkerweb:5000/reload : status = error, msg = config check failed\n[SCHEDULER] Error while reloading bunkerweb, failing over to last working configuration ...\n');
+		out('[API] Successfully sent API request to http://bunkerweb:5000/reload\n');
+	}
+	if (/bunkerity\/bunkerweb:/.test(c.image) && st.refuses && (c.gen ?? 0) > 0) out('2026/09/30 19:01:20 [emerg] 162#162: "modsecurity_rules_file" directive Rule id: 1990001 is duplicated\n');
+	done(0);
+}
 if (cmd === 'exec') {
 	const c = st.containers[args[1]]; if (!c) done(1);
 	const rest = args.slice(2).join(' ');
@@ -248,7 +260,12 @@ async function scenario(
 	files: Record<string, string | Buffer>,
 	composeFiles: string[],
 	containers: Record<string, Ctr>,
-	opts: { acquis?: Record<string, string | null>; answersOn?: string[]; envFile?: string },
+	opts: {
+		acquis?: Record<string, string | null>;
+		answersOn?: string[];
+		envFile?: string;
+		refuses?: boolean;
+	},
 	assertions: (r: {
 		st: any;
 		out: any;
@@ -290,6 +307,7 @@ async function scenario(
 		realDocker: realCompose ? realDocker : '',
 		miniModel: join(w, 'mini.cjs'),
 		answersOn: opts.answersOn ?? ['host-gateway', '172.18.0.1'],
+		refuses: opts.refuses ?? false,
 		acquis: opts.acquis ?? {},
 		containers: {},
 		calls: [],
@@ -671,6 +689,37 @@ async function main(): Promise<void> {
 				'the message reports what was checked, and labels the copies as originals',
 				/put back and checked/.test(warn.join(' ')) &&
 					/Copies of your original files/.test(warn.join(' ')),
+				warn.join(' | ')
+			);
+		}
+	);
+
+	// v1.20.1 — morphitir: BunkerWeb refused every rebuilt config (a duplicated
+	// ModSecurity rule) and silently kept the old one. The heal must stop at
+	// BunkerWeb's verdict, put the settings back, and say nginx's own reason.
+	await scenario(
+		"BunkerWeb refuses the rebuilt config: rolled back, with nginx's reason",
+		{
+			'docker-compose.yml': MORPHITIO,
+			'bunkerweb.env':
+				'SERVER_NAME=morphit.io\nUSE_REVERSE_PROXY=yes\nREVERSE_PROXY_HOST=http://bunkerweb-frontend-1:80\n',
+			'.env.prod': 'COMPOSE_X=1\n'
+		},
+		['docker-compose.yml'],
+		MORPHITIO_CTRS,
+		{ envFile: '.env.prod', refuses: true },
+		({ out, warn }) => {
+			check('rolled back', out.kind === 'rolled-back', JSON.stringify(out));
+			check(
+				"the reason is BunkerWeb's own config test, with nginx's words",
+				/own config test failed \("modsecurity_rules_file" directive Rule id: 1990001 is duplicated\)/.test(
+					(out as { reason?: string }).reason ?? ''
+				),
+				JSON.stringify(out)
+			);
+			check(
+				'the operator is told',
+				/Rule id: 1990001 is duplicated/.test(warn.join(' ')),
 				warn.join(' | ')
 			);
 		}

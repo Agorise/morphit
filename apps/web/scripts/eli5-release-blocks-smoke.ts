@@ -106,6 +106,21 @@ check('`< /dev/null` is present (the payload builder prompts, and would hang)', 
 check('a dry-run precedes the real broadcast', out.indexOf('--dry-run') < out.lastIndexOf('release-broadcast.ts release.json'));
 check('BLOCK 6 repairs the canary via the migrated refresh ~/.morphit/update-canary.sh (upgrade wipes build/canary.txt)', /\.morphit\/update-canary\.sh/.test(out) && !/morphit-canary-setup\.sh/.test(out));
 
+// ─── BLOCK 4 installs the lockfile before running any repo tooling ───
+// (v1.20.0) The laptop repo is refreshed by unpacking the release tarball, which
+// leaves node_modules as it was. The payload builder then imported a library
+// whose installed copy predated the lockfile and died before writing
+// release.json. BLOCK 4's FIRST command must be `npm ci`, ahead of every
+// `npx tsx` in the ceremony.
+{
+	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
+	const firstCmd = (/```\n([^\n]*)/.exec(b4) ?? [])[1] ?? '';
+	check(
+		'BLOCK 4 starts with `npm ci` (unpacking a tarball does not update node_modules)',
+		/^npm ci\b/.test(firstCmd) && out.indexOf('npm ci') < out.indexOf('npx tsx')
+	);
+}
+
 // ─── the manifest must come from the VPS, not a laptop build ───
 check('the manifest is derived from the VPS\u2019s SERVED verify.json', /curl -fsSL https:\/\/morphit\.io\/verify\.json/.test(out));
 check('no laptop build feeds the manifest (cross-machine hashes differ)', !/npm run build/.test(out) && !/build-manifest\.mjs/.test(out));

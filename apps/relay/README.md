@@ -93,7 +93,7 @@ with the rest of the node:
   guided/Ansible install; `apps/relay/keystore.json` after a hand-run
   `init`) — unlocked at boot from a systemd-encrypted credential, never a
   plaintext WIF on disk;
-- state in `/var/lib/morphit/relay` (the signup kill-switch file and the
+- state in `/var/lib/morphit-relay` (the signup kill-switch file and the
   persisted daily-ceiling count).
 
 Every setting is documented in [`ops/env/relay.env.example`](../../ops/env/relay.env.example)
@@ -103,7 +103,7 @@ and `docs/OPERATIONS.md`.
 
 | `code` | Meaning |
 | --- | --- |
-| `signups_disabled` (503) | Signups are paused: `/var/lib/morphit/relay/SIGNUPS_DISABLED` exists, or `MORPHIT_RELAY_SIGNUP_ENABLED=false` |
+| `signups_disabled` (503) | Signups are paused: `/var/lib/morphit-relay/SIGNUPS_DISABLED` exists, or `MORPHIT_RELAY_SIGNUP_ENABLED=false` |
 | `daily_ceiling_reached` (503) | Today's `MORPHIT_RELAY_SIGNUP_DAILY_CEILING` is used up (resets at UTC midnight; survives restarts) |
 | `relay_out_of_funds` (503) | The relay can't cover the live fee + 3 BLURT, or its last balance poll is over 90 s old |
 | `relay_fee_spike` (503) | The chain's live `account_creation_fee` is more than 1.5× `MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT`; nothing is broadcast or spent until you confirm the new fee and set it |

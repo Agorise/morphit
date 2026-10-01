@@ -25,7 +25,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { healBunkerWebWaf, restartFrontendContainer } from '../src/commands/upgrade.ts';
+import {
+	healBunkerWebWaf,
+	restartFrontendContainer,
+	selfHealSteps
+} from '../src/commands/upgrade.ts';
 import { runBunkerWeb } from '../src/commands/bunkerweb.ts';
 import {
 	collectInstallSummary,
@@ -74,10 +78,35 @@ if (cmd === 'inspect') {
 	done(0);
 }
 if (cmd === 'restart') { st.restarted.push(args[1]); done(st.containers[args[1]] ? 0 : 1); }
+if (cmd === 'logs') {
+	// BunkerWeb's verdict appears only after something restarted it.
+	const name = args[args.length - 1];
+	const kicked = st.restarted.length > 0 || st.compose.some((c) => c.sub[0] === 'up');
+	if (!kicked) done(0);
+	if (/scheduler/.test(st.containers[name] ? st.containers[name].image : '')) out(st.schedLog);
+	else out(st.edgeLog);
+	done(0);
+}
 if (cmd === 'exec') {
-	const c = st.containers[args[1]]; if (!c) done(1);
-	st.execs.push(args[1]);
-	const rest = args.slice(2).join(' ');
+	let k = 1; const envs = {};
+	while (args[k] && args[k].startsWith('-')) {
+		if (args[k] === '-e') { const [a, ...b] = args[k + 1].split('='); envs[a] = b.join('='); k += 2; } else k++;
+	}
+	const c = st.containers[args[k]]; if (!c) done(1);
+	st.execs.push(args[k]);
+	if (args[k + 1] === 'python3') {
+		if (envs.MODE === 'list') { out(JSON.stringify(st.ruleCopies)); done(0); }
+		if (envs.MODE === 'remove') {
+			const ids = envs.IDS.split(',').filter(Boolean).map(Number);
+			st.ruleCopies.rows = st.ruleCopies.rows.filter((r) => !ids.includes(r.id));
+			st.removedIds.push(...ids);
+			out(JSON.stringify({ backup: '/data/lib/db.pre-morphit-dedupe.sqlite3', rows: ids.length, moved: [] }));
+			done(0);
+		}
+		if (envs.MODE === 'restore') { st.restoredCount++; out('ok'); done(0); }
+		done(1);
+	}
+	const rest = args.slice(k + 1).join(' ');
 	if (rest.includes('nginx -T')) { out(isEdge(c) ? st.edgeLive : st.otherLive); done(0); }
 	if (rest.includes('for d in')) { out('/data/configs\n'); done(0); }
 	if (rest.includes('test -s')) { out('yes\n'); done(0); }
@@ -132,8 +161,28 @@ afterEach(() => {
 	for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+const ruleRow = (id: number, name: string, method: string) => ({
+	id,
+	serviceId: null,
+	type: 'modsec',
+	name,
+	method,
+	checksum: String(id),
+	data: Buffer.from('SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:1990001,phase:1"').toString(
+		'base64'
+	)
+});
+
 function morphitIo(
-	opts: { containers?: Record<string, Ctr>; env?: string; noEnvFileInModel?: boolean } = {}
+	opts: {
+		containers?: Record<string, Ctr>;
+		env?: string;
+		noEnvFileInModel?: boolean;
+		schedLog?: string;
+		edgeLog?: string;
+		ruleCopies?: { rows: ReturnType<typeof ruleRow>[]; files: string[] };
+		edgeLive?: string;
+	} = {}
 ) {
 	const w = mkdtempSync(join(tmpdir(), 'bw-identify-'));
 	dirs.push(w);
@@ -156,8 +205,17 @@ function morphitIo(
 	);
 	writeFileSync(join(w, 'bin/docker'), FAKE);
 	writeFileSync(join(w, 'bin/sleep'), '#!/bin/sh\nexit 0\n');
-	writeFileSync(join(w, 'bin/curl'), '#!/bin/sh\nprintf 200\n');
-	for (const b of ['docker', 'sleep', 'curl']) chmodSync(join(w, 'bin', b), 0o755);
+	writeFileSync(
+		join(w, 'bin/curl'),
+		'#!/bin/sh\ncase "$*" in *v1/health*) printf "${FAKE_CURL_API:-200}";; *) printf "${FAKE_CURL_HOME:-200}";; esac\n'
+	);
+	writeFileSync(
+		join(w, 'bin/systemd-run'),
+		`#!/bin/sh\nprintf '%s\\n' "$@" > ${join(w, 'systemd-run.args')}\nexit 0\n`
+	);
+	writeFileSync(join(w, 'bin/systemctl'), '#!/bin/sh\nexit 3\n');
+	for (const b of ['docker', 'sleep', 'curl', 'systemd-run', 'systemctl'])
+		chmodSync(join(w, 'bin', b), 0o755);
 	const ctrs: Record<string, Ctr> = opts.containers ?? {
 		// docker ps order: frontend FIRST (the order that fooled the name match).
 		'bunkerweb-frontend-1': { service: 'frontend', image: 'bunkerweb-frontend', mounts: [build] },
@@ -213,13 +271,21 @@ function morphitIo(
 		},
 		edgeService: 'bunkerweb',
 		envPath,
-		edgeLive: WIDE,
+		edgeLive: opts.edgeLive ?? WIDE,
 		cleanLive: CLEAN,
 		otherLive: FRONTEND_LIVE,
 		calls: [] as string[][],
 		compose: [] as Array<{ g: { p: string; d: string; f: string[]; e: string[] }; sub: string[] }>,
 		execs: [] as string[],
-		restarted: [] as string[]
+		restarted: [] as string[],
+		schedLog: opts.schedLog ?? 'Successfully sent API request to http://bunkerweb:5000/reload\n',
+		edgeLog: opts.edgeLog ?? '',
+		ruleCopies: opts.ruleCopies ?? {
+			rows: [ruleRow(5, 'morphit_json_api_off', 'scheduler')],
+			files: []
+		},
+		removedIds: [] as number[],
+		restoredCount: 0
 	};
 	const statePath = join(w, 'state.json');
 	writeFileSync(statePath, JSON.stringify(state));
@@ -366,6 +432,119 @@ describe('healBunkerWebWaf on a morphit.io-shaped stack (all containers named bu
 		expect(r.st.execs).toEqual([]);
 		expect(ups(r.st)).toEqual([]);
 		expect(r.out).not.toMatch(/ERR/);
+	});
+});
+
+// v1.20.1 — morphitir (2026-09-30): the exemption stored twice made BunkerWeb
+// refuse every new config for three weeks while every container looked healthy.
+describe('healBunkerWebWaf keeps ONE copy of the API exemption and reads BunkerWeb’s own verdict', () => {
+	const STEADY = `SERVER_NAME=morphitir.com\n${STEADY_ABC}USE_REAL_IP=no\n`;
+	const TWO = () => ({
+		rows: [
+			ruleRow(5, 'morphit_json_api_off', 'scheduler'),
+			ruleRow(6, 'morphit-json-api-off', 'manual')
+		],
+		files: []
+	});
+	const withCurl = async <T>(api: string, home: string, fn: () => Promise<T>): Promise<T> => {
+		process.env.FAKE_CURL_API = api;
+		process.env.FAKE_CURL_HOME = home;
+		try {
+			return await fn();
+		} finally {
+			delete process.env.FAKE_CURL_API;
+			delete process.env.FAKE_CURL_HOME;
+		}
+	};
+
+	it('removes the extra copy, rebuilds BunkerWeb, and proves the API passes while the site stays guarded', async () => {
+		const box = morphitIo({ env: STEADY, ruleCopies: TWO(), edgeLive: CLEAN });
+		const r = await withCurl('200', '403', () =>
+			box.run(() => healBunkerWebWaf(box.envPath, box.build))
+		);
+		expect(r.threw).toBeNull();
+		expect(r.st.removedIds).toEqual([6]);
+		expect(r.st.ruleCopies.rows.map((x) => x.name)).toEqual(['morphit_json_api_off']);
+		expect(r.st.restarted).toContain(SCHED);
+		expect(r.out).toMatch(/removed 1 extra copy/);
+		expect(r.out).toMatch(/built, tested and loaded its new settings/);
+		expect(r.out).toMatch(/exemption verified live .*stored 1 time/);
+		expect(r.st.restoredCount).toBe(0);
+	});
+
+	it('BunkerWeb refusing the rebuilt config is reported with nginx’s own reason — never as success', async () => {
+		const box = morphitIo({
+			env: STEADY,
+			ruleCopies: TWO(),
+			edgeLive: CLEAN,
+			schedLog:
+				'[API] Error while sending API request to http://bunkerweb:5000/reload : status = error, msg = config check failed\n' +
+				'[SCHEDULER] Error while reloading bunkerweb, failing over to last working configuration ...\n' +
+				'[API] Successfully sent API request to http://bunkerweb:5000/reload\n',
+			edgeLog:
+				'2026/09/30 19:01:20 [emerg] 162#162: "modsecurity_rules_file" directive Rule id: 1990001 is duplicated\n'
+		});
+		const r = await withCurl('200', '403', () =>
+			box.run(() => healBunkerWebWaf(box.envPath, box.build))
+		);
+		expect(r.out).toMatch(
+			/own config test failed \("modsecurity_rules_file" directive Rule id: 1990001 is duplicated\)/
+		);
+		expect(r.out).not.toMatch(/built, tested and loaded/);
+	});
+
+	it('puts the copies back when the API is blocked after removing one (never leaves /v1/ without its exemption)', async () => {
+		const box = morphitIo({ env: STEADY, ruleCopies: TWO(), edgeLive: CLEAN });
+		const r = await withCurl('403', '403', () =>
+			box.run(() => healBunkerWebWaf(box.envPath, box.build))
+		);
+		expect(r.st.removedIds).toEqual([6]);
+		expect(r.st.restoredCount).toBe(1);
+		expect(r.out).toMatch(/so it was put back/);
+	});
+
+	it('one copy → nothing removed, nothing restarted', async () => {
+		const box = morphitIo({ env: STEADY, edgeLive: CLEAN });
+		const r = await withCurl('200', '403', () =>
+			box.run(() => healBunkerWebWaf(box.envPath, box.build))
+		);
+		expect(r.st.removedIds).toEqual([]);
+		expect(r.st.restarted).toEqual([]);
+		expect(ups(r.st)).toEqual([]);
+		expect(r.out).toMatch(/exemption verified live .*stored 1 time/);
+	});
+
+	it('never writes the exemption as a second, file-based copy', async () => {
+		const box = morphitIo();
+		const r = await withCurl('200', '403', () =>
+			box.run(() => healBunkerWebWaf(box.envPath, box.build))
+		);
+		expect(r.st.calls.some((a) => a.join(' ').includes('morphit-json-api-off.conf'))).toBe(false);
+		expect(r.env).toMatch(/^CUSTOM_CONF_MODSEC_morphit_json_api_off=/m);
+	});
+});
+
+describe('v1.20.1: on a BunkerWeb box the web-proxy heals run in the background', () => {
+	it('the post-upgrade step starts `__web-heal` as the morphit-web-heal unit and changes nothing itself', async () => {
+		const box = morphitIo();
+		process.env.MORPHIT_WEB_HEAL_STATE = join(box.w, 'web-heal.json');
+		process.env.MORPHIT_WEB_HEAL_LOG = join(box.w, 'web-heal.log');
+		const before = readFileSync(box.envPath, 'utf8');
+		try {
+			const step = selfHealSteps().find(([n]) => n === 'the web-proxy heals')!;
+			const r = await box.run(() => step[1]());
+			expect(r.threw).toBeNull();
+			const args = readFileSync(join(box.w, 'systemd-run.args'), 'utf8').split('\n');
+			expect(args).toContain('--unit=morphit-web-heal');
+			expect(args).toContain('__web-heal');
+			expect(r.env).toBe(before);
+			expect(ups(r.st)).toEqual([]);
+			expect(r.st.restarted).toEqual([]);
+			expect(r.out).toMatch(/being applied in the background/);
+		} finally {
+			delete process.env.MORPHIT_WEB_HEAL_STATE;
+			delete process.env.MORPHIT_WEB_HEAL_LOG;
+		}
 	});
 });
 

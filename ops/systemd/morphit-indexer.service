@@ -40,7 +40,9 @@ WorkingDirectory=/opt/morphit/apps/indexer
 # an operator's `morphit-ops edit`. Those keys live only in morphit.config.env.
 # loadConfig() reads process.env, so either path works.
 ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/indexer.env; do [ -f "$f" ] && . "$f"; done; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
-Restart=on-failure
+# v1.20.1: always — an exit with status 0 (a drained event loop) must restart
+# too; on-failure left morphitir's relay down for three days that way.
+Restart=always
 RestartSec=5
 KillSignal=SIGTERM
 TimeoutStopSec=30
