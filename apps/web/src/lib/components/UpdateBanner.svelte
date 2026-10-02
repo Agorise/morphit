@@ -1,14 +1,9 @@
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
-	import { withHiddenFloor } from '$net/transportBudget';
 	import { browser } from '$app/environment';
 	import { runningVersion } from '$stores/release';
-	import { fetchWithTimeout } from '$net/fetchWithTimeout';
-	import {
-		parseDeployedVersion,
-		deployedVersionDiffers,
-		verifyJsonPollUrl
-	} from '$lib/updates/deployedVersion';
+	import { deployedVersionDiffers } from '$lib/updates/deployedVersion';
+	import { readServedVersion, SERVED_VERSION_REUSE_MS } from '$lib/updates/servedVersion';
 
 	// v1.20.2 (PageSpeed) — run `fn` once the page has finished loading and the
 	// browser is idle, so the ~80 KB verify.json poll never competes with the
@@ -185,19 +180,17 @@
 		// every few seconds used to download it on every switch.
 		const MIN_POLL_GAP_MS = 2 * 60_000;
 		let lastPollAt = -Infinity;
-		async function pollDeployedVersion(): Promise<void> {
+		// v1.20.3 — through the shared reader: the page-load poll (`reuse`) takes
+		// the answer the release check just read (one ~80 KB download, not two);
+		// every later poll asks afresh.
+		async function pollDeployedVersion(reuse = false): Promise<void> {
 			if (cancelled) return;
 			const now = Date.now();
 			if (now - lastPollAt < MIN_POLL_GAP_MS) return;
 			lastPollAt = now;
 			try {
-				const res = await fetchWithTimeout(
-					verifyJsonPollUrl(),
-					{ cache: 'no-store', credentials: 'same-origin' },
-					withHiddenFloor(10_000)
-				);
-				if (cancelled || !res.ok) return;
-				const deployed = parseDeployedVersion(await res.text());
+				const deployed = await readServedVersion({ maxAgeMs: reuse ? SERVED_VERSION_REUSE_MS : 0 });
+				if (cancelled || deployed === null) return;
 				deployedVersion = deployed;
 				if (deployedVersionDiffers(deployed, runningVersion)) {
 					newerVersionDeployed = true;
@@ -229,7 +222,7 @@
 		}
 
 		void check();
-		const cancelFirstPoll = whenPageSettled(() => void pollDeployedVersion());
+		const cancelFirstPoll = whenPageSettled(() => void pollDeployedVersion(true));
 		// Re-check periodically while the tab is open.
 		const timer = setInterval(check, 60_000);
 		// Slower deployed-version poll: verify.json carries the full asset-hash

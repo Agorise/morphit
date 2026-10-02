@@ -109,6 +109,42 @@ for (const f of files) {
 	);
 }
 
+// ── 1b. the article says how OFTEN, and that matches the code (v1.20.3) ──
+// The check used to run once per session and the article said so. Since
+// v1.20.3 a good answer is remembered for 24 h, while the site stays on the same
+// version ($net/releaseCache), so the article says "at most once a day (and once
+// after each site update)" and that it is two small requests — what a visitor
+// sees in the Network tab. No locale may still say "once per session".
+{
+	const cacheSrc = readFileSync(resolve(__dirname, '..', 'src', 'lib', 'net', 'releaseCache.ts'), 'utf8');
+	const ttl24h = /RELEASE_CACHE_TTL_MS\s*=\s*24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/.test(cacheSrc);
+	const enA = (JSON.parse(readFileSync(join(LOCALES, 'en.json'), 'utf8')) as { faq: { entries: Record<string, { a: string }> } }).faq.entries[KEY]!.a;
+	check(
+		'1b EN: the article says "at most once a day", "after each site update" and "two small requests" — as the code does',
+		ttl24h && /at most once a day/i.test(enA) && /after each site update/i.test(enA) && /two small requests/i.test(enA),
+		ttl24h ? 'article wording out of step with the code' : 'RELEASE_CACHE_TTL_MS is no longer 24 h — update the article in all 10 locales'
+	);
+	const ONCE_PER_SESSION: Record<string, RegExp> = {
+		en: /once per session/i,
+		es: /una vez por sesi[oó]n/i,
+		de: /einmal pro sitzung/i,
+		fr: /une fois par session/i,
+		it: /una volta per sessione/i,
+		pl: /raz na sesj[eę]/i,
+		ru: /раз за сессию/i,
+		fa: /یک بار در هر نشست/,
+		'zh-CN': /每次会话一次/,
+		'zh-HK': /每次工作階段一次/
+	};
+	for (const f of files) {
+		const loc = f.replace('.json', '');
+		const d = JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
+		const a = ((((d.faq as Json)?.entries as Json)?.[KEY] as { a?: string }) ?? {}).a ?? '';
+		const re = ONCE_PER_SESSION[loc];
+		check(`1b.${loc} the article no longer says "once per session"`, re !== undefined && !re.test(a), re ? '' : 'no pattern for this locale');
+	}
+}
+
 // ── 2. no surviving absolute claim that the direct call falsifies ───
 for (const f of files) {
 	const loc = f.replace('.json', '');

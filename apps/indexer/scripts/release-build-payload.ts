@@ -299,6 +299,25 @@ async function gatherInputs(): Promise<Inputs> {
  *  inputs.  Returns null when the whole block is omitted.  GPG prints
  *  fingerprints with spaces; we strip them so the validator (which
  *  forbids spaces) accepts a copy-pasted fingerprint. */
+/** Morphit's stable IPNS name — the same for every release (keep in step with
+ *  apps/web/src/lib/ipns.ts MORPHIT_IPNS_NAME; a test compares them). Every
+ *  zero-clearnet node up to v1.20.2 refuses a release without it. */
+export const CANONICAL_IPNS_NAME = 'k51qzi5uqu5dgkxmhwchxq4f9yiggxqyine7ang3xdz1ohmwc8csya1sqtcicf';
+
+/** The `/ipfs/<cid>` an IPNS record points at (its Value field), or null. The
+ *  record is protobuf; the value is plain text inside it, so a byte scan finds
+ *  it without a protobuf parser. */
+export function ipnsRecordTarget(recordB64: string): string | null {
+	let bytes: Buffer;
+	try {
+		bytes = Buffer.from(recordB64, 'base64');
+	} catch {
+		return null;
+	}
+	const m = /\/ipfs\/([a-z0-9]{46,})/.exec(bytes.toString('latin1'));
+	return m ? m[1]! : null;
+}
+
 function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	const sha = i.sourceSha256.trim().toLowerCase();
 	const offlineSha = (i.offlineSha256 ?? '').trim().toLowerCase();
@@ -371,8 +390,35 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	// indexer) with no hand-signed .asc. Optional; omitted if not provided.
 	if (/^[0-9a-f]{64}$/.test(offlineSha)) value.offline_sha256 = offlineSha;
 	if (cid !== '') value.ipfs_cid = cid;
-	if (ipns !== '') value.ipns_name = ipns;
-	if (ipnsRec !== '') value.ipns_record = ipnsRec;
+	else {
+		// v1.20.3: release.yml skips the CID when it cannot download Kubo
+		// (v1.20.2), and a zero-clearnet instance then cannot fetch the release.
+		process.stderr.write(
+			'\n⚠ no ipfs_cid — zero-clearnet instances (Tor/I2P only) cannot fetch this release.\n' +
+				'  The release box printed it during its upgrade ("hosted vX.Y.Z → bafy…"):\n' +
+				'  export MORPHIT_BUILD_IPFS_CID=<that CID> and build again.\n\n'
+		);
+	}
+	// v1.20.3: the name is fixed, so it is always included — v1.20.2 went out
+	// without it (its anchor had none) and zero-clearnet nodes refused it.
+	value.ipns_name = ipns !== '' ? ipns : CANONICAL_IPNS_NAME;
+	if (ipnsRec !== '') {
+		// v1.20.3: a record must point at THIS release. v1.20.2's first dry-run
+		// carried v1.20.1's record (and CID), left in the laptop's terminal by
+		// the previous ceremony's `source`.
+		const target = ipnsRecordTarget(ipnsRec);
+		if (cid === '') {
+			fail(
+				'an IPNS record was given but no ipfs_cid to check it against — unset MORPHIT_BUILD_IPNS_RECORD (it is probably left over from an earlier release)'
+			);
+		}
+		if (target !== cid) {
+			fail(
+				`the IPNS record points at ${target ?? '(unreadable)'}, not this release's ipfs_cid ${cid} — it is left over from an earlier release; unset MORPHIT_BUILD_IPNS_RECORD (open a new terminal) and build again`
+			);
+		}
+		value.ipns_record = ipnsRec;
+	}
 	if (mirrorList.length > 0) value.mirrors = mirrorList;
 	return value as unknown as ReleaseDistributionBlock;
 }

@@ -48,7 +48,13 @@ function check(name: string, ok: boolean): void {
 // 1 — the store reads the SERVED version from /verify.json.
 check(
 	'release store fetches the served version from verify.json',
-	/verifyJsonPollUrl|parseDeployedVersion/.test(src) && /fetchServedVersion/.test(src)
+	// v1.20.3: through the shared reader (one download with the update check),
+	// which builds the cache-busted verify.json URL itself.
+	/fetchServedVersion/.test(src) &&
+		/readServedVersion\s*\(/.test(src) &&
+		/verifyJsonPollUrl\s*\(/.test(
+			readFileSync(join(REPO, 'apps/web/src/lib/updates/servedVersion.ts'), 'utf-8')
+		)
 );
 
 // 2 — the asset check is GATED: a served-vs-announced version mismatch skips

@@ -83,7 +83,10 @@ export function hiddenReleaseUrls(gatewayBase: string, target: HiddenUpgradeTarg
 	const urls: string[] = [];
 	const cid = (target.ipfsCid ?? '').trim();
 	if (/^[a-z0-9]{46,}$/i.test(cid)) urls.push(`${base}/ipfs/${cid}/${path}`);
-	urls.push(`${base}/ipns/${encodeURIComponent(target.ipnsName)}/${path}`);
+	// v1.20.3: only when the release names one (a CID alone is enough).
+	if (target.ipnsName.trim() !== '') {
+		urls.push(`${base}/ipns/${encodeURIComponent(target.ipnsName)}/${path}`);
+	}
 	return urls;
 }
 

@@ -37,7 +37,8 @@
  *   • Payload structurally invalid → 'invalid_payload'.  Malformed
  *     op; treat as no_release for UI purposes but log details.
  *
- * Refresh cadence: once per session at app boot is sufficient.
+ * Refresh cadence: at app boot, at most once a day per browser since v1.20.3
+ * (a verified answer is remembered for 24 h by ./releaseCache.ts).
  * Releases are infrequent (a handful per year).  Optional periodic
  * refresh in long-lived sessions is in the store.
  */
@@ -47,22 +48,24 @@ import { MORPHIT_OFFICIAL_POSTING_PUBKEY } from '$net/config';
 import { validateReleasePayload, type ReleaseValidateError } from '@morphit/release-schema';
 import { checkPinnedKeyInAuthority } from '@morphit/release-schema';
 import type { ReleasePayloadV1 } from '@morphit/release-schema';
+import { RELEASE_SIGNER_ACCOUNT } from './releaseCache';
 
 // Re-export for backward-compat with anything that imports it from
 // here.  releaseTrustAnchor.ts is the new canonical module.
 export { checkPinnedKeyInAuthority } from '@morphit/release-schema';
 export type { PubkeyAuthorityCheck } from '@morphit/release-schema';
 
-/** The signer account whose release ops we follow.  Mainnet
- *  default; configurable per-deployment for sibling instances that
- *  run their own release-discovery cadence. */
-export const RELEASE_SIGNER_ACCOUNT = 'morphit';
+/** The signer account whose release ops we follow (defined in ./releaseCache,
+ *  which must not import the chain client). */
+export { RELEASE_SIGNER_ACCOUNT };
 
-/** How many history entries to walk when looking for the latest
- *  release op.  Large enough that even an active operator account
- *  doesn't bury the release op beyond reach.  10K is the chain RPC
- *  per-call cap. */
-const HISTORY_WALK_LIMIT = 10_000;
+/** How many history entries to walk when looking for the latest release op,
+ *  tried in order. v1.20.3: the last 100 entries first — a few KB, and the
+ *  latest release is normally among them — and the full 10,000 (the chain RPC's
+ *  per-call cap, ~115 KB) only when it is not. It used to be 10,000 on every
+ *  visit. */
+export const RELEASE_HISTORY_WINDOWS = [100, 10_000] as const;
+const HISTORY_WALK_LIMIT = RELEASE_HISTORY_WINDOWS[RELEASE_HISTORY_WINDOWS.length - 1]!;
 
 export type ReleaseFetchError =
 	/** Chain RPC unreachable / all endpoints failed. */
@@ -118,8 +121,10 @@ export async function fetchVerifiedRelease(): Promise<ReleaseFetchResult> {
 	//
 	// ─── THE PRIVACY COST, STATED (v1.7.5, t.txt #10) ──────────────────────────
 	// This call is the ONE place a user's browser touches a third-party host, and
-	// that host sees their IP. It fires once per session, from `initRelease()` in
-	// the root layout, so it happens on EVERY page — including the explorer.
+	// that host sees their IP. It runs from `initRelease()` in the root layout, so
+	// on every page — but since v1.20.3 a successful answer is remembered in the
+	// browser for 24 h (./releaseCache.ts), so a returning visitor reaches a node
+	// at most once a day; and it reads 100 history entries before 10,000.
 	// Previously this file argued the security case at length and never named the
 	// cost, which made the tradeoff invisible to the next reader.
 	//
@@ -149,13 +154,16 @@ export async function fetchVerifiedRelease(): Promise<ReleaseFetchResult> {
 	const client = getDirectChainClient();
 
 	// ─── 1. Find the latest release op in @morphit's history.  ──
-	let opResult;
+	let opResult = null;
 	try {
-		opResult = await client.getLatestCustomJson<unknown>(
-			RELEASE_SIGNER_ACCOUNT,
-			'morphit_release_v1',
-			HISTORY_WALK_LIMIT
-		);
+		for (const window of RELEASE_HISTORY_WINDOWS) {
+			opResult = await client.getLatestCustomJson<unknown>(
+				RELEASE_SIGNER_ACCOUNT,
+				'morphit_release_v1',
+				window
+			);
+			if (opResult !== null) break;
+		}
 	} catch (err) {
 		return {
 			ok: false,

@@ -391,8 +391,21 @@ jobs:
           # 1. Install the pinned Kubo (checksum-verified) into a scratch dir.
           KUBO_DIR="$(mktemp -d)"
           KTAR="kubo_${KUBO_VERSION}_linux-amd64.tar.gz"
-          if ! curl -fsSL "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/${KTAR}" -o "${KUBO_DIR}/${KTAR}"; then
-            echo "WARNING: could not download Kubo ${KUBO_VERSION} — no ipfs_cid this run (release proceeds)." >&2
+          # v1.20.3: v1.20.2's run hung ~5 min on dist.ipfs.tech and released with
+          # no ipfs_cid, so zero-clearnet instances could not fetch it. Bounded
+          # retries, then the same pinned binary from Kubo's GitHub release; the
+          # SHA-512 pin below checks whichever answered.
+          KOK=no
+          for KURL in "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/${KTAR}" "https://github.com/ipfs/kubo/releases/download/${KUBO_VERSION}/${KTAR}"; do
+            if curl -fsSL --connect-timeout 20 --max-time 180 --retry 3 --retry-delay 5 --retry-all-errors "$KURL" -o "${KUBO_DIR}/${KTAR}"; then
+              KOK=yes
+              echo "Kubo ${KUBO_VERSION} from ${KURL}"
+              break
+            fi
+            echo "WARNING: Kubo download failed from ${KURL}" >&2
+          done
+          if [ "$KOK" != yes ]; then
+            echo "::warning::could not download Kubo ${KUBO_VERSION} — NO ipfs_cid this run: Block 4 must take the CID the release box prints when it seeds." >&2
             exit 0
           fi
           GOT=$(sha512sum "${KUBO_DIR}/${KTAR}" | awk '{print $1}')

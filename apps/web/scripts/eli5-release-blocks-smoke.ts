@@ -121,6 +121,19 @@ check('BLOCK 6 repairs the canary via the migrated refresh ~/.morphit/update-can
 	);
 }
 
+// ─── (v1.20.3) BLOCK 4 clears the previous ceremony's values first ───
+// `source` only SETS what the anchor names. v1.20.2's anchor had no CID, so the
+// CID and IPNS record that v1.20.1's ceremony had sourced into the same terminal
+// went into the v1.20.2 payload. The unset must come BEFORE the source.
+{
+	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
+	const unsetAt = b4.indexOf("unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')");
+	check(
+		'BLOCK 4 unsets every MORPHIT_BUILD_* value before sourcing the anchor',
+		unsetAt !== -1 && unsetAt < b4.indexOf('source /tmp/morphit-anchor.env')
+	);
+}
+
 // ─── the manifest must come from the VPS, not a laptop build ───
 check('the manifest is derived from the VPS\u2019s SERVED verify.json', /curl -fsSL https:\/\/morphit\.io\/verify\.json/.test(out));
 check('no laptop build feeds the manifest (cross-machine hashes differ)', !/npm run build/.test(out) && !/build-manifest\.mjs/.test(out));

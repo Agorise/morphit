@@ -142,13 +142,10 @@ export const chainPinnedTreasury: Readable<
  *  sanctioned browser→Blurt-node disclosure, so it adds no privacy cost. */
 async function fetchServedVersion(): Promise<string | null> {
 	try {
-		const { parseDeployedVersion, verifyJsonPollUrl } = await import(
-			'$lib/updates/deployedVersion'
-		);
-		const { fetchWithTimeout } = await import('$net/fetchWithTimeout');
-		const res = await fetchWithTimeout(verifyJsonPollUrl(), { cache: 'no-store' });
-		if (!res.ok) return null;
-		return parseDeployedVersion(await res.text());
+		// v1.20.3: shared with the update check (UpdateBanner), so the ~80 KB
+		// file is downloaded once on page load, not once per reader.
+		const { readServedVersion } = await import('$lib/updates/servedVersion');
+		return await readServedVersion();
 	} catch {
 		return null;
 	}
@@ -163,8 +160,26 @@ export async function initRelease(): Promise<void> {
 	initStarted = true;
 
 	releaseStore.set({ kind: 'loading' });
-	const { fetchVerifiedRelease } = await import('$net/releaseFetch');
-	const fetchResult = await fetchVerifiedRelease();
+	// v1.20.3: a successful check is remembered in this browser for 24 h, while
+	// it announced the version this tab runs ($net/releaseCache), so a returning
+	// visitor reaches a Blurt node — the one third-party request — at most once
+	// a day. Only a verified answer is stored; a failure is asked again next time.
+	const { readCachedRelease, writeCachedRelease } = await import('$net/releaseCache');
+	const { safeLocal } = await import('$lib/utils/safeStorage');
+	const storage = {
+		getItem: (k: string) => safeLocal.get(k),
+		setItem: (k: string, v: string) => void safeLocal.set(k, v),
+		removeItem: (k: string) => void safeLocal.remove(k)
+	};
+	const cached = readCachedRelease(storage, Date.now(), RUNNING_VERSION);
+	let fetchResult: { ok: true; value: VerifiedRelease } | { ok: false; error: ReleaseFetchError };
+	if (cached !== null) {
+		fetchResult = { ok: true, value: cached as VerifiedRelease };
+	} else {
+		const { fetchVerifiedRelease } = await import('$net/releaseFetch');
+		fetchResult = await fetchVerifiedRelease();
+		if (fetchResult.ok) writeCachedRelease(storage, Date.now(), fetchResult.value);
+	}
 	if (!fetchResult.ok) {
 		releaseStore.set({ kind: 'error', error: fetchResult.error });
 		return;

@@ -2402,11 +2402,11 @@ Privacy is Morphit's #1 priority and never sees or logs your IP address. No cook
 
 Your orders, chat, balances and the block explorer all go through your operator's indexer. Morphit's indexers proxy those reads so your browser never touches third-party endpoints.
 
-**The one exception.** Once per session your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current. That node sees the IP that asked. You can watch it in the Network tab: one request out, everything else to Morphit.
+**The one exception.** At most once a day (and once after each site update), your browser asks a network node — a privately-run RPC endpoint — directly for the signed release record that says which version of Morphit is current: two small requests. That node sees the IP that asked. You can watch it in the Network tab; everything else goes to Morphit.
 
 **Why.** That record is how your browser knows the code it just ran is really ours. Rogue nodes can't forge it, and none of your data rides along with the request. Route it through your operator and a dishonest one could pair an old, genuinely-signed record with an old, backdoored build — and your browser would say all clear, forever. A replayed record carries a real signature, so checking signatures misses it. We would rather one node learn that an IP loaded a page than let an operator quietly pin you to a backdoor.
 
-**What that node learns.** An IP, and that someone asked for @morphit's release history. Not your username, orders, chat or balances. None of that leaves your operator's indexer.
+**What that node learns.** An IP, and that someone asked for @morphit's release history and account record. Not your username, orders, chat or balances. None of that leaves your operator's indexer.
 
 **Use Tor or a VPN and this is closed.** If you are here for Monero you almost certainly already do — so it is already closed for you. It hides your IP from every network node, every endpoint, and your ISP at once. Same advice we give for broadcasting XMR, and better than anything we could build into the app, because it protects you from us too.
 

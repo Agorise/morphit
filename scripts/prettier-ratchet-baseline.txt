@@ -710,7 +710,6 @@ apps/web/src/lib/seo/routes.test.ts
 apps/web/src/lib/seo/routes.ts
 apps/web/src/lib/settings/settingsSync.ts
 apps/web/src/lib/shipping/carriers.ts
-apps/web/src/lib/storage/storageKeyRegistry.ts
 apps/web/src/lib/stores/identity.test.ts
 apps/web/src/lib/stores/identity.ts
 apps/web/src/lib/stores/pendingEcho.ts

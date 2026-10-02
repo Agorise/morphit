@@ -126,6 +126,26 @@ interface DirectoryResponse {
 	}>;
 }
 
+/** v1.20.3 — the CID pattern the peer URL builder accepts. */
+const CID_RE = /^[a-z0-9]{46,}$/i;
+
+/**
+ * What the on-chain release must carry before a zero-clearnet node fetches
+ * anything (null = enough). The SHA-256 is the trust anchor and always
+ * required. The bytes are located by the CID (tried first) or the IPNS name
+ * (fallback): either one is enough. v1.20.2 went out with a CID but no name,
+ * and the old rule (the name required) left morphitlat unable to upgrade.
+ */
+export function hiddenReleaseTargetProblem(sha: string, ipns: string, cid: string): string | null {
+	if (!/^[0-9a-f]{64}$/i.test(sha)) {
+		return 'hidden upgrade: on-chain release has no source_sha256 yet — cannot verify; staying put (fail-closed)';
+	}
+	if (ipns === '' && !CID_RE.test(cid)) {
+		return 'hidden upgrade: on-chain release has neither an ipfs_cid nor an ipns_name — nothing to fetch it by; staying put (fail-closed)';
+	}
+	return null;
+}
+
 export interface HiddenUpgradeResolution {
 	readonly tarballPath: string;
 	readonly version: string;
@@ -183,10 +203,11 @@ export async function tryResolveHiddenUpgrade(
 	const sha = rel.distribution?.source_sha256?.trim() ?? '';
 	const ipns = rel.distribution?.ipns_name?.trim() ?? '';
 	const cid = rel.distribution?.ipfs_cid?.trim() ?? '';
-	if (!/^[0-9a-f]{64}$/i.test(sha) || ipns === '') {
-		throw new Error('hidden upgrade: on-chain release has no source_sha256 / ipns_name yet — cannot verify; staying put (fail-closed)');
-	}
-	opts.onProgress?.(`target v${version}, IPNS ${ipns} — verifying against the on-chain SHA-256 (no clearnet)`);
+	const problem = hiddenReleaseTargetProblem(sha, ipns, cid);
+	if (problem !== null) throw new Error(problem);
+	opts.onProgress?.(
+		`target v${version}, ${CID_RE.test(cid) ? `CID ${cid}` : `IPNS ${ipns}`} — verifying against the on-chain SHA-256 (no clearnet)`
+	);
 
 	// 2. Peers: federation directory → hidden gateway bases (auto-discovered).
 	const dir = await getLocalIndexerJson<DirectoryResponse>(base, '/v1/instances');

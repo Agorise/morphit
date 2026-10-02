@@ -80,74 +80,287 @@ export interface StorageKeySpec {
 
 export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	// ─── SESSION ──────────────────────────────────────────────────────
-	{ key: 'morphit.blurtAccount', tier: 'session', note: 'Who is signed in. Cleared by broadcastSignOut.' },
-	{ key: 'morphit.keystore.envelope', tier: 'session', note: 'Encrypted key material. Cleared by clearKeystore.' },
+	{
+		key: 'morphit.blurtAccount',
+		tier: 'session',
+		note: 'Who is signed in. Cleared by broadcastSignOut.'
+	},
+	{
+		key: 'morphit.keystore.envelope',
+		tier: 'session',
+		note: 'Encrypted key material. Cleared by clearKeystore.'
+	},
 	{ key: 'morphit.keystore.mode', tier: 'session', note: 'Unlock mode for the envelope above.' },
-	{ key: 'morphit.keystore.first_persist_at', tier: 'session', note: 'When the envelope was first written.' },
+	{
+		key: 'morphit.keystore.first_persist_at',
+		tier: 'session',
+		note: 'When the envelope was first written.'
+	},
 	{ key: 'morphit.paired.session', tier: 'session', note: 'Paired read-only session marker.' },
-	{ key: 'morphit.import.needs_account_name', tier: 'session', note: 'In-flight import/login state: the key was accepted but the account name is still needed. Belongs to the sign-in attempt, not the person.' },
-	{ key: 'morphit.session.reload-stash-v1', tier: 'session', note: 'Per-tab sessionStorage: the decrypted posting/memo keys handed from pagehide to the next load for a Remember-me RELOAD only (identity.ts). Written only when the session is unlocked with Remember-me on; carries its write time and is consumed (always removed) on the next load, honoured only on a reload within 30 s (v1.20.0, F-4). Never written with Remember-me off. (Not caught by the literal-key scan: the hyphen ends its match.)' },
+	{
+		key: 'morphit.import.needs_account_name',
+		tier: 'session',
+		note: 'In-flight import/login state: the key was accepted but the account name is still needed. Belongs to the sign-in attempt, not the person.'
+	},
+	{
+		key: 'morphit.session.reload-stash-v1',
+		tier: 'session',
+		note: 'Per-tab sessionStorage: the decrypted posting/memo keys handed from pagehide to the next load for a Remember-me RELOAD only (identity.ts). Written only when the session is unlocked with Remember-me on; carries its write time and is consumed (always removed) on the next load, honoured only on a reload within 30 s (v1.20.0, F-4). Never written with Remember-me off. (Not caught by the literal-key scan: the hyphen ends its match.)'
+	},
 
 	// ─── DEVICE ───────────────────────────────────────────────────────
 	// Kept on an explicit sign-out. Nothing here may name a person or their
 	// content — `signOutSweep.test.ts` asserts exactly that.
 	{ key: 'morphit.locale', tier: 'device', note: 'Which language THIS browser renders in.' },
-	{ key: 'morphit.autoLock.timeoutMinutes', tier: 'device', note: 'Idle-lock timing is a property of the machine you are sitting at, not of you. Syncing a laptop value onto a phone would be wrong.' },
-	{ key: 'morphit.rpcEndpoints', tier: 'device', note: 'Which nodes THIS browser can reach; network-dependent.' },
-	{ key: 'morphit.updateDismissed', tier: 'device', note: 'Which build version this browser was told about.' },
-	{ key: 'morphit.updateAcceptedRunning', tier: 'session', note: 'Transient sessionStorage handoff flag (cp555): this tab already accepted a running service-worker update, so the "Load it now" prompt is not offered twice before the reload lands. Removed once applied — belongs to the in-flight update handoff, not to the person or durably to the device.' },
-	{ key: 'morphit.notifications.declineState', tier: 'device', note: 'Browser-level permission bookkeeping. Re-prompting someone who declined at the OS level is noise, and the decision is per-browser anyway.' },
+	{
+		key: 'morphit.autoLock.timeoutMinutes',
+		tier: 'device',
+		note: 'Idle-lock timing is a property of the machine you are sitting at, not of you. Syncing a laptop value onto a phone would be wrong.'
+	},
+	{
+		key: 'morphit.rpcEndpoints',
+		tier: 'device',
+		note: 'Which nodes THIS browser can reach; network-dependent.'
+	},
+	{
+		key: 'morphit.updateDismissed',
+		tier: 'device',
+		note: 'Which build version this browser was told about.'
+	},
+	{
+		key: 'morphit.releaseCheck.v1',
+		tier: 'device',
+		note: 'v1.20.3 — the last verified @morphit release record (public chain data) and when it was read, so this browser asks a Blurt node at most once a day. Names no person.'
+	},
+	{
+		key: 'morphit.updateAcceptedRunning',
+		tier: 'session',
+		note: 'Transient sessionStorage handoff flag (cp555): this tab already accepted a running service-worker update, so the "Load it now" prompt is not offered twice before the reload lands. Removed once applied — belongs to the in-flight update handoff, not to the person or durably to the device.'
+	},
+	{
+		key: 'morphit.notifications.declineState',
+		tier: 'device',
+		note: 'Browser-level permission bookkeeping. Re-prompting someone who declined at the OS level is noise, and the decision is per-browser anyway.'
+	},
 
 	// ─── ACCOUNT — mirrored to chain ──────────────────────────────────
-	{ key: 'morphit.userPreferences.v1', tier: 'account', protection: 'mirrored', note: 'Fiat + region. THE ORIGINAL LEAK: a global key, so the maintainer saw his tester3 region in a fresh testowner session.' },
-	{ key: 'morphit.preferredLangs.v1', tier: 'account', protection: 'mirrored', note: 'v1.15.0 — local mirror of the on-chain profile preferred_langs (primary first). Mirrored: the chain profile is the source of truth; re-seeded from it on settings load.' },
-	{ key: 'morphit.lastPostLang.v1', tier: 'device', note: 'v1.15.0 — the last language used to post an order on THIS browser; the default for the next post. Browser-local convenience.' },
-	{ key: 'morphit.insecureContextNotice.dismissed', tier: 'device', note: 'v1.20.0 (F-9) — sessionStorage flag: this browser tab dismissed the "plain-HTTP I2P turns some features off" notice. Whether a page is a secure context is a property of the browser and the address it is on, not of the person; it resets when the browser session ends.' },
-	
-	{ key: 'morphit.notifications.prefs.v1', tier: 'account', protection: 'mirrored', note: 'Categories, channels, quiet hours.' },
-	{ key: 'morphit.hiddenAccounts.v1', tier: 'account', protection: 'mirrored', note: 'Accounts hidden from the user\'s own views.' },
-	{ key: 'morphit.crossPageTradeEvents.enabled', tier: 'account', protection: 'mirrored', note: 'Privacy-affecting opt-in; defaults OFF on reset so it is never inherited.' },
-	{ key: 'morphit.syndication.firstTradeAnnounce', tier: 'account', protection: 'mirrored', note: 'v1.8.11 — publishes on the user\'s behalf. Was a global key; now mirrored and reset to OFF.' },
-	{ key: 'morphit.syndication.orderBlogDefault', tier: 'account', protection: 'mirrored', note: 'v1.8.11 — as above.' },
+	{
+		key: 'morphit.userPreferences.v1',
+		tier: 'account',
+		protection: 'mirrored',
+		note: 'Fiat + region. THE ORIGINAL LEAK: a global key, so the maintainer saw his tester3 region in a fresh testowner session.'
+	},
+	{
+		key: 'morphit.preferredLangs.v1',
+		tier: 'account',
+		protection: 'mirrored',
+		note: 'v1.15.0 — local mirror of the on-chain profile preferred_langs (primary first). Mirrored: the chain profile is the source of truth; re-seeded from it on settings load.'
+	},
+	{
+		key: 'morphit.lastPostLang.v1',
+		tier: 'device',
+		note: 'v1.15.0 — the last language used to post an order on THIS browser; the default for the next post. Browser-local convenience.'
+	},
+	{
+		key: 'morphit.insecureContextNotice.dismissed',
+		tier: 'device',
+		note: 'v1.20.0 (F-9) — sessionStorage flag: this browser tab dismissed the "plain-HTTP I2P turns some features off" notice. Whether a page is a secure context is a property of the browser and the address it is on, not of the person; it resets when the browser session ends.'
+	},
+
+	{
+		key: 'morphit.notifications.prefs.v1',
+		tier: 'account',
+		protection: 'mirrored',
+		note: 'Categories, channels, quiet hours.'
+	},
+	{
+		key: 'morphit.hiddenAccounts.v1',
+		tier: 'account',
+		protection: 'mirrored',
+		note: "Accounts hidden from the user's own views."
+	},
+	{
+		key: 'morphit.crossPageTradeEvents.enabled',
+		tier: 'account',
+		protection: 'mirrored',
+		note: 'Privacy-affecting opt-in; defaults OFF on reset so it is never inherited.'
+	},
+	{
+		key: 'morphit.syndication.firstTradeAnnounce',
+		tier: 'account',
+		protection: 'mirrored',
+		note: "v1.8.11 — publishes on the user's behalf. Was a global key; now mirrored and reset to OFF."
+	},
+	{
+		key: 'morphit.syndication.orderBlogDefault',
+		tier: 'account',
+		protection: 'mirrored',
+		note: 'v1.8.11 — as above.'
+	},
 
 	// ─── ACCOUNT — suffixed with the account name ─────────────────────
-	{ key: 'morphit.displayName', tier: 'account', protection: 'suffixed', note: 'Draft of the profile field; the durable copy is the morphit_profile_v1 record.' },
+	{
+		key: 'morphit.displayName',
+		tier: 'account',
+		protection: 'suffixed',
+		note: 'Draft of the profile field; the durable copy is the morphit_profile_v1 record.'
+	},
 	{ key: 'morphit.shortBio', tier: 'account', protection: 'suffixed', note: 'As above.' },
 	{ key: 'morphit.websiteUrl', tier: 'account', protection: 'suffixed', note: 'As above.' },
 	{ key: 'morphit.streamingUrl', tier: 'account', protection: 'suffixed', note: 'As above.' },
 	{ key: 'morphit.nostrUrl', tier: 'account', protection: 'suffixed', note: 'As above.' },
-	{ key: 'morphit.chatSecurity.mode', tier: 'account', protection: 'suffixed', note: 'Per-account chat key-change policy.' },
-	{ key: 'morphit.chatSecurity.nudgeSeen', tier: 'account', protection: 'suffixed', note: 'Per-account one-shot nudge.' },
-	{ key: 'morphit.syndication.firstTradeFired', tier: 'account', protection: 'suffixed', note: 'One-shot milestone marker, per account.' },
+	{
+		key: 'morphit.chatSecurity.mode',
+		tier: 'account',
+		protection: 'suffixed',
+		note: 'Per-account chat key-change policy.'
+	},
+	{
+		key: 'morphit.chatSecurity.nudgeSeen',
+		tier: 'account',
+		protection: 'suffixed',
+		note: 'Per-account one-shot nudge.'
+	},
+	{
+		key: 'morphit.syndication.firstTradeFired',
+		tier: 'account',
+		protection: 'suffixed',
+		note: 'One-shot milestone marker, per account.'
+	},
 
 	// ─── ACCOUNT — sweep-only (candidates for promotion) ──────────────
 	// Safe between accounts because sign-out clears them, but they do NOT
 	// follow the user to a new browser. Promote when the cost of losing them
 	// on a new device outweighs the size they add to the blob.
-	{ key: 'morphit.chat.folders', tier: 'account', protection: 'sweep-only', note: 'Chat organisation. Genuinely account data; sizeable, so mirroring it needs its own design (chatFolders.ts already has a chain path of its own).' },
-	{ key: 'morphit.chat.folders.lastAdoptedAt', tier: 'account', protection: 'sweep-only', note: 'Bookkeeping for the above.' },
-	{ key: 'morphit.chat.folders.localChangedAt', tier: 'account', protection: 'sweep-only', note: 'Bookkeeping for the above.' },
-	{ key: 'morphit.chat.pub_pins', tier: 'account', protection: 'sweep-only', note: 'Pinned counterparty keys — names peers, so it must never survive sign-out.' },
-	{ key: 'morphit.chat.read_state', tier: 'account', protection: 'sweep-only', note: 'Per-conversation read cursors; names peers.' },
-	{ key: 'morphit.chat.recent_peers', tier: 'account', protection: 'sweep-only', note: 'Names peers directly.' },
-	{ key: 'morphit.chatNotifNudge.dismissed', tier: 'account', protection: 'sweep-only', note: 'One-shot UI nudge.' },
-	{ key: 'morphit.chatComposer.acctReminderSeen', tier: 'account', protection: 'sweep-only', note: 'One-shot UI nudge.' },
-	{ key: 'morphit.draft', tier: 'account', protection: 'sweep-only', note: 'Unsent drafts, including feedback drafts naming counterparties.' },
-	{ key: 'morphit.post.prefill', tier: 'account', protection: 'sweep-only', note: 'Half-written order form.' },
-	{ key: 'morphit.backupKeysVisited', tier: 'account', protection: 'sweep-only', note: 'Whether THIS user has seen the key-backup screen. Mirroring would wrongly mark a new device as already-backed-up.' },
-	{ key: 'morphit.my_orders.fee_status_banner.dismissed.v1', tier: 'account', protection: 'sweep-only', note: 'One-shot banner dismissal.' },
-	{ key: 'morphit.notif.chatDefaultOn.v1', tier: 'account', protection: 'sweep-only', note: 'One-shot migration marker for the chat-notification default.' },
-	{ key: 'morphit.welcomeFirstBuyHero.collapsed', tier: 'account', protection: 'sweep-only', note: 'One-shot UI collapse state.' },
-	{ key: 'morphit.tradeNotifications.enabled', tier: 'account', protection: 'sweep-only', note: 'Legacy key, migrated into notifications.prefs.v1; kept classified so the sweep still clears an old browser.' },
-	{ key: 'morphit.feedbackReminders.firedThisSession', tier: 'account', protection: 'sweep-only', note: 'Session-scoped by name; classified so the sweep covers it.' },
-	{ key: 'morphit.firstTradeHelper.dismissedThisSession', tier: 'account', protection: 'sweep-only', note: 'As above.' },
+	{
+		key: 'morphit.chat.folders',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Chat organisation. Genuinely account data; sizeable, so mirroring it needs its own design (chatFolders.ts already has a chain path of its own).'
+	},
+	{
+		key: 'morphit.chat.folders.lastAdoptedAt',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Bookkeeping for the above.'
+	},
+	{
+		key: 'morphit.chat.folders.localChangedAt',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Bookkeeping for the above.'
+	},
+	{
+		key: 'morphit.chat.pub_pins',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Pinned counterparty keys — names peers, so it must never survive sign-out.'
+	},
+	{
+		key: 'morphit.chat.read_state',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Per-conversation read cursors; names peers.'
+	},
+	{
+		key: 'morphit.chat.recent_peers',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Names peers directly.'
+	},
+	{
+		key: 'morphit.chatNotifNudge.dismissed',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'One-shot UI nudge.'
+	},
+	{
+		key: 'morphit.chatComposer.acctReminderSeen',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'One-shot UI nudge.'
+	},
+	{
+		key: 'morphit.draft',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Unsent drafts, including feedback drafts naming counterparties.'
+	},
+	{
+		key: 'morphit.post.prefill',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Half-written order form.'
+	},
+	{
+		key: 'morphit.backupKeysVisited',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Whether THIS user has seen the key-backup screen. Mirroring would wrongly mark a new device as already-backed-up.'
+	},
+	{
+		key: 'morphit.my_orders.fee_status_banner.dismissed.v1',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'One-shot banner dismissal.'
+	},
+	{
+		key: 'morphit.notif.chatDefaultOn.v1',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'One-shot migration marker for the chat-notification default.'
+	},
+	{
+		key: 'morphit.welcomeFirstBuyHero.collapsed',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'One-shot UI collapse state.'
+	},
+	{
+		key: 'morphit.tradeNotifications.enabled',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Legacy key, migrated into notifications.prefs.v1; kept classified so the sweep still clears an old browser.'
+	},
+	{
+		key: 'morphit.feedbackReminders.firedThisSession',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Session-scoped by name; classified so the sweep covers it.'
+	},
+	{
+		key: 'morphit.firstTradeHelper.dismissedThisSession',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'As above.'
+	},
 	// ── Found by the classification smoke on its first run (v1.8.11). All four
 	//    were GLOBAL keys holding account state, i.e. the same shape as the
 	//    userPreferences leak, just never reported.
-	{ key: 'morphit.recent_cancels_v1', tier: 'account', protection: 'sweep-only', note: 'Order permlinks THIS user recently cancelled — their trading activity. Was global.' },
-	{ key: 'morphit.recent_completes_v1', tier: 'account', protection: 'sweep-only', note: 'Order permlinks THIS user recently completed. Was global.' },
-	{ key: 'morphit.backup_material_pending', tier: 'account', protection: 'sweep-only', note: 'Whether THIS user has un-backed-up key material. A boolean, not the material itself — but leaving it global told the NEXT account it had keys to back up.' },
-	{ key: 'morphit.keystore.backup_nudge_dismissed', tier: 'account', protection: 'sweep-only', note: 'One-shot dismissal of the key-backup nudge; per person, not per browser.' }
+	{
+		key: 'morphit.recent_cancels_v1',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Order permlinks THIS user recently cancelled — their trading activity. Was global.'
+	},
+	{
+		key: 'morphit.recent_completes_v1',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Order permlinks THIS user recently completed. Was global.'
+	},
+	{
+		key: 'morphit.backup_material_pending',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'Whether THIS user has un-backed-up key material. A boolean, not the material itself — but leaving it global told the NEXT account it had keys to back up.'
+	},
+	{
+		key: 'morphit.keystore.backup_nudge_dismissed',
+		tier: 'account',
+		protection: 'sweep-only',
+		note: 'One-shot dismissal of the key-backup nudge; per person, not per browser.'
+	}
 ];
 
 /** Keys kept on an explicit sign-out: exactly the device tier. Derived, so the

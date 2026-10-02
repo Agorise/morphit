@@ -50,6 +50,11 @@
 #     v1.20.0's payload builder imports a library whose installed copy on the
 #     laptop was older than the lockfile's, and the builder died before writing
 #     release.json (2026-09-30). `npm ci` installs exactly the lockfile.
+#   • BLOCK 4 then unsets every MORPHIT_BUILD_* value: \`source\` only sets what
+#     the anchor names, so when v1.20.2's anchor had no CID, the CID and IPNS
+#     record v1.20.1's ceremony had sourced into the same terminal went into the
+#     payload (2026-10-01; the builder now also refuses a record that points at
+#     another CID).
 #   • Broadcasting (BLOCK 5) is a laptop step ONLY: the @morphit spending WIF
 #     must never live in CI.
 #   • BLOCK 6 is not optional: `morphit-ops upgrade` wipes build/canary.txt.
@@ -101,9 +106,10 @@ Then choose **option 2**. (The upgrade also self-seeds this release to IPFS if t
 
 ---
 
-**BLOCK 4** — build the on-chain payload from the VPS's served verify.json **plus** the published distribution anchor, and dry-run it (laptop, repo root). The first line installs exactly this release's packages (unpacking a tarball updates the code, not \`node_modules\`); the second fetches the anchor \`release.yml\` attached to the release; \`source\` loads the SHA-256 + fingerprint (the mirror list is baked into the payload builder):
+**BLOCK 4** — build the on-chain payload from the VPS's served verify.json **plus** the published distribution anchor, and dry-run it (laptop, repo root). The first line installs exactly this release's packages (unpacking a tarball updates the code, not \`node_modules\`); the second clears values an earlier ceremony left in this terminal; the third fetches the anchor \`release.yml\` attached to the release; \`source\` loads the SHA-256 + fingerprint (the mirror list and the IPNS name are baked into the payload builder):
 \`\`\`
 npm ci --no-audit --no-fund
+unset \$(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/distribution-anchor.env -o /tmp/morphit-anchor.env
 source /tmp/morphit-anchor.env
 curl -fsSL https://morphit.io/verify.json -o ~/verify.json

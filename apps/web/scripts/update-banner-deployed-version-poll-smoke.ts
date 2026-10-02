@@ -106,14 +106,14 @@ const importsHelpers =
 const importsRunning = /import\s*\{[^}]*\brunningVersion\b[^}]*\}\s*from\s*['"]\$stores\/release['"]/.test(
 	banner
 );
-const importsFetch = /\bfetchWithTimeout\b/.test(banner);
+const importsFetch = /import\s*\{[^}]*\breadServedVersion\b[^}]*\}\s*from\s*['"]\$lib\/updates\/servedVersion['"]/.test(banner);
 if (importsHelpers && importsRunning && importsFetch) {
-	pass('UpdateBanner imports poll helpers + runningVersion + fetchWithTimeout');
+	pass('UpdateBanner imports poll helpers + runningVersion + the shared readServedVersion');
 } else {
 	const miss: string[] = [];
 	if (!importsHelpers) miss.push('deployedVersion helpers');
 	if (!importsRunning) miss.push('runningVersion');
-	if (!importsFetch) miss.push('fetchWithTimeout');
+	if (!importsFetch) miss.push('readServedVersion');
 	fail('UpdateBanner missing an import', `missing: ${miss.join('; ')}`);
 }
 
@@ -133,15 +133,28 @@ if (!pollBody) {
 	fail('pollDeployedVersion not found', 'the deployed-version fallback is missing');
 } else {
 	// #3 cache-busted + no-store fetch of verify.json
-	const fetchesBusted = /verifyJsonPollUrl\s*\(/.test(pollBody);
-	const noStore = /cache:\s*['"]no-store['"]/.test(pollBody);
-	if (fetchesBusted && noStore) {
-		pass("pollDeployedVersion fetches verifyJsonPollUrl() with cache:'no-store'");
+	// v1.20.3: the read goes through the shared reader ($lib/updates/
+	// servedVersion), which the release check uses too, so verify.json is
+	// downloaded once on page load. The cache-proofing lives there now.
+	const shared = readFileSync(join(REPO_ROOT, 'apps/web/src/lib/updates/servedVersion.ts'), 'utf-8');
+	const fetchesBusted = /verifyJsonPollUrl\s*\(/.test(shared);
+	const noStore = /cache:\s*['"]no-store['"]/.test(shared);
+	const usesShared = /readServedVersion\s*\(/.test(pollBody);
+	if (fetchesBusted && noStore && usesShared) {
+		pass("pollDeployedVersion reads through the shared reader, which fetches verifyJsonPollUrl() with cache:'no-store'");
 	} else {
 		const miss: string[] = [];
-		if (!fetchesBusted) miss.push('verifyJsonPollUrl()');
-		if (!noStore) miss.push("cache:'no-store'");
-		fail('pollDeployedVersion fetch is not cache-proof', `missing: ${miss.join('; ')}`);
+		if (!usesShared) miss.push('readServedVersion() in pollDeployedVersion');
+		if (!fetchesBusted) miss.push('verifyJsonPollUrl() in servedVersion.ts');
+		if (!noStore) miss.push("cache:'no-store' in servedVersion.ts");
+		fail('pollDeployedVersion fetch is not cache-proof / not shared', `missing: ${miss.join('; ')}`);
+	}
+	// Only the FIRST (page-load) poll may reuse the release check's answer; every
+	// later poll (timer, tab-foreground, reconnect) must ask afresh.
+	if (/readServedVersion\(\s*\{\s*maxAgeMs:\s*reuse\s*\?\s*SERVED_VERSION_REUSE_MS\s*:\s*0\s*\}\s*\)/.test(pollBody)) {
+		pass('only the page-load poll reuses a recent answer; later polls ask afresh (maxAgeMs 0)');
+	} else {
+		fail('poll reuse is not limited to the page-load poll', 'expected readServedVersion({ maxAgeMs: reuse ? SERVED_VERSION_REUSE_MS : 0 })');
 	}
 
 	// #4 sets the flag ONLY under a deployedVersionDiffers guard.
@@ -191,12 +204,12 @@ if (pollCallSites >= 3) {
 // code on a phone's first load; fetched on every tab-foreground it cost 80 KB
 // per app switch. The first poll now waits until the page has loaded and the
 // browser is idle, and polls closer together than the minimum gap are skipped.
-if (/whenPageSettled\(\s*\(\)\s*=>\s*void pollDeployedVersion\(\)/.test(banner)) {
+if (/whenPageSettled\(\s*\(\)\s*=>\s*void pollDeployedVersion\(\s*true\s*\)/.test(banner)) {
 	pass('the first verify.json poll waits until the page has loaded (whenPageSettled)');
 } else {
 	fail(
 		'the first verify.json poll runs at mount',
-		'expected whenPageSettled(() => void pollDeployedVersion()) instead of a bare call'
+		'expected whenPageSettled(() => void pollDeployedVersion(true)) instead of a bare call'
 	);
 }
 const settled = body(banner, /function whenPageSettled\s*\(/);
@@ -214,7 +227,7 @@ if (
 if (
 	pollBody !== null &&
 	/MIN_POLL_GAP_MS/.test(pollBody) &&
-	pollBody.indexOf('MIN_POLL_GAP_MS') < pollBody.indexOf('fetchWithTimeout')
+	pollBody.indexOf('MIN_POLL_GAP_MS') < pollBody.indexOf('readServedVersion')
 ) {
 	pass('pollDeployedVersion skips a poll closer than MIN_POLL_GAP_MS to the last one');
 } else {
