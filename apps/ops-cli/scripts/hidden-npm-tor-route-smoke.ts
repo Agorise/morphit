@@ -12,8 +12,13 @@
  * finish, the package must be installed, and the SOCKS port must have been
  * asked for the registry by NAME.
  *
- * Needs `unshare` with network namespaces (root, or a user namespace) and
- * openssl. Run: cd apps/ops-cli && tsx --tsconfig ../../tsconfig.smoke.json
+ * Needs openssl. Where network namespaces are not allowed (a CI container
+ * without CAP_SYS_ADMIN), it runs the same install in the host's network
+ * instead and says so: npm then trusts ONLY the stand-in registry's
+ * certificate and the locked package's hash is the stand-in's, so npm can
+ * only finish through the SOCKS chain (a direct connection would reach the
+ * real registry, fail the certificate check and fail the hash). What that
+ * mode cannot show is a local DNS lookup; the namespace mode does. Run: cd apps/ops-cli && tsx --tsconfig ../../tsconfig.smoke.json
  * scripts/hidden-npm-tor-route-smoke.ts
  */
 import { spawnSync, spawn } from 'node:child_process';
@@ -40,7 +45,13 @@ const check = (name: string, ok: boolean, detail = ''): void => {
 	}
 };
 
-if (process.argv[2] !== '--inside') {
+const canIsolate = (): boolean => {
+	if (process.env.MORPHIT_SMOKE_NO_NETNS === '1') return false;
+	const t = spawnSync('unshare', ['-n', 'true'], { stdio: 'ignore' });
+	return !t.error && t.status === 0;
+};
+const isolated = process.argv[2] === '--inside';
+if (!isolated && canIsolate()) {
 	// Outer: re-run this file inside a network namespace with loopback only.
 	const tsx = process.argv[0]!;
 	const args = process.execArgv.concat([SELF, '--inside']);
@@ -63,15 +74,22 @@ if (process.argv[2] !== '--inside') {
 	process.exit(r.status);
 }
 
-// ── Inside the namespace ─────────────────────────────────────────────
+// ── Inside the namespace (or, where none can be made, the host's network) ──
+if (!isolated) {
+	console.log(
+		'  • no network namespace can be made here: running in the host network; npm can only finish through the SOCKS chain (stand-in certificate and package hash), but a local DNS lookup is not observable in this mode'
+	);
+}
 const work = mkdtempSync(join(tmpdir(), 'morphit-npm-tor-'));
 try {
 	// 0. The namespace really has no way out.
-	const dns = spawnSync('getent', ['hosts', 'registry.npmjs.org'], {
-		encoding: 'utf8',
-		timeout: 15_000
-	});
-	check('the namespace cannot resolve registry.npmjs.org itself', dns.status !== 0);
+	if (isolated) {
+		const dns = spawnSync('getent', ['hosts', 'registry.npmjs.org'], {
+			encoding: 'utf8',
+			timeout: 15_000
+		});
+		check('the namespace cannot resolve registry.npmjs.org itself', dns.status !== 0);
+	}
 
 	// 1. A package, as the registry would serve it.
 	const pkgDir = join(work, 'pkgsrc', 'package');
@@ -209,7 +227,13 @@ try {
 			r(n ?? 1);
 		});
 	});
-	check('real npm ci finished inside the loopback-only namespace', code === 0, `exit ${code}`);
+	check(
+		isolated
+			? 'real npm ci finished inside the loopback-only namespace'
+			: 'real npm ci finished through the SOCKS chain (host network)',
+		code === 0,
+		`exit ${code}`
+	);
 	check('the package is installed', existsSync(join(proj, 'node_modules', 'left-pad', 'index.js')));
 	check(
 		'Tor was asked for the registry by NAME',
