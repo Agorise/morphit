@@ -51,9 +51,16 @@ const pinnedDb = {
 } as unknown as pg.PoolClient;
 const noPinDb = { query: async () => ({ rows: [] }) } as unknown as pg.PoolClient;
 
-function chain(served: BlockHeader | null, operators = 3, calls: string[] = []): BlurtClient {
+/** `operators` exist in the pool; `reachable` of them answered their last call. */
+function chain(
+	served: BlockHeader | null,
+	operators = 3,
+	calls: string[] = [],
+	reachable = operators
+): BlurtClient {
 	return {
-		reachableOperatorCount: () => operators,
+		operatorCount: () => operators,
+		reachableOperatorCount: () => reachable,
 		condenserAgreed: async (
 			method: string,
 			params: unknown[],
@@ -129,20 +136,44 @@ describe('confirming fee-relevant transactions (V3-6)', () => {
 		).rejects.toBeInstanceOf(BlockNotConfirmedError);
 	});
 
-	it('with fewer than two operators, applies single-source', async () => {
+	it('a pool of ONE operator has nothing to compare with: applies single-source', async () => {
 		expect(await confirmFeeRelevantTransactions(pinnedDb, chain(null, 1), 105, forged)).toBe(
 			'single_source'
 		);
 	});
 
-	it('when no two operators agree, retries a bounded number of times, then applies', async () => {
-		for (let i = 1; i < MAX_UNCONFIRMED_ATTEMPTS; i++) {
+	it('one reachable operator out of several is not a quorum: retried, never applied single-source', async () => {
+		for (let i = 0; i < MAX_UNCONFIRMED_ATTEMPTS + 2; i++) {
+			await expect(
+				confirmFeeRelevantTransactions(pinnedDb, chain(null, 3, [], 1), 107, forged)
+			).rejects.toBeInstanceOf(BlockNotConfirmedError);
+		}
+	});
+
+	it('when no two operators agree, the block is retried for as long as it takes', async () => {
+		for (let i = 0; i < MAX_UNCONFIRMED_ATTEMPTS * 3; i++) {
 			await expect(
 				confirmFeeRelevantTransactions(pinnedDb, chain(null), 106, honest)
 			).rejects.toBeInstanceOf(BlockNotConfirmedError);
 		}
-		expect(await confirmFeeRelevantTransactions(pinnedDb, chain(null), 106, honest)).toBe(
-			'single_source'
+		expect(await confirmFeeRelevantTransactions(pinnedDb, chain(honest), 106, honest)).toBe(
+			'confirmed'
+		);
+	});
+
+	it('always confirms an rpc-directory op (it adds quorum operators to the pool)', async () => {
+		const dirTrx = (json: string) => ({
+			operations: [
+				['custom_json', { id: 'morphit_rpc_v1', required_posting_auths: ['morphit'], json }]
+			]
+		});
+		const served = block([dirTrx('{"v":1}')], ['dd']);
+		const chainSays = block([dirTrx('{"v":1,"nodes":[]}')], ['dd']);
+		await expect(
+			confirmFeeRelevantTransactions(noPinDb, chain(chainSays), 108, served)
+		).rejects.toBeInstanceOf(BlockNotConfirmedError);
+		expect(await confirmFeeRelevantTransactions(noPinDb, chain(served), 108, served)).toBe(
+			'confirmed'
 		);
 	});
 

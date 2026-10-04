@@ -1,6 +1,6 @@
 /**
  * require-live-session-smoke — the locked → welcome-back-unlock redirect guard
- * (cp342; cp356 retargets it from the homepage to /login?next=).
+ * (retargets it from the homepage to /login?next=).
  *
  * `<RequireLiveSession />` (lib/components/RequireLiveSession.svelte) is a
  * render-nothing guard for session-required pages. On a refresh / direct-nav
@@ -9,7 +9,7 @@
  * is unusable, so it sends the user to the welcome-back UNLOCK screen (/login),
  * carrying the page they were trying to reach as `?next=…`; after they unlock
  * with their password the login page forwards them to that destination instead
- * of the homepage (cp356).
+ * of the homepage.
  *
  *   • Redirects ONLY when fully locked — `!isUnlocked && !isPairedReadOnly`.
  *     A paired-readonly session is a LIVE read-only session (keys on the phone)
@@ -18,9 +18,9 @@
  *   • Runs ONCE on mount (not an `$effect`), so a later idle auto-lock while
  *     the user is actively on the page does NOT yank them away.
  *
- * cp340 introduced this redirect inline on /settings; cp342 generalized it into
+ * A later change introduced this redirect inline on /settings; a later change generalized it into
  * this shared component and applied it to settings, 2FA, backup-keys, post, and
- * post/edit; cp343 extended coverage to /chat and /chat/[peer] (both require a
+ * post/edit; a later change extended coverage to /chat and /chat/[peer] (both require a
  * live chat identity), so the behaviour is uniform across every login-required
  * page regardless of which one you landed on.
  *

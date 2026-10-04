@@ -7,12 +7,12 @@
  *     "hash_manifest": object (frontend + ops asset hashes),
  *     "endpoints": object (RPC endpoint rotation set),
  *     "signature": string (optional secondary signature; opaque),
- *     "treasury": object (optional, Part 106 onward — canonical
+ *     "treasury": object (optional, onward — canonical
  *                         BTC/XMR fee addresses pinned by the
  *                         @morphit posting key.  See below.)
  *   }
  *
- * `treasury` shape (Part 106; corrected Part 107) — every field
+ * `treasury` shape (corrected) — every field
  * optional within:
  *   {
  *     "btc": { "address": "bc1q...", "satoshis": 416,
@@ -25,22 +25,23 @@
  *     "this release does not pin a treasury for this chain;
  *     env-var fallback applies."
  *   - The whole `treasury` field may itself be `null` or omitted
- *     to mean "this release pre-dates Part 106 OR deliberately
+ *     to mean "this release pre-dates OR deliberately
  *     omits the pin entirely."
- *   - **Part 107 privacy invariant**: the Monero `viewkey` is
+ *   - **Privacy invariant**: the Monero `viewkey` is
  *     NEVER part of this block.  Publishing the view key would
  *     reveal every incoming payment to the treasury wallet
  *     forever, degrading privacy for the treasury and for every
  *     fee-paying user.  The view key stays env-only on each
  *     operator's indexer box.  If a release op carries a
- *     `viewkey` field (e.g. one broadcast before Part 107),
+ *     `viewkey` field (e.g. one broadcast previously),
  *     this handler silently ignores it — never persists it to
  *     the `treasury` JSONB column.
  *
- * Trust anchor chain (UNCHANGED from Part 105):
+ * Trust anchor:
  *   1. Signer's blurt account name MUST equal config.officialAccountName
- *   2. Signer's current posting pubkey on chain MUST equal
- *      config.officialPostingPubkey
+ *   2. The transaction carrying the op MUST be signed by the pinned
+ *      config.officialPostingPubkey (signature recovered from the block's
+ *      own transaction — see $indexer/officialOpTrust)
  *   3. Payload must validate structurally
  *
  * All three conditions in AND. Any failure lands the row with
@@ -48,17 +49,22 @@
  * rows. Invalid releases stay in the table for audit (operators can
  * see if a stale or hostile key ever broadcast something).
  *
- * Note: condition #2 does a chain read inside the handler. This is
- * the only handler that does so. It's fine — releases are rare (a
- * few per year at most), so the extra latency doesn't hurt the
- * poller's throughput.
+ * No chain read happens here: the verdict is a pure function of the
+ * block and the pin, the same on every node. A block holding this op is
+ * applied only once RPC operators (counted by node name) serve the same transaction
+ * (fee/btcFeeBlockConfirm.ts).
  */
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { resolveSignerPostingPubkey } from '$blurt/verify';
+import { officialOpDistrust } from '$indexer/officialOpTrust';
 import { checkJsonbSize } from '$indexer/payloadSize';
-import { parseAccountXpub, parseXmrPrimaryAddress } from '@morphit/release-schema';
+import {
+	isBtcMainnetAddress,
+	parseAccountXpub,
+	parseXmrAddress,
+	parseXmrPrimaryAddress
+} from '@morphit/release-schema';
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -74,31 +80,29 @@ interface ValidatedRelease {
 	 *  byte-identical to what passed the size check. */
 	readonly hash_manifest_serialized: string;
 	readonly endpoints_serialized: string;
-	/** Part 106 — optional treasury pin.  null when the payload
+	/** optional treasury pin.  null when the payload
 	 *  did not include a `treasury` field at all (or included
 	 *  it as null), serialized JSON when it did.  Either way,
 	 *  the column write is unambiguous. */
 	readonly treasury_serialized: string | null;
-	/** cp564 — optional distribution anchor (source_sha256, gpg_fingerprint,
+	/** optional distribution anchor (source_sha256, gpg_fingerprint,
 	 *  ipfs_cid, ipns_name, mirrors) as a JSON string, or null. Persisted so
 	 *  instances can pin the release's ipfs_cid and the API can surface it. */
 	readonly distribution_serialized: string | null;
 }
 
 /**
- * Structurally validate the optional `treasury` block.  We do
- * not VALIDATE that the BTC address is a syntactically-correct
- * Bitcoin address — that's an operator responsibility, enforced
- * at signing time via the bitcoin-address smoke.  Here we just
- * enforce the SHAPE so a malformed treasury block doesn't slip
- * into the releases table and confuse downstream readers.
+ * Validate the optional `treasury` block: shape, and the BTC / XMR
+ * addresses decoded with their checksums (shared parsers from
+ * @morphit/release-schema) — a mistyped pinned address would burn
+ * every fee paid to it, so a typo must not pin.
  *
- * **Part 107 privacy invariant**: this validator does NOT
+ * **Privacy invariant**: this validator does NOT
  * accept a `viewkey` field.  Any `viewkey` present in the
  * input is silently ignored and not persisted.  The view key
  * is operator-private; publishing it would degrade privacy
  * for the treasury and for every fee-paying user.  See
- * docs/adr/0011-dynamic-fee-model.md Part 107 amendment.
+ * docs/adr/0011-dynamic-fee-model.md amendment.
  *
  * Returns the canonicalized treasury value (with omitted fields
  * coerced to null) on success, or a reason string on failure.
@@ -128,6 +132,11 @@ function validateTreasury(
 		if (!/^(bc1[a-z0-9]+|[13][1-9A-HJ-NP-Za-km-z]+)$/.test(addr)) {
 			return { reason: 'treasury_btc_address_not_mainnet' };
 		}
+		// The shape admits a typo; the checksum does not. Every fee
+		// paid to a mistyped pinned address would be burned.
+		if (!isBtcMainnetAddress(addr)) {
+			return { reason: 'treasury_btc_address_bad_checksum' };
+		}
 		const sat = t.btc.satoshis;
 		if (typeof sat !== 'number' || !Number.isInteger(sat) || sat <= 0) {
 			return { reason: 'treasury_btc_satoshis_invalid' };
@@ -153,22 +162,22 @@ function validateTreasury(
 
 	// xmr: { address, piconero } | null | undefined
 	//
-	// Part 107: viewkey is INTENTIONALLY NOT a chain-pinned
-	// field.  A previous Part 106 design embedded the private
+	// viewkey is INTENTIONALLY NOT a chain-pinned
+	// field.  A previous design embedded the private
 	// view key here under the rationale that "it's publish-safe
 	// by Monero design"; that was correct only narrowly (no
 	// theft risk) and wrong for privacy (publishing the view key
 	// reveals every incoming payment, amount, timing, and
 	// subaddress to the treasury wallet, forever).
 	//
-	// Part 108++: per-payment proof verification replaced view-
+	// later+: per-payment proof verification replaced view-
 	// key-based decryption entirely.  No Morphit indexer needs
-	// a view key, ever.  Part 109 removed the
+	// a view key, ever.  A later change removed the
 	// `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env var as well.
 	//
 	// The defense-in-depth check below remains: if a payload
 	// submitted to this validator contains a stale `viewkey`
-	// field (e.g. from a Part 106-vintage release op being
+	// field (e.g. from an early release op being
 	// replayed), it is silently stripped — not stored in the
 	// JSONB column, not stored anywhere.
 	let xmr: { address: string; piconero: string; primary_address?: string } | null = null;
@@ -182,6 +191,12 @@ function validateTreasury(
 		// reach mainnet indexers.
 		if (!/^[48][0-9A-Za-z]{94}$/.test(addr)) {
 			return { reason: 'treasury_xmr_address_not_mainnet' };
+		}
+		{
+			const parsed = parseXmrAddress(addr);
+			if (!parsed.ok || parsed.value.net !== 'mainnet' || parsed.value.kind === 'integrated') {
+				return { reason: 'treasury_xmr_address_bad_checksum' };
+			}
 		}
 		const pn = t.xmr.piconero;
 		if (typeof pn !== 'string' || !/^\d+$/.test(pn) || pn === '0') {
@@ -203,7 +218,7 @@ function validateTreasury(
 		}
 	}
 
-	// cp372 — optional chain-pinned BLURT fee base.  No address
+	// optional chain-pinned BLURT fee base.  No address
 	// (BLURT fees are transfers to the operator's fee recipient);
 	// only the tier-1 base amount is pinned.  Mirrors the
 	// release-schema package's validateTreasury().
@@ -226,7 +241,7 @@ function validateTreasury(
 	// Both null is fine — it's a structurally valid "I declare
 	// no treasury pin" payload, equivalent to omitting the field.
 	// Attach `blurt` only when present so a release with no BLURT
-	// pin serializes byte-identically to the pre-cp372 shape.
+	// pin serializes byte-identically to the older shape.
 	const value: Record<string, unknown> = blurt !== null ? { btc, xmr, blurt } : { btc, xmr };
 	const sizeCheck = checkJsonbSize(value);
 	if (!sizeCheck.ok) return { reason: 'treasury_too_large' };
@@ -234,7 +249,7 @@ function validateTreasury(
 }
 
 /**
- * Structurally validate the optional `distribution` anchor (cp556).
+ * Structurally validate the optional `distribution` anchor.
  * MIRRORS packages/release-schema/src/releaseValidate.ts
  * `validateDistribution()` — same regexes, same ceilings, same reason
  * names.  The frontend re-validates independently; release.test.ts
@@ -291,7 +306,7 @@ function validateDistribution(
 		ipns_name = nm;
 	}
 
-	// v1.9.6 (the maintainer) — optional signed IPNS record (base64): the DHT-rebroadcast
+	// v1.9.6 — optional signed IPNS record (base64): the DHT-rebroadcast
 	// pointer every instance re-announces. Same syntax + size gate as the schema
 	// package's validateDistribution so a stored-valid release re-validates; the
 	// cryptographic validity is re-checked where the record is USED (instance
@@ -313,7 +328,7 @@ function validateDistribution(
 	let mirrors: string[] | undefined;
 	if (d.mirrors !== undefined && d.mirrors !== null) {
 		if (!Array.isArray(d.mirrors)) return { reason: 'distribution_mirrors_not_array' };
-		// Cap raised 8→10 (v1.9.6) → 32 (v1.11.1, the maintainer's 9 new mirrors; ~20-mirror
+		// Cap raised 8→10 (v1.9.6) → 32 (v1.11.1, 9 new mirrors; ~20-mirror
 		// goal + headroom). Kept in lockstep with release-schema MIRRORS_MAX; the
 		// 4096-byte serialized cap below is the real bloat guard.
 		if (d.mirrors.length > 32) return { reason: 'distribution_mirror_invalid' };
@@ -322,7 +337,7 @@ function validateDistribution(
 				typeof m !== 'string' ||
 				m.length === 0 ||
 				m.length > 256 ||
-				// v1.8.16 (the maintainer) — `+` added to the allowed path charset for
+				// v1.8.16 — `+` added to the allowed path charset for
 				// Launchpad, whose personal-repo git URLs are literally
 				// `git.launchpad.net/~agorise/+git/morphit`. `+` is a valid RFC-3986
 				// path sub-delimiter (no injection risk — the value is only ever a
@@ -368,7 +383,7 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	const hashManifestSize = checkJsonbSize(payload.hash_manifest);
 	if (!hashManifestSize.ok) return { reason: 'hash_manifest_too_large' };
 
-	// cp436 — endpoints is OPTIONAL (the maintainer's rule: no longer pinned on-chain —
+	// endpoints is OPTIONAL (project rule: no longer pinned on-chain —
 	// redundant with the frontend's baked-in defaults + avoids chain-bloat).
 	// Validate only when present; default to an empty object so the DB column
 	// stays non-null and /v1/release returns {} for the (now normal) case.
@@ -393,7 +408,7 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 		signature = payload.signature;
 	}
 
-	// Part 106 — optional treasury pin.  Validation is structural
+	// optional treasury pin.  Validation is structural
 	// only; cryptographic validation (does the viewkey actually
 	// decode the address) is the operator's responsibility at
 	// release-build time.
@@ -402,7 +417,7 @@ function validate(payload: unknown): ValidatedRelease | { reason: string } {
 	const treasury_serialized =
 		treasuryResult.value === null ? null : JSON.stringify(treasuryResult.value);
 
-	// cp564 — validate the optional distribution anchor (parity with the
+	// validate the optional distribution anchor (parity with the
 	// frontend validator) AND persist it: instances pin the release's
 	// ipfs_cid to their own IPFS node (decentralized availability), and the
 	// download page / pinning service read it from /v1/release, so the block
@@ -438,34 +453,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	let valid = true;
 	let invalidReason: string | null = null;
 
-	// Check 1: signer is the configured official account.
-	if (ctx.signer !== ctx.config.officialAccountName) {
+	// Checks 1 and 2: the official account, and a signature from the pinned
+	// key over the transaction the block carries.
+	const distrust = officialOpDistrust(ctx);
+	if (distrust !== null) {
 		valid = false;
-		invalidReason = 'signer_not_official_account';
-	}
-
-	// Check 2: the signer's current posting pubkey on chain matches
-	// the pinned value. Only run if check 1 passed — otherwise we'd
-	// waste a chain call on someone impersonating @morphit.
-	if (valid) {
-		let account;
-		try {
-			account = await ctx.blurt.getAccount(ctx.signer, { userFacing: false });
-		} catch (err) {
-			// Chain unreachable during this handler. Re-throw so the
-			// dispatcher rolls the block back and we retry — we'd
-			// rather delay the release verdict than commit an
-			// unverified 'valid=true' row.
-			throw err;
-		}
-		const chainPubkey = resolveSignerPostingPubkey(account);
-		if (chainPubkey === null) {
-			valid = false;
-			invalidReason = 'signer_no_single_posting_key';
-		} else if (chainPubkey !== ctx.config.officialPostingPubkey) {
-			valid = false;
-			invalidReason = 'pubkey_mismatch';
-		}
+		invalidReason = distrust;
 	}
 
 	// Record the row. `valid=false` releases are still worth

@@ -2,8 +2,8 @@
 /**
  * payjoin-uri-wire-shape-smoke.
  *
- * Part 122 cp26 sentinel for the PayJoin (BIP-78) endpoint
- * field, plus the cp26 inline-fix for the cp3-era latent bug
+ * for the PayJoin (BIP-78) endpoint
+ * field, plus the inline-fix for the latent bug
  * where USDT `network` was dropped on the wire.
  *
  * Asserts:
@@ -13,7 +13,7 @@
  *  - encodeAddressPayload rejects payjoinEndpoint on non-BTC
  *  - encodeAddressPayload rejects malformed URLs
  *  - USDT `network` field now correctly roundtrips through
- *    encode/decode (the cp3 latent bug fix)
+ *    encode/decode (the latent bug fix)
  *  - FundsSentPayload network field also roundtrips (symmetric
  *    fix)
  */
@@ -121,7 +121,7 @@ console.log('\n── payjoin-uri-wire-shape smoke ─────────�
 	}
 }
 
-// ── Scenario 6 — cp3 latent bug fix: USDT network roundtrips ──
+// ── Scenario 6 — latent bug fix: USDT network roundtrips ──
 {
 	const payload = {
 		v: 1 as const,

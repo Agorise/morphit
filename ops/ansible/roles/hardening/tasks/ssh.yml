@@ -44,7 +44,7 @@
     mode: '0755'
   when: morphit_sshd_config.stat.exists
 
-# ── LOCKOUT GUARD (the maintainer — Contabo/OVH lockout) ──────────────────────────────
+# ── LOCKOUT GUARD (Contabo/OVH lockout) ──────────────────────────────
 # Contabo/OVH and many budget VPSes ship with PASSWORD-ONLY root access and no
 # SSH key installed. Disabling PasswordAuthentication + PermitRootLogin on such
 # a box with the drop-in above ALREADY off (the drop-in sets PasswordAuthentication

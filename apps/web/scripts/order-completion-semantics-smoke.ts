@@ -2,7 +2,7 @@
 /*
  * order-completion-semantics — v1.5.5 (t155) guard.
  *
- * the maintainer's report, in one line: he and his counterparty completed a trade — BLURT
+ * The maintainer's report, in one line: he and his counterparty completed a trade — BLURT
  * sent, Payment Receipt in the chat, both parties reviewed each other — and the
  * order still read "Live". It stayed searchable in the orderbook, still offered
  * "Cancel this order", still sat under Active orders, still showed "(Live)" in

@@ -128,7 +128,7 @@ export async function runExportAltnetKey(ctx: ExportAltnetKeyCtx): Promise<numbe
 	const outPath = ctx.flags.out;
 	if (outPath) {
 		const outAbs = resolve(outPath);
-		// v1.18.0 deep-deep (ops-6). This was writeFileSync(..., {mode:0o600})
+		// This was writeFileSync(..., {mode:0o600})
 		// then chmod: the mode applies only to a NEW file, so a file another user
 		// had pre-created at this predictable path (mode 0666) was written
 		// through and stayed theirs to read, and a symlink there redirected the

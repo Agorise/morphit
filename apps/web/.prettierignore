@@ -4,8 +4,6 @@
 # Build outputs.
 build/
 dist/
-.vercel/
-.netlify/
 
 # Lockfile and Node modules.
 node_modules/

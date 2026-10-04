@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * directory-card-hidden-service — cp703 (Layer 4 of the hidden-service epic).
+ * directory-card-hidden-service — (Layer 4 of the hidden-service epic).
  *
  * The federated-directory card must present onion-only nodes correctly:
  *   - the title links to SOMETHING reachable, preferring the origin then the

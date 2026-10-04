@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G6 — typed amounts in every locale.
+ * typed amounts in every locale.
  *
  * The old field sanitizers (post/edit `keepDecimal`, PayBlurtModal
  * `sanitizeAmount`) dropped every "," as it was typed: a German "12,50" became

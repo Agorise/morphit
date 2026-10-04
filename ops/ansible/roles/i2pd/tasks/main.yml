@@ -9,7 +9,7 @@
 #      blocked, and the deprecated `apt-key --recv-keys` the PPA add uses fails
 #      outright there, so we never go near them when the .deb is already on disk.
 #   2. the purplei2p PPA (online, no bundle).  The distro i2pd 2.49.0 crash-loops
-#      on startup (see REVISIT), so the maintained PPA build is preferred.  This
+#      on startup (see the backlog), so the maintained PPA build is preferred.  This
 #      path is non-fatal: if the PPA or its signing key can't be reached, we fall
 #      back to the distribution's own i2pd rather than stopping the whole install
 #      with a wall of red.
@@ -24,8 +24,8 @@
 - name: Install i2pd from the bundled .deb (no PPA, no keyserver — censored-network safe)
   # apt resolves the .deb's own dependencies from whatever sources are active
   # (the online mirrors when online, or the vendor-redirected bundle when
-  # air-gapped), so this one path covers both.  This is the path the operator (and any
-  # operator on a filtered connection who downloaded the offline tarball) takes.
+  # air-gapped), so this one path covers both.  This is the path any
+  # operator on a filtered connection who downloaded the offline tarball takes.
   ansible.builtin.apt:
     deb: "{{ morphit_i2pd_bundled_deb.files | map(attribute='path') | list | sort | first }}"
     state: present
@@ -98,7 +98,7 @@
   register: morphit_i2pd_key_stat
   when: morphit_i2pd_key_src | length > 0
 
-# Install the wizard keyfile ONLY when the server has none — the maintainer's rule: an
+# Install the wizard keyfile ONLY when the server has none — the rule: an
 # existing operable b32 is preserved, never regenerated/overwritten.
 - name: Install the wizard-generated keyfile (serve the advertised address)
   ansible.builtin.copy:

@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * MailingAddressModal (cp121) — share a physical mailing
+	 * MailingAddressModal — share a physical mailing
 	 * address through the chat for cash-by-mail trades and any
 	 * trade involving a physical-good shipment (barter_goods etc).
 	 *
@@ -29,17 +29,22 @@
 	 *    chat doesn't auto-expire today (deferred follow-up).
 	 *
 	 * Validation happens at three layers:
-	 *   1. Inline as the user types (send button disabled until valid).
-	 *   2. encodeMailingAddressPayload, throws on bad input.
+	 *   1. As the user types: the payload the button would send is checked
+	 *      with mailingAddressProblem (the encoder's own rule), so the
+	 *      button is enabled only for a payload the encoder accepts, and
+	 *      the reason is shown translated.
+	 *   2. encodeMailingAddressPayload, throws PayloadValidationError.
 	 *   3. Recipient's decodePayload falls back to plaintext if off.
 	 */
 
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import {
 		encodeMailingAddressPayload,
-		isValidCountryCode,
+		mailingAddressProblem,
 		MAILING_ADDRESS_LIMITS,
-		type MailingAddressPayload
+		PayloadValidationError,
+		type MailingAddressPayload,
+		type MailingAddressProblem
 	} from '$lib/chat/payload';
 
 	interface Props {
@@ -55,8 +60,15 @@
 
 	let { orderPermlink, onShare, onCancel }: Props = $props();
 
-	// Form state
-	let country = $state('');
+	const OTHER = '__other__';
+
+	// Form state. The picker and the "Other" code box are separate fields:
+	// binding both to one value unmounted the box on its first keystroke.
+	let countryChoice = $state('');
+	let otherCountry = $state('');
+	const country = $derived(
+		(countryChoice === OTHER ? otherCountry : countryChoice).trim().toUpperCase()
+	);
 	let street = $state('');
 	let street2 = $state('');
 	let city = $state('');
@@ -66,56 +78,87 @@
 	let note = $state('');
 
 	// ISO 3166-1 alpha-2 countries.  Top-15-by-Morphit-relevance + "Other"
-	// shows free text.  Picker UI sorts alphabetically.  Full list
-	// available via the "Type any 2-letter ISO country code" affordance.
+	// shows free text.  Full list available via the "Type any 2-letter ISO
+	// country code" affordance.
 	//
 	// Conscious choice: don't bundle all 249 ISO countries in a giant
 	// dropdown that grandma has to scroll through.  Show common ones
 	// + accept any valid 2-letter code from a small input.
-	const COMMON_COUNTRIES: ReadonlyArray<{ code: string; name: string }> = [
-		{ code: 'AU', name: 'Australia' },
-		{ code: 'CA', name: 'Canada' },
-		{ code: 'CN', name: 'China' },
-		{ code: 'DE', name: 'Germany' },
-		{ code: 'ES', name: 'Spain' },
-		{ code: 'FR', name: 'France' },
-		{ code: 'GB', name: 'United Kingdom' },
-		{ code: 'HK', name: 'Hong Kong' },
-		{ code: 'IN', name: 'India' },
-		{ code: 'IR', name: 'Iran' },
-		{ code: 'IT', name: 'Italy' },
-		{ code: 'JP', name: 'Japan' },
-		{ code: 'PL', name: 'Poland' },
-		{ code: 'RU', name: 'Russia' },
-		{ code: 'US', name: 'United States' }
-	];
+	const COMMON_COUNTRY_CODES = [
+		'AU',
+		'CA',
+		'CN',
+		'DE',
+		'ES',
+		'FR',
+		'GB',
+		'HK',
+		'IN',
+		'IR',
+		'IT',
+		'JP',
+		'PL',
+		'RU',
+		'US'
+	] as const;
 
-	const countryValid = $derived(isValidCountryCode(country));
-	const streetValid = $derived(
-		street.length > 0 && street.length <= MAILING_ADDRESS_LIMITS.streetMax
-	);
-	const cityValid = $derived(city.length > 0 && city.length <= MAILING_ADDRESS_LIMITS.cityMax);
-	const postalCodeValid = $derived(
-		postalCode.length >= MAILING_ADDRESS_LIMITS.postalCodeMin &&
-			postalCode.length <= MAILING_ADDRESS_LIMITS.postalCodeMax
-	);
-	const noteValid = $derived(note.length <= MAILING_ADDRESS_LIMITS.noteMax);
-	const street2Valid = $derived(street2.length <= MAILING_ADDRESS_LIMITS.streetMax);
-	const stateValid = $derived(state_.length <= MAILING_ADDRESS_LIMITS.stateMax);
-	const recipientNameValid = $derived(
-		recipientName.length <= MAILING_ADDRESS_LIMITS.recipientNameMax
-	);
+	/** Country names in the reader's language (the browser's own CLDR data),
+	 *  sorted in that language; the bare code where the browser has none. */
+	const commonCountries = $derived.by(() => {
+		const lang = $locale ?? 'en';
+		let names: Intl.DisplayNames | null = null;
+		try {
+			names = new Intl.DisplayNames([lang, 'en'], { type: 'region' });
+		} catch {
+			names = null;
+		}
+		return COMMON_COUNTRY_CODES.map((code) => ({ code, name: names?.of(code) ?? code })).sort(
+			(a, b) => a.name.localeCompare(b.name, lang)
+		);
+	});
 
-	const canShare = $derived(
-		countryValid &&
-			streetValid &&
-			cityValid &&
-			postalCodeValid &&
-			noteValid &&
-			street2Valid &&
-			stateValid &&
-			recipientNameValid
-	);
+	/** Exactly what Share would send (trimmed; optional fields only when set). */
+	const payload = $derived.by((): MailingAddressPayload => {
+		const p: MailingAddressPayload = {
+			v: 1,
+			kind: 'morphit_mailing_address',
+			country,
+			street: street.trim(),
+			city: city.trim(),
+			postalCode: postalCode.trim()
+		};
+		const opt = p as {
+			street2?: string;
+			state?: string;
+			recipientName?: string;
+			note?: string;
+			orderPermlink?: string;
+		};
+		if (street2.trim()) opt.street2 = street2.trim();
+		if (state_.trim()) opt.state = state_.trim();
+		if (recipientName.trim()) opt.recipientName = recipientName.trim();
+		if (note.trim()) opt.note = note.trim();
+		if (orderPermlink) opt.orderPermlink = orderPermlink;
+		return p;
+	});
+
+	/** The encoder's verdict on that payload (null = it will be accepted). */
+	const problem = $derived<MailingAddressProblem | null>(mailingAddressProblem(payload));
+	const canShare = $derived(problem === null);
+
+	/** A problem worth explaining now. A field the user has not filled yet
+	 *  only keeps the button disabled; it is not an error to show. */
+	const shownProblem = $derived.by((): MailingAddressProblem | null => {
+		if (problem === null) return null;
+		if (
+			problem === 'country_invalid' &&
+			(countryChoice === '' || (countryChoice === OTHER && otherCountry.trim() === ''))
+		)
+			return null;
+		if (problem === 'street_required' || problem === 'city_required') return null;
+		if (problem === 'postal_code_length' && postalCode.trim() === '') return null;
+		return problem;
+	});
 
 	let sending = $state(false);
 	let errorMsg = $state<string | null>(null);
@@ -125,24 +168,15 @@
 		errorMsg = null;
 		sending = true;
 		try {
-			const payload: MailingAddressPayload = {
-				v: 1,
-				kind: 'morphit_mailing_address',
-				country: country.toUpperCase(),
-				street: street.trim(),
-				city: city.trim(),
-				postalCode: postalCode.trim()
-			};
-			if (street2.trim()) (payload as { street2?: string }).street2 = street2.trim();
-			if (state_.trim()) (payload as { state?: string }).state = state_.trim();
-			if (recipientName.trim())
-				(payload as { recipientName?: string }).recipientName = recipientName.trim();
-			if (note.trim()) (payload as { note?: string }).note = note.trim();
-			if (orderPermlink) (payload as { orderPermlink?: string }).orderPermlink = orderPermlink;
 			const encoded = encodeMailingAddressPayload(payload);
 			await onShare(encoded);
 		} catch (e) {
-			errorMsg = e instanceof Error ? e.message : String(e);
+			// Never the exception text: an encoder refusal has a translated
+			// reason, anything else (the send itself) a generic one.
+			errorMsg =
+				e instanceof PayloadValidationError
+					? $_(`mailing_address_modal.problem.${e.problem}`)
+					: $_('mailing_address_modal.send_failed');
 			sending = false;
 		}
 	}
@@ -200,22 +234,25 @@
 				</label>
 				<select
 					id="ma-country"
-					bind:value={country}
+					bind:value={countryChoice}
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm dark:border-ink-700 dark:bg-ink-950"
 				>
 					<option value="">{$_('mailing_address_modal.country_placeholder')}</option>
-					{#each COMMON_COUNTRIES as c (c.code)}
+					{#each commonCountries as c (c.code)}
 						<option value={c.code}>{c.name} ({c.code})</option>
 					{/each}
-					<option value="__other__">{$_('mailing_address_modal.country_other')}</option>
+					<option value={OTHER}>{$_('mailing_address_modal.country_other')}</option>
 				</select>
-				{#if country === '__other__'}
+				{#if countryChoice === OTHER}
 					<input
-						dir="auto"
+						id="ma-country-other"
+						dir="ltr"
 						type="text"
+						autocomplete="country"
+						aria-label={$_('mailing_address_modal.country_iso_placeholder')}
 						placeholder={$_('mailing_address_modal.country_iso_placeholder')}
 						maxlength="2"
-						bind:value={country}
+						bind:value={otherCountry}
 						class="mt-2 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm uppercase dark:border-ink-700 dark:bg-ink-950"
 					/>
 				{/if}
@@ -350,6 +387,12 @@
 					{$_('mailing_address_modal.note_help')}
 				</p>
 			</div>
+
+			{#if shownProblem !== null && errorMsg === null}
+				<p class="text-sm text-red-700 dark:text-red-300" role="status">
+					{$_(`mailing_address_modal.problem.${shownProblem}`)}
+				</p>
+			{/if}
 
 			{#if errorMsg}
 				<div

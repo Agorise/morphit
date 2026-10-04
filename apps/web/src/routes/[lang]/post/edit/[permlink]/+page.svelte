@@ -4,7 +4,8 @@
 	 *
 	 * Flow:
 	 *   1. Fetch the order by (signer's blurt account, :permlink)
-	 *      via GET /v1/orders/:account. Filter to that permlink.
+	 *      via GET /v1/orders/:account/:permlink (or this browser's
+	 *      staged copy of an order it just posted).
 	 *   2. If not found OR not alive OR window expired, show the
 	 *      corresponding error card with a clear explanation.
 	 *   3. Otherwise render the form pre-filled with the current
@@ -19,13 +20,15 @@
 	 *      show an expired card.
 	 *
 	 * Indexer propagation race: a user who posts an order and
-	 * immediately clicks "Edit" may race ahead of the indexer. We
-	 * handle this by offering a quiet auto-retry (every 2s for up
-	 * to 15s) before showing the not-found card. Grandma clicks
-	 * the button; it "just works" after a second or two.
+	 * immediately clicks "Edit" may race ahead of the indexer, which
+	 * applies blocks only once irreversible (45-63 s behind head).
+	 * This browser's staged copy of the order (pendingOrders) covers
+	 * that window when the post came from here; otherwise a quiet
+	 * auto-retry (every 2 s for up to 75 s) runs before the not-found
+	 * card.
 	 */
 
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
@@ -38,7 +41,7 @@
 	import PaymentMethodsPicker from '$components/PaymentMethodsPicker.svelte';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
-	// cp165: lazy below (rare leak-detection path)
+	// lazy below (rare leak-detection path)
 	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
@@ -47,7 +50,8 @@
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderReplace, BroadcastError } from '$blurt/ops/order';
 	import { KeystoreError } from '$crypto/keystore';
-	import { getOrdersByAccount } from '$lib/indexer/client';
+	import { getOrder } from '$lib/indexer/client';
+	import { pendingOrders, mergePendingOrders } from '$lib/stores/pendingOrders';
 	import type { OrderFormInput } from '$lib/orders/payload';
 	import { makeExpiryFlooredUtcDay } from '$lib/orders/payload';
 	import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
@@ -90,11 +94,12 @@
 		| 'not_yours'
 		| 'not_live'
 		| 'window_expired'
+		| 'load_error'
 		| 'save_error';
 	let phase = $state<Phase>('loading');
 	let errorMessage = $state('');
 
-	// cp165: lazy-load
+	// lazy-load
 	const loadPrivateKeyWarningModal = () =>
 		import('$components/PrivateKeyWarningModal.svelte').then((m) => m.default);
 
@@ -113,14 +118,14 @@
 	let amountMin = $state(''); // kept as string so empty distinguishes
 	let amountMax = $state('');
 	let paymentMethods: string[] = $state([]);
-	// cp425/cp440 — for a BARTER order the accepted-crypto set is prefilled
+	// for a BARTER order the accepted-crypto set is prefilled
 	// from the order's on-chain accepted_assets and rendered READ-ONLY here:
 	// it is locked on replace (the indexer rejects a change), like
 	// side/asset/currency. To change what you accept, post a new order.
 	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
-	// v1.9.0 (the maintainer) — preserve (and allow editing of) a barter order's inline goods
+	// v1.9.0 — preserve (and allow editing of) a barter order's inline goods
 	// label through an edit; without this, saving an edit would wipe the title.
 	let specificBarterTitle = $state('');
 	let expiresDays = $state(14);
@@ -134,8 +139,8 @@
 	// (defensive about unknown shapes, falling back to the canonical
 	// 'spread 0' default — same posture as /my/orders' `relistOrder`
 	// helper).  On save we reassemble the `{kind, percent|price}`
-	// record from the picker selection.  Part 117 closure of the
-	// pre-Part-117 "future iteration" gap noted in the prior state
+	// record from the picker selection.  of the
+	// older "future iteration" gap noted in the prior state
 	// declaration.
 	type PriceModelKind = 'spread' | 'fixed';
 	let priceModelKind = $state<PriceModelKind>('spread');
@@ -144,7 +149,7 @@
 
 	// ─── Multi-network asset state ─────────────────────────────────
 	// USDT, USDC, and DAI carry an `asset_network` discriminator
-	// (cp30/cp31 schema v32-v33). The edit form must surface the
+	// (schema v32-v33). The edit form must surface the
 	// same picker UI as /post, hydrate from the existing order's
 	// asset_network on load, reset when the user switches asset
 	// off the multi-network class, and re-emit asset_network in
@@ -186,13 +191,20 @@
 	// ─── Load the order ────────────────────────────────────────────
 	async function loadOnce(): Promise<'found' | 'not_found' | 'err'> {
 		if (!blurtAccount) return 'err';
-		const result = await getOrdersByAccount(blurtAccount, { limit: 100 });
-		if (!result.ok) {
-			console.warn('[post/edit] load orders failed:', result.message);
+		// The order itself (a search of the newest page of the account's
+		// orders missed older live ones).
+		const result = await getOrder(blurtAccount, permlink);
+		if (!result.ok && result.code !== 'not_found') {
+			console.warn('[post/edit] load order failed:', result.message);
 			errorMessage = $_('edit_order.error_load_failed');
 			return 'err';
 		}
-		const found = result.data.items.find((o) => o.permlink === permlink);
+		// The indexer's row wins; this browser's staged copy covers an order it
+		// posted moments ago that the indexer has not applied yet.
+		const found =
+			mergePendingOrders(result.ok ? [result.data.item] : [], get(pendingOrders), Date.now()).find(
+				(o) => o.account === blurtAccount && o.permlink === permlink
+			) ?? null;
 		if (!found) return 'not_found';
 
 		order = found;
@@ -200,15 +212,16 @@
 	}
 
 	async function load(): Promise<void> {
-		// Auto-retry for up to 15s to give the indexer a chance to
-		// catch up if the user hit "Edit" right after posting.
-		const deadline = Date.now() + 15_000;
+		// Auto-retry for up to 75 s (the indexer applies a block 45-63 s
+		// after it is produced) if the user hit "Edit" right after posting
+		// from another device.
+		const deadline = Date.now() + 75_000;
 		let firstTry = true;
 		while (Date.now() < deadline) {
 			phase = firstTry ? 'loading' : 'retrying_indexer';
 			const result = await loadOnce();
 			if (result === 'err') {
-				phase = 'save_error'; // reuse the error card for load errors
+				phase = 'load_error';
 				return;
 			}
 			if (result === 'found') {
@@ -256,7 +269,7 @@
 		amountMin = order.amount_min === null ? '' : formatAmountForInput(order.amount_min, currentLangEdit);
 		amountMax = order.amount_max === null ? '' : formatAmountForInput(order.amount_max, currentLangEdit);
 		paymentMethods = [...order.payment_methods];
-		// cp425 — prefill the accepted-crypto set for a barter order (null/
+		// prefill the accepted-crypto set for a barter order (null/
 		// absent on crypto orders → empty). The accept-picker below renders it.
 		acceptedAssets = order.accepted_assets
 			? order.accepted_assets.filter((t): t is AssetTicker => isAssetTicker(t))
@@ -302,12 +315,12 @@
 			spreadPercent = '0';
 		}
 
-		// cp36 Bob-3 fix — hydrate the multi-network picker from
+		// hydrate the multi-network picker from
 		// `order.asset_network`. The defensive typeguards
 		// (`isUsdtNetwork` etc.) catch the case where the indexer
 		// returns a network value we don't recognize (forward-
 		// compat with future network additions, or a malformed
-		// pre-cp30 row that somehow survived migration).  On
+		// older row that somehow survived migration).  On
 		// mismatch we leave the picker null so the canSave gate
 		// forces the user to re-pick — failing closed rather
 		// than silently broadcasting a stale value.
@@ -320,7 +333,8 @@
 			daiNetwork = netRaw;
 		}
 
-		// Kick off the countdown.
+		// Kick off the countdown (one timer: a reload must not stack another).
+		if (tickTimer) clearInterval(tickTimer);
 		tickTimer = setInterval(() => {
 			remainingMs = windowExpiresAt - Date.now();
 			if (remainingMs <= 0 && phase === 'ready') {
@@ -338,11 +352,17 @@
 		return supported.reduce((prev, cur) => (Math.abs(cur - n) < Math.abs(prev - n) ? cur : prev));
 	}
 
-	onMount(() => {
+	// The order is read once a session exists: the page shows the unlock card
+	// while locked, and a remembered account name alone does not name the
+	// account to the operator.
+	let loadStarted = false;
+	$effect(() => {
 		if (!blurtAccount) {
 			phase = 'not_yours'; // user has no account at all — treat as not-yours
 			return;
 		}
+		if (!$isUnlocked || loadStarted) return;
+		loadStarted = true;
 		void load();
 	});
 
@@ -351,7 +371,7 @@
 	});
 
 	// ─── Validation (lightweight — handler re-validates) ───────────
-	// v1.20.0 fix wave, G6 — fields keep what the user typed and are parsed
+	// fields keep what the user typed and are parsed
 	// with the active locale's conventions (shared with /post). The old
 	// keepDecimal() dropped every "," as typed ("12,50" → "1250").
 	const amountMinParse = $derived(parseAmountInput(amountMin, currentLangEdit));
@@ -416,9 +436,9 @@
 		return '';
 	});
 
-	// cp425 — barter (goods/services) asset: the accepted-crypto set. On the
+	// barter (goods/services) asset: the accepted-crypto set. On the
 	// EDIT page it is LOCKED (rendered read-only), like side/asset/currency, so
-	// there's no toggle handler here — cp440.
+	// there's no toggle handler here.
 	const isBarter = $derived(isGoodsAsset(asset));
 
 	const pmError = $derived.by(() => {
@@ -440,7 +460,7 @@
 	 *  fixed prices to avoid pathological floats reaching the
 	 *  indexer). */
 	const priceModelError = $derived.by(() => {
-		// cp425 — barter is valued directly in fiat (no crypto rate); the
+		// barter is valued directly in fiat (no crypto rate); the
 		// price-model UI is hidden and an inert model is shipped, so skip.
 		if (isBarter) return '';
 		if (priceModelKind === 'spread') {
@@ -507,7 +527,7 @@
 		fixedPrice = clean;
 	}
 
-	// cp422: fail-closed on terms the indexer would reject (control / bidi /
+	// fail-closed on terms the indexer would reject (control / bidi /
 	// zero-width). Terms is multi-line markdown so TAB/LF/CR are fine. Same
 	// posture as the network gate below — better a disabled Save than a
 	// silent post-broadcast `terms_forbidden_char` rejection.
@@ -521,7 +541,7 @@
 			!priceModelError &&
 			!termsForbidden &&
 			remainingMs > 0 &&
-			// cp36 Bob-3 fix — multi-network assets require a picked
+			// multi-network assets require a picked
 			// network. Without this gate the user can save with an
 			// empty picker; the indexer rejects with
 			// `asset_network_required_for_<asset>` after broadcast,
@@ -529,7 +549,7 @@
 			(asset !== 'USDT' || usdtNetwork !== null) &&
 			(asset !== 'USDC' || usdcNetwork !== null) &&
 			(asset !== 'DAI' || daiNetwork !== null) &&
-			// cp425 — a barter (goods/services) order requires Terms describing
+			// a barter (goods/services) order requires Terms describing
 			// the wares (≥3 chars), same rule as /post.
 			(!isBarter || terms.trim().length >= 3)
 	);
@@ -564,7 +584,7 @@
 		// emit the same canonical shape.  Spread defaults to 0 when
 		// the field is empty (treated as 'market rate').
 		const priceModel: Record<string, unknown> = isBarter
-			? // cp425 — barter has no crypto-vs-fiat rate; ship an inert, VALID
+			? // barter has no crypto-vs-fiat rate; ship an inert, VALID
 				// model (spread 0%; a 'fixed' price of 0 fails the indexer's
 				// positive-price check). Value is the fiat amount range.
 				{ kind: 'spread', percent: 0 }
@@ -580,7 +600,7 @@
 			amountMax: amountMaxNum,
 			priceModel,
 			locationRegion: region.trim() || null,
-			// cp425 — a barter order's payment_methods are the `pay_<crypto>`
+			// a barter order's payment_methods are the `pay_<crypto>`
 			// rails for its accepted cryptos (so the orderbook filter shows the
 			// accepted coins); the on-chain acceptedAssets set carries the
 			// tickers. Crypto orders keep the user's payment methods.
@@ -588,7 +608,7 @@
 				? acceptedAssets.map((a) => `pay_${a.toLowerCase()}`)
 				: paymentMethods,
 			acceptedAssets: isBarter && acceptedAssets.length > 0 ? acceptedAssets : undefined,
-			// v1.9.0 (the maintainer) — carry the barter goods label through the edit (builder +
+			// v1.9.0 — carry the barter goods label through the edit (builder +
 			// indexer re-sanitize; omitted/blank for crypto).
 			specificBarterTitle: isBarter ? specificBarterTitle : undefined,
 			terms: terms.trim() || null,
@@ -598,7 +618,7 @@
 			// post time."
 			expiresAt: makeExpiryFlooredUtcDay(expiresDays),
 			lang: postLang || undefined,
-			// cp36 Bob-3 fix — emit the active multi-network asset's
+			// emit the active multi-network asset's
 			// network in the replace payload. buildOrderPayload (in
 			// $lib/orders/payload.ts) reads this and writes the wire-
 			// shape `asset_network` field; the indexer's orderReplace
@@ -659,7 +679,7 @@
 	</header>
 
 	{#if $isPairedReadOnly}
-		<!-- Part 116: paired-readonly users get an explicit affordance
+		<!-- paired-readonly users get an explicit affordance
 		     pointing them at their phone, with the order's permlink
 		     preserved in the deep link so the phone opens the same
 		     edit form pre-loaded.  Without this branch the user hit
@@ -758,6 +778,20 @@
 				</BusyButton>
 			</div>
 		</section>
+	{:else if phase === 'load_error'}
+		<section class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950" role="alert">
+			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
+				{$_('edit_order.load_error_title')}
+			</h2>
+			{#if errorMessage}
+				<p class="mt-2 text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
+			{/if}
+			<div class="mt-4">
+				<BusyButton variant="primary" onclick={() => void load()}>
+					{$_('common.retry')}
+				</BusyButton>
+			</div>
+		</section>
 	{:else if phase === 'save_error'}
 		<section class="card border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950" role="alert">
 			<h2 class="font-display text-lg font-bold text-red-900 dark:text-red-100">
@@ -770,11 +804,13 @@
 				<p class="mt-1 text-xs text-red-700 dark:text-red-300">{errorMessage}</p>
 			{/if}
 			<div class="mt-4">
+				<!-- Back to the form with the user's edits as they left them (a
+				     reload here re-hydrated the form from the chain and threw
+				     the edits away). -->
 				<BusyButton
 					variant="primary"
 					onclick={() => {
 						phase = 'ready';
-						void load();
 					}}
 				>
 					{$_('common.retry')}
@@ -889,7 +925,7 @@
 			{/if}
 		</section>
 
-		<!-- Price-model picker (Part 117).  Mirrors the /post screen's
+		<!-- Price-model picker.  Mirrors the /post screen's
 		     picker so an editor can change pricing without having to
 		     cancel-and-re-list.  Picker state is initialized from the
 		     loaded order in `load()`; submission reassembles the on-
@@ -1008,7 +1044,7 @@
 				{#if isBarter}
 					<p class="mb-1 text-sm font-semibold">{$_('post_order.form.barter_accept_label')}</p>
 					<p class="mb-2 text-xs text-ink-500">{$_('edit_order.barter_accept_locked_hint')}</p>
-					<!-- cp440 — the accepted-crypto set is LOCKED while editing, like
+					<!-- the accepted-crypto set is LOCKED while editing, like
 					     side / asset / currency above. A counterparty who clicked
 					     through on the original listing chose it partly on WHICH coins
 					     they'd be paid in; letting the poster silently drop one (or

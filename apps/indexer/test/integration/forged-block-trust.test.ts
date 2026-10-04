@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, E1 — ONE RPC endpoint decides a block's content.
+ * ONE RPC endpoint decides a block's content.
  *
  * The poller and the head tailer read each block from a single endpoint, and
  * nothing re-checked the signatures inside it. A hostile endpoint in the pool
@@ -159,6 +159,50 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 		it('…but still shows one @alice really signed (the fast path is not switched off)', async () => {
 			const { chat } = await tailerEmits(block([signedTrx(chatOp('alice'), real)]));
 			expect(chat).toEqual(['alice']);
+		});
+
+		it('a genuinely signed but long-EXPIRED transaction replayed in a head block is not shown live', async () => {
+			const old = cryptoUtils.signTransaction(
+				{ ...unsignedTrx(chatOp('alice')), expiration: '2025-03-01T12:00:00' } as never,
+				[real]
+			) as unknown as ReturnType<typeof unsignedTrx>;
+			expect((await tailerEmits(block([old]))).chat).toEqual([]);
+			const cancel: [string, unknown] = [
+				'custom_json',
+				{
+					required_auths: [],
+					required_posting_auths: ['alice'],
+					id: 'morphit_order_cancel_v1',
+					json: JSON.stringify({ permlink: 'sell-blurt-1' })
+				}
+			];
+			const oldCancel = cryptoUtils.signTransaction(
+				{ ...unsignedTrx(cancel), expiration: '2025-03-01T12:00:00' } as never,
+				[real]
+			) as unknown as ReturnType<typeof unsignedTrx>;
+			expect((await tailerEmits(block([oldCancel]))).orders).toEqual([]);
+		});
+
+		it('a "head" block whose time is far from now is not shown live, however it is signed', async () => {
+			const at = '2025-03-01T12:00:00';
+			const trx = cryptoUtils.signTransaction(
+				{ ...unsignedTrx(chatOp('alice')), expiration: '2025-03-01T12:01:00' } as never,
+				[real]
+			) as unknown as ReturnType<typeof unsignedTrx>;
+			expect((await tailerEmits({ ...block([trx]), timestamp: at })).chat).toEqual([]);
+		});
+
+		it('a transaction the durable path already stored is not shown live again', async () => {
+			const trx = signedTrx(chatOp('alice'), real);
+			const b = block([trx]);
+			await fx.db.query(
+				`INSERT INTO chat_messages (sender, recipient, ciphertext, header, created_at, source_trx_id)
+				 VALUES ('alice', 'bob', 'x', '{}'::jsonb, now(), $1)`,
+				// Stored under the id the chain gives it — its content's; the id a
+				// node lists in the block is not consulted (VT1-9).
+				[cryptoUtils.generateTrxId(trx as never)]
+			);
+			expect((await tailerEmits(b)).chat).toEqual([]);
 		});
 
 		it('an unsigned provisional order cancel hides nothing', async () => {

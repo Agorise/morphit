@@ -41,7 +41,7 @@ ADR-0008 guarantee intact for everything that matters.
 
 ## Decision
 
-Add a **separate head-block tailer** (`apps/indexer/src/indexer/chatHeadTailer.ts`)
+Add a **separate head-block tailer** (`apps/indexer/src/indexer/headTailer.ts`)
 that polls the chain **head** (not the irreversible point), extracts
 `morphit_chat_v1` ops from new head blocks, and emits each over SSE as a
 **provisional** message within a couple of seconds. The durable, irreversible

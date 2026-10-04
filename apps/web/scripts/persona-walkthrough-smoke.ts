@@ -2,7 +2,7 @@
 /**
  * persona-walkthrough-smoke.
  *
- * Structural sentinel-pins for the Part 119 persona-walkthrough
+ * Structural sentinel-pins for the persona-walkthrough
  * fixes (Bob, Sally, Sally-operator).  Each scenario greps the
  * source for the canonical phrase or call-site that proves the
  * fix is still wired.  If a later refactor removes the protection,
@@ -30,37 +30,34 @@
  *   So-4  init.ts JSDoc step-count disclaimer
  *   So-6  systemd install uses the path-aware installer (beta14 — retires the ~/morphit drop-in)
  *
- * Plus several drift-catchers added during the Part 119 docs
+ * Plus several drift-catchers added during the docs
  * audit pass that aren't tied to a persona but matter equally:
  *
  *   D-1   morphit-ops (binary name, NO space) in operator docs
  *   D-2   no MORPHIT_INDEXER_FEES_ACCOUNT ghost env var anywhere
  *   D-3   monorepo install paths consistent in OPERATIONS.md
- *   D-4   schema version in PRE-LAUNCH reflects v31
- *   D-5   --dry-run flag claim removed from PRE-LAUNCH
  *   D-7   POST-LAUNCH backup recipe uses real systemd timer
  *   D-8   /v1/health diagnostics field paths match real shape
- *   D-9   PRE-LAUNCH wizard step-count realistic ("~17"/disclaimer)
  *   D-10  Postgres-version doc claim not over-restrictive
  *   D-11  Operator-register CLI command matches real subcommand
  *   D-12  Indexer nginx path /v1/ in §12 troubleshooting
  *   D-13  /v1/health field name "lag_blocks" not "head_lag_blocks"
  *
- * Part 120 additions:
+ *
  *
  *   P120-FAQ  public_api + qr_login FAQ entries wired in FAQ_KEYS
  *             (orphan-entry catch: translated in 10 locales but
  *              never rendered because not in the FAQ_KEYS array).
  *
- * Part 121 additions:
  *
- *   P121-DOC  Four operator/launch-doc sentinels pinning the
+ *
+ *   P121-DOC  Three operator/launch-doc sentinels pinning the
  *             `npm install` workspace-symlinks + smoke-suite
  *             ERR_MODULE_NOT_FOUND troubleshooting in RUN-A-NODE,
- *             OPERATIONS, and PRE-LAUNCH-CHECKLIST (P121-DOC 1-3),
- *             plus the Part 121 fee_method enum-freeze forward-
+ *             and OPERATIONS (P121-DOC 1-2),
+ *             plus the fee_method enum-freeze forward-
  *             note on ADR-0011 (P121-DOC-4).  The ADR-0011
- *             sentinel was added as a Part 121 cp2 catch-up after
+ *             sentinel was added as a catch-up after
  *             the discipline-correction memory edit (#24): when
  *             shipping a code-level invariant, the ADR that
  *             established the original wire format MUST gain a
@@ -70,23 +67,23 @@
  *             across canonical registry, frontend registry,
  *             per-network metadata module, indexer validation
  *             gates, and the orderbook row UI.  If any of these
- *             surfaces silently lose their Part 121 shape (e.g.
+ *             surfaces silently lose their shape (e.g.
  *             USDT.canPayListingFee flipped to true, defaultNetwork
  *             changed from null, the indexer's per-network gates
  *             stripped, or the orderbook row dropping the network
  *             chip), the smoke fails loudly.
  *
  *   P121-CP6  Five sentinels pinning the operator-stance
- *             surfacing work (item 3 from the cp6 plow-through
+ *             surfacing work (item 3 from the plow-through
  *             session).  /v1/instance now exposes
  *             `disabled_assets`; indexer-client mirrors the
- *             optional field for back-compat with pre-cp6
+ *             optional field for back-compat with older
  *             indexers; the frontend instance store hydrates
  *             it with `[]` fallback; /about-this-instance
  *             renders the per-instance stance; /run-a-node
  *             carries the prospective-operator explainer with
  *             the MORPHIT_INDEXER_DISABLED_ASSETS env var
- *             named directly.  Memory #25 ("every new tradable
+ *             named directly.  The default-on rule for new assets ("every new tradable
  *             asset ships default-ON instance-wide; operators
  *             opt out per-asset") is what these sentinels are
  *             defending — losing the surface would silently
@@ -129,19 +126,19 @@
  *             ops/scripts/morphit-{smartctl,fail2ban,mdadm}-
  *             monitor.sh each emit structured JSON in the
  *             LogRecord envelope; the classifier knows about
- *             every cp11 event at every tier (7 CRITICAL,
+ *             every event at every tier (7 CRITICAL,
  *             5 WARN, 3 INFO); ALERT_COPY has ELI5 advice for
  *             all of them; the bot's default JOURNALCTL_UNITS
  *             list covers all five sidecar units; the Ansible
  *             playbook at ops/ansible/playbook.yml integrates
- *             the cp9 matrix_bot + cp10 host_monitor +
- *             cp11 smartctl/fail2ban/mdadm roles with opt-in
+ *             the matrix_bot + host_monitor +
+ *             smartctl/fail2ban/mdadm roles with opt-in
  *             enable_* flags (all default false); and the
  *             matrix-bot npm-install requirement (better-sqlite3
  *             native build needing nodejs.org access) is
  *             documented in OPERATIONS.md §16.
  *
- *   P121-CP12 Four sentinels pinning the cp12 quality-gates +
+ *   P121-CP12 Four sentinels pinning the quality-gates +
  *             extended-extended sidecars work.  Two new
  *             tsx-based smokes (ansible-structural-smoke +
  *             ansible-lint-smoke) registered in run-smokes.sh
@@ -164,7 +161,7 @@
  *             sidecar units (indexer + relay + 6 monitors)
  *             with zero operator-side wiring needed.
  *
- *   P121-CP13 Five sentinels pinning the cp13 CI workflow +
+ *   P121-CP13 Five sentinels pinning the CI workflow +
  *             three more sidecars + matrix-bot deps-pin check.
  *             Forgejo Actions workflow at .forgejo/workflows/
  *             ci.yml runs three gate jobs on every push and PR
@@ -198,9 +195,9 @@
  *             bash-emits-JSON / TS-classifier-consumes-JSON
  *             contract.  Additionally validates that every
  *             event name in every sidecar follows the
- *             lowercase_snake convention (catches the cp9 bug
+ *             lowercase_snake convention (catches the bug
  *             class at source).  workspace-deps-pin-check.ts
- *             generalizes the cp13 matrix-bot-only check to
+ *             generalizes the matrix-bot-only check to
  *             ALL workspaces (apps/ + packages/), catching
  *             version drift across the monorepo not just one
  *             corner.  Two new POSIX-sh sidecars: systemd-
@@ -250,7 +247,7 @@
  *
  *   P121-CP16 Three sentinels pinning the SSE-stream shape
  *             smoke + expanded REST-API coverage.
- *             sse-stream-shape-smoke.ts ports cp15's contract-
+ *             sse-stream-shape-smoke.ts ports the contract-
  *             validation pattern to the three Server-Sent
  *             Events endpoints (/v1/orderbook/stream,
  *             /v1/instances/stream, /v1/chat/:a/:b/stream).
@@ -272,7 +269,7 @@
  *             schema coverage.  api-response-shape smoke now
  *             covers ALL @morphit/indexer-client response
  *             types (76 checks across 38 interfaces): the
- *             cp16 set plus ClearingPricePoint, ClearingPrice-
+ *             set plus ClearingPricePoint, ClearingPrice-
  *             HistoryResponse, BatchProfilesResponse, Feedback-
  *             Record (with rating literal-union + nested
  *             responses array), FeedbackResponseRecord,
@@ -336,8 +333,9 @@ const SCENARIOS: readonly Scenario[] = [
 			'backup_keys.paired.body',
 			'backup_keys.paired.deeplink_hint',
 			'backup_keys.paired.deeplink_cta',
-			'web+morphit://backup-keys',
-			'Bob finding B-2'
+			// The triple-slash form: the pairing resolver refuses a link with an
+			// authority (web+morphit://backup-keys resolved to nothing).
+			'web+morphit:///backup-keys'
 		]
 	},
 	{
@@ -373,7 +371,7 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: 'S-12 — /post asset-explainer Tooltips no longer pass hardcoded ariaLabel',
 		file: 'src/routes/[lang]/post/+page.svelte',
-		// cp396: the per-asset Tooltip chain was replaced by a single
+		// the per-asset Tooltip chain was replaced by a single
 		// alphabetized loop. Each block is a Tooltip whose textKey is the
 		// derived explainer key (post_order.form.asset_explainer.<ticker>),
 		// built once in `assetPickerItems`. So the evidence is the dynamic
@@ -387,12 +385,12 @@ const SCENARIOS: readonly Scenario[] = [
 			'ariaLabel="What is BTC?"',
 			'ariaLabel="What is XMR?"'
 		],
-		// Part 122 cp6 F7: broaden coverage beyond any literal list. Any
+		// broaden coverage beyond any literal list. Any
 		// asset Tooltip added with a hardcoded `ariaLabel="What is X?"` prop
 		// would regress S-12. The regex catches every `ariaLabel="..."` Svelte
 		// prop with a literal string value on this page, regardless of asset.
 		// Acceptable forms derive from i18n via `effectiveAriaLabel` (no
-		// ariaLabel prop — the cp396 asset blocks) or a `{$_("...")}` value.
+		// ariaLabel prop — the asset blocks) or a `{$_("...")}` value.
 		assertNoRegexMatch: [
 			{
 				pattern: /\bariaLabel="[^"]*"/,
@@ -483,7 +481,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		// The landing lists the three diagnostic children.  If any
 		// future PR removes the landing, /en/dev 404s again — same
-		// dead-end Sally-operator hit pre-cp136.
+		// dead-end Sally-operator hit older.
 		mustHave: [
 			'/dev/icons',
 			'/dev/responsive',
@@ -492,7 +490,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 
-	// ─── Drift-catchers from Part 119 docs audit ─────────────────────────
+	// ─── Drift-catchers from docs audit ─────────────────────────
 	{
 		name: 'D-1 — no `morphit ops ` (space) typos in operator docs',
 		file: 'docs/OPERATIONS.md',
@@ -529,29 +527,7 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['cd /opt/morphit-relay', 'cd /opt/morphit-indexer']
 	},
 	{
-		name: 'D-4 — PRE-LAUNCH reflects collapsed schema with v33 features',
-		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		rootRelative: true,
-		// Originally pinned v31 (Part 119); bumped to v32 in Part 121
-		// cp3 when orders.asset_network landed; bumped to v33 in Part
-		// 122 cp13 when push_subscriptions + push_pending landed.
-		// Part 122 cp82 refactored the wording to reflect the
-		// collapsed-migration reality (MIGRATIONS[] stops at v1 which
-		// subsumes v1-v27; v28-v33 features live inline in schema.sql)
-		// — the anchor now pins both `schema_migrations.version = 1`
-		// (the current MIGRATIONS[] head) AND the v33-feature
-		// inventory phrase that any future v34 addition must update.
-		// If a future part adds another migration, bump BOTH this
-		// sentinel + the doc together.
-		mustHave: [
-			'`schema_migrations.version = 1`',
-			'`push_subscriptions`',
-			'`extension_count`'
-		],
-		mustNotHave: ['currently at v29 as of Part 108++', 'currently at v32 as of']
-	},
-	{
-		// Part 122 cp2 — F5 finding from cp1 audit.
+		// F5 finding from audit.
 		//
 		// The migration model collapsed v2-v27 into v1 (May 2026 audit).
 		// v28-v32 changes live INLINE in schema.sql, but MIGRATIONS[]
@@ -571,36 +547,35 @@ const SCENARIOS: readonly Scenario[] = [
 		// validateMigrationsContract() runtime check.
 		//
 		// Maintenance: every schema version bump REQUIRES updating
-		// THREE places in the same work unit:
+		// TWO places in the same work unit:
 		//   1. apps/indexer/src/db/schema.sql (the actual DDL)
-		//   2. docs/PRE-LAUNCH-CHECKLIST.md (D-4 above)
-		//   3. this sentinel
-		// If post-launch you also add MIGRATIONS[vN], that's a fourth
-		// site.  Three drift-anchors all pulling the same direction.
+		//   2. this sentinel
+		// If post-launch you also add MIGRATIONS[vN], that's a third
+		// site.  Drift-anchors all pulling the same direction.
 		name: 'P122-CP2-F5 — schema.sql canonical head version pinned (cp1 F5 fix)',
 		file: 'apps/indexer/src/db/schema.sql',
 		rootRelative: true,
-		// The canonical head is v33 (Part 122 cp13 — push_subscriptions
-		// + push_pending tables, with cp14 adding the `locale` column).
+		// The canonical head is v33 (push_subscriptions
+		// + push_pending tables, with adding the `locale` column).
 		// This line is a late version-header comment in schema.sql; if
 		// it changes the sentinel fails, forcing the maintainer to
-		// either bump the sentinel (and check D-4 above) or revert
-		// the schema change.  Part 122 cp82 audit bumped this anchor
+		// either bump the sentinel (and check above) or revert
+		// the schema change.  bumped this anchor
 		// from v32 (the original pin) to v33 — the sentinel was
 		// passing on a stale anchor because schema.sql contained
-		// BOTH `v32 / Part 121` AND `v33 / Part 122 cp13` headers
+		// BOTH the `v32` AND the `v33` headers
 		// (the inline-without-MIGRATIONS pattern this sentinel was
-		// designed to catch had already started to drift).  cp82
+		// designed to catch had already started to drift).
 		// re-anchors at v33 to restore the load-bearing property.
-		mustHave: ['v33 / Part 122 cp13 — Web Push subscription storage + delivery queue']
+		mustHave: ['v33 — Web Push subscription storage + delivery queue']
 	},
 	{
-		// Part 122 cp3 — DNS-rebinding closure in federationProbe.
+		// DNS-rebinding closure in federationProbe.
 		//
-		// Cp7 REVISIT §A documented the gap: the existing hostname
+		// backlog §A documented the gap: the existing hostname
 		// denylist catches `https://127.0.0.1/` etc., but a hostname
 		// resolving to a private IP at fetch time would bypass the
-		// check.  cp3 closes the gap with a three-layer defense:
+		// check.  A later change closes the gap with a three-layer defense:
 		//   1. isPrivateHostname() — literal-string check (existing)
 		//   2. resolveAndValidatePublicIp() — DNS lookup +
 		//      per-IP validation against private-network deny list
@@ -613,7 +588,7 @@ const SCENARIOS: readonly Scenario[] = [
 		// that keeps smokes offline-deterministic.  If a future
 		// refactor strips the dispatcher or skips the pre-validation,
 		// the sentinel catches it at PR time.
-		// Cp154 — the helper bodies (isPrivateHostname,
+		// the helper bodies (isPrivateHostname,
 		// isPrivateIp) were lifted to `@morphit/net-defense`
 		// so the mcp-server can consume the same primitives.
 		// federationProbe.ts now imports + re-exports them; the
@@ -634,7 +609,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// cp154 — net-defense package self-pin.  The
+		// net-defense package self-pin.  The
 		// IPv4/IPv6 branches that used to live in
 		// federationProbe.ts are now here.  Sentinel pins both
 		// pure-function exports + the subtle branches (IPv4-
@@ -649,19 +624,19 @@ const SCENARIOS: readonly Scenario[] = [
 			// IPv4-mapped IPv6 unwrap is the subtle one — explicitly
 			// pin its presence so a future refactor doesn't drop it.
 			'::ffff:',
-			// CGNAT range (RFC 6598) — added in cp3 because operators
+			// CGNAT range (RFC 6598) — added because operators
 			// sometimes have internal services in 100.64/10.
 			'100\\.(6[4-9]'
 		]
 	},
 	{
-		// Part 122 cp4 — F9 (LOW) — paired-session "far past" check.
+		// F9 (LOW) — paired-session "far past" check.
 		//
 		// pairedSession.ts docblock promised "Reject obviously-bogus
-		// timestamps (negative, far past, far future)".  Pre-cp4 the
+		// timestamps (negative, far past, far future)".  Previously, the
 		// code only checked "negative" and "far future" — the "far
 		// past" leg was missing.  Defense-contract drift surfaced
-		// during cp4's Matrix/relay black-hat redux.  Cp4 closed it
+		// during the Matrix/relay black-hat redux.  A later change closed it
 		// with a `MAX_PAIRED_AGE_SECONDS` constant (365 days) +
 		// matching test case.  Sentinel pins all three legs of the
 		// contract against future drift.
@@ -676,20 +651,20 @@ const SCENARIOS: readonly Scenario[] = [
 			'r.pairedAt < 0',
 			// Far-future check:
 			'r.pairedAt > now + 86400',
-			// Far-past check (the cp4 fix):
+			// Far-past check (the fix):
 			'r.pairedAt < now - MAX_PAIRED_AGE_SECONDS'
 		]
 	},
 	{
-		// Part 122 cp5 — F10 (HIGH) — Jinja variable-name typo in
+		// F10 (HIGH) — Jinja variable-name typo in
 		// the Ansible npm-install task's changed_when expression.
-		// Pre-cp5 the second clause referenced `npm_install_result`
+		// Previously, the second clause referenced `npm_install_result`
 		// which doesn't exist (registered name is
 		// `morphit_npm_install_result`).  When npm produces output
 		// without 'changed' (the typical first-install case), Jinja
 		// evaluates the undefined variable and Ansible aborts the
 		// playbook with `'npm_install_result' is undefined`.
-		// Cp5 fixed by aligning both clauses on the registered name.
+		// A later change fixed by aligning both clauses on the registered name.
 		// Sentinel pins the absence of the typo + the presence of
 		// the correctly-named pair.
 		name: 'P122-CP5-F10 — Ansible clone_and_build.yml npm-install changed_when references the actual registered name twice',
@@ -700,12 +675,12 @@ const SCENARIOS: readonly Scenario[] = [
 			"'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
 		],
 		mustNotHave: [
-			// The pre-cp5 typo MUST NOT reappear.
+			// The older typo MUST NOT reappear.
 			"'added' in npm_install_result.stdout"
 		]
 	},
 	{
-		// Part 122 cp5 — F11 (MEDIUM), corrected in the v1.9.9 doc
+		// F11 (MEDIUM), corrected in the v1.9.9 doc
 		// accuracy audit. The shipped morphit-relay.service (and
 		// morphit-indexer.service) run as `User=root` — NOT
 		// `User=morphit-relay`, which no install path ever creates
@@ -717,7 +692,7 @@ const SCENARIOS: readonly Scenario[] = [
 		// The earlier `morphit-relay:morphit-relay` guidance chowned
 		// to a nonexistent user and would fail the command outright.
 		// Sentinel pins the corrected chown and forbids both the
-		// pre-cp5 `morphit:morphit` combined-chown and the
+		// older `morphit:morphit` combined-chown and the
 		// nonexistent-user `morphit-relay:morphit-relay` form.
 		name: 'P122-CP5-F11 — OPERATIONS.md chowns /etc/morphit env files root:morphit 0640 (units run User=root; matches Ansible + init.ts)',
 		file: 'docs/OPERATIONS.md',
@@ -726,17 +701,17 @@ const SCENARIOS: readonly Scenario[] = [
 			'sudo chown root:morphit /etc/morphit/indexer.env /etc/morphit/relay.env'
 		],
 		mustNotHave: [
-			// The pre-cp5 buggy combined morphit:morphit chown MUST NOT reappear.
+			// The older buggy combined morphit:morphit chown MUST NOT reappear.
 			'sudo chown morphit:morphit /etc/morphit/indexer.env /etc/morphit/relay.env',
 			// The nonexistent-user form (units run as root, not morphit-relay) MUST NOT reappear.
 			'chown morphit-relay:morphit-relay /etc/morphit/relay.env'
 		]
 	},
 	{
-		// Part 122 cp5 — F12 (HIGH) — Ansible base role must
+		// F12 (HIGH) — Ansible base role must
 		// create the `morphit-relay` system user BEFORE the
 		// morphit role tries to enable the morphit-relay.service.
-		// Pre-cp5 the playbook ran systemctl enable + start on
+		// Previously, the playbook ran systemctl enable + start on
 		// services that reference `User=morphit-relay` without
 		// the user ever being created — a fresh-deploy hard fail.
 		// Sentinel pins the user-creation task in the base role.
@@ -755,7 +730,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// Part 122 cp5 — F13 (LOW) — the relay.env.j2 template
+		// F13 (LOW) — the relay.env.j2 template
 		// must NOT carry a MORPHIT_RELAY_PASSPHRASE line.  No code
 		// path consumes that env var (the relay unlocks via TTY
 		// prompt or systemd LoadCredential); having it in the
@@ -774,11 +749,11 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// Part 122 cp5 — F14 (MEDIUM) — operator-doc wizard-step
+		// F14 (MEDIUM) — operator-doc wizard-step
 		// number had drifted from the code.  OPERATIONS.md said
 		// "morphit-ops init step 12 asks: Enable daily DB backup"
 		// but the backup prompt has migrated forward as steps were
-		// inserted ahead of it: pre-Part-109 it was step 12; Part 109
+		// inserted ahead of it: older it was step 12
 		// added stepFeeExplorers + stepChatLink; later the Homepage-SEO
 		// meta step (step 16) landed just ahead of it, taking backup to
 		// step 17 of 23.
@@ -802,23 +777,23 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// Part 122 cp5 — F14 companion — TOTAL_STEPS pinned in
+		// F14 companion — TOTAL_STEPS pinned in
 		// steps.ts.  If the wizard ever grows or shrinks the step
 		// count, this sentinel fails so the OPERATIONS.md doc
-		// references can be re-audited at the same turn.
+		// references can be re-audited in the same change.
 		//
-		// cp167 update: was 18, now 20.  cp167 added the MCP step
+		// update: was 18, now 20.  A later change added the MCP step
 		// (default-Yes, federation-wide discoverability) and the
 		// stepMatrixSurfaces/stepRpcEndpoints explicit-numbering
 		// pass that took the orchestrator's effective step count
 		// from 18 to 20.
 		//
-		// cp182 update: now 22.  cp182 added stepBunkerWeb (the
+		// update: now 22.  A later change added stepBunkerWeb (the
 		// reverse-proxy/WAF decision that wires
 		// MORPHIT_RELAY_TRUSTED_PROXY_IPS, 20 → 21) and stepHardening
 		// (the host-hardening checklist generator, 21 → 22).
 		//
-		// cp208 update: now 23.  cp208 inserted step 14
+		// update: now 23.  A later change inserted step 14
 		// "Payment-method policy" (the Barter enable/disable toggle,
 		// writing MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS) right
 		// after the trade-only asset policy step, bumping the later
@@ -831,11 +806,11 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// Part 122 cp6 — schema-as-contract first layer.
+		// schema-as-contract first layer.
 		//
 		// The signupClient module must import RelayErrorCode from
 		// the shared @morphit/relay-client package, not duplicate
-		// the literal union inline.  Pre-cp6 signupClient.ts had
+		// the literal union inline.  Previously, signupClient.ts had
 		// its own copy of the ~25 relay error codes; if the relay
 		// added a new code (e.g. 'name_reserved_for_operator') and
 		// the client didn't add it too, the client would fall
@@ -849,7 +824,7 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			"import('@morphit/relay-client').RelayErrorCode"
 		],
-		// Pre-cp6 the codes were duplicated inline.  This sentinel
+		// Previously, the codes were duplicated inline.  This sentinel
 		// rejects the inline duplication pattern.  The mustNotHave
 		// targets the two most distinctive relay-only codes; if
 		// either reappears as a string literal in signupClient,
@@ -858,14 +833,6 @@ const SCENARIOS: readonly Scenario[] = [
 			"| 'invite_rate_limited'",
 			"| 'spacing_cooldown'"
 		]
-	},
-	{
-		name: 'D-5 — PRE-LAUNCH does not reference nonexistent --dry-run flag',
-		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		rootRelative: true,
-		// The indexer has no --dry-run flag; verify the bad
-		// recommendation is gone.
-		mustNotHave: ['npm run start -- --dry-run']
 	},
 	{
 		name: 'D-7 — POST-LAUNCH backup recipe uses real systemd timer',
@@ -905,13 +872,6 @@ const SCENARIOS: readonly Scenario[] = [
 			'.diagnostics.relay.balance_blurt',
 			'.diagnostics.treasury.address_source'
 		]
-	},
-	{
-		name: 'D-9 — PRE-LAUNCH wizard step-count realistic',
-		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		rootRelative: true,
-		mustHave: ['~23 prompts', 'steps.ts'],
-		mustNotHave: ['covers all 14 steps']
 	},
 	{
 		name: 'D-10 — OPERATIONS.md Postgres version accepts 14+ (stock Ubuntu 22.04)',
@@ -961,7 +921,7 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['"head_lag_blocks":']
 	},
 
-	// ─── Part 120 — FAQ orphan catch ─────────────────────────────────────
+	// ─── FAQ orphan catch ─────────────────────────────────────
 	// Two FAQ entries (public_api, qr_login) had been translated into
 	// all 10 locales but never rendered because they weren't listed in
 	// FAQ_KEYS.  Both are flagship-feature entries.  These sentinels
@@ -988,14 +948,14 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: ['"qr_login":']
 	},
 
-	// ─── Part 121 — workspace symlink / smoke-failure note ──────────
+	// ─── workspace symlink / smoke-failure note ──────────
 	// New operators following RUN-A-MORPHIT-NODE.md need to know that
 	// `npm install` creates the workspace symlinks under
 	// `node_modules/@morphit/*` that the smoke suite depends on, and
 	// that a fresh-clone snapshot without `npm install` yet will see
 	// several smoke runners fail with `ERR_MODULE_NOT_FOUND`
 	// referencing a `@morphit/*` package (count drifts across releases
-	// as smokes are added or refactored; cp1 saw 13, cp22 saw 6, the
+	// as smokes are added or refactored; saw 13, saw 6, the
 	// number itself is not load-bearing — the symptom + fix is what
 	// matters).  These sentinels pin the doc claim against future
 	// drift so an operator hitting the symptom finds the right
@@ -1017,28 +977,18 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'P121-DOC-3 — PRE-LAUNCH-CHECKLIST §C has smoke-suite verification step',
-		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		rootRelative: true,
-		mustHave: [
-			'bash scripts/run-smokes.sh',
-			'ERR_MODULE_NOT_FOUND',
-			'Part 121 audit'
-		]
-	},
-	{
 		name: 'P121-DOC-4 — ADR-0011 carries Part 121 fee_method enum-freeze forward-note',
 		file: 'docs/adr/0011-dynamic-fee-model.md',
 		rootRelative: true,
 		mustHave: [
 			'2026-05-13 forward note',
 			'wire-format-frozen invariant',
-			'memory #23',
+			'Per the trade-only rule',
 			'fee-method-enum-frozen-smoke',
 			'first-buy-waiver-payment-agnostic-smoke'
 		]
 	},
-	// ─── Part 121 cp3 — USDT shipped ─────────────────────────
+	// ─── USDT shipped ─────────────────────────
 	{
 		name: 'P121-USDT-1 — canonical asset registry has USDT entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -1090,10 +1040,10 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'P121-USDT-5a — orderbook page derives the USDT network chip',
 		file: 'apps/web/src/routes/[lang]/orderbook/+page.svelte',
 		rootRelative: true,
-		// cp404 — the verbose order_row.network_hint sentence was replaced by
+		// the verbose order_row.network_hint sentence was replaced by
 		// the compact network-name chip; the page derives which network and
 		// looks up its display name, then passes the chip to OrderCard.
-		// cp442 — that derivation moved OUT of this page's row loop into the
+		// that derivation moved OUT of this page's row loop into the
 		// shared `$lib/orders/networkChip` helper, because the featured strip
 		// renders the same OrderCard and had no chip at all (a featured USDT
 		// order that doesn't name its chain is a lose-your-funds ambiguity).
@@ -1123,9 +1073,9 @@ const SCENARIOS: readonly Scenario[] = [
 		name: 'P121-STABLECOIN-5b — OrderCard renders the network chip + stablecoin price subline',
 		file: 'apps/web/src/lib/components/OrderCard.svelte',
 		rootRelative: true,
-		// cp404 — the row rendering moved into the shared OrderCard: it renders
+		// the row rendering moved into the shared OrderCard: it renders
 		// the passed networkChip and, for stablecoin orders, the peg subline.
-		// cp417 — generalised from USDT-only to all three stablecoins
+		// generalised from USDT-only to all three stablecoins
 		// (USDT/USDC/DAI) via isStablecoinSublineTicker + StablecoinPriceSubline.
 		mustHave: [
 			'networkChip',
@@ -1362,7 +1312,7 @@ const SCENARIOS: readonly Scenario[] = [
 
 	// ─── P121-CP10 — host-resource monitor sidecar ──────────────
 	//
-	// Five sentinels pinning the cp10 invariants: the sidecar
+	// Five sentinels pinning the invariants: the sidecar
 	// script exists + is executable, the systemd unit + timer
 	// exist, the classifier knows about host-resource events at
 	// every tier, the ALERT_COPY has friendly ELI5 advice for
@@ -1409,16 +1359,16 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'host-resource' && a.event === 'disk_critical'",
-			"'host-resource' && a.event === 'mem_critical'",
-			"'host-resource' && a.event === 'swap_critical'",
-			"'host-resource' && a.event === 'swap_thrashing_critical'",
-			"'host-resource' && a.event === 'cpu_saturated_critical'",
-			"'host-resource' && a.event === 'disk_warn'",
-			"'host-resource' && a.event === 'mem_warn'",
-			"'host-resource' && a.event === 'swap_warn'",
-			"'host-resource' && a.event === 'swap_thrashing_warn'",
-			"'host-resource' && a.event === 'cpu_saturated_warn'"
+			"('host-resource', 'disk_critical')",
+			"('host-resource', 'mem_critical')",
+			"('host-resource', 'swap_critical')",
+			"('host-resource', 'swap_thrashing_critical')",
+			"('host-resource', 'cpu_saturated_critical')",
+			"('host-resource', 'disk_warn')",
+			"('host-resource', 'mem_warn')",
+			"('host-resource', 'swap_warn')",
+			"('host-resource', 'swap_thrashing_warn')",
+			"('host-resource', 'cpu_saturated_warn')"
 		]
 	},
 	{
@@ -1465,7 +1415,7 @@ const SCENARIOS: readonly Scenario[] = [
 	// Seven sentinels pinning: the three extended-monitor scripts
 	// exist + emit module:event names matching the classifier;
 	// the bot's default JOURNALCTL_UNITS extends to cover them;
-	// the classifier has matchers + ALERT_COPY for every cp11
+	// the classifier has matchers + ALERT_COPY for every
 	// event; the Ansible playbook integrates the new roles with
 	// opt-in enable_* flags; and the matrix-bot npm-install
 	// requirement is documented for operators.
@@ -1533,13 +1483,13 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'smartctl' && a.event === 'smart_failed'",
-			"'smartctl' && a.event === 'self_test_failed'",
-			"'smartctl' && a.event === 'temperature_critical'",
-			"'fail2ban' && a.event === 'daemon_unreachable'",
-			"'fail2ban' && a.event === 'jail_critical_ban_count'",
-			"'mdadm' && a.event === 'array_failed'",
-			"'mdadm' && a.event === 'array_degraded'",
+			"('smartctl', 'smart_failed')",
+			"('smartctl', 'self_test_failed')",
+			"('smartctl', 'temperature_critical')",
+			"('fail2ban', 'daemon_unreachable')",
+			"('fail2ban', 'jail_critical_ban_count')",
+			"('mdadm', 'array_failed')",
+			"('mdadm', 'array_degraded')",
 			"'smartctl:smart_failed'",
 			"'fail2ban:daemon_unreachable'",
 			"'mdadm:array_degraded'",
@@ -1567,15 +1517,15 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		name: 'P121-CP11-7 — matrix-bot npm install requirement (better-sqlite3 native build + nodejs.org access) is documented in OPERATIONS.md',
+		name: 'P121-CP11-7 — the matrix-bot native add-ons (better-sqlite3, fetched and hash-checked, never built by install scripts) are documented in OPERATIONS.md',
 		file: 'docs/OPERATIONS.md',
 		rootRelative: true,
 		mustHave: [
 			'better-sqlite3',
-			'native build for better-sqlite3',
-			'nodejs.org',
-			'npm ci --workspaces',
-			'build-essential'
+			'NATIVE add-ons',
+			'npm ci --ignore-scripts --workspaces',
+			'pinned SHA-256',
+			'use the offline bundle'
 		]
 	},
 
@@ -1584,7 +1534,7 @@ const SCENARIOS: readonly Scenario[] = [
 	// Four sentinels pinning: the Ansible quality gates
 	// (ansible-lint + structural smoke), the three new sidecar
 	// scripts (dmesg, trivy, postfix) emitting correct LogRecord
-	// envelopes, classifier extension covering all cp12 events,
+	// envelopes, classifier extension covering all events,
 	// and bot's default JOURNALCTL_UNITS extending to all eight
 	// monitoring sidecar units.
 
@@ -1602,13 +1552,13 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'dmesg' && a.event === 'oom_kill'",
-			"'dmesg' && a.event === 'kernel_oops'",
-			"'dmesg' && a.event === 'kernel_panic'",
-			"'dmesg' && a.event === 'hardware_error'",
-			"'dmesg' && a.event === 'segfault_in_morphit'",
-			"'dmesg' && a.event === 'segfault_other'",
-			"'dmesg' && a.event === 'fd_exhausted'",
+			"('dmesg', 'oom_kill')",
+			"('dmesg', 'kernel_oops')",
+			"('dmesg', 'kernel_panic')",
+			"('dmesg', 'hardware_error')",
+			"('dmesg', 'segfault_in_morphit')",
+			"('dmesg', 'segfault_other')",
+			"('dmesg', 'fd_exhausted')",
 			"'dmesg:oom_kill'",
 			"'dmesg:kernel_panic'",
 			'OOM-killer activated',
@@ -1620,10 +1570,10 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'trivy' && a.event === 'image_critical_vulns'",
-			"'trivy' && a.event === 'image_high_vulns'",
-			"'postfix' && a.event === 'queue_critical'",
-			"'postfix' && a.event === 'queue_warn'",
+			"('trivy', 'image_critical_vulns')",
+			"('trivy', 'image_high_vulns')",
+			"('postfix', 'queue_critical')",
+			"('postfix', 'queue_warn')",
 			"'trivy:image_critical_vulns'",
 			"'postfix:queue_critical'",
 			'CRITICAL severity CVEs',
@@ -1649,8 +1599,8 @@ const SCENARIOS: readonly Scenario[] = [
 	//
 	// Five sentinels pinning: the Forgejo CI workflow ships three
 	// gate jobs (typecheck + ansible-lint + smokes triple-pulse);
-	// the three new cp13 sidecars emit correct LogRecord envelopes
-	// with their full event sets; classifier knows all cp13
+	// the three new sidecars emit correct LogRecord envelopes
+	// with their full event sets; classifier knows all
 	// events at every tier with ELI5 advice; the deps-pin-check
 	// smoke catches matrix-bot-sdk drift; and the bot's default
 	// JOURNALCTL_UNITS extends to all 11 sidecar units (indexer
@@ -1677,9 +1627,9 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'certbot' && a.event === 'cert_expiry_critical'",
-			"'certbot' && a.event === 'renewal_stalled'",
-			"'certbot' && a.event === 'cert_expiry_warn'",
+			"('certbot', 'cert_expiry_critical')",
+			"('certbot', 'renewal_stalled')",
+			"('certbot', 'cert_expiry_warn')",
 			"'certbot:renewal_stalled'",
 			"'certbot:cert_expiry_critical'",
 			'silently failing',
@@ -1691,11 +1641,11 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'apt' && a.event === 'security_updates_critical'",
-			"'apt' && a.event === 'security_updates_warn'",
-			"'compose' && a.event === 'service_unhealthy'",
-			"'compose' && a.event === 'service_exited'",
-			"'compose' && a.event === 'service_restart_loop'",
+			"('apt', 'security_updates_critical')",
+			"('apt', 'security_updates_warn')",
+			"('compose', 'service_unhealthy')",
+			"('compose', 'service_exited')",
+			"('compose', 'service_restart_loop')",
 			"'apt:security_updates_critical'",
 			"'compose:service_unhealthy'",
 			'sudo apt update',
@@ -1769,9 +1719,9 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'systemd' && a.event === 'unit_failed'",
-			"'systemd' && a.event === 'unit_restart_loop'",
-			"'systemd' && a.event === 'unit_missing'",
+			"('systemd', 'unit_failed')",
+			"('systemd', 'unit_restart_loop')",
+			"('systemd', 'unit_missing')",
 			"'systemd:unit_failed'",
 			"'systemd:unit_restart_loop'",
 			'reset-failed',
@@ -1783,9 +1733,9 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'journald' && a.event === 'journal_size_critical'",
-			"'journald' && a.event === 'journal_size_warn'",
-			"'journald' && a.event === 'journal_rotation_stale'",
+			"('journald', 'journal_size_critical')",
+			"('journald', 'journal_size_warn')",
+			"('journald', 'journal_rotation_stale')",
 			"'journald:journal_size_critical'",
 			'SystemMaxUse',
 			'journalctl --vacuum'
@@ -1852,8 +1802,8 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'smartctl' && a.event === 'temperature_sustained_high'",
-			"'smartctl' && a.event === 'temperature_overlimit_count'",
+			"('smartctl', 'temperature_sustained_high')",
+			"('smartctl', 'temperature_overlimit_count')",
 			"'smartctl:temperature_sustained_high'",
 			"'smartctl:temperature_overlimit_count'",
 			'scttempsts',
@@ -1865,8 +1815,8 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/matrix-bot/src/classifier.ts',
 		rootRelative: true,
 		mustHave: [
-			"'host-resource' && a.event === 'mount_critical'",
-			"'host-resource' && a.event === 'mount_warn'",
+			"('host-resource', 'mount_critical')",
+			"('host-resource', 'mount_warn')",
 			"'host-resource:mount_critical'",
 			"'host-resource:mount_warn'",
 			"'host-resource:mount_info'",
@@ -1964,7 +1914,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 
-	// ─── P121-CP18 — deep-deep security audit fixes ───────────
+	// ─── P121-CP18 — security audit fixes ───────────
 	{
 		name: 'P121-CP18-1 — AUDIT-1 fix: json_str() encodes ALL C0 control chars (0x00-0x1F) per RFC 8259',
 		file: 'ops/scripts/lib/emit.sh',
@@ -2105,10 +2055,10 @@ const SCENARIOS: readonly Scenario[] = [
 
 	// ─── P122-CP1 F1 fix — STOP banner above §1
 	//
-	// Beta-tester intake form (cp20) put the security-disclosure
+	// Beta-tester intake form put the security-disclosure
 	// warning at §16, fifteen sections below §1 ("one-line
 	// summary").  A tester reporting a security vuln would have
-	// typed it into §1 before scrolling to §16.  Cp1 prepended a
+	// typed it into §1 before scrolling to §16.  A later change prepended a
 	// STOP banner BEFORE §1 so the warning fires before any
 	// field is filled in.  Sentinel locks the placement: the
 	// banner phrase MUST appear in the file AND it MUST appear
@@ -2133,15 +2083,15 @@ const SCENARIOS: readonly Scenario[] = [
 		}
 	},
 
-	// ─── cp131 HIGH-006 — warrant canary ghost op ────────────────────────
-	// Pre-cp131, OPERATIONS.md §0a and PRE-LAUNCH-CHECKLIST L140
+	// ─── warrant canary ghost op ────────────────────────
+	// Previously, OPERATIONS.md §0a
 	// claimed @morphit "broadcasts morphit_warrant_canary_v1
 	// weekly".  No such chain op exists — the canary is a
 	// PGP-signed static file at /canary.txt regenerated by
 	// scripts/canary/generate.sh.  The ghost op-id misled
 	// operators into thinking @morphit needed mana for ~52
 	// weekly broadcasts/year, and into searching the indexer
-	// for an op that would never appear.  Sentinel pins both
+	// for an op that would never appear.  Sentinels pin the
 	// docs to the corrected wording.
 	{
 		name: 'cp131 HIGH-006 — OPERATIONS.md does not reference a `morphit_warrant_canary_v1` chain op',
@@ -2152,30 +2102,20 @@ const SCENARIOS: readonly Scenario[] = [
 		mustNotHave: ['morphit_warrant_canary_v1']
 	},
 	{
-		name: 'cp131 HIGH-006 — PRE-LAUNCH-CHECKLIST does not call for a `morphit_warrant_canary_v1` weekly broadcast',
-		file: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		rootRelative: true,
-		// One acknowledgment of the historical mistake is
-		// allowed in the cp131 fix-note; the literal claim that
-		// the op exists is forbidden.  Disambiguating substring:
-		// the false claim used "periodic `morphit_warrant_canary_v1` ops".
-		mustNotHave: ['periodic `morphit_warrant_canary_v1` ops']
-	},
-	{
 		name: 'cp131 HIGH-006 — README does not reference a `morphit_warrant_canary_v1` chain op',
 		file: 'README.md',
 		rootRelative: true,
 		mustNotHave: ['morphit_warrant_canary_v1']
 	},
 
-	// ─── cp131 LOW-010 — tar extract safety flags ────────────────────────
+	// ─── tar extract safety flags ────────────────────────
 	// upgrade.ts extracts a downloaded release tarball with
 	// `tar -xzf`.  GNU tar defaults refuse path traversal and
 	// absolute paths, but DO honor archived uid/gid, setuid/
 	// setgid bits, and same-name directory→file overwrites.
 	// A compromised build host (or supply-chain replacement
 	// of both the tarball and its .sha256) could exploit any
-	// of those.  cp131 added explicit defense-in-depth flags;
+	// of those.  A later change added explicit defense-in-depth flags;
 	// this sentinel pins them so the upgrade path can't
 	// silently regress.
 	{
@@ -2197,11 +2137,11 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: ['--no-overwrite-dir']
 	},
 
-	// ─── cp131 LOW-005 — consolidated price-source wiring ─────────────────
-	// Pre-cp131 main.ts started a standalone BLURT price source
+	// ─── consolidated price-source wiring ─────────────────
+	// Previously, main.ts started a standalone BLURT price source
 	// AND a multi-asset map that ALSO contained BLURT — two
 	// independent fetchers making duplicate outbound HTTP calls
-	// on every refresh interval.  cp131 derives `priceSource`
+	// on every refresh interval.  A later change derives `priceSource`
 	// from `multiAssetSources.get('BLURT')`.  These sentinels
 	// pin the consolidation so the duplication can't return.
 	{
@@ -2209,7 +2149,7 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/indexer/src/main.ts',
 		rootRelative: true,
 		// The import line was: `import { createPriceSource, createMultiAssetPriceSources } from '$indexer/price/factory';`
-		// cp131 removed `createPriceSource` from the import set.
+		// A later change removed `createPriceSource` from the import set.
 		mustNotHave: ["import { createPriceSource"]
 	},
 	{
@@ -2218,12 +2158,12 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ["multiAssetSources.get('BLURT')"]
 	},
-	// ─── cp137 — per-asset structural sentinels for the 12 assets
+	// ─── per-asset structural sentinels for the 12 assets
 	//     shipped after USDT.  USDT got 5 sentinels (P121-USDT-1..5)
-	//     when it shipped at Part 121 cp3 — the subsequent additions
-	//     (USDC cp30, BCH cp23, LTC cp24, DAI cp31, DASH cp27,
-	//     DOGE cp33, ZEC cp39, ARRR cp41, DCR cp43, SOL cp45, ETH
-	//     cp47, XRP cp49) shipped with dedicated per-checkpoint
+	//     when it shipped — the subsequent additions
+	//     (USDC, BCH, LTC, DAI, DASH,
+	//     DOGE, ZEC, ARRR, DCR, SOL, ETH,
+	//     XRP) shipped with dedicated per-checkpoint
 	//     sentinels in OTHER smokes (asset-registry-smoke,
 	//     fee-method-enum-frozen-smoke, per-asset-key-family-*,
 	//     what-is-morphit-asset-enum-smoke, etc.) but not in
@@ -2233,7 +2173,7 @@ const SCENARIOS: readonly Scenario[] = [
 	//     URL constant.  Structural defense at the persona-walk
 	//     layer so any asset rip-out or invariant drift fires here
 	//     in addition to the per-checkpoint smokes.
-	// ─── USDC (Part 122 cp30) ────────────────────────────────
+	// ─── USDC ────────────────────────────────
 	{
 		name: 'cp137-USDC-1 — canonical asset registry has USDC entry with trade-only invariant + 4 networks',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2270,7 +2210,7 @@ const SCENARIOS: readonly Scenario[] = [
 			"key: 'polygon'"
 		]
 	},
-	// ─── BCH (Part 122 cp23) ─────────────────────────────────
+	// ─── BCH ─────────────────────────────────
 	{
 		name: 'cp137-BCH-1 — canonical asset registry has BCH entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2299,7 +2239,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_BCH_CHAT_LINK_URL', 'BCH_TXID_RE']
 	},
-	// ─── LTC (Part 122 cp24) ─────────────────────────────────
+	// ─── LTC ─────────────────────────────────
 	{
 		name: 'cp137-LTC-1 — canonical asset registry has LTC entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2327,7 +2267,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_LTC_CHAT_LINK_URL', 'LTC_TXID_RE']
 	},
-	// ─── DAI (Part 122 cp31) ─────────────────────────────────
+	// ─── DAI ─────────────────────────────────
 	{
 		name: 'cp137-DAI-1 — canonical asset registry has DAI entry with trade-only invariant + 4 networks',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2364,7 +2304,7 @@ const SCENARIOS: readonly Scenario[] = [
 			"key: 'arbitrum'"
 		]
 	},
-	// ─── DASH (Part 122 cp27) ────────────────────────────────
+	// ─── DASH ────────────────────────────────
 	{
 		name: 'cp137-DASH-1 — canonical asset registry has DASH entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2392,7 +2332,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_DASH_CHAT_LINK_URL', 'DASH_TXID_RE']
 	},
-	// ─── DOGE (Part 122 cp33) ────────────────────────────────
+	// ─── DOGE ────────────────────────────────
 	{
 		name: 'cp137-DOGE-1 — canonical asset registry has DOGE entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2420,7 +2360,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_DOGE_CHAT_LINK_URL', 'DOGE_TXID_RE']
 	},
-	// ─── ZEC (Part 122 cp39) ─────────────────────────────────
+	// ─── ZEC ─────────────────────────────────
 	{
 		name: 'cp137-ZEC-1 — canonical asset registry has ZEC entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2448,7 +2388,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_ZEC_CHAT_LINK_URL', 'ZEC_TXID_RE']
 	},
-	// ─── ARRR / Pirate Chain (Part 122 cp41) ─────────────────
+	// ─── ARRR / Pirate Chain ─────────────────
 	{
 		name: 'cp137-ARRR-1 — canonical asset registry has ARRR entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2476,7 +2416,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_ARRR_CHAT_LINK_URL', 'ARRR_TXID_RE']
 	},
-	// ─── DCR / Decred (Part 122 cp43) ────────────────────────
+	// ─── DCR / Decred ────────────────────────
 	{
 		name: 'cp137-DCR-1 — canonical asset registry has DCR entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2504,7 +2444,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_DCR_CHAT_LINK_URL', 'DCR_TXID_RE']
 	},
-	// ─── SOL / Solana (Part 122 cp45) ────────────────────────
+	// ─── SOL / Solana ────────────────────────
 	{
 		name: 'cp137-SOL-1 — canonical asset registry has SOL entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2532,7 +2472,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_SOL_CHAT_LINK_URL', 'SOL_TXID_RE']
 	},
-	// ─── ETH / Ethereum (Part 122 cp47) ──────────────────────
+	// ─── ETH / Ethereum ──────────────────────
 	{
 		name: 'cp137-ETH-1 — canonical asset registry has ETH entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2560,7 +2500,7 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_ETH_CHAT_LINK_URL', 'ETH_TXID_RE']
 	},
-	// ─── XRP / Ripple (Part 122 cp49) ────────────────────────
+	// ─── XRP / Ripple ────────────────────────
 	{
 		name: 'cp137-XRP-1 — canonical asset registry has XRP entry with trade-only invariant',
 		file: 'packages/asset-registry/src/index.ts',
@@ -2588,19 +2528,18 @@ const SCENARIOS: readonly Scenario[] = [
 		rootRelative: true,
 		mustHave: ['BUNDLED_XRP_CHAT_LINK_URL', 'XRP_TXID_RE']
 	},
-	// ─── cp138 — DB/Relay hardening sentinels ─────────────────
+	// ─── DB/Relay hardening sentinels ─────────────────
 	{
 		name: 'cp138-D-2 — push_subscriptions enforces per-account cap with sliding-window eviction',
 		file: 'apps/relay/src/policy/pushSubscriptions.ts',
 		rootRelative: true,
 		mustHave: [
 			'MAX_SUBSCRIPTIONS_PER_ACCOUNT',
-			'cp138 D-2',
 			'this.db.withTx',
 			'ORDER BY created_at ASC',
 			'evicted_for_cap'
 		],
-		// Pre-cp138 the upsert was a single client.query() with no
+		// Previously, the upsert was a single client.query() with no
 		// cap check.  Defend against accidental regression to that
 		// pattern by requiring the withTx wrapper + eviction query.
 		mustNotHave: [
@@ -2612,7 +2551,6 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/web/src/lib/crypto/keystore.ts',
 		rootRelative: true,
 		mustHave: [
-			'cp138 C-1',
 			'MIN_KDF_OPSLIMIT = 2',
 			'MIN_KDF_MEMLIMIT = 64 * 1024 * 1024'
 		]
@@ -2622,7 +2560,6 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'apps/web/src/lib/crypto/yubikey/wrap.ts',
 		rootRelative: true,
 		mustHave: [
-			'cp138 C-1',
 			'MIN_ARGON_OPSLIMIT = 2',
 			'MIN_ARGON_MEMLIMIT = 64 * 1024 * 1024'
 		]
@@ -2640,7 +2577,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	// ─── Josie (sysadmin) ────────────────────────────────────────────────
-	// cp182 — Josie joins Bob/Sally/Charlie as a standing persona.  These
+	// Josie joins Bob/Sally/Charlie as a standing persona.  These
 	// pins lock the setup-wizard fixes found during his walkthrough so they
 	// cannot silently regress: dead doc/command references, the opt-in→
 	// default-on Matrix reframe + sidecar wiring, and the new BunkerWeb step.
@@ -2659,8 +2596,8 @@ const SCENARIOS: readonly Scenario[] = [
 			'Matrix alerting + public contact (recommended)',
 			'/etc/morphit/matrix-bot.env',
 			'MORPHIT_MATRIX_BOT_ACCESS_TOKEN',
-			// cp272 replaced the raw `systemctl enable morphit-matrix-bot.service`
-			// step with the one-command lifecycle switch; cp275 added the
+			// A later change replaced the raw `systemctl enable morphit-matrix-bot.service`
+			// step with the one-command lifecycle switch; a later change added the
 			// one-command delivery self-test.  Assert the walkthrough uses both.
 			'morphit-ops matrix set',
 			'morphit-ops matrix test'
@@ -2866,7 +2803,7 @@ for (const sc of SCENARIOS) {
 
 console.log(`\n${passed} passed, ${failed} failed (${SCENARIOS.length} total)`);
 
-// cp192 — the start-here hub is the new front door for operators; a
+// the start-here hub is the new front door for operators; a
 // broken link there is exactly the kind of hiccup we're killing.
 // Verify every relative markdown link [text](../X.md) in the hub
 // resolves to a real file (the generic fenced-path smoke skips

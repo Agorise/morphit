@@ -1,5 +1,5 @@
 /**
- * font-assets-present-smoke (cp212).
+ * font-assets-present-smoke.
  *
  * The repo now SHIPS the Comfortaa woff2 subsets (previously the folder was
  * empty and operators converted the fonts at build time). This guards that

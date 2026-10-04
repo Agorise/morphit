@@ -1,5 +1,5 @@
 /**
- * chat-bg-notify-v148-smoke — v1.4.8 (t.txt #6)
+ * chat-bg-notify-v148-smoke — v1.4.8
  *
  * A backgrounded morphit tab must still update its favicon/title unread badge
  * when a new message arrives — that's the whole point of a background

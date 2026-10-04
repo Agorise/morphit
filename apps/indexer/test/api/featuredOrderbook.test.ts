@@ -1,5 +1,5 @@
 /**
- * Unit test — GET /v1/featured carries the order-card trust signals (the maintainer).
+ * Unit test — GET /v1/featured carries the order-card trust signals.
  *
  * Featured cards render through the SAME shared `OrderCard` as the orderbook,
  * but the featured endpoint's row carried no reputation/identity columns — so
@@ -21,7 +21,7 @@ import type { Database } from '$db/pool';
 
 /** One winning featured slot, as the joined query would return it.
  *
- *  cp473 — typed as `FeaturedRow`, not an untyped literal. Previously a column
+ *  typed as `FeaturedRow`, not an untyped literal. Previously a column
  *  added to the real query could be missing here with nothing failing (the
  *  mapper produced `undefined`, JSON.stringify dropped the key, and the test
  *  asserted only the fields it already knew about). `Partial<FeaturedRow>`
@@ -99,7 +99,7 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		const order = body.featured[0]!.order;
 
 		expect(order.feedback_count).toBe(12);
-		// cp473 — the trade count this test's TITLE always claimed to cover but
+		// the trade count this test's TITLE always claimed to cover but
 		// never asserted. It is a DIFFERENT number from feedback_count on
 		// purpose: the card renders "7 trades · ★4.50 (12)".
 		expect(order.trade_count).toBe(7);
@@ -110,7 +110,7 @@ describe('GET /v1/featured — order-card trust signals', () => {
 		expect(order.is_new_trader).toBe(false);
 		expect(order.first_trade_at).toBe('2026-01-15T00:00:00.000Z');
 		expect(order.posting_pubkey).toBe('BLT5vw111111111111111111111111111111111117Bjw');
-		// v1.8.16 (the maintainer) — the featured payload must carry inline poster identity so
+		// v1.8.16 — the featured payload must carry inline poster identity so
 		// the homepage card is correct on FIRST paint (no @account+identicon swap).
 		// These were SELECTed since v1.8.13 but silently dropped from the wire
 		// mapping until now; assert both so a regression turns this test red.
@@ -142,7 +142,7 @@ describe('GET /v1/featured — order-card trust signals', () => {
 	});
 
 	it('cp473 — a veteran with real trades but NO reviews is not sprouted, and shows the trade count', async () => {
-		// The case the pre-cp473 featured strip got exactly backwards: it derived
+		// The case the older featured strip got exactly backwards: it derived
 		// the sprout from the FEEDBACK count, so 5 completed trades with nobody
 		// bothering to leave stars read as "new trader" — and the trade count was
 		// absent from the payload entirely, so the card said nothing at all.

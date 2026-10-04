@@ -2,11 +2,11 @@
 /**
  * scripts/operator-doc-env-var-parity-smoke.ts
  *
- * Structural Defense — operator-doc env-var parity (cp308, F-006).
+ * Structural Defense — operator-doc env-var parity.
  *
  * Sibling of operator-doc-fenced-path-existence-smoke: that gate
  * checks fenced PATHS resolve; this one checks fenced ENV-VAR
- * NAMES are real. It catches the drift class that cp308 found
+ * NAMES are real. It catches the drift class that found
  * manually as F-007: the OPERATIONS.md docker-compose example
  * prescribed `MORPHIT_RELAY_KEYSTORE_PATH` / `MORPHIT_RELAY_PASSPHRASE_FILE`,
  * neither of which the relay reads (it reads `MORPHIT_RELAY_ACTIVE_KEY_FILE`
@@ -72,7 +72,7 @@ const DYNAMIC_PATTERNS: RegExp[] = [/^MORPHIT_FAIL2BAN_[A-Z0-9]+_(CRITICAL|WARN)
 const DOCUMENTED_BUT_UNIMPLEMENTED: Record<string, string> = {
 	// The docker-compose `*_FILE` DB-secret pattern is documented with
 	// an explicit "not yet implemented" caveat (OPERATIONS.md Compose
-	// example, cp308 audit). The services read the password directly
+	// example, audit). The services read the password directly
 	// from the DATABASE_URL today; these names are placeholders for the
 	// pattern when it lands. (The relay KEY *_FILE vars in the same
 	// example ARE implemented — see F-007 — so they are NOT here.)

@@ -1,13 +1,13 @@
 # ADR-0030 — Dogecoin (DOGE) as a 10th tradable asset (trade-only, single-network mainnet)
 
-**Status:** Accepted (2026-05-19, Part 122 cp33)
-**Context window:** Part 122 cp33 — DOGE addition, following the
-matured Category-B template from cp27 (DASH), cp24 (LTC), cp21
-(BCH), and Part 121 cp3 (USDT).
+**Status:** Accepted (2026-05-19)
+**Context window:** — DOGE addition, following the
+matured Category-B template from (DASH), (LTC)
+(BCH), and (USDT).
 
 ## Context
 
-the maintainer's prompt 2026-05-19:
+The maintainer's prompt 2026-05-19:
 
 > add Dogecoin (DOGE). wire it up as well, COMPLETELY, and THEN
 > do a deep deep on our latest work.  remember, any place where
@@ -25,7 +25,7 @@ LTC, DASH).
 
 ### 1. Trade-only (Category B)
 
-`canPayListingFee: false`, `canBeTraded: true`.  Per Memory #23,
+`canPayListingFee: false`, `canBeTraded: true`.  Per the frozen fee_method rule,
 listing fees stay frozen at BLURT / BTC / XMR.  DOGE is a P2P
 trading asset only.
 
@@ -51,7 +51,7 @@ coordinated CoinJoin) or XMR (chain-level privacy), DOGE has no
 PrivateSend equivalent, no confidential transactions, no segwit-
 enabled mixing.  Users seeking strongest Morphit privacy should
 use XMR.  This is HONESTLY framed in the privacy guide and FAQ
-per Memory #29 — DOGE's posture is what it is; no spin.
+per the native-locale policy — DOGE's posture is what it is; no spin.
 
 ### 4. Address shape regex
 
@@ -77,7 +77,7 @@ DOGE = 100,000,000 shibatoshi.  Same scale as BTC/BCH/LTC/DASH.
 
 ### 6. Explorer choice — blockchair.com/dogecoin
 
-the maintainer-supplied 9-candidate survey (2026-05-19):
+maintainer-supplied 9-candidate survey (2026-05-19):
 
 | Candidate | Status |
 |-----------|--------|
@@ -103,16 +103,16 @@ Operators wanting a different default override via
 
 ### 7. Default-ON instance-wide
 
-Per Memory #25.  Operators disable via
+Per the default-on rule for new assets.  Operators disable via
 `MORPHIT_INDEXER_DISABLED_ASSETS="DOGE"`.
 
-### 8. Icon — the maintainer-supplied official Shiba Inu artwork
+### 8. Icon — maintainer-supplied official Shiba Inu artwork
 
-the maintainer supplied the canonical Dogecoin Shiba Inu illustration (54 KB
-detailed multi-path SVG).  This is 13× the cp32-conservative
+The maintainer supplied the canonical Dogecoin Shiba Inu illustration (54 KB
+detailed multi-path SVG).  This is 13× the conservative
 per-icon ceiling of 4 KB.
 
-cp33 raises the per-asset-icon ceiling from 4 KB to **64 KB**
+A later change raises the per-asset-icon ceiling from 4 KB to **64 KB**
 and the total asset-icon budget from 32 KB to **128 KB** in
 `network-icon-coverage-smoke.ts`.  Justification:
 
@@ -128,17 +128,17 @@ and the total asset-icon budget from 32 KB to **128 KB** in
 - Home page (BTC/XMR/BLURT icons combined ~5.6 KB) is
   unaffected.
 
-### 9. Payment-rail axis wired same-turn (cp32 LL #36)
+### 9. Payment-rail axis wired same-turn
 
-Per the cp32 LL #36 lesson — every tradable asset must also be
+Per the lesson — every tradable asset must also be
 wired as a payment rail (you can ACCEPT DOGE for a trade of a
 different asset, even though you can't pay Morphit's listing
-fees in DOGE).  Cp31 missed this for DAI (closed in cp32
-CODE-1); cp33 ships DOGE with BOTH axes same-turn:
+fees in DOGE).  A later change missed this for DAI (closed
+CODE-1); a later change ships DOGE with BOTH axes same-turn:
 
 - `pay_doge` entry in `apps/web/src/lib/payments/registry.ts`
 - `'pay_doge'` in indexer's `RESERVED_CANONICAL_KEYS`
-- `payment_method.pay_doge.description` × 10 locales (cp32 LL
+- `payment_method.pay_doge.description` × 10 locales (LL
   #35 invariant — multi-checkpoint i18n drift compounds; same-
   turn discipline now)
 
@@ -156,7 +156,7 @@ Chat payload:
   isValidDogeAddress/Txid, dispatcher extension, jitter
   dispatcher route, buildPaymentUri `dogecoin:` URI scheme,
   **CRITICAL: all 4 wire-format gates atomically widened with
-  DAI cp31 miss + DOGE**)
+  DAI miss + DOGE**)
 
 Explorer URLs:
 - `apps/web/src/lib/explorer/urlsCore.ts` (DOGE_TXID_RE +
@@ -170,7 +170,7 @@ Explorer URLs:
 - `apps/indexer/src/api/instance.ts` (InstanceResponse interface
   + body construction)
 - `packages/indexer-client/src/index.ts` (**CRITICAL: closed
-  preexisting LTC cp24 miss + DASH cp27 miss + DOGE cp33 in
+  preexisting LTC miss + DASH miss + DOGE in
   same atomic pass — CODE-4**)
 - `apps/matrix-bot/scripts/api-response-shape-smoke.ts`
 
@@ -178,39 +178,39 @@ Indexer config + prices:
 - `apps/indexer/src/config/index.ts` (frontendDogeChatLinkUrl
   Config field + Zod schema + builder mapping)
 - `apps/web/src/lib/prices/providers/coingecko.ts` (DOGE: 'dogecoin')
-- `apps/web/src/lib/prices/providers/fallback.ts` (DOGE: 0.10)
+- `apps/web/src/lib/prices/providers/fallback.ts` (since removed) (DOGE: 0.10)
 - `apps/web/src/lib/prices/index.ts` (initial Record + reset)
 
-Payment rail (cp32 LL #36):
+Payment rail:
 - `apps/web/src/lib/payments/registry.ts` (pay_doge entry)
 - `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts`
   ('pay_doge' in RESERVED_CANONICAL_KEYS)
 
 Static assets:
-- `apps/web/static/icons/icon-doge.svg` (the maintainer-supplied Shiba Inu,
+- `apps/web/static/icons/icon-doge.svg` (maintainer-supplied Shiba Inu,
   accessibility-hardened: aria-label, title, width/height stripped)
-- BEP-20 icon swap (the maintainer-supplied improved version) at
+- BEP-20 icon swap (maintainer-supplied improved version) at
   `apps/web/static/icons/networks/icon-network-bep20.svg`
 
-i18n (10 locales × 12 leaves = 120 strings + cp32 LL #35
+i18n (10 locales × 12 leaves = 120 strings +
 payment_method.pay_doge × 10 = 130 total):
 - `apps/web/src/lib/i18n/locales/{10 locales}.json`
 - FAQ what_is_doge × 10 locales (native EN/ES/FR/DE +
   EN-fallback × 6)
 - 2 stale FAQs cleaned up across all 10 locales:
-  trade_goods_services + where_to_buy_blurt (DAI cp31 drift +
-  asset count cp30 miss + DOGE cp33)
+  trade_goods_services + where_to_buy_blurt (DAI drift +
+  asset count miss + DOGE)
 
 Components (4 chat surfaces extended with DOGE branches):
 - `apps/web/src/lib/components/AddressShareModal.svelte` (DOGE
   tab + invalid-msg + placeholder dispatch; **CODE-5: DAI
-  placeholder dispatch added (cp31 miss)**)
+  placeholder dispatch added (miss)**)
 - `apps/web/src/lib/components/FundsSentModal.svelte` (DOGE tab)
 - `apps/web/src/lib/components/ConversationView.svelte` (2 type
-  unions widened with DAI cp31 miss + DOGE)
+  unions widened with DAI miss + DOGE)
 - `apps/web/src/lib/components/ChatMessage.svelte` (4 sites: DOGE
   explorer dispatch + canMarkSent guard + address-pill branch +
-  funds-sent-pill branch; 2 type unions widened with DAI cp31
+  funds-sent-pill branch; 2 type unions widened with DAI
   miss + DOGE)
 
 Routes:
@@ -258,17 +258,17 @@ Brag list + mediakit:
 **Positive:**
 - 7th Category-B asset shipped via fully matured template (zero
   new architectural patterns introduced).
-- Cp33 deep-deep surfaced 5 HIGH-severity preexisting bugs
+- A later change surfaced 5 HIGH-severity preexisting bugs
   (CODE-3 through CODE-7) — each of which was silently shipping
   broken behavior in production: DAI wire-format gates broken
-  since cp31, indexer-client mirror missing LTC+DASH since
-  cp24/cp27, DAI placeholder dispatch broken since cp31, 4 type
-  unions narrowed-wrong since cp30/cp31, FAQ asset enumerations
+  since an earlier release, indexer-client mirror missing LTC+DASH since
+  their addition, DAI placeholder dispatch broken since an earlier release, 4 type
+  unions narrowed-wrong since an earlier release, FAQ asset enumerations
   stale across 10 locales.
-- Cp32 LL #36 invariant (tradable axis ≠ payment-rail axis)
+- invariant (tradable axis ≠ payment-rail axis)
   applied SAME-TURN for DOGE — first asset addition where both
   axes ship as one work unit, not as a follow-up.
-- Cp32 LL #35 invariant (i18n description for payment-method)
+- invariant (i18n description for payment-method)
   applied same-turn — `payment_method.pay_doge.description`
   shipped with the rest, not back-filled.
 

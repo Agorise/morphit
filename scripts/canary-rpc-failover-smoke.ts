@@ -2,7 +2,7 @@
 /**
  * scripts/canary-rpc-failover-smoke.ts
  *
- * cp451 — the warrant canary used to POST its chain-head request to a
+ * the warrant canary used to POST its chain-head request to a
  * single pinned Blurt node. When that node returned 526 (dead TLS cert)
  * the ENTIRE canary refresh stopped, even though Morphit has an RPC
  * rotator that would have hopped to the next node. This smoke locks in the

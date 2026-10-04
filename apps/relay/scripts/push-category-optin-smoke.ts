@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * push-category-optin-smoke (cp450 GAP A) — Web Push must obey the
+ * push-category-optin-smoke — Web Push must obey the
  * per-category Settings toggle, not just the in-page path.
  *
  * The bug: `push_subscriptions` had no per-category state, so the
@@ -15,7 +15,7 @@
  *   client subscribe → client re-sync → Settings UI → chat nudge.
  *
  * A blocklist design is asserted throughout: `muted_categories` names
- * the categories turned OFF; empty = all on = the pre-cp450 behaviour,
+ * the categories turned OFF; empty = all on = the older behaviour,
  * so existing subscriptions are unaffected until they re-sync.
  */
 import { readFileSync } from 'node:fs';

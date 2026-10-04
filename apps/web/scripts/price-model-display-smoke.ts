@@ -169,7 +169,7 @@ scenario('fixed with negative price → still rendered (caller validates)', () =
 // ─── formatOrderPriceModel adapter ────────────────────────
 
 scenario('formatOrderPriceModel routes through correctly', () => {
-	// cp474 — `asset` is REQUIRED by the Pick<> this takes and was absent, so
+	// `asset` is REQUIRED by the Pick<> this takes and was absent, so
 	// `isGoodsAsset(o.asset)` read `undefined` in every scenario here.
 	const order: Pick<OrderRecord, 'asset' | 'price_model' | 'fiat_currency'> = {
 		asset: 'BTC',
@@ -190,7 +190,7 @@ scenario('formatOrderPriceModel passes fiat through to fixed', () => {
 	expect(r, 'orderbook.price_model.fixed|price=100,fiat=JPY');
 });
 
-// cp474 — suppressing the price line for BARTER (cp425) is the ONLY thing
+// suppressing the price line for BARTER is the ONLY thing
 // `formatOrderPriceModel` does that `formatPriceModel` doesn't, and it had no
 // coverage: both scenarios above omitted `asset`, so `isGoodsAsset(undefined)`
 // took the non-goods path every time. A goods order ships an inert price_model

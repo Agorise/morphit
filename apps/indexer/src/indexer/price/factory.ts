@@ -1,5 +1,5 @@
 /**
- * Price-source factory (cp130 multi-asset).
+ * Price-source factory (multi-asset).
  *
  * Builds CompositeCachedPriceSource instances from operator config.
  * Each price source serves an OPTIONAL fiat echo for one (asset,
@@ -15,26 +15,29 @@
  *
  * Per-asset composition
  * ─────────────────────
- * An optional PRIMARY source (a single authoritative feed, tried first
- * and committed whenever it is plausible), then the EXTERNAL tier
- * (queried together, then median-anchored + averaged with outlier
- * rejection so no single off/stale provider can swing the committed
- * price), then a FALLBACK tier (morphit_native, kept OUT of the average
- * so the external-vs-native cross-check stays meaningful), then the
- * static floor:
+ * An optional PRIMARY source (tried first and committed whenever it is
+ * plausible), then the EXTERNAL tier (queried together, then
+ * median-anchored + averaged with outlier rejection so no single off/stale
+ * provider can swing the committed price), then a FALLBACK tier
+ * (morphit_native, kept OUT of the average so the external-vs-native
+ * cross-check stays meaningful), then the static floor:
  *
  *   BLURT/USD:  api.blurt.blog/price_info (PRIMARY — the source of
  *               truth, tried first) → then, only if it is down or
  *               implausible, the Coingecko + CoinPaprika + CryptoCompare
  *               average (+ CoinCap/Messari when keyed, + CoinLore when
  *               id set) → morphit_native → static floor
- *   BTC/USD:    Coingecko + CoinPaprika + Kraken + Binance + Coinbase
+ *   BTC, XMR:   the Haveno / Bisq pricenodes over Tor (PRIMARY, in any
+ *               denomination fiat: their consensus, price/pricenodes.ts)
+ *               → only when they make no price, the clearnet aggregators:
+ *     BTC/USD:  Coingecko + CoinPaprika + Kraken + Binance + Coinbase
  *               + OKX + Bybit + CryptoCompare
  *               (+ CoinCap/CoinLore/Messari when configured)
- *               → morphit_native → static floor
- *   XMR/USD:    Coingecko + CoinPaprika + Kraken + CryptoCompare
+ *     XMR/USD:  Coingecko + CoinPaprika + Kraken + CryptoCompare
  *               (+ CoinCap/CoinLore/Messari when configured)
  *               → morphit_native → static floor
+ * A zero-clearnet node has no clearnet tier at all: BTC/XMR from the
+ * pricenodes (then the federation), BLURT from the federation.
  *
  * Multi-source rationale: a single upstream is an availability AND
  * accuracy risk (it can ban us, rate-limit us to nothing, or simply
@@ -58,7 +61,7 @@
  * ready; caller must invoke source.start() and source.stop() for
  * lifecycle management.
  *
- * cp128 denomination
+ * denomination
  * ──────────────────
  * `denominationFiat` (operator config) applies uniformly to all
  * assets.  An operator who sets `priceFeedDenominationFiat=EUR`
@@ -68,10 +71,10 @@
  * preemptive complexity; if a concrete use case appears (e.g.
  * operator wants BTC priced in USD but BLURT in EUR), revisit then.
  *
- * cp130 architecture
+ * architecture
  * ──────────────────
  * The previous `createPriceSource(config, db)` returned just one
- * BlurtPriceSource (BLURT-only).  cp130 keeps that signature for
+ * BlurtPriceSource (BLURT-only).  A later change keeps that signature for
  * backwards compatibility (the listing-fee endpoint uses it) and
  * adds a new `createMultiAssetPriceSources(config, db)` that
  * returns a Map of sources for BLURT + BTC + XMR.  Each source is
@@ -94,8 +97,17 @@ import { createBybitFetcher } from '$indexer/price/bybitFetcher';
 import { createCoincapFetcher } from '$indexer/price/coincapFetcher';
 import { createCoinloreFetcher } from '$indexer/price/coinloreFetcher';
 import { createMessariFetcher } from '$indexer/price/messariFetcher';
-import { createMorphitNativeFetcher } from '$indexer/price/morphitNativeFetcher';
+import {
+	createMorphitNativeFetcher,
+	HARDCODED_OUTER_MIN_USD,
+	HARDCODED_OUTER_MAX_USD
+} from '$indexer/price/morphitNativeFetcher';
 import { createFederatedFetcher, pinnedFeeImpliedUsdPrice } from '$indexer/price/federatedPriceFetcher';
+import {
+	pricenodesFor,
+	pricenodePriceFetch,
+	tiePricenodeLifecycle
+} from '$indexer/price/pricenodes';
 import { TreasurySource } from '$indexer/treasurySource';
 import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
 
@@ -104,7 +116,7 @@ import { DisagreementMonitor } from '$indexer/price/disagreementMonitor';
  *  Captures everything that differs per-asset so the generic
  *  factory below can build any (asset, denomination_fiat) pair.
  *
- *  cp130 assets supported: BLURT, BTC, XMR.  Future assets are a
+ *  assets supported: BLURT, BTC, XMR.  Future assets are a
  *  matter of adding entries here. */
 export interface AssetPriceSourceOptions {
 	/** Asset ticker, e.g. 'BLURT', 'BTC', 'XMR'. */
@@ -157,14 +169,14 @@ export interface AssetPriceSourceOptions {
 	 *  An operator on a non-USD denomination should override
 	 *  these via env vars. */
 	readonly staticFloor: number;
-	/** cp425 — true only for BLURT: pull the Blurt-native price feed
-	 *  (api.blurt.blog/price_info).  cp604 — this feed is the PRIMARY
+	/** true only for BLURT: pull the Blurt-native price feed
+	 *  (api.blurt.blog/price_info).  this feed is the PRIMARY
 	 *  source of truth for BLURT/USD: tried first, committed whenever
 	 *  plausible; the aggregator-average is the fallback. */
 	readonly blurtPriceFeed?: boolean;
 }
 
-/** Per-asset known defaults for the cp130 launch set.  Operators
+/** Per-asset known defaults for the launch set.  Operators
  *  who want different values override via env vars.
  *
  *  Coingecko coin ids are stable (the Coingecko project doesn't
@@ -230,16 +242,18 @@ export const CP130_ASSET_DEFAULTS: Record<string, AssetPriceSourceOptions> = {
 };
 
 /** Generic per-asset price source builder.  Same logic as the
- *  pre-cp130 BLURT-only factory, generalized on the asset
+ *  older BLURT-only factory, generalized on the asset
  *  parameters.
  *
- *  Composes:
- *   - Coingecko (always; needs the per-asset coinId)
- *   - morphit_native (if priceFeedNativeEnabled AND db provided)
- *   - Static floor
+ *  Composes the tiers in the header: the primary (pricenodes for
+ *  BTC/XMR, api.blurt.blog for BLURT; the federation on a hidden-only
+ *  node), the clearnet aggregators where clearnet is allowed,
+ *  morphit_native (if priceFeedNativeEnabled AND db provided), the
+ *  static floor.
  *
  *  Caller is responsible for calling source.start() and
- *  source.stop() for lifecycle. */
+ *  source.stop() for lifecycle (start/stop also run the shared
+ *  pricenode loop for BTC/XMR). */
 export function createAssetPriceSource(
 	config: Config,
 	options: AssetPriceSourceOptions,
@@ -372,7 +386,7 @@ export function createAssetPriceSource(
 			})
 		});
 	}
-	// cp425/cp604 — Blurt-native price feed (api.blurt.blog/price_info).
+	// Blurt-native price feed (api.blurt.blog/price_info).
 	// BLURT only, USD only (the feed quotes USD), and only when a URL is
 	// set (an operator can blank MORPHIT_INDEXER_BLURT_PRICE_FEED_URL to
 	// opt out). This is the PRIMARY source of truth for BLURT/USD: it is
@@ -381,6 +395,17 @@ export function createAssetPriceSource(
 	// the feed is down or implausible. A self-sovereign, non-CEX source of
 	// truth suits Morphit's decentralization priority.
 	const primaryUpstreams: Array<{ name: string; fetch: PriceFetch }> = [];
+	// BTC / XMR: the onion pricenodes' consensus, in any fiat they quote. The
+	// fetch reads the latest round (no I/O); the round itself runs in the
+	// background and refreshes this source as soon as it lands.
+	const asset = options.asset.toUpperCase();
+	const pricenodes = asset === 'BTC' || asset === 'XMR' ? pricenodesFor(config) : null;
+	if (pricenodes !== null && (asset === 'BTC' || asset === 'XMR')) {
+		primaryUpstreams.push({
+			name: 'pricenodes',
+			fetch: pricenodePriceFetch(pricenodes, asset, config.priceFeedDenominationFiat)
+		});
+	}
 	if (isUsd && options.blurtPriceFeed && config.blurtPriceFeedUrl) {
 		primaryUpstreams.push({
 			name: 'blurt_price_feed',
@@ -404,13 +429,14 @@ export function createAssetPriceSource(
 
 	// ── HIDDEN-ONLY (v1.15.x stage 2) ────────────────────────────────────────
 	// When the clearnet RPC pool is empty this node is hidden-only; stage-1's
-	// dispatcher would fail-close a clearnet price fetch anyway. So price from the
-	// FEDERATION over Tor/I2P: a federated median of peers' morphit_native
-	// receipts (already sampled into price_peer_observations by peerPriceMonitor)
-	// + this node's own native price becomes the PRIMARY. Clearnet CEX/aggregator
+	// dispatcher would fail-close a clearnet price fetch anyway. So price over
+	// Tor/I2P only: BTC/XMR from the onion pricenodes' consensus first, then
+	// (and for BLURT) the FEDERATION — a federated median of peers'
+	// morphit_native receipts (already sampled into price_peer_observations by
+	// peerPriceMonitor) + this node's own native price. Clearnet CEX/aggregator
 	// upstreams are dropped entirely; the static floor is the last resort.
 	if (config.blurtRpcEndpoints.length === 0) {
-		// (v1.18.0 deep-deep, M1) the chain-pinned fee amount (chain-pin > env,
+		// the chain-pinned fee amount (chain-pin > env,
 		// the SAME resolution the order handler enforces) implies a USD price;
 		// the federated median is clamped to it ± FEE_PRICE_TOLERANCE so K+1
 		// free sybil peers cannot move a hidden-only node's fee quote outside
@@ -443,9 +469,14 @@ export function createAssetPriceSource(
 					}
 				: undefined
 		});
-		return new CompositeCachedPriceSource({
+		const hidden = new CompositeCachedPriceSource({
 			upstreams: [],
-			primaryUpstreams: [{ name: 'federated', fetch: federated }],
+			// BTC/XMR: the onion pricenodes first; then (and for BLURT) the
+			// federation.
+			primaryUpstreams: [
+				...primaryUpstreams.filter((u) => u.name === 'pricenodes'),
+				{ name: 'federated', fetch: federated }
+			],
 			fallbackUpstreams,
 			outlierTolerance: config.priceOutlierTolerance,
 			plausibleMin: options.plausibleMin,
@@ -456,18 +487,20 @@ export function createAssetPriceSource(
 			asset: options.asset,
 			denominationFiat: config.priceFeedDenominationFiat
 		});
+		return pricenodes !== null ? tiePricenodeLifecycle(hidden, pricenodes) : hidden;
 	}
 
-	return new CompositeCachedPriceSource({
+	const source = new CompositeCachedPriceSource({
 		upstreams,
 		primaryUpstreams,
 		fallbackUpstreams,
+		...(pricenodes !== null ? { deferExternal: () => pricenodes.awaitingFirstRound() } : {}),
 		outlierTolerance: config.priceOutlierTolerance,
 		plausibleMin: options.plausibleMin,
 		plausibleMax: options.plausibleMax,
 		staticFloor: options.staticFloor,
 		refreshIntervalMs: config.priceRefreshIntervalMs,
-		// cp233 — Defense B (slow-drift) wiring: pass db + asset +
+		// Defense B (slow-drift) wiring: pass db + asset +
 		// denomination so each successful refresh updates the persisted
 		// drift baseline (price_drift_baseline) and surfaces sustained
 		// divergence on /v1/health.  db may be undefined for callers
@@ -476,6 +509,7 @@ export function createAssetPriceSource(
 		asset: options.asset,
 		denominationFiat: config.priceFeedDenominationFiat
 	});
+	return pricenodes !== null ? tiePricenodeLifecycle(source, pricenodes) : source;
 }
 
 /** Build the BLURT price source from operator config.
@@ -484,7 +518,7 @@ export function createAssetPriceSource(
  *  defaults; preserved as the public API for callers that only
  *  need BLURT pricing (e.g. listing-fee endpoint).
  *
- *  cp130: the actual logic moved into `createAssetPriceSource`;
+ *  the actual logic moved into `createAssetPriceSource`;
  *  this function is now ~5 lines.  Existing callers see the same
  *  behavior. */
 export function createPriceSource(config: Config, db?: Database): BlurtPriceSource {
@@ -495,14 +529,14 @@ export function createPriceSource(config: Config, db?: Database): BlurtPriceSour
 	return createAssetPriceSource(config, blurtOptions, db);
 }
 
-/** Build a map of price sources for all cp130-supported assets.
+/** Build a map of price sources for all supported assets.
  *
  *  Each entry's static-floor reads from a per-asset env var when
- *  available; the cp130 launch set:
+ *  available; the launch set:
  *
  *    BLURT: config.priceFeedStaticFloor              (existing env)
- *    BTC:   config.priceFeedBtcStaticFloor           (new env, cp130)
- *    XMR:   config.priceFeedXmrStaticFloor           (new env, cp130)
+ *    BTC:   config.priceFeedBtcStaticFloor           (new env)
+ *    XMR:   config.priceFeedXmrStaticFloor           (new env)
  *
  *  Returns a Map keyed by uppercase asset ticker.  Callers iterate
  *  to start() / stop() lifecycle; lookups for a specific asset use
@@ -510,7 +544,7 @@ export function createPriceSource(config: Config, db?: Database): BlurtPriceSour
  *
  *  All sources share the same operator-configured denomination
  *  (`priceFeedDenominationFiat`).  Per-asset denomination is not
- *  supported in cp130 (see factory.ts header comment for rationale). */
+ *  supported (see factory.ts header comment for rationale). */
 export function createMultiAssetPriceSources(
 	config: Config,
 	db?: Database
@@ -545,7 +579,7 @@ export function createMultiAssetPriceSources(
 
 /** Build the morphit_native price fetcher for one (asset, fiat)
  *  pair, or null when native pricing is disabled / no db is
- *  available.  cp233 — extracted from createAssetPriceSource so the
+ *  available.  extracted from createAssetPriceSource so the
  *  composite's native upstream AND defense C's cross-check share one
  *  construction (identical config args, no drift between them). */
 function buildMorphitNativeFetch(
@@ -554,30 +588,53 @@ function buildMorphitNativeFetch(
 	db?: Database
 ): PriceFetch | null {
 	if (!config.priceFeedNativeEnabled || !db) return null;
+	const envelope = nativePlausibleEnvelope(config, asset);
 	return createMorphitNativeFetcher({
 		asset,
 		denominationFiat: config.priceFeedDenominationFiat,
 		stablecoinKeys: config.priceFeedStablecoinKeys,
 		db,
 		operatorAccountName: config.operatorAccountName,
-		minPlausibleUsd: config.priceFeedNativePlausibleMin,
-		maxPlausibleUsd: config.priceFeedNativePlausibleMax
+		minPlausibleUsd: envelope.min,
+		maxPlausibleUsd: envelope.max
 	});
 }
 
-/** cp233 — Defense C wiring.  Build the in-process disagreement
+/**
+ * The plausibility envelope the morphit_native derivation applies to `asset`.
+ * The operator's MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN/MAX describe
+ * BLURT (their defaults, 0.0001–0.1 USD, are BLURT's range) and apply to BLURT
+ * only; every other asset uses its own range from CP130_ASSET_DEFAULTS. Applying
+ * the BLURT envelope to BTC or XMR rejected every native BTC/XMR price as
+ * implausible. An unknown asset gets the hardcoded outer bounds. PURE.
+ */
+export function nativePlausibleEnvelope(
+	config: Pick<Config, 'priceFeedNativePlausibleMin' | 'priceFeedNativePlausibleMax'>,
+	asset: string
+): { min: number; max: number } {
+	const a = asset.toUpperCase();
+	if (a === 'BLURT') {
+		return { min: config.priceFeedNativePlausibleMin, max: config.priceFeedNativePlausibleMax };
+	}
+	const d = CP130_ASSET_DEFAULTS[a];
+	return d
+		? { min: d.plausibleMin, max: d.plausibleMax }
+		: { min: HARDCODED_OUTER_MIN_USD, max: HARDCODED_OUTER_MAX_USD };
+}
+
+/** Defense C wiring.  Build the in-process disagreement
  *  monitor + the native fetcher for one asset, or null when the
  *  asset isn't eligible.
  *
  *  Eligibility: native pricing enabled + a db present (native
- *  derives from on-chain trade data).  An external reference is
- *  always available when external sources are reachable, because
- *  coingecko is an unconditional upstream for every asset — so the
- *  only gate is "do we have a native price to cross-check?".
+ *  derives from on-chain trade data).  The reference it is checked
+ *  against is the asset's committed price (whatever tier produced
+ *  it), so the only gate is "do we have a native price to
+ *  cross-check?".
  *
  *  Returns the monitor (held by the caller for /v1/health) and the
  *  native fetcher (driven by the monitor loop each cycle).  The
- *  denomination is the global operator setting (cp128). */
+ *  denomination is the global operator setting. */
 export function createDisagreementMonitor(
 	config: Config,
 	asset: string,

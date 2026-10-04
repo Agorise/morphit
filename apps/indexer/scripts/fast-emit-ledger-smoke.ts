@@ -48,6 +48,7 @@ import {
 } from '../src/indexer/chatFastFederation';
 import { chatEventBus } from '../src/indexer/chatEventBus';
 import { HeadTailer, MAX_CATCHUP_BLOCKS } from '../src/indexer/headTailer';
+import { transactionIdOf } from '../src/blurt/snapshotOpTrust';
 import type { LocatedChatOp } from '../src/indexer/headTailer';
 import type { Config } from '../src/config';
 import type { Database } from '../src/db/pool';
@@ -153,9 +154,16 @@ console.log('');
 //
 // Driven with a stubbed chain but a real run loop: real tick, real scanBlock,
 // real op parsing, real gates.
+interface FakeTrx {
+	ref_block_num: number;
+	ref_block_prefix: number;
+	expiration: string;
+	operations: unknown[];
+	extensions: unknown[];
+}
 interface FakeBlock {
 	timestamp: string;
-	transactions: { operations: unknown[] }[];
+	transactions: FakeTrx[];
 	transaction_ids: string[];
 }
 
@@ -179,12 +187,28 @@ function chatOp(signer: string, recipient: string, tag: string): unknown {
 	];
 }
 
-/** Run the real tailer over one block and report what reached the bus. */
-async function runTailerOverBlock(trxId: string, tag: string): Promise<string[]> {
+/** One chat transaction, and the id the chain gives it — the hash of its
+ *  content, which is what the ledger is keyed on (VT1-9). A head-block
+ *  transaction expires within the hour after its block (the tailer refuses a
+ *  replayed old one). */
+function chatTrx(tag: string): { trx: FakeTrx; id: string } {
+	const trx: FakeTrx = {
+		ref_block_num: 1,
+		ref_block_prefix: 2,
+		expiration: new Date(Date.now() + 60_000).toISOString().slice(0, 19),
+		operations: [chatOp('alice', 'bob', tag)],
+		extensions: []
+	};
+	return { trx, id: transactionIdOf(trx)! };
+}
+
+/** Run the real tailer over one block and report what reached the bus. The
+ *  block lists a node-chosen id for the transaction; the tailer must not use it. */
+async function runTailerOverBlock(trx: FakeTrx): Promise<string[]> {
 	const block: FakeBlock = {
 		timestamp: new Date().toISOString().slice(0, 19),
-		transactions: [{ operations: [chatOp('alice', 'bob', tag)] }],
-		transaction_ids: [trxId]
+		transactions: [trx],
+		transaction_ids: ['0'.repeat(40)]
 	};
 
 	let served = false;
@@ -221,7 +245,7 @@ async function runTailerOverBlock(trxId: string, tag: string): Promise<string[]>
 
 {
 	_resetFastEmitLedgerForTest();
-	const tags = await runTailerOverBlock('trx-chain-1', 'tag-chain-1');
+	const tags = await runTailerOverBlock(chatTrx('tag-chain-1').trx);
 	if (tags.includes('tag-chain-1'))
 		ok('the head tailer emits a message the fast path never delivered');
 	else
@@ -235,8 +259,9 @@ async function runTailerOverBlock(trxId: string, tag: string): Promise<string[]>
 {
 	_resetFastEmitLedgerForTest();
 	// Exactly what a local delivery or a peer push would have left behind.
-	markFastEmitted('trx-chain-2');
-	const tags = await runTailerOverBlock('trx-chain-2', 'tag-chain-2');
+	const { trx, id } = chatTrx('tag-chain-2');
+	markFastEmitted(id);
+	const tags = await runTailerOverBlock(trx);
 	if (!tags.includes('tag-chain-2'))
 		ok('and it SKIPS one the fast path already delivered — no second copy');
 	else
@@ -252,12 +277,13 @@ async function runTailerOverBlock(trxId: string, tag: string): Promise<string[]>
 	// chain copy free to do its job.
 	_resetSeenForTest();
 	_resetFastEmitLedgerForTest();
+	const { trx, id } = chatTrx('tag-chain-3');
 	await deliverVerifiedPush(
 		located('alice', 'bob', 'tag-chain-3'),
-		'trx-chain-3',
+		id,
 		gates({ blockThrows: true })
 	);
-	const tags = await runTailerOverBlock('trx-chain-3', 'tag-chain-3');
+	const tags = await runTailerOverBlock(trx);
 	if (tags.includes('tag-chain-3'))
 		ok('a FAILED fast attempt does not suppress the chain copy — the message still arrives');
 	else

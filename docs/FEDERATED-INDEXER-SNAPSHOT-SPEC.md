@@ -363,7 +363,7 @@ harden it. P6 is the trustless-but-fast endgame.
 2. **Default tier** — ship Tier 1 as the install default (my recommendation), with Tier 2
    auto-enabled in the background?
 3. **Publishers** — only morphit.io + morphitlat sign the canonical snapshot, or should
-   morphitir (once caught up) also publish for its region so censored-network newcomers
+   other caught-up instances also publish regional copies so censored-network newcomers
    fetch a local, same-signer-or-regional copy?
 4. **Op reuse vs. new op** — new `indexer_snapshot_v1` (my recommendation, clean
    separation), or overload `chain_snapshot_v1` with a `kind` field?

@@ -1,5 +1,5 @@
 /**
- * wallet-op-builders — cp424 (wallet security pass, foundation).
+ * wallet-op-builders — (wallet security pass, foundation).
  *
  * The wallet's Power up (transfer_to_vesting), Power down
  * (withdraw_vesting), and Send (transfer) all sign with the ACTIVE key

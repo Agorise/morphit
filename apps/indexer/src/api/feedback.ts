@@ -22,7 +22,12 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
-import { FEEDBACK_EXCLUSIONS_SQL } from '$api/reputationJoin';
+import {
+	FEEDBACK_EXCLUSIONS_SQL,
+	feedbackPairCountsSql,
+	latestReviewOfPairSql,
+	weightedRatingSql
+} from '$api/reputationJoin';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -70,7 +75,7 @@ interface FeedbackRow {
 	created_at: Date;
 	source_trx_id: string;
 	has_verified_chat: boolean;
-	/** cp471 (D1/D2): the cited order's OWNER (subject or reviewer),
+	/** (D1/D2): the cited order's OWNER (subject or reviewer),
 	 *  so the frontend links "View the order" to the right account. */
 	order_account: string | null;
 }
@@ -80,6 +85,21 @@ interface ResponseRow {
 	responder: string;
 	comment: string;
 	created_at: Date;
+}
+
+/** The ids, among `ids`, of order-bound reviews their reviewer has superseded
+ *  with a later review of the same subject — they do not count (only the
+ *  latest per pair does, latestReviewOfPairSql). */
+async function supersededIds(db: Database, ids: readonly string[]): Promise<Set<string>> {
+	if (ids.length === 0) return new Set();
+	const r = await db.query<{ id: string }>(
+		`SELECT f.id::text AS id FROM feedback f
+		  WHERE f.id = ANY($1::bigint[])
+		    AND f.order_permlink IS NOT NULL
+		    AND NOT ${latestReviewOfPairSql('f')}`,
+		[ids]
+	);
+	return new Set(r.rows.map((x) => x.id));
 }
 
 export function feedbackByAccountRoute(db: Database): Hono {
@@ -102,14 +122,9 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		const limit = q.limit ?? DEFAULT_LIMIT;
 
 		// ─── Summary query ─────────────────────────────────────────
-		// Excludes reviews where the (reviewer, subject) pair is
-		// flagged in suspicious_reciprocity OR related_accounts.
-		// Both signal tables store rows in canonical (a < b) order,
-		// so we test both orderings.  This is what makes the
-		// "weighted_rating" actually weighted — without this filter
-		// the field was an unweighted AVG that happily included
-		// sock-puppet reviews even though Signal A/B detected them.
-		// Per Finding R2.
+		// Excludes reviews whose (reviewer, subject) pair any of the
+		// four sock-puppet signals flags (feedbackPairCountsSql, the
+		// predicate every reputation surface shares). Per Finding R2.
 		//
 		// Also excludes feedback rows with NULL order_permlink
 		// (Finding G2.1) — untethered feedback doesn't drive the
@@ -121,7 +136,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		const summary = await db.query<SummaryRow>(
 			`WITH non_suppressed AS (
 				SELECT f.rating, f.created_at,
-				       -- cp471 (t.txt F/H): the cited order may have been
+				       -- cp471: the cited order may have been
 				       -- posted by EITHER party (intake allows account IN
 				       -- (subject, reviewer), cp420), so the SUBJECT's side is
 				       -- the order's side when the subject owns it, else the
@@ -133,53 +148,27 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				         ELSE NULL
 				       END AS side
 				  FROM feedback f
-				  -- cp471 (t.txt F/H) — was a JOIN on o.account =
-				  -- f.subject, which DROPPED every review whose cited order
-				  -- was posted by the REVIEWER (a maker reviewing the taker,
-				  -- citing the maker's OWN order — valid per intake cp420),
-				  -- silently zeroing the subject's whole reputation ("No
-				  -- feedback yet" despite a real verified review). Mirror the
-				  -- intake: the order is owned by EITHER party; LEFT so a
-				  -- since-removed order can't drop the count either. Match on
-				  -- account+permlink (the unique key — a bare permlink can
-				  -- collide across accounts).
-				  LEFT JOIN orders o
-				    ON o.permlink = f.order_permlink
-				   AND o.account IN (f.subject, f.reviewer)
+				  -- The cited order may be the subject's or the reviewer's
+				  -- (intake accepts either, see indexer/reviewCitation.ts).
+				  -- ONE row per review: when both parties own an order under
+				  -- that permlink, a plain join counted the review twice — so
+				  -- any reviewer could double his own rating by posting an
+				  -- unpaid order with the cited permlink. Prefer the
+				  -- fee-verified order (the one intake accepted), then the
+				  -- subject's. LEFT, so a since-removed order cannot drop the
+				  -- review either.
+				  LEFT JOIN LATERAL (
+				    SELECT o.account, o.side
+				      FROM orders o
+				     WHERE o.permlink = f.order_permlink
+				       AND o.account IN (f.subject, f.reviewer)
+				     ORDER BY (o.fee_status = 'verified') DESC, (o.account = f.subject) DESC
+				     LIMIT 1
+				  ) o ON TRUE
 				 WHERE f.subject = $1
 				   AND f.order_permlink IS NOT NULL
-				   AND NOT EXISTS (
-				       SELECT 1 FROM suspicious_reciprocity sr
-				        WHERE (sr.account_a = LEAST(f.reviewer, f.subject)
-				          AND sr.account_b = GREATEST(f.reviewer, f.subject))
-				   )
-				   AND NOT EXISTS (
-				       SELECT 1 FROM related_accounts ra
-				        WHERE (ra.account_a = LEAST(f.reviewer, f.subject)
-				          AND ra.account_b = GREATEST(f.reviewer, f.subject))
-				   )
-				   -- Signal C exclusion (Part 113): if the subject is
-				   -- flagged by the pile-on detector AND this specific
-				   -- reviewer is in the attackers list for that flag,
-				   -- drop the row from the reputation aggregate.  The
-				   -- JSONB->>'reviewer' lookup uses the attackers
-				   -- jsonb array stored on the one_way_pile_on row.
-				   AND NOT EXISTS (
-				       SELECT 1 FROM one_way_pile_on owpo,
-				                    jsonb_array_elements(owpo.attacking_reviewers) attacker
-				        WHERE owpo.subject = f.subject
-				          AND attacker->>'reviewer' = f.reviewer
-				   )
-				   -- cp123 (Signal D — review concentration): exclude
-				   -- feedback from reviewers flagged for concentrating
-				   -- ≥80% of their reviews on a single subject (closes
-				   -- Part 113 A4 residual).  See signals.ts:
-				   -- detectReviewConcentration.
-				   AND NOT EXISTS (
-				       SELECT 1 FROM review_concentration rc
-				        WHERE rc.reviewer = f.reviewer
-				          AND rc.dominant_subject = f.subject
-				   )
+				   AND ${feedbackPairCountsSql('f.reviewer', 'f.subject')}
+				   AND ${latestReviewOfPairSql('f')}
 			)
 			SELECT
 				COUNT(*)::text AS count,
@@ -187,11 +176,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				-- half-life.  See apps/indexer/src/indexer/reputation/decay.ts
 				-- for the rationale.  Empty result → NULL.
 				CASE WHEN COUNT(*) > 0
-				     THEN ROUND(
-				            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) /
-				            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))), 0),
-				            2
-				          )::text
+				     THEN ${weightedRatingSql('rating', 'created_at')}::text
 				     ELSE NULL
 				END AS weighted_rating,
 				-- cp124 H5: same formula, FILTERed by side, for the
@@ -200,20 +185,12 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				-- but bad as seller deserves to be visible.
 				COUNT(*) FILTER (WHERE side = 'buy')::text AS buy_count,
 				CASE WHEN COUNT(*) FILTER (WHERE side = 'buy') > 0
-				     THEN ROUND(
-				            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'buy') /
-				            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'buy'), 0),
-				            2
-				          )::text
+				     THEN ${weightedRatingSql('rating', 'created_at', "side = 'buy'")}::text
 				     ELSE NULL
 				END AS buy_weighted_rating,
 				COUNT(*) FILTER (WHERE side = 'sell')::text AS sell_count,
 				CASE WHEN COUNT(*) FILTER (WHERE side = 'sell') > 0
-				     THEN ROUND(
-				            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'sell') /
-				            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) FILTER (WHERE side = 'sell'), 0),
-				            2
-				          )::text
+				     THEN ${weightedRatingSql('rating', 'created_at', "side = 'sell'")}::text
 				     ELSE NULL
 				END AS sell_weighted_rating,
 				SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END)::text AS r1,
@@ -226,7 +203,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		);
 		const s = summary.rows[0]!;
 
-		// ─── cp124 H6: last_traded_at (dormancy signal) ─────────────
+		// ─── last_traded_at (dormancy signal) ─────────────
 		// Single query — MAX(created_at) across the two activity
 		// sources that matter for a "real" trader:
 		//   1. orders posted with fee_status='verified'
@@ -247,7 +224,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		);
 		const lastTradedAt = dormancy.rows[0]?.last_traded_at ?? null;
 
-		// ─── cp511 [E]: suspicious-reciprocity flag (profile trust pill) ───
+		// ─── suspicious-reciprocity flag (profile trust pill) ───
 		// True iff this account appears in ANY suspicious_reciprocity pair (as
 		// account_a OR account_b) — i.e. Signal B (ADR-0009 §5) caught it
 		// exchanging mutual reviews with another account. The pairwise flag is
@@ -273,7 +250,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 				'4': parseInt(s.r4, 10),
 				'5': parseInt(s.r5, 10)
 			},
-			// cp124 H5: side-of-trade distinction.  A trader great as
+			// side-of-trade distinction.  A trader great as
 			// buyer but bad as seller (or vice versa) deserves to be
 			// visible — readers see "as buyer: 4.92 (50) · as seller:
 			// 3.21 (10)" instead of a single conflated number.
@@ -288,13 +265,13 @@ export function feedbackByAccountRoute(db: Database): Hono {
 					weighted_rating: s.sell_weighted_rating === null ? null : Number(s.sell_weighted_rating)
 				}
 			},
-			// cp124 H6: dormancy signal.  ISO-8601 string when known,
+			// dormancy signal.  ISO-8601 string when known,
 			// null when the account has no verified orders + no
 			// feedback (brand-new account).  Readers see "last traded
 			// 3 days ago" vs "last traded 2 years ago" — informs
 			// trust without changing any numeric score.
 			last_traded_at: lastTradedAt === null ? null : lastTradedAt.toISOString(),
-			// cp511 [E] — see the suspicious-reciprocity query above.
+			// see the suspicious-reciprocity query above.
 			reciprocity_flagged: reciprocityFlagged
 		};
 
@@ -315,7 +292,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		const fbSql = `SELECT id::text, reviewer, subject, rating, comment,
 			        order_permlink, created_at, source_trx_id,
 			        has_verified_chat,
-			        -- cp471 (t.txt D1/D2): the cited order may belong to
+			        -- cp471: the cited order may belong to
 			        -- the subject OR the reviewer (intake cp420). The
 			        -- "View the order" link must target the order's real
 			        -- OWNER, else it 404s to the "being posted" limbo.
@@ -342,68 +319,26 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		}
 
 		// ─── Suppression flags ────────────────────────────────────
-		// For each feedback row in this page, determine whether the
-		// (reviewer, subject) pair is flagged in suspicious_reciprocity
-		// (Signal B), related_accounts (Signal A), or the Signal C
-		// one_way_pile_on attackers list.  The summary already
-		// excludes all three (Finding R2 + Part 113 Signal C
-		// extension); exposing the per-item flag lets the frontend
-		// render a clear "this review is from a flagged pair / actor"
-		// treatment so the displayed list reconciles with the summary
-		// count (Finding R15).  Part 118: Signal C added — pre-Part-
-		// 118 the per-row flag only covered A+B, so a Signal C
-		// attacker's row would appear on the profile WITHOUT the
-		// suppression chip while still being excluded from the
-		// headline rating — exactly the inconsistency R15 prevented
-		// for A+B.
+		// A row is `suppressed` when it does not count toward the
+		// summary above: its (reviewer, subject) pair is flagged by one
+		// of the four signals (the SAME feedbackPairCountsSql predicate
+		// the summary uses), it cites no order, or the reviewer has a
+		// later review of this subject (latestReviewOfPairSql). The list
+		// must agree with the score it sits under (Finding R15).
 		const reviewers = Array.from(new Set(rows.map((r) => r.reviewer)));
 		const flaggedReviewers = new Set<string>();
 		if (reviewers.length > 0) {
 			const flagResult = await db.query<{ reviewer: string }>(
-				`WITH pair_check AS (
-					SELECT
-						unnest($1::text[]) AS reviewer,
-						$2::text AS subject
-				)
-				SELECT pc.reviewer
-				  FROM pair_check pc
-				 WHERE EXISTS (
-				     SELECT 1 FROM suspicious_reciprocity sr
-				      WHERE sr.account_a = LEAST(pc.reviewer, pc.subject)
-				        AND sr.account_b = GREATEST(pc.reviewer, pc.subject)
-				 ) OR EXISTS (
-				     SELECT 1 FROM related_accounts ra
-				      WHERE ra.account_a = LEAST(pc.reviewer, pc.subject)
-				        AND ra.account_b = GREATEST(pc.reviewer, pc.subject)
-				 ) OR EXISTS (
-				     -- Signal C (Part 118): mirror the summary
-				     -- aggregate's exclusion logic.  The same
-				     -- jsonb_array_elements + attacker->>'reviewer'
-				     -- pattern that drives the summary CTE at the
-				     -- top of this handler.
-				     SELECT 1 FROM one_way_pile_on owpo,
-				                  jsonb_array_elements(owpo.attacking_reviewers) attacker
-				      WHERE owpo.subject = pc.subject
-				        AND attacker->>'reviewer' = pc.reviewer
-				 ) OR EXISTS (
-				     -- v1.8.12 (the maintainer): Signal D was MISSING here while the
-				     -- summary CTE has excluded on it since cp123. A review
-				     -- from a concentration-flagged reviewer therefore
-				     -- rendered as a perfectly normal review that silently
-				     -- contributed nothing to the score — the same
-				     -- "list disagrees with summary" this flag exists to
-				     -- prevent, and the same 3-of-4 signal gap found in the
-				     -- moderation CLI this release.
-				     SELECT 1 FROM review_concentration rc
-				      WHERE rc.reviewer = pc.reviewer
-				        AND rc.dominant_subject = pc.subject
-				 )`,
+				`SELECT r.reviewer
+				   FROM unnest($1::text[]) AS r(reviewer)
+				  WHERE NOT (${feedbackPairCountsSql('r.reviewer', '$2::text')})`,
 				[reviewers, account]
 			);
 			for (const r of flagResult.rows) flaggedReviewers.add(r.reviewer);
 		}
+		const superseded = await supersededIds(db, rows.map((r) => r.id));
 
-		// ─── Reviewer reputation (v1.8.0, t.txt) ───────────────────
+		// ─── Reviewer reputation (v1.8.0,) ───────────────────
 		// The "reviews this user has received" card now shows the CURRENT
 		// reputation of the REVIEWER (the person who left the review) — the
 		// mirror of what the feedback-given card already shows for the
@@ -422,11 +357,7 @@ export function feedbackByAccountRoute(db: Database): Hono {
 		if (reviewers.length > 0) {
 			const repResult = await db.query<{ subject: string; c: number; r: string | null }>(
 				`SELECT fb.subject, COUNT(*)::int AS c,
-				        ROUND(
-				          SUM(fb.rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))) /
-				          NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))), 0),
-				          2
-				        )::text AS r
+				        ${weightedRatingSql('fb.rating', 'fb.created_at')}::text AS r
 				   FROM feedback fb
 ${FEEDBACK_EXCLUSIONS_SQL}
 				    AND fb.subject = ANY($1::text[])
@@ -471,7 +402,7 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				rating: r.rating,
 				comment: r.comment,
 				order_permlink: r.order_permlink,
-				/** cp471 (D1/D2): the cited order's owner account. */
+				/** (D1/D2): the cited order's owner account. */
 				order_account: r.order_account,
 				created_at: r.created_at.toISOString(),
 				source_trx_id: r.source_trx_id,
@@ -481,7 +412,7 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				 *  rating + count (Finding R2); exposing the per-row
 				 *  flag lets the frontend show a clear visual cue so
 				 *  the list reconciles with the summary (Finding R15). */
-				// v1.8.12 (the maintainer) — ALSO true when the review carries no
+				// v1.8.12 — ALSO true when the review carries no
 				// order_permlink. The summary CTE requires
 				// `order_permlink IS NOT NULL` (an unanchored review cannot be
 				// checked against a real trade, so counting it would let anyone
@@ -491,8 +422,11 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				// the score, with nothing on screen saying so. `order_permlink`
 				// is nullable and the intake treats it as optional, so this is
 				// reachable, not theoretical.
-				suppressed: flaggedReviewers.has(r.reviewer) || r.order_permlink === null,
-				/** v1.8.0 (t.txt): the REVIEWER's current reputation —
+				// Also true for a review its reviewer has since superseded with a
+				// later one of the same subject (one review per pair counts).
+				suppressed:
+					flaggedReviewers.has(r.reviewer) || r.order_permlink === null || superseded.has(r.id),
+				/** v1.8.0: the REVIEWER's current reputation —
 				 *  exclusion-filtered + decay-weighted, identical to the
 				 *  headline figure on their own profile. Lets the received
 				 *  card render "★ 4.97 (12)" next to the reviewer, mirroring
@@ -569,7 +503,7 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 		const fbSql = `SELECT id::text, reviewer, subject, rating, comment,
 			        order_permlink, created_at, source_trx_id,
 			        has_verified_chat,
-			        -- cp471 (t.txt D1/D2): same owner rule as the received
+			        -- cp471: same owner rule as the received
 			        -- list — the cited order may belong to EITHER party, so
 			        -- the "View the order" link needs the real owner.
 			        (SELECT o.account FROM orders o
@@ -613,49 +547,25 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 		}
 
 		// ─── Suppression flags ────────────────────────────────────
-		// In feedback-given, $1 is the reviewer, and the subject
-		// varies across rows.  Pre-compute the set of subjects for
-		// which (reviewer, subject) is flagged so each row can be
-		// marked.  Per Finding R15 — same goal as the received
-		// route: list view reconciles with the suppression-aware
-		// summary on subject profiles.  Part 118: Signal C added
-		// (same posture as the /feedback handler above).
+		// In feedback-given, $1 is the reviewer and the subject varies
+		// across rows. Same rule as the received list: the shared
+		// feedbackPairCountsSql predicate, plus a review that cites no
+		// order, so a review shows as uncounted here exactly when the
+		// subject's own profile does not count it.
 		const subjects = Array.from(new Set(rows.map((r) => r.subject)));
 		const flaggedSubjects = new Set<string>();
 		if (subjects.length > 0) {
 			const flagResult = await db.query<{ subject: string }>(
-				`WITH pair_check AS (
-					SELECT
-						$1::text AS reviewer,
-						unnest($2::text[]) AS subject
-				)
-				SELECT pc.subject
-				  FROM pair_check pc
-				 WHERE EXISTS (
-				     SELECT 1 FROM suspicious_reciprocity sr
-				      WHERE sr.account_a = LEAST(pc.reviewer, pc.subject)
-				        AND sr.account_b = GREATEST(pc.reviewer, pc.subject)
-				 ) OR EXISTS (
-				     SELECT 1 FROM related_accounts ra
-				      WHERE ra.account_a = LEAST(pc.reviewer, pc.subject)
-				        AND ra.account_b = GREATEST(pc.reviewer, pc.subject)
-				 ) OR EXISTS (
-				     -- Signal C (Part 118): the reviewer is the
-				     -- fixed $1 here, the subject varies.  A row
-				     -- is flagged iff THIS subject has a Signal C
-				     -- pile-on detection AND $1 (the reviewer) is
-				     -- in that detection's attackers list.
-				     SELECT 1 FROM one_way_pile_on owpo,
-				                  jsonb_array_elements(owpo.attacking_reviewers) attacker
-				      WHERE owpo.subject = pc.subject
-				        AND attacker->>'reviewer' = pc.reviewer
-				 )`,
+				`SELECT g.subject
+				   FROM unnest($2::text[]) AS g(subject)
+				  WHERE NOT (${feedbackPairCountsSql('$1::text', 'g.subject')})`,
 				[account, subjects]
 			);
 			for (const r of flagResult.rows) flaggedSubjects.add(r.subject);
 		}
+		const superseded = await supersededIds(db, rows.map((r) => r.id));
 
-		// ─── Reviewed-account reputation (cp471, t.txt E) ────────
+		// ─── Reviewed-account reputation (E) ────────
 		// Each "reviews this user has left" card shows the CURRENT
 		// reputation of the person who was reviewed (★ 4.97 (12)).
 		// Computed here, scoped to this page's subjects, so the card
@@ -669,11 +579,7 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 		if (subjects.length > 0) {
 			const repResult = await db.query<{ subject: string; c: number; r: string | null }>(
 				`SELECT fb.subject, COUNT(*)::int AS c,
-				        ROUND(
-				          SUM(fb.rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))) /
-				          NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - fb.created_at)) / (365 * 86400.0))), 0),
-				          2
-				        )::text AS r
+				        ${weightedRatingSql('fb.rating', 'fb.created_at')}::text AS r
 				   FROM feedback fb
 ${FEEDBACK_EXCLUSIONS_SQL}
 				    AND fb.subject = ANY($1::text[])
@@ -698,12 +604,15 @@ ${FEEDBACK_EXCLUSIONS_SQL}
 				rating: r.rating,
 				comment: r.comment,
 				order_permlink: r.order_permlink,
-				/** cp471 (D1/D2): the cited order's owner account. */
+				/** (D1/D2): the cited order's owner account. */
 				order_account: r.order_account,
 				created_at: r.created_at.toISOString(),
 				source_trx_id: r.source_trx_id,
-				suppressed: flaggedSubjects.has(r.subject),
-				/** cp471 (E): the reviewed account's CURRENT reputation
+				// Same rule as the received list: a flagged pair, or a review
+				// tied to no order, does not count toward the subject's score.
+				suppressed:
+					flaggedSubjects.has(r.subject) || r.order_permlink === null || superseded.has(r.id),
+				/** (E): the reviewed account's CURRENT reputation
 				 *  (exclusion-filtered + decay-weighted, same as their own
 				 *  profile headline). null when they have no counting
 				 *  feedback yet. */

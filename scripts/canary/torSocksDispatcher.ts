@@ -1,19 +1,19 @@
 /**
  * scripts/canary/torSocksDispatcher.ts
  *
- * cp761 — tor-only privacy for the warrant-canary freshness proofs.
+ * tor-only privacy for the warrant-canary freshness proofs.
  *
  * WHY: on a tor-only node the canary's outbound freshness-proof fetches (Blurt
  * chain-head, Bitcoin head) went straight to clearnet endpoints, revealing the
  * node's real IP to those operators — the exact exposure tor-only exists to
- * avoid, and the same leak cp755 closed for the indexer's own chain reads. This
+ * avoid, and the same leak a later change closed for the indexer's own chain reads. This
  * module lets those fetches reach the SAME clearnet sources THROUGH the node's
  * co-located Tor SOCKS5 proxy, so the IP is hidden behind a Tor exit while the
  * freshness-proof diversity (real RPC nodes, real explorers) is preserved.
  *
  * DESIGN: undici's global dispatcher fed by the SHARED SOCKS5 connector from
  * @morphit/hidden-transport — the one the indexer, relay and ops-cli use.
- * (v1.18.0 deep-deep, L1) This file used to carry its own copy "so the canary
+ * This file used to carry its own copy "so the canary
  * would not reach into the indexer's internals"; the copy never received the
  * shared connector's fixes (S8 settle-once, S10 early close, X5 reply sized from
  * its address type and bytes after the reply kept), so a pooled tunnel's later

@@ -1,9 +1,9 @@
 /**
- * upgrade-mcp-reachability — cp449.
+ * upgrade-mcp-reachability.
  *
  * `morphit-ops upgrade` redeploys + restarts the MCP server (its own vendored
  * tree at /opt/morphit-mcp), but until now nothing confirmed the restarted
- * service actually came back up. cp449 adds a post-restart reachability probe.
+ * service actually came back up. A later change adds a post-restart reachability probe.
  *
  * The subtlety this smoke pins is a REAL deployment fact: the MCP binds
  * `MORPHIT_MCP_HTTP_HOST:MORPHIT_MCP_HTTP_PORT`, and on the canonical BunkerWeb

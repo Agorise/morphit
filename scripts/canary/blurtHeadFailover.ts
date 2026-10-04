@@ -7,7 +7,7 @@
  * `fetchOne` that fails the first N nodes and asserts the walk hops to the
  * next.
  *
- * cp451 — why this exists: the canary used to POST the chain-head request
+ * why this exists: the canary used to POST the chain-head request
  * to a single pinned node (default https://rpc.blurt.blog). When that one
  * witness's TLS cert died the node returned 526 and the ENTIRE canary
  * refresh stopped — even though the app itself has an RPC rotator that

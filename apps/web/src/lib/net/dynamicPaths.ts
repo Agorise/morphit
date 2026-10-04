@@ -1,5 +1,5 @@
 /**
- * Morphit — dynamic same-origin endpoint classifier (cp324).
+ * Morphit — dynamic same-origin endpoint classifier.
  *
  * The service worker serves same-origin GETs CACHE-FIRST so the app
  * runs fully offline (Priority #2 — unstoppability). That is correct

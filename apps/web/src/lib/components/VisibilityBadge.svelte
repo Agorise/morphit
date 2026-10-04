@@ -15,10 +15,10 @@
 	 *              The operator stores an opaque blob and can read none of it.
 	 *   device   → this browser only. Never leaves the machine.
 	 *
-	 * the maintainer hit the confusion directly: he set a screenful of fields, and when I
-	 * said "testowner has never broadcast settings" he corrected me — reasonably,
-	 * because he HAD saved settings, just to the other record. If the person
-	 * who built it is caught out by that boundary, every user will be.
+	 * The confusion is real: an account that had saved a screenful of fields was
+	 * described as "never broadcast settings" — true of the public record, false
+	 * of the private one. If the people who built it are caught out by that
+	 * boundary, every user will be.
 	 *
 	 * It matters most for the PUBLIC group. Someone typing a personal detail
 	 * into "short bio" deserves to know before they press Broadcast that it is

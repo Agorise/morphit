@@ -2,12 +2,12 @@
 /**
  * zec-trade-only-smoke.
  *
- * Part 122 cp39 sentinel: ZEC must be `canPayListingFee: false`
+ * ZEC must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping ZEC's flag to true would fail the
@@ -59,10 +59,10 @@ if (canonZec) {
 
 // ── Scenario 2 — canonical ZEC.canPayListingFee === false ────────
 if (canonZec && canonZec.canPayListingFee === false) {
-	pass('canonical ZEC.canPayListingFee === false (memory #23)');
+	pass('canonical ZEC.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical ZEC.canPayListingFee === false (memory #23)',
+		'canonical ZEC.canPayListingFee === false (trade-only rule)',
 		`ZEC must be trade-only.  Got canPayListingFee=${canonZec?.canPayListingFee}`
 	);
 }

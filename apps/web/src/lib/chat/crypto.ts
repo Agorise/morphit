@@ -5,48 +5,61 @@
  * ADR-0015. Every chat send goes through `encryptToRecipient`;
  * every chat receive goes through `decryptFromSender`.
  *
- * ─── The scheme in one paragraph ────────────────────────────────
+ * ─── The scheme ─────────────────────────────────────────────────
  *
  * Each account has a long-term X25519 identity keypair derived
  * deterministically from its Blurt posting private key via
  * BLAKE2b-256. The public half is published on-chain (via a
  * separate `morphit_chat_identity_v1` op) so peers can look it up.
- * To send a message, the sender generates a fresh ephemeral X25519
- * keypair, computes the shared secret with the recipient's long-
- * term pubkey, derives a one-use message key via BLAKE2b,
- * generates a random 12-byte nonce, and encrypts the plaintext
- * under ChaCha20-Poly1305-IETF. The recipient's accounts (both
- * sender and recipient handles) are bound as additional
- * authenticated data, so a relayed ciphertext can't be re-
- * attributed or re-addressed.
+ *
+ * v2 (sent by this version; `v: 2` in the envelope and op header).
+ * The sender generates a fresh ephemeral X25519 keypair and derives
+ * the message key from TWO Diffie-Hellman results:
+ *
+ *     dh1 = X25519(ephemeral, recipient)      — fresh per message
+ *     dh2 = X25519(sender, recipient)         — static-static
+ *     key = BLAKE2b-256(key = dh1 ‖ dh2,
+ *                       msg = "morphit-chat-msg-v2/" sender 0 recipient 0
+ *                             ‖ sender_pub ‖ recipient_pub ‖ ephemeral_pub)
+ *
+ * and encrypts under ChaCha20-Poly1305-IETF with a random 12-byte
+ * nonce and the two account names as AAD. The recipient computes
+ * dh2 from their own private key and the sender's PINNED chat key
+ * (pubPin.ts), so only someone holding the sender's (or the
+ * recipient's) private chat key can produce a message that opens:
+ * that is the sender authentication. A hostile indexer, which knows
+ * only public keys, can no longer mint a message "from" someone.
+ * The sender's optional self-copy uses dh1' = X25519(ephemeral,
+ * sender) and the same dh2, so it too can only have been written by
+ * one of the two parties.
+ *
+ * v1 (older clients; no `v`). Anonymous ECIES: the key depends only
+ * on the ephemeral and the recipient key. Still decrypted, so old
+ * messages and messages from not-yet-updated clients stay readable,
+ * but a v1 message is NEVER reported as authenticated: anyone with
+ * the recipient's public key could have written it.
  *
  * ─── Security properties ────────────────────────────────────────
  *
  * Provides:
- *   - Confidentiality: no one without the recipient's chat privkey
- *     can read a message.
+ *   - Confidentiality: no one without the recipient's (or, for v2,
+ *     the sender's) chat private key can read a message.
  *   - Ciphertext integrity: ChaCha20-Poly1305 AEAD rejects any
- *     tampering.
- *   - Sender binding: the AAD includes both account handles;
- *     relaying a ciphertext to a different recipient breaks AEAD
- *     auth.
- *   - One-sided sender-PFS: ephemeral private is wiped after
- *     send.  If the sender's posting key leaks LATER, the
- *     attacker cannot recover ephemerals from messages already
- *     broadcast — those ciphertexts are not decryptable from
- *     posting key alone.
+ *     tampering, including stripping or changing the version.
+ *   - Sender authentication (v2 only): see above. It is deniable —
+ *     the recipient could have computed the same key, so a message
+ *     proves its origin to the recipient, not to third parties. As
+ *     with any DH-authenticated scheme, someone who steals the
+ *     RECIPIENT's chat private key can also forge messages to them.
  *
  * Does NOT provide (per ADR-0015 — accepted tradeoffs):
- *   - Receiver-side forward secrecy.  Recipient's long-term
- *     chat-priv is the same forever, until posting-key rotation.
- *     Compromise of chat-priv reveals every past ciphertext the
- *     attacker can fetch from chain.  We deliberately rejected
- *     per-message-rotation forward-secrecy protocols (see
- *     ADR-0015 § "Alternatives considered") because the bundle
- *     and key-management cost is unacceptable for our threat
- *     model.  Acceptable because posting-key compromise already
- *     ends the account's security story for other reasons
- *     (attacker can broadcast as user).
+ *   - Forward secrecy. The recipient's chat private key is the same
+ *     until their posting key changes, and it decrypts every message
+ *     ever sent to them. In the default 'keep' mode the sender's own
+ *     chat key decrypts the self-copy of every message they sent.
+ *     Only in 'destroy' mode (no self-copy) does a later leak of the
+ *     sender's key alone not reopen what they sent — the recipient's
+ *     key still does. In short: **no forward secrecy**.
  *   - Post-compromise security.  No automatic recovery.
  *   - Metadata privacy.  Sender, recipient, and timestamp
  *     remain public on chain.
@@ -94,21 +107,26 @@ export class DecryptError extends Error {
 	}
 }
 
+/** Envelope version this client sends. */
+export const CHAT_ENVELOPE_VERSION = 2;
+
 /** On-wire envelope. Fields are all base64-encoded because the
  *  on-chain op stores JSON and the ciphertext column expects
  *  base64. */
 export interface ChatEnvelopeWire {
+	/** 2 for the sender-authenticated envelope; absent for v1. */
+	readonly v?: 2;
 	readonly ciphertext: string; // base64 — ChaCha20-Poly1305 output (ciphertext || 16-byte tag)
 	readonly ephemeralPub: string; // base64 — 32 bytes
 	readonly nonce: string; // base64 — 12 bytes
-	/** cp406 — OPTIONAL sender-decryptable copy. Present only when the sender
-	 *  is in "keep my history" mode (the default, encrypt-a-copy-to-self). It
-	 *  is the SAME plaintext, encrypted under a key the SENDER can re-derive
-	 *  from their own private key + the ephemeralPub above (ECDH against the
-	 *  sender's own pubkey, distinct AAD). Lets the sender read their own sent
-	 *  messages from chain forever. Absent in PFS "destroy on leave" mode — in
-	 *  which case own-sent messages remain unrecoverable after the session, by
-	 *  design. The recipient can never open this copy (different key + AAD). */
+	/** OPTIONAL sender-decryptable copy. Present only when the sender is in
+	 *  "keep my history" mode (the default). It is the SAME plaintext,
+	 *  encrypted under a key the SENDER re-derives from their own private key,
+	 *  the ephemeralPub above and (v2) the static-static term with the
+	 *  recipient's key; distinct AAD. Lets the sender read their own sent
+	 *  messages from chain forever. Absent in "destroy" mode — the sender then
+	 *  cannot reread own messages after the session. The recipient can never
+	 *  open this copy (different key + AAD). */
 	readonly selfCiphertext?: string; // base64 — ChaCha20-Poly1305 output
 	readonly selfNonce?: string; // base64 — 12 bytes
 }
@@ -213,17 +231,10 @@ export function wipeChatIdentity(keys: ChatIdentityKeys): void {
 // ─── Encrypt / decrypt ─────────────────────────────────────────
 
 /**
- * Build the per-message symmetric key from an X25519 shared
- * secret. Domain-separated by the (sender, recipient) pair so
- * two conversations between the same counterparties in opposite
- * directions use distinct keys (though both are derivable from
- * the same shared secret; the AEAD is still per-nonce so the
- * distinction is belt+suspenders).
- *
- * The concat(sender, "\u0000", recipient) format uses an in-band
- * separator that can't appear in a valid Blurt account name
- * (account names are [a-z0-9-] only), so there's no ambiguity
- * between e.g. ("ab", "cd") and ("abc", "d").
+ * v1 per-message key from the ephemeral shared secret, domain-separated by
+ * the (sender, recipient) pair. The concat(sender, "\u0000", recipient)
+ * format uses an in-band separator that can't appear in a valid Blurt
+ * account name, so ("ab", "cd") and ("abc", "d") never collide.
  */
 function deriveMessageKey(
 	sharedSecret: Uint8Array,
@@ -237,39 +248,189 @@ function deriveMessageKey(
 	return sodium.crypto_generichash(32, info, sharedSecret);
 }
 
-/**
- * Build the AAD string for AEAD. Same format on encrypt and
- * decrypt. Binding the sender and recipient handles means a
- * relay attacker can't re-target a ciphertext to a different
- * recipient (AEAD check fails) or re-attribute it (same).
- */
-function buildAad(senderAccount: string, recipientAccount: string): Uint8Array {
-	return enc.encode(`morphit-chat-aad-v1/${senderAccount}\u0000${recipientAccount}`);
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+	const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+	let o = 0;
+	for (const p of parts) {
+		out.set(p, o);
+		o += p.length;
+	}
+	return out;
 }
 
 /**
- * cp406 — AAD for the sender's SELF-COPY (see ChatEnvelopeWire.selfCiphertext).
- * A distinct domain string from buildAad so the self-copy is cryptographically
- * bound as a self-copy: the recipient's decrypt (which uses buildAad) can never
- * open it, and it can never be swapped for the recipient ciphertext without the
- * AEAD MAC failing. Combined with the different shared secret (ECDH against the
- * sender's own pubkey), the two copies are fully independent.
+ * v2 per-message key: BLAKE2b keyed with dh1 ‖ dh2 (ephemeral and
+ * static-static results), over a domain string that also binds both account
+ * names and the three public keys, so a key derived for one pair of
+ * identities can never serve another. `self` selects the self-copy domain.
  */
-function buildAadSelf(senderAccount: string, recipientAccount: string): Uint8Array {
-	return enc.encode(`morphit-chat-self-aad-v1/${senderAccount}\u0000${recipientAccount}`);
+function deriveMessageKeyV2(
+	dh1: Uint8Array,
+	dh2: Uint8Array,
+	senderAccount: string,
+	recipientAccount: string,
+	senderPub: Uint8Array,
+	recipientPub: Uint8Array,
+	ephPub: Uint8Array,
+	self: boolean
+): Uint8Array {
+	if (dh1.length !== 32 || dh2.length !== 32) {
+		throw new Error('chat crypto: shared secrets must be 32 bytes');
+	}
+	const ikm = concatBytes(dh1, dh2);
+	try {
+		const info = concatBytes(
+			enc.encode(
+				`${self ? 'morphit-chat-self-v2' : 'morphit-chat-msg-v2'}/${senderAccount}\u0000${recipientAccount}\u0000`
+			),
+			senderPub,
+			recipientPub,
+			ephPub
+		);
+		return sodium.crypto_generichash(32, info, ikm);
+	} finally {
+		sodium.memzero(ikm);
+	}
 }
 
 /**
- * Encrypt a plaintext message to a recipient. The recipient's
- * long-term chat pubkey must be known (typically fetched from the
- * indexer). Returns the on-wire envelope, ready to drop into a
- * `morphit_chat_v1` op payload.
+ * AAD for AEAD. Binding the sender and recipient handles means a relay
+ * attacker can't re-target a ciphertext to a different recipient or
+ * re-attribute it (the AEAD check fails). Versioned with the envelope.
+ */
+function buildAad(senderAccount: string, recipientAccount: string, v: 1 | 2 = 1): Uint8Array {
+	return enc.encode(`morphit-chat-aad-v${v}/${senderAccount}\u0000${recipientAccount}`);
+}
+
+/**
+ * AAD for the sender's SELF-COPY (see ChatEnvelopeWire.selfCiphertext). A
+ * distinct domain string from buildAad, so the self-copy is bound as a
+ * self-copy: the recipient's decrypt can never open it, and it can never be
+ * swapped for the recipient ciphertext without the AEAD MAC failing.
+ */
+function buildAadSelf(senderAccount: string, recipientAccount: string, v: 1 | 2 = 1): Uint8Array {
+	return enc.encode(`morphit-chat-self-aad-v${v}/${senderAccount}\u0000${recipientAccount}`);
+}
+
+/** X25519 that maps libsodium's low-order / all-zero failure to `onFail`. */
+function dh(priv: Uint8Array, pub: Uint8Array, onFail: () => Error): Uint8Array {
+	try {
+		return sodium.crypto_scalarmult(priv, pub);
+	} catch {
+		throw onFail();
+	}
+}
+
+/**
+ * Encrypt a plaintext message to a recipient in the sender-authenticated v2
+ * envelope — the only format this client sends. `sender` is the sender's own
+ * chat identity (its private half takes part in the static-static DH).
+ * `includeSelfCopy` adds a copy the sender can reread later ('keep' mode).
  *
- * The envelope's ciphertext field includes the 16-byte Poly1305
- * auth tag appended per libsodium convention — one base64 blob
- * covers data + tag.
+ * The envelope's ciphertext field includes the 16-byte Poly1305 auth tag
+ * appended per libsodium convention — one base64 blob covers data + tag.
  */
 export async function encryptToRecipient(
+	plaintext: string,
+	recipientChatPub: Uint8Array,
+	sender: ChatIdentityKeys,
+	senderAccount: string,
+	recipientAccount: string,
+	includeSelfCopy = true
+): Promise<ChatEnvelopeWire> {
+	await ensureSodium();
+	if (recipientChatPub.length !== 32) {
+		throw new Error('chat crypto: recipient pub must be 32 bytes');
+	}
+	if (sender.priv.length !== 32 || sender.pub.length !== 32) {
+		throw new Error('chat crypto: sender identity must be 32-byte keys');
+	}
+	if (senderAccount.length === 0 || recipientAccount.length === 0) {
+		throw new Error('chat crypto: accounts must be non-empty');
+	}
+
+	const ephPriv = sodium.randombytes_buf(32);
+	clampX25519Scalar(ephPriv);
+	const ephPub = sodium.crypto_scalarmult_base(ephPriv);
+	const wipe: Uint8Array[] = [ephPriv];
+	try {
+		const badKey = () => new Error('chat crypto: recipient key is not a usable X25519 key');
+		const dh1 = dh(ephPriv, recipientChatPub, badKey);
+		wipe.push(dh1);
+		const dh2 = dh(sender.priv, recipientChatPub, badKey);
+		wipe.push(dh2);
+		const key = deriveMessageKeyV2(
+			dh1,
+			dh2,
+			senderAccount,
+			recipientAccount,
+			sender.pub,
+			recipientChatPub,
+			ephPub,
+			false
+		);
+		wipe.push(key);
+		const nonce = sodium.randombytes_buf(12);
+		const plaintextBytes = enc.encode(plaintext);
+		const ciphertextWithTag = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+			plaintextBytes,
+			buildAad(senderAccount, recipientAccount, 2),
+			null,
+			nonce,
+			key
+		);
+
+		let selfCiphertext: string | undefined;
+		let selfNonce: string | undefined;
+		if (includeSelfCopy) {
+			const dh1Self = dh(ephPriv, sender.pub, () => new Error('chat crypto: bad sender key'));
+			wipe.push(dh1Self);
+			const keySelf = deriveMessageKeyV2(
+				dh1Self,
+				dh2,
+				senderAccount,
+				recipientAccount,
+				sender.pub,
+				recipientChatPub,
+				ephPub,
+				true
+			);
+			wipe.push(keySelf);
+			const selfNonceBytes = sodium.randombytes_buf(12);
+			selfCiphertext = toBase64(
+				sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+					plaintextBytes,
+					buildAadSelf(senderAccount, recipientAccount, 2),
+					null,
+					selfNonceBytes,
+					keySelf
+				)
+			);
+			selfNonce = toBase64(selfNonceBytes);
+		}
+		return {
+			v: 2,
+			ciphertext: toBase64(ciphertextWithTag),
+			ephemeralPub: toBase64(ephPub),
+			nonce: toBase64(nonce),
+			...(selfCiphertext !== undefined && selfNonce !== undefined
+				? { selfCiphertext, selfNonce }
+				: {})
+		};
+	} finally {
+		// Wipe the ephemeral private key and every derived secret, on every
+		// path.
+		for (const b of wipe) sodium.memzero(b);
+	}
+}
+
+/**
+ * The legacy v1 envelope (anonymous ECIES, no sender authentication). This
+ * client never SENDS it; it exists so the v1 read path — messages from
+ * before v2 and from clients not yet updated — stays exercised by tests.
+ * `senderChatPub` + `includeSelfCopy` add the v1 self-copy.
+ */
+export async function encryptToRecipientV1(
 	plaintext: string,
 	recipientChatPub: Uint8Array,
 	senderAccount: string,
@@ -284,78 +445,47 @@ export async function encryptToRecipient(
 	if (senderAccount.length === 0 || recipientAccount.length === 0) {
 		throw new Error('chat crypto: accounts must be non-empty');
 	}
-	// cp406 — a sender self-copy is emitted only when the caller supplies the
-	// sender's own chat pubkey AND keep-history mode is on. Existing callers
-	// that pass neither keep the exact prior (recipient-only, one-sided-PFS)
-	// behavior. Validate the length here so a bad key can't reach the ECDH.
 	const wantSelfCopy = includeSelfCopy && senderChatPub !== undefined;
 	if (wantSelfCopy && senderChatPub!.length !== 32) {
 		throw new Error('chat crypto: sender pub must be 32 bytes');
 	}
-
-	// Fresh ephemeral keypair for this message. The pub half goes
-	// in the envelope header; the priv is discarded immediately
-	// after the shared-secret computation below.
 	const ephPriv = sodium.randombytes_buf(32);
 	clampX25519Scalar(ephPriv);
 	const ephPub = sodium.crypto_scalarmult_base(ephPriv);
-
-	// Audit 2026-05 finding 2-12: wrap the rest in try/finally so
-	// ephPriv is wiped even if scalarmult or AEAD encrypt throws.
-	// crypto_scalarmult can throw on a low-order recipient point;
-	// pre-fix, that error path leaked ephPriv on the heap.
-	let shared: Uint8Array | null = null;
-	let messageKey: Uint8Array | null = null;
-	let sharedSelf: Uint8Array | null = null;
-	let messageKeySelf: Uint8Array | null = null;
+	const wipe: Uint8Array[] = [ephPriv];
 	try {
-		// ECDH: shared secret = X25519(eph_priv, recipient_pub).
-		const sharedLocal = sodium.crypto_scalarmult(ephPriv, recipientChatPub);
-		shared = sharedLocal;
-		const messageKeyLocal = deriveMessageKey(sharedLocal, senderAccount, recipientAccount);
-		messageKey = messageKeyLocal;
-
-		const nonce = sodium.randombytes_buf(12); // ChaCha20-Poly1305 IETF: 96-bit nonce
-		const aad = buildAad(senderAccount, recipientAccount);
+		const shared = sodium.crypto_scalarmult(ephPriv, recipientChatPub);
+		wipe.push(shared);
+		const key = deriveMessageKey(shared, senderAccount, recipientAccount);
+		wipe.push(key);
+		const nonce = sodium.randombytes_buf(12);
 		const plaintextBytes = enc.encode(plaintext);
-
 		const ciphertextWithTag = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
 			plaintextBytes,
-			aad,
-			null, // nsec; ietf variant ignores this — pass null
+			buildAad(senderAccount, recipientAccount),
+			null,
 			nonce,
-			messageKeyLocal
+			key
 		);
-
-		// cp406 — sender self-copy. Reuse the SAME ephemeral but ECDH against
-		// the sender's OWN pub, so the sender re-derives the key later from
-		// their priv + the ephemeralPub already in the header. Distinct AAD
-		// (buildAadSelf) binds it as a self-copy; the recipient can never open
-		// it (they lack the sender's priv, and the AAD/key differ).
 		let selfCiphertext: string | undefined;
 		let selfNonce: string | undefined;
 		if (wantSelfCopy) {
-			const sharedSelfLocal = sodium.crypto_scalarmult(ephPriv, senderChatPub!);
-			sharedSelf = sharedSelfLocal;
-			const messageKeySelfLocal = deriveMessageKey(
-				sharedSelfLocal,
-				senderAccount,
-				recipientAccount
-			);
-			messageKeySelf = messageKeySelfLocal;
+			const sharedSelf = sodium.crypto_scalarmult(ephPriv, senderChatPub!);
+			wipe.push(sharedSelf);
+			const keySelf = deriveMessageKey(sharedSelf, senderAccount, recipientAccount);
+			wipe.push(keySelf);
 			const selfNonceBytes = sodium.randombytes_buf(12);
-			const aadSelf = buildAadSelf(senderAccount, recipientAccount);
-			const selfCipherWithTag = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
-				plaintextBytes,
-				aadSelf,
-				null,
-				selfNonceBytes,
-				messageKeySelfLocal
+			selfCiphertext = toBase64(
+				sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+					plaintextBytes,
+					buildAadSelf(senderAccount, recipientAccount),
+					null,
+					selfNonceBytes,
+					keySelf
+				)
 			);
-			selfCiphertext = toBase64(selfCipherWithTag);
 			selfNonce = toBase64(selfNonceBytes);
 		}
-
 		return {
 			ciphertext: toBase64(ciphertextWithTag),
 			ephemeralPub: toBase64(ephPub),
@@ -365,158 +495,185 @@ export async function encryptToRecipient(
 				: {})
 		};
 	} finally {
-		// Wipe ephemeral priv unconditionally — PFS depends on this.
-		sodium.memzero(ephPriv);
-		if (shared) sodium.memzero(shared);
-		if (messageKey) sodium.memzero(messageKey);
-		if (sharedSelf) sodium.memzero(sharedSelf);
-		if (messageKeySelf) sodium.memzero(messageKeySelf);
+		for (const b of wipe) sodium.memzero(b);
+	}
+}
+
+/** A decrypted message and whether its sender is PROVED (v2, opened with the
+ *  sender's pinned chat key). `authenticated: false` means v1: readable, but
+ *  anyone with the recipient's public key could have written it. */
+export interface OpenedMessage {
+	readonly text: string;
+	readonly authenticated: boolean;
+}
+
+function parseCommon(
+	ephB64: string,
+	ctB64: string,
+	nonceB64: string
+): { ephPub: Uint8Array; ct: Uint8Array; nonce: Uint8Array } {
+	let ephPub: Uint8Array;
+	let ct: Uint8Array;
+	let nonce: Uint8Array;
+	try {
+		ephPub = fromBase64(ephB64);
+		ct = fromBase64(ctB64);
+		nonce = fromBase64(nonceB64);
+	} catch {
+		// Malformed base64 is indistinguishable (to the attacker) from a
+		// failed MAC — return the same generic error.
+		throw new DecryptError();
+	}
+	if (ephPub.length !== 32 || nonce.length !== 12 || ct.length < 16) {
+		throw new DecryptError();
+	}
+	return { ephPub, ct, nonce };
+}
+
+function aeadOpen(
+	ct: Uint8Array,
+	aad: Uint8Array,
+	nonce: Uint8Array,
+	key: Uint8Array
+): Uint8Array | null {
+	try {
+		return sodium.crypto_aead_chacha20poly1305_ietf_decrypt(null, ct, aad, nonce, key);
+	} catch {
+		return null;
 	}
 }
 
 /**
- * Decrypt an envelope received for this user. The user's own
- * chat identity is required (its priv half is used for the
- * ECDH). Returns the plaintext string or throws DecryptError
- * on ANY failure.
+ * Decrypt an envelope received by this user.
  *
- * The AAD reconstruction uses the SAME sender/recipient
- * accounts that the envelope claims — i.e. the op's signer and
- * recipient fields. The indexer has already validated those
- * against the chain (signer matches op sig; recipient matches
- * our own account if we're receiving), so using them here is
- * safe.
+ * v2: `senderChatPubs` are the sender's pinned chat keys to try (the current
+ * pin first, then keys pinned before an accepted key change, so older
+ * messages still open). The message opens only with one of them — that is the
+ * proof of origin — and comes back `authenticated: true`. With no matching
+ * key it throws DecryptError.
+ *
+ * v1: decrypted as before and returned `authenticated: false`.
+ *
+ * Throws DecryptError on ANY failure, without detail.
  */
 export async function decryptFromSender(
 	envelope: ChatEnvelopeWire,
 	myIdentity: ChatIdentityKeys,
 	senderAccount: string,
-	recipientAccount: string
-): Promise<string> {
+	recipientAccount: string,
+	senderChatPubs: readonly Uint8Array[] = []
+): Promise<OpenedMessage> {
 	await ensureSodium();
-
-	let ephPub: Uint8Array;
-	let ciphertextWithTag: Uint8Array;
-	let nonce: Uint8Array;
+	const { ephPub, ct, nonce } = parseCommon(
+		envelope.ephemeralPub,
+		envelope.ciphertext,
+		envelope.nonce
+	);
+	const wipe: Uint8Array[] = [];
 	try {
-		ephPub = fromBase64(envelope.ephemeralPub);
-		ciphertextWithTag = fromBase64(envelope.ciphertext);
-		nonce = fromBase64(envelope.nonce);
-	} catch {
-		// Malformed base64 is indistinguishable (to the attacker)
-		// from a failed MAC — return the same generic error.
-		throw new DecryptError();
-	}
-	if (ephPub.length !== 32 || nonce.length !== 12 || ciphertextWithTag.length < 16) {
-		throw new DecryptError();
-	}
-
-	let shared: Uint8Array | null = null;
-	let messageKey: Uint8Array | null = null;
-	try {
-		let sharedLocal: Uint8Array;
-		try {
-			sharedLocal = sodium.crypto_scalarmult(myIdentity.priv, ephPub);
-		} catch {
-			// scalarmult can throw if the peer's pub is a low-order
-			// point — an active attack. Reject without detail.
+		const dh1 = dh(myIdentity.priv, ephPub, () => new DecryptError());
+		wipe.push(dh1);
+		if (envelope.v === 2) {
+			for (const senderPub of senderChatPubs) {
+				if (senderPub.length !== 32) continue;
+				let dh2: Uint8Array;
+				try {
+					dh2 = sodium.crypto_scalarmult(myIdentity.priv, senderPub);
+				} catch {
+					continue;
+				}
+				wipe.push(dh2);
+				const key = deriveMessageKeyV2(
+					dh1,
+					dh2,
+					senderAccount,
+					recipientAccount,
+					senderPub,
+					myIdentity.pub,
+					ephPub,
+					false
+				);
+				wipe.push(key);
+				const pt = aeadOpen(ct, buildAad(senderAccount, recipientAccount, 2), nonce, key);
+				if (pt !== null) return { text: new TextDecoder().decode(pt), authenticated: true };
+			}
 			throw new DecryptError();
 		}
-		shared = sharedLocal;
-
-		const messageKeyLocal = deriveMessageKey(sharedLocal, senderAccount, recipientAccount);
-		messageKey = messageKeyLocal;
-
-		const aad = buildAad(senderAccount, recipientAccount);
-		let plaintextBytes: Uint8Array;
-		try {
-			plaintextBytes = sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
-				null, // nsec
-				ciphertextWithTag,
-				aad,
-				nonce,
-				messageKeyLocal
-			);
-		} catch {
-			throw new DecryptError();
-		}
-
-		return new TextDecoder().decode(plaintextBytes);
+		if (envelope.v !== undefined) throw new DecryptError();
+		const key = deriveMessageKey(dh1, senderAccount, recipientAccount);
+		wipe.push(key);
+		const pt = aeadOpen(ct, buildAad(senderAccount, recipientAccount), nonce, key);
+		if (pt === null) throw new DecryptError();
+		return { text: new TextDecoder().decode(pt), authenticated: false };
 	} finally {
-		// Audit 2026-05 finding 2-12: wipe unconditionally on
-		// both happy and error paths.
-		if (shared) sodium.memzero(shared);
-		if (messageKey) sodium.memzero(messageKey);
+		for (const b of wipe) sodium.memzero(b);
 	}
 }
 
 /**
- * cp406 — decrypt the sender's OWN self-copy of a message THEY sent (see
- * ChatEnvelopeWire.selfCiphertext). Used to restore own sent history from
- * chain when the account is in keep-history mode. `myIdentity` is the
- * SENDER's own identity — the caller only invokes this for records where it
- * is the sender. Returns the plaintext, or throws DecryptError on any failure
- * (no self-copy present — PFS mode or a pre-feature message — malformed, or
- * wrong key). ECDH symmetry: X25519(sender_priv, eph_pub) reproduces the
- * X25519(eph_priv, sender_pub) used at encrypt time.
+ * Decrypt the sender's OWN self-copy of a message THEY sent (see
+ * ChatEnvelopeWire.selfCiphertext), to restore own sent history from chain.
+ * `myIdentity` is the SENDER's own identity. For v2, `recipientChatPubs` are
+ * the recipient's pinned chat keys to try: the self-copy key also needs the
+ * static-static term, so a self-copy forged by someone who knows only the
+ * sender's public key does not open. Throws DecryptError on any failure (no
+ * self-copy — 'destroy' mode or a pre-feature message — malformed, or wrong
+ * key).
  */
 export async function decryptSelfCopy(
 	envelope: ChatEnvelopeWire,
 	myIdentity: ChatIdentityKeys,
 	senderAccount: string,
-	recipientAccount: string
+	recipientAccount: string,
+	recipientChatPubs: readonly Uint8Array[] = []
 ): Promise<string> {
 	await ensureSodium();
 	if (envelope.selfCiphertext === undefined || envelope.selfNonce === undefined) {
-		// No self-copy was written (PFS "destroy" mode, or a pre-feature message).
 		throw new DecryptError();
 	}
-
-	let ephPub: Uint8Array;
-	let selfCipherWithTag: Uint8Array;
-	let selfNonce: Uint8Array;
+	const { ephPub, ct, nonce } = parseCommon(
+		envelope.ephemeralPub,
+		envelope.selfCiphertext,
+		envelope.selfNonce
+	);
+	const wipe: Uint8Array[] = [];
 	try {
-		ephPub = fromBase64(envelope.ephemeralPub);
-		selfCipherWithTag = fromBase64(envelope.selfCiphertext);
-		selfNonce = fromBase64(envelope.selfNonce);
-	} catch {
-		throw new DecryptError();
-	}
-	if (ephPub.length !== 32 || selfNonce.length !== 12 || selfCipherWithTag.length < 16) {
-		throw new DecryptError();
-	}
-
-	let shared: Uint8Array | null = null;
-	let messageKey: Uint8Array | null = null;
-	try {
-		let sharedLocal: Uint8Array;
-		try {
-			sharedLocal = sodium.crypto_scalarmult(myIdentity.priv, ephPub);
-		} catch {
-			// Low-order point → reject without detail, same as the recipient path.
+		const dh1 = dh(myIdentity.priv, ephPub, () => new DecryptError());
+		wipe.push(dh1);
+		if (envelope.v === 2) {
+			for (const recipientPub of recipientChatPubs) {
+				if (recipientPub.length !== 32) continue;
+				let dh2: Uint8Array;
+				try {
+					dh2 = sodium.crypto_scalarmult(myIdentity.priv, recipientPub);
+				} catch {
+					continue;
+				}
+				wipe.push(dh2);
+				const key = deriveMessageKeyV2(
+					dh1,
+					dh2,
+					senderAccount,
+					recipientAccount,
+					myIdentity.pub,
+					recipientPub,
+					ephPub,
+					true
+				);
+				wipe.push(key);
+				const pt = aeadOpen(ct, buildAadSelf(senderAccount, recipientAccount, 2), nonce, key);
+				if (pt !== null) return new TextDecoder().decode(pt);
+			}
 			throw new DecryptError();
 		}
-		shared = sharedLocal;
-		const messageKeyLocal = deriveMessageKey(sharedLocal, senderAccount, recipientAccount);
-		messageKey = messageKeyLocal;
-
-		const aadSelf = buildAadSelf(senderAccount, recipientAccount);
-		let plaintextBytes: Uint8Array;
-		try {
-			plaintextBytes = sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
-				null, // nsec
-				selfCipherWithTag,
-				aadSelf,
-				selfNonce,
-				messageKeyLocal
-			);
-		} catch {
-			throw new DecryptError();
-		}
-		return new TextDecoder().decode(plaintextBytes);
+		if (envelope.v !== undefined) throw new DecryptError();
+		const key = deriveMessageKey(dh1, senderAccount, recipientAccount);
+		wipe.push(key);
+		const pt = aeadOpen(ct, buildAadSelf(senderAccount, recipientAccount), nonce, key);
+		if (pt === null) throw new DecryptError();
+		return new TextDecoder().decode(pt);
 	} finally {
-		if (shared) sodium.memzero(shared);
-		if (messageKey) sodium.memzero(messageKey);
+		for (const b of wipe) sodium.memzero(b);
 	}
 }
 

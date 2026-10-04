@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G2 — an EXPIRED order must not count toward the Sybil fee
+ * an EXPIRED order must not count toward the Sybil fee
  * tier.
  *
  * Nothing ever writes status='expired' (expiry is enforced at read time from

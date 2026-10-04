@@ -22,7 +22,7 @@ part 2.
 
 ---
 
-## Part 1 — What we need from the coin community
+## What we need from the coin community
 
 A request to add a coin should arrive with the following
 information.  No surprises later, no "let me check on the
@@ -37,11 +37,11 @@ icon" mid-implementation.
 
 2. **Full name.**  How the coin is known in prose ("Bitcoin",
    "Monero", "Pirate Chain").  Used in pickers, tooltips,
-   FAQ entries, and brag list.  Pirate Chain is real as of cp41
-   (see ADR-0032), Decred is real as of cp43
-   (see ADR-0033), Solana is real as of cp45
-   (see ADR-0034), Ethereum is real as of cp47
-   (see ADR-0035), and Ripple is real as of cp49
+   FAQ entries, and brag list.  Pirate Chain is real
+   (see ADR-0032), Decred is real
+   (see ADR-0033), Solana is real
+   (see ADR-0034), Ethereum is real
+   (see ADR-0035), and Ripple is real
    (see ADR-0036); all five were hypothetical examples earlier.
    announcements.
 
@@ -134,7 +134,7 @@ icon" mid-implementation.
 
 ---
 
-## Part 2 — File-by-file checklist
+## File-by-file checklist
 
 This section assumes you have all the data above on hand.
 Time estimate for an experienced Morphit developer: half a day
@@ -244,7 +244,7 @@ Same — add the new method to validation.
 
 ### Step 5 — Database schema (if explorer-verifier wired)
 
-If the new coin gets explorer verification (per Part 1, item 9):
+If the new coin gets explorer verification:
 
 **File:** `apps/indexer/src/db/schema.sql`
 
@@ -269,7 +269,7 @@ Pattern for the verifier code: see how
 `bitcoinExplorerVerifier.ts` and `moneroProofVerifier.ts`
 write their state.  (Monero uses per-payment tx-key
 verification rather than view-key-based explorer scraping
-since Part 108++; the BTC verifier remains the canonical
+since later+; the BTC verifier remains the canonical
 explorer-style template.)
 
 **File:** `apps/indexer/src/indexer/fee/<new>ExplorerVerifier.ts`
@@ -354,7 +354,7 @@ For every change above, add or update smoke scenarios:
 
 ## What we will NOT do
 
-- Add a coin without all the Part 1 inputs.
+- Add a coin without all the inputs.
 - Add a coin whose address format is unstable or under active
   consensus debate (we'd have to keep updating the validator).
 - Add a coin that requires us to bundle and ship a per-coin
@@ -371,9 +371,9 @@ Out of scope for the current iteration; tracked separately.
 
 ---
 
-## 2026-05-13 architectural update (Part 121) — trade-only assets + multi-network coins
+## 2026-05-13 architectural update — trade-only assets + multi-network coins
 
-Memory #23 established a hard architectural invariant that
+The frozen fee_method rule established a hard architectural invariant that
 clarifies what kinds of assets can be added in each role:
 
 **Listing fees can ONLY be paid in BLURT, XMR, or BTC.**  This is
@@ -412,7 +412,7 @@ bids.  Adding one is a much smaller change:
    `canBeUsedForListingFee: false`.
 3. No fee-verifier needed (the asset can't pay fees).
 4. Standard logo + i18n + address validator + ADDING-A-COIN
-   Part 1 inputs.
+   A later change inputs.
 
 The two new sentinel-grep smokes guarantee a Category B coin
 cannot accidentally leak into the fee path:
@@ -433,15 +433,15 @@ A new asset-registry field `supportedNetworks: readonly string[]`
 declares which networks an asset exists on.  Single-network
 coins (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP) declare `['mainnet']`.
 Multi-network coins list each network explicitly.  As of Part
-122 cp31 three multi-network assets are shipped:
+122 three multi-network assets are shipped:
 
-1. **USDT** (Part 121 cp3) — `supportedNetworks: ['erc20',
+1. **USDT** — `supportedNetworks: ['erc20',
    'trc20', 'spl', 'bep20']`.  Each network has a visually
    distinct address format (TRC-20 starts with `T`, ERC-20/BEP-20
    start with `0x`, SPL is base58 32-44 chars), so users can
    *usually* tell at a glance which network an address belongs
    to.
-2. **USDC** (Part 122 cp30) — `supportedNetworks: ['erc20',
+2. **USDC** — `supportedNetworks: ['erc20',
    'spl', 'base', 'polygon']`.  WATCH OUT: three of the four
    (ERC-20, Base, Polygon) all use the EVM `0x[40 hex]` address
    format — they are visually IDENTICAL.  An address that's
@@ -453,7 +453,7 @@ Multi-network coins list each network explicitly.  As of Part
    on USDT for this reason; the per-message cross-network
    warning in `ChatMessage.svelte` reflects this.  See ADR-0028
    §"Why surface the EVM identical-address warning so prominently?".
-3. **DAI** (Part 122 cp31) — `supportedNetworks: ['erc20',
+3. **DAI** — `supportedNetworks: ['erc20',
    'polygon', 'base', 'arbitrum']`.  EVEN MORE DANGEROUS than
    USDC for cross-network confusion: ALL FOUR DAI networks
    share the EVM `0x[40 hex]` format (no Solana SPL variant
@@ -482,7 +482,7 @@ entries at `packages/asset-registry/src/index.ts`.  USDT:
   privacyWarningKey: 'usdt_centralized',
   addressShape:
     /^(0x[a-fA-F0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|[1-9A-HJ-NP-Za-km-z]{32,44})$/,
-  privacyFeatures: {                         // Part 122 cp26 — required
+  privacyFeatures: {                         // required
     freshAddressAdvice: 'hd-derived',
     optInPrivacyTech: null,                  // USDT has no chain-level opt-in
     privacyGuideKey: 'usdt'
@@ -523,7 +523,7 @@ entry there.
 
 **Indexer wire-format wiring** — both the indexer's `InstanceResponse`
 interface AND the indexer-client mirror declare a per-network
-`chat_link_urls.<asset>` sub-map (Part 122 cp30-DD-10/11 — when
+`chat_link_urls.<asset>` sub-map (when
 adding a new multi-network asset, do NOT just add the field to
 the indexer-client mirror.  The indexer-side body construction
 must ALSO populate it from the corresponding Config field + Zod
@@ -566,12 +566,9 @@ warning is needed).  Non-null is an i18n key looked up under
 `assets.privacy_warnings.<key>` in the locale JSON.
 
 The three stablecoins ship a warning:
-- USDT's warning (Part 121 cp3,
-  `assets.privacy_warnings.usdt_centralized`)
-- USDC's warning (Part 122 cp30,
-  `assets.privacy_warnings.usdc_centralized`)
-- DAI's warning (Part 122 cp31,
-  `assets.privacy_warnings.dai_partly_decentralized`)
+- USDT's warning (`assets.privacy_warnings.usdt_centralized`)
+- USDC's warning (`assets.privacy_warnings.usdc_centralized`)
+- DAI's warning (`assets.privacy_warnings.dai_partly_decentralized`)
 
 USDT/USDC explain:
 - The issuer (Tether Inc. for USDT, Circle for USDC) can freeze
@@ -587,14 +584,14 @@ partly backed by USDC via the Peg Stability Module — so Circle's
 freeze power transitively affects DAI's redemption mechanics
 (documented in ADR-0029 §3).
 
-This warning is required by Memory #19 (privacy is priority
+This warning is required by the privacy-first rule (privacy is priority
 #1): users must be told when an asset they're considering
 fails the privacy bar.
 
 ### Privacy framework (`privacyFeatures` struct)
 
 Every `AssetEntry` carries a `privacyFeatures` struct (shipped in
-Part 122 cp26 — see `docs/adr/0026-transparent-chain-privacy-framework.md`).
+see `docs/adr/0026-transparent-chain-privacy-framework.md`).
 The struct drives four user-facing surfaces simultaneously:
 amount-jitter, address-reuse warnings, opt-in privacy-tech
 listings, and the per-asset privacy guide page at
@@ -620,8 +617,8 @@ If a new coin has a privacy tech not in the enum, **extend the
 enum** in `packages/asset-registry/src/index.ts` AND in
 `docs/adr/0026-transparent-chain-privacy-framework.md`'s table.
 Then add localized copy under `privacy.opt_in_tech.{tech}.{name,explain}`
-× 10 locales.  Same path DASH took to add `'privatesend'` (cp27,
-ADR-0027 §7).
+× 10 locales.  Same path DASH took to add `'privatesend'`
+(ADR-0027 §7).
 
 Required i18n keys per new asset (× 10 locales):
 

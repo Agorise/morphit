@@ -2,11 +2,11 @@
 /**
  * amount-jitter-utxo-smoke.
  *
- * Part 122 cp26 sentinel for the transparent-chain amount-jitter
+ * for the transparent-chain amount-jitter
  * helpers (jitterUtxoAmount + jitterBlurtAmount + dispatcher);
- * extended in cp30 to cover the stablecoin variant
- * (jitterStablecoinAmount via jitterAmountForAsset routing); cp31
- * added DAI (third stablecoin); cp33 added DOGE (sixth UTXO); cp39 added ZEC (seventh); cp41 added ARRR (eighth — Sapling shielded but UTXO-model amount semantics); cp43 added DCR (ninth — hybrid PoW/PoS, UTXO-model); cp45 added SOL (NOT routed through this function — Solana has 9-decimal lamport precision and uses a NEW jitterSolAmount); cp47 added ETH (NOT routed through this function — ETH is 18-decimal on-chain and uses a NEW jitterEthAmount with 6-decimal display-clamp matching the DAI cp31 design); cp49 added XRP (NOT routed through this function — XRPL uses 6-decimal drops natively and uses a NEW jitterXrpAmount).
+ * extended to cover the stablecoin variant
+ * (jitterStablecoinAmount via jitterAmountForAsset routing)
+ * added DAI (third stablecoin); a later change added DOGE (sixth UTXO); then ZEC (seventh); then ARRR (eighth — Sapling shielded but UTXO-model amount semantics); then DCR (ninth — hybrid PoW/PoS, UTXO-model); then SOL (NOT routed through this function — Solana has 9-decimal lamport precision and uses a NEW jitterSolAmount); then ETH (NOT routed through this function — ETH is 18-decimal on-chain and uses a NEW jitterEthAmount with 6-decimal display-clamp matching the DAI design); then XRP (NOT routed through this function — XRPL uses 6-decimal drops natively and uses a NEW jitterXrpAmount).
  *
  * The XMR jitter is already covered by older payload smokes; this
  * sentinel covers:
@@ -14,15 +14,15 @@
  *    0-999 satoshi jitter range, round-UP only
  *  - jitterBlurtAmount: 3-decimal precision, 0-99 milliblurt
  *    jitter range, round-UP only
- *  - jitterStablecoinAmount (cp30, via dispatcher): 6-decimal
+ *  - jitterStablecoinAmount (via dispatcher): 6-decimal
  *    precision (USDT/USDC), 18-decimal precision (DAI), 0-999
  *    micro-unit jitter range, round-UP only.  See ADR-0028
- *    Decision 2 — the cp26 USDT-pass-through behaviour was
- *    reversed in cp30 because the amount-correlation linkability
+ *    Decision 2 — the USDT-pass-through behaviour was
+ *    reversed because the amount-correlation linkability
  *    threat is independent of the centralization concern.
  *  - jitterAmountForAsset dispatcher: per-asset routing across
- *    all 15 tradable assets (cp48 — was "12" stale since cp33;
- *    cp39 ZEC + cp41 ARRR + cp43 DCR + cp45 SOL + cp47 ETH all
+ *    all 15 tradable assets (was "12" stale since an earlier release;
+ *    ZEC + ARRR + DCR + SOL + ETH all
  *    brought us to 15 without updating this comment)
  *  - input validation throws on garbage
  */
@@ -134,15 +134,15 @@ console.log('\n── amount-jitter-utxo smoke ───────────
 	const ltc = jitterAmountForAsset('ltc', '0.5');
 	if (/^\d+\.\d{8}$/.test(ltc)) pass('dispatcher routes LTC to 8-decimal');
 	else fail('dispatcher routes LTC to 8-decimal', `got "${ltc}"`);
-	// DASH: 8-decimal (cp27)
+	// DASH: 8-decimal
 	const dash = jitterAmountForAsset('dash', '0.5');
 	if (/^\d+\.\d{8}$/.test(dash)) pass('dispatcher routes DASH to 8-decimal');
 	else fail('dispatcher routes DASH to 8-decimal', `got "${dash}"`);
-	// DOGE: 8-decimal (cp33 — UTXO family, shibatoshi scale)
+	// DOGE: 8-decimal (UTXO family, shibatoshi scale)
 	const doge = jitterAmountForAsset('doge', '0.5');
 	if (/^\d+\.\d{8}$/.test(doge)) pass('dispatcher routes DOGE to 8-decimal (cp33)');
 	else fail('dispatcher routes DOGE to 8-decimal (cp33)', `got "${doge}"`);
-	// ZEC: 8-decimal (cp39 — UTXO family, zatoshi scale)
+	// ZEC: 8-decimal (UTXO family, zatoshi scale)
 	const zec = jitterAmountForAsset('zec', '0.5');
 	if (/^\d+\.\d{8}$/.test(zec)) pass('dispatcher routes ZEC to 8-decimal (cp39)');
 	else fail('dispatcher routes ZEC to 8-decimal (cp39)', `got "${zec}"`);
@@ -150,12 +150,12 @@ console.log('\n── amount-jitter-utxo smoke ───────────
 	const blurt = jitterAmountForAsset('blurt', '10');
 	if (/^\d+\.\d{3}$/.test(blurt)) pass('dispatcher routes BLURT to 3-decimal');
 	else fail('dispatcher routes BLURT to 3-decimal', `got "${blurt}"`);
-	// USDT: 6-decimal (cp30 — reversed the cp26 USDT-no-jitter
+	// USDT: 6-decimal (reversed the USDT-no-jitter
 	// decision; see ADR-0028 Decision 2).
 	const usdt = jitterAmountForAsset('usdt', '100');
 	if (/^\d+\.\d{6}$/.test(usdt)) pass('dispatcher routes USDT to 6-decimal (cp30)');
 	else fail('dispatcher routes USDT to 6-decimal (cp30)', `got "${usdt}"`);
-	// USDC: 6-decimal (cp30 — new asset, stablecoin jitter)
+	// USDC: 6-decimal (new asset, stablecoin jitter)
 	const usdc = jitterAmountForAsset('usdc', '100');
 	if (/^\d+\.\d{6}$/.test(usdc)) pass('dispatcher routes USDC to 6-decimal (cp30)');
 	else fail('dispatcher routes USDC to 6-decimal (cp30)', `got "${usdc}"`);
@@ -168,11 +168,11 @@ console.log('\n── amount-jitter-utxo smoke ───────────
 	else fail('dispatcher routes DAI to 6-decimal (cp31)', `got "${dai}"`);
 }
 
-// ── Scenario 7 — stablecoin jitter range + round-up (cp30/cp31) ─
+// ── Scenario 7 — stablecoin jitter range + round-up ─
 // Per ADR-0028 Decision 2: jitter for stablecoins is 0–999
 // micro-units (6-decimal precision), round-UP only — same
 // invariants as the UTXO jitter, just at a different scale.
-// CP35 closure: added DAI to the iteration (cp31 missed it).
+// CP35 closure: added DAI to the iteration (missed it).
 {
 	for (const asset of ['usdt', 'usdc', 'dai'] as const) {
 		const baseMicro = BigInt(100) * 1_000_000n; // 100.000000

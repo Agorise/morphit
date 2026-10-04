@@ -7,7 +7,7 @@
  * dashes.
  *
  * We generate them client-side as an OPAQUE token (`order-<random>`).
- * cp175 F-012: an earlier version embedded `<side>-<asset>-<fiat>` so a
+ * an earlier version embedded `<side>-<asset>-<fiat>` so a
  * user browsing their own order list saw meaningful strings — but that
  * leaked the asset (e.g. "xmr") into the permanent on-chain permlink, order
  * URLs, RSS GUIDs, and block explorers, with no functional benefit (nothing
@@ -23,11 +23,12 @@
  */
 
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
+import { stripSingleLineForbidden } from '$lib/orders/termsForbiddenChars';
 import type { AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '$i18n/locales';
 import type { OrderRecord } from '@morphit/indexer-client';
 
-const PERMLINK_CHARSET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no i/l/o/1 → ambiguity
+const PERMLINK_CHARSET = 'abcdefghjkmnpqrstuvwxyz23456789'; // 31 chars: no i/l/o/0/1 → ambiguity
 export const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Generate a random suffix of the given length. Uses the
@@ -43,14 +44,10 @@ function randomSuffix(len: number): string {
 	return out;
 }
 
-/** Build an opaque permlink like "order-kx2mq7p4n8za". The random
- *  suffix has 12 chars drawn from a 30-char alphabet, giving
- *  ~59 bits of entropy — enough that two concurrent users
- *  don't collide on the same side/asset/fiat combo. */
 /**
- * Order permlink — an OPAQUE random identifier.
+ * Order permlink — an OPAQUE random identifier, like "order-kx2mq7p4n8za".
  *
- * cp175 F-012 (Monero/privacy hardening): the permlink used to embed
+ * (Monero/privacy hardening): the permlink used to embed
  * `<side>-<asset>-<fiat>` (e.g. `sell-xmr-usd-ab12cd`). That string is
  * permanently public on the Blurt chain AND is spread into order URLs
  * (`/[account]/[permlink]`), RSS feed GUIDs + links, and block-explorer
@@ -70,9 +67,9 @@ function randomSuffix(len: number): string {
  *
  * `side`/`asset`/`fiat` are still accepted as params for call-site
  * compatibility but are no longer encoded into the returned string. 12 random
- * base36 chars (~62 bits) keeps collisions negligible now that the
- * distinguishing prefix is gone; uniqueness is still enforced by the indexer's
- * (account, permlink) primary key regardless.
+ * chars from the 31-character PERMLINK_CHARSET (~59 bits) keep collisions
+ * negligible now that the distinguishing prefix is gone; uniqueness is still
+ * enforced by the indexer's (account, permlink) primary key regardless.
  */
 export function makeOrderPermlink(_side: 'buy' | 'sell', _asset: AssetTicker, _fiat: string): string {
 	const suffix = randomSuffix(12);
@@ -119,7 +116,7 @@ export interface OrderPayload {
 	 *  when fee_method is 'btc' or 'xmr'; omitted otherwise. 64-char
 	 *  lowercase hex. */
 	readonly external_tx_id?: string;
-	/** Legacy (Part 108++): a Monero OutProof string. No longer sent — the
+	/** Legacy (later+): a Monero OutProof string. No longer sent — the
 	 *  explorers indexers use cannot check it (v1.20.0, M-X1); an indexer
 	 *  stores an order carrying only this as `proof_unsupported`. */
 	readonly tx_proof?: string;
@@ -127,7 +124,7 @@ export interface OrderPayload {
 	 *  hex — what the explorers' txprove checks and what decrypts a bound
 	 *  payment ID. Required when fee_method='xmr'; omitted otherwise. */
 	readonly tx_key?: string;
-	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
+	/** sub-network identifier for multi-
 	 *  network assets.  REQUIRED when asset === 'USDT' (one of
 	 *  'erc20', 'trc20', 'spl', 'bep20'), when asset === 'USDC'
 	 *  (one of 'erc20', 'spl', 'base', 'polygon'), or when
@@ -138,21 +135,21 @@ export interface OrderPayload {
 	 *  cross-network sends lose funds permanently and must be
 	 *  surfaced as a hint on the order row. */
 	readonly asset_network?: string;
-	/** REVISIT-LIST item 5 — operator earnings.  When present,
+	/** Backlog item 5 — operator earnings.  When present,
 	 *  the indexer credits the operator who registered this tag
 	 *  with 90% of the BLURT-paid listing fee.  Omitted (not
 	 *  null/empty) when the instance has no operator_tag
 	 *  configured — keeps the on-chain payload as small as
 	 *  possible for unbranded instances. */
 	readonly operator_tag?: string;
-	/** cp425 — for a BARTER (goods/services) listing, the non-empty set of
+	/** for a BARTER (goods/services) listing, the non-empty set of
 	 *  crypto tickers the seller accepts as settlement (e.g. ['BTC','DOGE',
 	 *  'XMR']). REQUIRED when asset === 'BARTER'; omitted for every crypto
 	 *  asset (they settle in themselves). Each must be a real crypto ticker,
 	 *  never 'BARTER' or any goods asset. The indexer dedupes + sorts to a
 	 *  canonical set; the builder ships whatever the form provides. */
 	readonly accepted_assets?: readonly AssetTicker[];
-	/** v1.9.0 (the maintainer) — for a BARTER listing, the user's own short label for WHAT
+	/** v1.9.0 — for a BARTER listing, the user's own short label for WHAT
 	 *  they're offering (e.g. "bananas"), typed inline where the summary would
 	 *  otherwise read "goods/services". Letters-only, ≤24 chars. OPTIONAL and
 	 *  backward-compatible: omitted when blank or non-barter, and an older indexer
@@ -202,7 +199,7 @@ export interface OrderFormInput {
 	/** v1.20.0 (MK-H2): the account the bound XMR fee was paid for.
 	 *  broadcastNewOrder refuses to post it under any other account. */
 	readonly xmrBoundAccount?: string;
-	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
+	/** sub-network identifier for multi-
 	 *  network assets.  REQUIRED when asset === 'USDT', asset ===
 	 *  'USDC', or asset === 'DAI'.  Omitted for single-network
 	 *  assets.  Form layer validates this is one of the asset-
@@ -211,25 +208,25 @@ export interface OrderFormInput {
 	 *  'polygon'|'base'|'arbitrum') before invoking
 	 *  buildOrderPayload. */
 	readonly assetNetwork?: string;
-	/** REVISIT-LIST item 5 — operator earnings.  When non-empty,
+	/** Backlog item 5 — operator earnings.  When non-empty,
 	 *  the post-order form passes this in.  Form layer reads it
 	 *  from the instance store ($instance.operator_tag).  Empty
 	 *  string treated same as undefined: omitted from payload. */
 	readonly operatorTag?: string;
-	/** cp425 — for a BARTER listing, the crypto tickers the seller accepts
+	/** for a BARTER listing, the crypto tickers the seller accepts
 	 *  as settlement. REQUIRED (non-empty) when asset === 'BARTER'; omitted
 	 *  for crypto assets. The form layer validates each is a real crypto
 	 *  ticker (never BARTER/goods) before calling buildOrderPayload. */
 	readonly acceptedAssets?: readonly AssetTicker[];
-	/** v1.9.0 (the maintainer) — the BARTER "what am I offering" label typed inline in the
+	/** v1.9.0 — the BARTER "what am I offering" label typed inline in the
 	 *  summary sentence. Letters-only, ≤24 chars (the form enforces this; the
 	 *  builder re-sanitizes as a backstop). Omitted/blank for crypto listings. */
 	readonly specificBarterTitle?: string;
 }
 
-/** v1.9.0 (the maintainer) — the inline BARTER "what am I offering" label is capped and
+/** v1.9.0 — the inline BARTER "what am I offering" label is capped and
  *  restricted to letters + single internal spaces (no digits, punctuation, or
- *  leading/trailing/double spaces). t.txt #5 relaxed the original letters-only
+ *  leading/trailing/double spaces).  relaxed the original letters-only
  *  rule to allow multi-word wares ("banana trees"). Shared by the form input
  *  handler, the payload builder backstop, and the smoke so all three agree on
  *  the exact rule. `\p{L}` keeps accented + non-Latin letters (bananas,
@@ -237,7 +234,7 @@ export interface OrderFormInput {
 export const SPECIFIC_BARTER_TITLE_MAX = 24;
 export function sanitizeBarterTitle(raw: string | null | undefined): string {
 	if (!raw) return '';
-	// t.txt #5 — letters (any script) PLUS single internal spaces, so multi-word
+	// letters (any script) PLUS single internal spaces, so multi-word
 	// wares like "banana trees" are allowed. Strip everything else (digits,
 	// punctuation, control chars), collapse whitespace runs to a single space,
 	// and drop a leading space. A single TRAILING space is intentionally kept
@@ -254,7 +251,8 @@ export function sanitizeBarterTitle(raw: string | null | undefined): string {
  * Build an OrderPayload from user input, doing the
  * normalization the indexer will verify:
  * - fiat_currency uppercased
- * - location_region trimmed, empty → null
+ * - location_region and payment_methods items lose the characters the
+ *   indexer's single-line gate refuses; location_region trimmed, empty → null
  * - terms trimmed, empty → null
  * - expires_at in UTC ISO-8601
  *
@@ -271,13 +269,20 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 	// screen lacks a ProtectedTextarea (e.g. a legacy screen added
 	// later, or an input that's too short to justify the overlay UI),
 	// nothing sensitive reaches the broadcast.
-	const regionTrimmed = input.locationRegion?.trim();
+	// Single-line fields lose the invisible characters the indexer's gate
+	// refuses (a pasted zero-width space cost the user the listing fee).
+	const regionTrimmed =
+		input.locationRegion !== null && input.locationRegion !== undefined
+			? stripSingleLineForbidden(input.locationRegion).trim()
+			: '';
 	const regionNorm = regionTrimmed ? redactPrivateKeys(regionTrimmed) : null;
 	const termsTrimmed = input.terms?.trim();
 	const termsNorm = termsTrimmed ? redactPrivateKeys(termsTrimmed) : null;
 	// Each payment method is a short chip label, but the same
 	// backstop applies — no field escapes unredacted.
-	const paymentMethodsNorm = input.paymentMethods.map((pm) => redactPrivateKeys(pm));
+	const paymentMethodsNorm = input.paymentMethods.map((pm) =>
+		redactPrivateKeys(stripSingleLineForbidden(pm))
+	);
 	const expiresIso = input.expiresAt ? input.expiresAt.toISOString() : null;
 
 	return {
@@ -301,7 +306,7 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.feeMethod === 'xmr' && input.txKey !== undefined && input.txKey.trim().length > 0
 			? { tx_key: input.txKey.trim().toLowerCase() }
 			: {}),
-		// Part 121 / cp30 / cp31 — sub-network for multi-network
+		// sub-network for multi-network
 		// assets.  Set when the form provides one (USDT, USDC, or
 		// DAI); omitted for single-network assets.  Lowercased on
 		// the way out for canonicalization with the asset-registry's
@@ -309,7 +314,7 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.assetNetwork !== undefined && input.assetNetwork.length > 0
 			? { asset_network: input.assetNetwork.toLowerCase() }
 			: {}),
-		// REVISIT-LIST item 5 — pass through when set.  We
+		// Backlog item 5 — pass through when set.  We
 		// normalize empty strings out so an instance with the
 		// env var defined but empty doesn't ship an empty
 		// operator_tag (which would always lookup-fail as
@@ -317,7 +322,7 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.operatorTag !== undefined && input.operatorTag.length > 0
 			? { operator_tag: input.operatorTag }
 			: {}),
-		// cp425 — accepted-crypto set for a BARTER listing.  Deduped + sorted
+		// accepted-crypto set for a BARTER listing.  Deduped + sorted
 		// to the same canonical form the indexer stores, so the broadcast
 		// payload is deterministic (the same accepted-set always serializes
 		// identically).  Included only when the form provides a non-empty set
@@ -325,7 +330,7 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
 		...(input.acceptedAssets !== undefined && input.acceptedAssets.length > 0
 			? { accepted_assets: [...new Set(input.acceptedAssets)].sort() as AssetTicker[] }
 			: {}),
-		// v1.9.0 (the maintainer) — the inline BARTER title, re-sanitized here (letters +
+		// v1.9.0 — the inline BARTER title, re-sanitized here (letters +
 		// single internal spaces, ≤24) as the security/consistency backstop and
 		// included only when it survives non-empty. .trim() drops any trailing
 		// space the live field kept while typing, so the on-chain value is clean.
@@ -345,7 +350,7 @@ export function buildOrderPayload(permlink: string, input: OrderFormInput): Orde
  * Compute an order-expiry Date `expiresDays` whole days from now, FLOORED to
  * the start of that UTC day (00:00:00.000Z).
  *
- * cp175 F-015 (metadata-leak reduction): the previous call sites used
+ * (metadata-leak reduction): the previous call sites used
  * `new Date(Date.now() + expiresDays * 86_400_000)`, whose `.toISOString()`
  * carries the submit moment to MILLISECOND precision (e.g. `…T14:23:47.831Z`).
  * That value is broadcast on the public Blurt chain in `expires_at`. Because

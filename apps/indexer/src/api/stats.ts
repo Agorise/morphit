@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — /v1/stats endpoint (cp406).
+ * Morphit indexer — /v1/stats endpoint.
  *
  * A small, STABLE, aggregate-only summary of network activity, intended for
  * third-party P2P aggregators (RoboSats, Bisq, Hodl Hodl, AgoraDesk, …) that
@@ -81,7 +81,7 @@ export function buildStatsResponse(
 		return Number.isFinite(n) && n >= 0 ? n : 0;
 	};
 	const disabled = new Set(disabledAssets.map((a) => a.toUpperCase()));
-	// cp425 — `supported` reports the CRYPTO tickers this instance trades, the
+	// `supported` reports the CRYPTO tickers this instance trades, the
 	// list clients render as coins on the stats page. Goods assets (BARTER)
 	// are orderable but are not coins (no address / price / icon-as-coin), so
 	// isGoodsAsset() gates them out here — mirroring the sitemap builder and

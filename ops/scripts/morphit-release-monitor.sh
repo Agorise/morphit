@@ -14,7 +14,7 @@
 # Cadence: every 6h via systemd timer.  Aligned with the
 # OnCalendar pattern used by other sidecars.
 #
-# Per the maintainer's memory entry #29: this sidecar is OBSERVATION-ONLY.
+# A standing rule: this sidecar is OBSERVATION-ONLY.
 # It NEVER applies the upgrade itself; the operator runs
 # `morphit-ops upgrade` manually after the alert (or sets
 # MORPHIT_AUTO_UPGRADE=1 + schedules a separate cron for auto-apply).

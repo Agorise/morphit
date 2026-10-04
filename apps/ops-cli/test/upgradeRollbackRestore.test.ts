@@ -1,6 +1,6 @@
 /**
- * A rollback puts back what the upgrade changed OUTSIDE the install dir
- * (v1.18.0 deep-deep, ops-5).
+ * A rollback puts back what the upgrade changed OUTSIDE the install dir.
+ *
  *
  * The self-heal phase edits /etc/morphit/relay.env (the relay hidden-RPC heal,
  * which keeps a `.before-v1.18.0-relay-heal` copy) and the upgrade refreshes

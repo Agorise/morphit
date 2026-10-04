@@ -2,14 +2,13 @@
  * Morphit — profile op broadcaster.
  *
  * Builds a `morphit_profile_v1` custom_json payload, signs it with the
- * user's posting key (from the LiveIdentity store), and broadcasts via
- * the endpoint rotator. Indexers read the latest op from the signing
- * account and treat it as canonical.
+ * user's posting key (from the LiveIdentity store), and broadcasts it
+ * same-origin through this instance's indexer. Indexers read the latest
+ * op from the signing account and treat it as canonical.
  *
- * The broadcast path requires the user to have a Blurt account on-chain
- * — Phase 2a has no registration flow yet, so this function throws a
- * clear error if no account name is on file. Settings catches and shows
- * the message; the display name is already saved locally.
+ * The broadcast needs the user's Blurt account name; with none on file
+ * this function throws a clear error. Settings catches and shows the
+ * message; the display name is already saved locally.
  *
  * Security note: every free-text field (display_name, nostr_url,
  * streaming_url) is run through redactPrivateKeys() before broadcast.
@@ -22,7 +21,7 @@
 
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
-// cp165 byte-budget: `broadcastCustomJson` is dynamically imported
+// Byte budget: `broadcastCustomJson` is dynamically imported
 // inside `broadcastProfile` (which is only called on user action).
 // A static import of '../sign' here transitively pulled dblurt into
 // the eager-load graph of any route that imports profile.ts for the
@@ -35,13 +34,15 @@ import { BroadcastError } from '../broadcastTransport';
 import type { LiveIdentity } from '$crypto/keygen';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { isOrderLang } from '$i18n/locales';
-import { clearProfileCache } from '$lib/indexer/profileCache';
+import { clearProfileCache, setProfileCacheScope } from '$lib/indexer/profileCache';
+import { hasPersistedKeystore } from '$crypto/persistentKeystore';
+import { readPairedSession } from '$crypto/pairedSession';
 
 /** Legacy, origin-wide. Read for migration; never written for a keyed session. */
 const ACCOUNT_STORAGE_KEY = 'morphit.blurtAccount';
 
 /**
- * cp445 — the account name is a property of the KEY, not of the browser origin.
+ * the account name is a property of the KEY, not of the browser origin.
  *
  * One origin-wide key meant tab A (signed in as @tester2) and tab B (@tester3)
  * shared a single name, and a `storage` listener rewrote it under whichever tab
@@ -68,37 +69,96 @@ function currentSessionKeyId(): string | null {
 /** Set once per unlock by `bindSessionPostingKey()`; cleared on lock/sign-out. */
 const sessionKeyIdStore = writable<string | null>(null);
 
+/** True while this tab's session is the one remembered on this device
+ *  ("Remember me"). Only then does the account name go to localStorage;
+ *  a "just this session" sign-in keeps it in this tab's sessionStorage, so
+ *  closing the tab forgets it and a later anonymous visit cannot announce
+ *  it (orders, chat stream, settings all read it). */
+let sessionRemembered = false;
+
 /**
  * Bind account storage to the keys this tab actually holds. Called from the
- * identity store whenever a session becomes unlocked, and with `null` on lock.
+ * identity store whenever a session becomes unlocked (and when Remember-me
+ * is committed for it), and with `null` on lock.
  */
-export function bindSessionPostingKey(keyId: string | null): void {
+export function bindSessionPostingKey(keyId: string | null, remembered = false): void {
 	sessionKeyIdStore.set(keyId);
+	sessionRemembered = keyId !== null && remembered;
+	if (keyId !== null && sessionRemembered) promoteSessionAccountName(keyId);
 	blurtAccountName.set(readAccountFromStorage());
+}
+
+/** Remember-me was committed for a session whose name so far lived only in
+ *  this tab: move it to localStorage. */
+function promoteSessionAccountName(keyId: string): void {
+	if (!browser) return;
+	try {
+		const name =
+			window.sessionStorage.getItem(scopedAccountKey(keyId)) ??
+			window.sessionStorage.getItem(ACCOUNT_STORAGE_KEY);
+		if (name) {
+			window.localStorage.setItem(scopedAccountKey(keyId), name);
+			window.localStorage.setItem(ACCOUNT_STORAGE_KEY, name);
+		}
+		window.sessionStorage.removeItem(scopedAccountKey(keyId));
+		window.sessionStorage.removeItem(ACCOUNT_STORAGE_KEY);
+	} catch {
+		/* storage unavailable */
+	}
 }
 
 function readAccountFromStorage(): string | null {
 	if (!browser) return null;
 	try {
 		const pub = currentSessionKeyId();
+		// This tab's "just this session" name first, then the remembered one.
+		for (const store of [window.sessionStorage, window.localStorage]) {
+			if (pub) {
+				const scoped = store.getItem(scopedAccountKey(pub));
+				if (scoped) return scoped;
+			}
+		}
 		if (pub) {
-			const scoped = window.localStorage.getItem(scopedAccountKey(pub));
-			if (scoped) return scoped;
-			// One-time migration: an origin-wide name written before this change
-			// belongs to whichever key is unlocked when it is first read.
+			// One-time migration: an origin-wide name written before names were
+			// scoped belongs to whichever key is unlocked when it is first read.
 			const legacy = window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
 			if (legacy) {
 				window.localStorage.setItem(scopedAccountKey(pub), legacy);
 				return legacy;
 			}
-			return null;
+			return window.sessionStorage.getItem(ACCOUNT_STORAGE_KEY);
 		}
-		// Locked / pre-unlock (the avatar seeds from this): legacy value only.
-		return window.localStorage.getItem(ACCOUNT_STORAGE_KEY);
+		// Locked / pre-unlock (the avatar seeds from this): the origin-wide value.
+		return (
+			window.sessionStorage.getItem(ACCOUNT_STORAGE_KEY) ??
+			window.localStorage.getItem(ACCOUNT_STORAGE_KEY)
+		);
 	} catch {
 		return null;
 	}
 }
+
+/** Boot: an account name in localStorage with nothing on this device to sign
+ *  in with — no remembered keystore, no paired session — was left by a "just
+ *  this session" sign-in of an older build. Forget it, so anonymous visits
+ *  stop announcing it. */
+function forgetOrphanedAccountName(): void {
+	if (!browser) return;
+	try {
+		if (hasPersistedKeystore() || readPairedSession() !== null) return;
+		const doomed: string[] = [];
+		for (let i = 0; i < window.localStorage.length; i++) {
+			const k = window.localStorage.key(i);
+			if (k !== null && (k === ACCOUNT_STORAGE_KEY || k.startsWith(`${ACCOUNT_STORAGE_KEY}.`))) {
+				doomed.push(k);
+			}
+		}
+		for (const k of doomed) window.localStorage.removeItem(k);
+	} catch {
+		/* storage unavailable */
+	}
+}
+forgetOrphanedAccountName();
 
 /**
  * Reactive mirror of the persisted Blurt account name.
@@ -122,6 +182,10 @@ function readAccountFromStorage(): string | null {
  * changes made by OTHER tabs (registering or signing out elsewhere).
  */
 export const blurtAccountName = writable<string | null>(readAccountFromStorage());
+
+// The on-disk profile cache is filed under the signed-in account, so another
+// account on this device never reads the list of accounts this one looked at.
+blurtAccountName.subscribe((account) => setProfileCacheScope(account));
 
 if (browser) {
 	// Cross-tab: a `storage` event fires in every OTHER tab when this key
@@ -157,19 +221,22 @@ export function getUserBlurtAccount(): string | null {
 	return inMemory ?? readAccountFromStorage();
 }
 
-/** Record the Blurt account name after registration. */
+/** Record the Blurt account name after registration / sign-in. */
 export function setUserBlurtAccount(name: string): void {
 	if (!browser) return;
 	try {
 		const pub = currentSessionKeyId();
+		// A remembered session's name goes to localStorage; a "just this
+		// session" one stays in this tab (see sessionRemembered).
+		const store = sessionRemembered ? window.localStorage : window.sessionStorage;
 		// Write under the key that owns this name. The legacy origin-wide slot is
 		// kept in step ONLY so a locked tab still has an identicon to seed from;
 		// it is never the source of truth for a broadcast.
-		if (pub) window.localStorage.setItem(scopedAccountKey(pub), name);
-		window.localStorage.setItem(ACCOUNT_STORAGE_KEY, name);
+		if (pub) store.setItem(scopedAccountKey(pub), name);
+		store.setItem(ACCOUNT_STORAGE_KEY, name);
 	} catch {
 		// Privacy Mode; the account name will need to be re-entered next
-		// session. A real solution is Phase 3 — indexer lookup by pubkey.
+		// session.
 	}
 	// Update the reactive mirror regardless of whether the persistent
 	// write succeeded — even in Privacy Mode the name is valid for THIS
@@ -183,7 +250,7 @@ export function setUserBlurtAccount(name: string): void {
  *  on `pagehide` (tab close) where wiping this cache would needlessly
  *  force the user to re-type their account name every session.
  *
- *  Why this exists (cp312): the login page gates its "sign you out of
+ *  Why this exists: the login page gates its "sign you out of
  *  @NNN first" modal on `getUserBlurtAccount()`, which reads this
  *  persistent key.  `reset()` clears the in-memory keystore but leaves
  *  this name, so after confirming the switch the gate still saw an
@@ -191,10 +258,18 @@ export function setUserBlurtAccount(name: string): void {
  *  the sign-out hadn't happened.  Clearing the name here closes that. */
 export function clearUserBlurtAccount(): void {
 	if (!browser) return;
+	for (const store of [() => window.localStorage, () => window.sessionStorage]) {
+		try {
+			store().removeItem(ACCOUNT_STORAGE_KEY);
+		} catch {
+			// Privacy Mode / storage unavailable — nothing persisted to clear.
+		}
+	}
 	try {
-		window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+		const pub = currentSessionKeyId();
+		if (pub) window.sessionStorage.removeItem(scopedAccountKey(pub));
 	} catch {
-		// Privacy Mode / storage unavailable — nothing persisted to clear.
+		/* storage unavailable */
 	}
 	blurtAccountName.set(null);
 }
@@ -233,9 +308,9 @@ export interface ProfilePayload {
 	/** Optional sanitized SVG text for a custom avatar. Stored in
 	 *  json_metadata.avatar_svg on-chain. MUST have been produced
 	 *  by `sanitizeSvg` in $lib/avatar — the broadcast path does
-	 *  NOT re-sanitize (that would be duplicated work). Rendered
-	 *  by IdentityLabel via {@html} so it MUST be safe at the
-	 *  point of broadcast.
+	 *  NOT re-sanitize (that would be duplicated work). Avatars render
+	 *  through an `<img>` data URI, which runs no script, but other
+	 *  readers of the chain may not be so careful.
 	 *  At most one of avatar_svg / avatar_data_uri should be set.
 	 *  Empty string explicitly clears a previously-set avatar. */
 	avatar_svg?: string;
@@ -352,7 +427,7 @@ export async function broadcastProfile(
 	if (!account) {
 		throw new BroadcastError('no_account', 'No Blurt account registered yet.');
 	}
-	// cp440 — pre-flight REMOVED. Chat messages (morphit_chat_v1) broadcast
+	// pre-flight REMOVED. Chat messages (morphit_chat_v1) broadcast
 	// fine with the same posting key through the same broadcastCustomJson, but
 	// they go STRAIGHT to it. The profile broadcast used to run a pre-flight
 	// first (a dblurt import via formatPublicKeyBLT + an account-keys fetch);
@@ -362,7 +437,7 @@ export async function broadcastProfile(
 	// broadcast. If a real identity↔account mismatch ever occurs, the chain's
 	// own rejection is surfaced via broadcastErrCopy, same as every other op.
 	const body = buildProfileBody(payload, Math.floor(Date.now() / 1000));
-	// cp165: dynamic import of '../sign' keeps dblurt out of the
+	// dynamic import of '../sign' keeps dblurt out of the
 	// eager-load graph for read-only routes that pull profile.ts.
 	const { broadcastCustomJson } = await import('../sign');
 	const result = await broadcastCustomJson(live, OP_IDS.profile, body, account);

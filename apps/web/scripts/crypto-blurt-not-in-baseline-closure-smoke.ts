@@ -1,7 +1,7 @@
 /**
  * crypto-blurt-not-in-baseline-closure-smoke.ts
  *
- * Byte-budget invariant (cp271 — memory Priority #4, TINY FOOTPRINT),
+ * Byte-budget invariant (memory Priority #4, TINY FOOTPRINT),
  * sibling to libsodium-not-in-baseline-closure-smoke.ts.
  *
  *   Three heavy things must NEVER appear in the STATIC import closure of
@@ -15,13 +15,13 @@
  *          • $stores/identity → keygen (toLiveIdentity/wipeLiveIdentity)
  *          • $stores/identity → $crypto/keystore → keygen
  *            (ensureSodium/Identity/KeyRole/KEY_ROLES)
- *        cp271 moved those bip39/secp-free symbols into $crypto/identity-
+ *        A later change moved those bip39/secp-free symbols into $crypto/identity-
  *        core; identity store + keystore import from there now, so the
  *        baseline no longer reaches keygen and its elliptic crypto.
  *
  *     2. The Blurt client ($blurt/client / src/lib/blurt/client.ts,
  *        ~12.6 KB gzip with dblurt). The baseline reached it via
- *        $stores/release → $net/releaseFetch → $blurt/client. cp271 made
+ *        $stores/release → $net/releaseFetch → $blurt/client. A later change made
  *        the release store dynamically import() releaseFetch +
  *        releaseHashCheck inside initRelease() (which runs in the layout's
  *        onMount, not at first paint), so the client is a lazy chunk.
@@ -30,7 +30,7 @@
  *
  * This smoke walks the layout STATIC import graph as text (no build, no
  * runtime, no transpile) and FAILS if any of the three re-enter it, plus
- * pins the specific cp271 mechanisms so a regression yields a precise
+ * pins the specific mechanisms so a regression yields a precise
  * message rather than a mysterious +N KB.
  *
  * OUT OF SCOPE: route-specific closures (onboarding/import/settings,
@@ -195,7 +195,7 @@ for (const layout of ['src/routes/[lang]/+layout.svelte', 'src/routes/+layout.sv
 }
 
 // (4) The two baseline importers must route through identity-core, NEVER
-// keygen (that is the cp271 redirect that removed secp256k1/bip39 from
+// keygen (that is the redirect that removed secp256k1/bip39 from
 // the baseline).
 for (const f of ['src/lib/stores/identity.ts', 'src/lib/crypto/keystore.ts']) {
 	scenarios++;

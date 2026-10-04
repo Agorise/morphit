@@ -2,16 +2,16 @@
 /**
  * Smoke: the first-trade community announcement ("Post A") is wired so that,
  * when a user opts in, it actually posts to the @morphit community with a
- * VALID profile link — and only ever for a first-time BUY. Anchor cp396.
+ * VALID profile link — and only ever for a first-time BUY. Anchor.
  *
  * THE PRODUCT RULES THIS GUARDS:
  *   1. Post A lands in the @morphit community: primaryTag === MORPHIT_COMMUNITY
  *      === 'blurt-176570' (becomes parent_permlink on the wire, so the post
  *      shows in the community feed where curators find + upvote it).
- *   2. The link in the post body is VALID: it uses the canonical production
- *      origin (CANONICAL_ORIGIN = https://morphit.io) and the real profile
- *      route shape /{lang}/@{username}. If CANONICAL_ORIGIN ever changes, the
- *      hardcoded body link must change with it — this smoke fails on drift.
+ *   2. The link in the post body is VALID and names the instance the user
+ *      posted from: every locale's body carries the {profile_url}
+ *      placeholder, filled with <this origin>/{lang}/@{username}
+ *      (behaviour: src/lib/syndication/publish.test.ts).
  *   3. Idempotent: the permlink is ACCOUNT-keyed (firstTradePermlink(account)),
  *      so a retry edits the same post instead of double-posting.
  *   4. First-BUY only: the FirstTradeContext documents the buy-side invariant,
@@ -25,28 +25,32 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, '..', '..', '..');
 const PUBLISH = join(REPO, 'apps/web/src/lib/syndication/publish.ts');
-const URLS = join(REPO, 'apps/web/src/lib/seo/urls.ts');
 const FEEDBACK = join(REPO, 'apps/web/src/lib/components/LeaveFeedbackForm.svelte');
 const POST = join(REPO, 'apps/web/src/routes/[lang]/post/+page.svelte');
-const EN = join(REPO, 'apps/web/src/lib/i18n/locales/en.json');
+const LOCALES = join(REPO, 'apps/web/src/lib/i18n/locales');
+const LANGS = SUPPORTED_LOCALES.map((l) => l.code);
 
 const publish = readFileSync(PUBLISH, 'utf-8');
-const urls = readFileSync(URLS, 'utf-8');
 const feedback = readFileSync(FEEDBACK, 'utf-8');
 const post = readFileSync(POST, 'utf-8');
-const en = JSON.parse(readFileSync(EN, 'utf-8')) as {
-	syndicate: { first_trade: { title: string; body: string } };
-};
-
-/** Canonical origin as declared in seo/urls.ts (single source of truth). */
-function canonicalOrigin(s: string): string {
-	const m = s.match(/CANONICAL_ORIGIN\s*=\s*'([^']+)'/);
-	return m?.[1] ?? '';
-}
-const ORIGIN = canonicalOrigin(urls);
+const bodies = LANGS.map(
+	(l) =>
+		(
+			JSON.parse(readFileSync(join(LOCALES, `${l}.json`), 'utf-8')) as {
+				syndicate: { first_trade: { body: string } };
+			}
+		).syndicate.first_trade.body
+);
+const linksProfile = (b: readonly string[]) =>
+	b.every(
+		(body) =>
+			body.includes('{profile_url}') && !/https?:\/\//.test(body.replace(/!\[\]\([^)]*\)/g, ''))
+	);
 
 type Check = { readonly name: string; readonly holds: () => boolean };
 
@@ -57,21 +61,16 @@ const checks: readonly Check[] = [
 	},
 	{
 		name: 'Post A is published with primaryTag: MORPHIT_COMMUNITY (lands in the community feed)',
+		holds: () => /publishFirstTradePost[\s\S]*?primaryTag:\s*MORPHIT_COMMUNITY/.test(publish)
+	},
+	{
+		name: 'every locale links the profile through {profile_url}, with no fixed site origin',
+		holds: () => linksProfile(bodies)
+	},
+	{
+		name: "Post A fills {profile_url} with this instance's profile URL for the account",
 		holds: () =>
-			/publishFirstTradePost[\s\S]*?primaryTag:\s*MORPHIT_COMMUNITY/.test(publish)
-	},
-	{
-		name: 'CANONICAL_ORIGIN resolves to the production origin',
-		holds: () => ORIGIN === 'https://morphit.io'
-	},
-	{
-		name: 'first_trade.body profile link uses CANONICAL_ORIGIN + /{lang}/@{username}',
-		holds: () => en.syndicate.first_trade.body.includes(`${ORIGIN}/{lang}/@{username}`)
-	},
-	{
-		name: 'Post A body is interpolated with {username} and {lang} (link resolves to a real account)',
-		holds: () =>
-			/syndicate\.first_trade\.body[\s\S]*?values:\s*\{\s*username:\s*account,\s*lang\s*\}/.test(
+			/syndicate\.first_trade\.body[\s\S]*?profile_url:\s*`\$\{instanceOrigin\(\)\}\/\$\{lang\}\/@\$\{account\}`/.test(
 				publish
 			)
 	},
@@ -126,11 +125,12 @@ const tampers: ReadonlyArray<{
 			)
 	},
 	{
-		label: 'body link origin drifts from CANONICAL_ORIGIN',
+		label: 'a locale hard-codes a site origin instead of {profile_url}',
 		holds: () =>
-			en.syndicate.first_trade.body
-				.replace(ORIGIN, 'https://example.test')
-				.includes(`${ORIGIN}/{lang}/@{username}`)
+			linksProfile([
+				...bodies.slice(1),
+				bodies[0]!.replace('{profile_url}', 'https://morphit.io/{lang}/@{username}')
+			])
 	},
 	{
 		label: 'permlink switched to non-deterministic (trx-keyed)',

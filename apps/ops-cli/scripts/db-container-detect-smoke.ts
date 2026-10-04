@@ -1,5 +1,5 @@
 /**
- * db-container-detect-smoke (cp509 / v1.8.4 B)
+ * db-container-detect-smoke (v1.8.4 B)
  *
  * The built-in DB backup is now Docker-aware: the shipped
  * ops/backup/morphit-backup.sh dumps THROUGH `docker exec
@@ -8,7 +8,7 @@
  * container so the operator never has to know its name.
  *
  * The live detection (detectDbContainer) shells out to `docker`, which
- * the sandbox has no way to exercise, so — as required — this is a STATIC
+ * a test run has no way to exercise, so — as required — this is a STATIC
  * smoke over the PURE cores that carry the real logic:
  *   1. parseContainerNames  — `docker ps` stdout → clean name list.
  *   2. isPostgresImage      — image-reference → is-Postgres.
@@ -57,7 +57,10 @@ check('parseContainerNames on empty → []', parseContainerNames('').length === 
 // ─── isPostgresImage ──────────────────────────────────────────────
 check('isPostgresImage: bare postgres', isPostgresImage('postgres'));
 check('isPostgresImage: postgres:16-alpine', isPostgresImage('postgres:16-alpine'));
-check('isPostgresImage: registry-qualified', isPostgresImage('registry.example.com/library/postgres:16'));
+check(
+	'isPostgresImage: registry-qualified',
+	isPostgresImage('registry.example.com/library/postgres:16')
+);
 check('isPostgresImage: postgresql variant', isPostgresImage('bitnami/postgresql:16'));
 check('isPostgresImage: postgis derivative', isPostgresImage('postgis/postgis:16-3.4'));
 check('isPostgresImage: NOT redis', !isPostgresImage('redis:7-alpine'));
@@ -68,49 +71,83 @@ const soleProvable: DbContainerCandidate[] = [
 	{ name: 'redis', image: 'redis:7', dbPresent: null },
 	{ name: 'bunkerweb-db-1', image: 'postgres:16-alpine', dbPresent: true }
 ];
-check("selectDbContainer picks the postgres container with the DB present", selectDbContainer(soleProvable) === 'bunkerweb-db-1');
+check(
+	'selectDbContainer picks the postgres container with the DB present',
+	selectDbContainer(soleProvable) === 'bunkerweb-db-1'
+);
 
 const soleInconclusive: DbContainerCandidate[] = [
 	{ name: 'web', image: 'nginx', dbPresent: null },
 	{ name: 'db', image: 'postgres:16', dbPresent: null } // fresh install: DB not created yet
 ];
-check('selectDbContainer falls back to the SOLE postgres candidate when the probe is inconclusive', selectDbContainer(soleInconclusive) === 'db');
+check(
+	'selectDbContainer falls back to the SOLE postgres candidate when the probe is inconclusive',
+	selectDbContainer(soleInconclusive) === 'db'
+);
 
 const hostOnly: DbContainerCandidate[] = [
 	{ name: 'web', image: 'nginx', dbPresent: null },
 	{ name: 'cache', image: 'redis:7', dbPresent: null }
 ];
-check('selectDbContainer → null when there is NO postgres container (host Postgres)', selectDbContainer(hostOnly) === null);
+check(
+	'selectDbContainer → null when there is NO postgres container (host Postgres)',
+	selectDbContainer(hostOnly) === null
+);
 
 const rejected: DbContainerCandidate[] = [
 	{ name: 'other-app-db', image: 'postgres:15', dbPresent: false } // a DIFFERENT app's postgres, morphit DB not in it
 ];
-check('selectDbContainer → null when the only postgres candidate is explicitly rejected', selectDbContainer(rejected) === null);
+check(
+	'selectDbContainer → null when the only postgres candidate is explicitly rejected',
+	selectDbContainer(rejected) === null
+);
 
 const twoInconclusive: DbContainerCandidate[] = [
 	{ name: 'pg-a', image: 'postgres:16', dbPresent: null },
 	{ name: 'pg-b', image: 'postgres:15', dbPresent: null }
 ];
-check('selectDbContainer → null when ambiguous (≥2 inconclusive postgres candidates)', selectDbContainer(twoInconclusive) === null);
+check(
+	'selectDbContainer → null when ambiguous (≥2 inconclusive postgres candidates)',
+	selectDbContainer(twoInconclusive) === null
+);
 
 const twoOneProvable: DbContainerCandidate[] = [
 	{ name: 'pg-a', image: 'postgres:16', dbPresent: null },
 	{ name: 'pg-b', image: 'postgres:15', dbPresent: true } // morphit DB is provably in pg-b
 ];
-check('selectDbContainer prefers the provable one even amid multiple postgres containers', selectDbContainer(twoOneProvable) === 'pg-b');
+check(
+	'selectDbContainer prefers the provable one even amid multiple postgres containers',
+	selectDbContainer(twoOneProvable) === 'pg-b'
+);
 
 check('selectDbContainer on empty candidate list → null', selectDbContainer([]) === null);
 
 // ─── parseBackupDbContainer ───────────────────────────────────────
 check(
 	'parseBackupDbContainer reads a bare value',
-	parseBackupDbContainer('BACKUP_DIR=/x\nDB_CONTAINER=bunkerweb-db-1\nRETAIN_DAYS=30') === 'bunkerweb-db-1'
+	parseBackupDbContainer('BACKUP_DIR=/x\nDB_CONTAINER=bunkerweb-db-1\nRETAIN_DAYS=30') ===
+		'bunkerweb-db-1'
 );
-check('parseBackupDbContainer: empty assignment → ""', parseBackupDbContainer('DB_CONTAINER=') === '');
-check('parseBackupDbContainer: absent line → ""', parseBackupDbContainer('BACKUP_DIR=/x\nRETAIN_DAYS=30') === '');
-check("parseBackupDbContainer strips single quotes", parseBackupDbContainer("DB_CONTAINER='my-db'") === 'my-db');
-check('parseBackupDbContainer strips double quotes', parseBackupDbContainer('DB_CONTAINER="my-db"') === 'my-db');
-check('parseBackupDbContainer tolerates surrounding whitespace', parseBackupDbContainer('  DB_CONTAINER =  my-db  ') === 'my-db');
+check(
+	'parseBackupDbContainer: empty assignment → ""',
+	parseBackupDbContainer('DB_CONTAINER=') === ''
+);
+check(
+	'parseBackupDbContainer: absent line → ""',
+	parseBackupDbContainer('BACKUP_DIR=/x\nRETAIN_DAYS=30') === ''
+);
+check(
+	'parseBackupDbContainer strips single quotes',
+	parseBackupDbContainer("DB_CONTAINER='my-db'") === 'my-db'
+);
+check(
+	'parseBackupDbContainer strips double quotes',
+	parseBackupDbContainer('DB_CONTAINER="my-db"') === 'my-db'
+);
+check(
+	'parseBackupDbContainer tolerates surrounding whitespace',
+	parseBackupDbContainer('  DB_CONTAINER =  my-db  ') === 'my-db'
+);
 
 // ─── assessBackupDockerDrift ──────────────────────────────────────
 check(
@@ -162,8 +199,14 @@ check(
 );
 check('dbIdentityFromUrl: non-postgres URL → null', dbIdentityFromUrl('mysql://u:p@h/db') === null);
 check('dbIdentityFromUrl: garbage → null', dbIdentityFromUrl('not a url') === null);
-check('dbIdentityFromUrl: missing db name → null', dbIdentityFromUrl('postgres://u:p@h:5432/') === null);
-check('dbIdentityFromUrl: missing user → null', dbIdentityFromUrl('postgres://@h:5432/db') === null);
+check(
+	'dbIdentityFromUrl: missing db name → null',
+	dbIdentityFromUrl('postgres://u:p@h:5432/') === null
+);
+check(
+	'dbIdentityFromUrl: missing user → null',
+	dbIdentityFromUrl('postgres://@h:5432/db') === null
+);
 
 console.log('');
 if (failed === 0) {

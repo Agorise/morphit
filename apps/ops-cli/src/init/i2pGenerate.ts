@@ -43,7 +43,7 @@ export interface I2pDestinationResult {
 }
 
 /** The host loopback port the frontend container publishes for hidden-service
- *  fan-out (cp695 / group_vars morphit_onion_frontend_port). Tor + I2P tunnels
+ *  fan-out (group_vars morphit_onion_frontend_port). Tor + I2P tunnels
  *  MUST target this, NOT the bare relay on 8080: the relay trusts X-Real-IP from
  *  its caller, so pointing a hidden service straight at it would let a visitor
  *  set their own client IP, and it 404s every non-relay path (the site).

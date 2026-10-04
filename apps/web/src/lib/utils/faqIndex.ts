@@ -773,7 +773,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'how_morphit_protects_me',
 		'what_is_morphit'
 	],
-	// Part 122 cp51 deep-deep N-1: BCH/LTC/DASH FAQ_RELATED parity
+	// BCH/LTC/DASH FAQ_RELATED parity
 	what_is_bch: [
 		'privacy_practices',
 		'how_to_buy',
@@ -810,7 +810,7 @@ export const FAQ_RELATED: Partial<Record<FaqKey, readonly FaqKey[]>> = {
 		'wallet_developer_api'
 	],
 
-	// cp218 — backfill: every FAQ key now has a related cluster, so no
+	// backfill: every FAQ key now has a related cluster, so no
 	// expanded article is a dead end ("keep people reading"). These are the
 	// 18 keys that previously had no FAQ_RELATED entry. Targets chosen for
 	// topical adjacency; cross-links are bidirectional where natural.
@@ -950,7 +950,7 @@ const STOPWORDS_EN = new Set([
  * real confusion shows up.
  */
 const SYNONYMS_EN: Record<string, readonly string[]> = {
-	// v1.7.5 (t.txt #10) — route IP/leak/exposure questions to the ONE article
+	// v1.7.5 — route IP/leak/exposure questions to the ONE article
 	// that discloses the boot-time direct-to-node release check. These are the
 	// words a worried user actually types, none of which appear in a phrase like
 	// "signed release record": they either fear a leak, or they opened the Network
@@ -1012,7 +1012,7 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	thorough: ['rigor', 'audit'],
 	// Identity / privacy
 	kyc: ['identity', 'verification'],
-	// v1.7.5 (t.txt #10) — extended toward the IP/RPC disclosure article.
+	// v1.7.5 — extended toward the IP/RPC disclosure article.
 	anonymous: ['privacy', 'anonymity', 'ip', 'tor', 'vpn'],
 	identity: ['kyc', 'verification'],
 	// Pricing
@@ -1035,7 +1035,7 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	swap: ['exchange', 'trade'],
 	// Operators
 	operator: ['node', 'instance', 'run'],
-	// v1.7.5 (t.txt #10) — 'node' now also reaches the IP/RPC article: a user who
+	// v1.7.5 — 'node' now also reaches the IP/RPC article: a user who
 	// opens the Network tab and spots one Blurt request searches this word.
 	node: ['operator', 'instance', 'ip', 'rpc', 'leak'],
 	instance: ['node', 'operator'],
@@ -1086,7 +1086,7 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	// "how do I buy X" / "how do I sell X" should route to the
 	// canonical how-to entries, not to the most-common-token-match
 	// (which is often "what is X" since both contain the asset
-	// name).  cp137 H-2: "how do I buy bitcoin" was hitting
+	// name).  "how do I buy bitcoin" was hitting
 	// `what_is_bch` because "bitcoin" alone is high-weight.
 	buy: ['how_to_buy', 'purchase', 'walkthrough'],
 	buying: ['how_to_buy', 'purchase', 'walkthrough'],
@@ -1158,7 +1158,7 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	// (lines 540/542); these are the genuinely-new keys.
 	blocked: ['block', 'privacy', 'spam'],
 	stalker: ['block', 'privacy', 'spam'],
-	// ─── Getting-started cluster (cp137 grandma walkthrough H-2).
+	// ─── Getting-started cluster (grandma walkthrough H-2).
 	// Without these, "how do I start" / "how do I begin" /
 	// "first time" route to unrelated entries (`order_editing`,
 	// `profile_pages`, etc.) instead of the actual walkthrough.
@@ -1180,7 +1180,7 @@ const SYNONYMS_EN: Record<string, readonly string[]> = {
 	tutorial: ['walkthrough', 'video', 'guide'],
 	guide: ['walkthrough', 'tutorial'],
 	step: ['walkthrough', 'guide'],
-	// ─── "What is this" cluster (cp137 grandma walkthrough H-2).
+	// ─── "What is this" cluster (grandma walkthrough H-2).
 	// A bare "this" tokenizes to nothing after stopwords, so
 	// "what is this" used to return random high-IDF hits.
 	// Anchor the search at the `what_is_morphit` entry by
@@ -1359,7 +1359,7 @@ export function scoreEntry(
 	return score;
 }
 
-/** cp453 — AND semantics for a multi-word query. Space-separated terms are an
+/** AND semantics for a multi-word query. Space-separated terms are an
  *  AND: "hive engine" must match entries containing BOTH "hive" AND "engine"
  *  (each term, OR one of its synonyms, present in the question or answer), not
  *  entries that merely match one term with a high TF-IDF score. Single-term (or

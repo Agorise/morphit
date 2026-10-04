@@ -4,6 +4,11 @@
 **Supersedes:** none
 **Superseded by:** none
 
+> **2026-10 audit note.** "Relay-mediated" below means the pairing
+> mailbox, which lives on the **indexer** (`apps/indexer/src/api/loginPairing.ts`,
+> `/v1/login-pairing/*`), not on the relay service. So the indexer, not the
+> relay, sees the (sealed) pairing traffic.
+
 ## Context
 
 Users who already have Morphit working on their phone (keys
@@ -548,13 +553,13 @@ be verifiable in code.  The brag-list claim that this ADR
 authorizes is **MORPHIT-BRAG-LIST.md item #218** ("QR
 sign-in: scan with your phone, never type your seed on a
 strange computer"), shipped together with the implementation
-in Audit Part 30 (2026-05-04).  The claim describes the
+ (2026-05-04).  The claim describes the
 threat model, primitives, smoke coverage, multisig honest-
 disclosure, and the cross-references this ADR documents.
 
-## Implementation (shipped Audit Part 30)
+## Implementation (shipped)
 
-This ADR was implemented end-to-end in Audit Part 30
+This ADR was implemented end-to-end
 (2026-05-04).  Shipped components:
 
 - ✅ Pure crypto module
@@ -650,13 +655,13 @@ The following are still backlog:
   state machine + crypto round-trip; full E2E is
   follow-up.
 
-## Part 114 amendment — read-only desktop session (Option A, formalized)
+## read-only desktop session (Option A, formalized)
 
 This section closes the "session-establishment gap" left open
 at original-ADR time and amends the design with the concrete
 Option A semantics now shipped in code.
 
-### What was missing pre-Part-114
+### What was missing older
 
 The original ADR (above) describes the QR-pair protocol end
 to end: ephemeral keys, signed bundle, chain-backed verifier
@@ -676,7 +681,7 @@ worked; the application-level sign-in did not.
 
 After weighing three closures (see "Three options considered"
 above — fully P2P with two cameras, relay-routed envelope,
-phone-mediated remote signing), Part 114 ships **Option A —
+phone-mediated remote signing), a later change ships **Option A —
 read-only desktop session**:
 
 - A successful QR-pair handshake establishes a new identity-
@@ -719,7 +724,7 @@ pairing event leaves an on-chain footprint visible to anyone
 watching the account — the OPPOSITE of the privacy posture
 this ADR set out to preserve.  The original ADR (lines
 94-103) explicitly rejected this approach for that reason;
-Part 114 honors that decision.
+A later change honors that decision.
 
 **Option A** is the only closure that lands cleanly in one
 ship and preserves every privacy property the original ADR
@@ -783,7 +788,7 @@ verified: 2,448 keys × 10 locales.
 
 ### What's still NOT shipped (kept honest)
 
-The same backlog items listed in the pre-Part-114 ADR remain
+The same backlog items listed in the older ADR remain
 open (multisig, 6-word phrase fallback, native-speaker
 review, full E2E with headless browser).  Option B
 (phone-mediated remote signing) and Option C (delegated
@@ -803,7 +808,7 @@ For Option A specifically:
 - ✅ Test coverage end-to-end.
 - ✅ All 10 locales at parity.
 
-Option A is complete and shippable as of Part 114.
+Option A is complete and shippable.
 
 ## v1.20.0 amendment — pairing across instances
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * reachability-check — cp694.
+ * reachability-check.
  *
  * A home node behind a router can't detect its own inbound reachability (NAT
  * hairpin), so an ISP 80/443 block used to surface only as a stale "Unreachable"
@@ -14,10 +14,16 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (r: string): string => readFileSync(join(REPO, r), 'utf8');
-let pass = 0, fail = 0;
+let pass = 0,
+	fail = 0;
 const check = (n: string, c: boolean, d = ''): void => {
-	if (c) { console.log(`  ✓ ${n}`); pass++; }
-	else { console.log(`  ✗ ${n}${d ? `: ${d}` : ''}`); fail++; }
+	if (c) {
+		console.log(`  ✓ ${n}`);
+		pass++;
+	} else {
+		console.log(`  ✗ ${n}${d ? `: ${d}` : ''}`);
+		fail++;
+	}
 };
 
 console.log('\n── reachability-check (cp694) ─────────────────────────\n');
@@ -43,9 +49,12 @@ check(
 	'the install runs the self-check on home boxes',
 	/morphit-reachability-check\.sh/.test(wiz) && /inputs\.mode === 'home'/.test(wiz)
 );
+// The online check goes THROUGH Tor (nothing fetched from the home
+// address); behaviour: apps/ops-cli:reachability-check-tor-smoke.
 check(
-	'cp697 — gates the probe behind an online check (never verdicts when offline)',
-	/timeout \d+ curl -fsS[^\n]*morphit\.io\/verify\.json/.test(sh) && /no internet connection right now/.test(sh)
+	'gates the probe behind an online check through Tor (never verdicts when offline)',
+	/\$\(probe https:\/\/morphit\.io\/verify\.json\)" = 000/.test(sh) &&
+		/Reachability can.t be checked without that/.test(sh)
 );
 check(
 	'cp697 — captures the HTTP code via a probe() helper (no ||echo-000 double-append → no false REACHABLE)',
@@ -55,8 +64,18 @@ check(
 	const w = readFileSync(join(REPO, 'apps/ops-cli/src/init/runAnsibleInstall.ts'), 'utf8');
 	const li = w.indexOf('List your instance on the public federated directory');
 	const rv = w.lastIndexOf("step(0, 0, 'Review your node')");
-	check('cp698 — the install review is the FINAL step (after the listing), so it reflects the canary', li > 0 && rv > li);
-	check('cp699/cp705 — the wizard pre-fills the canary instance origin (deriveInstanceOrigin: onion for Tor-only, else https://domain — no re-typing)', /MORPHIT_CANARY_INSTANCE_ORIGIN:\s*\n?\s*deriveInstanceOrigin\(inputs\.torOnly, inputs\.domain, '\/opt\/morphit'\) \?\?\s*\n?\s*`https:\/\/\$\{inputs\.domain\}`/.test(w));
+	check(
+		'cp698 — the install review is the FINAL step (after the listing), so it reflects the canary',
+		li > 0 && rv > li
+	);
+	check(
+		'cp699/cp705 — the wizard pre-fills the canary instance origin (deriveInstanceOrigin: onion for Tor-only, else https://domain — no re-typing)',
+		/MORPHIT_CANARY_INSTANCE_ORIGIN:\s*\n?\s*deriveInstanceOrigin\(inputs\.torOnly, inputs\.domain, '\/opt\/morphit'\) \?\?\s*\n?\s*`https:\/\/\$\{inputs\.domain\}`/.test(
+			w
+		)
+	);
 }
-console.log(`\n${pass} passed, ${fail} failed\n${fail === 0 ? `✓ all ${pass} reachability-check checks passed` : '✗ FAILED'}`);
+console.log(
+	`\n${pass} passed, ${fail} failed\n${fail === 0 ? `✓ all ${pass} reachability-check checks passed` : '✗ FAILED'}`
+);
 process.exit(fail === 0 ? 0 : 1);

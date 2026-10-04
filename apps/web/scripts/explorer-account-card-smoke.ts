@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * explorer-account-card smoke — cp321.
+ * explorer-account-card smoke.
  *
  * The block-explorer account page (/explorer/account/[name]) got a batch of
  * fixes this checkpoint. This smoke locks them in so they can't silently

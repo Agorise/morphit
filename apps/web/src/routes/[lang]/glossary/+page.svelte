@@ -33,13 +33,13 @@
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 
-	// cp303 — the footnote hyperlinks the word "FAQ" to the FAQ page. localePath
+	// the footnote hyperlinks the word "FAQ" to the FAQ page. localePath
 	// gives the locale-prefixed href (/en/faq, /de/faq, …); the {faqOpen}/{faqClose}
 	// placeholders in glossary.footnote wrap the FAQ word so every locale keeps the
 	// link in its own natural sentence position (rendered via {@html} below).
 	const faqHref = $derived(localePath('/faq', ($page.params.lang as LocaleCode) ?? DEFAULT_LOCALE));
 
-	/** The 22 terms covered by the glossary, in alphabetized
+	/** The terms covered by the glossary, in alphabetized
 	 *  English order. Adding a new term: add the key here, add
 	 *  glossary.<key>.title and glossary.<key>.body to all 10
 	 *  locale JSONs, done. */

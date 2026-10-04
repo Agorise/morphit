@@ -184,11 +184,21 @@ gradient="linear-gradient(90deg, $(tok brand-1) 0%, $(tok brand-2) 50%, $(tok br
 	fi
 } >> "$readme"
 
-# ─── Build the zip ─────────────────────────────────────────────────
+# ─── Build the zip (deterministic) ─────────────────────────────────
+# The same sources give the same bytes on any machine: every entry gets
+# one fixed timestamp, zip runs in UTC (its DOS times are local time),
+# entries are added in sorted order with fixed modes, and -X leaves out
+# zip's extra fields (the builder's own clock, timezone and user ids).
+# mediakit-freshness-smoke checks all of this on the committed zip.
+MEDIAKIT_EPOCH=1767225600 # 2026-01-01 00:00:00 UTC
+find "$stage/morphit-mediakit" -type d -exec chmod 0755 {} +
+find "$stage/morphit-mediakit" -type f -exec chmod 0644 {} +
+find "$stage/morphit-mediakit" -exec touch -h -d "@$MEDIAKIT_EPOCH" {} +
 rm -f "$OUTPUT_ZIP"
 (
-	cd "$stage" && \
-		zip -q -r "$OLDPWD/$OUTPUT_ZIP" morphit-mediakit
+	cd "$stage" &&
+		find morphit-mediakit -type f -print | LC_ALL=C sort |
+		TZ=UTC zip -q -X -D -@ "$OLDPWD/$OUTPUT_ZIP"
 )
 
 size=$(stat -c%s "$OUTPUT_ZIP" 2>/dev/null || stat -f%z "$OUTPUT_ZIP")

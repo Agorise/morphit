@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/llms-txt-freshness-smoke.ts
  *
- * Structural Defense — llms.txt freshness (cp429).
+ * Structural Defense — llms.txt freshness.
  *
  * `apps/web/static/llms.txt` is the short, curated llms.txt-standard
  * index (llmstxt.org convention) served for AI crawlers — DISTINCT
@@ -10,10 +10,10 @@
  * `llms-full-freshness-smoke.ts` guard). Unlike llms-full.txt, llms.txt
  * is HAND-MAINTAINED editorial content: there is no generator, and it
  * is NOT in the `build:llms-full` prebuild. That is exactly why it
- * drifted — in cp429 it still advertised the marketplace as a plain
+ * drifted — it still advertised the marketplace as a plain
  * fiat↔crypto venue and listed the 16 crypto tickers but never
  * mentioned BARTER (goods/services), which shipped as a first-class
- * registry asset in cp425. Nobody updates a static file when the asset
+ * registry asset. Nobody updates a static file when the asset
  * registry changes, and nothing caught it.
  *
  * This smoke is the guard. It does NOT try to regenerate the file
@@ -27,7 +27,7 @@
  *   LT-3: goods/services (barter) is mentioned, because the registry
  *         contains at least one goods asset (isGoodsAsset). Keeps the
  *         "one side can be goods & services" property from being
- *         paraphrased away the way it was before cp429.
+ *         paraphrased away the way it was previously.
  *   LT-4: llms.txt is actually wired to be served (referenced in the
  *         i18n bootstrap comment / lives under static/), so this file
  *         doesn't quietly become dead weight nobody serves.

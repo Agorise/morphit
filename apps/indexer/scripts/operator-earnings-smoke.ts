@@ -1,7 +1,7 @@
 /**
  * Operator-earnings attribution (audit) — tsx smoke runner.
  *
- * cp408 — the operator's 90% is now paid DIRECTLY at payment time by the fee
+ * the operator's 90% is now paid DIRECTLY at payment time by the fee
  * split (see feeTransfersFor / sumFeeTransfers). This module no longer queues a
  * relay payout; it only records attribution + earnings for the dashboard. This
  * smoke covers:
@@ -189,12 +189,14 @@ async function run(): Promise<void> {
 		};
 	}
 
-	function expectInsertAttribution(): QueryExpectation {
-		return {
-			match: 'INSERT INTO operator_attribution_events',
-			rows: [],
-			rowCount: 1
-		};
+	/** The attribution insert runs in its own savepoint (a duplicate must
+	 *  not abort the block transaction). */
+	function expectInsertAttribution(): QueryExpectation[] {
+		return [
+			{ match: 'SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 },
+			{ match: 'INSERT INTO operator_attribution_events', rows: [], rowCount: 1 },
+			{ match: 'RELEASE SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 }
+		];
 	}
 
 	function expectUpsertEarnings(): QueryExpectation {
@@ -258,7 +260,7 @@ async function run(): Promise<void> {
 		async () => {
 			const mock = makeMockClient([
 				expectLookup([{ account: 'alice' }]),
-				expectInsertAttribution(),
+				...expectInsertAttribution(),
 				expectUpsertEarnings()
 			]);
 			const r = await attributeBlurtFeeToOperator({
@@ -277,7 +279,7 @@ async function run(): Promise<void> {
 				'result'
 			);
 			assertEqual(
-				mock.queries.length,
+				mock.queries.filter((q) => !q.text.includes('SAVEPOINT')).length,
 				3,
 				'lookup + attribution insert + earnings upsert (NO relay queue, NO payout audit)'
 			);
@@ -298,12 +300,15 @@ async function run(): Promise<void> {
 			// would double-count earnings.
 			const mock = makeMockClient([
 				expectLookup([{ account: 'alice' }]),
+				{ match: 'SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 },
 				{
 					match: 'INSERT INTO operator_attribution_events',
 					throwError: Object.assign(new Error('duplicate'), {
 						code: '23505'
 					})
-				}
+				},
+				{ match: 'ROLLBACK TO SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 },
+				{ match: 'RELEASE SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 }
 				// NO further expectations: handler must abort.
 			]);
 			const r = await attributeBlurtFeeToOperator({
@@ -313,17 +318,24 @@ async function run(): Promise<void> {
 				instanceOperatorTag: 'alice'
 			});
 			assertEqual(r, { kind: 'duplicate_attribution' }, 'result');
-			assertEqual(mock.queries.length, 2, 'lookup + failed attribution (NO earnings upsert)');
+			assertEqual(
+				mock.queries.filter((q) => !q.text.includes('SAVEPOINT')).length,
+				2,
+				'lookup + failed attribution (NO earnings upsert)'
+			);
 		}
 	);
 
 	await scenario('attribute: non-unique-violation throw bubbles up', async () => {
 		const mock = makeMockClient([
 			expectLookup([{ account: 'alice' }]),
+			{ match: 'SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 },
 			{
 				match: 'INSERT INTO operator_attribution_events',
 				throwError: new Error('connection lost')
-			}
+			},
+			{ match: 'ROLLBACK TO SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT operator_attribution_insert', rows: [], rowCount: 0 }
 		]);
 		try {
 			await attributeBlurtFeeToOperator({
@@ -345,7 +357,7 @@ async function run(): Promise<void> {
 		async () => {
 			const mock = makeMockClient([
 				expectLookup([{ account: 'alice' }]),
-				expectInsertAttribution(),
+				...expectInsertAttribution(),
 				expectUpsertEarnings()
 			]);
 			await attributeBlurtFeeToOperator({

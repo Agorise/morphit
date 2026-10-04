@@ -1,8 +1,8 @@
-# ADR-0037 — Physical-shipment tracking & mailing-address share (cp120–cp121)
+# ADR-0037 — Physical-shipment tracking & mailing-address share
 
 **Status:** Accepted (shipped 2026-05; pre-launch hardening campaign)
 
-**Context part:** Part 122 cp120–cp122, follow-on to ADR-0021 (payment-method registry).
+**Context:** follow-on to ADR-0021 (payment-method registry).
 
 ## Context
 
@@ -35,8 +35,8 @@ tracking number.
 
 ## Decision
 
-Three coordinated changes, shipped together as cp120 (foundation) + cp121
-(UI) + cp122 (docs).
+Three coordinated changes, shipped together as an earlier fix (foundation) +
+(UI) + (docs).
 
 ### 1. Split `cash` into two payment methods, add `by_mail` category
 
@@ -71,7 +71,7 @@ in lockstep with the frontend registry (enforced by
 > discriminator within that envelope and evolves by adding new
 > fields or new kinds, not by bumping a per-kind version.  An
 > earlier draft of this ADR (and PHASE-5 docs) wrote
-> `morphit_addr_v1` etc., which never matched the code; cp131
+> `morphit_addr_v1` etc., which never matched the code
 > LOW-007 corrected this.
 
 - **`morphit_mailing_address`** — share a physical mailing address.
@@ -264,17 +264,17 @@ Shipment, custom carrier:
 - Carrier tracking URLs need periodic refresh. Marked in code with
   a doc comment explaining the best-effort posture and pointing
   to this ADR.
-- Translation polish for cp121 strings (~590 new strings) flagged
-  in REVISIT-LIST translation-quality block for native-speaker review.
+- Translation polish for strings (~590 new strings) flagged
+  in the backlog translation-quality block for native-speaker review.
 
 ## Related
 
 - ADR-0021 (payment-method registry) — baseline shape this ADR extends.
-- `carrier-registry-invariants-smoke` (cp120) — 13 structural
+- `carrier-registry-invariants-smoke` — 13 structural
   scenarios over the carrier registry.
-- `shipping-payload-roundtrip-smoke` (cp120) — 17 scenarios over
+- `shipping-payload-roundtrip-smoke` — 17 scenarios over
   the two new payload types, including S-8 javascript: URL rejection.
-- `apps/web/src/lib/components/MailingAddressModal.svelte` (cp121).
-- `apps/web/src/lib/components/ShipmentModal.svelte` (cp121).
-- ChatMessage pill rendering — cp121.
-- `docs/faq/cash-by-mail-trading.md` (cp122 companion FAQ).
+- `apps/web/src/lib/components/MailingAddressModal.svelte`.
+- `apps/web/src/lib/components/ShipmentModal.svelte`.
+- ChatMessage pill rendering.
+- `docs/faq/cash-by-mail-trading.md` (since removed) (companion FAQ).

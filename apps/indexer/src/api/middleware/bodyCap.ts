@@ -35,7 +35,7 @@ export function bodyCap(
 		// (larger) cap so the small read default doesn't 413 legitimate traffic:
 		//
 		//   /v1/broadcast   — an avatar (base64 image) + a signed, possibly
-		//                     multi-op tx. (the maintainer/timeapp: a 4 KB default silently
+		//                     multi-op tx. (timeapp: a 4 KB default silently
 		//                     rejected every avatar upload as 413.)
 		//   /v1/federation  — a BATCH of signed chat transactions pushed by a peer
 		//                     instance. Batching is what makes per-peer throughput

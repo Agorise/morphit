@@ -15,12 +15,12 @@
 5. `redirect: 'manual'` (block redirect-following to internal URLs)
 6. Body cap with streaming abort
 
-At cp146 the audit of `apps/mcp-server/src/indexerClient.ts` surfaced finding **F-mcp-1** (MED): the MCP server's `fetchJson()` had no equivalent private-address defense. Trust model is weaker than the indexer's (MORPHIT_MCP_INSTANCE_URL is user-supplied, not peer-supplied), but defense-in-depth still wants the address-range denylist for:
+At the audit of `apps/mcp-server/src/indexerClient.ts` surfaced finding **F-mcp-1** (MED): the MCP server's `fetchJson()` had no equivalent private-address defense. Trust model is weaker than the indexer's (MORPHIT_MCP_INSTANCE_URL is user-supplied, not peer-supplied), but defense-in-depth still wants the address-range denylist for:
 
 - Catching misconfigurations (user accidentally pastes a localhost URL).
 - Modestly raising the bar against chained exploits where a compromised MCP-client config tries to use the MCP server to probe internal networks from the user's machine.
 
-cp146 deferred F-mcp-1 as Tier-B because "lifting `federationProbe.ts` defenses into a shared package and having both indexer and mcp-server import from it" was bigger than that audit's scope. cp154 ships the lift.
+A later change deferred F-mcp-1 as Tier-B because "lifting `federationProbe.ts` defenses into a shared package and having both indexer and mcp-server import from it" was bigger than that audit's scope. A later change ships the lift.
 
 ## Decision
 
@@ -39,17 +39,17 @@ The MCP server does NOT adopt the full six-layer lockdown because its threat mod
 | Layer | indexer (peer-supplied URL) | mcp-server (user-supplied URL) |
 |---|---|---|
 | HTTPS-only | Required — federation directory is by definition cross-instance | Not enforced — users may legitimately use `http://onion.tor` or local dev instances |
-| `isPrivateHostname` literal denylist | Hard reject | **Reject by default, env opt-in** (cp154 F-mcp-1) |
+| `isPrivateHostname` literal denylist | Hard reject | **Reject by default, env opt-in** |
 | DNS rebinding defense | Required — peer can return any IP | Out of scope — user-supplied URL implies user has already evaluated the instance's identity |
 | IP-pinned dispatcher | Required (TOCTOU) | Out of scope |
-| `redirect: 'manual'` | Required | Already shipped (cp146 F-mcp-3) |
-| Body cap | Required (256 KB indexer / 4 MiB mcp-server) | Already shipped (cp151 F-mcp-5) |
+| `redirect: 'manual'` | Required | Already shipped |
+| Body cap | Required (256 KB indexer / 4 MiB mcp-server) | Already shipped |
 
 ## Why a separate package (not inline indexer/mcp-server)
 
 Three reasons:
 
-1. **Single source of truth.** The function bodies are identical at the lift point. Any future change to (e.g.) add a new RFC range goes in one place and propagates to both consumers. Duplication would let drift recreate exactly the F-mcp-1 finding cp154 is closing.
+1. **Single source of truth.** The function bodies are identical at the lift point. Any future change to (e.g.) add a new RFC range goes in one place and propagates to both consumers. Duplication would let drift recreate exactly the F-mcp-1 finding a later change is closing.
 
 2. **Pure-function surface.** Both functions are stateless and have zero runtime dependencies. They don't need DB, logger, env, or any other contextual state. A shared package is the natural shape for that surface.
 
@@ -82,12 +82,12 @@ If a future need arises to publish (e.g. third-party Morphit integrations want t
 
 **Positive:**
 - F-mcp-1 closed at the smallest reasonable scope.
-- cp154 demonstrates the ADDING-A-WORKSPACE.md (cp147) playbook on a real workspace addition — the playbook is now battle-tested.
+- A later change demonstrates the ADDING-A-WORKSPACE.md playbook on a real workspace addition — the playbook is now battle-tested.
 - Both consumers gain access to the same primitives if/when their threat models converge further.
 
 **Negative:**
 - One more workspace in the monorepo. Modest typecheck-sweep + smoke-runner cost (+1 each).
-- New package-lock.json regeneration in cp154 (`npm install`) — same kind of change that caused the cp140→cp144 CI-red incident, but this time the playbook (Phase 3 step 2) explicitly calls it out as a required step.
+- New package-lock.json regeneration (`npm install`) — same kind of change that caused the CI-red incident, but this time the playbook (Phase 3 step 2) explicitly calls it out as a required step.
 
 **Neutral:**
 - The indexer's `federationProbe.ts` shrinks by ~80 lines (the two function bodies move out). Existing callers and smokes unaffected via re-export.

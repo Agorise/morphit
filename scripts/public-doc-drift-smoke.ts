@@ -1,9 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — public-doc drift smoke (v1.7.7, t.txt #1).
+ * Morphit — public-doc drift smoke (v1.7.7).
  *
- * the maintainer: "i do not want ANY drift, so make sure with each new release, we verify
- * each of the public facing md files that users will want to refer to for help."
+ * Requirement: no drift; every release verifies each public-facing help document.
  *
  * A promise to "check every release" is a promise that holds until somebody is
  * in a hurry. This is the thing that makes it hold anyway.
@@ -47,7 +46,7 @@ const PUBLIC_DOCS = [
 	'docs/API.md',
 	'docs/LAUNCH-DAY.md',
 	'docs/POST-LAUNCH-WEEK-ONE.md',
-	'docs/BETA-INCIDENT-RUNBOOK.md',
+	'docs/INCIDENT-RUNBOOK.md',
 	'docs/RECOVERING-FROM-WRONG-RELAY-KEY.md',
 	'docs/FEES-AND-REWARDS.md',
 	'docs/SWITCHING-NETWORKS.md',
@@ -71,7 +70,11 @@ const check = (name: string, ok: boolean, detail = ''): void => {
 
 // ── the docs must exist at all ──────────────────────────────────────
 for (const d of PUBLIC_DOCS) {
-	check(`D-0 ${d} exists`, existsSync(join(ROOT, d)), 'a public doc vanished, or was moved without updating this list');
+	check(
+		`D-0 ${d} exists`,
+		existsSync(join(ROOT, d)),
+		'a public doc vanished, or was moved without updating this list'
+	);
 }
 const docs = PUBLIC_DOCS.filter((d) => existsSync(join(ROOT, d)));
 const text = new Map(docs.map((d) => [d, readFileSync(join(ROOT, d), 'utf8')]));
@@ -198,9 +201,7 @@ check(
 );
 
 // The allow-list must not rot either: an entry that stops matching is a lie.
-const staleAllow = ENV_ALLOW.filter(
-	(e) => !docs.some((d) => (text.get(d) ?? '').includes(e.name))
-);
+const staleAllow = ENV_ALLOW.filter((e) => !docs.some((d) => (text.get(d) ?? '').includes(e.name)));
 check(
 	'D-1b no stale env allow-list entries',
 	staleAllow.length === 0,
@@ -218,7 +219,10 @@ const PATH_ALLOW: ReadonlyArray<{ frag: string; why: string }> = [
 	{ frag: 'sitemap.xml', why: 'generated at build time' },
 	{ frag: 'llms.txt', why: 'generated at build time' },
 	{ frag: 'llms-full.txt', why: 'generated at build time' },
-	{ frag: 'mint-acts.ts', why: 'cited BECAUSE it does not exist — the doc says "There is no mint-acts.ts script"' },
+	{
+		frag: 'mint-acts.ts',
+		why: 'cited BECAUSE it does not exist — the doc says "There is no mint-acts.ts script"'
+	},
 	{ frag: 'verify-xmr-viewkey.ts', why: 'cited in a section explicitly marked "(retired)"' },
 	{ frag: '/usr/', why: 'a VPS filesystem path, not a repo path' },
 	{ frag: '/etc/', why: 'a VPS filesystem path' },
@@ -226,10 +230,16 @@ const PATH_ALLOW: ReadonlyArray<{ frag: string; why: string }> = [
 	{ frag: '/opt/', why: 'a VPS filesystem path' },
 	{ frag: 'group_vars/', why: 'cited relative to ops/ansible/, resolved there' },
 	{ frag: 'inventory/', why: 'cited relative to ops/ansible/' },
-	{ frag: 'vault.yml', why: 'the operator creates this from vault.yml.example; it must NOT be in the repo' },
+	{
+		frag: 'vault.yml',
+		why: 'the operator creates this from vault.yml.example; it must NOT be in the repo'
+	},
 	{ frag: 'hosts.yml', why: 'the operator creates this from hosts.yml.example' },
 	{ frag: '.env', why: 'operator-created from an example' },
-	{ frag: 'morphit-canary-setup.sh', why: "the maintainer's local script, intentionally outside this repo" },
+	{
+		frag: 'morphit-canary-setup.sh',
+		why: "the maintainer's local script, intentionally outside this repo"
+	},
 	{ frag: 'release.json', why: 'generated during the release ceremony' },
 	{
 		frag: 'keystore.json',
@@ -238,7 +248,9 @@ const PATH_ALLOW: ReadonlyArray<{ frag: string; why: string }> = [
 ];
 const deadPaths: string[] = [];
 for (const [doc, body] of text) {
-	for (const m of body.matchAll(/`([a-zA-Z0-9_./@-]+\.(?:ts|mjs|js|sh|sql|json|svelte|yml|yaml))`/g)) {
+	for (const m of body.matchAll(
+		/`([a-zA-Z0-9_./@-]+\.(?:ts|mjs|js|sh|sql|json|svelte|yml|yaml))`/g
+	)) {
 		const p = m[1]!;
 		if (PATH_ALLOW.some((a) => p.includes(a.frag))) continue;
 		if (p.startsWith('@') || p.startsWith('http')) continue;
@@ -266,7 +278,14 @@ check(
 
 // ── D-3: npm scripts a doc tells you to run must exist ──────────────
 const pkgScripts = new Set<string>();
-const pkgs = ['package.json', 'apps/web/package.json', 'apps/indexer/package.json', 'apps/relay/package.json', 'apps/ops-cli/package.json', 'apps/mcp-server/package.json'];
+const pkgs = [
+	'package.json',
+	'apps/web/package.json',
+	'apps/indexer/package.json',
+	'apps/relay/package.json',
+	'apps/ops-cli/package.json',
+	'apps/mcp-server/package.json'
+];
 for (const p of pkgs) {
 	if (!existsSync(join(ROOT, p))) continue;
 	const j = JSON.parse(readFileSync(join(ROOT, p), 'utf8')) as { scripts?: Record<string, string> };
@@ -295,8 +314,9 @@ for (const m of hub.matchAll(/\]\((\.\.?\/[^)]+\.md)\)/g)) {
 check('D-4 every start-here hub link resolves', hubDead.length === 0, hubDead.join(', '));
 
 // ── D-5: no contradicted version claim ──────────────────────────────
-const version = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string })
-	.version;
+const version = (
+	JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }
+).version;
 // Only CURRENT-version claims are pinned. "Upgrading past v1.3.5" is a historical
 // fact about migration v39 and must NOT be rewritten every release — pinning bare
 // version-shaped strings would force exactly that vandalism.
@@ -308,7 +328,8 @@ for (const [doc, body] of text) {
 	for (const m of body.matchAll(
 		/morphit[^\n]{0,50}?(?:current(?:ly)?|running|this release|latest)[^\n]{0,30}?\bv(\d+\.\d+\.\d+)/gi
 	)) {
-		if (m[1] !== version) versionClaims.push(`${doc}: claims v${m[1]}, package.json says ${version}`);
+		if (m[1] !== version)
+			versionClaims.push(`${doc}: claims v${m[1]}, package.json says ${version}`);
 	}
 }
 check(
@@ -336,12 +357,18 @@ type ValuePin = {
 const VALUE_PINS: ValuePin[] = [
 	{
 		label: 'stranger-fee base (BLURT)',
-		code: { file: 'apps/indexer/src/indexer/strangerFeePricing.ts', re: /STRANGER_FEE_BASE_BLURT\s*=\s*(\d+)/ },
+		code: {
+			file: 'apps/indexer/src/indexer/strangerFeePricing.ts',
+			re: /STRANGER_FEE_BASE_BLURT\s*=\s*(\d+)/
+		},
 		docs: [{ file: 'docs/FEES-AND-REWARDS.md', re: /STRANGER_FEE_BASE_BLURT\s*=\s*(\d+)/ }]
 	},
 	{
 		label: 'listing-fee base (BLURT)',
-		code: { file: 'apps/indexer/src/config/index.ts', re: /MORPHIT_INDEXER_FEE_BASE_BLURT[^\n;]*?default\((\d+)\)/ },
+		code: {
+			file: 'apps/indexer/src/config/index.ts',
+			re: /MORPHIT_INDEXER_FEE_BASE_BLURT[^\n;]*?default\((\d+)\)/
+		},
 		docs: [{ file: 'docs/FEES-AND-REWARDS.md', re: /env default base is `(\d+)` BLURT/ }]
 	},
 	{
@@ -356,22 +383,34 @@ const VALUE_PINS: ValuePin[] = [
 	},
 	{
 		label: 'cross-page trade-event listener cap',
-		code: { file: 'apps/web/src/lib/trades/tradeEventListener.ts', re: /MAX_LISTENER_STREAMS\s*=\s*(\d+)/ },
+		code: {
+			file: 'apps/web/src/lib/trades/tradeEventListener.ts',
+			re: /MAX_LISTENER_STREAMS\s*=\s*(\d+)/
+		},
 		docs: [{ file: 'docs/OPERATIONS.md', re: /caps the listener to \*\*(\d+)\*\*/ }]
 	},
 	{
 		label: 'chat fan-in cap (unique never-replied senders / 24h)',
-		code: { file: 'apps/indexer/src/indexer/handlers/chat.ts', re: /FAN_IN_UNIQUE_SENDERS_24H\s*=\s*(\d+)/ },
+		code: {
+			file: 'apps/indexer/src/indexer/handlers/chat.ts',
+			re: /FAN_IN_UNIQUE_SENDERS_24H\s*=\s*(\d+)/
+		},
 		docs: [{ file: 'docs/OPERATIONS.md', re: /fan-in \(\u2264(\d+) unique/ }]
 	},
 	{
 		label: 'chat per-pair no-reply cap',
-		code: { file: 'apps/indexer/src/indexer/handlers/chat.ts', re: /PER_PAIR_NO_REPLY_CAP\s*=\s*(\d+)/ },
+		code: {
+			file: 'apps/indexer/src/indexer/handlers/chat.ts',
+			re: /PER_PAIR_NO_REPLY_CAP\s*=\s*(\d+)/
+		},
 		docs: [{ file: 'docs/OPERATIONS.md', re: /per-pair no-reply cap \(\u2264(\d+)/ }]
 	},
 	{
 		label: 'attestor loyalty threshold (BLURT)',
-		code: { file: 'apps/indexer/src/indexer/attestorEligibility.ts', re: /ATTESTOR_LOYALTY_THRESHOLD_BLURT\s*=\s*(\d+)/ },
+		code: {
+			file: 'apps/indexer/src/indexer/attestorEligibility.ts',
+			re: /ATTESTOR_LOYALTY_THRESHOLD_BLURT\s*=\s*(\d+)/
+		},
 		docs: [{ file: 'docs/OPERATIONS.md', re: /\u2265(\d+) BLURT cumulative/ }]
 	}
 ];
@@ -397,7 +436,11 @@ for (const pin of VALUE_PINS) {
 		if (docVal === null) problems.push(`${d.file}: no value matched`);
 		else if (docVal !== codeVal) problems.push(`${d.file} states ${docVal}, code says ${codeVal}`);
 	}
-	check(`D-6 ${pin.label} = ${codeVal} (code \u21d4 docs)`, problems.length === 0, problems.join('; '));
+	check(
+		`D-6 ${pin.label} = ${codeVal} (code \u21d4 docs)`,
+		problems.length === 0,
+		problems.join('; ')
+	);
 }
 
 console.log('');

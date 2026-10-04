@@ -29,7 +29,7 @@ governance process) remain open.
 
 ## Why this document exists
 
-The revisit list carried "operator-shutdown tooling" for a
+The project backlog carried "operator-shutdown tooling" for a
 while. After writing a first draft, the framing itself
 turned out to be wrong. We can't shut down operators. The
 architecture is specifically designed so that nobody can.

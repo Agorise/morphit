@@ -2,9 +2,8 @@
 /*
  * push-dedup-survives-delivery — v1.5.5 (t155) guard.
  *
- * the maintainer: "tester3 received the SYSTEM notification TWICE... the first system
- * notif arrives in under 6 seconds which is great. a second notif arrives
- * though about a minute later."
+ * Reported: a user received the system notification twice: the first within 6 seconds (as
+ * intended), a second about a minute later.
  *
  * ROOT CAUSE. Both delivery paths enqueue the same message keyed on its
  * on-chain trx id, and `ON CONFLICT (account, source_trx_id) DO NOTHING` is

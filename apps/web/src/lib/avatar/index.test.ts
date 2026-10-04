@@ -2,9 +2,10 @@
 /**
  * Avatar sanitization tests.
  *
- * The SVG path is security-critical — inline SVG rendered via
- * {@html} is executed as live DOM content. Every test in the
- * sanitizer block represents an attack path that must be blocked.
+ * The SVG path is security-critical — the app renders avatars through
+ * an `<img>` data URI, but the sanitized SVG is published on chain,
+ * where another reader may inline it as live DOM content. Every test in
+ * the sanitizer block represents an attack path that must be blocked.
  *
  * The raster path isn't testable without a real Canvas (JSDOM's
  * canvas is either absent or very limited), so those tests stay

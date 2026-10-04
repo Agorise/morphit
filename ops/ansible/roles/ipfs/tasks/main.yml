@@ -145,21 +145,24 @@
     - { key: "Gateway.NoFetch", value: "true" }
     - { key: "Swarm.ConnMgr.HighWater", value: "{{ morphit_ipfs_connmgr_high }}" }
     - { key: "Swarm.ConnMgr.LowWater", value: "{{ morphit_ipfs_connmgr_low }}" }
-    # A tor-only node takes no part in the public IPFS network (v1.18.0
-    # deep-deep, H3): see the privacy task below for the rest of that posture.
-    # Setting "auto" here and "none" there on every run would flap the config.
+    # A tor-only node takes no part in the public IPFS network;
+    # a clearnet node seeds over the public DHT only (no HTTP
+    # routers). The same values as the privacy script below, so the two never
+    # flap the config.
     - key: "Routing.Type"
-      value: "'\"{{ (morphit_tor_only | default(false) | bool) | ternary('none', 'auto') }}\"'"
+      value: "'\"{{ (morphit_tor_only | default(false) | bool) | ternary('none', 'dht') }}\"'"
   changed_when: "'CHANGED' in morphit_ipfs_small.stdout"
   notify: Restart ipfs
 
 - name: Ensure /etc/morphit exists (env dir)
+  # The same owner and mode as the base role and hardening give it (the
+  # services' group reads the env files; nobody else lists them).
   ansible.builtin.file:
     path: /etc/morphit
     state: directory
     owner: root
-    group: root
-    mode: "0755"
+    group: "{{ morphit_service_group }}"
+    mode: "0750"
 
 - name: Install /usr/local/lib/morphit (script dir)
   ansible.builtin.file:
@@ -197,8 +200,10 @@
     group: root
     mode: "0755"
 
-# v1.18.0 deep-deep, H3. Every node: Kubo's telemetry off (it POSTs to a third
-# party by default). A TOR-ONLY node additionally leaves the public IPFS network
+# Every node: Kubo's telemetry, AutoTLS and AutoConf
+# off and no HTTP routers (by default it POSTs telemetry, fetches its settings
+# from conf.ipfs-mainnet.org and asks cid.contact); a clearnet node seeds over
+# the public DHT with the bootstrap list written out. A TOR-ONLY node instead leaves the public IPFS network
 # entirely: no DHT, no bootstrap peers, no swarm listener, no UPnP, no mDNS, no
 # AutoConf/AutoTLS phone-home, no provider records, and DNSLink lookups that
 # cannot leave the box. It still serves its pinned release by CID from its own

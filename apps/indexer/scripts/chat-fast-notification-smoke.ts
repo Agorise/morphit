@@ -1,5 +1,5 @@
 /**
- * chat-fast-notification-smoke (cp471) — the fast head-block notification path
+ * chat-fast-notification-smoke — the fast head-block notification path
  * must be a SAFE SUBSET of the durable path's admission, or it becomes a
  * notification-spam vector. This guard pins every safety property structurally
  * (comment-stripped, so a comment can't satisfy an assertion), so a future
@@ -63,7 +63,7 @@ function read(abs: string): string {
 const chat = read(join(ROOT, 'src/indexer/handlers/chat.ts'));
 const tailer = read(join(ROOT, 'src/indexer/headTailer.ts'));
 const gates = read(join(ROOT, 'src/indexer/chatGates.ts'));
-// v1.18.0 deep-deep (rv1-2): the safe-subset gate is ONE function shared by the
+// the safe-subset gate is ONE function shared by the
 // tailer and the federation intake, so its rule is asserted where it lives.
 const fastGate = read(join(ROOT, 'src/indexer/fastNotifyGate.ts'));
 const intakeRoute = read(join(ROOT, 'src/api/federationChatFast.ts'));
@@ -86,9 +86,15 @@ scenario('durable chat.ts passes ctx.trxId as the dedup key', () => {
 	assert(chat.includes('enqueueChatPush(client'), 'chat.ts does not call the shared enqueue');
 	assert(chat.includes('sourceTrxId: ctx.trxId'), 'chat.ts does not pass ctx.trxId to enqueue');
 });
-scenario('fast tailer passes the block trx id as the dedup key', () => {
+scenario('fast tailer passes the trx id, recomputed from the content, as the dedup key', () => {
 	assert(tailer.includes('enqueueChatPush(this.db'), 'tailer does not call the shared enqueue');
-	assert(tailer.includes('block.transaction_ids[ti]'), 'tailer does not read the on-chain trx id');
+	// VT1-9: the id the serving node lists in `transaction_ids` is its word;
+	// the chain's id is the hash of the content, and the durable path keys on it.
+	assert(
+		tailer.includes('const trxId = transactionIdOf(trx);') &&
+			!tailer.includes('block.transaction_ids['),
+		'tailer does not recompute the trx id from the content'
+	);
 	assert(tailer.includes('sourceTrxId: trxId'), 'tailer does not pass the trx id to enqueue');
 });
 
@@ -130,7 +136,7 @@ scenario('the fast path acts only on recipient-reply OR order-response bypass', 
 		'the fast gate is never evaluated in scanBlock'
 	);
 	assert(
-		/if \(fastAllowed && trxId !== undefined\) \{[\s\S]{0,120}?await this\.maybeFastNotify\(/.test(tailer),
+		/if \(fastAllowed\) \{[\s\S]{0,120}?await this\.maybeFastNotify\(/.test(tailer),
 		'the fast push is not gated on fastAllowed — a first-contact stranger could fast-notify'
 	);
 	assert(
@@ -173,7 +179,7 @@ scenario('service worker pokes every tab with CHAT_PUSH on push', () => {
 	assert(sw.includes('matchAll('), 'SW does not enumerate tabs');
 	// Whitespace-insensitive: the call is prettier-formatted across several
 	// lines, so a single-line regex here was a FALSE NEGATIVE (the wiring was
-	// present and working). Flatten before matching — cp471.
+	// present and working). Flatten before matching.
 	assert(
 		/postMessage\(\s*\{\s*type: 'CHAT_PUSH'/.test(flat(sw)),
 		'SW does not postMessage CHAT_PUSH'

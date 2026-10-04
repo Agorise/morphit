@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { lookupBlurtAccount } from '../src/init/chainCheck.ts';
 import { broadcastCustomJson } from '../src/commands/chainErrors.ts';
 
-type Mode = 'ok' | 'down503' | 'duplicate' | 'flaky';
+type Mode = 'ok' | 'down503' | 'duplicate' | 'flaky' | 'rpcerror';
 /** 'flaky' nodes: the FIRST broadcast any of them receives gets HTTP 503. */
 let broadcastsSeen = 0;
 
@@ -60,6 +60,13 @@ async function startNode(): Promise<Mock> {
 		const method = body?.method ?? '';
 		m.requests.push({ method, params: body?.params });
 		if (m.mode === 'down503') return send(res, 503, { error: 'down' });
+		// A node that answers every read with a generic JSON-RPC error.
+		if (m.mode === 'rpcerror' && method !== 'condenser_api.broadcast_transaction_synchronous')
+			return send(res, 200, {
+				jsonrpc: '2.0',
+				id: 1,
+				error: { code: -32000, message: 'Internal Error' }
+			});
 		if (method === 'condenser_api.get_accounts')
 			return send(res, 200, { result: [{ name: 'alice', balance: '7.000 BLURT' }] });
 		if (method === 'condenser_api.get_dynamic_global_properties')
@@ -180,6 +187,25 @@ describe('lookupBlurtAccount routing (D12)', () => {
 		);
 		expect(info?.balance).toBe('7.000 BLURT'); // a node's answer
 		expect(blocked).toEqual([]);
+	});
+
+	it('indexer down, one node answers reads with an RPC error → the read fails over to the other', async () => {
+		nodeA.mode = 'rpcerror';
+		nodeB.mode = 'ok';
+		const info = await lookupBlurtAccount(
+			'alice',
+			undefined,
+			deps({ indexerBases: [deadIndexer] })
+		);
+		expect(info?.balance).toBe('7.000 BLURT');
+		nodeA.mode = 'ok';
+		nodeB.mode = 'rpcerror';
+		const again = await lookupBlurtAccount(
+			'alice',
+			undefined,
+			deps({ indexerBases: [deadIndexer] })
+		);
+		expect(again?.balance).toBe('7.000 BLURT');
 	});
 
 	it('hidden-only + indexer down → throws, and never touches clearnet', async () => {

@@ -3,7 +3,7 @@
  * Smoke: the unclaimed-rewards "Claim now" feature is wired end-to-end —
  * the op is buildable + broadcastable same-origin, the indexer surfaces the
  * reward fields, and the balance card claims → animates → hides the line.
- * Anchor cp396.
+ * Anchor.
  *
  * THE PRODUCT RULES THIS GUARDS:
  *   1. claim_reward_balance is on the broadcast-proxy op whitelist, so the

@@ -158,16 +158,16 @@ export function resolveSignerPostingPubkey(
  * at 8KB) are downstream of this; this is the universal first
  * gate.
  *
- * Naming note (cp81-A1): the name uses LENGTH rather than BYTES
+ * Naming note: the name uses LENGTH rather than BYTES
  * because `string.length` counts UTF-16 code units, not bytes.
  * A 16K-code-unit multibyte string could be ~64KB on disk.  The
  * defense is correct (parser allocation scales with code units,
  * not bytes), but the original name `MAX_RAW_JSON_BYTES` was
- * misleading.  Renamed to MAX_RAW_JSON_LENGTH in cp82 to match
+ * misleading.  Renamed to MAX_RAW_JSON_LENGTH to match
  * the unit it actually checks; the back-compat alias was
- * removed in cp84 after confirming no external consumer (audit:
+ * removed after confirming no external consumer (audit:
  * repo-wide grep returned only this file + historical changelog
- * entries in TARBALL.md / REVISIT-LIST.md).
+ * entries in the internal journals).
  */
 export const MAX_RAW_JSON_LENGTH = 16 * 1024;
 

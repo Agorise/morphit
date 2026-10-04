@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G12 — counts render in the reader's own digits.
+ * counts render in the reader's own digits.
  *
  * When English formats a count through ICU plural (`{n, plural, … # …}`),
  * the `#` is locale-formatted: "1,234" en, "۱٬۲۳۴" fa. Six fa/zh strings had

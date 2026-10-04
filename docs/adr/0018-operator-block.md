@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-28
-**Deciders:** Agorise team (Claude collaborating)
+**Deciders:** Agorise team
 **Supersedes:** —
 **Related:**
 - ADR-0013 (operator incentives) — defines the operator role and the
@@ -12,6 +12,12 @@
 - ADR-0010 (key custody) — defines the trust-anchor pubkey model;
   this ADR's operator-account gate uses the same configured
   `officialAccountName`.
+
+> **2026-10 audit note.** The gate is `ctx.config.operatorAccountName`
+> (this instance's own operator account), not `officialAccountName` as
+> the Decision below says: a block op counts only when signed by the
+> operator of the instance that reads it
+> (`apps/indexer/src/indexer/handlers/operatorBlock.ts`).
 
 ## Context
 
@@ -32,10 +38,9 @@ revenue stream, and other instance-level concerns. Curation of the
 orderbook surface they expose is in scope for the role but had no
 ship-ready mechanism. The user asked for one.
 
-The user also explicitly framed the UX requirement: "we don't want
-to lose existing users and we certainly don't want to scare away new,
-potential users if they think they might get censored. it has to be
-very clear to everyone why someone got blocked." Operator-instance
+The UX requirement: existing users must not be lost, new users must not
+be scared away by a fear of censorship, and everyone must be able to see
+clearly why someone was blocked. Operator-instance
 blocks must therefore be transparent, scoped, reversible, and clearly
 explained to the affected user — without becoming a punishment vector.
 
@@ -115,7 +120,7 @@ silently transforms the reason to its safe form. Banner re-strips
 on render as a belt-and-braces measure.
 
 Audit finding #10 / #15 in
-`docs/audit/2026-04-28-followup-items-1-thru-6.md` documents the
+the internal audit record followup-items-1-thru-6 (2026-04-28) documents the
 threat model.
 
 ### Notification design: "honest-and-narrow"
@@ -281,10 +286,10 @@ link to operator.
 - Indexer API: `apps/indexer/src/api/operatorBlocks.ts` exposes
   `/v1/operator-blocks/by-blocked/:account` (single-row lookup) and
   `/v1/operator-blocks/by-operator/:operator` (audit listing).
-- ops-cli command: `apps/ops-cli/src/commands/operatorBlock.ts`.
+- ops-cli command: `apps/indexer/src/indexer/handlers/operatorBlock.ts`.
 - Frontend banner: `apps/web/src/lib/components/OperatorBlockBanner.svelte`
   mounted in `+layout.svelte` so it appears on every page.
-- Frontend store: `apps/web/src/lib/stores/operatorBlocks.ts`.
+- Frontend store: `apps/indexer/src/api/operatorBlocks.ts`.
 - Frontend client wrappers: `getOperatorBlockByBlocked`,
   `getOperatorBlocksByOperator` in `lib/indexer/client.ts`.
 - Smokes: 22 scenarios in `operator-block-handler-smoke.ts` covering
@@ -293,7 +298,7 @@ link to operator.
   custom `officialAccountName` config support, sibling-instance
   signature rejection.
 - i18n: 14 banner keys × 10 locales = 140 strings, drift = 0.
-- Audit doc: `docs/audit/2026-04-28-followup-items-1-thru-6.md`.
+- Audit doc: the internal audit record followup-items-1-thru-6 (2026-04-28).
 
 ## Open questions / future work
 
@@ -301,7 +306,7 @@ link to operator.
   `/v1/operator-blocks/by-operator` as a public list ("blocks issued
   by this instance's operator"). Not in this batch — design will
   need to balance the operator's accountability against the blocked
-  users' dignity. Filed in REVISIT-LIST.md §F.27 area.
+  users' dignity. Filed in the project backlog §F.27 area.
 - Banner currently lacks a "talk to operator" fallback when the
   operator hasn't published a chat-identity op. Logged as audit
   finding #16 (INFO).

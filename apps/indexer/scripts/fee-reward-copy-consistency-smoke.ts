@@ -136,8 +136,6 @@ scenario('no FAQ uses "10 BLURT + 10 BP" shorthand (misleading)', () => {
 
 scenario('no docs use the misleading shorthand either', () => {
 	const docs = [
-		'docs/AUDIT-2026-05.md',
-		'docs/REVISIT-LIST.md',
 		'docs/adr/0011-dynamic-fee-model.md',
 		'docs/adr/0013-operator-incentives.md',
 		'docs/FEES-AND-REWARDS.md'

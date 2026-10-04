@@ -2,11 +2,11 @@
 /**
  * xrp-trade-only-smoke.
  *
- * Part 122 cp49 sentinel: XRP (Ripple) must be
+ * XRP (Ripple) must be
  * `canPayListingFee: false` AND `canBeTraded: true` in BOTH the
  * canonical and frontend asset registries.
  *
- * Memory #23 invariant pinned from two directions: canonical
+ * The frozen fee_method invariant pinned from two directions: canonical
  * registry's `canPayListingFee: true → ticker ∈ {BLURT, BTC,
  * XMR}` rule means a future contributor flipping XRP's flag to
  * true would fail asset-registry-smoke first.  This smoke is the
@@ -24,7 +24,7 @@
  *
  * LL #50 NOTE: XRP addresses use the 'r' prefix which is unique
  * among Morphit assets.  No cross-asset overlap expected — but
- * the address-shape-overlap-smoke at cp42 captures any unexpected
+ * the address-shape-overlap-smoke captures any unexpected
  * collisions.
  *
  * XRPL-SPECIFIC UX NOTES (documented in privacy.guides.xrp):
@@ -62,8 +62,8 @@ if (!canonXrp) {
 	pass('canonical registry contains XRP entry');
 	if (canonXrp.canBeTraded === true) pass('canonical XRP.canBeTraded === true');
 	else fail('canonical XRP.canBeTraded === true', `actual: ${canonXrp.canBeTraded}`);
-	if (canonXrp.canPayListingFee === false) pass('canonical XRP.canPayListingFee === false (memory #23)');
-	else fail('canonical XRP.canPayListingFee === false (memory #23)', `actual: ${canonXrp.canPayListingFee}`);
+	if (canonXrp.canPayListingFee === false) pass('canonical XRP.canPayListingFee === false (trade-only rule)');
+	else fail('canonical XRP.canPayListingFee === false (trade-only rule)', `actual: ${canonXrp.canPayListingFee}`);
 	if (canonXrp.decimals === 6) pass('canonical XRP.decimals === 6 (drops)');
 	else fail('canonical XRP.decimals === 6 (drops)', `actual: ${canonXrp.decimals}`);
 	if (Array.isArray(canonXrp.supportedNetworks) && canonXrp.supportedNetworks.length === 1 && canonXrp.supportedNetworks[0] === 'mainnet') {
@@ -98,7 +98,7 @@ if (!feXrp) {
 	pass('frontend registry contains xrp entry');
 	if (feXrp.canBeTraded === true) pass('frontend xrp.canBeTraded === true');
 	else fail('frontend xrp.canBeTraded === true', `actual: ${feXrp.canBeTraded}`);
-	if (feXrp.canBeUsedForListingFee === false) pass('frontend xrp.canBeUsedForListingFee === false (memory #23)');
+	if (feXrp.canBeUsedForListingFee === false) pass('frontend xrp.canBeUsedForListingFee === false (trade-only rule)');
 	else fail('frontend xrp.canBeUsedForListingFee === false', `actual: ${feXrp.canBeUsedForListingFee}`);
 	if (feXrp.decimals === 6) pass('frontend xrp.decimals === 6');
 	else fail('frontend xrp.decimals === 6', `actual: ${feXrp.decimals}`);

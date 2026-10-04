@@ -9,7 +9,7 @@
  *   - Pure helpers live here: build/recover wrap given an HMAC
  *     callback.  Smoke-testable with a stub HMAC.
  *   - WebHID transport lives in `transport.ts` (browser-only, not
- *     smoke-testable in the sandbox).  Transport returns a function
+ *     smoke-testable under Node).  Transport returns a function
  *     that performs an HMAC operation; the helpers in this file
  *     consume that callback.
  *
@@ -53,19 +53,28 @@ export type YubikeyHmacFn = (challenge: Uint8Array) => Promise<Uint8Array>;
 
 /** Defensive minimums for the wrap-Argon2id params, mirroring the
  *  passphrase wrap floor (see keystore.ts comment for full
- *  rationale).  cp138 C-1: raised from (1, 1 MB) to libsodium's
+ *  rationale).  raised from (1, 1 MB) to libsodium's
  *  INTERACTIVE values (2, 64 MiB) to close the M4 latent
  *  downgrade-attack vector identified by the 2026-04-28 batch-I
  *  audit.  A tampered envelope cannot claim weak params here. */
 const MIN_ARGON_OPSLIMIT = 2; // crypto_pwhash_OPSLIMIT_INTERACTIVE
 const MIN_ARGON_MEMLIMIT = 64 * 1024 * 1024; // 64 MiB = crypto_pwhash_MEMLIMIT_INTERACTIVE
+/** And ceilings, as for the passphrase wrap: these stored parameters ARE
+ *  used for the derivation, so an unbounded value from a hostile keyfile
+ *  would freeze or crash the tab. */
+const MAX_ARGON_OPSLIMIT = 4; // crypto_pwhash_OPSLIMIT_SENSITIVE
+const MAX_ARGON_MEMLIMIT = 256 * 1024 * 1024; // 256 MiB = crypto_pwhash_MEMLIMIT_MODERATE
 
 function assertSafeKdfParams(p: YubikeyArgonParams): void {
 	if (
 		typeof p.opslimit !== 'number' ||
 		typeof p.memlimit !== 'number' ||
+		!Number.isSafeInteger(p.opslimit) ||
+		!Number.isSafeInteger(p.memlimit) ||
 		p.opslimit < MIN_ARGON_OPSLIMIT ||
-		p.memlimit < MIN_ARGON_MEMLIMIT
+		p.memlimit < MIN_ARGON_MEMLIMIT ||
+		p.opslimit > MAX_ARGON_OPSLIMIT ||
+		p.memlimit > MAX_ARGON_MEMLIMIT
 	) {
 		throw new Error('YubiKey wrap has invalid or unsafe KDF parameters');
 	}
@@ -215,10 +224,9 @@ export async function buildYubikeyWrap(
  *  (OTP/empty), or a non-Yubico HID that returns challenge-INDEPENDENT
  *  bytes.
  *
- *  Why this gate exists (Batch I hardening, 2026-06): the WebHID
- *  transport (`transport.ts`) has known framing defects (see the
- *  diagnosis comment there) and is pending a real-hardware fix.  Its
- *  most likely failure mode is challenge-INDEPENDENT output (a malformed
+ *  Why this gate exists: the WebHID transport (`transport.ts`) has not
+ *  been proved against every key and slot configuration.  Its most
+ *  likely failure mode is challenge-INDEPENDENT output (a malformed
  *  frame is rejected by the key, and the read path returns device status
  *  that does not depend on the challenge).  Pre-gate, `enrollYubikey`
  *  tapped the device exactly once and committed the wrap with NO check

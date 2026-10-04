@@ -144,7 +144,7 @@ export const FX_ANCHOR_EUR_MIN = 0.5;
 export const FX_ANCHOR_EUR_MAX = 2.0;
 
 /**
- * (v1.20.0 fix wave, G5) Copy of `table` without the entries outside
+ * Copy of `table` without the entries outside
  * [FX_RATE_PLAUSIBLE_MIN, FX_RATE_PLAUSIBLE_MAX] (and non-finite /
  * non-positive ones). Providers such as currency-api mix crypto codes into the
  * fiat table (`btc` ≈ 1e-5 per USD); judging the RAW table all-or-nothing threw

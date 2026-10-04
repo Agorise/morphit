@@ -57,7 +57,7 @@
 		if (e.key === 'Enter') submit();
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);

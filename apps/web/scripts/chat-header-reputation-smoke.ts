@@ -2,12 +2,12 @@
 /**
  * Smoke: the chat conversation header shows the peer's reputation cluster —
  * new-trader sprout + ⭐ composite score + trade count — mirroring the order
- * card (the maintainer #4). Anchor 2026-07-08.
+ * card. Anchor 2026-07-08.
  *
  * Data comes from the reputation-receipt summary (same composite score the
  * order cards show); best-effort + silent so it never blocks the chat.
  *
- * cp473 — THIS SMOKE PINNED TWO REAL BUGS, so its assertions are inverted here.
+ * THIS SMOKE PINNED TWO REAL BUGS, so its assertions are inverted here.
  * The header is where a user sizes up a stranger before handing over money, and
  * it was reading the RATING count for two different trade-shaped things:
  *
@@ -16,7 +16,7 @@
  *      completed trades was announced as "9 trades", in all 10 locales.
  *   2. It derived the 🌱 sprout from `summary.count_total`, the receipt's
  *      deliberately UNFILTERED total, which counts rows the indexer threw out
- *      as sock-puppet / pile-on / concentration fraud. Proven at cp473 against
+ *      as sock-puppet / pile-on / concentration fraud. Proven against
  *      real Postgres: 4 flagged sock reviews (0 included, 0 trades) cleared the
  *      "new trader" warning for an account whose real reputation was zero.
  *
@@ -64,12 +64,12 @@ check('loadPeerReputation is best-effort/silent (try/catch, ok-guard)', /if \(!r
 check('loadPeerReputation kicked off on mount', /void loadPeerReputation\(\);/.test(cv));
 
 // header render
-// tt.txt #7 — the sprout moved OUT of the `{#if peerReputation}` reputation
+// the sprout moved OUT of the `{#if peerReputation}` reputation
 // block and onto line 1, at the end of the display name (order-card shape). The
 // intent is unchanged: it renders iff the peer is a new trader.
 check('header renders NewTraderChip when the peer is new', /\{#if peerReputation\?\.isNewTrader\}[\s\S]{0,60}<NewTraderChip \/>/.test(cv));
 check('the sprout is NOT gated on having a reputation score', !/peerReputation\.score[\s\S]{0,120}<NewTraderChip \/>/.test(cv));
-// v1.7.5 (t.txt #8) — these three checks pinned the HAND-ROLLED implementation
+// v1.7.5 — these three checks pinned the HAND-ROLLED implementation
 // (a literal gold-star emoji, a bare trades_only span, a `trades > 0` guard) —
 // which is exactly the implementation the maintainer reported as broken. The emoji renders
 // GOLD when the app's star convention has been the emerald one since v1.5.5, and

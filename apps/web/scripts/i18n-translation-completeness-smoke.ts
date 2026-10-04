@@ -133,12 +133,12 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'contact_protocol.web', locale: 'de', reason: '(b) "Web" is the standard loanword for a web page in de tech UIs' },
 	{ key: 'contact_protocol.web', locale: 'es', reason: '(b) "Web" is the standard loanword for a web page in es tech UIs' },
 	{ key: 'contact_protocol.web', locale: 'fr', reason: '(b) "Web" is the standard loanword for a web page in fr tech UIs' },
-	// ─── v1.9.15 (t.txt, the maintainer) footer column header "SUPPORT" → German "Support"
+	// ─── v1.9.15 footer column header "SUPPORT" → German "Support"
 	//     is the standard loanword for a help/support section in tech UIs (native
 	//     "Unterstützung"/"Hilfe" read oddly as a footer nav label), so it is
 	//     byte-identical to EN.
 	{ key: 'footer.col_support', locale: 'de', reason: '(b) "Support" is the standard German loanword for a help/support nav section; byte-identical to EN' },
-	// ─── v1.9.5 (the maintainer) blog "## Details:" heading — German uses "Details" (the
+	// ─── v1.9.5 blog "## Details:" heading — German uses "Details" (the
 	//     standard loanword; native "Einzelheiten" is rarer in tech UIs), so it is
 	//     byte-identical to EN. It only tripped the heuristic after the heading was
 	//     changed from all-caps bold "DETAILS" to title-case "Details:".
@@ -154,7 +154,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'post_order.form.amount_entered_usd_hint', locale: 'de', reason: '(b) pure interpolation placeholders + math symbol (≈) — no translatable text' },
 	{ key: 'post_order.form.amount_entered_usd_hint', locale: 'es', reason: '(b) pure interpolation placeholders + math symbol (≈) — no translatable text' },
 	{ key: 'post_order.form.amount_entered_usd_hint', locale: 'fr', reason: '(b) pure interpolation placeholders + math symbol (≈) — no translatable text' },
-	// ─── cp321 explorer-account Public Keys card: the four Blurt key-role
+	// ─── explorer-account Public Keys card: the four Blurt key-role
 	//     names (Owner / Active / Posting / Memo) are technical identifiers
 	//     kept in English in EVERY locale by project convention — exactly as
 	//     backup_keys_panel.role.* does ("Owner-Schlüssel" / "Clave Owner" /
@@ -173,14 +173,14 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'explorer.account.key_memo', locale: 'de', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
 	{ key: 'explorer.account.key_memo', locale: 'es', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
 	{ key: 'explorer.account.key_memo', locale: 'fr', reason: '(c) Blurt key-role identifier kept in English by project convention (mirrors backup_keys_panel.role.*)' },
-	// cp305 — the sign-out-before-switch modal's confirm button is "OK"
+	// the sign-out-before-switch modal's confirm button is "OK"
 	// per the maintainer's explicit two-button [Cancel / OK] spec for this dialog.
 	// "OK" is an internationally-recognized affirmation rendered
 	// identically in these locales (it/pl already pass the heuristic);
 	// it is the intended text, not an untranslated miss.
 	{ key: 'login.signout_before_switch_modal.confirm', locale: 'de', reason: '(b) "OK" is a universal affirmation loanword; intentional per the modal\'s Cancel/OK spec' },
 	{ key: 'login.signout_before_switch_modal.confirm', locale: 'fr', reason: '(b) "OK" is a universal affirmation loanword; intentional per the modal\'s Cancel/OK spec' },
-	// ─── cp229 RSS feed-format names: "RSS 2.0", "Atom", "JSON" are
+	// ─── RSS feed-format names: "RSS 2.0", "Atom", "JSON" are
 	//     proper-noun / technical format identifiers, byte-identical in
 	//     every locale by design (the 3-format RSS feature). The
 	//     surrounding copied-to-clipboard sentences ARE translated;
@@ -194,7 +194,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'rss.format_json', locale: 'de', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
 	{ key: 'rss.format_json', locale: 'es', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
 	{ key: 'rss.format_json', locale: 'fr', reason: '(c) "JSON" is a feed-format name (technical identifier); identical in every locale' },
-	// cp295 — the footer link was shortened from "PGP keys" to the bare
+	// the footer link was shortened from "PGP keys" to the bare
 	// acronym "PGP" (the maintainer's batch item D). "PGP" is a universal
 	// cryptography acronym, written the same in every locale, so being
 	// byte-identical to English here is the CORRECT rendering, not a miss.
@@ -209,7 +209,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'footer.api', locale: 'es', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
 	{ key: 'footer.api', locale: 'fr', reason: '(c) "API" is a universal programming acronym; identical in every locale' },
 	{ key: 'footer.contact', locale: 'fr', reason: '(a) "Contact" is also French (same spelling, same meaning)' },
-	// cp423 — the chat-inbox "RE:" prefix on the "RE: <order title>" subline.
+	// the chat-inbox "RE:" prefix on the "RE: <order title>" subline.
 	// "RE:" (from Latin "in re" = "regarding") is an internationally-recognized
 	// convention rendered identically in email clients across languages; it is
 	// the maintainer's literal wording and the intended text, not an untranslated miss.
@@ -222,7 +222,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	// interpolated HTTP status code follows, so es is legitimately
 	// byte-identical to EN here. (fr/de/it/pl/ru/fa/zh all differ.)
 	{ key: 'settings.endpoints.http_error', locale: 'es', reason: '(b) "Error" is identical in Spanish (cognate); the rest is the interpolated HTTP {code}' },
-	// ─── cp115 network product names: Latin-script brand names that
+	// ─── network product names: Latin-script brand names that
 	//     legitimately do NOT translate.  Arbitrum, Base, Polygon are
 	//     Layer-2 network product names (registered marks).  BEP-20
 	//     and TRC-20 are technical token-standard identifiers (binance
@@ -678,7 +678,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'relative_time.terse.months', locale: 'fr', reason: '(b) "mo" = "mois" — unusual but used' },
 	{ key: 'clearing_price.window_label', locale: 'es', reason: '(b) "{days}d" duration shorthand' },
 	{ key: 'clearing_price.window_label', locale: 'pl', reason: '(b) "{days}d" duration shorthand' },
-	// Part 108++ — wallet brand/product names: invariant across all locales
+	// later+ — wallet brand/product names: invariant across all locales
 	{ key: 'post_order.fee_method.tx_key_how_to_monerujo_heading', locale: 'es', reason: '(c) "Monerujo" is a brand/product name' },
 	{ key: 'post_order.fee_method.tx_key_how_to_monerujo_heading', locale: 'fr', reason: '(c) "Monerujo" is a brand/product name' },
 	{ key: 'post_order.fee_method.tx_key_how_to_monerujo_heading', locale: 'de', reason: '(c) "Monerujo" is a brand/product name' },
@@ -725,7 +725,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'post_order.fee_method.tx_key_how_to_feather_heading', locale: 'zh-CN', reason: '(c) "Feather Wallet" is a brand/product name' },
 	{ key: 'post_order.fee_method.tx_key_how_to_feather_heading', locale: 'zh-HK', reason: '(c) "Feather Wallet" is a brand/product name' },
 
-	// ─── Part 121 — USDT proper nouns ───
+	// ─── USDT proper nouns ───
 	// "Tether" is a brand name; same spelling in all Latin-script
 	// locales.  fa/zh-CN/zh-HK get native transliterations (تتر,
 	// 泰达币, 泰達幣) so they're not in the allow-list.
@@ -777,7 +777,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'chat.address.method_usdt', locale: 'zh-CN', reason: '(c) "USDT" is a universal acronym' },
 	{ key: 'chat.address.method_usdt', locale: 'zh-HK', reason: '(c) "USDT" is a universal acronym' },
 
-	// ─── (c) cp64: per-asset invariants (proper nouns / acronyms / protocol identifiers) — Memory #29 native-locale policy ───
+	// ─── (c): per-asset invariants (proper nouns / acronyms / protocol identifiers) — the native-locale policy ───
 	{ key: 'chat.address.method_arrr', locale: 'es', reason: `(c) "ARRR" is the universal ticker symbol; no translation` },
 	{ key: 'chat.address.method_arrr', locale: 'fr', reason: `(c) "ARRR" is the universal ticker symbol; no translation` },
 	{ key: 'chat.address.method_arrr', locale: 'de', reason: `(c) "ARRR" is the universal ticker symbol; no translation` },
@@ -1075,12 +1075,12 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'assets.usdc.price_subline.live', locale: 'fa', reason: `(c) "1 USDC = \${price} live" — brand + placeholder; "live" stays English in most locales as a UI status indicator` },
 	{ key: 'assets.usdc.price_subline.live', locale: 'zh-CN', reason: `(c) "1 USDC = \${price} live" — brand + placeholder; "live" stays English in most locales as a UI status indicator` },
 	{ key: 'assets.usdc.price_subline.live', locale: 'zh-HK', reason: `(c) "1 USDC = \${price} live" — brand + placeholder; "live" stays English in most locales as a UI status indicator` },
-	// ─── cp116 setup-wizard same-spelling cases: short labels that
+	// ─── setup-wizard same-spelling cases: short labels that
 	//     legitimately match English in some locales. ──────────────
 	{ key: 'admin.setup_wizard.payment.category_online', locale: 'de', reason: `(b) "Online" is the same word in German UI conventions; identical to EN by accepted usage` },
 	{ key: 'admin.setup_wizard.payment.category_crypto', locale: 'fr', reason: `(b) "Crypto" is the same word in French UI conventions; identical to EN by accepted usage` },
 	{ key: 'admin.setup_wizard.payment.description_label', locale: 'fr', reason: `(b) "Description" is the same word in French; identical to EN by spelling identity` },
-	// ─── ADR-0043 / cp132 2FA: closed-source-authenticator brand
+	// ─── ADR-0043 / 2FA: closed-source-authenticator brand
 	//     names that do NOT translate.  Google Authenticator,
 	//     Microsoft Authenticator, and Authy are product names
 	//     trademarked by their respective vendors; their .name
@@ -1095,7 +1095,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'de', reason: '(c) "Authy" is a registered product name; does not translate' },
 	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'es', reason: '(c) "Authy" is a registered product name; does not translate' },
 	{ key: 'settings.totp.not_recommended_apps.authy.name', locale: 'fr', reason: '(c) "Authy" is a registered product name; does not translate' },
-	// cp396 — "Blockchain" is a universally-adopted loanword; the body text in
+	// "Blockchain" is a universally-adopted loanword; the body text in
 	// each of these locales uses it verbatim, so the glossary TITLE matches it
 	// by design. (it/pl already use "blockchain" elsewhere and pass the
 	// heuristic; ru/fa/zh translate it: Блокчейн / بلاکچین / 区块链 / 區塊鏈.)
@@ -1104,7 +1104,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'glossary.blockchain.title', locale: 'fr', reason: '(b) "Blockchain" is a universal tech loanword; body uses it verbatim' },
 	{ key: 'orderbook.card.message_word', locale: 'fr', reason: '(a) "Message" is the same word in French; translating it would be wrong (cp404)' },
 	{ key: 'chat.export.parties_heading', locale: 'fr', reason: '(a) "Parties" is the same word in French — the parties to an agreement (cp404)' },
-	// cp424 — "Power up" / "Power down" are Blurt operation terms of art,
+	// "Power up" / "Power down" are Blurt operation terms of art,
 	// kept verbatim like BLURT / BP. blurtwallet.com and Morphit's own FAQ
 	// (all 10 locales) use them untranslated; the wallet modal's subtitles
 	// + schedule notice ARE fully translated around them.
@@ -1120,14 +1120,14 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'profile.wallet.power_down_title', locale: 'de', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
 	{ key: 'profile.wallet.power_down_title', locale: 'es', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
 	{ key: 'profile.wallet.power_down_title', locale: 'fr', reason: '(c) "Power down BP" is all Blurt terms (Power down + BP); invariant across locales' },
-	// cp466 — the #2 Terms markdown-guide modal (post_order.terms_md_guide.*).
+	// the #2 Terms markdown-guide modal (post_order.terms_md_guide.*).
 	// German translates most element names (Heading→Überschrift, Bold→Fett,
 	// Link's row label stays a table cell) but two are byte-identical to English
 	// by correct German usage, not a miss: "Element" is a German cognate, and
 	// "Link" is the standard German loanword for a hyperlink (der Link).
 	{ key: 'post_order.terms_md_guide.col_element', locale: 'de', reason: '(a) "Element" is a German cognate — spelled identically to English' },
 	{ key: 'post_order.terms_md_guide.el_link', locale: 'de', reason: '(b) "Link" is the standard German loanword for a hyperlink (der Link)' },
-	// ─── FAQ glossary acronyms (2026-07-19, the maintainer): the 12 technical
+	// ─── FAQ glossary acronyms: the 12 technical
 	//     acronyms added as glossary terms have TITLES equal to the
 	//     acronym itself (ECIES / X25519 / TLS / …). Acronyms are not
 	//     translated, so the title is byte-identical to English in every
@@ -1169,7 +1169,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	{ key: 'glossary.x25519.title', locale: 'de', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
 	{ key: 'glossary.x25519.title', locale: 'es', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
 	{ key: 'glossary.x25519.title', locale: 'fr', reason: '(c) universal acronym / technical identifier — not translated in any locale' },
-	// Website / Streaming profile cards (cp506)
+	// Website / Streaming profile cards
 	{ key: 'footer.globe', locale: 'de', reason: '(b) "Website" is a German loanword, spelled identically to English' },
 	{ key: 'identity.website_link_tooltip', locale: 'de', reason: '(b) "Website" is a German loanword, spelled identically to English' },
 	{ key: 'footer.play', locale: 'de', reason: '(b) "Streaming" is a loanword, spelled identically to English' },
@@ -1185,7 +1185,7 @@ const ALLOW_LIST: AllowEntry[] = [
 	// device, and all three detail sentences) ARE translated, so this is a
 	// single-word coincidence and not an untranslated section.
 	{ key: 'settings.visibility.public', locale: 'fr', reason: '(b) coincidental same spelling — "Public" is the correct French word' },
-	// t.txt #3 — the operators-subtitle linked word. "instances" is the same word
+	// the operators-subtitle linked word. "instances" is the same word
 	// in French and English (coincidental same spelling / loanword); the sibling
 	// subtitle text is fully translated, so this is a single-word coincidence, not
 	// an untranslated miss.
@@ -1225,16 +1225,16 @@ const allowSet = new Set(ALLOW_LIST.map((e) => `${e.key}::${e.locale}`));
 interface Finding { key: string; locale: string; value: string }
 const findings: Finding[] = [];
 
-// Memory #29 policy on locale-translation requirements:
+// The native-locale policy on locale-translation requirements:
 //   - en/es/fr/de: MUST be natively translated for new keys
 //     (the "native-translation locales").
 //   - fa/it/pl/ru/zh-CN/zh-HK: EN-fallback acceptable as
 //     community-translation backlog (the "policy-fallback
 //     locales").  Each EN-identical string in these locales is
-//     the documented Memory #29 backlog state, NOT a translation
+//     the documented native-locale policy backlog state, NOT a translation
 //     miss.  This smoke skips the byte-identical check for them.
 //
-// The native-translations-floor-smoke (LL #47) covers the
+// The native-translations-floor-smoke covers the
 // orthogonal regression case — "going down" from a previously-
 // native string back to EN-fallback — for ALL 9 non-EN locales.
 // This smoke handles the "must be native per policy" forward
@@ -1246,7 +1246,7 @@ for (const [k, enV] of en) {
 	// Skip strings that are pure format/identifiers (no alpha chars).
 	if (![...enV].some((c) => /[a-zA-Z]/.test(c))) continue;
 	for (const l of nonEn) {
-		if (POLICY_FALLBACK_LOCALES.has(l)) continue; // Memory #29 backlog (reduced to ~49 long-form keys at cp68)
+		if (POLICY_FALLBACK_LOCALES.has(l)) continue; // the native-locale policy backlog (reduced to ~49 long-form keys)
 		const lV = data.get(l)!.get(k);
 		if (lV === undefined) continue; // structural drift caught by parity smoke
 		if (lV !== enV) continue; // translated, fine

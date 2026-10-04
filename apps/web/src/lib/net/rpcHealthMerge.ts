@@ -2,7 +2,7 @@
  * rpcHealthMerge — reconcile a fresh active-probe result with the passive
  * (smoothed pool) health snapshot for the stats-page RPC endpoints card.
  *
- * WHY (the maintainer): the card shows the passive snapshot instantly, then fires ONE fresh
+ * WHY: the card shows the passive snapshot instantly, then fires ONE fresh
  * `?probe=1` ping and repaints with it. A single fresh ping is one sample — a
  * node on flaky WiFi, or a jittery Tor/I2P circuit, can miss that one request
  * while being up the vast majority of the time (the smoothed snapshot still

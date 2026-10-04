@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the canary timestamp parser is implemented twice, and the two copies
- * must never disagree (cp442).
+ * must never disagree.
  *
  *   • `scripts/canary/verify.ts`      — the operator-facing verifier CLI
  *   • `apps/ops-cli/src/canaryTime.ts` — used by `morphit-ops` health

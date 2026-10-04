@@ -4,10 +4,14 @@
  * Item 3.  Two routes:
  *
  *   GET /v1/operator-blocks/by-blocked/:account
- *     Returns the operator-block record (if any) currently in effect
- *     against `:account`.  Used by the frontend banner to detect
- *     whether the signed-in user has been operator-blocked on this
- *     instance.  Response shape:
+ *     Returns THIS instance's operator's block (if any) currently in
+ *     effect against `:account` — the only block that hides anything
+ *     here.  Used by the frontend banner to detect whether the
+ *     signed-in user has been operator-blocked on this instance.
+ *     (Every operator's chain-origin blocks are indexed; answering
+ *     with whichever was newest told a user they were blocked here
+ *     because some other instance blocked them, and published that
+ *     other operator's list.)  Response shape:
  *       { account, blocked: false }
  *     when no block, or
  *       { account, blocked: true, operator, reason,
@@ -61,7 +65,7 @@ interface ByOperatorRow {
 	updated_at: Date;
 }
 
-export function operatorBlocksRoute(db: Database): Hono {
+export function operatorBlocksRoute(db: Database, operatorAccount: string): Hono {
 	const app = new Hono();
 
 	// ─── /by-blocked/:account ─────────────────────────────────────
@@ -79,12 +83,11 @@ export function operatorBlocksRoute(db: Database): Hono {
 			       created_at,
 			       updated_at
 			FROM operator_blocks
-			WHERE blocked = $1 AND state = 'blocked'
-			ORDER BY updated_at DESC
+			WHERE blocked = $1 AND operator = $2 AND state = 'blocked'
 			LIMIT 1
 		`;
 
-		const result = await db.query<ByBlockedRow>(sql, [account]);
+		const result = await db.query<ByBlockedRow>(sql, [account, operatorAccount]);
 		const row = result.rows[0];
 		if (!row) {
 			return c.json({ account, blocked: false });

@@ -22,17 +22,31 @@
  */
 
 import { computeReputationScore } from '$indexer/reputation/score';
+import { REPUTATION_DECAY_HALF_LIFE_DAYS } from '$indexer/reputation/decay';
 
 /**
- * The four sock-puppet / brigading exclusions, plus the trade-bound filter.
- *
- * Written ONCE. Three queries need them: the orderbook + featured aggregate
- * (below), and the RSS feed's count-only `min_trades` subquery. A copy that
- * drifted would publish inflated reputation on whichever surface got the stale
- * clause — and the surfaces are exactly where a stranger sizes up whether to
- * hand a counterparty money.
- *
- * Assumes the feedback table is aliased `fb`.
+ * A feedback row's time-decay weight, 0.5^(age / half-life), in DOUBLE
+ * PRECISION. The same formula as decay.ts's reputationDecayWeight (the JS the
+ * verifiable receipt uses). In NUMERIC, POWER is ~20 µs a call; over a
+ * 50,000-review table that was a full second on every orderbook page.
+ */
+export function decayWeightSql(createdAt: string): string {
+	return `POWER(0.5::float8, EXTRACT(EPOCH FROM (NOW() - ${createdAt}))::float8 / ${REPUTATION_DECAY_HALF_LIFE_DAYS * 86400}.0)`;
+}
+
+/**
+ * The decay-weighted average rating to two decimals, as NUMERIC (NULL when no
+ * row qualifies). `filter` is an optional aggregate FILTER condition.
+ */
+export function weightedRatingSql(rating: string, createdAt: string, filter = ''): string {
+	const f = filter ? ` FILTER (WHERE ${filter})` : '';
+	const w = decayWeightSql(createdAt);
+	return `ROUND((SUM(${rating} * ${w})${f} / NULLIF(SUM(${w})${f}, 0))::numeric, 2)`;
+}
+
+/**
+ * The four sock-puppet / brigading signals for one review, as a predicate that
+ * is TRUE when the review COUNTS (none of them flags the pair):
  *
  *   1. suspicious_reciprocity — repetitive (reviewer, subject) pairs.
  *   2. related_accounts       — known-linked accounts.
@@ -40,46 +54,76 @@ import { computeReputationScore } from '$indexer/reputation/score';
  *   4. review_concentration   — Signal D, reviewers who aim >=80% of their
  *                               reviews at a single subject.
  *
- * Also drops feedback with a NULL order_permlink (Finding G2.1): untethered
+ * Written ONCE and used by every place that judges a review: the orderbook,
+ * featured and feed aggregates (via {@link FEEDBACK_EXCLUSIONS_SQL}), the
+ * profile summary, and the per-row `suppressed` flag on both review lists
+ * (`NOT (…)`). A copy that drifted would publish inflated reputation, or a list
+ * that disagrees with the score above it, on whichever surface got the stale
+ * clause.
+ *
+ * `reviewer` / `subject` are SQL expressions (column references or
+ * placeholders); nothing is bound here.
+ */
+export function feedbackPairCountsSql(reviewer: string, subject: string): string {
+	return `NOT EXISTS (
+	        SELECT 1 FROM suspicious_reciprocity sr
+	         WHERE sr.account_a = LEAST(${reviewer}, ${subject})
+	           AND sr.account_b = GREATEST(${reviewer}, ${subject})
+	    )
+	      AND NOT EXISTS (
+	        SELECT 1 FROM related_accounts ra
+	         WHERE ra.account_a = LEAST(${reviewer}, ${subject})
+	           AND ra.account_b = GREATEST(${reviewer}, ${subject})
+	    )
+	      AND NOT EXISTS (
+	        SELECT 1 FROM one_way_pile_on owpo,
+	                     jsonb_array_elements(owpo.attacking_reviewers) attacker
+	         WHERE owpo.subject = ${subject}
+	           AND attacker->>'reviewer' = ${reviewer}
+	    )
+	      AND NOT EXISTS (
+	        SELECT 1 FROM review_concentration rc
+	         WHERE rc.reviewer = ${reviewer}
+	           AND rc.dominant_subject = ${subject}
+	    )`;
+}
+
+/**
+ * TRUE when the feedback row aliased `alias` is its reviewer's LATEST
+ * order-bound review of that subject (by created_at, then id). A reviewer's
+ * opinion of a trader counts once, whatever number of the trader's orders it
+ * cites: one counterparty used to file a 1★ review per fee-paid order the
+ * victim ever posted and take a 5.00 rating to 2.82.
+ */
+export function latestReviewOfPairSql(alias: string): string {
+	return `NOT EXISTS (
+	        SELECT 1 FROM feedback fb_later
+	         WHERE fb_later.reviewer = ${alias}.reviewer
+	           AND fb_later.subject = ${alias}.subject
+	           AND fb_later.order_permlink IS NOT NULL
+	           AND (fb_later.created_at, fb_later.id) > (${alias}.created_at, ${alias}.id)
+	    )`;
+}
+
+/**
+ * The aggregate WHERE clause: {@link feedbackPairCountsSql}, one review per
+ * (reviewer, subject) ({@link latestReviewOfPairSql}), and the trade-bound
+ * filter. Assumes the feedback table is aliased `fb`.
+ *
+ * Drops feedback with a NULL order_permlink (Finding G2.1): untethered
  * feedback doesn't drive the reputation signal, which closes the "real human
  * Alice writes vague positive feedback for stranger Bob she never traded with"
  * path that sock-puppet detection (which only catches REPETITIVE pairs) misses.
  */
 export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
-	      AND NOT EXISTS (
-	        SELECT 1 FROM suspicious_reciprocity sr
-	         WHERE sr.account_a = LEAST(fb.reviewer, fb.subject)
-	           AND sr.account_b = GREATEST(fb.reviewer, fb.subject)
-	    )
-	      AND NOT EXISTS (
-	        SELECT 1 FROM related_accounts ra
-	         WHERE ra.account_a = LEAST(fb.reviewer, fb.subject)
-	           AND ra.account_b = GREATEST(fb.reviewer, fb.subject)
-	    )
-	      -- Signal C exclusion (Part 113): drop rows from
-	      -- coordinated pile-on attackers (see one_way_pile_on
-	      -- migration v31 + feedback.ts comments for design).
-	      AND NOT EXISTS (
-	        SELECT 1 FROM one_way_pile_on owpo,
-	                     jsonb_array_elements(owpo.attacking_reviewers) attacker
-	         WHERE owpo.subject = fb.subject
-	           AND attacker->>'reviewer' = fb.reviewer
-	    )
-	      -- Signal D exclusion (cp123 H2): drop rows from
-	      -- reviewers flagged for concentrating ≥80% of their
-	      -- reviews on a single subject (closes Part 113 A4
-	      -- residual).  See signals.ts: detectReviewConcentration.
-	      AND NOT EXISTS (
-	        SELECT 1 FROM review_concentration rc
-	         WHERE rc.reviewer = fb.reviewer
-	           AND rc.dominant_subject = fb.subject
-	    )`;
+	      AND ${feedbackPairCountsSql('fb.reviewer', 'fb.subject')}
+	      AND ${latestReviewOfPairSql('fb')}`;
 
 /**
  * v1.5.5 — COMPLETED-TRADE count per account, sock-puppet filtered.
  *
- * the maintainer: "if an order was marked as completed (not canceled or expired), then
- * imo that counts as 1 completed trade even if no stars were left." So the
+ * Requirement: an order marked completed (not cancelled or expired) counts as one completed
+ * trade, even when no stars were left. So the
  * trade count is now grounded in COMPLETIONS, not reviews — a real trade where
  * nobody bothered to leave stars still counts, and a zero-review trade never
  * drags a score down (it isn't in the rating average at all).
@@ -89,7 +133,7 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
  * ever accrue trades — a taker owns no order and would read "0 trades" forever
  * however many trades they completed.
  *
- * EXCLUSIONS (the maintainer, cp472 tightening #2): the same sock-puppet PAIR signals the
+ * EXCLUSIONS (tightening #2): the same sock-puppet PAIR signals the
  * rating aggregate applies —
  *   1. suspicious_reciprocity — flagged repetitive pairs
  *   2. related_accounts       — known-linked accounts
@@ -106,7 +150,7 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
  * applied here: both describe REVIEW patterns (attackers piling reviews onto a
  * subject; a reviewer aiming ≥80% of their REVIEWS at one subject). Neither has
  * a trade analogue in the data, and pretending otherwise would silently void
- * legitimate trades. See REVISIT for the documented residual (a pair with no
+ * legitimate trades. See the backlog for the documented residual (a pair with no
  * flag can still mint repeat trade credits at one listing fee each).
  *
  * A completion with NO named counterparty still credits the owner: there's no
@@ -123,7 +167,7 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
  *   count of an account it keeps.
  */
 /*
- * (v1.18.0 deep-deep, M2) FEE-PAID ONLY. What was wrong: every completed order
+ * FEE-PAID ONLY. What was wrong: every completed order
  * counted, whatever its fee_status — an order op with NO fee transfer (row
  * fee_status='missing') plus an order_complete op minted a trade credit for two
  * free custom_json ops, so the "costs a real listing fee per fake trade" claim
@@ -135,7 +179,7 @@ export const FEEDBACK_EXCLUSIONS_SQL = `	    WHERE fb.order_permlink IS NOT NULL
  * completing an order is also how its owner takes it down, and a read-side
  * filter corrects already-indexed rows immediately, with no re-index.
  *
- * (v1.18.0 deep-deep, M3) A free first-buy waiver order (fee_method
+ * A free first-buy waiver order (fee_method
  * 'waived_first_buy', recorded as 'verified' at zero cost) still credits its
  * OWNER — it is their real first trade — but never the named counterparty:
  * otherwise every free sock signup could mint one trade credit for a target.
@@ -222,13 +266,9 @@ export function feedbackAggregateJoin(orderAlias = 'o', scopeSubjectsSql?: strin
 	   -- stranger Bob she never traded with" attack path.
 	   SELECT subject, COUNT(*)::int AS c,
 	          MAX(created_at) AS last_feedback_at,
-	          -- cp123 H1: time-decay weighted rating with 365-day
-	          -- half-life.  See indexer/reputation/decay.ts.
-	          ROUND(
-	            SUM(rating * POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))) /
-	            NULLIF(SUM(POWER(0.5, EXTRACT(EPOCH FROM (NOW() - created_at)) / (365 * 86400.0))), 0),
-	            2
-	          )::numeric AS r
+	          -- Time-decay weighted rating, 365-day half-life
+	          -- (indexer/reputation/decay.ts).
+	          ${weightedRatingSql('rating', 'created_at')} AS r
 	     FROM feedback fb
 ${FEEDBACK_EXCLUSIONS_SQL}${scope}
 	    GROUP BY subject
@@ -242,7 +282,7 @@ ${FEEDBACK_EXCLUSIONS_SQL}${scope}
  *
  * Kept as its own join rather than folded into {@link feedbackAggregateJoin}
  * because trades and ratings are now DIFFERENT numbers with different sources:
- * trades come from completed ORDERS, ratings from FEEDBACK. the maintainer asked for them
+ * trades come from completed ORDERS, ratings from FEEDBACK. The maintainer asked for them
  * shown side by side ("1 trade · ★5.00 (34)") precisely so the ratings count
  * still says how many ratings back the average — folding them together is what
  * would make "★5.00 (34)" imply 34 ratings when 34 might be trades.
@@ -267,7 +307,7 @@ ${tradeCountSql(scopeAccountsSql)}
  *
  * Keep in lockstep with {@link ReputationRow} and `reputationFieldsFromRow`.
  *
- * cp473 — `trade_count` and the trade-derived `is_new_trader` are emitted HERE
+ * `trade_count` and the trade-derived `is_new_trader` are emitted HERE
  * rather than left to each caller. v1.5.5 re-pointed both at real completions
  * (`tc.c`) on /v1/orderbook + /v1/orders/:account by hand-editing those two
  * queries, but this shared helper still read the FEEDBACK proxy (`f.c`) — so
@@ -301,7 +341,7 @@ export function reputationSelectColumns(
  * LEFT JOIN the poster's PROFILE so a listing row carries its own display name
  * and avatar. Exposes `<alias>.display_name` and `<alias>.json_metadata`.
  *
- * v1.8.13 (the maintainer) — WHY THIS IS A TRUST FIX, NOT A PERFORMANCE ONE.
+ * v1.8.13 — WHY THIS IS A TRUST FIX, NOT A PERFORMANCE ONE.
  *
  * The orderbook returned `posting_pubkey` inline but not the profile, so the
  * browser had to make a SECOND round-trip for names and avatars. Cards

@@ -1,6 +1,6 @@
 /**
  * A tiny in-process Blurt chain + JSON-RPC nodes for relay smokes (v1.20.0
- * fix wave 4). Adapted from the independent verifier's harness (scratchpad
+ * 4). Adapted from the independent verifier's harness (scratchpad
  * V2/fakechain.ts). Every node shares one chain; each node's behaviour is
  * mutable so a scenario can make one hang, lie, lag, or lose replies.
  *

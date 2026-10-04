@@ -1,5 +1,5 @@
 /**
- * Chat folder-state op broadcaster (t.txt v1.4.9 #5).
+ * Chat folder-state op broadcaster.
  *
  * Encrypts the user's chat folder organization (which threads are kept in
  * Inbox / Starred) with a posting-key-derived key (see folderCrypto) and

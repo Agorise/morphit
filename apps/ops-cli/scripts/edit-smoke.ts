@@ -96,7 +96,7 @@ scenario('SEO copy with spaces (parseEnv consumer = single-quoted, no apostrophe
 		['MORPHIT_INSTANCE_SEO_TITLE', 'My Privacy-First Instance']
 	]);
 	// SEO copy goes to morphit.config.env which is read by Node's
-	// parseEnv via operator-config.  cp139-D-1 v2: prefer single-
+	// parseEnv via operator-config.  v2: prefer single-
 	// quoted form (works for everything except apostrophe values).
 	// Since "My Privacy-First Instance" has no apostrophe, it's
 	// emitted single-quoted.

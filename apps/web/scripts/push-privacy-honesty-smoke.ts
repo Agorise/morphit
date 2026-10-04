@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — push-privacy honesty smoke (v1.7.7, t.txt #6).
+ * Morphit — push-privacy honesty smoke (v1.7.7).
  *
  * A privacy control that does nothing is worse than no control: it converts a
  * cautious user's care into false confidence, on the one panel where that costs
@@ -19,7 +19,7 @@
  * redirect it. UnifiedPush is the only design where a user genuinely picks their
  * own push server — a feature, not a radio button.
  *
- * the maintainer chose: remove the option, fix the FAQ.
+ * The maintainer chose: remove the option, fix the FAQ.
  *
  * These checks pin the OUTCOME, so the option cannot creep back without the
  * delivery path that would make it true:

@@ -2,7 +2,7 @@
 /**
  * what-is-morphit-asset-enum-smoke.
  *
- * cp131 DEEP-001 STRUCTURAL DEFENSE.
+ * STRUCTURAL DEFENSE.
  *
  * The FAQ entry `what_is_morphit` is the FIRST answer a new user
  * reads.  Its body contains a parenthetical enumeration of every
@@ -10,8 +10,8 @@
  * USD Coin (USDC), Dai, Bitcoin Cash, Litecoin, Dash, Dogecoin,
  * Zcash, Pirate Chain, Decred, Solana, Ethereum, and XRP)").
  *
- * Drift class caught at cp131: the enumeration stopped at
- * Dogecoin while the registry kept growing through cp124+.  The
+ * Drift class caught: the enumeration stopped at
+ * Dogecoin while the registry kept growing through later.  The
  * canonical "Morphit supports these N assets" pitch was
  * underclaiming capability on the headline FAQ for a dozen
  * checkpoints.
@@ -66,7 +66,7 @@ const ENGLISH_NAMES: Record<string, readonly string[]> = {
 	SOL: ['Solana', 'SOL'],
 	ETH: ['Ethereum', 'ETH'],
 	XRP: ['XRP', 'Ripple'],
-	// cp425 — goods/services. The what_is_morphit answer names it with a
+	// goods/services. The what_is_morphit answer names it with a
 	// locale-appropriate word (barter/goods), not the ticker, so the accepted
 	// spellings are the words that actually appear; per-locale renderings are
 	// in LOCALE_ALIASES below.
@@ -99,7 +99,7 @@ const LOCALE_ALIASES: Record<string, Record<string, readonly string[]>> = {
 		ETH: ['以太坊', 'Ethereum', 'ETH'],
 		BARTER: ['以物易物', '商品']
 	},
-	// cp425 — these locales otherwise fall through to ENGLISH_NAMES, but the
+	// these locales otherwise fall through to ENGLISH_NAMES, but the
 	// what_is_morphit answer names barter with a translated word (not the
 	// ticker or the English "Barter"), so each needs its own barter alias.
 	es: { BARTER: ['bienes', 'intercambiar'] },

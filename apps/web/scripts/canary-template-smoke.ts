@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/canary-template-smoke.ts
  *
- * Verifies apps/web/static/canary.txt.template is structurally
+ * Verifies the canary template (scripts/canary/canary.txt.template) is structurally
  * sound — every placeholder the generator expects to substitute
  * actually appears in the template, and every placeholder in
  * the template is in the generator's known list.
@@ -18,14 +18,18 @@
  * This smoke surfaces both kinds of drift at CI time.
  *
  * Run via `bash scripts/run-smokes.sh` or directly:
- *   cd apps/web && npx tsx scripts/canary-template-smoke.ts
+ *   cd apps/web && ../../node_modules/.bin/tsx --tsconfig tsconfig.smoke.json scripts/canary-template-smoke.ts
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
-const TEMPLATE = join(REPO, 'apps/web/static/canary.txt.template');
+// A build input, not a served file: it lives next to the generator
+// (scripts/canary/). Everything under apps/web/static/ is copied into the
+// public web root, so a template there would be served at /canary.txt.template.
+const TEMPLATE = join(REPO, 'scripts/canary/canary.txt.template');
+const SERVED_COPY = join(REPO, 'apps/web/static/canary.txt.template');
 const GENERATOR = join(REPO, 'scripts/canary/generate.sh');
 
 console.log('\n── canary-template smoke ───────────────────────────────\n');
@@ -37,6 +41,9 @@ if (!existsSync(TEMPLATE)) {
 }
 if (!existsSync(GENERATOR)) {
 	failures.push(`canary generator missing: ${GENERATOR}`);
+}
+if (existsSync(SERVED_COPY)) {
+	failures.push(`canary template is in the public web root (served): ${SERVED_COPY}`);
 }
 
 if (failures.length === 0) {
@@ -139,6 +146,7 @@ if (failures.length > 0) {
 } else {
 	console.log('  ✓ canary template is structurally valid');
 	console.log('  ✓ generator and template substitutions are in sync');
+	console.log('  ✓ the template is not in the public web root');
 	console.log('\n──────────────────────────────────────────────────────');
 	console.log('✓ all 1 scenarios passed');
 }

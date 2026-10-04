@@ -2,11 +2,11 @@
 /**
  * sol-trade-only-smoke.
  *
- * Part 122 cp45 sentinel: SOL (Solana) must be
+ * SOL (Solana) must be
  * `canPayListingFee: false` AND `canBeTraded: true` in BOTH the
  * canonical and frontend asset registries.
  *
- * Memory #23 invariant pinned from two directions: canonical
+ * The frozen fee_method invariant pinned from two directions: canonical
  * registry's `canPayListingFee: true → ticker ∈ {BLURT, BTC,
  * XMR}` rule means a future contributor flipping SOL's flag to
  * true would fail asset-registry-smoke first.  This smoke is the
@@ -28,7 +28,7 @@
  * design — Solana addresses ARE base58 32-byte public keys
  * regardless of whether they hold native SOL or an SPL token.
  * The asset field on the order disambiguates at the order
- * layer; cp42 address-shape-overlap-smoke documents the
+ * layer; a later change address-shape-overlap-smoke documents the
  * intentional cross-asset overlaps.
  */
 
@@ -58,8 +58,8 @@ if (!canonSol) {
 	pass('canonical registry contains SOL entry');
 	if (canonSol.canBeTraded === true) pass('canonical SOL.canBeTraded === true');
 	else fail('canonical SOL.canBeTraded === true', `actual: ${canonSol.canBeTraded}`);
-	if (canonSol.canPayListingFee === false) pass('canonical SOL.canPayListingFee === false (memory #23)');
-	else fail('canonical SOL.canPayListingFee === false (memory #23)', `actual: ${canonSol.canPayListingFee}`);
+	if (canonSol.canPayListingFee === false) pass('canonical SOL.canPayListingFee === false (trade-only rule)');
+	else fail('canonical SOL.canPayListingFee === false (trade-only rule)', `actual: ${canonSol.canPayListingFee}`);
 	if (canonSol.decimals === 9) pass('canonical SOL.decimals === 9 (lamports)');
 	else fail('canonical SOL.decimals === 9 (lamports)', `actual: ${canonSol.decimals}`);
 	if (Array.isArray(canonSol.supportedNetworks) && canonSol.supportedNetworks.length === 1 && canonSol.supportedNetworks[0] === 'mainnet') {
@@ -91,7 +91,7 @@ if (!feSol) {
 	pass('frontend registry contains sol entry');
 	if (feSol.canBeTraded === true) pass('frontend sol.canBeTraded === true');
 	else fail('frontend sol.canBeTraded === true', `actual: ${feSol.canBeTraded}`);
-	if (feSol.canBeUsedForListingFee === false) pass('frontend sol.canBeUsedForListingFee === false (memory #23)');
+	if (feSol.canBeUsedForListingFee === false) pass('frontend sol.canBeUsedForListingFee === false (trade-only rule)');
 	else fail('frontend sol.canBeUsedForListingFee === false', `actual: ${feSol.canBeUsedForListingFee}`);
 	if (feSol.decimals === 9) pass('frontend sol.decimals === 9');
 	else fail('frontend sol.decimals === 9', `actual: ${feSol.decimals}`);
@@ -136,7 +136,7 @@ if (canonSol) {
 	for (const [name, input] of REJECTS) {
 		// Note: BTC P2PKH at 34 chars within {32,44} is an EXPECTED overlap.
 		// Skip that one from the reject test — it's documented in
-		// cp42 address-shape-overlap-smoke EXPECTED_OVERLAPS.
+		// A later change address-shape-overlap-smoke EXPECTED_OVERLAPS.
 		if (name.includes('BTC P2PKH')) continue;
 		if (canonSol.addressShape.test(input)) {
 			fail(`addressShape REJECTS ${name}`, `accepted input: ${input.slice(0, 60)}`);

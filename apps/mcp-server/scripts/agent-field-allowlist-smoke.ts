@@ -1,5 +1,5 @@
 /**
- * mcp-server agent-field-allowlist smoke (cp242).
+ * mcp-server agent-field-allowlist smoke.
  *
  * The MCP tools surface order data to an AI agent through two trim
  * functions that act as an ALLOWLIST boundary — only known public-
@@ -12,7 +12,7 @@
  *                        OWNER-VIEW `/v1/orders/:account` endpoint. That
  *                        endpoint returns every order regardless of status
  *                        PLUS the lister's internal fee mechanics
- *                        (`fee_status`, `fee_method`). cp242 found
+ *                        (`fee_status`, `fee_method`). A later change found
  *                        get_listing returned that row RAW, leaking the
  *                        lister's fee-payment chain / verification state to
  *                        the agent. The fix routes it through
@@ -51,7 +51,7 @@ const ownerViewRow: Record<string, unknown> = {
 	asset: 'XMR',
 	side: 'sell',
 	fiat_currency: 'USD',
-	price: '150.00',
+	price_model: { kind: 'fixed', price: '150.00' },
 	amount_min: '0.1',
 	amount_max: '5.0',
 	location_region: 'EU',
@@ -77,7 +77,7 @@ const PUBLIC_FIELDS = [
 	'asset',
 	'side',
 	'fiat_currency',
-	'price',
+	'price_model',
 	'amount_min',
 	'amount_max',
 	'location_region',
@@ -101,10 +101,13 @@ check(
 	`missing: ${PUBLIC_FIELDS.filter((f) => !(f in to)).join(', ')}`
 );
 check(
-	'trimOrderRow drops fee mechanics + status/expiry + unknown fields',
-	[...LEAK_FIELDS, 'status', 'expires_at'].every((f) => !(f in to)),
-	`leaked: ${[...LEAK_FIELDS, 'status', 'expires_at'].filter((f) => f in to).join(', ')}`
+	'trimOrderRow drops fee mechanics + status + unknown fields',
+	[...LEAK_FIELDS, 'status'].every((f) => !(f in to)),
+	`leaked: ${[...LEAK_FIELDS, 'status'].filter((f) => f in to).join(', ')}`
 );
+// The expiry is public on the orderbook and tells the user when a listing
+// lapses, so search results carry it too.
+check('trimOrderRow keeps expires_at', to.expires_at === '2026-07-01T00:00:00Z');
 
 // trimListingRow — single-listing lookup (owner-view endpoint).
 check(
@@ -131,7 +134,7 @@ check(
 
 // Wiring — the tools must actually route their rows through the trims.
 // (Function-correctness above is moot if a tool returns the raw row, which
-// is exactly the cp242 regression.) Cheap static check on the source.
+// is exactly the regression.) Cheap static check on the source.
 const getListingSrc = readFileSync(new URL('../src/tools/getListing.ts', import.meta.url), 'utf-8');
 const searchOrdersSrc = readFileSync(new URL('../src/tools/searchOrders.ts', import.meta.url), 'utf-8');
 check(

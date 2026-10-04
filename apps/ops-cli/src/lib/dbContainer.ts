@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────
 // Docker DB-container detection — the "Docker-aware" half of the built-in
-// backup (cp509 / v1.8.4 B).
+// backup (v1.8.4 B).
 //
 // The shipped backup script (ops/backup/morphit-backup.sh) dumps THROUGH
 // `docker exec "$DB_CONTAINER" pg_dump …` when DB_CONTAINER is set, so a
@@ -11,14 +11,14 @@
 // operator never has to know it.
 //
 // Detection is name-AGNOSTIC (the same lesson as findFrontendContainer in
-// upgrade.ts — cp236 hard-coded a container name and a compose file and was
+// upgrade.ts — a later change hard-coded a container name and a compose file and was
 // wrong on both counts): we look at the image + whether the morphit DB is
 // actually reachable inside, never at a specific name.
 //
 // The pure parsing/selection cores (parseContainerNames / isPostgresImage /
 // selectDbContainer) carry the real logic and are covered by static smokes;
 // the impure orchestrator (detectDbContainer) is a thin `docker` wrapper that
-// the sandbox can't exercise (no Docker), so it stays deliberately trivial.
+// a test run can't exercise (it needs Docker), so it stays deliberately trivial.
 // ─────────────────────────────────────────────────────────────────────
 
 import { spawnSync } from 'node:child_process';

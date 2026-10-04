@@ -1,5 +1,5 @@
 /**
- * morphit-ops install (cp192) — guided first-time install
+ * morphit-ops install — guided first-time install
  * orchestrator.
  *
  * STATUS: scaffold. The pieces this command sequences already
@@ -15,7 +15,7 @@
  * lay down systemd units FOR the operator. Those steps need to run
  * as root, mutate the host, and — critically — be validated on a
  * real fresh Ubuntu box before we tell anyone they're "smooth."
- * Until that VM validation happens (tracked in REVISIT-LIST), this
+ * Until that VM validation happens (tracked in the backlog), this
  * command DETECTS what's missing and points at the exact existing,
  * tested path (the Ansible playbook, or the documented manual
  * steps) rather than running unvetted host mutation. That honesty
@@ -41,6 +41,7 @@ import {
 	syncTouchedToWebRoot
 } from '../lib/branding.ts';
 import { resolveWebRoot } from './upgrade.ts';
+import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 
 export interface InstallCtx {
@@ -61,7 +62,8 @@ const PREREQS: readonly Prereq[] = [
 		name: 'Node.js (>= 22)',
 		probe: 'node --version',
 		minHint: 'Node.js 22 LTS',
-		fixHint: 'Install Node 22 LTS (see docs/RUN-A-MORPHIT-NODE.md "Install Node.js and PostgreSQL").'
+		fixHint:
+			'Install Node 22 LTS (see docs/RUN-A-MORPHIT-NODE.md "Install Node.js and PostgreSQL").'
 	},
 	{
 		name: 'npm',
@@ -128,7 +130,7 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('    1. Check prerequisites (Node, PostgreSQL, git).');
 	console.log('    2. Configure your instance (the setup wizard).');
 	console.log('    3. (Optional) harden the server.');
-	console.log('    4. (Optional) make `morphit-ops` runnable without `npx`.');
+	console.log('    4. (Optional) make `morphit-ops` runnable from anywhere.');
 	console.log('');
 	console.log('  For the fully-automated path on a fresh Ubuntu server, the');
 	console.log('  Ansible playbook in ops/ansible/ does the OS-level install');
@@ -153,8 +155,9 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 
 	if (!allPresent) {
 		console.log('Some prerequisites are missing. Install them (the lines above');
-		console.log('point at the exact docs), then run `npx morphit-ops install`');
-		console.log('again. Nothing has been changed on your system.');
+		console.log('point at the exact docs), then run this again from the install');
+		console.log('directory:  sudo node apps/ops-cli/bin/morphit-ops.mjs install');
+		console.log('Nothing has been changed on your system.');
 		console.log('');
 		console.log('Tip: the Ansible playbook in ops/ansible/ installs all of these');
 		console.log('for you on a fresh Ubuntu box — see docs/start-here/README.md.');
@@ -165,7 +168,9 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	console.log('');
 	const proceed = await askYesNo('Continue to the setup wizard now?', true);
 	if (!proceed) {
-		console.log('\nStopped. Run `npx morphit-ops install` (or `npx morphit-ops init`) when ready.');
+		console.log(
+			'\nStopped. When ready, run from the install directory:  sudo node apps/ops-cli/bin/morphit-ops.mjs install'
+		);
 		return 0;
 	}
 
@@ -180,8 +185,10 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 	if (initCode !== 0) {
 		console.log('');
 		console.log('Setup wizard did not complete. Fix the issue above and re-run');
-		console.log('`npx morphit-ops install`. (You can also run the wizard alone');
-		console.log('with `npx morphit-ops init`.)');
+		console.log(
+			'`sudo node apps/ops-cli/bin/morphit-ops.mjs install` from the install directory. (You can also run'
+		);
+		console.log('the wizard alone with `sudo node apps/ops-cli/bin/morphit-ops.mjs init`.)');
 		return initCode;
 	}
 
@@ -260,7 +267,7 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
 }
 
 /**
- * Last steps of any install (v1.19.0 deep-deep):
+ * Last steps of any install:
  *  - npm's "New major version of npm available!" notice off box-wide, and the
  *    global npmrc root-owned 0644 (lib/npmNotice.ts) — the wizard itself runs
  *    under an npx whose notice would otherwise print right after this;
@@ -271,6 +278,29 @@ export async function runInstall(ctx: InstallCtx): Promise<number> {
  */
 function finishInstall(repoRoot: string): void {
 	healNpmUpdateNotice();
+	// every install's pages name this instance's own origin (never
+	// a clearnet one on a hidden-only node), branding or not.
+	try {
+		const webRoot = resolveWebRoot(process.env);
+		const r = syncInstanceOrigin(
+			{
+				info: (m) => console.log(`  ${m}`),
+				warn: (m) => console.log(`  ! ${m}`),
+				spinner: () => () => {}
+			},
+			{
+				installDir: repoRoot,
+				buildDir: buildDirOf(repoRoot),
+				webRoot: existsSync(webRoot) ? webRoot : null
+			}
+		);
+		if (r.detail !== '') console.log(`  ${r.verified ? '' : '! '}${sanitizeForTerm(r.detail)}`);
+	} catch (err) {
+		console.log(
+			`  ! Your instance origin could not be applied (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}). ` +
+				'Run: sudo morphit-ops upgrade'
+		);
+	}
 	try {
 		const settings = readBrandingSettings(repoRoot);
 		if (!brandingConfigured(settings)) return;
@@ -278,7 +308,8 @@ function finishInstall(repoRoot: string): void {
 		const r = applyBranding({ buildDir, settings });
 		if (r.unsupported) return;
 		const webRoot = resolveWebRoot(process.env);
-		if (r.touched.length > 0 && existsSync(webRoot)) syncTouchedToWebRoot(buildDir, webRoot, r.touched);
+		if (r.touched.length > 0 && existsSync(webRoot))
+			syncTouchedToWebRoot(buildDir, webRoot, r.touched);
 		if (r.active) console.log('  \u2713 Applied your existing branding (docs/BRANDING.md).');
 		for (const w of r.warnings) console.log(`  ! ${sanitizeForTerm(w)}`);
 	} catch (err) {
@@ -291,10 +322,10 @@ function finishInstall(repoRoot: string): void {
 
 /**
  * Offer to symlink the project-local morphit-ops bin onto PATH so
- * the operator can type `morphit-ops` instead of `npx morphit-ops`.
+ * the operator can type `morphit-ops` instead of the launcher's path.
  * This is the fix for the recurring "morphit-ops: command not
  * found" confusion: the tool is a project-local bin, so without a
- * symlink it's only reachable via npx from the install dir.
+ * symlink it's only reachable by its path in the install dir.
  *
  * We target /usr/local/bin (conventional, on PATH, not managed by
  * the package manager). We never overwrite an existing file there
@@ -302,22 +333,34 @@ function finishInstall(repoRoot: string): void {
  * launcher so it always tracks this install.
  */
 async function offerPathSymlink(): Promise<void> {
-	const binTarget = join(safeCwd() ?? defaultRepoRoot(), 'apps', 'ops-cli', 'bin', 'morphit-ops.mjs');
+	const binTarget = join(
+		safeCwd() ?? defaultRepoRoot(),
+		'apps',
+		'ops-cli',
+		'bin',
+		'morphit-ops.mjs'
+	);
 	if (!existsSync(binTarget)) {
 		// Not in an install tree (or unusual layout) — skip silently
 		// rather than guess.
 		console.log('  (Skipping the PATH shortcut — run this from your install directory');
-		console.log('   if you want it. For now, use `npx morphit-ops <command>`.)');
+		console.log(
+			'   if you want it. For now, use `sudo node apps/ops-cli/bin/morphit-ops.mjs <command>` there.)'
+		);
 		return;
 	}
 
-	console.log('  Right now you run the tool as `npx morphit-ops <command>` from');
+	console.log(
+		'  Right now you run the tool as `sudo node apps/ops-cli/bin/morphit-ops.mjs <command>` from'
+	);
 	console.log('  this directory. I can add a system-wide shortcut so you can just');
 	console.log('  type `morphit-ops <command>` from anywhere.');
 	console.log('');
 	const want = await askYesNo('Add the `morphit-ops` shortcut to /usr/local/bin?', true);
 	if (!want) {
-		console.log('  Skipped. You can always run `npx morphit-ops <command>`.');
+		console.log(
+			'  Skipped. You can always run `sudo node apps/ops-cli/bin/morphit-ops.mjs <command>` from this directory.'
+		);
 		return;
 	}
 
@@ -345,6 +388,8 @@ async function offerPathSymlink(): Promise<void> {
 		console.log('');
 		console.log(`    sudo ln -sf "${binTarget}" "${linkPath}"`);
 		console.log('');
-		console.log('  (Until then, `npx morphit-ops <command>` works fine.)');
+		console.log(
+			'  (Until then, `sudo node apps/ops-cli/bin/morphit-ops.mjs <command>` from this directory works fine.)'
+		);
 	}
 }

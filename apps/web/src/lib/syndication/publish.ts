@@ -68,10 +68,19 @@ const MORPHIT_TAG = 'morphit';
  *  images we'd thread these through config. */
 const IMAGE_FIRST_TRADE =
 	'https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png';
-// v1.9.0 (the maintainer) — the per-order announcement now leads with Morphit's own
-// og-image (served from the site), matching the order detail page's header, and
-// is reused as the post's social-card thumbnail.
-const IMAGE_ORDER_POST = 'https://morphit.io/og-image.png';
+/** This instance's origin: the links in a post lead to the site the user
+ *  posted from, never to another instance. */
+function instanceOrigin(): string {
+	return typeof window !== 'undefined' ? window.location.origin : '';
+}
+
+/** The per-order announcement leads with the site's og-image (the order detail
+ *  page's header), also used as the post's social-card thumbnail — only from
+ *  an https origin: Blurt's frontends cannot load an image from a hidden
+ *  service (or from plain http), and would show a broken image. */
+function orderPostImage(origin: string): string | null {
+	return origin.startsWith('https://') ? `${origin}/og-image.png` : null;
+}
 
 // ─── Result types ──────────────────────────────────────────────────
 
@@ -128,7 +137,7 @@ export async function publishFirstTradePost(
 	}) as string;
 	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
 	const body = t('syndicate.first_trade.body', {
-		values: { username: account, lang }
+		values: { profile_url: `${instanceOrigin()}/${lang}/@${account}` }
 	}) as string;
 
 	const permlink = firstTradePermlink(account);
@@ -184,13 +193,18 @@ export interface OrderPostContext {
 	readonly expiresAtIso?: string | null;
 	readonly locationRegion?: string | null;
 	readonly terms?: string;
-	/** v1.9.0 (the maintainer) — the BARTER inline goods label; when set, the headline reads
+	/** v1.9.0 — the BARTER inline goods label; when set, the headline reads
 	 *  "…of bananas" instead of the generic "goods/services". Ignored for crypto. */
 	readonly specificBarterTitle?: string | null;
-	/** t.txt #5 — the BARTER accepted crypto ticker(s), so a value-free barter
+	/** the BARTER accepted crypto ticker(s), so a value-free barter
 	 *  headline reads "I want to sell {goods} for {cryptos}" (the same title the
 	 *  order card and create-flow summary render). Ignored for crypto/valued barter. */
 	readonly acceptedAssets?: readonly string[] | null;
+	/** How the listing fee was settled. Only a BLURT fee travels in the order's
+	 *  own transaction, so only then does the post say the fee is verified; a
+	 *  waived listing or a BTC/XMR fee (attested later, if at all) gets no
+	 *  fee line — the post is permanent and must not claim a payment. */
+	readonly feeMethod: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
 }
 
 /** Fire Post B. Returns an explicit Result so the order-success
@@ -220,7 +234,7 @@ export async function publishOrderPost(
 				amount_min: ctx.amountMin ?? null,
 				amount_max: ctx.amountMax ?? null,
 				accepted_assets: ctx.acceptedAssets ?? null,
-				// v1.9.5 (the maintainer) — crypto settlement for the headline. `paymentMethodNames`
+				// v1.9.5 — crypto settlement for the headline. `paymentMethodNames`
 				// are ALREADY resolved display labels, so the methodDisplay below is the
 				// identity. Ignored for barter (which settles in accepted_assets).
 				payment_methods: ctx.paymentMethodNames ?? null
@@ -240,7 +254,7 @@ export async function publishOrderPost(
 	}) as string;
 	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
 
-	// v1.9.0 (the maintainer) — the announcement body now MIRRORS the order detail page:
+	// v1.9.0 — the announcement body now MIRRORS the order detail page:
 	// og-image header, an H1 headline (the same "…Want to trade?" title), a
 	// DETAILS block of bullets (pay/accept + methods, posted/expires dates,
 	// optional location, listing fee), the full order Terms rendered WITH the
@@ -264,15 +278,19 @@ export async function publishOrderPost(
 		bullets.push(`- ${colon('order_detail.expires_on')}${formatDayMonth(ctx.expiresAtIso)}`);
 	if (ctx.locationRegion && ctx.locationRegion.trim().length > 0)
 		bullets.push(`- ${colon('order_detail.location')}${ctx.locationRegion.trim()}`);
-	bullets.push(
-		`- ${colon('order_detail.listing_fee')}✓ ${t('order_detail.fee_verified') as string}`
-	);
+	if (ctx.feeMethod === 'blurt') {
+		bullets.push(
+			`- ${colon('order_detail.listing_fee')}✓ ${t('order_detail.fee_verified') as string}`
+		);
+	}
 
-	const orderUrl = `https://morphit.io/${lang}/@${account}/${ctx.orderPermlink}`;
+	const origin = instanceOrigin();
+	const image = orderPostImage(origin);
+	const orderUrl = `${origin}/${lang}/@${account}/${ctx.orderPermlink}`;
 	const termsText = (ctx.terms ?? '').trim();
 
 	const sections: string[] = [
-		`![Morphit](${IMAGE_ORDER_POST})`,
+		...(image !== null ? [`![Morphit](${image})`] : []),
 		`# ${title}`,
 		`## ${t('syndicate.order_post.details') as string}`,
 		bullets.join('\n')
@@ -293,9 +311,7 @@ export async function publishOrderPost(
 		permlink,
 		title,
 		body,
-		extraMetadata: {
-			image: [IMAGE_ORDER_POST]
-		}
+		extraMetadata: image !== null ? { image: [image] } : {}
 	};
 
 	try {

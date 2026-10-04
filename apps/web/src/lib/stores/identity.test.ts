@@ -2,189 +2,154 @@
 /**
  * Cross-tab unlock state propagation tests (§F.17).
  *
- * The identity store registers a `storage` event listener on
- * module import that mirrors envelope changes from other tabs.
- * These tests fire synthetic StorageEvents and assert the
- * resulting identity store state.
+ * In the browser the identity store registers handleStorageEvent as its
+ * `storage` listener, mirroring envelope changes made by other tabs. These
+ * tests hand it synthetic StorageEvents and assert the resulting identity
+ * store state. (The reload stash is covered by identity.reloadStash.test.ts.)
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 
 import {
 	identity,
-	bootFromEnvelope,
 	bootFromPairedSession,
 	broadcastSignOut,
 	handleSessionHandoffMessage,
+	handleStorageEvent,
 	pairedReadOnly,
-	reset,
-	stashSessionForReload,
-	restoreSessionFromReloadStash,
-	handlePageHide
+	reset
 } from './identity';
-import { encryptIdentity, type KeystoreEnvelope } from '$crypto/keystore';
-import { generateFullIdentity } from '$crypto/keygen';
 import { KEYSTORE_ENVELOPE_STORAGE_KEY } from '$crypto/persistentKeystore';
-import {
-	type PairedSession,
-	clearPairedSession,
-	readPairedSession
-} from '$crypto/pairedSession';
+import { type PairedSession, clearPairedSession, readPairedSession } from '$crypto/pairedSession';
 import { ensureSodium } from '$crypto/sodium';
 
-const TEST_PASSWORD = 'correct-horse-battery-staple';
+/** Structurally valid keystores (their contents are never decrypted here). */
+const ENV = {
+	v: 1,
+	kdf: 'argon2id',
+	kdfParams: { opslimit: 2, memlimit: 64 * 1024 * 1024 },
+	salt: 'c2FsdA==',
+	nonce: 'bm9uY2U=',
+	ciphertext: 'Y3Q=',
+	createdAt: 1
+};
+const ENV_NEW_PASSWORD = { ...ENV, salt: 'c2FsdDI=', ciphertext: 'Y3Qy', createdAt: 2 };
 
-async function makeEnvelope(): Promise<KeystoreEnvelope> {
-	const full = await generateFullIdentity();
-	return await encryptIdentity(full, TEST_PASSWORD);
+/** This tab unlocked, the way a sibling tab's handoff unlocks it. */
+function unlock(): void {
+	handleSessionHandoffMessage(
+		{
+			t: 'offer',
+			payload: {
+				state: 'unlocked',
+				envelope: ENV,
+				live: {
+					createdAt: 1,
+					origin: 'posting-only',
+					posting: {
+						role: 'posting',
+						publicKey: new Uint8Array(33).fill(2),
+						privateKey: new Uint8Array(32).fill(7)
+					},
+					memo: null,
+					ownerPublicKey: null,
+					activePublicKey: null
+				}
+			}
+		},
+		() => {}
+	);
+	expect(get(identity).state).toBe('unlocked');
 }
 
-function fireStorageEvent(opts: {
+/** What another tab's write to localStorage delivers here. Production
+ *  registers handleStorageEvent as the `storage` listener (browser only);
+ *  the test calls it with the same event. */
+function storageEventFromAnotherTab(opts: {
 	key: string | null;
 	newValue: string | null;
 	oldValue?: string | null;
 }): void {
-	const ev = new StorageEvent('storage', {
-		key: opts.key,
-		newValue: opts.newValue,
-		oldValue: opts.oldValue ?? null,
-		storageArea: window.localStorage
-	});
-	window.dispatchEvent(ev);
+	handleStorageEvent(
+		new StorageEvent('storage', {
+			key: opts.key,
+			newValue: opts.newValue,
+			oldValue: opts.oldValue ?? null,
+			storageArea: window.localStorage
+		})
+	);
 }
 
-describe.skip('§F.17 — cross-tab unlock state propagation', () => {
-	// Part 72 honest disclosure: these 4 tests exercise the
-	// `storage` event handler in the identity store, which fires
-	// when localStorage changes in another tab.  Synthetic
-	// StorageEvent dispatch requires jsdom (node has no Window /
-	// no event mechanism).  But the test setup also calls
-	// encryptIdentity / generateFullIdentity which use
-	// libsodium-wrappers-sumo, and libsodium throws "unsupported
-	// input type for message" inside jsdom because jsdom's
-	// Uint8Array shim lives in a different realm than Node's.
-	//
-	// The cross-tab handler IS exercised by:
-	//   - manual smoke during release prep (open two tabs, sign
-	//     out of one, watch the other re-lock)
-	//   - the live app, where this code has shipped since
-	//     Phase F.17
-	//   - structural code review at audit time (the listener is
-	//     registered at module load, fires on every storage event,
-	//     and switch-cases on `event.key === KEYSTORE_ENVELOPE_STORAGE_KEY`)
-	//
-	// Re-enabling these tests cleanly requires either:
-	//   (a) a happy-dom or @vitest/browser setup that gives the
-	//       test a real(ish) Window AND a node-realm Uint8Array,
-	//       OR
-	//   (b) pre-computing the envelopes outside the test (e.g. in
-	//       a globalSetup that runs in node) and injecting them
-	//       as fixtures.
-	//
-	// Filed in REVISIT-LIST as "F-stragglers / identity §F.17
-	// jsdom-libsodium conflict."  Not blocking launch.
+describe('§F.17 — cross-tab unlock state propagation', () => {
+	// reset() wipes live key bytes with libsodium.
+	beforeAll(async () => {
+		await ensureSodium();
+	});
 	beforeEach(() => {
-		// Reset between tests so each starts from 'locked'.
+		reset();
+	});
+	afterEach(() => {
 		reset();
 	});
 
-	it('envelope deletion in another tab → resets to locked', async () => {
-		const env = await makeEnvelope();
-		await bootFromEnvelope(env, TEST_PASSWORD);
-		expect(get(identity).state).toBe('unlocked');
-
-		// Simulate sign-out from another tab: localStorage deletes
-		// the envelope key, which fires a storage event with
-		// newValue=null.
-		fireStorageEvent({
+	it('envelope deletion in another tab (its sign-out) → this tab locks', () => {
+		unlock();
+		storageEventFromAnotherTab({
 			key: KEYSTORE_ENVELOPE_STORAGE_KEY,
 			newValue: null,
-			oldValue: JSON.stringify(env)
+			oldValue: JSON.stringify(ENV)
 		});
-
 		expect(get(identity).state).toBe('locked');
 	});
 
-	it('envelope value change in another tab → swaps envelope, keeps live keys', async () => {
-		const oldEnv = await makeEnvelope();
-		await bootFromEnvelope(oldEnv, TEST_PASSWORD);
-		const stateBefore = get(identity);
-		if (stateBefore.state !== 'unlocked') throw new Error('precondition');
-		const liveBefore = stateBefore.live;
-
-		// Simulate password change in another tab: a new envelope
-		// is written to localStorage.  The live keys here should
-		// remain valid (same identity).
-		const full2 = await generateFullIdentity();
-		const newEnv = await encryptIdentity(full2, 'different-password-xyz');
-		fireStorageEvent({
+	it('envelope value change in another tab (its password change) → swaps envelope, keeps live keys', () => {
+		unlock();
+		const before = get(identity);
+		if (before.state !== 'unlocked') throw new Error('precondition');
+		storageEventFromAnotherTab({
 			key: KEYSTORE_ENVELOPE_STORAGE_KEY,
-			newValue: JSON.stringify(newEnv),
-			oldValue: JSON.stringify(oldEnv)
+			newValue: JSON.stringify(ENV_NEW_PASSWORD),
+			oldValue: JSON.stringify(ENV)
 		});
-
-		const stateAfter = get(identity);
-		expect(stateAfter.state).toBe('unlocked');
-		if (stateAfter.state !== 'unlocked') throw new Error('post');
-		// Same live reference (we didn't re-decrypt; just swapped envelope).
-		expect(stateAfter.live).toBe(liveBefore);
-		// Envelope reference replaced.
-		expect(stateAfter.envelope).not.toBe(oldEnv);
+		const after = get(identity);
+		if (after.state !== 'unlocked') throw new Error('post');
+		expect(after.live).toBe(before.live);
+		expect(after.envelope).toEqual(ENV_NEW_PASSWORD);
 	});
 
-	it('corrupted JSON in storage event → ignored, state unchanged', async () => {
-		const env = await makeEnvelope();
-		await bootFromEnvelope(env, TEST_PASSWORD);
-		const stateBefore = get(identity);
-		if (stateBefore.state !== 'unlocked') throw new Error('precondition');
-
-		fireStorageEvent({
+	it('corrupted JSON in a storage event → ignored, state unchanged', () => {
+		unlock();
+		storageEventFromAnotherTab({
 			key: KEYSTORE_ENVELOPE_STORAGE_KEY,
 			newValue: '{this is not valid JSON',
-			oldValue: JSON.stringify(env)
+			oldValue: JSON.stringify(ENV)
 		});
-
-		const stateAfter = get(identity);
-		expect(stateAfter.state).toBe('unlocked');
-		if (stateAfter.state !== 'unlocked') throw new Error('post');
-		// Envelope reference UNCHANGED — corruption is silently
-		// dropped rather than corrupting our store.
-		expect(stateAfter.envelope).toBe(env);
+		const after = get(identity);
+		if (after.state !== 'unlocked') throw new Error('post');
+		expect(after.envelope).toEqual(ENV);
 	});
 
-	it('storage event for unrelated key → ignored', async () => {
-		const env = await makeEnvelope();
-		await bootFromEnvelope(env, TEST_PASSWORD);
-
-		fireStorageEvent({
-			key: 'some-other-localstorage-key',
-			newValue: 'whatever',
-			oldValue: 'previous'
-		});
-
-		const state = get(identity);
-		expect(state.state).toBe('unlocked');
+	it('storage event for an unrelated key → ignored', () => {
+		unlock();
+		storageEventFromAnotherTab({ key: 'some-other-localstorage-key', newValue: 'whatever' });
+		expect(get(identity).state).toBe('unlocked');
 	});
 
 	it('storage event when already locked → no-op (no errors)', () => {
-		// Start locked.
 		expect(get(identity).state).toBe('locked');
-
-		fireStorageEvent({
+		storageEventFromAnotherTab({
 			key: KEYSTORE_ENVELOPE_STORAGE_KEY,
 			newValue: null,
 			oldValue: 'some-old-value'
 		});
-
-		// Still locked, no thrown errors.
 		expect(get(identity).state).toBe('locked');
 	});
 });
 
 /**
- * Cross-tab session-handoff dispatch (BroadcastChannel, cp290) +
- * the cp290-follow-up sign-out propagation.
+ * Cross-tab session-handoff dispatch (BroadcastChannel) +
+ * the follow-up sign-out propagation.
  *
  * Unlike the §F.17 block above, these drive the exported message
  * handler directly with synthetic payloads, so they need NO libsodium
@@ -310,192 +275,5 @@ describe('identity — cross-tab session handoff dispatch + sign-out propagation
 		expect(get(identity).state).toBe('locked');
 		await flushMicrotasks();
 		expect(readPairedSession()).toBeNull();
-	});
-});
-
-describe('identity — reload self-handoff (Remember-me-gated, hard-reload carve-out)', () => {
-	// Mirrors the impl constant RELOAD_STASH_KEY in identity.ts.
-	const STASH_KEY = 'morphit.session.reload-stash-v1';
-	// btoa('AB') = base64 of bytes [65,66]; btoa('CD') = [67,68]. Used to prove
-	// the binary serializer round-trips key bytes back to Uint8Array.
-	const liveStashBody = {
-		live: {
-			createdAt: 1,
-			origin: 'posting-only',
-			posting: { role: 'posting', publicKey: { __u8__: btoa('AB') }, privateKey: { __u8__: btoa('CD') } },
-			memo: null,
-			ownerPublicKey: null,
-			activePublicKey: null
-		},
-		envelope: { scheme: 'simple' }
-	};
-	// v1.20.0 review (F-4): every stash carries its write time.
-	const stashAt = (at: number): string => JSON.stringify({ ...liveStashBody, at });
-	const freshStash = (): string => stashAt(Date.now());
-
-	/** What `performance.getEntriesByType('navigation')[0].type` reports for
-	 *  this load: 'reload' for F5, 'navigate' for a new visit or a restored
-	 *  tab, 'back_forward' for history navigation. */
-	function setNavigationType(type: string | null): void {
-		vi.spyOn(performance, 'getEntriesByType').mockImplementation(((kind: string) =>
-			kind === 'navigation' && type !== null ? [{ type }] : []) as unknown as typeof performance.getEntriesByType);
-	}
-
-	/** A structurally valid "Remember me" envelope on disk (hasPersistedKeystore). */
-	function rememberMeOn(): void {
-		window.localStorage.setItem('morphit.keystore.mode', 'password');
-		window.localStorage.setItem(
-			KEYSTORE_ENVELOPE_STORAGE_KEY,
-			JSON.stringify({
-				v: 1,
-				kdf: 'argon2id',
-				kdfParams: { opslimit: 64, memlimit: 1 << 30 },
-				salt: 'c2FsdA==',
-				nonce: 'bm9uY2U=',
-				ciphertext: 'Y3Q=',
-				createdAt: 1
-			})
-		);
-	}
-
-	function stubController(): void {
-		Object.defineProperty(navigator, 'serviceWorker', {
-			configurable: true,
-			value: { controller: {} }
-		});
-	}
-	function clearController(): void {
-		delete (navigator as unknown as { serviceWorker?: unknown }).serviceWorker;
-	}
-
-	// reset() wipes live key bytes via sodium.memzero; ready the shared
-	// libsodium instance so the unlocked-state teardown doesn't throw.
-	beforeAll(async () => {
-		await ensureSodium();
-	});
-
-	beforeEach(() => {
-		reset();
-		window.sessionStorage.removeItem(STASH_KEY);
-		// jsdom has no navigator.serviceWorker by default — that is the
-		// "hard reload / no controller" baseline.
-		clearController();
-	});
-	afterEach(() => {
-		reset();
-		window.sessionStorage.removeItem(STASH_KEY);
-		window.localStorage.clear();
-		clearController();
-		vi.restoreAllMocks();
-		vi.useRealTimers();
-	});
-
-	it('stashSessionForReload writes nothing while locked', () => {
-		stashSessionForReload(); // precondition: reset() → locked
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
-	});
-
-	it('restoreSessionFromReloadStash is a no-op when there is no stash', () => {
-		restoreSessionFromReloadStash();
-		expect(get(identity).state).toBe('locked');
-	});
-
-	it('discards the stash and stays LOCKED when there is no SW controller (hard reload)', () => {
-		setNavigationType('reload');
-		window.sessionStorage.setItem(STASH_KEY, freshStash());
-		restoreSessionFromReloadStash();
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // consumed once
-		expect(get(identity).state).toBe('locked'); // fail closed — not restored
-	});
-
-	it('adopts the stash and round-trips key bytes when a SW controller is present (normal reload)', () => {
-		stubController();
-		setNavigationType('reload');
-		window.sessionStorage.setItem(STASH_KEY, freshStash());
-		restoreSessionFromReloadStash();
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // consumed once
-		const st = get(identity);
-		expect(st.state).toBe('unlocked');
-		if (st.state === 'unlocked') {
-			expect(st.live.posting.publicKey).toBeInstanceOf(Uint8Array);
-			expect(Array.from(st.live.posting.publicKey)).toEqual([65, 66]);
-			expect(Array.from(st.live.posting.privateKey)).toEqual([67, 68]);
-		}
-	});
-
-	it('consumes but does NOT clobber an already-live session', () => {
-		stubController();
-		setNavigationType('reload');
-		window.sessionStorage.setItem(STASH_KEY, freshStash());
-		restoreSessionFromReloadStash();
-		expect(get(identity).state).toBe('unlocked');
-		// A second stash arrives while we're already unlocked.
-		window.sessionStorage.setItem(STASH_KEY, freshStash());
-		restoreSessionFromReloadStash();
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull(); // still consumed
-		expect(get(identity).state).toBe('unlocked'); // live session preserved
-	});
-	// ─── v1.20.0 review (F-4): only a REAL reload, and only a fresh stash ───
-	// The stash used to be written on EVERY pagehide (tab close, leaving for
-	// another site) with no timestamp, and restored on any later load — so
-	// Back, a restored tab or a restored browser session came back UNLOCKED,
-	// with no password, days later, past the idle auto-lock.
-
-	it('discards a stash older than 30 s, even on a reload', () => {
-		stubController();
-		setNavigationType('reload');
-		window.sessionStorage.setItem(STASH_KEY, stashAt(Date.now() - 31_000));
-		restoreSessionFromReloadStash();
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
-		expect(get(identity).state).toBe('locked');
-	});
-
-	it('discards a stash that has no write time (written by an older build)', () => {
-		stubController();
-		setNavigationType('reload');
-		window.sessionStorage.setItem(STASH_KEY, JSON.stringify(liveStashBody));
-		restoreSessionFromReloadStash();
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
-		expect(get(identity).state).toBe('locked');
-	});
-
-	for (const type of ['navigate', 'back_forward', 'prerender', null]) {
-		it(`discards a fresh stash when this load is not a reload (${String(type)})`, () => {
-			stubController();
-			setNavigationType(type);
-			window.sessionStorage.setItem(STASH_KEY, freshStash());
-			restoreSessionFromReloadStash();
-			expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
-			expect(get(identity).state).toBe('locked');
-		});
-	}
-
-	it('pagehide into the back/forward cache stashes nothing; a real unload stashes a timed copy that expires', () => {
-		rememberMeOn();
-		stubController();
-		setNavigationType('reload');
-		window.sessionStorage.setItem(STASH_KEY, freshStash());
-		restoreSessionFromReloadStash();
-		expect(get(identity).state).toBe('unlocked');
-
-		// Leaving for another page that keeps this one in the bfcache.
-		handlePageHide(true);
-		expect(get(identity).state).toBe('locked');
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
-
-		// Unlock again, then a real unload (reload, or a tab close — the two
-		// are indistinguishable at pagehide).
-		window.sessionStorage.setItem(STASH_KEY, freshStash());
-		restoreSessionFromReloadStash();
-		vi.useFakeTimers();
-		vi.setSystemTime(new Date('2026-09-27T12:00:00Z'));
-		handlePageHide(false);
-		expect(get(identity).state).toBe('locked');
-		expect(window.sessionStorage.getItem(STASH_KEY)).not.toBeNull();
-		// Reopened 45 s later (Ctrl+Shift+T, session restore): too late.
-		vi.setSystemTime(new Date('2026-09-27T12:00:45Z'));
-		restoreSessionFromReloadStash();
-		expect(get(identity).state).toBe('locked');
-		expect(window.sessionStorage.getItem(STASH_KEY)).toBeNull();
 	});
 });

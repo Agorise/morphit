@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/snapshot-bootstrap.ts  (cp764)
+ * apps/indexer/scripts/snapshot-bootstrap.ts
  *
  * Restore an indexer-DB snapshot (from snapshot-export.ts) onto THIS box, so a
  * fresh instance starts near the chain head and only catches up the small gap
@@ -28,11 +28,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config/index.ts';
-import { installHiddenServiceDispatcher } from '../src/indexer/hiddenServiceDispatcher.ts';
-import { hiddenServiceProxyConfigFromEnv } from '../src/indexer/hiddenServiceFetch.ts';
+import { bootChainClient, installChainRouting } from '../src/indexer/bootChainClient.ts';
 import { createDatabase } from '../src/db/pool.ts';
 import { latestSchemaVersion } from '../src/db/migrations.ts';
-import { BlurtClient } from '../src/blurt/client.ts';
 import { distrustRestoredPostingKeys } from '../src/indexer/postingKeyBackfill.ts';
 import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
 import {
@@ -83,12 +81,9 @@ function ipfsGateways(): string[] {
 			.split(',')
 			.map((s) => s.trim().replace(/\/+$/, ''))
 			.filter(Boolean);
-	return [
-		'http://127.0.0.1:8080',
-		'https://ipfs.io',
-		'https://dweb.link',
-		'https://cloudflare-ipfs.com'
-	];
+	// cloudflare-ipfs.com is not listed: Cloudflare retired its public
+	// gateway, so it only ever added a failed request (and a third party).
+	return ['http://127.0.0.1:8080', 'https://ipfs.io', 'https://dweb.link'];
 }
 
 const sha256File = (path: string): string =>
@@ -158,11 +153,11 @@ async function acquireFromChain(
 	process.stderr.write(
 		`\nsnapshot: reading @${signer}'s chain history for the newest indexer_snapshot_v1 …\n`
 	);
-	const blurt = new BlurtClient(config);
-	// v1.18.0 deep-deep (rv2-1): this used to be ONE callCondenser — the
+	const blurt = bootChainClient(config);
+	// this used to be ONE callCondenser — the
 	// fastest endpoint alone decided which op (and so which dump) this node
 	// restored, and nothing checked that @signer really signed it. Now two
-	// independent RPC operators must agree on the op AND on the block holding
+	// RPC operators (counted by node name) must agree on the op AND on the block holding
 	// it, and its signature must recover to the pinned posting key.
 	let resolved: Awaited<ReturnType<typeof resolveTrustedSnapshotOp>>;
 	try {
@@ -272,7 +267,7 @@ async function acquireFromChain(
 }
 
 /**
- * The public key a snapshot op from `signer` must be signed with (rv2-1).
+ * The public key a snapshot op from `signer` must be signed with.
  * The official account's is the pinned MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY
  * — the same anchor the release and rpc-directory handlers check. Any other
  * signer needs its key pinned explicitly with --signer-pubkey.
@@ -339,31 +334,6 @@ function psqlReadiness(dbUrl: string): PsqlReadiness {
 	return probe.status === 0 ? { ok: true } : { ok: false, why: 'too-old' };
 }
 
-/**
- * Route .onion / .b32.i2p fetches through Tor and i2pd.
- *
- * WITHOUT THIS, a hidden-only node cannot read the chain from a standalone
- * script at all. `installHiddenServiceDispatcher` was only ever called from the
- * indexer SERVICE (main.ts), so the service reads the chain happily over I2P
- * while any script run beside it sends the same request straight at a
- * `.b32.i2p` hostname with no proxy and gets `fetch failed`. That is exactly
- * what stopped morphitlat — a zero-clearnet box — from mirroring, and it would
- * have stopped fast-sync there too.
- *
- * Same clearnet policy as the service: a node with no clearnet RPC endpoints
- * fails closed rather than quietly reaching for the open internet.
- */
-function installHiddenRouting(config: ReturnType<typeof loadConfig>): void {
-	try {
-		installHiddenServiceDispatcher(
-			hiddenServiceProxyConfigFromEnv(process.env),
-			config.blurtRpcEndpoints.length === 0 ? 'refuse' : 'allow'
-		);
-	} catch {
-		/* a clearnet box works fine without it; never block on this */
-	}
-}
-
 async function main(): Promise<void> {
 	const fromChain = has('from-chain');
 	const snapshotPath = process.argv[2];
@@ -388,7 +358,7 @@ async function main(): Promise<void> {
 		process.env.MORPHIT_INDEXER_DATABASE_URL ??= 'postgres://verify-only-unused';
 		process.env.MORPHIT_INDEXER_PUBLIC_ORIGIN ??= 'https://verify-only.invalid';
 		// The REAL @morphit posting key (the documented default), not a
-		// placeholder: since v1.18.0 deep-deep (rv2-1) the snapshot op's
+		// placeholder: since an earlier release the snapshot op's
 		// signature is checked against it, so a dry run proves that too.
 		process.env.MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY ??=
 			'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9';
@@ -401,7 +371,10 @@ async function main(): Promise<void> {
 		}
 	}
 	const config = loadConfig();
-	installHiddenRouting(config);
+	// Route .onion / .b32.i2p through Tor and i2pd, and refuse clearnet on a
+	// hidden-only node, before any request (bootChainClient.ts). Throws if the
+	// router cannot be installed: never read the chain unrouted.
+	installChainRouting(config);
 	const db = createDatabase(config);
 	const work = mkdtempSync(join(tmpdir(), 'morphit-snap-restore-'));
 
@@ -543,7 +516,7 @@ async function main(): Promise<void> {
 		}
 
 		// ── restore ───────────────────────────────────────────────
-		// v1.18.0 deep-deep (rv2-1b, rv2-8). The dump used to be piped straight
+		// (rv2-1b, rv2-8). The dump used to be piped straight
 		// into psql, which runs its own backslash commands from its input — `\!`
 		// is a shell command, and this runs as root. And an `OWNER TO` naming the
 		// publisher's role failed on any box whose role differs, after `--clean`
@@ -627,6 +600,41 @@ async function main(): Promise<void> {
 			`\n✓ restored to block ${gotBlock.toLocaleString()} (chain ${gotChain}).\n`
 		);
 
+		// ── foreign code, then local-only state (rv2-1c / rv2-5) ──
+		// FIRST, before this script writes a single row: a snapshot is data, and
+		// any function, trigger or rule it created would fire on the writes
+		// below (the posting-key reset updates every account) — its effects,
+		// a relay payout row say, would outlive the cleanup. The sanitizer
+		// already refuses a dump that defines code; this drops anything that got
+		// in some other way. Then the publisher's own state goes: an older
+		// snapshot still holds its push subscriptions, its relay payout queue
+		// and similar (see snapshotLocalState.ts) — this node's relay would
+		// otherwise act on them.
+		try {
+			const schemaSql = readFileSync(
+				join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'schema.sql'),
+				'utf8'
+			);
+			const dropped = await dropRoutinesNotInSchema(db, schemaSql);
+			if (dropped.length > 0) {
+				process.stderr.write(
+					`  removed ${dropped.length} object(s) the snapshot added that Morphit does not define:\n`
+				);
+				for (const d of dropped.slice(0, 20)) process.stderr.write(`      ${d}\n`);
+			}
+			const scrubbed = await scrubRestoredLocalState(db);
+			if (scrubbed > 0) {
+				process.stderr.write(
+					`  publisher-local rows left out or reset (push queues, probe opinions): ${scrubbed.toLocaleString()}.\n`
+				);
+			}
+		} catch (err) {
+			die(
+				`could not tidy the restored database: ${err instanceof Error ? err.message : String(err)}. ` +
+					`Do not start the indexer on this database until this succeeds — re-run the restore.`
+			);
+		}
+
 		// ── posting keys: this node confirms them itself (v1.18.0, D4) ──
 		// A restored row marked confirmed would be trusted by the chat fast path
 		// with no chain read, on the publisher's word alone — and the op-log check
@@ -648,38 +656,6 @@ async function main(): Promise<void> {
 			);
 		}
 
-		// ── local-only state and foreign code (v1.18.0 deep-deep, rv2-5 / rv2-1c) ──
-		// A snapshot carries the chain's state, never the publisher's own: an
-		// older snapshot still holds its push subscriptions, its relay payout
-		// queue and similar (see snapshotLocalState.ts) — this node's relay would
-		// otherwise act on them. And a snapshot is data: any function, trigger or
-		// rule it created that schema.sql does not is dropped before the indexer
-		// can fire it.
-		try {
-			const scrubbed = await scrubRestoredLocalState(db);
-			if (scrubbed > 0) {
-				process.stderr.write(
-					`  publisher-local rows left out or reset (push queues, probe opinions): ${scrubbed.toLocaleString()}.\n`
-				);
-			}
-			const schemaSql = readFileSync(
-				join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'schema.sql'),
-				'utf8'
-			);
-			const dropped = await dropRoutinesNotInSchema(db, schemaSql);
-			if (dropped.length > 0) {
-				process.stderr.write(
-					`  removed ${dropped.length} object(s) the snapshot added that Morphit does not define:\n`
-				);
-				for (const d of dropped.slice(0, 20)) process.stderr.write(`      ${d}\n`);
-			}
-		} catch (err) {
-			die(
-				`could not tidy the restored database: ${err instanceof Error ? err.message : String(err)}. ` +
-					`Do not start the indexer on this database until this succeeds — re-run the restore.`
-			);
-		}
-
 		// ── Tier-2 hardening: op-log spot-check (from-chain only) ──
 		// Prove the restored `ops` log matches the chain before we recommend
 		// serving. Quarantine on any mismatch. --skip-verify opts out (e.g. a
@@ -687,7 +663,7 @@ async function main(): Promise<void> {
 		if (fromChain && !has('skip-verify')) {
 			process.stderr.write(`\nsnapshot: Tier-2 op-log spot-check against the chain…\n`);
 			const samples = flag('verify-samples') ?? '40';
-			// v1.18.0 deep-deep (rv2-6): this spawned plain `node` on a .ts file
+			// this spawned plain `node` on a .ts file
 			// with no path aliases, which died with ERR_MODULE_NOT_FOUND ('$config')
 			// and exit 1 — read as QUARANTINE, after a restore that was fine. Run it
 			// the way fast-sync runs this script: the repo's tsx with the tsconfig.
@@ -732,7 +708,7 @@ async function main(): Promise<void> {
 	}
 }
 
-// Exit as soon as the work is done (v1.18.0 deep-deep, rv2-1/rv2-9): quorum
+// Exit as soon as the work is done: quorum
 // reads abandon the slower RPC calls once two operators agree, and an abandoned
 // call keeps retrying in the background until its own timeout (a minute over
 // Tor/I2P), which would otherwise hold the process open for nothing.

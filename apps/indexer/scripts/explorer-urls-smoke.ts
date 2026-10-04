@@ -4,7 +4,7 @@
  * Pure helpers.  Verifies validation refuses garbage and that
  * URLs match the documented external-explorer patterns.
  *
- * Part 109: the BTC/XMR templates are now operator-configurable
+ * the BTC/XMR templates are now operator-configurable
  * (instance.chat_link_urls), but the smoke runs outside
  * SvelteKit so it can't import urls.ts directly (which pulls
  * the Svelte store via `$lib`).  Instead it tests the pure

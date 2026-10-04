@@ -14,7 +14,7 @@
  * value … denominated in [fiat]") and the asset-registry.  So the
  * sentence reads "<amount> <fiat> … of <asset>", never "<amount> <asset>".
  *
- * SETTLEMENT (v1.9.5, the maintainer — tt.txt) — every order names what settles the
+ * SETTLEMENT (v1.9.5) — every order names what settles the
  * trade at the end of the sentence:
  *   • BARTER (goods) settles in CRYPTO → the `accepted_assets` tickers,
  *     shown verbatim ("… for BTC or XMR").
@@ -159,7 +159,7 @@ export function orderTitleParts(
 	opts?: OrderTitleOptions
 ): OrderTitleParts {
 	const side = o.side === 'sell' ? 'sell' : 'buy';
-	// cp425 — for a goods asset (BARTER) the sentence reads "…of goods/services"
+	// for a goods asset (BARTER) the sentence reads "…of goods/services"
 	// (or the user's inline title) instead of "…of BARTER"; callers pass a
 	// localized `goodsLabel`. Falls back to the raw ticker if none is provided
 	// (e.g. a caller that hasn't been updated), so the title is always sensible.
@@ -169,7 +169,7 @@ export function orderTitleParts(
 	const hasMin = o.amount_min !== null && o.amount_min !== undefined;
 	const hasMax = o.amount_max !== null && o.amount_max !== undefined;
 
-	// RTL bidi (the maintainer) — in a right-to-left locale, wrap each embedded LTR token
+	// RTL bidi — in a right-to-left locale, wrap each embedded LTR token
 	// (the fiat amount(s), the currency/asset ticker, and every settlement rail)
 	// in a bidi isolate so the Farsi sentence renders cleanly instead of
 	// reshuffling numbers/tickers at the boundaries. `iso` is the identity in
@@ -178,7 +178,7 @@ export function orderTitleParts(
 	const rtl = isRtlLocale(opts?.locale);
 	const iso = (s: string): string => (rtl ? isolateToken(s) : s);
 
-	// v1.9.5 (the maintainer) — the settlement string every branch appends: the accepted
+	// v1.9.5 — the settlement string every branch appends: the accepted
 	// cryptos (barter) or the payment-method labels (crypto), as a localized
 	// disjunction. Empty only for a malformed order (validation requires ≥1).
 	// Each rail is isolated BEFORE the disjunction join (RTL only) so the
@@ -222,7 +222,7 @@ export function orderTitleParts(
 			values: { amount: iso(fmt(o.amount_max as number)), fiat: iso(fiat), asset: iso(asset), settlement }
 		};
 	}
-	// tt.txt #5 — a BARTER listing with no fiat value reads "I'm buying {asset}
+	// a BARTER listing with no fiat value reads "I'm buying {asset}
 	// for {settlement}" (the accepted crypto), since there's no fiat band to name
 	// and the crypto is what the trade settles in. Crypto assets and valued
 	// barter never reach here. A barter with no accepted set falls through to the

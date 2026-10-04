@@ -1,5 +1,5 @@
 /**
- * Morphit — safe inline-markdown renderer for FAQ answers (cp218).
+ * Morphit — safe inline-markdown renderer for FAQ answers.
  *
  * FAQ copy in the i18n files uses light *inline* markdown — `**bold**`,
  * `*italic*`, `` `code` ``, and the occasional `[text](url)` — authored so the
@@ -67,7 +67,7 @@ export function renderFaqInline(input: string, localizeHref?: (path: string) => 
 		const href = safeHref(raw);
 		if (href === null) return whole; // leave unsafe/odd links as literal text
 		const internal = href.startsWith('/') || href.startsWith('#');
-		// cp425 — locale-prefix path-internal links (e.g. `/my/wallet` →
+		// locale-prefix path-internal links (e.g. `/my/wallet` →
 		// `/{lang}/my/wallet`) via the caller's localizer so an in-app link
 		// in an answer lands on the right per-locale route. `#hash` links and
 		// external URLs pass through unchanged; safeHref already validated the

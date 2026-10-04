@@ -2,7 +2,7 @@
  * broadcast-error-copy-smoke (v1.16.5)
  *
  * Every broadcast failure must resolve to an EXACT, actionable UI message — never
- * an opaque "try again", never "open DevTools" (the maintainer's rule). This pins the pure
+ * an opaque "try again", never "open DevTools". This pins the pure
  * classifier: each error type / chain reason maps to the right i18n key, the key
  * exists in en.json, and settings.+page.svelte routes through the classifier.
  */

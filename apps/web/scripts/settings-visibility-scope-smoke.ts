@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * settings-visibility-scope — v1.8.11 (the maintainer, t.txt).
+ * settings-visibility-scope — v1.8.11.
  *
  * WHY THIS EXISTS. The Settings page writes to three different destinations and
  * said so nowhere:
@@ -11,7 +11,7 @@
  *             (notifications, hidden/blocked accounts, region, syndication).
  *   device  → never leaves this browser.
  *
- * the maintainer was caught by that boundary himself: he saved a screenful of fields, and
+ * The maintainer was caught by that boundary himself: he saved a screenful of fields, and
  * when told "testowner has never broadcast settings" he correctly objected — he
  * HAD saved settings, just to the other record. If the author of the software
  * trips on it, users will.
@@ -92,7 +92,7 @@ for (const [headingId, scope] of EXPECTED) {
 	);
 }
 
-// v1.8.12 (the maintainer) — a badge must never become an extra child of a flex row that
+// v1.8.12 — a badge must never become an extra child of a flex row that
 // already holds the heading and a button: it then competes for width and
 // collides with the title. Two cards shipped that way in v1.8.11 (Hidden
 // accounts, Blocked accounts, both of which carry a Refresh button) and the maintainer

@@ -1,8 +1,8 @@
 /**
- * priceFetchUtil smoke (cp159 F-indexer-1/2/3).
+ * priceFetchUtil smoke (2/3).
  *
  * Pins the hardened-fetch helper that backs coingeckoFetcher.ts
- * after the cp159 audit closed three
+ * after the audit closed three
  * findings against the price-feed pipeline:
  *
  *   F-indexer-1 (MED) — no body cap on `await res.json()` from
@@ -38,13 +38,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * Local strip-comments helper.  Same shape as cp153's
+ * Local strip-comments helper.  Same shape as an earlier fix's
  * `scripts/lib/strip-comments.ts` (block-comments first via
  * lazy match, then line-comments).  Duplicated here rather
  * than cross-imported because the repo-root helper is reached
  * via 3-level relative path that doesn't resolve cleanly under
  * tsx + tsconfig.smoke.json from `apps/indexer/scripts/`.
- * Per-workspace smoke gets its own copy; the cp153 helper
+ * Per-workspace smoke gets its own copy; the helper
  * remains the canonical for repo-root scripts/ smokes.
  */
 const BLOCK_COMMENT_RE = /\/\*[\s\S]*?\*\//g;
@@ -233,10 +233,6 @@ const sentinels: Array<{ name: string; mustHave: string }> = [
 	{
 		name: 'env override hook for max-body-bytes',
 		mustHave: 'MORPHIT_INDEXER_PRICE_FETCH_MAX_BODY_BYTES'
-	},
-	{
-		name: 'cp159 F-indexer-1 docblock reference',
-		mustHave: 'F-indexer-1'
 	}
 ];
 
@@ -298,14 +294,14 @@ if (callsiteFailed === 0) {
 
 /* ---------------- scenario 9: no bare `await res.json()` in fetchers ---------------- */
 
-// Pre-cp159, both fetchers used `await res.json()` without a body cap.
-// After cp159 they MUST use readPriceBodyCapped + JSON.parse.  Catch
+// Previously, both fetchers used `await res.json()` without a body cap.
+// Later they MUST use readPriceBodyCapped + JSON.parse.  Catch
 // any regression that reintroduces the bare `res.json()` pattern.
 //
-// IMPORTANT: strip comments first.  The cp159 fix annotations
+// IMPORTANT: strip comments first.  The fix annotations
 // inside coingeckoFetcher's source contain the literal text
 // "Replaces `await res.json()` which had no size bound" — that's
-// explanation, not code.  cp153's shared stripComments() helper
+// explanation, not code.  the shared stripComments() helper
 // removes comments before the regex match so the smoke only
 // fires on actual code-path regressions.
 

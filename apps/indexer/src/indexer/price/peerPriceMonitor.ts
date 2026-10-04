@@ -1,12 +1,12 @@
 /**
  * Morphit indexer — Cross-instance peer price monitor (Defense F).
  *
- * cp127 deferred Defense F from ADR-0039's black-hat-defense table.
- * cp129 implements it.
+ * A later change deferred Defense F from ADR-0039's black-hat-defense table.
+ * A later change implements it.
  *
  * What this catches
  * ─────────────────
- * The cp127 morphit_native fetcher has manipulation defenses
+ * The morphit_native fetcher has manipulation defenses
  * against attackers manipulating Morphit's own on-platform trade
  * data (Sybil filtering, per-trader caps, tier hierarchy, drift
  * monitoring, etc.).  But what if an entire indexer is compromised?
@@ -29,7 +29,7 @@
  *        For each peer in `known_instances` with last_probe_status
  *        in ('good', 'quiet'):
  *          - GET https://<peer-origin>/v1/price/morphit-native/receipt
- *          - Parse the response; pick out derived_price + source.
+ *          - Parse it (priceReceiptShape.parsePeerReceipt): price + source.
  *          - INSERT a row into price_peer_observations.
  *
  *   2. After each sample cycle:
@@ -39,13 +39,13 @@
  *        because we can't tell if their price came from our same
  *        derivation method).
  *
- *   3. Compare median(peers) vs my own current derived_price.
+ *   3. Compare median(peers) vs my own current price.
  *        If |my - median| / median > PEER_DISAGREEMENT_THRESHOLD
  *        (default 25%), increment a sustained-disagreement counter.
  *
  *   4. If counter exceeds PEER_DISAGREEMENT_SUSTAINED_HOURS
  *      (default 4 hours), fire an alert (rate-limited to
- *      PEER_ALERT_COOLDOWN_HOURS = 24h, matching the cp127
+ *      PEER_ALERT_COOLDOWN_HOURS = 24h, matching the
  *      disagreementMonitor pattern).
  *
  * Why median, not mean
@@ -68,7 +68,7 @@
  * ────────────────────────
  * Comparing my USD-denominated BLURT price to a peer's EUR-
  * denominated BLURT price requires a USD/EUR oracle, which would
- * defeat the self-sovereign premise of cp127.  So this monitor
+ * defeat the self-sovereign premise.  So this monitor
  * only compares peers with matching `denomination_fiat`.  A
  * USD-denominated indexer in a mostly-EUR federation will skip
  * the comparison entirely (which is correct — no signal from a
@@ -80,7 +80,7 @@
  *   indexer in the federation is reporting the same wrong price
  *   (because all operators colluded, or because a shared data
  *   source got poisoned), no cross-instance comparison can
- *   detect it.  Same blind spot as cp127's "consensus from
+ *   detect it.  Same blind spot as an earlier fix's "consensus from
  *   compromised sources" failure mode.
  * - **Geographic isolation**.  A new instance in a region where
  *   most peers happen to be unreachable just sees few peers and
@@ -109,10 +109,10 @@
  *   hidden-only node, whose primary price is the federated median of the
  *   observations this monitor collects (federatedPriceFetcher.ts).
  * - The monitor stores observations to `price_peer_observations`
- *   and updates an in-process `lastAlertFiredAt` timestamp for
- *   rate-limiting.  No new endpoint surfaces alerts; they appear
+ *   and keeps, per (asset, denomination), an in-process
+ *   `lastAlertFiredAt` timestamp for rate-limiting.  No new endpoint surfaces alerts; they appear
  *   in indexer logs and are surfaced by /v1/health via the
- *   existing diagnostics layer (cp129 extends).
+ *   existing diagnostics layer (a later change extends).
  * - See ADR-0041 for the full architectural rationale.
  */
 
@@ -126,11 +126,16 @@ import {
 	hiddenServiceProxyConfigFromEnv
 } from '$indexer/hiddenServiceFetch';
 import { PER_OPERATOR_LATEST_PRICE_SQL } from '$indexer/price/federatedPriceFetcher';
+import {
+	parsePeerReceipt,
+	PRICE_RECEIPT_PATH,
+	type PeerReceipt
+} from '$indexer/price/priceReceiptShape';
 
 const log = logger('peer-price-monitor');
 
 /** Default disagreement threshold for firing alerts.  25% deviation
- *  from peer median is the same number cp127's disagreementMonitor
+ *  from peer median is the same number the disagreementMonitor
  *  uses for external-vs-native disagreement; keeps the semantics
  *  consistent. */
 export const PEER_DISAGREEMENT_THRESHOLD = 0.25;
@@ -141,7 +146,7 @@ export const PEER_DISAGREEMENT_THRESHOLD = 0.25;
 export const PEER_DISAGREEMENT_WINDOW_HOURS = 4;
 
 /** Hours of sustained over-threshold disagreement before an alert
- *  fires.  Matches cp127 disagreementMonitor's sustained-window
+ *  fires.  Matches disagreementMonitor's sustained-window
  *  for consistency. */
 export const PEER_DISAGREEMENT_SUSTAINED_HOURS = 4;
 
@@ -166,22 +171,6 @@ export const PEER_OBSERVATION_RETENTION_DAYS = 7;
 /** HTTP timeout for peer queries.  Short — we'd rather skip an
  *  unresponsive peer than block the sample cycle. */
 export const PEER_FETCH_TIMEOUT_MS = 10_000;
-
-/** Receipt response shape we expect from peer instances.
- *
- *  This is a subset of `/v1/price/morphit-native/receipt`'s
- *  full response — we only care about the derived price and what
- *  source it came from.  Other fields (contributing_traders,
- *  envelope info, etc.) are peer-specific implementation details
- *  we don't need to compare. */
-interface PeerReceiptResponse {
-	readonly asset: string;
-	readonly denomination_fiat: string;
-	readonly derived_price?: number;
-	readonly tier_used?: string;
-	readonly source?: string;
-	readonly NOT_AN_ORACLE_WARNING?: string;
-}
 
 /** Result of querying one peer in one sample cycle. */
 export interface PeerObservation {
@@ -281,7 +270,7 @@ export function peerReceiptBase(
  *  failures are normal in the federation and shouldn't block the
  *  cycle.
  *
- *  cp139-F-2 hardening: routes through `fetchJson` from
+ *  routes through `fetchJson` from
  *  federationProbe so the per-peer fetch gets the same six-layer
  *  SSRF defense the probe loop has:
  *    1. HTTPS protocol enforcement
@@ -296,7 +285,7 @@ export function peerReceiptBase(
  *    5. redirect: 'manual' (no 30x chains to internal URLs)
  *    6. Body cap at 256KB with streaming abort (DoS bound)
  *
- *  Pre-cp139-F-2 this function called bare fetch(), relying solely
+ *  Previously, this function called bare fetch(), relying solely
  *  on the operator-register handler's intake-time literal-hostname
  *  check.  Intake gating catches static forms; the request-time
  *  layers above catch DNS-rebinding + redirect + body-bomb.  Both
@@ -312,31 +301,14 @@ export async function fetchPeerReceipt(
 	 *  refuses everything on a hidden-only node — and that one honours the
 	 *  budget, which on Tor or I2P has to allow for building a circuit. */
 	fetcher: <T>(url: string, timeoutMs: number) => Promise<T> = (url) => fetchJson(url)
-): Promise<PeerReceiptResponse | null> {
+): Promise<PeerReceipt | null> {
 	try {
-		const url = new URL(
-			'/v1/price/morphit-native/receipt',
-			peerOrigin
-		);
+		const url = new URL(PRICE_RECEIPT_PATH, peerOrigin);
 		url.searchParams.set('asset', asset);
 		url.searchParams.set('denomination_fiat', denominationFiat);
-		const body = await fetcher<PeerReceiptResponse>(url.toString(), timeoutMs);
-		if (
-			typeof body.derived_price !== 'number' ||
-			!Number.isFinite(body.derived_price) ||
-			body.derived_price <= 0
-		) {
-			return null;
-		}
-		if (body.asset !== asset) {
-			return null;
-		}
-		if (body.denomination_fiat !== denominationFiat) {
-			// Different denomination — skip per the same-denomination
-			// filter (we can't compare apples to oranges).
-			return null;
-		}
-		return body;
+		// The producer's own type is read with the producer's own parser
+		// (priceReceiptShape.ts), so the two ends cannot disagree on a field.
+		return parsePeerReceipt(await fetcher<unknown>(url.toString(), timeoutMs), asset, denominationFiat);
 	} catch (err) {
 		log.debug('peer_fetch_failed', { peerOrigin, err: String(err) });
 		return null;
@@ -394,20 +366,31 @@ export function shouldFireAlert(
 	return elapsedSinceLastAlert >= cooldownMs;
 }
 
-/** Module-level state for sustained-disagreement tracking + alert
- *  rate-limiting.  Reset on indexer restart (acceptable — peer
- *  observations are persisted, so a restart just delays the alert
- *  by one cycle while the in-process state rebuilds). */
-const moduleState = {
-	aboveThresholdSince: null as Date | null,
-	lastAlertFiredAt: null as Date | null
-};
+/** Sustained-disagreement tracking + alert rate-limiting, one entry per
+ *  (asset, denomination) monitor. main.ts runs one monitor per asset; with a
+ *  single shared record, one asset's agreement cleared another's disagreement
+ *  clock every cycle (the BTC/XMR cycles reset BLURT's), so the alert never
+ *  fired. Reset on indexer restart (acceptable — peer observations are
+ *  persisted, so a restart just delays the alert by one cycle). */
+interface MonitorState {
+	aboveThresholdSince: Date | null;
+	lastAlertFiredAt: Date | null;
+}
+const monitorStates = new Map<string, MonitorState>();
 
-/** Reset module state (used by tests).  Not exported in production
- *  paths. */
+function stateFor(asset: string, denominationFiat: string): MonitorState {
+	const key = `${asset}|${denominationFiat}`;
+	let st = monitorStates.get(key);
+	if (st === undefined) {
+		st = { aboveThresholdSince: null, lastAlertFiredAt: null };
+		monitorStates.set(key, st);
+	}
+	return st;
+}
+
+/** Reset every monitor's state (tests). */
 export function _resetPeerPriceMonitorState(): void {
-	moduleState.aboveThresholdSince = null;
-	moduleState.lastAlertFiredAt = null;
+	monitorStates.clear();
 }
 
 /** Run one sample cycle: query peers, store observations, compute
@@ -481,7 +464,7 @@ export async function runPeerPriceSampleCycle(
 	/** One peer's receipt: its addresses in order, first answer wins. A peer on
 	 *  two networks is still ONE sample — the median counts instances, and a
 	 *  peer must not weigh double for having published twice. */
-	const receiptFrom = async (t: { bases: string[] }): Promise<PeerReceiptResponse | null> => {
+	const receiptFrom = async (t: { bases: string[] }): Promise<PeerReceipt | null> => {
 		for (const base of t.bases) {
 			const r = hiddenOnly
 				? await fetchPeerReceipt(base, asset, denominationFiat, fetchTimeoutMs, hiddenFetch)
@@ -495,7 +478,7 @@ export async function runPeerPriceSampleCycle(
 	// (peer offline, denomination-mismatch, etc.) — they just
 	// don't contribute an observation.
 	//
-	// cp167 design decision — kept on Promise.allSettled, NOT
+	// design decision — kept on Promise.allSettled, NOT
 	// migrated to @morphit/rpc-pool's quorumCall.  Rationale:
 	//
 	//   - EndpointPool / quorumCall are optimized for "give me
@@ -529,11 +512,10 @@ export async function runPeerPriceSampleCycle(
 		observations.push({
 			peerOrigin,
 			asset: result.value.asset,
-			denominationFiat: result.value.denomination_fiat,
-			observedPrice: result.value.derived_price!,
+			denominationFiat: result.value.denominationFiat,
+			observedPrice: result.value.price,
 			observedAt: now,
-			sourceNative:
-				result.value.source === 'morphit_native' ? 'morphit_native' : 'unknown'
+			sourceNative: result.value.sourceNative
 		});
 	}
 
@@ -560,7 +542,7 @@ export async function runPeerPriceSampleCycle(
 	// against unknown sources is apples-to-oranges.
 	const windowMs = disagreementWindowHours * 60 * 60 * 1000;
 	const windowStart = new Date(now.getTime() - windowMs);
-	// (v1.18.0 deep-deep, M1) ONE latest sample per peer operator (shared SQL
+	// ONE latest sample per peer operator (shared SQL
 	// with the hidden-only federated fetcher). Was: every observation row in
 	// the window, so a peer sampled N times — or one operator publishing N
 	// origins — weighed N times in the median.
@@ -618,20 +600,21 @@ export async function runPeerPriceSampleCycle(
 		disagreementThreshold
 	);
 
-	// Step 6: update sustained-disagreement state.
+	// Step 6: update this asset's sustained-disagreement state.
+	const state = stateFor(asset, denominationFiat);
 	if (aboveThreshold) {
-		if (moduleState.aboveThresholdSince === null) {
-			moduleState.aboveThresholdSince = now;
+		if (state.aboveThresholdSince === null) {
+			state.aboveThresholdSince = now;
 		}
 	} else {
-		moduleState.aboveThresholdSince = null;
+		state.aboveThresholdSince = null;
 	}
 
 	// Step 7: fire alert if criteria met.
 	const fireAlert = shouldFireAlert(
-		moduleState.aboveThresholdSince,
+		state.aboveThresholdSince,
 		now,
-		moduleState.lastAlertFiredAt,
+		state.lastAlertFiredAt,
 		sustainedHours,
 		alertCooldownHours
 	);
@@ -643,11 +626,11 @@ export async function runPeerPriceSampleCycle(
 			peerMedian: peerMed,
 			deviation: deviation.toFixed(4),
 			peerCount: peerPrices.length,
-			sustainedSince: moduleState.aboveThresholdSince?.toISOString(),
+			sustainedSince: state.aboveThresholdSince?.toISOString(),
 			defenseTag:
-				'Defense F (cp127 deferred → cp129) — my derived price diverges from peer median by more than threshold for sustained period.  See ADR-0041.'
+				'Defense F: this node\'s price has differed from the peer median by more than the threshold for the sustained period (ADR-0041).'
 		});
-		moduleState.lastAlertFiredAt = now;
+		state.lastAlertFiredAt = now;
 	}
 
 	return {
@@ -693,9 +676,9 @@ export function startPeerPriceMonitor(
 		if (!running) return;
 		try {
 			const result = await runPeerPriceSampleCycle(cfg);
-			// cp233 — surface the latest cycle result so /v1/health can
+			// surface the latest cycle result so /v1/health can
 			// show F's peer comparison alongside B (drift) and C
-			// (disagreement).  The cp129 schema comment always promised
+			// (disagreement).  The schema comment always promised
 			// F would "surface on /v1/health"; this callback is where
 			// that finally becomes true.  Fenced from the prune below by
 			// being a pure in-memory store on the caller's side.

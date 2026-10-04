@@ -303,7 +303,7 @@ await scenario('O1.1: rejects display_name impersonating reserved name', async (
 	assertEqual(r, { ok: false, reason: 'display_name_impersonates_reserved' }, 'result');
 });
 
-// ─── cp670 — brand allowed in a longer distinct name; bare/infra blocked ───
+// ─── brand allowed in a longer distinct name; bare/infra blocked ───
 
 await scenario('cp670: accepts "Morphit Latino" (brand in a distinct name)', async () => {
 	const mock = makeMockClient([
@@ -351,7 +351,7 @@ await scenario('cp670: owner exemption — signer "morphit" may set "Morphit"', 
 	assertEqual(r, { ok: true }, 'result');
 });
 
-// ─── cp671 — RTL: Persian display name with ZWNJ is accepted ───
+// ─── RTL: Persian display name with ZWNJ is accepted ───
 
 await scenario('cp671: accepts Persian display_name with ZWNJ (half-space)', async () => {
 	const mock = makeMockClient([

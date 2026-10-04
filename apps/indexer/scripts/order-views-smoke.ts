@@ -1,12 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * Smoke for orderViews API — task #14.
+ * Smoke for the orderViews API.
  *
  * Tests pure handler logic (incrementOrderView, readOrderViews)
  * against an in-memory fake Database.  No Hono runtime
- * required — Hono isn't installed in the smoke sandbox, and
- * the privacy + correctness logic lives in the pure functions
- * anyway.
+ * required — the privacy + correctness logic lives in the pure
+ * functions.
  */
 
 import { incrementOrderView, readOrderViews } from '../src/api/orderViewsLogic.ts';
@@ -40,7 +39,6 @@ function makeFakeDb(
 ): Database {
 	const orderExists = opts.orderExists ?? true;
 	let count = opts.initialCount ?? 0;
-	let updatedAt: string | null = null;
 
 	const fakeQuery = async <R extends pg.QueryResultRow = pg.QueryResultRow>(
 		text: string,
@@ -59,7 +57,6 @@ function makeFakeDb(
 		}
 		if (sql.startsWith('INSERT INTO order_views')) {
 			count += 1;
-			updatedAt = new Date().toISOString();
 			return {
 				rows: [{ count: String(count) } as unknown as R],
 				rowCount: 1,
@@ -68,8 +65,8 @@ function makeFakeDb(
 				fields: []
 			};
 		}
-		if (sql.startsWith('SELECT count, updated_at FROM order_views')) {
-			if (count === 0 && updatedAt === null) {
+		if (sql.startsWith('SELECT count FROM order_views')) {
+			if (count === 0) {
 				return {
 					rows: [],
 					rowCount: 0,
@@ -81,8 +78,7 @@ function makeFakeDb(
 			return {
 				rows: [
 					{
-						count: String(count),
-						updated_at: updatedAt
+						count: String(count)
 					} as unknown as R
 				],
 				rowCount: 1,
@@ -194,26 +190,20 @@ scenario('increment accepts dotted account name (Blurt allows)', async () => {
 	if (r.status !== 200) throw new Error(`expected 200, got ${r.status}`);
 });
 
-scenario('read: 0 + null when no views recorded', async () => {
+scenario('read: 0 when no views recorded', async () => {
 	const db = makeFakeDb({ orderExists: true, initialCount: 0 });
 	const r = await readOrderViews(db, 'alice', 'sell-btc-usd-1234');
 	if (r.status !== 200) throw new Error(`expected 200, got ${r.status}`);
-	const body = r.body as { count: number; updated_at: string | null };
-	if (body.count !== 0) throw new Error(`expected 0, got ${body.count}`);
-	if (body.updated_at !== null) {
-		throw new Error('updated_at should be null');
-	}
+	if (JSON.stringify(r.body) !== '{"count":0}') throw new Error(`body ${JSON.stringify(r.body)}`);
 });
 
-scenario('read: returns count + updated_at after increments', async () => {
+scenario('read: the body is the count and nothing else after increments', async () => {
 	const db = makeFakeDb({ orderExists: true, initialCount: 0 });
 	await incrementOrderView(db, 'alice', 'sell-btc-usd-1234');
 	await incrementOrderView(db, 'alice', 'sell-btc-usd-1234');
 	await incrementOrderView(db, 'alice', 'sell-btc-usd-1234');
 	const r = await readOrderViews(db, 'alice', 'sell-btc-usd-1234');
-	const body = r.body as { count: number; updated_at: string | null };
-	if (body.count !== 3) throw new Error(`expected 3, got ${body.count}`);
-	if (body.updated_at === null) throw new Error('updated_at should be set');
+	if (JSON.stringify(r.body) !== '{"count":3}') throw new Error(`body ${JSON.stringify(r.body)}`);
 });
 
 scenario('read: Cache-Control = public, max-age=30', async () => {

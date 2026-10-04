@@ -4,7 +4,6 @@
 	xmlns:xhtml="http://www.w3.org/1999/xhtml">
 	<url>
 		<loc>https://morphit.io/de/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -21,7 +20,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -38,7 +36,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -55,7 +52,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -72,7 +68,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -89,7 +84,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -106,7 +100,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -123,7 +116,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -140,7 +132,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -157,7 +148,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>1.0</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/"/>
@@ -174,7 +164,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -191,7 +180,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -208,7 +196,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -225,7 +212,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -242,7 +228,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -259,7 +244,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -276,7 +260,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -293,7 +276,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -310,7 +292,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -327,7 +308,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/orderbook</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/orderbook"/>
@@ -344,7 +324,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -361,7 +340,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -378,7 +356,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -395,7 +372,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -412,7 +388,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -429,7 +404,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -446,7 +420,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -463,7 +436,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -480,7 +452,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -497,7 +468,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/faq</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.9</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/faq"/>
@@ -514,7 +484,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -531,7 +500,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -548,7 +516,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -565,7 +532,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -582,7 +548,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -599,7 +564,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -616,7 +580,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -633,7 +596,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -650,7 +612,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -667,7 +628,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/onboarding</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.8</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/onboarding"/>
@@ -684,7 +644,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -701,7 +660,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -718,7 +676,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -735,7 +692,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -752,7 +708,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -769,7 +724,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -786,7 +740,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -803,7 +756,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -820,7 +772,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -837,7 +788,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/download</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/download"/>
@@ -854,7 +804,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -871,7 +820,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -888,7 +836,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -905,7 +852,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -922,7 +868,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -939,7 +884,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -956,7 +900,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -973,7 +916,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -990,7 +932,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -1007,7 +948,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/run-a-node</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.7</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/run-a-node"/>
@@ -1024,7 +964,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1041,7 +980,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1058,7 +996,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1075,7 +1012,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1092,7 +1028,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1109,7 +1044,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1126,7 +1060,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1143,7 +1076,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1160,7 +1092,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1177,7 +1108,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/operators</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/operators"/>
@@ -1194,7 +1124,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1211,7 +1140,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1228,7 +1156,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1245,7 +1172,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1262,7 +1188,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1279,7 +1204,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1296,7 +1220,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1313,7 +1236,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1330,7 +1252,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1347,7 +1268,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/security</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/security"/>
@@ -1364,7 +1284,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1381,7 +1300,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1398,7 +1316,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1415,7 +1332,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1432,7 +1348,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1449,7 +1364,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1466,7 +1380,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1483,7 +1396,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1500,7 +1412,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1517,7 +1428,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/support</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/support"/>
@@ -1534,7 +1444,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1551,7 +1460,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1568,7 +1476,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1585,7 +1492,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1602,7 +1508,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1619,7 +1524,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1636,7 +1540,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1653,7 +1556,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1670,7 +1572,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1687,7 +1588,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/about-this-instance</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/about-this-instance"/>
@@ -1704,7 +1604,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1721,7 +1620,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1738,7 +1636,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1755,7 +1652,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1772,7 +1668,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1789,7 +1684,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1806,7 +1700,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1823,7 +1716,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1840,7 +1732,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1857,7 +1748,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/instances</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/instances"/>
@@ -1874,7 +1764,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1891,7 +1780,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1908,7 +1796,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1925,7 +1812,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1942,7 +1828,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1959,7 +1844,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1976,7 +1860,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -1993,7 +1876,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -2010,7 +1892,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -2027,7 +1908,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/compare</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>weekly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/compare"/>
@@ -2044,7 +1924,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2061,7 +1940,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2078,7 +1956,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2095,7 +1972,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2112,7 +1988,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2129,7 +2004,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2146,7 +2020,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2163,7 +2036,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2180,7 +2052,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2197,7 +2068,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/stats</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>daily</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/stats"/>
@@ -2214,7 +2084,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2231,7 +2100,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2248,7 +2116,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2265,7 +2132,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2282,7 +2148,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2299,7 +2164,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2316,7 +2180,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2333,7 +2196,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2350,7 +2212,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2367,7 +2228,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/backup-keys</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/backup-keys"/>
@@ -2384,7 +2244,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2401,7 +2260,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2418,7 +2276,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2435,7 +2292,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2452,7 +2308,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2469,7 +2324,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2486,7 +2340,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2503,7 +2356,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2520,7 +2372,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2537,7 +2388,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy-terms</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>yearly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy-terms"/>
@@ -2554,7 +2404,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2571,7 +2420,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2588,7 +2436,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2605,7 +2452,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2622,7 +2468,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2639,7 +2484,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2656,7 +2500,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2673,7 +2516,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2690,7 +2532,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2707,7 +2548,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/plan</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.4</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/plan"/>
@@ -2724,7 +2564,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2741,7 +2580,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2758,7 +2596,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2775,7 +2612,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2792,7 +2628,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2809,7 +2644,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2826,7 +2660,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2843,7 +2676,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2860,7 +2692,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2877,7 +2708,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/glossary</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/glossary"/>
@@ -2894,7 +2724,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -2911,7 +2740,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -2928,7 +2756,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -2945,7 +2772,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -2962,7 +2788,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -2979,7 +2804,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -2996,7 +2820,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -3013,7 +2836,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -3030,7 +2852,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -3047,7 +2868,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/cheat-sheet</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/cheat-sheet"/>
@@ -3064,7 +2884,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3081,7 +2900,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3098,7 +2916,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3115,7 +2932,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3132,7 +2948,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3149,7 +2964,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3166,7 +2980,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3183,7 +2996,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3200,7 +3012,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3217,7 +3028,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.6</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy"/>
@@ -3234,7 +3044,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3251,7 +3060,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3268,7 +3076,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3285,7 +3092,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3302,7 +3108,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3319,7 +3124,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3336,7 +3140,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3353,7 +3156,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3370,7 +3172,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3387,7 +3188,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/btc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/btc"/>
@@ -3404,7 +3204,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3421,7 +3220,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3438,7 +3236,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3455,7 +3252,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3472,7 +3268,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3489,7 +3284,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3506,7 +3300,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3523,7 +3316,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3540,7 +3332,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3557,7 +3348,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/xmr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xmr"/>
@@ -3574,7 +3364,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3591,7 +3380,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3608,7 +3396,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3625,7 +3412,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3642,7 +3428,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3659,7 +3444,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3676,7 +3460,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3693,7 +3476,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3710,7 +3492,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3727,7 +3508,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/blurt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/blurt"/>
@@ -3744,7 +3524,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3761,7 +3540,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3778,7 +3556,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3795,7 +3572,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3812,7 +3588,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3829,7 +3604,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3846,7 +3620,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3863,7 +3636,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3880,7 +3652,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3897,7 +3668,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/usdt</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdt"/>
@@ -3914,7 +3684,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -3931,7 +3700,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -3948,7 +3716,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -3965,7 +3732,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -3982,7 +3748,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -3999,7 +3764,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -4016,7 +3780,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -4033,7 +3796,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -4050,7 +3812,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -4067,7 +3828,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/usdc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/usdc"/>
@@ -4084,7 +3844,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4101,7 +3860,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4118,7 +3876,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4135,7 +3892,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4152,7 +3908,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4169,7 +3924,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4186,7 +3940,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4203,7 +3956,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4220,7 +3972,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4237,7 +3988,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/dai</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dai"/>
@@ -4254,7 +4004,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4271,7 +4020,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4288,7 +4036,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4305,7 +4052,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4322,7 +4068,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4339,7 +4084,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4356,7 +4100,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4373,7 +4116,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4390,7 +4132,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4407,7 +4148,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/bch</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/bch"/>
@@ -4424,7 +4164,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4441,7 +4180,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4458,7 +4196,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4475,7 +4212,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4492,7 +4228,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4509,7 +4244,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4526,7 +4260,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4543,7 +4276,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4560,7 +4292,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4577,7 +4308,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/ltc</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/ltc"/>
@@ -4594,7 +4324,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4611,7 +4340,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4628,7 +4356,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4645,7 +4372,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4662,7 +4388,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4679,7 +4404,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4696,7 +4420,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4713,7 +4436,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4730,7 +4452,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4747,7 +4468,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/dash</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dash"/>
@@ -4764,7 +4484,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4781,7 +4500,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4798,7 +4516,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4815,7 +4532,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4832,7 +4548,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4849,7 +4564,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4866,7 +4580,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4883,7 +4596,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4900,7 +4612,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4917,7 +4628,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/doge</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/doge"/>
@@ -4934,7 +4644,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -4951,7 +4660,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -4968,7 +4676,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -4985,7 +4692,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5002,7 +4708,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5019,7 +4724,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5036,7 +4740,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5053,7 +4756,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5070,7 +4772,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5087,7 +4788,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/zec</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/zec"/>
@@ -5104,7 +4804,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5121,7 +4820,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5138,7 +4836,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5155,7 +4852,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5172,7 +4868,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5189,7 +4884,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5206,7 +4900,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5223,7 +4916,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5240,7 +4932,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5257,7 +4948,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/arrr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/arrr"/>
@@ -5274,7 +4964,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5291,7 +4980,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5308,7 +4996,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5325,7 +5012,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5342,7 +5028,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5359,7 +5044,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5376,7 +5060,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5393,7 +5076,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5410,7 +5092,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5427,7 +5108,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/dcr</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/dcr"/>
@@ -5444,7 +5124,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5461,7 +5140,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5478,7 +5156,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5495,7 +5172,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5512,7 +5188,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5529,7 +5204,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5546,7 +5220,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5563,7 +5236,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5580,7 +5252,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5597,7 +5268,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/sol</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/sol"/>
@@ -5614,7 +5284,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5631,7 +5300,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5648,7 +5316,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5665,7 +5332,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5682,7 +5348,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5699,7 +5364,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5716,7 +5380,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5733,7 +5396,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5750,7 +5412,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5767,7 +5428,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/eth</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/eth"/>
@@ -5784,7 +5444,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/de/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5801,7 +5460,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/en/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5818,7 +5476,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/es/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5835,7 +5492,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fa/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5852,7 +5508,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/fr/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5869,7 +5524,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/it/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5886,7 +5540,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/pl/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5903,7 +5556,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/ru/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5920,7 +5572,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-CN/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>
@@ -5937,7 +5588,6 @@
 	</url>
 	<url>
 		<loc>https://morphit.io/zh-HK/privacy/xrp</loc>
-		<lastmod>2026-10-02</lastmod>
 		<changefreq>monthly</changefreq>
 		<priority>0.5</priority>
 		<xhtml:link rel="alternate" hreflang="de" href="https://morphit.io/de/privacy/xrp"/>

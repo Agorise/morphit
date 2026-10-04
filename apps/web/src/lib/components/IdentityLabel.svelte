@@ -20,9 +20,10 @@
 	 *
 	 * How this rule is enforced across the codebase:
 	 *
-	 *   1. No render site ever writes raw `@{account}` — call sites
-	 *      use `<IdentityLabel account={…}>` instead. The @-prefix
-	 *      formatting is this component's job.
+	 *   1. Render sites should not write raw `@{account}` — use
+	 *      `<IdentityLabel account={…}>`; the @-prefix formatting is
+	 *      this component's job. (Not enforced: some places, e.g. plain
+	 *      text and aria labels, still write the name directly.)
 	 *   2. i18n strings that used to interpolate {account} or
 	 *      {author} are refactored to prefix-only (e.g. "Trade with"
 	 *      rather than "Trade with {account}"), so the username slot
@@ -80,19 +81,18 @@
 		displayName?: string | null;
 		/** True while this account's profile is still being fetched.
 		 *
-		 *  v1.8.13 (the maintainer) — WHY THIS EXISTS. Identity has THREE states, and this
+		 *  v1.8.13 — WHY THIS EXISTS. Identity has THREE states, and this
 		 *  component only modelled two: "has a custom identity" and
 		 *  "@account + identicon". It conflated the third — NOT KNOWN YET — with
 		 *  the second, so any surface that fetches profiles after mount painted
 		 *  a confident, WRONG identity and then rewrote it seconds later.
 		 *
-		 *  the maintainer on the orderbook: "i should NEVER see the default username and
-		 *  identicon if a custom display name and custom avatar have been set."
-		 *  And on chat, where it is far worse: "imagine chatting with someone in
-		 *  the chatroom and then all of a sudden their avatar and/or display name
-		 *  changes on you like that. would you do a trade with that user?"
+		 *  Requirement: the default username and identicon never show when a custom
+		 *  display name and avatar are set. On chat it is far worse: a counterparty
+		 *  whose avatar or display name suddenly changes mid-conversation is not
+		 *  someone anyone would trade with.
 		 *
-		 *  He is right that this is a TRUST defect. A counterparty whose identity
+		 *  This is a TRUST defect. A counterparty whose identity
 		 *  mutates mid-conversation is indistinguishable from a swap attack, and
 		 *  the honest response to being uncertain is to SAY SO rather than to
 		 *  assert a fallback. With `pending`, the transition is unknown → known
@@ -113,7 +113,7 @@
 		 * precedence over the deterministic heart identicon when
 		 * populated. The source MUST have been processed through
 		 * $lib/avatar's `sanitizeSvg`. It is shown as an <img> (never
-		 * inlined — v1.18.0 deep-deep, M1).
+		 * inlined).
 		 */
 		avatarSvg?: string | null;
 		/**
@@ -135,9 +135,8 @@
 		 *  hero avatar + the username label underneath). */
 		hideAvatar?: boolean;
 		/** t155 — render the account's @handle in parentheses right after the
-		 *  DISPLAY NAME, on the same line. the maintainer: "they all show the avatar and
-		 *  display name, but right after the display name please show that user's
-		 *  @username in parenthesis on the same line as the display name."
+		 *  DISPLAY NAME, on the same line. Requirement: right after the display name, the
+		 *  user's @username in parentheses, on the same line.
 		 *
 		 *  Opt-in, and a no-op when the account has no display name: `name`
 		 *  already falls back to `@account` in that case, so appending the handle
@@ -182,7 +181,7 @@
 	const isSelf = $derived(!!account && $selfProfile.account === account);
 	const effAvatarSvg = $derived(avatarSvg ?? (isSelf ? $selfProfile.avatarSvg : null));
 	const effAvatarDataUri = $derived(avatarDataUri ?? (isSelf ? $selfProfile.avatarDataUri : null));
-	// v1.8.15 (t.txt #2) — the display-name twin of the avatar fallback above.
+	// v1.8.15 — the display-name twin of the avatar fallback above.
 	// When this label's subject is the logged-in user and the caller passed no
 	// explicit display name, fall back to the shared self-profile name so the
 	// user's CUSTOM name renders everywhere their identicon would (chat header,
@@ -234,7 +233,7 @@
 	// chunk) and is lazy-loaded.  We expose `fullKey` here as
 	// component-local $state, resolving via the async
 	// formatPublicKeyBLT helper on first hover, focus, or copy.
-	// v1.5.0 (t.txt line 5): a removed display name can arrive here as an empty
+	// v1.5.0: a removed display name can arrive here as an empty
 	// string (broadcast display_name: ''), not just null — normalize so that
 	// "no display name" always renders as @username, never blank or key-only.
 	const cleanDisplayName = $derived(
@@ -295,8 +294,8 @@
 
 	// What we DISPLAY on screen: a truncation of the SAME value the copy
 	// button yields (`full`), so the abbreviation is always a true
-	// prefix+suffix of what gets copied — NOT a different encoding. (cp305
-	// fix: previously the screen showed `fingerprint()`'s BLT+hex
+	// prefix+suffix of what gets copied — NOT a different encoding. (Fixed:
+	// previously the screen showed `fingerprint()`'s BLT+hex
 	// abbreviation while copy gave the base58 canonical key, so e.g.
 	// "BLT02cd7c…a6d3" on screen but "BLT6SzDa…" on the clipboard — same
 	// pubkey, two encodings, looked like a mismatch.) Before the canonical
@@ -309,12 +308,12 @@
 		return truncatePublicKey(f);
 	});
 
-	// cp305: eagerly resolve the canonical base58 key as soon as the
+	// eagerly resolve the canonical base58 key as soon as the
 	// component mounts WITH a public key, so the displayed truncation
 	// matches the copy/tooltip value immediately rather than only after
 	// hover. Only three single-identity surfaces pass `publicKey` (the two
 	// onboarding recaps + the settings profile preview); none are
-	// high-cardinality lists, so this does NOT regress the cp165 first-paint
+	// high-cardinality lists, so this does NOT regress the first-paint
 	// dblurt byte-budget (and the onboarding pages load dblurt anyway).
 	// ensureFullKey() is a no-op once resolved/resolving; effects are
 	// client-only so this never runs during SSR.
@@ -332,7 +331,7 @@
 	async function copyFull(e: Event): Promise<void> {
 		e.preventDefault();
 		e.stopPropagation();
-		// cp165: ensure the canonical BLT key is resolved before
+		// ensure the canonical BLT key is resolved before
 		// copying — otherwise the clipboard would get the
 		// fingerprint placeholder.  ensureFullKey is a no-op if
 		// already resolved, and lazy-loads dblurt on first call.
@@ -349,7 +348,7 @@
 		}
 	}
 
-	// Part 73: clear pending copy timeout on unmount.  Without
+	// clear pending copy timeout on unmount.  Without
 	// this, a user who copies a key and immediately navigates
 	// away leaves a setTimeout running that fires into a stale
 	// state proxy.  Svelte 5's reactive system tolerates the
@@ -362,11 +361,10 @@
 	});
 </script>
 
-<!-- v1.7.7 (t.txt #6) — the "(@username)" suffix is GONE, and with it the
+<!-- v1.7.7 — the "(@username)" suffix is GONE, and with it the
      `showHandleAfterName` prop, which existed only to draw it.
-     [the maintainer]: "no need to show the (@username) in parenthesis, and be sure to
-     truncate the display name line since it is too wide for mobile. the layout
-     of those feedback/review cards on mobile is attrocious."
+     Requirement: no (@username) here, and the display-name line truncates; the review cards
+     were far too wide on mobile.
      It cost roughly half the width of a phone-sized card to repeat something the
      card already answers better: every one of those four call sites passes
      `publicKeyString`, so the posting key renders directly underneath, and the
@@ -380,7 +378,7 @@
 
 {#snippet label()}
 	{#if name && (fingerprint || publicKeyString)}
-		<!-- cp397: the truncated posting key sits on its own line directly
+		<!-- the truncated posting key sits on its own line directly
 		     under the (bold) display name, in tiny muted text — so the
 		     human label and the cryptographic identity read as a stacked
 		     pair rather than a long inline run. -->
@@ -395,7 +393,7 @@
 			>
 		</span>
 	{:else if name}
-		<!-- v1.7.5 (t.txt #3) — TRUNCATE, don't wrap.
+		<!-- v1.7.5 — TRUNCATE, don't wrap.
 		     This branch (a display name with no posting key under it) was the only
 		     one that let a name wrap. The branch above already truncates, which is
 		     why an order card with its key visible looked fine while the chat inbox
@@ -420,7 +418,7 @@
 	{/if}
 {/snippet}
 
-<!-- v1.7.7 (t.txt #9) — `min-w-0 max-w-full` on the ROOT is what makes every
+<!-- v1.7.7 — `min-w-0 max-w-full` on the ROOT is what makes every
      `truncate` inside this component actually work.
      Without them a long display name ran past the card edge and collided with
      the Restore button, and the RE: line below truncated at "RE: I'm bu…" while
@@ -453,7 +451,7 @@
 	-->
 	{#if !hideAvatar}
 		{#if effAvatarSvg && effAvatarSvg.length > 0}
-			<!-- (v1.18.0 deep-deep, M1) An <img>, never {@html}: inlined, the
+			<!-- An <img>, never {@html}: inlined, the
 			     picture's own style/class (position:fixed, `fixed inset-0`)
 			     escaped this frame and could cover the whole page. -->
 			<img
@@ -477,7 +475,7 @@
 				aria-hidden="true"
 			/>
 		{:else if pending}
-			<!-- v1.8.13 (the maintainer) — profile still loading: show a neutral placeholder,
+			<!-- v1.8.13 — profile still loading: show a neutral placeholder,
 			     NOT the identicon. The identicon is a real answer ("this account
 			     has no custom avatar"), and asserting it before we know produces
 			     the swap the maintainer objected to — an avatar that changes on its own

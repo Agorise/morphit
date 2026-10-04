@@ -12,7 +12,7 @@
  *   • EDIT (/post/edit): the network is IMMUTABLE in a 15-minute
  *     replace — the indexer rejects a change with
  *     `replace_asset_network_change_forbidden`. So the edit route must
- *     NOT mount an interactive picker. cp401: mounting one let the user
+ *     NOT mount an interactive picker. mounting one let the user
  *     change the network, the broadcast "succeeded" (the page showed
  *     "saved"), and the indexer silently rejected the replace — the
  *     edit never applied. Instead the edit route HYDRATES the network
@@ -20,12 +20,12 @@
  *     the payload, so the immutability check matches
  *     (v.asset_network === target.asset_network).
  *
- * WHY THIS SMOKE EXISTS (Part 122 cp36 Bob-3 finding, revised cp401):
+ * WHY THIS SMOKE EXISTS (finding, revised):
  *
- * /post/edit originally shipped with ZERO multi-network wiring (cp35),
+ * /post/edit originally shipped with ZERO multi-network wiring,
  * so editing a USDT/USDC/DAI order broadcast an orderReplace without
- * asset_network → `asset_network_required_for_<asset>`. cp36 added the
- * pickers to BOTH routes. cp401 then found that an editable network (or
+ * asset_network → `asset_network_required_for_<asset>`. A later change added the
+ * pickers to BOTH routes. A later change then found that an editable network (or
  * side/asset/fiat) on the edit page is itself the bug: those fields are
  * immutable in a replace, so the picker was removed and the network is
  * now shown read-only. This smoke was rewritten to encode the

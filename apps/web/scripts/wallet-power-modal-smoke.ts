@@ -1,11 +1,11 @@
 /**
- * wallet-power-modal — cp424 (wallet security pass, staking UI).
+ * wallet-power-modal — (wallet security pass, staking UI).
  *
  * The op/math/signing this flow stands on is proven end-to-end by
  * wallet-op-builders-smoke (28/28: VESTS math, exact-precision
  * formatters, builder validation, genuine round-trip signing for all
  * three ops incl. the hand-serialized withdraw_vesting). This smoke
- * pins the UI GLUE around it — the parts that don't run in the sandbox
+ * pins the UI GLUE around it — the parts that don't run under Node
  * (no DOM / no key entry) and so can't be exercised by the op smoke:
  *
  *   1. PowerModal wires each mode to the CORRECT op + signer, signs
@@ -111,7 +111,7 @@ check(
 // ─── 4. MyBalanceCard: gating, capture, lazy render ────────────────────
 const card = read('apps/web/src/lib/components/MyBalanceCard.svelte');
 
-// tt.txt #11 — CAPABILITY, not provenance. A 'posting-active' session keeps a
+// CAPABILITY, not provenance. A 'posting-active' session keeps a
 // verified Active key on this device and can power up/down; asking
 // `origin === 'morphit-seed'` would deny it. Power-up is signed with the same
 // active key a transfer is, so it rides the same gate.
@@ -205,7 +205,7 @@ check(
 );
 check('every locale has a non-empty header title', titleStillBalance === 0);
 
-// cp453 — "Use full balance" must FLOOR to 3dp, never toFixed-ROUND (which for a
+// "Use full balance" must FLOOR to 3dp, never toFixed-ROUND (which for a
 // raw balance like 74.8176 yields "74.818", a hair above the real ceiling, so
 // the fill then failed the `<= available` check — the reported power-down bug).
 check(

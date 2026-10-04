@@ -40,7 +40,7 @@ function explorers(pid8: string, extra: string) {
 					status: 'success',
 					data: { tx_hash: TXID, payment_id: '', payment_id8: pid8, extra, confirmations: 5 }
 				};
-		return { ok: true, status: 200, json: async () => body } as unknown as Response;
+		return Response.json(body);
 	}) as typeof fetch;
 }
 
@@ -158,12 +158,8 @@ describe('xmr fee self-test', () => {
 				};
 			else if (url.includes('/api/get_transaction_data/'))
 				body = { status: 'ERROR', error: 'Transaction not found' };
-			return {
-				ok: true,
-				status: 200,
-				json: async () => body,
-				text: async () => text
-			} as unknown as Response;
+			// A real Response: explorer answers are read as a size-capped stream.
+			return new Response(body !== null || text === '' ? JSON.stringify(body) : text);
 		}) as typeof fetch;
 		const lines: string[] = [];
 		const ok = await runXmrFeeSelftest(
@@ -216,7 +212,7 @@ describe('xmr fee self-test', () => {
 					]
 				};
 			}
-			return { ok: true, status: 200, json: async () => body } as unknown as Response;
+			return Response.json(body);
 		}) as typeof fetch;
 		const lines: string[] = [];
 		const ok = await runXmrFeeSelftest(

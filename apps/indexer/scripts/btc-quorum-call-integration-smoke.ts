@@ -1,7 +1,7 @@
 /**
  * Morphit indexer — BTC fee verifier quorum-call integration smoke.
  *
- * cp166 — proves the actual UX win the maintainer asked about: when 2 of 4
+ * proves the actual UX win the maintainer asked about: when 2 of 4
  * configured BTC explorers are down/slow, the verifier returns in
  * ~50 ms via the 2 healthy survivors, NOT in 5 s via Promise.allSettled
  * waiting on the slow ones' full timeout.
@@ -203,7 +203,7 @@ async function main(): Promise<void> {
 			// The healthy explorers respond in <50 ms; the hanging
 			// ones would hold the request open for the full 5_000 ms
 			// timeout under the old Promise.allSettled pattern.
-			// Under cp166 quorumCall, the call returns as soon as
+			// Under quorumCall, the call returns as soon as
 			// the 2 healthy form quorum, so we should be sub-500 ms.
 			const v = new BitcoinExplorerFeeVerifier({
 				feeAddress: FEE_ADDRESS,

@@ -311,7 +311,7 @@ describe('POST /v1/account/create', () => {
 		const { status, body } = await post(app, validOp(), { inviteTokens });
 		expect(status).toBe(503);
 		expect(body.code).toBe('relay_out_of_funds');
-		// One read-only account lookup happens first (fix wave 4, A4: a
+		// One read-only account lookup happens first (a
 		// same-name retry must be answered "already created" before any
 		// limit); nothing is broadcast.
 		expect(stub.getAccount).toHaveBeenCalledTimes(1);
@@ -429,7 +429,7 @@ describe('POST /v1/account/create', () => {
 		expect(body.code).toBe('already_registered');
 	});
 
-	// v1.20.0 fix wave (D2). The client now signs ONCE and resends the SAME
+	// The client now signs ONCE and resends the SAME
 	// bytes, treating a "duplicate" as success and asking the chain (account
 	// exists with OUR owner key?) when no node confirmed. The endpoint maps
 	// the three outcomes the client can report.
@@ -444,7 +444,7 @@ describe('POST /v1/account/create', () => {
 		expect(body.status).toBe('broadcast');
 		expect(body.note).toBe('recovered_after_lost_reply');
 		expect(ceiling.currentCount()).toBe(1);
-		// No dust on a RECOVERED create (fix wave 4): the account may have been
+		// No dust on a RECOVERED create: the account may have been
 		// made by an earlier attempt that already sent it — never pay it twice.
 		expect(stub.broadcastTransfer).not.toHaveBeenCalled();
 	});

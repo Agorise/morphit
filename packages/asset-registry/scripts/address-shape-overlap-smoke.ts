@@ -2,7 +2,7 @@
 /**
  * address-shape-overlap-smoke.
  *
- * CP42 K-73 closure of LL #50 (cp41): when adding chains with shared
+ * CP42 K-73 closure of LL #50: when adding chains with shared
  * protocol lineage, two assets may share address formats — the regex
  * layer can't disambiguate; only context (asset field, tab selection)
  * can.  This smoke pins the KNOWN intentional overlaps as an explicit
@@ -21,8 +21,8 @@
  *  - {USDT} accepts T... Tron addresses, USDC/DAI don't.
  *  - {BTC, BCH, LTC} legacy `1...` and `3...` addresses overlap
  *    (BCH preserves legacy compatibility; LTC `3...` is legacy P2SH).
- *  - {ZEC, ARRR} both accept zs1 Sapling shielded addresses (cp41
- *    LL #50: Pirate Chain forked from Zcash Sapling protocol).
+ *  - {ZEC, ARRR} both accept zs1 Sapling shielded addresses
+ *    (Pirate Chain forked from Zcash Sapling protocol).
  *
  * Any UNDOCUMENTED overlap fails the smoke.
  *

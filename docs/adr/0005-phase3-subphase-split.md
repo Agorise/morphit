@@ -7,7 +7,7 @@
 > originally implemented. Updated to **15 minutes** in Part
 > 70; see ADR-0001 Amendment 2026-05-07 for the rationale.
 
-> **2026-05-12 forward note (Part 120 audit):** the
+> **2026-05-12 forward note:** the
 > "Go service" / "Go relay" / "Go indexer" framing below
 > describes the original Phase 3a/3b implementation plan.
 > Both shipped as **Node.js/TypeScript** services (`tsx` as
@@ -144,7 +144,7 @@ tarball:
 ### Follow-up work
 
 - `REVIEW-PHASE2.md` entries P2-1 (Blurt account registration)
-  and the operator-action-items section in PLAN.md are now
+  and the operator-action-items section of Plan v1.3 (an internal record) are now
   marked complete; 3a can reference those as done rather than
   blocking on them.
 - Carry-forward item #11 from Phase 1 (self-hosting docs) lands

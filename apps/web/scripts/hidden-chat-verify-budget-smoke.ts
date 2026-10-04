@@ -255,7 +255,7 @@ console.log('');
 	const started = Date.now();
 	// Bounded by a watchdog, because the failure this checks for is "never
 	// settles" — awaiting it directly would hang the smoke itself, and a smoke
-	// that hangs is a CI bomb rather than a test result (cp142/cp143).
+	// that hangs is a CI bomb rather than a test result.
 	const attempt = (async (): Promise<'aborted' | 'resolved'> => {
 		try {
 			const res = await fetchWithTimeout(url, { method: 'POST' }, 1_000);

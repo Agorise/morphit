@@ -3,7 +3,7 @@
 	 * PowerModal — confirm + broadcast a Power up (stake) or Power down
 	 * (unstake) operation from the user's own Morphit-bound account.
 	 *
-	 * cp424 wallet security pass. Both actions sign with the ACTIVE key
+	 * wallet security pass. Both actions sign with the ACTIVE key
 	 * and move value on-chain, so this reuses the exact hardened path the
 	 * Pay-now flow uses:
 	 *
@@ -78,7 +78,7 @@
 		 *  "12345.678901 VESTS"), used verbatim for "power down everything"
 		 *  so no dust is left behind. */
 		vestingSharesRaw: string;
-		/** cp439 — an already-running power-down (amount left + finish date),
+		/** an already-running power-down (amount left + finish date),
 		 *  or null. Shown as a 💡 note in the mode='down' modal so the user
 		 *  sees an unstake is already underway before starting another. */
 		powerDown?: PowerDownProgress | null;
@@ -117,13 +117,13 @@
 
 	const available = $derived(mode === 'up' ? blurtBalance : bpBalance);
 
-	/** v1.8.15 (t.txt #3) — posting-only sessions hold no active key, so the
+	/** v1.8.15 — posting-only sessions hold no active key, so the
 	 *  Morphit-password path below dead-ends. When false we render the SAME
 	 *  <UnlockActiveKeyModal> the "Pay now" flow uses, so the user pastes their
 	 *  Active key (WIF) — and their Morphit password if they keep it — right here. */
 	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
 
-	/** The available balance FLOORED to chain display precision (3 dp). cp453 —
+	/** The available balance FLOORED to chain display precision (3 dp).
 	 *  `toFixed(3)` ROUNDS, so a raw balance like 74.8176 became "74.818", a hair
 	 *  ABOVE the real ceiling; "Use full balance" then failed the `<= available`
 	 *  check ("Enter an amount up to your available balance") even though the
@@ -134,7 +134,7 @@
 	 *  never actually left behind on-chain. */
 	const availableFloor = $derived(floorToBlurtPrecision(available));
 
-	/** cp439 — remaining-BP figure for the 💡 in-progress note, formatted the
+	/** remaining-BP figure for the 💡 in-progress note, formatted the
 	 *  same way the balance card shows BP (locale grouping, 3 decimals). The
 	 *  i18n string supplies the "BP" unit, so this is number-only. */
 	const powerDownAmountText = $derived(
@@ -271,7 +271,7 @@
 		}
 	}
 
-	// v1.8.15 (t.txt #3) — POSTING-ONLY path. UnlockActiveKeyModal has verified
+	// v1.8.15 — POSTING-ONLY path. UnlockActiveKeyModal has verified
 	// the pasted Active-key WIF against this account's on-chain authorities and
 	// hands us the raw scalar. We sign directly (no envelope to unlock) and wipe
 	// it the moment signing is done — the same ephemeral pattern PayBlurtModal
@@ -323,7 +323,7 @@
 		</p>
 
 		{#if mode === 'down' && powerDown}
-			<!-- cp439 — a power-down is already running. Show how much is left
+			<!-- a power-down is already running. Show how much is left
 			     and when the final weekly payout lands, so the user knows an
 			     unstake is underway before they start another. -->
 			<p
@@ -466,7 +466,7 @@
 					</button>
 				</div>
 			{:else}
-				<!-- v1.8.15 (t.txt #3) — POSTING-ONLY. No active-key envelope to
+				<!-- v1.8.15 — POSTING-ONLY. No active-key envelope to
 				     unlock, so instead of a password field that cannot work we
 				     render the SAME unlock modal the "Pay now" flow uses: the user
 				     pastes their Active key (WIF), plus their Morphit password if

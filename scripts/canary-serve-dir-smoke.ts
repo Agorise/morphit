@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * canary-serve-dir — cp693.
+ * canary-serve-dir.
  *
  * On an ansible/home install the wizard runs canary setup from the SOURCE
  * tarball (~/Downloads/morphit) but the frontend container serves the DEPLOYED

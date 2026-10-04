@@ -79,7 +79,7 @@ scenario('scope is "/"', () => {
 });
 
 scenario('background_color is dark and matches ink-950 page bg', () => {
-	// Part 114: corrected from #0a0a0a (true black, wrong) to #0a0e16
+	// corrected from #0a0a0a (true black, wrong) to #0a0e16
 	// (ink-950, the actual page background — see apps/web/src/app.css
 	// line 119).  The PWA splash screen renders against this color
 	// before the app's CSS loads, so a mismatch causes a visible

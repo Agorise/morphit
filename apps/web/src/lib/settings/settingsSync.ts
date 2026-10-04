@@ -9,7 +9,11 @@
  *
  * Best-effort: a failed broadcast never breaks the app; the local stores keep
  * the change this session. A `ready` gate ensures the initial restore (and the
- * initial subscribe fire) never echo straight back out as a broadcast.
+ * initial subscribe fire) never echo straight back out as a broadcast, and
+ * nothing is published until the on-chain blob has been READ: a failed read
+ * leaves the local stores as they are, keeps broadcasts off and retries. (A
+ * blob is the whole settings state, so publishing before reading it would
+ * replace every device's settings with whatever this one holds.)
  */
 import { get } from 'svelte/store';
 import { identity } from '$stores/identity';
@@ -58,6 +62,12 @@ function isObj(v: unknown): v is Record<string, unknown> {
 // echo back out as a broadcast.
 let ready = false;
 let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** The account whose settings the mirrored stores hold (this session). */
+let restoredFor: string | null = null;
+
+/** Waits before re-reading the blob after a failed read. */
+const RETRY_DELAYS_MS = [5_000, 15_000, 45_000, 120_000] as const;
 
 /** Read the current local settings into the on-chain blob shape. Sections are
  *  added here as each settings surface is wired into the mirror. */
@@ -118,7 +128,7 @@ function scheduleBroadcast(): void {
 /**
  * Return every mirrored store to factory defaults.
  *
- * v1.8.11 (the maintainer) — THE BUG THIS FIXES. `applyRestored` below only ever applies
+ * v1.8.11 — THE BUG THIS FIXES. `applyRestored` below only ever applies
  * the fields a blob actually CONTAINS, and it is only reached when a blob
  * exists at all. So an account that has never broadcast its settings — a brand
  * new one, or one that simply hasn't changed anything yet — restored NOTHING,
@@ -133,7 +143,9 @@ function scheduleBroadcast(): void {
  * settings and hidden-account list untouched.
  *
  * Called inside the `ready` gate, so these writes never echo back out as a
- * broadcast and cannot overwrite the on-chain blob with defaults.
+ * broadcast and cannot overwrite the on-chain blob with defaults. Called only
+ * once the blob has been READ (or when the session's account changes): a
+ * failed read must not wipe this device's settings.
  */
 function resetMirroredStores(): void {
 	clearPreferences();
@@ -217,38 +229,74 @@ export function initSettingsSync(): () => void {
 		orderBlogDefault.subscribe(() => scheduleBroadcast())
 	];
 
-	void (async () => {
+	let stopped = false;
+	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Read + apply the blob. True once it was read (applied, or there is
+	 *  none); false when the read or the decryption failed. */
+	async function restore(): Promise<boolean> {
 		const id = get(identity);
 		const account = getUserBlurtAccount();
-		if (id.state === 'unlocked' && account) {
-			// Clear the previous account's settings BEFORE restoring this one's.
-			// Unconditional on purpose: the no-blob and partial-blob cases are
-			// exactly the ones that used to inherit. See resetMirroredStores().
+		if (id.state !== 'unlocked' || !account) return false;
+		// Another account in this session: its settings must not stay on screen
+		// for this one, whatever the read does. (Still no broadcast.)
+		if (restoredFor !== null && restoredFor !== account) {
 			resetMirroredStores();
-			try {
-				const r = await getUserSettings(account);
-				if (r.ok && r.data.enc !== null) {
-					const state = await decryptSettingsState(
-						id.live.posting.privateKey,
-						account,
-						r.data.enc
-					);
-					if (state !== null && typeof state === 'object') {
-						applyRestored(state as UserSettingsState);
-					}
-				}
-			} catch {
-				/* keep device-local defaults */
-			}
+			restoredFor = null;
 		}
-		ready = true;
-	})();
+		try {
+			const r = await getUserSettings(account);
+			if (!r.ok) return r.code === 'not_found' ? (resetAfterRead(account), true) : false;
+			if (r.data.enc === null) {
+				// Never saved: factory defaults, not the previous account's values.
+				resetAfterRead(account);
+				return true;
+			}
+			const state = await decryptSettingsState(id.live.posting.privateKey, account, r.data.enc);
+			if (state === null || typeof state !== 'object') return false;
+			// Clear first: a partial blob must not inherit the other sections.
+			resetMirroredStores();
+			applyRestored(state as UserSettingsState);
+			restoredFor = account;
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	function resetAfterRead(account: string): void {
+		resetMirroredStores();
+		restoredFor = account;
+	}
+
+	async function attempt(n: number): Promise<void> {
+		const ok = await restore();
+		if (stopped) return;
+		if (ok) {
+			ready = true;
+			return;
+		}
+		// Not read: keep this device's settings and keep broadcasts off.
+		const delay = RETRY_DELAYS_MS[n];
+		if (delay === undefined) return;
+		retryTimer = setTimeout(() => {
+			retryTimer = null;
+			void attempt(n + 1);
+		}, delay);
+	}
+
+	void attempt(0);
 
 	return () => {
+		stopped = true;
 		for (const u of unsubs) u();
 		if (broadcastTimer !== null) {
 			clearTimeout(broadcastTimer);
 			broadcastTimer = null;
+		}
+		if (retryTimer !== null) {
+			clearTimeout(retryTimer);
+			retryTimer = null;
 		}
 		ready = false;
 	};

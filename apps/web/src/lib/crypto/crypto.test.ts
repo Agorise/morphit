@@ -19,7 +19,6 @@ import {
 	envelopeToBlob,
 	blobToEnvelope,
 	useActiveKeyForPasswordChange,
-	useOwnerKey,
 	validateSimpleEnvelope,
 	KeystoreError
 } from './keystore';
@@ -109,9 +108,11 @@ describe('keygen — live identity invariant', () => {
 		expect(ownerPrivBefore.some((b) => b !== 0)).toBe(true);
 		expect(activePrivBefore.some((b) => b !== 0)).toBe(true);
 
-		// LiveIdentity carries only posting + memo privates.
+		// LiveIdentity carries only the posting private key: the memo key is
+		// public-only (nothing uses its private half) and the source's is zeroed.
 		expect(live.posting.privateKey.length).toBeGreaterThan(0);
-		expect(live.memo!.privateKey.length).toBeGreaterThan(0);
+		expect('privateKey' in live.memo!).toBe(false);
+		expect([...full.keys.memo!.privateKey].every((b) => b === 0)).toBe(true);
 		expect('privateKey' in live).toBe(false);
 		// Public keys for owner/active are exposed for display.
 		expect(live.ownerPublicKey!.length).toBeGreaterThan(0);
@@ -128,9 +129,9 @@ describe('keygen — live identity invariant', () => {
 			expect([...full.keys[role]!.privateKey].some((b) => b !== 0)).toBe(true);
 		}
 
-		// `live` carries only posting + memo privates.
+		// `live` carries only the posting private key; memo is public-only.
 		expect(live.posting.privateKey.length).toBeGreaterThan(0);
-		expect(live.memo!.privateKey.length).toBeGreaterThan(0);
+		expect('privateKey' in live.memo!).toBe(false);
 
 		// The live posting/memo public keys match what's in full.
 		expect(formatPublicKey(live.posting.publicKey)).toBe(
@@ -357,24 +358,6 @@ describe('keystore — JIT unlock', () => {
 
 		expect(called).toBe(false);
 	});
-
-	it('useOwnerKey works the same way for owner', async () => {
-		const full = await generateFullIdentity();
-		const originalOwner = new Uint8Array(full.keys.owner!.privateKey);
-		const env = await encryptIdentity(full, 'correct-horse-battery-staple');
-
-		const result = await useOwnerKey(
-			env,
-			'correct-horse-battery-staple',
-			async (ownerPriv) => {
-				expect(Array.from(ownerPriv)).toEqual(Array.from(originalOwner));
-				return 'ok';
-			},
-			full.keys.posting.publicKey
-		);
-
-		expect(result).toBe('ok');
-	});
 });
 
 describe('profile — fingerprints & validation', () => {
@@ -389,7 +372,7 @@ describe('profile — fingerprints & validation', () => {
 	});
 
 	it('formatPublicKeyBLT returns the canonical BLT-base58check key (async, lazy dblurt)', async () => {
-		// cp165: fullPublicKey was removed.  The async
+		// fullPublicKey was removed.  The async
 		// formatPublicKeyBLT is the canonical formatter; it
 		// dynamically imports dblurt so the 2 MB chunk doesn't
 		// land on the first-paint graph of every authenticated
@@ -413,7 +396,7 @@ describe('profile — fingerprints & validation', () => {
 		const f = formatIdentity('Sally Doe', pk);
 		expect(f.name).toBe('Sally Doe');
 		expect(f.fingerprint.startsWith('BLT')).toBe(true);
-		// cp165 byte-budget: the `full` field was removed because it
+		// byte-budget: the `full` field was removed because it
 		// required dblurt (2 MB chunk) at first paint.  Consumers
 		// that need the canonical full key call formatPublicKeyBLT
 		// directly (async).  See IdentityLabel.svelte for the
@@ -579,7 +562,7 @@ describe('wipeIdentity', () => {
 	});
 });
 
-// ─── Audit 2026-05 Part 1 regressions ───────────────────────────────
+// ─── Audit 2026-05 regressions ───────────────────────────────
 
 describe('audit 2026-05 finding 1-1 — validateSimpleEnvelope', () => {
 	it('accepts a real envelope round-trip', async () => {

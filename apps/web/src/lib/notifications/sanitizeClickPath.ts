@@ -2,7 +2,7 @@
  * sanitizeClickPath — resolve a push-payload clickPath against the
  * SW's own origin and reject anything not same-origin.
  *
- * Extracted from service-worker.ts (cp81-D22b) so the validation
+ * Extracted from service-worker.ts so the validation
  * logic can be unit-tested without instantiating a real Worker /
  * ServiceWorkerGlobalScope.
  *

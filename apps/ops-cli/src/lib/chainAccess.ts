@@ -1,5 +1,5 @@
 /**
- * How ops-cli reaches the Blurt chain (v1.20.0 fix wave, D12).
+ * How ops-cli reaches the Blurt chain.
  *
  * WHAT WAS WRONG. `lookupBlurtAccount` walked DEFAULT_BLURT_RPC_ENDPOINTS in a
  * fixed order (always hammering the same first node, paying a full timeout on
@@ -130,10 +130,13 @@ export async function chainRead<T>(
 		}
 	}
 	const pool = makePool(deps, explicitEndpoints);
+	// `read`: a node's generic RPC error on a read is that node's fault, so the
+	// pool fails over past it; broadcasts below stay without it.
 	return (await pool.call(
 		(url, signal) => jsonRpc(url, `condenser_api.${method}`, params, signal),
 		{
-			hedge: true
+			hedge: true,
+			read: true
 		}
 	)) as T;
 }

@@ -21,7 +21,15 @@
  * Needs an nginx binary; otherwise it says so and skips.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	closeSync,
+	mkdirSync,
+	mkdtempSync,
+	openSync,
+	readFileSync,
+	rmSync,
+	writeFileSync
+} from 'node:fs';
 import { createServer, request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import { createServer as createNetServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -153,17 +161,24 @@ async function main(): Promise<void> {
 				`client_body_temp_path ${dir}; proxy_temp_path ${dir}; fastcgi_temp_path ${dir}; uwsgi_temp_path ${dir}; scgi_temp_path ${dir};\n` +
 				`include ${dir}/site.conf; }\n`
 		);
-		const start = spawnSync('nginx', ['-c', join(dir, 'nginx.conf')], { encoding: 'utf8' });
+		// web.conf logs to nginx's stderr; a file here, so the daemon does not
+		// hold this process's pipe open.
+		const errFile = join(dir, 'stderr.log');
+		const errFd = openSync(errFile, 'w');
+		const start = spawnSync('nginx', ['-c', join(dir, 'nginx.conf')], {
+			stdio: ['ignore', errFd, errFd]
+		});
+		closeSync(errFd);
 		check(
 			`${c.label}: starts on a real nginx`,
 			start.status === 0,
-			(start.stderr ?? '').trim().split('\n').pop()
+			readFileSync(errFile, 'utf8').trim().split('\n').pop()
 		);
 		if (start.status !== 0) continue;
 		try {
 			await runChecks(c.label, c.port, upstreamSaw);
 		} finally {
-			spawnSync('nginx', ['-c', join(dir, 'nginx.conf'), '-s', 'stop']);
+			spawnSync('nginx', ['-c', join(dir, 'nginx.conf'), '-s', 'stop'], { stdio: 'ignore' });
 		}
 	}
 	up.close();

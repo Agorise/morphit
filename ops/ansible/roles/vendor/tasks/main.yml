@@ -18,7 +18,7 @@
     path: "{{ morphit_local_source_path }}/vendor/apt/Packages.gz"
   register: morphit_vendor_apt
 
-# cp679 — the offline redirect below points apt at ONLY the bundled local repo,
+# the offline redirect below points apt at ONLY the bundled local repo,
 # which makes Linux Mint's Update Manager report "Please switch to another Linux
 # Mint mirror / Your APT configuration is corrupt" for the duration of the
 # install. That is fine for a genuinely air-gapped box (there are no mirrors to

@@ -1,11 +1,11 @@
 /**
  * Morphit ops CLI — `edit-active-key` subcommand.
  *
- * cp167 — dedicated path for rotating the relay's ACTIVE key
+ * dedicated path for rotating the relay's ACTIVE key
  * without re-running the entire setup wizard.  Triggered when:
  *
  *   - An operator pasted the wrong key during initial setup
- *     (e.g. posting key instead of active key — pre-cp167 the
+ *     (e.g. posting key instead of active key — older the
  *     wizard's prompt copy was ambiguous; this is the recovery
  *     path for instances created before that fix landed).
  *   - The active key was rotated on chain (account_update op)
@@ -22,7 +22,7 @@
  *      restart hint).  This avoids the operator having to
  *      remember which @account they wired up.
  *   4. Prompt for the new active key (same prompt copy as the
- *      cp167 wizard step 5 — crystal clear that this is the
+ *      wizard step 5 — crystal clear that this is the
  *      ACTIVE key for the named relay account, not posting).
  *   5. Optionally re-prompt for a new passphrase if the existing
  *      keystore is an encrypted envelope (default: same passphrase).
@@ -41,6 +41,8 @@
  *     `import-altnet-key`).
  */
 
+import { keepOwnerAndMode } from '../lib/keepOwner.ts';
+import { manualSealCommand, relayCredPath, sealRelayPassphrase } from '../lib/relayCred.ts';
 import { resolve, join, dirname, basename } from 'node:path';
 import {
 	existsSync,
@@ -112,13 +114,13 @@ function readCriticalEnv(configDir: string): {
 	if (keystorePath.length === 0) {
 		throw new Error(
 			`morphit.env at ${envPath} doesn't define MORPHIT_RELAY_ACTIVE_KEY_FILE.  ` +
-				"The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead."
+				'The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead.'
 		);
 	}
 	if (relayAccount.length === 0) {
 		throw new Error(
 			`morphit.env at ${envPath} doesn't define MORPHIT_RELAY_ACCOUNT.  ` +
-				"The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead."
+				'The file may be corrupted or pre-init.  Re-run `morphit-ops init` instead.'
 		);
 	}
 	return { keystorePath, relayAccount };
@@ -178,7 +180,7 @@ function loadCurrentKeystore(keystorePath: string, relayAccount: string): Curren
 	if (!/^5[1-9A-HJ-NP-Za-km-z]{50}$/.test(raw)) {
 		throw new Error(
 			`Keystore at ${keystorePath} is neither a JSON envelope nor a valid WIF.  ` +
-				"Refusing to overwrite — you may want to investigate manually."
+				'Refusing to overwrite — you may want to investigate manually.'
 		);
 	}
 	return {
@@ -191,7 +193,7 @@ function loadCurrentKeystore(keystorePath: string, relayAccount: string): Curren
 }
 
 /** Prompt the operator for the new active key.  Same crystal-
- *  clear prompt copy as the cp167 wizard step 5. */
+ *  clear prompt copy as the wizard step 5. */
 async function promptNewActiveKey(relayAccount: string): Promise<string> {
 	step(1, 3, `New ACTIVE key for @${relayAccount}`);
 	explain(
@@ -293,6 +295,9 @@ function atomicWrite(targetPath: string, content: string): void {
 		closeSync(fd);
 	}
 	chmodSync(tmpPath, 0o600);
+	// Keep an existing file's owner, group and mode (the relay keystore is
+	// root:morphit-relay 0640 so the unprivileged relay can read it).
+	keepOwnerAndMode(targetPath, tmpPath);
 	renameSync(tmpPath, targetPath);
 }
 
@@ -401,10 +406,14 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 	}
 	if (wipeFlag) {
 		wipePrior = true;
-		console.log('  Wipe policy: --wipe-prior flag set; prior keystore will be securely overwritten + unlinked, no .bak.');
+		console.log(
+			'  Wipe policy: --wipe-prior flag set; prior keystore will be securely overwritten + unlinked, no .bak.'
+		);
 	} else if (keepFlag) {
 		wipePrior = false;
-		console.log('  Wipe policy: --keep-backup flag set; prior keystore will be copied to .bak-<unix-ms>.');
+		console.log(
+			'  Wipe policy: --keep-backup flag set; prior keystore will be copied to .bak-<unix-ms>.'
+		);
 	} else {
 		// Interactive — ask whether prior key was compromised/wrong.
 		console.log(
@@ -413,11 +422,11 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 				'    Safe rotation (default).  Keeps a timestamped backup of the\n' +
 				'      prior keystore alongside the new one as\n' +
 				`      ${basename(critical.keystorePath)}.bak-<unix-ms>.  Recommended\n` +
-				"      for routine key rotation — you can roll back if the new\n" +
-				"      key paste was wrong or chain refused it.\n" +
+				'      for routine key rotation — you can roll back if the new\n' +
+				'      key paste was wrong or chain refused it.\n' +
 				'\n' +
 				'    No-trace rotation.  Overwrites the prior keystore with random\n' +
-				"      bytes and unlinks it.  No .bak is created.  Use this if\n" +
+				'      bytes and unlinks it.  No .bak is created.  Use this if\n' +
 				'      the prior key was wrong/compromised and you want zero\n' +
 				'      record of it on the server.'
 		);
@@ -464,24 +473,22 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 	step(3, 3, 'Write new keystore atomically');
 	let newContent: string;
 	let newPath: string;
+	let newPassphrase: string | null = null;
 	if (newMode === 'encrypted') {
 		const passphrase = await askPassphraseForNew();
+		newPassphrase = passphrase;
 		console.log('  Encrypting your new active key (takes ~1 second)...');
 		const env = encryptEnvelope(newWif, passphrase);
 		newContent = JSON.stringify(env, null, 2);
 		console.log('  ✓ Encrypted.');
 		// If the prior keystore was plaintext, switch the filename.
 		newPath =
-			current.mode === 'encrypted'
-				? current.path
-				: join(dirname(current.path), 'keystore.json');
+			current.mode === 'encrypted' ? current.path : join(dirname(current.path), 'keystore.json');
 	} else {
 		newContent = newWif;
 		// If the prior keystore was encrypted, switch the filename.
 		newPath =
-			current.mode === 'plaintext'
-				? current.path
-				: join(dirname(current.path), 'keystore.wif');
+			current.mode === 'plaintext' ? current.path : join(dirname(current.path), 'keystore.wif');
 	}
 
 	// Handle the prior file according to the wipe/backup policy.
@@ -518,6 +525,23 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 		return 1;
 	}
 	console.log(`  ✓ New keystore written to ${newPath} (0600 permissions)`);
+
+	// The relay opens the keystore with its host-sealed passphrase; seal the
+	// new one, or the relay cannot start.
+	let sealed = true;
+	if (newPassphrase !== null) {
+		const r = sealRelayPassphrase(newPassphrase);
+		sealed = r.ok;
+		if (r.ok)
+			console.log(`  ✓ The new passphrase is sealed into ${relayCredPath()} for the relay.`);
+		else {
+			console.log(`  ✗ Could not seal the new passphrase into ${relayCredPath()} (${r.reason}).`);
+			console.log(
+				'    The relay cannot unlock the new keystore until it is sealed; on this server run:'
+			);
+			console.log(`      ${manualSealCommand()}`);
+		}
+	}
 
 	// If the filename changed (encrypted ↔ plaintext), update morphit.env.
 	if (newPath !== current.path) {
@@ -563,8 +587,11 @@ export async function runEditActiveKey(args: EditActiveKeyArgs): Promise<number>
 	console.log('  Next steps:');
 	console.log('    1. Restart the relay so it loads the new key:');
 	console.log('         sudo systemctl restart morphit-relay.service');
-	console.log('    2. The relay will prompt for the unlock passphrase at');
-	console.log('       startup (if you chose encrypted mode).  It then');
+	console.log(
+		sealed
+			? '    2. The relay unlocks the new keystore with the sealed passphrase.  It then'
+			: '    2. Seal the passphrase first (the command above), or the relay cannot start.  It then'
+	);
 	console.log('       verifies the new active pubkey matches what the');
 	console.log(`       chain says @${critical.relayAccount}'s active authority`);
 	console.log('       is, and refuses to start if there is a mismatch — so');

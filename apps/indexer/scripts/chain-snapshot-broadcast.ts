@@ -1,11 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/chain-snapshot-broadcast.ts (cp765)
+ * apps/indexer/scripts/chain-snapshot-broadcast.ts
  *
  * Sign + broadcast a chain_snapshot_v1 op from @morphit — the on-chain pointer
  * to a published block_log snapshot (see chainSnapshotOp.ts). Mirrors
  * release-broadcast.ts: laptop-only (the @morphit posting WIF never goes in CI),
- * validates the payload before asking for the key, and dry-runs by default.
+ * validates the payload before asking for the key, and dry-runs by default
+ * (--broadcast to sign + send; the key is read without echo).
  *
  * Build the payload after you've pinned the block_log to IPFS + mirrored it:
  *   {
@@ -19,13 +20,13 @@
  *   }
  *
  *   node_modules/.bin/tsx --tsconfig tsconfig.smoke.json \
- *     apps/indexer/scripts/chain-snapshot-broadcast.ts snapshot.json --dry-run
- *   # then, for real, drop --dry-run (prompts for the @morphit posting WIF)
+ *     apps/indexer/scripts/chain-snapshot-broadcast.ts snapshot.json
+ *   # then, for real, add --broadcast (asks for the @morphit posting WIF; not echoed)
  */
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
-import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import { askHidden, broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
 import {
 	buildChainSnapshotOp,
 	CHAIN_SNAPSHOT_OP_ID,
@@ -39,7 +40,12 @@ function die(msg: string): never {
 }
 function ask(q: string): Promise<string> {
 	const rl = createInterface({ input: process.stdin, output: process.stderr });
-	return new Promise((res) => rl.question(q, (a) => { rl.close(); res(a.trim()); }));
+	return new Promise((res) =>
+		rl.question(q, (a) => {
+			rl.close();
+			res(a.trim());
+		})
+	);
 }
 const has = (n: string): boolean => process.argv.includes(`--${n}`);
 function flag(n: string): string | undefined {
@@ -49,7 +55,10 @@ function flag(n: string): string | undefined {
 
 async function main(): Promise<void> {
 	const file = process.argv[2];
-	if (!file || file.startsWith('--')) die('usage: chain-snapshot-broadcast.ts <payload.json> [--dry-run] [--signer morphit] [--node <url>] [--include-hidden]');
+	if (!file || file.startsWith('--'))
+		die(
+			'usage: chain-snapshot-broadcast.ts <payload.json> [--broadcast] [--signer morphit] [--node <url>] [--include-hidden]'
+		);
 	const signer = flag('signer') ?? CHAIN_SNAPSHOT_SIGNER_DEFAULT;
 
 	let payloadJson: string;
@@ -63,13 +72,17 @@ async function main(): Promise<void> {
 	const op = buildChainSnapshotOp(payloadJson, signer);
 	process.stderr.write(`\n${CHAIN_SNAPSHOT_OP_ID} — signed by @${signer}\n\n${op.json}\n\n`);
 
-	if (has('dry-run')) {
-		process.stderr.write('DRY RUN — not broadcast. Re-run without --dry-run to sign + send.\n');
+	// Dry run unless --broadcast is given: the op is printed, no key is asked
+	// for and nothing is sent. (--dry-run is accepted and changes nothing.)
+	if (!has('broadcast')) {
+		process.stderr.write('DRY RUN — not broadcast. Re-run with --broadcast to sign + send.\n');
 		console.log(op.json);
 		return;
 	}
 
-	const wif = await ask('Paste the @' + signer + ' POSTING WIF (starts with 5), or blank to abort: ');
+	const wif = await askHidden(
+		`Paste the @${signer} POSTING WIF (starts with 5; nothing shows as you paste), or blank to abort: `
+	);
 	if (!wif) die('aborted (no key).');
 	let priv: PrivateKey;
 	try {
@@ -82,7 +95,9 @@ async function main(): Promise<void> {
 	} catch {
 		/* non-fatal — the broadcast fails loudly if the key is wrong */
 	}
-	if ((await ask(`\nBroadcast ${CHAIN_SNAPSHOT_OP_ID} as @${signer} now? (type "yes"): `)) !== 'yes') {
+	if (
+		(await ask(`\nBroadcast ${CHAIN_SNAPSHOT_OP_ID} as @${signer} now? (type "yes"): `)) !== 'yes'
+	) {
 		die('aborted.');
 	}
 
@@ -108,7 +123,9 @@ async function main(): Promise<void> {
 			`  block_num : ${res.blockNum ?? '(pending)'}\n` +
 			`  via       : ${res.via}\n` +
 			`  op id     : ${CHAIN_SNAPSHOT_OP_ID}\n\n` +
-			'New nodes reading the latest chain_snapshot_v1 from @' + signer + ' will bootstrap from it.\n'
+			'New nodes reading the latest chain_snapshot_v1 from @' +
+			signer +
+			' will bootstrap from it.\n'
 	);
 }
 

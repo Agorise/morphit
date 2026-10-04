@@ -15,9 +15,9 @@
  * renders without the component.  No SSR error.  No console warning
  * until you actually load the page.
  *
- * WHY THIS SMOKE EXISTS (cp115 lesson)
+ * WHY THIS SMOKE EXISTS (lesson)
  *
- * The cp115 session compaction left MorphitLogoBling referenced in
+ * The session compaction left MorphitLogoBling referenced in
  * `apps/web/src/routes/[lang]/+layout.svelte` without its import
  * line.  Resumed-session caught it via grep, but a grep-style
  * structural defense codifies the catch so the same class can't
@@ -81,7 +81,7 @@ for (const file of files) {
 	// are imported in <script>, used in template.  Inline svelte tags
 	// inside <script lang="ts"> blocks don't count (strings, comments).
 	const scriptMatch = src.match(/<script[\s\S]*?<\/script>/g) ?? [];
-	// cp170: strip JS comments from the script blob BEFORE import-
+	// strip JS comments from the script blob BEFORE import-
 	// matching.  Otherwise a commented-out `// import Foo from '…'`
 	// line satisfies the import regex and the smoke passes a file
 	// that never actually imports Foo (a false negative — the exact
@@ -107,7 +107,7 @@ for (const file of files) {
 	// self-documenting component to fail the smoke against itself.
 	template = template.replace(/<!--[\s\S]*?-->/g, '');
 
-	// cp170: collect component names bound by Svelte await/each block
+	// collect component names bound by Svelte await/each block
 	// clauses in the template.  These are legitimate ways to bind a
 	// PascalCase component identifier WITHOUT a script import — used
 	// for route-level lazy-loading:
@@ -147,7 +147,7 @@ for (const file of files) {
 	// (covers cases where the PascalCase identifier is a local
 	// destructure or dynamic component-class binding), and names
 	// bound by `{#await … then X}` / `{:then X}` / `{#each … as X}`
-	// block clauses in the template (cp170 — lazy-load idiom).
+	// block clauses in the template (lazy-load idiom).
 	const missing: string[] = [];
 	for (const name of referenced) {
 		if (blockBound.has(name)) continue;

@@ -1,6 +1,6 @@
 <!--
 	apps/web/src/routes/[lang]/admin/setup-wizard/+page.svelte
-	cp116 — operator setup wizard, V1.
+	operator setup wizard, V1.
 
 	WHAT THIS PAGE IS
 
@@ -16,8 +16,7 @@
 
 	WHY READ-ONLY
 
-	The "manually editing a text file sucks" pain (per memory rule
-	cp115) is real, but solving it by giving the web tier mutation
+	The "manually editing a text file sucks" pain is real, but solving it by giving the web tier mutation
 	capability would (a) require a major new auth-gated mutation
 	endpoint, (b) add filesystem-write attack surface on every
 	Morphit instance, (c) need a service-restart trigger.  All three
@@ -68,7 +67,7 @@
 	import { instance } from '$lib/stores/instance';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 
-	// The core three (memory rule cp115): operators cannot disable
+	// The core three (memory rule): operators cannot disable
 	// these — they're load-bearing for the federation protocol.
 	// BTC + XMR + BLURT comprise the listing-fee payment options;
 	// disabling any of them would break the fee-payment path for
@@ -86,13 +85,13 @@
 	// you want disabled?").
 	let disabledTickers = $state<Set<string>>(new Set());
 
-	// Canonical payment-method disable set (cp208) — the payment-method
+	// Canonical payment-method disable set — the payment-method
 	// analogue of disabledTickers.  Same inverted UI convention:
 	// checked = offered, unchecked = disabled.  Hydrated from
 	// $instance.disabled_payment_methods alongside disabled_assets.
 	let disabledMethods = $state<Set<string>>(new Set());
 
-	// cp117 V3 #1: live config preview.  On mount, hydrate the
+	// live config preview.  On mount, hydrate the
 	// asset-disable state from the indexer's `/v1/instance` response
 	// (already exposed as `disabled_assets`).  Operators see their
 	// CURRENT state pre-populated, then they edit and see the diff
@@ -160,7 +159,7 @@
 		disabledMethods = next;
 	}
 
-	// Format the payment-method env var line (cp208).  Empty when
+	// Format the payment-method env var line.  Empty when
 	// nothing is disabled (signals "all offered" cleanly).
 	const methodEnvLine = $derived.by(() => {
 		const sorted = [...disabledMethods].sort();
@@ -177,21 +176,11 @@
 	let pmUrl = $state('');
 	let pmDescription = $state('');
 
-	// Canonical reserved keys.  Drift is caught by the
-	// reserved-keys-parity-smoke; keep this list in sync with
-	// apps/ops-cli/src/commands/paymentMethod.ts when adding new
-	// canonical methods.  If a future cp adds Visa+Mastercard
-	// rails this list grows.
-	const RESERVED_KEYS = new Set([
-		'pay_btc', 'pay_blurt', 'pay_xmr', 'barter_goods', 'cash_in_person',
-		'cash_by_mail', 'precious_metals', 'airwallex', 'alipay', 'amazon_pay',
-		'apple_pay', 'bancontact', 'bitso', 'bizum', 'blik', 'cash_app',
-		'gcash', 'google_pay', 'ideal', 'interac_etransfer', 'klarna', 'mpesa',
-		'mercado_pago', 'mir', 'mtn_momo', 'oxxo_pay', 'payoneer',
-		'paypal', 'paytm', 'payu', 'pix', 'przelewy24', 'revolut',
-		'shaparak', 'shebapay', 'sofort', 'spei', 'square_cash',
-		'unionpay', 'venmo', 'wechat_pay', 'wise', 'zelle'
-	]);
+	// Canonical reserved keys: every method this frontend ships
+	// ($lib/payments/registry). Derived, so a newly shipped method is
+	// reserved here at once. (ops-cli keeps its own list in
+	// apps/ops-cli/src/commands/paymentMethod.ts.)
+	const RESERVED_KEYS: ReadonlySet<string> = new Set(PAYMENT_METHODS.map((m) => m.key));
 
 	// Key validation — same rules as ops-cli + indexer.  ([a-z0-9_]+,
 	// ≤32 chars, not a canonical reserved key).  Mirrors the same
@@ -252,7 +241,7 @@
 		return parts.join(' \\\n  ');
 	});
 
-	// ─── Section 3: payment-method REMOVE (cp117) ──────────────
+	// ─── Section 3: payment-method REMOVE ──────────────
 	// Mirror of the add form but minimal — only a key is needed for
 	// the chain op.  Validation uses the same KEY_PATTERN as add,
 	// but does NOT block RESERVED_KEYS at the UI level: canonical
@@ -361,7 +350,7 @@
 			{$_('admin.setup_wizard.assets.intro')}
 		</p>
 
-		<!-- cp117 V3 #1: live config preview.  Shows the instance's
+		<!-- live config preview.  Shows the instance's
 		     CURRENTLY-configured disabled assets so operators can
 		     see what's already in effect before they edit. -->
 		<div
@@ -455,7 +444,7 @@
 		</div>
 	</section>
 
-	<!-- ─── Section 2: Payment-method enable/disable (cp208) ── -->
+	<!-- ─── Section 2: Payment-method enable/disable ── -->
 	<section class="mb-12 rounded-2xl border border-ink-100 bg-white p-6 md:p-8 dark:border-ink-800 dark:bg-ink-900">
 		<h2 class="font-display text-xl font-bold">
 			{$_('admin.setup_wizard.payment_disable.heading')}
@@ -547,7 +536,7 @@
 			{$_('admin.setup_wizard.payment.intro')}
 		</p>
 
-		<!-- cp117 V3 #1: live config preview for payment methods. -->
+		<!-- live config preview for payment methods. -->
 		<div
 			class="mt-4 rounded-lg border border-ink-200 bg-ink-50 p-3 text-xs dark:border-ink-700 dark:bg-ink-950"
 			aria-live="polite"
@@ -691,7 +680,7 @@
 		</div>
 	</section>
 
-	<!-- ─── Section 3 (cp117): Payment-method REMOVE ───────────── -->
+	<!-- ─── Section 3: Payment-method REMOVE ───────────── -->
 	<section class="mt-8 rounded-2xl border border-ink-100 bg-white p-6 md:p-8 dark:border-ink-800 dark:bg-ink-900">
 		<h2 class="font-display text-xl font-bold">
 			{$_('admin.setup_wizard.payment_remove.heading')}

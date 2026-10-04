@@ -1,5 +1,5 @@
 /**
- * fee-split-math-smoke (cp408) — the shared BLURT fee split primitive.
+ * fee-split-math-smoke — the shared BLURT fee split primitive.
  *
  * `splitListingFeeBlurt` is the single source of truth for the 90/10 federation
  * revenue split. BOTH the frontend (feeTransfersFor, which builds the fee tx)

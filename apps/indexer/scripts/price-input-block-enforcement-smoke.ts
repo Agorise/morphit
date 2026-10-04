@@ -1,8 +1,8 @@
 /**
- * price-input-block-enforcement-smoke (cp209).
+ * price-input-block-enforcement-smoke.
  *
  * Companion to orderbook-block-enforcement-smoke. Instance-local
- * blocking hides a seller's LISTINGS from the orderbook; cp209 extends
+ * blocking hides a seller's LISTINGS from the orderbook; a later change extends
  * the same guarantee to the instance's DERIVED price feeds, so a
  * manually-blocked (not merely signal-flagged) seller can't move the
  * morphit_native / depeg price this instance computes from its own
@@ -18,7 +18,7 @@
  * query still carries the operator-block exclusion (`NOT EXISTS ...
  * operator_blocks ... ob.blocked = o.account ... state = 'blocked'`),
  * that both config types declare `operatorAccountName` (NOT the old
- * `officialAccountName` — cp258: operator_blocks is keyed by the operator
+ * `officialAccountName`: operator_blocks is keyed by the operator
  * account, so binding the official account made the exclusion inert for
  * any instance with a separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME),
  * and that both construction sites pass `config.operatorAccountName`. If someone weakens a query or adds a new
@@ -94,7 +94,7 @@ for (const [file, expected] of Object.entries(QUERY_SURFACES)) {
 }
 
 // ── PB-3/PB-4: both config types require operatorAccountName ──
-// cp258: the field MUST be operatorAccountName (the operator_blocks write
+// the field MUST be operatorAccountName (the operator_blocks write
 // key) — it was officialAccountName, which made the exclusion inert for any
 // instance running a separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME.
 const CONFIG_DECLS: Record<string, string> = {
@@ -129,7 +129,7 @@ for (const [file, iface] of Object.entries(CONFIG_DECLS)) {
 }
 
 // ── PB-5/PB-6: both construction sites pass config.operatorAccountName ──
-// cp258: the VALUE must be config.operatorAccountName (the write key), NOT
+// the VALUE must be config.operatorAccountName (the write key), NOT
 // config.officialAccountName — the bug this guard now catches.
 const CALL_SITES: Array<{ file: string; fn: string }> = [
 	{ file: join(srcDir, 'indexer', 'price', 'factory.ts'), fn: 'createMorphitNativeFetcher' },

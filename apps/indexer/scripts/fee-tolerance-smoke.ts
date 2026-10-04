@@ -1,5 +1,5 @@
 /**
- * fee-tolerance-smoke (cp372) — Model-A verification tolerance.
+ * fee-tolerance-smoke — Model-A verification tolerance.
  *
  * The chain-pinned fee amount stays the enforced target (anti-fork),
  * but the verifier accepts a payment within FEE_PRICE_TOLERANCE
@@ -45,13 +45,30 @@ function check(name: string, cond: boolean): void {
 	}
 }
 
+/** The verifiers read a real Response (headers and a size-capped body stream,
+ *  fee/explorerHttp.ts); the fakes below describe one by status + json/text. */
+type FakeResponse = {
+	status: number;
+	json?: () => Promise<unknown>;
+	text?: () => Promise<string>;
+};
+function realResponses(
+	fake: (input: RequestInfo | URL, init?: RequestInit) => Promise<unknown>
+): typeof fetch {
+	return (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const f = (await fake(input, init)) as FakeResponse;
+		const body = f.json ? JSON.stringify(await f.json()) : await f.text!();
+		return new Response(body, { status: f.status });
+	}) as typeof fetch;
+}
+
 function btcFetch(observedSats: number): typeof fetch {
 	const txBody = {
 		txid: VALID_TXID,
 		vout: [{ value: observedSats, scriptpubkey_address: FEE_ADDRESS }],
 		status: { confirmed: true, block_height: 800_000 }
 	};
-	return (async (input: RequestInfo | URL) => {
+	return realResponses(async (input: RequestInfo | URL) => {
 		const url = typeof input === 'string' ? input : input.toString();
 		if (url.includes('/blocks/tip/height')) {
 			return { ok: true, status: 200, text: async () => '800000' } as unknown as Response;
@@ -60,7 +77,7 @@ function btcFetch(observedSats: number): typeof fetch {
 			return { ok: true, status: 200, json: async () => txBody } as unknown as Response;
 		}
 		throw new Error(`unmocked URL ${url}`);
-	}) as unknown as typeof fetch;
+	});
 }
 
 function btcVerifier(observedSats: number): BitcoinExplorerFeeVerifier {
@@ -70,7 +87,7 @@ function btcVerifier(observedSats: number): BitcoinExplorerFeeVerifier {
 			explorerUrls: ['https://blockstream.info/api'],
 			minConfirmations: 1,
 			requestTimeoutMs: 5_000,
-			// cp474 — Part 109 quorum gate; required by the config type.
+			// quorum gate; required by the config type.
 			minSuccessfulResponses: 1
 		},
 		btcFetch(observedSats)
@@ -80,7 +97,7 @@ const claim = (expectedAmount: number): FeeClaim => ({
 	feeMethod: 'btc',
 	expectedAmount,
 	externalTxId: VALID_TXID,
-	// cp474 — REQUIRED by FeeClaim; `undefined` is not `null`, and the Monero
+	// REQUIRED by FeeClaim; `undefined` is not `null`, and the Monero
 	// verifier discriminates on `txProof === null`.
 	txProof: null,
 	permlink: 'order-01',

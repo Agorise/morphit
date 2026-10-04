@@ -2,8 +2,40 @@ node_modules/
 .svelte-kit/
 dist/
 *.tsbuildinfo
+coverage/
 
 # Offline-appliance build output (scripts/build-offline-bundle.sh dumps a
 # bundled Node runtime + apt/docker/kubo blobs here into the repo tree).
 # Root-anchored so it never matches ops/ansible/roles/vendor (real source).
 /vendor/
+
+# Operator secrets that `morphit-ops init` writes into the install tree: the
+# env files and the relay's ACTIVE key (keystore.wif in plaintext mode).
+# Never commit them. The committed *.env.example templates stay tracked.
+/*.env
+!/*.env.example
+/apps/relay/keystore.*
+
+# Release and offline-bundle artifacts (scripts/release-sign.sh,
+# scripts/build-offline-bundle.sh, the release job).
+/release/
+/morphit-v*.tar.gz*
+/.canonical-release/
+/release-info.json
+/release-signer.fpr
+/ipfs-cid.txt
+/ipns-*.txt
+/ipns-sign.*
+
+# A signed canary and its key belong to the instance that publishes them
+# (scripts/canary/generate.sh writes canary.txt here by default).
+/apps/web/static/canary.txt
+/apps/web/static/pgp_keys.asc
+
+# The maintainer's private handoff (internal journals and records). Never
+# committed, never packed (release-packers-exclude-private-smoke).
+/private/
+
+# Install-time state written by the Ansible roles.
+/.npm-cache/
+/ops/postgres/.init.applied

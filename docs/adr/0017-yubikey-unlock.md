@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-28
-**Deciders:** Agorise team (Claude collaborating)
+**Deciders:** Agorise team
 **Supersedes:** —
 **Related:**
 - ADR-0010 (key custody) — defines the encrypted-keystore model

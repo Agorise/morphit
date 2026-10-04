@@ -1,6 +1,6 @@
 /**
  * Morphit web — local chain-op signature verification smoke
- * (S14, Audit Part 26).
+ * (S14).
  *
  * Exercises the pure verifyTransactionSignatures helper with
  * fixture transactions and authorities.  The wrapper that

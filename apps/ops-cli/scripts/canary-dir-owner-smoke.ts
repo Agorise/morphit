@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * apps/ops-cli/scripts/canary-dir-owner-smoke.ts  (cp619 — the maintainer)
+ * apps/ops-cli/scripts/canary-dir-owner-smoke.ts  (the maintainer)
  *
  * `morphit-ops upgrade` rebuilds apps/web/build as root (vite recreates the dir
  * root-owned), but that dir is where the operator uploads their PGP-signed
  * warrant canary (canary.txt + pgp_keys.asc) over SSH, and a bind-mount
- * frontend serves it directly. Before cp619 every upgrade re-rooted the dir and
+ * frontend serves it directly. Previously every upgrade re-rooted the dir and
  * the next weekly canary upload failed with "Permission denied" — a silently
  * STALE canary, which reads as "a warrant was served." This pins:
  *   A. the owner-decision (`chooseCanaryDirOwner`): keep the operator's non-root
@@ -40,9 +40,10 @@ const ROOT = { uid: 0, gid: 0 };
 
 // ── A. owner decision ────────────────────────────────────────────────
 {
-	// 1. Operator already set build/ to a non-root user → keep it (the maintainer's case).
+	// 1. Operator already set build/ to a non-root user → keep it.
 	const r1 = chooseCanaryDirOwner(MORPHIT, ROOT);
-	if (r1 && r1.uid === 1001) ok('keeps the existing non-root owner on build/ (the canary upload user)');
+	if (r1 && r1.uid === 1001)
+		ok('keeps the existing non-root owner on build/ (the canary upload user)');
 	else bad('should keep the non-root owner on build/', JSON.stringify(r1));
 
 	// 2. build/ is root (fresh rebuild), install owned by the app user → fall back.
@@ -56,7 +57,8 @@ const ROOT = { uid: 0, gid: 0 };
 	else bad('should fall back on missing build/', JSON.stringify(r3));
 
 	// 4. Both root → null (leave it root; never guess a uid).
-	if (chooseCanaryDirOwner(ROOT, ROOT) === null) ok('leaves it root when both build/ and install are root-owned');
+	if (chooseCanaryDirOwner(ROOT, ROOT) === null)
+		ok('leaves it root when both build/ and install are root-owned');
 	else bad('should return null when nothing non-root is found');
 
 	// 5. Nothing readable → null.
@@ -79,18 +81,22 @@ const ROOT = { uid: 0, gid: 0 };
 	const raw = readFileSync(resolve(OPS, 'src/commands/upgrade.ts'), 'utf8');
 	const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-	if (/import\s*\{[^}]*chooseCanaryDirOwner[^}]*\}/.test(src)) ok('upgrade.ts imports chooseCanaryDirOwner');
+	if (/import\s*\{[^}]*chooseCanaryDirOwner[^}]*\}/.test(src))
+		ok('upgrade.ts imports chooseCanaryDirOwner');
 	else bad('upgrade.ts should import chooseCanaryDirOwner');
 
 	const iCapture = src.indexOf('chooseCanaryDirOwner(readOwner');
-	const iBuild = src.indexOf("runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', 'web') })");
+	// The web rebuild (its options object may span lines and carry an env).
+	const iBuild = src.search(
+		/runOrThrow\('npm', \['run', 'build'\], \{\s*cwd: join\(installDir, 'apps', 'web'\)/
+	);
 	const iRestore = src.indexOf("spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`");
 
 	if (iCapture > 0 && iBuild > 0 && iCapture < iBuild)
 		ok('captures the served-dir owner BEFORE the web rebuild (vite recreates it root-owned)');
 	else bad('owner capture must run before the web rebuild', `capture=${iCapture} build=${iBuild}`);
 
-	// cp624 — the owner MUST be read from the OLD install (backupDir), NOT the fresh
+	// the owner MUST be read from the OLD install (backupDir), NOT the fresh
 	// post-extract tree. Step 7 renamed the operator's install (with their chowned,
 	// non-root build/) to backupDir, and step 8 extracted a root-owned installDir
 	// with NO build/ yet — so reading installDir preserved NOTHING and a root-owned
@@ -114,7 +120,11 @@ const ROOT = { uid: 0, gid: 0 };
 		ok('restores ownership (chown -R) AFTER the rebuild');
 	else bad('ownership restore must run after the rebuild', `restore=${iRestore} build=${iBuild}`);
 
-	if (/chown.*canaryDirUid[\s\S]{0,400}apps.*web.*build|const webBuild = join\(installDir, 'apps', 'web', 'build'\)[\s\S]{0,600}spawnSync\('chown'/.test(src))
+	if (
+		/chown.*canaryDirUid[\s\S]{0,400}apps.*web.*build|const webBuild = join\(installDir, 'apps', 'web', 'build'\)[\s\S]{0,600}spawnSync\('chown'/.test(
+			src
+		)
+	)
 		ok('the restore chowns apps/web/build specifically');
 	else bad('the restore should target apps/web/build');
 
@@ -123,14 +133,14 @@ const ROOT = { uid: 0, gid: 0 };
 		ok('a failed chown warns (non-fatal) rather than rolling back the successful build');
 	else bad('a failed chown should warn, not roll back');
 
-	// cp622 — the restore now also hands static/ back (the refresh writes
+	// the restore now also hands static/ back (the refresh writes
 	// static/canary.txt before copying it into build/, so it needs both writable).
 	if (/'apps', 'web', 'static'/.test(src))
 		ok('the restore also chowns apps/web/static (generate.sh writes the signed canary there)');
 	else bad('the restore should also chown apps/web/static');
 }
 
-// ── C. parsePasswdRefreshTarget (cp622 — same-box refresh target) ─────
+// ── C. parsePasswdRefreshTarget (same-box refresh target) ─────
 {
 	const good = parsePasswdRefreshTarget('morphit:x:1001:1001::/home/morphit:/bin/bash');
 	if (
@@ -144,7 +154,11 @@ const ROOT = { uid: 0, gid: 0 };
 
 	// getent output can carry a trailing newline — take the first line only.
 	const trailingNl = parsePasswdRefreshTarget('alice:x:1000:1000:Alice:/home/alice:/bin/bash\n');
-	if (trailingNl && trailingNl.user === 'alice' && trailingNl.refreshScript === '/home/alice/.morphit/update-canary.sh')
+	if (
+		trailingNl &&
+		trailingNl.user === 'alice' &&
+		trailingNl.refreshScript === '/home/alice/.morphit/update-canary.sh'
+	)
 		ok('tolerates a trailing newline from getent');
 	else bad('should tolerate a trailing newline', JSON.stringify(trailingNl));
 
@@ -163,12 +177,13 @@ const ROOT = { uid: 0, gid: 0 };
 	else bad('a blank username should be null');
 }
 
-// ── D. upgrade.ts cp622 wiring: same-box auto-restore, guarded ────────
+// ── D. upgrade.ts wiring: same-box auto-restore, guarded ────────
 {
 	const raw = readFileSync(resolve(OPS, 'src/commands/upgrade.ts'), 'utf8');
 	const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-	if (/import\s*\{[^}]*parsePasswdRefreshTarget[^}]*\}/.test(src)) ok('upgrade.ts imports parsePasswdRefreshTarget');
+	if (/import\s*\{[^}]*parsePasswdRefreshTarget[^}]*\}/.test(src))
+		ok('upgrade.ts imports parsePasswdRefreshTarget');
 	else bad('upgrade.ts should import parsePasswdRefreshTarget');
 
 	// Only for operators who had a canary before the upgrade.
@@ -177,12 +192,16 @@ const ROOT = { uid: 0, gid: 0 };
 	else bad('auto-restore should gate on a pre-upgrade canary');
 
 	// Runs the refresh AS the owner, non-interactively, with a timeout (no hang).
-	if (/sudo'[\s\S]{0,80}'-n'[\s\S]{0,80}'-u'[\s\S]{0,120}'bash'/.test(src) && /timeout: 90_000/.test(src))
+	if (
+		/sudo'[\s\S]{0,80}'-n'[\s\S]{0,80}'-u'[\s\S]{0,120}'bash'/.test(src) &&
+		/timeout: 90_000/.test(src)
+	)
 		ok('runs the refresh via sudo -n -u <user> bash with a 90s timeout (can never hang)');
 	else bad('the auto-refresh must be sudo -n -u <user> bash + timeout-guarded');
 
 	// No controlling tty → a passphrase-protected key fails fast, not a pinentry hang.
-	if (/GPG_TTY: ''/.test(src)) ok("clears GPG_TTY so a passphrased key can't hang on a tty pinentry");
+	if (/GPG_TTY: ''/.test(src))
+		ok("clears GPG_TTY so a passphrased key can't hang on a tty pinentry");
 	else bad('should clear GPG_TTY for the non-interactive refresh');
 
 	// The manual reminder must NOT also fire when the auto-restore succeeded.
@@ -194,7 +213,9 @@ const ROOT = { uid: 0, gid: 0 };
 	const iRefresh = src.indexOf('parsePasswdRefreshTarget(pw.stdout)');
 	const iPublish = src.indexOf('const plan = planFrontendDeploy(');
 	if (iRefresh > 0 && iPublish > 0 && iRefresh < iPublish)
-		ok('auto-restore runs BEFORE the frontend publish (9c), so a web-root copy picks up the canary');
+		ok(
+			'auto-restore runs BEFORE the frontend publish (9c), so a web-root copy picks up the canary'
+		);
 	else bad('auto-restore must run before step 9c', `refresh=${iRefresh} publish=${iPublish}`);
 }
 

@@ -1,5 +1,5 @@
 /**
- * chat-folders-onchain-smoke — v1.4.9 (t.txt #5)
+ * chat-folders-onchain-smoke — v1.4.9
  *
  * Pins the end-to-end wiring of on-chain chat folders (morphit_chat_folders_v1)
  * so no layer can silently fall out of sync: the op id (client + indexer), the
@@ -156,7 +156,7 @@ check(
 );
 
 // ── v1.7.7: the archive watermark must not mix TIME BASES ──────────
-// the maintainer's tester3: archive a thread, refresh a minute later, it is BACK in the
+// tester3: archive a thread, refresh a minute later, it is BACK in the
 // Inbox; archive again and it sticks. tester2 never reproduced it on identical
 // code — because it was never the code, never the older Brave build, never a
 // cache. It was his CLOCK. `resurrectArchivedOnNewActivity` compares a folder
@@ -202,13 +202,13 @@ check(
 	/lastMsgMs > archivedAtMs/.test(folders)
 );
 
-// ── v1.7.7 (t.txt #5): folder moves must PROPAGATE, not just publish ──
-// the maintainer: archived on his PC, phone kept the thread in the Inbox "even after a few
-// minutes" until he manually refreshed. The publish side was fine — the op was
+// ── v1.7.7: folder moves must PROPAGATE, not just publish ──
+// Bug: archived on a PC, the phone kept the thread in the Inbox for a few
+// minutes, until a manual refresh. The publish side was fine — the op was
 // on chain. The READ side ran exactly once, from a $effect that fired when
 // $isUnlocked flipped true. One read per page load.
 //
-// the maintainer also named the asymmetry that explains it: un-archive DID cross devices
+// The maintainer also named the asymmetry that explains it: un-archive DID cross devices
 // without a refresh. That was never syncing — resurrectArchivedOnNewActivity
 // RE-DERIVES it locally on every 5s conversation poll from data the device
 // already has. Archiving cannot be re-derived; it is a decision, and it only

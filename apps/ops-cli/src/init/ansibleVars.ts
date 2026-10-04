@@ -1,5 +1,5 @@
 /**
- * ansibleVars.ts (cp600) — the wizard↔Ansible bridge core.
+ * ansibleVars.ts — the wizard↔Ansible bridge core.
  *
  * The grandma install runs the SAME full hardened playbook a VPS does; the only
  * home/VPS difference is networking (a home box's IP changes → DDNS) plus the
@@ -17,10 +17,14 @@
  *     identical either way — nothing is lightened for home.
  *
  * Everything here is PURE + unit-tested; the actual `ansible-playbook` spawn +
- * apt-installing Ansible live in the (a mini PC-validated) install runner.
+ * apt-installing Ansible live in the install runner (validated on a real machine).
  */
+import { homeserverRoute, torSocksUrl } from '../lib/matrixRoute.ts';
 import { randomBytes } from 'node:crypto';
-import { isReservedTag, tagImpersonatesReserved } from '../../../indexer/src/indexer/confusables.ts';
+import {
+	isReservedTag,
+	tagImpersonatesReserved
+} from '../../../indexer/src/indexer/confusables.ts';
 
 /** Operator-tag charset + length (mirrors the on-chain handler + the wizard). */
 const OPERATOR_TAG_PATTERN = /^[a-z0-9._-]+$/;
@@ -84,6 +88,9 @@ export interface AnsibleInstallInputs {
 	 *  haven't got a token yet — it's left stopped, ready, and health shows
 	 *  "token needed" until they add one via `morphit-ops matrix`. */
 	readonly installMatrixBotDeferred?: boolean;
+	/** age public key (age1…) the daily database backups are encrypted to.
+	 *  Undefined = plain-text backups (the operator chose to skip). */
+	readonly backupAgeRecipient?: string;
 }
 
 /** A cryptographically-random secret, as strong as is meaningful: 48 bytes =
@@ -104,14 +111,28 @@ export function validateDomain(domain: string): true | string {
 		? true
 		: 'does not look like a bare domain (e.g. trade.example.com \u2014 no https://, no path)';
 }
+/** An age X25519 public key: `age1` + 58 bech32 characters. A pasted SECRET
+ *  key is refused with its own message (it must never reach this server). */
+export function validateAgeRecipient(raw: string): true | string {
+	const s = raw.trim();
+	if (/^AGE-SECRET-KEY-1/i.test(s)) {
+		return 'is an age SECRET key \u2014 paste the PUBLIC key (age1\u2026) and keep the secret one off this server';
+	}
+	return /^age1[02-9ac-hj-np-z]{58}$/.test(s)
+		? true
+		: 'is not an age public key (it starts with age1 and is 62 characters long)';
+}
 export function validateAcmeEmail(email: string): true | string {
-	return /.+@.+\..+/.test(email.trim())
+	// Linear: no nested `.+` that backtracks cubically on a long '@@@…' paste.
+	const e = email.trim();
+	return e.length <= 254 && /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(e)
 		? true
 		: 'is not a valid email (Let\u2019s Encrypt sends certificate-expiry notices here)';
 }
 export function validateDdnsUrl(url: string): true | string {
 	const u = url.trim();
-	if (!/^https:\/\//i.test(u)) return 'must start with https:// (your DNS provider\u2019s dynamic-DNS update URL)';
+	if (!/^https:\/\//i.test(u))
+		return 'must start with https:// (your DNS provider\u2019s dynamic-DNS update URL)';
 	// {ip} is OPTIONAL. If present, the updater replaces it with the detected
 	// public IP; if absent, it pushes the URL as-is and the provider detects the
 	// caller's IP itself (Namecheap, for one, documents `ip=` as optional). So we
@@ -119,7 +140,9 @@ export function validateDdnsUrl(url: string): true | string {
 	return true;
 }
 export function validateOperatorAccount(name: string): true | string {
-	return /^[a-z0-9.-]{3,16}$/.test(name.trim()) ? true : 'is not a valid BLURT account name (3\u201316 chars, a\u2013z 0\u20139 . -)';
+	return /^[a-z0-9.-]{3,16}$/.test(name.trim())
+		? true
+		: 'is not a valid BLURT account name (3\u201316 chars, a\u2013z 0\u20139 . -)';
 }
 /** The federation operator tag (MORPHIT_INSTANCE_OPERATOR_TAG). Must pass the
  *  SAME rules the on-chain register handler enforces, or the deferred first-online
@@ -174,9 +197,7 @@ export function validateAlertMxid(mxid: string): true | string {
 	if (m.startsWith('#')) {
 		return 'must be your PERSONAL account (@you:server) — not a #room, which would leak private alerts publicly';
 	}
-	return /^@[^:\s]+:[^:\s]+\.[^:\s]+$/.test(m)
-		? true
-		: 'should look like @you:matrix.org';
+	return /^@[^:\s]+:[^:\s]+\.[^:\s]+$/.test(m) ? true : 'should look like @you:matrix.org';
 }
 /** The instance title (MORPHIT_INSTANCE_NAME).  Required + capped at 64 to match
  *  the indexer's Zod `z.string().max(64)`. */
@@ -206,6 +227,18 @@ export function validateMatrixAddress(raw: string): true | string {
 	}
 	return true;
 }
+
+/** The Matrix alert bot's homeserver on a tor-only node: on this machine or a
+ *  .onion (v3) one, reached through Tor. True, or why not. PURE. */
+export function validateTorOnlyHomeserver(raw: string): true | string {
+	const route = homeserverRoute(raw);
+	if (route === 'loopback' || route === 'onion') return true;
+	if (route === 'invalid') return 'is not an http(s) URL';
+	return 'is a clearnet homeserver; a tor-only node may only use one on this machine or a .onion homeserver';
+}
+
+/** Tor's SocksPort on a fresh tor-only install (the tor role's default). */
+export const TOR_ONLY_BOT_SOCKS = '127.0.0.1:9050';
 
 /** Turn a validated Matrix contact into a universally-clickable URL.  matrix.to is
  *  the form Matrix itself recommends for sharing — it opens in any browser and
@@ -253,7 +286,9 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 	const fa = validateOperatorAccount(inputs.feesAccount);
 	if (fa !== true) problems.push(`feesAccount "${inputs.feesAccount}" ${fa}.`);
 	if (!inputs.keystorePath.startsWith('/')) {
-		problems.push(`keystorePath "${inputs.keystorePath}" must be an absolute path (the wizard writes the keystore there).`);
+		problems.push(
+			`keystorePath "${inputs.keystorePath}" must be an absolute path (the wizard writes the keystore there).`
+		);
 	}
 	if (inputs.indexerDbPassword.length < 24) {
 		problems.push('the DB password must be strong (>= 24 characters \u2014 use randomSecret()).');
@@ -265,13 +300,24 @@ export function validateInstallInputs(inputs: AnsibleInstallInputs): string[] {
 		inputs.matrixAlertMxid
 	].filter((v) => v !== undefined && v.length > 0);
 	if (alertParts.length > 0 && alertParts.length < 3) {
-		problems.push(
-			'Matrix alerts need all of homeserver + access token + recipient MXID, or none.'
-		);
+		problems.push('Matrix alerts need all of homeserver + access token + recipient MXID, or none.');
 	}
 	if (inputs.matrixAlertMxid !== undefined && inputs.matrixAlertMxid.length > 0) {
 		const am = validateAlertMxid(inputs.matrixAlertMxid);
 		if (am !== true) problems.push(`the alert recipient ${am}.`);
+	}
+	if (inputs.backupAgeRecipient !== undefined && inputs.backupAgeRecipient.length > 0) {
+		const r = validateAgeRecipient(inputs.backupAgeRecipient);
+		if (r !== true) problems.push(`the backup encryption key ${r}.`);
+	}
+	if (
+		inputs.torOnly &&
+		inputs.matrixAlertHomeserver !== undefined &&
+		inputs.matrixAlertHomeserver.length > 0
+	) {
+		const hs = validateTorOnlyHomeserver(inputs.matrixAlertHomeserver);
+		if (hs !== true)
+			problems.push(`the alert bot homeserver ${inputs.matrixAlertHomeserver} ${hs}.`);
 	}
 	return problems;
 }
@@ -284,7 +330,7 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		// Tor-only: reachable via the auto-generated onion (+ optional I2P/Lokinet)
 		// with NO clearnet domain. The tor role still generates + serves the onion;
 		// the tls role and BunkerWeb's clearnet TLS front are skipped, and the
-		// frontend serves the onion standalone (Tor → frontend:8090, cp695).
+		// frontend serves the onion standalone (Tor → frontend:8090).
 		morphit_tor_only: inputs.torOnly,
 		morphit_operator_account: inputs.operatorAccount,
 		morphit_operator_tag: inputs.operatorTag,
@@ -344,7 +390,18 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 	// which writes /etc/morphit/matrix-bot.env at 0600 — the same file the
 	// deployed bot reads and `morphit-ops matrix` manages. All-or-nothing:
 	// missing any one of the three leaves alerting off rather than half-wired.
-	if (inputs.matrixAlertHomeserver && inputs.matrixAlertToken && inputs.matrixAlertMxid) {
+	// A tor-only node never gets a bot that talks to a clearnet homeserver
+	// (validateAnsibleInputs reports it; this holds even if a caller skips that).
+	const clearnetBotOnTorOnly =
+		inputs.torOnly &&
+		inputs.matrixAlertHomeserver !== undefined &&
+		validateTorOnlyHomeserver(inputs.matrixAlertHomeserver) !== true;
+	if (
+		inputs.matrixAlertHomeserver &&
+		inputs.matrixAlertToken &&
+		inputs.matrixAlertMxid &&
+		!clearnetBotOnTorOnly
+	) {
 		vars.enable_matrix_bot = true;
 		vars.matrix_bot_homeserver = inputs.matrixAlertHomeserver;
 		vars.matrix_bot_access_token = inputs.matrixAlertToken;
@@ -363,6 +420,19 @@ export function buildAnsibleVars(inputs: AnsibleInstallInputs): Record<string, u
 		// the role installs it STOPPED. The monitor sidecars stay OFF — they alert
 		// THROUGH the bot, which isn't running until a token is added.
 		vars.enable_matrix_bot = true;
+	}
+	// On a tor-only node the bot reaches its homeserver only through Tor and
+	// refuses one that is not on this machine or a .onion.
+	if (vars.enable_matrix_bot === true && inputs.torOnly) {
+		vars.matrix_bot_tor_only = true;
+		vars.matrix_bot_socks_proxy = torSocksUrl(TOR_ONLY_BOT_SOCKS);
+	}
+	// Daily DB backups are encrypted to this key (backup.env AGE_RECIPIENT).
+	if (
+		inputs.backupAgeRecipient !== undefined &&
+		validateAgeRecipient(inputs.backupAgeRecipient) === true
+	) {
+		vars.morphit_backup_age_recipient = inputs.backupAgeRecipient.trim();
 	}
 	return vars;
 }

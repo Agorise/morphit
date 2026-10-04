@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * instances-alt-network-links smoke — cp321.
+ * instances-alt-network-links smoke.
  *
  * THE BUG THIS GUARDS AGAINST. On the federation directory (/instances), each
  * instance card shows alt-network reachability pills (Tor / Lokinet / I2P b32 /

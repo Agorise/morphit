@@ -41,6 +41,7 @@ const app = (reason: 'hidden_only' | null): Hono => {
 		{} as BlurtClient,
 		true,
 		true,
+		[],
 		reason
 	).register(a);
 	return a;
@@ -85,6 +86,7 @@ describe('what a relay with push off answers', () => {
 			{} as BlurtClient,
 			true,
 			false,
+			[],
 			'hidden_only'
 		).register(a);
 		const res = await a.request('/v1/push/unsubscribe', {

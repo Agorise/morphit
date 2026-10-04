@@ -1,5 +1,5 @@
 /**
- * upgrade-schema-reminder-smoke (cp217).
+ * upgrade-schema-reminder-smoke.
  *
  * Two features tie together here: `upgrade` warns when it crosses an indexer
  * schema.sql change, and `doctor` (via the indexer's --check-schema) detects
@@ -92,13 +92,13 @@ const indexerMain = readFileSync(join(REPO, 'apps', 'indexer', 'src', 'main.ts')
 // the operator at doctor + OPERATIONS §23.
 if (/export function schemaBaselineChanged/.test(upgradeSrc)) ok('upgrade.ts exports schemaBaselineChanged');
 else bad('upgrade.ts no longer exports schemaBaselineChanged');
-// v1.8.12 (the maintainer) — this used to require `schemaBaselineChanged(backupDir,
+// v1.8.12 — this used to require `schemaBaselineChanged(backupDir,
 // installDir)` directly, which is a WEAKER condition than the warning needs.
 // That function only diffs schema.sql; it says nothing about whether a
 // numbered migration carries the change to existing databases. So ANY schema
 // edit fired the "changed IN PLACE — not via a numbered migration" reminder,
 // even when a migration existed and had already been applied at indexer
-// start-up. the maintainer hit that upgrading to v1.8.12 (which ships MIGRATION 51): his
+// start-up. The maintainer hit that upgrading to v1.8.12 (which ships MIGRATION 51): his
 // DB was correctly updated and the upgrade told him it was not, pointing him
 // at a reset + re-sync. A false alarm that recommends rebuilding a database
 // costs more than no alarm.
@@ -144,7 +144,7 @@ else bad('indexer main.ts drift check not wired');
 if (/\[check-schema\]/.test(indexerMain)) ok('indexer main.ts emits [check-schema] lines doctor parses');
 else bad('indexer main.ts [check-schema] output missing');
 
-// ─── cp447: additive migrations must NOT tell operators to reset the DB ──────
+// ─── additive migrations must NOT tell operators to reset the DB ──────
 //
 // This misfired for real on the v1.3.0 → v1.3.5 upgrade (migration 39, chat
 // read-state threading). The detector was a byte-diff of schema.sql, so it told
@@ -166,7 +166,7 @@ const BASE = [
 const PLUS_SECTION =
 	BASE + ['-- \u2500\u2500\u2500 v2 \u2500\u2500\u2500', 'ALTER TABLE u ADD COLUMN c TEXT;', ''].join('\n');
 
-// cp466 — the real-world append: a blank line is placed BEFORE the new marker
+// the real-world append: a blank line is placed BEFORE the new marker
 // (the schema.sql convention), which lands in the formerly-last section's body.
 // That is boundary whitespace, not a schema change, and must NOT warn.
 const PLUS_SECTION_BLANK_BEFORE_MARKER =

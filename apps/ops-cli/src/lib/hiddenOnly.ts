@@ -1,6 +1,6 @@
 /**
  * Is this node hidden-only? And, when it is, the ONE way ops-cli may reach the
- * Blurt chain: through this node's own indexer. (v1.18.0 deep-deep, H1)
+ * Blurt chain: through this node's own indexer.
  *
  * WHAT WAS WRONG. ops-cli never asked this question. Every interactive launch
  * fetched the latest version from git.agorise.net and read the relay balance

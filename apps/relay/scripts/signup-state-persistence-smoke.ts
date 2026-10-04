@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Relay signup state + live RPC directory smoke (v1.20.0 fix wave, D3 + D12).
+ * Relay signup state + live RPC directory smoke.
  *
  * D3  Every installed relay ran with the daily-ceiling counter in memory only
  *     and the kill-switch file disabled: no installer set MORPHIT_RELAY_DATA_DIR

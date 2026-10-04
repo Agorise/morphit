@@ -4,7 +4,7 @@
 --
 -- v11 added these columns for a syndication design that was later
 -- revised before shipping. The current implementation uses a
--- different mechanism (see docs/SYNDICATION-CHECKPOINT.md + Post A/B
+-- different mechanism (see ADR-0012 and the Post A/B
 -- patterns in the frontend) that does not consult either column.
 -- Neither column is read or written anywhere in the current code:
 --

@@ -91,6 +91,14 @@
     mode: '0640'
   notify: Restart morphit-matrix-bot
 
+- name: Write the bot's posture for the indexer (no secret; the indexer cannot read matrix-bot.env)
+  ansible.builtin.template:
+    src: matrix-bot.posture.j2
+    dest: /etc/morphit/matrix-bot.posture
+    owner: root
+    group: "{{ morphit_service_group }}"
+    mode: '0640'
+
 - name: Install matrix-bot systemd unit
   ansible.builtin.copy:
     src: /opt/morphit/ops/systemd/morphit-matrix-bot.service

@@ -14,5 +14,5 @@
 ## Notes
 
 - **No behaviour change for clearnet nodes**, no migration, no protocol change. Offline-first preserved; no new external dependency.
-- **Fresh security audit of the v1.16.0→v1.16.2 delta** (`docs/AUDIT-v1.16.x-DELTA-DEEP-DEEP.md`): the privacy keystone (clearnet-elimination gate) and hidden-transport layer were verified sound; the two findings above were the only gaps, both fixed. Threat models refreshed for the federation / clearnet-elimination / hidden-transport architecture (`docs/audit/2026-09-v1.16-delta-threat-model.md`).
+- **Fresh security audit of the v1.16.0→v1.16.2 delta** (an internal audit record): the privacy keystone (clearnet-elimination gate) and hidden-transport layer were verified sound; the two findings above were the only gaps, both fixed. Threat models refreshed for the federation / clearnet-elimination / hidden-transport architecture (`docs/audit/2026-09-v1.16-delta-threat-model.md`).
 - **CI now catches browser-bundle breaks earlier.** A new `web-build-smoke` runs `vite build` in the battery, so a Node-only import reaching the client bundle fails on push (and locally) rather than at release time — the exact class of break that slipped to CI in v1.16.2. Two guard smokes pin the audit invariants.

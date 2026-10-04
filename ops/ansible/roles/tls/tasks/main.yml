@@ -1,13 +1,16 @@
 # Role: tls
 #
 # Certbot-managed Let's Encrypt cert with automatic renewal per
-# OPERATIONS.md §35.  The cert is requested via standalone mode
-# on port 80 — BunkerWeb hands off port 80 to certbot during
-# renewal via certbot's pre/post hooks (configured in the
-# bunkerweb role).
+# OPERATIONS.md §35.
 #
-# For first issuance, no service yet binds port 80, so standalone
-# works cleanly.
+# First issuance on a fresh install: nothing holds port 80 yet (BunkerWeb
+# starts later in the play), so certbot's standalone server answers the
+# challenge.  RENEWAL cannot work that way — BunkerWeb holds port 80 from then
+# on — so once BunkerWeb is up, the bunkerweb role switches the renewal to the
+# webroot authenticator: Let's Encrypt's request goes through BunkerWeb to the
+# frontend, which serves /.well-known/ from the web build certbot writes into
+# (checked there by a test renewal).  A re-run on a box where something
+# already holds port 80 issues through that same webroot.
 
 ---
 - name: Install certbot
@@ -50,10 +53,21 @@
     - not tls_cert_stat.stat.exists
     - tls_acme_probe.status is not defined
 
-- name: Request initial cert (standalone)
+- name: See whether something already holds port 80 (BunkerWeb on a re-run)
+  ansible.builtin.command: ss -ltnH 'sport = :80'
+  register: tls_port80
+  changed_when: false
+  failed_when: false
+  when:
+    - not tls_cert_stat.stat.exists
+    - tls_acme_probe.status is defined
+
+- name: Request initial cert (standalone when port 80 is free, else through the web build)
   ansible.builtin.command:
     cmd: >-
-      certbot certonly --standalone --non-interactive --agree-tos
+      certbot certonly --non-interactive --agree-tos
+      {{ '--webroot --webroot-path ' ~ (morphit_repo_path ~ '/apps/web/build') | quote
+         if (tls_port80.stdout | default('') | trim | length) > 0 else '--standalone' }}
       --email {{ tls_acme_email }}
       --server {{ tls_certbot_server }}
       -d {{ morphit_domain }}
@@ -92,7 +106,7 @@
     content: |
       #!/bin/sh
       # Runs after certbot renews the cert.
-      # cp663 #7 — certbot RESETS the cert to root-only (0700 archive)
+      # certbot RESETS the cert to root-only (0700 archive)
       # on every renewal, which would silently break BunkerWeb's TLS
       # (it runs as GID 101) ~60 days out.  Re-assert group-readability
       # so it self-heals.  GID 101 is BunkerWeb's in-image user.

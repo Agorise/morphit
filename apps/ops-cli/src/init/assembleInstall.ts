@@ -1,5 +1,5 @@
 /**
- * assembleInstall.ts (cp600) — the ORCHESTRATION backbone of the grandma
+ * assembleInstall.ts — the ORCHESTRATION backbone of the grandma
  * install runner.  The interactive front-end (compose the wizard's account /
  * active-key / fees steps + collectInstallInputs) hands this a finished plan;
  * this drives the irreversible, order-sensitive part and is dependency-injected
@@ -113,7 +113,7 @@ export interface AssembleDeps {
 
 export type AssembleResult = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
-// ─── Real (a mini PC-validated) implementations ────────────────────
+// ─── Real implementations (validated on a real machine) ──────────
 function realWrite0600(path: string, content: string): void {
 	writeFileSync(path, content, { mode: 0o600 });
 }
@@ -142,7 +142,7 @@ async function realEnsureAnsible(ansibleDir: string): Promise<boolean> {
 		// can't be created for some reason.
 	}
 	const have = spawnSync('ansible-playbook', ['--version'], { stdio: 'ignore' });
-	// cp690 — a self-contained (offline) bundle ships ansible in its apt closure
+	// a self-contained (offline) bundle ships ansible in its apt closure
 	// (vendor/apt) and the galaxy collections it needs (vendor/ansible-collections).
 	// ansibleDir is <bundleRoot>/ops/ansible, so the bundle's vendor/ dir is two
 	// levels up. Install FROM the bundle with no network; reach apt/Galaxy only

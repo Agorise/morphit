@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/posting-key-storage-smoke.ts (cp404, option A)
+ * apps/indexer/scripts/posting-key-storage-smoke.ts (option A)
  *
  * Covers the DISPLAY-ONLY posting-key storage: the pure key extractor,
  * plus source-level assertions that the whole path is wired (schema
  * column, ingest capture, startup backfill, orderbook exposure, and the
  * "verification never trusts this column" invariant). The DB/chain parts
- * of the backfill can't run in the sandbox, so those are asserted at the
+ * of the backfill can't run without a database and a chain, so those are asserted at the
  * source level instead of executed.
  */
 
@@ -169,7 +169,7 @@ check(
 	!/posting_pubkey/.test(verify),
 	'verify.ts must resolve keys from the chain authority, not the stored column'
 );
-// cp405 — the beta.44 "Can't reach the indexer" regression fix. The additive
+// the beta.44 "Can't reach the indexer" regression fix. The additive
 // column must be delivered on the AWAITED boot path (before the server binds),
 // not only by the fire-and-forget backfill (which raced the first request and,
 // on an ADD COLUMN failure, hard-downed the orderbook while the indexer stayed

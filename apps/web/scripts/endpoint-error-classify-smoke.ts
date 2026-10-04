@@ -1,5 +1,5 @@
 /**
- * endpoint-error-classify-smoke (cp346; repurposed cp408)
+ * endpoint-error-classify-smoke (repurposed)
  *
  * Two guards:
  *

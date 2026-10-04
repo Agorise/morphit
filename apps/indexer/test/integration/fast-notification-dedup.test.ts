@@ -1,5 +1,5 @@
 /**
- * The fast/durable notification dedup, at RUNTIME — the bug the maintainer actually hit.
+ * The fast/durable notification dedup, at RUNTIME — a bug that was actually hit.
  *
  * WHAT THIS IS ABOUT. A chat message is notified twice by design: the head
  * tailer enqueues a push ~5 s after send, and the durable handler enqueues the
@@ -13,14 +13,14 @@
  * and the migration note for v1.5.5 says so in as many words: the relay used to
  * DELETE a row once it had been delivered (~5 s), so when the durable handler
  * enqueued the same trx ~60 s later there was nothing left to conflict with and
- * it inserted a SECOND push — "the duplicate notification the maintainer hit". The fix was
+ * it inserted a SECOND push — a duplicate notification. The fix was
  * not to the predicate but to the LIFETIME: the sender now stamps `sent_at` and
  * a pruner reclaims the row much later, so the dedup key survives delivery.
  *
  * That failure is invisible to every check short of a database. The SQL is
  * correct in isolation and stays correct; what broke was how long the row lived
- * relative to when the second insert arrived. `REVISIT-LIST` has carried it as
- * "needs a live Postgres — confirm on the VPS" since cp471, and an audit pass
+ * relative to when the second insert arrived. The backlog has carried it as
+ * "needs a live Postgres — confirm on the VPS" since an earlier release, and an audit pass
  * marked the predicate "verified clean" by READING it, which is exactly the
  * distinction this file exists to close: the predicate was never the part that
  * failed.
@@ -156,6 +156,14 @@ describe.skipIf(!INTEGRATION_ENABLED)('one message, one notification', () => {
 	/** Two DIFFERENT messages to the same person are two notifications. A dedup
 	 *  keyed on the account alone would silence the second one. */
 	it('two different messages notify twice', async () => {
+		// An established conversation: the recipient has written to the sender
+		// (until then a sender earns one push a day, no-reply-push-cap).
+		await fx.db.query(
+			`INSERT INTO chat_messages (sender, recipient, ciphertext, header, created_at, source_trx_id)
+			 VALUES ($1, $2, 'AAAA', '{}'::jsonb, NOW(), 'reply-trx-for-dedup-test-00000000000000')
+			 ON CONFLICT DO NOTHING`,
+			[RECIPIENT, SENDER]
+		);
 		await push();
 		await enqueueChatPush(fx.db, {
 			recipient: RECIPIENT,

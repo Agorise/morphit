@@ -39,7 +39,7 @@ That invariant is doing two jobs at once, and only one of them is load-bearing:
 Meanwhile the field grew its own workarounds around the boundary, which is
 usually the sign that a boundary is in the wrong place:
 
-- `pendingFeatured.ts` (cp431) is an optimistic display-only store whose header
+- `pendingFeatured.ts` is an optimistic display-only store whose header
   says, in effect, "the fast path is chat-only, so I'll do it client-side."
 - The order detail page retries for ~24s against a 45-63s wait, with a comment
   claiming that is *"comfortably longer than block time + indexer poll lag"* —

@@ -44,7 +44,7 @@
 			url: 'https://codeberg.org/agorise/morphit',
 			status: 'live'
 		},
-		// v1.8.16 (the maintainer) — SourceForge + SourceHut mirrors are live and anchored
+		// v1.8.16 — SourceForge + SourceHut mirrors are live and anchored
 		// on-chain (buildDistribution baked list). They link straight to the repo.
 		{
 			id: 'sourceforge',
@@ -52,48 +52,84 @@
 			url: 'https://sourceforge.net/projects/agorise-morphit/',
 			status: 'live'
 		},
-		{ id: 'sourcehut', name: 'SourceHut', url: 'https://git.sr.ht/~agorise/morphit', status: 'live' },
+		{
+			id: 'sourcehut',
+			name: 'SourceHut',
+			url: 'https://git.sr.ht/~agorise/morphit',
+			status: 'live'
+		},
 		{ id: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/Agorise/morphit', status: 'live' },
-		// v1.8.16 (the maintainer) — Bitbucket + Launchpad push-mirrors confirmed live. Every
+		// v1.8.16 — Bitbucket + Launchpad push-mirrors confirmed live. Every
 		// git mirror is now live; only IPFS remains pending (per-release
 		// content-addressed copy, auto-pinned once a release runs with PINATA_JWT).
 		// Removed earlier: Gitee (site down), GitFlic (no signup confirmation
 		// email), Radicle (requires installing their app).
-		{ id: 'bitbucket', name: 'Bitbucket', url: 'https://bitbucket.org/agorise/morphit', status: 'live' },
+		{
+			id: 'bitbucket',
+			name: 'Bitbucket',
+			url: 'https://bitbucket.org/agorise/morphit',
+			status: 'live'
+		},
 		{
 			id: 'launchpad',
 			name: 'Launchpad',
 			url: 'https://git.launchpad.net/~agorise/+git/morphit',
 			status: 'live'
 		},
-		// v1.9.6 (the maintainer) — gitea.com + framagit.org push-mirrors confirmed live; both are
+		// v1.9.6 — gitea.com + framagit.org push-mirrors confirmed live; both are
 		// anchored on-chain too (buildDistribution baked list; the mirror cap was
 		// bumped 8 -> 10 to fit them).
 		{ id: 'gitea', name: 'Gitea', url: 'https://gitea.com/agorise/morphit', status: 'live' },
-		{ id: 'framagit', name: 'Framagit', url: 'https://framagit.org/agorise/morphit', status: 'live' },
-		// v1.11.1 (the maintainer) — NINE new push-mirrors on indie git hosts, all confirmed
+		{
+			id: 'framagit',
+			name: 'Framagit',
+			url: 'https://framagit.org/agorise/morphit',
+			status: 'live'
+		},
+		// v1.11.1 — NINE new push-mirrors on indie git hosts, all confirmed
 		// live and anchored on-chain (buildDistribution baked list; the mirror cap
 		// was bumped 10 -> 32 to fit them + leave headroom for the pending Savannah
 		// + 0xacab mirrors). None has a simple-icons brand glyph, so each renders
 		// the shared generic Git mark (MIRROR_LOGO_FALLBACK) beside its real name.
 		{ id: 'gitgud', name: 'GitGud', url: 'https://gitgud.io/agorise/morphit', status: 'live' },
-		{ id: 'chapril', name: 'Chapril', url: 'https://forge.chapril.org/agorise/morphit', status: 'live' },
-		{ id: 'disroot', name: 'Disroot', url: 'https://git.disroot.org/agorise/morphit', status: 'live' },
+		{
+			id: 'chapril',
+			name: 'Chapril',
+			url: 'https://forge.chapril.org/agorise/morphit',
+			status: 'live'
+		},
+		{
+			id: 'disroot',
+			name: 'Disroot',
+			url: 'https://git.disroot.org/agorise/morphit',
+			status: 'live'
+		},
 		{ id: 'kaki87', name: 'KaKi87', url: 'https://git.kaki87.net/agorise/morphit', status: 'live' },
-		{ id: 'codefloe', name: 'Codefloe', url: 'https://codefloe.com/agorise/morphit', status: 'live' },
+		{
+			id: 'codefloe',
+			name: 'Codefloe',
+			url: 'https://codefloe.com/agorise/morphit',
+			status: 'live'
+		},
 		{ id: 'gitgay', name: 'git.gay', url: 'https://git.gay/agorise/morphit', status: 'live' },
 		{ id: 'bolha', name: 'Bolha.dev', url: 'https://bolha.dev/agorise/morphit', status: 'live' },
-		{ id: 'opencommit', name: 'OpenCommit', url: 'https://opencommit.eu/agorise/morphit', status: 'live' },
+		{
+			id: 'opencommit',
+			name: 'OpenCommit',
+			url: 'https://opencommit.eu/agorise/morphit',
+			status: 'live'
+		},
 		{ id: 'sijai', name: 'sij.ai', url: 'https://sij.ai/agorise/morphit', status: 'live' }
 	] as const;
 
-	// v1.9.6 (the maintainer) — TWO decentralized "latest release" surfaces:
+	// Two decentralized "latest release" surfaces:
 	//   • IPNS (always latest): native ipns://<name>/… — resolves over the public DHT
 	//     with no DNS + no third party (every instance rebroadcasts the signed record;
 	//     see $lib/ipns.ts + ops/ipfs/morphit-ipns-rebroadcast.sh). Needs an IPFS-capable
 	//     browser; always shown (the URL is static). The privacy/decentralization pick.
 	//   • IPFS (always latest): the current release's immutable DIRECTORY CID (from
-	//     /v1/release → distribution.ipfs_cid) via ipfs.io — resolves in ANY browser
+	//     the signature-verified release op, distribution.ipfs_cid — $stores/release,
+	//     never the operator's word) via ipfs.io — resolves in ANY browser
 	//     (grandma), at the cost of one DNS lookup + one gateway. Live once a release
 	//     carrying a CID is on-chain; a "coming soon" card until then.
 	// (w3name is gone — it stored records off the DHT, so gateways never resolved them.)
@@ -106,11 +142,16 @@
 		// Always "live" — the URL is static (needs no CID). See the note under the grid.
 		{ id: 'ipns', name: 'IPNS (always latest)', url: ipnsNativeTarballUrl(), status: 'live' },
 		ipfsCid
-			? { id: 'ipfs', name: 'IPFS (always latest)', url: ipfsCidTarballUrl(ipfsCid), status: 'live' }
+			? {
+					id: 'ipfs',
+					name: 'IPFS (always latest)',
+					url: ipfsCidTarballUrl(ipfsCid),
+					status: 'live'
+				}
 			: { id: 'ipfs', name: 'IPFS', url: 'https://ipfs.tech/', status: 'pending' }
 	]);
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
@@ -236,7 +277,7 @@
 				</li>
 			{/each}
 		</ul>
-		<!-- v1.9.6 (the maintainer) — IPNS note: the native ipns:// card needs an IPFS-capable
+		<!-- v1.9.6 — IPNS note: the native ipns:// card needs an IPFS-capable
 		     browser; the IPFS card works anywhere. The permanent address is shown as
 		     copyable text (select-all) so anyone can paste it into their own node. -->
 		<p class="mt-4 text-sm text-ink-600 dark:text-ink-400">
@@ -267,7 +308,7 @@
 		<!-- Source code primary CTA. -->
 		<!-- Already emerald-tinted at rest; adding the hover would DIM its
 	     border (/40 -> /20) on hover, which reads as the card receding. -->
-	<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
+		<section class="card border-morphit-emerald/40 bg-morphit-emerald/5">
 			<h3 class="font-display text-xl font-bold">
 				{$_('download.operator_source_heading')}
 			</h3>

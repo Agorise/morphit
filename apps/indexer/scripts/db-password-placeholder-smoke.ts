@@ -9,8 +9,9 @@
  *    `init.sql` provisioning script that REJECTS them, (c) the
  *    `.env.example` files that document the sentinel as the
  *    required-replace value, (d) the indexer/relay config files
- *    that share the reject list, and (e) the historical audit
- *    log (`docs/AUDIT-2026-05.md`), which is append-only.
+ *    that share the reject list, and (e) the operator docs that name
+ *    them so operators recognise them. `private/` (the maintainer's
+ *    private handoff, absent from public clones) is not scanned.
  *
  * 2. ZOD SCHEMA REJECTION. The indexer and relay config schemas
  *    refuse to parse a DATABASE_URL whose password component is
@@ -69,45 +70,24 @@ const ALLOWED_PATHS = new Set([
 	'apps/relay/src/config/index.ts',
 	// This smoke itself contains the strings literally.
 	'apps/indexer/scripts/db-password-placeholder-smoke.ts',
-	// The relay HMAC-secret smoke (cp252) tests that these sentinels
+	// The relay HMAC-secret smoke tests that these sentinels
 	// are REJECTED as HMAC secrets, so it contains them literally.
 	'apps/relay/scripts/hmac-secret-placeholder-smoke.ts',
-	// Historical audit log — append-only, mentions the past
-	// presence of the placeholders in fix narratives.
-	'docs/AUDIT-2026-05.md',
-	// Final report from the May 2026 audit campaign — names the
-	// sentinel literally in the "standing pre-launch action items"
-	// section so operators know what to rotate.
-	'docs/AUDIT-2026-05-FINAL-REPORT.md',
-	// cp138 deep-deep audit campaign — plan, findings, outside-
-	// scope docs all reference the placeholder sentinel in the
-	// context of pre-launch operator-actions.  cp138 follows
-	// the same naming convention as the May 2026 audit.
-	'docs/AUDIT-cp138-PLAN.md',
-	'docs/AUDIT-cp138-FINDINGS.md',
-	'docs/AUDIT-OUTSIDE-SCOPE.md',
-	// Memorized facts in REVISIT-LIST mention placeholders by
-	// name in the operator-action checklist.
-	'docs/REVISIT-LIST.md',
 	// Operator-facing setup doc names the sentinel by spelling
 	// in step 7 + step 8 (so the operator recognizes it).
 	'docs/RUN-A-MORPHIT-NODE.md',
 	// Deep operator runbook §30 documents the reject list.
 	'docs/OPERATIONS.md',
-	// TARBALL.md is the per-checkpoint snapshot; the
-	// audit-trail commentary on the placeholder hardening
-	// names every sentinel by spelling.
-	'TARBALL.md',
-	// Brag list entry 230 (Part 71) names the sentinel
+	// Brag list entry 230 names the sentinel
 	// in the audit-trail closure narrative explaining
 	// that the "rotate CHANGE_ME_BEFORE_PRODUCTION"
 	// standing-action item was based on a misreading
 	// (the string is in a denylist by design).  Removing
 	// the literal would weaken the closure provenance.
 	'MORPHIT-BRAG-LIST.md',
-	// cp131 HIGH-001 — the backup script implements the
+	// the backup script implements the
 	// SAME placeholder-denylist discipline for AGE_RECIPIENT
-	// / REMOTE_DESTINATION values that pre-cp131 only the
+	// / REMOTE_DESTINATION values that previously only the
 	// indexer/relay Zod configs enforced.  The literal
 	// CHANGE_ME / CHANGEME / REPLACE / XXXXX strings have
 	// to live in `is_placeholder()` so the script can
@@ -116,19 +96,14 @@ const ALLOWED_PATHS = new Set([
 	// as init.sql + the example env files above.
 	'ops/backup/morphit-backup.sh',
 	'ops/backup/backup.env.example',
-	// cp131 HIGH-001 — Ansible template's safe-empty
+	// Ansible template's safe-empty
 	// defaults sit alongside operator-facing comments
 	// that NAME the placeholder strings so operators
 	// know what to type.  Same trust posture as
 	// indexer.env.example.
-	'ops/ansible/group_vars/all.yml',
-	// cp131 HIGH-006 — PRE-LAUNCH-CHECKLIST.md was already
-	// in the implicit-allowlist set via docs/ blanket
-	// inclusion below; this entry just makes the
-	// rationale explicit.
-	'docs/PRE-LAUNCH-CHECKLIST.md'
+	'ops/ansible/group_vars/all.yml'
 	// v1.8.0 housecleaning: the three persona-walkthrough docs
-	// (cp137/cp139/cp148) that used to be allowlisted here were
+	// that used to be allowlisted here were
 	// deleted as point-in-time records — nothing left to scan.
 ]);
 
@@ -141,7 +116,9 @@ const SKIP_DIRS = new Set([
 	'.vercel',
 	'.netlify',
 	'.git',
-	'.pnpm-store'
+	'.pnpm-store',
+	// The maintainer's private handoff (gitignored, never packed).
+	'private'
 ]);
 
 // ─── File extensions to scan ──────────────────────────────────────────

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: read state is per DISCUSSION, not per person (cp446, the maintainer).
+ * Smoke: read state is per DISCUSSION, not per person.
  *
  * "If I read one thread from a user, it should not mark other threads with that
  * user as read. Think of it like email."
@@ -8,7 +8,7 @@
  * This crosses a signed on-chain op (`morphit_chat_read_v1`), so the guards here
  * are about COMPATIBILITY as much as behaviour:
  *
- *   '*'  — a legacy peer-wide ack. What every pre-cp446 client sent, and what an
+ *   '*'  — a legacy peer-wide ack. What every older client sent, and what an
  *          old client still sends today. A client may NOT forge one.
  *   ''   — the thread that cites no order. A real thread of its own.
  *   else — the permlink of the order that thread is about.
@@ -115,10 +115,10 @@ check(
 );
 check('mark-all-read walks discussions', /markConversationRead\(c\.peer, c\.order\?\.permlink \?\? '', now\)/.test(inbox));
 check(
-	'the unread badge counts unread discussions, excluding archived (t.txt 10)',
+	'the unread badge counts unread discussions, excluding archived',
 	/const order = c\.order\?\.permlink \?\? '';/.test(badge) &&
 		/isArchived\(c\.peer, order\)/.test(badge) &&
-		// v1.7.5 (t.txt #2) — this used to pin the THREE-arg
+		// v1.7.5 — this used to pin the THREE-arg
 		// `isUnread(c.peer, order, c.last_message_at)`, which is the call
 		// signature from BEFORE the cross-device fix. `isUnread` could not see
 		// who sent the last message, so a message you sent from your PC came
@@ -133,9 +133,9 @@ check(
 
 
 // ── v1.7.7: the badge and the inbox cards must share ONE predicate ──
-// cp452 established the invariant: a badge that disagrees with the visible cards
+// A later change established the invariant: a badge that disagrees with the visible cards
 // is a bug in whichever direction it leans. It was enforced by two call sites
-// applying "the same rule" — which is how they drifted. the maintainer's repro is the
+// applying "the same rule" — which is how they drifted. The maintainer's repro is the
 // drift: a push landed, the thread resurrected into his Inbox, the badge stayed
 // dark AND the card showed READ, because both read a durable `last_message_at`
 // that the fast path never updates (ADR-0051 invariant #1).
@@ -162,7 +162,7 @@ check(
 check(
 	'…and the card no longer calls raw isUnread directly',
 	!/\bisUnread\(/.test(page),
-	'raw isUnread on the page means the card sees a stale row again — the maintainer s missing green border'
+	'raw isUnread on the page means the card sees a stale row again — a missing green border'
 );
 check(
 	'threadIsUnread consults the pending-push overlay',

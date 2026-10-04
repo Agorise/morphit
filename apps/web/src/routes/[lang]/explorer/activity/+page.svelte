@@ -97,7 +97,12 @@
 		}
 	}
 
+	/** Set when the page is left: the first load finishing later must not
+	 *  start the pollers. */
+	let destroyed = false;
+
 	function startPolling(): void {
+		if (destroyed) return;
 		if (!volumeTimer) {
 			volumeTimer = setInterval(() => {
 				if (typeof document !== 'undefined' && document.hidden) return;
@@ -127,7 +132,10 @@
 		void Promise.all([refreshVolume(), refreshListings()]).then(startPolling);
 	});
 
-	onDestroy(stopPolling);
+	onDestroy(() => {
+		destroyed = true;
+		stopPolling();
+	});
 
 	const activeVolume = $derived(
 		activeWindow === '7d' ? volume7d : activeWindow === '30d' ? volume30d : volume90d
@@ -142,7 +150,7 @@
 		return Math.max(max, 1);
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);

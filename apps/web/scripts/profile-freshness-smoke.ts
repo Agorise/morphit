@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: display name + avatar no longer fall back to "@account" + identicon
- * and STAY that way across refreshes (the maintainer #2). Anchor 2026-07-08.
+ * and STAY that way across refreshes. Anchor 2026-07-08.
  *
  * Two independent causes, both guarded here:
  *
@@ -57,7 +57,7 @@ check('server keeps the 90s header for complete batches', /BATCH_CACHE_CONTROL =
 // returned nothing for anyone who never set one). That silently broke THIS
 // policy: a profile-less account now comes back as a ROW, so a row-count test
 // would call such a batch complete and pin "no profile" for the full 90s —
-// exactly the negative-caching failure cp428 exists to prevent. Row presence
+// exactly the negative-caching failure exists to prevent. Row presence
 // stopped meaning "has a profile"; only has_profile does.
 check('server picks the header by batch completeness (cache-served + queried positives, never a row count)', /const complete = servedFromCache \+ queriedWithProfile === accounts\.length;/.test(serverProfiles) && /if \(row\.has_profile\)\s*\{[\s\S]{0,120}queriedWithProfile\+\+;/.test(serverProfiles) && /complete \? BATCH_CACHE_CONTROL : BATCH_CACHE_CONTROL_PARTIAL/.test(serverProfiles));
 check('completeness cannot regress to a row count (a profile-less row is not a profile)', !/const complete = result\.rows\.length === accounts\.length;/.test(serverProfiles));
@@ -67,7 +67,10 @@ check('the single-profile 404 is no-store too (404s are heuristically cacheable)
 check('cache exposes getProfileCachedDetailed with a `failed` flag', /export async function getProfileCachedDetailed/.test(cacheMod) && /readonly failed: boolean/.test(cacheMod));
 check('`failed` is derived from the cp428 soft-null marker', /cache\.get\(account\)\?\.soft === true/.test(cacheMod));
 check('fetchBatch can bypass the browser HTTP cache (cache: reload)', /reload = false/.test(cacheMod) && /cache: 'reload' as RequestCache/.test(cacheMod));
-check('a reload request skips the in-memory cache + in-flight sharing', /if \(opts\?\.reload\) \{[\s\S]{0,120}needsFetch\.push\(account\);/.test(cacheMod));
+// reload (the user's own just-broadcast profile) and revalidate (a
+// background refresh) both skip the memory cache; only reload also uses
+// cache:'reload'. Behaviour: apps/web:profile-persistent-cache-smoke.
+check('a reload or revalidate request skips the in-memory cache + in-flight sharing', /const bypass = opts\?\.reload === true \|\| opts\?\.revalidate === true;/.test(cacheMod) && /if \(bypass\) \{[\s\S]{0,120}needsFetch\.push\(account\);/.test(cacheMod));
 check('reload is threaded batch → fetchBatch', /fetchBatch\(chunkOfAccounts, signal, opts\?\.reload === true\)/.test(cacheMod));
 
 // ─── 3. selfProfile store: never clobber a good avatar on a blip ─────
@@ -79,7 +82,7 @@ check('the retry delay outlives the 5s soft-null TTL', /6_000/.test(store));
 check('bustCache also force-reloads the browser HTTP cache', /reload: opts\?\.bustCache === true/.test(store));
 check('an authoritative "no profile" is still applied (avatar really removed)', /const props = extractLabelPropsFromProfile\(profile\);/.test(store));
 
-// ─── 4. cp452: optimistic prime + orderbook re-read (t.txt 2 + 3) ────
+// ─── 4. optimistic prime + orderbook re-read ────
 // A settings edit must show INSTANTLY (not after the 90s TTL), and the user's
 // own orderbook cards must recover their avatar/name after a SW-upgrade reload
 // race WITHOUT a manual refresh.
@@ -91,7 +94,7 @@ check('cache exports primeProfile (optimistic write for the user\u2019s own edit
 // applyBlock, and the poller applies blocks only up to last-irreversible
 // (ADR-0008), 45-63s behind head. The hold expired ~40s BEFORE the indexer could
 // know about the edit, and the next fetch reverted the user's own just-saved
-// name — the exact "I saved it but it reverted" flicker (t.txt 2+3) this exists
+// name — the exact "I saved it but it reverted" flicker this exists
 // to prevent. Now pins the REQUIREMENT (a window that outlasts irreversibility,
 // via the shared chain constant) rather than a literal that was never right.
 check('a prime is held through indexer catch-up (isPrimeHeld + PRIME_HOLD_MS)', /const PRIME_HOLD_MS = PENDING_TTL_MS/.test(cacheMod) && /function isPrimeHeld\(/.test(cacheMod));

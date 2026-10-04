@@ -1,8 +1,9 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest';
 import {
 	resolveBroadcastAccount,
 	clearAccountBindingCache,
-	AccountBindingError
+	AccountBindingError,
+	assertKeyControlsAccount
 } from './accountBinding';
 import type { LiveIdentity } from '$crypto/identity-core';
 import * as secp256k1 from '@noble/secp256k1';
@@ -38,7 +39,7 @@ describe('resolveBroadcastAccount — the account is a property of the KEY', () 
 	});
 
 	it('falls back to the hint when neither reverse index can see the account (pre-fork)', async () => {
-		// v1.8.10 (the maintainer): a Steem-era account that never re-set its posting key on
+		// v1.8.10: a Steem-era account that never re-set its posting key on
 		// Blurt is invisible to `account_by_key`, and invisible to the indexer's
 		// own posting_pubkey index until it has touched Morphit. Both sources
 		// return [] even though the key IS a valid current authority — so the
@@ -101,5 +102,31 @@ describe('resolveBroadcastAccount — the account is a property of the KEY', () 
 			})
 		).rejects.toThrow();
 		expect(await resolveBroadcastAccount(live, null, async () => ['tester2'])).toBe('tester2');
+	});
+});
+
+describe('assertKeyControlsAccount — the forward check', () => {
+	beforeEach(() => vi.stubGlobal('window', { location: new URL('https://morphit.example/') }));
+	afterEach(() => vi.unstubAllGlobals());
+	const keysResponse = (status: number, body: unknown = {}) =>
+		(async () =>
+			new Response(JSON.stringify(body), {
+				status,
+				headers: { 'content-type': 'application/json' }
+			})) as unknown as typeof fetch;
+
+	it('refuses an account the chain does not have (the unverified pre-fork hint)', async () => {
+		const account = await resolveBroadcastAccount(live, 'no-such-user', async () => []);
+		await expect(
+			assertKeyControlsAccount(live, account, keysResponse(404, { error: 'not_found' }))
+		).rejects.toMatchObject({ kind: 'no_account_for_key' });
+	});
+
+	it('refuses when the chain cannot be asked', async () => {
+		const err = await assertKeyControlsAccount(live, 'someone', keysResponse(502)).catch(
+			(e: unknown) => e
+		);
+		expect(err).toBeInstanceOf(Error);
+		expect(err).not.toBeInstanceOf(AccountBindingError);
 	});
 });

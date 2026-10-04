@@ -1,14 +1,25 @@
 /**
- * Morphit indexer — Postgres connection pool.
+ * Morphit indexer — Postgres connection pools.
  *
- * One pool per process. Transactions are opened via withTx() which
- * handles BEGIN/COMMIT/ROLLBACK consistently and never leaks
- * connections.
+ * Two pools per process, each up to MORPHIT_INDEXER_DB_POOL_MAX
+ * connections (default 10; Postgres' max_connections must allow twice
+ * that):
+ *   - 'core': the poller, head tailer, background jobs and migrations.
+ *     No statement timeout — a block's transaction and an hourly
+ *     signal scan run as long as they need.
+ *   - 'api': the HTTP routes. Every statement is cancelled after
+ *     API_STATEMENT_TIMEOUT_MS.
+ * With one shared pool, a dozen slow orderbook requests held every
+ * connection and the poller's next block waited behind them.
  *
- * Pool sizing: up to 10 connections. The indexer has two concurrent
- * consumers — the poller (one block at a time) and the HTTP API
- * (parallel reads) — so 10 is generous without being wasteful on a
- * small VPS.
+ * Both pools turn JIT off: the reputation joins' row estimates are
+ * inflated enough that Postgres JIT-compiled queries that run in a
+ * millisecond, spending tens to thousands of milliseconds of CPU
+ * compiling them. And both end a session left idle inside a
+ * transaction, so a stuck client cannot hold locks indefinitely.
+ *
+ * Transactions are opened via withTx() which handles
+ * BEGIN/COMMIT/ROLLBACK consistently and never leaks connections.
  */
 
 import pg from 'pg';
@@ -65,12 +76,26 @@ export class PgSafeClient extends pg.Client {
 	}
 }
 
-export function createDatabase(config: Config): Database {
+/** Statement cap on the HTTP routes' pool. */
+export const API_STATEMENT_TIMEOUT_MS = 5_000;
+
+export type DatabaseRole = 'core' | 'api';
+
+/** Session settings sent at connect, per role. */
+export function sessionOptionsFor(role: DatabaseRole): string {
+	const idleInTxMs = role === 'api' ? 10_000 : 300_000;
+	const opts = ['-c jit=off', `-c idle_in_transaction_session_timeout=${idleInTxMs}`];
+	if (role === 'api') opts.push(`-c statement_timeout=${API_STATEMENT_TIMEOUT_MS}`);
+	return opts.join(' ');
+}
+
+export function createDatabase(config: Config, role: DatabaseRole = 'core'): Database {
 	const pool = new pg.Pool({
 		Client: PgSafeClient,
 		connectionString: config.databaseUrl,
-		// Operator knob: MORPHIT_INDEXER_DB_POOL_MAX (default 10).
-		// Bound by Postgres server's max_connections; raise both
+		options: sessionOptionsFor(role),
+		// Operator knob: MORPHIT_INDEXER_DB_POOL_MAX (default 10), per
+		// pool. Bound by Postgres server's max_connections; raise both
 		// in lockstep for high-traffic instances.
 		max: config.databasePoolMax,
 		idleTimeoutMillis: 30_000,
@@ -80,7 +105,7 @@ export function createDatabase(config: Config): Database {
 	// Surface connection errors early. Without this, a dropped backend
 	// connection silently propagates through the pool.
 	pool.on('error', (err) => {
-		log.error('idle_client_error', {}, err);
+		log.error('idle_client_error', { pool: role }, err);
 	});
 
 	let closed = false;

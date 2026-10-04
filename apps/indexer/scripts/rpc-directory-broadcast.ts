@@ -10,11 +10,11 @@
  * └─────────────────────────────────────────────────────────────┘
  *
  * Usage:
- *   1) Inspect the built-in starter directory (the two public nodes) without a key:
- *        npx tsx apps/indexer/scripts/rpc-directory-broadcast.ts --dry-run
+ *   1) Inspect the built-in starter directory (the public hidden nodes) without a key:
+ *        node_modules/.bin/tsx apps/indexer/scripts/rpc-directory-broadcast.ts --dry-run
  *   2) Publish a custom directory from a JSON file:
- *        npx tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json --dry-run
- *        npx tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json
+ *        node_modules/.bin/tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json --dry-run
+ *        node_modules/.bin/tsx apps/indexer/scripts/rpc-directory-broadcast.ts dir.json
  *
  * Flags: --dry-run (print the op, no key, no network), --signer <acct>,
  *        --node <rpc-url> (use exactly this node), --include-hidden (also rank the
@@ -51,7 +51,7 @@ function die(msg: string): never {
  *  named. Used when no JSON file is passed, so publishing the canonical set is
  *  one command. Edit here (or pass a file) to add/remove nodes. NOTE: the latest
  *  morphit_rpc_v1 op REPLACES the on-chain directory, so this list should be the
- *  COMPLETE set you want published (dead nodes like oldpc are simply omitted). */
+ *  COMPLETE set you want published (a node left out is dropped from it). */
 function starterDirectory(): RpcDirectoryPayload {
 	return {
 		v: 1,

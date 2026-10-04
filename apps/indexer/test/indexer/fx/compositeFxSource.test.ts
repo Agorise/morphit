@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G5 — one out-of-range entry must not discard a provider's
+ * one out-of-range entry must not discard a provider's
  * whole FX table.
  *
  * currency-api ships ~150 fiat AND crypto codes; `btc` per USD is ~1e-5, below

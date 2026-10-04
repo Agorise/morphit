@@ -1,7 +1,13 @@
 /**
  * Composite cached USD→fiat FX source — multi-source AVERAGING.
  *
- * Each refresh fetches ALL configured upstreams concurrently
+ * An optional PRIMARY tier is tried first, in order: the first primary that
+ * returns a plausible table is committed and the upstreams below are not asked
+ * that refresh. This is how the onion pricenodes' consensus
+ * (price/pricenodes.ts) comes first and the clearnet FX providers serve only
+ * as its fallback.
+ *
+ * Otherwise each refresh fetches ALL configured upstreams concurrently
  * (Promise.allSettled), then for every currency aggregates the
  * readings from every source that returned a plausible table via
  * the median-anchored robust mean (aggregateRobust): the median
@@ -49,6 +55,11 @@ const log = logger('fx');
 export const FX_OUTLIER_TOLERANCE = 0.02;
 
 export interface CompositeFxSourceConfig {
+	/** Tried first, in order; the first plausible table wins (see header). */
+	readonly primaryUpstreams?: ReadonlyArray<{ readonly name: string; readonly fetch: FxFetch }>;
+	/** While this says true and no primary had a table, the upstreams are not
+	 *  asked this cycle (see price/compositeSource.ts deferExternal). */
+	readonly deferUpstreams?: () => boolean;
 	readonly upstreams: ReadonlyArray<{ readonly name: string; readonly fetch: FxFetch }>;
 	readonly refreshIntervalMs: number;
 	readonly staleThresholdMs?: number;
@@ -105,7 +116,7 @@ export class CompositeCachedFxSource implements FxRateSource {
 		this.clearIntervalFn = config.clearInterval ?? globalThis.clearInterval;
 		this.staleThresholdMs = config.staleThresholdMs ?? config.refreshIntervalMs * 3;
 		this.sourceStats = new Map(
-			config.upstreams.map((u) => [
+			[...(config.primaryUpstreams ?? []), ...config.upstreams].map((u) => [
 				u.name,
 				{ lastOkAt: null, lastTriedAt: null, okLastCycle: false, currencyCount: 0 }
 			])
@@ -144,7 +155,7 @@ export class CompositeCachedFxSource implements FxRateSource {
 
 	/** Per-source status for the morphit-ops health view. */
 	sourceStatus(): FxSourceStatus[] {
-		return this.config.upstreams.map((u) => {
+		return [...(this.config.primaryUpstreams ?? []), ...this.config.upstreams].map((u) => {
 			const s = this.sourceStats.get(u.name)!;
 			return {
 				name: u.name,
@@ -209,6 +220,38 @@ export class CompositeCachedFxSource implements FxRateSource {
 	 *  aggregate per-currency.  Public for deterministic tests. */
 	async refreshOnce(): Promise<void> {
 		const now = this.now();
+		for (const up of this.config.primaryUpstreams ?? []) {
+			const stat = this.sourceStats.get(up.name)!;
+			stat.lastTriedAt = now;
+			let table: FxRateTable | null = null;
+			try {
+				table = dropImplausibleRates(await up.fetch());
+			} catch (err) {
+				log.warn('primary_threw', { source: up.name }, err);
+			}
+			if (isPlausibleFxTable(table) && table !== null) {
+				stat.lastOkAt = now;
+				stat.okLastCycle = true;
+				stat.currencyCount = Object.keys(table.rates).length;
+				this.cached = {
+					table: { base: 'USD', rates: { ...table.rates, USD: 1 } },
+					contributingSources: [up.name],
+					updatedAt: now,
+					maxContributors: 1,
+					anyRejected: false
+				};
+				log.info('refreshed_primary', {
+					source: up.name,
+					currency_count: Object.keys(table.rates).length
+				});
+				return;
+			}
+			stat.okLastCycle = false;
+		}
+		if (this.config.upstreams.length > 0 && this.config.deferUpstreams?.() === true) {
+			log.info('upstreams_deferred', { reason: 'primary_pending' });
+			return;
+		}
 		const results = await Promise.allSettled(this.config.upstreams.map((u) => u.fetch()));
 
 		const goodTables: Array<{ name: string; table: FxRateTable }> = [];

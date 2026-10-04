@@ -9,7 +9,7 @@
  *     only our own proxy is involved (F2's class, on the one branch F2 missed).
  * And: a CONNECT reply longer than the IPv4 form (an IPv6 or domain BND.ADDR)
  *     left its tail in front of the HTTP response undici reads next.
- * M1 (v1.18.0 deep-deep): the I2P CONNECT connector had no early-close
+ * M1: the I2P CONNECT connector had no early-close
  *     listener. A proxy that closed during the handshake (i2pd restarting)
  *     destroyed the socket, which also cleared its timer, so the connect
  *     callback was NEVER called — and the pooled route (connections: 1) queued

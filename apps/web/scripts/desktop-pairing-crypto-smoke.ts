@@ -59,7 +59,7 @@ async function scenario(name: string, fn: () => Promise<void> | void): Promise<v
 	}
 }
 
-// cp474 — 28 of this file's 33 assert() calls pass no message, so the required
+// 28 of this file's 33 assert() calls pass no message, so the required
 // `msg` meant every one of them handed `undefined` to `new Error()`: a failure
 // would have surfaced as a blank error. The enclosing scenario name already
 // carries the context, so default the message rather than churn 28 call sites.

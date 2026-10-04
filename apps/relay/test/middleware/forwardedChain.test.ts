@@ -1,5 +1,5 @@
 /**
- * (v1.18.0 deep-deep, H1) The relay must find the REAL client in the headers
+ * The relay must find the REAL client in the headers
  * our own proxies actually produce — not whatever the client typed.
  *
  * nginx's `$proxy_add_x_forwarded_for` is "the client's own X-Forwarded-For,

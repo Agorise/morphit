@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	isPgSafeText,
+	jsonNestingExceeds,
 	pgSafeBlock,
 	pgSafeDeep,
 	pgSafeParams,
@@ -77,6 +78,66 @@ describe('pgSafeBlock', () => {
 		).toBe('m\uFFFD');
 		expect(dirty.transactions[0]!.operations[0]![1]).toEqual({ memo: 'm\u0000' });
 		expect(out.transaction_ids).toBe(dirty.transaction_ids);
+	});
+});
+
+describe('nesting depth', () => {
+	const nest = (depth: number, leaf: unknown): unknown => {
+		let v: unknown = leaf;
+		for (let i = 0; i < depth; i++) v = i % 2 === 0 ? [v] : { k: v };
+		return v;
+	};
+	const leafOf = (v: unknown): unknown => {
+		while (v !== null && typeof v === 'object')
+			v = Array.isArray(v) ? v[0] : (v as { k: unknown }).k;
+		return v;
+	};
+
+	it('pgSafeDeep walks any depth without throwing, copying only the changed path', () => {
+		const dirty = nest(100_000, 'x\u0000');
+		const out = pgSafeDeep(dirty);
+		// (Deep values are never handed to expect(): its formatter recurses.)
+		expect(out === dirty).toBe(false);
+		expect(leafOf(out)).toBe('x\uFFFD');
+		expect(leafOf(dirty)).toBe('x\u0000');
+		const clean = nest(100_000, 'fine');
+		expect(pgSafeDeep(clean) === clean).toBe(true);
+		let threw = false;
+		try {
+			pgSafeBlock({ transactions: [dirty] });
+		} catch {
+			threw = true;
+		}
+		expect(threw).toBe(false);
+	});
+
+	it('pgSafeDeep keeps sibling order, unchanged siblings by reference, and own __proto__ keys', () => {
+		const keep = { a: 1 };
+		const v = JSON.parse('{"__proto__":{"x":"\\u0000"},"z":[1,"b\\u0000",{"q":2}]}') as Record<
+			string,
+			unknown
+		>;
+		(v as Record<string, unknown>).keep = keep;
+		const out = pgSafeDeep(v) as Record<string, unknown>;
+		expect(Object.keys(out)).toEqual(['__proto__', 'z', 'keep']);
+		expect(Object.hasOwn(out, '__proto__')).toBe(true);
+		expect((out['__proto__'] as { x: string }).x).toBe('\uFFFD');
+		expect(out.z).toEqual([1, 'b\uFFFD', { q: 2 }]);
+		expect(out.keep).toBe(keep);
+		expect(({} as { x?: unknown }).x).toBeUndefined();
+	});
+
+	it('jsonNestingExceeds counts container levels and answers for any depth', () => {
+		expect(jsonNestingExceeds('s', 0)).toBe(false);
+		expect(jsonNestingExceeds([], 0)).toBe(true);
+		expect(jsonNestingExceeds([], 1)).toBe(false);
+		expect(jsonNestingExceeds({ a: [[1]] }, 3)).toBe(false);
+		expect(jsonNestingExceeds({ a: [[1]] }, 2)).toBe(true);
+		expect(jsonNestingExceeds({ a: 1, b: [2, { c: [] }] }, 4)).toBe(false);
+		expect(jsonNestingExceeds({ a: 1, b: [2, { c: [] }] }, 3)).toBe(true);
+		expect(jsonNestingExceeds(nest(64, 1), 64)).toBe(false);
+		expect(jsonNestingExceeds(nest(65, 1), 64)).toBe(true);
+		expect(jsonNestingExceeds(nest(100_000, 1), 64)).toBe(true);
 	});
 });
 

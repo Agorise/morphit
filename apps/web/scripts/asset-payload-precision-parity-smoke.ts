@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * asset-payload-precision-parity-smoke (cp46 — O-1 closure).
+ * asset-payload-precision-parity-smoke (O-1 closure).
  *
  * RUN-LOCATION REQUIREMENT: must be invoked with apps/web/tsconfig.json
  * as the resolved tsconfig because the imports below traverse into
@@ -17,7 +17,7 @@
  *      that asset's amount-class operates at N-decimal
  *      precision.  Mismatch (e.g. jitterSolAmount running at
  *      1e8 instead of 1e9) silently produces wrong on-chain
- *      amounts.  Cp45 SOL addition surfaced this gap: a
+ *      amounts.  SOL addition surfaced this gap: a
  *      mutation M-98 changing `1_000_000_000n` to `100_000_000n`
  *      was invisible to all 35 existing smokes.  This smoke
  *      pins the invariant by exercising `jitterAmountForAsset`
@@ -27,13 +27,13 @@
  *      scheme in its payment-URI builder branch (`bitcoin:`,
  *      `monero:`, `litecoin:`, `bitcoincash:`, `dash:`,
  *      `dogecoin:`, `zcash:`, `arrr:`, `decred:`, `solana:`,
- *      EVM-style for stablecoins, in-app for BLURT).  Cp46
+ *      EVM-style for stablecoins, in-app for BLURT).
  *      mutation M-99 changing `solana:` → `bitcoin:` would
  *      silently emit wrong URIs and confuse wallets.  This
  *      smoke pins each asset's expected scheme.
  *
  *   3. **Txid shape parity.**  Each asset has a documented
- *      txid regex.  Cp46 mutation M-97 widening
+ *      txid regex.  mutation M-97 widening
  *      `/^[1-9A-HJ-NP-Za-km-z]{87,88}$/` to `{1,200}` would
  *      silently accept malformed txids (BTC 64-hex shape would
  *      then test true for SOL).  This smoke pins each asset's
@@ -54,12 +54,12 @@ import {
 } from '../src/lib/chat/payload';
 
 // Per-asset expected URI scheme + txid shape.  Source-of-truth
-// is the cp1-cp45 wiring across the registry; this smoke is the
+// is the wiring across the registry; this smoke is the
 // load-bearing cross-check.
 type AssetExpectation = {
 	ticker: string;
 	chatTicker: ChatAssetTicker;
-	expectedJitterDecimals: number; // may differ from canonical.decimals (DAI uses 6-decimal jitter on 18-decimal on-chain by cp31 design)
+	expectedJitterDecimals: number; // may differ from canonical.decimals (DAI uses 6-decimal jitter on 18-decimal on-chain by design)
 	expectedUriScheme: string | null; // null = no URI (BLURT) or per-network (USDT/USDC/DAI)
 	txidShapeAcceptable: string;
 	txidShapeUnacceptable: string;
@@ -110,7 +110,7 @@ const EXPECTATIONS: AssetExpectation[] = [
 		ticker: 'DAI',
 		chatTicker: 'dai',
 		// DAI is 18-decimal on-chain but jitter clamps to 6-decimal
-		// display precision per cp31 ADR-0029 design: consistent
+		// display precision ADR-0029 design: consistent
 		// $0.001-magnitude jitter UX across all stablecoins.  Comment
 		// in packages/asset-registry/src/index.ts DAI entry documents
 		// this; the smoke captures the design choice as a fixed
@@ -179,8 +179,8 @@ const EXPECTATIONS: AssetExpectation[] = [
 	{
 		ticker: 'SOL',
 		chatTicker: 'sol',
-		// SOL is the first 9-decimal asset in Morphit.  Cp45 added
-		// jitterSolAmount for 9-decimal lamport arithmetic.  cp46
+		// SOL is the first 9-decimal asset in Morphit.  A later change added
+		// jitterSolAmount for 9-decimal lamport arithmetic.
 		// M-98 mutation showed that changing 1_000_000_000n to
 		// 100_000_000n (BTC-family precision) was silently invisible
 		// to all 35 existing smokes — this smoke is the structural
@@ -194,8 +194,8 @@ const EXPECTATIONS: AssetExpectation[] = [
 		ticker: 'ETH',
 		chatTicker: 'eth',
 		// ETH is 18-decimal on-chain (wei) but jitter clamps to
-		// 6-decimal display precision per cp47 design (matching
-		// DAI's cp31 ADR-0029 rationale).  At $2500/ETH a 0-999
+		// 6-decimal display precision design (matching
+		// DAI's ADR-0029 rationale).  At $2500/ETH a 0-999
 		// microether jitter range is ~$0.0025 max — the same
 		// $0.001-magnitude jitter UX the stablecoins use.
 		expectedJitterDecimals: 6,
@@ -235,7 +235,7 @@ function fail(name: string, detail: string): void {
 console.log('\n── asset-payload-precision-parity smoke (cp46) ──────\n');
 
 // ── 1. canonical asset count matches expectations array ──
-// cp425 — EXPECTATIONS lists txid/URI/precision shapes, which only crypto
+// EXPECTATIONS lists txid/URI/precision shapes, which only crypto
 // assets have. Goods assets (BARTER) are orderable but have no on-chain txid,
 // URI scheme, or amount precision (isGoodsAsset gates them out), so they are
 // correctly absent from EXPECTATIONS. Compare the count against the CRYPTO
@@ -261,7 +261,7 @@ for (const exp of EXPECTATIONS) {
 	// jitterAmountForAsset on '0' input yields '0.<frac>' where frac
 	// has exactly `expectedJitterDecimals` characters (zero-padded).
 	// NOTE: expectedJitterDecimals may differ from canonAsset.decimals
-	// for DAI (18-decimal on-chain, 6-decimal jitter clamp by cp31
+	// for DAI (18-decimal on-chain, 6-decimal jitter clamp
 	// design).  The smoke author maintains EXPECTATIONS to reflect
 	// the documented design choice; mutations to jitter arithmetic
 	// surface as mismatches against EXPECTATIONS.

@@ -205,7 +205,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		'HV-3g non-object body tolerated',
 		summarizeHealth(null).status === 'unknown' && summarizeHealth(42).synced
 	);
-	// cp365 — parsePriceFeed: tolerant of every shape the indexer (or an
+	// parsePriceFeed: tolerant of every shape the indexer (or an
 	// older build) might send for the non-verbose `price_feed`.
 	const pfOn = parsePriceFeed({
 		enabled: true,
@@ -490,7 +490,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 		writeFileSync(tmpl, 'Generated: {{GENERATED_AT_ISO}}\nValid through: {{VALID_THROUGH_ISO}}\n');
 		expect('HV-8d checkCanary: un-substituted template → unparsable', checkCanary(tmpl, now).state === 'unparsable');
 
-		// cp442 — the generator now writes the maintainer's sitewide stamp
+		// the generator now writes the maintainer's sitewide stamp
 		// ("15 June, 2026 @ 03:14:00 UTC"). `new Date(str)` on a non-ISO string is
 		// implementation-defined, so health parses it explicitly. If that ever
 		// regresses, a perfectly good canary reports as `unparsable` and the
@@ -531,7 +531,7 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 			checkCanary(badMonth, now).state === 'unparsable'
 		);
 
-		// cp622 — still valid but LOW on remaining validity → stale (aging): the
+		// still valid but LOW on remaining validity → stale (aging): the
 		// weekly refresh has likely stalled, so warn WHILE it's still valid rather
 		// than waiting for it to expire and readers to see a false tamper signal.
 		const staleAging = join(dir, 'stale-aging.txt');
@@ -565,10 +565,10 @@ expect('HV-1e an unparseable string passes through', ensureHealthPath('not a url
 	}
 }
 
-// ─── HV-9: parsePriceFeedsHealth (cp372 multi-source feed health;
-//          cp381 top-level operator-only block + per-source price) ───
+// ─── HV-9: parsePriceFeedsHealth (multi-source feed health;
+//          top-level operator-only block + per-source price) ───
 {
-	// cp381: the parser now takes the top-level `price_feeds` block
+	// the parser now takes the top-level `price_feeds` block
 	// directly (it moved out of the gated `diagnostics`), and each
 	// crypto source row carries the price it reported.
 	const block = {

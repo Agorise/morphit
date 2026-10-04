@@ -1,5 +1,5 @@
 /**
- * upgrade-frontend-deploy-smoke (cp211; publish logic reworked beta11).
+ * upgrade-frontend-deploy-smoke (publish logic reworked beta11).
  *
  * `morphit-ops upgrade` rebuilds + redeploys the static web frontend (the
  * Node services run from TS source via tsx, so only the SvelteKit `vite
@@ -17,7 +17,7 @@
  *   - the bind-mount detection helpers (normalizeMountPath, parseMountSources,
  *     containerMountsBuildDir) that identify the frontend container by the
  *     apps/web/build mount it carries — NOT by a container name or compose
- *     file. beta11 replaces cp236, whose `morphit-frontend`-name +
+ *     file. beta11 replaces the older path, whose `morphit-frontend`-name +
  *     repo-example-compose assumptions broke on real deployments (a compose
  *     project names the container `<project>-frontend-1`, e.g.
  *     `bunkerweb-frontend-1`, and recreating it from the repo's example
@@ -75,7 +75,11 @@ const bad = (m: string, d = '') => {
 	const override = resolveWebRoot({ MORPHIT_WEB_ROOT: '/srv/site' });
 	const trimmed = resolveWebRoot({ MORPHIT_WEB_ROOT: '  /srv/site  ' });
 	const empty = resolveWebRoot({ MORPHIT_WEB_ROOT: '   ' });
-	if (override === '/srv/site' && trimmed === '/srv/site' && empty === '/var/www/morphit-frontend') {
+	if (
+		override === '/srv/site' &&
+		trimmed === '/srv/site' &&
+		empty === '/var/www/morphit-frontend'
+	) {
 		ok('FD-2 resolveWebRoot honors override, trims whitespace, falls back on empty');
 	} else {
 		bad('FD-2', `override=${override} trimmed=${trimmed} empty=${empty}`);
@@ -188,22 +192,20 @@ function tmp(prefix: string): string {
 	}
 
 	// FD-10 containerized: no web root, container present → restart that
-	// container only, no warn. This is the regression case: pre-cp236 the
+	// container only, no warn. This is the regression case: older the
 	// frontend was silently skipped here. The container name is whatever
 	// `docker ps` reported — here a compose-style `bunkerweb-frontend-1`,
-	// which cp236's hardcoded `morphit-frontend` filter would have MISSED.
+	// which the hardcoded `morphit-frontend` filter would have MISSED.
 	const bw = planFrontendDeploy({
 		webRootExists: false,
 		frontendContainer: 'bunkerweb-frontend-1',
 		webRoot: WR,
 		buildDir: BD
 	});
-	if (
-		!bw.copyToWebRoot &&
-		bw.restartContainer === 'bunkerweb-frontend-1' &&
-		bw.warn === null
-	) {
-		ok('FD-10 containerized (compose-named container, no web root) → restart that container, no warning');
+	if (!bw.copyToWebRoot && bw.restartContainer === 'bunkerweb-frontend-1' && bw.warn === null) {
+		ok(
+			'FD-10 containerized (compose-named container, no web root) → restart that container, no warning'
+		);
 	} else {
 		bad('FD-10 (frontend would be silently skipped / wrong container!)', JSON.stringify(bw));
 	}
@@ -243,7 +245,7 @@ function tmp(prefix: string): string {
 
 // ─── FD-16/17/18/19: bind-mount detection helpers (beta11) ──────────
 // These are the robust, name-agnostic signal that a container serves OUR
-// frontend build: it bind-mounts <install>/apps/web/build. cp236 matched a
+// frontend build: it bind-mounts <install>/apps/web/build. A later change matched a
 // hardcoded container name instead and broke on real deployments.
 {
 	// FD-16 normalizeMountPath: strip a single trailing slash, keep bare "/",
@@ -289,7 +291,9 @@ function tmp(prefix: string): string {
 	const unrelatedMiss = containerMountsBuildDir(['/etc/letsencrypt', '/var/log/nginx'], BD);
 	const emptyMiss = containerMountsBuildDir([], BD);
 	if (hit && !parentMiss && !siblingMiss && !unrelatedMiss && !emptyMiss) {
-		ok('FD-18 containerMountsBuildDir matches the exact build dir only (no parent/sibling/prefix false positives)');
+		ok(
+			'FD-18 containerMountsBuildDir matches the exact build dir only (no parent/sibling/prefix false positives)'
+		);
 	} else {
 		bad(
 			'FD-18',
@@ -307,7 +311,9 @@ function tmp(prefix: string): string {
 	const detected = containerMountsBuildDir(parseMountSources(realStackInspect), BD);
 	const notDetected = containerMountsBuildDir(parseMountSources(decoyInspect), BD);
 	if (detected && !notDetected) {
-		ok('FD-19 a container is detected by its apps/web/build mount among others, name-agnostically (and a decoy mount is not)');
+		ok(
+			'FD-19 a container is detected by its apps/web/build mount among others, name-agnostically (and a decoy mount is not)'
+		);
 	} else {
 		bad('FD-19', `detected=${detected} notDetected=${notDetected}`);
 	}
@@ -362,7 +368,7 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-31',
-			re: /'up', '-d', '--no-deps', '--build', '--force-recreate', ref\.service/,
+			re: /'up',\s*'-d',\s*'--no-deps',\s*'--build',\s*'--force-recreate',\s*ref\.service/,
 			desc: 'v1.17.1: compose-managed frontend is rebuilt with --force-recreate (a byte-identical image otherwise leaves the container bound to the STALE pre-upgrade build inode); wave 5: only its own service (--no-deps), its whole Compose project — behaviour in test/bunkerwebWafIdentify.test.ts'
 		},
 		{
@@ -399,7 +405,7 @@ function tmp(prefix: string): string {
 		}
 	}
 
-	// FD-20 (beta11 regression guard): cp236's name/compose-based approach is
+	// FD-20 (beta11 regression guard): the name/compose-based approach is
 	// fully GONE — no `recreateBunkerwebFrontend`, no `bunkerwebFrontendPresent`,
 	// no hardcoded `name=^/morphit-frontend$` docker filter, no HARDCODED
 	// `--force-recreate frontend` (a literal service name). Their presence would
@@ -410,16 +416,21 @@ function tmp(prefix: string): string {
 		{ re: /recreateBunkerwebFrontend/, what: 'recreateBunkerwebFrontend()' },
 		{ re: /bunkerwebFrontendPresent/, what: 'bunkerwebFrontendPresent()' },
 		{ re: /name=\^\/morphit-frontend\$/, what: 'hardcoded morphit-frontend docker filter' },
-		{ re: /--force-recreate['",\s]+frontend\b/, what: 'hardcoded --force-recreate frontend (cp236 ghost)' }
+		{
+			re: /--force-recreate['",\s]+frontend\b/,
+			what: 'hardcoded --force-recreate frontend (cp236 ghost)'
+		}
 	];
 	const ghostHits = ghosts.filter((g) => g.re.test(upgradeSrc)).map((g) => g.what);
 	if (ghostHits.length === 0) {
-		ok('FD-20 cp236 name/compose-based publish path fully removed (no recreate/name-filter/force-recreate ghosts)');
+		ok(
+			'FD-20 cp236 name/compose-based publish path fully removed (no recreate/name-filter/force-recreate ghosts)'
+		);
 	} else {
 		bad('FD-20 stale cp236 publish path present', ghostHits.join(', '));
 	}
 
-	// FD-15 (cp236 regression guard): the web build must be UNCONDITIONAL.
+	// FD-15 (regression guard): the web build must be UNCONDITIONAL.
 	// The original bug nested `npm run build` inside an `if (webRoot exists)`
 	// else, so a container-served host (no /var/www/morphit-frontend) silently
 	// skipped the frontend rebuild. Assert (a) the old skip text is gone and
@@ -458,7 +469,8 @@ function tmp(prefix: string): string {
 		hash_manifest: {}
 	});
 	const v = parseVerifyJsonVersion(verifyJson);
-	if (v === '1.0.0-beta.24') ok('FD-21a parseVerifyJsonVersion extracts morphit_version from the real verify.json shape');
+	if (v === '1.0.0-beta.24')
+		ok('FD-21a parseVerifyJsonVersion extracts morphit_version from the real verify.json shape');
 	else bad('FD-21a', `got ${v}`);
 
 	if (
@@ -479,7 +491,10 @@ function tmp(prefix: string): string {
 	const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 	const FIELD = 'morphit_version';
 	const genSrc = readFileSync(join(repoRoot, 'scripts', 'build-verify-json.mjs'), 'utf8');
-	const parserSrc = readFileSync(join(repoRoot, 'apps', 'ops-cli', 'src', 'commands', 'upgrade.ts'), 'utf8');
+	const parserSrc = readFileSync(
+		join(repoRoot, 'apps', 'ops-cli', 'src', 'commands', 'upgrade.ts'),
+		'utf8'
+	);
 	const aboutSrc = readFileSync(
 		join(repoRoot, 'apps', 'web', 'src', 'routes', '[lang]', 'about-this-instance', '+page.svelte'),
 		'utf8'
@@ -488,27 +503,34 @@ function tmp(prefix: string): string {
 	const parserReads = parserSrc.includes(`.${FIELD}`) || parserSrc.includes(`{ ${FIELD}?:`);
 	const aboutReads = aboutSrc.includes(FIELD);
 	if (genWrites && parserReads && aboutReads)
-		ok(`FD-21c verify.json field "${FIELD}" agrees across generator, upgrade parser, and about page`);
-	else bad('FD-21c', `field drift: generator=${genWrites} parser=${parserReads} about=${aboutReads}`);
+		ok(
+			`FD-21c verify.json field "${FIELD}" agrees across generator, upgrade parser, and about page`
+		);
+	else
+		bad('FD-21c', `field drift: generator=${genWrites} parser=${parserReads} about=${aboutReads}`);
 
 	// classifyFrontendVerify: fresh / stale / unknown.
-	if (classifyFrontendVerify('abc', 'abc') === 'fresh') ok('FD-22a equal versions → fresh (snackbar will fire)');
+	if (classifyFrontendVerify('abc', 'abc') === 'fresh')
+		ok('FD-22a equal versions → fresh (snackbar will fire)');
 	else bad('FD-22a');
 	if (classifyFrontendVerify('newbuild', 'oldbuild') === 'stale')
 		ok('FD-22b served ≠ built → stale (snackbar blocked, warn)');
 	else bad('FD-22b');
-	if (classifyFrontendVerify(null, 'x') === 'unknown' && classifyFrontendVerify('x', null) === 'unknown')
+	if (
+		classifyFrontendVerify(null, 'x') === 'unknown' &&
+		classifyFrontendVerify('x', null) === 'unknown'
+	)
 		ok('FD-22c either version unknown → unknown (best-effort note)');
 	else bad('FD-22c');
 
-	// cp752: the .shipped build marker must be EXCLUDED from verify.json hashing —
+	// the .shipped build marker must be EXCLUDED from verify.json hashing —
 	// it's a build-system signal, not a served asset, and hashing it makes an
 	// instance's manifest differ by deploy path.
 	if (/rel === 'verify\.json' \|\| rel === '\.shipped'/.test(genSrc))
 		ok('cp752 verify.json hashing skips the .shipped build marker');
 	else bad('cp752', 'build-verify-json must skip the .shipped marker');
 
-	// cp622/cp754: same-box operators get their canary restored automatically on
+	// same-box operators get their canary restored automatically on
 	// upgrade — PREFERRING the canary's own systemd service (the path-agnostic
 	// mechanism that covers Ansible/appliance boxes), with the home-dir refresh
 	// script as fallback.
@@ -518,9 +540,10 @@ function tmp(prefix: string): string {
 		/running your refresh as/.test(parserSrc)
 	)
 		ok('cp754 upgrade auto-restores the canary via its systemd service (+ home-script fallback)');
-	else bad('cp754', 'upgrade must trigger morphit-canary.service, then fall back to the home script');
+	else
+		bad('cp754', 'upgrade must trigger morphit-canary.service, then fall back to the home script');
 
-	// cp753: the fall-through reminder is accurate (nothing is "rebuilt"), names
+	// the fall-through reminder is accurate (nothing is "rebuilt"), names
 	// the real appliance command, and no longer sends every operator to a home
 	// script that does not exist on an Ansible box.
 	if (
@@ -542,13 +565,16 @@ console.log('\u2713 upgrade rebuilds + redeploys the static frontend, with rollb
 console.log(`\u2713 all ${pass} upgrade-frontend-deploy scenarios passed`);
 
 // v1.16.12 — the frontend nginx `/v1/broadcast` needs a body cap large enough for
-// an avatar broadcast; the plain `/v1/` cap (4k) 413'd it at this proxy (the maintainer/timeapp).
+// an avatar broadcast; the plain `/v1/` cap (4k) 413'd it at this proxy (timeapp).
 {
 	const ngxRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 	const ngx = readFileSync(join(ngxRoot, 'ops', 'bunkerweb', 'frontend', 'nginx.conf'), 'utf8');
 	const bcast = ngx.slice(ngx.indexOf('location /v1/broadcast'));
 	const cap = /location \/v1\/broadcast[\s\S]*?client_max_body_size\s+(\d+)k/.exec(bcast);
 	const kb = cap ? parseInt(cap[1], 10) : 0;
-	assert(/location \/v1\/broadcast/.test(ngx), 'frontend nginx has a dedicated /v1/broadcast location');
+	assert(
+		/location \/v1\/broadcast/.test(ngx),
+		'frontend nginx has a dedicated /v1/broadcast location'
+	);
 	assert(kb >= 64, `/v1/broadcast body cap must be >= 64k for avatar broadcasts (got ${kb}k)`);
 }

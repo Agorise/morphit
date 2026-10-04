@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep (rv2-11) — the boot NULL fill never refills a key the
+ * the boot NULL fill never refills a key the
  * owner disowned.
  *
  * The reconcile writes `posting_pubkey = NULL, posting_key_reconciled = TRUE`

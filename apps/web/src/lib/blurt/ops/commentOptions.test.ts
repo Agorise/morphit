@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { buildCommentOptionsOperation } from './comment';
 
 /**
- * comment_options — v1.8.12 (the maintainer): "we really want as much liquid BLURT as
- * possible to go to the user/author."
+ * comment_options — v1.8.12: as much of the author reward as possible goes to
+ * the author as liquid BLURT.
  *
  * Morphit never broadcast this op, so every syndicated post took Blurt's
  * default 25% liquid / 75% BP author split. What is provable HERE is the op's

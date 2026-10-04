@@ -2,7 +2,7 @@
 	CoinCarousel — below-the-fold marquee of supported assets +
 	settlement networks + the "barter" option.
 
-	WHY THIS COMPONENT EXISTS (Part 122 cp115)
+	WHY THIS COMPONENT EXISTS
 
 	The home page's prior "3 featured assets" block (BTC/XMR/BLURT
 	hardcoded) didn't reflect Morphit's actual breadth and made
@@ -48,7 +48,7 @@
 	e.g. if the BTC mainnet ever gets a "btc-network" indicator
 	reusing icon-btc.svg — collapses to one carousel slot.  The
 	rule is currently uncontested (no two sources share a basename
-	with the the maintainer-specified network list) but stays as defensive
+	with the specified network list) but stays as defensive
 	insurance.
 
 	ACCESSIBILITY
@@ -304,7 +304,7 @@
 	.coin-carousel {
 		position: relative;
 		overflow: hidden;
-		/* cp115-cp6: two rows scrolling opposite directions.  Each row
+		/* two rows scrolling opposite directions.  Each row
 		 * is 80px (40px icon + 14px label + 20px padding rounded up to
 		 * 80 for breathing room); two rows = 160px total.  As the
 		 * carousel grows past 22 slots, additional slots remain
@@ -376,10 +376,10 @@
 		 * Coin tickers (3-5 chars) sit centered within the same width
 		 * for consistent rhythm.
 		 *
-		 * cp115-cp6: opacity 0.85 dims the carousel slightly so it sits
+		 * opacity 0.85 dims the carousel slightly so it sits
 		 * as a decorative ribbon under the bolder priorities-cards above
 		 * rather than competing for attention.  Icon ARTWORK is shipped
-		 * full-color (the maintainer's rule cp115-cp4 "don't modify them"); this
+		 * full-color (the maintainer's rule -cp4 "don't modify them"); this
 		 * 0.85 is uniform per-item alpha applied at the stacking level,
 		 * not a color modification.  The I-10 smoke pins this exact
 		 * value so future drift gets caught. */

@@ -29,12 +29,11 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
-	import PriceFreshnessIndicator from '$components/PriceFreshnessIndicator.svelte';
 
 	const ALT_NETWORKS = ['tor', 'lokinet', 'i2p', 'nostr', 'blurt'] as const;
 	// Asset icon dev surface.  All 16 tradable assets + the
 	// yubikey ancillary icon.  All icons live at
-	// /icons/icon-<lower-ticker>.svg per cp115 convention cleanup;
+	// /icons/icon-<lower-ticker>.svg convention cleanup;
 	// an earlier /coins/<ticker>.svg path was vestigial (the files
 	// never shipped to disk under that path) and has been folded
 	// into the canonical /icons/ form for all 16 entries.
@@ -378,15 +377,6 @@
 				</p>
 			</div>
 
-			<div class="rounded-xl border border-ink-200 bg-ink-950 p-6 dark:border-ink-800">
-				<p class="mb-3 text-xs uppercase tracking-widest text-ink-400">PriceFreshnessIndicator</p>
-				<div class="flex flex-wrap gap-4">
-					<PriceFreshnessIndicator />
-					<PriceFreshnessIndicator symbol="BTC" />
-					<PriceFreshnessIndicator symbol="XMR" />
-					<PriceFreshnessIndicator symbol="BLURT" />
-				</div>
-			</div>
 		</div>
 	</section>
 

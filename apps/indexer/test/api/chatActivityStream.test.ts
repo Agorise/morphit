@@ -218,10 +218,10 @@ describe('chatActivityStreamRoute', () => {
 		expect(frame).toContain('"inbound":false');
 	});
 
-	// ─── v1.7.5 (t.txt #1): the COLD START ───────────────────────────
+	// ─── v1.7.5: the COLD START ───────────────────────────
 	//
-	// the maintainer: "even when the browser itself or tab is closed completely, and then I
-	// open a new tab and go to Morphit, I want the badges in 6 seconds or less."
+	// Requirement: with the browser fully closed, opening Morphit in a new tab shows the badges
+	// within 6 seconds.
 	//
 	// This is the one case no live stream can serve: the message arrived while no
 	// page existed to hear it, and `getConversations` legitimately cannot help
@@ -320,7 +320,7 @@ describe('chatActivityStreamRoute', () => {
 	});
 
 	it("marks a REPLAYED message the account SENT as not inbound (never badge your own words)", async () => {
-		// t.txt #2's bug, at the replay layer: this is a PARTICIPANT stream, so it
+		//  #2's bug, at the replay layer: this is a PARTICIPANT stream, so it
 		// replays what the maintainer SENT from his PC too. Badging that on his phone is
 		// exactly what he reported.
 		chatEventBus.emitFast({

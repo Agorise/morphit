@@ -2,7 +2,7 @@
  * Morphit indexer — /v1/orderbook/featured/clearing-price-history endpoint.
  *
  * Surfaces historical featured-slot auction "clearing prices"
- * (REVISIT-LIST §G item — Group 1 #2 from the prior chat's
+ * (backlog §G item — Group 1 #2 from the prior chat's
  * decision menu).
  *
  * Definition of clearing price:

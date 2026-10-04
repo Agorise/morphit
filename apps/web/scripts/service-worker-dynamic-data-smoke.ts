@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * service-worker-dynamic-data smoke — cp324.
+ * service-worker-dynamic-data smoke.
  *
  * Prevents regression of the "footer keeps forgetting the operator
  * name" bug.
@@ -22,7 +22,7 @@
  * which would also have defeated the deployed-version poll's `?cb=`
  * cache-buster.
  *
- * cp324 fix: extracted a pure `isDynamicDataPath()` classifier into
+ * extracted a pure `isDynamicDataPath()` classifier into
  * $lib/net/dynamicPaths and wired it into `isCacheable()` so the
  * indexer/relay API, feeds, verify.json and canary all fall through to
  * the network (where each caller's own `cache:` directive governs
@@ -40,13 +40,13 @@
  *     `isCacheable` so the exclusion actually takes effect.
  *
  * Mutation tests:
- *   M-324a: make `isDynamicDataPath` return false for `/v1/...` →
+ *   make `isDynamicDataPath` return false for `/v1/...` →
  *     the dynamic-paths sweep fires.
- *   M-324b: broaden it to `startsWith('/v1')` (drop the slash) →
+ *   broaden it to `startsWith('/v1')` (drop the slash) →
  *     the look-alike sweep fires on `/v1foo`.
- *   M-324c: remove the `isDynamicDataPath` call from `isCacheable` →
+ *   remove the `isDynamicDataPath` call from `isCacheable` →
  *     the wiring check fires.
- *   M-324d: delete the `if (!isCacheable(req)) return;` gate →
+ *   delete the `if (!isCacheable(req)) return;` gate →
  *     the gate check fires.
  *
  * Why this matters: instance branding, the warrant canary, and the

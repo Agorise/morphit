@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, L3 — reserved operator TAGS must be matched
+ * reserved operator TAGS must be matched
  * confusable-aware, not by exact equality only.
  *
  * rv6 L3: `m0rphit`, `rnorphit` and `morphit-io` were all accepted as operator

@@ -1,5 +1,5 @@
 /**
- * orderbook-hide-confirm-smoke — cp453
+ * orderbook-hide-confirm-smoke
  *
  * THE BUG THIS GUARDS. The orderbook eyeball toggle used to call `hideAccount`
  * directly on a single, unconfirmed click. The eyeball sits inside the card's

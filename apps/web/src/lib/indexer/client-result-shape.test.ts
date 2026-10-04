@@ -1,7 +1,7 @@
 /**
  * Lock the Result<T> shape exported by client.ts.
  *
- * Why this test exists: BATCH19D-result-shape (audit doc Part 19)
+ * Why this test exists: BATCH19D-result-shape (audit doc)
  * caught ~16 production code paths reading `result.value` instead
  * of `result.data` on indexer-Result types.  The bug shipped
  * silently because `tsc --noEmit` cannot resolve SvelteKit aliases

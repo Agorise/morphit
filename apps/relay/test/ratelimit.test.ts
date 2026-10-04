@@ -17,7 +17,7 @@ describe('Limiter', () => {
 	} {
 		// Pinned to a known mid-day UTC time so tests don't depend
 		// on the runner's wall clock for determinism.  Item 6 /
-		// Audit Part 27 plumbed the Clock seam through Limiter.
+		// A later change plumbed the Clock seam through Limiter.
 		const clock = new ManualClock('2026-05-15T12:00:00Z');
 		const lim = new Limiter(max, windowMs, clock);
 		active.push(lim);

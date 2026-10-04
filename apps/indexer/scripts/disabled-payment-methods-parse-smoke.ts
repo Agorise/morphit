@@ -2,7 +2,7 @@
 /**
  * disabled-payment-methods-parse-smoke.
  *
- * cp208: pin the behavior of the env-var parser for
+ * pin the behavior of the env-var parser for
  * MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS — the payment-method
  * analogue of disabled-assets-parse-smoke.  An operator who wants
  * to turn off Barter (or any other canonical method) writes:

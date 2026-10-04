@@ -1,5 +1,5 @@
 /**
- * release-broadcast (cp317) — sign + broadcast a morphit_release_v1 op.
+ * release-broadcast — sign + broadcast a morphit_release_v1 op.
  *
  * ┌─────────────────────────────────────────────────────────────┐
  * │  LAPTOP ONLY.  This uses the @morphit PRIVATE posting key   │
@@ -9,11 +9,11 @@
  *
  * Pipeline:
  *   1) Build the payload (pre-filled with the canonical treasury):
- *        npx tsx apps/indexer/scripts/release-build-payload.ts > release.json
+ *        node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts > release.json
  *   2) PREVIEW it — shows the exact op, asks for NO key, sends nothing:
- *        npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+ *        node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
  *   3) Sign + broadcast for real (prompts for the key, masked):
- *        npx tsx apps/indexer/scripts/release-broadcast.ts release.json
+ *        node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json
  *
  * Flags:
  *   --dry-run        Print the exact op and exit.  No key, no network.
@@ -84,7 +84,7 @@ try {
 } catch (e) {
 	die(`cannot read ${fileArg}: ${errMsg(e)}`);
 }
-// cp474 — annotate rather than leave `op` implicitly `any`.  This is the
+// annotate rather than leave `op` implicitly `any`.  This is the
 // laptop-only release-broadcast CLI: the op it builds is what gets SIGNED and
 // pushed on-chain, so `any` here erased type checking on the one payload in
 // the repo that is irreversible once broadcast.

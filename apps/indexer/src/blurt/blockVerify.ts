@@ -21,7 +21,7 @@
  *      signed_block_header::id). It must equal the served `block_id`.
  *   3. LINKS. Block n's `previous` must be the id COMPUTED for block n−1.
  * With 1–3 a window of blocks is one hash chain: anchoring its LAST id with
- * two independent operators then proves every block in it.
+ * two operators (counted by node name) then proves every block in it.
  *
  * WHY REPORT-ONLY. The recomputation needs every Blurt operation serialized
  * byte-exactly (dblurt's serializers; Blurt forked Steem 0.23 and changed its

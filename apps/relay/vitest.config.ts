@@ -11,7 +11,7 @@ export default defineConfig({
 		environment: 'node',
 		globals: false,
 		isolate: true,
-		// cp78-D19: bump per-test timeout from vitest's 5s default to
+		// bump per-test timeout from vitest's 5s default to
 		// 30s.  The scrypt-heavy tests in `test/unlock.test.ts` (931–
 		// 1834ms solo) and `test/keyEnvelope.test.ts` (464–1422ms
 		// solo) can exceed 5s under battery CPU contention when 100+

@@ -1,5 +1,5 @@
 /**
- * morphit-ops harden (cp187) — a focused, re-runnable hardening
+ * morphit-ops harden — a focused, re-runnable hardening
  * wizard.
  *
  * Hardening was previously reachable ONLY as the tail of the
@@ -150,7 +150,7 @@ export async function runHarden(ctx: HardenCtx): Promise<number> {
 			// (non-standard boxes on morphit_user/morphit_db work without editing).
 			const backup = await stepBackup(readDeployedDatabaseUrl(repoRoot) ?? '');
 			if (backup.enabled) {
-				// cp514 — this whole block used to print THREE steps that could not
+				// this whole block used to print THREE steps that could not
 				// work: it never installed the script (the unit's ExecStart is a
 				// hardcoded /usr/local/lib/morphit path) nor the .service/.timer unit
 				// files, so `systemctl enable --now morphit-backup.timer` failed with

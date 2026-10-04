@@ -79,7 +79,7 @@ For each `file:line` reported by `brag-list-claim-parity-smoke`, change the numb
 
 The smoke output is a complete checklist — no need to grep separately.
 
-Touchpoints typically affected (count from cp140 baseline):
+Touchpoints typically affected (count from baseline):
 - `MORPHIT-BRAG-LIST.md` — 15 mentions
 - `README.md` — 1 mention
 - `apps/web/static/llms.txt` — 1 mention (line 42)
@@ -98,7 +98,7 @@ git grep -nE "all (10|ten) (locales|languages)|10 supported locales|10 fully loc
 
 Update each to either the new exact number, or to "all supported locales" / "every supported locale" if it reads naturally that way.
 
-Typical locations as of cp140:
+Typical locations:
 - `apps/web/src/lib/i18n/index.test.ts` — docstring header
 - `apps/web/src/routes/[lang]/+page.ts` — prerender-output comment
 - `apps/web/src/routes/[lang]/+layout.ts` — prerender-output comment

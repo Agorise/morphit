@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import handler from '$indexer/handlers/release';
 import { fakeConfig, makeCtx, mockBlurt } from '../testutils/context';
 import { makeMockClient } from '../testutils/mockClient';
+import type { BlockTransaction } from '$blurt/client';
 
 const OFFICIAL_PUBKEY = 'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9';
 
@@ -42,29 +43,57 @@ const accountWithOfficialKey = {
 	memo_key: OFFICIAL_PUBKEY
 };
 
-const accountWithDifferentKey = {
-	...accountWithOfficialKey,
-	posting: {
-		...accountWithOfficialKey.posting,
-		key_auths: [['BLTrotated-key-not-the-pinned-one', 1]] as const
-	}
-};
+const { PrivateKey, cryptoUtils } = await import('@beblurt/dblurt');
+const CHAIN_ID = fakeConfig().chainId;
+const OFFICIAL_KEY = PrivateKey.fromSeed('release-handler-test-official');
+const OTHER_KEY = PrivateKey.fromSeed('release-handler-test-someone-else');
+const SIGNED_PUBKEY = OFFICIAL_KEY.createPublic().toString();
+
+/** The transaction a block carries for this op, signed by `key` (or not). */
+function transactionFor(payload: unknown, key: typeof OFFICIAL_KEY | null): BlockTransaction {
+	const unsigned = {
+		ref_block_num: 1,
+		ref_block_prefix: 2,
+		expiration: '2026-04-19T12:01:00',
+		operations: [
+			[
+				'custom_json',
+				{
+					required_auths: [],
+					required_posting_auths: ['morphit'],
+					id: 'morphit_release_v1',
+					json: JSON.stringify(payload)
+				}
+			]
+		],
+		extensions: []
+	};
+	if (key === null) return { ...unsigned, signatures: [] } as unknown as BlockTransaction;
+	return cryptoUtils.signTransaction(
+		unsigned as never,
+		[key],
+		Buffer.from(CHAIN_ID, 'hex')
+	) as never;
+}
 
 describe('release handler', () => {
-	it('records valid=true when signer, pubkey, and payload all match', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
-		const blurt = mockBlurt({
-			getAccount: async () => accountWithOfficialKey
+	const chainThatThrows = () =>
+		mockBlurt({
+			getAccount: async () => {
+				throw new Error('chain unreachable');
+			}
 		});
+
+	it('records valid=true when the official account signed it with the pinned key — no chain read', async () => {
+		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
 		const r = await handler(
 			makeCtx({
 				signer: 'morphit',
 				payload: validPayload(),
-				blurt,
-				config: fakeConfig({
-					officialPostingPubkey: OFFICIAL_PUBKEY,
-					officialAccountName: 'morphit'
-				})
+				transaction: transactionFor(validPayload(), OFFICIAL_KEY),
+				// Every chain read would fail: the verdict must not need one.
+				blurt: chainThatThrows(),
+				config: fakeConfig({ officialPostingPubkey: SIGNED_PUBKEY, officialAccountName: 'morphit' })
 			}),
 			mock.client
 		);
@@ -77,37 +106,64 @@ describe('release handler', () => {
 
 	it('records valid=false when signer is not the official account', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
-		// getAccount is never called because check 1 fails first — pass
-		// a blurt proxy that would throw to prove that.
-		const blurt = mockBlurt({});
 		const r = await handler(
 			makeCtx({
 				signer: 'eve',
 				payload: validPayload(),
-				blurt,
-				config: fakeConfig({ officialAccountName: 'morphit' })
+				transaction: transactionFor(validPayload(), OFFICIAL_KEY),
+				blurt: mockBlurt({}),
+				config: fakeConfig({ officialPostingPubkey: SIGNED_PUBKEY, officialAccountName: 'morphit' })
 			}),
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
 		const q = mock.queries[0]!;
 		expect(q.params[7]).toBe(false);
+		expect(q.params[8]).toBe('signer_not_official_account');
 	});
 
-	it('records valid=false when the chain pubkey differs from the pinned value', async () => {
+	it('records valid=false when the transaction is signed by any other key', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
-		const blurt = mockBlurt({
-			getAccount: async () => accountWithDifferentKey
-		});
 		const r = await handler(
 			makeCtx({
 				signer: 'morphit',
 				payload: validPayload(),
-				blurt,
-				config: fakeConfig({
-					officialPostingPubkey: OFFICIAL_PUBKEY,
-					officialAccountName: 'morphit'
-				})
+				transaction: transactionFor(validPayload(), OTHER_KEY),
+				blurt: mockBlurt({}),
+				config: fakeConfig({ officialPostingPubkey: SIGNED_PUBKEY, officialAccountName: 'morphit' })
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		expect(mock.queries[0]!.params[7]).toBe(false);
+		expect(mock.queries[0]!.params[8]).toBe('not_signed_by_pinned_key');
+	});
+
+	it('records valid=false when the transaction carries no signature (a hostile RPC node served it)', async () => {
+		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit',
+				payload: validPayload(),
+				transaction: transactionFor(validPayload(), null),
+				blurt: mockBlurt({}),
+				config: fakeConfig({ officialPostingPubkey: SIGNED_PUBKEY, officialAccountName: 'morphit' })
+			}),
+			mock.client
+		);
+		expect(r).toEqual({ ok: true });
+		expect(mock.queries[0]!.params[7]).toBe(false);
+		expect(mock.queries[0]!.params[8]).toBe('not_signed_by_pinned_key');
+	});
+
+	it('records valid=false when there is no transaction to check (an op replayed from the event log)', async () => {
+		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
+		const r = await handler(
+			makeCtx({
+				signer: 'morphit',
+				payload: validPayload(),
+				blurt: mockBlurt({}),
+				config: fakeConfig({ officialPostingPubkey: SIGNED_PUBKEY, officialAccountName: 'morphit' })
 			}),
 			mock.client
 		);
@@ -115,20 +171,21 @@ describe('release handler', () => {
 		expect(mock.queries[0]!.params[7]).toBe(false);
 	});
 
-	it('records valid=false when the signer account has no single posting key', async () => {
+	it('a signature over DIFFERENT content does not vouch for this payload', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO releases' }]);
-		const blurt = mockBlurt({
-			getAccount: async () => null // account vanished (impossible but tests the null branch)
-		});
+		const signedOther = transactionFor({ ...validPayload(), version: '0.0.1' }, OFFICIAL_KEY);
+		// The same signatures pasted onto a transaction carrying this payload.
+		const tampered = {
+			...transactionFor(validPayload(), null),
+			signatures: signedOther.signatures
+		} as BlockTransaction;
 		const r = await handler(
 			makeCtx({
 				signer: 'morphit',
 				payload: validPayload(),
-				blurt,
-				config: fakeConfig({
-					officialPostingPubkey: OFFICIAL_PUBKEY,
-					officialAccountName: 'morphit'
-				})
+				transaction: tampered,
+				blurt: mockBlurt({}),
+				config: fakeConfig({ officialPostingPubkey: SIGNED_PUBKEY, officialAccountName: 'morphit' })
 			}),
 			mock.client
 		);
@@ -205,37 +262,9 @@ describe('release handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'endpoints_too_large' });
 		expect(mock.queries).toHaveLength(0);
 	});
-
-	it('propagates chain errors so the block rolls back and retries', async () => {
-		// If getAccount throws (RPC unreachable mid-tick), the handler
-		// re-throws so the poller rolls the block back. We'd rather
-		// retry next tick than commit an unverified valid=true.
-		const mock = makeMockClient();
-		const blurt = mockBlurt({
-			getAccount: async () => {
-				throw new Error('chain unreachable');
-			}
-		});
-		await expect(
-			handler(
-				makeCtx({
-					signer: 'morphit',
-					payload: validPayload(),
-					blurt,
-					config: fakeConfig({
-						officialPostingPubkey: OFFICIAL_PUBKEY,
-						officialAccountName: 'morphit'
-					})
-				}),
-				mock.client
-			)
-		).rejects.toThrow('chain unreachable');
-		// No row was written before the throw.
-		expect(mock.queries).toHaveLength(0);
-	});
 });
 
-// ─── Part 106 — treasury chain-pin handler tests ─────────────────────
+// ─── treasury chain-pin handler tests ─────────────────────
 //
 // These tests exercise the handler's structural validation of the
 // optional `treasury` block, AND prove byte-for-byte parity with
@@ -245,11 +274,13 @@ describe('release handler', () => {
 
 import { validateReleasePayload } from '@morphit/release-schema';
 
-const VALID_BTC_ADDR = 'bc1q' + 'a'.repeat(38);
-const VALID_XMR_ADDR = '4' + 'A'.repeat(94);
+// Real mainnet addresses: the handler decodes them with their checksums.
+const VALID_BTC_ADDR = 'bc1qdwaelg52ts3e0m8fellkw5u9x7plfwc0kxnwnk';
+const VALID_XMR_ADDR =
+	'447UAtPLv7u8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL49CyFBGy';
 // A 64-hex string used ONLY in tests to feed the validator a
 // payload that contains a viewkey field — to verify that the
-// validator silently strips it (Part 107 invariant).  Not a
+// validator silently strips it (invariant).  Not a
 // real key; nothing here is a real key.  Named to make the
 // test intent unambiguous.
 const VALID_XMR_VK_LOOKING = 'a'.repeat(64);
@@ -258,7 +289,7 @@ function payloadWithTreasury(treasury: unknown) {
 	return { ...validPayload(), treasury };
 }
 
-// cp556 — distribution-anchor fixtures.
+// distribution-anchor fixtures.
 const VALID_SOURCE_SHA256 = 'a'.repeat(64); // lowercase hex
 const VALID_GPG_FPR = 'DEADBEEF'.repeat(5); // 40 hex (v4 fingerprint)
 const VALID_IPFS_CID_V0 = 'Qm' + 'a'.repeat(44); // base58btc, 46 chars
@@ -269,7 +300,7 @@ function payloadWithDistribution(distribution: unknown) {
 describe('release handler — Part 106 + 107 treasury validation', () => {
 	const validTreasury = {
 		btc: { address: VALID_BTC_ADDR, satoshis: 416 },
-		// Part 107: NO viewkey field in canonical chain-pinned shape.
+		// NO viewkey field in canonical chain-pinned shape.
 		xmr: { address: VALID_XMR_ADDR, piconero: '781250000' }
 	};
 
@@ -295,7 +326,7 @@ describe('release handler — Part 106 + 107 treasury validation', () => {
 		expect(persisted.btc.address).toBe(VALID_BTC_ADDR);
 		expect(persisted.xmr.address).toBe(VALID_XMR_ADDR);
 		expect(persisted.xmr.piconero).toBe('781250000');
-		// CRITICAL Part 107 invariant: the persisted row MUST NOT
+		// CRITICAL invariant: the persisted row MUST NOT
 		// contain a viewkey field, even if a buggy payload tried to
 		// include one.  This is the privacy guarantee.
 		expect('viewkey' in persisted.xmr).toBe(false);
@@ -322,7 +353,7 @@ describe('release handler — Part 106 + 107 treasury validation', () => {
 			}),
 			mock.client
 		);
-		// Accepts the payload (we don't reject — Part 107 reasons:
+		// Accepts the payload (we don't reject — reasons:
 		// don't break parsing of legacy/malicious release ops; just
 		// strip the field).
 		expect(r).toEqual({ ok: true });
@@ -500,7 +531,7 @@ describe('release handler — Part 106 + 107 treasury validation', () => {
 	});
 });
 
-// ─── Part 106 — INDEXER ↔ FRONTEND validator parity ──────────────────
+// ─── INDEXER ↔ FRONTEND validator parity ──────────────────
 //
 // The indexer's structural validator (in handlers/release.ts) and
 // the frontend's validator (now @morphit/release-schema)
@@ -545,7 +576,8 @@ describe('release validator parity — frontend ↔ indexer', () => {
 			payload: payloadWithTreasury({
 				btc: null,
 				xmr: {
-					address: '8' + 'A'.repeat(94),
+					address:
+						'84bwu2PWp3NaRudAKTadmeZPBLTjL5f4bKU8F6NJKqxgUvwth6QxUVSUNFAQnHbbuQcMRNR4baYUKNcZXQtKMMKm4aVE3Fe',
 					piconero: '1'
 				}
 			}),
@@ -629,7 +661,7 @@ describe('release validator parity — frontend ↔ indexer', () => {
 			payload: payloadWithTreasury('treasury'),
 			expect: 'treasury_not_object'
 		},
-		// cp556 — decentralized-distribution anchor parity.
+		// decentralized-distribution anchor parity.
 		{ name: 'distribution=null → ok', payload: payloadWithDistribution(null), expect: 'ok' },
 		{
 			name: 'distribution minimal (sha + fpr) → ok',
@@ -645,7 +677,10 @@ describe('release validator parity — frontend ↔ indexer', () => {
 				source_sha256: VALID_SOURCE_SHA256,
 				gpg_fingerprint: VALID_GPG_FPR,
 				ipfs_cid: VALID_IPFS_CID_V0,
-				mirrors: ['https://codeberg.org/agorise/morphit', 'https://ipfs.io/ipfs/' + VALID_IPFS_CID_V0]
+				mirrors: [
+					'https://codeberg.org/agorise/morphit',
+					'https://ipfs.io/ipfs/' + VALID_IPFS_CID_V0
+				]
 			}),
 			expect: 'ok'
 		},
@@ -731,7 +766,7 @@ describe('release validator parity — frontend ↔ indexer', () => {
 			expect: 'distribution_mirror_invalid'
 		},
 		{
-			// Mirror cap bumped 8 → 10 (v1.9.6) → 32 (v1.11.1, the maintainer's 9 new mirrors).
+			// Mirror cap bumped 8 → 10 (v1.9.6) → 32 (v1.11.1, 9 new mirrors).
 			name: 'distribution 32 mirrors (at the cap) → ok',
 			payload: payloadWithDistribution({
 				source_sha256: VALID_SOURCE_SHA256,
@@ -782,21 +817,46 @@ describe('release — treasury btc.xpub (handler and frontend agree)', () => {
 	const MASTER =
 		'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8';
 
-	const cases: Array<{ name: string; xpub: unknown; expect: { stored: string | null } | string }> = [
-		{ name: 'zpub → accepted, stored as canonical xpub', xpub: BIP84_ZPUB, expect: { stored: BIP84_XPUB } },
-		{ name: 'xpub → accepted unchanged', xpub: BIP84_XPUB, expect: { stored: BIP84_XPUB } },
-		{ name: 'xpub null → legacy shape, no xpub key', xpub: null, expect: { stored: null } },
-		{ name: 'zprv (PRIVATE) → treasury_btc_xpub_invalid', xpub: BIP84_ZPRV, expect: 'treasury_btc_xpub_invalid' },
-		{ name: 'vpub (testnet) → treasury_btc_xpub_invalid', xpub: VPUB, expect: 'treasury_btc_xpub_invalid' },
-		{ name: 'master key (depth 0) → treasury_btc_xpub_invalid', xpub: MASTER, expect: 'treasury_btc_xpub_invalid' },
-		{ name: 'typo → treasury_btc_xpub_invalid', xpub: BIP84_ZPUB.slice(0, -1) + 'x', expect: 'treasury_btc_xpub_invalid' },
-		{ name: 'number → treasury_btc_xpub_invalid', xpub: 7, expect: 'treasury_btc_xpub_invalid' }
-	];
+	const cases: Array<{ name: string; xpub: unknown; expect: { stored: string | null } | string }> =
+		[
+			{
+				name: 'zpub → accepted, stored as canonical xpub',
+				xpub: BIP84_ZPUB,
+				expect: { stored: BIP84_XPUB }
+			},
+			{ name: 'xpub → accepted unchanged', xpub: BIP84_XPUB, expect: { stored: BIP84_XPUB } },
+			{ name: 'xpub null → legacy shape, no xpub key', xpub: null, expect: { stored: null } },
+			{
+				name: 'zprv (PRIVATE) → treasury_btc_xpub_invalid',
+				xpub: BIP84_ZPRV,
+				expect: 'treasury_btc_xpub_invalid'
+			},
+			{
+				name: 'vpub (testnet) → treasury_btc_xpub_invalid',
+				xpub: VPUB,
+				expect: 'treasury_btc_xpub_invalid'
+			},
+			{
+				name: 'master key (depth 0) → treasury_btc_xpub_invalid',
+				xpub: MASTER,
+				expect: 'treasury_btc_xpub_invalid'
+			},
+			{
+				name: 'typo → treasury_btc_xpub_invalid',
+				xpub: BIP84_ZPUB.slice(0, -1) + 'x',
+				expect: 'treasury_btc_xpub_invalid'
+			},
+			{ name: 'number → treasury_btc_xpub_invalid', xpub: 7, expect: 'treasury_btc_xpub_invalid' }
+		];
 
 	for (const c of cases) {
 		it(c.name, async () => {
 			const treasury = {
-				btc: { address: VALID_BTC_ADDR, satoshis: 416, ...(c.xpub === null ? {} : { xpub: c.xpub }) },
+				btc: {
+					address: VALID_BTC_ADDR,
+					satoshis: 416,
+					...(c.xpub === null ? {} : { xpub: c.xpub })
+				},
 				xmr: null
 			};
 			const mock = makeMockClient();
@@ -805,7 +865,10 @@ describe('release — treasury btc.xpub (handler and frontend agree)', () => {
 					signer: 'morphit',
 					payload: payloadWithTreasury(treasury),
 					blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
-					config: fakeConfig({ officialPostingPubkey: OFFICIAL_PUBKEY, officialAccountName: 'morphit' })
+					config: fakeConfig({
+						officialPostingPubkey: OFFICIAL_PUBKEY,
+						officialAccountName: 'morphit'
+					})
 				}),
 				mock.client
 			);
@@ -839,26 +902,60 @@ describe('release — treasury btc.xpub (handler and frontend agree)', () => {
 // addresses (mainnet STANDARD only) and store the same value.
 describe('release — treasury xmr.primary_address (handler and frontend agree)', () => {
 	// Built with the PyPI `monero` package (see test/lib/xmrAddress.test.ts).
-	const PRIMARY = '447UAtPLv7u8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL49CyFBGy';
-	const INTEGRATED = '4Dp9BhCqXPR8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL4D5AqWT5Do24HzptoQp';
+	const PRIMARY =
+		'447UAtPLv7u8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL49CyFBGy';
+	const INTEGRATED =
+		'4Dp9BhCqXPR8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL4D5AqWT5Do24HzptoQp';
 	const SUBADDRESS =
 		'84bwu2PWp3NaRudAKTadmeZPBLTjL5f4bKU8F6NJKqxgUvwth6QxUVSUNFAQnHbbuQcMRNR4baYUKNcZXQtKMMKm4aVE3Fe';
 	const TESTNET =
 		'9uvyLnpzBSV84B29APC8AQ4Qmx7nd2X4eX79cxtmXecv76exk4mG7YyDeH15hKJkJ7Y5q26GZoo3V64qL6Fs1A1A7D9oaFf';
-	const cases: Array<{ name: string; primary: unknown; expect: { stored: string | null } | string }> = [
-		{ name: 'mainnet primary → accepted and stored', primary: PRIMARY, expect: { stored: PRIMARY } },
+	const cases: Array<{
+		name: string;
+		primary: unknown;
+		expect: { stored: string | null } | string;
+	}> = [
+		{
+			name: 'mainnet primary → accepted and stored',
+			primary: PRIMARY,
+			expect: { stored: PRIMARY }
+		},
 		{ name: 'absent → legacy shape, no key', primary: null, expect: { stored: null } },
-		{ name: 'subaddress (8…) → treasury_xmr_primary_invalid', primary: SUBADDRESS, expect: 'treasury_xmr_primary_invalid' },
-		{ name: 'integrated → treasury_xmr_primary_invalid', primary: INTEGRATED, expect: 'treasury_xmr_primary_invalid' },
-		{ name: 'testnet → treasury_xmr_primary_invalid', primary: TESTNET, expect: 'treasury_xmr_primary_invalid' },
-		{ name: 'checksum typo → treasury_xmr_primary_invalid', primary: PRIMARY.slice(0, -1) + (PRIMARY.endsWith('a') ? 'b' : 'a'), expect: 'treasury_xmr_primary_invalid' },
-		{ name: 'number → treasury_xmr_primary_invalid', primary: 4, expect: 'treasury_xmr_primary_invalid' }
+		{
+			name: 'subaddress (8…) → treasury_xmr_primary_invalid',
+			primary: SUBADDRESS,
+			expect: 'treasury_xmr_primary_invalid'
+		},
+		{
+			name: 'integrated → treasury_xmr_primary_invalid',
+			primary: INTEGRATED,
+			expect: 'treasury_xmr_primary_invalid'
+		},
+		{
+			name: 'testnet → treasury_xmr_primary_invalid',
+			primary: TESTNET,
+			expect: 'treasury_xmr_primary_invalid'
+		},
+		{
+			name: 'checksum typo → treasury_xmr_primary_invalid',
+			primary: PRIMARY.slice(0, -1) + (PRIMARY.endsWith('a') ? 'b' : 'a'),
+			expect: 'treasury_xmr_primary_invalid'
+		},
+		{
+			name: 'number → treasury_xmr_primary_invalid',
+			primary: 4,
+			expect: 'treasury_xmr_primary_invalid'
+		}
 	];
 	for (const c of cases) {
 		it(c.name, async () => {
 			const treasury = {
 				btc: null,
-				xmr: { address: SUBADDRESS, piconero: '781250000', ...(c.primary === null ? {} : { primary_address: c.primary }) }
+				xmr: {
+					address: SUBADDRESS,
+					piconero: '781250000',
+					...(c.primary === null ? {} : { primary_address: c.primary })
+				}
 			};
 			const mock = makeMockClient();
 			const r = await handler(
@@ -866,7 +963,10 @@ describe('release — treasury xmr.primary_address (handler and frontend agree)'
 					signer: 'morphit',
 					payload: payloadWithTreasury(treasury),
 					blurt: mockBlurt({ getAccount: async () => accountWithOfficialKey }),
-					config: fakeConfig({ officialPostingPubkey: OFFICIAL_PUBKEY, officialAccountName: 'morphit' })
+					config: fakeConfig({
+						officialPostingPubkey: OFFICIAL_PUBKEY,
+						officialAccountName: 'morphit'
+					})
 				}),
 				mock.client
 			);

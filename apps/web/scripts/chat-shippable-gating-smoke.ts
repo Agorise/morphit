@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * chat-shippable-gating-smoke (cp406).
+ * chat-shippable-gating-smoke.
  *
  * Two things this locks, both easy to get subtly wrong:
  *
  * 1. WHICH payment methods are "shippable" — i.e. move a physical thing that
  *    can be posted, so a trade using them unlocks the in-chat "Share mailing
- *    address" + "Record shipment" controls. Per the maintainer: barter goods, precious
+ *    address" + "Record shipment" controls. as requested: barter goods, precious
  *    metals (handed over in person OR shipped) and cash-by-mail (the cash
  *    envelope is posted). Cash-in-person is physical but face-to-face only →
  *    NOT shippable. Everything electronic/on-chain is not physical at all.
@@ -89,7 +89,7 @@ check('10 — unknown key ignored ⇒ not shippable', !orderUsesShippableMethod(
 	const sellerGetsCash = chatShippingButtons(['cash_by_mail'], false);
 	check('16 — cash-by-mail crypto-SENDER shares where to mail the cash', sellerGetsCash.showShareMailing);
 }
-// Cash-in-person: neither control, either side (the maintainer's tester3 scenario).
+// Cash-in-person: neither control, either side (tester3 scenario).
 {
 	const buyer = chatShippingButtons(['cash_in_person'], true);
 	const seller = chatShippingButtons(['cash_in_person'], false);

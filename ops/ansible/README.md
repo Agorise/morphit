@@ -5,8 +5,12 @@ and §38 (squatter defense) on a fresh Ubuntu 24.04 LTS host.
 
 ## What this deploys
 
-- **Base hardening** per OPERATIONS.md §37 (all 18 subsections) +
-  §34 (UFW + fail2ban).
+- **Base hardening** per OPERATIONS.md §37 + §34 (UFW + fail2ban):
+  13 of the role's 16 hardening steps apply automatically; AppArmor
+  (no per-service profile ships), the default-deny outbound firewall
+  and the GRUB password are advice the playbook only prints. A
+  tor-only node also gets an enforced egress rule (only Tor and i2pd
+  may connect out).
 - **TLS** via certbot with auto-renew per §35.
 - **PostgreSQL** bound to loopback only, with morphit_indexer +
   morphit_relay databases provisioned per §37.8.
@@ -16,54 +20,55 @@ and §38 (squatter defense) on a fresh Ubuntu 24.04 LTS host.
 - **BunkerWeb** as a Docker container, terminating TLS in front
   of the indexer and relay per §32.  Trusted-proxy IPs wired
   correctly so the relay's rate limits work.
-- **Daily encrypted Postgres backups** per §31, with off-host
-  destination configurable.
+- **Daily Postgres backups** per §31 — encrypted only if you set an
+  age public key (`morphit_backup_age_recipient`), plain text
+  otherwise — with an optional off-host destination.
 - **Diamond-hardened squatter defense** preset per §38.7 applied
   to `/etc/morphit/relay.env` automatically.
 
 ### Optional sidecars (all opt-in via `enable_*: true` in group_vars)
 
-- **`matrix_bot`** (cp9) — operator alerts to Matrix DM with
+- **`matrix_bot`** — operator alerts to Matrix DM with
   tiered classification (CRITICAL / WARN / INFO).  Requires a
   bot Matrix account access token in vault.  Off by default.
-- **`host_monitor`** (cp10) — periodic disk / memory / swap /
+- **`host_monitor`** — periodic disk / memory / swap /
   CPU / swap-thrashing monitor.  Off by default.
-- **`smartctl_monitor`** (cp11) — disk SMART health checks
+- **`smartctl_monitor`** — disk SMART health checks
   every 6h.  Installs `smartmontools`.  Off by default.
-- **`fail2ban_monitor`** (cp11) — observability for fail2ban
+- **`fail2ban_monitor`** — observability for fail2ban
   jails: alerts on daemon-down + ban-count spikes.  Off by
   default.
-- **`mdadm_monitor`** (cp11) — Linux software RAID array health.
+- **`mdadm_monitor`** — Linux software RAID array health.
   Safe to enable defensively — exits silently on hosts without
   RAID.  Off by default.
-- **`dmesg_monitor`** (cp12) — kernel ring buffer scan every
+- **`dmesg_monitor`** — kernel ring buffer scan every
   5 min for OOM-killer activations, kernel oopses, hardware
   errors, and segfaults.  Off by default.
-- **`trivy_monitor`** (cp12) — daily Docker image CVE rescan
+- **`trivy_monitor`** — daily Docker image CVE rescan
   for CRITICAL + HIGH vulnerabilities.  Installs trivy from
   the Aqua Security apt repo.  Off by default.  Most useful
   with the BunkerWeb deploy path.
-- **`postfix_monitor`** (cp12) — mail queue depth +
+- **`postfix_monitor`** — mail queue depth +
   oldest-message age.  Catches silent operator-alerting
   failures (smarthost credentials rotated, TLS bumped).  Off
   by default.
-- **`certbot_monitor`** (cp13) — TLS cert expiry + renewal-
+- **`certbot_monitor`** — TLS cert expiry + renewal-
   stall detection (cert expiring AND no successful renewal in
   N days).  Catches the "renewal silently broke months ago"
   pattern that most monitoring misses.  Off by default.
-- **`apt_monitor`** (cp13) — daily pending security-update
+- **`apt_monitor`** — daily pending security-update
   count.  Surfaces what the motd line shows but operators
   stop reading.  Debian/Ubuntu only.  Off by default.
-- **`compose_monitor`** (cp13) — Docker Compose service
+- **`compose_monitor`** — Docker Compose service
   health + restart-loop detection.  Most useful with the
   BunkerWeb deploy path.  Useless on bare-metal-only.  Off
   by default.
-- **`systemd_monitor`** (cp14) — systemd unit health.
+- **`systemd_monitor`** — systemd unit health.
   Watches morphit-* units for "failed" state + high restart
   counts.  Critical complement to journalctl-based alerting:
   a unit that fails to even start emits no journal output.
   Off by default.
-- **`journald_monitor`** (cp14) — journal disk usage +
+- **`journald_monitor`** — journal disk usage +
   rotation health.  Catches the "journal silently grew for
   6 months until disk full" pattern.  Daily check.  Off by
   default.
@@ -84,8 +89,8 @@ the new role.
   with a sudo-capable user; the playbook handles everything from
   there.
 - **Generate or deploy the operator's BLURT keys.**  The relay
-  needs a Blurt active key and a Blurt posting key for the
-  operator account.  See `RUN-A-MORPHIT-NODE.md` for the
+  needs the relay account's ACTIVE key (as an encrypted keystore);
+  no posting key lives on the server.  See `RUN-A-MORPHIT-NODE.md` for the
   key-generation procedure; place the resulting keystore at the
   path named in `group_vars/all.yml` before running the playbook.
 - **Run the operator's owner-key rotation, witness-fee responses,
@@ -99,15 +104,14 @@ the new role.
 OPERATIONS.md §33 documents Docker as an *optional* alternative.
 The canonical path is bare-metal systemd, for three reasons:
 
-1. The `*_FILE` env-var-from-secret pattern shown in §33's
-   docker-compose example (e.g. `MORPHIT_RELAY_DB_PASSWORD_FILE`)
-   is **not yet implemented** in the relay/indexer config
-   loaders (audit caveat 2026-05-06).  Today, those vars are
-   ignored and credentials must be inlined in DATABASE_URL.
-   Docker secrets don't help you until that pattern lands.
-2. The repo deliberately ships no `docker-compose.yml`.  The
-   four `ops/systemd/*.service` units are the authoritative
-   deployment artifacts.
+1. Secrets reach the services through root-owned env files and a
+   systemd credential (the relay's keystore passphrase arrives as
+   `MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE`), not through Docker
+   secrets; the database password is still inlined in the
+   `DATABASE_URL`.
+2. The repo ships no compose file for the Morphit services (only for
+   BunkerWeb). The `ops/systemd/*.service` units are the
+   authoritative deployment artifacts.
 3. Operators new to Morphit have a simpler debugging story
    when the relay is a normal systemd service: `journalctl -u
    morphit-relay -f` and you're done.
@@ -116,11 +120,11 @@ The canonical path is bare-metal systemd, for three reasons:
 deployment pattern.  This playbook reflects that split:
 morphit services bare-metal, BunkerWeb containerized.
 
-## Honesty caveats from the author
+## Things to check before you rely on it
 
-I (Claude, who wrote this with the maintainer supervising) wrote this without
-being able to test it end-to-end.  Specific places where the
-sysadmin should expect to debug rather than copy-paste:
+The guided install (`morphit-setup.sh` → `morphit-ops install`) drives
+this playbook, so it is the tested path. Places where a sysadmin running
+it by hand should still expect to look closer:
 
 - **BunkerWeb version drift.**  BunkerWeb's env-var names and
   Docker tag layout change between major versions.  The
@@ -135,14 +139,15 @@ sysadmin should expect to debug rather than copy-paste:
   derivative's own.  It still hard-fails on Debian/LMDE, the
   older 22.04 "jammy" base (Ubuntu 22.04 / Mint 21), and
   non-Ubuntu distros.
-- **PostgreSQL major version.**  The repo's existing
-  `ops/postgres/init.sql` targets PG 17 (per §33 reference).
-  The playbook installs `postgresql` (whatever's in the
-  Ubuntu repo).  If your sysadmin needs PG 17 specifically,
-  add the PGDG apt repository in `roles/postgres/tasks/`.
-- **Morphit build artifacts.**  The playbook clones the repo
-  and runs `npm install + npm run build`.  Production
-  deployments may prefer pre-built tarballs from CI.  The
+- **PostgreSQL major version.**  The playbook installs the
+  distribution's `postgresql` (16 on the 24.04 base). If you need
+  another major version, add the PGDG apt repository in
+  `roles/postgres/tasks/`.
+- **Morphit build artifacts.**  The playbook installs from the
+  release tree with `npm install --ignore-scripts` (no dependency
+  install script runs, as root or otherwise) and keeps the prebuilt
+  frontend the release ships; an offline bundle's `node_modules` is
+  used as is.  The
   `morphit` role's `clone_and_build.yml` is the integration
   point.
 - **Operator-editable values.**  Everything in

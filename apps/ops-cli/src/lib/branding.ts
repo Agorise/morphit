@@ -11,6 +11,7 @@
  *   /brand/site-logo.svg, /brand/site-logo-footer.svg   header+hero / footer logo
  *   /favicon.svg, /app-icon*.svg|png, /apple-touch-icon.png   icons
  *   /manifest.webmanifest                                     PWA name
+ *   /og-image.png                link-preview picture, drawn from the logo + name (./ogImage.ts)
  *   /brand/brand.json                                         brand for the SPA shell
  *   every prerendered page (.html)                            brand-name text slots
  *   anything under <branding dir>/static/                     free-form overlay
@@ -98,6 +99,16 @@ import {
 } from '@morphit/operator-config/theme';
 import { impersonatesReservedOperatorName } from '../../../indexer/src/indexer/confusables.ts';
 import { sanitizeSvg, HostileSvgError } from './svgSanitize.ts';
+import {
+	OG_HEIGHT,
+	OG_IMAGE_REL,
+	OG_WIDTH,
+	WORDMARK_ASPECT,
+	ogHostFromOriginMap,
+	renderOgImage,
+	usablePngMark,
+	type OgMark
+} from './ogImage.ts';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -872,6 +883,9 @@ export interface BrandingPlan {
 	readonly rasterizerMissing: boolean;
 	/** The applied colour theme, or null for the Morphit colours. */
 	readonly theme: ThemePalette | null;
+	/** sha256 of the og-image.png this branding serves (drawn, or the
+	 *  operator's own), or null when the shipped one stays. */
+	readonly ogImageSha256: string | null;
 }
 
 export interface BrandingState {
@@ -1033,8 +1047,12 @@ export function planBranding(
 
 	// Logos.
 	const customLogo = has('logo.svg');
+	// The operator's logo and icon, as validated (the link-preview image uses them too).
+	let logoSvg: NormalizedSvg | null = null;
+	let iconSvg: NormalizedSvg | null = null;
 	if (customLogo) {
 		const logo = svgInput('logo.svg');
+		logoSvg = logo;
 		put(BRAND_TARGETS.siteLogo, Buffer.from(logo.svg));
 		const footer = has('logo-footer.svg') ? svgInput('logo-footer.svg') : logo;
 		put(BRAND_TARGETS.siteLogoFooter, Buffer.from(footer.svg));
@@ -1087,6 +1105,7 @@ export function planBranding(
 	// Icons.
 	if (has('icon.svg')) {
 		const icon = svgInput('icon.svg');
+		iconSvg = icon;
 		put(BRAND_TARGETS.favicon, Buffer.from(icon.svg));
 		put(BRAND_TARGETS.appIconSvg, Buffer.from(composeAppIconSvg(icon, 512, 0.64, canvas)));
 		put(BRAND_TARGETS.appIconMaskableSvg, Buffer.from(composeAppIconSvg(icon, 512, 0.49, canvas)));
@@ -1127,6 +1146,52 @@ export function planBranding(
 				`and run \`sudo morphit-ops branding apply\` again, or put ready-made PNGs of the same names and ` +
 				`sizes in ${dir} (launch screens under ${dir}/static/splash/).`
 		);
+	}
+
+	// Link-preview image (og:image): the shipped one shows the Morphit mark,
+	// wordmark and morphit.io. An instance with its own name or logo gets its
+	// own, drawn in the same layout (./ogImage.ts); one with only colours, or
+	// none, keeps the shipped image. The operator's own static/og-image.png wins.
+	const ogCanon = canon(OG_IMAGE_REL);
+	const ownIconPng = has('app-icon-512.png') ? readInput('app-icon-512.png') : null;
+	const ogMark: OgMark | null =
+		iconSvg !== null
+			? { kind: 'svg', svg: iconSvg, label: 'icon.svg', wide: false }
+			: ownIconPng !== null && usablePngMark(ownIconPng)
+				? { kind: 'png', png: ownIconPng, label: 'app-icon-512.png' }
+				: logoSvg !== null
+					? {
+							kind: 'svg',
+							svg: logoSvg,
+							label: 'logo.svg',
+							wide: logoSvg.width / logoSvg.height > WORDMARK_ASPECT
+						}
+					: null;
+	const ogDim = ogCanon === null ? null : pngSize(ogCanon);
+	if (
+		(settings.brandName !== null || ogMark !== null) &&
+		ogDim !== null &&
+		ogDim.width === OG_WIDTH &&
+		ogDim.height === OG_HEIGHT &&
+		!has(`static/${OG_IMAGE_REL}`)
+	) {
+		let originMap: unknown = null;
+		try {
+			originMap = JSON.parse(
+				(safeRead(paths.buildDir, '.origin-slots.json') ?? Buffer.from('null')).toString('utf8')
+			);
+		} catch {
+			originMap = null;
+		}
+		const og = renderOgImage({
+			name: settings.brandName ?? DEFAULT_BRAND_NAME,
+			mark: ogMark,
+			host: ogHostFromOriginMap(originMap),
+			palette
+		});
+		if (og.png !== null) put(OG_IMAGE_REL, og.png);
+		notes.push(...og.notes);
+		warnings.push(...og.warnings);
 	}
 
 	// Image overlay (applied last: wins over the generated images). Images
@@ -1256,6 +1321,7 @@ export function planBranding(
 		const c = canon(rel);
 		if (c !== null && c.equals(buf)) files.delete(rel);
 	}
+	const ogPlanned = files.get(OG_IMAGE_REL);
 	return {
 		files,
 		brandName,
@@ -1264,7 +1330,8 @@ export function planBranding(
 		warnings,
 		notes,
 		rasterizerMissing: missingPngs.length > 0,
-		theme: palette
+		theme: palette,
+		ogImageSha256: ogPlanned === undefined ? null : sha256Hex(ogPlanned)
 	};
 }
 
@@ -1284,6 +1351,8 @@ export interface BrandingResult {
 	readonly rasterizerMissing: boolean;
 	/** The applied colour theme, or null for the Morphit colours. */
 	readonly theme: ThemePalette | null;
+	/** sha256 of the og-image.png this branding serves, or null for the shipped one. */
+	readonly ogImageSha256: string | null;
 }
 
 export function matchOwner(path: string, ref: string): void {
@@ -1374,7 +1443,8 @@ export function applyBranding(opts: {
 			notes: [],
 			unsupported: true,
 			rasterizerMissing: false,
-			theme: null
+			theme: null,
+			ogImageSha256: null
 		};
 	}
 	const release = opts.dryRun ? (): void => {} : acquireLock(paths);
@@ -1445,7 +1515,8 @@ function applyLocked(
 		notes: plan.notes,
 		unsupported: false,
 		rasterizerMissing: plan.rasterizerMissing,
-		theme: plan.theme
+		theme: plan.theme,
+		ogImageSha256: plan.ogImageSha256
 	});
 	if (dryRun) return result();
 
@@ -1605,9 +1676,38 @@ export function syncTouchedToWebRoot(
 	return n;
 }
 
-/** POSIX-join helper for callers that print build-relative paths. */
-export function displayPath(...parts: string[]): string {
-	return posix.join(...parts.map((p) => p.split(sep).join('/')));
+/**
+ * OBSERVE the link-preview image a visitor's unfurler gets: the served
+ * og-image.png must be the one this branding drew (`expectedSha256`), or —
+ * when the shipped image stays (null) — the one the served verify.json lists.
+ */
+export function checkServedOgImage(
+	servedDir: string,
+	expectedSha256: string | null
+): { ok: boolean; sha256: string | null; detail: string } {
+	const b = safeRead(servedDir, OG_IMAGE_REL);
+	if (b === null) return { ok: true, sha256: null, detail: `no ${OG_IMAGE_REL} is served` };
+	const sha = sha256Hex(b);
+	let want = expectedSha256;
+	if (want === null) {
+		try {
+			const v = JSON.parse(
+				(safeRead(servedDir, 'verify.json') ?? Buffer.from('{}')).toString('utf8')
+			) as {
+				hash_manifest?: Record<string, string>;
+			};
+			want = v.hash_manifest?.[OG_IMAGE_REL] ?? sha;
+		} catch {
+			want = sha;
+		}
+	}
+	return want === sha
+		? { ok: true, sha256: sha, detail: '' }
+		: {
+				ok: false,
+				sha256: sha,
+				detail: `${join(servedDir, OG_IMAGE_REL)} is not the image this branding drew (sha256 ${sha.slice(0, 12)}…, expected ${want.slice(0, 12)}…)`
+			};
 }
 
 /** Absolute build dir of an install. */

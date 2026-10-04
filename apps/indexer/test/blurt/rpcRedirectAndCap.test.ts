@@ -1,6 +1,6 @@
 /**
- * Chain RPC neither follows redirects nor reads unbounded bodies
- * (v1.18.0 deep-deep, M2).
+ * Chain RPC neither follows redirects nor reads unbounded bodies.
+ *
  *
  * An RPC node is a third party — anyone can publish one in the on-chain
  * directory. dblurt (and the batch get_block path) used fetch's defaults: a node
@@ -62,31 +62,6 @@ afterEach(async () => {
 	await Promise.all(servers.splice(0).map((s) => new Promise<void>((r) => s.close(() => r()))));
 });
 
-/** Wait on a condition, never on a fixed sleep. */
-async function until(cond: () => boolean, maxMs: number): Promise<void> {
-	const deadline = performance.now() + maxMs;
-	while (!cond() && performance.now() < deadline) await new Promise((r) => setTimeout(r, 5));
-}
-
-/**
- * Start a call and watch it. dblurt retries a failed attempt on the SAME node
- * until its 10 s budget is spent, so rather than wait that out, the test waits
- * for the node to be asked a SECOND time — proof the first attempt was refused
- * — or for the call to succeed, which is the bug.
- */
-async function watch(
-	call: Promise<unknown>,
-	nodeHits: () => number
-): Promise<{ resolved: boolean }> {
-	let resolved = false;
-	call.then(
-		() => (resolved = true),
-		() => undefined
-	);
-	await until(() => resolved || nodeHits() >= 2, 8_000);
-	return { resolved };
-}
-
 const client = (url: string): BlurtClient =>
 	new BlurtClient({
 		localRpcEndpoints: [],
@@ -107,10 +82,11 @@ describe('M2 — a redirecting RPC node', () => {
 			res.writeHead(307, { location: `${victimUrl}/` });
 			res.end();
 		});
-		const w = await watch(client(redirector).getDynamicGlobalProperties(), () => hits);
-		expect(w.resolved, 'the call succeeded by following the redirect').toBe(false);
+		// Refused at once: the call fails, the node is asked ONCE (not again
+		// until dblurt's 10 s budget runs out), and nobody follows the redirect.
+		await expect(client(redirector).getDynamicGlobalProperties()).rejects.toThrow();
 		expect(victimHits, 'the indexer re-POSTed to where the node pointed it').toBe(0);
-		expect(hits).toBeGreaterThanOrEqual(2);
+		expect(hits, 'the refused node was asked again').toBe(1);
 	});
 
 	it('the batch get_block path does not follow a 307 either', async () => {
@@ -132,8 +108,9 @@ describe('M2 — an RPC node that sends a huge body', () => {
 			hits++;
 			answer(req, res, 40);
 		});
-		const w = await watch(client(flooder).getDynamicGlobalProperties(), () => hits);
-		expect(w.resolved, 'a 40 MB reply was read whole and accepted').toBe(false);
-		expect(hits).toBeGreaterThanOrEqual(2);
+		// A get_dynamic_global_properties reply's budget is 8 MiB: the 40 MiB
+		// answer is refused, once, not read whole and not re-downloaded.
+		await expect(client(flooder).getDynamicGlobalProperties()).rejects.toThrow();
+		expect(hits, 'the refused node was asked again').toBe(1);
 	});
 });

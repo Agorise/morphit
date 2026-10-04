@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * /pair — `web+morphit:` protocol-handler landing route (cp214).
+	 * /pair — `web+morphit:` protocol-handler landing route.
 	 *
 	 * `manifest.webmanifest` registers `web+morphit` → `/pair?%s`. When a
 	 * `web+morphit:///…` link is opened (the read-only→main-device write-bounce

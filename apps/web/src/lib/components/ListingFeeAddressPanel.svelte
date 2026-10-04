@@ -3,8 +3,8 @@
 	 * ListingFeeAddressPanel — renders the canonical BTC/XMR fee
 	 * address to the user with copy button and optional QR code.
 	 *
-	 * Part 106 of the audit campaign closed a real fork-attack
-	 * vulnerability in the listing-fee path: pre-Part-106, the
+	 * of the audit campaign closed a real fork-attack
+	 * vulnerability in the listing-fee path: older, the
 	 * UI text said "send to our address" but never displayed the
 	 * address itself, leaving the operator free to social-
 	 * engineer a hostile address into the user's flow.  This
@@ -12,8 +12,8 @@
 	 * authoritatively, with a "chain-pinned by @morphit" badge
 	 * when the value comes from a signed release op.
 	 *
-	 * **Part 107 privacy correction**: the XMR view-key
-	 * disclosure that the initial Part 106 design included has
+	 * **Privacy correction**: the XMR view-key
+	 * disclosure that the initial design included has
 	 * been REMOVED.  The view key is operator-private and is
 	 * never published anywhere — not on chain, not in this UI,
 	 * not in any API response.  Users who want to verify their
@@ -41,7 +41,7 @@
 	 */
 
 	import { _ } from 'svelte-i18n';
-	import { chainPinnedTreasury } from '$stores/release';
+	import { chainPinnedTreasury, release, retryReleaseCheck } from '$stores/release';
 	import { MORPHIT_ACCOUNT } from '$net/config';
 	import { formatFiat } from '$lib/i18n/formatters';
 	import QrPanel from '$lib/components/QrPanel.svelte';
@@ -54,16 +54,16 @@
 	interface Props {
 		/** Which fee asset is the user paying with. */
 		method: 'btc' | 'xmr';
-		/** cp372 Model A: live BTC fee amount (satoshis) from
+		/** Model A: live BTC fee amount (satoshis) from
 		 *  /v1/listing-fee — the operator's USD-equivalent fee re-priced
 		 *  at the current BTC/USD rate.  When present (>0) and method is
 		 *  'btc', it's the amount the UI quotes; the address always comes
 		 *  from the chain-pinned treasury.  Absent → quote the pinned
 		 *  /v1/release amount. */
 		liveSatoshis?: number;
-		/** cp372 Model A: live XMR fee amount as a piconero string. */
+		/** Model A: live XMR fee amount as a piconero string. */
 		livePiconero?: string;
-		/** cp372 Model A: USD (or denomination-fiat) value of the live
+		/** Model A: USD (or denomination-fiat) value of the live
 		 *  fee amount, for the ambient "≈ $0.25" echo. */
 		feeFiat?: number;
 		/** Fiat ticker the `feeFiat` value is expressed in (default USD). */
@@ -115,7 +115,7 @@
 		if (t === null) return null;
 		if (method === 'btc') {
 			if (t.btc === null) return null;
-			// Model A (cp372): prefer the live USD-tracked amount from
+			// Model A: prefer the live USD-tracked amount from
 			// /v1/listing-fee when the indexer provided one; otherwise
 			// quote the chain-pinned amount.  The ADDRESS is ALWAYS the
 			// chain-pinned one (security-critical, never overridden).
@@ -165,7 +165,7 @@
 	 *  | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp' — see
 	 *  apps/web/src/lib/chat/payload.ts as the canonical source)
 	 *  — but listing fees can only be paid in BTC/XMR/BLURT per
-	 *  the Memory #23 fee_method-frozen invariant.  We only ever
+	 *  the frozen fee_method invariant.  We only ever
 	 *  produce method ∈ {'btc', 'xmr'} from this panel (BLURT
 	 *  goes through a separate Pay-Now flow). */
 	const qrPayload = $derived.by((): AddressPayload | null => {
@@ -218,6 +218,15 @@
 				values: { asset: method.toUpperCase() }
 			})}
 		</p>
+		{#if $release.kind === 'error' && ($release.error.kind === 'rpc_failed' || $release.error.kind === 'older_release')}
+			<button
+				type="button"
+				class="mt-2 text-sm font-semibold underline underline-offset-2"
+				onclick={() => void retryReleaseCheck()}
+			>
+				{$_('common.retry')}
+			</button>
+		{/if}
 	</section>
 {:else}
 	<section class="card mb-4">

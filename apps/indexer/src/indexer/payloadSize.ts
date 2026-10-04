@@ -1,7 +1,7 @@
 /**
  * Serialized-JSON size cap for indexer handlers.
  *
- * Finding L in docs/REVISIT-LIST.md §F: every handler that
+ * Finding L in the project backlog §F: every handler that
  * accepts a freeform JSON object (price_model on orders,
  * header on chat, json_metadata on profile, hash_manifest
  * and endpoints on release) passes it through to a JSONB

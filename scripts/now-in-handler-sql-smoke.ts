@@ -3,9 +3,9 @@
  * scripts/now-in-handler-sql-smoke.ts
  *
  * Structural Defense #37 — NOW()-in-handler-SQL sentinel
- * (cp85 Lesson #1 candidate, promoted in same cp).
+ * (Lesson #1 candidate, promoted in same cp).
  *
- * Catches the cp85-A1 bug class: indexer handler SQL using
+ * Catches the bug class: indexer handler SQL using
  * `NOW()` (Postgres CURRENT_TIMESTAMP at execution) instead of
  * `ctx.blockTime` (chain-deterministic block time).
  *
@@ -19,7 +19,7 @@
  * divergent DB state between operators replaying the same
  * chain history.
  *
- * The cp85-A1 fix replaced 6 `NOW()` references in
+ * The fix replaced 6 `NOW()` references in
  * `featureBid.ts` with `$N` parameters bound to `ctx.blockTime`.
  * `strangerFee.ts:148` carries an explicit prior-art comment
  * on the same anti-pattern.

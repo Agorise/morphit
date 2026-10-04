@@ -1,5 +1,5 @@
 #!/bin/sh
-# morphit-treasury-repin.sh — MAINTAINER-ONLY sidecar (cp372).
+# morphit-treasury-repin.sh — MAINTAINER-ONLY sidecar.
 #
 # Runs the treasury auto-re-pin check on a timer.  Model A pins the
 # listing-fee AMOUNTS on chain (deterministic across the federation);

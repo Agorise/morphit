@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 /**
- * v1.7.7 — [the maintainer]: "if i have 20 messages sitting in my inbox, and i want every
- * single one of them to move to Archived and i click on one archive link for
- * each message every half second, then nothing will malfunction or break,
- * right? ... experienced users will be clicking stuff pretty damn fast."
+ * v1.7.7 — Requirement: archiving 20 inbox messages one by one, a click every half second, must
+ * not malfunction; experienced users click fast.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -92,7 +90,7 @@ describe('rapid filing — 20 threads, one click every 500ms', () => {
 		expect(broadcasts[0]!.length).toBe(20);
 	});
 
-	it("the maintainer: click every second, then REFRESH a couple seconds later — nothing is lost", async () => {
+	it("click every second, then REFRESH a couple seconds later — nothing is lost", async () => {
 		vi.useFakeTimers();
 		delaysMs = [60_000]; // the broadcast is still in flight when the tab dies
 		for (const p of threads.slice(0, 5)) {
@@ -110,7 +108,7 @@ describe('rapid filing — 20 threads, one click every 500ms', () => {
 		for (const p of threads.slice(0, 5)) expect(isArchived(p, 'order-1')).toBe(true);
 	});
 
-	it("the maintainer: after that refresh, the watermark still has a block time to clamp against", () => {
+	it("after that refresh, the watermark still has a block time to clamp against", () => {
 		// The hole this closes: `lastAdoptedAt` used to be module state, so right
 		// after a refresh the watermark had nothing to clamp to and degraded to a
 		// bare Date.now() — the exact bug it exists to prevent. Archiving before the

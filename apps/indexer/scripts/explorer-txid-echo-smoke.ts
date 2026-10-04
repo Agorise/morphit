@@ -1,13 +1,13 @@
 /**
  * Morphit indexer — explorer txid-echo verification smoke
- * (Item 4, Audit Part 26).
+ * (Item 4).
  *
  * Verifies that BOTH the BTC and XMR explorer verifiers reject
  * responses where the explorer's echoed transaction id doesn't
  * match what we asked for.
  *
  * Threat model (honest framing): this defense is narrower than
- * the original REVISIT-LIST §F.6 spec ("secp256k1 verify of
+ * the original backlog §F.6 spec ("secp256k1 verify of
  * off-chain fee txns").  Verifying signatures on an
  * explorer-returned tx doesn't actually defend against a lying
  * explorer — anyone can produce a perfectly-valid signed BTC
@@ -15,7 +15,7 @@
  * blockchain.  Verifying inclusion would require SPV merkle
  * proofs against a header chain (BTC) or out-of-band view-key
  * decryption (XMR), both of which are substantially bigger than
- * "~150 lines per chain."  See AUDIT-2026-05.md Part 26 for
+ * "~150 lines per chain."  See the internal audit record AUDIT-2026-05 for
  * the full pushback narrative.
  *
  * What this smoke does test is real and useful: an explorer
@@ -66,8 +66,25 @@ function ok(name: string, cond: boolean, why = ''): void {
 
 // ─── BTC mocks ────────────────────────────────────────────────
 
+/** The verifiers read a real Response (headers and a size-capped body stream,
+ *  fee/explorerHttp.ts); the fakes below describe one by status + json/text. */
+type FakeResponse = {
+	status: number;
+	json?: () => Promise<unknown>;
+	text?: () => Promise<string>;
+};
+function realResponses(
+	fake: (input: RequestInfo | URL, init?: RequestInit) => Promise<unknown>
+): typeof fetch {
+	return (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const f = (await fake(input, init)) as FakeResponse;
+		const body = f.json ? JSON.stringify(await f.json()) : await f.text!();
+		return new Response(body, { status: f.status });
+	}) as typeof fetch;
+}
+
 function btcFetch(returnedTxid: string): typeof fetch {
-	return (async (input: RequestInfo | URL) => {
+	return realResponses(async (input: RequestInfo | URL) => {
 		const url = typeof input === 'string' ? input : input.toString();
 		if (url.includes('/blocks/tip/height')) {
 			return {
@@ -96,7 +113,7 @@ function btcFetch(returnedTxid: string): typeof fetch {
 			} as unknown as Response;
 		}
 		throw new Error(`smoke: unmocked URL ${url}`);
-	}) as unknown as typeof fetch;
+	});
 }
 
 function btcClaim(): FeeClaim {
@@ -104,7 +121,7 @@ function btcClaim(): FeeClaim {
 		feeMethod: 'btc',
 		expectedAmount: 2_500,
 		externalTxId: VALID_TXID,
-		// cp474 — REQUIRED by FeeClaim; `undefined` is not `null`, and the
+		// REQUIRED by FeeClaim; `undefined` is not `null`, and the
 		// Monero verifier discriminates on `txProof === null`.
 		txProof: null,
 		permlink: 'my-order-01',
@@ -115,7 +132,7 @@ function btcClaim(): FeeClaim {
 // ─── XMR mocks ────────────────────────────────────────────────
 
 function xmrFetch(returnedTxid: string | undefined): typeof fetch {
-	return (async (input: RequestInfo | URL) => {
+	return realResponses(async (input: RequestInfo | URL) => {
 		const url = typeof input === 'string' ? input : input.toString();
 		if (url.includes('/api/outputs')) {
 			return {
@@ -133,7 +150,7 @@ function xmrFetch(returnedTxid: string | undefined): typeof fetch {
 			} as unknown as Response;
 		}
 		throw new Error(`smoke: unmocked URL ${url}`);
-	}) as unknown as typeof fetch;
+	});
 }
 
 function xmrClaim(): FeeClaim {
@@ -165,7 +182,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://example-explorer.test/api'],
 				minConfirmations: 1,
 				requestTimeoutMs: 1000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			btcFetch(VALID_TXID)
@@ -186,7 +203,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://example-explorer.test/api'],
 				minConfirmations: 1,
 				requestTimeoutMs: 1000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			btcFetch(WRONG_TXID)
@@ -210,7 +227,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://example-explorer.test/api'],
 				minConfirmations: 1,
 				requestTimeoutMs: 1000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			btcFetch(VALID_TXID.toUpperCase())
@@ -231,7 +248,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://example-explorer.test'],
 				minConfirmations: 1,
 				requestTimeoutMs: 1000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			xmrFetch(VALID_TXID)
@@ -252,7 +269,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://example-explorer.test'],
 				minConfirmations: 1,
 				requestTimeoutMs: 1000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			xmrFetch(WRONG_TXID)
@@ -278,7 +295,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://example-explorer.test'],
 				minConfirmations: 1,
 				requestTimeoutMs: 1000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			xmrFetch(undefined)

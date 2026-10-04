@@ -10,13 +10,13 @@
 	 * template.
 	 *
 	 * WHY: the in-memory session is wiped on every reload — decrypted keys never
-	 * persist across a refresh (the security posture; cp334/cp340). A page whose
+	 * persist across a refresh (the security posture). A page whose
 	 * core action needs a live signing session is therefore unusable for a
 	 * fully-locked visitor, and leaving them stranded there LOOKS like a logout.
 	 * Instead, send them to the welcome-back UNLOCK screen (/login) carrying the
 	 * page they were trying to reach as `?next=…`; after they unlock with their
 	 * password, the login page forwards them to that destination rather than
-	 * dumping them on the homepage (cp356). A locked visitor with NO remembered
+	 * dumping them on the homepage. A locked visitor with NO remembered
 	 * keystore lands on the same /login, which offers import/start — still more
 	 * direct than the homepage.
 	 *
@@ -33,7 +33,7 @@
 	 *
 	 * Pages that present their OWN locked-state UI in place (e.g. /my/orders,
 	 * which shows an "unlock to view your orders" card rather than redirecting —
-	 * cp345 keeps order history behind the unlock so a locked, walked-away device
+	 * A later change keeps order history behind the unlock so a locked, walked-away device
 	 * never reveals your trades) must NOT use this guard: they handle the locked
 	 * visitor themselves and shouldn't be bounced away.
 	 */

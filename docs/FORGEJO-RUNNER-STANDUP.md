@@ -81,7 +81,7 @@ cd ~/forgejo-runner
   --instance https://git.agorise.net \
   --token frt_XXXXXXXXXXXXXXXXXXXXXXXX \
   --name "morphit-release-runner-01" \
-  --labels "morphit-build,linux,docker"
+  --labels "ubuntu-24.04:docker://ubuntu:24.04"
 ```
 
 This creates `~/forgejo-runner/.runner` with the registered token. Treat that file like a secret — it grants job-running privileges on the registered scope.
@@ -96,7 +96,7 @@ log:
 
 runner:
   capacity: 2          # max parallel jobs; release pipeline never needs more
-  timeout: 30m         # release builds take 5-15 min; 30m is the SAFETY ceiling
+  timeout: 2h          # must exceed the longest job: release.yml allows 60 min, the CI smokes job 90 min
   fetch_timeout: 5s
 
 cache:
@@ -108,10 +108,13 @@ container:
   privileged: false    # release builds never need privileged
   options: "--cpus=2 --memory=4g"
   workdir_parent: /workspace
-  # Only allow images from the project's own published list.  This
-  # is the single most important defense against malicious workflow
-  # changes — a PR that switches the image to a backdoored one is
-  # rejected at runner boot.
+  # No host volumes may be mounted into job containers. (This is a
+  # VOLUME allowlist; the runner has no image allowlist. What stops a
+  # pull request from changing the workflow's image or steps is a
+  # SEPARATE release runner, under its own label, that runs
+  # release.yml only and no pull-request CI. Giving release.yml such
+  # a label is a maintainer action still to do: today every workflow
+  # uses `runs-on: ubuntu-24.04`.)
   valid_volumes: []
 ```
 
@@ -168,13 +171,13 @@ on:
 
 jobs:
   hello:
-    runs-on: morphit-build
+    runs-on: ubuntu-24.04
     container: alpine:3.20
     steps:
       - run: echo "Runner is alive on $(uname -a)"
 ```
 
-Trigger via the Forgejo UI (`Actions → runner-smoke-test → Run workflow`). Expect a green check inside 60s. If it hangs in "queued" for more than 90s, the runner labels don't match — verify `morphit-build` is in the runner's `--labels` (Step 3).
+Trigger via the Forgejo UI (`Actions → runner-smoke-test → Run workflow`). Expect a green check inside 60s. If it hangs in "queued" for more than 90s, the runner labels don't match — verify `ubuntu-24.04` is in the runner's `--labels` (Step 3).
 
 ## Step 7 — Run the release-ceremony steps 8/9/10
 

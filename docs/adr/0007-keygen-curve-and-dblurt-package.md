@@ -222,7 +222,7 @@ public API and smaller; keep them separate.
 
 - `docs/adr/0002-live-keys-policy.md` — live-keys policy (unchanged
   in substance; format language updated).
-- `docs/REVIEW-PHASE2.md` — P2-12 carry-forward item (upgraded from
+- `docs/REVIEW-PHASE2.md` (since removed) — P2-12 carry-forward item (upgraded from
   "blocker-adjacent" to the actual cause of this ADR).
 - `apps/web/src/lib/crypto/keygen.ts` — file to be modified.
 - `apps/web/src/lib/blurt/sign.ts` — file to be modified.

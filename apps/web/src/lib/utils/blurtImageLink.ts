@@ -2,7 +2,7 @@
  * blurtImageLink — strict allowlist + linkifier for Blurt-blog image
  * URLs that appear in user-authored free text (order `terms`, shown
  * publicly on the order-detail / orderbook / account / my-orders
- * views). cp388.
+ * views)..
  *
  * WHY THIS EXISTS
  * Order terms are public, on-chain, attacker-controllable free text.

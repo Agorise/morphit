@@ -1,23 +1,23 @@
-# ADR-0041 — Cross-instance peer price disagreement detector (cp129 Defense F)
+# ADR-0041 — Cross-instance peer price disagreement detector (Defense F)
 
 **Status:** Accepted (shipped 2026-05; pre-launch hardening campaign)
 
 **Date:** 2026-05-23
-**Deciders:** project maintainer (the maintainer)
-**Related:** ADR-0039 (self-sovereign pricing — designed 8 black-hat defenses A-H; Defense F was deferred from cp127 to "future work"; cp129 implements it).  ADR-0040 (denomination configurability — the same-denomination filter in Defense F builds on this).
+**Deciders:** project maintainer
+**Related:** ADR-0039 (self-sovereign pricing — designed 8 black-hat defenses A-H; Defense F was deferred from to "future work"; a later change implements it).  ADR-0040 (denomination configurability — the same-denomination filter in Defense F builds on this).
 
 ## Context
 
 ADR-0039 designed the `morphit_native` price fetcher with eight
 specific manipulation defenses (A through H).  Seven shipped in
-cp127.  Defense F — **cross-instance peer disagreement detector**
+Defense F — **cross-instance peer disagreement detector**
 — was deferred because it required federation-aware code that
 ADR-0039's scope didn't cover.
 
 The threat Defense F addresses: **what if THIS indexer is the one
 being manipulated?**
 
-All other cp127 defenses assume the indexer's own code paths are
+All other defenses assume the indexer's own code paths are
 correct and the manipulation happens at the trader / data-source
 level (sock-puppet whales, slow-drift attacks, post-and-cancel
 races, etc.).  But what if an operator is compromised — pressured
@@ -69,7 +69,7 @@ New schema-v36 table `price_peer_observations`:
 |---|---|---|
 | peer_origin | TEXT | URL of the peer instance |
 | asset | TEXT | which asset's price (BLURT today; BTC/XMR future) |
-| denomination_fiat | TEXT | which fiat (USD today; EUR/XDR/XAU future per cp128) |
+| denomination_fiat | TEXT | which fiat (USD today; EUR/XDR/XAU future) |
 | observed_price | NUMERIC(38,18) | peer's reported derived_price |
 | observed_at | TIMESTAMPTZ | when we recorded it |
 | source_native | TEXT | 'morphit_native' / 'unknown' — only morphit_native rows are used in the median |
@@ -140,7 +140,7 @@ have enough peers.
 
 ### Same-denomination filter
 
-Cp128 made denomination configurable per-operator.  A USD-
+A later change made denomination configurable per-operator.  A USD-
 denominated indexer cannot meaningfully compare its BLURT/USD
 price to a EUR-denominated peer's BLURT/EUR price without a
 USD/EUR oracle, which would defeat the self-sovereign premise.
@@ -173,7 +173,7 @@ get tagged `'unknown'` and excluded from the median.
 - I'd appear to be the outlier from MY perspective; my alert
   would fire on innocent me.
 - **This is the inherent limit** of any majority-based defense.
-  Same blind spot as cp127's "consensus from compromised
+  Same blind spot as an earlier fix's "consensus from compromised
   sources."  Cross-federation peer-Sybil is expensive but not
   impossible.
 - Mitigation: the federation prober's chain-registration check
@@ -223,9 +223,9 @@ get tagged `'unknown'` and excluded from the median.
   reachability redundancy.
 - **Per-peer trust weighting.**  All peers count equally in the
   median.  A future enhancement could weight peers by their
-  age, trade volume, or federation-prober "goodness."  Cp129
+  age, trade volume, or federation-prober "goodness."
   ships the simpler equal-weight approach; weighted-median is a
-  REVISIT item.
+  backlog item.
 
 ## Operator action required
 
@@ -261,22 +261,22 @@ cases), and doc-comment defense manifest.
 
 ## Future work
 
-- **Weighted peer median** (REVISIT cp130+) — weight peers by
+- **Weighted peer median** (backlog later) — weight peers by
   federation-prober goodness score, age, or trade volume.
 - ~~**/v1/health surface** for the peer-disagreement state~~ —
-  **Done, cp233.**  The latest peer-comparison cycle now surfaces on
+  **Done.**  The latest peer-comparison cycle now surfaces on
   `/v1/health?verbose=1` under `price.peer` (peers queried, peer
   median vs own price, deviation, above-threshold flag, alert),
   captured via an optional `onResult` callback on
   `startPeerPriceMonitor` so F's core logic was untouched.  Surfaced
-  alongside the cp233-wired defenses B (`price.drift`) and C
-  (`price.disagreement`) — see ADR-0039's cp233 update.  (The cp129
+  alongside the defenses B (`price.drift`) and C
+  (`price.disagreement`) — see ADR-0039's update.  (The
   `schema.sql` comment claimed F already surfaced here; that was
-  aspirational until cp233 — this future-work item was the accurate
+  aspirational until a later fix — this future-work item was the accurate
   record.)
-- ~~**Cross-asset extension**~~ — **Done, cp130.**  The monitor is
+- ~~**Cross-asset extension**~~ — **Done.**  The monitor is
   started per-asset for every configured (asset, denomination_fiat)
-  pair (BLURT/BTC/XMR); cp233 captures each asset's latest result.
+  pair (BLURT/BTC/XMR); a later change captures each asset's latest result.
 
 ## Related code/docs
 
@@ -284,8 +284,8 @@ cases), and doc-comment defense manifest.
 - `apps/indexer/src/db/schema.sql` — schema-v36 table
 - `apps/indexer/src/config/index.ts` — env vars + Config fields
 - `apps/indexer/src/main.ts` — startup + graceful shutdown wiring
-- `apps/indexer/src/api/health.ts` — `/v1/health` `price.peer` surface (cp233)
+- `apps/indexer/src/api/health.ts` — `/v1/health` `price.peer` surface
 - `apps/indexer/scripts/peer-price-monitor-smoke.ts` — 39 scenarios
-- `apps/indexer/scripts/price-source-hardening-smoke.ts` — B/C/F wiring + surface scenarios (`BW-*`, `CW-*`, `FS-*`, cp233)
+- `apps/indexer/scripts/price-source-hardening-smoke.ts` — B/C/F wiring + surface scenarios (`BW-*`, `CW-*`, `FS-*`)
 - `ops/env/indexer.env.example` — documented env vars
 - `scripts/run-smokes.sh` — smoke registered in runner

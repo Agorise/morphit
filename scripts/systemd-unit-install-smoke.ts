@@ -59,8 +59,8 @@ const CORE_UNITS = [
 // (/opt/morphit-mcp) as a low-priv user — the installer must NOT fold
 // it into the monorepo core loop. (The morphit-relay-mint-acts oneshot
 // was the other isolated unit; its ACT-minting model was removed at
-// beta.28 / cp329 — account creation is now a direct account_create op
-// paying the fee inline — and the unit templates were deleted at cp348.)
+// beta.28 / — account creation is now a direct account_create op
+// paying the fee inline — and the unit templates were deleted.)
 const ISOLATED_UNITS = ['morphit-mcp.service'];
 
 interface Result {

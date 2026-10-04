@@ -1,22 +1,22 @@
 /**
  * Morphit relay — posting-key signature verification for the
- * Web Push subscribe + unsubscribe endpoints (cp14 introduced
- * subscribe-side; cp131 MED-009 added the unsubscribe-side).
+ * Web Push subscribe + unsubscribe endpoints (a later change introduced
+ * subscribe-side; a later change added the unsubscribe-side).
  *
- * Closes the cp13 trade-off: cp13 accepted subscriptions with no
+ * Closes the trade-off: accepted subscriptions with no
  * cryptographic proof of account ownership, on the grounds that
  * the worst case ("an attacker subscribes to alice's account on
  * their own device") only leaked the timing of alice's PUBLIC
- * chain events.  cp14 tightens this: only the holder of alice's
+ * chain events.  A later change tightens this: only the holder of alice's
  * posting key can subscribe a device as alice.
  *
- * cp131 MED-009 mirrors that gate onto /v1/push/unsubscribe.
- * Pre-cp131 unsubscribe accepted (account, endpoint) with no
+ * A later change mirrors that gate onto /v1/push/unsubscribe.
+ * Previously, unsubscribe accepted (account, endpoint) with no
  * proof at all AND no rate limit, on the grounds that "users
  * should always be able to remove a subscription."  Real risk:
  * an attacker with DB-leak access to the (account, endpoint)
  * pairs could DoS notifications federation-wide by mass-firing
- * unsubscribe requests.  cp131 requires the same posting-key
+ * unsubscribe requests.  A later change requires the same posting-key
  * signature on the unsubscribe payload AND applies a per-IP
  * rate limit; legitimate clients re-sign with their already-
  * present posting key.
@@ -98,7 +98,7 @@ export interface SubscribeSigInputs {
 
 /** Verify a posting-key signature on a subscribe request.
  *  Thin wrapper around verifyPushActionSignature; preserved as
- *  the cp14 public entry point so callers don't need to know
+ *  the public entry point so callers don't need to know
  *  the action keyword. */
 export async function verifyPushSubscribeSignature(
 	blurt: BlurtClient,
@@ -109,7 +109,7 @@ export async function verifyPushSubscribeSignature(
 }
 
 /** Verify a posting-key signature on an unsubscribe request.
- *  cp131 MED-009 — same shape as subscribe but with a distinct
+ *  same shape as subscribe but with a distinct
  *  canonical-message ACTION keyword so a captured subscribe
  *  signature CANNOT be replayed as an unsubscribe (or
  *  vice-versa). */
@@ -148,9 +148,9 @@ async function verifyPushActionSignature(
 	const canonical = `morphit:push:${action}:${inputs.account}:${endpointHash}:${inputs.timestamp}`;
 	const messageHash = createHash('sha256').update(canonical, 'utf-8').digest();
 
-	// Parse the wire signature.  dblurt's Signature.fromString
-	// accepts BLURT-prefix base58 ('SIG_...' or raw hex per the
-	// chain protocol).  Any parse error => malformed.
+	// Parse the wire signature: 65 bytes as hex (recovery byte + r + s),
+	// the form the browser sends. dblurt's Signature.fromString takes hex
+	// only. Any parse error => malformed.
 	let sig: Signature;
 	try {
 		sig = Signature.fromString(inputs.signatureHex);

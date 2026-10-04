@@ -1,10 +1,10 @@
 /**
- * ops-cli production build (cp162).
+ * ops-cli production build.
  *
  * Bundles the operator CLI into a single self-contained
  * `dist/main.js` with a Node shebang, so the published `bin`
  * points at runnable JavaScript and the runtime no longer
- * depends on `tsx`.  This closes the cp161 root cause for good:
+ * depends on `tsx`.  This closes the root cause for good:
  * the operator's `morphit-ops init` runs under plain `node`,
  * with no source-transpilation step at invocation time.
  *
@@ -31,6 +31,8 @@
  *     own internal requires + optional native bits.  Bundling it
  *     is fragile; it stays a production dependency and is required
  *     normally at runtime.
+ *   - `@resvg/resvg-js` — the link-preview image renderer, a native
+ *     addon chosen per platform when it loads.
  *   - `node:*` builtins — never bundled.
  *
  * Everything else (ops-cli source + keyEnvelope + feeAmountCalc
@@ -59,8 +61,11 @@ await build({
 	target: 'node22',
 	format: 'esm',
 	// Keep these resolved from node_modules at runtime, not inlined.
-	external: ['pg'],
-	// cp178 — CRITICAL ESM/CJS interop fix.  We bundle to `format:
+	// @resvg/resvg-js (the link-preview image renderer, src/lib/ogImage.ts)
+	// is a native addon picked per platform at load time; it is loaded lazily
+	// through createRequire, and listed here so it is never inlined.
+	external: ['pg', '@resvg/resvg-js'],
+	// CRITICAL ESM/CJS interop fix.  We bundle to `format:
 	// 'esm'`, but several inlined deps are CommonJS and call
 	// `require(...)` at module-eval time — notably the broadcast
 	// path's @beblurt/dblurt → cross-fetch → node-fetch, which does
@@ -106,9 +111,9 @@ await build({
 	// tsconfigs, which makes esbuild's tsconfig advisories redundant
 	// here.  Silence just that message class so the operator's first
 	// `npm run build` is clean instead of showing 5 scary ▲ WARNINGs
-	// about a non-issue (cp181 handoff-hygiene polish).  `logOverride`
+	// about a non-issue (handoff-hygiene polish).  `logOverride`
 	// is scoped to the `tsconfig.json` message id only; real build
-	// errors (syntax, unresolved imports, the cp178 dynamic-require
+	// errors (syntax, unresolved imports, the dynamic-require
 	// class) are unaffected and still surface.
 	logOverride: { 'tsconfig.json': 'silent' },
 	logLevel: 'info'

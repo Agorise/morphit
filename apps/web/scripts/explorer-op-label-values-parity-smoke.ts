@@ -10,7 +10,7 @@
  * WITHOUT the `{ values: dec.values }` argument, the placeholders render
  * literally — e.g. "@{voter} upvoted @{author}".
  *
- * That is exactly the cp406 block-view bug this pins: the tx + account views
+ * That is exactly the block-view bug this pins: the tx + account views
  * forwarded dec.values, but the block view had dropped it. Fails if any
  * explorer view ever renders the op label without forwarding dec.values.
  */
@@ -54,7 +54,7 @@ for (const rel of VIEWS) {
 	scenario(`${view} view forwards dec.values to the op label`, () => {
 		// Whitespace-normalized, so a formatter wrapping the call across lines
 		// (prettier does, once the line is long) doesn't read as a missing
-		// argument. (v1.18.0 deep-deep: the account view was reformatted.)
+		// argument. (the account view was reformatted.)
 		const src = readFileSync(join(REPO, rel), 'utf8')
 			.replace(/\s+/g, ' ')
 			.replace(/\(\s/g, '(')

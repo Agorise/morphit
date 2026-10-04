@@ -142,7 +142,7 @@ await scenario('allowlist deliberately excludes spam-economic constants', () => 
 		'MORPHIT_INDEXER_CHAIN_ID',
 		'MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY',
 		// NOTE: MORPHIT_INDEXER_FEE_RECIPIENT is intentionally NOT excluded.
-		// cp407 moved it INTO morphit.config.env (see the template comment) so
+		// A later change moved it INTO morphit.config.env (see the template comment) so
 		// `morphit-ops edit` (fees-account) can change the operator's 90%-fee
 		// account without the ansible-rendered indexer.env shadowing it; the edit
 		// path validates the Blurt account name, and the indexer falls back to
@@ -350,7 +350,7 @@ await scenario('comments and blank lines are ignored', () => {
 });
 
 await scenario(
-	'v1.18.0 deep-deep (rv2-2): every default hidden RPC endpoint names its operator, one address per transport',
+	'every default hidden RPC endpoint names its operator, one address per transport',
 	() => {
 		const m = operatorConfig as unknown as {
 			DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[];

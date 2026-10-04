@@ -3,7 +3,7 @@
  *
  * CLI used by generate.sh to fetch the Blurt chain head for the warrant
  * canary, hopping across the canonical DEFAULT_BLURT_RPC_ENDPOINTS rotator
- * list until one node answers. Before cp451 the canary pinned a single node
+ * list until one node answers. Previously the canary pinned a single node
  * and a 526 from that one witness stalled the whole refresh; now a dead node
  * is skipped exactly as the app's own RPC pool skips it.
  *
@@ -74,7 +74,7 @@ async function fetchOneLive(url: string): Promise<BlurtHead | null> {
 }
 
 async function main(): Promise<void> {
-	// cp761 — on a tor-only node, pin every fetch to the Tor SOCKS proxy so the
+	// on a tor-only node, pin every fetch to the Tor SOCKS proxy so the
 	// clearnet RPC read reaches its endpoint through a Tor exit (hiding the
 	// node's real IP) instead of leaking it. No-op on clearnet. Fail-closed: if
 	// Tor is down the fetch errors and the failover exits 1 (a stale canary must

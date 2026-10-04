@@ -3,11 +3,11 @@
  * scripts/operator-doc-fenced-path-existence-smoke.ts
  *
  * Structural Defense #31 — operator-doc fenced-path existence
- * (cp82-O29 candidate, deferred from cp82, shipped cp84).
+ * (candidate, deferred, shipped).
  *
  * Verifies that every script-path referenced in operator-facing
  * documentation resolves to a real file on disk.  Catches the
- * drift class that cp82-A6 fixed manually: `scripts/encrypt-
+ * drift class that fixed manually: `scripts/encrypt-
  * active-key.ts` was referenced in 6 places across OPERATIONS.md
  * and RUN-A-MORPHIT-NODE.md, but the actual script lived at
  * `apps/relay/scripts/encrypt-active-key.ts`.  An operator
@@ -26,7 +26,7 @@
  *
  *   - `scripts/...`              → repo-root scripts/
  *   - `apps/<workspace>/scripts/...` → workspace scripts/
- *   - `apps/<ws>/<subpath>`      → workspace subpath (for cp82-A6 class)
+ *   - `apps/<ws>/<subpath>`      → workspace subpath (for class)
  *   - `ops/scripts/...`          → ops scripts
  *   - `ops/ansible/...`          → ansible material
  *   - `packages/<pkg>/scripts/...` → package scripts
@@ -44,8 +44,8 @@
  * plus README.md.  ADRs are excluded — they encode historical
  * decisions and may legitimately reference paths that have
  * since been renamed (annotation-pattern-not-rewrite rule).
- * The audit log and REVISIT-LIST.md are excluded as historical
- * journals.  TARBALL.md is excluded — its purpose is exactly
+ * The internal journals live in the gitignored private/ folder and
+ * are not scanned — their purpose is exactly
  * to record past states, including superseded paths.
  *
  * Each (doc, line, path) tuple counts as one scenario.
@@ -59,19 +59,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 
 // Doc files in scope.  Each operator-facing surface; excludes
-// ADRs (historical), audit (frozen), REVISIT-LIST (journal),
-// TARBALL (state log), PHASE-* (planning), DESIGN docs (RFCs).
+// ADRs (historical), the internal journals (private/, not public)
+// and DESIGN docs (RFCs).
 const OPERATOR_DOCS = [
 	'README.md',
 	'docs/start-here/README.md',
 	'docs/RUN-A-MORPHIT-NODE.md',
 	'docs/OPERATIONS.md',
-	'docs/PRE-LAUNCH-CHECKLIST.md',
 	'docs/LAUNCH-DAY.md',
 	'docs/POST-LAUNCH-WEEK-ONE.md',
 	'docs/UPGRADING.md',
 	'docs/MIGRATE-TO-RELEASE-TRACK.md',
-	'docs/BETA-INCIDENT-RUNBOOK.md',
+	'docs/INCIDENT-RUNBOOK.md',
 	'docs/SECURITY.md',
 	'docs/ADDING-A-COIN.md',
 	'docs/API.md',
@@ -182,8 +181,7 @@ function isOperatorManagedRuntimeFile(p: string, repoRoot: string): boolean {
 	// SRI on-chain release manifest (`build-manifest.release.json`).  They
 	// materialize only after `npm run build` / `build:manifest`; never
 	// committed (see apps/web/.gitignore).  Operator docs reference them as
-	// the release-op manifest source (PRE-LAUNCH-CHECKLIST §B/§E, OPERATIONS
-	// §40.6), so the existence check must skip them.
+	// the release-op manifest source (OPERATIONS §40.6), so the existence check must skip them.
 	if (
 		p.endsWith('/build-manifest.sha256') ||
 		p.endsWith('/build-manifest.release.json')

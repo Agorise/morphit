@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /*
- * signer-backend-consistency — cp175 F-001 guard.
+ * signer-backend-consistency — guard.
  *
- * cp174 wired the @noble signer into sign.ts behind SIGNER_BACKEND, but a
+ * A later change wired the @noble signer into sign.ts behind SIGNER_BACKEND, but a
  * SECOND, independent signer in ops/comment.ts (the syndication/cross-post
  * path) was missed and kept calling dblurt's broadcast.sign unconditionally —
  * so flipping SIGNER_BACKEND to 'noble' would have left cross-posts signing via

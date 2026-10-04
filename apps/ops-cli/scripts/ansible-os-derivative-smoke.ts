@@ -1,5 +1,5 @@
 /**
- * ansible-os-derivative smoke (cp226).
+ * ansible-os-derivative smoke.
  *
  * Guards the change that lets the Ansible playbook run on Ubuntu-24.04
  * derivatives (Linux Mint 22, Pop!_OS 24.04, Zorin 17), not just Ubuntu

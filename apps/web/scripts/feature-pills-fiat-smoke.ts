@@ -1,5 +1,5 @@
 /**
- * feature-pills-fiat-smoke — cp453 (t.txt #3)
+ * feature-pills-fiat-smoke
  *
  * The "🚀 Feature this order!" form: (a) the 6h/24h/72h duration pills gained a
  * subtle hover, and (b) the cost preview shows the fee in the user's DEFAULT

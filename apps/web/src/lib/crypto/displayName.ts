@@ -1,7 +1,7 @@
 /**
  * Display-name length helpers — pure string logic, zero crypto deps.
  *
- * Extracted from crypto/profile.ts (cp404): profile.ts imports keygen
+ * Extracted from crypto/profile.ts: profile.ts imports keygen
  * (→ @scure/bip39, heavy), and profileProps.ts — which sits in the root
  * layout's STATIC import closure via selfProfile → AvatarMenu — only needs
  * the trivial cap helper. Importing it from profile.ts dragged bip39 into

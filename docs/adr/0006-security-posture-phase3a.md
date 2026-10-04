@@ -53,7 +53,8 @@ are the load-bearing non-code defenses:
   (session hijacking, credential stuffing, OAuth misconfiguration,
   nOAuth, CSRF-as-commonly-understood) do not exist here.
 - **No user database.** Morphit does not collect KYC and does not
-  log IP addresses. There is no user database to breach, no
+  log IP addresses (they are held in memory only, for rate limiting,
+  at most 24 hours). There is no user database to breach, no
   personal information to leak, and no data that could be
   compelled by subpoena.
 - **No server-side dynamic code.** The relay has no `eval`, no
@@ -110,10 +111,20 @@ defenses applied:
 - Response body is capped at 256KB (Audit 2026-05 NEW-9-11)
   with both Content-Length pre-check and streaming-with-abort.
 
-The verdict remains **Covered**, but the structural argument
-("no URL ever comes from a request body") no longer holds —
-SSRF is now defended by explicit hostname allowlisting plus the
-response-handling caps above.
+The structural argument ("no URL ever comes from a request body")
+no longer holds — SSRF is defended by explicit hostname allowlisting
+plus the response-handling caps above.
+
+**2026-10 amendment — the verdict was wrong until then.** The relay's
+Web Push feature accepted ANY URL a signed-in user registered as a
+push endpoint (`z.string().url()`) and POSTed to it on every
+notification: a blind SSRF and port probe against the relay's own
+loopback and LAN. Fixed in the 2026-10 audit
+(`apps/relay/src/policy/pushEndpoint.ts`): https only, default port,
+no IP literal, the host must be a browser push service or one the
+operator adds (`MORPHIT_RELAY_PUSH_EXTRA_HOSTS`), and every address
+the name resolves to must be public at send time; existing
+subscriptions to other hosts are deleted on upgrade.
 
 #### CSRF (Cross-Site Request Forgery)
 
@@ -232,10 +243,9 @@ naturally benefit from those networks' own DDoS properties.
 - Relay is stateless beyond the in-memory rate limiters and a
   one-minute dedupe cache. A restart clears everything; no file
   or database grows unbounded.
-- fail2ban integration is documented in the README: systemd
-  journal entries of rate-limit rejections can be consumed by
-  fail2ban to install temporary iptables bans without the relay
-  itself logging or persisting IPs.
+- There is no fail2ban integration for the relay: it logs no
+  client addresses, so there is nothing for fail2ban to read
+  (OPERATIONS.md §34).
 
 #### XSS (Cross-Site Scripting)
 
@@ -258,7 +268,7 @@ naturally benefit from those networks' own DDoS properties.
 
 The relay has no database. The Phase-3b indexer will use Postgres
 with `sqlc`-generated parameterized queries only; no string
-concatenation into SQL. Documented in `docs/PHASE-3a-DESIGN.md`
+concatenation into SQL. Documented in the original Phase 3a design note (an internal record)
 ahead of 3b.
 
 #### Prototype pollution
@@ -405,4 +415,4 @@ public key to resist impersonation.
 - ADR-0002: live-keys policy
 - ADR-0005: Phase 3 subphase split
 - `docs/SECURITY.md`: user-facing threat model
-- `docs/PHASE-3a-DESIGN.md`: relay-specific design + security review
+- the original Phase 3a design note (an internal record): relay-specific design + security review

@@ -55,9 +55,13 @@ morphit_fee_recipient: "{{ morphit_operator_account }}"
 
 # ─── Server users ────────────────────────────────────────────────
 
-# Unprivileged service user that runs the morphit relay + indexer.
-# Created by the `base` role.  Don't change after first deploy
-# without manual data migration.
+# Service user that owns the backups and runs the backup job; its group
+# grants read access to the operator config (/etc/morphit, the install's
+# env files).  The relay and the indexer do NOT run as it: each has its own
+# unprivileged user (morphit-relay, morphit-indexer), member of this group
+# only.  The install tree (/opt/morphit) is root-owned.  Created by the
+# `base` role.  Don't change after first deploy without manual data
+# migration.
 morphit_service_user: morphit
 morphit_service_group: morphit
 morphit_service_home: /var/lib/morphit
@@ -123,8 +127,19 @@ morphit_offline_install: false
 # ─── Node.js ─────────────────────────────────────────────────────
 
 # The repo's package.json specifies the Node engine; verify before
-# pinning here.  As of Part 121, Node 22 LTS is canonical.
+# pinning here.  Node 22 LTS is canonical.
 morphit_node_version: "22"
+
+# NodeSource's apt signing key ("NSolid <nsolid-gpg@nodesource.com>"). The
+# key is used only when it is exactly this one (roles/morphit/tasks/nodejs.yml;
+# morphit-setup.sh pins the same).
+nodesource_key_fingerprint: "6F71F525282841EEDAF851B42F59B5F99B1BE0B4"
+# Docker's apt signing key (the fingerprint docs.docker.com publishes) and
+# Aqua Security's Trivy repository key (github.com/aquasecurity/trivy-repo,
+# deb/public.key; the trivy monitor is off by default). Each key is used only
+# when it is exactly this one.
+docker_apt_key_fingerprint: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+trivy_apt_key_fingerprint: "825AD9036F7C850E6A6FED4935B8ACA44FD9CA9F"
 
 
 # ─── Relay environment (§18, §23, §38.7) ─────────────────────────
@@ -134,7 +149,7 @@ morphit_node_version: "22"
 # target host BEFORE first run.
 morphit_relay_keystore_path: /etc/morphit/relay.keystore
 
-# (Part 122 cp5 F13) — `morphit_relay_keystore_passphrase` was
+# — `morphit_relay_keystore_passphrase` was
 # previously defined here as a vault-with-default pattern.  It is
 # no longer needed: the relay's encrypted-envelope design unlocks
 # the keystore via a systemd encrypted credential
@@ -226,25 +241,41 @@ morphit_mcp_bind_port: 8124
 # a different set.  Comma-separated.
 morphit_indexer_blurt_rpc_endpoints: "https://rpc.drakernoise.com,https://blurtrpc.dagobert.uk,https://rpc.blurt.blog,https://rpc.beblurt.com,https://rpc.blurt.one,https://blurt-rpc.saboin.com"
 
-# Hidden-service Blurt RPC seed nodes, one list per transport. Read by BOTH
-# indexer.env.j2 and relay.env.j2 (v1.18.0, F32): the relay had no hidden
-# endpoints at all, so on a tor-only node it reached the chain over clearnet
-# while the indexer beside it did not. One list here, so the two processes
-# cannot be seeded differently. Keep in sync with
-# DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS in packages/operator-config.
-morphit_hidden_rpc_seed_onion:
+# Hidden-service Blurt RPC seed nodes: each operator's .onion and .b32.i2p, in
+# the order of DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS in packages/operator-config
+# (which this list must equal — apps/ops-cli/scripts/hidden-rpc-template-canon-smoke.ts
+# renders both templates and checks). Read by BOTH indexer.env.j2 and
+# relay.env.j2, so the two processes cannot be seeded differently; each keeps
+# the .onion nodes when Tor is enabled and the .b32.i2p nodes when i2pd is.
+morphit_hidden_rpc_seed:
+  # Star
   - "http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091"
-  - "http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091"
-morphit_hidden_rpc_seed_i2p:
   - "http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091"
+  # Jade
+  - "http://axj4qkjwk3bwh2lrn4bud5rrgsyrvuamd6jxdlmks6flsrju7q5rb5yd.onion:8091"
   - "http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091"
+  # kc
+  - "http://xpqyoeap42iwmi6c6ew6svvtv2qwnkrbxpcshqitwmb3z2jqcvjb2nid.onion:8091"
+  - "http://xenmlfwajcaiavtt24a3lwzzjiv4pgvfjaps4etlpvgmvupvvcea.b32.i2p:8091"
+  # oldpc
+  - "http://iarstejtiqofqs7hamflujy3fjwitxfoyysj6cngwpzdzermwm6hteid.onion:8091"
+  - "http://5cfk2jmub7gnte536sxezapgkykirje6v6omouhpymfo52eh473a.b32.i2p:8091"
+  # mama
+  - "http://lr444djiignckmq3y2mhl2zplcy7lwxfxamv2irc2lt5jpmfybshhzid.onion:8091"
+  - "http://jtkaeepcpj2gfgv7swwnplffpu4zpf37bojtpigyrii5glwmrd6q.b32.i2p:8091"
+  # j2
+  - "http://ukbumluqrinql6dw7l2mbtdioygodnrloob22cqfa4tvl3pspn5qzhid.onion:8091"
+  - "http://ogmildopmgbdyy2kc724ezhrnmvhnf2x52qw7lqgo2jna5juc3kq.b32.i2p:8091"
+  # s2
+  - "http://qci6a2fsuljqk2q3coeyqiipmzv3yqykvgibbktt6fcojysl2yw3gaad.onion:8091"
+  - "http://5jsepybvuw66r4e7xejv26r67ewoimtmx3iwedpflh7a2t5y66sa.b32.i2p:8091"
 
 # Asset registry: disable specific tradable assets if your instance
-# specializes (§38, Memory #25).  Comma-separated uppercase tickers.
+# specializes (§38, the default-on rule for new assets).  Comma-separated uppercase tickers.
 # Empty string = no assets disabled (default-everything posture).
 morphit_indexer_disabled_assets: ""
 
-# Canonical payment-method KEYS this instance will NOT offer (cp208).
+# Canonical payment-method KEYS this instance will NOT offer.
 # Comma-separated, lowercase.  Empty = offer every method (default).
 # Most operators leave this empty or set "barter_goods" for a
 # money-only instance.  See OPERATIONS.md §"Payment-method configuration".
@@ -324,6 +355,18 @@ morphit_alert_smtp_port: 587
 morphit_alert_smtp_user: "alerts@example.com"
 morphit_alert_smtp_password: "{{ vault_alert_smtp_password | default('CHANGE-ME-SMTP') }}"
 
+# Alert mail leaves this server only when a real SMTP relay and address are
+# set above (not the example.com placeholders) and never on a tor-only node
+# (SMTP is clearnet).  Otherwise Postfix delivers locally only, and the AIDE,
+# rkhunter and unattended-upgrades reports stay on the server: the latest of
+# each in /var/log/morphit/ (aide-check.log, rkhunter-check.log) and apt's own
+# log.  fail2ban only bans: it never mails, and never looks banned addresses up.
+morphit_alert_mail_enabled: >-
+  {{ (morphit_alert_smtp_host | default('') | length > 0)
+     and ('example.com' not in morphit_alert_smtp_host)
+     and ('example.com' not in morphit_alert_email_to)
+     and not (morphit_tor_only | default(false) | bool) }}
+
 
 # ─── TLS (§35) ───────────────────────────────────────────────────
 
@@ -354,11 +397,11 @@ morphit_auto_register: false
 enable_tor: true
 morphit_tor_hs_dir: /var/lib/tor/morphit
 morphit_tor_local_host: 127.0.0.1
-# cp695 — host loopback port the frontend container publishes so Tor + I2P
+# host loopback port the frontend container publishes so Tor + I2P
 # hidden services reach the site fan-out (not the bare relay). Must match the
 # port tor/i2pd target below + the docker-compose frontend ports mapping.
 morphit_onion_frontend_port: 8090
-morphit_tor_local_port: 8090   # cp695: the frontend fan-out (was 8080=relay-only, which 404d the site)
+morphit_tor_local_port: 8090   # the frontend fan-out (was 8080=relay-only, which 404d the site)
 morphit_tor_key_src: ""
 
 # Every instance also gets a basic .b32.i2p (the wizard generates one and
@@ -372,7 +415,7 @@ morphit_i2pd_datadir: /var/lib/i2pd
 morphit_i2pd_tunnels_conf: /etc/i2pd/tunnels.conf
 morphit_i2pd_keyfile: morphit-web.dat
 morphit_i2pd_local_host: 127.0.0.1
-morphit_i2pd_local_port: 8090  # cp695: the frontend fan-out (was 8080=relay-only)
+morphit_i2pd_local_port: 8090  # the frontend fan-out (was 8080=relay-only)
 morphit_i2pd_key_src: ""
 
 
@@ -412,15 +455,10 @@ bunkerweb_scheduler_image: bunkerity/bunkerweb-scheduler:1.5.10
 # attacks, lenient enough to not break legitimate Morphit traffic.
 bunkerweb_crs_paranoia: 3
 
-# Block hosting-provider ASNs that are over-represented in
-# squatter traffic (§38.6 item c).  Verify against your own
-# rejection logs before enabling — real users on these networks
-# do exist (rare, but they do).
-bunkerweb_block_asns:
-  - "AS14061"  # DigitalOcean
-  - "AS24940"  # Hetzner
-  - "AS16276"  # OVH
-  # Add more as your rejection logs reveal patterns.
+# No ASN blocks: BunkerWeb's ASN blocking lives in its blacklist
+# plugin, which also reverse-resolves every visitor address, and blocking
+# hosting providers turns away the many visitors who use a VPN.  See the
+# privacy section of roles/bunkerweb/templates/bunkerweb.env.j2.
 
 # Country-block list for §38.6 item b.  Empty by default; populate
 # only under active attack.  ISO-3166-1 alpha-2 codes.
@@ -463,10 +501,13 @@ audit_log_max_files: 5
 
 # ─── Outbound network policy (§37.13) ────────────────────────────
 
-# Hosts the morphit services + apt are allowed to reach.  Anything
-# else outbound is dropped by UFW.  Add to this list if your
-# backup destination, RPC endpoints, or SMTP host are not already
-# resolvable from the items above.
+# A REFERENCE list, not a rule: the clearnet hosts a clearnet node's
+# services and apt talk to.  Nothing enforces it — UFW allows outgoing
+# traffic on a clearnet node (federation probes reach arbitrary peers;
+# see roles/hardening/tasks/outbound.yml), and the hardening role only
+# prints its size.  Use it if you write your own outbound firewall.
+# A tor-only node IS enforced, more strictly: only Tor and i2pd may
+# reach the internet at all (ops/tor-only/morphit-tor-egress.sh).
 outbound_allowed_destinations:
   # apt repos
   - archive.ubuntu.com
@@ -497,7 +538,7 @@ outbound_allowed_destinations:
   - mirror.gcr.io                          # trivy CVE DB fallback
 
 
-# ─── Operator-alerts via Matrix sidecar (cp9, §16) ──────────────
+# ─── Operator-alerts via Matrix sidecar ──────────────
 #
 # Set enable_matrix_bot: true and populate matrix_bot_* vars in
 # vault.yml to deploy the operator-alert sidecar.  Refer to
@@ -569,13 +610,14 @@ morphit_mcp_advertise: true
 # misbehave).  http://.onion / .b32.i2p is NOT accepted by push services, so a
 # tor-only node (which has no clearnet domain) cannot use its own origin here.
 #
-# cp756 — subject derivation:
-#   • clearnet node  → https://<your domain> (as before).
+# Subject derivation:
+#   • clearnet node  → https://<your domain>.
 #   • tor-only node  → a mailto: taken from your contact URL when that IS a
-#                      mailto:, otherwise EMPTY. Empty means push is cleanly
-#                      DISABLED (isValidVapidSubject rejects it) rather than the
-#                      old domain-less `https://` that silently produced an
-#                      invalid subject. To enable push on a tor-only node (for
+#                      mailto:, otherwise EMPTY. Empty is written as empty
+#                      (the role does not let the generator put its
+#                      example.com placeholder there), so push is cleanly
+#                      DISABLED (isValidVapidSubject rejects it); a tor-only
+#                      relay also refuses push for being hidden-only. To enable push on a tor-only node (for
 #                      the browsers/transports that allow it — Tor Browser
 #                      blocks service workers, so this mainly helps .b32.i2p /
 #                      https-fronted onions), set this explicitly to
@@ -593,7 +635,7 @@ morphit_vapid_subject: >-
   {%- endif -%}
 
 
-# ─── Health disk figure (cp708) ─────────────────────────────────
+# ─── Health disk figure ─────────────────────────────────
 #
 # The /v1/health `system.disk_*` figure (and the `morphit-ops` health
 # view) measures the filesystem that holds the node's DATA — the
@@ -605,7 +647,7 @@ morphit_vapid_subject: >-
 # Must be an ABSOLUTE path; a bad value safely falls back to `/`.
 # morphit_health_disk_path: "/var/lib/postgresql"
 
-# ─── Host-resource monitor sidecar (cp10, §16) ──────────────────
+# ─── Host-resource monitor sidecar ──────────────────
 #
 # Disk / memory / swap / CPU thresholds.  All optional — the
 # script has sensible defaults for a 1-4 vCPU / 2-8 GB VPS.
@@ -627,7 +669,7 @@ enable_host_monitor: false
 # host_monitor_cpu_info: 1.5
 
 
-# ─── Disk SMART monitor sidecar (cp11, §16) ─────────────────────
+# ─── Disk SMART monitor sidecar ─────────────────────
 #
 # Polls smartctl every 6h on all detected block devices.
 # Installs smartmontools.  Useful on bare-metal hosts; less
@@ -637,7 +679,7 @@ enable_smartctl_monitor: false
 # smartctl_temp_warn: 50
 
 
-# ─── fail2ban monitor sidecar (cp11, §16) ───────────────────────
+# ─── fail2ban monitor sidecar ───────────────────────
 #
 # Polls fail2ban-client every 5 min — alerts on ban-count
 # spikes (potential attack) and on the fail2ban daemon being
@@ -655,7 +697,7 @@ enable_fail2ban_monitor: false
 #     warn: 5
 
 
-# ─── mdadm (Linux software RAID) monitor sidecar (cp11, §16) ────
+# ─── mdadm (Linux software RAID) monitor sidecar ────
 #
 # Polls /proc/mdstat every 15 min — alerts on array_failed /
 # array_degraded, INFO on array_resyncing (informational).
@@ -664,7 +706,7 @@ enable_fail2ban_monitor: false
 enable_mdadm_monitor: false
 
 
-# ─── Kernel-log monitor sidecar (cp12, §16) ─────────────────────
+# ─── Kernel-log monitor sidecar ─────────────────────
 #
 # Scans dmesg every 5 min for OOM-killer activations, kernel
 # oopses, kernel panics, hardware errors (MCE/EDAC/ATA), and
@@ -675,7 +717,7 @@ enable_dmesg_monitor: false
 # (no tuning vars — dmesg events are categorical, not threshold-based)
 
 
-# ─── Docker image CVE rescan sidecar (cp12, §16) ────────────────
+# ─── Docker image CVE rescan sidecar ────────────────
 #
 # Daily trivy scan of running Docker images for CRITICAL + HIGH
 # CVEs.  Most relevant for operators using the BunkerWeb deploy
@@ -690,7 +732,7 @@ enable_trivy_monitor: false
 # trivy_scan_timeout: 300       # seconds per image
 
 
-# ─── Postfix queue monitor sidecar (cp12, §16) ──────────────────
+# ─── Postfix queue monitor sidecar ──────────────────
 #
 # Watches postfix mail queue depth + oldest message age.
 # Critical observability gap: if email alerting silently fails
@@ -707,7 +749,7 @@ enable_postfix_monitor: false
 # postfix_age_warn_min: 30
 
 
-# ─── TLS certbot monitor sidecar (cp13, §16) ────────────────────
+# ─── TLS certbot monitor sidecar ────────────────────
 #
 # Daily check of TLS cert expiry + a renewal-stall detector
 # (cert expiring AND no successful renewal in N days).  Most
@@ -719,7 +761,7 @@ enable_certbot_monitor: false
 # certbot_renewal_stall_days: 14
 
 
-# ─── apt pending security updates sidecar (cp13, §16) ───────────
+# ─── apt pending security updates sidecar ───────────
 #
 # Daily count of pending security updates.  Surfaces what the
 # motd shows but operators stop reading after the first month.
@@ -729,7 +771,7 @@ enable_apt_monitor: false
 # apt_security_warn: 1
 
 
-# ─── Docker Compose health monitor sidecar (cp13, §16) ──────────
+# ─── Docker Compose health monitor sidecar ──────────
 #
 # Watches Docker Compose service health + restart loops.  Most
 # useful with BunkerWeb compose stack.  Useless on bare-metal-
@@ -739,7 +781,7 @@ enable_compose_monitor: false
 # compose_projects: /opt/morphit/ops/bunkerweb
 
 
-# ─── systemd unit-health monitor sidecar (cp14, §16) ────────────
+# ─── systemd unit-health monitor sidecar ────────────
 #
 # Watches morphit-* units (plus any in MORPHIT_SYSTEMD_WATCH) for
 # "failed" state and high restart counts.  Catches what journalctl-
@@ -750,7 +792,7 @@ enable_systemd_monitor: false
 # systemd_monitor_extra_watch: "postgres@16-main.service docker.service"
 
 
-# ─── journald disk-usage monitor sidecar (cp14, §16) ────────────
+# ─── journald disk-usage monitor sidecar ────────────
 #
 # Daily check of journal disk usage + time span covered.  Catches
 # the "journal silently grew for 6 months until disk full" pattern

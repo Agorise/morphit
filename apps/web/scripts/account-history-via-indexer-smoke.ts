@@ -1,16 +1,16 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: account history (and the explorer's account read) go through the
- * indexer, not direct browser RPC. Anchor cp296.
+ * indexer, not direct browser RPC. Anchor.
  *
  * PRIVACY INVARIANT (priority #1). The balance card's P&L export and the
  * block-explorer account page used to read an account's chain history —
  * and the explorer also its balance/DGP — by talking to public Blurt RPC
  * nodes DIRECTLY from the browser, leaking the user's IP and exactly
  * whose account they were inspecting to third parties Morphit doesn't
- * control. cp296 routes both through the operator's own indexer
+ * control. A later change routes both through the operator's own indexer
  * (same-origin): a new `/v1/account/:account/history` proxy (sibling of
- * the cp295 balance proxy), and the explorer's account read reuses the
+ * the balance proxy), and the explorer's account read reuses the
  * balance proxy (now also returning `posting_pub`). This smoke fails if
  * any leg of that wiring regresses:
  *
@@ -19,9 +19,11 @@
  *   2. `@morphit/indexer-client` exports `AccountHistoryResponse` +
  *      `AccountHistoryEntry`, and the balance response carries `posting_pub`.
  *   3. A web fetch helper `fetchAccountHistory` exists.
- *   4. MyBalanceCard fetches history via `fetchAccountHistory` and no
- *      longer imports `getBlurtClient`.
- *   5. The explorer account page fetches history via `fetchAccountHistory`,
+ *   4. MyBalanceCard reads history through it (fetchYearOfHistory →
+ *      fetchAccountHistoryPage, which retries a too-large page with fewer
+ *      entries → fetchAccountHistory) and no longer imports `getBlurtClient`.
+ *   5. The explorer account page fetches history the same way
+ *      (`fetchAccountHistoryPage`),
  *      its account read via `fetchAccountBalance`, and no longer imports
  *      `getBlurtClient`.
  *
@@ -35,7 +37,7 @@
  *
  * Tamper tests (run below; each must flip a check red):
  *   - Drop the `/v1/account` history mount from main.ts → fails.
- *   - Make MyBalanceCard stop importing fetchAccountHistory → fails.
+ *   - Make MyBalanceCard stop reading through fetchYearOfHistory → fails.
  *   - Re-introduce a getBlurtClient import into the explorer page → fails.
  *   - Remove `posting_pub` from the balance response interface → fails.
  */
@@ -54,12 +56,19 @@ const P = {
 	balanceEndpoint: join(REPO, 'apps/indexer/src/api/accountBalance.ts'),
 	webHelper: join(REPO, 'apps/web/src/lib/blurt/accountHistory.ts'),
 	balanceCard: join(REPO, 'apps/web/src/lib/components/MyBalanceCard.svelte'),
+	yearHistory: join(REPO, 'apps/web/src/lib/pnl/yearHistory.ts'),
+	pageHelper: join(REPO, 'apps/web/src/lib/indexer/accountHistoryPage.ts'),
 	explorer: join(REPO, 'apps/web/src/routes/[lang]/explorer/account/[name=account]/+page.svelte')
 } as const;
 
 const read = (p: string): string => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 
 type Check = { readonly name: string; readonly holds: () => boolean };
+
+/** The page helper and the year reader go through the indexer fetch. */
+const helpersProxied = (): boolean =>
+	/fetchAccountHistory\(/.test(read(P.pageHelper)) &&
+	/fetchAccountHistoryPage\(/.test(read(P.yearHistory));
 
 const checks: readonly Check[] = [
 	{
@@ -110,16 +119,16 @@ const checks: readonly Check[] = [
 		}
 	},
 	{
-		name: 'MyBalanceCard fetches history via fetchAccountHistory',
-		holds: () => /fetchAccountHistory\(/.test(read(P.balanceCard))
+		name: 'MyBalanceCard reads history via fetchYearOfHistory (→ the indexer page helper)',
+		holds: () => /fetchYearOfHistory\(/.test(read(P.balanceCard)) && helpersProxied()
 	},
 	{
 		name: 'MyBalanceCard no longer imports getBlurtClient (history read is proxied)',
 		holds: () => !/getBlurtClient/.test(read(P.balanceCard))
 	},
 	{
-		name: 'explorer account page fetches history via fetchAccountHistory',
-		holds: () => /fetchAccountHistory\(/.test(read(P.explorer))
+		name: 'explorer account page fetches history via fetchAccountHistoryPage (→ the indexer)',
+		holds: () => /fetchAccountHistoryPage\(/.test(read(P.explorer)) && helpersProxied()
 	},
 	{
 		name: 'explorer account page reads account/DGP via fetchAccountBalance',
@@ -159,10 +168,10 @@ const tampers: ReadonlyArray<{
 		check: 'main.ts mounts accountHistoryRoute on the /v1/account sub-app'
 	},
 	{
-		label: 'make MyBalanceCard stop importing fetchAccountHistory',
+		label: 'make MyBalanceCard stop reading through fetchYearOfHistory',
 		file: 'balanceCard',
-		mutate: (s) => s.replace(/fetchAccountHistory/g, 'noSuchHistoryFn'),
-		check: 'MyBalanceCard fetches history via fetchAccountHistory'
+		mutate: (s) => s.replace(/fetchYearOfHistory/g, 'noSuchHistoryFn'),
+		check: 'MyBalanceCard reads history via fetchYearOfHistory (→ the indexer page helper)'
 	},
 	{
 		label: 're-introduce a getBlurtClient import into the explorer page',
@@ -205,8 +214,8 @@ for (const t of tampers) {
 					/accountApp\.route\('\/', accountHistoryRoute\(blurt\)\)/.test(mutated) &&
 					/app\.route\('\/v1\/account', accountApp\)/.test(mutated)
 				);
-			case 'MyBalanceCard fetches history via fetchAccountHistory':
-				return /fetchAccountHistory\(/.test(mutated);
+			case 'MyBalanceCard reads history via fetchYearOfHistory (→ the indexer page helper)':
+				return /fetchYearOfHistory\(/.test(mutated) && helpersProxied();
 			case 'explorer account page no longer imports getBlurtClient (both reads proxied)':
 				return !/getBlurtClient/.test(mutated);
 			case 'balance response carries posting_pub (explorer account read needs no getAccount RPC)':

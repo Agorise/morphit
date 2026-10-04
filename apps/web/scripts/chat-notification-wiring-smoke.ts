@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: t.txt #14, #17, #18, #19, #22 — plus the #15/#37 regression guards for
- * the notification wiring (the maintainer: "make sure none of this can break later").
+ * Smoke: plus the #15/#37 regression guards for
+ * the notification wiring ("make sure none of this can break later").
  *
  *  #14 "Mark complete / review" must smooth-scroll to the review form. It
  *      didn't, because the form is behind a LAZY dynamic import and the retry

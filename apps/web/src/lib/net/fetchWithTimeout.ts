@@ -1,10 +1,10 @@
 /**
  * Centralized fetch-with-timeout helper.
  *
- * cp70 found two un-timeouted fetch() call sites that could hang the
+ * A later change found two un-timeouted fetch() call sites that could hang the
  * UI indefinitely behind a slow Tor circuit or unresponsive server
- * (chainFee.ts and ops-cli/upgrade.ts).  cp71's
- * fetch-must-have-timeout-smoke (cp71-O21) caught 13 more sites
+ * (chainFee.ts and ops-cli/upgrade.ts).  The
+ * fetch-must-have-timeout-smoke caught 13 more sites
  * across the web app that needed the same treatment.
  *
  * Rather than each call site re-implementing the AbortController +

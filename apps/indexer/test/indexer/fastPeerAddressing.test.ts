@@ -16,6 +16,12 @@
  * feature, it removes it, and it removes it on the configuration most operators
  * actually run.
  *
+ * `fastPeerFromRow` builds that every-address list for the reads made FROM a
+ * peer (the login-pairing forward, the fee cross-check). Chat fan-out is
+ * narrower since an earlier release: probe-verified peers only, every push over its own Tor
+ * circuit, so `fanOutPeerFromRow` keeps a peer's onion and its https origin
+ * (reached through an exit) and nothing else.
+ *
  * WHAT IS ASSERTED HERE is behaviour, not shape: given a directory and a set of
  * local daemons, which address does a message actually go out over, and what
  * happens when that address turns out not to work.
@@ -26,6 +32,7 @@ import { ProxyUnavailableError } from '@morphit/hidden-transport';
 import type { HiddenServiceProxyConfig } from '@morphit/hidden-transport';
 import {
 	fastPeerFromRow,
+	fanOutPeerFromRow,
 	fastPeersFromDirectory,
 	addressesOf,
 	peerKey,
@@ -318,158 +325,164 @@ describe('NetworkReachability', () => {
 
 // ─── the behaviour, end to end ──────────────────────────────────────────────
 
-/** Nothing is listening on port 1, so the hidden leg fails the way a box with
- *  no Tor/i2pd daemon fails: immediately, locally, before the peer is asked. */
+/** Nothing is listening on port 1, so a push fails the way a box with no Tor
+ *  daemon fails: immediately, locally, before the peer is asked. */
 const DEAD_DAEMONS: HiddenServiceProxyConfig = {
 	torSocks: '127.0.0.1:1',
 	i2pHttpProxy: '127.0.0.1:1'
 };
 
-/** A sender whose clearnet leg is a stub, so the address a push WENT OUT OVER
- *  is observable. */
+/** Tor configured, I2P switched off — the fan-out needs nothing else. */
+const TOR_ONLY: HiddenServiceProxyConfig = { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' };
+
+type Answer = { status: number; body: string } | Error;
+
+/**
+ * A sender whose isolated-circuit push is a stub, so the address a push WENT
+ * OUT OVER is observable. Every push is made through `postIsolated`:
+ * there is no other way out, so a recording of it is a recording of every
+ * dial. Without `answer`, the real Tor push is used.
+ */
 function makeSender(
 	proxies: HiddenServiceProxyConfig,
-	clearnetStatus = 200
+	answer?: (url: string) => Answer | Promise<Answer>,
+	timeoutMs = 1_000
 ): { sender: PeerSender; attempts: string[] } {
 	const attempts: string[] = [];
 	const sender = new PeerSender({
 		proxies,
-		timeoutMs: 1_000,
-		postClearnet: async (url: string) => {
-			attempts.push(url);
-			return { status: clearnetStatus, body: '{}' };
-		}
+		timeoutMs,
+		...(answer === undefined
+			? {}
+			: {
+					postIsolated: async (url: string) => {
+						attempts.push(url);
+						const a = await answer(url);
+						if (a instanceof Error) throw a;
+						return a;
+					}
+				})
 	});
 	return { sender, attempts };
 }
 
-describe('sending — the address is chosen where local reachability is known', () => {
+const torDown = (): Error => new ProxyUnavailableError('local tor transport unavailable');
+
+describe('sending — every address is reached over Tor', () => {
 	/**
-	 * The exact scenario from the bug report, driven end to end: a clearnet-only
-	 * instance, a peer that published an onion, and a real push. Before the fix
-	 * this delivered ZERO and failed ONE, with `clearnetAttempts: 0`.
+	 * The fan-out route for a peer with an onion and an https origin: the onion,
+	 * then the origin through a Tor exit. A dead local Tor fails both, so the
+	 * message waits for the chain — and is never sent over a direct connection
+	 * instead, which would hand the peer (and anyone watching) this node's
+	 * address alongside the message's timing.
 	 */
-	it('a dead Tor daemon fails over to the peer clearnet origin within the same push', async () => {
-		const { sender, attempts } = makeSender(DEAD_DAEMONS);
-		// The hidden leg is exercised for real — nothing is listening on the
-		// configured SOCKS port, so postJsonViaHiddenService raises the
-		// local-fault shape this whole mechanism keys off.
-		//
-		// The onion is still offered FIRST: config cannot tell a dead daemon
-		// from a live one, which is precisely why the send path has to.
-		const peer = fastPeerFromRow(row('https://peer.example', { tor: ONION }), DEAD_DAEMONS);
-		expect(originsOf(peer)[0]).toBe(`http://${ONION}`);
-
-		sender.enqueue({ operations: [] }, [peer]);
-		await sender.drain(5_000);
-
-		expect(sender.stats().delivered, 'the message must have been delivered').toBe(1);
-		expect(attempts, 'it must have gone out over the clearnet origin').toEqual([
-			'https://peer.example/v1/federation/chat-fast'
-		]);
-		// And the instance has LEARNED that its Tor is unusable.
-		expect(sender.reachability.isDown('tor')).toBe(true);
-	});
-
-	it('having learned, it does not re-dial the dead network for the next message', async () => {
-		const { sender, attempts } = makeSender(DEAD_DAEMONS);
-		const peer = fastPeerFromRow(row('https://peer.example', { tor: ONION }), BOTH);
-
-		sender.enqueue({ operations: [], n: 1 }, [peer]);
-		await sender.drain(5_000);
-		expect(sender.reachability.isDown('tor')).toBe(true);
-		const afterFirst = sender.stats().failures.length;
-
-		sender.enqueue({ operations: [], n: 2 }, [peer]);
-		await sender.drain(5_000);
-
-		expect(sender.stats().delivered).toBe(2);
-		// No NEW failure was recorded: the second message never touched Tor.
-		expect(sender.stats().failures.length).toBe(afterFirst);
-		expect(attempts).toHaveLength(2);
-	});
-
-	/**
-	 * The counterweight, and the reason the failover is safe. A peer that
-	 * ANSWERS — even with a 500 — has been reached. Dialling its other address
-	 * would not be a retry; it would be a second delivery of the same batch to
-	 * the same instance, and the peer has no way to tell those apart.
-	 */
-	it('does NOT try another address when the PEER refused', async () => {
-		const { sender, attempts } = makeSender(BOTH, 500);
-		// Preferred address is clearnet (Tor switched off), alternate is... also
-		// clearnet? No — give it two clearnet addresses so both legs are fake.
-		const peer: FastPeer = {
-			origin: 'https://a.example',
-			hidden: false,
-			key: 'https://a.example',
-			alternates: [{ origin: 'https://b.example', hidden: false }]
-		};
-		sender.enqueue({ operations: [] }, [peer]);
-		await sender.drain(5_000);
-
-		expect(attempts).toEqual(['https://a.example/v1/federation/chat-fast']);
-		expect(sender.stats().failed).toBe(1);
-		expect(sender.stats().failures[0]?.localFault).not.toBe(true);
-	});
-
-	/**
-	 * A TIMEOUT IS NOT A LOCAL FAULT, and this is the case where getting that
-	 * wrong costs the most.
-	 *
-	 * When a push times out, the peer may well have RECEIVED it — what was lost
-	 * is the answer, not the message. Treating that as our transport failing
-	 * would send the same batch down a second road to the same instance, which
-	 * is a duplicate delivery rather than a retry. The receiving side's replay
-	 * memory would catch it, but relying on that would mean deliberately doubling
-	 * the federation's load on exactly the peers that are already too slow to
-	 * answer in time.
-	 */
-	it('does not fail over when the push merely TIMED OUT', async () => {
-		const attempts: string[] = [];
-		const sender = new PeerSender({
-			proxies: BOTH,
-			timeoutMs: 50,
-			postClearnet: async (url: string, _body: unknown, ms: number) => {
-				attempts.push(url);
-				// Abort the way the real transports do, past the deadline.
-				await new Promise((r) => setTimeout(r, ms + 40));
-				throw Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
-			}
-		});
-		sender.enqueue({ operations: [] }, [
-			{
-				origin: 'https://a.example',
-				hidden: false,
-				key: 'https://a.example',
-				alternates: [{ origin: 'https://b.example', hidden: false }]
-			}
-		]);
-		await sender.drain(5_000);
-
-		expect(attempts, 'a lost answer must not become a second delivery').toEqual([
-			'https://a.example/v1/federation/chat-fast'
-		]);
-		expect(sender.stats().failures[0]?.localFault).not.toBe(true);
-		expect(sender.reachability.downNetworks()).toEqual([]);
-	});
-
-	it('a peer with only an unreachable network is still attempted, not silently dropped', async () => {
+	it('a dead Tor daemon fails the push, with no direct clearnet attempt', async () => {
 		const { sender } = makeSender(DEAD_DAEMONS);
-		sender.reachability.markDown('tor');
-		const peer = fastPeerFromRow(row(`http://${ONION}`, { tor: ONION }), BOTH);
+		const peer = fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), DEAD_DAEMONS)!;
+		expect(originsOf(peer)).toEqual([`http://${ONION}`, 'https://peer.example']);
 
 		sender.enqueue({ operations: [] }, [peer]);
 		await sender.drain(5_000);
 
 		const s = sender.stats();
+		expect(s.delivered).toBe(0);
+		expect(s.failed).toBe(1);
+		expect(s.failures[0]?.localFault).toBe(true);
+		// And the instance has LEARNED that its Tor is unusable.
+		expect(sender.reachability.isDown('tor')).toBe(true);
+	});
+
+	it('a local fault on the onion moves to the https origin, still through Tor', async () => {
+		const { sender, attempts } = makeSender(TOR_ONLY, (url) =>
+			url.includes('.onion') ? torDown() : { status: 200, body: '{}' }
+		);
+		const peer = fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), TOR_ONLY)!;
+		sender.enqueue({ operations: [] }, [peer]);
+		await sender.drain(5_000);
+
+		expect(sender.stats().delivered).toBe(1);
+		expect(attempts).toEqual([
+			`http://${ONION}/v1/federation/chat-fast`,
+			'https://peer.example/v1/federation/chat-fast'
+		]);
+		// The push that went through proved Tor works.
+		expect(sender.reachability.isDown('tor')).toBe(false);
+	});
+
+	/**
+	 * THE MUTATION THAT SURVIVED THE FIRST BATTERY. Deleting `reach.markUp()`
+	 * from the send path changed nothing any test could see. A Tor that
+	 * recovers but stays marked down is the state a daemon restart leaves.
+	 */
+	it('a success clears the Tor mark at once', async () => {
+		const { sender } = makeSender(TOR_ONLY, () => ({ status: 200, body: '{}' }));
+		sender.reachability.markDown('tor');
+		sender.enqueue({ operations: [] }, [
+			fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), TOR_ONLY)!
+		]);
+		await sender.drain(5_000);
+		expect(sender.stats().delivered).toBe(1);
+		expect(sender.reachability.isDown('tor'), 'a working push is proof Tor is back').toBe(false);
+	});
+
+	/**
+	 * The counterweight, and the reason the failover is safe. A peer that
+	 * ANSWERS — even with a 500 — has been reached. Dialling its other address
+	 * would be a second delivery of the same batch to the same instance.
+	 */
+	it('does NOT try another address when the PEER refused', async () => {
+		const { sender, attempts } = makeSender(TOR_ONLY, () => ({ status: 500, body: '{}' }));
+		sender.enqueue({ operations: [] }, [
+			fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), TOR_ONLY)!
+		]);
+		await sender.drain(5_000);
+
+		expect(attempts).toEqual([`http://${ONION}/v1/federation/chat-fast`]);
+		expect(sender.stats().failed).toBe(1);
+		expect(sender.stats().failures[0]?.localFault).not.toBe(true);
+	});
+
+	/**
+	 * A TIMEOUT IS NOT A LOCAL FAULT: the peer may well have RECEIVED the push —
+	 * what was lost is the answer. Treating it as our transport failing would
+	 * send the same batch down a second road to the same instance.
+	 */
+	it('does not fail over when the push merely TIMED OUT', async () => {
+		const { sender, attempts } = makeSender(
+			TOR_ONLY,
+			// What the isolated post throws when its own timer (`timeoutMs`, 50 here)
+			// aborts the request: the sender has no timer of its own, it only
+			// decides what that error means.
+			() => Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }),
+			50
+		);
+		sender.enqueue({ operations: [] }, [
+			fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), TOR_ONLY)!
+		]);
+		await sender.drain(5_000);
+
+		expect(attempts, 'a lost answer must not become a second delivery').toEqual([
+			`http://${ONION}/v1/federation/chat-fast`
+		]);
+		expect(sender.stats().failures[0]?.localFault).not.toBe(true);
+		expect(sender.reachability.downNetworks()).toEqual([]);
+	});
+
+	it('a peer is still attempted while Tor is marked down, not silently dropped', async () => {
+		const { sender, attempts } = makeSender(TOR_ONLY, () => torDown());
+		sender.reachability.markDown('tor');
+		sender.enqueue({ operations: [] }, [fanOutPeerFromRow(row(`http://${ONION}`), TOR_ONLY)!]);
+		await sender.drain(5_000);
+
+		const s = sender.stats();
+		expect(attempts).toHaveLength(1);
 		expect(s.failed, 'the push was attempted and failed, rather than vanishing').toBe(1);
 		expect(s.failures[0]?.localFault).toBe(true);
 	});
 
 	it('records WHY a push failed locally, so a failure count is a diagnosis', async () => {
 		const { sender } = makeSender(DEAD_DAEMONS);
-		sender.enqueue({ operations: [] }, [fastPeerFromRow(row(`http://${ONION}`), BOTH)]);
+		sender.enqueue({ operations: [] }, [fanOutPeerFromRow(row(`http://${ONION}`), DEAD_DAEMONS)!]);
 		await sender.drain(5_000);
 		const f = sender.stats().failures[0];
 		expect(f?.localFault).toBe(true);
@@ -483,17 +496,14 @@ describe('sending — the address is chosen where local reachability is known', 
 	 */
 	it('failover does not strand messages in a second queue', async () => {
 		let inFlight = 0;
-		const sender = new PeerSender({
-			proxies: DEAD_DAEMONS,
-			timeoutMs: 1_000,
-			postClearnet: async () => {
-				inFlight++;
-				await new Promise((r) => setTimeout(r, 5));
-				inFlight--;
-				return { status: 200, body: '{}' };
-			}
+		const { sender } = makeSender(TOR_ONLY, async (url) => {
+			if (url.includes('.onion')) return torDown();
+			inFlight++;
+			await new Promise((r) => setTimeout(r, 5));
+			inFlight--;
+			return { status: 200, body: '{}' };
 		});
-		const peer = fastPeerFromRow(row('https://peer.example', { tor: ONION }), BOTH);
+		const peer = fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), TOR_ONLY)!;
 		for (let i = 0; i < 5; i++) sender.enqueue({ operations: [], i }, [peer]);
 		await sender.drain(10_000);
 
@@ -503,209 +513,75 @@ describe('sending — the address is chosen where local reachability is known', 
 });
 
 /**
- * ALL THREE HIDDEN NETWORKS, not just the one that is easy to reach.
- *
- * Morphit's hidden transport is three separate implementations behind one name:
- * a hand-written SOCKS5 connector for Tor, undici's `ProxyAgent` for I2P, and a
- * plain agent for Lokinet's tun. Until `postHidden` became injectable, every
- * test in this tree drove the Tor branch and nothing else — so I2P and Lokinet
- * were carried entirely by the claim that they were similar enough, on the two
- * networks the zero-clearnet instances most depend on.
+ * WHICH ADDRESSES A FAN-OUT PEER HAS. A push carries a signed message
+ * ahead of the chain, so where it is sent from is worth protecting: every push
+ * gets its own Tor circuit. I2P and Lokinet cannot put two requests on
+ * unlinkable paths, so they are not fan-out routes, and a node without Tor has
+ * no fan-out route at all — its users' messages travel by chain.
  */
-describe('every hidden network is routed, not just Tor', () => {
-	/** A working hidden transport, recording which URLs it was asked for. */
-	function hiddenSender(answer: (url: string) => { status: number; body: string } | Error): {
-		sender: PeerSender;
-		hiddenUrls: string[];
-		clearnetUrls: string[];
-	} {
-		const hiddenUrls: string[] = [];
-		const clearnetUrls: string[] = [];
-		const sender = new PeerSender({
-			proxies: BOTH,
-			timeoutMs: 1_000,
-			postClearnet: async (url: string) => {
-				clearnetUrls.push(url);
-				return { status: 200, body: '{}' };
-			},
-			postHidden: async (url: string) => {
-				hiddenUrls.push(url);
-				const a = answer(url);
-				if (a instanceof Error) throw a;
-				return a;
-			}
-		});
-		return { sender, hiddenUrls, clearnetUrls };
-	}
-
-	it.each([
-		['tor', ONION],
-		['i2p (b32)', I2P_B32],
-		['i2p (name)', I2P_NAME],
-		['lokinet', LOKI]
-	])('delivers over %s when that network works', async (_label, host) => {
-		const { sender, hiddenUrls, clearnetUrls } = hiddenSender(() => ({ status: 200, body: '{}' }));
-		sender.enqueue({ operations: [] }, [
-			{ origin: `http://${host}`, hidden: true, key: 'https://peer.example' }
-		]);
-		await sender.drain(5_000);
-
-		expect(sender.stats().delivered).toBe(1);
-		expect(hiddenUrls).toEqual([`http://${host}/v1/federation/chat-fast`]);
-		expect(clearnetUrls, 'a working hidden route must not also hit clearnet').toEqual([]);
-	});
-
-	/**
-	 * THE MUTATION THAT SURVIVED THE FIRST BATTERY. Deleting `reach.markUp()`
-	 * from the send path changed nothing any test could see, because nothing
-	 * could drive a hidden push to SUCCEED. A network that recovers but stays
-	 * marked down keeps every peer on it routed the long way round for the rest
-	 * of the cooldown — the bug is silent, and it is exactly the state a Tor
-	 * restart leaves behind.
-	 */
-	it.each([
-		['tor', ONION],
-		['i2p', I2P_B32],
-		['loki', LOKI]
-	])('a success over %s clears that network mark at once', async (network, host) => {
-		const { sender } = hiddenSender(() => ({ status: 200, body: '{}' }));
-		sender.reachability.markDown(network as 'tor' | 'i2p' | 'loki');
-		expect(sender.reachability.isDown(network as 'tor')).toBe(true);
-
-		sender.enqueue({ operations: [] }, [
-			{ origin: `http://${host}`, hidden: true, key: 'https://peer.example' }
-		]);
-		await sender.drain(5_000);
-
-		expect(sender.stats().delivered).toBe(1);
-		expect(
-			sender.reachability.isDown(network as 'tor'),
-			'a working push is proof the network is back'
-		).toBe(false);
-	});
-
-	it.each([
-		['i2p', I2P_B32, 'i2p' as const],
-		['lokinet', LOKI, 'loki' as const]
-	])('marks %s down and fails over when its local daemon is gone', async (_l, host, network) => {
-		const { sender, clearnetUrls } = hiddenSender(() => {
-			const err = new Error('local transport unavailable');
-			// The shape the transport entry point normalises a local fault into.
-			return Object.assign(err, { name: 'ProxyUnavailableError' });
-		});
-		void network;
-		sender.enqueue({ operations: [] }, [
-			{
-				origin: `http://${host}`,
-				hidden: true,
-				key: 'https://peer.example',
-				alternates: [{ origin: 'https://peer.example', hidden: false }]
-			}
-		]);
-		await sender.drain(5_000);
-		// A hand-faked name is NOT the marker class, so this must be treated as
-		// the peer failing — asserting the negative keeps the test honest about
-		// what actually identifies a local fault.
-		expect(clearnetUrls).toEqual([]);
-		expect(sender.stats().failed).toBe(1);
-	});
-
-	/**
-	 * FAILOVER IS UNCONDITIONAL; the breaker is not. Both networks fail over on
-	 * a real local fault — that is about this message, and one fault is always
-	 * enough to stop using the address that produced it.
-	 *
-	 * Whether the NETWORK comes off the list for every OTHER peer is a separate
-	 * claim needing separate evidence, so it is asserted per network below
-	 * rather than folded in here. See "the network breaker needs evidence about
-	 * the NETWORK".
-	 */
-	it.each([
-		['i2p', I2P_B32, 'i2p' as const],
-		['lokinet', LOKI, 'loki' as const]
-	])('%s: a REAL local fault fails over within the same push', async (_l, host, network) => {
-		const { sender, clearnetUrls } = hiddenSender(() => new ProxyUnavailableError('daemon down'));
-		sender.enqueue({ operations: [] }, [
-			{
-				origin: `http://${host}`,
-				hidden: true,
-				key: 'https://peer.example',
-				alternates: [{ origin: 'https://peer.example', hidden: false }]
-			}
-		]);
-		await sender.drain(5_000);
-
-		expect(sender.stats().delivered).toBe(1);
-		expect(clearnetUrls).toEqual(['https://peer.example/v1/federation/chat-fast']);
-		void network;
-	});
-
-	it('i2p: one local fault is conclusive, because the error names OUR proxy', async () => {
-		const { sender } = hiddenSender(() => new ProxyUnavailableError('daemon down'));
-		sender.enqueue({ operations: [] }, [
-			{
-				origin: `http://${I2P_B32}`,
-				hidden: true,
-				key: 'https://peer.example',
-				alternates: [{ origin: 'https://peer.example', hidden: false }]
-			}
-		]);
-		await sender.drain(5_000);
-
-		expect(sender.reachability.isDown('i2p')).toBe(true);
-		// The networks that were NOT at fault stay available.
-		expect(sender.reachability.downNetworks()).toEqual(['i2p']);
-	});
-
-	it('lokinet: one local fault is NOT conclusive, because the error names THEIR host', async () => {
-		const { sender } = hiddenSender(() => new ProxyUnavailableError('daemon down'));
-		sender.enqueue({ operations: [] }, [
-			{
-				origin: `http://${LOKI}`,
-				hidden: true,
-				key: 'https://peer.example',
-				alternates: [{ origin: 'https://peer.example', hidden: false }]
-			}
-		]);
-		await sender.drain(5_000);
-
-		expect(
-			sender.reachability.downNetworks(),
-			'a single unresolvable .loki name must not cost every other .loki peer'
-		).toEqual([]);
-	});
-
-	it('a peer on a down network falls through to its OTHER hidden network', async () => {
-		// The shape that matters for a zero-clearnet pair: no clearnet address
-		// anywhere, so the only escape from a dead Tor is the peer's I2P address.
-		const { sender, hiddenUrls } = hiddenSender((url) =>
-			url.includes('.onion') ? new ProxyUnavailableError('tor down') : { status: 200, body: '{}' }
+describe('fan-out addressing is Tor only', () => {
+	it('an onion first, then the https origin (through an exit); never I2P or Lokinet', () => {
+		const peer = fanOutPeerFromRow(
+			row('https://peer.example', {
+				tor: ONION,
+				i2p_b32: I2P_B32,
+				i2p_name: I2P_NAME,
+				lokinet: LOKI
+			}),
+			BOTH
 		);
-		sender.enqueue({ operations: [] }, [
-			{
-				origin: `http://${ONION}`,
-				hidden: true,
-				key: `http://${ONION}`,
-				alternates: [{ origin: `http://${I2P_B32}`, hidden: true }]
-			}
-		]);
-		await sender.drain(5_000);
+		expect(originsOf(peer!)).toEqual([`http://${ONION}`, 'https://peer.example']);
+	});
 
-		expect(sender.stats().delivered, 'a zero-clearnet pair must still connect').toBe(1);
-		expect(hiddenUrls).toEqual([
-			`http://${ONION}/v1/federation/chat-fast`,
-			`http://${I2P_B32}/v1/federation/chat-fast`
-		]);
-		expect(sender.reachability.downNetworks()).toEqual(['tor']);
+	it('a peer reachable only over I2P or Lokinet has no fan-out route', () => {
+		expect(
+			fanOutPeerFromRow(row(`http://${I2P_B32}`, { i2p_b32: I2P_B32, lokinet: LOKI }), BOTH)
+		).toBeNull();
+	});
+
+	it('a peer with I2P and an https origin is reached at the origin, through Tor', () => {
+		const peer = fanOutPeerFromRow(row('https://peer.example', { i2p_b32: I2P_B32 }), BOTH);
+		expect(originsOf(peer!)).toEqual(['https://peer.example']);
+	});
+
+	it('no Tor configured: no fan-out route for anyone', () => {
+		expect(fanOutPeerFromRow(row('https://peer.example', { tor: ONION }), I2P_ONLY)).toBeNull();
+		expect(fanOutPeerFromRow(row('https://peer.example'), NEITHER)).toBeNull();
+	});
+
+	it('a plain http clearnet origin is not a route (only https leaves through an exit)', () => {
+		expect(fanOutPeerFromRow(row('http://peer.example'), TOR_ONLY)).toBeNull();
+	});
+
+	it('the queue key is the registered origin, whichever address is preferred', () => {
+		const peer = fanOutPeerFromRow(row('https://Peer.Example/', { tor: ONION }), TOR_ONLY)!;
+		expect(peer.origin).toBe(`http://${ONION}`);
+		expect(peerKey(peer)).toBe('https://peer.example');
+	});
+
+	it('a zero-clearnet peer whose origin is its onion is listed once', () => {
+		const peer = fanOutPeerFromRow(row(`http://${ONION}`, { tor: ONION }), TOR_ONLY)!;
+		expect(originsOf(peer)).toEqual([`http://${ONION}`]);
 	});
 });
 
 describe('fastPeersFromDirectory', () => {
-	function dbWith(rows: ReturnType<typeof row>[]): FastFederationDb {
+	/** Rows as the directory read returns them: probe-verified unless said
+	 *  otherwise. */
+	function dbWith(
+		rows: (ReturnType<typeof row> & { last_probe_status?: string; last_probe_error?: string })[]
+	): FastFederationDb {
+		const full = rows.map((r) => ({
+			last_probe_status: 'good',
+			last_probed_at: null,
+			registered_at_time: null,
+			last_probe_error: null,
+			...r
+		}));
 		return {
 			query: (async () => ({
-				rows,
-				rowCount: rows.length
+				rows: full,
+				rowCount: full.length
 			})) as unknown as FastFederationDb['query']
 		};
 	}
@@ -720,14 +596,9 @@ describe('fastPeersFromDirectory', () => {
 			'https://self.example',
 			NEITHER
 		);
-		// No daemons configured → every peer is offered at its clearnet origin.
-		//
-		// The ORDER is the ranking's, not the query's: these rows carry no probe
-		// status, so they all land in the unknown tier and fall through to the
-		// origin tiebreak that makes the ordering total. Asserting the set rather
-		// than the sequence here, because the sequence is `rankDirectoryPeers`'s
-		// contract and is asserted against real statuses in its own block.
-		expect(peers.map((p) => p.origin).sort()).toEqual([
+		// No daemons configured → every peer is offered at its clearnet origin,
+		// in the ranking's order: one tier, so by origin.
+		expect(peers.map((p) => p.origin)).toEqual([
 			'https://one.example',
 			'https://three.example',
 			'https://two.example'
@@ -790,6 +661,27 @@ describe('fastPeersFromDirectory', () => {
 		const peers = await fastPeersFromDirectory(db, 'https://self.example', BOTH, 7);
 		expect(captured[1], 'the query bound is the scan cap, not the fan-out bound').toBe(500);
 		expect(peers, 'the fan-out bound is applied to the ranked list').toHaveLength(7);
+	});
+
+	it('the fan-out read keeps only probe-verified peers, at their Tor addresses', async () => {
+		const d = await fastPeerDirectory(
+			dbWith([
+				row('https://good.example', { tor: ONION, i2p_b32: I2P_B32 }),
+				{ ...row('https://new.example', { tor: ONION2 }), last_probe_status: 'never' },
+				{ ...row('https://gone.example'), last_probe_status: 'unreachable' },
+				{
+					...row(`http://${I2P_B32}`),
+					last_probe_error: 'hidden_service_not_network_probed'
+				},
+				{ ...row('https://quiet.example'), last_probe_status: 'quiet' }
+			]),
+			'https://self.example',
+			BOTH
+		);
+		expect(d.peers.map((p) => originsOf(p))).toEqual([
+			[`http://${ONION}`, 'https://good.example'],
+			['https://quiet.example']
+		]);
 	});
 
 	it('uses ONION2 to prove two distinct peers keep distinct keys', () => {
@@ -904,27 +796,28 @@ describe('which peers get a bounded fan-out slot', () => {
 		expect(ordered([...junk, real])[0]).toBe('https://real.example');
 	});
 
-	it('breaks a tier tie by most recently confirmed', () => {
+	/**
+	 * Within a tier, by origin: a key a peer cannot influence by how it answers.
+	 * Not probe time — it is stamped when a probe FINISHES, so a peer that stalls
+	 * its probe on purpose sorted to the front.
+	 */
+	it('breaks a tier tie by origin, not by when a probe finished', () => {
 		expect(
 			ordered([
-				peerRow('https://older.example', 'good', '2026-09-19T00:00:00Z'),
-				peerRow('https://newer.example', 'good', '2026-09-20T00:00:00Z')
+				peerRow(
+					'https://zzz-stalled.example',
+					'good',
+					'2026-09-20T12:00:00Z',
+					'2026-01-01T00:00:00Z'
+				),
+				peerRow(
+					'https://aaa-prompt.example',
+					'good',
+					'2026-09-20T09:00:00Z',
+					'2026-09-01T00:00:00Z'
+				)
 			])
-		).toEqual(['https://newer.example', 'https://older.example']);
-	});
-
-	it('then by the longest registered, which is what resists a burst', () => {
-		// The origins are chosen so ALPHABETICAL order contradicts registration
-		// order. An earlier version of this fixture had them agreeing, so
-		// deleting the registration tiebreak entirely changed nothing — the
-		// origin tiebreak below it produced the same answer and the test passed
-		// against code that had lost the property it was written for.
-		expect(
-			ordered([
-				peerRow('https://aaa-recent.example', 'never', null, '2026-09-01T00:00:00Z'),
-				peerRow('https://zzz-established.example', 'never', null, '2026-02-01T00:00:00Z')
-			])
-		).toEqual(['https://zzz-established.example', 'https://aaa-recent.example']);
+		).toEqual(['https://aaa-prompt.example', 'https://zzz-stalled.example']);
 	});
 
 	it('is a total order, so an unchanged directory does not reshuffle', () => {
@@ -985,7 +878,7 @@ describe('the fan-out bound is reported, not just applied', () => {
 	}
 
 	it('reports nothing dropped when the directory fits', async () => {
-		const d = await fastPeerDirectory(dbWithRows(5), 'https://self.example', NEITHER, 40);
+		const d = await fastPeerDirectory(dbWithRows(5), 'https://self.example', TOR_ONLY, 40);
 		expect(d.peers).toHaveLength(5);
 		expect(d.dropped).toBe(0);
 	});
@@ -998,152 +891,57 @@ describe('the fan-out bound is reported, not just applied', () => {
 	 * only different from the bug if it is visible.
 	 */
 	it('says how many instances the bound left out', async () => {
-		const d = await fastPeerDirectory(dbWithRows(57), 'https://self.example', NEITHER, 40);
+		const d = await fastPeerDirectory(dbWithRows(57), 'https://self.example', TOR_ONLY, 40);
 		expect(d.peers).toHaveLength(40);
 		expect(d.dropped).toBe(17);
 	});
 });
 
 /**
- * ONE BAD NAME MUST NOT TAKE DOWN A NETWORK.
+ * ONE PEER'S BAD ROUTE MUST NOT TAKE TOR AWAY FROM EVERY OTHER PEER.
  *
- * The send path's breaker and the send path's FAILOVER are one decision in the
- * code and two decisions in fact. Failover is about this message: any local
- * fault should move to the next address immediately, and that is right.
- * Marking the NETWORK down is about every other peer on it, for the next
- * minute, and it needs better evidence than one address failing.
- *
- * On Tor and I2P one failure IS enough, because the error names OUR end: the
- * SOCKS connector raises `ProxyUnavailableError` only when the socket to our
- * own proxy failed or our own proxy answered wrongly, and the I2P branch
- * matches `address`/`port` against the proxy we configured. Neither can be
- * produced by a peer's address being wrong.
- *
- * Lokinet has no such discriminator and cannot have one. Its local fault is a
- * DNS miss, and a DNS miss carries THEIR name, not ours: a stale, mistyped or
- * deregistered `.loki` address on one peer's chain record produces the same
- * `getaddrinfo ENOTFOUND` as our router being gone. So the single-failure rule,
- * correct on the other two networks, reads one peer's bad address as our whole
- * transport being down — and the warm path already knows better, requiring
- * EVERY warm-up over a network to fail locally before it says so.
+ * Failover and the breaker are one decision in the code and two in fact.
+ * Failover is about this message: any local fault moves to the peer's next
+ * address. Marking Tor down is about every other peer, for the next minute,
+ * and it needs evidence about OUR end. A fault our own SOCKS connector raised
+ * is that evidence; a fault the transport could not pin on our end
+ * ('ambiguous') is evidence about the peer until a second peer corroborates it
+ * — and one peer's two addresses are one peer.
  */
-describe('the network breaker needs evidence about the NETWORK', () => {
-	const LOKI_DEAD = 'stale.loki';
-	const LOKI_GOOD = 'healthy.loki';
-
-	/** A sender whose hidden transport fails for the named hosts the way a DNS
-	 *  miss does once `postJsonViaHiddenService` has classified it — which is
-	 *  the shape the send path actually receives. */
-	function lokiSender(deadHosts: readonly string[]) {
-		const hiddenUrls: string[] = [];
-		const clearnetUrls: string[] = [];
-		const sender = new PeerSender({
-			proxies: BOTH,
-			timeoutMs: 1_000,
-			postClearnet: async (url: string) => {
-				clearnetUrls.push(url);
-				return { status: 200, body: '{}' };
-			},
-			postHidden: async (url: string) => {
-				hiddenUrls.push(url);
-				const host = new URL(url).hostname;
-				if (deadHosts.includes(host)) {
-					throw new ProxyUnavailableError(
-						`local loki transport unavailable: getaddrinfo ENOTFOUND ${host}`,
-						{
-							cause: Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), {
-								code: 'ENOTFOUND',
-								syscall: 'getaddrinfo',
-								hostname: host
-							})
-						}
-					);
-				}
-				return { status: 200, body: '{}' };
-			}
+describe('the Tor breaker needs evidence about our end', () => {
+	const ambiguous = (): Error =>
+		Object.assign(new ProxyUnavailableError('tunnel refused'), {
+			confidence: 'ambiguous' as const
 		});
-		return { sender, hiddenUrls, clearnetUrls };
-	}
 
-	it('one peer with a stale .loki address does not mark Lokinet down', async () => {
-		const { sender } = lokiSender([LOKI_DEAD]);
-		sender.enqueue({ operations: [], n: 1 }, [
-			{ origin: `http://${LOKI_DEAD}`, hidden: true, key: 'https://stale.example' }
-		]);
+	it('one conclusive local fault marks Tor down immediately', async () => {
+		const { sender } = makeSender(TOR_ONLY, () => torDown());
+		sender.enqueue({ operations: [] }, [fanOutPeerFromRow(row(`http://${ONION}`), TOR_ONLY)!]);
 		await sender.drain(5_000);
-
-		expect(
-			sender.reachability.isDown('loki'),
-			'one unresolvable name is evidence about that NAME, not about our router'
-		).toBe(false);
-	});
-
-	/**
-	 * The consequence, and the reason this is worth fixing rather than noting.
-	 * A healthy Lokinet peer that ALSO publishes a clearnet origin gets its
-	 * traffic silently moved onto the clearnet for the next minute — on an
-	 * instance whose operator chose a hidden network, because a DIFFERENT peer
-	 * mistyped an address.
-	 */
-	it('a stale .loki on one peer does not downgrade another peer to clearnet', async () => {
-		const { sender, hiddenUrls, clearnetUrls } = lokiSender([LOKI_DEAD]);
-		const healthy: FastPeer = {
-			origin: `http://${LOKI_GOOD}`,
-			hidden: true,
-			key: 'https://healthy.example',
-			alternates: [{ origin: 'https://healthy.example', hidden: false }]
-		};
-
-		sender.enqueue({ operations: [], n: 1 }, [
-			{ origin: `http://${LOKI_DEAD}`, hidden: true, key: 'https://stale.example' }
-		]);
-		await sender.drain(5_000);
-		sender.enqueue({ operations: [], n: 2 }, [healthy]);
-		await sender.drain(5_000);
-
-		expect(hiddenUrls, 'the healthy peer must still be reached over Lokinet').toContain(
-			`http://${LOKI_GOOD}/v1/federation/chat-fast`
-		);
-		expect(clearnetUrls, 'and must NOT have been pushed over the clearnet instead').toEqual([]);
-	});
-
-	/**
-	 * The breaker must still WORK. Two distinct names failing to resolve is the
-	 * first point at which our resolver is the better explanation than their
-	 * records, and it is the point the network goes down — within the same
-	 * batch, not a minute later.
-	 */
-	it('two distinct .loki addresses failing DOES mark Lokinet down', async () => {
-		const { sender } = lokiSender([LOKI_DEAD, 'other.loki']);
-		sender.enqueue({ operations: [], n: 1 }, [
-			{ origin: `http://${LOKI_DEAD}`, hidden: true, key: 'https://a.example' },
-			{ origin: 'http://other.loki', hidden: true, key: 'https://b.example' }
-		]);
-		await sender.drain(5_000);
-
-		expect(sender.reachability.isDown('loki'), 'two names is our router, not two typos').toBe(true);
-	});
-
-	/** Tor is self-identifying, so ONE failure stays conclusive — the fix must
-	 *  not slow down the network where the evidence was already good. */
-	it('one Tor local fault still marks Tor down immediately', async () => {
-		const { sender } = lokiSender([ONION]);
-		sender.enqueue({ operations: [], n: 1 }, [
-			{ origin: `http://${ONION}`, hidden: true, key: 'https://a.example' }
-		]);
-		await sender.drain(5_000);
-
 		expect(sender.reachability.isDown('tor')).toBe(true);
 	});
 
-	/** ...and so is I2P. */
-	it('one I2P local fault still marks I2P down immediately', async () => {
-		const { sender } = lokiSender([I2P_B32]);
-		sender.enqueue({ operations: [], n: 1 }, [
-			{ origin: `http://${I2P_B32}`, hidden: true, key: 'https://a.example' }
+	it('an ambiguous fault from one peer is held, not convicted — even across its two addresses', async () => {
+		const { sender, attempts } = makeSender(TOR_ONLY, () => ambiguous());
+		sender.enqueue({ operations: [] }, [
+			fanOutPeerFromRow(row('https://stale.example', { tor: ONION }), TOR_ONLY)!
 		]);
 		await sender.drain(5_000);
 
-		expect(sender.reachability.isDown('i2p')).toBe(true);
+		expect(attempts, 'failover still tried both of its addresses').toHaveLength(2);
+		expect(sender.reachability.isDown('tor'), 'one peer is evidence about that peer').toBe(false);
+		expect(sender.reachability.pendingSuspicion()).toEqual({ tor: 1 });
+	});
+
+	it('ambiguous faults from two distinct peers DO mark Tor down', async () => {
+		const { sender } = makeSender(TOR_ONLY, () => ambiguous());
+		sender.enqueue({ operations: [] }, [
+			fanOutPeerFromRow(row(`http://${ONION}`), TOR_ONLY)!,
+			fanOutPeerFromRow(row(`http://${ONION2}`), TOR_ONLY)!
+		]);
+		await sender.drain(5_000);
+		expect(sender.reachability.isDown('tor'), 'two peers is our end, not two bad routes').toBe(
+			true
+		);
 	});
 });

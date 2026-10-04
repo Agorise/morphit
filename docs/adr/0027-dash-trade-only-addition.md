@@ -1,6 +1,6 @@
 # ADR-0027 — DASH trade-only addition
 
-**Status:** Accepted (Part 122 cp27, 2026-05-17)
+**Status:** Accepted
 
 **Supersedes:** None.  Extends the trade-only Category-B template
 established by ADR-0023 (USDT), ADR-0024 (BCH), and ADR-0025 (LTC).
@@ -14,16 +14,16 @@ asset ships default-ON instance-wide, operator override via
 
 ## Context
 
-After cp24 added LTC, the maintainer proposed Dash (DASH) as the next
+Later added LTC, the maintainer proposed Dash (DASH) as the next
 trade-only asset.  Dash brings a notable shape to the Morphit
 roster: it's the first transparent Bitcoin-family chain on
 Morphit with a **chain-level opt-in privacy upgrade**
 (PrivateSend), placing it between BTC/BCH/LTC (transparent only)
 and XMR (mandatory chain-level privacy) on the privacy spectrum.
 
-The asset-registry pattern matured through cp21/cp24 means
-adding DASH is a content task across known seams.  cp27 ships
-the addition with proactive cp23-DD-class closure (every
+The asset-registry pattern matured through the earlier additions means
+adding DASH is a content task across known seams.  A later change ships
+the addition with proactive closure (every
 downstream typed-consumer site touched in the same checkpoint,
 not deferred to a follow-up DD).
 
@@ -32,7 +32,7 @@ not deferred to a follow-up DD).
 **Decision 1 — Trade-only Category B.**  DASH is added with
 `canBeTraded: true, canPayListingFee: false`.  Listing fees
 stay BLURT/BTC/XMR; the fee_method enum stays frozen per
-Memory #23.  Same posture as USDT/BCH/LTC.
+The frozen fee_method rule.  Same posture as USDT/BCH/LTC.
 
 **Decision 2 — Single-network mainnet.**  Dash has no per-network
 sub-chains (no testnet split, no L2).  `supportedNetworks:
@@ -91,20 +91,20 @@ address is shared on Morphit — Morphit does not coordinate the
 mix, hold the funds, or expose users to masternode-trust
 trade-offs beyond what their wallet already does.
 
-**Decision 8 — Default-ON instance-wide.**  Per Memory #25, new
+**Decision 8 — Default-ON instance-wide.**  Per the default-on rule for new assets, new
 assets ship enabled.  Operators preferring a narrower asset
 policy disable per-asset via `MORPHIT_INDEXER_DISABLED_ASSETS="DASH"`
-or via the `morphit-ops init` wizard step 13.  The cp22
+or via the `morphit-ops init` wizard step 13.  The
 wizard auto-picks up DASH via the
 `canBeTraded && !canPayListingFee` filter.
 
 **Decision 9 — Community-canonical SVG logo at
-`apps/web/static/icons/icon-dash.svg` (updated cp27-DD).**  The
+`apps/web/static/icons/icon-dash.svg` (updated).**  The
 canonical Dash mark on Dash-brand-blue (#008CE7) disc: the
 forward-leaning rounded "D" with two horizontal speed lines.
 No `<text>` elements (per ADDING-A-COIN.md font-fallback rule).
-Originally shipped at cp27 as a path-based placeholder "D"
-stylization; replaced with the community-canonical SVG at cp27-DD
+Originally shipped as a path-based placeholder "D"
+stylization; replaced with the community-canonical SVG
 when the maintainer provided the authoritative artwork.  Minified via svgo
 to 0.6 KB while preserving viewBox.
 
@@ -118,7 +118,7 @@ to 0.6 KB while preserving viewBox.
 - Privacy-conscious traders gain an additional rail with opt-in
   mixing as a wallet-side option, sitting between transparent
   BTC/BCH/LTC and mandatory-private XMR.
-- The `privatesend` enum extension follows the cp26
+- The `privatesend` enum extension follows the
   privacy-framework pattern — `optInPrivacyTech` is now
   `['mweb','cashfusion','coinjoin','payjoin','privatesend']` and
   every per-asset privacy guide page surfaces the relevant entries
@@ -137,14 +137,14 @@ to 0.6 KB while preserving viewBox.
   priority.  The horizontal-scrolling tab layout still fits
   comfortably; revisit if/when an 8th asset is added.
 
-> **Forward-note (Part 122 cp32, 2026-05-18):** the 8th (USDC,
-> cp30, ADR-0028) and 9th (DAI, cp31, ADR-0029) assets have since
+> **Forward-note:** the 8th (USDC,
+> ADR-0028) and 9th (DAI, ADR-0029) assets have since
 > shipped.  The asset-picker tab layout continues to fit
 > comfortably at 9; cheat-sheet readability still holds.  The
-> grandma-friendly review re-ran at cp31 and cp32 and remains
+> grandma-friendly review re-ran and remains
 > clean.  Revisit if/when a 10th asset is added.
 
-> **Forward-note (Part 122 cp84, 2026-05-21):** assets 10–16 have
+> **Forward-note:** assets 10–16 have
 > since shipped — DOGE (ADR-0030), ZEC (ADR-0031), ARRR (ADR-0032),
 > DCR (ADR-0033), SOL (ADR-0034), ETH (ADR-0035), XRP (ADR-0036).
 > The horizontal-scrolling tab layout still fits — the picker's
@@ -171,7 +171,7 @@ EN-fallback for it/pl/ru/fa/zh-CN/zh-HK), 5 UI dispatches
 post-page), prices internalStore + reset + COINGECKO_IDS +
 FALLBACK_USD, RESERVED_CANONICAL_KEYS + frontend payments
 registry, cheat-sheet route, schema.sql comments, API.md
-examples, GRANDMA-FRIENDLY-INVESTIGATION.md, llms.txt +
+examples, the grandma-UX investigation, llms.txt +
 llms-full.txt asset enumerations, FAQ entries (3 × 10 locales),
 brag list (10 enumeration patches + new entry #279), this ADR,
 new packages/asset-registry/scripts/dash-trade-only-smoke.ts
@@ -180,8 +180,8 @@ new packages/asset-registry/scripts/dash-trade-only-smoke.ts
 
 ## Smoke baseline impact
 
-cp26-DD 3,306 → cp27 3,320: +13 dash-trade-only-smoke + 1 new
+3,306 → 3,320: +13 dash-trade-only-smoke + 1 new
 DASH-in-disabled-assets-wizard scenario.  privacy-features-registry
 smoke extended VALID_TECH + per-ticker maps for DASH (36 → 42
-scenarios — but already counted in cp26 → cp26-DD baseline math,
+scenarios — but already counted → baseline math,
 so no new scenarios added here).

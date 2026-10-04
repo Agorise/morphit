@@ -17,7 +17,7 @@
 <script lang="ts">
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import type { BlurtTransaction } from '$blurt/client';
@@ -36,7 +36,7 @@
 	let tx = $state<BlurtTransaction | null>(null);
 	let expandedOps = $state<Record<number, boolean>>({});
 
-	// cp425 — animate the loading ellipsis as up to 3 cycling dots (advancing
+	// animate the loading ellipsis as up to 3 cycling dots (advancing
 	// every 500ms, echoing the typewriter effect used elsewhere). The dots grow
 	// rightward at the end of the line, so nothing before them ever shifts. The
 	// interval runs only while the page is loading and is cleaned up otherwise.
@@ -49,13 +49,22 @@
 		return () => clearInterval(id);
 	});
 
-	async function load(): Promise<void> {
+	/** Bumped by every load; an older load's result is dropped (the route's
+	 *  transaction changed while it was in flight). */
+	let loadGen = 0;
+
+	async function load(id: string): Promise<void> {
+		const g = ++loadGen;
 		status = 'loading';
+		errorMsg = '';
+		tx = null;
+		expandedOps = {};
 		try {
 			// Transaction via the indexer (privacy: no direct RPC from the
 			// browser; also more reliable — the pool finds a node that
 			// exposes get_transaction).
-			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), trxId);
+			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), id);
+			if (g !== loadGen) return;
 			if (r.kind === 'not_found') {
 				status = 'not_found';
 				return;
@@ -64,21 +73,25 @@
 			tx = r.tx;
 			status = 'ok';
 		} catch (err) {
+			if (g !== loadGen) return;
 			console.warn('[explorer/tx] load failed:', err);
 			errorMsg = $_('explorer.tx.error.load_failed');
 			status = 'error';
 		}
 	}
 
-	onMount(() => {
-		void load();
+	// Load whenever the route's transaction id changes (the page component is
+	// reused when following a link to another transaction).
+	$effect(() => {
+		const id = trxId;
+		untrack(() => void load(id));
 	});
 
 	function toggleOp(i: number): void {
 		expandedOps = { ...expandedOps, [i]: !expandedOps[i] };
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);

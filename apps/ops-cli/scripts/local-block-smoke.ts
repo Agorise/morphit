@@ -53,7 +53,7 @@ expect('unblock + blocked → unblock', plan('unblock', 'blocked') === 'unblock'
 expect('unblock + unblocked → noop', plan('unblock', 'unblocked') === 'noop');
 expect('unblock + no row → noop', plan('unblock', null) === 'noop');
 
-// ── cp258 — operator_blocks key guard ───────────────────────────────
+// ── operator_blocks key guard ───────────────────────────────
 // All ops-cli block writes/reads MUST be keyed by the per-instance
 // operatorAccount (== the indexer's operatorAccountName, == the on-chain
 // block handler's gate), NOT officialAccount (the federation-wide

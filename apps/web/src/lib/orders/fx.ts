@@ -1,6 +1,6 @@
 /**
- * Morphit frontend — USD→fiat FX fetch + pure conversion helpers
- * (cp372).
+ * Morphit frontend — USD→fiat FX fetch + pure conversion helpers.
+ *
  *
  * The first-trade minimum is "$1 USD-equivalent" of BLURT, and
  * grandma enters her order amounts in HER local fiat.  To (a) seed
@@ -108,7 +108,7 @@ export function usdMinInFiat(table: FxResponse | null, usd: number, fiat: string
 	return Math.ceil(raw * 100) / 100;
 }
 
-/** (v1.20.0 fix wave, G5) Headroom added to the SEEDED first-order minimum
+/** Headroom added to the SEEDED first-order minimum
  *  for a non-USD fiat.  The $1 floor is checked by every indexer with ITS
  *  OWN FX table (refreshed hourly; independent nodes average their own
  *  sources, which agree within FX_OUTLIER_TOLERANCE = 2%).  A seed that sits
@@ -131,12 +131,14 @@ export function firstOrderMinInFiat(table: FxResponse | null, fiat: string): num
 	);
 }
 
-/** Client-side mirror of the indexer's first-buy floor (order.ts):
+/** The first-buy $1 floor, judged here before signing. This is the rule's
+ *  only enforcement: the indexer does not judge it (an FX rate is local to
+ *  each node, so acceptance cannot depend on it); it only requires
+ *  that a waived first buy states an amount_min (`waiver_requires_min_usd`).
  *  - 'missing'       no minimum entered (the waiver needs one);
  *  - 'unconvertible' the fiat cannot be valued in USD here (unknown code,
- *                    or no FX table for a non-USD fiat) — the indexer
- *                    rejects this (`waiver_fiat_unconvertible`, G5); it is
- *                    NOT treated as already-USD any more;
+ *                    or no FX table for a non-USD fiat) — not offered; it
+ *                    is NOT treated as already-USD;
  *  - 'below' / 'ok'  the converted amount vs the $1 floor.
  *  USD always converts 1:1, even with no table.  Pure + total. */
 export function waiverFloorStatus(

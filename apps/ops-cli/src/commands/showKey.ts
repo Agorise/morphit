@@ -1,5 +1,5 @@
 /**
- * Morphit ops CLI — `show-key` subcommand (cp178).
+ * Morphit ops CLI — `show-key` subcommand.
  *
  * WHY THIS EXISTS.
  * Operators (and the "grandma" persona) hit a dead end when the

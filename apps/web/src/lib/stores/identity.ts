@@ -1,9 +1,9 @@
 /**
  * Morphit — session identity store.
  *
- * Holds the LiveIdentity (posting + memo privates; owner + active public
- * keys) for the duration of a session. The encrypted KeystoreEnvelope is
- * also held here so that JIT-unlock operations (useActiveKey / useOwnerKey)
+ * Holds the LiveIdentity (the posting private key; memo, owner and active
+ * public keys) for the duration of a session. The encrypted KeystoreEnvelope
+ * is also held here so that the JIT unlock of the active key (useActiveKey)
  * can reach it without a separate round-trip.
  *
  * Three states:
@@ -45,8 +45,30 @@ import {
 	wipeTotpSecret,
 	type LiveIdentity
 } from '$crypto/identity-core';
-import { KEYSTORE_ENVELOPE_STORAGE_KEY, clearKeystore, hasPersistedKeystore } from '$crypto/persistentKeystore';
-import { sweepAccountStorageOnSignOut } from '$lib/storage/signOutSweep';
+import {
+	KEYSTORE_ENVELOPE_STORAGE_KEY,
+	clearKeystore,
+	isPersistedEnvelope,
+	persistedKeystorePresent,
+	writeEnvelope
+} from '$crypto/persistentKeystore';
+import { sodium, ensureSodium } from '$crypto/sodium';
+import {
+	LEGACY_RELOAD_STASH_KEYS,
+	RELOAD_STASH_KEY,
+	RELOAD_STASH_MAX_AGE_MS,
+	SW_STASH_PUT,
+	SW_STASH_TAKE,
+	openStash,
+	parseStashRecord,
+	sealStash
+} from '$lib/auth/reloadStash';
+import {
+	sweepAccountStorageOnSignOut,
+	sweepSessionAccountKeysOnSignOut
+} from '$lib/storage/signOutSweep';
+import { setPersonStorageTier } from '$lib/storage/personStorage';
+import { setUnsealPending } from '$lib/chat/unsealGate';
 import { safeSession } from '../utils/safeStorage';
 import {
 	PAIRED_SESSION_STORAGE_KEY,
@@ -55,7 +77,12 @@ import {
 	readPairedSession,
 	type PairedSession
 } from '$crypto/pairedSession';
-import { bindSessionPostingKey, clearUserBlurtAccount, getUserBlurtAccount } from '$blurt/ops/profile';
+import {
+	bindSessionPostingKey,
+	clearUserBlurtAccount,
+	getUserBlurtAccount,
+	setUserBlurtAccount
+} from '$blurt/ops/profile';
 
 export type IdentityState =
 	| { state: 'locked' }
@@ -65,20 +92,60 @@ export type IdentityState =
 const internal = writable<IdentityState>({ state: 'locked' });
 
 /**
- * cp445 — the persisted Blurt account name is scoped to the posting key that
+ * the persisted Blurt account name is scoped to the posting key that
  * owns it (see `ops/profile.ts`). Every transition into or out of `unlocked`
  * must tell the storage layer which key is now in charge, or a second tab's
  * sign-in hands this tab the wrong account name — and the chain answers
  * "Missing Posting Authority <someone else>".
  *
+ * It also says whether this session is the one remembered on this device: only
+ * then are the account name and the person's chat state ($lib/storage/
+ * personStorage) written to localStorage ("just this session" keeps them in
+ * the tab). Re-evaluated when the remembered keystore changes, so
+ * committing Remember-me after the unlock moves the name over.
+ *
  * One subscription, so no `internal.set(...)` call site can forget to do it.
  */
-internal.subscribe((state) => {
+derived([internal, persistedKeystorePresent], ([state]) => state).subscribe((state) => {
 	if (state.state === 'unlocked') {
-		bindSessionPostingKey(sessionKeyId(state.live.posting.publicKey));
+		const remembered = isPersistedEnvelope(state.envelope);
+		bindSessionPostingKey(sessionKeyId(state.live.posting.publicKey), remembered);
+		setPersonStorageTier(remembered ? 'local' : 'session');
 	} else {
 		bindSessionPostingKey(null);
+		// A paired device is remembered on disk ($lib/pair); locked or signed
+		// out, the person's chat state is neither read nor written.
+		setPersonStorageTier(state.state === 'paired-readonly' ? 'local' : null);
 	}
+});
+
+/**
+ * Unlock restores the chat-key pins an explicit Lock sealed for this account
+ * ($lib/chat/pubPin unsealPins), so a key the operator substitutes after a
+ * lock still meets the "safety number changed" step. Runs once per entry into
+ * `unlocked`; another account's seal is left alone.
+ */
+let wasUnlocked = false;
+/** Bumped on every entry into and exit from `unlocked`: an unseal that was
+ *  started for an earlier unlock finds a different number and stops. */
+let unlockEpoch = 0;
+internal.subscribe((state) => {
+	const unlocked = state.state === 'unlocked';
+	if (unlocked !== wasUnlocked) unlockEpoch++;
+	if (unlocked && !wasUnlocked) {
+		const epoch = unlockEpoch;
+		const priv = Uint8Array.from(state.live.posting.privateKey);
+		// Only while THIS unlock lasts: a Lock that lands first seals the pins
+		// again, and a late unseal must not put them back readable (or let the
+		// next account's Lock seal them under its own key).
+		setUnsealPending(
+			import('$lib/chat/pubPin')
+				.then((m) => m.unsealPins(priv, () => epoch === unlockEpoch))
+				.catch(() => false)
+				.finally(() => priv.fill(0))
+		);
+	}
+	wasUnlocked = unlocked;
 });
 
 /**
@@ -87,7 +154,7 @@ internal.subscribe((state) => {
  * Deliberately a raw hex prefix of the public key rather than the BLT-formatted
  * string: `formatPublicKeyBLT` lives in `$crypto/keygen`, and this store is on
  * the every-page baseline — importing it would drag bip39 + secp256k1 into the
- * first paint of every route (cp271; `crypto-blurt-not-in-baseline-closure-smoke`
+ * first paint of every route (`crypto-blurt-not-in-baseline-closure-smoke`
  * caught exactly that). We only need an identifier that differs between keys, and
  * the public key already is one.
  */
@@ -223,15 +290,17 @@ export async function bootFromEnvelope(
 			const { verifyTotpOrBackup } = await import('$crypto/keystoreTotp');
 			const result = await verifyTotpOrBackup(full, totpCode);
 			if (result.kind === 'backup_redeemed') {
-				// A backup code was consumed — re-encrypt and persist the
-				// updated identity so the same code can't be replayed by
-				// an attacker who reads the keystore before the user
-				// notices the redemption.
-				const { encryptIdentity } = await import('$crypto/keystore');
-				const { writeEnvelope } = await import('$crypto/persistentKeystore');
-				const newEnv = await encryptIdentity(result.updatedIdentity, password);
-				writeEnvelope(newEnv);
-				env = newEnv;
+				// A backup code was consumed — re-encrypt the updated identity
+				// (keeping the keystore's shape and every wrap, so an enrolled
+				// YubiKey keeps working) so the same code can't be replayed.
+				// The copy on disk is replaced only when it IS this keystore:
+				// unlocking another account's keyfile must never overwrite the
+				// one remembered on this device.
+				const { reencryptIdentityKeepingWraps } = await import('$crypto/keystore');
+				const newEnv = await reencryptIdentityKeepingWraps(env, password, result.updatedIdentity);
+				// If the disk write fails, the session stays on the keystore that
+				// is on disk, so the two never diverge.
+				if (!isPersistedEnvelope(env) || writeEnvelope(newEnv)) env = newEnv;
 			}
 		}
 
@@ -257,31 +326,136 @@ export async function bootFromEnvelope(
 }
 
 /**
- * Decrypt a layered keystore envelope using the YubiKey HMAC
- * callback (Batch I, ADR-0017).  Same end-state as bootFromEnvelope:
- * LiveIdentity + envelope stashed in the store.
+ * Unlock a layered keystore with the YubiKey (an ALTERNATIVE to the
+ * password, not an additional factor). Same end-state as bootFromEnvelope.
  *
- * Caller is responsible for:
- *   - Building the HMAC callback (typically via requestYubikey from
- *     $crypto/yubikey/transport).
- *   - Closing the YubiKey transport device after this returns,
- *     successful or not.
+ *   - 2FA applies here exactly as on the password path: a keystore with
+ *     TOTP enrolled needs the authenticator or a backup code
+ *     ('totp_required' / 'totp_invalid'); the caller asks for it and calls
+ *     again (one more touch of the key).
+ *   - After the gate, the wrap that opened the keystore is rebuilt under a
+ *     fresh challenge (one more touch), so a recorded response never
+ *     unlocks it again. If the key does not answer that second time the
+ *     unlock still succeeds and the challenge moves on the next unlock.
+ *   - The copy on disk is replaced only when it IS this keystore.
+ *
+ * Caller is responsible for building the HMAC callback (typically via
+ * requestYubikey from $crypto/yubikey/transport) and closing the device
+ * after this returns, successful or not.
  */
 export async function bootFromEnvelopeWithYubikey(
 	env: KeystoreEnvelope,
-	hmacFn: (challenge: Uint8Array) => Promise<Uint8Array>
+	hmacFn: (challenge: Uint8Array) => Promise<Uint8Array>,
+	totpCode?: string
 ): Promise<void> {
 	// Lazy import keeps the cold-path crypto out of the identity
 	// store's import graph for users who never touch a YubiKey.
-	const { unlockWithYubikey } = await import('$crypto/keystoreYubikey');
-	const full = await unlockWithYubikey(env, hmacFn);
-	const live = toLiveIdentity(full);
-	// Same upgrade-supersedes-paired rationale as bootFromEnvelope.
-	const prev = get(internal);
-	if (prev.state === 'paired-readonly') {
-		clearPairedSession();
+	const { openWithYubikey, rotateYubikeyChallenge } = await import('$crypto/keystoreYubikey');
+	const opened = await openWithYubikey(env, hmacFn);
+	const full = opened.identity;
+	let handedOff = false;
+	try {
+		let next: KeystoreEnvelope = opened.env;
+		if (full.totpSecret) {
+			const { KeystoreError, reencryptLayeredWithCek } = await import('$crypto/keystore');
+			if (!totpCode) {
+				throw new KeystoreError(
+					'totp_required',
+					'This keystore has 2FA enabled. Provide your authenticator code or a backup code.'
+				);
+			}
+			const { verifyTotpOrBackup } = await import('$crypto/keystoreTotp');
+			const result = await verifyTotpOrBackup(full, totpCode);
+			if (result.kind === 'backup_redeemed') {
+				next = await reencryptLayeredWithCek(opened.env, opened.cek, result.updatedIdentity);
+			}
+		}
+		try {
+			next = await rotateYubikeyChallenge(
+				next as typeof opened.env,
+				opened.wrapIndex,
+				opened.cek,
+				hmacFn
+			);
+		} catch {
+			// The key did not answer the second time; keep the current wrap.
+		}
+		// If the disk write fails, the session stays on the keystore that is
+		// on disk, so the two never diverge.
+		if (next !== env && isPersistedEnvelope(env) && !writeEnvelope(next)) next = env;
+
+		const live = toLiveIdentity(full);
+		// Same upgrade-supersedes-paired rationale as bootFromEnvelope.
+		const prev = get(internal);
+		if (prev.state === 'paired-readonly') {
+			clearPairedSession();
+		}
+		internal.set({ state: 'unlocked', live, envelope: next });
+		handedOff = true;
+	} finally {
+		opened.cek.fill(0);
+		if (!handedOff) {
+			wipeDecryptedIdentity(full);
+		} else if (full.totpSecret) {
+			wipeTotpSecret(full);
+		}
 	}
-	internal.set({ state: 'unlocked', live, envelope: env });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Sessions encrypted under a password the user never saw
+// ────────────────────────────────────────────────────────────────────────────
+//
+// A seed import without "Remember me" keeps the session's keystore encrypted
+// under a RANDOM password (onboarding/import): nothing is written to disk and
+// the user is never asked for a password. That keystore is useless as a
+// backup — a keyfile exported from it opens with a password nobody knows, and
+// "Show seed" asks for one that does not exist. So the random password is
+// remembered here, in memory only, next to the envelope it opens, and
+// `protectSessionWithPassword` re-encrypts the session's keystore under a
+// password the user chooses before anything is exported. Cleared on lock and
+// sign-out with the session.
+
+let ephemeral: { envelope: KeystoreEnvelope; password: string } | null = null;
+
+/** onboarding/import: this session's keystore is encrypted under `password`,
+ *  a random one the user has not seen. */
+export function noteEphemeralSessionPassword(envelope: KeystoreEnvelope, password: string): void {
+	ephemeral = { envelope, password };
+}
+
+/** True while this session's keystore opens only with a password the user
+ *  never saw (set one with protectSessionWithPassword before a backup). */
+export function sessionPasswordIsEphemeral(): boolean {
+	const s = get(internal);
+	return s.state === 'unlocked' && ephemeral !== null && s.envelope === ephemeral.envelope;
+}
+
+/** Re-encrypt this session's keystore under `newPassword` (the caller has
+ *  checked it against the password policy). The session keeps running; the
+ *  disk is not touched (the session was never remembered). */
+export async function protectSessionWithPassword(
+	newPassword: string
+): Promise<'ok' | 'not_ephemeral' | 'failed'> {
+	if (!sessionPasswordIsEphemeral() || ephemeral === null) return 'not_ephemeral';
+	const { envelope, password } = ephemeral;
+	try {
+		const full = await decryptIdentity(envelope, password);
+		try {
+			// The import made a simple-passphrase keystore; a new one under the
+			// user's password replaces it.
+			const { encryptIdentity } = await import('$crypto/keystore');
+			const reKeyed = await encryptIdentity(full, newPassword);
+			const outcome = commitSessionEnvelope(reKeyed);
+			if (outcome === 'locked') return 'failed';
+			ephemeral = null;
+			return 'ok';
+		} finally {
+			wipeDecryptedIdentity(full);
+		}
+	} catch {
+		return 'failed';
+	}
 }
 
 /**
@@ -359,7 +533,7 @@ export function lockSession(): void {
 	// effect is to skip an indexer round-trip. A stale entry just means
 	// the next unlocked session pays one extra GET to re-confirm — fine.
 	//
-	// cp402 [3] — the own-sent plaintext cache IS cleared here: unlike the
+	// the own-sent plaintext cache IS cleared here: unlike the
 	// chat-identity name cache above, it holds message CONTENT, so it must
 	// not linger in memory past a lock. Dynamic import keeps chatService's
 	// deps out of this store's static graph (the same dynamic-import
@@ -400,8 +574,9 @@ export function reset(opts?: { clearDisk?: boolean }): void {
 	if (current.state === 'unlocked') {
 		wipeLiveIdentity(current.live);
 	}
+	ephemeral = null;
 	internal.set({ state: 'locked' });
-	// cp402 [3] — clear the own-sent plaintext cache (message content must
+	// clear the own-sent plaintext cache (message content must
 	// not survive a lock/sign-out in memory). In-memory only; dynamic
 	// import avoids pulling chatService's deps into this store's static
 	// graph (the same dynamic-import approach the sign-out path uses for
@@ -449,8 +624,51 @@ export function updateEnvelope(env: KeystoreEnvelope): void {
 	internal.set({ state: 'unlocked', live: current.live, envelope: env });
 }
 
+/** Outcome of {@link commitSessionEnvelope}. */
+export type EnvelopeCommit =
+	/** Session and the device's remembered keystore both hold `next`. */
+	| 'persisted'
+	/** Only the session holds `next`: this session's keystore is not the one
+	 *  the device remembers (Remember me off, or another account remembered). */
+	| 'session_only'
+	/** `requirePersisted` was set and this session is not the remembered one:
+	 *  nothing changed. */
+	| 'not_remembered'
+	/** The disk write failed: nothing changed. */
+	| 'persist_failed'
+	/** No unlocked session: nothing changed. */
+	| 'locked';
+
 /**
- * Replace BOTH halves of an unlocked session (tt.txt #11).
+ * Commit a re-keyed keystore for the unlocked session — the ONE way to change
+ * it (password, YubiKey wraps, 2FA, backup-code redemption, Active key).
+ *
+ * The session's copy and the device's remembered copy move together, or
+ * neither does. The remembered copy is written only when it IS this session's
+ * keystore (byte-identical before the change), so a session that was never
+ * remembered can never overwrite another account's keystore on this device.
+ * `live`, when given, replaces the live identity too (capabilities changed).
+ *
+ * Before this existed, the YubiKey card wrote only the disk copy and the
+ * password change wrote the session's stale copy back over it — a removed
+ * (lost) YubiKey unlocked again, and a YubiKey-only keystore opened with the
+ * password again.
+ */
+export function commitSessionEnvelope(
+	next: KeystoreEnvelope,
+	opts: { readonly requirePersisted?: boolean; readonly live?: LiveIdentity } = {}
+): EnvelopeCommit {
+	const current = get(internal);
+	if (current.state !== 'unlocked') return 'locked';
+	const remembered = isPersistedEnvelope(current.envelope);
+	if (!remembered && opts.requirePersisted === true) return 'not_remembered';
+	if (remembered && !writeEnvelope(next)) return 'persist_failed';
+	internal.set({ state: 'unlocked', live: opts.live ?? current.live, envelope: next });
+	return remembered ? 'persisted' : 'session_only';
+}
+
+/**
+ * Replace BOTH halves of an unlocked session.
  *
  * `updateEnvelope` alone is not enough when the identity's CAPABILITIES change:
  * the money paths gate on `live.activePublicKey`, so a keystore that gained an
@@ -585,7 +803,7 @@ export function autoRestorePairedSession(): void {
  *  store state, event) → new store state; no DOM access beyond what
  *  the event itself carries. */
 export function handleStorageEvent(e: StorageEvent): void {
-	// Paired-session cross-tab sync (Part 114).  Symmetric to the
+	// Paired-session cross-tab sync.  Symmetric to the
 	// envelope listener below: pick up sign-ins/sign-outs that
 	// happened in another tab.
 	if (e.key === PAIRED_SESSION_STORAGE_KEY) {
@@ -638,7 +856,7 @@ export function handleStorageEvent(e: StorageEvent): void {
 	if (e.newValue === null) {
 		// Envelope deleted — the other tab signed out and
 		// already removed the persisted envelope.  Mirror it
-		// here with a bare reset(): post-cp334 a bare reset()
+		// here with a bare reset(): newer a bare reset
 		// wipes only the in-memory live keys and deliberately
 		// does NOT touch disk — which is exactly right here,
 		// since the envelope is already gone.  (Disk-clearing
@@ -721,7 +939,9 @@ export function handleStorageEvent(e: StorageEvent): void {
 
 type SessionHandoffMessage =
 	| { t: 'request' }
-	| { t: 'offer'; payload: IdentityState }
+	/** `account`: the session's account name — a "just this session" name
+	 *  lives only in the offering tab's sessionStorage. */
+	| { t: 'offer'; payload: IdentityState; account?: string | null }
 	| { t: 'signout' }
 	| { t: 'lock' };
 
@@ -743,12 +963,23 @@ function getSessionHandoffChannel(): BroadcastChannel | null {
 /** Adopt a session offered by a sibling tab. No-op unless we're locked —
  *  a live session is never clobbered by an inbound offer (so a stale offer
  *  arriving after we've unlocked some other way is harmless). */
-function adoptOfferedSession(payload: unknown): void {
+function adoptOfferedSession(payload: unknown, account?: unknown): void {
 	if (get(internal).state !== 'locked') return;
 	const p = payload as IdentityState | null;
 	if (!p || typeof p !== 'object' || typeof (p as { state?: unknown }).state !== 'string') return;
 	if (p.state === 'unlocked' && p.live && p.envelope) {
 		internal.set({ state: 'unlocked', live: p.live, envelope: p.envelope });
+		// A "just this session" account name is only in the offering tab.
+		if (
+			getUserBlurtAccount() === null &&
+			typeof account === 'string' &&
+			/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/.test(account)
+		) {
+			setUserBlurtAccount(account);
+		}
+		// The reload stash seals with libsodium, synchronously, at pagehide;
+		// a tab unlocked by a handoff may not have loaded it yet.
+		void ensureSodium().catch(() => {});
 	} else if (p.state === 'paired-readonly' && p.paired) {
 		internal.set({ state: 'paired-readonly', paired: p.paired });
 	}
@@ -773,13 +1004,13 @@ export function handleSessionHandoffMessage(
 		const s = get(internal);
 		if (s.state === 'unlocked' || s.state === 'paired-readonly') {
 			try {
-				post({ t: 'offer', payload: s });
+				post({ t: 'offer', payload: s, account: getUserBlurtAccount() });
 			} catch {
 				// Structured-clone or channel error — drop silently.
 			}
 		}
 	} else if (msg.t === 'offer') {
-		adoptOfferedSession(msg.payload);
+		adoptOfferedSession(msg.payload, (msg as { account?: unknown }).account);
 	} else if (msg.t === 'lock') {
 		// v1.20.0 review (F-5): another tab's user EXPLICITLY locked (avatar
 		// menu → Lock session). Lock here too, keeping the Remember-me
@@ -796,14 +1027,10 @@ export function handleSessionHandoffMessage(
 		// lives only in broadcastSignOut, never in reset), so this can't
 		// loop. Fires only on an explicit sign-out, never on tab-close.
 		reset({ clearDisk: true });
-		// v1.8.11 (the maintainer) — also drop the cached self-avatar. `broadcastSignOut()`
-		// clears it in the tab that signed out, but `reset()` deliberately does
-		// NOT (lock/pagehide must keep it), so a SIBLING tab held the previous
-		// user's avatar in memory after an explicit sign-out. On a shared
-		// machine that is the same wrong as leaving their bio in localStorage.
-		void import('$lib/stores/selfProfile')
-			.then((mod) => mod.clearSelfProfile())
-			.catch(() => {});
+		// And everything else the sign-out forgets that lives in THIS tab: its
+		// account name, chat maps, cached self-avatar and profile cache
+		// (reset() deliberately keeps them: lock and pagehide must).
+		forgetAccountInThisTab();
 	}
 }
 
@@ -861,39 +1088,34 @@ export function requestSessionFromOpenTabs(): void {
 // Reload self-handoff — Remember-me-gated, hard-reload carve-out
 // ────────────────────────────────────────────────────────────────────────────
 //
-// the maintainer's decision (post-beta.38): if the user CHECKED "Remember me", a plain
-// page refresh (F5 / the reload button) must keep them logged in WITHOUT a
-// password — the convenience they opted into. A HARD refresh (Ctrl+Shift+R)
-// is an explicit "clean slate" → LOCK. If Remember-me is OFF, EVERY refresh
-// locks (the in-memory-only default is untouched).
+// If the user CHECKED "Remember me", a plain page refresh (F5 / the reload
+// button) keeps them logged in WITHOUT a password — the convenience they opted
+// into. A HARD refresh (Ctrl+Shift+R) is an explicit "clean slate" → LOCK. If
+// Remember-me is OFF, EVERY refresh locks (the in-memory-only default is
+// untouched).
 //
 // The cross-tab handoff above already covers a refresh while a SIBLING tab is
-// open. This covers the LONE-tab refresh: on `pagehide` we stash the live
-// session to PER-TAB sessionStorage; the next load consumes it exactly once.
-// Gated on hasPersistedKeystore() — i.e. Remember-me ON (the import/login
-// "remember me" opt-in is precisely what persists the encrypted envelope) —
-// so a privacy-max user (Remember-me OFF) never has a decrypted session
-// written anywhere.
+// open. This covers the LONE-tab refresh, and the decrypted keys never reach
+// disk on the way ($lib/auth/reloadStash): on `pagehide` the session is
+// encrypted under a fresh random key; this tab's sessionStorage gets only the
+// ciphertext (browsers do write sessionStorage to disk — Chromium's session
+// database, Firefox's session-restore file), and the key goes to the service
+// worker, which keeps it in memory for at most RELOAD_STASH_MAX_AGE_MS and
+// hands it out once. The next load asks for it, decrypts, and both are gone.
+// After the worker stops, the browser closes or 30 s pass, what is on disk is
+// ciphertext nobody can open.
 //
-// TRADE-OFF, made deliberately: between the pagehide and the
-// next load, the decrypted posting (and memo) key sits in this tab's
-// sessionStorage. It is never shared cross-tab and — honoring the Keypair
-// "never serialize to network" contract — NEVER sent anywhere off the device.
-// It is NOT "cleared when the tab closes": pagehide cannot tell a reload from
-// a tab close or a navigation to another site, browsers keep a closed tab's
-// sessionStorage for "Reopen closed tab" / session restore, and Firefox's
-// session store may write sessionStorage to its session file on disk. So
-// (v1.20.0 review, F-4) the stash is bounded instead:
-//   • not written at all when the page goes into the back/forward cache
-//     (pagehide `persisted` — that is never a reload);
-//   • stamped with its write time and honoured for RELOAD_STASH_MAX_AGE_MS
-//     only;
-//   • consumed only when this load's navigation type is 'reload' — a new
-//     visit, a restored tab or Back gets the password prompt;
-//   • always removed on the next load, used or not.
-// Same-origin script could read it, as it could read the live in-memory
-// session; the site's CSP still allows 'unsafe-inline' and 'unsafe-eval', so
-// that is not a boundary this relies on. Remember-me OFF stays pure in-memory.
+// Written only when:
+//   • the session is unlocked and its keystore IS the remembered one on disk
+//     (isPersistedEnvelope) — a "just this session" sign-in, or a second
+//     account used while another is remembered, is never stashed;
+//   • a service worker controls the page (none → nothing could hold the key);
+//   • the page is not going into the back/forward cache (never a reload).
+// Restored only when this load is a reload (navigation type 'reload'), the
+// stash is at most RELOAD_STASH_MAX_AGE_MS old, the service worker still has
+// its key, and the decrypted keystore is still the remembered one. The stash
+// is removed on the next load, used or not. Same-origin script could ask for
+// the key, as it could read the live in-memory session.
 //
 // Hard-reload detection: a hard reload BYPASSES the service worker, so
 // `navigator.serviceWorker.controller` is null on that load; a normal reload
@@ -901,16 +1123,10 @@ export function requestSessionFromOpenTabs(): void {
 // pre-SW-activation first load, or a browser with service workers off, e.g.
 // Tor Browser) → discard the stash and lock.
 
-const RELOAD_STASH_KEY = 'morphit.session.reload-stash-v1';
+/** How long the next load waits for the service worker to hand over the key. */
+const STASH_KEY_WAIT_MS = 3_000;
 
-/** A stash older than this is discarded unused. A reload re-runs this module
- *  within a second or two; 30 s leaves room for a slow Tor/I2P reload while
- *  making a stash that outlived its tab (Reopen closed tab, session restore)
- *  worthless. */
-export const RELOAD_STASH_MAX_AGE_MS = 30_000;
-
-// structured clone (the cross-tab handoff) preserves typed arrays; JSON does
-// not, and LiveIdentity carries Uint8Array key bytes — so base64 them.
+// LiveIdentity carries Uint8Array key bytes, which JSON does not — base64 them.
 function reloadStashReplacer(_k: string, v: unknown): unknown {
 	if (v instanceof Uint8Array) {
 		let s = '';
@@ -936,82 +1152,143 @@ function currentNavigationType(): string | null {
 		if (typeof performance === 'undefined' || typeof performance.getEntriesByType !== 'function') {
 			return null;
 		}
-		const nav = performance.getEntriesByType('navigation')[0] as
-			| { type?: unknown }
-			| undefined;
+		const nav = performance.getEntriesByType('navigation')[0] as { type?: unknown } | undefined;
 		return typeof nav?.type === 'string' ? nav.type : null;
 	} catch {
 		return null;
 	}
 }
 
-/** Stash the live session for a same-tab reload. Called from `pagehide`
- *  (see handlePageHide) BEFORE reset() wipes the in-memory keys. No-op unless
- *  the session is UNLOCKED and Remember-me is on (hasPersistedKeystore()); a
- *  paired-readonly session has its own disk marker (autoRestorePairedSession)
- *  and is never stashed here. */
-export function stashSessionForReload(): void {
-	// No `browser` guard: safeSession/safeLocal are SSR-safe (return null/false
-	// off-window) and the sole caller is the browser-gated pagehide listener.
-	// Omitting it also lets vitest exercise this (SvelteKit's `browser` is
-	// false under test, which would otherwise no-op the whole function).
-	const s = get(internal);
-	if (s.state !== 'unlocked' || !s.live || !s.envelope) return;
-	if (!hasPersistedKeystore()) {
-		// Remember-me OFF → never persist the decrypted session; clear stale.
-		safeSession.remove(RELOAD_STASH_KEY);
-		return;
-	}
+/** The service worker controlling this page, or null (hard reload, none). */
+function serviceWorkerController(): ServiceWorker | null {
 	try {
-		safeSession.set(
-			RELOAD_STASH_KEY,
-			JSON.stringify({ at: Date.now(), live: s.live, envelope: s.envelope }, reloadStashReplacer)
-		);
+		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+		return navigator.serviceWorker.controller ?? null;
 	} catch {
-		safeSession.remove(RELOAD_STASH_KEY);
+		return null;
 	}
 }
 
-/** Consume a reload stash on the next load. CONSUME-ONCE: the key is removed
- *  before anything else, so a parse error, a hard reload or a refusal can
- *  never leave the decrypted session lingering. Restores only when ALL hold:
- *  (a) we're still locked (never clobber a live session, e.g. a sibling
- *  handoff already won); (b) a service-worker controller is present (a hard
- *  reload has none → lock, failing closed); (c) this load IS a reload
- *  (navigation type 'reload'); (d) the stash is at most
- *  RELOAD_STASH_MAX_AGE_MS old. */
-export function restoreSessionFromReloadStash(): void {
-	// No `browser` guard — see stashSessionForReload. safeSession is SSR-safe
-	// and the navigator.serviceWorker access below is typeof-guarded.
-	const raw = safeSession.get(RELOAD_STASH_KEY);
-	if (raw === null) return;
+/** Remove any stash this tab holds, including the plaintext ones older builds
+ *  wrote. */
+function dropReloadStash(): void {
+	for (const k of LEGACY_RELOAD_STASH_KEYS) safeSession.remove(k);
 	safeSession.remove(RELOAD_STASH_KEY);
-	if (get(internal).state !== 'locked') return;
-	if (
-		typeof navigator === 'undefined' ||
-		!('serviceWorker' in navigator) ||
-		navigator.serviceWorker.controller === null
-	) {
-		return; // hard reload (Ctrl+Shift+R) or pre-activation → lock
+}
+
+/** Stash the live session for a same-tab reload. Called from `pagehide`
+ *  (see handlePageHide) BEFORE reset() wipes the in-memory keys. Writes only
+ *  ciphertext, and only for the remembered session (see above); a
+ *  paired-readonly session has its own disk marker (autoRestorePairedSession)
+ *  and is never stashed here. Synchronous: pagehide cannot wait. */
+export function stashSessionForReload(): void {
+	// No `browser` guard: safeSession is SSR-safe and the sole caller is the
+	// browser-gated pagehide listener; omitting it lets vitest exercise this.
+	dropReloadStash();
+	const s = get(internal);
+	if (s.state !== 'unlocked' || !s.live || !s.envelope) return;
+	if (!isPersistedEnvelope(s.envelope)) return;
+	const controller = serviceWorkerController();
+	if (controller === null || sodium === undefined) return;
+	let plain: Uint8Array | null = null;
+	let key: Uint8Array | null = null;
+	try {
+		plain = new TextEncoder().encode(
+			JSON.stringify({ live: s.live, envelope: s.envelope }, reloadStashReplacer)
+		);
+		const sealed = sealStash(sodium, plain, Date.now());
+		key = sealed.key;
+		// postMessage copies the key at once; ours is zeroed below.
+		controller.postMessage({ type: SW_STASH_PUT, id: sealed.record.id, key });
+		safeSession.set(RELOAD_STASH_KEY, JSON.stringify(sealed.record));
+	} catch {
+		safeSession.remove(RELOAD_STASH_KEY);
+	} finally {
+		plain?.fill(0);
+		key?.fill(0);
 	}
+}
+
+/** Ask the service worker for (and so remove) the key of stash `id`. */
+function takeStashKey(controller: ServiceWorker, id: string): Promise<Uint8Array | null> {
+	return new Promise((resolve) => {
+		const channel = new MessageChannel();
+		let settled = false;
+		const finish = (key: Uint8Array | null): void => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			try {
+				channel.port1.close();
+			} catch {
+				// already closed
+			}
+			resolve(key);
+		};
+		const timer = setTimeout(() => finish(null), STASH_KEY_WAIT_MS);
+		channel.port1.onmessage = (ev: MessageEvent) => {
+			const key = (ev.data as { key?: unknown } | null)?.key;
+			// Checked by tag, not instanceof: a cloned buffer may come from
+			// another realm. Copied into ours; the received copy is wiped.
+			if (Object.prototype.toString.call(key) !== '[object Uint8Array]') return finish(null);
+			const received = key as Uint8Array;
+			const own = received.length === 32 ? new Uint8Array(received) : null;
+			received.fill(0);
+			finish(own);
+		};
+		try {
+			controller.postMessage({ type: SW_STASH_TAKE, id }, [channel.port2]);
+		} catch {
+			finish(null);
+		}
+	});
+}
+
+/** Consume a reload stash on the next load. CONSUME-ONCE: the stash is
+ *  removed before anything else. Restores only when ALL hold: (a) we're still
+ *  locked (never clobber a live session, e.g. a sibling handoff already won);
+ *  (b) a service-worker controller is present (a hard reload has none → lock,
+ *  failing closed) and still holds the stash's key; (c) this load IS a reload
+ *  (navigation type 'reload'); (d) the stash is at most
+ *  RELOAD_STASH_MAX_AGE_MS old; (e) the decrypted keystore is still the one
+ *  remembered on disk. */
+export async function restoreSessionFromReloadStash(): Promise<void> {
+	const raw = safeSession.get(RELOAD_STASH_KEY);
+	dropReloadStash();
+	if (raw === null) return;
+	if (get(internal).state !== 'locked') return;
+	const controller = serviceWorkerController();
+	if (controller === null) return; // hard reload (Ctrl+Shift+R) or pre-activation → lock
 	// A new visit, a reopened/restored tab, Back/Forward → password prompt.
 	if (currentNavigationType() !== 'reload') return;
+	const record = parseStashRecord(raw);
+	if (record === null) return;
+	const age = Date.now() - record.at;
+	// Too old, or from the future (clock moved back by more than a little).
+	if (!(age >= -5_000 && age <= RELOAD_STASH_MAX_AGE_MS)) return;
+	const key = await takeStashKey(controller, record.id);
+	if (key === null) return;
+	let plain: Uint8Array | null = null;
 	try {
-		const parsed = JSON.parse(raw, reloadStashReviver) as {
-			at?: unknown;
+		await ensureSodium();
+		plain = openStash(sodium, record, key);
+		if (plain === null) return;
+		const parsed = JSON.parse(new TextDecoder().decode(plain), reloadStashReviver) as {
 			live?: LiveIdentity;
 			envelope?: KeystoreEnvelope;
 		};
-		const age = typeof parsed.at === 'number' ? Date.now() - parsed.at : NaN;
-		// No write time (an older build's stash), too old, or from the future
-		// (clock moved back by more than a little) → stay locked.
-		if (!(age >= -5_000 && age <= RELOAD_STASH_MAX_AGE_MS)) return;
-		if (parsed.live && parsed.envelope) {
-			internal.set({ state: 'unlocked', live: parsed.live, envelope: parsed.envelope });
+		if (!parsed.live || !parsed.envelope) return;
+		if (!isPersistedEnvelope(parsed.envelope) || get(internal).state !== 'locked') {
+			wipeLiveIdentity(parsed.live);
+			return;
 		}
+		internal.set({ state: 'unlocked', live: parsed.live, envelope: parsed.envelope });
 	} catch {
 		// Malformed stash — stay locked; the envelope is still persisted, so
 		// the user can unlock with their password.
+	} finally {
+		key.fill(0);
+		plain?.fill(0);
 	}
 }
 
@@ -1040,7 +1317,7 @@ export function handlePageHide(persisted: boolean): void {
  *  of an EXPLICIT sign-out. Idempotent and safe to call when already locked
  *  (siblings receiving the message just reset() a locked store — a no-op). */
 export function broadcastSignOut(): void {
-	// (v1.18.0 deep-deep, M2) Stop this browser's push notifications for the
+	// Stop this browser's push notifications for the
 	// account BEFORE the session is wiped: reset() zeroes the posting key, and
 	// the relay-side unsubscribe should be signed with it. So take a COPY of the
 	// key and the account name now; push.ts signs, unsubscribes (browser and
@@ -1096,15 +1373,38 @@ export function broadcastSignOut(): void {
 	bestEffort(clearKeystore);
 	bestEffort(clearPairedSession);
 	bestEffort(() => reset());
+	forgetAccountInThisTab();
+}
+
+/** Explicit Sign Out, the part every open tab must do for itself — the tab
+ *  that signed out (broadcastSignOut) and each sibling that hears its
+ *  'signout' message. A sibling may hold its own "just this session" account
+ *  name (its sessionStorage, which no other tab can reach), conversation maps
+ *  in memory that a still-mounted view would write back, and a profile cache
+ *  filed under the account: left alone, it kept naming the account to the
+ *  operator on every chat poll and wrote peers back to disk after the
+ *  sweep. Never called from reset(), lock or pagehide. */
+function forgetAccountInThisTab(): void {
+	const bestEffort = (fn: () => void): void => {
+		try {
+			fn();
+		} catch {
+			// Isolated: a failure here must not prevent the other clears.
+		}
+	};
 	// Forget the persisted account name on an EXPLICIT sign-out so the login
 	// page's signed-in gate (getUserBlurtAccount(), reading the shared-across-
 	// tabs `morphit.blurtAccount` localStorage key) no longer reports an
-	// account anywhere. localStorage is per-origin, so this one removal signs
-	// the name out of every open tab. Deliberately here and NOT in reset():
+	// account anywhere. A remembered name is in localStorage (per origin); a
+	// "just this session" name is in each tab's own sessionStorage, which is
+	// why every tab runs this. Deliberately here and NOT in reset():
 	// reset() also runs on pagehide/lockSession(), where wiping this
 	// convenience cache would force the user to re-enter their account name
 	// every session — the name-clear is the mark of an EXPLICIT sign-out.
 	bestEffort(clearUserBlurtAccount);
+	// This tab's own sessionStorage: a "just this session" name, and the chat
+	// state such a sign-in keeps there instead of on disk.
+	bestEffort(sweepSessionAccountKeysOnSignOut);
 	// Forget every OTHER account-derived key too (display name, bio, links,
 	// chat peers/pins/read-state, unsent drafts, and the NOT-account-scoped
 	// `morphit.userPreferences.v1`). Before this, all of that survived an
@@ -1114,30 +1414,46 @@ export function broadcastSignOut(): void {
 	// per-account key is forgotten by default rather than surviving until
 	// someone remembers to add it. See $lib/storage/signOutSweep.
 	bestEffort(sweepAccountStorageOnSignOut);
+	// The chat stores keep their maps in memory too, and a view still mounted
+	// (a conversation marked read as it unmounts) would write the whole old map
+	// back. Reset them, then sweep again once the page has moved on, so nothing
+	// of this account is left on disk a second after the sign-out.
+	void import('$lib/chat/signOutReset')
+		.then((mod) => mod.resetChatOnSignOut())
+		.catch(() => {})
+		.finally(() => {
+			bestEffort(sweepAccountStorageOnSignOut);
+			for (const ms of [300, 900]) {
+				setTimeout(() => bestEffort(sweepAccountStorageOnSignOut), ms);
+			}
+		});
 	// Also drop the cached self-avatar (shown in the menu + IdentityLabels).
 	// Dynamically imported to keep selfProfile's deps out of this store's
 	// static graph; EXPLICIT sign-out only (reset()/lockSession keep it —
 	// public data, re-shown on unlock). Chunk-load failure is harmless: the
 	// avatar cache is refreshed per account on the next unlock anyway.
-	void import('$lib/stores/selfProfile')
-		.then((mod) => mod.clearSelfProfile())
+	void import('$lib/stores/selfProfile').then((mod) => mod.clearSelfProfile()).catch(() => {});
+	// And the on-disk profile cache: which accounts this browser looked up is
+	// the signed-out person's history, not the device's.
+	void import('$lib/indexer/profileCache')
+		.then((mod) => mod.forgetProfilesOnSignOut())
 		.catch(() => {});
 }
 
 if (browser) {
 	autoRestorePairedSession();
 
-	// Lone-tab refresh restore (Remember-me-gated). Consume any reload stash
-	// this tab's own pagehide left BEFORE asking siblings — our own stash is
-	// the authoritative session for this tab, and a hard reload will already
-	// have caused it to be discarded (controller null → lock). Runs after the
-	// paired restore so a disk-restored paired session short-circuits it.
-	restoreSessionFromReloadStash();
+	// Lone-tab refresh restore (Remember-me-gated). Consumes any reload stash
+	// this tab's own pagehide left; a hard reload discards it (controller
+	// null → lock). Runs after the paired restore so a disk-restored paired
+	// session short-circuits it. It finishes asynchronously (the service
+	// worker hands over the stash key), so it may race the sibling request
+	// below: both act only on a locked store, so whichever lands first wins
+	// and the other is ignored.
+	void restoreSessionFromReloadStash();
 
 	// Set up the cross-tab handoff listener (so this tab can ANSWER sibling
 	// requests) and immediately ask any open tab to hand us a session.
-	// Runs after the restores above so an already-restored session
-	// short-circuits the request (we're no longer locked).
 	initSessionHandoff();
 	requestSessionFromOpenTabs();
 
@@ -1155,7 +1471,7 @@ if (browser) {
 	// bfcache is never a reload. The user unlocks with their password (or a
 	// sibling tab hands the session over on the next full load).
 
-	// Cross-tab unlock state propagation (§F.17 + Part 114 for paired).
+	// Cross-tab unlock state propagation (§F.17 + for paired).
 	//
 	// Pre-fix: tab 1 signs out, wipes the persisted envelope.
 	// Tab 2's in-memory live identity is untouched — user

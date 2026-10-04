@@ -1,6 +1,6 @@
 /**
- * The relay installs the router even with no hidden endpoint configured
- * (v1.18.0 deep-deep, L3).
+ * The relay installs the router even with no hidden endpoint configured.
+ *
  *
  * A clearnet relay with a blank MORPHIT_RELAY_HIDDEN_RPC_ENDPOINTS installed no
  * router — yet at boot it merges the on-chain RPC directory, `.onion`/`.i2p`

@@ -1,7 +1,7 @@
 /**
- * ansible-vars-smoke.ts (cp600) — pins the PURE wizard↔Ansible bridge
+ * ansible-vars-smoke.ts — pins the PURE wizard↔Ansible bridge
  * (apps/ops-cli/src/init/ansibleVars.ts).  The actual `ansible-playbook` run is
- * a mini PC-validated, but the var MAPPING + the local-run argv + the DB-password
+ * validated on a real machine, but the var MAPPING + the local-run argv + the DB-password
  * generation must stay correct — a wrong var name or a missing `enable_ddns`
  * silently breaks a grandma install deep into the playbook.
  */

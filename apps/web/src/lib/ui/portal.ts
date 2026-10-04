@@ -1,7 +1,7 @@
 /**
  * Morphit — `use:portal`: move a node to `<body>` for the life of the component.
  *
- * Why this exists (tt.txt #1): the avatar menu's full-page scrim was
+ * Why this exists: the avatar menu's full-page scrim was
  * `fixed inset-0`, which everyone — including the comment above it — assumed
  * covered the viewport. It didn't. The sticky header carries `backdrop-blur-md`,
  * and **an ancestor with `backdrop-filter` (or `filter`, `transform`,

@@ -1,0 +1,22 @@
+{
+  "id": "jobs",
+  "name": "Jobs",
+  "description": "Fake core plugin for internal jobs.",
+  "version": "1.0",
+  "stream": "yes",
+  "settings": {},
+  "jobs": [
+    {
+      "name": "mmdb-local",
+      "file": "mmdb-local.py",
+      "every": "day",
+      "reload": true
+    },
+    {
+      "name": "failover-backup",
+      "file": "failover-backup.py",
+      "every": "once",
+      "reload": false
+    }
+  ]
+}

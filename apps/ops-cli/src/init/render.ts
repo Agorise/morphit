@@ -69,7 +69,7 @@ export interface WizardAnswers {
 	readonly listingFee: ListingFeeResult;
 	readonly feeExplorers: FeeExplorersResult;
 	readonly chatLinkExplorers: ChatLinkExplorersResult;
-	/** Part 122 cp22 — operator-chosen trade-only-asset disable
+	/** operator-chosen trade-only-asset disable
 	 *  set.  Renders into MORPHIT_INDEXER_DISABLED_ASSETS in
 	 *  morphit.config.env.  Empty means accept everything
 	 *  (default posture). */
@@ -77,9 +77,9 @@ export interface WizardAnswers {
 	readonly disabledPaymentMethods: DisabledPaymentMethodsResult;
 	readonly seo: SeoResult;
 	readonly backup: BackupResult;
-	/** Part 111 — operator tag for federation-scoped payouts. */
+	/** operator tag for federation-scoped payouts. */
 	readonly operatorTag: OperatorTagResult;
-	/** Part 121 cp9 — Matrix surfaces.
+	/** Matrix surfaces.
 	 *
 	 *  Two distinct addresses kept separate by design:
 	 *    - alertMxid (@user:server)  — PRIVATE E2E DM for operator
@@ -93,12 +93,12 @@ export interface WizardAnswers {
 	 *  config load time + via persona sentinels.
 	 */
 	readonly matrix: MatrixSurfacesResult;
-	/** cp167 — Model Context Protocol server install opt-in.
+	/** Model Context Protocol server install opt-in.
 	 *  Default is enabled (AI agents become the new search layer;
 	 *  read-only, non-custodial, zero abuse surface).  Disabling
 	 *  removes the morphit-mcp systemd unit from rendered artifacts. */
 	readonly mcpServer: McpServerResult;
-	/** cp182 — BunkerWeb reverse-proxy/WAF decision.  When enabled,
+	/** BunkerWeb reverse-proxy/WAF decision.  When enabled,
 	 *  renders MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 (the
 	 *  pinned BunkerWeb Docker network) so the relay honours the
 	 *  real client IP BunkerWeb forwards.  Written ONLY when enabled;
@@ -106,7 +106,7 @@ export interface WizardAnswers {
 	 *  default bridge pool 172.16.0.0/12 — a peer there can only be
 	 *  inside the operator's own network). */
 	readonly bunkerWeb: BunkerWebResult;
-	/** cp182 — host-hardening checklist.  When generateChecklist is
+	/** host-hardening checklist.  When generateChecklist is
 	 *  true, writeWizardOutput emits a personalized
 	 *  morphit-hardening-checklist.md (domain + BunkerWeb-vs-nginx
 	 *  path baked in) sequencing the shipped Ansible/nginx/ops
@@ -148,7 +148,7 @@ export interface MatrixSurfacesResult {
 	readonly groupRoomAlias: string | null;
 }
 
-/** Part 110 — operator-configurable listing fee + fallback
+/** operator-configurable listing fee + fallback
  *  BLURT price.  All three BTC/XMR/BLURT amounts plus the
  *  fallback price live here so the env-renderer can write
  *  them in one place.
@@ -175,7 +175,7 @@ export interface ListingFeeResult {
 	 *  during an upstream outage are still in the right
 	 *  ballpark.  Default 0.002. */
 	readonly fallbackBlurtPriceUsd: number;
-	/** cp128: denomination fiat the indexer expresses BLURT
+	/** denomination fiat the indexer expresses BLURT
 	 *  prices in for display surfaces.  Default 'USD'.
 	 *  Operators in non-USD markets (or hedging against USD
 	 *  collapse) can set EUR, GBP, JPY, BRL, CNY, INR, RUB, XDR
@@ -200,7 +200,7 @@ export interface WriteResult {
 	readonly envBytes: number;
 	readonly keystoreBytes: number;
 	readonly backupEnvBytes: number;
-	/** cp182 — path to the personalized hardening checklist, or null
+	/** path to the personalized hardening checklist, or null
 	 *  if the operator declined to generate it.  0644 (no secrets —
 	 *  it is a runbook), unlike the 0600 config/keystore files. */
 	readonly hardeningChecklistPath: string | null;
@@ -291,7 +291,9 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		// The stanza points at the keyfile by its bare name — valid once the
 		// operator copies morphit-web.dat into i2pd's datadir.  webPort is the
 		// origin's port (i2pd proxies I2P → the local site).
-		writeFileSync(stanzaPath, i2pTunnelStanza(I2P_KEYFILE_NAME, HIDDEN_FRONTEND_PORT), { mode: 0o644 });
+		writeFileSync(stanzaPath, i2pTunnelStanza(I2P_KEYFILE_NAME, HIDDEN_FRONTEND_PORT), {
+			mode: 0o644
+		});
 		chmodSync(stanzaPath, 0o644);
 	}
 
@@ -324,7 +326,7 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 		backupEnvBytes = Buffer.byteLength(backupContent, 'utf8');
 	}
 
-	// ─── morphit-hardening-checklist.md (cp182) ──
+	// ─── morphit-hardening-checklist.md ──
 	// A personalized runbook (operator's domain + BunkerWeb-vs-nginx
 	// path).  No secrets in it, so 0644 — the operator will read it
 	// in an editor and work through it over their first evenings.
@@ -367,7 +369,7 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 	};
 }
 
-// ─── Personalized hardening checklist (cp182) ────────────────────
+// ─── Personalized hardening checklist ────────────────────
 //
 // Produces morphit-hardening-checklist.md.  Does NOT re-implement
 // hardening — it sequences the shipped artifacts (Ansible hardening
@@ -378,13 +380,13 @@ export function writeWizardOutput(answers: WizardAnswers, repoRoot: string): Wri
 // order, for THIS instance" runbook.
 /** Minimal inputs the hardening checklist actually needs.  Kept
  *  separate from WizardAnswers so the standalone `morphit-ops
- *  harden` command (cp187) can regenerate the checklist without
+ *  harden` command can regenerate the checklist without
  *  fabricating a full wizard-answers object. */
 export interface HardeningChecklistInput {
 	readonly instanceName: string;
 	readonly origin: string | null;
 	readonly bunkerWebEnabled: boolean;
-	/** cp378 — the operator's hardening-pillar confirmations from the
+	/** the operator's hardening-pillar confirmations from the
 	 *  wizard.  When present, the checklist opens with a short "you
 	 *  confirmed" summary.  Optional. */
 	readonly confirmed?: {
@@ -432,7 +434,9 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 		L.push('## During setup you confirmed');
 		L.push('');
 		for (const [yes, label] of rows) {
-			L.push(`- [${yes === false ? ' ' : 'x'}] ${label}${yes === false ? '  — you chose to skip; strongly reconsider' : ''}`);
+			L.push(
+				`- [${yes === false ? ' ' : 'x'}] ${label}${yes === false ? '  — you chose to skip; strongly reconsider' : ''}`
+			);
 		}
 		L.push('');
 		L.push('The Ansible playbook applies ALL of these regardless; the list');
@@ -452,7 +456,9 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	L.push('         and `PasswordAuthentication no`, then `sudo systemctl restart ssh`.');
 	L.push('      (Automated: `ops/ansible/roles/hardening/tasks/ssh.yml` — OPERATIONS §37.1)');
 	L.push('- [ ] **Automatic security updates:**');
-	L.push('      `sudo apt install unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades`');
+	L.push(
+		'      `sudo apt install unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades`'
+	);
 	L.push('      (Automated: OPERATIONS §37.2)');
 	L.push('- [ ] **Firewall (UFW)** — allow SSH FIRST, then web, then enable (order matters,');
 	L.push('      or you lock yourself out):');
@@ -480,7 +486,7 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	} else {
 		L.push(`- [ ] **Point DNS first.**  Make the A/AAAA record for \`${domain}\` resolve to`);
 		L.push('      this server before requesting a certificate.');
-		L.push('- [ ] **Issue a Let\'s Encrypt certificate:**');
+		L.push("- [ ] **Issue a Let's Encrypt certificate:**");
 		L.push(`      \`sudo certbot --nginx -d ${domain}\``);
 		L.push('      certbot installs a renewal timer automatically — verify with');
 		L.push('      `systemctl list-timers certbot.timer`.  (Reference: OPERATIONS.md §35)');
@@ -507,7 +513,9 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 		L.push(`      Edit it to set \`server_name ${domain};\` — ONE domain. It serves`);
 		L.push('      `apps/web/build` and reverse-proxies `/relay/`, `/v1/`, `/rss/`, `/mcp`');
 		L.push('      to the local services, so you do NOT need a separate host per service.');
-		L.push('      Symlink into `sites-enabled/`, then `sudo nginx -t && sudo systemctl reload nginx`.');
+		L.push(
+			'      Symlink into `sites-enabled/`, then `sudo nginx -t && sudo systemctl reload nginx`.'
+		);
 		L.push('      (Advanced: only if you deliberately split the relay/indexer onto their');
 		L.push('      own subdomains, see the OPTIONAL `ops/nginx/relay.conf` + `indexer.conf`.');
 		L.push('      Reference: RUN-A-MORPHIT-NODE.md §6)');
@@ -572,7 +580,7 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push(`MORPHIT_INSTANCE_NAME=${quote(answers.instanceName, 'parseEnv')}`);
 	// Tagline is optional — omit the line entirely when skipped, so an
 	// unbranded instance doesn't carry a placeholder description into
-	// the federated /instances directory or its SEO (cp231).
+	// the federated /instances directory or its SEO.
 	if (answers.tagline !== '') {
 		lines.push(`MORPHIT_INSTANCE_TAGLINE=${quote(answers.tagline, 'parseEnv')}`);
 	}
@@ -650,7 +658,7 @@ function renderConfig(answers: WizardAnswers): string {
 	lines.push('MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT=100');
 	lines.push('');
 
-	// ─── Matrix surfaces (Part 121 cp9) ──────────────────────
+	// ─── Matrix surfaces ──────────────────────
 	// Two distinct Matrix addresses, kept separate by design:
 	//   - alert MXID (@user:server)  — PRIVATE E2E DM destination
 	//     for operator alerts.  Bot-only; never exposed via the
@@ -662,10 +670,7 @@ function renderConfig(answers: WizardAnswers): string {
 	// @→# replacement is actively harmful (security disclosures
 	// would leak to a public room).  Validate shape at config
 	// load time and via persona sentinels.
-	if (
-		answers.matrix.alertMxid !== null ||
-		answers.matrix.groupRoomAlias !== null
-	) {
+	if (answers.matrix.alertMxid !== null || answers.matrix.groupRoomAlias !== null) {
 		lines.push('# ──────────────────────────────────────────────────────');
 		lines.push('# Matrix surfaces');
 		lines.push('# ──────────────────────────────────────────────────────');
@@ -678,9 +683,7 @@ function renderConfig(answers: WizardAnswers): string {
 		lines.push('# /about-this-instance, and footer for user→operator');
 		lines.push('# contact.  Exposed via /v1/instance.operator_matrix_room.');
 		if (answers.matrix.alertMxid !== null) {
-			lines.push(
-				`MORPHIT_MATRIX_BOT_ALERT_MXID=${quote(answers.matrix.alertMxid, 'parseEnv')}`
-			);
+			lines.push(`MORPHIT_MATRIX_BOT_ALERT_MXID=${quote(answers.matrix.alertMxid, 'parseEnv')}`);
 		}
 		if (answers.matrix.groupRoomAlias !== null) {
 			lines.push(
@@ -690,7 +693,7 @@ function renderConfig(answers: WizardAnswers): string {
 		lines.push('');
 	}
 
-	// ─── MCP server (cp167) ─────────────────────────────────────────
+	// ─── MCP server ─────────────────────────────────────────
 	// Renders the operator's wizard answer about whether to install
 	// the morphit-mcp service.  No secret material here — just an
 	// enable flag the operator can flip later, plus comments telling
@@ -723,7 +726,78 @@ function renderConfig(answers: WizardAnswers): string {
 	}
 	lines.push('');
 
-	// cp193 — MORPHIT_RELAY_TRUSTED_PROXY_IPS and the relay signup
+	// ─── Trade-only asset policy ─────────────────────────────────
+	// Operator choices, so they live here in morphit.config.env (both keys
+	// are in the operator-config allowlist).
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Trade-only asset policy (indexer)');
+	lines.push('# ──────────────────────────────────────────────────────');
+	lines.push('# Comma-separated list of uppercase tickers your indexer');
+	lines.push('# REFUSES to write new orders for.  Empty (or unset)');
+	lines.push('# means accept every trade-only asset shipped in this');
+	lines.push('# release.  Peer-instance orders for the same asset');
+	lines.push('# still appear in your read-only orderbook feeds — the');
+	lines.push('# chain history is shared across the federation.');
+	lines.push('#');
+	lines.push('# Parser is tolerant of whitespace, mixed case, and');
+	lines.push('# trailing commas — write it however you like.');
+	lines.push('#');
+	lines.push('# Examples:');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS=""        (accept all)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT"    (refuse USDT)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDC"    (refuse USDC)');
+	lines.push(
+		'#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI" (refuse all three stablecoins — privacy-pure)'
+	);
+	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH" (refuse BTC-forks)');
+	lines.push('#');
+	lines.push('# Change your mind later by editing this line and');
+	lines.push('# restarting the indexer service.  Browsers see the');
+	lines.push('# change at most 5 minutes after restart (the');
+	lines.push('# /v1/instance response carries a 5-minute Cache-Control');
+	lines.push('# header).  See docs/OPERATIONS.md §"Trade-only asset');
+	lines.push('# configuration" for the full operator playbook.');
+	lines.push(
+		`MORPHIT_INDEXER_DISABLED_ASSETS=${quote(answers.disabledAssets.disabledTickers.join(','))}`
+	);
+	lines.push('');
+
+	// ── Disabled payment methods (canonical) ──
+	lines.push('# ─────────────────────────────────────────────────────────');
+	lines.push('# DISABLED PAYMENT METHODS (operator-scoped)');
+	lines.push('# ─────────────────────────────────────────────────────────');
+	lines.push('# Canonical payment-method keys you do NOT want to offer on');
+	lines.push('# this instance.  Hidden from the post-order picker and the');
+	lines.push('# orderbook payment filter; the indexer refuses a NEW order');
+	lines.push('# only when ALL of its payment methods are disabled (an order');
+	lines.push('# that still offers one enabled method is kept).');
+	lines.push('#');
+	lines.push('# Peer-instance orders that use a method you disabled still');
+	lines.push('# appear in your read-only orderbook — chain history is shared');
+	lines.push('# across the federation.');
+	lines.push('#');
+	lines.push('# Comma-separated, LOWERCASE keys.  Parser tolerates');
+	lines.push('# whitespace, case, and trailing commas.');
+	lines.push('#');
+	lines.push('# Examples:');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=""              (offer all — default)');
+	lines.push(
+		'#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods" (no Barter / money-only instance)'
+	);
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="paypal"   (no PayPal)');
+	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods,paypal,zelle"');
+	lines.push('#');
+	lines.push('# Canonical method keys (barter_goods, paypal, zelle,');
+	lines.push('# …) are listed in docs/OPERATIONS.md §"Payment-method');
+	lines.push('# configuration".  Change your mind later by editing this line');
+	lines.push('# and restarting the indexer (browsers see the change at most');
+	lines.push('# 5 minutes after restart).');
+	lines.push(
+		`MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=${quote(answers.disabledPaymentMethods.disabledKeys.join(','))}`
+	);
+	lines.push('');
+
+	// MORPHIT_RELAY_TRUSTED_PROXY_IPS and the relay signup
 	// ceiling are NOT operator-config-allowlisted keys, so they are
 	// written into morphit.env (renderEnv), not here.  Putting them in
 	// morphit.config.env makes the indexer reject the whole config on
@@ -764,7 +838,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_RELAY_DATABASE_URL=${quote(answers.databaseUrl)}`);
 	lines.push('');
 
-	// cp193 — relay signup ceiling. NOT an operator-config-allowlisted
+	// relay signup ceiling. NOT an operator-config-allowlisted
 	// key, so it lives here in morphit.env (matching relay.env.example
 	// and the Ansible relay.env template), NOT in morphit.config.env.
 	lines.push('# ──────────────────────────────────────────────────────');
@@ -775,7 +849,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_RELAY_SIGNUP_DAILY_CEILING=${answers.dailyCeiling}`);
 	lines.push('');
 
-	// cp193 — reverse-proxy trusted client IPs. Also NOT allowlisted,
+	// reverse-proxy trusted client IPs. Also NOT allowlisted,
 	// so it belongs here. When the stack sits behind BunkerWeb's pinned
 	// 172.20.0.0/16 Docker network, the relay must trust that range so
 	// the real client IP in X-Forwarded-For is honoured by rate limits
@@ -793,7 +867,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		lines.push('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16');
 	} else {
 		lines.push('# No reverse proxy was selected at setup.  Left unset, the relay');
-		lines.push('# trusts X-Forwarded-For from loopback and from Docker\'s default');
+		lines.push("# trusts X-Forwarded-For from loopback and from Docker's default");
 		lines.push('# bridge pool (172.16.0.0/12), which covers nginx on this server');
 		lines.push('# and any proxy container here.  Set this only for a proxy/CDN');
 		lines.push('# outside those ranges (a set value replaces 172.16.0.0/12).');
@@ -858,7 +932,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(`MORPHIT_INDEXER_START_BLOCK=${MORPHIT_GENESIS_BLOCK}`);
 	lines.push('');
 
-	// cp194 — two REQUIRED indexer vars the wizard had never written
+	// two REQUIRED indexer vars the wizard had never written
 	// (the indexer's Zod config marks both required; ops/env/indexer.env.example
 	// and the Ansible template set them, but the wizard path didn't — so a
 	// wizard-configured indexer failed to boot with "MORPHIT_INDEXER_PUBLIC_ORIGIN:
@@ -890,7 +964,9 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# indexer recognises official network posts. Do not change it');
 	lines.push('# unless you are running a private fork with its own official');
 	lines.push('# account.');
-	lines.push('MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY=BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9');
+	lines.push(
+		'MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY=BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9'
+	);
 	lines.push('');
 
 	lines.push('# ──────────────────────────────────────────────────────');
@@ -899,7 +975,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# Comma-separated https:// URLs the indexer queries to');
 	lines.push('# verify BTC/XMR fee payments.  Multi-explorer cross-check');
 	lines.push('# rejects single-source manipulation (a compromised explorer');
-	lines.push("# cannot lie undetected if the other configured explorers");
+	lines.push('# cannot lie undetected if the other configured explorers');
 	lines.push('# disagree).  Restart the indexer service after changes:');
 	lines.push('#   sudo systemctl restart morphit-indexer');
 	lines.push('#');
@@ -914,12 +990,8 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#');
 	lines.push('# For maximum independence, self-host both — see');
 	lines.push('# docs/OPERATIONS.md §40.4 for a docker-compose recipe.');
-	lines.push(
-		`MORPHIT_INDEXER_BTC_EXPLORER_URLS=${quote(answers.feeExplorers.btc.join(','))}`
-	);
-	lines.push(
-		`MORPHIT_INDEXER_XMR_EXPLORER_URLS=${quote(answers.feeExplorers.xmr.join(','))}`
-	);
+	lines.push(`MORPHIT_INDEXER_BTC_EXPLORER_URLS=${quote(answers.feeExplorers.btc.join(','))}`);
+	lines.push(`MORPHIT_INDEXER_XMR_EXPLORER_URLS=${quote(answers.feeExplorers.xmr.join(','))}`);
 	lines.push('');
 
 	lines.push('# ──────────────────────────────────────────────────────');
@@ -963,23 +1035,15 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#   DAI  (Polygon): https://polygonscan.com/tx/{txid}');
 	lines.push('#   DAI  (Base):    https://basescan.org/tx/{txid}');
 	lines.push('#   DAI  (Arbitrum): https://arbiscan.io/tx/{txid}');
-	lines.push(
-		`MORPHIT_FRONTEND_BTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.btc)}`
-	);
-	lines.push(
-		`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xmr)}`
-	);
-	lines.push(
-		`MORPHIT_FRONTEND_BCH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.bch)}`
-	);
-	lines.push(
-		`MORPHIT_FRONTEND_LTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ltc)}`
-	);
+	lines.push(`MORPHIT_FRONTEND_BTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.btc)}`);
+	lines.push(`MORPHIT_FRONTEND_XMR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xmr)}`);
+	lines.push(`MORPHIT_FRONTEND_BCH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.bch)}`);
+	lines.push(`MORPHIT_FRONTEND_LTC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.ltc)}`);
 	lines.push(
 		`MORPHIT_FRONTEND_DASH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dash)}`,
-		// Part 122 cp33 — DOGE single-network chat-link.
+		// DOGE single-network chat-link.
 		`MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.doge)}`,
-		// Part 122 cp39 — ZEC single-network chat-link.
+		// ZEC single-network chat-link.
 		`MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.zec)}`,
 		`MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.arrr)}`,
 		`MORPHIT_FRONTEND_DCR_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dcr)}`,
@@ -987,7 +1051,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 		`MORPHIT_FRONTEND_ETH_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.eth)}`,
 		`MORPHIT_FRONTEND_XRP_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.xrp)}`
 	);
-	// Part 122 cp30-DD-11 — USDT per-network env vars.  These
+	// USDT per-network env vars.  These
 	// finally route through the indexer body to the frontend's
 	// usdtExplorerUrl() lookup after the DD-11 closure.
 	lines.push(
@@ -1002,7 +1066,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(
 		`MORPHIT_FRONTEND_USDT_BEP20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdt.bep20)}`
 	);
-	// Part 122 cp30 — USDC per-network env vars.
+	// USDC per-network env vars.
 	lines.push(
 		`MORPHIT_FRONTEND_USDC_ERC20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.erc20)}`
 	);
@@ -1015,7 +1079,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push(
 		`MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.usdc.polygon)}`
 	);
-	// Part 122 cp31 — DAI per-network env vars (4 EVM networks).
+	// DAI per-network env vars (4 EVM networks).
 	lines.push(
 		`MORPHIT_FRONTEND_DAI_ERC20_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dai.erc20)}`
 	);
@@ -1027,71 +1091,6 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	);
 	lines.push(
 		`MORPHIT_FRONTEND_DAI_ARBITRUM_CHAT_LINK_URL=${quote(answers.chatLinkExplorers.dai.arbitrum)}`
-	);
-	lines.push('');
-
-	// ─── Trade-only asset policy (Part 122 cp22) ─────────────────
-	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# Trade-only asset policy (indexer)');
-	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# Comma-separated list of uppercase tickers your indexer');
-	lines.push('# REFUSES to write new orders for.  Empty (or unset)');
-	lines.push('# means accept every trade-only asset shipped in this');
-	lines.push('# release.  Peer-instance orders for the same asset');
-	lines.push('# still appear in your read-only orderbook feeds — the');
-	lines.push('# chain history is shared across the federation.');
-	lines.push('#');
-	lines.push('# Parser is tolerant of whitespace, mixed case, and');
-	lines.push('# trailing commas — write it however you like.');
-	lines.push('#');
-	lines.push('# Examples:');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS=""        (accept all)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT"    (refuse USDT)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDC"    (refuse USDC)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="USDT,USDC,DAI" (refuse all three stablecoins — privacy-pure)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_ASSETS="BCH,LTC,DASH" (refuse BTC-forks)');
-	lines.push('#');
-	lines.push('# Change your mind later by editing this line and');
-	lines.push('# restarting the indexer service.  Browsers see the');
-	lines.push('# change at most 5 minutes after restart (the');
-	lines.push('# /v1/instance response carries a 5-minute Cache-Control');
-	lines.push('# header).  See docs/OPERATIONS.md §"Trade-only asset');
-	lines.push('# configuration" for the full operator playbook.');
-	lines.push(
-		`MORPHIT_INDEXER_DISABLED_ASSETS=${quote(answers.disabledAssets.disabledTickers.join(','))}`
-	);
-	lines.push('');
-
-	// ── Disabled payment methods (canonical) ──
-	lines.push('# ─────────────────────────────────────────────────────────');
-	lines.push('# DISABLED PAYMENT METHODS (operator-scoped)');
-	lines.push('# ─────────────────────────────────────────────────────────');
-	lines.push('# Canonical payment-method keys you do NOT want to offer on');
-	lines.push('# this instance.  Hidden from the post-order picker and the');
-	lines.push('# orderbook payment filter; the indexer refuses a NEW order');
-	lines.push('# only when ALL of its payment methods are disabled (an order');
-	lines.push('# that still offers one enabled method is kept).');
-	lines.push('#');
-	lines.push('# Peer-instance orders that use a method you disabled still');
-	lines.push('# appear in your read-only orderbook — chain history is shared');
-	lines.push('# across the federation.');
-	lines.push('#');
-	lines.push('# Comma-separated, LOWERCASE keys.  Parser tolerates');
-	lines.push('# whitespace, case, and trailing commas.');
-	lines.push('#');
-	lines.push('# Examples:');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=""              (offer all — default)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods" (no Barter / money-only instance)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="paypal"   (no PayPal)');
-	lines.push('#   MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS="barter_goods,paypal,zelle"');
-	lines.push('#');
-	lines.push('# Canonical method keys (barter_goods, paypal, zelle,');
-	lines.push('# …) are listed in docs/OPERATIONS.md §"Payment-method');
-	lines.push('# configuration".  Change your mind later by editing this line');
-	lines.push('# and restarting the indexer (browsers see the change at most');
-	lines.push('# 5 minutes after restart).');
-	lines.push(
-		`MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS=${quote(answers.disabledPaymentMethods.disabledKeys.join(','))}`
 	);
 	lines.push('');
 
@@ -1115,12 +1114,8 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('#');
 	lines.push('# BLURT-paid listing fee gets a 50% discount in the indexer');
 	lines.push('# (MORPHIT_INDEXER_FEE_BASE_BLURT, separate from this block).');
-	lines.push(
-		`MORPHIT_INDEXER_BTC_FEE_SATOSHIS=${answers.listingFee.btcSatoshis}`
-	);
-	lines.push(
-		`MORPHIT_INDEXER_XMR_FEE_PICONERO=${answers.listingFee.xmrPiconero}`
-	);
+	lines.push(`MORPHIT_INDEXER_BTC_FEE_SATOSHIS=${answers.listingFee.btcSatoshis}`);
+	lines.push(`MORPHIT_INDEXER_XMR_FEE_PICONERO=${answers.listingFee.xmrPiconero}`);
 	lines.push('');
 	lines.push('# Fallback BLURT/USD price.  The indexer runs a composite');
 	lines.push('# price source: an outlier-rejected median across several');
@@ -1131,15 +1126,13 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push("# the indexer; fee verification doesn't touch USD prices.");
 	lines.push('# Update when BLURT drifts significantly:');
 	lines.push('#   morphit-ops edit  →  Listing fee + fallback BLURT price');
-	lines.push(
-		`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=${answers.listingFee.fallbackBlurtPriceUsd}`
-	);
+	lines.push(`MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR=${answers.listingFee.fallbackBlurtPriceUsd}`);
 	lines.push('');
 
-	// cp128 — denomination fiat (operator-chosen unit for the
+	// denomination fiat (operator-chosen unit for the
 	// indexer's BLURT-price echo on display surfaces).
 	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# cp128 — Denomination fiat (display unit)');
+	lines.push('# Denomination fiat (display unit)');
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# The unit the indexer expresses BLURT prices in on its');
 	lines.push('# own display surfaces (listing-fee fiat echo, receipt');
@@ -1147,13 +1140,11 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# ticker if your market is non-USD (EUR/GBP/JPY/BRL/CNY/');
 	lines.push('# INR/RUB/AED/...) or you want to hedge against USD');
 	lines.push('# erosion (XDR = IMF basket, XAU = gold ounces).');
-	lines.push(
-		`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT=${answers.listingFee.denominationFiat}`
-	);
+	lines.push(`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT=${answers.listingFee.denominationFiat}`);
 	lines.push('');
 
 	lines.push('# ──────────────────────────────────────────────────────');
-	lines.push('# Operator tag (Part 111 — federation-scoped payouts)');
+	lines.push('# Operator tag (federation-scoped payouts)');
 	lines.push('# ──────────────────────────────────────────────────────');
 	lines.push('# Identifies this instance in the federation.  Each');
 	lines.push('# order op the frontend broadcasts carries this tag;');
@@ -1168,9 +1159,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
 	lines.push('# operators MUST pick a unique tag AND register it on');
 	lines.push('# chain via `morphit_operator_register_v1` before any');
 	lines.push('# attribution-based payouts can be received.');
-	lines.push(
-		`MORPHIT_INSTANCE_OPERATOR_TAG=${quote(answers.operatorTag.tag)}`
-	);
+	lines.push(`MORPHIT_INSTANCE_OPERATOR_TAG=${quote(answers.operatorTag.tag)}`);
 	lines.push('');
 
 	lines.push('# ──────────────────────────────────────────────────────');
@@ -1209,7 +1198,7 @@ function renderEnv(answers: WizardAnswers, keystorePath: string): string {
  *  shape of ops/backup/backup.env.example. */
 /** Render the operator's backup.env. Takes the backup slice (not the whole
  *  WizardAnswers) so `morphit-ops harden` can produce the SAME populated file
- *  as `init` — cp514: harden used to point operators at the generic
+ *  as `init`: harden used to point operators at the generic
  *  ops/backup/backup.env.example, which ships an empty DB_CONTAINER and the
  *  init.sql default DB name/user, silently discarding the container + identity
  *  it had just auto-detected. */
@@ -1282,7 +1271,7 @@ export function renderBackupEnv(backup: BackupResult): string {
  *        for embedded `'`.  Suppresses every form of bash
  *        expansion.
  *
- *  cp139-C-11 first switched both to single-quoted; cp139-D-1
+ *  A later change first switched both to single-quoted
  *  then discovered parseEnv's apostrophe-handling gap.  This
  *  per-consumer split is the canonical fix.  Symmetric with
  *  apps/ops-cli/src/commands/edit.ts:quoteValue() — both write
@@ -1307,7 +1296,7 @@ function quote(value: string, consumer: EnvFileConsumer = 'bash'): string {
 		// `$…`/`$(…)`/backticks inside double quotes — so double-quote only a
 		// value with none of those (nor `"`, which parseEnv cannot escape).
 		// Otherwise `'` → `’` (reads the same) and single-quote. Kept identical
-		// to edit.ts quoteValue (v1.19.0 deep-deep).
+		// to edit.ts quoteValue.
 		if (!/[$`\\"!]/.test(value)) return `"${value}"`;
 		return `'${value.replace(/'/g, '\u2019')}'`;
 	}

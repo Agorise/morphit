@@ -3,7 +3,7 @@
  * Smoke: `formatPublicKeyBLT` must hand dblurt a real Buffer, not a
  * bare Uint8Array.
  *
- * Regression guard for the cp283 import-blocking bug. The posting-key
+ * Regression guard for the import-blocking bug. The posting-key
  * login path (and account-name registration) calls
  * `formatPublicKeyBLT(publicKey)`, which wraps `@beblurt/dblurt`'s
  * `PublicKey(...).toString()`. dblurt bundles the browserify crypto

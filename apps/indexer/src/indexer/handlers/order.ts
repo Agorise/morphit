@@ -34,8 +34,9 @@ import { addressModePermlink, allocateBtcFeeAddress, btcPinAt } from '$indexer/f
 import { xmrBindingFor, xmrPrimaryAt, type XmrBinding } from '$indexer/fee/xmrBinding';
 import { xmrIntegratedAddress } from '@morphit/release-schema';
 import { logger } from '$log';
-import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
+import { countForSybilTier } from '$api/sybilTier';
 
 const log = logger('order-handler');
 
@@ -61,8 +62,8 @@ const MAX_EXPIRES_AT_DAYS = 365;
 
 /** O3.4 — forbidden character class for user-text fields.
  *  Mirror of profile.ts / feedback.ts / operatorRegister.ts.
- *  Control chars (C0/C1), bidi-override marks, zero-width
- *  joiners — none have legitimate display use, all are used
+ *  Control chars (C0/C1), bidi-override marks, the zero-width
+ *  space — none have legitimate display use, all are used
  *  by impersonation / RTL-flip attacks against rendered text.
  *  Applied to the single-line fields location_region and
  *  payment_methods items. The terms field is multi-line markdown and
@@ -116,7 +117,7 @@ interface ValidatedOrder {
 	 *  the external chain that carries the fee payment. Null
 	 *  for blurt/waived_first_buy. */
 	readonly external_tx_id: string | null;
-	/** Part 108++: per-payment Monero proof string.  Required
+	/** later+: per-payment Monero proof string.  Required
 	 *  when fee_method='xmr', null otherwise.  Used by the XMR
 	 *  fee verifier to confirm the payment without holding the
 	 *  treasury's view key. */
@@ -126,7 +127,7 @@ interface ValidatedOrder {
 	 *  payment ID. Null for non-XMR orders and for legacy OutProof-only XMR
 	 *  orders (stored `proof_unsupported`). */
 	readonly tx_key: string | null;
-	/** Part 121 / cp30 / cp31 — sub-network identifier for multi-
+	/** sub-network identifier for multi-
 	 *  network assets.  Non-null when asset is multi-network: for
 	 *  USDT one of 'erc20'|'trc20'|'spl'|'bep20'; for USDC one of
 	 *  'erc20'|'spl'|'base'|'polygon'; for DAI one of 'erc20'|
@@ -134,13 +135,13 @@ interface ValidatedOrder {
 	 *  (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE).  Pinned at post
 	 *  time so cross-network sends are impossible. */
 	readonly asset_network: string | null;
-	/** cp425 — for a BARTER (goods/services) order, the non-empty set of
+	/** for a BARTER (goods/services) order, the non-empty set of
 	 *  crypto tickers the seller accepts as settlement (canonical sorted,
 	 *  deduped, e.g. ['BTC','DOGE','XMR']).  Each is a real crypto ticker in
 	 *  ASSET_TICKERS, never BARTER or any goods asset.  Null for every crypto
 	 *  asset — those settle in themselves and carry no accepted-set. */
 	readonly accepted_assets: readonly string[] | null;
-	/** v1.9.0 (the maintainer) — a BARTER order's inline "what am I offering" label (e.g.
+	/** v1.9.0 — a BARTER order's inline "what am I offering" label (e.g.
 	 *  "bananas"). Letters-only, ≤24 chars. Null for crypto orders and blank
 	 *  barter titles. Optional/backward-compatible: absent on older payloads. */
 	readonly specific_barter_title: string | null;
@@ -151,7 +152,7 @@ interface ValidatedOrder {
 	readonly lang: string | null;
 }
 
-function validate(payload: unknown): ValidatedOrder | { reason: string } {
+function validate(payload: unknown, blockTime: Date): ValidatedOrder | { reason: string } {
 	if (!isPlainObject(payload)) return { reason: 'payload_not_object' };
 
 	// permlink — shared validator (apps/indexer/src/indexer/permlink.ts)
@@ -347,9 +348,12 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		if (Number.isNaN(d.getTime())) return { reason: 'expires_at_unparseable' };
 		// Sanity-cap the future window.  Without this, a chain-
 		// direct payload could set expires_at to year 9999 and
-		// the orderbook would carry the row indefinitely.
+		// the orderbook would carry the row indefinitely.  Measured
+		// from the op's BLOCK time: a wall-clock read made a node
+		// applying the op live and a node replaying it later reach
+		// different verdicts on the same op.
 		const maxFutureMs = MAX_EXPIRES_AT_DAYS * 86_400_000;
-		if (d.getTime() - Date.now() > maxFutureMs) {
+		if (d.getTime() - blockTime.getTime() > maxFutureMs) {
 			return { reason: 'expires_at_too_far_future' };
 		}
 		expires_at = d;
@@ -441,7 +445,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		}
 	}
 
-	// Part 121 / cp30 — asset_network field for multi-network assets.
+	// asset_network field for multi-network assets.
 	// USDT (erc20/trc20/spl/bep20) and USDC (erc20/spl/base/polygon)
 	// both REQUIRE asset_network.  Single-network assets must omit
 	// (or pass null); a non-null asset_network on a single-network
@@ -450,12 +454,12 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
 	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
-	// Part 122 cp31 — DAI's 4 EVM networks per ADR-0029 §1.
+	// DAI's 4 EVM networks per ADR-0029 §1.
 	// Note 'arbitrum' is unique to DAI; the other three overlap
 	// names with USDC's set (erc20/base/polygon) but each asset's
 	// allowlist is independently enforced.
 	const DAI_NETWORKS_VALID = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
-	// cp30-DD-DD I-1 (defense-in-depth) — bound the input before
+	// (defense-in-depth) — bound the input before
 	// allocating a lowercased copy.  Every valid network name is
 	// ≤ 8 chars ('arbitrum').  Reject anything longer early — the
 	// allowlist would reject it anyway, but skipping the
@@ -499,7 +503,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		asset_network = null;
 	}
 
-	// cp425 — accepted_assets: the set of cryptos a BARTER (goods/services)
+	// accepted_assets: the set of cryptos a BARTER (goods/services)
 	// listing accepts as settlement.  REQUIRED (non-empty) when the asset is
 	// a goods asset (BARTER); must be OMITTED for every crypto asset (they
 	// settle in themselves).  Each entry must be a real crypto ticker in the
@@ -544,10 +548,10 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		accepted_assets = null;
 	}
 
-	// v1.9.0 (the maintainer) — specific_barter_title: a BARTER order's own short label for
+	// v1.9.0 — specific_barter_title: a BARTER order's own short label for
 	// what's on offer, typed inline where the summary reads "goods/services". It
 	// flows into the order title + the on-chain announcement. Letters + single
-	// internal spaces (t.txt #5), ≤24 chars — validated STRICTLY here (reject,
+	// internal spaces, ≤24 chars — validated STRICTLY here (reject,
 	// don't silently truncate) so the on-chain value matches what the client's
 	// sanitizer produced. Optional for barter; must be absent for a crypto asset.
 	let specific_barter_title: string | null = null;
@@ -565,7 +569,7 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 		if (Array.from(normalized).length > 24) {
 			return { reason: 'specific_barter_title_too_long' };
 		}
-		// t.txt #5 — letters PLUS single internal spaces (multi-word wares like
+		// letters PLUS single internal spaces (multi-word wares like
 		// "banana trees"). \p{L} covers accented + non-Latin scripts; leading /
 		// trailing / double spaces, digits, punctuation, control chars → rejected.
 		// The client trims + collapses before broadcast, so a valid on-chain value
@@ -610,47 +614,16 @@ function validate(payload: unknown): ValidatedOrder | { reason: string } {
 }
 
 /** Find and sum the sibling transfer(s) that paid the fee for this order.
- *  cp408 — moved to `$indexer/fee` as the shared `sumFeeTransfers` (used by the
+ *  moved to `$indexer/fee` as the shared `sumFeeTransfers` (used by the
  *  listing, feature-bid, and stranger-fee handlers), which honors the
  *  payment-time federation split. See there. */
 
-/** Count how many orders by this signer are in the "count toward
- *  Sybil tier" bucket per ADR-0009 §4: currently live OR created
- *  in the last 24h (even if cancelled). The count is of orders
- *  ALREADY in the DB; the order we're about to insert is the
- *  (n+1)-th.
- *
- *  "Currently live" means live AT THIS OP'S BLOCK TIME: status='live'
- *  AND not past expires_at. (v1.20.0, G2) Nothing ever writes
- *  status='expired' — expiry is enforced at read time — so the old
- *  `status = 'live'` test counted every order that merely ran out as live
- *  forever, compounding the fee 1.5× per expired order. Block time (not
- *  NOW()) keeps the verdict identical on replay and across instances. The
- *  frontend quote applies the same rule (apps/web/src/lib/orders/fee.ts
- *  `countsTowardSybilTier`). */
-async function countForSybilTier(
-	client: pg.PoolClient,
-	signer: string,
-	blockTime: Date
-): Promise<number> {
-	const cutoff = new Date(blockTime.getTime() - 24 * 3600 * 1000);
-	const res = await client.query<{ n: string }>(
-		`SELECT COUNT(*)::text AS n
-		 FROM orders
-		 WHERE account = $1
-		   AND ((status = 'live' AND (expires_at IS NULL OR expires_at > $3))
-		        OR created_at >= $2)`,
-		[signer, cutoff, blockTime]
-	);
-	return parseInt(res.rows[0]?.n ?? '0', 10);
-}
-
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
-	const v = validate(ctx.payload);
+	const v = validate(ctx.payload, ctx.blockTime);
 	if ('reason' in v) return { ok: false, reason: v.reason };
 
-	// Part 121 — operator-level instance-wide asset disable gate
-	// (Memory #25).  If the operator has listed this asset in
+	// operator-level instance-wide asset disable gate
+	// (the default-on rule for new assets).  If the operator has listed this asset in
 	// MORPHIT_INDEXER_DISABLED_ASSETS, refuse the order even if
 	// it would otherwise validate.  Other instances may still
 	// accept this asset's orders — federation visibility is
@@ -681,7 +654,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'payment_methods_all_disabled' };
 	}
 
-	// Part 111 — operator-attribution tag for federation-scoped
+	// operator-attribution tag for federation-scoped
 	// payout queueing.  Same value the operator-earnings module
 	// validates downstream.  We pull it once here and thread it
 	// into every `INSERT INTO orders` so the low-balance scanner
@@ -730,7 +703,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		if (v.asset !== 'BLURT') {
 			return { ok: false, reason: 'waiver_requires_blurt' };
 		}
-		// Phase 3 / cp369: enforce a $1 USD-equivalent minimum on the
+		// Phase 3: enforce a $1 USD-equivalent minimum on the
 		// first-buy VALUE.  amount_min is a fiat value (the orderbook
 		// renders it as "{min} – {max} {fiat_currency}"), so this is a
 		// fiat-to-fiat check — no price feed in the critical path.  A
@@ -742,39 +715,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		if (v.amount_min === null) {
 			return { ok: false, reason: 'waiver_requires_min_usd' };
 		}
-		// cp369 reverses the §F.11 "BLURT-denomination" regression that
-		// compared this fiat-valued amount against a flat 500-BLURT
-		// constant (so a "$1" order read as "1 BLURT < 500" and got
-		// rejected).  The floor is fiat — no price feed needed, which
-		// was §F.11's only stated reason for going BLURT-native here.
-		// $1 is exact for a USD-denominated instance; a non-USD
-		// instance would want a per-currency $1 conversion (a multi-
-		// currency-pricing follow-up).  Without a floor a user could
-		// take the waiver on a $0.001 buy and leave with ~nothing.
-		// cp369/cp370: the $1 floor is the canonical FIRST_ORDER_MIN_USD
-		// from @morphit/asset-registry — the single source of truth the
-		// frontend quote and this validation both import.
-		const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD;
-		// cp372: FX-aware floor.  amount_min is denominated in
-		// v.fiat_currency (the orderbook renders "{min}–{max} {fiat}"),
-		// so for a non-USD order "1.20" might be 1.20 AUD ≈ $0.79 — below
-		// the $1 floor.  Convert to USD via the indexer's FX source
-		// before comparing.  This closes the non-USD gap that the cp369
-		// comment flagged as a "multi-currency-pricing follow-up".
-		// fiatToUsd returns null when the currency can't be converted
-		// (FX feed disabled AND non-USD, or a currency outside both the
-		// live and static tables).  (v1.20.0 fix wave, G5) That used to
-		// fall back to treating amount_min AS USD, so "1 IRR" passed the
-		// $1 floor on a node without an IRR rate while a node with one
-		// rejected the same op.  An amount we cannot value cannot clear a
-		// value floor: reject.  (USD always converts 1:1.)
-		const minUsd = ctx.fiatToUsd(v.amount_min, v.fiat_currency);
-		if (minUsd === null) {
-			return { ok: false, reason: 'waiver_fiat_unconvertible' };
-		}
-		if (minUsd < WAIVER_MIN_FIAT_USD) {
-			return { ok: false, reason: 'waiver_requires_min_usd' };
-		}
+		// The $1 USD-equivalent first-order minimum (FIRST_ORDER_MIN_USD) is
+		// ADVISORY, enforced by the client before it signs. It is not
+		// a consensus rule: judging it here needed each node's live FX rate,
+		// so the same op was applied on one indexer and rejected on another
+		// (EUR 0.93 passed at 1.08 USD/EUR and failed at 1.07), and a
+		// zero-clearnet node, with only its static table, disagreed with
+		// everyone. What is checked here is a pure function of the chain:
+		// side, asset, a stated amount_min, first order, one claim.
 		// Has this account posted before? Even a rejected prior
 		// attempt counts — the waiver is a one-shot bonus, not a
 		// retry token.
@@ -846,10 +794,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	// ─── ADR-0011 sub-phase 4b: BTC/XMR paths ──────────────────────
 	// For btc/xmr, fee payment happened off-Blurt. The payer's txid
-	// is in v.external_tx_id. We invoke the appropriate verifier
-	// (injected via ctx.feeVerifiers), which either confirms the
-	// payment, finds it underpaid/missing, or reports the explorer
-	// is unreachable (pending_external).
+	// is in v.external_tx_id. The order is stored `pending_external`
+	// and the re-check job verifies it with the verifier for its method
+	// (see below); that verifier must still be configured here, so an
+	// order for a method this node cannot check is refused at once.
 	if (v.fee_method === 'btc' || v.fee_method === 'xmr') {
 		// ─── v1.20.0 (MK-H2): per-order BTC fee address ────────────────
 		// Once the release pin in force at this block carries the
@@ -1008,7 +956,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		if (expectedAmount === undefined || expectedAmount === 0 || expectedAmount === 0n) {
 			// A verifier exists but the fee amount is unset. Same
 			// operator-misconfiguration case; reject clearly.
-			// Part 106: ctx.feeAmounts uses the same chain-pin >
+			// ctx.feeAmounts uses the same chain-pin >
 			// env precedence as feeVerifiers, so this also catches
 			// the case where the verifier was rebuilt for a
 			// chain-pinned address but the env-only amount was 0.
@@ -1017,8 +965,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 		// Finding O19 — fee-reuse check.  An external_tx_id can pay
 		// for at most one order per fee_method.  Check for prior
-		// claims BEFORE running the verifier; if reuse is detected,
-		// we don't even bother hitting the explorer.  The order row
+		// claims; if reuse is detected the explorers are never asked
+		// about it (the re-check skips rows without a txid).  The order row
 		// is still inserted so the user can see why it failed
 		// (visible via /v1/orders/:account, but not the public
 		// orderbook because fee_status is not 'verified').
@@ -1063,7 +1011,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				external_tx_id: v.external_tx_id,
 				prior_claimer: reuseProbe.rows[0]!.account
 			});
-			// (v1.18.0 deep-deep, H2) What was wrong: this INSERT wrote
+			// What was wrong: this INSERT wrote
 			// external_tx_id = the reused txid, which collides with the
 			// partial UNIQUE index orders_external_tx_id_uniq
 			// (fee_method, external_tx_id) WHERE external_tx_id IS NOT NULL
@@ -1128,39 +1076,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: true };
 		}
 
-		const result = await verifier.verify({
-			feeMethod: v.fee_method,
-			expectedAmount,
-			externalTxId: v.external_tx_id,
-			txProof: v.tx_proof,
-			txKey: v.tx_key,
-			xmrBinding,
-			permlink: v.permlink,
-			signer: ctx.signer
-		});
-
-		// Map the discriminated verifier result onto a row status.
-		// The row is always inserted so the user can inspect what
-		// happened. Orderbook visibility is gated on fee_status.
-		let feeStatus: 'verified' | 'pending_external' | 'missing' | 'underpaid';
-		if (result.kind === 'verified') {
-			feeStatus = 'verified';
-		} else if (result.kind === 'pending_external') {
-			// Attestation fallback can promote this later.
-			feeStatus = 'pending_external';
-		} else {
-			// rejected. Broad bucket — specific reason went to logs.
-			// Using 'missing' as the default rejected status since
-			// underpaid is only meaningful when the tx exists. The
-			// verifier's reason code distinguishes them in the log.
-			feeStatus = result.reason.startsWith('underpaid') ? 'underpaid' : 'missing';
-			log.info('fee_rejected', {
-				signer: ctx.signer,
-				permlink: v.permlink,
-				fee_method: v.fee_method,
-				reason: result.reason
-			});
-		}
+		// The fee is NOT verified here. Asking the explorers inside the block
+		// transaction held the block open for every outbound round trip (25 junk
+		// XMR orders kept one block open ~10 s with 50 requests, from every
+		// indexer at once) and made the stored verdict depend on what each
+		// node's explorers said at that moment. The row goes in as
+		// `pending_external` on every node; ExternalFeeRechecker
+		// (fee/externalFeeRecheck.ts) asks the explorers outside any block
+		// transaction, rate-limited, and settles it — new rows first, within
+		// FRESH_CHECK_INTERVAL_MS.
+		const feeStatus = 'pending_external';
 
 		const externalRes = await client.query(
 			`INSERT INTO orders (
@@ -1214,7 +1139,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// invisible in /v1/orderbook but visible via /v1/orders/:account
 	// so the user can see their own fee-rejected posts.
 	//
-	// cp408 — the fee is paid as a payment-time split: 90% to this instance's
+	// the fee is paid as a payment-time split: 90% to this instance's
 	// fee recipient + 10% to the canonical treasury (or a single 100% transfer
 	// when the recipient IS the canonical treasury). We sum both legs for the
 	// underpaid check and separately confirm the canonical treasury received its
@@ -1243,11 +1168,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	let feeStatus: 'verified' | 'missing' | 'underpaid' = 'missing';
 	if (fee !== null) {
-		// Count existing orders for Sybil tier. This order is the
-		// (count + 1)-th.
+		// Count existing orders for Sybil tier, at block time (identical on
+		// replay and across instances). This order is the (count + 1)-th.
+		// The same function serves GET /v1/orders/:account/sybil_tier, so a
+		// client's quote cannot drift from what is charged here.
 		const existingCount = await countForSybilTier(client, ctx.signer, ctx.blockTime);
 		const nth = existingCount + 1;
-		// BLURT-native fee (Model A, cp372): the ENFORCED amount stays
+		// BLURT-native fee (Model A): the ENFORCED amount stays
 		// a pure function of the pinned base × tier — NO price read
 		// here, so no TOCTOU and the floor is deterministic across the
 		// federation.  The base is now resolved through ctx.feeAmounts
@@ -1321,10 +1248,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			ctx.blockNum,
 			ctx.blockTime,
 			operatorTagForRow,
-			ctx.config.instanceOperatorTag
+			ctx.config.instanceOperatorTag,
+			fee.toCanonicalBlurt
 		);
 
-		// cp408 — operator-earnings attribution (audit only).
+		// operator-earnings attribution (audit only).
 		// The operator's 90% is now paid DIRECTLY at payment time (the fee
 		// split's owner leg), so this no longer queues a relay transfer — it
 		// just records the attribution + cumulative earnings for the operator

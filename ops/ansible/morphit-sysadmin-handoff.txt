@@ -52,13 +52,25 @@ need an outside-perspective view).
     → expect:  connection times out or "Connection refused"
 
 ──────────────────────────────────────────────────────────────────
-1.5  X-Forwarded-For spoof from untrusted source rejected
+1.5  A forged X-Forwarded-For does not buy a fresh rate-limit bucket
 
-    From a host NOT in MORPHIT_RELAY_TRUSTED_PROXY_IPS:
-    curl -H 'X-Forwarded-For: 8.8.8.8' https://<host>/v1/health
-    → expect:  the relay logs the connection's REAL IP, not 8.8.8.8.
-               Verify with `sudo journalctl -u morphit-relay | grep -E
-               '"ip":"[0-9.]+"' | tail -3`.
+    The relay logs no client addresses, so test the BEHAVIOUR. From
+    one machine, send 70 name-availability checks within a minute,
+    each claiming a different address (the limit is 60 a minute per
+    client network):
+
+    for i in $(seq 1 70); do
+      curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+        -H 'content-type: application/json' \
+        -H "X-Forwarded-For: 198.51.100.$i" \
+        -d '{"name":"zzzzverify"}' \
+        https://<host>/relay/v1/account/availability
+    done | sort | uniq -c
+    → expect:  some 429s at the end — NOT 70 × 200.
+    Then, right away, one request from a second machine on another
+    network (a phone on mobile data):
+    → expect:  200 (each real visitor has their own bucket).
+    (OPERATIONS.md §37.19.)
 
 ──────────────────────────────────────────────────────────────────
 1.6  AIDE filesystem integrity baseline initialized
@@ -97,9 +109,8 @@ need an outside-perspective view).
 ──────────────────────────────────────────────────────────────────
 2.2  Public instance endpoint returns JSON
 
-    curl -fsSL https://<host>/v1/instance | jq .operator_account
-    → expect:  the operator account name configured in
-               group_vars/all.yml under morphit_operator_account
+    curl -fsSL https://<host>/v1/instance | jq '{operator_tag, relay_account, fee_recipient}'
+    → expect:  the tag and accounts configured in group_vars/all.yml
 
 ──────────────────────────────────────────────────────────────────
 2.3  Diamond-hardened squatter defense preset applied
@@ -200,27 +211,29 @@ by this playbook:
 
     THE RIGHT FIX FOR ANSIBLE DEPLOYMENTS:  do NOT `git pull` on the
     target host by hand.  Re-run the playbook instead — it runs
-    `npm install` and (since cp161) verifies the morphit-ops bin is
+    `npm install` and verifies the morphit-ops bin is
     runnable as a post-install step, so a broken install fails the
     play with a clear error rather than surfacing here.
 
     IF YOU MUST FIX IN PLACE (host already diverged from a manual
-    pull):  run as the morphit service user, from the repo root:
+    pull):  run as root (the tree is root-owned; the services run as
+    their own users and must not be able to change it), from the
+    repo root, with no dependency install scripts:
 
-        sudo -u <morphit_service_user> bash -lc \
-          'cd <morphit_repo_path> && npm install && \
-           npm exec --offline --workspace apps/ops-cli morphit-ops -- --help'
+        cd <morphit_repo_path> && sudo npm install --ignore-scripts && \
+          sudo node apps/ops-cli/bin/morphit-ops.mjs --help
 
-    The `npm exec --offline --workspace` form resolves the tool
-    purely from the LOCAL workspace and forbids any registry
-    access — if it prints the help text, the operator's
+    The `node apps/ops-cli/bin/morphit-ops.mjs` form runs the tool
+    straight from the LOCAL checkout with no registry access (as does
+    `npm exec --offline --workspace apps/ops-cli morphit-ops`) — if it
+    prints the help text, the operator's
     `morphit-ops init` / `register` will work.  (Do NOT rely on
     `npx --no-install` for this check: it still performs a
     registry lookup before erroring, so it is not a reliable
     offline guarantee on a hardened or air-gapped host.)
 
     NOTE: the CLI runs from TypeScript source via tsx, which is a
-    PRODUCTION dependency of apps/ops-cli (since cp161).  Installing
+    PRODUCTION dependency of apps/ops-cli.  Installing
     with --omit=dev or NODE_ENV=production no longer breaks it.
 
     Full explanation: OPERATIONS.md §33 "Troubleshooting:
@@ -249,10 +262,13 @@ by this playbook:
     /etc/morphit/relay.keystore — see RUN-A-MORPHIT-NODE.md
     for the keystore-generation procedure.
 
-    First-boot behavior:  the relay prompts on TTY for the
-    keystore passphrase.  If running under systemd-managed boot
-    without a TTY, run `sudo systemctl start morphit-relay`
-    interactively from a console session (NOT ssh-with-no-TTY).
+    Unlock:  there is no prompt. The keystore's passphrase is
+    sealed to this host as /etc/morphit/relay_passphrase.cred
+    (systemd-creds, --with-key=host) and the unit loads it at
+    every start. If the relay says the passphrase "did not
+    decrypt" the keystore, the credential and the keystore no
+    longer match (for example after a key rotation done by hand):
+    re-run `sudo morphit-ops edit-active-key`, which re-seals it.
 
 ──────────────────────────────────────────────────────────────────
 "BunkerWeb returns 502 Bad Gateway for /v1/* endpoints"
@@ -263,11 +279,13 @@ by this playbook:
     (typically 172.17.0.1:8081).
 
     Verify:
-    sudo netstat -lntp | grep -E '8080|8081'
-    →  morphit-indexer should be listening on 127.0.0.1:8081
-    →  morphit-relay should be listening on 127.0.0.1:8080
-    →  BunkerWeb uses MORPHIT_BUNKERWEB_UPSTREAM_INDEXER etc. to
-       reach them across the bridge.
+    sudo ss -lntp | grep -E ':8080|:8081'
+    →  morphit-indexer listening on 8081, morphit-relay on 8080, at
+       an address the Docker bridge can reach (the bind host set by
+       morphit_indexer_bind_host / morphit_relay_bind_host; a
+       127.0.0.1-only bind is unreachable from the frontend
+       container and every proxied call returns 502). UFW lets only
+       the BunkerWeb bridge reach those ports.
 
 ──────────────────────────────────────────────────────────────────
 "X-Forwarded-For shows BunkerWeb's IP, not the real client IP"
@@ -282,8 +300,10 @@ by this playbook:
 ──────────────────────────────────────────────────────────────────
 "Daily AIDE check emails are not arriving"
 
-    The aide-check cron script in /etc/cron.daily/aide-check uses
-    `mail` to send to the alert email.  Verify:
+    By default no alert mail is sent at all: results stay in
+    /var/log/morphit/aide-check.log (and rkhunter-check.log). Mail
+    is sent only when a real SMTP relay and address are set in
+    group_vars (never on a tor-only node). If you set them, verify:
     - postfix or another MTA is installed and configured
     - DNS for the alert recipient domain is reachable
     - test-send:  echo test | mail -s test <alert_recipient>
@@ -293,10 +313,9 @@ by this playbook:
    Final word
 ═══════════════════════════════════════════════════════════════════
 
-The playbook has NOT been tested end-to-end on a fresh Ubuntu
-24.04 VM by the maintainer (see README.md "Honesty caveats from
-the author").  Expect to debug rather than copy-paste.  Specific
-places already known to need debugging are listed in the README.
+The guided install drives this playbook, so it is the tested
+path; running it by hand, see README.md "Things to check before
+you rely on it".
 
 If you find a defect, file an issue at git.agorise.net/agorise/morphit
 with the playbook tag and the exact ansible-playbook command +

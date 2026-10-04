@@ -57,7 +57,7 @@ runbook, then **[../POST-LAUNCH-WEEK-ONE.md](../POST-LAUNCH-WEEK-ONE.md)**
 for the first-week monitoring routine.
 
 ### …deal with something going wrong
-👉 Open **[../BETA-INCIDENT-RUNBOOK.md](../BETA-INCIDENT-RUNBOOK.md)**.
+👉 Open **[../INCIDENT-RUNBOOK.md](../INCIDENT-RUNBOOK.md)**.
 If specifically your relay's signing key is wrong or compromised,
 see **[../RECOVERING-FROM-WRONG-RELAY-KEY.md](../RECOVERING-FROM-WRONG-RELAY-KEY.md)**.
 

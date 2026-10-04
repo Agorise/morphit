@@ -1,7 +1,7 @@
 /**
  * @morphit/rpc-pool — latency-aware RPC endpoint pool.
  *
- * Lifted at cp165 from the rotation/cooldown logic duplicated in
+ * Lifted from the rotation/cooldown logic duplicated in
  * apps/indexer/src/blurt/client.ts and apps/relay/src/blurt/client.ts,
  * extended with two production-grade ingredients those clients
  * lacked:
@@ -37,10 +37,20 @@
  *   relay signup getAcct   fastest-first      ON  (user waits)
  *   indexer chain-fee      fastest-first      ON  (user posts order)
  *
- * Failure semantics unchanged from the previous round-robin
- * clients: exponential cooldown ladder on transport failure, last-
- * ditch retry-all-ignoring-cooldowns, application-level RPC errors
- * thrown to the caller without rotating.
+ * Failure semantics:
+ *   - transport failure (unreachable, timeout, 429/5xx) → rotate to the
+ *     next endpoint, exponential cooldown ladder;
+ *   - endpoint fault (the node does not serve the API or method, or its
+ *     reply is not a JSON-RPC answer — see isEndpointFaultError) → the
+ *     same: rotate and cool down. The node never answered the question,
+ *     so asking another one cannot repeat a request it processed;
+ *   - any other application error on a READ (`call(fn, { read: true })`)
+ *     → ask the next operator; the erroring node is parked only once
+ *     another one answers, and an error that several operators return
+ *     alike is the request's own fault and is returned to the caller;
+ *   - any other application error on anything else (a broadcast) → thrown
+ *     to the caller from the first endpoint, no rotation, no cooldown;
+ *   - last-ditch retry of every endpoint ignoring cooldowns.
  */
 
 /** Per-endpoint health + latency state. */
@@ -62,7 +72,7 @@ export interface EndpointState {
 	 *  or 0 if never.  Diagnostic only — exposed via `snapshot()`
 	 *  for operator health views. */
 	lastSuccessAt: number;
-	/** cp474 — Unix-ms timestamp before which the next request to this
+	/** Unix-ms timestamp before which the next request to this
 	 *  endpoint must not be dispatched, enforcing the per-endpoint RPS
 	 *  ceiling.  Each in-flight caller RESERVES its slot by advancing this
 	 *  cursor synchronously before it awaits, so N concurrent callers pace
@@ -96,7 +106,7 @@ export const DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS: readonly number[] = [
 	300_000
 ] as const;
 
-/** cp474 — Jitter fraction applied to every cooldown ladder step.
+/** Jitter fraction applied to every cooldown ladder step.
  *  0.25 means an endpoint's cooldown lands uniformly in
  *  [0.75×step, 1.25×step].
  *
@@ -119,7 +129,7 @@ export const DEFAULT_RATE_LIMIT_COOLDOWN_LADDER_MS: readonly number[] = [
  *  while one is parked. */
 export const DEFAULT_COOLDOWN_JITTER_FRACTION = 0.25;
 
-/** cp474 — Default per-endpoint request ceiling, in requests per second.
+/** Default per-endpoint request ceiling, in requests per second.
  *
  *  This is the rpc.blurt.blog operator's FIRST ask ("lower the RPS or
  *  introduce a delay between requests"), and the pool is the only place
@@ -256,7 +266,7 @@ export function isTransportError(err: unknown): boolean {
 	// identically on every endpoint, so rotating is pointless and would
 	// just mask the real cause. The matched set is the standard
 	// retryable list (408, 429, 500, 502, 503, 504) PLUS the 520-527
-	// family (cp328). These are non-standard 5xx codes that an UPSTREAM
+	// family. These are non-standard 5xx codes that an UPSTREAM
 	// edge/proxy sitting in front of a Blurt RPC node returns when it
 	// can't get a valid response from that node's origin — e.g. 521
 	// "origin down", 522/524 timeout, 523 "unreachable". For us they
@@ -264,11 +274,50 @@ export function isTransportError(err: unknown): boolean {
 	// failure → rotate off it. (These come from whatever proxy a given
 	// Blurt node operator runs upstream; Morphit's own stack is
 	// BunkerWeb with no CDN.) Without this the pool gave up on the
-	// first 521 instead of hopping to a healthy node — the relay's ACT
-	// auto-mint surfaced `HTTP 521: <none>` and minted 0.
+	// first 521 instead of hopping to a healthy node: a relay broadcast
+	// failed with `HTTP 521: <none>` while other nodes were healthy.
 	if (/\bhttp (?:408|429|500|502|503|504|52[0-7])\b/.test(m)) return true;
 	return false;
 }
+
+/**
+ * Is this error about the ENDPOINT rather than about the request?
+ *
+ * Two kinds, both of which mean the node gave no usable answer to a question
+ * other nodes can answer:
+ *   - it does not serve the API or method asked for ("Could not find API
+ *     condenser_api", "Could not find method …", JSON-RPC -32601). A public
+ *     node with a plugin switched off answers EVERY call this way — and so can
+ *     a hostile node that wants to stall whoever lists it first;
+ *   - its reply is not a JSON-RPC answer (not JSON, no result/error, wrong id).
+ *
+ * The pool treats these like a transport failure: rotate to the next endpoint
+ * and cool this one down. That is also safe for a broadcast — the caller offers
+ * the SAME signed bytes (nothing is re-signed in the pool), and a timeout
+ * already rotates a broadcast in exactly the same way.
+ *
+ * The node writes these messages itself, so a hostile node can always make its
+ * own error look like a fault. That only gets IT parked, which is the point.
+ */
+export function isEndpointFaultError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const m = err.message.toLowerCase();
+	if (/could not find (?:api|method)\b/.test(m)) return true;
+	if (/\bmethod not found\b/.test(m)) return true;
+	const meta = (err as { metadata?: { rpc_code?: unknown } }).metadata;
+	if (meta !== undefined && meta !== null && meta.rpc_code === -32601) return true;
+	if (err.name === 'SyntaxError') return true;
+	if (m.includes('malformed json-rpc response')) return true;
+	if (m.includes('got invalid response id')) return true;
+	return false;
+}
+
+/** On a READ, how many distinct operators must return an application error
+ *  before it is taken to be the request's own fault and returned. Fewer than
+ *  this, and a later operator answering proves the error was node-local. Three
+ *  keeps an unknown-id lookup cheap while one or two misbehaving operators can
+ *  no longer decide the answer for everyone. */
+export const READ_ERROR_AGREEMENT_OPERATORS = 3;
 
 /** Heuristic — did this endpoint reject us specifically for RATE
  *  LIMITING (HTTP 429 / "too many requests")?  A subset of
@@ -318,16 +367,16 @@ export interface EndpointPoolOptions {
 	 *  ladder so a quota'd endpoint is parked, not re-probed every
 	 *  couple of seconds. */
 	readonly rateLimitCooldownLadderMs?: readonly number[];
-	/** cp474 — override the jitter fraction applied to cooldown ladder steps.
+	/** override the jitter fraction applied to cooldown ladder steps.
 	 *  Must be in [0, 1).  0 disables jitter (deterministic cooldowns — only
 	 *  appropriate in tests that assert exact timings). */
 	readonly cooldownJitterFraction?: number;
-	/** cp474 — per-endpoint request ceiling in requests/second.  Defaults to
+	/** per-endpoint request ceiling in requests/second.  Defaults to
 	 *  DEFAULT_MAX_REQUESTS_PER_SECOND.  0 disables pacing.  This is a
 	 *  per-ENDPOINT cap, not a pool-wide one: the pool's aggregate ceiling is
 	 *  this times the number of healthy endpoints. */
 	readonly maxRequestsPerSecond?: number;
-	/** cp474 — injectable RNG, for tests that need deterministic jitter.
+	/** injectable RNG, for tests that need deterministic jitter.
 	 *  Defaults to Math.random.  Jitter is a thundering-herd defence, not a
 	 *  secret, so Math.random is the right tool: no crypto entropy needed. */
 	readonly random?: () => number;
@@ -339,13 +388,15 @@ export interface EndpointPoolOptions {
 	readonly hedgeThresholdMs?: number;
 	/** Minimum stagger between primary and hedge dispatch. */
 	readonly hedgeStaggerFloorMs?: number;
-	/** Who RUNS the node behind a URL (v1.18.0 deep-deep, rv2-2).
+	/** Who RUNS the node behind a URL.
 	 *
 	 *  `quorumCall` used to count agreement per URL. Every hidden Blurt node is
 	 *  listed twice — once as `.onion`, once as `.b32.i2p` — so ONE operator
 	 *  answering on both transports met a two-endpoint quorum alone, and a quorum
 	 *  exists precisely so that no single operator decides. Agreement is now
-	 *  counted per operator: URLs mapped to the same name count once.
+	 *  counted per operator NAME: URLs mapped to the same name count once.
+	 *  A name is a label, not proof: two names may be run by one person, and
+	 *  nothing here can tell (VT4-6).
 	 *
 	 *  Return undefined for "unknown", which falls back to the URL itself — the
 	 *  old per-URL behaviour, still right for pools whose URLs are independent
@@ -371,6 +422,13 @@ export interface CallOptions {
 	 *  endpoint on failure + recording health exactly as a normal call does.
 	 *  Ignored (no-op) for single- or zero-endpoint pools. */
 	readonly startOffset?: number;
+	/** This call only READS chain state. An application error from one node is
+	 *  then not taken as the answer: the next operator is asked, and the node
+	 *  that erred is parked once another one answers. Only when
+	 *  READ_ERROR_AGREEMENT_OPERATORS operators return an error is it the
+	 *  answer. Leave unset for a broadcast: the chain's rejection of a
+	 *  transaction is the answer, and it is returned from the first node. */
+	readonly read?: boolean;
 }
 
 /**
@@ -505,19 +563,20 @@ export class EndpointPool {
 	/** Operator names learned at runtime (the on-chain directory's node names). */
 	private readonly operatorByUrl = new Map<string, string>();
 
-	/** The operator identity quorum agreement is counted by (rv2-2): a name
-	 *  learned at runtime, else the constructor's `operatorOf`, else the URL. */
+	/** The operator identity quorum agreement is counted by: a name
+	 *  learned at runtime, else the constructor's `operatorOf`, else the URL.
+	 *  Names are labels (the directory's node names), not proven independence. */
 	operatorOf(url: string): string {
 		return this.operatorByUrl.get(url) ?? this.operatorOfOption?.(url) ?? url;
 	}
 
-	/** Distinct operators in the pool. */
+	/** Distinct operator names in the pool. */
 	operatorCount(): number {
 		return new Set(this.endpoints.map((ep) => this.operatorOf(ep.url))).size;
 	}
 
 	/**
-	 * Distinct operators worth counting on for a quorum right now (rv2-9).
+	 * Distinct operators worth counting on for a quorum right now.
 	 *
 	 * An operator is left out only while EVERY one of its endpoints is failing
 	 * (its last attempt was a transport failure and nothing has succeeded
@@ -526,6 +585,13 @@ export class EndpointPool {
 	 * installed, say) asked for two agreeing answers that could never arrive,
 	 * forever. A failing operator is still ASKED — it counts again the moment it
 	 * answers — it is just not waited for.
+	 *
+	 * LIVENESS ONLY. One transport blip on the other operators drops this to 1,
+	 * so a quorum sized from it collapses to a single operator's word exactly
+	 * when the network is flaky. Never size the quorum for an answer that is
+	 * written down or trusted afterwards from this number: use a fixed count
+	 * (and `operatorCount()` to know whether the pool can meet it at all), and
+	 * retry later when it is not met.
 	 */
 	reachableOperatorCount(): number {
 		const ok = new Set<string>();
@@ -541,7 +607,7 @@ export class EndpointPool {
 	 *  directory (`morphit_rpc_v1`) without a restart.
 	 *
 	 *  `operators` (url → operator name) records who runs each address, so the
-	 *  two addresses of one directory node count once in a quorum (rv2-2). */
+	 *  two addresses of one directory node count once in a quorum. */
 	mergeEndpoints(urls: readonly string[], operators?: Readonly<Record<string, string>>): string[] {
 		if (operators !== undefined) {
 			for (const [url, name] of Object.entries(operators)) {
@@ -589,15 +655,42 @@ export class EndpointPool {
 	 *  timeoutMs so a hung node can't pin the call beyond its
 	 *  budget.
 	 *
-	 *  Transport errors trigger rotation + cooldown.  Application-
-	 *  level errors (the upstream returned an RPC error) propagate
-	 *  to the caller and DO NOT rotate.
+	 *  Transport errors and endpoint faults (isEndpointFaultError)
+	 *  trigger rotation + cooldown.  Other application-level errors
+	 *  (the upstream returned an RPC error) propagate to the caller
+	 *  without rotating — unless the call is a `read`, see CallOptions.
 	 */
 	async call<T>(
 		fn: (url: string, signal: AbortSignal) => Promise<T>,
 		options: CallOptions = {}
 	): Promise<T> {
 		const hedge = options.hedge === true;
+		const read = options.read === true;
+		// Read errors whose blame is deferred: the endpoint is parked only if a
+		// later endpoint answers (then the error was that node's alone).
+		const readErrors: Array<{ ep: EndpointState; err: unknown }> = [];
+		const readErrorOperators = new Set<string>();
+		/** 'next' = try the next endpoint; otherwise the error to throw now. */
+		const classify = (ep: EndpointState, err: unknown): 'next' | { throw: unknown } => {
+			if (isTransportError(err) || isEndpointFaultError(err)) {
+				// recordFailure was called inside attempt()
+				lastError = err;
+				return 'next';
+			}
+			if (!read) return { throw: err };
+			readErrors.push({ ep, err });
+			readErrorOperators.add(this.operatorOf(ep.url));
+			// Several operators give the same kind of answer: it is the
+			// request's fault (an unknown id, say). Nobody is parked for it.
+			if (readErrorOperators.size >= READ_ERROR_AGREEMENT_OPERATORS) {
+				return { throw: readErrors[0]!.err };
+			}
+			return 'next';
+		};
+		const answered = (result: T): T => {
+			for (const r of readErrors) this.recordFailure(r.ep);
+			return result;
+		};
 		const timeoutMs =
 			options.timeoutMs ??
 			(hedge ? DEFAULT_USER_FACING_TIMEOUT_MS : DEFAULT_BACKGROUND_TIMEOUT_MS);
@@ -636,16 +729,11 @@ export class EndpointPool {
 				const result = await this.attempt(ep, next, fn, timeoutMs, hedge, (url) =>
 					triedUrls.add(url)
 				);
-				return result;
+				return answered(result);
 			} catch (err) {
-				if (isTransportError(err)) {
-					// recordFailure was called inside attempt()
-					lastError = err;
-					continue;
-				}
-				// Application-level RPC error — keep endpoint warm,
-				// propagate to caller.
-				throw err;
+				const verdict = classify(ep, err);
+				if (verdict === 'next') continue;
+				throw verdict.throw;
 			}
 		}
 
@@ -660,16 +748,18 @@ export class EndpointPool {
 			const ep = lastDitchOrder[i]!;
 			try {
 				const result = await this.attemptSingle(ep, fn, timeoutMs, hedge);
-				return result;
+				return answered(result);
 			} catch (err) {
-				if (isTransportError(err)) {
-					lastError = err;
-					continue;
-				}
-				throw err;
+				const verdict = classify(ep, err);
+				if (verdict === 'next') continue;
+				throw verdict.throw;
 			}
 		}
 
+		// No endpoint answered. A read that met application errors returns the
+		// first of them (what the caller would have seen before), and nobody is
+		// parked for it — nothing proved it node-local.
+		if (readErrors.length > 0) throw readErrors[0]!.err;
 		throw new Error(
 			`all RPC endpoints unavailable: ${
 				lastError instanceof Error ? lastError.message : String(lastError)
@@ -700,7 +790,7 @@ export class EndpointPool {
 			// unconditionally, so every background call — the poller, backfills,
 			// one-shot scripts, signed-write proxying — was cut off at 25 s on a
 			// .onion/.i2p endpoint, and MORPHIT_HIDDEN_RPC_TIMEOUT_MS could not raise
-			// it (v1.20.0 fix wave, D7).
+			// it.
 			return this.attemptSingle(primary, fn, timeoutMs, hedge);
 		}
 
@@ -748,9 +838,9 @@ export class EndpointPool {
 				// That says nothing about its health, so it must not be recorded
 				// as a failure (cooldown + wiped EWMA would push a healthy node out
 				// of rotation). Only the shared deadline is a real timeout
-				// (v1.20.0 fix wave, D9 — quorumCall already made this distinction).
+				// (quorumCall already made this distinction).
 				const abortedByUs = ctl.signal.aborted && !timeoutCtl.signal.aborted;
-				if (!abortedByUs && isTransportError(err)) {
+				if (!abortedByUs && (isTransportError(err) || isEndpointFaultError(err))) {
 					this.recordFailure(ep, isRateLimitError(err));
 				}
 				throw err;
@@ -804,7 +894,7 @@ export class EndpointPool {
 		}
 	}
 
-	/** cp474 — hold the caller until this endpoint's RPS budget allows the
+	/** hold the caller until this endpoint's RPS budget allows the
 	 *  next dispatch, and reserve that slot.
 	 *
 	 *  The reservation is the important part.  Reading `now`, sleeping, and
@@ -862,7 +952,7 @@ export class EndpointPool {
 				this.recordSuccess(ep, latency);
 				return result;
 			} catch (err) {
-				if (isTransportError(err)) {
+				if (isTransportError(err) || isEndpointFaultError(err)) {
 					this.recordFailure(ep, isRateLimitError(err));
 				}
 				throw err;
@@ -888,7 +978,7 @@ export class EndpointPool {
 	 *  endpoint earns a real latency measurement; then sort known
 	 *  endpoints by EWMA ascending (fastest first).
 	 *
-	 *  cp165 design note: an earlier version sorted unknown-EWMA to
+	 *  design note: an earlier version sorted unknown-EWMA to
 	 *  INFINITY (i.e. last), which meant a brand-new endpoint never
 	 *  got picked while another endpoint stayed healthy.  In
 	 *  production the indexer's poller exercised every endpoint
@@ -908,7 +998,7 @@ export class EndpointPool {
 		// Split them by failure history. Never EXCLUDE anyone — nodes come and go
 		// constantly and one that was down a minute ago may be up now — this only
 		// decides who is asked FIRST:
-		//   1. never-tried (null EWMA, no failures) — bootstrap, unchanged (cp165)
+		//   1. never-tried (null EWMA, no failures) — bootstrap, unchanged
 		//   2. known-good — fastest EWMA first
 		//   3. failing-with-no-successful-measurement — last, but still tried
 		const rank = (e: EndpointState): number =>
@@ -971,7 +1061,7 @@ export class EndpointPool {
 		ep.ewmaLatencyMs = null;
 	}
 
-	/** cp474 — spread a ladder step uniformly over
+	/** spread a ladder step uniformly over
 	 *  [(1-f)×step, (1+f)×step] so federated instances that were
 	 *  rate-limited together don't come back together.  Mean is unchanged;
 	 *  the result is clamped at 0 for safety and rounded to whole ms so
@@ -1014,7 +1104,7 @@ export class EndpointPool {
 	 * maps cleanly onto this: `ok` → T, `data_*` → null, transport
 	 * failure → throw.
 	 *
-	 * cp166 — addresses the choke point in the BTC/XMR verifiers
+	 * addresses the choke point in the BTC/XMR verifiers
 	 * where Promise.allSettled forced the indexer to wait for every
 	 * candidate explorer (or its 5s timeout) before checking quorum.
 	 * Now quorum check is incremental and returns early.
@@ -1033,7 +1123,7 @@ export class EndpointPool {
 			 *  for .onion/.i2p endpoints exactly as `call` does.  Defaults to
 			 *  {@link DEFAULT_BACKGROUND_TIMEOUT_MS}. */
 			timeoutMs?: number;
-			/** How many operators are asked at once (rv2-9).  When one of them
+			/** How many operators are asked at once.  When one of them
 			 *  fails, disagrees or has no answer, the next operator is asked,
 			 *  so a cap never lowers what can be learned — it only stops every
 			 *  endpoint being hit for every call.  Default: all at once. */
@@ -1062,7 +1152,7 @@ export class EndpointPool {
 			};
 		}
 
-		// v1.18.0 deep-deep (rv2-2): group endpoints by OPERATOR, fastest
+		// group endpoints by OPERATOR, fastest
 		// operator first. One operator contributes at most one answer, however
 		// many addresses it has, so its .onion and .b32.i2p can no longer
 		// out-vote an honest pair. An operator's other addresses are its

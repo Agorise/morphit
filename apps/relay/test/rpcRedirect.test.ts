@@ -1,5 +1,5 @@
 /**
- * The relay's chain RPC does not follow redirects (v1.18.0 deep-deep, M2).
+ * The relay's chain RPC does not follow redirects.
  *
  * The relay broadcasts signups and transfers through dblurt, which followed
  * redirects by default: an RPC node (anyone can list one in the on-chain

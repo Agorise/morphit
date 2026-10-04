@@ -2,7 +2,7 @@
  * Morphit — resolving an ACTIVE key from what an existing Blurt user actually
  * has in their hands.
  *
- * Context (the maintainer, tt.txt #11/#12): the 12-word seed and the Keyfile are Morphit
+ * Context: the 12-word seed and the Keyfile are Morphit
  * inventions. A user who has been on Blurt for years has neither. They have an
  * **Active key** in WIF form (`5…`), copied out of some other wallet — and that
  * is the ONLY thing Morphit accepts here.
@@ -114,7 +114,7 @@ export async function resolveActiveKey(
 	} catch {
 		return { ok: false, reason: 'invalid_wif' };
 	}
-	// cp445 deep-deep — on every REFUSAL path this scalar is real, derived
+	// on every REFUSAL path this scalar is real, derived
 	// private key material (possibly the OWNER key, which is exactly the one
 	// we refuse) and nothing downstream will ever wipe it: only the success
 	// path hands it to a caller that does. Zero it before we leave.

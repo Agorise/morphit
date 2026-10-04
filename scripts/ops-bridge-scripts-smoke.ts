@@ -2,7 +2,7 @@
  * ops-bridge-scripts-smoke — no one-off live-patch script ships in ops/.
  *
  * History. `ops/` used to carry sixteen one-off scripts written during live
- * debugging sessions (v1.12.x relay-health, cp775 federation, the morphitlat
+ * debugging sessions (v1.12.x relay-health, federation, the morphitlat
  * canary). They travelled in every release, in /opt/morphit/ops, long after the
  * fixes they bridged had shipped. Run on a current release they did harm
  * (v1.20.0 deep review, C5/C6), for example:

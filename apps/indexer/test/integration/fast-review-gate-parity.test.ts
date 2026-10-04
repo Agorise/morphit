@@ -1,6 +1,6 @@
 /**
  * The head tailer's fast REVIEW notification must admit a subset of what the
- * durable feedback handler admits (v1.18.0 deep-deep, rv6-L1).
+ * durable feedback handler admits.
  *
  * It did not. The durable handler accepted a cited order only when its
  * `fee_status = 'verified'`; the tailer's own copy of the query also accepted
@@ -51,16 +51,19 @@ describe.skipIf(!INTEGRATION_ENABLED)('fast review notification ⊆ durable revi
 			);
 		await order('attested-order', 'verified_by_attestation', 'btc');
 		await order('paid-order', 'verified', 'blurt');
+		await order('other-paid-order', 'verified', 'blurt');
 		// A substantiated conversation (≥2 each way over ≥15 min), so the
 		// provable-counterparty bar passes and the CITATION is the only
 		// difference between the cases.
 		const times = ['10:00', '10:10', '10:20', '10:30'];
 		for (const [i, t] of times.entries()) {
 			const [from, to] = i % 2 === 0 ? [REVIEWER, SUBJECT] : [SUBJECT, REVIEWER];
+			// The pair's conversation is about the paid order (a citation
+			// must name an order the two traded on).
 			await fx.db.query(
-				`INSERT INTO chat_messages (sender, recipient, ciphertext, header, created_at, source_trx_id)
-				 VALUES ($1, $2, 'eA==', '{}'::jsonb, $3, $4)`,
-				[from, to, new Date(`2026-04-19T${t}:00Z`), `trx-chat-${i}`]
+				`INSERT INTO chat_messages (sender, recipient, ciphertext, header, created_at, source_trx_id, order_permlink)
+				 VALUES ($1, $2, 'eA==', '{}'::jsonb, $3, $4, $5)`,
+				[from, to, new Date(`2026-04-19T${t}:00Z`), `trx-chat-${i}`, i === 0 ? 'paid-order' : null]
 			);
 		}
 	});
@@ -106,6 +109,10 @@ describe.skipIf(!INTEGRATION_ENABLED)('fast review notification ⊆ durable revi
 			await fast('attested-order'),
 			'the fast path notified for a review the durable path rejects — a push for a review that never exists'
 		).toBe(false);
+	});
+
+	it('a review citing a paid order the pair never discussed: the fast path does not notify', async () => {
+		expect(await fast('other-paid-order')).toBe(false);
 	});
 
 	it('a review citing a PAID order: both admit it (the fast path is not simply switched off)', async () => {

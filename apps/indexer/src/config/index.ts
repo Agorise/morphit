@@ -11,15 +11,21 @@
 import { DEFAULT_XMR_EXPLORERS, parseXmrExplorerList } from './xmrExplorers';
 import { z } from 'zod';
 import { parseRoomAlias, MORPHIT_GENESIS_BLOCK, DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, normalizeContactUrl, sanitizeBrandName } from '@morphit/operator-config';
+import {
+	DEFAULT_BTC_FEE_EXPLORERS,
+	DEFAULT_PRICENODES,
+	isAcceptableSourceUrl
+} from '@morphit/operator-config/fee-sources';
+import { hiddenServiceProxyConfigFromEnv, type HiddenServiceProxyConfig } from '@morphit/hidden-transport';
 import { CANONICAL_TREASURY } from '$config/canonicalTreasury';
 
-/** Blurt account-name shape — the project-canonical regex (cp175 F-007):
+/** Blurt account-name shape — the project-canonical regex:
  *  3–16 chars, lowercase, leading letter, `[a-z0-9.-]` interior, ending
  *  alphanumeric. Byte-identical to every other account-name regex in the
  *  tree (blurt-account-regex-parity sentinel). */
 const FEE_RECIPIENT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
-/** cp407 — resolve the operator's configured BLURT fee recipient. A federated
+/** resolve the operator's configured BLURT fee recipient. A federated
  *  operator earns 90% of BLURT listing fees and sets the account they land in;
  *  if they leave it empty or enter a malformed account name we fall back to the
  *  canonical treasury (@morphit-fees) rather than route fees to a non-account
@@ -52,7 +58,7 @@ const PLACEHOLDER_DB_PASSWORDS = [
 	'postgres'
 ] as const;
 
-/** Validate a chat-link URL template (Part 109).  Must start
+/** Validate a chat-link URL template.  Must start
  *  with https://, contain literal `{txid}`, and parse as a
  *  URL after substitution with a placeholder txid.  Mirrors
  *  the ops-cli wizard's parseChatLinkTemplate so the
@@ -105,12 +111,12 @@ export interface Config {
 	/** How long to sleep between polling the chain head. Blurt blocks
 	 *  are ~3 seconds; this is the ceiling on indexer freshness. */
 	readonly blockIntervalMs: number;
-	/** cp664 — how many block-fetch WINDOWS the catch-up backfill prefetches
+	/** how many block-fetch WINDOWS the catch-up backfill prefetches
 	 *  CONCURRENTLY, each starting on a different RPC endpoint (spread load
 	 *  across all nodes, no single-endpoint SPOF; a stalled node's window
 	 *  transparently falls back through the pool to another).  0 = auto = one
 	 *  window per configured endpoint.  The DB write stays strictly in-order;
-	 *  cp666 commits ONE transaction per fetch window (≤BLOCK_FETCH_BATCH blocks)
+	 *  a later change commits ONE transaction per fetch window (≤BLOCK_FETCH_BATCH blocks)
 	 *  rather than one per block, so the per-commit fsync is amortised across the
 	 *  window while the network FETCH is parallelised across endpoints. */
 	readonly backfillConcurrency: number;
@@ -162,8 +168,6 @@ export interface Config {
 	 *  PUBLIC_MORPHIT_INDEXER_ORIGIN. Used for self-reference and
 	 *  logging; doesn't affect routing. */
 	readonly publicOrigin: string;
-	/** Exact-match allowed origins for CORS. */
-	readonly allowedOrigins: readonly string[];
 	/** Reverse proxies whose X-Forwarded-For / X-Real-IP the per-IP limiter
 	 *  believes (v1.20.0, E2). Undefined = the built-in default (loopback +
 	 *  172.16.0.0/12, Docker's default bridge pool, where the BunkerWeb
@@ -213,8 +217,8 @@ export interface Config {
 	 *  a transfer verifies.  MUST match BASE_FEE_BLURT on the
 	 *  frontend. */
 	readonly feeBaseBlurt: number;
-	/** Operator-level instance-wide asset disable list (Part 121,
-	 *  Memory #25).  Uppercase tickers — orders posted with a
+	/** Operator-level instance-wide asset disable list
+	 *  (the default-on rule for new assets).  Uppercase tickers — orders posted with a
 	 *  disabled asset are rejected at handler-time.  Default
 	 *  empty (everything in the canonical registry is enabled).
 	 *  Federation: cross-instance read-only visibility is
@@ -230,13 +234,13 @@ export interface Config {
 	 *  methods.  Default empty (every canonical method is offered).
 	 *  Federation: cross-instance read-only visibility preserved. */
 	readonly disabledPaymentMethods: readonly string[];
-	/** Part 121 cp9 — public Matrix room alias for user→operator
+	/** public Matrix room alias for user→operator
 	 *  contact, exposed via /v1/instance.operator_matrix_room.
 	 *  Parsed and validated as `#room:server` at config load
 	 *  time by parseRoomAlias from @morphit/operator-config.
 	 *  null when not configured (frontend hides the link). */
 	readonly operatorMatrixRoom: string | null;
-	/** cp167 — When true, /v1/instance includes an mcp_url field
+	/** When true, /v1/instance includes an mcp_url field
 	 *  constructed from publicOrigin so AI agents can discover this
 	 *  instance's MCP endpoint.  The morphit-mcp service runs (or
 	 *  not) independently of this flag — this is strictly about
@@ -268,27 +272,30 @@ export interface Config {
 	 *  Default: 'launch'. Operator flips via env var when the
 	 *  transition trigger is reached; no redeploy required. */
 	readonly attestationPhase: 'launch' | 'steady';
-	/** Whether to run the optional BLURT/USD price feed.
+	/** Whether to run the price feed (BLURT, BTC and XMR in the
+	 *  denomination fiat).
 	 *
-	 *  Default: false. When false, the indexer makes ZERO outbound
-	 *  HTTP calls for pricing; fee verification doesn't need it.
+	 *  Default: TRUE (MORPHIT_INDEXER_PRICE_FEED_ENABLED unset). Set it
+	 *  to false and the indexer makes no outbound HTTP calls for
+	 *  pricing; fee verification doesn't need it. BTC and XMR are priced
+	 *  from the onion pricenodes first (price/pricenodes.ts); a node with
+	 *  no clearnet RPC uses hidden price sources only.
 	 *
-	 *  When true, the price source (Coingecko →
-	 *  morphit_native → static floor) is initialized at boot and the
+	 *  When true, the price sources (factory.ts: pricenodes / BLURT's
+	 *  own feed → the clearnet aggregators where allowed →
+	 *  morphit_native → static floor) are initialized at boot and the
 	 *  /v1/listing-fee endpoint surfaces an optional `base_fee_fiat`
 	 *  + `blurt_price_fiat` + `denomination_fiat` echo. This is
 	 *  purely a display courtesy for frontends that want to show
 	 *  users an approximate fiat equivalent next to BLURT amounts.
-	 *  Disabled by default because most operators don't need it and
-	 *  we'd rather not phone home to third-party price APIs without
-	 *  explicit opt-in. (cp127 added the morphit_native upstream as
-	 *  a self-sovereign alternative; cp128 added denomination-fiat
-	 *  configurability so the echo can be in USD, EUR, XDR, XAU,
-	 *  etc., per operator config.) */
+	 *  (a later change added the morphit_native upstream as a self-sovereign
+	 *  alternative; a later change added denomination-fiat configurability so
+	 *  the echo can be in USD, EUR, XDR, XAU, etc., per operator
+	 *  config.) */
 	readonly priceFeedEnabled: boolean;
 	/** Static floor BLURT/USD price. Only used when
 	 *  `priceFeedEnabled === true` AND every live upstream has failed
-	 *  AND no value has ever cached successfully. Default 0.002. */
+	 *  AND no value has ever cached successfully. Default 0.001. */
 	readonly priceFeedStaticFloor: number;
 	/** How often the composite price source refreshes from
 	 *  upstreams, in ms. Only relevant when `priceFeedEnabled` is
@@ -326,7 +333,7 @@ export interface Config {
 	 *  messariApiKey is set. */
 	readonly messariBaseUrl: string;
 	readonly messariApiKey?: string;
-	/** cp425 — Blurt-native BLURT/USD price feed (api.blurt.blog/price_info).
+	/** Blurt-native BLURT/USD price feed (api.blurt.blog/price_info).
 	 *  Joins the external market average for BLURT only. Empty disables it. */
 	readonly blurtPriceFeedUrl: string;
 	/** Relative outlier band for the crypto external average, e.g.
@@ -353,7 +360,7 @@ export interface Config {
 	readonly fxErApiBaseUrl: string;
 	readonly fxCurrencyApiBaseUrl: string;
 
-	/** ── cp127: morphit_native price-source feed config ──────────
+	/** ── morphit_native price-source feed config ──────────
 	 *  Opt-in self-sovereign price derivation from on-platform
 	 *  trade data.  When enabled, the morphit_native fetcher slots
 	 *  into the composite source's upstream chain BETWEEN coingecko
@@ -363,32 +370,25 @@ export interface Config {
 	 *  platform's trading volume to support self-sovereign pricing). */
 	readonly priceFeedNativeEnabled: boolean;
 
-	/** When true, AND morphit_native is enabled, AND the cross-source
-	 *  disagreement monitor detects sustained material disagreement
-	 *  between morphit_native and the external sources, prefer the
-	 *  morphit_native value.  Default: false (external remains
-	 *  primary).  Operators who trust their data flip this once
-	 *  they've validated their on-platform pricing matches reality. */
-	readonly priceFeedPreferNativeWhenDisagreeing: boolean;
-
 	/** Stablecoin tickers the morphit_native fetcher considers for
 	 *  Tier 2 + the depeg detector.  Default: USDT/USDC/DAI.  An
 	 *  operator can override to drop or add stablecoins. */
 	readonly priceFeedStablecoinKeys: ReadonlyArray<string>;
 
-	/** Per-asset plausibility envelope for the morphit_native fetcher.
-	 *  Operator can TIGHTEN these but cannot WIDEN past the
-	 *  hardcoded outer bounds in morphitNativeFetcher.ts.  Defaults
-	 *  match the BLURT historical range. */
+	/** BLURT's plausibility envelope for the morphit_native derivation
+	 *  (other assets use their own range from price/factory.ts
+	 *  CP130_ASSET_DEFAULTS). Operator can TIGHTEN these but cannot
+	 *  WIDEN past the hardcoded outer bounds in morphitNativeFetcher.ts.
+	 *  Defaults match the BLURT historical range. */
 	readonly priceFeedNativePlausibleMin: number;
 	readonly priceFeedNativePlausibleMax: number;
 
-	/** ── cp128: operator-configurable denomination fiat ──────────
+	/** ── operator-configurable denomination fiat ──────────
 	 *  The unit the indexer expresses BLURT prices in for its own
 	 *  display surfaces (the USD echo on /v1/listing-fee, the
 	 *  /v1/price/morphit-native/receipt endpoint, the drift
 	 *  baseline + disagreement monitor's per-pair state).  Default
-	 *  'USD' preserves the cp127 behavior.  Operators serving non-
+	 *  'USD' preserves the behavior.  Operators serving non-
 	 *  USD-native markets (or hedging against USD collapse / petro-
 	 *  dollar erosion) can set this to any 3-8 character uppercase
 	 *  fiat ticker — EUR, GBP, JPY, BRL, CNY, INR, RUB, XDR (IMF
@@ -406,7 +406,7 @@ export interface Config {
 	 *  stablecoins exist).  See ADR-0040 for the full design. */
 	readonly priceFeedDenominationFiat: string;
 
-	/** ── cp129: Defense F — cross-instance peer price monitor ────
+	/** ── Defense F — cross-instance peer price monitor ────
 	 *  Periodically (every priceFeedPeerSampleIntervalMinutes) the
 	 *  indexer queries each federation peer's
 	 *  `/v1/price/morphit-native/receipt` endpoint and records the
@@ -424,13 +424,13 @@ export interface Config {
 	/** How often to sample peers (minutes).  Default 30. */
 	readonly priceFeedPeerSampleIntervalMinutes: number;
 
-	/** ── cp130: per-asset static-floor for the multi-asset price
+	/** ── per-asset static-floor for the multi-asset price
 	 *  factory.  These are the fallback prices each asset's
 	 *  composite source serves when all live upstreams have failed
 	 *  AND no value has cached successfully since boot.  Display-
 	 *  only; fee verification doesn't consult them.
 	 *
-	 *  Per-asset defaults match the cp130 launch set.  Operators in
+	 *  Per-asset defaults match the launch set.  Operators in
 	 *  non-USD denominations should override these to match their
 	 *  unit (e.g. on a EUR-denominated instance, set
 	 *  MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR to a rough
@@ -446,42 +446,51 @@ export interface Config {
 	 *  organic bidding traffic. */
 	readonly featureFeeBlurtPerHour: number;
 
-	/** ADR-0011 sub-phase 4b: Bitcoin fee-collection address.
-	 *  Orders with fee_method='btc' are verified by checking an
-	 *  output on the payer's tx pays this address. Empty string
-	 *  disables BTC fee acceptance. */
+	/** ADR-0011 sub-phase 4b: Bitcoin fee-collection address — the
+	 *  fallback until a release pins one. An explicitly EMPTY value
+	 *  turns BTC fees off on this node, even when a release pins an
+	 *  address (externalFeeAvailability.ts). */
 	readonly btcFeeAddress: string;
 	/** Bitcoin listing fee in satoshis. ADR-0011 §2 says BTC/XMR
 	 *  pay tier-1 flat. We store satoshis (integer) to avoid
 	 *  float pitfalls at verification time. Default: 0 until
 	 *  operator configures. */
 	readonly btcFeeSatoshis: number;
-	/** Explorer URLs for Bitcoin verification. Comma-separated.
-	 *  Empty list disables verification (rejects all BTC fees as
-	 *  pending_external immediately). */
+	/** Explorer URLs for Bitcoin verification (Esplora API bases).
+	 *  Onion ones are asked first, over Tor; clearnet ones only when those
+	 *  cannot answer, and never on a zero-clearnet node. An empty list
+	 *  turns BTC fees off on this node. */
 	readonly btcExplorerUrls: readonly string[];
 
 	/** ADR-0011 sub-phase 4b: Monero fee-collection address.
-	 *  Paired with btcFeeAddress for the XMR path. */
+	 *  Same rules as btcFeeAddress (empty = XMR fees off here). */
 	readonly xmrFeeAddress: string;
 	/** Monero listing fee in piconero. Same rationale as
 	 *  btcFeeSatoshis; Monero's smallest unit is 1e-12 XMR. */
 	readonly xmrFeePiconero: bigint;
-	/** Explorer URLs for Monero verification. */
+	/** Explorer URLs for Monero verification, same tiering as BTC's.
+	 *  Empty = XMR fees off. */
 	readonly xmrExplorerUrls: readonly string[];
 
-	/** Part 109 quorum gate.  Minimum number of BTC explorers
-	 *  that must return a successful response before a fee
+	/** quorum gate.  Minimum number of BTC explorers
+	 *  that must return a successful, agreeing response before a fee
 	 *  verification promotes to `verified`.  When fewer responding
 	 *  explorers agree (degraded outage), the verifier returns
-	 *  `pending_external`.  Default 1 preserves pre-Part-109
-	 *  behavior; operators with 3+ configured explorers should
-	 *  raise to 2.  Bounded: >= 1, <= btcExplorerUrls.length. */
+	 *  `pending_external`.  Default 2 (resolveBtcQuorum).  Bounded:
+	 *  >= 1, <= btcExplorerUrls.length. */
 	readonly btcMinSuccessfulResponses: number;
-	/** Part 109 quorum gate for XMR.  Same semantics as the BTC
-	 *  field above.  With the default 5-explorer list, operators
-	 *  can set this to 2-3 for true cross-source verification. */
+	/** quorum gate for XMR.  Same semantics as the BTC
+	 *  field above; default 2 (resolveXmrQuorum). */
 	readonly xmrMinSuccessfulResponses: number;
+	/** Haveno / Bisq pricenode bases (`<base>/getAllMarketPrices`): BTC and
+	 *  XMR prices and the USD→fiat table come from their consensus, over Tor
+	 *  (price/pricenodes.ts). Empty (or absent, in a hand-built Config) =
+	 *  none: the clearnet sources only, where allowed. */
+	readonly pricenodeUrls?: readonly string[];
+	/** The Tor SOCKS / i2pd proxies this indexer reaches hidden services
+	 *  through (MORPHIT_INDEXER_TOR_SOCKS / _I2P_HTTP_PROXY). Absent in a
+	 *  hand-built Config: the environment is read instead. */
+	readonly hiddenProxies?: HiddenServiceProxyConfig;
 
 	/** ADR-0010 §3: low-balance auto-refill settings. */
 	readonly lowBalanceRefillIntervalMs: number;
@@ -550,46 +559,43 @@ export interface Config {
 	readonly instanceEnsName: string | undefined;
 	readonly instanceOrigin: string | undefined;
 
-	/** Frontend chat-link URL template for BTC txids (Part 109).
+	/** Frontend chat-link URL template for BTC txids.
 	 *  When undefined, frontend uses its bundled default
 	 *  (`https://mempool.space/tx/{txid}`).  When set, frontend
 	 *  uses this template instead.  See validator above for the
 	 *  shape contract: https://, contains `{txid}`, parses as URL. */
 	readonly frontendBtcChatLinkUrl: string | undefined;
-	/** Frontend chat-link URL template for XMR txids (Part 109).
+	/** Frontend chat-link URL template for XMR txids.
 	 *  When undefined, frontend uses its bundled default
 	 *  (`https://xmrchain.net/tx/{txid}`). */
 	readonly frontendXmrChatLinkUrl: string | undefined;
-	/** Frontend chat-link URL template for BCH txids (Part 122
-	 *  cp21).  When undefined, frontend uses its bundled default
+	/** Frontend chat-link URL template for BCH txids.  When undefined, frontend uses its bundled default
 	 *  (`https://blockchair.com/bitcoin-cash/transaction/{txid}`).
 	 *  Same shape contract as BTC/XMR: https://, contains `{txid}`,
 	 *  parses as URL.  Operators wanting a different BCH explorer
-	 *  set MORPHIT_FRONTEND_BCH_CHAT_LINK_URL; candidates the maintainer
+	 *  set MORPHIT_FRONTEND_BCH_CHAT_LINK_URL; candidates
 	 *  surveyed at addition time included blockchair.com,
 	 *  blockchain.com/explorer, bitinfocharts.com, bchexplorer.info,
 	 *  oklink.com/bch, bch.tokenview.io, blockexplorer.one, and
 	 *  explorer.cloverpool.com. */
 	readonly frontendBchChatLinkUrl: string | undefined;
 
-	/** Per-instance LTC chat-link explorer URL template (Part 122
-	 *  cp24).  When undefined, frontend uses its bundled default
+	/** Per-instance LTC chat-link explorer URL template.  When undefined, frontend uses its bundled default
 	 *  (`https://litecoinspace.org/tx/{txid}`).  Same shape
 	 *  contract as BTC/XMR/BCH: https://, contains `{txid}`,
 	 *  parses as URL.  Operators wanting a different LTC explorer
-	 *  set MORPHIT_FRONTEND_LTC_CHAT_LINK_URL; candidates the maintainer
+	 *  set MORPHIT_FRONTEND_LTC_CHAT_LINK_URL; candidates
 	 *  surveyed at addition time included blockchair.com/litecoin,
 	 *  oklink.com/litecoin, bitinfocharts.com/litecoin/explorer/,
 	 *  chain.so/LTC, litecoinspace.org, blockexplorer.one/litecoin/mainnet,
 	 *  and ltc.tokenview.io. */
 	readonly frontendLtcChatLinkUrl: string | undefined;
 
-	/** Per-instance DASH chat-link explorer URL template (Part 122
-	 *  cp27).  When undefined, frontend uses its bundled default
+	/** Per-instance DASH chat-link explorer URL template.  When undefined, frontend uses its bundled default
 	 *  (`https://insight.dash.org/insight/tx/{txid}`).  Same shape
 	 *  contract as BTC/XMR/BCH/LTC: https://, contains `{txid}`,
 	 *  parses as URL.  Operators wanting a different DASH explorer
-	 *  set MORPHIT_FRONTEND_DASH_CHAT_LINK_URL; candidates the maintainer
+	 *  set MORPHIT_FRONTEND_DASH_CHAT_LINK_URL; candidates
 	 *  surveyed at addition time included blockchair.com/dash,
 	 *  explorer.dash.org/insight/, chainz.cryptoid.info/dash/,
 	 *  oklink.com/dash, bitinfocharts.com/dash/explorer/,
@@ -597,13 +603,12 @@ export interface Config {
 	 *  blockchain.com/explorer/assets/dash, and dash.tokenview.io. */
 	readonly frontendDashChatLinkUrl: string | undefined;
 
-	/** Per-instance DOGE chat-link explorer URL template (Part 122
-	 *  cp33).  When undefined, frontend uses its bundled default
+	/** Per-instance DOGE chat-link explorer URL template.  When undefined, frontend uses its bundled default
 	 *  (`https://blockchair.com/dogecoin/transaction/{txid}`).
 	 *  Same shape contract as BTC/XMR/BCH/LTC/DASH: https://,
 	 *  contains `{txid}`, parses as URL.  Operators wanting a
 	 *  different DOGE explorer set MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL;
-	 *  candidates the maintainer surveyed at addition time (2026-05-19):
+	 *  candidates surveyed at addition time (2026-05-19):
 	 *  dogechain.info, blockchair.com/dogecoin (chosen as
 	 *  bundled default), bitinfocharts.com/dogecoin/explorer,
 	 *  live.blockcypher.com/doge, blockexplorer.one/dogecoin/mainnet,
@@ -612,15 +617,14 @@ export interface Config {
 	 *  (exchange-adjacent; declined). */
 	readonly frontendDogeChatLinkUrl: string | undefined;
 
-	/** Per-instance ZEC chat-link explorer URL template (Part 122
-	 *  cp39).  Same shape as BTC/XMR/BCH/LTC/DASH/DOGE (single
+	/** Per-instance ZEC chat-link explorer URL template.  Same shape as BTC/XMR/BCH/LTC/DASH/DOGE (single
 	 *  field, single-network mainnet).  When unset, the frontend
 	 *  uses the bundled default `mainnet.zcashexplorer.app`.
 	 *  Validation: https:// scheme, contains `{txid}` placeholder,
 	 *  parses as URL after substitution.  Privacy/decentralization
 	 *  rationale: community-run/project-aligned explorers preferred
 	 *  over third-party aggregators or exchange-affiliated
-	 *  services.  Candidates the maintainer surveyed at addition time
+	 *  services.  Candidates surveyed at addition time
 	 *  (2026-05-19): mainnet.zcashexplorer.app (chosen as bundled
 	 *  default — community-run, official-style pointer),
 	 *  blockchair.com/zcash, zcashinfo.com, 3xpl.com/zcash,
@@ -629,7 +633,7 @@ export interface Config {
 	readonly frontendZecChatLinkUrl: string | undefined;
 
 	/** ARRR (Pirate Chain) chat-link explorer URL template (Part
-	 *  122 cp41).  When set, the frontend uses this template
+	 *  122).  When set, the frontend uses this template
 	 *  instead of the bundled `explorer.piratechain.com/tx/{txid}`
 	 *  default.  Must contain `{txid}` placeholder; checked at
 	 *  config load.
@@ -643,8 +647,7 @@ export interface Config {
 	 *  aggregator). */
 	readonly frontendArrrChatLinkUrl: string | undefined;
 
-	/** DCR (Decred) chat-link explorer URL template (Part 122
-	 *  cp43).  When set, the frontend uses this template instead
+	/** DCR (Decred) chat-link explorer URL template.  When set, the frontend uses this template instead
 	 *  of the bundled `dcrdata.decred.org/tx/{txid}` default.
 	 *  Must contain `{txid}` placeholder; checked at config load.
 	 *
@@ -657,8 +660,7 @@ export interface Config {
 	 *  analytics + block explorer). */
 	readonly frontendDcrChatLinkUrl: string | undefined;
 
-	/** SOL (Solana) chat-link explorer URL template (Part 122
-	 *  cp45).  When set, the frontend uses this template instead
+	/** SOL (Solana) chat-link explorer URL template.  When set, the frontend uses this template instead
 	 *  of the bundled `explorer.solana.com/tx/{txid}` default.
 	 *  Must contain `{txid}` placeholder; checked at config load.
 	 *
@@ -670,8 +672,7 @@ export interface Config {
 	 *  solana.fm (community-run, unreachable at survey time). */
 	readonly frontendSolChatLinkUrl: string | undefined;
 
-	/** ETH (Ethereum) chat-link explorer URL template (Part 122
-	 *  cp47).  When set, the frontend uses this template instead
+	/** ETH (Ethereum) chat-link explorer URL template.  When set, the frontend uses this template instead
 	 *  of the bundled `eth.blockscout.com/tx/{txid}` default.
 	 *  Must contain `{txid}` placeholder; checked at config load.
 	 *
@@ -687,8 +688,7 @@ export interface Config {
 	 *  regular tx lookups). */
 	readonly frontendEthChatLinkUrl: string | undefined;
 
-	/** XRP (Ripple) chat-link explorer URL template (Part 122
-	 *  cp49).  When set, the frontend uses this template instead
+	/** XRP (Ripple) chat-link explorer URL template.  When set, the frontend uses this template instead
 	 *  of the bundled `livenet.xrpl.org/transactions/{txid}`
 	 *  default.  Must contain `{txid}` placeholder; checked at
 	 *  config load.
@@ -703,9 +703,9 @@ export interface Config {
 	readonly frontendXrpChatLinkUrl: string | undefined;
 
 	/** Per-instance per-network USDT chat-link explorer URL
-	 *  templates (Part 122 cp30 — DD-11 closure; the multi-network
+	 *  templates (DD-11 closure; the multi-network
 	 *  USDT explorer override has never actually worked on the
-	 *  public API since Part 121 cp3 because the indexer never
+	 *  public API since an earlier release because the indexer never
 	 *  declared these fields.  Frontend defensive-fallback hid the
 	 *  breakage).  Each field independently undefined→bundled
 	 *  default; when set, the frontend uses this template for the
@@ -723,7 +723,7 @@ export interface Config {
 	readonly frontendUsdtBep20ChatLinkUrl: string | undefined;
 
 	/** Per-instance per-network USDC chat-link explorer URL
-	 *  templates (Part 122 cp30 — DD-10 closure).  Same shape
+	 *  templates (DD-10 closure).  Same shape
 	 *  contract as USDT above.  Bundled defaults:
 	 *    erc20   → https://etherscan.io/tx/{txid}
 	 *    spl     → https://solscan.io/tx/{txid}
@@ -738,7 +738,7 @@ export interface Config {
 	readonly frontendUsdcPolygonChatLinkUrl: string | undefined;
 
 	/** Per-instance per-network DAI chat-link explorer URL
-	 *  templates (Part 122 cp31).  4 networks, all EVM-family.
+	 *  templates.  4 networks, all EVM-family.
 	 *  Bundled defaults:
 	 *    erc20    → https://etherscan.io/tx/{txid}
 	 *    polygon  → https://polygonscan.com/tx/{txid}
@@ -759,7 +759,7 @@ export interface Config {
 	 *  to this operator.  When unset, orders go out without
 	 *  attribution and the treasury keeps 100%.
 	 *
-	 *  REVISIT-LIST item 5 — operator earnings pipeline. */
+	 *  Backlog item 5 — operator earnings pipeline. */
 	readonly instanceOperatorTag: string | undefined;
 
 	/** Per-instance SEO copy override.  When set, frontend uses
@@ -770,7 +770,7 @@ export interface Config {
 	readonly instanceSeoTitle: string | undefined;
 	readonly instanceSeoDescription: string | undefined;
 	readonly instanceSeoKeywords: string | undefined;
-	/** cp119-A4: optional Twitter/X handle for `<meta name="twitter:site">`.
+	/** optional Twitter/X handle for `<meta name="twitter:site">`.
 	 *  When set (e.g. `@morphit`), Twitter cards show "via @morphit"
 	 *  attribution.  When unset, the meta tag is omitted entirely
 	 *  (the card still renders without it).  Operators who don't have
@@ -820,7 +820,7 @@ const envSchema = z.object({
 				.filter(Boolean)
 		)
 		.refine(
-			// cp755: NO `arr.length > 0` here. A tor-only node deliberately empties
+			// NO `arr.length > 0` here. A tor-only node deliberately empties
 			// the clearnet pool (MORPHIT_INDEXER_RPC_ENDPOINTS=) so chain reads go
 			// ONLY over the hidden-service pool — reaching a clearnet RPC over the
 			// box's real connection would leak its clearnet IP, the exposure tor-only
@@ -903,7 +903,7 @@ const envSchema = z.object({
 		.transform((s) => s.trim().toLowerCase() !== 'false'),
 	MORPHIT_INDEXER_START_BLOCK: z.coerce.number().int().nonnegative().default(MORPHIT_GENESIS_BLOCK),
 	MORPHIT_INDEXER_BLOCK_INTERVAL_MS: z.coerce.number().int().positive().default(3000),
-	// cp664 — concurrent prefetch windows during catch-up.  0 = auto (one per endpoint).
+	// concurrent prefetch windows during catch-up.  0 = auto (one per endpoint).
 	MORPHIT_INDEXER_BACKFILL_CONCURRENCY: z.coerce.number().int().min(0).max(64).default(0),
 	// v1.15.x — catch-up strategy. 'fifo' = the classic await-oldest prefetch;
 	// 'flow' = the out-of-order reorder-buffer path (deep buffer, cursor hedge,
@@ -934,15 +934,6 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_LISTEN_HOST: z.string().default('127.0.0.1'),
 	MORPHIT_INDEXER_LISTEN_PORT: z.coerce.number().int().min(1).max(65535).default(8081),
 	MORPHIT_INDEXER_PUBLIC_ORIGIN: z.string().url(),
-	MORPHIT_INDEXER_ALLOWED_ORIGINS: z
-		.string()
-		.default('')
-		.transform((s) =>
-			s
-				.split(',')
-				.map((o) => o.trim())
-				.filter(Boolean)
-		),
 	// v1.20.0 (E2) — the reverse proxies the per-IP limiter believes. Unset: the
 	// code default (loopback + 172.16.0.0/12, Docker's default bridge pool —
 	// the ansible bridge is 172.20.0.0/16, morphit.io's 172.18.0.0/24), so
@@ -992,7 +983,7 @@ const envSchema = z.object({
 	 *  config change while community operators get a dedicated knob. */
 	MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME: z.string().max(16).default(''),
 
-	// cp407 — federated operators earn 90% of BLURT listing fees, so they set
+	// federated operators earn 90% of BLURT listing fees, so they set
 	// the Blurt account those fees land in (the wizard writes this from their
 	// "fees account" answer). Accept ANY string here (even empty/garbage)
 	// rather than min/max — an operator who nulls or fat-fingers it must NOT
@@ -1004,8 +995,8 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_FEE_BASE_BLURT: z.coerce.number().positive().default(125),
 	MORPHIT_INDEXER_FEE_TOLERANCE: z.coerce.number().positive().max(0.5).default(0.001),
 
-	/** Operator-level instance-wide asset disable list (Part 121,
-	 *  Memory #25).  Comma-separated uppercase tickers from the
+	/** Operator-level instance-wide asset disable list
+	 *  (the default-on rule for new assets).  Comma-separated uppercase tickers from the
 	 *  canonical registry — e.g. `MORPHIT_INDEXER_DISABLED_ASSETS="USDT"`
 	 *  to refuse all USDT orders on this instance.  The indexer's
 	 *  order handler rejects orders posted with a disabled asset;
@@ -1020,7 +1011,7 @@ const envSchema = z.object({
 	 *  - Operators running a private instance for a specific
 	 *    community that only wants BTC+XMR
 	 *
-	 *  Memory #23 invariant separately blocks USDT from paying
+	 *  The frozen fee_method invariant separately blocks USDT from paying
 	 *  fees regardless of this knob.  This knob blocks USDT from
 	 *  being TRADED at all on the instance.
 	 *
@@ -1062,7 +1053,7 @@ const envSchema = z.object({
 				.filter((t) => t.length > 0)
 		),
 
-	/** Part 121 cp9 — public Matrix room alias for user→operator
+	/** public Matrix room alias for user→operator
 	 *  contact.  EXPOSED via /v1/instance.operator_matrix_room.
 	 *  Rendered on /support, /about-this-instance, and footer.
 	 *
@@ -1094,7 +1085,7 @@ const envSchema = z.object({
 		.transform((s, ctx) => {
 			const trimmed = s.trim();
 			if (trimmed === '') return null;
-			// cp194 — parseRoomAlias is statically imported at the top
+			// parseRoomAlias is statically imported at the top
 			// of this file. It was previously loaded via require() here,
 			// which is undefined under ESM (this file runs under tsx as
 			// ESM): boot crashed with "require is not defined" the moment
@@ -1117,7 +1108,7 @@ const envSchema = z.object({
 			return parsed;
 		}),
 
-	/** cp167 — Public advertisement of the MCP endpoint.  When true,
+	/** Public advertisement of the MCP endpoint.  When true,
 	 *  /v1/instance includes an `mcp_url` field constructed from
 	 *  the public origin so AI agent operators can discover this
 	 *  instance.  False means /v1/instance omits mcp_url entirely.
@@ -1139,13 +1130,15 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT: z.coerce.number().positive().default(100),
 	MORPHIT_INDEXER_ATTESTATION_PHASE: z.enum(['launch', 'steady']).default('launch'),
 
-	// Optional BLURT/USD price feed.  ON by default: it powers the USD
-	// equivalents the Morphit frontend shows next to BLURT amounts (the
-	// profile balance card + the listing-fee fiat echo).  Source is
-	// CoinGecko with a static-floor fallback; a server-side call from the operator's box, never
-	// user-facing.  Operators who want a fully self-contained instance
-	// that makes zero external price calls can set this to false (the UI
-	// then shows BLURT only).
+	// Price feed.  ON by default: it powers the fiat equivalents the
+	// Morphit frontend shows next to BLURT / BTC / XMR amounts (the profile
+	// balance card + the listing-fee fiat echo).  BTC and XMR come from the
+	// Haveno / Bisq pricenodes over Tor (MORPHIT_INDEXER_PRICENODE_URLS),
+	// BLURT from api.blurt.blog; the clearnet aggregators below are the
+	// fallback where clearnet is allowed.  Server-side calls from the
+	// operator's box, in the background, never user-facing.  Operators who
+	// want an instance that makes zero external price calls can set this
+	// to false (the UI then shows BLURT only).
 	MORPHIT_INDEXER_PRICE_FEED_ENABLED: z
 		.enum(['true', 'false'])
 		.default('true')
@@ -1174,7 +1167,7 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_COINCAP_API_KEY: z.string().optional(),
 	MORPHIT_INDEXER_MESSARI_BASE_URL: z.string().default('https://data.messari.io'),
 	MORPHIT_INDEXER_MESSARI_API_KEY: z.string().optional(),
-	// cp425 — Blurt-native price feed (BLURT/USD). Joins the external
+	// Blurt-native price feed (BLURT/USD). Joins the external
 	// average for BLURT. Set empty to disable.
 	MORPHIT_INDEXER_BLURT_PRICE_FEED_URL: z.string().default('https://api.blurt.blog/price_info'),
 	MORPHIT_INDEXER_PRICE_OUTLIER_TOLERANCE: z.coerce.number().positive().max(1).default(0.05),
@@ -1205,16 +1198,9 @@ const envSchema = z.object({
 		// currencyApiFetcher.ts / fetchUtil.ts followSameHostRedirect.
 		.default('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1'),
 
-	// ─── cp127: morphit_native (self-sovereign) price feed ──────
+	// ─── morphit_native (self-sovereign) price feed ──────
 	// Default OFF (operators opt in when they trust their data).
 	MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED: z
-		.enum(['true', 'false'])
-		.default('false')
-		.transform((s) => s === 'true'),
-	// Default OFF (priority remains Coingecko > native).
-	// Operators with mature data can flip to true to prefer native
-	// when external sources materially disagree.
-	MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING: z
 		.enum(['true', 'false'])
 		.default('false')
 		.transform((s) => s === 'true'),
@@ -1228,10 +1214,11 @@ const envSchema = z.object({
 				.map((t) => t.trim().toLowerCase())
 				.filter((t) => t.length > 0)
 		),
-	// Per-asset plausibility envelope for the native fetcher.
-	// Defaults match BLURT historical range; an operator can tighten
-	// these but the hardcoded outer bounds in morphitNativeFetcher.ts
-	// take precedence (defense E).
+	// BLURT's plausibility envelope for the native derivation (other
+	// assets use their own range from price/factory.ts
+	// CP130_ASSET_DEFAULTS). Defaults match BLURT's historical range; an
+	// operator can tighten these but the hardcoded outer bounds in
+	// morphitNativeFetcher.ts take precedence (defense E).
 	MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN: z.coerce
 		.number()
 		.positive()
@@ -1240,8 +1227,8 @@ const envSchema = z.object({
 		.number()
 		.positive()
 		.default(0.1),
-	// cp128: denomination fiat ticker.  3-8 uppercase chars.  Default
-	// 'USD' preserves cp127 behavior; operators in non-USD markets
+	// denomination fiat ticker.  3-8 uppercase chars.  Default
+	// 'USD' preserves behavior; operators in non-USD markets
 	// (or hedging against USD erosion) can set EUR, GBP, JPY, BRL,
 	// CNY, INR, RUB, XDR, XAU, or any other valid 3-8 char ticker.
 	// See ADR-0040.
@@ -1252,7 +1239,7 @@ const envSchema = z.object({
 			'must be 3-8 uppercase letters (e.g. USD, EUR, XDR, XAU)'
 		)
 		.default('USD'),
-	// cp129: Defense F — cross-instance peer disagreement detector.
+	// Defense F — cross-instance peer disagreement detector.
 	// Opt-in (default false).  When enabled, the indexer queries
 	// peer instances' price-receipt endpoint and alerts on
 	// sustained median-vs-self disagreement.  See ADR-0041.
@@ -1265,7 +1252,7 @@ const envSchema = z.object({
 		.int()
 		.positive()
 		.default(30),
-	// cp130: per-asset static-floor defaults for BTC + XMR.  These
+	// per-asset static-floor defaults for BTC + XMR.  These
 	// are USD-shaped defaults; operators in non-USD denominations
 	// override to match their unit.  See ADR-0042.
 	MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR: z.coerce
@@ -1278,49 +1265,56 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR: z.coerce.number().positive().default(50),
 
 	// BTC fee verification.  Default amount targets ~$0.25 USD at
-	// $60K BTC; operator can recompute via
-	//   tsx apps/indexer/scripts/recommend-fee-amounts.ts
-	// when prices drift significantly.  Address defaults to the
+	// $60K BTC.  Once a release pins treasury amounts (the normal
+	// case) the pinned amount is used and this one is ignored.
+	// Address defaults to the
 	// canonical treasury (CANONICAL_TREASURY.btc) so every instance
 	// routes BTC fees to the canonical treasury out of the box; the
 	// chain-pinned release op overrides it once broadcast
 	// (treasurySource.ts).  Set this to an explicit empty string to
-	// DISABLE BTC fee acceptance on this instance.
+	// turn BTC fees OFF on this instance — that holds even when a
+	// release pins an address, and /v1/instance then shows the BTC
+	// treasury as null. A zero-clearnet node (no clearnet RPC) takes them
+	// through the onion explorers in the lists below, and advertises a
+	// method only while one of those answers.
 	MORPHIT_INDEXER_BTC_FEE_ADDRESS: z.string().default(CANONICAL_TREASURY.btc),
 	MORPHIT_INDEXER_BTC_FEE_SATOSHIS: z.coerce.number().int().min(0).default(416),
+	// Esplora API bases. Default (@morphit/operator-config, feeSources.ts):
+	// four onion explorers, asked first over Tor, then blockstream.info and
+	// mempool.space as the clearnet fallback (never on a zero-clearnet node).
 	MORPHIT_INDEXER_BTC_EXPLORER_URLS: z
 		.string()
-		.default('https://blockstream.info/api,https://mempool.space/api')
+		.default(DEFAULT_BTC_FEE_EXPLORERS.join(','))
 		.refine(
 			(s) =>
 				s
 					.split(',')
 					.map((u) => u.trim())
 					.filter((u) => u.length > 0)
-					.every((u) => u.startsWith('https://')),
-			'all BTC explorer URLs must be https:// (cleartext exposes the txid+address)'
+					.every((u) => isAcceptableSourceUrl(u)),
+			'all BTC explorer URLs must be https://, or http:// to a .onion / .i2p service (cleartext over the open internet exposes the txid+address)'
 		),
 
 	// XMR fee verification.
 	//
-	// Part 109: the `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env var that
-	// existed during the Part 107/108 transition has been removed
+	// the `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env var that
+	// existed during the transition has been removed
 	// entirely.  No code path reads it.  No verification flow uses
 	// it.  If your `indexer.env` still has a line for it, the line
 	// is harmless (zod ignores unknown env vars) — you can safely
 	// delete it next time you touch the file.  See ADR-0011
-	// Part 108++ amendment for the design rationale (per-payment
+	// later+ amendment for the design rationale (per-payment
 	// proofs eliminate the need for any indexer to hold a view
 	// key).
 	//
 	// Default piconero amount targets ~$0.25 USD at $320 XMR;
-	// see the recommend-fee-amounts CLI for live recomputation.
+	// a chain-pinned amount overrides it.
 	// Address defaults to the canonical treasury
 	// (CANONICAL_TREASURY.xmr) so every instance routes XMR fees to
 	// the canonical treasury out of the box; the chain-pinned
 	// release op overrides it once broadcast (treasurySource.ts).
-	// Set this to an explicit empty string to DISABLE XMR fee
-	// acceptance on this instance.
+	// Set this to an explicit empty string to turn XMR fees OFF on
+	// this instance, even when a release pins an address.
 	MORPHIT_INDEXER_XMR_FEE_ADDRESS: z.string().default(CANONICAL_TREASURY.xmr),
 	MORPHIT_INDEXER_XMR_FEE_PICONERO: z
 		.string()
@@ -1329,30 +1323,45 @@ const envSchema = z.object({
 	MORPHIT_INDEXER_XMR_EXPLORER_URLS: z
 		.string()
 		.default(
-			// v1.20.0 (wave 4): three explorers checked live, two kinds —
-			// `https://…` = onion-monero-blockchain-explorer (txprove),
-			// `raw-tx+https://…` = raw transactions verified locally. See
-			// config/xmrExplorers.ts and docs/OPERATIONS.md §40.4.
+			// Two onion xmrblocks explorers first (over Tor), then the clearnet
+			// fallback: two txprove explorers, the raw-tx moneroblocks.info and
+			// three public nodes. See config/xmrExplorers.ts and
+			// docs/OPERATIONS.md §40.4.
 			DEFAULT_XMR_EXPLORERS.join(',')
 		)
 		.refine(
 			(s) => parseXmrExplorerList(s) !== null,
-			'all XMR explorer URLs must be https:// (or raw-tx+https://) — cleartext would leak the tx key'
+			'all XMR explorer URLs must be https:// (with an optional raw-tx+ / node+ prefix), or http:// to a .onion / .i2p service — cleartext over the open internet would leak the tx key'
 		),
 
-	// Part 109 quorum gates (BTC + XMR).  Minimum number of
-	// explorers that must return a successful response before
-	// the fee verifier promotes a payment to `verified`.  Default
-	// 1 preserves pre-Part-109 behavior (any single agreeing
-	// response is enough).  Operators with 3+ configured explorers
-	// should raise to 2 (or higher) for true cross-source check on
-	// every payment.  Bounded server-side: must be >= 1 and <=
-	// the count of configured explorer URLs (cross-validated below).
-	MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: z.coerce
-		.number()
-		.int()
-		.positive()
-		.default(1),
+	// Haveno / Bisq pricenodes (`<base>/getAllMarketPrices`), over Tor: BTC and
+	// XMR prices and the USD→fiat table are their consensus (price/pricenodes.ts).
+	// Default: the five live ones (@morphit/operator-config, feeSources.ts). Set
+	// empty for none (the clearnet price / FX sources then, where allowed).
+	MORPHIT_INDEXER_PRICENODE_URLS: z
+		.string()
+		.default(DEFAULT_PRICENODES.join(','))
+		.transform((s) =>
+			s
+				.split(',')
+				.map((u) => u.trim().replace(/\/+$/, ''))
+				.filter((u) => u.length > 0)
+		)
+		.refine(
+			(list) => list.every((u) => isAcceptableSourceUrl(u)),
+			'all pricenode URLs must be https://, or http:// to a .onion / .i2p service'
+		),
+
+	// quorum gates (BTC + XMR).  Minimum number of
+	// explorers that must return a successful, agreeing response
+	// before the fee verifier promotes a payment to `verified`.
+	// Both default to TWO (resolveBtcQuorum / resolveXmrQuorum
+	// below): one explorer's word — a compromised default or one an
+	// operator added — must not be enough to mark a fee paid. Left
+	// unset, the quorum is lowered to the number of configured
+	// explorers when fewer are configured (with a boot line saying
+	// so); set explicitly, it must be <= that number.
+	MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: z.coerce.number().int().positive().optional(),
 	// v1.20.0: XMR defaults to TWO agreeing explorers — less trust in
 	// any one of them. Left unset it resolves to min(2, number of configured
 	// explorers) in resolveXmrQuorum below, so an instance whose own list has
@@ -1469,7 +1478,7 @@ const envSchema = z.object({
 	 *  Advertised as a footer pill; not resolved server-side. */
 	MORPHIT_INSTANCE_ENS_NAME: z.string().max(80).optional(),
 	MORPHIT_INSTANCE_ORIGIN: z.string().url().optional(),
-	/** Frontend chat-link external explorer URL templates (Part 109).
+	/** Frontend chat-link external explorer URL templates.
 	 *  When a counterparty sends a BTC or XMR txid in chat, the
 	 *  frontend renders it as a clickable link substituting `{txid}`
 	 *  into this template.  Operators can point these at their own
@@ -1497,7 +1506,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp21 — BCH chat-link explorer URL.  Same shape
+	// BCH chat-link explorer URL.  Same shape
 	// contract as BTC/XMR; when unset, frontend falls back to the
 	// bundled blockchair.com/bitcoin-cash default.
 	MORPHIT_FRONTEND_BCH_CHAT_LINK_URL: z
@@ -1508,7 +1517,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp24 — LTC chat-link explorer URL.  Same shape
+	// LTC chat-link explorer URL.  Same shape
 	// contract as BTC/XMR/BCH; when unset, frontend falls back to
 	// the bundled litecoinspace.org default.
 	MORPHIT_FRONTEND_LTC_CHAT_LINK_URL: z
@@ -1519,7 +1528,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp27 — DASH chat-link explorer URL.  Same shape
+	// DASH chat-link explorer URL.  Same shape
 	// contract as BTC/XMR/BCH/LTC; when unset, frontend falls
 	// back to the bundled insight.dash.org default.
 	MORPHIT_FRONTEND_DASH_CHAT_LINK_URL: z
@@ -1530,7 +1539,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp33 — DOGE chat-link explorer URL.  Same shape
+	// DOGE chat-link explorer URL.  Same shape
 	// contract as BTC/XMR/BCH/LTC/DASH; when unset, frontend
 	// falls back to the bundled blockchair.com/dogecoin default.
 	MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL: z
@@ -1541,7 +1550,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp39 — ZEC chat-link explorer URL override.
+	// ZEC chat-link explorer URL override.
 	// Single-network like BTC/XMR/BCH/LTC/DASH/DOGE.  When unset,
 	// falls back to the bundled mainnet.zcashexplorer.app default.
 	MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL: z
@@ -1552,7 +1561,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp41 — ARRR (Pirate Chain) chat-link explorer URL
+	// ARRR (Pirate Chain) chat-link explorer URL
 	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/ZEC.
 	// When unset, falls back to the bundled
 	// explorer.piratechain.com default.
@@ -1564,7 +1573,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp43 — DCR (Decred) chat-link explorer URL
+	// DCR (Decred) chat-link explorer URL
 	// override.  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE/
 	// ZEC/ARRR.  When unset, falls back to the bundled
 	// dcrdata.decred.org default.
@@ -1576,7 +1585,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp45 — SOL (Solana) chat-link explorer URL
+	// SOL (Solana) chat-link explorer URL
 	// override.  Single-network like all the other tradable
 	// assets.  When unset, falls back to the bundled
 	// explorer.solana.com default.
@@ -1588,7 +1597,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp47 — ETH (Ethereum) chat-link explorer URL
+	// ETH (Ethereum) chat-link explorer URL
 	// override.  Single-network like all the other tradable
 	// assets.  When unset, falls back to the bundled
 	// eth.blockscout.com default.
@@ -1600,7 +1609,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp49 — XRP (Ripple) chat-link explorer URL
+	// XRP (Ripple) chat-link explorer URL
 	// override.  Single-network XRPL mainnet.  When unset,
 	// falls back to the bundled livenet.xrpl.org default.
 	MORPHIT_FRONTEND_XRP_CHAT_LINK_URL: z
@@ -1611,8 +1620,8 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp30 — USDT per-network chat-link explorer URLs.
-	// DD-11 closure: these were missing since Part 121 cp3 so the
+	// USDT per-network chat-link explorer URLs.
+	// DD-11 closure: these were missing since an earlier release so the
 	// public-API per-network override never worked.  Frontend
 	// defensive-fallback hid the breakage.  Each undefined →
 	// frontend uses bundled default for that network.
@@ -1648,7 +1657,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp30 — USDC per-network chat-link explorer URLs.
+	// USDC per-network chat-link explorer URLs.
 	// DD-10 closure.  4 networks: erc20, spl, base, polygon.
 	// BEP-20 intentionally not supported (ADR-0028 §1, Binance-Peg
 	// + 18-decimal divergence).
@@ -1684,7 +1693,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// Part 122 cp31 — DAI per-network chat-link explorer URLs.
+	// DAI per-network chat-link explorer URLs.
 	// 4 networks: ERC-20 (Ethereum), Polygon, Base, Arbitrum.
 	// SPL/TRC-20/BEP-20 intentionally NOT supported per ADR-0029 §1
 	// (no canonical Maker-issued DAI on those chains).
@@ -1720,7 +1729,7 @@ const envSchema = z.object({
 			(s) => s === undefined || isValidChatLinkTemplate(s),
 			'must be https://, contain {txid}, and parse as URL'
 		),
-	// REVISIT-LIST item 5 — operator earnings pipeline.
+	// Backlog item 5 — operator earnings pipeline.
 	// Charset matches the operator-register handler's TAG_PATTERN
 	// (a-z, 0-9, ., _, -; 1..64 chars).  Validated here so a
 	// misconfigured operator-config fails to start the indexer
@@ -1737,7 +1746,7 @@ const envSchema = z.object({
 	MORPHIT_INSTANCE_SEO_TITLE: z.string().max(200).optional(),
 	MORPHIT_INSTANCE_SEO_DESCRIPTION: z.string().max(500).optional(),
 	MORPHIT_INSTANCE_SEO_KEYWORDS: z.string().max(500).optional(),
-	// cp119-A4: optional Twitter/X handle for twitter:site card
+	// optional Twitter/X handle for twitter:site card
 	// attribution.  Must start with `@`; max 16 chars (Twitter limit).
 	// Operators without X presence leave unset.
 	MORPHIT_INSTANCE_SEO_TWITTER_SITE: z
@@ -1784,6 +1793,29 @@ export function hiddenRpcEndpointsForDial(
 /** The default XMR fee-verification quorum (v1.20.0): two agreeing explorers. */
 export const DEFAULT_XMR_MIN_SUCCESSFUL_RESPONSES = 2;
 
+/** The default BTC fee-verification quorum: two agreeing explorers. */
+export const DEFAULT_BTC_MIN_SUCCESSFUL_RESPONSES = 2;
+
+/** How many BTC explorers must agree before a Bitcoin fee counts as paid —
+ *  the same rule as resolveXmrQuorum. */
+export function resolveBtcQuorum(
+	explicit: number | undefined,
+	explorerCount: number
+): { value: number; note: string | null } {
+	if (explicit !== undefined) return { value: explicit, note: null };
+	if (explorerCount >= DEFAULT_BTC_MIN_SUCCESSFUL_RESPONSES) {
+		return { value: DEFAULT_BTC_MIN_SUCCESSFUL_RESPONSES, note: null };
+	}
+	const value = Math.max(1, explorerCount);
+	return {
+		value,
+		note:
+			`[config] MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} BTC explorer(s) configured, ` +
+			`so a Bitcoin fee is accepted on ${value} explorer's word. Add a second explorer to ` +
+			`MORPHIT_INDEXER_BTC_EXPLORER_URLS (the default list has six) to require two to agree.`
+	};
+}
+
 /**
  * v1.20.0 — how many XMR explorers must agree before a Monero fee counts as
  * paid. An explicit MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES is used as
@@ -1806,7 +1838,7 @@ export function resolveXmrQuorum(
 		note:
 			`[config] MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES: only ${explorerCount} XMR explorer(s) configured, ` +
 			`so a Monero fee is accepted on ${value} explorer's word. Add a second explorer to ` +
-			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has six) to require two to agree.`
+			`MORPHIT_INDEXER_XMR_EXPLORER_URLS (the default list has eight) to require two to agree.`
 	};
 }
 
@@ -1844,7 +1876,6 @@ export function loadConfig(): Config {
 		listenHost: e.MORPHIT_INDEXER_LISTEN_HOST,
 		listenPort: e.MORPHIT_INDEXER_LISTEN_PORT,
 		publicOrigin: e.MORPHIT_INDEXER_PUBLIC_ORIGIN,
-		allowedOrigins: e.MORPHIT_INDEXER_ALLOWED_ORIGINS,
 		trustedProxyCidrs: e.MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS,
 		listRatePerMin: e.MORPHIT_INDEXER_LIST_RATE_PER_MIN,
 		resourceRatePerMin: e.MORPHIT_INDEXER_RESOURCE_RATE_PER_MIN,
@@ -1898,22 +1929,17 @@ export function loadConfig(): Config {
 		fxFrankfurterBaseUrl: e.MORPHIT_INDEXER_FX_FRANKFURTER_BASE_URL,
 		fxErApiBaseUrl: e.MORPHIT_INDEXER_FX_ER_API_BASE_URL,
 		fxCurrencyApiBaseUrl: e.MORPHIT_INDEXER_FX_CURRENCY_API_BASE_URL,
-		// cp127 — morphit_native price feed
+		// morphit_native price feed
 		priceFeedNativeEnabled: e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED,
-		priceFeedPreferNativeWhenDisagreeing:
-			e.MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING,
 		priceFeedStablecoinKeys: e.MORPHIT_INDEXER_PRICE_FEED_STABLECOIN_KEYS,
 		priceFeedNativePlausibleMin:
 			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN,
 		priceFeedNativePlausibleMax:
 			e.MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX,
-		// cp128
 		priceFeedDenominationFiat: e.MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT,
-		// cp129
 		priceFeedPeerMonitorEnabled: e.MORPHIT_INDEXER_PEER_PRICE_MONITOR_ENABLED,
 		priceFeedPeerSampleIntervalMinutes:
 			e.MORPHIT_INDEXER_PEER_PRICE_SAMPLE_INTERVAL_MINUTES,
-		// cp130
 		priceFeedBtcStaticFloor: e.MORPHIT_INDEXER_PRICE_FEED_BTC_STATIC_FLOOR,
 		priceFeedXmrStaticFloor: e.MORPHIT_INDEXER_PRICE_FEED_XMR_STATIC_FLOOR,
 
@@ -1925,16 +1951,24 @@ export function loadConfig(): Config {
 			const list = e.MORPHIT_INDEXER_BTC_EXPLORER_URLS.split(',')
 				.map((s) => s.trim())
 				.filter(Boolean);
-			if (e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES > list.length && list.length > 0) {
+			const explicit = e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES;
+			if (explicit !== undefined && explicit > list.length && list.length > 0) {
 				throw new Error(
-					`MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES=${e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES} ` +
+					`MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES=${explicit} ` +
 						`exceeds configured BTC explorer URL count (${list.length}). ` +
 						`Quorum can never be met. Reduce the threshold or add more URLs.`
 				);
 			}
 			return list;
 		})(),
-		btcMinSuccessfulResponses: e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES,
+		btcMinSuccessfulResponses: (() => {
+			const list = e.MORPHIT_INDEXER_BTC_EXPLORER_URLS.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean);
+			const q = resolveBtcQuorum(e.MORPHIT_INDEXER_BTC_MIN_SUCCESSFUL_RESPONSES, list.length);
+			if (q.note !== null && list.length > 0) console.warn(q.note);
+			return q.value;
+		})(),
 
 		xmrFeeAddress: e.MORPHIT_INDEXER_XMR_FEE_ADDRESS,
 		xmrFeePiconero: BigInt(e.MORPHIT_INDEXER_XMR_FEE_PICONERO),
@@ -1956,6 +1990,8 @@ export function loadConfig(): Config {
 			if (q.note !== null) console.warn(q.note);
 			return q.value;
 		})(),
+		pricenodeUrls: e.MORPHIT_INDEXER_PRICENODE_URLS,
+		hiddenProxies: hiddenServiceProxyConfigFromEnv(process.env),
 
 		lowBalanceRefillIntervalMs: e.MORPHIT_INDEXER_LOW_BALANCE_REFILL_INTERVAL_MS,
 		lowBalanceThresholdBlurt: e.MORPHIT_INDEXER_LOW_BALANCE_THRESHOLD_BLURT,
@@ -2045,7 +2081,7 @@ export function loadConfig(): Config {
 		frontendSolChatLinkUrl: e.MORPHIT_FRONTEND_SOL_CHAT_LINK_URL,
 		frontendEthChatLinkUrl: e.MORPHIT_FRONTEND_ETH_CHAT_LINK_URL,
 		frontendXrpChatLinkUrl: e.MORPHIT_FRONTEND_XRP_CHAT_LINK_URL,
-		// Part 122 cp30 — multi-network USDT + USDC chat-link
+		// multi-network USDT + USDC chat-link
 		// overrides.  Independent fields per (asset, network) since
 		// the underlying explorers vary per chain and an operator's
 		// trust-posture can differ per chain too.
@@ -2057,7 +2093,7 @@ export function loadConfig(): Config {
 		frontendUsdcSplChatLinkUrl: e.MORPHIT_FRONTEND_USDC_SPL_CHAT_LINK_URL,
 		frontendUsdcBaseChatLinkUrl: e.MORPHIT_FRONTEND_USDC_BASE_CHAT_LINK_URL,
 		frontendUsdcPolygonChatLinkUrl: e.MORPHIT_FRONTEND_USDC_POLYGON_CHAT_LINK_URL,
-		// Part 122 cp31 — DAI per-network env vars.
+		// DAI per-network env vars.
 		frontendDaiErc20ChatLinkUrl: e.MORPHIT_FRONTEND_DAI_ERC20_CHAT_LINK_URL,
 		frontendDaiPolygonChatLinkUrl: e.MORPHIT_FRONTEND_DAI_POLYGON_CHAT_LINK_URL,
 		frontendDaiBaseChatLinkUrl: e.MORPHIT_FRONTEND_DAI_BASE_CHAT_LINK_URL,

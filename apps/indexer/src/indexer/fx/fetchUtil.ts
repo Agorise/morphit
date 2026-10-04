@@ -39,20 +39,25 @@ export async function fxGetJson(
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), timeoutMs);
 	try {
-		const res = await fetchImpl(url, {
-			...priceUpstreamFetchInit(ac.signal),
-			headers: priceUpstreamHeaders(),
-			// The price stack defaults to redirect:'manual' (no 30x to
-			// unexpected hosts). One FX upstream — currency-api on the
-			// jsDelivr CDN — addresses its data via the `@latest` path,
-			// which 302-redirects to the concrete dated version. Under
-			// redirect:'manual' that hop becomes an opaque non-OK response
-			// and the source can NEVER succeed (its health shows "last ok:
-			// never"). Such upstreams opt into following the redirect; we
-			// still honour the price stack's intent by REJECTING any
-			// redirect that crosses to a different host (guard below).
-			...(opts?.followSameHostRedirect ? { redirect: 'follow' as const } : {})
-		});
+		// redirect:'manual' ALWAYS. One FX upstream — currency-api on the
+		// jsDelivr CDN — addresses its data via the `@latest` path, which
+		// 302-redirects to the concrete dated version, so such an upstream
+		// opts into following ONE redirect. It is followed here, by hand, and
+		// only when its target is the same host: letting fetch follow and
+		// checking the final URL afterwards meant a cross-host hop had already
+		// been requested by the time it was rejected.
+		const get = (u: string): Promise<Response> =>
+			fetchImpl(u, { ...priceUpstreamFetchInit(ac.signal), headers: priceUpstreamHeaders() });
+		let res = await get(url);
+		if (opts?.followSameHostRedirect && res.status >= 300 && res.status < 400) {
+			const next = sameHostRedirectTarget(url, res.headers.get('location'));
+			await res.body?.cancel().catch(() => undefined);
+			if (next === null) {
+				log.warn('cross_host_redirect_rejected', { url });
+				return null;
+			}
+			res = await get(next);
+		}
 		if (res.status === 429) {
 			log.warn('rate_limited', { url });
 			return null;
@@ -61,25 +66,6 @@ export async function fxGetJson(
 			log.warn('http_not_ok', { url, status: res.status });
 			return null;
 		}
-		if (opts?.followSameHostRedirect && typeof res.url === 'string' && res.url.length > 0) {
-			// Reject ONLY a redirect we can PROVE crossed to a different
-			// host. An empty/unparseable final URL (no redirect happened,
-			// or a test mock that doesn't populate res.url) is not a
-			// detectable cross-host hop — don't reject; the rate filter is
-			// the backstop. A real undici response always carries the final
-			// URL, so genuine cross-host hops (jsDelivr → elsewhere) are
-			// still caught.
-			let crossHost = false;
-			try {
-				crossHost = new URL(res.url).host !== new URL(url).host;
-			} catch {
-				crossHost = false;
-			}
-			if (crossHost) {
-				log.warn('cross_host_redirect_rejected', { url, finalUrl: res.url });
-				return null;
-			}
-		}
 		const text = await readPriceBodyCapped(res, ac, url);
 		return JSON.parse(text) as unknown;
 	} catch (err) {
@@ -87,6 +73,19 @@ export async function fxGetJson(
 		return null;
 	} finally {
 		clearTimeout(timer);
+	}
+}
+
+/** The absolute target of a redirect from `from`, when it stays on the same
+ *  host (and port) with the same scheme; null otherwise. PURE. */
+export function sameHostRedirectTarget(from: string, location: string | null): string | null {
+	if (location === null || location.length === 0) return null;
+	try {
+		const a = new URL(from);
+		const b = new URL(location, a);
+		return a.host === b.host && a.protocol === b.protocol ? b.toString() : null;
+	} catch {
+		return null;
 	}
 }
 

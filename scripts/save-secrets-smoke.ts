@@ -1,7 +1,7 @@
 /**
- * save-secrets-smoke.ts (cp600) — pins the PURE pieces of saveSecrets.ts: the
+ * save-secrets-smoke.ts — pins the PURE pieces of saveSecrets.ts: the
  * "save these offline" block content + the typed-confirmation gate.  The
- * interactive prompt is a mini PC/UX territory; the content + gate must stay
+ * interactive prompt is checked on a real machine; the content + gate must stay
  * correct so the operator is actually told to vault their generated secrets
  * offline and can't reflex past it.
  */

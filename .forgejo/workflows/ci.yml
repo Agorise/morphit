@@ -1,36 +1,35 @@
 # Morphit CI — runs on every push and pull request.
 #
-# Four gates, in order of cheapness:
-#   1. typecheck-sweep — fast, catches type errors across all
+# Six gates, in order of cheapness:
+#   1. supply-chain-audit — `npm audit` against the triaged allowlist
+#      (.audit-allowlist.json); fails on a new high/critical advisory
+#   2. typecheck-sweep — fast, catches type errors across all
 #      backend + library workspaces (apps/web excluded — it
 #      extends the generated .svelte-kit/tsconfig.json, which
 #      this sweep doesn't materialize)
-#   2. web-check       — fast, runs `svelte-kit sync` then
+#   3. web-check       — fast, runs `svelte-kit sync` then
 #      `svelte-check` against apps/web; catches Svelte-template
 #      + .svelte-aware TypeScript errors the workspace sweep
 #      can't see
-#   3. ansible-lint    — fast, catches playbook quality drift
-#   4. integration     — the indexer integration suite (vitest)
+#   4. ansible-lint    — fast, catches playbook quality drift
+#   5. integration     — the indexer integration suite (vitest)
 #      against a REAL Postgres 16, so cross-table SQL + migration
 #      regressions surface in CI instead of only in manual runs.
-#      (Added cp426: the suite was green but CI-invisible, so it
-#      silently drifted — see the two stale tests fixed at cp423.)
-#   5. run-smokes      — the full smoke suite (~4,400+ scenarios
-#      across ~190 runners, triple-pulsed for flakes)
+#   6. run-smokes      — the full smoke suite, triple-pulsed for flakes
 #
-# If any gate fails, the run fails.  Gates 1–4 run in parallel;
+# If any gate fails, the run fails.  Gates 1–5 run in parallel;
 # the smokes gate is the longest-running and effectively serial.
 # The web-check job intentionally runs `svelte-kit sync &&
 # svelte-check` directly (not via run-smokes →
 # workspace-typecheck-smoke) so the protection is legible in
-# the CI surface and a sandbox-broken smoke runner can't hide
+# the CI surface and a broken smoke runner can't hide
 # behind a SKIP exit code.
 #
 # Forgejo Actions has GitHub-Actions-compatible syntax; this
 # workflow runs unchanged on either as long as the runner is a
 # Debian/Ubuntu host.
 #
-# AUDIT-CI-2 (cp18 deep-deep): third-party actions are SHA-pinned,
+# AUDIT-CI-2: third-party actions are SHA-pinned,
 # not tag-pinned.  Tags like `@v4` can be re-pointed at attacker-
 # controlled commits if an action repo is compromised; SHAs are
 # immutable.  The version comment after each SHA (`# v4.2.2`) lets
@@ -53,13 +52,13 @@ concurrency:
 
 jobs:
   supply-chain-audit:
-    name: Supply-chain audit gate (fail on new high/critical)
+    name: Supply-chain audit gate (every advisory triaged, none fixable in range)
     runs-on: ubuntu-24.04
-    # Fails only on a HIGH/CRITICAL advisory that is NOT in the triaged baseline
-    # (.audit-allowlist.json). The baseline is documented in
-    # SECURITY-AUDIT-dependencies.md; the gate catches a NEW vulnerable
-    # dependency entering the tree. Needs network (npm audit); the gate SKIPS
-    # gracefully if the registry is unreachable rather than failing the build.
+    # Fails on a moderate/high/critical advisory not triaged in
+    # .audit-allowlist.json (each entry carries its reason and review date), on
+    # an allowlist entry npm no longer reports, on an advisory an in-range
+    # update fixes, and when the audit cannot run (registry unreachable): no
+    # information is not a pass.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -78,8 +77,8 @@ jobs:
   typecheck:
     name: TypeScript typecheck (sweep all workspaces)
     runs-on: ubuntu-24.04
-    # cp145 — every job gets an explicit wall-clock ceiling.
-    # cp143 put a per-smoke timeout inside scripts/run-smokes.sh;
+    # every job gets an explicit wall-clock ceiling.
+    # put a per-smoke timeout inside scripts/run-smokes.sh;
     # this job-level timeout is the complement for the other CI
     # steps (npm ci, tsc invocations) that no smoke wraps.
     # Current runtime is <2 minutes; 10× headroom for slow runners.
@@ -105,7 +104,7 @@ jobs:
   web-check:
     name: apps/web svelte-check (svelte-kit sync + svelte-aware tsc)
     runs-on: ubuntu-24.04
-    # cp145 — current runtime is ~3 minutes; 10 minutes is roomy.
+    # current runtime is ~3 minutes; 10 minutes is roomy.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -143,7 +142,7 @@ jobs:
   integration:
     name: Integration tests (real Postgres 16)
     runs-on: ubuntu-24.04
-    # cp145 — explicit wall-clock ceiling. The indexer integration
+    # explicit wall-clock ceiling. The indexer integration
     # suite is ~10 files / ~92 tests and runs in well under a minute
     # against a warm DB; 15 minutes is generous headroom for the
     # postgres service to become healthy + npm ci on a cold cache.
@@ -240,12 +239,12 @@ jobs:
   ansible-lint:
     name: ansible-lint (playbook quality gate)
     runs-on: ubuntu-24.04
-    # cp145 — current runtime is <1 minute; 5 minutes is roomy.
+    # current runtime is <1 minute; 5 minutes is roomy.
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Python 3.12 + ansible-lint
+      - name: Install Python + ansible-lint (pinned, hash-checked)
         run: |
           # Container-executor job runs as root in node:20-bookworm — plain
           # apt-get (no sudo, no source-list overrides). The retry loop rides out
@@ -258,14 +257,11 @@ jobs:
           apt-get install -y --no-install-recommends \
             python3 python3-pip python3-venv
           # --break-system-packages: Debian marks the system Python as externally
-          # managed. This is an ephemeral CI container.
-          pip3 install --break-system-packages --quiet \
-            ansible ansible-lint
-
-      - name: Install required ansible collections
-        run: |
-          ansible-galaxy collection install -r \
-            ops/ansible/collections/requirements.yml
+          # managed. This is an ephemeral CI container. Every package is pinned
+          # with its hash; the pinned `ansible` bundles the collections the
+          # playbook uses, so nothing comes from Ansible Galaxy.
+          pip3 install --break-system-packages --quiet --require-hashes \
+            -r .forgejo/ansible-lint-requirements.txt
 
       - name: Run ansible-lint
         working-directory: ops/ansible
@@ -274,8 +270,8 @@ jobs:
   smokes:
     name: Smoke suite (run-smokes.sh, triple-pulse)
     runs-on: ubuntu-24.04
-    # One pulse took 19.5 minutes on this runner (2026-09-29, 734 smokes), so
-    # triple-pulse is ~60 minutes. cp143's per-smoke 240s timeout caps any
+    # One pulse took about 20 minutes on this runner, so triple-pulse is about
+    # 60 minutes. the per-smoke 240s timeout caps any
     # single hung smoke; this job-level ceiling caps the whole battery in case
     # a non-smoke step (npm ci, build, ansible-lint install, ansible-galaxy
     # collection install) hangs, or the outer `for i in 1 2 3` loop wedges.
@@ -313,9 +309,9 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install build tools (for better-sqlite3 native build)
+      - name: Install build tools
         run: |
-          # cp190 — see the ansible-lint job: plain apt-get as root in the
+          # see the ansible-lint job: plain apt-get as root in the
           # node:20-bookworm container (no sudo, no source-list overrides).
           for i in 1 2 3; do
             apt-get update -qq && break
@@ -325,34 +321,35 @@ jobs:
           apt-get install -y --no-install-recommends \
             build-essential python3
 
-      - name: Install workspace dependencies (with native build)
-        # The smoke suite includes a matrix-bot deps-pin-check
-        # which needs node_modules populated with REAL packages.
-        # Don't pass --ignore-scripts here.
-        run: npm ci --no-audit --no-fund
+      - name: Install workspace dependencies (with the Matrix bot's native add-ons)
+        # No install scripts run. The matrix-bot smokes load two native add-ons;
+        # they are downloaded and checked against pinned SHA-256s
+        # (scripts/fetch-matrix-bot-natives.mjs, the pins Ansible installs use).
+        run: |
+          set -eu
+          npm ci --ignore-scripts --no-audit --no-fund
+          node scripts/fetch-matrix-bot-natives.mjs .
 
-      - name: Install ansible-lint (for ansible-lint-smoke)
+      - name: Install ansible-lint (for ansible-lint-smoke; pinned, hash-checked)
         run: |
           apt-get install -y --no-install-recommends \
             python3-pip
-          pip3 install --break-system-packages --quiet \
-            ansible ansible-lint
-          ansible-galaxy collection install -r \
-            ops/ansible/collections/requirements.yml
+          pip3 install --break-system-packages --quiet --require-hashes \
+            -r .forgejo/ansible-lint-requirements.txt
 
       - name: Build workspaces that ship compiled artifacts
         # `apps/mcp-server` is the only workspace whose `bin`
         # points into `dist/` and therefore needs `tsc -p
         # tsconfig.build.json` to run before its smoke spawns
         # `node dist/main.js`.  The smoke is self-healing as of
-        # cp142 (will lazy-build if missing), but doing the
+        # (will lazy-build if missing), but doing the
         # build here makes the failure mode legible — a build
         # break surfaces as this step failing, not as a
         # mystery hang inside the smoke runner.
         #
         # If a future workspace adds a similar dist-bin, add
         # it here and the matching `spawn-dist-prebuild-coverage-smoke`
-        # (cp142) will keep this list and the smokes in sync.
+        # will keep this list and the smokes in sync.
         run: npm run build -w apps/mcp-server
 
       - name: Run smokes (triple-pulse)

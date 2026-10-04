@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * avatar-size-thresholds — v1.8.10 (the maintainer, t.txt).
+ * avatar-size-thresholds — v1.8.10.
  *
  * THE BUG THIS EXISTS TO CATCH. The settings page rendered the avatar preview's
  * size line and its red warning from two HARDCODED numbers — 2048 (warn) and
@@ -16,7 +16,7 @@
  *     could not be broadcast at all was told, reassuringly, that it was
  *     "getting close to the size limit".
  *
- * the maintainer hit all three. The page now mirrors the module's constants and renders
+ * The maintainer hit all three. The page now mirrors the module's constants and renders
  * three distinct states (fine / approaching / over).
  *
  * WHY MIRRORED, NOT IMPORTED: `$lib/avatar` carries the SVG sanitizer, minifier
@@ -76,7 +76,7 @@ check(
 	uiCap !== undefined && uiCap === modCap,
 	'the preview would state a maximum the code does not enforce'
 );
-// the maintainer (v1.16.5): the amber "getting close to the size limit" nag was removed —
+// The maintainer (v1.16.5): the amber "getting close to the size limit" nag was removed —
 // a file comfortably under the cap needs no warning. Pin that it stays gone.
 check(
 	'the soft-warn nag is gone from the UI (v1.16.5)',

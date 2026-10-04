@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * offline-bundle-git — cp689.
+ * offline-bundle-git.
  *
  * A truly offline (air-gapped) install must not reach the network for ANY step.
  * The bundle ships git in its apt closure, but morphit-setup.sh used to install
@@ -60,7 +60,7 @@ check(
 	'offline path must never reach the registry for git'
 );
 
-// cp690 — ansible + its galaxy collections must also be bundled + installed
+// ansible + its galaxy collections must also be bundled + installed
 // offline (they were being fetched from the Ubuntu archive + Ansible Galaxy).
 check('ansible is in the offline bundle apt closure (PKGS)', /\bansible\b/.test(pkgs));
 check(

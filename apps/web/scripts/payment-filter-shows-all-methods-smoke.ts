@@ -5,8 +5,8 @@
  *
  * REGRESSION: PaymentFilterSelect once capped its browse list at
  * `.slice(0, 50)`.  The registry grew past 50 methods, so the tail of the
- * alphabet (Unionpay … Zelle) silently vanished from the dropdown — the maintainer:
- * "the select options only go as far as S."  searchPaymentMethods returns
+ * alphabet (Unionpay … Zelle) silently vanished from the dropdown — the options
+ * stopped at S.  searchPaymentMethods returns
  * ALL entries on an empty query (see payments/search.ts), so the only thing
  * that can hide methods in the filter is a too-small cap in the component.
  *

@@ -1,6 +1,6 @@
 <script lang="ts">
 	/** False until this surface's profile hydrate has completed once.
-	 *  v1.8.13 (the maintainer) — while false, identity labels render a neutral placeholder
+	 *  v1.8.13 — while false, identity labels render a neutral placeholder
 	 *  instead of asserting @account + identicon and then rewriting themselves.
 	 *  An identity that visibly changes is indistinguishable from a swap attack. */
 	let profilesHydrated = $state(false);
@@ -70,7 +70,7 @@
 		 *  editable so users can correct typos; WITH lockSubject it
 		 *  is shown read-only. */
 		prefillSubject?: string;
-		/** cp421: when true, the subject is a provably-derived trade
+		/** when true, the subject is a provably-derived trade
 		 *  partner (from the order's on-chain counterparties) and is
 		 *  rendered LOCKED — a prominent read-only @handle instead of a
 		 *  free-text input — so there's no ambiguity about who is being
@@ -86,7 +86,7 @@
 		 *  and the chat panel is headed "Mark this trade complete" — but
 		 *  neither ever broadcast the completion, so a settled trade sat
 		 *  "Live" forever, stayed in the orderbook, kept its Cancel button and
-		 *  counted 0 in the Paid pill. the maintainer hit exactly this.
+		 *  counted 0 in the Paid pill. The maintainer hit exactly this.
 		 *
 		 *  The CALLER asserts ownership because only it knows: my/orders lists
 		 *  nothing but the user's own orders, and the chat resolves the order's
@@ -125,10 +125,10 @@
 	// v1.5.0 — enrich the "You're reviewing" box with the counterparty's
 	//  avatar, display name (@handle), and truncated posting key. Fetched from
 	//  the same-origin indexer; stale results are ignored; NO reputation is
-	//  shown (the maintainer: it mustn't bias the review).
+	//  shown (it mustn't bias the review).
 	let subjectProfile = $state<ProfileResponse | null>(null);
 	/** False until the counterparty's profile has resolved.
-	 *  v1.8.13 (the maintainer) — the review form shows WHO you are about to rate; asserting
+	 *  v1.8.13 — the review form shows WHO you are about to rate; asserting
 	 *  `@account` + identicon and then rewriting it is the identity swap the maintainer
 	 *  objected to, and this is a particularly bad place for it. */
 	let subjectProfileResolved = $state(false);
@@ -157,10 +157,11 @@
 				subjectProfile = profile;
 				subjectProfileResolved = true;
 				subjectPostingKey = keys?.posting?.key_auths?.[0]?.[0] ?? null;
-				// v1.5.0 — new-trader pill (NO reputation score). Matches the
-				//  orderbook's "< 4 verified-fee trades" rule, approximated by the
-				//  received-feedback count from the public reputation receipt.
-				subjectIsNewTrader = rep.ok ? rep.data.summary.count_total < 4 : false;
+				// New-trader pill (NO reputation score): the orderbook's "< 4
+				// trades" rule, from the receipt's trade count — as in
+				// ConversationView. (count_total counts reviews, including ones the
+				// indexer excluded as fraud.)
+				subjectIsNewTrader = rep.ok ? (rep.data.summary.trade_count ?? 0) < 4 : false;
 			} catch {
 				if (seq !== subjectFetchSeq) return;
 				subjectProfile = null;
@@ -318,7 +319,7 @@
 		clearDraft(DRAFT_KEY);
 		draftSavedAt = null;
 		// v1.5.0 — keep the locked/prefilled counterparty so the "You're
-		// reviewing" box never dead-ends after a discard (the maintainer: the box must
+		// reviewing" box never dead-ends after a discard (Requirement: the box must
 		// always hold a counterparty). Only the draft's rating + comment go.
 		subject = prefillSubject ?? '';
 		rating = null;
@@ -415,7 +416,7 @@
 			if (completeOwnedOrder) {
 				try {
 					await broadcastOrderComplete(state.live, orderPermlink, subject);
-					// t.txt #5 — the trade is settled WITH `subject`; tell every
+					// the trade is settled WITH `subject`; tell every
 					// OTHER inquirer on this order so they aren't left hanging.
 					// Fire-and-forget + best-effort: the completion above is already
 					// on-chain, and the auto-reply must never block or fail the
@@ -455,7 +456,7 @@
 			// belt-and-suspenders: clear first.
 			clearDraft(DRAFT_KEY);
 			draftSavedAt = null;
-			// cp514 (t.txt D) — record the just-landed feedback optimistically so
+			// record the just-landed feedback optimistically so
 			// the chat inbox flips this peer's card from the green "Leave feedback"
 			// prompt to the ★ rating immediately, without waiting for the durable
 			// /feedback-given fetch to catch up. rating + reviewerAccount are
@@ -548,7 +549,7 @@
 
 	<!-- Subject: counterparty account name -->
 	{#if lockSubject}
-		<!-- cp421: provably-derived trade partner — read-only, prominent,
+		<!-- provably-derived trade partner — read-only, prominent,
 		     no way to redirect the review to another account. -->
 		<div class="mb-3">
 			<span class="mb-1 block text-sm font-semibold">
@@ -650,7 +651,7 @@
 	{/if}
 
 
-	<!-- t155 (the maintainer): "let's put the 'Submit feedback' and 'Cancel' buttons side by
+	<!-- t155: "let's put the 'Submit feedback' and 'Cancel' buttons side by
 	     side with the cancel button on the left if possible, or underneath if on
 	     mobile and there isn't enough room for side by side."
 	
@@ -662,10 +663,9 @@
 	     right edge rather than stretched across it.
 	
 	     Cancel keeps its `ghost` hover fill; Submit moves primary → secondary,
-	     which IS "green border with green text" plus a hover — the maintainer: "i do not
-	     like the color of the 'Submit feedback' button so please change it to
-	     green border with green text and a nice mouseover effect on both
-	     buttons." No new variant needed; both already exist. -->
+	     which IS "green border with green text" plus a hover — Requirement: the 'Submit
+	     feedback' button uses a green border with green text, and both buttons get a hover
+	     effect. No new variant needed; both already exist. -->
 	<div class="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
 		<BusyButton variant="ghost" disabled={submitting} onclick={onCancel}>
 			{$_('common.cancel')}

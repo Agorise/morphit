@@ -96,7 +96,7 @@ export function hiddenNetworkOf(url: string): HiddenNetwork {
 
 // ─── is a host an ADDRESS on this box's own networks? ─────────────
 //
-// (v1.18.0 deep-deep, C1) The router used to decide "local, not clearnet" by
+// The router used to decide "local, not clearnet" by
 // matching the TEXT of a host against `10.`, `127.`, `192.168.`, `172.16-31.`
 // and `169.254.`. A DNS NAME such as `10.attacker.example` matched, so a
 // hidden-only node handed it to the plain agent: a system-resolver query for
@@ -146,7 +146,7 @@ export function isLocalAddressLiteral(host: string): boolean {
 }
 
 /** Is `host` an IP LITERAL that is not a public unicast address? PURE.
- *  v1.20.0 fix wave (D13): delegates to the ONE non-public set in
+ *  delegates to the ONE non-public set in
  *  @morphit/net-defense (loopback, RFC 1918, link-local, 0/8, CGNAT,
  *  benchmarking, multicast, reserved, ULA, site-local, NAT64, 6to4, Teredo,
  *  IPv4-compatible and IPv4-mapped in any form). It used to keep its own list,
@@ -184,7 +184,7 @@ export function nameMimicsNonPublicAddress(host: string): boolean {
 	// the missing octets are, i.e. both the lowest (…0) and highest (…255)
 	// completion are non-public. Zero-padding alone made `192.example.org`
 	// (→ 192.0.0.0, inside the non-public 192.0.0.0/24) look like an address
-	// once that /24 joined the set (v1.20.0 fix wave 2).
+	// once that /24 joined the set.
 	const low = [...octets];
 	const high = [...octets];
 	while (low.length < 4) low.push('0');
@@ -618,8 +618,8 @@ function handBack(sock: net.Socket, rest: Buffer): void {
 }
 
 /**
- * An `https:` URL was handed to a hidden-network connector (v1.20.0 fix wave 2,
- * S9). The connectors return a PLAIN socket — hidden networks encrypt and
+ * An `https:` URL was handed to a hidden-network connector.
+ * The connectors return a PLAIN socket — hidden networks encrypt and
  * authenticate end to end, so their URLs are `http://` — and a missing port
  * defaults to 80. Dialling an `https://<host>.onion` URL therefore used to
  * speak plaintext HTTP to port 80: not what the URL says, and silently. It is
@@ -769,7 +769,7 @@ export function makeHttpConnectConnector(proxyHost: string, proxyPort: number) {
 			)
 		);
 		sock.setTimeout(HIDDEN_HANDSHAKE_TIMEOUT_MS, () => fail(new Error('CONNECT handshake timeout')));
-		// (v1.18.0 deep-deep, M1) A proxy that closes before answering the
+		// A proxy that closes before answering the
 		// CONNECT — i2pd restarting, or shedding load — is OUR end failing, and a
 		// fact NOW. Without this listener nothing settled at all: destroying the
 		// socket also cleared its handshake timer, so undici's connect callback

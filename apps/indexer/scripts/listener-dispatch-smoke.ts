@@ -44,7 +44,7 @@ function assertNotNull<T>(value: T | null, label: string): asserts value is T {
 	if (value === null) throw new Error(`${label}: expected non-null`);
 }
 
-// cp471: `lang` is a REQUIRED field on ListenerDispatchCtx — the chat route
+// `lang` is a REQUIRED field on ListenerDispatchCtx — the chat route
 // is locale-prefixed (/[lang]/chat/[account]). This fixture omitted it, and
 // because tsx strips types rather than checking them, it silently passed
 // `undefined`, making the F-38 suppression path compute '/undefined/chat/bob'

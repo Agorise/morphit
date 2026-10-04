@@ -1,9 +1,9 @@
 /**
  * balance-locale-sign-colors-smoke.ts
  *
- * v1.8.0 (t.txt): in Chinese financial convention a value going UP is RED and
+ * v1.8.0: in Chinese financial convention a value going UP is RED and
  * a value going DOWN is GREEN (红涨绿跌) — the opposite of the Western
- * green-up/red-down that `AnimatedNumber` flashes by default. the maintainer asked that
+ * green-up/red-down that `AnimatedNumber` flashes by default. The maintainer asked that
  * the wallet-card balance typewriter reflect this for the zh-CN / zh-HK
  * locales.
  *

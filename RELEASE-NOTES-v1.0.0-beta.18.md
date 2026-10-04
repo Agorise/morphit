@@ -5,7 +5,7 @@ printable backup card on the onboarding screen now renders instead of producing
 a blank page. For operators: it removes a recurring upgrade nag and makes the
 upgrade's "is the new build actually live?" check reliable — both changes are in
 `morphit-ops upgrade` itself, with nothing extra to do beyond deploying it. This
-release also expands the default Blurt RPC pool to six independent nodes and
+release also expands the default Blurt RPC pool to six nodes and
 makes the client back off properly from rate-limited endpoints, so chain reads
 and broadcasts are steadier.
 

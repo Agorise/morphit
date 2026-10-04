@@ -41,7 +41,7 @@ export interface IdentityLabelProfileProps {
 	/** json_metadata.website_url — a website/blog link, globe icon. */
 	readonly websiteUrl: string | null;
 	/** json_metadata.short_bio — used by the settings form to hydrate the
-	 *  bio field from the current account's on-chain profile (cp346). Not
+	 *  bio field from the current account's on-chain profile. Not
 	 *  rendered by IdentityLabel itself; other callers simply ignore it. */
 	readonly shortBio: string | null;
 }

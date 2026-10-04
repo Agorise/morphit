@@ -2,9 +2,9 @@
 /**
  * asset-accent-class-uniqueness-smoke.
  *
- * Cp42-H-55 closure: at cp42 the deep-deep surfaced that XMR and
+ * the deep audit surfaced that XMR and
  * DAI both used `text-orange-500` — a pre-existing collision that
- * dated to cp31 (DAI addition).  Fixed inline at cp42 by reassigning
+ * dated to (DAI addition).  Fixed inline by reassigning
  * DAI to `text-yellow-600` (matches DAI's golden-yellow brand color).
  *
  * This smoke pins the invariant going forward: no two registered

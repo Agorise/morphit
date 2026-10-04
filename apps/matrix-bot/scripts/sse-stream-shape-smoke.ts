@@ -11,7 +11,7 @@
  * events as data changes).  Each event's `data:` payload has a
  * specific JSON shape the frontend's EventSource handler parses.
  *
- * Same pattern as api-response-shape-smoke (cp15):
+ * Same pattern as api-response-shape-smoke:
  *   1. zod schema for each event-type payload
  *   2. sample literal with `satisfies` cross-check against the
  *      canonical TS interface where one exists in

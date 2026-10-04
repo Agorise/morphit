@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/shipping-payload-roundtrip-smoke.ts
  *
- * Structural Defense (cp120) — encode-then-decode roundtrip
+ * Structural Defense — encode-then-decode roundtrip
  * fidelity + validator rejection coverage for the two new
  * chat payload types:
  *

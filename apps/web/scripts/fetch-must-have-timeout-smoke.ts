@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * fetch-must-have-timeout smoke — Part 122 cp71 (LL #73 / O-21).
+ * fetch-must-have-timeout smoke.
  *
  * `await fetch(url)` without an AbortController + timeout hangs
  * indefinitely if the remote endpoint is slow or unresponsive.
- * cp70-D5 and cp70-D6 both fell into this trap (ops-cli/upgrade.ts
+ * both fell into this trap (ops-cli/upgrade.ts
  * and stores/chainFee.ts). The pattern is used CORRECTLY in 7+
  * other places; these were drift.
  *
@@ -20,11 +20,11 @@
  *   • The fetch is inside a Service Worker context, where the
  *     browser manages the timeout via the request's own signal.
  *
- * cp70-D5/D6 reference fixes:
+ * Reference fixes:
  *   - apps/ops-cli/src/commands/upgrade.ts: UPGRADE_FETCH_TIMEOUT_MS = 30_000
  *   - apps/web/src/lib/stores/chainFee.ts:  10s AbortController in try/finally
  *
- * Mutation test M-144: add `await fetch('https://example.com')`
+ * Mutation test: add `await fetch('https://example.com')`
  * (no signal) to any .ts file → smoke fires.
  */
 
@@ -76,8 +76,8 @@ function walkTs(dir: string, out: string[]): void {
 //
 // Each entry is anchored on a STABLE SUBSTRING of the fetch line, NOT
 // a line number. A line-number anchor is fragile: the service worker
-// is edited often and its hint went stale TWICE (cp252 shifted it
-// 150→182, cp257 shifted it 182→190 — each shift silently broke this
+// is edited often and its hint went stale TWICE (shifted it
+// 150→182, shifted it 182→190 — each shift silently broke this
 // gate in CI until repaired). A content anchor survives line shifts
 // and re-breaks ONLY when the fetch line itself is rewritten — which
 // is exactly the moment the rationale below should be re-examined.
@@ -115,7 +115,7 @@ const ALLOW_LIST: readonly AllowEntry[] = [
 		snippet: 'fetch(input, { ...init, signal })',
 		reason: 'fetchWithTimeout is the timeout-wrapping helper itself; its signal comes from an AbortController constructed earlier than the smoke window'
 	},
-	// (v1.18.0 deep-deep, M2) The batched get_block fetch in
+	// The batched get_block fetch in
 	// apps/indexer/src/blurt/client.ts was allow-listed here; it now goes through
 	// `guardedRpcFetch()` (redirects refused, reply capped), which this scan does
 	// not see as a bare fetch. Its signal is still the EndpointPool's own

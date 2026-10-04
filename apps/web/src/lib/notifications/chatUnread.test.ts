@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * cp474 (t.txt #3 + #4) — a Web Push for an ARCHIVED thread must light the badge
+ * a Web Push for an ARCHIVED thread must light the badge
  * AND pull the thread back into the Inbox, both inside the push's own latency.
  *
- * THE BUG THIS GUARDS AGAINST. the maintainer, on live morphit.io: tester2 sent a message
+ * THE BUG THIS GUARDS AGAINST. on live morphit.io: tester2 sent a message
  * into a thread both parties had archived. tester3 got the system notification
  * in 6 seconds — and then waited about a MINUTE for the badge, and the message
  * never moved to his Inbox at all; he had to open the Archived folder to find
@@ -18,8 +18,8 @@
  * deliberately never writes `chat_messages`, so the push was structurally
  * incapable of resurrecting anything.
  *
- * The fix is not to weaken `badgeEligible` — that check is load-bearing (cp452:
- * a badge that outruns the visible cards nags about threads the inbox won't
+ * The fix is not to weaken `badgeEligible` — that check is load-bearing
+ * (a badge that outruns the visible cards nags about threads the inbox won't
  * show). It's that the push IS the new-activity signal, so it should un-archive
  * the thread, exactly as the ~60s indexer path already did.
  *
@@ -37,8 +37,7 @@ const ORDER = 'im-selling-200-mxn-of-xmr';
 
 /** The listener `startChatUnreadChannel` hands to `subscribeFastPush`. Captured
  *  so a test can fire a push without standing up a service worker. */
-let fastPushListener: ((peer: string, orderPermlink: string, atMs?: number) => void) | null =
-	null;
+let fastPushListener: ((peer: string, orderPermlink: string, atMs?: number) => void) | null = null;
 
 vi.mock('$lib/chat/globalChatActivityStream', () => ({
 	startGlobalChatActivity: () => () => {},
@@ -95,6 +94,13 @@ vi.mock('$blurt/ops/profile', async (importOriginal) => {
 	return { ...actual, getUserBlurtAccount: () => ME };
 });
 
+// A live session (polling names the account, so it needs one).
+vi.mock('$stores/identity', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$stores/identity')>();
+	const { readable } = await import('svelte/store');
+	return { ...actual, hasAnySession: readable(true) };
+});
+
 vi.mock('$lib/chat/blocks', async () => {
 	const { writable } = await import('svelte/store');
 	return {
@@ -109,6 +115,7 @@ vi.mock('$lib/utils/hiddenAccounts', async () => {
 });
 
 import { getConversations } from '$lib/indexer/client';
+import { setPersonStorageTier } from '$lib/storage/personStorage';
 import { markConversationRead } from '$lib/chat/readState';
 import { startChatUnreadChannel, listFastPending, noteFastChatPush } from './chatUnread';
 import { unreadCount } from './index';
@@ -120,11 +127,12 @@ import {
 	__reloadChatFolders
 } from '$lib/chat/chatFolders';
 
-describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
+describe('cp474 — fast push into an ARCHIVED thread', () => {
 	let stop: (() => void) | null = null;
 
 	beforeEach(() => {
 		localStorage.clear();
+		setPersonStorageTier('local');
 		clearChatFolders();
 		__reloadChatFolders();
 		fastPushListener = null;
@@ -137,7 +145,7 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 	});
 
 	it('un-archives the thread and lights the badge, without the indexer', async () => {
-		// the maintainer's setup: both parties had the thread archived DAYS ago, and the
+		// The maintainer's setup: both parties had the thread archived DAYS ago, and the
 		// message arrives now. `resurrectArchivedOnNewActivity` only acts when the
 		// activity strictly postdates the archive, so the clock has to move — and
 		// modelling that gap is the point, not a workaround: a thread you archived
@@ -159,12 +167,12 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 		// still knows nothing (see the mock above).
 		fastPushListener!(PEER, ORDER);
 
-		// t.txt #4 — the thread must be back in the Inbox, dynamically. The chat
+		// the thread must be back in the Inbox, dynamically. The chat
 		// page's $derived reads $chatFolders, so this is what re-renders the card
 		// out of Archived and into Inbox with no refresh.
 		expect(isArchived(PEER, ORDER)).toBe(false);
 
-		// t.txt #3 — and the badge must be lit NOW, not in ~60s.
+		// and the badge must be lit NOW, not in ~60s.
 		expect(get(unreadCount).chat).toBe(1);
 	});
 
@@ -185,7 +193,7 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 		expect(isArchived('someone-else', 'unrelated-order')).toBe(true);
 	});
 
-	// ── v1.7.7 — the maintainer'S REPRO, VERBATIM ─────────────────────────────────
+	// ── v1.7.7 — THE REPORTED REPRO, VERBATIM ─────────────────────────────────
 	// "both tester2 and tester3 have the message sitting in their archive
 	//  folders … tester2 opens the old archived message thread and sends a
 	//  'badge now?' message … tester3 gets the system notification immediately
@@ -198,7 +206,7 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 	// from the durable list or already unread in it — never the one shape that
 	// breaks: PRESENT, STALE, and READ. That combination is not exotic; it is
 	// what EVERY old archived conversation looks like the moment a reply lands.
-	it("lights the badge for a push on an OLD thread whose durable row is stale-but-read (the maintainer's repro)", async () => {
+	it('lights the badge for a push on an OLD thread whose durable row is stale-but-read', async () => {
 		// tester3 read this thread on the 14th, then archived it. The durable row
 		// still says the 14th, because the fast path never writes chat_messages.
 		vi.setSystemTime(new Date('2026-07-14T11:00:00.000Z'));
@@ -251,7 +259,7 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 	});
 });
 
-// ── cp514 (t.txt B) — listFastPending must round-trip fastKey ──────────
+// ── listFastPending must round-trip fastKey ──────────
 // THE BUG THIS GUARDS. The badge lit in ~5s but the conversation CARD only
 // appeared on the ~60s durable poll: "tester3 goes to his chat inbox, but
 // there is nothing there. about a minute later, the … message … appears."
@@ -264,9 +272,9 @@ describe('cp474 — fast push into an ARCHIVED thread (t.txt #3 + #4)', () => {
 // badge (unreadCount) but never call listFastPending(), so the whole suite
 // stayed green while the inbox card was dead. This exercises the round-trip
 // directly, so a re-broken separator fails loudly.
-describe('cp514 (t.txt B) — listFastPending round-trips a fast push (optimistic inbox card)', () => {
+describe('cp514 — listFastPending round-trips a fast push (optimistic inbox card)', () => {
 	it('returns the (peer, order) a push filed, so the inbox can synthesise a card', () => {
-		const peer = 'the maintainer-fastb-peer';
+		const peer = 'fastb-peer';
 		const order = 'im-buying-7-mxn-of-blurt';
 		// Date.now() (not a fixed past time): recount() prunes fast-pending
 		// entries older than the TTL, so a live push must be timestamped now.
@@ -280,7 +288,7 @@ describe('cp514 (t.txt B) — listFastPending round-trips a fast push (optimisti
 	it('round-trips an ORDER-LESS thread (empty permlink) — separator still present', () => {
 		// A no-RE: thread pushes an empty permlink; the key is `peer\u0000`, and
 		// the parser must yield peer + '' rather than dropping the entry.
-		const peer = 'the maintainer-noorder';
+		const peer = 'noorder-peer';
 		noteFastChatPush(peer, '', Date.now());
 		const hit = listFastPending().find((p) => p.peer === peer);
 		expect(hit).toBeDefined();

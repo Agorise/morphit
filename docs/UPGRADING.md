@@ -198,7 +198,11 @@ Steps the command takes, in order:
     init` after an upgrade, and you don't re-enter your passphrase
     config — your instance comes back up exactly as it was, on the
     new code.
-9. Runs `npm ci --no-audit --no-fund` in the new install dir.
+9. Runs `npm ci --ignore-scripts --no-audit --no-fund` in the new
+   install dir (no dependency's install script runs; the Matrix bot's
+   native add-ons are reused or rebuilt only where the bot runs; an
+   offline bundle's prebuilt `node_modules` is used as is; a
+   zero-clearnet node installs over Tor only or refuses).
 9b. **Rebuilds and republishes the web frontend.** The indexer, relay,
     and matrix-bot run straight from TypeScript source via `tsx`, so
     `npm ci` is all they need — but the website is a static SvelteKit
@@ -347,6 +351,29 @@ Flags: `--check-only`, `--json`, `--yes`, `--from-file=PATH`, and
 `--allow-downgrade` (install a release older than the one you run; off
 by default).
 
+**Nothing in the heal phase stops to ask.** The upgrade's self-heals
+never wait for an answer: where one has a question (old relay log lines
+in the journal, a Matrix bot kept on clearnet on a Tor-only node,
+plain-text backups), it takes the safe default (the journal is left, the
+clearnet bot is stopped, the backups are left), records the question and
+prints the command to answer it later:
+
+- `sudo morphit-ops upgrade --questions` — asks those questions at a
+  terminal (without one it stops with an error and changes nothing).
+- `sudo morphit-ops upgrade --heals` — re-runs this release's heals and
+  the after-restart heals, downloading nothing. A plain
+  `sudo morphit-ops upgrade` on an up-to-date box does the same after
+  "Already on the latest release." (`--check-only` and `--json` stay
+  read-only).
+
+**Zero-clearnet (Tor + I2P) nodes upgrade from the signed offline
+bundle.** Every release carries `morphit-<ver>-offline.tar.gz` (about
+250 MB) and its `.asc`, built and signed by the release job with the key your box
+already trusts. Download both on another computer, copy them over
+(`scp -O`, not plain `scp`), and run
+`sudo morphit-ops upgrade --from-file=/path/to/morphit-<ver>-offline.tar.gz`.
+The release notes give the exact steps for each release.
+
 ### Which indexer the upgrade asks (v1.18.0)
 
 Before an upgrade, `morphit-ops` decides whether your node is
@@ -485,6 +512,10 @@ curl -fLO "https://git.agorise.net/agorise/morphit/releases/download/${VERSION}/
 # 2. Verify the checksum.  Output must say "OK"; refuse to proceed otherwise.
 sha256sum -c "morphit-${VERSION}.tar.gz.sha256"
 
+# 0. Verify the download against the signed on-chain anchor (see
+#    docs/VERIFY-YOUR-DOWNLOAD.md; this also checks @morphit's signature):
+#      node scripts/verify-download.mjs "morphit-${VERSION}.tar.gz"
+
 # 3. Stop the running services (each optional one only if it is running).
 sudo systemctl stop morphit-indexer morphit-relay
 for u in morphit-matrix-bot morphit-mcp; do
@@ -506,19 +537,22 @@ for f in morphit.config.env morphit.env apps/relay/keystore.json apps/relay/keys
   [ -e "$BACKUP/$f" ] && sudo cp -p "$BACKUP/$f" "/opt/morphit/$f"
 done
 [ -d "$BACKUP/apps/relay/altnet" ] && sudo cp -rp "$BACKUP/apps/relay/altnet" /opt/morphit/apps/relay/
-sudo chown -R morphit:morphit /opt/morphit  # adjust to match your install
-# The secrets must stay private (0600, as the upgrade keeps them):
-ls -l /opt/morphit/morphit.env /opt/morphit/apps/relay/keystore.* 2>/dev/null
+# The code stays owned by root (the services run as their own users and
+# must not be able to change it). Do NOT chown the tree to a service user.
+sudo chown -R root:root /opt/morphit && sudo chmod -R go-w /opt/morphit
+# Settings and keys in /etc/morphit (relay.keystore, *.env, the sealed
+# relay_passphrase.cred) are not touched by an upgrade; the services'
+# pre-start helper keeps their owner and mode right.
 
-# 6. Install workspace dependencies.
+# 6. Install workspace dependencies — as root, running no install scripts.
 cd /opt/morphit
-sudo -u morphit npm ci --no-audit --no-fund
+sudo npm ci --ignore-scripts --no-audit --no-fund
 
 # 6b. Deploy the web frontend.  `npm run build` in apps/web keeps the
 #     prebuilt frontend the release ships (apps/web/build, marked
 #     .shipped) instead of rebuilding it, which keeps visitors'
 #     build-integrity check green.
-(cd apps/web && sudo -u morphit npm run build)
+(cd apps/web && sudo npm run build)
 
 # 6c. Re-apply your branding (logo, icons, site name), if you set any —
 #     the fresh build is the plain Morphit look until you do.  Harmless
@@ -537,7 +571,9 @@ sudo chown -R www-data:www-data /var/www/morphit-frontend  # match your web root
 cat /opt/morphit/release-info.json
 # Confirm "tag" field === "${VERSION}"
 
-# 8. Restart services (and the optional ones that were running before).
+# 8. Restart services (and the optional ones that were running before;
+#    the loop below brings back the Matrix bot and the MCP server).
+sudo systemctl daemon-reload
 sudo systemctl start morphit-indexer
 sudo systemctl start morphit-relay
 [ -f /tmp/morphit-was-running ] && while read -r u; do sudo systemctl start "$u"; done < /tmp/morphit-was-running
@@ -573,14 +609,14 @@ git tag -v v1.0.0-beta.1
 # Output should end with "Good signature from..." and the
 # fingerprint should match an authorized signer.
 
-# 4. Optional: confirm the released tarball's git tree matches
-#    the tag's tree.  This is brittle (depends on tar's filename
-#    ordering matching git's), so the easier check is to compare
-#    individual file contents:
+# 4. Optional: compare the source files with the install, ignoring
+#    what the install adds (dependencies, the prebuilt frontend,
+#    your settings):
 git checkout v1.0.0-beta.1
-diff -r . /opt/morphit
-# Should show only node_modules/ and similar build-artifact paths
-# as different (those aren't in the source tree).
+diff -rq --exclude=.git --exclude=node_modules --exclude=build \
+  --exclude='*.env' --exclude=release-info.json . /opt/morphit
+# Any remaining difference in a source file deserves a look; expect
+# a few generated files, since builds are not byte-reproducible.
 ```
 
 If `git tag -v` says "Good signature" and the diff is clean, the

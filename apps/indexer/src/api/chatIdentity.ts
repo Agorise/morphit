@@ -10,10 +10,9 @@
  * via a no-auth endpoint is equivalent to exposing on-chain data,
  * which is already public.
  *
- * Caching: the server does not set Cache-Control because response
- * validity depends on whether the user has rotated since the last
- * fetch. Clients are expected to cache briefly (per-conversation)
- * and refetch on next conversation open.
+ * Caching: never stored — the answer names an account (`no-store` from
+ * the security middleware, VT3-6). Clients cache briefly in memory
+ * (per-conversation) and refetch on next conversation open.
  */
 
 import { Hono } from 'hono';

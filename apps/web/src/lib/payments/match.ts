@@ -58,8 +58,8 @@ function fold(s: string): string {
  *    "paypal"   → "paypal"
  *    "PayPal"   → "paypal"
  *    "Pay Pal"  → "Pay Pal" (no match — falsy intent unclear)
- *    "Cash (in person)" → "cash_in_person"  // cp120
- *    "Cash by mail"     → "cash_by_mail"    // cp120
+ *    "Cash (in person)" → "cash_in_person"  //
+ *    "Cash by mail"     → "cash_by_mail"    //
  *    "M-PESA"   → "mpesa"
  *    "promptpay"→ "promptpay" (unknown — passes through)
  */

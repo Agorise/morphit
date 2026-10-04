@@ -1,5 +1,5 @@
 /**
- * indexer-config-boot-smoke (cp194)
+ * indexer-config-boot-smoke
  *
  * Two guards for the boot-crash class the VPS operator hit:
  *
@@ -203,7 +203,7 @@ try {
 	}
 }
 
-// ─── Guard 4 (cp407): fee recipient validates + falls back to the
+// ─── Guard 4: fee recipient validates + falls back to the
 //     treasury. Federated operators earn 90% of BLURT fees and set the
 //     account they land in; an empty or malformed value must fall back to
 //     @morphit-fees (NOT crash boot, NOT route fees to a non-account) and

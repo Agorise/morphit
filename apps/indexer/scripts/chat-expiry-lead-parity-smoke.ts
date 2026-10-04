@@ -136,7 +136,7 @@ if (Number.isFinite(clientLeadMs)) {
 //
 // Graphene writes the expiry without a timezone, and JavaScript reads a
 // zone-less date-time as LOCAL. Get that wrong and every fast-path message is
-// misdated by the host's offset — seven hours on the maintainer's boxes, enough to
+// misdated by the host's offset — hours, on any host outside UTC, enough to
 // reorder a whole day of a transcript.
 //
 // THE TRAP THIS BLOCK EXISTS TO AVOID. Asserted on the host's own timezone,
@@ -148,7 +148,7 @@ if (Number.isFinite(clientLeadMs)) {
 {
 	const originalTz = process.env.TZ;
 	try {
-		process.env.TZ = 'Etc/UTC'; // local time, no DST
+		process.env.TZ = 'Pacific/Honolulu'; // UTC-10, no DST
 		const offsetMinutes = new Date().getTimezoneOffset();
 		check(
 			`the forced timezone took (offset ${offsetMinutes} min)`,

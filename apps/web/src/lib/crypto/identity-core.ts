@@ -2,7 +2,7 @@
  * Lightweight identity core — types, role constants, and the two
  * sync LiveIdentity helpers, with ZERO elliptic-crypto dependency.
  *
- * Why this module exists (cp271 byte budget, sibling to the cp267
+ * Why this module exists (byte budget, sibling to the
  * `./sodium` lazy split):
  *   `keygen.ts` statically imports `@scure/bip39` + `@noble/secp256k1`
  *   (~19 KB Brotli combined) at module top. The shared `[lang]` layout
@@ -80,7 +80,7 @@ export interface FullIdentity {
 	 *  importPostingOnlyFullIdentity (Batch H — existing-Blurt-account
 	 *  import path).
 	 *
-	 *  'posting-active' (tt.txt #11) — a posting-only import that later chose
+	 *  'posting-active' — a posting-only import that later chose
 	 *  "keep my Active key on this device". It holds posting + active; owner and
 	 *  memo remain null and `seedBytes` is still null, because an Active key
 	 *  cannot derive them (that chain is one-way).
@@ -141,9 +141,9 @@ export interface FullIdentity {
 }
 
 /**
- * The in-memory identity of a running Morphit session. Posting and memo
- * PRIVATE keys are live; owner and active are exposed only as public
- * keys (for display / lookup).
+ * The in-memory identity of a running Morphit session. Only the posting
+ * PRIVATE key is live; memo, owner and active are exposed as public keys
+ * only (for display / lookup).
  */
 export interface LiveIdentity {
 	readonly createdAt: number;
@@ -155,11 +155,11 @@ export interface LiveIdentity {
 	 *  spend, while a morphit-seed session that somehow lacked one must not. */
 	readonly origin: 'morphit-seed' | 'posting-only' | 'posting-active';
 	readonly posting: Keypair;
-	/** Null for posting-only imports.  Chat encryption today uses
-	 *  posting (deriveChatIdentity), not memo, so chat works with
-	 *  posting-only sessions; this field exists for forward-compat
-	 *  if a future chain op requires the memo private. */
-	readonly memo: Keypair | null;
+	/** Null for posting-only / posting-active imports. The PUBLIC half only:
+	 *  nothing signs or decrypts with the memo key (chat derives its key
+	 *  from posting), so its private key is not kept in memory, cloned to
+	 *  other tabs or stashed for a reload. */
+	readonly memo: { readonly role: 'memo'; readonly publicKey: Uint8Array } | null;
 	/** Null for posting-only AND posting-active imports (owner is never held). */
 	readonly ownerPublicKey: Uint8Array | null;
 	/** Null ONLY when no active key is held. This is the capability flag the
@@ -216,8 +216,10 @@ export function toLiveIdentity(full: FullIdentity): LiveIdentity {
 	}
 	const ownerPub = ownerKp.publicKey;
 	const activePub = activeKp.publicKey;
+	const memoPub = memoKp.publicKey;
 	sodium.memzero(ownerKp.privateKey);
 	sodium.memzero(activeKp.privateKey);
+	sodium.memzero(memoKp.privateKey);
 	// K1.2 — zero the source FullIdentity's seedBytes too.  The
 	// returned LiveIdentity doesn't carry seedBytes; if the caller
 	// kept a clone (cloneFullIdentity) for the keystore, that
@@ -227,7 +229,7 @@ export function toLiveIdentity(full: FullIdentity): LiveIdentity {
 		createdAt: full.createdAt,
 		origin: 'morphit-seed',
 		posting: full.keys.posting,
-		memo: memoKp,
+		memo: Object.freeze({ role: 'memo' as const, publicKey: memoPub }),
 		ownerPublicKey: ownerPub,
 		activePublicKey: activePub
 	});
@@ -235,7 +237,6 @@ export function toLiveIdentity(full: FullIdentity): LiveIdentity {
 
 export function wipeLiveIdentity(id: LiveIdentity): void {
 	sodium.memzero(id.posting.privateKey);
-	if (id.memo) sodium.memzero(id.memo.privateKey);
 }
 
 /** Zero EVERY secret a decrypted FullIdentity carries — all four private

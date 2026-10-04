@@ -1,15 +1,18 @@
 /**
- * Morphit indexer — /v1/rpc-endpoints endpoint (cp407).
+ * Morphit indexer — /v1/rpc-endpoints endpoint.
  *
  * Per-node health for the Blurt RPC pool the indexer reads/writes through, so
  * the browser's Settings → RPC endpoints card can show WHY a server-only node
  * (one the browser can't probe directly, for privacy) is or isn't being used.
  *
  * Privacy-first by construction:
- *   - It reports ONLY the canonical, already-public Blurt nodes
- *     (`DEFAULT_BLURT_RPC_ENDPOINTS`). Any operator-custom endpoint the
- *     operator added via MORPHIT_INDEXER_RPC_ENDPOINTS is filtered OUT — the
- *     public body never reveals a private/internal upstream URL.
+ *   - It reports ONLY already-public nodes (publishedRpcEndpoints): the
+ *     clearnet canon (`DEFAULT_BLURT_RPC_ENDPOINTS`, when this instance uses
+ *     clearnet at all), the built-in hidden canon this instance uses, and the
+ *     hidden nodes of the signed on-chain RPC directory. Anything the operator
+ *     configured beyond those — a private upstream, their own onion or I2P
+ *     node, a local or auto-detected loopback node — is neither listed nor
+ *     probed on a visitor's request.
  *   - Per node it exposes only coarse health: reachable-or-not, smoothed
  *     latency, consecutive-failure count, remaining cooldown. Nothing
  *     per-account, nothing that correlates traders.
@@ -28,7 +31,7 @@ import { hiddenNetworkOf, hiddenServiceProxyConfigFromEnv } from '$indexer/hidde
 import { isHiddenRpcUrl } from '$blurt/rpcDirectoryOp';
 import { readCappedBytes } from '@morphit/hidden-transport/rpc-fetch';
 
-/** A get_dynamic_global_properties reply is a few KB. (v1.18.0 deep-deep, M2) */
+/** A get_dynamic_global_properties reply is a few KB. */
 const PROBE_REPLY_MAX_BYTES = 1024 * 1024;
 
 /** Classify a pool URL into the card's transport buckets. Loopback → local (a
@@ -46,10 +49,10 @@ export function rpcTransportOf(url: string): 'clearnet' | 'tor' | 'i2p' | 'local
 }
 
 /**
- * cp471 (tt.txt C) — WHY an active probe failed.
+ * WHY an active probe failed.
  *
- * the maintainer: a flat red "unreachable" is useless — a node whose operator confirms
- * "all responses are 200" was being labelled unreachable because probeOne
+ * Requirement: a flat red "unreachable" is useless — a node whose operator confirms
+ * every response is a 200 was being labelled unreachable because probeOne
  * collapsed EVERY failure mode (TLS, non-2xx, JSON-RPC error, timeout, DNS)
  * into a bare `ok:false`. These codes are a CLOSED, stable vocabulary.
  *
@@ -72,7 +75,7 @@ export type RpcProbeFailure =
 	/** Connection actively refused. */
 	| 'refused'
 	/** Any other transport-level failure (reset, unroutable). Truly "not
-	 *  pingable" — the maintainer: plain "Unreachable" is fine for this one. */
+	 *  pingable" — Requirement: plain "Unreachable" is fine for this one. */
 	| 'network'
 	/** A hidden node (.onion / .b32.i2p) that this instance can't reach because
 	 *  its OWN Tor/i2pd proxy isn't running — i.e. "this instance has no Tor/I2P",
@@ -106,7 +109,7 @@ export interface RpcEndpointHealth {
 	readonly consecutive_failures: number;
 	/** Remaining cooldown in ms before the node is retried (0 when available). */
 	readonly cooldown_ms: number;
-	/** cp471 (tt.txt C): WHY the most recent ACTIVE probe failed, so the card
+	/** WHY the most recent ACTIVE probe failed, so the card
 	 *  can show a one-line reason instead of a flat "unreachable". Null/absent
 	 *  when healthy, or on the passive pool snapshot (the pool doesn't retain a
 	 *  reason — the card falls back to the generic label there). */
@@ -183,7 +186,7 @@ export async function unreachableTransports(): Promise<Set<'tor' | 'i2p'>> {
 }
 
 /**
- * cp453 (t.txt #1) — ACTIVE per-node probe. The passive snapshot above only
+ * ACTIVE per-node probe. The passive snapshot above only
  * reflects the pool's own traffic and barely moves; the Settings "refresh"
  * button wants FRESH latency for every canonical node on demand. This pings each
  * node once, in parallel, and reports the round-trip.
@@ -211,7 +214,7 @@ function probeTimeoutMs(url: string): number {
 }
 
 /**
- * cp471 (tt.txt C) — map a thrown fetch error to a stable {@link RpcProbeFailure}.
+ * map a thrown fetch error to a stable {@link RpcProbeFailure}.
  *
  * Node's fetch wraps transport errors as `TypeError: fetch failed` with the real
  * cause on `err.cause` carrying a `code`. An aborted request surfaces as an
@@ -314,7 +317,7 @@ async function probeOne(url: string): Promise<ProbeResult> {
 		const res = await fetch(url, {
 			method: 'POST',
 			signal: controller.signal,
-			// (v1.18.0 deep-deep, M2) Never followed: the probed nodes are third
+			// Never followed: the probed nodes are third
 			// parties from the on-chain directory, and a 307 to our own loopback
 			// made this probe re-POST there (a blind SSRF). A redirect is reported
 			// as the HTTP status it is.
@@ -344,7 +347,7 @@ async function probeOne(url: string): Promise<ProbeResult> {
 		}
 		let body: { result?: unknown; error?: unknown };
 		try {
-			// (v1.18.0 deep-deep, M2) Capped: `res.json()` read whatever the node
+			// Capped: `res.json()` read whatever the node
 			// chose to send. Past the cap the read throws → 'bad_body'.
 			const bytes = await readCappedBytes(res, PROBE_REPLY_MAX_BYTES, url);
 			body = JSON.parse(Buffer.from(bytes).toString('utf8')) as { result?: unknown; error?: unknown };
@@ -382,8 +385,8 @@ export async function probeEndpoints(
 			// we report consecutive_failures: 2, which lifts it past the card's
 			// transient-miss suppression (<=1). That's what lets an explicit refresh
 			// show a node the operator just shut down as DOWN, instead of keeping its
-			// stale last-known latency. (the maintainer: "what good is a refresh if it doesn't
-			// show the real status of that address?")
+			// stale last-known latency. (Requirement: a refresh shows the real status of that
+			// address)
 			let r = await probeOne(url);
 			let consecutiveFailures = 0;
 			if (!r.ok) {
@@ -437,8 +440,8 @@ export function __resetProbeCacheForTests(): void {
 }
 
 /**
- * cp767 — the public-node allow-list for the /v1/rpc-endpoints route. On a
- * tor-only instance (cp755 emptied its clearnet pool) the clearnet canon is
+ * the public-node allow-list for the /v1/rpc-endpoints route. On a
+ * tor-only instance (emptied its clearnet pool) the clearnet canon is
  * EXCLUDED: the active `?probe=1` path fetches each URL directly, so probing a
  * clearnet RPC from a tor-only box would leak the box's real IP to those
  * operators — the exact exposure tor-only exists to prevent — and would list
@@ -446,6 +449,34 @@ export function __resetProbeCacheForTests(): void {
  * unit-tested. `usesClearnet` is simply "does this instance have a clearnet
  * sync pool" (config.blurtRpcEndpoints.length > 0).
  */
+/**
+ * The list /v1/rpc-endpoints may publish and probe: the public lists only,
+ * never what the operator configured privately. PURE.
+ */
+export function publishedRpcEndpoints(opts: {
+	/** This instance reads the chain over clearnet at all. */
+	usesClearnet: boolean;
+	clearnetCanon: readonly string[];
+	/** The built-in public hidden nodes. */
+	hiddenCanon: readonly string[];
+	/** This instance's configured hidden pool (only canon members of it are published). */
+	configuredHidden: readonly string[];
+	/** Hidden nodes of the signed on-chain directory. */
+	directoryHidden: readonly string[];
+}): string[] {
+	const configured = new Set(opts.configuredHidden);
+	return canonicalProbeUrls({
+		usesClearnet: opts.usesClearnet,
+		clearnetCanon: opts.clearnetCanon,
+		hidden: unionHidden(
+			opts.hiddenCanon.filter((u) => configured.has(u)),
+			opts.directoryHidden
+		),
+		local: [],
+		autoLocal: []
+	});
+}
+
 export function canonicalProbeUrls(opts: {
 	usesClearnet: boolean;
 	clearnetCanon: readonly string[];
@@ -571,8 +602,8 @@ export function rpcEndpointsRoute(
 	app.get('/', async (c) => {
 		const canonicalUrls = await canonicalUrlsFn();
 		const names = await namesFn();
-		// `?probe=1` → fresh active ping of every node (5s-rate-limited server-side,
-		// t.txt #1). Anything else → the cheap passive pool snapshot. Both get names
+		// `?probe=1` → fresh active ping of every node (5s-rate-limited
+		// server-side). Anything else → the cheap passive pool snapshot. Both get names
 		// attached and are sorted by latency ascending.
 		if (c.req.query('probe') === '1') {
 			return c.json(withNamesSorted(await cachedProbeEndpoints(canonicalUrls), names));

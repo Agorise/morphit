@@ -1,6 +1,6 @@
 /**
  * fastchat-abuse-guards-smoke — the federated fast-chat path under abuse
- * (v1.18.0 deep-deep: rv1-1 … rv1-6, rv2-3, rv2-7).
+ * (rv1-1 … rv1-6, rv2-3, rv2-7).
  *
  * Every scenario here is a reviewer's reproduction turned into an assertion,
  * and each one was run against the code before its fix and seen to fail. They
@@ -165,8 +165,10 @@ console.log('fastchat-abuse-guards — the federated fast path under abuse\n');
 	const dispatcher = new ChatFastDispatcher({
 		db,
 		selfOrigin: 'https://self.example',
-		proxies: { torSocks: '', i2pHttpProxy: '' } as never,
-		postClearnet: async (_url, body) => {
+		// Tor configured: chat fan-out runs only over Tor. Never dialled
+		// here — `postIsolated` is the stand-in.
+		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' } as never,
+		postIsolated: async (_url, body) => {
 			posts.push({ at: Date.now(), body: JSON.stringify(body) });
 			await sleep(2);
 			return { status: 202, body: '' };

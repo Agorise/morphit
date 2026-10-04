@@ -98,7 +98,7 @@ describe('seo/routes — indexability rules', () => {
 		// the sitemap builder MUST know how to expand its segment.
 		// Adding a new dynamic-segment indexable route requires also
 		// adding a case to expandRoutes() in scripts/build-sitemap.mjs
-		// and updating this allowlist.  cp117 A7 added `[asset]`.
+		// and updating this allowlist.  A later change added `[asset]`.
 		const EXPANDABLE_SEGMENTS: readonly string[] = ['[asset]'];
 
 		for (const r of ROUTES) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * paired-readonly-lifecycle-smoke (ADR-0022 QR-pair, Option A, Part 114).
+ * paired-readonly-lifecycle-smoke (ADR-0022 QR-pair, Option A).
  *
  * Validates the persisted paired-readonly session lifecycle outside
  * the Svelte runtime:

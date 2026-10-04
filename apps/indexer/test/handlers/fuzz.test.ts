@@ -1,5 +1,5 @@
 /**
- * Property-based payload fuzz harness for every op handler (cp426 audit,
+ * Property-based payload fuzz harness for every op handler (audit,
  * recommendation #2).
  *
  * A hostile actor can broadcast a custom_json with ANY `json` payload. Each
@@ -19,9 +19,18 @@
  *
  * The DB client is mocked to return empty rows, so most inputs are rejected at
  * the narrowing stage before any query — exactly the path a hostile op hits.
+ *
+ * every handler the dispatcher registers is fuzzed (a parity check
+ * fails when one is added without being fuzzed); pollution keys are OWN keys,
+ * as JSON.parse delivers them from the chain (`obj['__proto__'] = v` sets the
+ * prototype and leaves no key at all); deep nesting and long text are seeded;
+ * and known-bad values are asserted to be REJECTED, so a weakened validator
+ * fails here — crash-safety alone let a removed check pass.
  */
 
 import { describe, it, expect } from 'vitest';
+
+import { HANDLERS as DISPATCHED } from '$indexer/dispatcher';
 
 import { makeCtx } from '../testutils/context';
 import { makeMockClient } from '../testutils/mockClient';
@@ -41,6 +50,12 @@ import operatorBlock from '$indexer/handlers/operatorBlock';
 import operatorPaymentMethod from '$indexer/handlers/operatorPaymentMethod';
 import operatorRegister from '$indexer/handlers/operatorRegister';
 import release from '$indexer/handlers/release';
+import orderComplete from '$indexer/handlers/orderComplete';
+import chatFolders from '$indexer/handlers/chatFolders';
+import settings from '$indexer/handlers/settings';
+import block from '$indexer/handlers/block';
+import featureBid from '$indexer/handlers/featureBid';
+import rpcDirectory from '$indexer/handlers/rpcDirectory';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (ctx: any, client: any) => Promise<unknown>;
@@ -60,7 +75,13 @@ const HANDLERS: Readonly<Record<string, Handler>> = {
 	operatorBlock,
 	operatorPaymentMethod,
 	operatorRegister,
-	release
+	release,
+	orderComplete,
+	chatFolders,
+	settings,
+	block,
+	featureBid,
+	rpcDirectory
 };
 
 // ─── Deterministic PRNG ────────────────────────────────────────────
@@ -109,7 +130,14 @@ function randomValue(rng: () => number, depth: number): unknown {
 		if (kr < 0.15) k = ['__proto__', 'constructor', 'prototype'][Math.floor(rng() * 3)]!;
 		else if (kr < 0.7) k = KNOWN_FIELDS[Math.floor(rng() * KNOWN_FIELDS.length)]!;
 		else k = 'k' + Math.floor(rng() * 1000);
-		obj[k] = randomValue(rng, depth + 1);
+		// An OWN key, as JSON.parse delivers it (`obj['__proto__'] = v` would
+		// set the prototype instead and leave no key).
+		Object.defineProperty(obj, k, {
+			value: randomValue(rng, depth + 1),
+			enumerable: true,
+			writable: true,
+			configurable: true
+		});
 	}
 	return obj;
 }
@@ -200,4 +228,88 @@ describe('handler payload fuzz — crash-safety invariants', () => {
 			expect(rejected).toBeGreaterThan(0);
 		});
 	}
+});
+
+describe('handler fuzz coverage and known-bad values', () => {
+	it('every handler the dispatcher registers is fuzzed', () => {
+		const fuzzed = new Set(Object.values(HANDLERS));
+		const missing = Object.entries(DISPATCHED).filter(([, h]) => !fuzzed.has(h as never));
+		expect(missing.map(([id]) => id)).toEqual([]);
+	});
+
+	const deep = (n: number): unknown => {
+		let v: unknown = 'leaf';
+		for (let i = 0; i < n; i++) v = { order_permlink: v, permlink: v === 'leaf' ? 'p' : undefined };
+		return v;
+	};
+	const HOSTILE: readonly unknown[] = [
+		JSON.parse('{"__proto__":{"polluted":"chain"},"display_name":"x","permlink":"p"}'),
+		JSON.parse('{"constructor":{"prototype":{"polluted":"chain"}},"recipient":"bob"}'),
+		JSON.parse('{"json_metadata":{"__proto__":{"polluted":"chain"}},"payment_methods":[{"__proto__":{"polluted":1}}]}'),
+		deep(300),
+		{ permlink: 'p', comment: 'x'.repeat(20_000), terms: 'y'.repeat(20_000), ciphertext: 'A'.repeat(20_000) }
+	];
+
+	for (const [name, handler] of Object.entries(HANDLERS)) {
+		it(`${name}: own __proto__ keys, deep nesting and long text never pollute, hang or throw a non-Error`, async () => {
+			for (const payload of HOSTILE) {
+				try {
+					const r = await withTimeout(
+						Promise.resolve(handler(makeCtx({ signer: 'alice', payload }), makeMockClient().client)),
+						1500,
+						name
+					);
+					expect(isValidResultShape(r)).toBe(true);
+				} catch (err) {
+					expect(err).toBeInstanceOf(Error);
+					expect((err as Error).message).not.toMatch(/^HANG:/);
+				}
+				expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+			}
+		});
+	}
+
+	/** The rejection reason (the SPECIFIC check must fire — a later check
+	 *  rejecting for another reason would hide a removed validator). */
+	const reasonFor = async (h: Handler, payload: unknown, signer = 'alice'): Promise<string> => {
+		try {
+			const r = (await h(makeCtx({ signer, payload }), makeMockClient().client)) as {
+				ok: boolean;
+				reason?: string;
+			};
+			return r.ok ? 'ok' : (r.reason ?? '');
+		} catch (e) {
+			return `threw: ${(e as Error).message}`;
+		}
+	};
+	const goodOrder = {
+		permlink: 'p1',
+		side: 'sell',
+		asset: 'BTC',
+		fiat_currency: 'USD',
+		amount_min: 10,
+		amount_max: 100,
+		price_model: { kind: 'spread', percent: 1 },
+		payment_methods: ['cash_in_person']
+	};
+
+	it('chat: a recipient that is not an account name is refused', async () => {
+		expect(
+			await reasonFor(chat, { recipient: 'Not An Account!', ciphertext: 'AAAA', header: { v: 1, client_tag: 't' } })
+		).toBe('recipient_invalid');
+	});
+	it('feedback: a comment with a bidi override is refused', async () => {
+		expect(await reasonFor(feedback, { subject: 'bob', rating: 5, comment: 'great \u202Etrader' })).toBe(
+			'comment_forbidden_char'
+		);
+	});
+	it('order: a negative minimum and an absurd maximum are refused', async () => {
+		expect(await reasonFor(order, { ...goodOrder, amount_min: -1 })).toBe('amount_min_negative');
+		expect(await reasonFor(order, { ...goodOrder, amount_max: 1e18 })).toBe('amount_max_too_large');
+	});
+	it("operatorBlock: anyone but this instance's operator account is refused", async () => {
+		expect(
+			await reasonFor(operatorBlock, { v: 1, blocked: 'bob', action: 'block', reason: 'spam' }, 'mallory')
+		).toBe('not_operator');
+	});
 });

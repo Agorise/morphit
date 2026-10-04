@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * morphit-ops bin launcher (cp162).
+ * morphit-ops bin launcher.
  *
  * This is the published `bin` entry.  It exists to make the CLI
- * robust across every install path, eliminating the cp161
+ * robust across every install path, eliminating the
  * "command not found" failure class for good:
  *
  *   - PREFERRED: if `dist/main.js` exists (the esbuild bundle,
@@ -15,7 +15,7 @@
  *   - FALLBACK: if `dist/main.js` is absent (e.g. a manual clone
  *     where the operator ran `npm install` but not yet
  *     `npm run build`), fall back to running the TypeScript source
- *     via tsx.  This preserves the pre-cp162 behavior so the bin
+ *     via tsx.  This preserves the older behavior so the bin
  *     never points at a missing file.
  *
  * Either way `npx morphit-ops <cmd>` / the bin symlink resolves to
@@ -27,7 +27,7 @@
  * that hasn't run the build yet (the manual `npm install`-only
  * flow doesn't build workspaces — only `cd apps/web && npm run
  * build` is in the manual docs).  Pointing `bin` straight at the
- * source needs tsx at runtime (the thing cp162 removes).  The shim
+ * source needs tsx at runtime (the thing a later change removes).  The shim
  * gets the best of both: compiled-and-fast when built, still-works
  * when not.
  */

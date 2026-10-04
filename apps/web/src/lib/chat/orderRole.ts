@@ -30,7 +30,7 @@ export function peerCryptoSide(rawOrderSide: string, orderIsMine: boolean): Cryp
 	return ownerSide === 'sell' ? 'buy' : 'sell';
 }
 
-/** cp406 (the maintainer) — which of the two crypto money-flow buttons a chat should
+/** which of the two crypto money-flow buttons a chat should
  *  show. Takes the RESOLVED order record (or null for a chat with no live
  *  order — an unsolicited chat opened from a profile's Message button, or a
  *  chat whose order is no longer live) and whether that order is ours.
@@ -41,14 +41,14 @@ export function peerCryptoSide(rawOrderSide: string, orderIsMine: boolean): Cryp
  *  address. The physical mailing/shipment controls layer on top of these
  *  (see ConversationView.orderCanShip).
  *
- *  cp474 (t.txt #6) — "no longer live" now actually means it.
+ *  "no longer live" now actually means it.
  *
  *  This function used to test `if (!order)` and nothing else, so "no longer
  *  live" only held for a chat with no order AT ALL. But the chat resolves its
  *  order from `getOrdersByAccount`, which returns the account's orders
  *  whatever their state — that is how the RE: line can show "(Cancelled)". So
  *  a COMPLETED order still arrived here as a perfectly good `{side}` and lit
- *  the button row. the maintainer hit it on a fulfilled BLURT trade where both parties
+ *  the button row. The maintainer hit it on a fulfilled BLURT trade where both parties
  *  already held a Payment Receipt: the chat was still offering "Pay now" for a
  *  trade that was paid and closed — an invitation to pay twice.
  *

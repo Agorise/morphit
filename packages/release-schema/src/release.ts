@@ -50,7 +50,8 @@ export interface ReleaseEndpoints {
 	readonly relay?: readonly string[];
 	/** Indexers that serve the orderbook REST + RSS APIs. */
 	readonly indexer?: readonly string[];
-	/** Avatar image servers, each accepting `GET /avatars/{pubkey}`. */
+	/** Reserved; nothing reads it. Avatars travel in the profile op's
+	 *  json_metadata (avatar_svg / avatar_data_uri), not from a server. */
 	readonly avatar?: readonly string[];
 	/** Blurt RPC endpoints for chain reads.  These are for
 	 *  bootstrap / fallback; the running app already has a list
@@ -59,7 +60,7 @@ export interface ReleaseEndpoints {
 }
 
 /**
- * Treasury chain-pin (Part 106; corrected Part 107).
+ * Treasury chain-pin (corrected).
  *
  * When present in a `morphit_release_v1` payload, the treasury
  * block declares the canonical Morphit BTC and/or XMR fee
@@ -73,16 +74,16 @@ export interface ReleaseEndpoints {
  * 106 and have no treasury pin; their indexers fall back to
  * env-var values).
  *
- * **Privacy invariant (Part 107):** the chain-pinned `treasury`
+ * **Privacy invariant:** the chain-pinned `treasury`
  * block carries ONLY public information — the address and the
  * fee amount.  The Monero PRIVATE view key is NEVER chain-
  * pinned, never surfaced in any API response, never published
- * in any form.  Initial Part 106 design embedded the view key
+ * in any form.  Initial design embedded the view key
  * here under the rationale that "it's publish-safe by Monero
  * design"; that framing was wrong for privacy (publishing the
  * view key reveals every incoming payment, amount, timing, and
- * subaddress to the treasury wallet, forever).  Part 107
- * removes the view key from this block.  Since Part 108++/109
+ * subaddress to the treasury wallet, forever).
+ * removes the view key from this block.  Since later+/109
  * NO indexer holds any view key: XMR fees are verified from the
  * payer's per-payment transaction key (v1.20.0, M-X1: the 64-hex
  * tx private key the explorers' txprove takes — the OutProof strings
@@ -91,7 +92,7 @@ export interface ReleaseEndpoints {
  * every XMR payment independently
  * (apps/indexer/src/indexer/fee/moneroProofVerifier.ts; the old
  * MORPHIT_INDEXER_XMR_FEE_VIEWKEY env var was removed).  See
- * docs/adr/0011-dynamic-fee-model.md (Part 107 and later
+ * docs/adr/0011-dynamic-fee-model.md (and later
  * amendments) for the history.
  *
  * See docs/OPERATIONS.md §40 for the operator ceremony.
@@ -139,15 +140,15 @@ export interface ReleaseTreasuryBlock {
 		 *  integrated addresses only exist for primary addresses. */
 		readonly primary_address?: string;
 	} | null;
-	/** cp372 — chain-pinned BLURT listing-fee base (tier-1 amount,
+	/** chain-pinned BLURT listing-fee base (tier-1 amount,
 	 *  before the Sybil multiplier).  Unlike BTC/XMR there is no
 	 *  address: the BLURT fee is a transfer to the operator's fee
 	 *  recipient account, so only the amount needs pinning.  Pinning
 	 *  it on-chain makes the BLURT floor deterministic across every
 	 *  federated indexer (the same anti-fork property the BTC/XMR
-	 *  amounts already had); before cp372 it was an env-only per-
+	 *  amounts already had); previously it was an env-only per-
 	 *  operator value, the one fee input that could diverge between
-	 *  nodes.  Optional + nullable: releases without it (pre-cp372, or
+	 *  nodes.  Optional + nullable: releases without it (previously, or
 	 *  operators who never pin BLURT) leave every indexer on its env
 	 *  fallback (`MORPHIT_INDEXER_FEE_BASE_BLURT`).  The maintainer's
 	 *  release-broadcaster auto-computes this from the canonical USD
@@ -160,7 +161,7 @@ export interface ReleaseTreasuryBlock {
 }
 
 /**
- * Decentralized-distribution anchor (cp556).
+ * Decentralized-distribution anchor.
  *
  * The project's source is public on Forgejo (git.agorise.net), but a
  * single git host is a single point of failure and censorship. This
@@ -247,7 +248,7 @@ export interface ReleasePayloadV1 {
 	readonly version: string;
 	/** SHA-256 hash manifest of the build's assets. */
 	readonly hash_manifest: ReleaseHashManifest;
-	/** cp436 — OPTIONAL announced endpoint pools. the maintainer's rule: normal
+	/** OPTIONAL announced endpoint pools. Project rule: normal
 	 *  releases OMIT this entirely (it bloats the chain and is redundant
 	 *  with the frontend's baked-in DEFAULT_BLURT_RPC_ENDPOINTS). When
 	 *  absent, clients keep whatever endpoints they already have. */
@@ -256,13 +257,13 @@ export interface ReleasePayloadV1 {
 	 *  indexer, available to clients that want to do extra
 	 *  verification.  Bounded at 512 chars. */
 	readonly signature?: string;
-	/** Optional treasury pin (Part 106).  When present, declares
+	/** Optional treasury pin.  When present, declares
 	 *  the canonical BTC/XMR fee addresses authoritatively.
 	 *  Frontend renders the address with copy + QR on the post-
 	 *  order page; every federated indexer uses these addresses
 	 *  for fee verification.  See ReleaseTreasuryBlock. */
 	readonly treasury?: ReleaseTreasuryBlock;
-	/** cp556 — OPTIONAL decentralized-distribution anchor: a
+	/** OPTIONAL decentralized-distribution anchor: a
 	 *  verifiable pointer to the GPG-signed source tarball mirrored
 	 *  to Codeberg / IPFS / etc.  See ReleaseDistributionBlock. */
 	readonly distribution?: ReleaseDistributionBlock;

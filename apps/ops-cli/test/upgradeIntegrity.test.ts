@@ -1,12 +1,13 @@
 /**
- * What `morphit-ops upgrade` installs, and from what (v1.18.0 deep-deep:
- * ops-2, ops-3, ops-7, ops-8).
+ * What `morphit-ops upgrade` installs, and from what.
  *
  *   ops-2  A mirror could make a node "upgrade" to an OLDER signed release:
  *          "up to date" was string equality, a verified signature overrode a
  *          known mismatch against the primary's hash, and nothing checked the
  *          extracted tarball was the version chosen.
  *   ops-3  A present but INVALID .asc was silently ignored.
+ *   An unsigned tarball whose hash the primary vouched for was enough;
+ * see upgradeReleaseAnchor.test.ts.
  *   ops-7  Mirror-supplied asset names reached join(tmpDir, name) unchecked.
  *   ops-8  The live-canary probe ran `sh -c` with the configured origin's host.
  *
@@ -39,6 +40,7 @@ import {
 const scratch = mkdtempSync(join(tmpdir(), 'morphit-integrity-'));
 const gnupg = join(scratch, 'gnupg');
 const signerPub = join(scratch, 'signer.asc');
+let signerFpr = '';
 
 beforeAll(() => {
 	mkdirSync(gnupg, { mode: 0o700 });
@@ -61,6 +63,8 @@ beforeAll(() => {
 	).toBe(0);
 	const pub = gpg(['--armor', '--export', 'test@example.invalid']);
 	writeFileSync(signerPub, pub.stdout);
+	signerFpr =
+		/^fpr:+([0-9A-F]{40}):/m.exec(gpg(['--with-colons', '--list-keys']).stdout)?.[1] ?? '';
 });
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -141,8 +145,19 @@ afterEach(() => {
 	Object.assign(process.env, saved);
 });
 
+// The throwaway signer is pinned for these runs, and the chain has no release
+// record, so the signature is what decides.
 const upgrade = (tarball: string, extra: Record<string, string> = {}) =>
-	runUpgrade({ flags: { 'from-file': tarball, yes: 'true', ...extra }, positional: [] });
+	runUpgrade({
+		flags: { 'from-file': tarball, yes: 'true', ...extra },
+		positional: [],
+		trust: {
+			signerFingerprints: [signerFpr],
+			chainRead: async () => {
+				throw new Error('no chain in this test');
+			}
+		}
+	});
 
 const backups = (): string[] =>
 	readdirSync(dirname(installDir)).filter((n) => n.startsWith(`${basename(installDir)}.bak-`));
@@ -183,40 +198,52 @@ describe('a signed OLDER release is not installed as an upgrade (ops-2)', () => 
 });
 
 describe('the integrity decision (ops-2, ops-3)', () => {
-	const base = {
-		actualHash: 'a'.repeat(64),
-		expectedHashFromChain: false,
-		bytesFromPrimary: false,
-		hidden: null
-	};
-	it('a present but invalid signature refuses, even when the primary hash matches', () => {
-		expect(
-			integrityGate({ ...base, signature: 'invalid', expectedHash: 'a'.repeat(64) }).allowed
-		).toBe(false);
+	const H = 'a'.repeat(64);
+	const base = { actualHash: H, chainHash: null, primaryHash: null, hidden: null };
+	it('a present but invalid signature refuses, even when the chain hash matches', () => {
+		expect(integrityGate({ ...base, signature: 'invalid', chainHash: H }).allowed).toBe(false);
 	});
-	it('a valid signature does not override a known primary-hash mismatch', () => {
+	it('a valid signature does not override a known hash mismatch', () => {
 		expect(
-			integrityGate({ ...base, signature: 'valid', expectedHash: 'b'.repeat(64) }).allowed
+			integrityGate({ ...base, signature: 'valid', primaryHash: 'b'.repeat(64) }).allowed
 		).toBe(false);
+		expect(integrityGate({ ...base, signature: 'valid', chainHash: 'b'.repeat(64) }).allowed).toBe(
+			false
+		);
 	});
-	it('a valid signature with no primary hash (primary down) is still accepted', () => {
-		expect(integrityGate({ ...base, signature: 'valid', expectedHash: null })).toMatchObject({
+	it('a valid pinned signature with no hash anywhere is accepted', () => {
+		expect(integrityGate({ ...base, signature: 'valid' })).toMatchObject({
 			allowed: true,
 			proof: 'gpg-signature'
 		});
 	});
-	it('no signature and a matching primary hash is still accepted', () => {
-		expect(
-			integrityGate({ ...base, signature: 'absent', expectedHash: 'a'.repeat(64) }).allowed
-		).toBe(true);
-	});
-	it('a signature that cannot be checked here (no gpg) falls back to the hash, as before', () => {
-		expect(
-			integrityGate({ ...base, signature: 'unverifiable', expectedHash: 'a'.repeat(64) }).allowed
-		).toBe(true);
-		expect(integrityGate({ ...base, signature: 'unverifiable', expectedHash: null }).allowed).toBe(
+	it('no signature and a matching PRIMARY hash alone is refused', () => {
+		expect(integrityGate({ ...base, signature: 'absent', primaryHash: H }).allowed).toBe(false);
+		expect(integrityGate({ ...base, signature: 'unverifiable', primaryHash: H }).allowed).toBe(
 			false
 		);
+	});
+	it('no signature and a matching signed-chain hash is accepted', () => {
+		expect(
+			integrityGate({ ...base, signature: 'absent', chainHash: H, primaryHash: H })
+		).toMatchObject({
+			allowed: true,
+			proof: 'onchain-anchored-sha256'
+		});
+	});
+	it('the chain and the primary disagreeing refuses, whatever else holds', () => {
+		expect(
+			integrityGate({ ...base, signature: 'valid', chainHash: H, primaryHash: 'b'.repeat(64) })
+				.allowed
+		).toBe(false);
+	});
+	it('a hidden fetch needs the chain hash', () => {
+		const hidden = { servedBy: 'http://p.onion', tag: 'v1.18.0' };
+		expect(integrityGate({ ...base, signature: 'absent', hidden }).allowed).toBe(false);
+		expect(integrityGate({ ...base, signature: 'absent', chainHash: H, hidden })).toMatchObject({
+			allowed: true,
+			proof: 'hidden-federation-onchain-sha256'
+		});
 	});
 	it('only a strictly newer version is newer', () => {
 		expect(isNewerRelease('v1.18.0', 'v1.17.15')).toBe(true);

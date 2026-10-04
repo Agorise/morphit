@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the avatar menu's portaled scrim (the maintainer: "you broke the avatar menu").
+ * Smoke: the avatar menu's portaled scrim ("you broke the avatar menu").
  *
  * The scrim was `use:portal`'d directly as the FIRST node of `{#if open}`.
  * A Svelte block tracks its own first and last nodes; moving the first one to
@@ -52,7 +52,7 @@ check('the closed container cannot eat clicks', /pointer-events-none hidden/.tes
 check('the scrim and panel opt back INTO pointer events', (code.match(/pointer-events-auto/g) ?? []).length === 2);
 check('the scrim closes the menu', /onclick=\{close\}/.test(code));
 
-// Folded in from the retired `avatar-menu-blur-smoke` (cp446): it pinned the OLD
+// Folded in from the retired `avatar-menu-blur-smoke`: it pinned the OLD
 // design — a `fixed inset-0` scrim at z-40, below a z-50 menu — which no longer
 // exists and which could never have blurred the header. Its four checks are
 // subsumed here; two of its unique assertions are kept verbatim.

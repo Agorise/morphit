@@ -1,26 +1,27 @@
 /**
  * Morphit indexer — fee verifier abstraction (ADR-0011 §3, sub-phase 4b).
  *
- * The order handler doesn't care HOW a fee was paid — only whether
- * the payment matches the expected amount. Each fee_method has its
- * own verifier that produces one of three outcomes:
+ * A BTC/XMR order is stored `pending_external` by the order handler; the
+ * verifier for its fee_method is run by the re-check job
+ * ($indexer/fee/externalFeeRecheck), never inside a block transaction.
+ * Each verifier produces one of three outcomes:
  *
- *   - `verified` — we observed the payment on chain, it matches
- *     the expected amount within tolerance, order is good to go
- *     live immediately.
+ *   - `verified` — we observed the payment on chain and it matches
+ *     the expected amount within tolerance; the order goes live.
  *   - `pending_external` — the verifier couldn't reach its data
- *     source (explorer down, RPC timeout). The order lands in
- *     `pending_external` fee_status; the counterparty can submit
- *     a `morphit_fee_attest_v1` to promote it, or it expires.
+ *     source (explorer down, RPC timeout). The order stays
+ *     `pending_external`; independent attestors can promote it with
+ *     `morphit_fee_attest_v1`, and later checks still overrule them.
  *   - `rejected` — the payment doesn't exist, wrong amount, wrong
- *     destination. The order is not indexed as live.
+ *     destination. The order is stored `missing` / `underpaid` and
+ *     stays off the book.
  *
  * Verifier implementations:
  *   - `OnChainBlurtFeeVerifier` (4a, already exists inline in
  *     order.ts) — reads sibling transfer ops from the same tx.
  *   - `BitcoinExplorerFeeVerifier` (4b, new) — queries public
  *     Bitcoin block explorers (Blockstream, mempool.space).
- *   - `MoneroProofFeeVerifier` (Part 108++, REPLACES the old
+ *   - `MoneroProofFeeVerifier` (later+, REPLACES the old
  *     view-key-based MoneroExplorerFeeVerifier) — verifies a
  *     payment with the payer's transaction key (v1.20.0, M-X1)
  *     submitted with the order op, and — once the treasury primary
@@ -31,8 +32,7 @@
  *     `morphit_fee_attest_v1` ops to promote `pending_external`
  *     orders.
  *
- * The order handler chooses a verifier based on `fee_method` in
- * the payload. Each verifier is stateless and pure-ish (it reads
+ * The verifier is chosen by the order's `fee_method`. Each verifier is stateless and pure-ish (it reads
  * external state but does no writes).
  */
 
@@ -50,7 +50,7 @@ export interface FeeClaim {
 	 *  For BTC/XMR, this is the txid the payer says landed their
 	 *  payment. For waived_first_buy, unused. */
 	readonly externalTxId: string | null;
-	/** Legacy per-payment Monero OutProof string (Part 108++). Kept on
+	/** Legacy per-payment Monero OutProof string (later+). Kept on
 	 *  the claim for the record only: since v1.20.0 (M-X1) no verifier
 	 *  reads it — the explorers cannot check it — and orders that carry
 	 *  only this are stored `proof_unsupported` without a verifier call. */

@@ -6,9 +6,9 @@
  * must have a matching icon SVG at
  *   apps/web/static/icons/networks/icon-network-{slug}.svg
  *
- * WHY THIS SMOKE EXISTS (Part 122 cp32 deep-deep J-2 finding):
+ * WHY THIS SMOKE EXISTS:
  *
- * Until cp32 there was no automated check that the network slugs the
+ * Until a later fix there was no automated check that the network slugs the
  * code enumerates have corresponding artwork on disk.  A future asset
  * addition (e.g. a 'moonbeam' or 'fantom' network) could ship without
  * the icon and the gap wouldn't surface until production users hit a
@@ -21,10 +21,10 @@
  *   1. Edit packages/asset-registry/src/index.ts supportedNetworks
  *   2. Run smokes — this smoke fails until the icon SVG is added
  *
- * BACK-COMPAT NOTE — Part 122 cp32:
+ * BACK-COMPAT NOTE:
  *
- * The smoke also captures the *post-cp32 byte budget* per icon.
- * Cp32 shipped the maintainer-supplied artwork that totals 6,046 bytes across
+ * The smoke also captures the *newer byte budget* per icon.
+ * A later change shipped the maintainer-supplied artwork that totals 6,046 bytes across
  * all 7 multi-network icons.  Memory's Priority #4 — TINY FOOTPRINT
  * — requires that future swaps not bloat this beyond a clear ceiling.
  * Per-icon ceiling: 4,096 bytes (every current icon is well under).
@@ -54,7 +54,7 @@ const ICONS_DIR = resolve(
 const PER_ICON_BYTE_CEILING = 4_096;
 const TOTAL_NETWORK_ICONS_BUDGET = 16_384;
 
-// CP33 — Part 122: per-asset icon ceiling raised from 4 KB to
+// CP33: per-asset icon ceiling raised from 4 KB to
 // 64 KB to accommodate the maintainer-supplied detailed artwork (DOGE icon
 // is a full-color Shiba Inu illustration at ~54 KB, the
 // canonical Dogecoin brand mark).  Network icons keep the
@@ -142,10 +142,9 @@ for (const slug of [...networkSet].sort()) {
 // CP32 EXTENSION — also pin every per-asset icon at /icons/icon-<ticker>.svg.
 // Per-icon ceiling: 64 KB (asset icons may carry detailed brand
 // artwork — Shibu Inu DOGE etc).  Total budget for 16 asset icons
-// at present (cp47 — Part 122) + headroom = 128 KB.  Last verified
-// cp48 deep-deep finding L-1 (was "10 asset icons" stale since
-// cp32; asset additions at cp33 DOGE, cp39 ZEC, cp41 ARRR, cp43
-// DCR, cp45 SOL, cp47 ETH brought the total to 15 without
+// at present + headroom = 128 KB.  Last verified
+// L-1 (was "10 asset icons" stale; asset additions DOGE, ZEC, ARRR
+// DCR, SOL, ETH brought the total to 15 without
 // updating this comment).
 const ASSET_ICONS_DIR = resolve(REPO_ROOT, 'apps/web/static/icons');
 const PER_ASSET_ICON_BUDGET = TOTAL_ASSET_ICONS_BUDGET;

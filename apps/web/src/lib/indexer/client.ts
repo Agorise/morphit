@@ -17,7 +17,6 @@ import type {
 	AccountFeedbackResponse,
 	AccountFeedbackGivenResponse,
 	AccountOrdersResponse,
-	AttestorEligibilityResponse,
 	BlocksResponse,
 	ChatAdmissionResponse,
 	ChatHistoryResponse,
@@ -27,6 +26,10 @@ import type {
 	UserSettingsResponse,
 	ConversationsResponse,
 	OrderCounterpartiesResponse,
+	OrderCounterpartyListsResponse,
+	OrderRecord,
+	OrderResponse,
+	SybilTierResponse,
 	FeaturedOrderbookResponse,
 	ClearingPriceHistoryResponse,
 	FeaturedBidHistoryResponse,
@@ -37,7 +40,6 @@ import type {
 	OrderbookQuery,
 	OrderbookResponse,
 	ProfileResponse,
-	ReleaseResponse,
 	ReputationReceiptResponse,
 	StatsResponse,
 	RpcEndpointsResponse,
@@ -81,29 +83,28 @@ async function request<T>(
 	init: {
 		signal?: AbortSignal;
 		query?: URLSearchParams;
-		origin?: string;
 		cache?: RequestCache;
 		/** (v1.20.2) A longer budget for a call that waits on more than this
 		 *  indexer (the /compare peer fetch). Never shorter than the default. */
 		minTimeoutMs?: number;
 	} = {}
 ): Promise<Result<T>> {
-	const url = new URL(path, resolveOrigin(init.origin ?? MORPHIT_INDEXER_ORIGIN));
+	const url = new URL(path, resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 	if (init.query) {
 		// URLSearchParams → concrete entries so we don't override
 		// any pre-existing path query.
 		for (const [k, v] of init.query) url.searchParams.append(k, v);
 	}
 
-	// Compose a timeout signal with any caller-supplied signal. The budget
-	// depends on what this particular request has to cross: a hidden page
-	// origin (every call from a Tor/I2P visitor) or a hidden TARGET origin
-	// (the compare page fetching a peer instance's orderbook from a .b32.i2p
-	// address, which the old flat budget could not complete even from clearnet).
+	// Compose a timeout signal with any caller-supplied signal. Every request
+	// goes to this instance's own indexer; the budget depends on whether the
+	// page itself is on a hidden origin (every call from a Tor/I2P visitor).
+	// A call that waits on more than this indexer (the compare page: the
+	// indexer fetches the peer's page) passes a longer minTimeoutMs.
 	const internalAbort = new AbortController();
 	const timeoutId = setTimeout(
 		() => internalAbort.abort(),
-		Math.max(indexerTimeoutMs(init.origin ?? MORPHIT_INDEXER_ORIGIN), init.minTimeoutMs ?? 0)
+		Math.max(indexerTimeoutMs(MORPHIT_INDEXER_ORIGIN), init.minTimeoutMs ?? 0)
 	);
 	const combined = init.signal
 		? anySignal([init.signal, internalAbort.signal])
@@ -223,7 +224,7 @@ export function getStats(signal?: AbortSignal): Promise<Result<StatsResponse>> {
 /** GET /v1/rpc-endpoints — per-node health of the canonical Blurt RPC pool the
  *  indexer uses (for the Settings RPC card's server-only rows). `probe: true`
  *  asks the indexer to ACTIVELY ping every node right now (fresh latency);
- *  server-side it's rate-limited to once per 5s (t.txt #1). Omitted → the cheap
+ *  server-side it's rate-limited to once per 5s. Omitted → the cheap
  *  passive pool snapshot. */
 export function getRpcEndpoints(opts?: {
 	probe?: boolean;
@@ -277,6 +278,15 @@ export function getOrderbook(
  *  the trip to it. */
 export const PEER_ORDERBOOK_TIMEOUT_MS = 65_000;
 
+/** /v1/compare/orderbook's answer: the peer's first page reduced to each
+ *  order's identity and sort key (the indexer relays nothing else). */
+export interface PeerOrderbookResponse {
+	readonly items: readonly Pick<OrderRecord, 'account' | 'permlink' | 'updated_at'>[];
+	readonly next_cursor: string | null;
+	readonly indexed_block: number;
+	readonly origin: string;
+}
+
 /** (v1.20.2) Another instance's first orderbook page, fetched BY THIS
  *  INSTANCE (`GET /v1/compare/orderbook?origin=…`, same origin). The page's
  *  CSP `connect-src` allows only 'self' and the RPC nodes, so the browser
@@ -287,10 +297,10 @@ export const PEER_ORDERBOOK_TIMEOUT_MS = 65_000;
 export function getPeerOrderbook(
 	origin: string,
 	signal?: AbortSignal
-): Promise<Result<OrderbookResponse & { readonly origin: string }>> {
+): Promise<Result<PeerOrderbookResponse>> {
 	const params = new URLSearchParams();
 	params.set('origin', origin);
-	return request<OrderbookResponse & { readonly origin: string }>('/v1/compare/orderbook', {
+	return request<PeerOrderbookResponse>('/v1/compare/orderbook', {
 		signal,
 		query: params,
 		minTimeoutMs: PEER_ORDERBOOK_TIMEOUT_MS
@@ -320,8 +330,8 @@ export function getClearingPriceHistory(
 }
 
 /** GET /v1/orderbook/featured/bids?account=X — recent featured-
- *  slot bids placed by an account on their own orders.  Part 122
- *  cp17.  Returns up to 30 bids ordered newest-first; each row
+ *  slot bids placed by an account on their own orders.
+ *  Returns up to 30 bids ordered newest-first; each row
  *  carries `is_visible` so the UI can mark currently-visible
  *  bids vs paid-but-outranked vs expired. */
 export function getFeaturedBidHistory(
@@ -347,6 +357,92 @@ export function getOrdersByAccount(
 		signal: opts.signal,
 		query: params
 	});
+}
+
+/** An account's orders, newest-updated first, following the cursor for up to
+ *  `maxPages` pages of 100, one request at a time. Null when the first page
+ *  fails; a later page's failure keeps what was read. `complete` is false when
+ *  more orders exist than were read. */
+export async function getAccountOrderPages(
+	account: string,
+	opts: { maxPages?: number; signal?: AbortSignal } = {}
+): Promise<{ readonly items: OrderRecord[]; readonly complete: boolean } | null> {
+	const items: OrderRecord[] = [];
+	let cursor: string | undefined;
+	for (let i = 0; i < (opts.maxPages ?? 5); i++) {
+		const r = await getOrdersByAccount(account, { limit: 100, cursor, signal: opts.signal });
+		if (!r.ok) {
+			if (i === 0) return null;
+			return { items, complete: false };
+		}
+		items.push(...r.data.items);
+		if (!r.data.next_cursor) return { items, complete: true };
+		cursor = r.data.next_cursor;
+	}
+	return { items, complete: false };
+}
+
+/** GET /v1/orders/:account/:permlink — one order, whatever its age (404
+ *  `not_found` when this instance has none, or hides its owner). Use this,
+ *  not a search of getOrdersByAccount, which returns only the newest page. */
+export function getOrder(
+	account: string,
+	permlink: string,
+	signal?: AbortSignal
+): Promise<Result<OrderResponse>> {
+	return request<OrderResponse>(
+		`/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}`,
+		{ signal }
+	);
+}
+
+/** GET /v1/orders/:account/sybil_tier[?at=ISO] — how many of the account's
+ *  orders count toward its Sybil fee tier, counted by the indexer with the same
+ *  query its order handler charges by. The next order is the (count + 1)-th. */
+export function getSybilTier(
+	account: string,
+	opts: { at?: Date; signal?: AbortSignal } = {}
+): Promise<Result<SybilTierResponse>> {
+	const params = new URLSearchParams();
+	if (opts.at) params.set('at', opts.at.toISOString());
+	return request<SybilTierResponse>(`/v1/orders/${encodeURIComponent(account)}/sybil_tier`, {
+		signal: opts.signal,
+		query: params,
+		cache: 'no-store'
+	});
+}
+
+/** Most orders one counterparty_lists request may name (the indexer's cap). */
+export const COUNTERPARTY_LISTS_BATCH = 50;
+
+/** GET /v1/orders/:owner/counterparty_lists?permlinks=a,b,… — the
+ *  counterparty list of up to COUNTERPARTY_LISTS_BATCH of the owner's orders
+ *  in one request; each list is what getOrderCounterparties returns for it. */
+export function getOrderCounterpartyLists(
+	owner: string,
+	permlinks: readonly string[],
+	signal?: AbortSignal
+): Promise<Result<OrderCounterpartyListsResponse>> {
+	const params = new URLSearchParams();
+	params.set('permlinks', permlinks.join(','));
+	return request<OrderCounterpartyListsResponse>(
+		`/v1/orders/${encodeURIComponent(owner)}/counterparty_lists`,
+		{ signal, query: params }
+	);
+}
+
+/** One order looked up by account + permlink: the direct read, so an order
+ *  older than the newest page is still found. `null` = this instance has no
+ *  such order; `undefined` = the read failed (network, timeout, server). */
+export async function findOrder(
+	account: string,
+	permlink: string,
+	signal?: AbortSignal
+): Promise<OrderRecord | null | undefined> {
+	const r = await getOrder(account, permlink, signal);
+	if (r.ok) return r.data.item;
+	if (r.code === 'not_found') return null;
+	return undefined;
 }
 
 /** GET /v1/profiles/:account — single profile. */
@@ -410,11 +506,6 @@ export function getFeedbackGiven(
 		`/v1/accounts/${encodeURIComponent(account)}/feedback-given`,
 		{ signal: opts.signal, query: params }
 	);
-}
-
-/** GET /v1/release — latest verified release. */
-export function getRelease(signal?: AbortSignal): Promise<Result<ReleaseResponse>> {
-	return request<ReleaseResponse>('/v1/release', { signal });
 }
 
 /** GET /v1/chat/:a/:b — ciphertext between two accounts. */
@@ -501,7 +592,7 @@ export function getChatReadState(
 
 /**
  * GET /v1/chat-folders/:account — the account's ENCRYPTED chat folder
- * organization blob (t.txt v1.4.9 #5), or `enc: null` if never saved. The blob
+ * organization blob, or `enc: null` if never saved. The blob
  * is opaque ciphertext; the caller decrypts it with a posting-key-derived key.
  */
 export function getChatFolders(
@@ -552,24 +643,6 @@ export function getChatAdmission(
 ): Promise<Result<ChatAdmissionResponse>> {
 	return request<ChatAdmissionResponse>(
 		`/v1/chat-admission/${encodeURIComponent(me)}/${encodeURIComponent(peer)}`,
-		{ signal }
-	);
-}
-
-/**
- * GET /v1/attestor-eligibility/:account — Finding I gate
- * pre-check. Returns whether the given account can currently
- * attest to BTC/XMR orders' fees under the active phase rule.
- * Frontend calls this on order-detail pages before showing
- * the attest button so ineligible users see an explanation
- * instead of a broadcast-rejected error.
- */
-export function getAttestorEligibility(
-	account: string,
-	signal?: AbortSignal
-): Promise<Result<AttestorEligibilityResponse>> {
-	return request<AttestorEligibilityResponse>(
-		`/v1/attestor-eligibility/${encodeURIComponent(account)}`,
 		{ signal }
 	);
 }

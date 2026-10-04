@@ -1,8 +1,8 @@
 /**
  * nav-arrow-consistency-smoke — every directional arrow uses the shared
  * .nav-arrow affordance, so all arrows slide in their pointing direction and
- * turn emerald on hover/focus, and arrow-bearing links never underline (cp339,
- * the homepage "Learn more" effect, applied site-wide for consistency).
+ * turn emerald on hover/focus, and arrow-bearing links never underline
+ * (the homepage "Learn more" effect, applied site-wide for consistency).
  *
  * WHY: arrows were scattered — tiny "→ / ←", bespoke inline SVGs, and one-off
  * Tailwind `rtl:-scale-x-100` + `group-hover:translate-x-1` classes. They must
@@ -71,7 +71,7 @@ check(
 	!priorities.includes('priorities-card-cta-arrow')
 );
 
-// cp411 — no link/button uses a BARE → (U+2192) as its affordance. Such an
+// no link/button uses a BARE → (U+2192) as its affordance. Such an
 // arrow neither slides nor greens and is the smaller, inconsistent glyph. The
 // affordance idioms: a translated label `{$_(…)}` immediately followed by a
 // trailing →, a label `{…}` ending a line with a bare →, or a → right before a

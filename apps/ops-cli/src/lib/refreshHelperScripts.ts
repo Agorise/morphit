@@ -1,6 +1,6 @@
 /**
  * Refresh the helper scripts Ansible copied ONCE into /usr/local/lib/morphit/
- * during `morphit-ops upgrade` (v1.20.0 fix wave, C3 / C17).
+ * during `morphit-ops upgrade`.
  *
  * WHY. The morphit + ipfs roles copy these scripts at install time and nothing
  * ever refreshed them: `upgrade` extracts a new tree but the timers/units keep
@@ -53,7 +53,16 @@ export const HELPER_SCRIPTS: ReadonlyArray<{ readonly release: string; readonly 
 	{ release: 'ops/ipfs/morphit-ipfs-gc.sh', name: 'morphit-ipfs-gc.sh' },
 	// v1.20.0 (C13): tor-only nodes only (tor role + lib/torOnlyOsHeal.ts).
 	{ release: 'ops/tor-only/morphit-tor-only-os.sh', name: 'morphit-tor-only-os.sh' },
-	{ release: 'ops/tor-only/morphit-tor-timesync.sh', name: 'morphit-tor-timesync.sh' }
+	{ release: 'ops/tor-only/morphit-tor-timesync.sh', name: 'morphit-tor-timesync.sh' },
+	// the pre-start helper the indexer and relay units run as root
+	// (installed by lib/unitPrivilegeHeal.ts and the morphit role).
+	{ release: 'ops/scripts/morphit-service-perms.sh', name: 'morphit-service-perms.sh' },
+	// the DDNS updater reads ddns.env as data (it used to source it, and
+	// the `&` in provider URLs cut the value); refreshing the installed copy is
+	// the heal.
+	{ release: 'ops/ddns/morphit-ddns-update.sh', name: 'morphit-ddns-update.sh' },
+	// tor-only nodes only (tor role + lib/torOnlyEgressHeal.ts).
+	{ release: 'ops/tor-only/morphit-tor-egress.sh', name: 'morphit-tor-egress.sh' }
 ];
 
 export const DEFAULT_HELPER_DIR = '/usr/local/lib/morphit';

@@ -1,5 +1,5 @@
 /**
- * instances-current-by-origin-smoke — v1.4.9 (t.txt #1)
+ * instances-current-by-origin-smoke — v1.4.9
  *
  * The instances directory highlights "the instance you are on" (card ring +
  * badge + sort-to-top + the footer Contact-link flash). It MUST identify the

@@ -113,9 +113,9 @@ on `load`.
 
 Do **not** manually register a different SW URL in `app.html`: it would
 race with SvelteKit's and silently replace it (same scope `/`, last
-register wins). That was the Part 122 / cp81 bug — a separate `/sw.js`
+register wins). That was the bug — a separate `/sw.js`
 was registered manually and superseded the SvelteKit SW, breaking push
-notifications (fixed in cp81-D22). `UpdateBanner.svelte` picks up the
+notifications (fixed). `UpdateBanner.svelte` picks up the
 registration via `navigator.serviceWorker.getRegistration()`
 asynchronously and watches for `updatefound`. See
 [`SERVICE-WORKER-CACHING-DESIGN.md`](./SERVICE-WORKER-CACHING-DESIGN.md)

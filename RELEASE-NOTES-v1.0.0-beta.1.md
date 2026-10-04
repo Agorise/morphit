@@ -52,7 +52,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
     TRC-20, Solana / SPL, and BNB Smart Chain / BEP-20.  USDC covers
     Ethereum / ERC-20, Solana / SPL, Base, and Polygon.  DAI covers
     Ethereum / ERC-20, Polygon, Base, and Arbitrum.  Amount-jitter
-    at 6-decimal precision applies (cp30 reversal of the earlier
+    at 6-decimal precision applies (a reversal of the earlier
     USDT pass-through decision — Circle/Tether/MakerDAO governance
     powers are documented per-asset as separate, independently-real
     threats).
@@ -83,8 +83,8 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   first order without holding any BLURT.
 - **Featured-slot auction** with a minimum-hours floor (prevents
   micro-bid sniping), per-bidder bid history, **outbid push
-  notifications** (cp17), and **anti-snipe soft-close**
-  (cp18 — expiring top-5 bids extend by 5 minutes when a new
+  notifications**, and **anti-snipe soft-close**
+  (expiring top-5 bids extend by 5 minutes when a new
   bid arrives within the snipe window, capped at 6 extensions /
   30 minutes total).
 
@@ -111,7 +111,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
 
 ### Notifications
 
-- **Web Push subscriptions** (cp13–cp16, hardened cp131) for
+- **Web Push subscriptions** (hardened) for
   chat / feedback / outbid events.  VAPID-protected; subscribe
   AND unsubscribe both require a valid posting-key signature
   over a canonical message binding account-name + endpoint +
@@ -141,7 +141,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   registered on-chain via `morphit_operator_register_v1`).
 - **Operator kill-switch** for compromise scenarios — relay-side
   flag disables signups and posts a banner pointing users at
-  other instances.  See `docs/BETA-INCIDENT-RUNBOOK.md`.
+  other instances.  See `docs/INCIDENT-RUNBOOK.md`.
 - **Reproducible builds** — every tarball is rebuildable
   byte-for-byte from its tagged commit; bundle hashes are
   broadcast on-chain via `morphit_release_v1`.
@@ -157,12 +157,12 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   strictly env-only on their box, never published on-chain, in
   APIs, in logs, or in release ops.  Per-payment proofs are
   user-supplied at trade time.
-- **Transparent-chain privacy framework (cp26 + cp30).**  Registry-driven
+- **Transparent-chain privacy framework.**  Registry-driven
   per-asset privacy practices surface in the address-share modal
   and at `/[lang]/privacy/{asset}`:
   - **Amount-jitter on every transparent asset** (BTC, BCH, LTC, DASH,
-    DOGE, ZEC transparent, DCR, BLURT — XMR has been jittered since cp3,
-    and stablecoins USDT/USDC/DAI jitter at 6-decimal precision per cp30):
+    DOGE, ZEC transparent, DCR, BLURT — XMR has been jittered from the start,
+    and stablecoins USDT/USDC/DAI jitter at 6-decimal precision):
     default ON; adds a small random extra (≤999 sat for UTXO chains, ≤99
     milliblurt for BLURT, scaled per-asset for the others) to defeat
     amount-correlation between the orderbook post and the on-chain
@@ -188,7 +188,7 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   - **No wallet recommendations.**  Even reputable wallets have
     been compromised — Morphit names protocol standards, not
     wallet software.
-- **DASH PrivateSend awareness (cp27).**  Dash's masternode-
+- **DASH PrivateSend awareness.**  Dash's masternode-
   coordinated CoinJoin variant is documented in the per-asset
   privacy guide at `/privacy/dash`.  Pre-mixing happens
   entirely wallet-side BEFORE the address is shared on Morphit
@@ -214,9 +214,11 @@ commit.  For the exhaustive claim-by-claim breakdown, read
   the source — the exact count grows release-over-release as
   defenses are added.  Run them yourself: `bash scripts/run-smokes.sh`.
   Triple-pulse them (three times back-to-back) to filter flakes.
-- **Audit log** in `docs/AUDIT-2026-05.md` (~25,400 lines), public
-  in the repo, with every finding, every fix, every accepted
-  risk documented.
+- **Audit log** (~25,400 lines) of the 2026-05 review campaign, with
+  every finding, every fix, every accepted risk documented. (It was
+  public in the repo at the time; the working audit records have since
+  moved out of the public tree, and the current threat model is in
+  `docs/audit/2026-10-*.md`.)
 - **42 architecture decision records** in `docs/adr/0001-…`
   through `0043-…` (the 0016 slot is reserved-but-unused; its
   planned work shipped as ADR-0022).

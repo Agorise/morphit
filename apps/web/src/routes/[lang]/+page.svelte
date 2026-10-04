@@ -5,7 +5,7 @@
 	import { _ } from 'svelte-i18n';
 	import MorphitLogoBling from '$components/MorphitLogoBling.svelte';
 	import Head from '$components/Head.svelte';
-	// cp169 byte-budget — everything below the fold is lazy-loaded.
+	// byte-budget — everything below the fold is lazy-loaded.
 	// On a 1024×768 desktop the hero block ends at ~760px (py-24 +
 	// 64px wordmark (MorphitLogoBling) + H1 + hero body +
 	// CTAs + py-24 bottom), placing the FeaturedOrders wrapper at
@@ -15,9 +15,9 @@
 	// further below.  All three lazy-load at the route level so the
 	// initial bundle for first-paint is hero-only.
 	//
-	// cp168 had eager-loaded PrioritiesSection on the theory that it
+	// A later change had eager-loaded PrioritiesSection on the theory that it
 	// might sit above the fold post-Reachable-via-removal — but
-	// measurement showed it doesn't, so cp169 reverts to lazy.
+	// measurement showed it doesn't, so a later change reverts to lazy.
 	// AltNetworkIcon import remains removed (Reachable-via panel is
 	// gone; the footer renders its own chips).
 	import { organizationSchema, websiteSchema, softwareApplicationSchema } from '$seo/jsonld';
@@ -26,12 +26,12 @@
 	import { hasAnySession } from '$stores/identity';
 	import { hasPersistedKeystore } from '$crypto/persistentKeystore';
 
-	// cp115-cp6: the old 4-card `points` grid (non_custodial / no_kyc /
+	// the old 4-card `points` grid (non_custodial / no_kyc /
 	// uncensorable / grandma) was deleted — replaced by the 7-card
 	// PrioritiesSection which covers the same user-facing properties +
 	// 3 more, with FAQ deep-links and hover/click affordances.
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -48,7 +48,7 @@
 	// localStorage). $hasAnySession is *also* false for a LOCKED session,
 	// so a pure `$hasAnySession || hasPersistedKeystore()` derived can keep
 	// the SSR "false" and never re-read on the client — leaving the CTA
-	// visible for a locked returning user (the REVISIT-LIST deferred
+	// visible for a locked returning user (the backlog deferred
 	// hardening). So mirror the keystore flag into reactive $state via an
 	// $effect that re-reads on mount AND whenever the session state flips:
 	// mount catches the locked-on-load case; the $hasAnySession dependency
@@ -61,7 +61,7 @@
 	});
 	const hideStartTradingCta = $derived($hasAnySession || keystorePersisted);
 
-	// cp169 lazy-loaders for every below-the-fold component on the
+	// lazy-loaders for every below-the-fold component on the
 	// landing page.  All three sit below the fold on the typical
 	// 1024×768 desktop viewport and on every mobile viewport.
 	const loadFeaturedOrders = () =>
@@ -73,17 +73,16 @@
 
 	// Home page gets the richest JSON-LD: Organization + WebSite (with
 	// SearchAction unlocking the SERP sitelinks search box).
-	// cp119-A5: pass currentLang so each schema emits `inLanguage` —
+	// pass currentLang so each schema emits `inLanguage` —
 	// helps Google disambiguate translated copies of the same @id node.
 	// The Organization / WebSite / SoftwareApplication nodes are anchored to
-	// the CANONICAL origin (@id https://morphit.io/#…): they describe the
-	// Morphit project and software, so they always say "Morphit" — an
-	// instance's own brand (docs/BRANDING.md) must not be written into
-	// structured data that claims to be morphit.io (v1.19.0 deep-deep).
+	// this instance's own origin (@id <origin>/#…, src/lib/seo/urls.ts) and
+	// describe the Morphit software, so their name is always "Morphit", not
+	// the instance's own brand (docs/BRANDING.md).
 	const jsonLd = $derived([
 		organizationSchema(DEFAULT_BRAND_NAME, $_('app.tagline'), currentLang),
 		websiteSchema(DEFAULT_BRAND_NAME, currentLang),
-		// cp112: SoftwareApplication schema makes the homepage eligible
+		// SoftwareApplication schema makes the homepage eligible
 		// for Google's installation-rich-result UI (price/category/OS).
 		// Per-instance SEO description override is respected here so
 		// community operators with custom branding get the right copy.
@@ -148,7 +147,7 @@
 					<a href={lp('/onboarding')} class="btn-secondary">{$_('home.cta_start')}</a>
 				{/if}
 			</div>
-			<!-- cp168 removed the returning-user "Already have a Blurt
+			<!-- A later change removed the returning-user "Already have a Blurt
 			     account…" tertiary CTA.  Reason: it mentioned the chain
 			     by name above the fold, which we're trying to lessen.
 			     Returning users find Sign in via the header AvatarMenu
@@ -159,9 +158,9 @@
 		<!-- Phase 5 item 5: featured slots showcase — the orders users have
 		     paid to promote (up to max_slots, currently 3), each rendered with
 		     the shared OrderCard in its featured frame. Self-hides when empty so
-		     a fresh-install site doesn't show an awkward empty panel. cp169
+		     a fresh-install site doesn't show an awkward empty panel.
 		     lazy-loaded — see rationale on the loadFeaturedOrders import.
-		     cp431 — `stack` (full-width horizontal cards), identical to the
+		     `stack` (full-width horizontal cards), identical to the
 		     orderbook's featured list, on desktop AND mobile.  The old `grid`
 		     variant squished a lone order into a fraction-width portrait cell. -->
 		<div class="mt-16">
@@ -170,7 +169,7 @@
 			{/await}
 		</div>
 
-		<!-- cp168 removed the "Reachable via" four-network card panel
+		<!-- A later change removed the "Reachable via" four-network card panel
 		     that used to sit here.  Reason: redundant with the footer
 		     which already chips Tor / Lokinet / I2P (.b32.i2p) / Nostr
 		     + No-JS + RSS.  Removing it shortens the path between the
@@ -179,8 +178,8 @@
 		<!-- Seven cards bragging about Morphit's design priorities,
 		     each hyperlinked to a cross-linked FAQ entry.  Replaces
 		     the old 4-card points grid as the canonical priorities
-		     surface on the home page.  cp169 lazy-loaded (reverted
-		     from cp168 eager — measurement showed it sits below the
+		     surface on the home page.  lazy-loaded (reverted
+		     from eager — measurement showed it sits below the
 		     fold on 1024×768 desktops). -->
 		{#await loadPrioritiesSection() then PrioritiesSection}
 			<PrioritiesSection />

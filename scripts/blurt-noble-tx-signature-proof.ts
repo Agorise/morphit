@@ -2,7 +2,7 @@
 /*
  * blurt-noble-tx-signature-proof — ADR-0046 cutover safety net.
  *
- * The cp173 recovery proof (scripts/blurt-noble-signer-recovery-proof.ts)
+ * The recovery proof (scripts/blurt-noble-signer-recovery-proof.ts)
  * signed ARBITRARY 32-byte digests.  This proof closes the remaining gap: it
  * exercises the FULL transaction path the wired noble signer uses — compute
  * the digest from a real Blurt Transaction via dblurt's own
@@ -17,7 +17,7 @@
  *      both backends derive the same transactionDigest), so the only thing
  *      that differs between backends is the ECDSA, not what is signed.
  *
- * This is the in-sandbox half of the cutover gate.  It does NOT broadcast to
+ * This is the offline half of the cutover gate.  It does NOT broadcast to
  * the live chain (no chain access here); the final flip of SIGNER_BACKEND to
  * 'noble' still requires one real Blurt broadcast per op class.  See ADR-0046.
  *

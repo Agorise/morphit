@@ -9,7 +9,7 @@
  *
  *   1. PNG / SVG / build script / brag list all exist on disk.
  *   2. The PNG's SHA-256 fingerprint sidecar
- *      (`apps/web/static/morphit-comparison.png.fingerprint`) matches
+ *      (scripts/comparison-image/morphit-comparison.png.fingerprint) matches
  *      the SHA-256 of the current SVG content.  When the SVG changes
  *      without re-running build_comparison.py, the sidecar hash and
  *      the live SVG hash diverge → smoke fails with an actionable
@@ -18,12 +18,11 @@
  *      Why fingerprint instead of mtime: git checkout resets every
  *      file's mtime to the checkout instant in filesystem-walk
  *      order, so an mtime-based check is non-deterministic in CI
- *      even when the repo is byte-perfect.  (cp136 shipped with an
+ *      even when the repo is byte-perfect.  (a later change shipped with an
  *      mtime check that passed locally but failed CI — F-5.)
  *
- * Wordmark-preservation checks (introduced cp134 after the maintainer's hand-edited
- * Morphit wordmark replaced the plain "Morphit" text in the column
- * header):
+ * Wordmark-preservation checks (the hand-edited Morphit wordmark replaced
+ * the plain "Morphit" text in the column header):
  *
  *   5. The build script declares BOTH `WORDMARK_DEFS` and
  *      `WORDMARK_GROUP` Python constants.  If a future edit removes
@@ -67,7 +66,11 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 const PNG = join(REPO_ROOT, 'apps/web/static/morphit-comparison.png');
-const FINGERPRINT = join(REPO_ROOT, 'apps/web/static/morphit-comparison.png.fingerprint');
+// A build input, not a served file: it lives next to the generator
+// (scripts/comparison-image/). Everything under apps/web/static/ is copied into
+// the public web root, so a sidecar there would be served.
+const FINGERPRINT = join(REPO_ROOT, 'scripts/comparison-image/morphit-comparison.png.fingerprint');
+const SERVED_FINGERPRINT = join(REPO_ROOT, 'apps/web/static/morphit-comparison.png.fingerprint');
 const SVG = join(REPO_ROOT, 'scripts/comparison-image/comparison.svg');
 const SCRIPT = join(REPO_ROOT, 'scripts/comparison-image/build_comparison.py');
 const BRAG = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
@@ -111,10 +114,16 @@ if (!existsSync(BRAG)) {
 	pass(`MORPHIT-BRAG-LIST.md exists`);
 }
 
+if (existsSync(SERVED_FINGERPRINT)) {
+	fail(`the fingerprint sidecar is not in the public web root (found ${SERVED_FINGERPRINT})`);
+} else {
+	pass(`the fingerprint sidecar is not in the public web root`);
+}
+
 // Content fingerprint check (replaces three mtime-based checks).
 //
 // build_comparison.py writes a SHA-256 of the rendered SVG to
-// `apps/web/static/morphit-comparison.png.fingerprint` every time
+// its fingerprint sidecar (FINGERPRINT above) every time
 // it builds.  If the SVG on disk hashes to that same value, the PNG
 // was built from this exact SVG and is fresh.  If they diverge,
 // someone hand-edited the SVG (or the build script) without
@@ -143,7 +152,7 @@ if (existsSync(SVG) && existsSync(FINGERPRINT)) {
 } else if (existsSync(SVG) && !existsSync(FINGERPRINT)) {
 	fail(
 		`PNG fingerprint sidecar is missing`,
-		`Expected at apps/web/static/morphit-comparison.png.fingerprint. ` +
+		`Expected at ${FINGERPRINT}. ` +
 			`Re-run: python3 scripts/comparison-image/build_comparison.py and ` +
 			`commit the produced fingerprint file.`
 	);

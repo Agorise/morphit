@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/llms-full-freshness-smoke.ts
  *
- * Structural Defense — llms-full.txt freshness (cp229).
+ * Structural Defense — llms-full.txt freshness.
  *
  * `apps/web/static/llms-full.txt` is the single-file FAQ corpus that
  * AI retrieval tools ingest (llmstxt.org convention). It is a DERIVED
@@ -10,7 +10,7 @@
  * `apps/web/src/lib/i18n/locales/en.json` and emits it verbatim. The
  * web build regenerates it via the `build:llms-full` prebuild step.
  *
- * Why this smoke exists: in cp229 the committed corpus was found to
+ * Why this smoke exists: the committed corpus was found to
  * have drifted ~2 weeks (≈230 lines) from en.json — it still carried
  * the pre-PWA-migration app-store / F-Droid / APK / sideloading FAQ
  * entries (long since removed in the codebase), was missing the
@@ -18,12 +18,12 @@
  * single "RSS 2.0 feed" from before the 3-format (xml/atom/json)
  * rework. Nobody re-ran the generator after editing the FAQ, and no
  * guard caught it — so the AI-crawler corpus served stale answers
- * (the exact failure cp213's accuracy audit was meant to prevent).
+ * (the exact failure the accuracy audit was meant to prevent).
  *
  * The media-kit zip already has a freshness guard for the same class
  * of bug (source edited, derived artifact not regenerated, stale bytes
  * ship). This is a sibling guard. (og-image.png used to have one too,
- * but as of cp567 the PNG is hand-authored, not derived, so it needs
+ * but the PNG is hand-authored, not derived, so it needs
  * no source-drift guard.)
  *
  * Robust to git checkout: it does NOT use mtime. It re-derives the

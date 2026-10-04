@@ -3,10 +3,10 @@
  * scripts/sidecar-envelope-error-path-smoke.ts
  *
  * Structural Defense #34 — sidecar envelope error-path verifier
- * (cp83-O30 candidate, shipped cp84).
+ * (candidate, shipped).
  *
  * Complements Defense #33 (sidecar-shell-quoting static smoke)
- * by approaching the cp83-D23a bug class from a different angle:
+ * by approaching the bug class from a different angle:
  * actually RUN each sidecar with a mocked external tool that
  * returns a multi-token error, then verify every emitted line
  * parses as valid JSON.
@@ -24,7 +24,7 @@
  * companion: each fixture installs a working-binary mock that
  * exits non-zero with whitespace-laden multi-token error output,
  * forcing the sidecar down its error-handling branch.  That's
- * where cp83-D23a lived.
+ * where lived.
  *
  * Scope: one fixture per high-leverage sidecar — every sidecar
  * whose error path captures external-command output into an

@@ -4,7 +4,8 @@
  *
  * Covers every branch of comparePin (no_pin, match,
  * same_ref_different_pub, older_ref, newer_ref) plus the
- * read/write/clear API and the validation guards.
+ * read/write/clear API and the validation guards. A newer ref with a
+ * CHANGED key is never pinned silently (pubPinKeyChange.test.ts).
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,6 +20,7 @@ import {
 	resolveChatPubFromIndexer,
 	PUB_PIN_ERROR,
 	PubPinError,
+	pendingKeyChange,
 	type ChatPubPin,
 	type ChainPubResult
 } from './pubPin';
@@ -330,7 +332,7 @@ describe('pubPin — resolveChatPubFromIndexer state machine', () => {
 		});
 	});
 
-	it('newer_ref + chain confirms with same pub: pin updates to chain', async () => {
+	it('newer_ref + chain confirms a CHANGED key: held as pending, pin unchanged until the user accepts', async () => {
 		setPin('alice', makePin({ blockNum: 1000, trxId: VALID_TRX, pubB64: VALID_PUB_A }));
 		const indexer = makePin({
 			blockNum: 2000,
@@ -342,11 +344,12 @@ describe('pubPin — resolveChatPubFromIndexer state machine', () => {
 			trxId: OTHER_TRX,
 			chatPubB64: VALID_PUB_B
 		});
-		const pubB64 = await resolveChatPubFromIndexer('alice', indexer, chain.fn);
-		expect(pubB64).toBe(VALID_PUB_B);
+		await expect(resolveChatPubFromIndexer('alice', indexer, chain.fn)).rejects.toMatchObject({
+			code: PUB_PIN_ERROR.key_changed
+		});
 		expect(chain.calls).toBe(1);
-		expect(getPin('alice')?.blockNum).toBe(2000);
-		expect(getPin('alice')?.pubB64).toBe(VALID_PUB_B);
+		expect(getPin('alice')?.pubB64).toBe(VALID_PUB_A);
+		expect(pendingKeyChange('alice')).toMatchObject({ blockNum: 2000, pubB64: VALID_PUB_B });
 	});
 
 	it('newer_ref + chain DISAGREES with indexer: chain wins (active-MITM defense)', async () => {
@@ -365,9 +368,12 @@ describe('pubPin — resolveChatPubFromIndexer state machine', () => {
 			trxId: OTHER_TRX,
 			chatPubB64: PUB_C // different from indexer
 		});
-		const pubB64 = await resolveChatPubFromIndexer('alice', indexer, chain.fn);
-		expect(pubB64).toBe(PUB_C);
-		expect(getPin('alice')?.pubB64).toBe(PUB_C);
+		await expect(resolveChatPubFromIndexer('alice', indexer, chain.fn)).rejects.toMatchObject({
+			code: PUB_PIN_ERROR.key_changed
+		});
+		// The pending candidate is the chain's view, never the indexer's.
+		expect(pendingKeyChange('alice')?.pubB64).toBe(PUB_C);
+		expect(getPin('alice')?.pubB64).toBe(VALID_PUB_A);
 	});
 
 	it('newer_ref + chain returns null: throws chain_reports_none, pin preserved', async () => {

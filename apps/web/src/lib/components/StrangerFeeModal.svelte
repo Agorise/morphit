@@ -53,7 +53,7 @@
 
 	let { live, peer, onPaid, onCancel }: Props = $props();
 
-	/** v1.8.15 (t.txt #3) — does this session already hold an Active key?
+	/** v1.8.15 — does this session already hold an Active key?
 	 *  A 'morphit-seed' or 'posting-active' session does; a POSTING-ONLY login
 	 *  does not, and for it the Morphit-password path below is a dead end (there
 	 *  is no active-key envelope to unlock). Mirrors PayBlurtModal exactly: when
@@ -78,7 +78,7 @@
 	 *  /v1/listing-fee when the operator has the price feed
 	 *  enabled.  Null = no fiat echo shown.
 	 *
-	 *  cp128: previously `usdPerBlurt`; renamed because the operator
+	 *  previously `usdPerBlurt`; renamed because the operator
 	 *  can configure the denomination to EUR / XDR / XAU / etc. */
 	let fiatPerBlurt: number | null = $state(null);
 	let denominationFiat: string = $state('USD');
@@ -117,8 +117,8 @@
 			// enabled the price feed.  Doesn't block the modal
 			// becoming usable.
 			//
-			// cp128: reads renamed fields `blurt_price_fiat` and
-			// `denomination_fiat`; pre-cp128 was `blurt_price_usd`.
+			// reads renamed fields `blurt_price_fiat` and
+			// `denomination_fiat`; older was `blurt_price_usd`.
 			void (async () => {
 				const lf = await fetchListingFee(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 				if (lf.kind === 'ok' && typeof lf.quote.blurt_price_fiat === 'number') {
@@ -220,7 +220,7 @@
 		passwordInput = ''; // belt-and-suspenders: also cleared if signing never ran
 	}
 
-	// v1.8.15 (t.txt #3) — POSTING-ONLY path. UnlockActiveKeyModal has already
+	// v1.8.15 — POSTING-ONLY path. UnlockActiveKeyModal has already
 	// verified the pasted Active-key WIF against this account's on-chain
 	// authorities and hands us the raw scalar. We sign the stranger-fee tx with
 	// it DIRECTLY (no envelope to unlock) and wipe it the moment signing is done
@@ -425,7 +425,7 @@
 					</button>
 				</div>
 			{:else}
-				<!-- v1.8.15 (t.txt #3) — POSTING-ONLY. No active-key envelope to
+				<!-- v1.8.15 — POSTING-ONLY. No active-key envelope to
 				     unlock, so instead of a password field that cannot work we
 				     render the SAME unlock modal the "Pay now" flow uses: the user
 				     pastes their Active key (WIF) here, plus their Morphit password

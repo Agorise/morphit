@@ -1,6 +1,6 @@
 /**
  * Morphit smoke — the relay sees the REAL client, on every shipped proxy path.
- * (v1.18.0 deep-deep, H1)
+ *
  *
  * The relay keys every per-IP signup defense (hourly/daily limits, spacing,
  * invite binding, the ALTCHA trigger) on the address its proxy forwards. Three
@@ -13,10 +13,10 @@
  *   - BunkerWeb (the public edge) ran USE_REAL_IP=yes with
  *     REAL_IP_FROM=0.0.0.0/0, believing that header from the whole internet.
  *
- * Part 1 (always): reads the shipped configs and evaluates, for each way a
+ * (always): reads the shipped configs and evaluates, for each way a
  * request can arrive, which header value the relay is handed — including the
  * frontend's geo/map switch, evaluated the way nginx does (longest prefix).
- * Part 2 (when an nginx binary is available — $MORPHIT_SMOKE_NGINX or `nginx`
+ * (when an nginx binary is available — $MORPHIT_SMOKE_NGINX or `nginx`
  * on PATH): RUNS the shipped /relay/ blocks in a real nginx in front of a tiny
  * upstream that calls the relay's real clientIp(), and checks the answer.
  *
@@ -80,7 +80,7 @@ function headers(body: string): Map<string, string> {
 /** Variables a visitor controls outright. */
 const CLIENT_CONTROLLED = new Set(['$proxy_add_x_forwarded_for', '$http_x_forwarded_for']);
 
-// ─── Part 1: the shipped configs ────────────────────────────────────────────
+// ─── the shipped configs ────────────────────────────────────────────
 console.log('\n── relay client IP: shipped proxy configs ───────────\n');
 
 {
@@ -260,7 +260,7 @@ for (const f of [
 	);
 }
 
-// ─── Part 2: the shipped /relay/ blocks in a real nginx ─────────────────────
+// ─── the shipped /relay/ blocks in a real nginx ─────────────────────
 function findNginx(): string | null {
 	const fromEnv = process.env.MORPHIT_SMOKE_NGINX;
 	const candidates = [fromEnv, 'nginx', '/usr/sbin/nginx'].filter((x): x is string => !!x);

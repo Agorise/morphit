@@ -1,16 +1,16 @@
 <!--
-	Morphit — tamper-alert banner (Batch J).
+	Morphit — tamper-alert banner.
 
-	CRITICAL surface: the running bundle's bytes don't match the
-	chain-signed manifest, OR the trust-anchor pubkey on chain
-	doesn't match our pin.
+	CRITICAL surface: files this site served don't match the
+	chain-signed manifest, OR the newest release op on chain (named
+	alike by two RPC operators' nodes) is signed by a key other than our pin.
 
-	Either condition means the user CANNOT trust what's running.
 	Possibilities:
-	  • A CDN or hosting provider serving a tampered build.
-	  • DNS hijack / mirror substitution.
-	  • Trust anchor rotated upstream and our pin is stale (legit
-	    if @morphit voluntarily rotated; SUSPICIOUS otherwise).
+	  • A server or proxy serving changed files (accident, break-in,
+	    or the operator on purpose — the check cannot stop a hostile
+	    operator, who serves the check too).
+	  • @morphit rotated its key and our pin is stale, or the
+	    @morphit account was taken over.
 
 	Tone: red, urgent, NOT dismissible.  We deliberately do NOT
 	auto-reload, do NOT auto-fix.  The user needs to know
@@ -19,7 +19,7 @@
 	Recommended user actions surfaced:
 	  • Sign out before doing anything else (don't authorize ops
 	    on a possibly-tampered page).
-	  • Compare the running bundle's signed source on GitHub.
+	  • Compare with the published source.
 	  • Try a known-good Morphit instance.
 
 	The banner is NOT shown when:
@@ -38,7 +38,9 @@
 	    'invalid_payload'.
 -->
 <script lang="ts">
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
+	import { localePath } from '$i18n/path';
+	import { matchSupported } from '$i18n/locales';
 	import { release, assetCheck, staleBuild } from '$stores/release';
 	import { swUpdatePending, tamperGraceElapsed } from '$lib/updates/tamperBannerGate';
 
@@ -67,7 +69,7 @@
 	// the announced one. staleBuild requires a valid chain-signed newer release,
 	// so an attacker can't fabricate it to hide a tampered same-version bundle.
 	//
-	// cp514 (t.txt A) — ALSO suppress while a service-worker update is pending
+	// ALSO suppress while a service-worker update is pending
 	// (a new build is landing → the "Load it now" snackbar owns that window) and
 	// for a short grace window after boot (the async update poll / reg.update()
 	// can resolve just after the byte check, so the banner would otherwise flash
@@ -76,15 +78,14 @@
 	// is gated — pubkey/invalid-payload are on-chain-signature alarms, unrelated
 	// to a frontend byte swap, and are never suppressed.
 	const assetTamper = $derived(
-		tamperedPaths.length > 0 &&
-			$staleBuild !== true &&
-			!$swUpdatePending &&
-			$tamperGraceElapsed
+		tamperedPaths.length > 0 && $staleBuild !== true && !$swUpdatePending && $tamperGraceElapsed
 	);
 
 	const show = $derived(showPubkeyMismatch || showInvalidPayload || assetTamper);
 
 	let expanded = $state(false);
+
+	const lang = $derived(matchSupported($locale ?? '') ?? undefined);
 </script>
 
 {#if show}
@@ -137,8 +138,19 @@
 				</summary>
 				<ul class="mt-2 list-disc pl-6 text-sm">
 					<li>{$_('release.tamper_alert.action_sign_out')}</li>
-					<li>{$_('release.tamper_alert.action_compare_source')}</li>
-					<li>{$_('release.tamper_alert.action_try_other_instance')}</li>
+					<li>
+						<a
+							href="https://git.agorise.net/agorise/morphit/releases"
+							target="_blank"
+							rel="noopener noreferrer external"
+							class="underline">{$_('release.tamper_alert.action_compare_source')}</a
+						>
+					</li>
+					<li>
+						<a href={localePath('/instances', lang)} class="underline"
+							>{$_('release.tamper_alert.action_try_other_instance')}</a
+						>
+					</li>
 				</ul>
 			</details>
 		</div>

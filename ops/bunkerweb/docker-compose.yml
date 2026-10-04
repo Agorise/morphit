@@ -103,6 +103,28 @@ services:
       - ./bunkerweb.env
     volumes:
       - bw-data:/data
+      # The scheduler (not just the instance) reads CUSTOM_SSL_CERT to
+      # validate and ship the cert; without this mount it logs "not a valid
+      # file" and the instance falls back to a self-signed cert.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # BunkerWeb 1.5's scheduler finds the instance through the Docker API
+      # (the image's bunkerweb.INSTANCE label); without the socket it never
+      # finds one and never pushes a config.  Read-only bind, as in the
+      # Ansible template.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Nothing from the internet: BunkerWeb's own GeoIP (db-ip.com), release
+      # check (api.github.com) and Pro-plugin (assets.bunkerity.com) jobs run
+      # whatever the settings, so the scheduler gets Morphit's job lists
+      # instead. The GeoIP files come from the image (mmdb-local.py).  Adjust
+      # the path if you cloned morphit somewhere other than /opt/morphit.
+      - /opt/morphit/ops/bunkerweb/scheduler/jobs-plugin.json:/usr/share/bunkerweb/core/jobs/plugin.json:ro
+      - /opt/morphit/ops/bunkerweb/scheduler/mmdb-local.py:/usr/share/bunkerweb/core/jobs/jobs/mmdb-local.py:ro
+      - /opt/morphit/ops/bunkerweb/scheduler/pro-plugin.json:/usr/share/bunkerweb/core/pro/plugin.json:ro
+    # The socket is root:docker mode 660 and the scheduler runs as UID 101, so
+    # it needs the host's docker group.  Put the GID in /etc/bunkerweb/.env
+    # (Compose reads that file):  echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee /etc/bunkerweb/.env
+    group_add:
+      - "${DOCKER_GID:?set DOCKER_GID in /etc/bunkerweb/.env (getent group docker | cut -d: -f3)}"
     networks:
       - bunkerweb_net
     depends_on:
@@ -129,6 +151,11 @@ services:
         max-size: "1m"
         max-file: "2"
     restart: unless-stopped
+    # Published on a HOST LOOPBACK port so the Tor and I2P hidden services
+    # reach the frontend directly (they cannot go through BunkerWeb, which
+    # redirects http to https).  Loopback only: never reachable from outside.
+    ports:
+      - "127.0.0.1:8090:80"
     volumes:
       # The SvelteKit production build from the host, read-only.  Ship
       # new frontend bytes by rebuilding the web app (`npm run build`

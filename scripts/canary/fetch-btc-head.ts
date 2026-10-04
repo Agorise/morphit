@@ -4,8 +4,8 @@
  * CLI used by generate.sh to fetch the Bitcoin chain head for the warrant
  * canary, hopping across the canonical DEFAULT_CANARY_BTC_SOURCES list (five
  * independent providers, each with its own HTTP shape) until one answers.
- * Before cp613 the canary hit blockstream.info alone and a single timeout
- * there stalled the whole refresh; cp614 widened it to five providers so a
+ * Previously the canary hit blockstream.info alone and a single timeout
+ * there stalled the whole refresh; a later change widened it to five providers so a
  * provider outage / region block / Cloudflare 403 no longer stalls it.
  *
  * The source list + shapes are imported from @morphit/operator-config (one
@@ -71,7 +71,7 @@ async function fetchOneLive(source: CanaryBtcSource): Promise<BtcHead | null> {
 }
 
 async function main(): Promise<void> {
-	// cp761 — route the BTC explorer fetch over Tor SOCKS on a tor-only node
+	// route the BTC explorer fetch over Tor SOCKS on a tor-only node
 	// (no-op on clearnet). The BTC head is a SECONDARY proof: if Tor is down the
 	// fetch fails and the caller degrades it to "unavailable" — it never falls
 	// back to a direct clearnet connection.

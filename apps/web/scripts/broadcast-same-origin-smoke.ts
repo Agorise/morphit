@@ -1,21 +1,21 @@
 /**
  * broadcast-same-origin-smoke — every chain WRITE goes through the operator's
- * own indexer (same-origin), not a direct browser→third-party-RPC call. cp344.
+ * own indexer (same-origin), not a direct browser→third-party-RPC call..
  *
  * WHY: broadcasting straight to a public RPC node from the browser leaked the
  * user's IP + their exact action to operators Morphit doesn't control (the
- * WRITE twin of the cp298 read leak) and broke whenever a node changed its
+ * WRITE twin of the read leak) and broke whenever a node changed its
  * CORS header / went down. The fix routes the broadcast AND the ref-block read
  * that precedes it through the indexer (POST /v1/broadcast, GET
- * /v1/chain/properties). cp344 shipped this WITH a direct-RPC fallback;
- * cp410 REMOVED that fallback entirely — the browser must never contact a Blurt
+ * /v1/chain/properties). A later change shipped this WITH a direct-RPC fallback;
+ * REMOVED that fallback entirely — the browser must never contact a Blurt
  * node directly, so an unreachable proxy now throws BroadcastUnavailableError
  * rather than leaking the write to a third-party node. This smoke pins that
  * wiring so it can't silently revert to direct RPC (which would quietly
  * re-open the privacy hole + the fragility).
  *
- * Static analysis only — the sandbox has no Blurt RPC, so the live broadcast
- * itself is a post-deploy real-browser check, not something this can run.
+ * Static analysis only — the live broadcast itself is a post-deploy
+ * real-browser check, not something this can run.
  *
  * Usage (from apps/web): tsx scripts/broadcast-same-origin-smoke.ts
  */
@@ -58,7 +58,7 @@ check(
 	'getRefBlockInfo reads head via fetchDynamicGlobalProperties (not direct RPC)',
 	/fetchDynamicGlobalProperties\(\)/.test(sign)
 );
-// cp410 — there is NO condenser broadcast call left anywhere in the web client
+// there is NO condenser broadcast call left anywhere in the web client
 // (the last one, broadcastTransport's fallback, was removed). sign.ts in
 // particular must not broadcast directly.
 check(
@@ -81,11 +81,11 @@ check(
 		!/getBlurtClient\(\)\.getDynamicGlobalProperties/.test(comment)
 );
 
-// ── Transport: same-origin ONLY (cp410 removed the direct-RPC fallback) ──────
+// ── Transport: same-origin ONLY (a later change removed the direct-RPC fallback) ──────
 check("transport POSTs to /v1/broadcast", /'\/v1\/broadcast'/.test(transport));
 check("transport reads /v1/chain/properties for the ref-block", /'\/v1\/chain\/properties'/.test(transport));
 check('transport exports ChainRejectedError', /export class ChainRejectedError/.test(transport));
-// cp410 — the browser must NEVER contact a Blurt RPC node directly, so the old
+// the browser must NEVER contact a Blurt RPC node directly, so the old
 // direct-RPC fallback (directRpcBroadcast) was REMOVED. This is the stronger
 // invariant: the transport has NO direct broadcast path at all, and when the
 // indexer proxy is unreachable it throws BroadcastUnavailableError (never

@@ -1,19 +1,19 @@
 /**
- * Source-marketing-prose smoke (cp152).
+ * Source-marketing-prose smoke.
  *
- * Catches the cp146 F-mcp-16 class of bug: marketing-grade prose
+ * Catches the class of bug: marketing-grade prose
  * embedded in `.ts` source files (the strings AI agents quote
  * verbatim to users) drifts from the project's #1 Privacy &
  * anonymity priority without any smoke noticing.
  *
- * The cp146 walkthrough surfaced the original instance: the
+ * The walkthrough surfaced the original instance: the
  * `describeMorphit` tool's summary said "no IP logging by design"
  * which AI agents repeated to users — but the literal truth is
  * "instances see the connecting IP at the HTTP layer; data model
  * retains no per-user IP log; Tor onions available for
- * unlinkability."  cp146 fixed the copy.  cp152 codifies it.
+ * unlinkability."  a later change fixed the copy.  A later change codifies it.
  *
- * The cp141 brag-list-claim-parity-smoke walks MARKETING_DOCS
+ * The brag-list-claim-parity-smoke walks MARKETING_DOCS
  * (the brag list, READMEs, etc.).  It DOESN'T walk source files
  * because marketing prose isn't supposed to live in source.
  * But `apps/mcp-server/src/tools/describeMorphit.ts` and
@@ -35,7 +35,7 @@
  *            that taught us not to use the phrasing.
  *
  * Together: the marketing prose AI agents quote is locked at
- * the cp146 corrected state, with no upward freedom for either
+ * the corrected state, with no upward freedom for either
  * removing necessary nuance or reintroducing misleading
  * shorthand.
  */
@@ -73,7 +73,7 @@ interface PinnedPhrase {
 
 const PINNED: PinnedPhrase[] = [
 	// describeMorphit — the "what is Morphit" summary AI agents
-	// repeat to users when asked.  cp146 F-mcp-16 fixed the
+	// repeat to users when asked.  A later change fixed the
 	// dishonest "no IP logging by design" to the literal
 	// honest version below.  Each clause is pinned because
 	// removing it would weaken the user's mental model.

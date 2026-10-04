@@ -1,8 +1,8 @@
 /**
- * cp474 (t.txt #6) — the chat's crypto money-flow buttons must disappear once
+ * the chat's crypto money-flow buttons must disappear once
  * the order is finished.
  *
- * THE BUG THIS GUARDS AGAINST. the maintainer, on live morphit.io: a fulfilled BLURT trade
+ * THE BUG THIS GUARDS AGAINST. on live morphit.io: a fulfilled BLURT trade
  * where both parties already held a Payment Receipt was STILL showing the "Pay
  * now" / "Share crypto address" row across the bottom of the chatroom. That is
  * not just clutter — it invites a second payment on a closed trade.
@@ -11,8 +11,8 @@
  * only held for a chat with no order at all. But the chat resolves its order
  * via `getOrdersByAccount`, which returns the account's orders in ANY state —
  * that's how the RE: line can read "(Cancelled)". A completed order therefore
- * arrived as a perfectly good `{ side }` and lit the row. cp406's comment had
- * claimed these were hidden for a dead order since cp406; the code never did it.
+ * arrived as a perfectly good `{ side }` and lit the row. the comment had
+ * claimed these were hidden for a dead order since an earlier release; the code never did it.
  *
  * The gate is a denylist, deliberately: `status` is OPTIONAL on OrderRecord, so
  * a federated peer on an older indexer omits it, and an `=== 'live'` allowlist
@@ -53,9 +53,9 @@ describe('chatMoneyFlow', () => {
 		expect(chatMoneyFlow(null, false)).toEqual({ payNow: false, shareAddress: false });
 	});
 
-	// ─── cp474 (t.txt #6) ─────────────────────────────────────────
+	// ─── ─────────────────────────────────────────
 	it('shows nothing for a COMPLETED order — the trade is paid and closed', () => {
-		// the maintainer's exact case: the fulfilled BLURT trade, both parties holding a
+		// The maintainer's exact case: the fulfilled BLURT trade, both parties holding a
 		// Payment Receipt, still offering "Pay now".
 		expect(chatMoneyFlow({ side: 'buy', status: 'completed' }, false)).toEqual({
 			payNow: false,

@@ -38,10 +38,21 @@
  *   - referenced_order_not_found
  *   - referenced_order_not_live
  *   - not_order_author (bidder must own the order)
+ *   - referenced_order_fee_not_verified
  *   - fee_missing
  *   - fee_underpaid
  *   - bid_increment_too_small (would displace a visible-slot
- *     bid by less than max(1 BLURT/hour, 5%))
+ *     bid by less than max(1 BLURT/hour, 5%)) — only before
+ *     CONSENSUS_V2_ACTIVATION_TIME. From that time on such a bid
+ *     is ACCEPTED AND QUEUED: it takes effect when the bid it would
+ *     have displaced expires, and runs its full hours from then.
+ *     The fee is paid on chain whatever the verdict, so refusing a
+ *     paid bid over the increment only burned the bidder's BLURT.
+ *   - duplicate_feature_bid (a second bid op in one transaction)
+ *
+ * A rejected bid's BLURT is NOT returned: the transfer is a chain op
+ * and stands whatever this handler decides. The client checks what it
+ * can (live, fee-verified order; the increment) before signing.
  *
  * Idempotency:
  *   trx_id UNIQUE constraint means a replay of the same op is a
@@ -58,6 +69,8 @@ import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/f
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
 import { logger } from '$log';
 import { localize, normalizeLocale } from '$indexer/pushLocalize';
+import { inSavepoint, isUniqueViolation } from '$indexer/savepoint';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 const log = logger('featureBid');
 
@@ -72,7 +85,7 @@ const log = logger('featureBid');
 // for their community can edit this constant in the source —
 // it's deliberately a code constant rather than env-tunable
 // because changing it changes auction dynamics for everyone in
-// the federation.  See REVISIT-LIST §G "Featured-slot auction
+// the federation.  See the backlog §G "Featured-slot auction
 // refinements" for the longer-term anti-sniping design discussion.
 const MIN_HOURS = 6;
 const MAX_HOURS = 168; // one week
@@ -82,21 +95,27 @@ const MAX_HOURS = 168; // one week
  *  lives here.  If you change one, change both. */
 const MAX_SLOTS_VISIBLE = 3;
 
+/** SQL: the bid `b`'s order can be shown at `atParam` — live, fee verified,
+ *  not expired. The featured strip ranks by the same rule (api). */
+function liveBidPredicate(atParam: string): string {
+	return `AND EXISTS (
+	   SELECT 1 FROM orders o
+	    WHERE o.account = b.bidder AND o.permlink = b.order_permlink
+	      AND o.status = 'live'
+	      AND o.fee_status IN ('verified', 'verified_by_attestation')
+	      AND (o.expires_at IS NULL OR o.expires_at > ${atParam}))`;
+}
+
+/** liveBidPredicate from CONSENSUS_V2_ACTIVATION_TIME, nothing before it. */
+function liveBidPredicateIf(blockTime: Date, atParam: string): string {
+	return consensusV2Active(blockTime) ? liveBidPredicate(atParam) : '';
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-/** Postgres SQLSTATE 23505 = unique_violation. */
-function isUniqueViolation(err: unknown): boolean {
-	return (
-		typeof err === 'object' &&
-		err !== null &&
-		'code' in err &&
-		(err as { code: unknown }).code === '23505'
-	);
-}
-
-/** cp408 — the feature-fee sibling transfer(s) are located + summed by the
+/** the feature-fee sibling transfer(s) are located + summed by the
  *  shared `sumFeeTransfers` in `$indexer/fee`, which honors the payment-time
  *  federation split (90% owner / 10% canonical, memo `morphit-feature:<permlink>`). */
 
@@ -132,9 +151,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// verified yet. The bid row would sit inert (the featured
 	// endpoint filters on fee_status IN ('verified',
 	// 'verified_by_attestation')), so the user spent BLURT for a
-	// slot that activates later than expected. Rejecting early
-	// lets the per-op savepoint roll the transfer back, so the
-	// user keeps their BLURT. Both 'verified' (native BLURT fee)
+	// slot that activates later than expected. Rejecting does NOT
+	// give the BLURT back — the transfer is a chain op — so the
+	// client must check this before signing; the rejection only
+	// keeps an inert bid out of the table. Both 'verified' (native BLURT fee)
 	// and 'verified_by_attestation' (community-attested external-
 	// chain fee, Finding I) count here — equally legitimate for
 	// the featured orderbook.
@@ -172,7 +192,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	// ─── Fee verification ─────────────────────────────────────────
-	// cp408 — the feature fee is paid as a payment-time split (90% to this
+	// the feature fee is paid as a payment-time split (90% to this
 	// instance's recipient + 10% to the canonical treasury, or a single 100%
 	// transfer when the recipient is canonical). Sum both legs, then confirm
 	// the canonical treasury received its cut.
@@ -204,7 +224,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	// ─── Min-bid increment (anti-pennywise displacement) ──────────
 	//
-	// REVISIT-LIST §G "Featured-slot auction refinements": prevent
+	// Backlog §G "Featured-slot auction refinements": prevent
 	// 0.01-BLURT-over displacement of an existing visible-slot
 	// bidder.  Without this, someone bids `currentTop + 0.01` and
 	// displaces the current top for a trivial premium — which
@@ -231,13 +251,20 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// update here too (handler-coverage smoke does NOT catch this
 	// drift; an integration test would).
 	const newBidBlurtPerHour = fee.totalBlurt / hours;
-	const visibleTop = await client.query<{ blurt_per_hour: string }>(
-		`SELECT blurt_per_hour::text AS blurt_per_hour
-		 FROM featured_slot_bids
-		 WHERE cancelled = FALSE
-		   AND effective_at <= $1
-		   AND expires_at > $1
-		 ORDER BY blurt_per_hour DESC, block_time_at ASC
+	// Set when the bid is queued behind the bid it would displace (below).
+	let queuedUntil: Date | null = null;
+	// From CONSENSUS_V2_ACTIVATION_TIME a bid holds a slot only while its
+	// order can be shown (live, fee verified, unexpired) — the rule the
+	// featured strip ranks by. A bid on a dead order used to keep "its"
+	// slot: it blanked a paid slot on the strip and still counted here.
+	const liveOnly = liveBidPredicateIf(ctx.blockTime, '$1');
+	const visibleTop = await client.query<{ blurt_per_hour: string; expires_at: Date }>(
+		`SELECT b.blurt_per_hour::text AS blurt_per_hour, b.expires_at
+		 FROM featured_slot_bids b
+		 WHERE b.cancelled = FALSE
+		   AND b.effective_at <= $1
+		   AND b.expires_at > $1 ${liveOnly}
+		 ORDER BY b.blurt_per_hour DESC, b.block_time_at ASC
 		 OFFSET $2 LIMIT 1`,
 		[ctx.blockTime, MAX_SLOTS_VISIBLE - 1]
 	);
@@ -250,7 +277,12 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			const requiredRelative = displacedRate * 1.05;
 			const requiredBeat = Math.max(requiredAbsolute, requiredRelative);
 			if (newBidBlurtPerHour < requiredBeat) {
-				return { ok: false, reason: 'bid_increment_too_small' };
+				if (!consensusV2Active(ctx.blockTime)) {
+					return { ok: false, reason: 'bid_increment_too_small' };
+				}
+				// Accept and queue: the paid bid waits for the slot instead
+				// of displacing its holder for a trivial premium.
+				queuedUntil = new Date(visibleTop.rows[0]!.expires_at);
 			}
 		}
 		// If newBidBlurtPerHour <= displacedRate the bid lands at
@@ -266,41 +298,53 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// ─── Insert bid row ───────────────────────────────────────────
 
 	const blurtPerHour = newBidBlurtPerHour;
-	const expiresAt = new Date(ctx.blockTime.getTime() + hours * 60 * 60 * 1000);
+	const effectiveAt =
+		queuedUntil !== null && queuedUntil.getTime() > ctx.blockTime.getTime()
+			? queuedUntil
+			: ctx.blockTime;
+	const expiresAt = new Date(effectiveAt.getTime() + hours * 60 * 60 * 1000);
 
+	// In its own savepoint: a unique violation must not abort the block
+	// transaction (see $indexer/savepoint).
 	try {
-		await client.query(
-			`INSERT INTO featured_slot_bids (
+		await inSavepoint(client, 'feature_bid_insert', () =>
+			client.query(
+				`INSERT INTO featured_slot_bids (
 				bidder, order_permlink, hours_requested,
 				blurt_paid, blurt_per_hour,
 				effective_at, expires_at,
 				trx_id, block_num, block_time_at
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			[
-				ctx.signer,
-				permlink,
-				hours,
-				fee.totalBlurt,
-				blurtPerHour,
-				ctx.blockTime,
-				expiresAt,
-				ctx.trxId,
-				ctx.blockNum,
-				ctx.blockTime
-			]
+				[
+					ctx.signer,
+					permlink,
+					hours,
+					fee.totalBlurt,
+					blurtPerHour,
+					effectiveAt,
+					expiresAt,
+					ctx.trxId,
+					ctx.blockNum,
+					ctx.blockTime
+				]
+			)
 		);
 	} catch (err) {
 		if (isUniqueViolation(err)) {
-			// Replay of the same op — the bid already exists.
-			// Return ok so the dispatcher doesn't log a duplicate
-			// "rejected" entry. The first application is the
-			// authoritative one.
-			return { ok: true };
+			// A bid with this trx id is already recorded: a second feature-bid
+			// op in the same transaction (one fee transfer cannot pay for two
+			// bids), or a re-applied block whose verdict the event log already
+			// holds. Nothing new is recorded.
+			return { ok: false, reason: 'duplicate_feature_bid' };
 		}
 		throw err;
 	}
 
-	// ─── Anti-snipe extension (Part 122 cp18) ───────────────────
+	// A queued bid displaces nobody now: no soft-close extension, no
+	// outbid notice. It takes its slot when the one it waits on expires.
+	if (queuedUntil !== null) return { ok: true };
+
+	// ─── Anti-snipe extension ───────────────────
 	// When a new bid arrives that would push someone out of the
 	// top-MAX_SLOTS, AND any current top-MAX_SLOTS bid expires
 	// within SNIPE_WINDOW_MINUTES, extend those expiring bids'
@@ -325,30 +369,31 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const SNIPE_EXTENSION_MINUTES = 5;
 	const MAX_EXTENSIONS = 6;
 	try {
-		// Update all top-MAX_SLOTS_FOR_NOTIFY bids whose
-		// expires_at is within the snipe window AND haven't
-		// hit MAX_EXTENSIONS yet.  Excludes the new bid we
-		// just inserted (its trx_id is ctx.trxId).
-		//
-		// The CTE picks the current top-MAX_SLOTS by the same
-		// rank predicate as featuredOrderbook.ts; UPDATE...FROM
-		// applies the extension to that subset.
-		//
-		// cp85-A1 — use ctx.blockTime, not NOW().  Same rationale
-		// as strangerFee.ts:148 — handler must be deterministic
-		// on indexer replay.  NOW() at replay time evaluates to
-		// the replay machine's wall-clock, so the set of "top
-		// visible bids" and "expiring within snipe window" would
-		// differ from the original real-time pass, producing
-		// different `extension_count` increments and divergent
-		// state between operators replaying chain history.
-		const extensionResult = await client.query<{ bid_id: string }>(
-			`WITH visible AS (
+		await inSavepoint(client, 'feature_bid_anti_snipe', async () => {
+			// Update all top-MAX_SLOTS_FOR_NOTIFY bids whose
+			// expires_at is within the snipe window AND haven't
+			// hit MAX_EXTENSIONS yet.  Excludes the new bid we
+			// just inserted (its trx_id is ctx.trxId).
+			//
+			// The CTE picks the current top-MAX_SLOTS by the same
+			// rank predicate as featuredOrderbook.ts; UPDATE...FROM
+			// applies the extension to that subset.
+			//
+			// use ctx.blockTime, not NOW().  Same rationale
+			// as strangerFee.ts:148 — handler must be deterministic
+			// on indexer replay.  NOW() at replay time evaluates to
+			// the replay machine's wall-clock, so the set of "top
+			// visible bids" and "expiring within snipe window" would
+			// differ from the original real-time pass, producing
+			// different `extension_count` increments and divergent
+			// state between operators replaying chain history.
+			const extensionResult = await client.query<{ bid_id: string }>(
+				`WITH visible AS (
 				SELECT b.bid_id
 				  FROM featured_slot_bids b
 				 WHERE b.cancelled = FALSE
 				   AND b.effective_at <= $6
-				   AND b.expires_at > $6
+				   AND b.expires_at > $6 ${liveBidPredicateIf(ctx.blockTime, '$6')}
 				 ORDER BY b.blurt_per_hour DESC, b.block_time_at ASC
 				 LIMIT $1
 			)
@@ -362,23 +407,24 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			   AND b.expires_at <= $6 + ($2 * INTERVAL '1 minute')
 			   AND b.extension_count < $4
 			RETURNING b.bid_id`,
-			[
-				MAX_SLOTS_FOR_NOTIFY,
-				SNIPE_WINDOW_MINUTES,
-				SNIPE_EXTENSION_MINUTES,
-				MAX_EXTENSIONS,
-				ctx.trxId,
-				ctx.blockTime
-			]
-		);
-		if (extensionResult.rows.length > 0) {
-			log.info('anti_snipe_extended', {
-				count: extensionResult.rows.length,
-				new_bidder: ctx.signer,
-				new_permlink: permlink,
-				extension_minutes: SNIPE_EXTENSION_MINUTES
-			});
-		}
+				[
+					MAX_SLOTS_FOR_NOTIFY,
+					SNIPE_WINDOW_MINUTES,
+					SNIPE_EXTENSION_MINUTES,
+					MAX_EXTENSIONS,
+					ctx.trxId,
+					ctx.blockTime
+				]
+			);
+			if (extensionResult.rows.length > 0) {
+				log.info('anti_snipe_extended', {
+					count: extensionResult.rows.length,
+					new_bidder: ctx.signer,
+					new_permlink: permlink,
+					extension_minutes: SNIPE_EXTENSION_MINUTES
+				});
+			}
+		});
 	} catch (err) {
 		log.warn('anti_snipe_extension_failed', {
 			bidder: ctx.signer,
@@ -387,7 +433,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		});
 	}
 
-	// ─── Outbid notification (Part 122 cp17) ────────────────────
+	// ─── Outbid notification ────────────────────
 	// If this new bid pushed someone out of the top-N visible
 	// set, enqueue a push_pending row for the displaced bidder.
 	// They paid for a slot and just lost visibility — they
@@ -411,12 +457,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// Non-fatal on enqueue failure — bid is recorded; missing a
 	// push is a UX regression, not a data-loss event.
 	try {
-		const rankResult = await client.query<{
-			bidder: string;
-			order_permlink: string;
-			rank: string;
-		}>(
-			`WITH ranked AS (
+		await inSavepoint(client, 'feature_bid_outbid_notify', async () => {
+			const rankResult = await client.query<{
+				bidder: string;
+				order_permlink: string;
+				rank: string;
+			}>(
+				`WITH ranked AS (
 				SELECT
 					b.bidder,
 					b.order_permlink,
@@ -426,75 +473,71 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				FROM featured_slot_bids b
 				WHERE b.cancelled = FALSE
 				  AND b.effective_at <= $3
-				  AND b.expires_at > $3
+				  AND b.expires_at > $3 ${liveBidPredicateIf(ctx.blockTime, '$3')}
 			)
 			SELECT bidder, order_permlink, rank::text AS rank
 			  FROM ranked
 			 WHERE rank IN ($1, $2)
 			 ORDER BY rank`,
-			[MAX_SLOTS_FOR_NOTIFY, MAX_SLOTS_FOR_NOTIFY + 1, ctx.blockTime]
-		);
+				[MAX_SLOTS_FOR_NOTIFY, MAX_SLOTS_FOR_NOTIFY + 1, ctx.blockTime]
+			);
 
-		// Did our new bid make the top-N?
-		const ourBidIsVisible = rankResult.rows.some(
-			(r) =>
-				r.bidder === ctx.signer &&
-				r.order_permlink === permlink &&
-				parseInt(r.rank, 10) <= MAX_SLOTS_FOR_NOTIFY
-		);
-		// Who's at rank MAX_SLOTS+1?
-		const displaced = rankResult.rows.find(
-			(r) => parseInt(r.rank, 10) === MAX_SLOTS_FOR_NOTIFY + 1
-		);
+			// Did our new bid make the top-N?
+			const ourBidIsVisible = rankResult.rows.some(
+				(r) =>
+					r.bidder === ctx.signer &&
+					r.order_permlink === permlink &&
+					parseInt(r.rank, 10) <= MAX_SLOTS_FOR_NOTIFY
+			);
+			// Who's at rank MAX_SLOTS+1?
+			const displaced = rankResult.rows.find(
+				(r) => parseInt(r.rank, 10) === MAX_SLOTS_FOR_NOTIFY + 1
+			);
 
-		if (ourBidIsVisible && displaced && displaced.bidder !== ctx.signer) {
-			// Read the displaced bidder's locale (cp14 pattern —
-			// same query shape as feedback.ts and chat.ts).
-			//
-			// DD-meta-cp1718-1: skip the INSERT entirely if the
-			// bidder has no push subscription on file.  The
-			// push-sender will gracefully drop a no-subs row,
-			// but enqueue-then-drop wastes work and pollutes the
-			// `push_sender_drops_no_subscriptions` counter that
-			// operators monitor.  When no subs exist, the locale
-			// query returns 0 rows; that's our signal.
-			const localeRow = await client.query<{ locale: string }>(
-				`SELECT locale FROM push_subscriptions
+			if (ourBidIsVisible && displaced && displaced.bidder !== ctx.signer) {
+				// Read the displaced bidder's locale (pattern —
+				// same query shape as feedback.ts and chat.ts).
+				//
+				// DD-meta-cp1718-1: skip the INSERT entirely if the
+				// bidder has no push subscription on file.  The
+				// push-sender will gracefully drop a no-subs row,
+				// but enqueue-then-drop wastes work and pollutes the
+				// `push_sender_drops_no_subscriptions` counter that
+				// operators monitor.  When no subs exist, the locale
+				// query returns 0 rows; that's our signal.
+				const localeRow = await client.query<{ locale: string }>(
+					`SELECT locale FROM push_subscriptions
 				  WHERE account = $1
 				  ORDER BY created_at DESC
 				  LIMIT 1`,
-				[displaced.bidder]
-			);
-			if (localeRow.rowCount === 0) {
-				// No subscriptions — skip the INSERT.  The user
-				// will still see their bid as "Outranked" in the
-				// FeaturedBidHistory next time they open
-				// /my/orders; push is best-effort.
-			} else {
-				const locale = normalizeLocale(localeRow.rows[0]?.locale);
-				const titleStr = localize(locale, 'outbid_title');
-				const bodyStr = localize(
-					locale,
-					'outbid_body',
-					ctx.signer,
-					displaced.order_permlink
+					[displaced.bidder]
 				);
-				await client.query(
-					`INSERT INTO push_pending
+				if (localeRow.rowCount === 0) {
+					// No subscriptions — skip the INSERT.  The user
+					// will still see their bid as "Outranked" in the
+					// FeaturedBidHistory next time they open
+					// /my/orders; push is best-effort.
+				} else {
+					const locale = normalizeLocale(localeRow.rows[0]?.locale);
+					const titleStr = localize(locale, 'outbid_title');
+					const bodyStr = localize(locale, 'outbid_body', ctx.signer, displaced.order_permlink);
+					await client.query(
+						`INSERT INTO push_pending
 					   (account, category, title, body, click_path, event_at)
 					 VALUES ($1, 'order', $2, $3, $4, $5)`,
-					[
-						displaced.bidder,
-						titleStr,
-						bodyStr,
-						// cp470 — the [lang] segment is required; a locale-less
-					// /my/orders 404s (no reroute hook).
-					`/${locale}/my/orders#order-${displaced.order_permlink}`,
-						ctx.blockTime
-					]
-				);
+						[
+							displaced.bidder,
+							titleStr,
+							bodyStr,
+							// the [lang] segment is required; a locale-less
+							// /my/orders 404s (no reroute hook).
+							`/${locale}/my/orders#order-${displaced.order_permlink}`,
+							ctx.blockTime
+						]
+					);
+				}
 			}
-		}
+		});
 	} catch (err) {
 		log.warn('outbid_notify_failed', {
 			bidder: ctx.signer,

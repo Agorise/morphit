@@ -14,17 +14,20 @@ branding, register, block, …); the database views (status, signups,
 drain-queue, abuse, failed-broadcasts, loyalty, attestations, flags) only
 read.
 
-Don't run `npx morphit-ops` outside the install folder: `npx` then looks the
-name up on the public npm registry, which is not where Morphit comes from.
+Never run it through `npx`: outside the install folder `npx` looks the name
+up on the public npm registry, which is not where Morphit comes from. Before
+the `morphit-ops` shortcut exists, run `sudo node apps/ops-cli/bin/morphit-ops.mjs <cmd>`
+from the install folder.
 
 ## First-time setup
 
 Use the guided install — `sudo bash morphit-setup.sh` in the extracted
 release, choose *Full guided install*
 ([`docs/RUN-A-MORPHIT-NODE.md`](../../docs/RUN-A-MORPHIT-NODE.md)). It runs
-the setup wizard (`init`) for you, writes `morphit.config.env`,
-`morphit.env` and the encrypted relay keystore (`apps/relay/keystore.json`,
-mode 0600), and installs everything else.
+the setup wizard for you, writes `morphit.config.env`, `morphit.env` and
+the encrypted relay keystore (`/etc/morphit/relay.keystore`; its
+passphrase sealed to the host as `/etc/morphit/relay_passphrase.cred`), and
+installs everything else.
 
 To check only whether this machine's hardware/OS meets the bar:
 

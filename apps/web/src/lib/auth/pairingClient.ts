@@ -185,11 +185,13 @@ const defaultVerifier: SignatureVerifier = async (account, canonicalBytes, signa
 
 		// Fetch the account's PUBLIC posting authority through the SAME-ORIGIN
 		// indexer instead of a direct RPC call (privacy #1: third-party RPC
-		// nodes never see the user's IP or which account is pairing). The keys
-		// are public and the signature recovery below stays client-side, so a
-		// malicious operator cannot forge a valid pairing by serving fake keys —
-		// the worst it could do is make a legitimate pairing fail, a denial it
-		// already has by virtue of serving the app itself.
+		// nodes never see the user's IP or which account is pairing). The
+		// signature recovery below is client-side, but the authority it is
+		// checked against comes from the operator: an operator that serves a
+		// fake authority listing its own key could pair this browser as that
+		// account. A pairing grants a read-only view and no keys, and the same
+		// operator already serves the page's code, so this adds no power it
+		// lacks — but this check does not defend against it.
 		const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
 		if (!keys) {
 			return false;

@@ -5,7 +5,7 @@
  * hardening control end-to-end (beta16 §45).  The behavioral counterpart
  * to the static mcp-webpush-install-defaults-smoke.
  *
- * Why it exists: cp251 shipped a persistent morphit-mcp.service whose
+ * Why it exists: a later change shipped a persistent morphit-mcp.service whose
  * unit assumed an HTTP server on 127.0.0.1:8124, but the server was
  * stdio-only — so the daemon read EOF on its empty stdin and exited 0 in
  * under a second, leaving nothing listening (status: inactive (dead),
@@ -27,7 +27,7 @@
  *
  * Raw node:http is used (not fetch) because undici treats Host/Origin as
  * forbidden header names and silently drops them, which would make the
- * DNS-rebinding checks pass vacuously.  Pure-tsx, sandbox-runnable
+ * DNS-rebinding checks pass vacuously.  Pure-tsx, runnable offline
  * (loopback only; no external network).
  */
 
@@ -276,7 +276,7 @@ async function main(): Promise<void> {
 		// both reaped. A plain SIGKILL on the wrapper orphans the server
 		// whenever the bind SUCCEEDS — which it does on a dockerized CI
 		// runner where 172.18.0.1 is a real bridge-gateway interface (in
-		// the sandbox the bind fails EADDRNOTAVAIL and the server self-
+		// a host without that interface the bind fails EADDRNOTAVAIL and the server self-
 		// exits, hiding this). The orphan's inherited stderr pipe then
 		// kept THIS smoke alive until the 240s runner kill. Resolution is
 		// bind-outcome independent: `close` (the refusal path — gives the
@@ -331,7 +331,7 @@ async function main(): Promise<void> {
 
 		// 172.18.0.1 (Docker bridge / private) must NOT trip the guard — it
 		// proceeds to bind (only failing EADDRNOTAVAIL here because the
-		// sandbox has no such interface; on a real dockerized host it binds).
+		// host may have no such interface; on a real dockerized host it binds).
 		const bridge = await spawnGuard('172.18.0.1', PORT_C);
 		if (!/refusing to bind/.test(bridge.err)) pass('172.18.0.1 (bridge) bind allowed by guard');
 		else fail('172.18.0.1 (bridge) bind allowed by guard', bridge.err.slice(0, 140));

@@ -1,5 +1,5 @@
 /**
- * crypto-fetcher-smoke (cp372)
+ * crypto-fetcher-smoke
  *
  * Parse + error-handling tests for the crypto→USD fetchers in the
  * multi-source median: CoinPaprika, Kraken, CryptoCompare, Binance,
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
 		check('messari: throws → null', (await f()) === null);
 	}
 
-	// ── cp425: Blurt-native price feed (api.blurt.blog/price_info) ──
+	// ── Blurt-native price feed (api.blurt.blog/price_info) ──
 	// The parser is DEFENSIVE (the exact shape is verified on deploy):
 	// it accepts several plausible shapes, but ONLY a value inside the
 	// plausibility band, so a volume / percent / market-cap field can

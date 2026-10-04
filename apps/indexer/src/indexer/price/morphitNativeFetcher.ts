@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — morphit_native price fetcher (cp127).
+ * Morphit indexer — morphit_native price fetcher.
  *
  * Self-sovereign price derivation from on-platform trade data.  This
  * is the module that lets us reduce reliance on Coingecko
@@ -8,7 +8,7 @@
  * Architectural overview
  * ──────────────────────
  * The fetcher implements a TIERED ANCHOR architecture that survives
- * every adversarial scenario in the cp127 design discussion:
+ * every adversarial scenario in the design discussion:
  *
  *   Tier 1 — USD-fiat-direct anchor (PRIMARY, most resilient)
  *     Orders where the asset trades directly against denominationFiat
@@ -38,7 +38,7 @@
  * Returns null if no tier qualifies; the composite source's fallback
  * chain takes over (next upstream → static floor).
  *
- * Black-hat defenses (per the cp127 conspiracy-theorist review)
+ * Black-hat defenses (per the conspiracy-theorist review)
  * ─────────────────────────────────────────────────────────────
  *   A. Per-trader contribution cap — each distinct account
  *      contributes its OWN MEDIAN price (not its sum of orders).
@@ -61,7 +61,7 @@
  *      values outside [PRICE_PLAUSIBLE_MIN, PRICE_PLAUSIBLE_MAX].
  *      Composite source has its own redundant check.
  *
- *   F. Cross-instance peer disagreement — DEFERRED to cp128.  Not
+ *   F. Cross-instance peer disagreement — DEFERRED.  Not
  *      part of this module.
  *
  *   G. Receipt — exposed via /v1/price/morphit-native/receipt;
@@ -80,11 +80,11 @@
  *   - related_accounts
  *   - one_way_pile_on attacking_reviewers
  *   - review_concentration reviewers
- *   - operator_blocks (accounts THIS operator has blocked — cp209;
+ *   - operator_blocks (accounts THIS operator has blocked;
  *     mirrors the orderbook's instance-local moderation so a
  *     manually-blocked seller can't influence this instance's price)
  *
- * The first four are the same cp123-cp125 reputation filter tables.
+ * The first four are the same reputation filter tables.
  * Reusing them ensures price manipulation requires the same level of
  * sophistication as reputation manipulation — a high bar by design.
  *
@@ -112,7 +112,7 @@ import {
 const log = logger('price/native');
 
 /** Configurable thresholds (operator-tunable later if needed).
- *  Conservative defaults match the cp127 design discussion. */
+ *  Conservative defaults match the design discussion. */
 export const NATIVE_WINDOW_HOURS = 8;
 export const NATIVE_MIN_DISTINCT_TRADERS = 3;
 export const NATIVE_MIN_STABLECOIN_COUNT_TIER2 = 2;
@@ -159,12 +159,12 @@ export interface MorphitNativeFetcherConfig {
 	readonly db: Database;
 	/** This instance's OPERATOR account name (the `operator` column
 	 *  in operator_blocks — keyed by `operatorAccountName`, NOT
-	 *  `officialAccountName`; cp258 fixed this from the latter, which
+	 *  `officialAccountName`; a later change fixed this from the latter, which
 	 *  silently made the exclusion inert whenever an operator set a
 	 *  separate MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME).  Orders from
 	 *  accounts this operator has blocked (state='blocked') are excluded
 	 *  from every derivation tier AND from the depeg detector, mirroring
-	 *  the orderbook's instance-local moderation (cp209).  Pass
+	 *  the orderbook's instance-local moderation.  Pass
 	 *  `config.operatorAccountName`; '' makes the exclusion inert. */
 	readonly operatorAccountName: string;
 	/** Per-asset plausibility envelope.  Will be clamped to
@@ -456,7 +456,7 @@ interface RawOrderRow {
  *   - kind='fixed' (no circular dependency on external pricing)
  *   - created_at within window AND past grace period (defeats race)
  *   - account has prior verified trade (Sybil cold-start floor)
- *   - account not in any signal table (cp123-cp125 reputation filter)
+ *   - account not in any signal table (reputation filter)
  */
 async function queryTier1Orders(
 	config: MorphitNativeFetcherConfig,

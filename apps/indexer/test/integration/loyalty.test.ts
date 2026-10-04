@@ -38,7 +38,26 @@ async function paySingleFee(
 	amountBlurt: number
 ): Promise<void> {
 	await fx.db.withTx(async (client) => {
-		await trackVerifiedBlurtFee(client, account, amountBlurt, BLOCK_NUM, BLOCK_TIME, 'morphit', 'morphit');
+		// The order the fee paid for, tagged to this instance: a delegation
+		// target counts the milestones reached through this instance.
+		await client.query(
+			`INSERT INTO orders (account, permlink, side, asset, fiat_currency, price_model, payment_methods,
+			                     status, created_at, updated_at, fee_status, fee_method, operator_tag)
+			 VALUES ($1, 'loyalty-fee', 'sell', 'BTC', 'USD', '{}'::jsonb, ARRAY['cash'], 'live', $2, $2,
+			         'verified', 'blurt', 'morphit')
+			 ON CONFLICT (account, permlink) DO NOTHING`,
+			[account, BLOCK_TIME]
+		);
+		await trackVerifiedBlurtFee(
+			client,
+			account,
+			amountBlurt,
+			BLOCK_NUM,
+			BLOCK_TIME,
+			'morphit',
+			'morphit',
+			amountBlurt
+		);
 	});
 }
 

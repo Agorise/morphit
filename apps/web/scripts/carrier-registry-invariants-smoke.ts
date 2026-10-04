@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/carrier-registry-invariants-smoke.ts
  *
- * Structural Defense (cp120) — invariants over the bundled
+ * Structural Defense — invariants over the bundled
  * shipping-carrier registry at `apps/web/src/lib/shipping/carriers.ts`.
  *
  * Scenarios:

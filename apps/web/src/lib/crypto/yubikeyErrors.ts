@@ -13,7 +13,7 @@
  *     classifyYubikeyError + yubikeyErrorI18nKey for callers
  *     that only look in the keystore namespace.
  *
- * REVISIT-LIST item 3 — code-specific error copy.
+ * Backlog item 3 — code-specific error copy.
  */
 
 /** Stable error-kind discriminator surfaced to UI as i18n keys.

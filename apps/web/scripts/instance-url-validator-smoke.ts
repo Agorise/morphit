@@ -32,7 +32,7 @@ function expectReason(name: string, raw: string, reason: string): void {
 // clearnet
 expectOk('https:// clearnet kept', 'https://morphit.io', 'https://morphit.io');
 expectOk('bare clearnet host defaults to https', 'morphit.io', 'https://morphit.io');
-expectOk('http:// clearnet now accepted (the maintainer: http or https)', 'http://morphit.io', 'http://morphit.io');
+expectOk('http:// clearnet now accepted (http or https)', 'http://morphit.io', 'http://morphit.io');
 expectOk('clearnet host with path → origin only', 'https://morphit.io/en/orderbook', 'https://morphit.io');
 
 // zero-clearnet (the whole point of this change)

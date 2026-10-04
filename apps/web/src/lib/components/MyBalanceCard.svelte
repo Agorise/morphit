@@ -19,8 +19,8 @@
 	  3. Compute voting power % via balanceMath.votingPowerPercent from
 	     the EFFECTIVE vesting (own + received − delegated) and the
 	     present clock time.
-	  4. Display.  Refresh once per minute while mounted (cheap; one
-	     RPC call).
+	  4. Display.  Refresh every 5 s while mounted (REFRESH_MS; one
+	     indexer read).
 
 	Privacy posture: chain balances are public.  This card is private
 	to the user only as a courtesy — anyone curious can fetch the
@@ -36,14 +36,13 @@
 	import { goto } from '$app/navigation';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
 	import { computePowerDownProgress, type PowerDownProgress } from '$blurt/powerDownProgress';
-	import { fetchAccountHistory } from '$blurt/accountHistory';
+	import { fetchYearOfHistory } from '$lib/pnl/yearHistory';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { vestsToBlurtPower, votingPowerPercent, parseAssetAmount } from '$blurt/balanceMath';
 	import { computeBlurtVestingApr, formatApr } from '$blurt/apr';
 	import {
 		categorizeOp,
 		filterByDateRange,
-		type HistoryOp,
 		type CategorizerPredicates,
 		type PnlRow
 	} from '$lib/pnl/categorize';
@@ -63,13 +62,13 @@
 	import Tooltip from '$components/Tooltip.svelte';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 
-	/** cp424 — the Power up / Power down modal is lazy-loaded: it pulls in
+	/** the Power up / Power down modal is lazy-loaded: it pulls in
 	 *  the active-key signing path (incl. the withdraw_vesting serializer +
 	 *  bytebuffer), which shouldn't sit in the initial profile-card chunk
 	 *  when most viewers never open it. */
 	const loadPowerModal = () => import('$components/PowerModal.svelte').then((m) => m.default);
 
-	/** cp424 — the Send modal is lazy-loaded for the same reason as
+	/** the Send modal is lazy-loaded for the same reason as
 	 *  PowerModal: it pulls the active-key transfer-signing path, which
 	 *  shouldn't sit in the initial profile-card chunk. */
 	const loadSendModal = () => import('$components/SendBlurtModal.svelte').then((m) => m.default);
@@ -92,13 +91,13 @@
 	let errorMsg = $state('');
 	let blurtBalance = $state(NaN);
 	let bpBalance = $state(NaN);
-	// cp510 [12] — BP delegated IN to this account (received_vesting_shares
+	// BP delegated IN to this account (received_vesting_shares
 	// converted to BP). Separate from own staked BP (vesting_shares): it's
 	// power lent to the user — e.g. Morphit's welcome delegation from
 	// morphit-relay — not owned stake, so it's surfaced as its own line rather
 	// than folded into the "staked BLURT" figure.
 	let receivedBp = $state(NaN);
-	/** cp424 — captured for the Power up / Power down modal. `vestingFund`
+	/** captured for the Power up / Power down modal. `vestingFund`
 	 *  + `totalVests` are the raw DGP pool strings that drive the BP→VESTS
 	 *  conversion for a partial power-down (blurtPowerToVests parses them);
 	 *  `vestingSharesRaw` is the EXACT on-chain vesting_shares string, used
@@ -106,12 +105,12 @@
 	let vestingFund = $state('');
 	let totalVests = $state('');
 	let vestingSharesRaw = $state('');
-	/** cp439 — in-progress power-down summary (amount left + finish date) for
+	/** in-progress power-down summary (amount left + finish date) for
 	 *  the Power down modal's 💡 section. null when nothing is powering down. */
 	let powerDownProgress = $state<PowerDownProgress | null>(null);
 	let manaPct = $state(NaN);
 	let vestingApr = $state(NaN);
-	// cp396 — unclaimed author/curation rewards. `*Display` are the parsed
+	// unclaimed author/curation rewards. `*Display` are the parsed
 	// numbers shown to the user (BLURT liquid + BP via the chain's
 	// reward_vesting_blurt). `*Raw` are the exact Graphene asset strings the
 	// claim_reward_balance op consumes (claim ALL). `claiming` guards the
@@ -129,7 +128,7 @@
 	 *  in which case the USD-equivalent line is simply omitted. */
 	let blurtPriceFiat = $state<number | null>(null);
 	let denomFiat = $state('USD');
-	/** cp429 — FX table (USD-anchored) so the balance's fiat value can be
+	/** FX table (USD-anchored) so the balance's fiat value can be
 	 *  shown in the USER's saved preferred fiat, not the operator's
 	 *  denomination. Best-effort: null → we fall back to denomFiat. */
 	let fxTable = $state<FxResponse | null>(null);
@@ -139,7 +138,7 @@
 	 *  locale-formatted by formatFiat (activeLocale()); the lowercase code is
 	 *  appended deliberately because in many locales "$"/"€" alone is
 	 *  ambiguous. null → render nothing. */
-	/** cp433 — when the user hasn't explicitly chosen a display fiat, fall
+	/** when the user hasn't explicitly chosen a display fiat, fall
 	 *  back to a sensible default for their INTERFACE LANGUAGE rather than
 	 *  always showing the operator's USD denomination. Language ≠ country, so
 	 *  this is best-effort (a Spanish speaker in Mexico can still pick MXN in
@@ -224,7 +223,7 @@
 		if (refreshInFlight && !hard) return;
 		if (!hard) refreshInFlight = true;
 		try {
-			// cp295 — read balance via the indexer (same-origin), NOT
+			// read balance via the indexer (same-origin), NOT
 			// directly from a Blurt RPC node. The indexer fetches account
 			// + DGP server-side across the full node pool, so third-party
 			// nodes never see the user's IP or which account they're
@@ -251,14 +250,14 @@
 				dgp.total_vesting_fund_blurt,
 				dgp.total_vesting_shares
 			);
-			// cp510 [12] — delegated-in BP (received_vesting_shares → BP), same
+			// delegated-in BP (received_vesting_shares → BP), same
 			// pool conversion. Shown as a separate "+ N BP delegated to you" line.
 			receivedBp = vestsToBlurtPower(
 				acct.received_vesting_shares,
 				dgp.total_vesting_fund_blurt,
 				dgp.total_vesting_shares
 			);
-			// cp424 — retain the raw pool figures + exact vesting_shares for
+			// retain the raw pool figures + exact vesting_shares for
 			// the Power up / Power down modal (BP↔VESTS conversion + dust-free
 			// "power down everything").
 			vestingFund =
@@ -273,7 +272,7 @@
 				typeof acct.vesting_shares === 'string'
 					? acct.vesting_shares
 					: String(acct.vesting_shares);
-			// cp439 — an in-progress power-down (amount still to release + the
+			// an in-progress power-down (amount still to release + the
 			// date the last weekly payout lands) for the Power down modal's 💡
 			// section. null when the account isn't powering down.
 			powerDownProgress = computePowerDownProgress(
@@ -298,7 +297,7 @@
 				current_supply: dgp.current_supply,
 				total_vesting_fund_blurt: dgp.total_vesting_fund_blurt
 			});
-			// cp396 — unclaimed rewards. While a claim is in flight we DON'T
+			// unclaimed rewards. While a claim is in flight we DON'T
 			// overwrite from a soft poll (the optimistic clear must win until
 			// the post-claim hard refresh lands); otherwise sync from chain.
 			if (!claiming) {
@@ -344,7 +343,7 @@
 		} catch {
 			// Price feed unavailable → USD-equivalent simply not shown.
 		}
-		// cp429 — fetch the USD-anchored FX table so the value can be shown in
+		// fetch the USD-anchored FX table so the value can be shown in
 		// the user's preferred fiat. Separate best-effort call: if it fails the
 		// balance still shows the operator's-denomination value.
 		try {
@@ -379,20 +378,20 @@
 		}
 	}
 
-	// ─── cp424 — Power up (stake) / Power down (unstake) ───────────────
+	// ─── Power up (stake) / Power down (unstake) ───────────────
 	// Both sign with the ACTIVE key, so they're only offered to a full
 	// seed session ('morphit-seed'). A posting-only login (imported a
 	// posting WIF / posting-only keyfile) has no active key locally and
 	// CANNOT sign these — the buttons stay hidden for it (matching the
-	// /post BLURT-fee active-key gate, cp406), rather than letting the
+	// /post BLURT-fee active-key gate), rather than letting the
 	// user fill a form only to hit a "no active key" wall.
-	/** CAPABILITY, not provenance (tt.txt #11). A 'posting-active' session — a
+	/** CAPABILITY, not provenance. A 'posting-active' session — a
 	 *  posting-only import that chose to keep its verified Active key on this
 	 *  device — CAN sign a transfer. Asking `origin === 'morphit-seed'` would
 	 *  wrongly deny it. Ask whether the key is actually there. */
 	const hasActiveKey = $derived(($liveIdentity?.activePublicKey ?? null) !== null);
 	let powerMode = $state<'up' | 'down' | null>(null);
-	/** cp433 — when true, the liquid-BLURT odometer applies its next change
+	/** when true, the liquid-BLURT odometer applies its next change
 	 *  with no red flash. Set for a few seconds after a power-DOWN so the
 	 *  tiny per-op fee debit doesn't paint the balance red and scare the
 	 *  user (the money that actually moves is BP, released weekly). All
@@ -425,7 +424,7 @@
 		void refresh({ hard: true });
 	}
 
-	// ─── cp424 — Send BLURT to any Blurt account ───────────────────────
+	// ─── Send BLURT to any Blurt account ───────────────────────
 	// Also active-key-signed, so gated on the same hasActiveKey as the
 	// staking actions.
 	let sendOpen = $state(false);
@@ -465,7 +464,7 @@
 		void goto(lp('/post'));
 	}
 
-	// cp396 — claim unclaimed rewards into usable balances. Broadcasts
+	// claim unclaimed rewards into usable balances. Broadcasts
 	// claim_reward_balance with the posting key, optimistically clears the
 	// unclaimed line (so it disappears at once), then hard-refreshes so the
 	// BLURT/BP odometers above animate up to the post-claim totals.
@@ -501,76 +500,28 @@
 	let exporting = $state(false);
 	let exportError = $state('');
 
-	/** Fetch the user's last 365 days of account history, paged
-	 *  through the chain's get_account_history API.  Returns the
-	 *  union of all returned ops in chronological order.
-	 *
-	 *  Pagination: the chain accepts up to 10_000 entries per call.
-	 *  We page backward from the head until we hit ops older than
-	 *  one year OR the start of history.  In practice an active
-	 *  account does ~100s of ops/year; one page is usually enough.
-	 *  We cap at 5 pages (50_000 ops) to bound the worst case —
-	 *  someone with that much chain activity has unusual needs and
-	 *  can ask for a larger window in the future. */
-	async function fetchYearOfHistory(account: string): Promise<HistoryOp[]> {
-		const PAGE = 10_000;
-		const MAX_PAGES = 5;
-		const oneYearAgoSec = Math.floor(Date.now() / 1000) - 365 * 86_400;
-
-		const collected: HistoryOp[] = [];
-		// Walk backward.  `from = -1` means "most recent"; we
-		// receive the latest PAGE ops in chronological order.  Then
-		// `from = oldestSeen - 1` for the next page.
-		let from = -1;
-		for (let page = 0; page < MAX_PAGES; page++) {
-			// One page via the indexer (privacy: no direct RPC from the
-			// browser). get_account_history shape per entry:
-			//   [seq, { block, trx_id, timestamp, op: [name, body] }]
-			const r = await fetchAccountHistory(
-				resolveOrigin(MORPHIT_INDEXER_ORIGIN),
-				account,
-				from,
-				PAGE
-			);
-			if (r.kind !== 'ok') break;
-			const history = r.entries;
-			if (history.length === 0) break;
-
-			// `history` is ordered oldest-first within the window.
-			// `seq` is monotonically increasing across history.
-			let oldestSeen = Number.POSITIVE_INFINITY;
-			let pageHasYearOld = false;
-			for (const entry of history) {
-				if (!Array.isArray(entry) || entry.length !== 2) continue;
-				const seq = entry[0];
-				const op = entry[1];
-				if (typeof seq !== 'number') continue;
-				oldestSeen = Math.min(oldestSeen, seq);
-				const ts = Date.parse(op.timestamp + (op.timestamp.endsWith('Z') ? '' : 'Z')) / 1000;
-				if (Number.isFinite(ts) && ts < oneYearAgoSec) {
-					pageHasYearOld = true;
-				}
-				collected.push(op);
-			}
-
-			// If this page reached year-old territory OR returned
-			// fewer than the page size (start of history), stop.
-			if (pageHasYearOld || history.length < PAGE) break;
-			if (oldestSeen <= 0) break;
-			from = oldestSeen - 1;
-		}
-		return collected;
-	}
-
 	async function exportPnl(): Promise<void> {
 		if (exporting) return;
 		exporting = true;
 		exportError = '';
 		try {
-			const ops = await fetchYearOfHistory(account);
+			// The last 365 days, every page of it ($lib/pnl/yearHistory): a read
+			// that fails, or a year too busy to read whole, fails the export
+			// rather than exporting part of the year.
+			const year = await fetchYearOfHistory(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
+			if (year.kind !== 'ok') {
+				exportError =
+					year.reason === 'too_much_history'
+						? $_('my_balance.error.export_too_much_history')
+						: year.reason === 'busy'
+							? $_('my_balance.error.export_busy')
+							: $_('my_balance.error.export_failed');
+				return;
+			}
+			const ops = year.ops;
 			const opFeeAccount = resolveFeeRecipient(getInstanceSnapshot().fee_recipient);
 			const preds: CategorizerPredicates = {
-				// cp407 — recognise BOTH this instance's operator fee account and
+				// recognise BOTH this instance's operator fee account and
 				// the canonical treasury, so fee transfers light up whether the
 				// user paid a federated operator or the canonical morphit-fees.
 				isFeesAccount: (n) => n === opFeeAccount || n === FEE_RECIPIENT,
@@ -695,7 +646,7 @@
 	);
 	const showLowManaHint = $derived(Number.isFinite(manaPct) && manaPct < LOW_MANA_THRESHOLD);
 
-	// cp396 — mobile exact-amount popovers. On mobile the three values render
+	// mobile exact-amount popovers. On mobile the three values render
 	// abbreviated (floored BLURT/BP, 0-decimal voting %) to fit the 3-column
 	// card on narrow phones. Tapping a value reveals its EXACT amount in a
 	// small popover. Desktop already shows full precision, so the popovers are
@@ -741,7 +692,7 @@
 		};
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
@@ -792,7 +743,7 @@
 			{$_('profile.my_balance.error')}: {errorMsg}
 		</p>
 	{:else}
-		<!-- the maintainer — three evenly spaced columns. `grid-cols-3` already gives the
+		<!-- three evenly spaced columns. `grid-cols-3` already gives the
 		     columns equal WIDTH, but with `gap-3` the BLURT column's fiat
 		     approximation ran right up against "BP (staked BLURT)" while a wide
 		     gap yawned before "Voting" — equal columns, visibly unequal rhythm.
@@ -812,7 +763,7 @@
 					{$_('profile.my_balance.blurt_label')}
 				</dt>
 				<dd class="font-mono text-lg font-semibold leading-tight">
-					<!-- the maintainer — the balance and its fiat approximation sit on one baseline,
+					<!-- the balance and its fiat approximation sit on one baseline,
 					     separated by exactly one space.
 					     Previously the fiat was an `inline-block` with `ml-1`: an
 					     inline-block aligns by its own last line-box baseline, not the
@@ -834,7 +785,7 @@
 									silent={suppressBlurtFlashOnce}
 									localeSignColors
 								/></span
-							><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
+							><!-- Mobile: floored integer; tap to reveal the exact amount. -->
 							<span class="relative sm:hidden" data-exact-tip
 								><button
 									type="button"
@@ -853,7 +804,7 @@
 							>
 						</span>
 						{#if usdLabel}
-							<!-- cp515 (t.txt) — `relative -top-0.5` optical lift. The row is
+							<!-- `relative -top-0.5` optical lift. The row is
 							     `items-baseline`, so the two texts share a TRUE baseline — which is
 							     typographically correct and still reads as "sitting low", because
 							     text-xs next to text-lg mono digits has a much smaller cap-height,
@@ -883,7 +834,7 @@
 					<!-- Desktop: full BP precision with grouping. -->
 					<span class="hidden sm:inline"
 						><AnimatedNumber value={bpBalance} decimals={3} durationMs={3000} localeSignColors /></span
-					><!-- Mobile: floored integer; tap to reveal the exact amount (cp396). -->
+					><!-- Mobile: floored integer; tap to reveal the exact amount. -->
 					<span class="relative sm:hidden" data-exact-tip
 						><button
 							type="button"
@@ -900,10 +851,10 @@
 						>{#if openExact === 'bp'}{@render exactTip(exactBp)}{/if}</span
 					>
 					{#if Number.isFinite(receivedBp) && receivedBp > 0}
-						<!-- cp511 [12-revise] — delegated-in BP as a tiny tap/hover info icon
+						<!-- [12-revise] — delegated-in BP as a tiny tap/hover info icon
 						     (NOT a line — keeps the card uncluttered). Reveals "+ N BP delegated
 						     to you" only when a delegation exists. -->
-						<!-- cp515 (t.txt) — `relative -top-px` optical lift. `items-center` centres
+						<!-- `relative -top-px` optical lift. `items-center` centres
 						     the icon in the ROW's line box, and that box includes descender space
 						     the mono digits never use, so a centred icon reads as low against
 						     them. 1px up sits it on the digits' optical centre. -->
@@ -944,7 +895,7 @@
 					<!-- Desktop: 2-decimal precision. -->
 					<span class="hidden sm:inline"
 						><AnimatedNumber value={manaPct} decimals={2} durationMs={3000} />%</span
-					><!-- Mobile: 0-decimal; tap to reveal the exact percentage (cp396). -->
+					><!-- Mobile: 0-decimal; tap to reveal the exact percentage. -->
 					<span class="relative sm:hidden" data-exact-tip
 						><button
 							type="button"
@@ -972,7 +923,7 @@
 		{/if}
 
 		{#if hasUnclaimed}
-			<!-- cp396 — unclaimed author/curation rewards. Highlighted line ABOVE
+			<!-- unclaimed author/curation rewards. Highlighted line ABOVE
 			     the Top up button; claiming sweeps them into usable balances (the
 			     odometers above animate up), then this line disappears. The Claim
 			     button only renders when keys are present (a paired-readonly device
@@ -1013,7 +964,7 @@
 			{/if}
 		{/if}
 
-		<!-- cp424 — P&L grouped next to Top up (stacked under on mobile). The
+		<!-- P&L grouped next to Top up (stacked under on mobile). The
 		     "Send" button (right on desktop / stacked-under on mobile) lands in
 		     the reserved right slot with the Send modal in the next increment. -->
 		<div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1051,7 +1002,7 @@
 					{exporting ? $_('profile.pnl.exporting') : $_('profile.pnl.export_button')}
 				</button>
 			</div>
-			<!-- tt.txt #11 — Send used to be HIDDEN outright for a posting-only
+			<!-- Send used to be HIDDEN outright for a posting-only
 			     session. A control that silently isn't there teaches nothing; the
 			     user concludes Morphit can't send BLURT at all. The button is now
 			     always offered, and the modal explains + unlocks in place. -->

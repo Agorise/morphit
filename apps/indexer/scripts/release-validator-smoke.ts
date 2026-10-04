@@ -407,15 +407,18 @@ scenario('checkPinnedKeyInAuthority: undefined key_auths → reject', () => {
 	if (r.ok) throw new Error('expected reject');
 });
 
-// ─── Part 106 — treasury chain-pin validation ────────────────────────
+// ─── treasury chain-pin validation ────────────────────────
 //
 // These scenarios mirror the indexer-side validateTreasury() rules
 // in apps/indexer/src/indexer/handlers/release.ts.  Any treasury
 // payload the indexer rejects must also be rejected here, with
 // matching reason names.
 
-const VALID_BTC_ADDR = 'bc1q' + 'a'.repeat(38); // bech32, 42 chars total
-const VALID_XMR_ADDR = '4' + 'A'.repeat(94);
+// Real mainnet addresses: the validator decodes them with their checksums,
+// so a made-up string of the right shape is (correctly) refused.
+const VALID_BTC_ADDR = 'bc1qdwaelg52ts3e0m8fellkw5u9x7plfwc0kxnwnk'; // P2WPKH
+const VALID_XMR_ADDR =
+	'447UAtPLv7u8bB454DGupLTFj5cBy4XgP8ru1EGpgrB7NgbxCXowhwEBStCS3zWuEXTQBdi2qSEAMScqifFo4VL49CyFBGy';
 const VALID_XMR_VK = 'a'.repeat(64);
 
 function withTreasury(t: unknown): unknown {
@@ -515,14 +518,15 @@ scenario('Part 106 + 107: XMR primary address (4...), no viewkey field → ok', 
 		btc: null, xmr: { address: VALID_XMR_ADDR, piconero: '781250000' }
 	}));
 	if (!r.ok) throw new Error('expected ok');
-	// Part 107 invariant: validator output MUST NOT contain a viewkey field.
+	// invariant: validator output MUST NOT contain a viewkey field.
 	if (r.value.treasury?.xmr !== null && 'viewkey' in (r.value.treasury?.xmr ?? {})) {
 		throw new Error('Part 107 invariant violated: validator output contains viewkey');
 	}
 });
 
 scenario('Part 106 + 107: XMR subaddress (8...), no viewkey field → ok', () => {
-	const subaddr = '8' + 'A'.repeat(94);
+	const subaddr =
+		'84bwu2PWp3NaRudAKTadmeZPBLTjL5f4bKU8F6NJKqxgUvwth6QxUVSUNFAQnHbbuQcMRNR4baYUKNcZXQtKMMKm4aVE3Fe';
 	const r = validateReleasePayload(withTreasury({
 		btc: null, xmr: { address: subaddr, piconero: '781250000' }
 	}));
@@ -539,10 +543,10 @@ scenario('Part 106 + 107: XMR testnet (9...) → reject', () => {
 });
 
 scenario('Part 107: XMR with viewkey field PRESENT → silently ignored, output STRIPS it', () => {
-	// A release op broadcast before Part 107 (or by a hostile
+	// A release op broadcast previously (or by a hostile
 	// operator who hand-crafted a payload) might include a
-	// viewkey field.  Part 107 says: never reject for that
-	// (we don't want to break parsing of pre-Part-107 ops),
+	// viewkey field.  says: never reject for that
+	// (we don't want to break parsing of older ops),
 	// but DO strip the field — the validated output must not
 	// carry a viewkey under any circumstance.
 	const r = validateReleasePayload(withTreasury({
@@ -613,7 +617,7 @@ scenario('Part 106 + 107: both BTC and XMR pinned → ok, output has no viewkey'
 	if (!r.ok) throw new Error('expected ok');
 	if (r.value.treasury?.btc?.address !== VALID_BTC_ADDR) throw new Error('btc');
 	if (r.value.treasury?.xmr?.address !== VALID_XMR_ADDR) throw new Error('xmr');
-	// Part 107 invariant.
+	// invariant.
 	const xmrOut = r.value.treasury?.xmr;
 	if (xmrOut !== null && xmrOut !== undefined && 'viewkey' in xmrOut) {
 		throw new Error('Part 107 invariant violated');
@@ -621,7 +625,7 @@ scenario('Part 106 + 107: both BTC and XMR pinned → ok, output has no viewkey'
 });
 
 scenario('Part 106: BTC legacy address (1...) → ok', () => {
-	const legacy = '1' + 'A'.repeat(33); // 34 chars total, mainnet legacy
+	const legacy = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2'; // mainnet P2PKH
 	const r = validateReleasePayload(withTreasury({
 		btc: { address: legacy, satoshis: 416 }, xmr: null
 	}));
@@ -629,7 +633,7 @@ scenario('Part 106: BTC legacy address (1...) → ok', () => {
 });
 
 scenario('Part 106: BTC P2SH address (3...) → ok', () => {
-	const p2sh = '3' + 'A'.repeat(33);
+	const p2sh = '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy'; // mainnet P2SH
 	const r = validateReleasePayload(withTreasury({
 		btc: { address: p2sh, satoshis: 416 }, xmr: null
 	}));
@@ -645,7 +649,7 @@ scenario('Part 106: BTC legacy testnet (m...) → reject', () => {
 	}
 });
 
-// ─── cp372 — chain-pinned BLURT fee base ─────────────────────────────
+// ─── chain-pinned BLURT fee base ─────────────────────────────
 
 scenario('cp372: treasury.blurt absent → ok (back-compat, no BLURT pin)', () => {
 	const r = validateReleasePayload(withTreasury({ btc: null, xmr: null }));
@@ -713,7 +717,7 @@ scenario('cp372: all three assets pinned together → ok', () => {
 	if (r.value.treasury?.btc?.satoshis !== 416) throw new Error('btc lost');
 });
 
-// ─── cp556 — decentralized-distribution anchor ──────────────────────
+// ─── decentralized-distribution anchor ──────────────────────
 const D_SHA = 'a'.repeat(64);
 const D_FPR = 'DEADBEEF'.repeat(5); // 40-hex v4 fingerprint
 const D_CID0 = 'Qm' + 'a'.repeat(44); // CIDv0 base58btc
@@ -818,7 +822,7 @@ scenario('distribution non-https mirror → distribution_mirror_invalid', () => 
 });
 
 // Mirror cap bumped 8 → 10 (v1.9.6, gitea.com + framagit.org) → 32 (v1.11.1,
-// the maintainer's 9 new push-mirrors; ~20-mirror goal + headroom). Pin the NEW boundary:
+// 9 new push-mirrors; ~20-mirror goal + headroom). Pin the NEW boundary:
 // 32 is accepted (at the cap), 33 is rejected (over it). A forward-compat note
 // lives on MIRRORS_MAX.
 scenario('distribution 32 mirrors (at the cap) → ok', () => {
@@ -845,7 +849,7 @@ scenario('distribution 33 mirrors (over the cap) → distribution_mirror_invalid
 		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
 });
 
-// v1.8.16 (the maintainer) — Launchpad personal-repo git URLs carry a `+` (`/+git/`); the
+// v1.8.16 — Launchpad personal-repo git URLs carry a `+` (`/+git/`); the
 // mirror charset was relaxed to allow it. Pin BOTH directions: the `+` URL is
 // accepted, and a genuinely-bad char (space) is STILL rejected, so the relaxation
 // didn't open the charset wide.
@@ -872,6 +876,24 @@ scenario('distribution mirror with a space → distribution_mirror_invalid', () 
 	);
 	if (r.ok || r.reason !== 'distribution_mirror_invalid')
 		throw new Error(`got ${r.ok ? 'ok' : r.reason}`);
+});
+
+scenario('a BTC address of the right shape but a bad checksum → reject', () => {
+	const r = validateReleasePayload(withTreasury({
+		btc: { address: 'bc1q' + 'a'.repeat(38), satoshis: 416 }, xmr: null
+	}));
+	if (r.ok || r.reason !== 'treasury_btc_address_bad_checksum') {
+		throw new Error(`expected treasury_btc_address_bad_checksum, got ${r.ok ? 'ok' : r.reason}`);
+	}
+});
+
+scenario('an XMR address of the right shape but a bad checksum → reject', () => {
+	const r = validateReleasePayload(withTreasury({
+		btc: null, xmr: { address: '4' + 'A'.repeat(94), piconero: '781250000' }
+	}));
+	if (r.ok || r.reason !== 'treasury_xmr_address_bad_checksum') {
+		throw new Error(`expected treasury_xmr_address_bad_checksum, got ${r.ok ? 'ok' : r.reason}`);
+	}
 });
 
 console.log(`\n${'─'.repeat(54)}`);

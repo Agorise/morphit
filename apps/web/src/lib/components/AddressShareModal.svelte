@@ -28,7 +28,6 @@
 	 * header for why we don't do checksum verification here.
 	 */
 
-	import { formatDayMonth } from '$lib/i18n/formatters';
 	import { _, locale } from 'svelte-i18n';
 	import { parseAmountInput } from '$lib/orders/amountInput';
 	import {
@@ -55,11 +54,7 @@
 	import UsdtNetworkPicker from './UsdtNetworkPicker.svelte';
 	import UsdcNetworkPicker from './UsdcNetworkPicker.svelte';
 	import DaiNetworkPicker from './DaiNetworkPicker.svelte';
-	import {
-		findPriorShare,
-		recordAddressShare,
-		type AddressHistoryEntry
-	} from '$lib/privacy/addressHistory';
+	import { wasSharedBefore, shareAddress } from '$lib/privacy/addressHistory';
 
 	interface Props {
 		/** Pre-filled order permlink — when the modal was opened
@@ -74,7 +69,7 @@
 		/** Called when the user cancels.  Modal closes; no message
 		 *  sent. */
 		onCancel: () => void;
-		/** cp425 — when set, the method tabs are RESTRICTED to this list
+		/** when set, the method tabs are RESTRICTED to this list
 		 *  (used for a BARTER order: the seller may only share an address for
 		 *  a crypto they actually accept, i.e. the order's accepted_assets).
 		 *  Undefined → all methods offered (the normal crypto-trade case). */
@@ -83,7 +78,7 @@
 
 	let { orderPermlink, onShare, onCancel, allowedMethods }: Props = $props();
 
-	/** cp425 — every method tab in on-screen order. `visibleMethods` filters
+	/** every method tab in on-screen order. `visibleMethods` filters
 	 *  this to `allowedMethods` when the modal is restricted (barter). */
 	const ALL_METHODS: readonly ChatAssetTicker[] = [
 		'btc',
@@ -112,7 +107,7 @@
 	/** Selected payment method.  Tab UI; default BTC because
 	 *  Morphit's expected most-common pair is BLURT↔BTC. */
 	let method = $state<ChatAssetTicker>('btc');
-	// cp425 — keep the selection inside the allowed set: a restricted barter
+	// keep the selection inside the allowed set: a restricted barter
 	// modal must never sit on a coin the seller doesn't accept (default 'btc'
 	// may not be in accepted_assets).
 	$effect(() => {
@@ -123,7 +118,7 @@
 	});
 	let address = $state('');
 	let amount = $state('');
-	/** v1.20.0 fix wave, G6 — the requested amount is read with the active
+	/** the requested amount is read with the active
 	 *  locale's conventions (either decimal mark, native digits) and SENT in
 	 *  canonical ASCII; an ambiguous "1,234" (en) is refused, not guessed.
 	 *  `canonicalAmount` is '' when blank, the raw text when unreadable (so
@@ -131,7 +126,7 @@
 	const amountParse = $derived(parseAmountInput(amount, $locale));
 	const canonicalAmount = $derived(amountParse.ok ? amountParse.value : amount.trim());
 	let note = $state('');
-	/** Part 121 — USDT sub-network (ERC-20/TRC-20/SPL/BEP-20).
+	/** USDT sub-network (ERC-20/TRC-20/SPL/BEP-20).
 	 *  Null when method !== 'usdt' OR when user hasn't picked
 	 *  yet.  When method === 'usdt', the form REQUIRES a non-null
 	 *  network before canSubmit goes true.  Per-network address
@@ -139,7 +134,7 @@
 	 *  (TRC-20 starts with T, ERC-20/BEP-20 are 0x+40-hex, SPL
 	 *  is base58 32-44 chars). */
 	let usdtNetwork = $state<UsdtNetwork | null>(null);
-	/** Part 122 cp30 — USDC sub-network (ERC-20/SPL/Base/Polygon).
+	/** USDC sub-network (ERC-20/SPL/Base/Polygon).
 	 *  Same shape as usdtNetwork above: null when method !== 'usdc',
 	 *  required pre-submit otherwise.  Note ERC-20, Base, and
 	 *  Polygon all share the EVM 0x[40-hex] address format, so
@@ -150,7 +145,7 @@
 	 *  address can receive USDC on any of the three EVM chains
 	 *  but the wallet has to send on the matching chain. */
 	let usdcNetwork = $state<UsdcNetwork | null>(null);
-	/** Part 122 cp31 — selected DAI network for multi-network
+	/** selected DAI network for multi-network
 	 *  trades.  4 EVM networks (ERC-20/Polygon/Base/Arbitrum),
 	 *  ALL visually identical at the address-format level —
 	 *  highest cross-network-confusion surface on Morphit.  The
@@ -170,7 +165,7 @@
 	 *  explicitly don't want matching support. */
 	let useMemo = $state(true);
 
-	/** cp26 — BTC PayJoin (BIP-78) endpoint URL.  Optional, BTC-
+	/** BTC PayJoin (BIP-78) endpoint URL.  Optional, BTC-
 	 *  only.  When non-empty, the generated bitcoin: URI gains
 	 *  a `pj=<url>` parameter and the wire payload carries
 	 *  `payjoin_endpoint`.  Wallets that support PayJoin will
@@ -185,8 +180,8 @@
 	let payjoinEndpoint = $state('');
 
 	/** Q5 — privacy: randomize amount for transparent chains.
-	 *  Default ON for XMR (cp3) AND all transparent assets
-	 *  (BTC/BCH/LTC/BLURT) from cp26.  XMR uses 6 trailing
+	 *  Default ON for XMR AND all transparent assets
+	 *  (BTC/BCH/LTC/BLURT).  XMR uses 6 trailing
 	 *  decimals of jitter to defeat amount-correlation on the
 	 *  Monero chain (see jitterMoneroAmount).  All 8 UTXO assets
 	 *  (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR) use satoshi-precision
@@ -195,11 +190,11 @@
 	 *  (see jitterBlurtAmount).  SOL/ETH/XRP use their own
 	 *  per-asset jitter (jitterSolAmount/jitterEthAmount/
 	 *  jitterXrpAmount — calibrated to lamport / wei / drop
-	 *  precision respectively).  USDT, USDC, and DAI (cp30
-	 *  reversed cp26's USDT-no-jitter decision per ADR-0028
+	 *  precision respectively).  USDT, USDC, and DAI (a later change
+	 *  reversed the USDT-no-jitter decision per ADR-0028
 	 *  Decision 2): 6-decimal precision, 0-999 microunit jitter
 	 *  ≈ $0.001 (jitterStablecoinAmount).
-	 *  The cp26 rationale "centralization is the issue, not
+	 *  The rationale "centralization is the issue, not
 	 *  amount-correlation" correctly observed that jitter doesn't
 	 *  help against Circle/Tether freezes, but did NOT refute the
 	 *  SEPARATE amount-correlation linkability threat.  Both
@@ -215,8 +210,8 @@
 	let jitteredAmount = $state<string | null>(null);
 	/** Returns true when amount-jitter is available for the
 	 *  currently-selected asset.  Every tradable asset is jitter-
-	 *  eligible as of cp30 (USDT was excluded in cp26 but the
-	 *  exclusion was reverted in cp30; see jitterAmount comment
+	 *  eligible (USDT was excluded but the
+	 *  exclusion was reverted; see jitterAmount comment
 	 *  above for the design rationale). */
 	const jitterEligible = $derived(true);
 	$effect(() => {
@@ -236,7 +231,7 @@
 		}
 	});
 
-	// cp26-back-compat aliases for any existing references to the
+	// back-compat aliases for any existing references to the
 	// XMR-specific names; remove once all sites use the generic ones.
 	const jitterXmr = $derived(jitterAmount);
 	const xmrJitteredAmount = $derived(method === 'xmr' ? jitteredAmount : null);
@@ -304,16 +299,27 @@
 						: isValidAddress(method, trimmedAddress) &&
 							(method !== 'blurt' || blurtAccountState !== 'missing'))
 	);
-	/** cp26 — Address-reuse detection.  Reads the local-only
-	 *  address-history (see lib/privacy/addressHistory.ts) and
-	 *  surfaces a warning chip when the user is about to share an
-	 *  address they've shared from this device before.  Reuse leaks
-	 *  the operator's on-chain identity to the counterparty's
-	 *  observers + builds a counterparty graph against the same
-	 *  address over time. */
-	const priorShare = $derived(
-		addressLooksValid ? findPriorShare(method.toUpperCase(), trimmedAddress) : null
-	);
+	/** Address-reuse detection. Asks the local-only, hashed address
+	 *  history (lib/privacy/addressHistory.ts) whether this address was
+	 *  shared from this device before, and surfaces a warning chip if so.
+	 *  Reuse links trades on the public chain and builds a counterparty
+	 *  graph against the same address over time. */
+	let sharedBefore = $state(false);
+	$effect(() => {
+		const asset = method.toUpperCase();
+		const address = trimmedAddress;
+		if (!addressLooksValid) {
+			sharedBefore = false;
+			return;
+		}
+		let current = true;
+		void wasSharedBefore(asset, address).then((seen) => {
+			if (current) sharedBefore = seen;
+		});
+		return () => {
+			current = false;
+		};
+	});
 	/** Amount is OPTIONAL.  Empty is fine.  Non-empty must be a
 	 *  valid positive decimal. */
 	const amountLooksValid = $derived(
@@ -325,12 +331,12 @@
 	 *  network — cross-network sends lose funds, so the form
 	 *  refuses to submit until the user explicitly chooses. */
 	const usdtNetworkPicked = $derived(method !== 'usdt' || usdtNetwork !== null);
-	/** USDC-specific gate (cp30, mirror of USDT): network MUST be
+	/** USDC-specific gate (mirror of USDT): network MUST be
 	 *  picked before submit, no default — especially important
 	 *  here because ERC-20 / Base / Polygon look identical at the
 	 *  address-format level (all 0x[40 hex]). */
 	const usdcNetworkPicked = $derived(method !== 'usdc' || usdcNetwork !== null);
-	/** DAI-specific gate (cp31, mirror of USDC): network MUST be
+	/** DAI-specific gate (mirror of USDC): network MUST be
 	 *  picked before submit, no default — ESPECIALLY important
 	 *  here because ALL FOUR DAI networks (ERC-20 / Polygon /
 	 *  Base / Arbitrum) look identical at the address-format
@@ -363,7 +369,11 @@
 		if (trimmedAddress.length < minTyped) return null;
 		if (addressLooksValid) return null;
 		// v1.5.0 — BLURT: format-valid but the account doesn't exist on chain.
-		if (method === 'blurt' && isValidAddress('blurt', trimmedAddress) && blurtAccountState === 'missing') {
+		if (
+			method === 'blurt' &&
+			isValidAddress('blurt', trimmedAddress) &&
+			blurtAccountState === 'missing'
+		) {
 			return 'chat.address.blurt_account_not_found';
 		}
 		if (method === 'btc') return 'chat.address.address_invalid_btc';
@@ -407,7 +417,7 @@
 		method = m;
 		// Don't clear address — user may have pasted XMR while BTC
 		// was selected, the validator will catch the mismatch.
-		// Part 121 / cp30 / cp31: when leaving a multi-network asset
+		// when leaving a multi-network asset
 		// (USDT, USDC, or DAI), drop the pinned network so a future
 		// re-pick forces a fresh explicit choice (no stale value).
 		// Each multi-network trade gets a deliberate network commit.
@@ -421,15 +431,14 @@
 		sending = true;
 		sendError = null;
 		try {
-			// cp26 — if amount jitter is enabled for an eligible asset
+			// if amount jitter is enabled for an eligible asset
 			// and we have a valid jittered amount, send that as
 			// payload.amount; the buyer's wallet will pre-fill it from
 			// the QR/payload and the on-chain transfer carries the
 			// jittered value.  We use the memoized $state rather than
 			// re-calling jitterAmountForAsset so the preview the user
 			// saw IS the amount that gets sent (no re-roll between
-			// preview and submit).  USDT is no-jitter (its privacy
-			// issue is centralization, not amount-correlation).
+			// preview and submit).  Every tradable asset is eligible.
 			const finalAmount =
 				jitterEligible && jitterAmount && jitteredAmount !== null
 					? jitteredAmount
@@ -450,26 +459,26 @@
 				// generated client-side; encodeAddressPayload validates
 				// the shape one more time as defense in depth.
 				...(method === 'blurt' && useMemo && memo !== '' ? { memo } : {}),
-				// Part 121 — pin the USDT network on the message
+				// pin the USDT network on the message
 				// itself.  The receiver renders "Tron (TRC-20) USDT
 				// address:" as the bold header so cross-network
 				// confusion is impossible.  Validated above by the
 				// addressLooksValid + usdtNetworkPicked gates.
 				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {}),
-				// Part 122 cp30 — pin the USDC network the same way.
+				// pin the USDC network the same way.
 				// Especially critical because ERC-20 / Base / Polygon
 				// all use the EVM 0x[40 hex] address shape, so without
 				// the network field the receiver couldn't tell which
 				// chain to expect.
 				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {}),
-				// Part 122 cp31 — pin the DAI network the same way.
+				// pin the DAI network the same way.
 				// MOST critical of the three stablecoins because ALL
 				// FOUR DAI networks use the EVM 0x[40 hex] shape (no
 				// SPL branch to disambiguate); without the network
 				// field the receiver couldn't tell which of ERC-20 /
 				// Polygon / Base / Arbitrum to expect.
 				...(method === 'dai' && daiNetwork !== null ? { network: daiNetwork } : {}),
-				// cp26 — BTC PayJoin (BIP-78) endpoint URL.  Only
+				// BTC PayJoin (BIP-78) endpoint URL.  Only
 				// propagates when method is btc AND the seller
 				// supplied a non-empty endpoint.  Encoder enforces
 				// the BTC-only invariant as defense in depth.
@@ -478,19 +487,12 @@
 					: {})
 			};
 			const wire = encodeAddressPayload(payload);
-			// cp26 — Record this share in the local-only address
-			// history so subsequent uses of the same address surface
-			// a reuse warning.  Best-effort: failure to record
-			// (localStorage full, private mode) does NOT block the
-			// share itself.
-			const historyEntry: AddressHistoryEntry = {
-				asset: method.toUpperCase(),
-				address: trimmedAddress,
-				sharedAt: new Date().toISOString(),
-				...(orderPermlink !== undefined ? { orderPermlink } : {})
-			};
-			recordAddressShare(historyEntry);
-			await onShare(wire);
+			// Send, then remember (hashed) that this address was shared, so a
+			// later share of the same address surfaces the reuse warning. A
+			// failed send is not remembered.
+			await shareAddress(method.toUpperCase(), trimmedAddress, async () => {
+				await onShare(wire);
+			});
 		} catch (err) {
 			console.warn('[AddressShareModal] send failed:', err);
 			sendError = $_('chat.address.send_failed');
@@ -498,7 +500,7 @@
 		}
 	}
 
-	// Part 73: dismiss UX parity with PayBlurtModal — Escape and
+	// dismiss UX parity with PayBlurtModal — Escape and
 	// backdrop-click both close.  Pre-fix the modal could only be
 	// dismissed via the explicit Cancel button.
 	function onBackdropClick(e: MouseEvent): void {
@@ -520,7 +522,7 @@
 	onkeydown={onModalKeydown}
 	tabindex="-1"
 >
-	<!-- v1.5.0 (tt.txt B2): the card had NO max-height and NO overflow, so on a
+	<!-- v1.5.0: the card had NO max-height and NO overflow, so on a
 	     phone the content (coin picker + privacy warnings + address + amount +
 	     QR) ran past the viewport with no way to scroll to the Send button.
 	     Matches the sibling chat modals (MailingAddressModal / ShipmentModal):
@@ -533,7 +535,7 @@
 			{$_('chat.address.modal_subtitle')}
 		</p>
 
-		<!-- v1.5.0 (tt.txt B1): coin SELECT (with logos), replacing the old
+		<!-- v1.5.0: coin SELECT (with logos), replacing the old
 		     one-tab-per-asset row. 16 `flex-1` tab buttons wrapped into a wall
 		     of blocks that was the main reason this modal didn't fit a phone. -->
 		<div class="mt-5">
@@ -551,7 +553,7 @@
 			</div>
 		</div>
 
-		<!-- Part 121 — USDT privacy warning + network picker.
+		<!-- USDT privacy warning + network picker.
 		     Renders only when USDT is the active tab.  Sits ABOVE
 		     the address input so users see the warning + commit
 		     to a network before pasting an address (form
@@ -565,7 +567,7 @@
 			</div>
 		{/if}
 
-		<!-- Part 122 cp30 — USDC privacy warning + network picker.
+		<!-- USDC privacy warning + network picker.
 		     Same shape as USDT: privacy chip above the picker, picker
 		     enforces network commit before submit.  Extra emphasis
 		     on the cross-network warning because ERC-20 / Base /
@@ -581,7 +583,7 @@
 			</div>
 		{/if}
 
-		<!-- Part 122 cp31 — DAI multi-network picker.  Same
+		<!-- DAI multi-network picker.  Same
 		     pattern as USDC; the privacy warning copy is
 		     DIFFERENT (dai_partly_centralized acknowledges DAI's
 		     decentralization at the contract level while being
@@ -663,13 +665,12 @@
 					{$_('chat.address.subaddress_tip_modal')}
 				</div>
 			{/if}
-			<!-- cp26 — Address-reuse warning.  Surfaced when the
-			     user is about to share an address they've shared
-			     from this device before.  Renders BELOW the error
-			     row (errors take priority) but ABOVE the optional
-			     subaddress tip.  Privacy posture: localStorage-only,
-			     never transmitted to any server. -->
-			{#if priorShare !== null && !addressErrorKey}
+			<!-- Address-reuse warning.  Surfaced when the user is about
+			     to share an address they've shared from this device
+			     before.  Renders BELOW the error row (errors take
+			     priority) but ABOVE the optional subaddress tip.
+			     Local-only, hashed, never transmitted. -->
+			{#if sharedBefore && !addressErrorKey}
 				<div
 					class="mt-2 rounded-lg border border-red-400 bg-red-50 p-2 text-xs dark:border-red-600 dark:bg-red-950"
 					role="alert"
@@ -678,24 +679,13 @@
 						⚠ {$_('chat.address.reuse_warning_heading')}
 					</div>
 					<p class="mt-1 text-red-800 dark:text-red-200">
-						{$_('chat.address.reuse_warning_body', {
-							values: {
-								date: formatDayMonth(priorShare.sharedAt)
-							}
-						})}
+						{$_('chat.address.reuse_warning_body')}
 					</p>
-					{#if priorShare.orderPermlink !== undefined}
-						<p class="mt-1 text-[11px] text-red-700 dark:text-red-300">
-							{$_('chat.address.reuse_warning_prior_order', {
-								values: { permlink: priorShare.orderPermlink }
-							})}
-						</p>
-					{/if}
 				</div>
 			{/if}
 		</label>
 
-		<!-- cp26 — BTC PayJoin (BIP-78) endpoint URL.  Optional
+		<!-- BTC PayJoin (BIP-78) endpoint URL.  Optional
 		     advanced field — most sellers won't use this.  Surfaces
 		     only on the BTC tab.  When the seller's wallet supports
 		     PayJoin (BIP-78), they paste the endpoint URL here; the
@@ -807,13 +797,11 @@
 		<!-- Q5 — Amount-jitter toggle.  Defeats amount-correlation
 		     attacks on transparent chains (any 3rd party can match
 		     order book + chain to identify the trade).  XMR shipped
-		     this in cp3 with deep Monero-specific copy
-		     (Sally finding L13 — Part 68 — explicit ON/OFF state
-		     copy).  cp26 extended to BTC/BCH/LTC (satoshi precision)
-		     and BLURT (milliblurt precision).  USDT excluded — its
-		     privacy issue is centralization (Tether freeze), not
-		     amount-correlation; jitter doesn't address the actual
-		     threat. -->
+		     this with deep Monero-specific copy
+		     (Sally finding L13 — explicit ON/OFF state
+		     copy).  A later change extended to BTC/BCH/LTC (satoshi precision)
+		     and BLURT (milliblurt precision); every tradable asset,
+		     USDT included, is now eligible (jitterEligible). -->
 		{#if jitterEligible && trimmedAmount.length > 0 && amountLooksValid}
 			{@const unit = method.toUpperCase()}
 			{@const labelKey =

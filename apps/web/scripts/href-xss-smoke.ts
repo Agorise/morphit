@@ -58,12 +58,12 @@ const SAFE_BUILDER_NAMES = [
 	'blurtWalletExplorerFallbackUrl',
 	'safeContactUrl',
 	'safeInstanceOrigin',
-	'safeBlurtImageUrl', // cp388 — TermsText builder; https + exact host img.blurt.blog + image-ext + no userinfo/odd-port, returns string|null
+	'safeBlurtImageUrl', // TermsText builder; https + exact host img.blurt.blog + image-ext + no userinfo/odd-port, returns string|null
 	'validateContactUrl', // local /operators function returning string|null
 	'canonicalFor', // Head.svelte canonical builder
 	'shareUrl', // FaqSearch builder
 	'explorerLinkForTxid', // ChatMessage builder; calls morphitExplorerTxUrl/externalExplorerUrl internally
-	// Part 121 cp7 — per-locale link wrapper.  `lp(path)` calls
+	// per-locale link wrapper.  `lp(path)` calls
 	// `localePath(path, currentLang)` from `$i18n/path`.  The
 	// `path` argument is always a literal authored by us at the
 	// call site (never operator/peer-controlled) and
@@ -87,7 +87,7 @@ const SAFE_BUILDER_NAMES = [
 const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	[
 		'apps/web/src/routes/[lang]/about-this-instance/+page.svelte',
-		// cp721 — matrixUri() is a SAFE constructor: it strips the leading #/@ and
+		// matrixUri() is a SAFE constructor: it strips the leading #/@ and
 		// hard-prefixes a fixed `matrix:r/` or `matrix:u/` scheme, so its output
 		// can never be a javascript:/data: URL regardless of operator_matrix_room
 		// (which is itself validated to an @user:server / #room:server address).
@@ -96,7 +96,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/routes/[lang]/chat/+page.svelte',
-		// cp446 — the inbox threads by (peer, order), so a card's href needs a
+		// the inbox threads by (peer, order), so a card's href needs a
 		// `?order=` query string and can no longer be a bare `lp()` template the
 		// tracer understands. `threadHref` builds it from localePath (a
 		// SAFE_BUILDER that prefixes `/<lang>` to single-slash internal paths),
@@ -106,7 +106,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/lib/components/OrderCard.svelte',
-		// cp404 — detailHref/profileHref/messageHref are STRING PROPS whose
+		// detailHref/profileHref/messageHref are STRING PROPS whose
 		// values the parent pages (orderbook + account) build with localePath():
 		//   lp(`/@${account}/${permlink}`), lp(`/@${account}`).
 		// localePath is a SAFE_BUILDER that only prefixes single-slash internal
@@ -119,7 +119,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/lib/components/OrderPosterIdentity.svelte',
-		// cp406 — the identity row was extracted out of OrderCard into this
+		// the identity row was extracted out of OrderCard into this
 		// shared component (used by OrderCard + the order-detail poster card).
 		// `profileHref` is the same STRING PROP as OrderCard's above: callers
 		// build it with localePath() — lp(`/@${account}`) — a SAFE_BUILDER that
@@ -140,7 +140,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/lib/components/TermsText.svelte',
-		// cp406 — TermsText renders a structured tree from parseTermsMarkdown().
+		// TermsText renders a structured tree from parseTermsMarkdown().
 		// The only anchors it emits are `link` runs, and a `link` run's `href`
 		// (r.href) comes from one of two SAFE_BUILDERS baked into the parse tree
 		// in termsMarkdown.ts (both already in SAFE_BUILDER_NAMES): (1)
@@ -148,7 +148,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// image extension + no userinfo/odd port — for auto-linked Blurt images,
 		// and (2) safeContactUrl(m[2]) — scheme allowlist (https/http/mailto/
 		// matrix/xmpp/nostr), REFUSES javascript:/data:/vbscript:/file: — for
-		// explicit `[text](url)` links (cp414); an unsafe scheme is left as inert
+		// explicit `[text](url)` links; an unsafe scheme is left as inert
 		// literal text, never a link. The static tracer can't follow the safe URL
 		// through the parse-tree run type, but it's confirmed safe — there is NO
 		// {@html} and no other href source. (Locked by blurt-image-link-safety-smoke.)
@@ -227,7 +227,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// already in SAFE_BUILDER_NAMES above) so by the time the
 		// template reads `link.href`, the value is a locale-prefixed
 		// path string that the smoke can't trace back to lp() but
-		// a reviewer has confirmed safe.  See Part 121 cp7 design
+		// a reviewer has confirmed safe.  design
 		// doc.
 		new Set(['link.href'])
 	],
@@ -247,7 +247,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// `alt.href` is similar — `alt` is an element of
 		// `hreflangAlternates(resolvedPath)`'s output.
 		//
-		// cp114: `feed.href` allowlisted.  The `feeds` prop on this
+		// `feed.href` allowlisted.  The `feeds` prop on this
 		// component is only ever passed from site-controlled call sites
 		// (currently /[lang]/+page.svelte and /[lang]/orderbook/+page.svelte,
 		// both passing the literal `/rss/orderbook.xml` string).  The prop
@@ -268,7 +268,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		'apps/web/src/routes/[lang]/download/+page.svelte',
 		// `m.url` — local MIRRORS config in /download: hardcoded `https://`
 		// repo/host URLs (Forgejo, GitHub, Codeberg, …), site-controlled.
-		// cp201's PWA-only rework replaced the old STORES grid (`store.url`)
+		// the PWA-only rework replaced the old STORES grid (`store.url`)
 		// with this source-mirrors grid.
 		new Set(['m.url'])
 	],
@@ -300,11 +300,11 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/lib/components/ChatMessage.svelte',
-		// cp121: `trackingUrl` is one of two values, both site-controlled:
+		// `trackingUrl` is one of two values, both site-controlled:
 		//   1. buildTrackingUrl(carrierEntry.trackingUrlTemplate, sh.tracking)
 		//      — where carrierEntry.trackingUrlTemplate comes from the
 		//      hardcoded CARRIERS const in apps/web/src/lib/shipping/carriers.ts.
-		//      The carrier-registry-invariants smoke (cp120) enforces that
+		//      The carrier-registry-invariants smoke enforces that
 		//      every template starts with `https://` and contains a single
 		//      `{tracking}` placeholder; buildTrackingUrl URL-encodes the
 		//      tracking number before substituting.  No operator/peer input
@@ -321,7 +321,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 		// Anchor element also carries rel="noopener noreferrer" to suppress
 		// referrer leak + Spectre-style window.opener attacks.
 		//
-		// cp410: `verifyUrl` is a `{@const}` from
+		// `verifyUrl` is a `{@const}` from
 		// blurtWalletExplorerFallbackUrl('tx', p.txid) — the opt-in
 		// "Verify on block explorer" link on a BLURT funds-sent pill (lets a
 		// seller self-verify a payment without trusting the operator's
@@ -354,7 +354,7 @@ const ALLOWLIST_HREF_EXPR: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	],
 	[
 		'apps/web/src/lib/components/ExplorerLink.svelte',
-		// cp167: primaryUrl and altUrl are both elements of the
+		// primaryUrl and altUrl are both elements of the
 		// `urls` prop, which callers populate exclusively from
 		// `externalExplorerUrls(asset, txid)` in apps/web/src/lib/
 		// explorer/urls.ts.  That builder:
@@ -499,7 +499,7 @@ function detectUnsafeHref(absPath: string): readonly Hit[] {
 		// recognition below for template literals: lets call sites
 		// stay readable without forcing a wrapping function call.
 		// Catches: `validatedNostrUrl`, `validatedStreamingUrl`,
-		// `validatedWebsiteUrl`, `validatedContactUrl`, etc.  Part 74.
+		// `validatedWebsiteUrl`, `validatedContactUrl`, etc..
 		if (/^validated[A-Z]\w*$/.test(expr)) continue;
 
 		// Skip template literals whose leading interpolation is a
@@ -512,7 +512,7 @@ function detectUnsafeHref(absPath: string): readonly Hit[] {
 		// makes the call site less readable.  The smoke catches a
 		// real regression if a `${operatorOrigin}/...` (no safe-
 		// prefix) form ever lands.
-		// Part 70: extend to recognize this convention.
+		// extend to recognize this convention.
 		if (/^`\$\{\s*safe[A-Z]\w*\s*\}/.test(expr)) continue;
 
 		// Skip `BUILDER(...) ?? FALLBACK` and `BUILDER(...) || FALLBACK`

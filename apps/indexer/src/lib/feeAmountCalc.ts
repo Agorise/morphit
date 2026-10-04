@@ -7,7 +7,7 @@
  * CLI helper) and the ops-cli setup wizard's listing-fee
  * editor step.
  *
- * Why this file exists.  Part 110 added a wizard step
+ * Why this file exists.  A later change added a wizard step
  * that lets operators set the listing-fee USD target
  * (default $0.25) and have the wizard recompute the
  * BTC sat and XMR piconero amounts from live Coingecko
@@ -105,7 +105,7 @@ export async function fetchBtcXmrPricesFromCoingecko(
 		throw new Error(`coingecko returned HTTP ${res.status}`);
 	}
 
-	// Part 112 hardening — tightened parse path.  Previously
+	// tightened parse path.  Previously
 	// did `Number(body.bitcoin?.usd)` directly; the downstream
 	// `Number.isFinite` gate caught garbage but accepted a
 	// surprising mix of input types via JavaScript's coercion

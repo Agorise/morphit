@@ -1,6 +1,6 @@
 /**
  * broadcastErrorClass — turn ANY broadcast failure into an exact,
- * actionable UI message. The rule (the maintainer, v1.16.5): the interface must always
+ * actionable UI message. The rule (v1.16.5): the interface must always
  * tell the user/operator precisely WHAT went wrong and HOW to fix it. We never
  * fall back to a dead-end "try again", and we never ask anyone to open DevTools.
  *
@@ -67,7 +67,7 @@ export function classifyBroadcastError(err: unknown, account: string): Broadcast
 
 	// Transport couldn't reach the instance / chain — the most common opaque
 	// failure (offline or still-syncing instance). Now named + actionable, and for
-	// a WAF status we name the EXACT layer + fix (the maintainer: the code must say what's
+	// a WAF status we name the EXACT layer + fix (Requirement: the code must say what's
 	// wrong, not a generic "couldn't reach" — timeapp's recurring avatar 413).
 	if (err instanceof BroadcastUnavailableError) {
 		const detail = shortDetail(err.message);

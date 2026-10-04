@@ -69,5 +69,5 @@ over untouched.
   (any unreadable saved field is coerced rather than crashing the form), the first-order
   tips behaviour, and the walkthrough-link hover. The new node-health price line is
   covered by tests on both the indexer endpoint and the `morphit-ops` view. A fresh
-  five-persona walkthrough and a focused deep-deep review confirmed the changes end to
+  five-persona walkthrough and a focused deep review confirmed the changes end to
   end, across all supported languages.

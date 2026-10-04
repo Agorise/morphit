@@ -6,7 +6,7 @@
  *   - $crypto/base58 — pure base58 + length/checksum/version guards,
  *     parameterized by a SHA-256 callback.  Smoke-testable here.
  *   - $crypto/wif — production wrapper that wires libsodium's SHA-256.
- *     Not exercised by this smoke (sodium not in sandbox); the live
+ *     Not exercised by this smoke (it does not load libsodium); the live
  *     browser path goes through it for the actual signing flow.
  *
  * What this smoke covers:

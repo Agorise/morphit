@@ -5,7 +5,7 @@
  * Unit-style smoke for the per-locale prerendering helpers shipped
  * in `src/lib/i18n/path.ts`.  These are pure functions intended to
  * be verifiable WITHOUT a working SvelteKit build (per the Part
- * 121 cp6 plow-through that scoped item 2 to helpers + REVISIT
+ * 121 plow-through that scoped item 2 to helpers + the backlog
  * rather than full route restructure).
  *
  * Coverage:

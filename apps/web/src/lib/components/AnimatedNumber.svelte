@@ -58,14 +58,14 @@
 		/** Optional aria-label override.  By default the rendered
 		 *  number is the accessible content. */
 		ariaLabel?: string;
-		/** cp433 — when true, a value change snaps in with NO color flash
+		/** when true, a value change snaps in with NO color flash
 		 *  and no tween (like the first render). Used to quietly apply the
 		 *  tiny per-op fee debited on a power-down, which otherwise flashes
 		 *  the BLURT balance red and alarms the user (the money that's
 		 *  actually moving is BP, released weekly over 4 weeks). Normal
 		 *  balance changes leave this false and animate as usual. */
 		silent?: boolean;
-		/** v1.8.0 (t.txt) — when true AND the app locale is Chinese
+		/** v1.8.0 — when true AND the app locale is Chinese
 		 *  (zh-CN / zh-HK), INVERT the gain/loss flash colours to match the
 		 *  Chinese financial convention: a value going UP flashes RED, a value
 		 *  going DOWN flashes GREEN (红涨绿跌 — the opposite of the Western
@@ -157,7 +157,7 @@
 	function startFlash(direction: 'gain' | 'loss'): void {
 		flash = direction;
 		if (flashTimer !== null) clearTimeout(flashTimer);
-		// cp429 — the color lasts EXACTLY as long as the odometer tween, no
+		// the color lasts EXACTLY as long as the odometer tween, no
 		// longer (was durationMs + 400, a tail that outlived the count).
 		flashTimer = setTimeout(() => {
 			flash = null;
@@ -195,7 +195,7 @@
 			displayed = next;
 			return;
 		}
-		// cp429 — suppress the flash/tween when the change is imperceptible at
+		// suppress the flash/tween when the change is imperceptible at
 		// the DISPLAYED precision. BP is derived from VESTS via the global
 		// vesting ratio, which drifts by sub-milli-BP every block, so each
 		// wallet poll recomputed a bpBalance that differed BELOW the 3rd
@@ -208,7 +208,7 @@
 			return;
 		}
 		if (silent) {
-			// cp433 — caller asked for a quiet update (the per-op fee on a
+			// caller asked for a quiet update (the per-op fee on a
 			// power-down). Snap to the new value with no color, no tween.
 			if (rafId !== null) {
 				cancelAnimationFrame(rafId);
@@ -230,7 +230,7 @@
 		lastSettled = next;
 	});
 
-	// Cleanup on unmount.  Part 74: switched from a no-deps
+	// Cleanup on unmount.  switched from a no-deps
 	// `$effect(() => () => ...)` pattern to onDestroy.  The old
 	// pattern relied on the effect's body containing no reactive
 	// reads — a future edit adding any reactive dependency would

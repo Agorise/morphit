@@ -22,10 +22,10 @@ cache, and background refresh. `priceSource.current()`
 returns the BLURT/USD rate used by order fee
 verification in `apps/indexer/src/indexer/handlers/order.ts`.
 
-The revisit list asked for evaluation of five additional
+The project backlog asked for evaluation of five additional
 sources: **Tribaldex, Hive-Engine, CoinMarketCap,
 Blockchair, Blockchain.com**. This document records what
-I found about each and a recommendation for or against
+was found about each and a recommendation for or against
 integrating it.
 
 The goal of additional sources is **not** diversification
@@ -135,8 +135,8 @@ only if they narrow a real gap in the existing chain.
   verifies the claimed payment on the external chain.
   Blockchair's `/bitcoin/dashboards/transaction/{hash}`
   endpoint is a clean way to look up a payment. This is
-  a separate workstream from BLURT/USD pricing — I'm
-  logging it here but it belongs in the attestor-UX
+  a separate workstream from BLURT/USD pricing — it is
+  logged here but belongs in the attestor-UX
   design, not in `priceSource`.
 - **Recommendation:** do NOT integrate into
   `priceSource`. Revisit in the ADR-0011 sub-phase 4b
@@ -220,7 +220,7 @@ only if they narrow a real gap in the existing chain.
 
 ---
 
-## What I'd integrate code-wise (if operator green-lights CMC)
+## What to integrate code-wise (if the operator green-lights CMC)
 
 Minimal skeleton (for reference, not shipped this
 session):

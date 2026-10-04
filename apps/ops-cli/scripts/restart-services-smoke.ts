@@ -1,5 +1,5 @@
 /**
- * restart-services smoke (cp225).
+ * restart-services smoke.
  *
  * Guards the grandma-friendly fix where `morphit-ops edit` (menu #3) and
  * `alt-address` (menu #4) now OFFER to restart the affected service(s)

@@ -1,8 +1,8 @@
 /**
- * send-blurt-modal — cp424 (wallet security pass, Send UI).
+ * send-blurt-modal — (wallet security pass, Send UI).
  *
  * The transfer op + signing are proven by wallet-op-builders-smoke; this
- * pins the Send UI glue that can't run in the sandbox (no DOM / network /
+ * pins the Send UI glue that can't run under Node (no DOM / network /
  * key entry). Send is riskier than the staking modals because the
  * RECIPIENT is user-entered, so the guards below matter most:
  *
@@ -30,7 +30,7 @@ const repo = join(here, '..', '..', '..');
 const read = (rel: string): string => readFileSync(join(repo, rel), 'utf8');
 
 let failures = 0;
-// cp442 — `total` was hardcoded as 29 in the summary line while the file ran
+// `total` was hardcoded as 29 in the summary line while the file ran
 // more checks than that, so the battery under-counted this smoke's assertions.
 // Count for real.
 let total = 0;
@@ -104,7 +104,7 @@ check(
 	"canSend requires recipientState === 'valid'",
 	/canSend = \$derived\([\s\S]*?recipientState === 'valid'/.test(modal)
 );
-// cp442 — the bound moved into the pure `$lib/blurt/sendValidation` module (so
+// the bound moved into the pure `$lib/blurt/sendValidation` module (so
 // it can be unit-tested), but it must still be ENFORCED and the amount must
 // still reach the signer through the throwing formatter.
 const sendValidationSrc = readFileSync(

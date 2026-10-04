@@ -1,5 +1,5 @@
 /**
- * prefetch-in-order-smoke (cp664) — guards the delicate ordering + resilience
+ * prefetch-in-order-smoke — guards the delicate ordering + resilience
  * guarantees of `consumeInOrderWithPrefetch`, the core of the indexer's
  * concurrent catch-up backfill. A subtle bug here would let the poller apply
  * blocks OUT OF ORDER or skip one — corrupting the index — so these run with a

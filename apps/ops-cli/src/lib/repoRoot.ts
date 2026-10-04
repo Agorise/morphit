@@ -113,7 +113,7 @@ export function defaultRepoRoot(): string {
 	// then looked for morphit.config.env in the wrong place, surfacing
 	// "No database URL configured" on Status dashboard. Recover from THIS
 	// module's own location, which is always inside the installed tree
-	// (whether running compiled dist or from source). (cp308 #16 fix.)
+	// (whether running compiled dist or from source).
 	const fromModule = walkUpToRepoRoot(dirname(fileURLToPath(import.meta.url)));
 	if (declaresWorkspaces(`${fromModule}/package.json`)) {
 		// Apply the same stale-.bak recovery to the module path, in case

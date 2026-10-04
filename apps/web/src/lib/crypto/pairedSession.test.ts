@@ -144,9 +144,9 @@ describe('pairedSession — validator rejects malformed records', () => {
 
 	it('rejects far-past pairedAt (more than 365 days behind) — Part 122 cp4 F9', () => {
 		// Defense contract per the docblock: "Reject obviously-bogus
-		// timestamps (negative, far past, far future)".  Pre-cp4 the
+		// timestamps (negative, far past, far future)".  Previously, the
 		// far-past case wasn't actually checked despite the comment
-		// promising it.  Cp4 closed the gap with a 365-day sanity
+		// promising it.  A later change closed the gap with a 365-day sanity
 		// cutoff (constant MAX_PAIRED_AGE_SECONDS in the module).
 		writeRaw({ ...VALID, pairedAt: Math.floor(Date.now() / 1000) - 400 * 86400 });
 		expect(readPairedSession()).toBeNull();

@@ -2,7 +2,9 @@
  * matrix-bot healthcheck HTTP server (loopback-only).
  *
  * Serves two things on 127.0.0.1:<healthcheckPort>:
- *   - GET (anything)  → liveness probe for systemd ({ ok:true, ts }).
+ *   - GET (anything)  → liveness probe ({ ok, tailer_alive, ts }): 200 while
+ *                       the journal tailer is running, 503 while it is not —
+ *                       a bot that cannot read the journal cannot alert.
  *   - POST /self-test → ask the bot to DM a clearly-labelled TEST alert to
  *                       each CONFIGURED alert MXID, using the bot's OWN
  *                       client / token / crypto.  This is what
@@ -14,8 +16,8 @@
  * ops-cli would generate + try to upload conflicting device keys — rejected
  * by the homeserver, and in the bad case poisoning the *running* bot's E2E
  * identity.  Triggering the bot's own client over loopback sidesteps that
- * entirely: the test DM is a real encrypted alert, identical to a genuine
- * one.  The route can ONLY reach the recipients already in the bot's config
+ * entirely: the test DM travels exactly like a genuine alert (end-to-end
+ * encrypted only when MORPHIT_MATRIX_ENCRYPT=1, see matrix.ts).  The route can ONLY reach the recipients already in the bot's config
  * (there is no caller-supplied target), so the loopback endpoint can't be
  * turned into a spam vector even if something local POSTs to it.
  */
@@ -30,6 +32,9 @@ export interface HealthServerOptions {
 	/** Only sendDm is needed — keeps the mock surface in tests tiny. */
 	readonly sender: Pick<MatrixSender, 'sendDm'>;
 	readonly renderTestBody: () => { plain: string; html: string };
+	/** Whether the journal tailer is running (see journalctl.ts). Omitted =
+	 *  not tracked (always reported alive). */
+	readonly tailerAlive?: () => boolean;
 }
 
 export interface SelfTestResult {
@@ -115,8 +120,12 @@ export function createHealthServer(opts: HealthServerOptions): Server {
 			return;
 		}
 
-		// Default: systemd readiness / liveness probe.
-		res.writeHead(200, { 'Content-Type': 'application/json' });
-		res.end(JSON.stringify({ ok: true, ts: new Date().toISOString() }));
+		// Default: liveness probe. Down while the tailer is down — a bot that
+		// cannot read the journal cannot alert, whatever else is fine.
+		const tailerAlive = opts.tailerAlive?.() ?? true;
+		res.writeHead(tailerAlive ? 200 : 503, { 'Content-Type': 'application/json' });
+		res.end(
+			JSON.stringify({ ok: tailerAlive, tailer_alive: tailerAlive, ts: new Date().toISOString() })
+		);
 	});
 }

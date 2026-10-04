@@ -567,7 +567,7 @@ export interface PairingForwardDeps {
 		pid: string,
 		bundleJson: string,
 		nowMs: number
-	) => 'ok' | 'over_capacity' | 'already_delivered';
+	) => 'ok' | 'no_waiter' | 'already_delivered';
 	readonly postClearnet?: PostClearnet;
 	readonly postHidden?: PostHidden;
 	readonly hiddenTimeoutMs?: number;
@@ -628,7 +628,8 @@ export function pairingForwardRoute(deps: PairingForwardDeps): Hono {
 		if (resolved.kind === 'self') {
 			const r = deps.deliverLocal(pid, deliveryJson, now());
 			if (r === 'already_delivered') return fail(c, 409, 'already_delivered');
-			if (r === 'over_capacity') return fail(c, 503, 'target_busy');
+			// Nobody waits on this code here: the desktop left, or never asked.
+			if (r === 'no_waiter') return fail(c, 404, 'no_pairing');
 			return c.json({ ok: true });
 		}
 
@@ -658,6 +659,8 @@ export function pairingForwardRoute(deps: PairingForwardDeps): Hono {
 			const s = out.status;
 			if (s >= 200 && s < 300) return c.json({ ok: true });
 			if (s === 409) return fail(c, 409, 'already_delivered');
+			// The target has nobody waiting on this code (its desktop left).
+			if (s === 404) return fail(c, 404, 'no_pairing');
 			if (s >= 300 && s < 400) return fail(c, 502, 'target_redirect_refused');
 			if (s === 429 || s === 503) return fail(c, 503, 'target_busy');
 			return fail(c, 502, 'target_rejected');

@@ -6,7 +6,7 @@
  * XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP — see
  * `buildPaymentUri` in `apps/web/src/lib/chat/payload.ts` for the
  * canonical per-asset URI shape).  We declare only the API surface we actually call — the package
- * is not installed in development sandboxes, so without these
+ * may be missing from a partial dev install, so without these
  * stubs tsc would fail to resolve the import even though the
  * import is dynamic.
  *

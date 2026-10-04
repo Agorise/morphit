@@ -1,5 +1,5 @@
 /**
- * hmac-secret-placeholder smoke — cp252.
+ * hmac-secret-placeholder smoke.
  *
  * Regression guard for a real security finding: `MORPHIT_RELAY_INVITE_HMAC_SECRET`
  * and `MORPHIT_RELAY_ALTCHA_HMAC_SECRET` were declared as a bare
@@ -13,7 +13,7 @@
  * (see policy/inviteToken.ts + policy/altcha.ts; main.ts passes `null` ⇒ the
  * policy generates `randomBytes(32)`).
  *
- * Fix (cp252): `hmacSecretSchema` — still `.optional()` (unset ⇒ secure ephemeral
+ * Fix: `hmacSecretSchema` — still `.optional()` (unset ⇒ secure ephemeral
  * default, the intended design), but if a value IS set it must NOT be a known
  * placeholder sentinel and must be ≥16 chars. The relay.env.example lines are now
  * commented out (un-edited copy ⇒ secure default) with an accurate comment.

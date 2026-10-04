@@ -1,6 +1,6 @@
 <!--
 	LazyLoadError — the {:catch} fallback for lazily-imported components
-	({#await loadXxx() then Comp}). cp418.
+	({#await loadXxx() then Comp})..
 
 	These lazy imports code-split heavier / interactive UI (forms, pickers,
 	modals) so they don't weigh down first paint. The service worker is

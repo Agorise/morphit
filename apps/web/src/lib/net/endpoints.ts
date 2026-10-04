@@ -14,13 +14,17 @@
  *   - This layer is transport-only — it doesn't know about Blurt ops.
  *     dblurt sits ON TOP OF this, passing its JSON-RPC calls through.
  *
- * User can customize the endpoint list in Settings; changes persist in
- * localStorage and survive reloads.
+ * In the browser its only user is the release check ($net/releaseFetch), the
+ * one place the app reads the chain without the operator's indexer. That check
+ * reads from the best node (`nodesInOrder` / `callAt`) and asks one other
+ * operator's node only when it must ($net/releaseVerifyCore).
  */
 
 import {
 	DEFAULT_RPC_ENDPOINTS,
 	DEFAULT_HIDDEN_RPC_ENDPOINTS,
+	DEFAULT_I2P_RPC_ENDPOINTS,
+	HIDDEN_RPC_OPERATORS,
 	RPC_TIMEOUT_MS,
 	RPC_MAX_CONSECUTIVE_FAILURES,
 	RPC_MAX_RETRIES_PER_CALL
@@ -98,13 +102,22 @@ export type JsonRpcResponse<T = unknown> = JsonRpcSuccess<T> | JsonRpcError;
 // Endpoint list
 // ────────────────────────────────────────────────────────────────────────────
 //
-// cp410 — the user-editable custom endpoint list (loadEndpoints / saveEndpoints
-// / resetEndpoints, persisted in localStorage) was removed with the settings
-// card's simplification. The browser talks only to the operator's indexer; the
-// rotator's sole remaining caller (release verification) is pinned to the
-// canonical DEFAULT_RPC_ENDPOINTS, so there is nothing left that would honor a
-// user-supplied node. Any list previously stored under ENDPOINTS_STORAGE_KEY is
-// simply ignored (harmless dead data).
+// The pool is fixed per page origin (`selectRpcPool` below); there is no
+// user-supplied list. A list an older build stored under ENDPOINTS_STORAGE_KEY
+// is ignored.
+
+/** Who runs an endpoint, for counting independent answers: a hidden node's
+ *  name (its `.onion` and `.b32.i2p` are one operator), otherwise the URL's
+ *  hostname (two ports on one host are one operator). */
+export function rpcOperatorOf(url: string): string {
+	const named = HIDDEN_RPC_OPERATORS[url];
+	if (named !== undefined) return `name:${named}`;
+	try {
+		return `host:${new URL(url).hostname.toLowerCase()}`;
+	} catch {
+		return `url:${url}`;
+	}
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Rotator
@@ -206,6 +219,61 @@ export class EndpointRotator {
 		return healthy;
 	}
 
+	/** Record a failed transport attempt on `target` and cool it down after
+	 *  RPC_MAX_CONSECUTIVE_FAILURES in a row. */
+	private demote(target: EndpointStat, err: Error): void {
+		target.consecutiveFailures++;
+		const cls = classifyEndpointError(err);
+		target.lastErrorCode = cls.code;
+		target.lastErrorKind = cls.kind;
+		if (target.consecutiveFailures >= RPC_MAX_CONSECUTIVE_FAILURES) {
+			// Exponential-ish cooldown capped at 5 minutes.
+			const base = 1_500;
+			const cool = Math.min(
+				5 * 60_000,
+				base * 2 ** (target.consecutiveFailures - RPC_MAX_CONSECUTIVE_FAILURES)
+			);
+			target.cooldownUntil = Date.now() + cool;
+		}
+	}
+
+	/** One JSON-RPC request to one endpoint. Resolves with the result; throws an
+	 *  RpcError when the node answered with a JSON-RPC error (the node is not
+	 *  demoted — it answered), or the transport error otherwise (demoted). */
+	private async callOne<T>(target: EndpointStat, method: string, params: unknown): Promise<T> {
+		const started = performance.now();
+		const body: JsonRpcRequest = {
+			jsonrpc: '2.0',
+			id: this.nextRpcId++,
+			method,
+			params: params ?? {}
+		};
+		let json: JsonRpcResponse<T>;
+		try {
+			// A hidden endpoint gets the hidden-transport timeout floor: a flat 8 s
+			// cannot survive a cold Tor/I2P circuit.
+			const res = await fetchWithTimeout(
+				target.url,
+				body,
+				withHiddenFloor(RPC_TIMEOUT_MS, target.url)
+			);
+			json = (await res.json()) as JsonRpcResponse<T>;
+		} catch (err) {
+			const e = err instanceof Error ? err : new Error(String(err));
+			this.demote(target, e);
+			throw e;
+		}
+		target.lastLatencyMs = Math.round(performance.now() - started);
+		target.consecutiveFailures = 0;
+		target.lastOkAt = Date.now();
+		target.lastErrorCode = null;
+		target.lastErrorKind = null;
+		if (json !== null && typeof json === 'object' && 'error' in json && json.error) {
+			throw new RpcError(json.error.message, json.error.code, target.url);
+		}
+		return (json as JsonRpcSuccess<T>).result;
+	}
+
 	/**
 	 * Call a JSON-RPC method. Tries up to `RPC_MAX_RETRIES_PER_CALL`
 	 * endpoints before giving up. Throws if all eligible endpoints fail.
@@ -223,67 +291,12 @@ export class EndpointRotator {
 			const target = eligible[attempt]!;
 			tried.push(target.url);
 			try {
-				const started = performance.now();
-				const body: JsonRpcRequest = {
-					jsonrpc: '2.0',
-					id: this.nextRpcId++,
-					method,
-					params: params ?? {}
-				};
-				// The pool is hidden-only on a hidden origin (selectRpcPool), and the
-				// browser fetches those .onion endpoints DIRECTLY. A flat 8s cannot
-				// survive a cold circuit, so the boot-time release-integrity check
-				// could never succeed there. Raised by the target, never shortened.
-				const res = await fetchWithTimeout(
-					target.url,
-					body,
-					withHiddenFloor(RPC_TIMEOUT_MS, target.url)
-				);
-				const json = (await res.json()) as JsonRpcResponse<T>;
-				const elapsed = performance.now() - started;
-				if ('error' in json && json.error) {
-					// JSON-RPC error — not a transport issue, don't demote the
-					// endpoint for it. (e.g. method not supported, bad params.)
-					target.lastLatencyMs = Math.round(elapsed);
-					target.consecutiveFailures = 0;
-					target.lastOkAt = Date.now();
-					target.lastErrorCode = null;
-					target.lastErrorKind = null;
-					throw new RpcError(json.error.message, json.error.code, target.url);
-				}
-				target.lastLatencyMs = Math.round(elapsed);
-				target.consecutiveFailures = 0;
-				target.lastOkAt = Date.now();
-				target.lastErrorCode = null;
-				target.lastErrorKind = null;
-				return (json as JsonRpcSuccess<T>).result;
+				return await this.callOne<T>(target, method, params);
 			} catch (err) {
+				// A JSON-RPC error is the caller's problem (the node answered, it
+				// said no): re-raise at once. A transport error tries the next node.
+				if (err instanceof RpcError) throw err;
 				lastErr = err instanceof Error ? err : new Error(String(err));
-				// Do not demote for JSON-RPC-level errors (the server
-				// answered, it just said no).
-				if (!(err instanceof RpcError)) {
-					target.consecutiveFailures++;
-					// Capture WHY it failed (HTTP status / timeout / unreachable)
-					// for the rotator's own diagnostics. cp408: this is NO LONGER
-					// surfaced on the settings panel — that card now shows node
-					// health measured server-side by the indexer.
-					const cls = classifyEndpointError(lastErr);
-					target.lastErrorCode = cls.code;
-					target.lastErrorKind = cls.kind;
-					if (target.consecutiveFailures >= RPC_MAX_CONSECUTIVE_FAILURES) {
-						// Exponential-ish cooldown capped at 5 minutes.
-						const base = 1_500;
-						const cool = Math.min(
-							5 * 60_000,
-							base * 2 ** (target.consecutiveFailures - RPC_MAX_CONSECUTIVE_FAILURES)
-						);
-						target.cooldownUntil = Date.now() + cool;
-					}
-				} else {
-					// Re-raise RPC-level errors immediately; they're the
-					// caller's problem, not a transport problem.
-					throw err;
-				}
 			}
 		}
 		throw new EndpointRotationError(
@@ -293,116 +306,26 @@ export class EndpointRotator {
 		);
 	}
 
-	/**
-	 * Audit 2026-05 finding 2-7: call up to `maxN` endpoints in
-	 * parallel and return all individual results.  Caller compares
-	 * the results to detect a single hostile endpoint lying about
-	 * chain state.
-	 *
-	 * Unlike `call`, this method does NOT fail on individual
-	 * endpoint errors — it returns an array of per-endpoint
-	 * outcomes (success or error).  The caller decides what
-	 * constitutes "quorum agreement."
-	 *
-	 * Endpoints are picked from `eligible()` (best-first).  At
-	 * minimum 1 outcome is returned (or the array is empty when
-	 * no endpoints are configured).  Each outcome has the URL so
-	 * the caller can correlate.
-	 */
-	async callMany<T = unknown>(
-		method: string,
-		params: unknown,
-		maxN: number
-	): Promise<
-		ReadonlyArray<
-			| {
-					readonly url: string;
-					readonly ok: true;
-					readonly result: T;
-			  }
-			| {
-					readonly url: string;
-					readonly ok: false;
-					readonly error: Error;
-			  }
-		>
-	> {
-		const eligible = this.eligible();
-		const targets = eligible.slice(0, Math.max(1, Math.min(maxN, eligible.length)));
-		const promises = targets.map(async (target) => {
-			try {
-				const started = performance.now();
-				const body: JsonRpcRequest = {
-					jsonrpc: '2.0',
-					id: this.nextRpcId++,
-					method,
-					params: params ?? {}
-				};
-				// The pool is hidden-only on a hidden origin (selectRpcPool), and the
-				// browser fetches those .onion endpoints DIRECTLY. A flat 8s cannot
-				// survive a cold circuit, so the boot-time release-integrity check
-				// could never succeed there. Raised by the target, never shortened.
-				const res = await fetchWithTimeout(
-					target.url,
-					body,
-					withHiddenFloor(RPC_TIMEOUT_MS, target.url)
-				);
-				const json = (await res.json()) as JsonRpcResponse<T>;
-				const elapsed = performance.now() - started;
-				if ('error' in json && json.error) {
-					target.lastLatencyMs = Math.round(elapsed);
-					target.consecutiveFailures = 0;
-					target.lastOkAt = Date.now();
-					target.lastErrorCode = null;
-					target.lastErrorKind = null;
-					return {
-						url: target.url,
-						ok: false as const,
-						error: new RpcError(json.error.message, json.error.code, target.url)
-					};
-				}
-				target.lastLatencyMs = Math.round(elapsed);
-				target.consecutiveFailures = 0;
-				target.lastOkAt = Date.now();
-				target.lastErrorCode = null;
-				target.lastErrorKind = null;
-				return {
-					url: target.url,
-					ok: true as const,
-					result: (json as JsonRpcSuccess<T>).result
-				};
-			} catch (err) {
-				const e = err instanceof Error ? err : new Error(String(err));
-				if (!(e instanceof RpcError)) {
-					target.consecutiveFailures++;
-					const cls = classifyEndpointError(e);
-					target.lastErrorCode = cls.code;
-					target.lastErrorKind = cls.kind;
-					if (target.consecutiveFailures >= RPC_MAX_CONSECUTIVE_FAILURES) {
-						const base = 1_500;
-						const cool = Math.min(
-							5 * 60_000,
-							base * 2 ** (target.consecutiveFailures - RPC_MAX_CONSECUTIVE_FAILURES)
-						);
-						target.cooldownUntil = Date.now() + cool;
-					}
-				}
-				return {
-					url: target.url,
-					ok: false as const,
-					error: e
-				};
-			}
-		});
-		return Promise.all(promises);
+	/** The endpoints to try, best first (healthy before cooling down; with
+	 *  privacyFirst, hidden-service nodes before clearnet ones). */
+	nodesInOrder(): readonly string[] {
+		return this.eligible().map((s) => s.url);
 	}
 
-	/* cp408 — warmup() (a browser-side probe that POSTed to every Blurt RPC
-	 * node from the user's device) was REMOVED. Privacy is priority #1: the
-	 * browser must never contact a Blurt RPC node just to measure it. The
-	 * endpoint-settings card now shows node health measured by the INDEXER
-	 * (GET /v1/rpc-endpoints), and the rotator still self-tunes from real
-	 * `call()` latency/health, so no dedicated probe is needed or wanted. */
+	/** The operator behind `url` (see rpcOperatorOf): operators are counted
+	 *  by node name, or by host name for a node without one. They are not
+	 *  proven independent; the default hidden nodes are run by the project. */
+	operatorOf(url: string): string {
+		return rpcOperatorOf(url);
+	}
+
+	/** One JSON-RPC request to the endpoint `url` (no failover: the caller
+	 *  chooses the node). Throws like `call` does when that node fails. */
+	async callAt<T = unknown>(url: string, method: string, params?: unknown): Promise<T> {
+		const target = this.stats.get(url);
+		if (target === undefined) throw new Error(`not in this rotator's pool: ${url}`);
+		return this.callOne<T>(target, method, params);
+	}
 
 	/** Replace the endpoint list. Preserves stats for endpoints that
 	 *  survive the change; new URLs start with a clean slate. */
@@ -527,14 +450,20 @@ export interface PageOrigin {
  *
  * Three cases:
  *
- * 1. SERVED FROM A HIDDEN ORIGIN (.onion / .i2p) — hidden endpoints ONLY. The
- *    visitor is on Tor or I2P and their browser must never open a clearnet
- *    connection, not even as a fallback, so there is no clearnet tier to fall
- *    through to.
+ * 1. SERVED FROM A HIDDEN ORIGIN — that network's hidden endpoints ONLY: the
+ *    `.onion` nodes on a `.onion` page, the `.b32.i2p` nodes on an `.i2p`
+ *    page. The visitor is on Tor or I2P and their browser must never open a
+ *    clearnet connection, not even as a fallback, so there is no clearnet tier
+ *    to fall through to.
  *
- * 2. SERVED OVER PLAIN HTTP — hidden first, then clearnet. An http page may
- *    fetch http subresources, so the hidden tier is genuinely attempted and a
- *    Tor/I2P-capable browser gets the private path before any clearnet node.
+ * 2. SERVED OVER PLAIN HTTP FROM A CLEARNET NAME OR ADDRESS (e.g. a LAN or
+ *    home box without TLS) — clearnet ONLY, like https. The page's
+ *    Content-Security-Policy (the default host's, in
+ *    ops/bunkerweb/frontend/nginx.conf and ops/nginx/web.conf) allows only the
+ *    clearnet nodes, so a hidden node would be blocked before any connection
+ *    and, with the release check's two-node budget, the check would never
+ *    reach a node at all. A visitor on Tor reaches the private path through
+ *    the instance's own .onion (case 1).
  *
  * 3. SERVED OVER HTTPS — clearnet ONLY.
  *
@@ -548,9 +477,10 @@ export interface PageOrigin {
  *    each, on every page load. That is alarming in a project whose whole pitch
  *    is that you can audit what it does in your browser.
  *
- *    Nothing is lost by dropping them here. Chrome treats `.onion` as a
- *    potentially-trustworthy origin and Firefox does not, so the behaviour was
- *    never consistent anyway — and the privacy path it was reaching for is
+ *    Nothing is lost by dropping them here. Browsers disagree on an http
+ *    `.onion` origin (Tor Browser treats it as secure; Chromium does not: no
+ *    secure context, no crypto.subtle, no service worker), so the behaviour
+ *    was never consistent anyway — and the privacy path it was reaching for is
  *    served properly by Onion-Location (`$lib/seo/onionLocation`): Tor Browser
  *    is offered the instance's own `.onion`, and once there, case 1 applies and
  *    the pool is hidden-only. That is a stronger guarantee than a best-effort
@@ -560,54 +490,31 @@ export function selectRpcPool(origin: PageOrigin | null): readonly string[] {
 	// No `location` (SSR, prerender): assume the safest reachable pool.
 	if (origin === null) return [...DEFAULT_RPC_ENDPOINTS];
 
+	// Each hidden network gets its own nodes: an I2P proxy cannot route .onion
+	// and Tor cannot route .b32.i2p.
 	const host = origin.hostname.toLowerCase();
-	if (host.endsWith('.onion') || host.endsWith('.i2p')) {
-		return [...DEFAULT_HIDDEN_RPC_ENDPOINTS];
-	}
+	if (host.endsWith('.onion')) return [...DEFAULT_HIDDEN_RPC_ENDPOINTS];
+	if (host.endsWith('.i2p')) return [...DEFAULT_I2P_RPC_ENDPOINTS];
 
-	// Mixed active content: an https page cannot fetch an http endpoint.
-	const hiddenAreFetchable =
-		origin.protocol.toLowerCase() !== 'https:' ||
-		DEFAULT_HIDDEN_RPC_ENDPOINTS.every((u) => u.toLowerCase().startsWith('https://'));
-
-	return hiddenAreFetchable
-		? [...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_RPC_ENDPOINTS]
-		: [...DEFAULT_RPC_ENDPOINTS];
+	// Any clearnet origin, https or plain http: the clearnet nodes its CSP
+	// allows (an https page could not fetch the http hidden nodes anyway —
+	// mixed active content).
+	return [...DEFAULT_RPC_ENDPOINTS];
 }
 
-/** Get or create the app-wide rotator. Warmup is kicked off on first
- *  access and runs in the background — calls made before warmup completes
- *  still work, just without latency-informed priority. */
+/** Get or create the app-wide rotator: the release check's pool for this page
+ *  origin (selectRpcPool above; privacyFirst keeps hidden nodes ahead should a
+ *  pool ever hold both tiers). The release check (fetchVerifiedRelease in ./releaseFetch.ts) is
+ *  its only user. */
 export function getRotator(): EndpointRotator {
 	if (singleton) return singleton;
-	// cp410 — PINNED to the canonical browser-reachable pool. The rotator now has
-	// a single caller: the boot-time release-integrity check (getDirectChainClient
-	// in $blurt/client), the SOLE sanctioned browser→Blurt-node reader. It must
-	// read the REAL chain (not the operator's indexer, which it exists to
-	// distrust), and from the browser it can only reach the CORS-clean canonical
-	// nodes — so it uses DEFAULT_RPC_ENDPOINTS, not any user-supplied list (the
-	// custom-endpoint feature was removed with the settings card's simplification;
-	// there's nothing left in the app that would honor a custom node).
-	// Which nodes this page may actually reach — see selectRpcPool above for the
-	// three origin cases and why an https page gets no http hidden tier.
-	// privacyFirst makes the rotator exhaust the hidden tier before touching
-	// clearnet wherever both are present.
 	const urls = selectRpcPool(
 		typeof location === 'undefined'
 			? null
 			: { protocol: location.protocol, hostname: location.hostname }
 	);
 	singleton = new EndpointRotator(urls, { privacyFirst: true });
-	// cp268/cp408 privacy (#1): the browser NEVER probe-pings Blurt RPC nodes.
-	// getRotator() runs on ordinary pages (the layout's per-session
-	// release-integrity check reaches it); an eager probe would POST
-	// `get_dynamic_global_properties` to ALL configured Blurt RPC nodes from
-	// the user's browser, leaking the user's IP to several third-party
-	// operators at once (and throwing CORS errors on any node whose CORS
-	// headers are misconfigured). It's also unnecessary: `call()` records each
-	// endpoint's latency / health on every real request, so the rotator
-	// self-tunes organically. The dedicated probe (warmup()) has been removed
-	// entirely (cp408); the endpoint-settings card shows node health measured
-	// server-side by the indexer instead.
+	// No warm-up probe: probing would send the visitor's IP to every node in the
+	// pool. The rotator learns latency and health from the real requests.
 	return singleton;
 }

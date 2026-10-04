@@ -39,11 +39,11 @@ fi
 # under load, broken IPv6 routes, captive portals) can stall
 # `apt-get update` for tens of seconds.  Without a cap, this
 # sidecar can blow past the envelope-smoke's spawnSync budget
-# and produce an intermittent flake (Part 121 cp21 disclosure;
-# fixed in cp22).  Continue even on timeout so a stale package
+# and produce an intermittent flake (disclosure;
+# fixed).  Continue even on timeout so a stale package
 # list still produces usable upgrade counts.
 #
-# OBSERVABILITY (Part 122 cp1, AV14 finding): without this,
+# OBSERVABILITY: without this,
 # repeated apt-update failures would silently degrade the
 # operator's update visibility — stale package lists would
 # produce stale "upgrades pending" counts with no signal that

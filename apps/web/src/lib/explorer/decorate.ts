@@ -63,7 +63,7 @@ export interface OpDecoration {
 	/** True if the op is a Morphit-specific custom_json.  UI uses
 	 *  this to decide whether to show a tinted background. */
 	readonly isMorphitOp: boolean;
-	/** cp397 — interpolation values for the templated labels
+	/** interpolation values for the templated labels
 	 *  (transfer / vote / comment / account_create spell out the
 	 *  accounts + amount involved, e.g. "@a sent 55 BLURT to @b").
 	 *  Undefined for the static pill labels (Morphit ops, unknowns). */
@@ -195,7 +195,7 @@ export function decorateOp(opName: string, opBody: unknown): OpDecoration {
 		if (typeof id === 'string') {
 			const kind = OP_ID_TO_KIND.get(id);
 			if (kind) {
-				// cp439: a release announcement surfaces its version in the pill
+				// a release announcement surfaces its version in the pill
 				// ("Release announcement: Morphit vX.Y.Z"). Falls back to the
 				// plain label if the version can't be read.
 				if (kind === 'morphit_release') {

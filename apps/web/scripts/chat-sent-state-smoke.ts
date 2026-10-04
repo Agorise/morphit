@@ -1,5 +1,5 @@
 /**
- * chat-sent-state-smoke — v1.4.8 (t.txt)
+ * chat-sent-state-smoke — v1.4.8
  *
  * A sent message stops reading "sending…" the instant the broadcast succeeds
  * (fast perceived send), and then the bubble goes CLEAN — no checkmark, no

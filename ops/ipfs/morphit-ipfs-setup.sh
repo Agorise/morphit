@@ -71,7 +71,7 @@ sudo -u "$IPFS_USER" env IPFS_PATH="$IPFS_REPO" sh -c '
 	ipfs config --json Swarm.ConnMgr.LowWater 20 >/dev/null 2>&1 || true
 '
 
-# 3b. Privacy settings (v1.18.0 deep-deep, H3), the same list Ansible and
+# 3b. Privacy settings, the same list Ansible and
 # `morphit-ops upgrade` apply: telemetry off on every node, and on a HIDDEN-ONLY
 # node (MORPHIT_INDEXER_RPC_ENDPOINTS present and empty in indexer.env) no part
 # in the public IPFS network at all. Without this a tor-only box set up by hand

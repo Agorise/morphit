@@ -1,7 +1,7 @@
 /**
  * signOutSweep — what an explicit Sign Out forgets.
  *
- * the maintainer's evidence (v1.8.11): after signing out of @tester3 and into @testowner,
+ * The maintainer's evidence (v1.8.11): after signing out of @tester3 and into @testowner,
  * localStorage still held `morphit.shortBio.tester3`, `displayName.tester3`,
  * his chat peers, unsent feedback drafts, and — because it is not
  * account-scoped at all — `morphit.userPreferences.v1`, whose region value
@@ -28,8 +28,8 @@ function makeStorage(seed: Record<string, string> = {}): Storage {
 
 const ACCOUNT_KEYS = {
 	'morphit.blurtAccount': 'tester3',
-	'morphit.displayName.tester3': 'the maintainer doin testing',
-	'morphit.displayName.testowner': 'testowner@Agorise',
+	'morphit.displayName.tester3': 'just testing',
+	'morphit.displayName.testowner': 'testOwner@Agorise',
 	'morphit.shortBio.tester3': 'Here is my short bio…',
 	'morphit.websiteUrl.testowner': 'https://blurt.blog/@testowner/posts',
 	'morphit.streamingUrl.testowner': 'https://blurt.media/@agorise',
@@ -60,7 +60,7 @@ describe('sweepAccountStorageOnSignOut', () => {
 		}
 	});
 
-	it('THE LEAK the maintainer SAW: userPreferences does not survive into the next account', () => {
+	it('THE LEAK: userPreferences does not survive into the next account', () => {
 		// Not account-scoped, so it is shared outright — his tester3 region
 		// appeared in a fresh testowner session.
 		expect(store.getItem('morphit.userPreferences.v1')).not.toBeNull();

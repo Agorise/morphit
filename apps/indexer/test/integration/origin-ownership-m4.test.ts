@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, M4 — registering someone else's origin first must not
+ * registering someone else's origin first must not
  * lock the real operator out of the federation directory.
  *
  * rv6 A5: `known_instances` is keyed on origin and the register handler did

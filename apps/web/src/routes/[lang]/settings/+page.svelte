@@ -22,7 +22,7 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import WriteBlockedReadOnly from '$components/WriteBlockedReadOnly.svelte';
 	import NotificationSettings from '$components/NotificationSettings.svelte';
-	// cp165 byte-budget: HardwareKeyCard is lazy-imported below.
+	// byte-budget: HardwareKeyCard is lazy-imported below.
 	// It's only rendered for unlocked users with a persisted
 	// keystore (excludes paired-readonly + seed-only + locked
 	// visitors) and pulls webhid + yubikey transport code (~22 KB
@@ -48,9 +48,11 @@
 		orderBlogDefault,
 		setOrderBlogDefault
 	} from '$lib/utils/syndicationPrefs';
-	import { liveIdentity, isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import { liveIdentity, isUnlocked, isPairedReadOnly, hasAnySession } from '$stores/identity';
+	import { sessionAccountName } from '$stores/sessionAccount';
 	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
 	import { getProfile } from '$lib/indexer/client';
+	import { get } from 'svelte/store';
 	import {
 		readLocalPreferredLangs,
 		writeLocalPreferredLangs,
@@ -59,6 +61,7 @@
 	import { isOrderLang } from '$i18n/locales';
 	import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 	import { broadcastProfile, getUserBlurtAccount, setUserBlurtAccount } from '$blurt/ops/profile';
+	import { profileSavePayload } from '$lib/settings/profileSave';
 	import { formatPublicKeyBLT } from '$crypto/keygen';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
@@ -73,12 +76,12 @@
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import VisibilityBadge from '$components/VisibilityBadge.svelte';
 
-	// cp346: profile-field DRAFTS are scoped per account. These keys used to
+	// profile-field DRAFTS are scoped per account. These keys used to
 	// be global (`morphit.displayName` etc.), so signing out of one account
 	// and into another showed the previous account's cached field values in
 	// the form (a correctness + privacy bug).
 	//
-	// v1.8.11 (the maintainer) — this was a `const` resolved ONCE at component init, on
+	// v1.8.11 — this was a `const` resolved ONCE at component init, on
 	// the assumption that "sign-out navigates away → the component remounts on
 	// the next login". That assumption is false in an SPA: sign out and sign
 	// back in as someone else WITHOUT a page reload and this component is
@@ -105,10 +108,15 @@
 	//   • hasPlacedOrderOnChain — the account has at least one order in the
 	//     index (its free first-buy waiver is consumed). Chain-derived, so
 	//     it's robust across devices and covers the common "placed my first
-	//     order, haven't completed a trade yet" case. Determined once on
-	//     mount via the same /v1/orders check the order form uses for waiver
-	//     eligibility; null = not yet known.
-	const syndicationAccount = getUserBlurtAccount();
+	//     order, haven't completed a trade yet" case. Determined via the
+	//     same /v1/orders check the order form uses for waiver eligibility,
+	//     once a session exists and again if the session's account changes;
+	//     null = not yet known.
+	const syndicationAccount = $derived.by(() => {
+		void $hasAnySession;
+		void $liveIdentity;
+		return sessionAccountName();
+	});
 	let hasPlacedOrderOnChain = $state<boolean | null>(null);
 	const firstTradeMilestonePast = $derived(
 		hasFiredFirstTrade(syndicationAccount) || hasPlacedOrderOnChain === true
@@ -119,16 +127,18 @@
 	const syndicationPhaseKnown = $derived(
 		!syndicationAccount || hasFiredFirstTrade(syndicationAccount) || hasPlacedOrderOnChain !== null
 	);
-	// Resolve the chain-side "has this account placed an order" signal once
-	// on mount (browser only; no reactive deps → runs a single time). Drives
-	// the syndication phase switch above.
+	// Resolve the chain-side "has this account placed an order" signal for the
+	// session's account (browser only). Drives the syndication phase switch
+	// above.
 	$effect(() => {
-		if (!browser || !syndicationAccount) return;
+		const account = syndicationAccount;
+		if (!browser || !account) return;
+		hasPlacedOrderOnChain = null;
 		let cancelled = false;
 		void (async () => {
 			try {
 				const origin = resolveOrigin(MORPHIT_INDEXER_ORIGIN);
-				const result = await checkWaiverEligibility(origin, syndicationAccount);
+				const result = await checkWaiverEligibility(origin, account);
 				if (!cancelled) hasPlacedOrderOnChain = result.kind === 'ineligible_has_orders';
 			} catch {
 				// Conservative on error: leave Phase 1 so the first-trade
@@ -150,7 +160,7 @@
 	const STREAMING_URL_STORAGE_KEY = $derived(`morphit.streamingUrl${PROFILE_KEY_SUFFIX}`);
 	const WEBSITE_URL_STORAGE_KEY = $derived(`morphit.websiteUrl${PROFILE_KEY_SUFFIX}`);
 	const SHORT_BIO_STORAGE_KEY = $derived(`morphit.shortBio${PROFILE_KEY_SUFFIX}`);
-	/** The pre-cp346 GLOBAL keys, purged on mount so the leaked drafts don't
+	/** The older GLOBAL keys, purged on mount so the leaked drafts don't
 	 *  linger (they are never read again once scoping is in effect). */
 	const LEGACY_GLOBAL_PROFILE_KEYS = [
 		'morphit.displayName',
@@ -171,7 +181,7 @@
 	let saved = $state('');
 	let saving = $state(false);
 
-	// cp165 byte-budget: lazy-load HardwareKeyCard.  The
+	// byte-budget: lazy-load HardwareKeyCard.  The
 	// `HardwareKeyCardPromise` starts null and gets populated on
 	// first render of the gated card (see {#await} block below).
 	// Once the import resolves, Svelte's {#await} replaces the
@@ -186,7 +196,7 @@
 	let broadcastOk = $state(false);
 
 	/** Localized message for a failed "Save & broadcast", shared by every
-	 *  broadcast handler on this page. A ChainRejectedError (cp344) carries the
+	 *  broadcast handler on this page. A ChainRejectedError carries the
 	 *  chain's OWN reason — "missing required posting authority", "insufficient
 	 *  mana", etc. — so we surface it instead of the opaque generic copy; that
 	 *  is the difference between a user knowing their account is out of resource
@@ -207,7 +217,7 @@
 	let bioBroadcastError = $state('');
 	let bioBroadcastOk = $state(false);
 
-	/** Tier 3.2 (Part 99) — a two-step confirm (like the preferences Clear), but
+	/** Tier 3.2 — a two-step confirm (like the preferences Clear), but
 	 *  scoped to clearing the user's stored fiat / region
 	 *  preferences in the new "Preferences" settings section.
 	 *  Two-step confirm so a misclick doesn't silently wipe the
@@ -241,7 +251,7 @@
 	const accountInputInvalid = $derived(
 		accountInput.trim().length > 0 && ACCOUNT_INVALID_CHAR.test(accountInput.trim().toLowerCase())
 	);
-	/** Sally finding H2 (Part 68): true when the user just landed
+	/** Sally finding H2: true when the user just landed
 	 *  here from a seed/keyfile import, which doesn't carry an
 	 *  account name.  Triggers an explanatory banner above the
 	 *  account-name section so the user knows why they're here.
@@ -260,10 +270,31 @@
 	let streamingBroadcastError = $state('');
 	let streamingBroadcastOk = $state(false);
 	let websiteInput = $state('');
-	// v1.15.0 — preferred languages (primary + additional). Seeded from the local
-	// mirror → chain profile → UI locale; written to the chain profile on any save.
+	// v1.15.0 — preferred languages (primary + additional). Seeded once the
+	// profile has loaded: the set chosen on this device (local mirror) → the
+	// chain profile → the UI locale. Written by the card's own Save & broadcast.
 	let preferredPrimary = $state('');
 	let preferredAdditional = $state<string[]>([]);
+	let langsBroadcasting = $state(false);
+	let langsBroadcastOk = $state(false);
+	let langsBroadcastError = $state('');
+	/** The published profile's load state. Publishing any field waits for
+	 *  'ok': a field the page did not load would otherwise go out empty. */
+	let profileLoad = $state<'idle' | 'loading' | 'ok' | 'failed'>('idle');
+	/** Re-runs the published-profile read (set once the account is known). */
+	let loadPublishedProfile: (() => Promise<void>) | null = null;
+	const canPublish = $derived(profileLoad === 'ok');
+
+	function seedPreferredLangs(chainLangs: readonly string[] | null): void {
+		const set =
+			readLocalPreferredLangs() ?? (chainLangs && chainLangs.length > 0 ? [...chainLangs] : null);
+		if (set === null) {
+			if (!preferredPrimary) preferredPrimary = currentLang;
+			return;
+		}
+		preferredPrimary = set[0]!;
+		preferredAdditional = set.slice(1);
+	}
 	let websiteSaved = $state('');
 	let websiteSaving = $state(false);
 	let websiteSavedToast = $state(false);
@@ -366,15 +397,15 @@
 	 *  page. `avatar-size-thresholds-smoke` pins these two numbers to the
 	 *  module's exports so the mirror cannot drift.
 	 *
-	 *  v1.8.10 (the maintainer) — these were previously hardcoded as 2048 (warn) and 3072
+	 *  v1.8.10 — these were previously hardcoded as 2048 (warn) and 3072
 	 *  (cap), and BOTH were wrong. The real cap is 6144, so the preview told
 	 *  users "of 3.0 KB maximum" for a limit that did not exist, and a 3.5 KB
 	 *  image was reported as over a maximum it was comfortably under. The warn
 	 *  threshold sat at 2048 — 33% of the actual cap — so a perfectly fine
 	 *  2.9 KB avatar was shown a red error saying it was near a limit it was
-	 *  nowhere near. the maintainer hit both. */
+	 *  nowhere near. The maintainer hit both. */
 	const AVATAR_CAP_BYTES = 6144;
-	// v1.16.5 — the soft "getting close" warn threshold is gone (the maintainer): a file
+	// v1.16.5 — the soft "getting close" warn threshold is gone: a file
 	// comfortably under the cap needs no yellow nag. Only the hard cap warns.
 	/** The selected file's name, shown truncated so a very long or space-laden
 	 *  filename can never overflow the layout. */
@@ -435,7 +466,7 @@
 				nostrSaved = n;
 				nostrInput = n;
 			}
-			// cp346: which fields have NO local draft for this account? Those get
+			// which fields have NO local draft for this account? Those get
 			// hydrated from the on-chain profile below — so a freshly-imported
 			// account (or this account on a new device) shows its real on-chain
 			// values instead of blanks. A local draft is a pending edit and wins.
@@ -451,7 +482,7 @@
 			if (acct) {
 				accountSaved = acct;
 				accountInput = acct;
-				// cp346: purge the pre-scoping GLOBAL profile keys so a previous
+				// purge the pre-scoping GLOBAL profile keys so a previous
 				// account's leaked drafts don't linger. Safe — the scoped keys
 				// above (which carry `.${acct}`) are never these bare names while
 				// logged in, so this never deletes the current account's draft.
@@ -462,16 +493,28 @@
 						// Privacy Mode — nothing to purge.
 					}
 				}
-				// One-shot, best-effort profile fetch: drives the "Remove avatar"
-				// button (only shown when an avatar exists on chain) AND hydrates
-				// the editable fields that have no local draft (cp346). Failure
-				// leaves the avatar button hidden + the fields empty — safe.
-				if (!avatarExistenceChecked) {
+				// One-shot profile fetch: drives the "Remove avatar" button (only
+				// shown when an avatar exists on chain), hydrates the editable
+				// fields that have no local draft and seeds the preferred
+				// languages. Publishing waits for it (profileLoad === 'ok'): a
+				// field the page did not load must not be sent as empty.
+				// Only with a session (the page sends a locked visit to unlock):
+				// the read names the account to the operator.
+				if (!avatarExistenceChecked && get(hasAnySession)) {
 					avatarExistenceChecked = true;
-					void (async () => {
+					loadPublishedProfile = async () => {
+						profileLoad = 'loading';
 						try {
 							const r = await getProfile(acct);
-							if (r.ok) {
+							if (!r.ok) {
+								// No profile yet is a loaded, empty profile.
+								profileLoad = r.code === 'not_found' ? 'ok' : 'failed';
+								if (profileLoad === 'ok') seedPreferredLangs(null);
+								return;
+							}
+							seedPreferredLangs(preferredLangsFromProfile(r.data.json_metadata));
+							profileLoad = 'ok';
+							{
 								const props = extractLabelPropsFromProfile(r.data);
 								hasCustomAvatar = !!(props.avatarSvg || props.avatarDataUri);
 								currentAvatarSvg = props.avatarSvg;
@@ -500,12 +543,14 @@
 								}
 							}
 						} catch {
-							// Indexer unreachable / no profile — leave hidden + empty.
+							// Indexer unreachable — publishing stays paused (Retry).
+							profileLoad = 'failed';
 						}
-					})();
+					};
+					void loadPublishedProfile();
 				}
 			}
-			// Sally finding H2 (Part 68): one-shot banner trigger
+			// Sally finding H2: one-shot banner trigger
 			// for users redirected here from seed/keyfile import.
 			// Read-and-clear: the banner shows once, then disappears
 			// forever for this session.  If the import flow couldn't
@@ -525,14 +570,14 @@
 		}
 	});
 
-	// v1.8.10 (the maintainer): pass the signed-in account so the reserved-name guard can
+	// v1.8.10: pass the signed-in account so the reserved-name guard can
 	// exempt its rightful owner — @agorise setting "Agorise" is not
 	// impersonation. `?? undefined` keeps the strict behaviour for a signed-out
 	// or unknown session rather than passing an empty string that matches
 	// nothing. The indexer re-checks against the chain-authenticated signer and
 	// is the authority; this only stops the FORM rejecting what the chain allows.
 	const validation = $derived(validateDisplayName(input, getUserBlurtAccount() ?? undefined));
-	/** v1.5.0 (t.txt line 5): the field has been emptied while a name is still
+	/** v1.5.0: the field has been emptied while a name is still
 	 *  saved — a "remove my display name" intent. An empty name is otherwise
 	 *  invalid (too short), so this gates the Save buttons + handlers to allow
 	 *  saving the removal. */
@@ -540,7 +585,7 @@
 	const remaining = $derived(DISPLAY_NAME_MAX_LENGTH - [...input].length);
 
 	const bioValidation = $derived(validateShortBio(bioInput));
-	/** v1.5.0 (t.txt line 5): bio counterpart of `clearing`. */
+	/** v1.5.0: bio counterpart of `clearing`. */
 	const bioClearing = $derived(bioInput.trim().length === 0 && bioSaved.length > 0);
 	const bioRemaining = $derived(SHORT_BIO_MAX_LENGTH - [...bioInput].length);
 
@@ -604,7 +649,7 @@
 	// posting key when unlocked, a demo otherwise.
 	const previewPubkey = $derived($liveIdentity ? $liveIdentity.posting.publicKey : DEMO_PUBKEY);
 
-	/** cp452 (t.txt 2 + 3) — optimistically publish the user's CURRENT profile
+	/** optimistically publish the user's CURRENT profile
 	 *  (all fields, from the just-saved component state) into the shared profile
 	 *  cache after a CONFIRMED broadcast, so the orderbook + every self
 	 *  IdentityLabel reflect the edit within a frame instead of after the 90s
@@ -698,10 +743,36 @@
 		return [...new Set([preferredPrimary, ...preferredAdditional].filter((c) => isOrderLang(c)))];
 	}
 
-	async function saveAndBroadcast(): Promise<void> {
-		await saveLocal();
+	/** The languages card's own save: this device's chosen set (the orderbook
+	 *  filter and the post-language default follow it) and the chain profile's
+	 *  preferred_langs. */
+	async function saveAndBroadcastLangs(): Promise<void> {
+		if (!canPublish) return;
 		const live = $liveIdentity;
 		if (!live) return;
+		const langs = preferredLangsForSave();
+		langsBroadcasting = true;
+		langsBroadcastError = '';
+		langsBroadcastOk = false;
+		try {
+			await broadcastProfile(live, profileSavePayload({ field: 'preferred_langs', value: langs }));
+			writeLocalPreferredLangs(langs);
+			langsBroadcastOk = true;
+			primeSelfProfile();
+			setTimeout(() => (langsBroadcastOk = false), 3000);
+		} catch (err) {
+			console.warn('[settings] preferred-languages broadcast failed:', err);
+			langsBroadcastError = broadcastErrCopy(err);
+		} finally {
+			langsBroadcasting = false;
+		}
+	}
+
+	async function saveAndBroadcast(): Promise<void> {
+		if (!canPublish || clearing) return;
+		await saveLocal();
+		const live = $liveIdentity;
+		if (!live || !saved) return;
 		broadcasting = true;
 		broadcastError = '';
 		broadcastOk = false;
@@ -711,17 +782,11 @@
 			// indexer stores the whole json_metadata blob, and
 			// IdentityLabel reads specific keys out of it on every
 			// render site.
-			await broadcastProfile(live, {
-				display_name: saved,
-				nostr_url: nostrCleaned || undefined,
-				streaming_url: streamingCleaned || undefined,
-				website_url: websiteCleaned || undefined,
-				short_bio: bioSaved,
-				preferred_langs: preferredLangsForSave()
-			});
-			writeLocalPreferredLangs(preferredLangsForSave());
+			// Only the name (see $lib/settings/profileSave). An empty name is
+			// never sent: the indexer reads it as "no name in this op".
+			await broadcastProfile(live, profileSavePayload({ field: 'display_name', value: saved }));
 			broadcastOk = true;
-			// v1.8.15 (t.txt #2) — confirmed on-chain: publish the new name to the
+			// v1.8.15 — confirmed on-chain: publish the new name to the
 			// shared self-profile store so the avatar menu + every IdentityLabel of
 			// self show it INSTANTLY (the avatar-save path already does this via
 			// setSelfAvatar; the name path didn't, so a new name only appeared once
@@ -757,6 +822,7 @@
 	}
 
 	async function saveAndBroadcastBio(): Promise<void> {
+		if (!canPublish) return;
 		await saveBioLocal();
 		const live = $liveIdentity;
 		if (!live) return;
@@ -764,16 +830,8 @@
 		bioBroadcastError = '';
 		bioBroadcastOk = false;
 		try {
-			// Carry every profile field so the whole json_metadata blob
-			// stays in sync on-chain (same discipline as the display-name
-			// broadcast).
-			await broadcastProfile(live, {
-				display_name: saved,
-				nostr_url: nostrSaved,
-				streaming_url: streamingSaved,
-				website_url: websiteSaved,
-				short_bio: bioSaved
-			});
+			// Only the bio: the indexer keeps every field the op omits.
+			await broadcastProfile(live, profileSavePayload({ field: 'short_bio', value: bioSaved }));
 			bioBroadcastOk = true;
 			primeSelfProfile();
 			setTimeout(() => (bioBroadcastOk = false), 3000);
@@ -808,25 +866,19 @@
 	}
 
 	async function saveAndBroadcastStreaming(): Promise<void> {
+		if (!canPublish) return;
 		await saveStreamingLocal();
 		const live = $liveIdentity;
 		if (!live) return;
-		const displayName = saved || (validation.ok ? validation.cleaned : '');
 		streamingBroadcasting = true;
 		streamingBroadcastError = '';
 		streamingBroadcastOk = false;
 		try {
-			// Broadcast ALL known profile fields together so the
-			// indexer's stored json_metadata reflects the user's full
-			// intent. Omitting nostr_url here would orphan any
-			// previously-broadcast Nostr URL.
-			await broadcastProfile(live, {
-				display_name: displayName,
-				nostr_url: nostrSaved,
-				streaming_url: streamingSaved,
-				website_url: websiteSaved,
-				short_bio: bioSaved
-			});
+			// Only this link: the indexer keeps every field the op omits.
+			await broadcastProfile(
+				live,
+				profileSavePayload({ field: 'streaming_url', value: streamingSaved })
+			);
 			streamingBroadcastOk = true;
 			primeSelfProfile();
 			setTimeout(() => (streamingBroadcastOk = false), 3000);
@@ -861,21 +913,19 @@
 	}
 
 	async function saveAndBroadcastWebsite(): Promise<void> {
+		if (!canPublish) return;
 		await saveWebsiteLocal();
 		const live = $liveIdentity;
 		if (!live) return;
-		const displayName = saved || (validation.ok ? validation.cleaned : '');
 		websiteBroadcasting = true;
 		websiteBroadcastError = '';
 		websiteBroadcastOk = false;
 		try {
-			await broadcastProfile(live, {
-				display_name: displayName,
-				nostr_url: nostrSaved,
-				streaming_url: streamingSaved,
-				website_url: websiteSaved,
-				short_bio: bioSaved
-			});
+			// Only this link: the indexer keeps every field the op omits.
+			await broadcastProfile(
+				live,
+				profileSavePayload({ field: 'website_url', value: websiteSaved })
+			);
 			websiteBroadcastOk = true;
 			primeSelfProfile();
 			setTimeout(() => (websiteBroadcastOk = false), 3000);
@@ -910,26 +960,16 @@
 	}
 
 	async function saveAndBroadcastNostr(): Promise<void> {
+		if (!canPublish) return;
 		await saveNostrLocal();
 		const live = $liveIdentity;
 		if (!live) return;
-		// Broadcast requires a display_name (indexer validates
-		// min length 1). Use the saved one, or fall back to the
-		// Broadcast the full profile bag so we don't orphan any
-		// previously-set field. A missing display name is fine —
-		// the field is simply omitted from json_metadata.
-		const displayName = saved || (validation.ok ? validation.cleaned : '');
 		nostrBroadcasting = true;
 		nostrBroadcastError = '';
 		nostrBroadcastOk = false;
 		try {
-			await broadcastProfile(live, {
-				display_name: displayName,
-				nostr_url: nostrSaved,
-				streaming_url: streamingSaved,
-				website_url: websiteSaved,
-				short_bio: bioSaved
-			});
+			// Only this link: the indexer keeps every field the op omits.
+			await broadcastProfile(live, profileSavePayload({ field: 'nostr_url', value: nostrSaved }));
 			nostrBroadcastOk = true;
 			primeSelfProfile();
 			setTimeout(() => (nostrBroadcastOk = false), 3000);
@@ -1021,23 +1061,16 @@
 			avatarBroadcastError = $_('common.broadcast_err.offline');
 			return;
 		}
-		const displayName = saved || (validation.ok ? validation.cleaned : '');
 		avatarBroadcasting = true;
 		avatarBroadcastError = '';
 		avatarBroadcastOk = false;
 		try {
-			await broadcastProfile(live, {
-				display_name: displayName,
-				nostr_url: nostrSaved,
-				streaming_url: streamingSaved,
-				website_url: websiteSaved,
-				short_bio: bioSaved,
-				// Pass BOTH fields explicitly so the indexer knows
-				// exactly which one is active; empty string clears
-				// the other half of the pair.
-				avatar_svg: avatarStagedSvg,
-				avatar_data_uri: avatarStagedDataUri
-			});
+			// Only the avatar, BOTH halves so the indexer knows exactly which
+			// one is active (an empty string clears the other half).
+			await broadcastProfile(
+				live,
+				profileSavePayload({ field: 'avatar', svg: avatarStagedSvg, dataUri: avatarStagedDataUri })
+			);
 			hasCustomAvatar = true;
 			currentAvatarSvg = avatarStagedSvg || null;
 			currentAvatarDataUri = avatarStagedDataUri || null;
@@ -1068,20 +1101,11 @@
 		// semantic.
 		const live = $liveIdentity;
 		if (!live) return;
-		const displayName = saved || (validation.ok ? validation.cleaned : '');
 		avatarBroadcasting = true;
 		avatarBroadcastError = '';
 		avatarBroadcastOk = false;
 		try {
-			await broadcastProfile(live, {
-				display_name: displayName,
-				nostr_url: nostrSaved,
-				streaming_url: streamingSaved,
-				website_url: websiteSaved,
-				short_bio: bioSaved,
-				avatar_svg: '',
-				avatar_data_uri: ''
-			});
+			await broadcastProfile(live, profileSavePayload({ field: 'avatar', svg: '', dataUri: '' }));
 			hasCustomAvatar = false;
 			currentAvatarSvg = null;
 			currentAvatarDataUri = null;
@@ -1277,7 +1301,9 @@
 
 	$effect(() => {
 		if (!browser) return;
-		const me = getUserBlurtAccount();
+		// Only with a session (a locked visit is sent to unlock first).
+		void $hasAnySession;
+		const me = sessionAccountName();
 		if (!me) return;
 		// Force a fresh fetch on every mount — NOT loadBlocks(), which
 		// early-returns once the store has loaded once in the session, so
@@ -1322,11 +1348,12 @@
 		blockedRefreshedTimer = setTimeout(() => (blockedRefreshed = false), 2000);
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
-	// Seed the primary preferred language to the UI locale until the profile loads.
+	// The primary preferred language shows the UI locale until the profile has
+	// loaded (seedPreferredLangs then sets the real one).
 	$effect(() => {
 		if (!preferredPrimary) preferredPrimary = currentLang;
 	});
@@ -1369,7 +1396,7 @@
 	     their account name and verifies the match against on-
 	     chain posting.key_auths before saving. -->
 	{#if needsAccountNameBanner}
-		<!-- Sally finding H2 (Part 68): one-shot landing banner for
+		<!-- Sally finding H2: one-shot landing banner for
 		     users who just imported via seed or keyfile.  Without
 		     this they land on a generic "settings" page with no
 		     idea why and may close the tab thinking the import
@@ -1538,7 +1565,7 @@
 
 		<!-- Permanence warning — high-contrast callout so it doesn't
 		     get skimmed past. On-chain means public forever, no
-		     delete, no takedown. cp512 [S3]: once a custom avatar is
+		     delete, no takedown. once a custom avatar is
 		     already on chain the user has crossed this bridge, so the
 		     warning is just noise — hide it. -->
 		{#if !hasCustomAvatar}
@@ -1558,7 +1585,7 @@
 		<!-- File input — the native control is visually hidden (sr-only) but fully
 		     functional via the label; we render the chosen filename ourselves,
 		     `truncate`d with the full name on hover, so a very long or space-laden
-		     filename can never overflow the card (the maintainer, v1.16.5). -->
+		     filename can never overflow the card (v1.16.5). -->
 		<div class="mt-6">
 			<input
 				id="avatar-file-input"
@@ -1616,7 +1643,7 @@
 						avatarDataUri={avatarStagedDataUri || null}
 						avatarSize={96}
 					/>
-					<!-- v1.8.10 (the maintainer): `min-w-0 flex-1` stops this column being squeezed
+					<!-- v1.8.10: `min-w-0 flex-1` stops this column being squeezed
 					     into a two-words-per-line ribbon beside the 96px avatar. It had
 					     no width basis at all, so the flex row gave it whatever was
 					     left; on a narrow card that was almost nothing. flex-wrap on the
@@ -1633,8 +1660,8 @@
 						</p>
 						<!-- Only the hard cap warns now: if the processed avatar is over
 						     the 6144-byte limit it cannot be broadcast, so we say so. A
-						     file that is comfortably under the cap needs no nagging (the maintainer,
-						     v1.16.5) — the plain size readout above is enough. -->
+						     file that is comfortably under the cap needs no nagging
+						     (v1.16.5) — the plain size readout above is enough. -->
 						{#if avatarStagedBytes > AVATAR_CAP_BYTES}
 							<p class="mt-1 text-red-600 dark:text-red-400">
 								{$_('settings.avatar.preview_too_large', {
@@ -1671,7 +1698,7 @@
 			{#if $isUnlocked && !avatarStagedSvg && !avatarStagedDataUri && hasCustomAvatar}
 				<div class="flex items-center gap-3">
 					{#if currentAvatarSvg}
-						<!-- An <img>, never inlined (v1.18.0 deep-deep, M1). -->
+						<!-- An <img>, never inlined. -->
 						<img
 							src={svgAvatarImgSrc(currentAvatarSvg)}
 							alt=""
@@ -1725,6 +1752,19 @@
 			onCancel={() => (confirmRemoveAvatarOpen = false)}
 		/>
 	</section>
+
+	{#if profileLoad === 'failed'}
+		<!-- Publishing waits for the published profile: a field this page did
+		     not load would otherwise be sent empty and erase it. -->
+		<section class="card mt-6 border-amber-300 dark:border-amber-700" role="status">
+			<p class="text-sm">{$_('settings.profile_load_failed')}</p>
+			<div class="mt-3">
+				<BusyButton variant="secondary" size="sm" onclick={() => void loadPublishedProfile?.()}>
+					{$_('common.retry')}
+				</BusyButton>
+			</div>
+		</section>
+	{/if}
 
 	<!-- ─── Display name ─── -->
 	<section class="card mt-6" aria-labelledby="display-name-heading">
@@ -1796,7 +1836,7 @@
 					size="sm"
 					busy={broadcasting}
 					done={broadcastOk}
-					disabled={!clearing && !validation.ok}
+					disabled={!canPublish || clearing || !validation.ok}
 					busyLabel={$_('settings.display_name.broadcast_pending')}
 					onclick={saveAndBroadcast}
 				>
@@ -1808,6 +1848,15 @@
 				</BusyButton>
 			{/if}
 		</div>
+
+		{#if clearing}
+			<!-- A published name can't be removed yet (the network keeps the
+			     stored name when an op carries none); clearing changes only
+			     this device. -->
+			<p class="mt-3 text-sm text-ink-600 dark:text-ink-300">
+				{$_('settings.display_name.clear_local_only')}
+			</p>
+		{/if}
 
 		{#if broadcastError}
 			<div class="mt-3">
@@ -1887,7 +1936,7 @@
 					size="sm"
 					busy={bioBroadcasting}
 					done={bioBroadcastOk}
-					disabled={!bioClearing && !bioValidation.ok}
+					disabled={!canPublish || (!bioClearing && !bioValidation.ok)}
 					busyLabel={$_('settings.display_name.broadcast_pending')}
 					onclick={saveAndBroadcastBio}
 				>
@@ -1948,6 +1997,31 @@
 			</span>
 			<LanguageFilterSelect bind:value={preferredAdditional} />
 		</div>
+
+		{#if $isUnlocked}
+			<div class="mt-6 flex flex-wrap items-center gap-3">
+				<BusyButton
+					variant="primary"
+					size="sm"
+					busy={langsBroadcasting}
+					done={langsBroadcastOk}
+					disabled={!canPublish}
+					busyLabel={$_('settings.display_name.broadcast_pending')}
+					onclick={saveAndBroadcastLangs}
+				>
+					{#if langsBroadcastOk}
+						{$_('common.broadcasted')}
+					{:else}
+						{$_('settings.display_name.save_and_broadcast')}
+					{/if}
+				</BusyButton>
+			</div>
+		{/if}
+		{#if langsBroadcastError}
+			<div class="mt-3">
+				<StatusLine kind="error">{langsBroadcastError}</StatusLine>
+			</div>
+		{/if}
 	</section>
 
 	<!-- ─── Website / Blog URL ─── -->
@@ -2032,7 +2106,7 @@
 					size="sm"
 					busy={websiteBroadcasting}
 					done={websiteBroadcastOk}
-					disabled={!websiteIsValid}
+					disabled={!canPublish || !websiteIsValid}
 					busyLabel={$_('common.broadcasting')}
 					onclick={saveAndBroadcastWebsite}
 				>
@@ -2148,7 +2222,7 @@
 					size="sm"
 					busy={streamingBroadcasting}
 					done={streamingBroadcastOk}
-					disabled={!streamingIsValid}
+					disabled={!canPublish || !streamingIsValid}
 					busyLabel={$_('common.broadcasting')}
 					onclick={saveAndBroadcastStreaming}
 				>
@@ -2263,7 +2337,7 @@
 					size="sm"
 					busy={nostrBroadcasting}
 					done={nostrBroadcastOk}
-					disabled={!nostrIsValid}
+					disabled={!canPublish || !nostrIsValid}
 					busyLabel={$_('settings.nostr_url.broadcast_pending')}
 					onclick={saveAndBroadcastNostr}
 				>
@@ -2300,7 +2374,7 @@
 	     own state via the preferences store, and its own event
 	     handlers. Lives here because it belongs in Settings but is
 	     substantial enough that inlining would bloat this file.
-	     Wrapped in an id="notifications" anchor (cp233) so the
+	     Wrapped in an id="notifications" anchor so the
 	     AvatarMenu "Notification settings" link (/settings#notifications)
 	     actually scrolls here instead of landing at the page top. -->
 	<div id="notifications">
@@ -2366,7 +2440,7 @@
 			<p class="mt-2 text-ink-600 dark:text-ink-300">
 				{$_('settings.syndication.explain')}
 			</p>
-			<!-- Sally finding H9 (Part 68): selling-point pitch so a user landing here understands the privacy-vs-reach tradeoff. -->
+			<!-- Sally finding H9: selling-point pitch so a user landing here understands the privacy-vs-reach tradeoff. -->
 			<p
 				class="mt-3 rounded-xl border border-morphit-emerald/30 bg-morphit-emerald/5 p-3 text-sm text-ink-700 dark:border-morphit-emerald/40 dark:text-ink-200"
 			>
@@ -2594,7 +2668,7 @@
 		{/if}
 	</section>
 
-	<!-- ─── Preferences (Tier 3.2, Part 99) ─── -->
+	<!-- ─── Preferences (Tier 3.2) ─── -->
 	<section class="card mt-6" aria-labelledby="preferences-heading">
 		<h2 id="preferences-heading" class="font-display text-xl font-bold">
 			{$_('settings.preferences.heading')}

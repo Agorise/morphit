@@ -65,7 +65,7 @@
 	// (no version string from verify.json yet).
 	const SW_ONLY = '__sw__';
 
-	// v1.8.15 (t.txt #6) — the LAST piece of the "Load it now twice on mobile"
+	// v1.8.15 — the LAST piece of the "Load it now twice on mobile"
 	// bug. v1.8.14 recorded dismissedVersion = deployedVersion ?? SW_ONLY on
 	// accept, which is TIMING-DEPENDENT: if the version poll hasn't resolved
 	// when a reload lands back on the OLD shell (mobile throttles that poll),
@@ -89,12 +89,12 @@
 	const acceptPending = $derived(acceptedRunning !== null && acceptedRunning === runningVersion);
 
 	// v1.1.5 — the "Load it now twice on mobile" bug was NOT the SW handoff
-	// timing (cp364→438 all chased that and failed on-device). The real cause:
+	// timing (several earlier fixes chased that and failed on-device). The real cause:
 	// a reload could be answered from a stale HTTP-cached index.html, landing
 	// on the OLD shell — so the poll re-detected the mismatch and re-offered.
 	// The fix is upstream: the service worker now fetches navigations with
 	// `cache:'reload'` (fresh shell from origin every time). With the reload
-	// reliably landing on the new bytes, cp438's cross-reload "resume + attempt
+	// reliably landing on the new bytes, the cross-reload "resume + attempt
 	// cap" machinery is unnecessary — and it was itself the thing that
 	// re-surfaced the snackbar at its cap (the visible SECOND fire), so it's
 	// removed. Worst case now is ONE honest re-offer if a reload genuinely
@@ -284,7 +284,7 @@
 	// are network-first, so that reload still pulls the fresh shell.
 	function applyUpdate(): void {
 		applying = true;
-		// v1.8.15 (t.txt #6) — record the bundle we're accepting FROM, so a
+		// v1.8.15 — record the bundle we're accepting FROM, so a
 		// reload that lands back on this same shell (mobile) doesn't re-offer.
 		// Timing-independent: runningVersion is baked in, always known here,
 		// unlike deployedVersion which the poll may not have resolved yet.
@@ -294,7 +294,7 @@
 			// private-mode denial must not block the reload
 		}
 		acceptedRunning = runningVersion;
-		// v1.8.14 (the maintainer) — RECORD THE ACCEPTANCE BEFORE RELOADING.
+		// v1.8.14 — RECORD THE ACCEPTANCE BEFORE RELOADING.
 		//
 		// This is why "Load it now" kept appearing twice on mobile, and why the
 		// previous fix (a more generous handoff timeout) never finished the job:

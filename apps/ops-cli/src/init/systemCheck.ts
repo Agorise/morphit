@@ -20,6 +20,7 @@ import { resolve4 } from 'node:dns/promises';
 import { connect } from 'node:net';
 import { sanitizeForTerm } from '../render/term.ts';
 import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
+import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 
 export type CheckStatus = 'ok' | 'warn' | 'error';
 
@@ -80,8 +81,11 @@ export async function runSystemCheck(): Promise<SystemCheckResult> {
 	// running is a common and distinct state from not-installed.
 	checks.push(checkPostgresInstalled());
 	checks.push(await checkPostgresReachable());
-	checks.push(await checkOutboundHttps());
-	checks.push(await checkSystemTime());
+	// One probe of the Blurt RPC pool serves both (no other host is asked).
+	let pool: Promise<RpcPoolProbe> | null = null;
+	const probe = (): Promise<RpcPoolProbe> => (pool ??= probeRpcPool());
+	checks.push(await checkOutboundHttps(probe));
+	checks.push(await checkSystemTime(probe));
 
 	// ─── OS hardening (Q9 — operator setup checklist) ──────────
 	// Best-effort. These read from local files / run quick local
@@ -350,7 +354,7 @@ export function classifyOs(
 	// base matters.  Pre-beta11 these fell through to the generic
 	// "unsupported distro" warn — accurate enough but vague.  Recognize
 	// them explicitly as the Ubuntu-based systems they are.  (The
-	// Ansible installer separately gates on a `noble` base — cp226 — so
+	// Ansible installer separately gates on a `noble` base — so
 	// this systemCheck only needs to say "works, Ubuntu-based".)
 	const derivative =
 		id === 'linuxmint' ||
@@ -445,7 +449,12 @@ const REQUIRED_PORTS: ReadonlyArray<{ port: number; what: string; block: boolean
 export function portConflictCheck(listening: Set<number>): Check {
 	const clashes = REQUIRED_PORTS.filter((p) => listening.has(p.port));
 	if (clashes.length === 0) {
-		return { name: 'Port availability', actual: 'free', recommended: '80/443/5432 free', status: 'ok' };
+		return {
+			name: 'Port availability',
+			actual: 'free',
+			recommended: '80/443/5432 free',
+			status: 'ok'
+		};
 	}
 	const blocking = clashes.filter((p) => p.block);
 	const desc = clashes.map((p) => `${p.port} (${p.what})`).join(', ');
@@ -464,10 +473,18 @@ export function portConflictCheck(listening: Set<number>): Check {
 
 function checkPortConflicts(): Check {
 	try {
-		const out = execSync('ss -tlnH 2>/dev/null || netstat -tln 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
+		const out = execSync('ss -tlnH 2>/dev/null || netstat -tln 2>/dev/null', {
+			encoding: 'utf8',
+			timeout: 3000
+		});
 		return portConflictCheck(parseListeningPorts(out));
 	} catch {
-		return { name: 'Port availability', actual: 'could not check', recommended: '80/443/5432 free', status: 'warn' };
+		return {
+			name: 'Port availability',
+			actual: 'could not check',
+			recommended: '80/443/5432 free',
+			status: 'warn'
+		};
 	}
 }
 
@@ -483,7 +500,10 @@ function checkDockerSubnet(): Check {
 			"docker network ls -q 2>/dev/null | xargs -r docker network inspect 2>/dev/null | grep -oE '[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}' || true",
 			{ encoding: 'utf8', timeout: 5000 }
 		);
-		const cidrs = out.split('\n').map((s) => s.trim()).filter(Boolean);
+		const cidrs = out
+			.split('\n')
+			.map((s) => s.trim())
+			.filter(Boolean);
 		if (overlapsMorphitSubnet(cidrs)) {
 			return {
 				name: 'Docker subnet',
@@ -493,9 +513,19 @@ function checkDockerSubnet(): Check {
 				note: "an existing docker network overlaps 172.20.0.0/16, which Morphit's compose network needs — 'docker compose up' will clash. Free that network before installing"
 			};
 		}
-		return { name: 'Docker subnet', actual: '172.20.0.0/16 free', recommended: '172.20.0.0/16 free', status: 'ok' };
+		return {
+			name: 'Docker subnet',
+			actual: '172.20.0.0/16 free',
+			recommended: '172.20.0.0/16 free',
+			status: 'ok'
+		};
 	} catch {
-		return { name: 'Docker subnet', actual: 'n/a', recommended: '172.20.0.0/16 free', status: 'ok' };
+		return {
+			name: 'Docker subnet',
+			actual: 'n/a',
+			recommended: '172.20.0.0/16 free',
+			status: 'ok'
+		};
 	}
 }
 
@@ -503,20 +533,39 @@ function checkDockerSubnet(): Check {
  *  Postgres URL both depend on it. */
 function checkLocalhostResolves(): Check {
 	try {
-		const out = execSync('getent hosts localhost 2>/dev/null', { encoding: 'utf8', timeout: 2000 }).trim();
+		const out = execSync('getent hosts localhost 2>/dev/null', {
+			encoding: 'utf8',
+			timeout: 2000
+		}).trim();
 		const ip = out.split(/\s+/)[0] ?? '';
 		if (ip === '127.0.0.1' || ip === '::1') {
 			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'ok' };
 		}
 		if (ip) {
-			return { name: 'localhost resolves', actual: ip, recommended: '127.0.0.1', status: 'warn', note: 'localhost maps to an unexpected address; harmless — the wizard already uses 127.0.0.1 for the database automatically.' };
+			return {
+				name: 'localhost resolves',
+				actual: ip,
+				recommended: '127.0.0.1',
+				status: 'warn',
+				note: 'localhost maps to an unexpected address; harmless — the wizard already uses 127.0.0.1 for the database automatically.'
+			};
 		}
-		return { name: 'localhost resolves', actual: 'no', recommended: '127.0.0.1', status: 'error', note: 'add "127.0.0.1 localhost" to /etc/hosts — the local install inventory and the DB URL both need it' };
+		return {
+			name: 'localhost resolves',
+			actual: 'no',
+			recommended: '127.0.0.1',
+			status: 'error',
+			note: 'add "127.0.0.1 localhost" to /etc/hosts — the local install inventory and the DB URL both need it'
+		};
 	} catch {
-		return { name: 'localhost resolves', actual: 'unknown', recommended: '127.0.0.1', status: 'warn' };
+		return {
+			name: 'localhost resolves',
+			actual: 'unknown',
+			recommended: '127.0.0.1',
+			status: 'warn'
+		};
 	}
 }
-
 
 // ── Ansible version (v1.15.1) — the "0 hosts" root cause on Ubuntu 22.04 ──
 // Ubuntu 22.04's `apt install ansible` gives the EOL 2.10, which can't load the
@@ -570,7 +619,8 @@ export function interpretDnsResult(
 	if (domainAddrs.length === 0) {
 		return {
 			ok: false,
-			note: "the domain doesn't resolve yet. Add a DNS A record pointing at this server" +
+			note:
+				"the domain doesn't resolve yet. Add a DNS A record pointing at this server" +
 				(boxIp ? ` (${boxIp})` : '') +
 				', then wait for it to propagate (can take up to an hour) before the HTTPS cert can be issued.'
 		};
@@ -593,7 +643,7 @@ export function interpretDnsResult(
 /** This box's primary outbound IPv4 (its public IP on a VPS). null if unknown. */
 export function boxPrimaryIp(): string | null {
 	try {
-		const out = execSync("ip route get 1.1.1.1 2>/dev/null", { encoding: 'utf8', timeout: 2000 });
+		const out = execSync('ip route get 1.1.1.1 2>/dev/null', { encoding: 'utf8', timeout: 2000 });
 		const m = /src\s+([0-9.]+)/.exec(out);
 		return m ? m[1]! : null;
 	} catch {
@@ -603,7 +653,9 @@ export function boxPrimaryIp(): string | null {
 
 /** Resolve a domain's A records + interpret against this box. Async (does a DNS
  *  lookup); never throws. */
-export async function checkDomainPointsHere(domain: string): Promise<{ ok: boolean; note: string }> {
+export async function checkDomainPointsHere(
+	domain: string
+): Promise<{ ok: boolean; note: string }> {
 	let addrs: string[] = [];
 	try {
 		addrs = await resolve4(domain);
@@ -645,13 +697,23 @@ function checkAnsibleVersion(): Check {
 	}
 	const v = parseAnsibleVersion(out);
 	if (!v) {
-		return { name: 'Ansible version', actual: 'unknown', recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'warn' };
+		return {
+			name: 'Ansible version',
+			actual: 'unknown',
+			recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
+			status: 'warn'
+		};
 	}
 	const label = v.isCore
 		? `core ${v.major}.${v.minor}.${v.patch}`
 		: `${v.major}.${v.minor}.${v.patch} (legacy, pre-core)`;
 	if (ansibleMeetsFloor(v)) {
-		return { name: 'Ansible version', actual: label, recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`, status: 'ok' };
+		return {
+			name: 'Ansible version',
+			actual: label,
+			recommended: `>= ${MIN_ANSIBLE_CORE.major}.${MIN_ANSIBLE_CORE.minor}`,
+			status: 'ok'
+		};
 	}
 	return {
 		name: 'Ansible version',
@@ -765,7 +827,7 @@ async function checkPostgresReachable(): Promise<Check> {
 	const portRaw = process.env.MORPHIT_OPS_PG_PORT ?? '5432';
 	// Strict numeric parse — parseInt() accepts trailing garbage like
 	// "5432abc"; better to fail-fast with a clear message than connect
-	// to whatever the partial parse landed on.  cp70-D1 lesson.
+	// to whatever the partial parse landed on.  lesson.
 	const port = /^\d+$/.test(portRaw) ? Number(portRaw) : NaN;
 	if (!Number.isFinite(port) || port < 1 || port > 65535) {
 		return {
@@ -801,8 +863,94 @@ async function checkPostgresReachable(): Promise<Check> {
 	});
 }
 
-export async function checkOutboundHttps(): Promise<Check> {
-	// v1.18.0 deep-deep, H1: re-running `init` on an installed hidden-only node
+/** What one probe of the Blurt RPC pool found. */
+export interface RpcPoolProbe {
+	/** The first node that answered, or null when none did. */
+	readonly answered: string | null;
+	/** The chain's head time from that answer (UTC ms), or the reply's Date header. */
+	readonly referenceMs: number | null;
+	/** Local clock at the middle of that request (ms). */
+	readonly localMidMs: number | null;
+	/** Nodes that did not answer, with why. */
+	readonly failed: ReadonlyArray<{ readonly url: string; readonly why: string }>;
+}
+
+/**
+ * Ask every node of the shipped Blurt RPC pool for the chain's head
+ * (`condenser_api.get_dynamic_global_properties`), in parallel; the first good
+ * answer wins. One probe serves both the outbound-HTTPS and the clock check:
+ * no other host is contacted. Never throws.
+ */
+export async function probeRpcPool(
+	endpoints: readonly string[] = DEFAULT_BLURT_RPC_ENDPOINTS,
+	fetchImpl: typeof fetch = fetch,
+	timeoutMs = 5000
+): Promise<RpcPoolProbe> {
+	const failed: Array<{ url: string; why: string }> = [];
+	const one = async (
+		url: string
+	): Promise<{ url: string; referenceMs: number | null; localMidMs: number }> => {
+		const ac = new AbortController();
+		const t = setTimeout(() => ac.abort(), timeoutMs);
+		try {
+			const before = Date.now();
+			const resp = await fetchImpl(url, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: 1,
+					method: 'condenser_api.get_dynamic_global_properties',
+					params: []
+				}),
+				signal: ac.signal
+			});
+			const body = (await resp.json().catch(() => null)) as { result?: { time?: unknown } } | null;
+			const after = Date.now();
+			if (!resp.ok || body === null || typeof body.result !== 'object' || body.result === null) {
+				throw new Error(resp.ok ? 'not a Blurt RPC answer' : `HTTP ${resp.status}`);
+			}
+			const chainTime =
+				typeof body.result.time === 'string' ? Date.parse(`${body.result.time}Z`) : NaN;
+			const header = Date.parse(resp.headers.get('date') ?? '');
+			const referenceMs = Number.isFinite(chainTime)
+				? chainTime
+				: Number.isFinite(header)
+					? header
+					: null;
+			return { url, referenceMs, localMidMs: (before + after) / 2 };
+		} catch (err) {
+			failed.push({
+				url,
+				why:
+					err instanceof Error
+						? err.name === 'AbortError'
+							? 'timed out'
+							: err.message
+						: String(err)
+			});
+			throw err;
+		} finally {
+			clearTimeout(t);
+		}
+	};
+	try {
+		const first = await Promise.any(endpoints.map(one));
+		return {
+			answered: first.url,
+			referenceMs: first.referenceMs,
+			localMidMs: first.localMidMs,
+			failed
+		};
+	} catch {
+		return { answered: null, referenceMs: null, localMidMs: null, failed };
+	}
+}
+
+export async function checkOutboundHttps(
+	probe: () => Promise<RpcPoolProbe> = () => probeRpcPool()
+): Promise<Check> {
+	// re-running `init` on an installed hidden-only node
 	// (empty clearnet RPC pool in indexer.env) must not reach a clearnet RPC
 	// from the box's home IP just to learn that it can. Such a node needs no
 	// outbound clearnet HTTPS; its chain traffic goes over Tor/I2P.
@@ -814,49 +962,35 @@ export async function checkOutboundHttps(): Promise<Check> {
 			status: 'ok'
 		};
 	}
-	try {
-		const controller = new AbortController();
-		const t = setTimeout(() => controller.abort(), 5000);
-		// HEAD against a canonical Blurt RPC. Same list shipped with
-		// the frontend (apps/web/src/lib/net/config.ts).
-		const resp = await fetch('https://rpc.blurt.blog', {
-			method: 'HEAD',
-			signal: controller.signal
-		});
-		clearTimeout(t);
-		if (resp.ok || resp.status === 405) {
-			// 405 Method Not Allowed is fine — the server's reachable.
-			return {
-				name: 'Outbound HTTPS',
-				actual: 'reachable',
-				recommended: 'reachable',
-				status: 'ok'
-			};
-		}
-		return {
-			name: 'Outbound HTTPS',
-			actual: `HTTP ${resp.status}`,
-			recommended: 'reachable',
-			status: 'warn',
-			note: 'reachable but unexpected response'
-		};
-	} catch (err) {
+	const r = await probe();
+	const down = r.failed.map((f) => sanitizeForTerm(new URL(f.url).host)).join(', ');
+	if (r.answered === null) {
 		return {
 			name: 'Outbound HTTPS',
 			actual: 'failed',
 			recommended: 'reachable',
 			status: 'error',
-			note:
-				'cannot reach Blurt RPC; check your network and DNS' +
-				(err instanceof Error ? ` (${err.message})` : '')
+			note: `none of the ${r.failed.length} Blurt RPC nodes answered (${down}); check this server's network and DNS`
 		};
 	}
+	return {
+		name: 'Outbound HTTPS',
+		actual: 'reachable',
+		recommended: 'reachable',
+		status: 'ok',
+		note:
+			r.failed.length > 0
+				? `not answering right now: ${down} (the indexer routes around them)`
+				: undefined
+	};
 }
 
-export async function checkSystemTime(): Promise<Check> {
-	// Same reason as checkOutboundHttps (v1.18.0 deep-deep, H1): the clock is
-	// compared against a clearnet web server's Date header, which a hidden-only
-	// node must not contact. Tor itself refuses to run with a badly wrong clock.
+export async function checkSystemTime(
+	probe: () => Promise<RpcPoolProbe> = () => probeRpcPool()
+): Promise<Check> {
+	// Same reason as checkOutboundHttps: a hidden-only
+	// node must not contact a clearnet host for this. Tor itself refuses to run
+	// with a badly wrong clock.
 	if (isHiddenOnlyNode()) {
 		return {
 			name: 'System time',
@@ -865,59 +999,32 @@ export async function checkSystemTime(): Promise<Check> {
 			status: 'ok'
 		};
 	}
-	try {
-		const before = Date.now();
-		const controller = new AbortController();
-		const t = setTimeout(() => controller.abort(), 5000);
-		const resp = await fetch('https://www.google.com', {
-			method: 'HEAD',
-			signal: controller.signal
-		});
-		clearTimeout(t);
-		const after = Date.now();
-		const dateHeader = resp.headers.get('date');
-		if (!dateHeader) {
-			return {
-				name: 'System time',
-				actual: 'no date header',
-				recommended: 'within 30s of NTP',
-				status: 'warn'
-			};
-		}
-		const serverMs = Date.parse(dateHeader);
-		if (isNaN(serverMs)) {
-			return {
-				name: 'System time',
-				actual: 'unparseable',
-				recommended: 'within 30s of NTP',
-				status: 'warn'
-			};
-		}
-		// Account for round-trip half-time.
-		const localMid = (before + after) / 2;
-		const driftSec = Math.abs(localMid - serverMs) / 1000;
-		const status: CheckStatus = driftSec < 30 ? 'ok' : driftSec < 300 ? 'warn' : 'error';
-		return {
-			name: 'System time',
-			actual: `${driftSec.toFixed(0)}s drift vs HTTP server`,
-			recommended: '<30s drift',
-			status,
-			note:
-				status === 'error'
-					? 'install NTP (e.g. systemd-timesyncd or chrony) — chain ops fail with bad clocks'
-					: status === 'warn'
-						? 'consider running NTP for tighter sync'
-						: undefined
-		};
-	} catch (err) {
+	// The reference is the Blurt chain's head time from the same RPC answer
+	// as the outbound check (blocks every 3 s), or that reply's Date header.
+	const r = await probe();
+	if (r.referenceMs === null || r.localMidMs === null) {
 		return {
 			name: 'System time',
 			actual: 'check failed',
 			recommended: '<30s drift',
 			status: 'warn',
-			note: 'could not query a reference clock'
+			note: 'no Blurt RPC node answered, so there was no reference clock'
 		};
 	}
+	const driftSec = Math.abs(r.localMidMs - r.referenceMs) / 1000;
+	const status: CheckStatus = driftSec < 30 ? 'ok' : driftSec < 300 ? 'warn' : 'error';
+	return {
+		name: 'System time',
+		actual: `${driftSec.toFixed(0)}s drift vs the Blurt chain`,
+		recommended: '<30s drift',
+		status,
+		note:
+			status === 'error'
+				? 'install NTP (e.g. systemd-timesyncd or chrony) — chain ops fail with bad clocks'
+				: status === 'warn'
+					? 'consider running NTP for tighter sync'
+					: undefined
+	};
 }
 
 // ─── OS hardening checks (Q9) ────────────────────────────────────
@@ -1169,7 +1276,7 @@ export function renderSystemCheck(result: SystemCheckResult, color: boolean): vo
 	const NAME_W = 28;
 	const ACTUAL_W = 22;
 	for (const c of result.checks) {
-		// cp139-C-3: c.name / c.actual / c.note can include file
+		// c.name / c.actual / c.note can include file
 		// content (PRETTY_NAME from /etc/os-release, SystemMaxUse
 		// value from journald.conf, sshd_config directive values)
 		// or library error messages.  Stripping terminal escapes

@@ -1,7 +1,7 @@
 /**
  * Morphit — hold a scroll container at the bottom while its content settles.
  *
- * tt.txt #8: opening a conversation dropped the user into the MIDDLE of it.
+ * opening a conversation dropped the user into the MIDDLE of it.
  *
  * The chat had no first-load handling at all. The first batch of messages took
  * the ordinary "user was at the bottom" path, which calls
@@ -17,8 +17,8 @@
  * while the content is still growing. Any user scroll cancels the pin
  * immediately — nothing is more infuriating than a page that yanks you back.
  *
- * cp474 (t.txt #7) — the maintainer: "it STILL does not always scroll the bubble all the
- * way up so that i can see the last, most recent message". Two reasons, both
+ * Reported: it still did not always scroll the last, most recent message fully into view. Two
+ * reasons, both
  * meaning the settle window above was never real:
  *
  *   1. The ResizeObserver watched the SCROLL CONTAINER. That container is
@@ -59,7 +59,7 @@ export interface PinTarget {
  * a cancel function — call it the moment the user scrolls away, and on destroy.
  *
  * Holds on until `scrollHeight` has been STABLE for `settleMs`, bounded by
- * `maxMs`. An animation-frame loop does the measuring: cp474 removed the
+ * `maxMs`. An animation-frame loop does the measuring: a later change removed the
  * ResizeObserver this used to prefer, because it watched the scroll CONTAINER,
  * whose fixed border-box never changes when the content inside it grows — it
  * could not fire for the one event it was there for.

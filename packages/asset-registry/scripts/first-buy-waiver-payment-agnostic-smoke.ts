@@ -2,7 +2,7 @@
 /**
  * first-buy-waiver-payment-agnostic-smoke.
  *
- * Memory #23 + the maintainer's design answer for Part 121 question 3:
+ * The frozen fee_method rule + the maintainer's design answer for question 3:
  *
  *   "If their first buy order of BLURT is with USDT, that's fine."
  *
@@ -144,13 +144,13 @@ if (/v\.asset !== 'BLURT'/.test(waiverGate)) {
 // This is the load-bearing check.  Even one reference to
 // payment_methods inside the gate (before the INSERT) would mean
 // the waiver is dependent on what the buyer pays their seller
-// with — which violates the maintainer's design for Part 121 question 3.
+// with — which violates the maintainer's design for question 3.
 // Mentions inside the INSERT statement (column list, VALUES
 // binding) are fine — they're persistence, not gating.
 if (/payment_methods/.test(waiverGate)) {
 	fail(
 		`waiver gate does NOT reference payment_methods`,
-		`the waiver gate references 'payment_methods' — the waiver must fire regardless of how the buyer pays the seller (Memory #23, Part 121 Q3 answer).  Find the gate condition and remove the dependence.`
+		`the waiver gate references 'payment_methods' — the waiver must fire regardless of how the buyer pays the seller (the frozen fee_method rule, Part 121 Q3 answer).  Find the gate condition and remove the dependence.`
 	);
 } else {
 	pass(`waiver gate does NOT reference payment_methods (gate is payment-method agnostic)`);

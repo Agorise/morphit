@@ -1,18 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * long-form-en-fallback-floor smoke — Part 122 cp80 (LL #80 / O-26).
+ * long-form-en-fallback-floor smoke.
  *
- * Closes the Memory #29 backlog state for long-form content.
+ * Closes the native-locale policy backlog state for long-form content.
  *
- * Memory #29 originally permitted EN-fallback for 6 "community-
+ * The native-locale policy originally permitted EN-fallback for 6 "community-
  * translation backlog" locales (it/pl/ru/fa/zh-CN/zh-HK) while
  * es/fr/de were policy-natively-translated.  The existing
- * `i18n-translation-completeness-smoke` (cp45 LL #45) enforced
- * the native-locale policy for es/fr/de but explicitly skipped
+ * `i18n-translation-completeness-smoke` enforced
+ * The native-locale policy for es/fr/de but explicitly skipped
  * the 6 backlog locales (`POLICY_FALLBACK_LOCALES` set, line
  * ~1016 of that smoke).
  *
- * cp76-cp80 closed the long-form portion of the Memory #29
+ * A later change closed the long-form portion of the native-locale policy
  * backlog: 13 batches of translations (~150 strings) covering
  * every key with EN length ≥ 200 chars across all 6 backlog
  * locales.  This smoke locks in that completion: future long-
@@ -38,10 +38,10 @@
  *   - 200+ ch keys are FAQ answers, privacy-guide bodies, and
  *     long-form explanatory copy — the bulk of what users
  *     actually read in their language.  These were the explicit
- *     scope of the cp76-cp80 batch effort.
+ *     scope of the batch effort.
  *
  * Why this is a real defense, not a speculative one:
- *   - The backlog existed (~150 long-form keys at cp68 entry).
+ *   - The backlog existed (~150 long-form keys entry).
  *   - The backlog was closed via 13 explicit batches.
  *   - Without this smoke, future long-form content (new FAQ
  *     entries, new privacy-guide sections, new asset additions)
@@ -51,7 +51,7 @@
  *   - This smoke is the regression gate that prevents the
  *     backlog from re-opening.
  *
- * Mutation test M-149:
+ * Mutation test:
  *   - Replace any long-form (≥200 ch) value in any backlog
  *     locale JSON with its EN-equivalent → smoke fires naming
  *     the key + locale.
@@ -84,7 +84,7 @@ console.log('\n── long-form-en-fallback-floor smoke (cp80 LL #80 / O-26) ─
  *  the es/fr/de native trio). */
 const LONG_FORM_THRESHOLD_CHARS = 200;
 
-/** The 6 backlog locales the older Memory #29 policy permitted
+/** The 6 backlog locales the older native-locale policy permitted
  *  to EN-fallback.  This smoke says: not for long-form content
  *  anymore. */
 const BACKLOG_LOCALES = ['it', 'pl', 'ru', 'fa', 'zh-CN', 'zh-HK'] as const;
@@ -193,7 +193,7 @@ const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {
 	console.error('\nlong-form-en-fallback-floor smoke FAILED');
-	console.error('cp80-O26: the Memory #29 long-form backlog was closed at cp80.  Long-form content (≥200 ch) cannot regress to EN-fallback in it/pl/ru/fa/zh-CN/zh-HK.');
+	console.error('cp80-O26: the native-locale policy long-form backlog was closed at cp80.  Long-form content (≥200 ch) cannot regress to EN-fallback in it/pl/ru/fa/zh-CN/zh-HK.');
 	process.exit(1);
 }
 console.log(`✓ all ${total} long-form-en-fallback-floor scenarios passed`);

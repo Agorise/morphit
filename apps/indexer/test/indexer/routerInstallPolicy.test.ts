@@ -1,5 +1,5 @@
 /**
- * Every indexer installs the router (v1.18.0 deep-deep, L3).
+ * Every indexer installs the router.
  *
  * The router was installed only when hidden RPC endpoints were CONFIGURED. Two
  * configurations were left without one:

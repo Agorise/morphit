@@ -6,13 +6,13 @@
  * value, future commits must not REGRESS that pair back to
  * EN-byte-identical content.
  *
- * WHY THIS SMOKE EXISTS (Part 122 cp37 LL #46 closure):
+ * WHY THIS SMOKE EXISTS:
  *
- * Cp36 surfaced LL #46 the hard way: while updating
+ * A later change surfaced LL #46 the hard way: while updating
  * `faq.entries.what_is_morphit.a` × 10 locales to include DAI + DOGE + ZEC + ARRR + DCR + SOL + ETH + XRP
  * in the asset enumeration, the initial pass applied the same
  * "native en/es/fr/de + EN-fallback for the other 6" strategy
- * Memory #29 documents for NEW asset i18n strings. That strategy is
+ * The native-locale policy documents for NEW asset i18n strings. That strategy is
  * correct for new keys — but `what_is_morphit` was old enough that
  * it/pl/ru/fa/zh-CN/zh-HK already had FULL NATIVE translations,
  * which the pass overwrote with EN-fallback. Caught in-flight by
@@ -22,7 +22,7 @@
  * This smoke closes that class mechanically. The
  * `native-translations-snapshot.json` sibling file captures every
  * (key, locale) pair where the locale value diverges from English
- * at the time the snapshot was taken (cp37 baseline). For every
+ * at the time the snapshot was taken (baseline). For every
  * pair in the snapshot, this smoke asserts the locale's current
  * value is STILL not byte-identical to English. Any regression
  * (locale value got overwritten with the English text) fails

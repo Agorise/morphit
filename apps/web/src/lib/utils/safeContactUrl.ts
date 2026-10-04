@@ -6,7 +6,7 @@ import { CONTACT_URL_SCHEMES } from '@morphit/operator-config/contact';
  * Origin: BATCH14-7 audit fix.  An operator can publish any
  * string as `contact_url` via the `morphit_operator_register_v1`
  * op (and, if a hypothetical future `morphit_instance_v1` op
- * lands per the REVISIT-LIST federated-discovery enhancement,
+ * lands per the backlog federated-discovery enhancement,
  * via that path too).  The indexer's op validator applies a URL
  * regex on intake but doesn't enforce the scheme allowlist —
  * defense-in-depth: re-validate before rendering.

@@ -62,7 +62,13 @@ import { CONTACT_URL_SCHEMES } from '@morphit/operator-config';
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { impersonatesReservedOperatorName, ownsReservedName, isReservedTag, tagImpersonatesReserved } from '$indexer/confusables';
+import {
+	impersonatesReservedOperatorName,
+	ownsReservedName,
+	isReservedTag,
+	tagImpersonatesReserved
+} from '$indexer/confusables';
+import { consensusV2Active } from '$indexer/consensusActivation';
 import { isNonPublicAddressLiteral, nameMimicsNonPublicAddress } from '@morphit/hidden-transport';
 import { FEE_RECIPIENT_ACCOUNT_RE, recordFeeRecipient } from '$indexer/feeRecipients';
 
@@ -82,8 +88,8 @@ const ORIGIN_MAX = 2048;
 const TAG_PATTERN = /^[a-z0-9._-]+$/;
 
 /** Same forbidden-char class as profile display names — block
- *  control chars, bidi overrides, zero-width joiners.
- *  cp671: U+200C (ZWNJ) and U+200D (ZWJ) are intentionally NOT blocked — the
+ *  control chars, bidi overrides, the zero-width space.
+ *  U+200C (ZWNJ) and U+200D (ZWJ) are intentionally NOT blocked — the
  *  zero-width non-joiner is essential to correct Farsi / Arabic-script and Indic
  *  orthography (Persian's "half-space" / nim-fasele). Only the zero-width SPACE
  *  (U+200B) and the explicit bidi override/isolate controls stay blocked; normal
@@ -136,7 +142,9 @@ const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
  * `endsWith('.i2p')` / `endsWith('.loki')` alone, so `x.com/a.i2p` passed and
  * became `http://x.com/a.i2p` — a CLEARNET link — in the directory's "I2P" pill.
  */
-export const ALT_HOST_SHAPES: Readonly<Record<'tor' | 'i2p_b32' | 'i2p_name' | 'lokinet' | 'ens', RegExp>> = {
+export const ALT_HOST_SHAPES: Readonly<
+	Record<'tor' | 'i2p_b32' | 'i2p_name' | 'lokinet' | 'ens', RegExp>
+> = {
 	tor: /^[a-z2-7]{56}\.onion$/,
 	i2p_b32: /^[a-z2-7]{52}\.b32\.i2p$/,
 	i2p_name: new RegExp(`^(?!.*\\.b32\\.i2p$)(?:${LABEL}\\.)+i2p$`),
@@ -207,9 +215,9 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 		return { reason: 'display_name_leading_at' };
 	}
 	// Homograph impersonation of reserved operator handles is checked in the
-	// handler (cp670), where the chain-authenticated signer is available for the
+	// handler, where the chain-authenticated signer is available for the
 	// owner-exemption and the operator-specific policy (brand allowed inside a
-	// longer distinct name — "Morphit Latino"; infra handles + bare-brand
+	// longer distinct name — "Morphit Latino"; reserved infra handles + bare-brand
 	// and homographs still blocked).
 
 	// contact_url — optional. If provided, must be a well-formed
@@ -334,8 +342,7 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 			// attacks.  The full DNS-rebinding closure (resolve +
 			// validate every returned IP + pin via custom undici
 			// dispatcher to prevent TOCTOU) lives in the probe layer
-			// at `federationProbe.ts:fetchJson()` — shipped Part 122
-			// cp3, sentinel-locked by `P122-CP3` in
+			// at `federationProbe.ts:fetchJson()` — sentinel-locked by `P122-CP3` in
 			// apps/web/scripts/persona-walkthrough-smoke.ts.  The
 			// registration-time check here is defense-in-depth; the
 			// probe-time check is the authoritative one.
@@ -379,7 +386,7 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 			if (/^\[?fe80:/i.test(hostname)) {
 				return { reason: 'origin_link_local' };
 			}
-			// (v1.18.0 deep-deep, C1) The patterns above only match an IPv4
+			// The patterns above only match an IPv4
 			// literal written out in full, so an IPv4-mapped IPv6 literal
 			// (`[::ffff:127.0.0.1]`, which the URL parser rewrites to
 			// `[::ffff:7f00:1]`), CGNAT, 0/8 and the like slipped through; and a
@@ -435,13 +442,16 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 		if (tor !== null && altHostFor('tor', tor) === null) return { reason: 'alt_tor_not_onion' };
 		const i2pB32 = host(a.i2p_b32, 'i2p_b32');
 		if (typeof i2pB32 === 'object' && i2pB32 !== null) return i2pB32;
-		if (i2pB32 !== null && altHostFor('i2p_b32', i2pB32) === null) return { reason: 'alt_i2p_b32_invalid' };
+		if (i2pB32 !== null && altHostFor('i2p_b32', i2pB32) === null)
+			return { reason: 'alt_i2p_b32_invalid' };
 		const i2pName = host(a.i2p_name, 'i2p_name');
 		if (typeof i2pName === 'object' && i2pName !== null) return i2pName;
-		if (i2pName !== null && altHostFor('i2p_name', i2pName) === null) return { reason: 'alt_i2p_name_invalid' };
+		if (i2pName !== null && altHostFor('i2p_name', i2pName) === null)
+			return { reason: 'alt_i2p_name_invalid' };
 		const loki = host(a.lokinet, 'lokinet');
 		if (typeof loki === 'object' && loki !== null) return loki;
-		if (loki !== null && altHostFor('lokinet', loki) === null) return { reason: 'alt_lokinet_invalid' };
+		if (loki !== null && altHostFor('lokinet', loki) === null)
+			return { reason: 'alt_lokinet_invalid' };
 		const ens = host(a.ens, 'ens');
 		if (typeof ens === 'object' && ens !== null) return ens;
 		if (ens !== null && altHostFor('ens', ens) === null) return { reason: 'alt_ens_invalid' };
@@ -462,8 +472,15 @@ export function validate(payload: unknown): ValidatedPayload | { reason: string 
 	// shape, no normalisation: the value is compared byte-for-byte against the
 	// `to` of fee transfers, so a value that would need fixing up is refused.
 	let feeRecipient: string | null = null;
-	if (payload.fee_recipient !== undefined && payload.fee_recipient !== null && payload.fee_recipient !== '') {
-		if (typeof payload.fee_recipient !== 'string' || !FEE_RECIPIENT_ACCOUNT_RE.test(payload.fee_recipient)) {
+	if (
+		payload.fee_recipient !== undefined &&
+		payload.fee_recipient !== null &&
+		payload.fee_recipient !== ''
+	) {
+		if (
+			typeof payload.fee_recipient !== 'string' ||
+			!FEE_RECIPIENT_ACCOUNT_RE.test(payload.fee_recipient)
+		) {
 			return { reason: 'fee_recipient_invalid' };
 		}
 		feeRecipient = payload.fee_recipient;
@@ -485,13 +502,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const v = validate(ctx.payload);
 	if ('reason' in v) return { ok: false, reason: v.reason };
 
-	// cp670 — display-name impersonation, signer-aware. The project brand
+	// display-name impersonation, signer-aware. The project brand
 	// ("Morphit", "Agorise") is allowed inside a longer, distinct instance name
 	// so first-party regional instances can brand themselves ("Morphit Latino");
-	// bare-brand/homograph impersonation and any infra handle stay
+	// bare-brand/homograph impersonation and any reserved infra handle stay
 	// blocked. The rightful owner of a reserved name is exempt for THAT name
 	// (matches profile.ts, which operatorRegister previously did not apply).
-	if (!ownsReservedName(ctx.signer, v.display_name) && impersonatesReservedOperatorName(v.display_name)) {
+	// From CONSENSUS_V2_ACTIVATION_TIME names are compared on their confusable
+	// skeleton too (invisible characters, math letters … — confusables.ts).
+	const nameRule = { strict: consensusV2Active(ctx.blockTime) };
+	if (
+		!ownsReservedName(ctx.signer, v.display_name, nameRule) &&
+		impersonatesReservedOperatorName(v.display_name, nameRule)
+	) {
 		return { ok: false, reason: 'display_name_impersonates_reserved' };
 	}
 
@@ -552,7 +575,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: false, reason: 'superseded_by_newer_registration' };
 		}
 	} else {
-		// (v1.18.0 deep-deep, L3) Confusable-aware reserved-tag check for a NEW
+		// Confusable-aware reserved-tag check for a NEW
 		// claim. What was wrong: only exact equality (isReservedTag, in
 		// validate()) was checked, so `m0rphit` / `rnorphit` / `morphit-io` were
 		// claimable — and a tag is immutable, so a look-alike is squatted for
@@ -571,7 +594,16 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (tag) DO NOTHING
 			RETURNING account`,
-			[ctx.signer, v.tag, v.display_name, v.contact_url, v.origin, ctx.blockNum, v.alt_networks ? JSON.stringify(v.alt_networks) : null, ctx.blockNum]
+			[
+				ctx.signer,
+				v.tag,
+				v.display_name,
+				v.contact_url,
+				v.origin,
+				ctx.blockNum,
+				v.alt_networks ? JSON.stringify(v.alt_networks) : null,
+				ctx.blockNum
+			]
 		);
 		if (insertRes.rowCount === 0) {
 			// Tag was already claimed by another account.
@@ -600,10 +632,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			await client.query(`DELETE FROM known_instances WHERE operator_account = $1`, [ctx.signer]);
 		}
 	} else {
-		await client.query(
-			`DELETE FROM known_instances WHERE operator_account = $1 AND origin <> $2`,
-			[ctx.signer, v.origin]
-		);
+		await client.query(`DELETE FROM known_instances WHERE operator_account = $1 AND origin <> $2`, [
+			ctx.signer,
+			v.origin
+		]);
 		await client.query(
 			`INSERT INTO known_instances (
 				origin, operator_account,

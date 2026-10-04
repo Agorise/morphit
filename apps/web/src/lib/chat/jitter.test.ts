@@ -2,7 +2,7 @@
  * jitter.test.ts — vitest unit tests for all 7 amount-jitter
  * functions in `apps/web/src/lib/chat/payload.ts`.
  *
- * Part 122 cp50 deep-deep M-1 closure.  Before cp50 there were
+ * Previously there were
  * ZERO vitest unit tests for ANY jitter function — only the
  * structural `asset-payload-precision-parity-smoke` (which tests
  * decimal-place SHAPE and URI scheme + txid shape, NOT

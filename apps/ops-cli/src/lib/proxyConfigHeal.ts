@@ -24,7 +24,12 @@
  *    itself reports it): a LOG_FORMAT that names no visitor, and Morphit's
  *    CONTENT_SECURITY_POLICY / PERMISSIONS_POLICY / REFERRER_POLICY /
  *    X_FRAME_OPTIONS. A value the operator set is kept, except a LOG_FORMAT
- *    that logs addresses.
+ *    that logs addresses, and the BunkerWeb features that send visitor data
+ *    to third parties (BunkerNet, DNSBL, the reverse-DNS black/white/grey
+ *    lists, the anonymous report, a third-party or misplaced anti-bot), which
+ *    are always turned off (lib/bunkerwebPrivacy.ts). Those are then checked
+ *    where BunkerWeb really reads them: the variables.env its scheduler
+ *    generated inside the edge container, and the scheduler's environment.
  *  - the Compose files the containers came from (ALL of them, from their own
  *    labels): the edge keeps no Docker log (its error, ban and ModSecurity
  *    lines name visitors), the frontend's log is bounded, and
@@ -60,7 +65,10 @@
  * EFFECTIVE config is read from inside the running container (`nginx -T`) and
  * every location that proxies to the relay (:8080) or the indexer (:8081) must
  * send `X-Forwarded-For $morphit_relay_xff` and an empty X-Real-IP — else the
- * indexer's per-address limits key on whatever a visitor typed. A config file
+ * indexer's per-address limits key on whatever a visitor typed. The same dump
+ * must also show a page CSP with no inline script or eval, `server_tokens off`,
+ * and every proxied location clearing the visitor-set internal headers
+ * (VISITOR_HEADERS_CLEARED), and a missing file answered with 404. A config file
  * newer than the running nginx gets a graceful reload; a container that does
  * not have it is rebuilt ONCE (time permitting) and checked again; otherwise a
  * calm warning names the exact command.
@@ -69,11 +77,22 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { readSchedulerCycle, dockerLogsSince, type SchedulerCycle } from './bunkerwebScheduler.ts';
+import { isHiddenOnlyNode } from './hiddenOnly.ts';
+import {
+	BUNKERWEB_PRIVACY_KEYS,
+	bunkerwebSettingsProblems,
+	planBunkerwebPrivacy
+} from './bunkerwebPrivacy.ts';
 
 // ── Canonical values (kept equal to ops/bunkerweb/bunkerweb.env.example by the
 //    vitest; the csp-header-consistency smoke keeps that file equal to the rest).
 export const MORPHIT_CSP =
-	"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://rpc.blurt.one https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'";
+	"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com; media-src 'none'; object-src 'none'; child-src 'none'; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'";
+/** The base image ops/bunkerweb/frontend/Dockerfile pins (its label; the
+ *  vitest keeps the two equal). A frontend built from another is rebuilt. */
+export const FRONTEND_BASE_LABEL = 'org.morphit.frontend-base';
+export const FRONTEND_BASE =
+	'nginx:1.30.5-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94';
 export const MORPHIT_PERMISSIONS_POLICY =
 	'camera=(self), microphone=(), geolocation=(), interest-cohort=()';
 export const MORPHIT_LOG_FORMAT = `'$host [$time_local] "$request_method $uri" $status $body_bytes_sent'`;
@@ -92,6 +111,8 @@ export interface Plan {
 	readonly changes: readonly string[];
 	/** Compose services this plan edits. */
 	readonly touched?: readonly string[];
+	/** What stops applying because of a change (said once, plainly). */
+	readonly notices?: readonly string[];
 }
 
 // ─── bytes ──────────────────────────────────────────────────────────────
@@ -127,7 +148,8 @@ export function encodeConfig(text: string, d: DecodedText): Buffer {
 // ─── bunkerweb.env ──────────────────────────────────────────────────────
 
 /** Missing keys are appended; an operator's own value is kept, except a
- *  LOG_FORMAT that logs addresses (untouched with `keepLogFormat`). PURE. */
+ *  LOG_FORMAT that logs addresses (untouched with `keepLogFormat`) and the
+ *  features that send visitor data off the box (always off). PURE. */
 export function planBunkerwebEnv(
 	text: string,
 	opts: {
@@ -186,9 +208,21 @@ export function planBunkerwebEnv(
 		if (cur === null || cur.trim() === '') {
 			set(key, val);
 			changes.push(`BunkerWeb header: ${what}`);
+		} else if (
+			key === 'CONTENT_SECURITY_POLICY' &&
+			cur.trim() !== val &&
+			isMorphitCsp(envFileValue(cur))
+		) {
+			// An earlier release's policy (inline script and eval allowed, or an
+			// older node list): replaced. An operator's own policy is kept.
+			set(key, val);
+			changes.push('BunkerWeb header: Content-Security-Policy without inline script or eval');
 		}
 	}
-	return { text: out, changes };
+	const privacy = planBunkerwebPrivacy(out);
+	out = privacy.text;
+	changes.push(...privacy.changes);
+	return { text: out, changes, notices: privacy.notices };
 }
 
 /** An env-file value as Compose hands it to the container: surrounding single
@@ -212,7 +246,7 @@ export function envFileEntries(text: string): Map<string, string> {
 }
 
 /** The REVERSE_PROXY_HOST values of a BunkerWeb env, by key. PURE. */
-export function reverseProxyHosts(text: string): Map<string, string> {
+function reverseProxyHosts(text: string): Map<string, string> {
 	const out = new Map<string, string>();
 	for (const [k, v] of envFileEntries(text))
 		if (/^(?:[A-Za-z0-9.-]+_)?REVERSE_PROXY_HOST(?:_\d+)?$/.test(k)) out.set(k, v);
@@ -253,7 +287,7 @@ const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** [start, end) line range of a top-level service block `  <name>:` under
  *  `services:`, or null. Services are indented two spaces (every Morphit
  *  compose layout, and Docker's own examples). PURE. */
-function serviceRange(lines: readonly string[], name: string): [number, number] | null {
+export function serviceRange(lines: readonly string[], name: string): [number, number] | null {
 	const svc = lines.findIndex((l) => /^services:\s*$/.test(l));
 	if (svc < 0) return null;
 	let start = -1;
@@ -815,6 +849,156 @@ export function frontendFileMissesAre404(dump: string): boolean {
 	return walk(parseNgx(dump));
 }
 
+/** Does this CSP's script-src allow neither inline script nor eval? A policy
+ *  without script-src falls back to default-src. PURE. */
+export function cspScriptSrcStrict(csp: string): boolean {
+	const dirs = new Map<string, string[]>();
+	for (const part of csp.split(';')) {
+		const [name, ...vals] = part.trim().split(/\s+/);
+		if (name) dirs.set(name.toLowerCase(), vals);
+	}
+	const src = dirs.get('script-src') ?? dirs.get('default-src') ?? [];
+	return !src.some((v) => v === "'unsafe-inline'" || v === "'unsafe-eval'");
+}
+
+/** In an `nginx -T` dump of the frontend: is every page CSP it can send — each
+ *  value of the `map $host $morphit_csp`, or a literal Content-Security-Policy
+ *  header — free of inline script and eval? false when it sends none. PURE. */
+export function frontendCspStrict(dump: string): boolean {
+	const all = parseNgx(dump);
+	const values: string[] = [];
+	const walk = (list: readonly NgxDirective[]): void => {
+		for (const d of list) {
+			if (d.name === 'map' && d.args[1] === '$morphit_csp' && d.block)
+				for (const e of d.block) values.push(e.args[0] ?? '');
+			if (
+				d.name === 'add_header' &&
+				/^content-security-policy$/i.test(d.args[0] ?? '') &&
+				!/^\$/.test(d.args[1] ?? '')
+			)
+				values.push(d.args[1] ?? '');
+			if (d.block) walk(d.block);
+		}
+	};
+	walk(all);
+	return values.length > 0 && values.every((v) => cspScriptSrcStrict(v));
+}
+
+/** Is `csp` a policy Morphit itself wrote (any release) — same directives as
+ *  today's canonical one except for script-src (only 'self', 'unsafe-inline',
+ *  'unsafe-eval', 'wasm-unsafe-eval') and connect-src (only 'self' and the
+ *  canonical Blurt RPC nodes, `rpc.blurt.one` included)? An operator's own
+ *  policy is anything else, and is kept. PURE. */
+export function isMorphitCsp(csp: string): boolean {
+	const parse = (v: string): Map<string, string> => {
+		const m = new Map<string, string>();
+		for (const part of v.split(';')) {
+			const [name, ...vals] = part.trim().split(/\s+/);
+			if (name) m.set(name.toLowerCase(), vals.join(' '));
+		}
+		return m;
+	};
+	const have = parse(csp);
+	const want = parse(MORPHIT_CSP);
+	if ([...have.keys()].sort().join() !== [...want.keys()].sort().join()) return false;
+	for (const [k, v] of want) {
+		if (k === 'script-src' || k === 'connect-src') continue;
+		if (have.get(k) !== v) return false;
+	}
+	const okScript = new Set(["'self'", "'unsafe-inline'", "'unsafe-eval'", "'wasm-unsafe-eval'"]);
+	const okConnect = new Set([
+		"'self'",
+		...(want.get('connect-src') ?? '').split(' '),
+		'https://rpc.blurt.one'
+	]);
+	return (
+		(have.get('script-src') ?? '').split(' ').every((t) => okScript.has(t)) &&
+		(have.get('connect-src') ?? '').split(' ').every((t) => okConnect.has(t))
+	);
+}
+
+/** Request headers a visitor could set that must never reach the relay or
+ *  indexer: the loopback-only health marker, and the per-visitor I2P
+ *  destination i2pd adds on its http tunnels (a stable pseudonym). */
+export const VISITOR_HEADERS_CLEARED = [
+	'x-morphit-local-health',
+	'x-i2p-destb64',
+	'x-i2p-destb32',
+	'x-i2p-desthash'
+] as const;
+
+/** In an `nginx -T` dump: does every server hide the nginx version
+ *  (`server_tokens off`, own or inherited from http), and does every location
+ *  that proxies clear VISITOR_HEADERS_CLEARED (own proxy_set_header lines, or
+ *  the enclosing block's when it sets none)? `uncleared` names the failing
+ *  locations. PURE. */
+export function frontendHidesInternals(dump: string): {
+	tokensOff: boolean;
+	uncleared: string[];
+} {
+	let servers = 0;
+	let tokensOff = true;
+	const uncleared: string[] = [];
+	const headersOf = (b: readonly NgxDirective[]): Map<string, string> | null => {
+		const set = b.filter((d) => d.name === 'proxy_set_header' && d.args.length >= 1);
+		return set.length === 0
+			? null
+			: new Map(set.map((d) => [d.args[0]!.toLowerCase(), d.args[1] ?? '']));
+	};
+	const tokensOf = (b: readonly NgxDirective[]): string | null =>
+		b.find((d) => d.name === 'server_tokens')?.args[0] ?? null;
+	const walk = (
+		list: readonly NgxDirective[],
+		inherited: Map<string, string> | null,
+		tokens: string | null
+	): void => {
+		for (const d of list) {
+			if (!d.block) continue;
+			const eff = headersOf(d.block) ?? inherited;
+			const tok = tokensOf(d.block) ?? tokens;
+			if (d.name === 'server') {
+				servers++;
+				if (tok !== 'off') tokensOff = false;
+			}
+			if (d.name === 'location' && d.block.some((x) => x.name === 'proxy_pass'))
+				if (!VISITOR_HEADERS_CLEARED.every((h) => eff?.get(h) === ''))
+					uncleared.push(d.args.join(' '));
+			walk(d.block, eff, tok);
+		}
+	};
+	walk(parseNgx(dump), null, null);
+	return { tokensOff: servers > 0 && tokensOff, uncleared };
+}
+
+/** The Dockerfile in a stack's frontend build context (<stack dir>/frontend). */
+const frontendBuildDockerfile = (ref: ComposeRef): string =>
+	join(ref.workDir || dirname(ref.files[0]!), 'frontend', 'Dockerfile');
+
+/** A frontend Dockerfile as Morphit ships it (any release): an nginx base,
+ *  the stock default server removed, Morphit's nginx.conf copied in — and
+ *  nothing else. PURE. */
+export function isMorphitFrontendDockerfile(text: string): boolean {
+	const lines = text
+		.split('\n')
+		.map((l) => l.trim())
+		.filter((l) => l !== '' && !l.startsWith('#'));
+	const rest = lines.filter(
+		(l) =>
+			!/^FROM nginx:[\w.-]*alpine(@sha256:[0-9a-f]{64})?$/.test(l) &&
+			!/^LABEL org\.morphit\.frontend-base=/.test(l)
+	);
+	return (
+		lines.some((l) => /^FROM nginx:/.test(l)) &&
+		rest.join('\n') ===
+			[
+				'RUN rm -f /etc/nginx/conf.d/default.conf',
+				'COPY nginx.conf /etc/nginx/conf.d/morphit.conf',
+				'EXPOSE 80',
+				'CMD ["nginx", "-g", "daemon off;"]'
+			].join('\n')
+	);
+}
+
 /** Ports whose services key per-address limits on X-Forwarded-For. */
 const XFF_PORTS = /:(8080|8081)(\/|$)/;
 
@@ -884,13 +1068,34 @@ export interface ProxyHealRuntime {
 	): { status: number; headers: Readonly<Record<string, string>> } | null;
 	/** `nginx -T` inside a container; null if it cannot be read. */
 	nginxT(name: string, timeoutMs: number): string | null;
+	/** BunkerWeb's generated /etc/nginx/variables.env inside the edge (what its
+	 *  Lua code loads at each reload); null if it cannot be read. Optional:
+	 *  absent → the containers' environment is the evidence. */
+	bunkerwebSettings?(name: string, timeoutMs: number): string | null;
+	/** The frontend-base label of the running container's image ('' when it
+	 *  has none); null if it cannot be read. Optional: absent → not checked. */
+	frontendBase?(name: string, timeoutMs: number): string | null;
+	/** A rebuild of this frontend uses a Dockerfile Morphit shipped, so it
+	 *  comes up on the pinned base (and carries its label). Optional: absent →
+	 *  assumed. */
+	frontendRebuildPinsBase?(ref: ComposeRef): boolean;
 	/** A config file inside the container is newer than its start. */
 	configNewerThanStart(name: string, timeoutMs: number): boolean;
 	/** Graceful `nginx -s reload` inside the container. */
 	reloadNginx(name: string, timeoutMs: number): boolean;
 	/** Refresh the frontend's build-context nginx.conf from the release and
 	 *  `up -d --no-deps --build --force-recreate` it. */
-	refreshFrontend(ref: ComposeRef, timeoutMs: number): boolean;
+	refreshFrontend(ref: ComposeRef, timeoutMs: number, withBase?: boolean): boolean;
+	/** This node takes no clearnet route (lib/hiddenOnly.ts). Optional: absent → no. */
+	hiddenOnly?(): boolean;
+	/** The pinned frontend base image is on this box (`docker image inspect`). */
+	baseImagePresent?(timeoutMs: number): boolean;
+	/** `docker load` the offline bundle's copy of the pinned base, if the
+	 *  install carries one (vendor/docker); true when it loaded. */
+	loadBundledBase?(timeoutMs: number): boolean;
+	/** The RUNNING Docker daemon pulls through Tor (its environment has the
+	 *  socks5 proxy the tor-only egress heal writes). */
+	dockerPullsThroughTor?(): boolean;
 	/** BunkerWeb's own verdict (lib/bunkerwebScheduler.ts) on the config its
 	 *  scheduler(s) built since `sinceIso`. Optional: absent → not consulted. */
 	schedulerCycle?(
@@ -1008,19 +1213,74 @@ async function verifyFrontendForwarding(
 		missing: string[];
 		edgePort: number | null;
 		filesAre404: boolean;
+		/** Its page CSP allows no inline script and no eval. */
+		cspStrict: boolean;
+		/** No nginx version in its headers or error pages. */
+		tokensOff: boolean;
+		/** Proxied locations that pass visitor-set internal headers on. */
+		uncleared: string[];
+		/** Built from the pinned base image (true when that cannot be read, or
+		 *  when a rebuild would not change it). */
+		baseCurrent: boolean;
 	}
+	/** false only when the label was read, is not the pinned base, and a
+	 *  rebuild would put the frontend on it (an operator's own Dockerfile, or a
+	 *  service that only names an image, is not judged on its base). */
+	const baseOf = (): boolean | null => {
+		const b = rt.frontendBase?.(fe.name, clock.t(PROBE_MS)) ?? null;
+		if (b === null || b === FRONTEND_BASE) return b === null ? null : true;
+		if (rt.frontendRebuildPinsBase?.(feRef) === false) return null;
+		return baseReachable() ? false : null;
+	};
+	// A rebuild onto the pinned base makes Docker fetch that image when it is
+	// not on the box. On a hidden-only node that would be a Docker Hub pull from
+	// the box's own address, so the base switch waits until the image is here
+	// (or loads from the offline bundle's vendor/docker) or Docker is seen
+	// pulling through Tor. Decided once per run.
+	let baseHeld: boolean | null = null;
+	const baseReachable = (): boolean => {
+		if (baseHeld === null) {
+			baseHeld =
+				rt.hiddenOnly?.() === true &&
+				!(rt.baseImagePresent?.(clock.t(PROBE_MS)) ?? false) &&
+				!(
+					(rt.loadBundledBase?.(clock.t(UP_MAX_MS, 10_000)) ?? false) &&
+					(rt.baseImagePresent?.(clock.t(PROBE_MS)) ?? false)
+				) &&
+				!(rt.dockerPullsThroughTor?.() ?? false);
+			if (baseHeld)
+				opts.info(
+					`The frontend (${fe.name}) stays on its current nginx base for now: this hidden-only node does not have ` +
+						`this release's base image (${FRONTEND_BASE.split('@')[0]}), and Docker does not pull through Tor yet, so nothing ` +
+						'is fetched from Docker Hub. Once Docker pulls through Tor (the tor-only egress heal sets that up), ' +
+						'run on this server: sudo morphit-ops upgrade --heals'
+				);
+		}
+		return !baseHeld;
+	};
 	const check = (): Seen | null => {
 		const dump = rt.nginxT(fe.name, clock.t(PROBE_MS));
 		return dump === null
 			? null
 			: {
 					...frontendForwardsOneAddress(dump),
+					...frontendHidesInternals(dump),
 					edgePort: frontendEdgePort(dump),
-					filesAre404: frontendFileMissesAre404(dump)
+					filesAre404: frontendFileMissesAre404(dump),
+					cspStrict: frontendCspStrict(dump),
+					baseCurrent: baseOf() !== false
 				};
 	};
 	const good = (r: Seen | null): r is Seen =>
-		r !== null && r.proxied > 0 && r.missing.length === 0 && r.edgePort !== null && r.filesAre404;
+		r !== null &&
+		r.proxied > 0 &&
+		r.missing.length === 0 &&
+		r.edgePort !== null &&
+		r.filesAre404 &&
+		r.cspStrict &&
+		r.tokensOff &&
+		r.uncleared.length === 0 &&
+		r.baseCurrent;
 	let stop = rt.spinner('Checking which client address the frontend passes to the indexer…');
 	let first: Seen | null;
 	let reloadFailed = false;
@@ -1065,6 +1325,14 @@ async function verifyFrontendForwarding(
 				: '',
 			!r.filesAre404
 				? 'answers a missing file (such as /.well-known/…) with the app page instead of 404'
+				: '',
+			!r.cspStrict ? 'still allows inline script and eval in its Content-Security-Policy' : '',
+			!r.tokensOff ? 'still shows its nginx version in headers and error pages' : '',
+			r.uncleared.length > 0
+				? `still passes visitor-set internal headers (such as X-I2P-DestB32) to the relay or indexer on ${r.uncleared.join(', ')}`
+				: '',
+			!r.baseCurrent
+				? `was built from an older nginx base image than this release's (${FRONTEND_BASE.split('@')[0]})`
 				: ''
 		]
 			.filter(Boolean)
@@ -1083,7 +1351,7 @@ async function verifyFrontendForwarding(
 	let after: Seen = first;
 	let refreshed = false;
 	try {
-		refreshed = rt.refreshFrontend(feRef, clock.t(UP_MAX_MS, 10_000));
+		refreshed = rt.refreshFrontend(feRef, clock.t(UP_MAX_MS, 10_000), baseHeld !== true);
 		// A recreated nginx answers within seconds; do not let a rebuild that did
 		// not help eat the time the privacy/header change needs.
 		const until = rt.now() + REFRESH_WAIT_MS;
@@ -1104,6 +1372,18 @@ async function verifyFrontendForwarding(
 			);
 		if (!before.filesAre404)
 			opts.info('✓ The frontend now answers a missing file with 404 instead of the app page.');
+		if (!before.cspStrict)
+			opts.info(
+				'✓ The frontend now sends a Content-Security-Policy with no inline script and no eval (seen in its running config).'
+			);
+		if (!before.baseCurrent)
+			opts.info(
+				`✓ The frontend now runs on this release's pinned base image (${FRONTEND_BASE.split('@')[0]}, label read back).`
+			);
+		if (!before.tokensOff || before.uncleared.length > 0)
+			opts.info(
+				'✓ The frontend now hides its nginx version and drops visitor-set internal headers before the relay and indexer (seen in its running config).'
+			);
 		return { state: 'refreshed', edgePort: after.edgePort };
 	}
 	return stale(after);
@@ -1238,6 +1518,7 @@ async function applyComposeAndEnv(
 	};
 	const toWrite = new Map<string, Buffer>();
 	const envChanges: string[] = [];
+	const envNotices: string[] = [];
 	let envFinal: Map<string, string> = new Map();
 	let envFinalText = '';
 	if (envPath) {
@@ -1304,6 +1585,7 @@ async function applyComposeAndEnv(
 			if (p.changes.length > 0) {
 				toWrite.set(envPath, encodeConfig(p.text, d));
 				envChanges.push(...p.changes);
+				envNotices.push(...(p.notices ?? []));
 			}
 		}
 	}
@@ -1476,6 +1758,15 @@ async function applyComposeAndEnv(
 		const upSince = new Date(rt.now() - 2_000).toISOString();
 		const schedsUp = upNames.filter((n) => schedulers.some((s) => s.name === n));
 		let refused: string | null = null;
+		// The privacy settings this run changes (lib/bunkerwebPrivacy.ts), and
+		// where they were seen live: BunkerWeb's generated settings, or (when
+		// that file cannot be read) the containers' environment.
+		const privacyWant = new Map(
+			changedKeys
+				.filter((k) => BUNKERWEB_PRIVACY_KEYS.includes(k))
+				.map((k) => [k, envFinal.get(k)!] as const)
+		);
+		const evidence: { seen: 'generated' | 'environment' } = { seen: 'environment' };
 		try {
 			const up = rt.composeUp(ref, upServices, clock.t(UP_MAX_MS, reserve + VERIFY_MIN_MS));
 			why = up ? '' : 'Docker Compose did not finish in time';
@@ -1540,6 +1831,24 @@ async function applyComposeAndEnv(
 				for (const k of changedKeys)
 					if (!e.env.includes(`${k}=${envFinal.get(k)}`))
 						problems.push(`${e.name} does not have the new ${k} yet`);
+			if (privacyWant.size > 0) {
+				// BunkerWeb's jobs (BunkerNet registration, list downloads, the
+				// report) run with the scheduler's environment …
+				for (const n of schedsUp)
+					for (const [k, v] of privacyWant)
+						if (now.get(n) && !now.get(n)!.env.includes(`${k}=${v}`))
+							problems.push(`${n} does not have the new ${k} yet`);
+				// … and its request-time code with the settings the scheduler
+				// generated and pushed to the edge.
+				const vars =
+					e && rt.bunkerwebSettings
+						? rt.bunkerwebSettings(e.name, clock.t(PROBE_MS, reserve))
+						: null;
+				if (vars !== null) {
+					evidence.seen = 'generated';
+					problems.push(...bunkerwebSettingsProblems(vars, privacyWant));
+				} else evidence.seen = 'environment';
+			}
 			if (e && expectedLogFormat !== null) {
 				const dump = rt.nginxT(e.name, clock.t(PROBE_MS, reserve));
 				// Unreadable: the container's environment (checked above) is the evidence.
@@ -1566,6 +1875,13 @@ async function applyComposeAndEnv(
 		}
 		if (why === '') {
 			for (const c of allChanges) opts.info(`✓ ${c}`);
+			for (const n of envNotices) opts.info(`${n}.`);
+			if (privacyWant.size > 0)
+				opts.info(
+					evidence.seen === 'generated'
+						? '✓ Seen in the settings BunkerWeb runs with (the variables.env its scheduler generated).'
+						: "✓ Seen in the BunkerWeb containers' environment (BunkerWeb's generated settings file could not be read)."
+				);
 			if (staleEdge || staleFe)
 				opts.info('✓ The web containers now run with the logging their Compose file sets.');
 			return { kind: 'applied', changes: allChanges };
@@ -1780,6 +2096,25 @@ export async function healProxyConfig(deps: {
 				const r = docker(['exec', n, 'nginx', '-T'], t);
 				return r.ok && r.out !== '' ? r.out : null;
 			},
+			bunkerwebSettings: (n, t) => {
+				const r = docker(['exec', n, 'cat', '/etc/nginx/variables.env'], t);
+				return r.ok && r.out !== '' ? r.out : null;
+			},
+			frontendBase: (n, t) => {
+				const r = docker(
+					['inspect', n, '--format', `{{index .Config.Labels "${FRONTEND_BASE_LABEL}"}}`],
+					t
+				);
+				return r.ok ? r.out.trim() : null;
+			},
+			frontendRebuildPinsBase: (ref) => {
+				const d = frontendBuildDockerfile(ref);
+				try {
+					return existsSync(d) && isMorphitFrontendDockerfile(readFileSync(d, 'utf8'));
+				} catch {
+					return false;
+				}
+			},
 			configNewerThanStart: (n, t) => {
 				const started = Date.parse(
 					docker(['inspect', n, '--format', '{{.State.StartedAt}}'], t).out
@@ -1796,7 +2131,7 @@ export async function healProxyConfig(deps: {
 				return Number.isFinite(started) && newest * 1000 > started;
 			},
 			reloadNginx: (n, t) => docker(['exec', n, 'nginx', '-s', 'reload'], t).ok,
-			refreshFrontend: (ref, t) => {
+			refreshFrontend: (ref, t, withBase = true) => {
 				// The release's nginx.conf into the build context (a stack whose compose
 				// file bind-mounts it reads the release copy directly), then rebuild +
 				// recreate: a recreated container's nginx loads the new file.
@@ -1804,16 +2139,72 @@ export async function healProxyConfig(deps: {
 					dirname(dirname(dirname(deps.buildDir))),
 					'ops/bunkerweb/frontend/nginx.conf'
 				);
-				const dst = join(ref.workDir || dirname(ref.files[0]!), 'frontend', 'nginx.conf');
+				const ddst = frontendBuildDockerfile(ref);
+				const dst = join(dirname(ddst), 'nginx.conf');
 				try {
 					if (existsSync(src) && existsSync(dirname(dst))) copyFileSync(src, dst);
+					// The Dockerfile too (its pinned base) — only over one Morphit
+					// shipped; an operator's own is left alone.
+					// Not while the pinned base cannot be had without a clearnet pull.
+					const dsrc = join(dirname(src), 'Dockerfile');
+					if (
+						withBase &&
+						existsSync(dsrc) &&
+						existsSync(ddst) &&
+						isMorphitFrontendDockerfile(readFileSync(ddst, 'utf8'))
+					)
+						copyFileSync(dsrc, ddst);
 				} catch {
 					/* the rebuild below still recreates the container */
 				}
+				// A build context already naming the pinned base (an earlier run) would
+				// pull it: then recreate without rebuilding.
+				let build = true;
+				try {
+					build = withBase || !readFileSync(ddst, 'utf8').includes(FRONTEND_BASE);
+				} catch {
+					/* no Dockerfile in a build context: Compose decides */
+				}
 				return docker(
-					composeArgs(ref, ['up', '-d', '--no-deps', '--build', '--force-recreate', ref.service]),
+					composeArgs(ref, [
+						'up',
+						'-d',
+						'--no-deps',
+						...(build ? ['--build'] : []),
+						'--force-recreate',
+						ref.service
+					]),
 					t
 				).ok;
+			},
+			hiddenOnly: () => isHiddenOnlyNode(),
+			baseImagePresent: (t) => docker(['image', 'inspect', FRONTEND_BASE], t).ok,
+			loadBundledBase: (t) => {
+				const root = dirname(dirname(dirname(deps.buildDir)));
+				const f = join(root, 'vendor', 'docker', `${FRONTEND_BASE.replace(/[/:]/g, '_')}.tar.gz`);
+				if (!existsSync(f)) return false;
+				try {
+					return (
+						spawnSync('sh', ['-c', 'gzip -dc "$1" | docker load', 'sh', f], {
+							stdio: 'ignore',
+							timeout: t
+						}).status === 0
+					);
+				} catch {
+					return false;
+				}
+			},
+			dockerPullsThroughTor: () => {
+				const pid = spawnSync('systemctl', ['show', '-p', 'MainPID', '--value', 'docker'], {
+					encoding: 'utf8'
+				}).stdout?.trim();
+				if (!pid || !/^[1-9]\d*$/.test(pid)) return false;
+				try {
+					const env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
+					return env.some((e) => /^HTTPS_PROXY=socks5h?:\/\/127\.0\.0\.1:\d+$/i.test(e));
+				} catch {
+					return false;
+				}
 			},
 			schedulerCycle: (schedulers, edge, sinceIso, t) => {
 				const edgeLogs = edge ? dockerLogsSince(edge, sinceIso, t) : '';

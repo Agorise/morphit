@@ -1,9 +1,19 @@
 /**
  * Morphit indexer — /v1/health endpoint.
  *
- * Reports uptime, chain head, indexed head, and the gap between
- * them. The `stale` flag trips when the gap exceeds the configured
- * threshold; it's informational and doesn't change behavior.
+ * PUBLIC body: status, chain head, indexed head and the gap between
+ * them, catch-up progress, and coarse booleans (RPC reachable, relay up,
+ * price feed live/stale, release-seeding state). That is what peers' probes
+ * and the web app read. Everything that describes the HOST — version, uptime,
+ * CPU/RAM/disk, how many RPC endpoints it has, which price upstream serves,
+ * the catch-up rate — is added only for a LOCAL caller: a request carrying
+ * `X-Morphit-Local-Health: 1`, which `morphit-ops` sends to the indexer
+ * directly and every public edge strips (ops/nginx, BunkerWeb). On a
+ * zero-clearnet node in particular, exact host figures and restart times are
+ * a correlation aid an anonymous visitor has no use for.
+ *
+ * The `stale` flag trips when the gap exceeds the configured threshold; it's
+ * informational and doesn't change behavior.
  *
  * When either MORPHIT_INDEXER_VERBOSE_HEALTH=true (global) or
  * ?verbose=1 (per-request) is set, the response also includes a
@@ -34,7 +44,7 @@ import { recentOutboundChatSize } from '$indexer/recentOutboundChat';
 import { fastNotifyBudgetSize } from '$indexer/fastNotifyBudget';
 
 // Keep in sync with the root package.json `version`.  The
-// version-consistency-smoke (Part 122 cp20) fails the build if
+// version-consistency-smoke fails the build if
 // this constant drifts from any other package.json or from the
 // relay's VERSION constant.  When bumping for a new release,
 // update all 10 package.json files + this constant +
@@ -44,7 +54,7 @@ import { fastNotifyBudgetSize } from '$indexer/fastNotifyBudget';
 // endpoint reports. It stays hardcoded here on purpose: it is one of the 19
 // version touchpoints the version-consistency smoke pins, and reading it from
 // package.json at runtime would take it out of that net.
-export const INDEXER_VERSION = '1.20.3';
+export const INDEXER_VERSION = '1.21.0';
 
 // Blurt produces one block every 3 seconds. Used to translate the
 // block-lag count into a human "seconds behind" figure in the
@@ -110,23 +120,23 @@ export function healthRoute(
 	config: Config,
 	poller: Poller,
 	priceSource: BlurtPriceSource | null,
-	// cp233 — Defense C: per-asset disagreement monitors, read for the
+	// Defense C: per-asset disagreement monitors, read for the
 	// verbose price block's `disagreement` surface.  Defaulted so any
 	// caller that doesn't wire it sees an empty map (→ disagreement
 	// reports null), never a crash.
 	disagreementMonitors: ReadonlyMap<string, DisagreementMonitor> = new Map(),
-	// cp233 — Defense F: latest peer-monitor cycle result per asset,
+	// Defense F: latest peer-monitor cycle result per asset,
 	// read for the verbose price block's `peer` surface.  Defaulted so
 	// a caller that doesn't wire it sees an empty map (→ peer null).
 	peerMonitorResults: ReadonlyMap<string, PeerSampleCycleResult> = new Map(),
-	// cp372/cp381 — multi-source FX + crypto feed status for the
+	// multi-source FX + crypto feed status for the
 	// operator-only top-level `price_feeds` block (morphit-ops node-health
 	// view), gated on the X-Morphit-Local-Health header the public edge
 	// strips.  Defaulted so callers that don't wire them see fx disabled /
 	// no crypto feeds.
 	fxSource: FxRateSource | null = null,
 	multiAssetSources: ReadonlyMap<string, BlurtPriceSource> = new Map(),
-	// cp403 [1] — chat head-block fast-path tailer. Its status
+	// chat head-block fast-path tailer. Its status
 	// (enabled/running/watermark/emitted/last error) is surfaced in the
 	// operator-only top-level `fastpath` block (beside `price_feeds`,
 	// same X-Morphit-Local-Health gate) so the morphit-ops node-health
@@ -191,12 +201,10 @@ export function healthRoute(
 			blockSeconds: BLURT_BLOCK_SECONDS
 		});
 
-		// Compact RPC-pool health for at-a-glance triage on the PUBLIC
-		// body: how many of the configured Blurt RPC endpoints are
-		// currently reachable (out of cooldown). If this reads 0 while
-		// the node is behind, RPC — not the indexer — is the problem
-		// (exactly the beta5 firefight). Per-endpoint URLs/detail stay
-		// in the gated verbose block below.
+		// Compact RPC-pool health: how many of the configured Blurt RPC
+		// endpoints are currently reachable. Public as the boolean `rpc_ok`;
+		// the counts go to a local caller, per-endpoint detail to the gated
+		// verbose block below.
 		const rpcSnap = poller.rpcEndpointSnapshot;
 		const nowMs = Date.now();
 		// An endpoint is "healthy" only if it is BOTH out of cooldown AND has
@@ -211,10 +219,13 @@ export function healthRoute(
 			(e) => e.cooldownUntil <= nowMs && e.lastSuccessAt > 0
 		).length;
 
+		// Asked by `morphit-ops` on the box itself; the public edge strips the
+		// header, so a public caller can never set it.
+		const localDiag = c.req.header('x-morphit-local-health') === '1';
+		const { blocks_per_sec: _rate, ...publicSync } = sync;
+
 		const body: Record<string, unknown> = {
 			status: stale ? ('degraded' as const) : ('ok' as const),
-			version: INDEXER_VERSION,
-			uptime_sec: uptimeSec,
 			chain_head_block: status.chainHeadBlock,
 			indexed_block: status.indexedBlock,
 			lag_blocks: lagBlocks,
@@ -231,35 +242,27 @@ export function healthRoute(
 			stale,
 			// Catch-up progress for the UI (orderbook "still catching up" banner).
 			// behind=false once synced; eta_utc null until there's enough signal.
-			sync,
-			rpc_endpoints_healthy: rpcEndpointsHealthy,
-			rpc_endpoints_total: rpcSnap.length
+			// The rate itself (blocks_per_sec) describes the host: local only.
+			sync: localDiag ? sync : publicSync,
+			// Is at least one Blurt RPC endpoint answering? If this is false while
+			// the node is behind, RPC — not the indexer — is the problem. The
+			// counts behind it are local only.
+			rpc_ok: rpcEndpointsHealthy > 0
 		};
 
-		// cp667 — three operator-facing facts on the PUBLIC body, from a cached
-		// snapshot (stale-while-revalidate; see operationalHealth.ts). Kept public
-		// deliberately (the maintainer's call): whether this node is doing its share of
-		// seeding the release (a decentralization signal peers benefit from),
-		// coarse host resource use, and whether the optional relay is reachable.
-		// Backups/canary stay OUT of the public body — more sensitive, and the
-		// full picture is available locally via `morphit-ops health --json`.
+		// Operational facts from a cached snapshot (stale-while-revalidate; see
+		// operationalHealth.ts). Public: whether this node seeds the release and
+		// whether its relay answers — coarse states. Local only: the seeding
+		// detail and the host's resource figures.
 		const op = getOperationalSnapshot(config.relayHealthUrl);
-		body.ipfs_seeding = op.ipfs_seeding;
-		body.system = op.system;
+		body.ipfs_seeding = localDiag ? op.ipfs_seeding : { state: op.ipfs_seeding.state };
 		// `up` only: the relay's hidden_only is the gate's business, not a public
 		// field (see operationalHealth).
 		body.relay = { up: op.relay.up };
 
-		// Compact price-feed state on the PUBLIC (non-verbose) body so
-		// `morphit-ops health` can show whether the BLURT/USD feed is on
-		// and serving a live price, without needing the gated verbose
-		// token.  Nothing sensitive here — the price itself is already
-		// public via /v1/listing-fee (`blurt_price_fiat`); the per-
-		// upstream/forensic detail (drift, disagreement, peer) stays in
-		// the verbose `diagnostics.price` block below.  `enabled:false`
-		// means the operator has MORPHIT_INDEXER_PRICE_FEED_ENABLED off
-		// (the UI shows BLURT only); `stale:true` means the feed is on
-		// but no live upstream has succeeded (serving the static floor).
+		// Compact price-feed state: whether the BLURT/fiat feed is on and live.
+		// The price itself is public anyway (/v1/listing-fee); WHICH upstream is
+		// serving it is local only.
 		body.price_feed =
 			priceSource !== null
 				? (() => {
@@ -268,13 +271,21 @@ export function healthRoute(
 							enabled: true as const,
 							blurt_fiat: d.price,
 							denomination_fiat: config.priceFeedDenominationFiat,
-							source: d.source,
+							...(localDiag ? { source: d.source } : {}),
 							stale: d.stale
 						};
 					})()
 				: { enabled: false as const };
 
-		// cp381 — per-source price-feed health (which providers are up,
+		if (localDiag) {
+			body.version = INDEXER_VERSION;
+			body.uptime_sec = uptimeSec;
+			body.rpc_endpoints_healthy = rpcEndpointsHealthy;
+			body.rpc_endpoints_total = rpcSnap.length;
+			body.system = op.system;
+		}
+
+		// per-source price-feed health (which providers are up,
 		// each provider's last reading, seconds since each answered,
 		// provider-disagreement).  This is what `morphit-ops health`
 		// renders by default so an operator can see at a glance which
@@ -293,7 +304,6 @@ export function healthRoute(
 		// operator's feeds are momentarily down would shave the
 		// price-manipulation opacity the median-of-many design relies on —
 		// hence operator-only rather than public.
-		const localDiag = c.req.header('x-morphit-local-health') === '1';
 		if (localDiag) {
 			body.price_feeds = buildPriceFeedsHealth(fxSource, multiAssetSources);
 			// (v1.20.2, E1) full block verification, report-only: how many
@@ -304,7 +314,7 @@ export function healthRoute(
 				typeof (poller as { blockVerifyStats?: () => unknown }).blockVerifyStats === 'function'
 					? poller.blockVerifyStats()
 					: null;
-			// cp403 [1] — chat head-block fast-path status, surfaced in the
+			// chat head-block fast-path status, surfaced in the
 			// same operator-only top-level block as price_feeds so the
 			// morphit-ops node-health view can show admins whether fast
 			// the fast path is tailing and keeping up (alongside FX + price
@@ -353,7 +363,7 @@ export function healthRoute(
 		// when the server-side flag is off.
 		const verbose = config.verboseHealth && c.req.query('verbose') === '1';
 		if (verbose) {
-			// cp166 — explorer health was previously sourced from a
+			// explorer health was previously sourced from a
 			// shared CircuitBreaker; each fee verifier now owns its
 			// own EndpointPool with latency-aware ordering, and the
 			// poller's `explorerHealthSnapshot` accessor merges
@@ -399,7 +409,7 @@ export function healthRoute(
 				priceSource !== null
 					? (() => {
 							const d = priceSource.currentDetailed();
-							// cp233 — Defense B (slow-drift) surface.
+							// Defense B (slow-drift) surface.
 							// driftStatus() is optional on the interface;
 							// when present and non-null (drift monitoring is
 							// wired and at least one refresh has committed),
@@ -409,7 +419,7 @@ export function healthRoute(
 							// slowly walked away from baseline — the attack
 							// the per-cycle smoothing cap cannot catch.
 							const drift = priceSource.driftStatus?.() ?? null;
-							// cp233 — Defense C surface.  The price block is
+							// Defense C surface.  The price block is
 							// BLURT-scoped (blurt_usd above), so read the BLURT
 							// monitor's last check: whether the self-sovereign
 							// native price currently disagrees with the external
@@ -444,7 +454,7 @@ export function healthRoute(
 											alert: disagree.alert_fired
 										}
 									: null,
-								// cp233 — Defense F (peer) surface.  Latest
+								// Defense F (peer) surface.  Latest
 								// peer-comparison cycle for BLURT: how many peers
 								// were queried, the peer median vs our own price,
 								// the deviation, and whether an alert fired.  null
@@ -452,7 +462,7 @@ export function healthRoute(
 								// monitor is disabled).  Together with drift (B)
 								// and disagreement (C) above, all three price-
 								// manipulation defenses are now visible here —
-								// finally making good on the cp129 schema comment.
+								// finally making good on the schema comment.
 								peer: peerResult
 									? {
 											peers_queried: peerResult.peersQueried,

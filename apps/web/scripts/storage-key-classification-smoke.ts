@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * storage-key-classification — v1.8.11 (the maintainer, t.txt).
+ * storage-key-classification — v1.8.11.
  *
- * THE BUG THIS EXISTS TO PREVENT. the maintainer signed out of @tester3, signed in as
- * @testowner, and found tester3's region setting waiting for him. The cause was
+ * THE BUG THIS EXISTS TO PREVENT. A user signed out of one account, signed in
+ * as another, and found the first account's region setting waiting. The cause was
  * not one bad key: it was that keys had been added over two years with no
  * shared answer to "does this belong to the person or to the browser?" Some
  * were account-suffixed, some were mirrored to chain, and some — including
@@ -14,8 +14,17 @@
  * key, and this smoke fails the build when a key appears in the source that the
  * registry does not mention. Adding a key now forces the question.
  *
+ * What counts as a key in use: every `'morphit.…'` literal (hyphens
+ * included — `morphit.address-history.v2` used to end the match at the
+ * hyphen and slip through), every literal passed straight to a storage API
+ * (`localStorage`/`sessionStorage`/`safeLocal`/`safeSession` get/set/remove)
+ * or held in a `…KEY` constant (that is how `morphit:install-banner-dismissed`
+ * was missed), and every IndexedDB database name.
+ *
  * Tamper tests (each must turn this red):
  *   - `localStorage.setItem('morphit.newThing', …)` without registering it.
+ *   - `const DISMISS_KEY = 'morphit:other'` without registering it.
+ *   - `indexedDB.open('morphit-new-db')` without registering it.
  *   - Delete an entry from STORAGE_KEYS that the source still writes.
  *   - Put a person-ish key in the DEVICE tier (it would survive sign-out).
  */
@@ -55,7 +64,11 @@ check(`the registry declares keys (${declared.size})`, declared.size > 20);
 const deviceTier = [...registrySrc.matchAll(/\{\s*key:\s*'([^']+)',\s*tier:\s*'device'/g)].map(
 	(m) => m[1]!
 );
-check(`the device tier is small and deliberate (${deviceTier.length})`, deviceTier.length > 0 && deviceTier.length <= 10, 'a large device tier means keys are surviving sign-out unexamined');
+check(
+	`the device tier is small and deliberate (${deviceTier.length})`,
+	deviceTier.length > 0 && deviceTier.length <= 10,
+	'a large device tier means keys are surviving sign-out unexamined'
+);
 
 // A device key is left behind on a SHARED machine after sign-out, so none may
 // name a person or their content. This mirrors the unit test on the sweep, but
@@ -94,8 +107,24 @@ for (const file of files) {
 		.split('\n')
 		.filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
 		.join('\n');
-	for (const m of code.matchAll(/'(morphit\.[A-Za-z0-9_.]+)'/g)) {
-		const key = m[1]!;
+	const found: string[] = [
+		...[...code.matchAll(/'(morphit\.[A-Za-z0-9_.-]+)'/g)].map((m) => m[1]!),
+		// Literals handed straight to a storage API.
+		...[
+			...code.matchAll(
+				/\b(?:localStorage|sessionStorage|safeLocal|safeSession)\.(?:getItem|setItem|removeItem|get|set|remove)\(\s*'([^']+)'/g
+			)
+		].map((m) => m[1]!),
+		// Key constants (`const DISMISS_KEY = 'morphit:…'`).
+		...[...code.matchAll(/\b(?:[A-Z][A-Z0-9_]*_)?KEY\s*=\s*'(morphit[^']*)'/g)].map((m) => m[1]!),
+		// IndexedDB databases: a literal open, or the DB_NAME constant of a
+		// file that opens one.
+		...[...code.matchAll(/indexedDB\.open\(\s*'([^']+)'/g)].map((m) => m[1]!),
+		...(/indexedDB\.open\(/.test(code)
+			? [...code.matchAll(/\b(?:[A-Z][A-Z0-9_]*_)?DB_NAME\s*=\s*'([^']+)'/g)].map((m) => m[1]!)
+			: [])
+	];
+	for (const key of found) {
 		// Trailing-dot forms are prefixes built at runtime (`morphit.draft.` +
 		// id); the registry declares the prefix, so normalise before matching.
 		const norm = key.endsWith('.') ? key.slice(0, -1) : key;
@@ -129,7 +158,7 @@ check(
 check(
 	'userPreferences is classified ACCOUNT, not device',
 	/key: 'morphit\.userPreferences\.v1',\s*tier: 'account'/.test(registrySrc),
-	'this is the key whose region value followed the maintainer from tester3 into testowner'
+	'this is the key whose region value followed one account into the next'
 );
 check(
 	'both syndication opt-ins are mirrored to chain (v1.8.11)',
@@ -139,13 +168,13 @@ check(
 		/key: 'morphit\.syndication\.orderBlogDefault',\s*tier: 'account',\s*protection: 'mirrored'/.test(
 			registrySrc
 		),
-	'they publish on the user\'s behalf, so they must follow the account rather than the browser'
+	"they publish on the user's behalf, so they must follow the account rather than the browser"
 );
 
 // Every ACCOUNT key must declare HOW it is protected — an account key with no
 // protection is exactly the shape of the original bug.
 const accountWithoutProtection = [
-	...registrySrc.matchAll(/\{\s*key: '([^']+)',\s*tier: 'account',\s*note:/g)
+	...registrySrc.matchAll(/\{\s*key: '([^']+)',\s*tier: 'account'\s*\}/g)
 ].map((m) => m[1]!);
 check(
 	'no ACCOUNT key is missing a protection field',

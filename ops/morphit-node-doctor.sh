@@ -4,7 +4,7 @@
 # privacy and health, with a focus on tor-only boxes.
 #
 # AUTO-FIXES (safe, idempotent): on a tor-only node, forces the clearnet RPC
-# pool empty so chain reads go ONLY over the hidden (Tor/I2P) pool — the cp755
+# pool empty so chain reads go ONLY over the hidden (Tor/I2P) pool — the
 # invariant — and restarts the indexer if that changed anything. Backs up
 # indexer.env first.
 #
@@ -32,6 +32,24 @@ info(){ printf '    %s%s%s\n' "$d" "$1" "$x"; }
 
 if [ "$(id -u)" -ne 0 ]; then echo "Please run as root:  sudo bash $0"; exit 1; fi
 if [ ! -f "$IDXENV" ]; then echo "No $IDXENV — is this a Morphit node? (set MORPHIT_ENVDIR if custom)"; exit 1; fi
+
+# Root sources these files below, so only when nobody but root can have
+# written them: a root-owned file, not group/world-writable, in a root-owned
+# directory nobody else can write (else another user could run code as root).
+root_only() {
+  local f="$1" d; d="$(dirname -- "$f")"
+  [ -f "$f" ] && [ ! -L "$f" ] && [ "$(stat -c %u -- "$f")" = 0 ] \
+    && [ $((8#$(stat -c %a -- "$f") & 8#022)) -eq 0 ] \
+    && [ "$(stat -c %u -- "$d")" = 0 ] && [ $((8#$(stat -c %a -- "$d") & 8#022)) -eq 0 ]
+}
+for f in "$REPO/morphit.env" "$REPO/morphit.config.env" "$IDXENV"; do
+  if [ -e "$f" ] && ! root_only "$f"; then
+    echo "Not reading $f: a user other than root can change it (or its folder), and this check runs as root."
+    echo "On this server, make the file and its folder root-owned and not group/world-writable first:"
+    echo "  sudo chown root \"$f\" \"$(dirname -- "$f")\"; sudo chmod go-w \"$f\" \"$(dirname -- "$f")\""
+    exit 1
+  fi
+done
 
 # ── read the EFFECTIVE env the way the indexer unit does ─────────────
 # Distinguishes UNSET (→ built-in clearnet default applies) from EMPTY (→ good).

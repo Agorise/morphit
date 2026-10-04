@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — /v1/account/:account/keys endpoint. Anchor cp298.
+ * Morphit indexer — /v1/account/:account/keys endpoint. Anchor.
  *
  *   GET /v1/account/:account/keys
  *     → { account: { name, owner, active, posting, memo_key } }
@@ -25,9 +25,8 @@
  * these public authorities runs client-side. The indexer is purely a
  * privacy-preserving relay of public data.
  *
- * Authorities change rarely (key rotations are infrequent), so the
- * response is briefly `public`-cacheable — public chain data, not
- * per-user-private.
+ * The answer names the account, so it is never stored (`no-store` from
+ * the security middleware, VT3-6).
  */
 
 import { Hono } from 'hono';
@@ -35,10 +34,6 @@ import { Hono } from 'hono';
 import type { BlurtClient } from '$blurt/client';
 import { errorBody, isAccountName } from '$api/shared';
 
-/** Authorities change only on a key rotation (rare). A short public
- *  cache collapses the per-keystroke existence checks the import field
- *  fires while typing, without risking a stale verdict for long. */
-const KEYS_CACHE_CONTROL = 'public, max-age=30, stale-while-revalidate=120';
 
 interface AccountKeysBody {
 	readonly account: {
@@ -95,7 +90,6 @@ export function accountKeysRoute(blurt: BlurtClient): Hono {
 			}
 		};
 
-		c.header('Cache-Control', KEYS_CACHE_CONTROL);
 		return c.json(body);
 	});
 

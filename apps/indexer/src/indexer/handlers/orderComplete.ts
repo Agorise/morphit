@@ -40,7 +40,7 @@
  *     one review per reviewer/subject/order) and filtered by the sock-puppet
  *     signals. Reputation-by-collusion therefore still costs a real listing fee
  *     per fake trade and still trips the reciprocity/related-account signals.
- *     (v1.18.0 deep-deep, M2) That "real listing fee" claim was false until
+ *     That "real listing fee" claim was false until
  *     then: an order with NO fee (fee_status 'missing') could be completed and
  *     counted. This handler still completes any live order (completing is also
  *     how an owner takes a listing down), but TRADE_COUNT_SQL in
@@ -50,7 +50,7 @@
  * outright rather than silently dropped, so a client bug can't quietly cost
  * someone their trade credit.
  *
- * cp472 TIGHTENING (the maintainer) — the named counterparty must clear the PROVABLE-
+ * TIGHTENING — the named counterparty must clear the PROVABLE-
  * COUNTERPARTY bar: the same substantiated two-way conversation the
  * has_verified_chat badge and every REVIEW already require (≥2 messages each
  * way, ≥15-min span, pair not flagged for reciprocity). Shared impl in
@@ -74,6 +74,26 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { hasVerifiedChat } from '$indexer/chatGates';
+import { raiseTradeSignals } from '$indexer/signals';
+import { inSavepoint } from '$indexer/savepoint';
+import { logger } from '$log';
+
+const log = logger('order-complete');
+
+/** Signal E for the two accounts a completion credits, at its block time.
+ *  Advisory (reputation display): a failure is logged and never rejects the
+ *  completion, and its own savepoint keeps the block transaction usable. */
+async function tradeSignals(
+	client: pg.PoolClient,
+	ctx: OpContext,
+	counterparty: string
+): Promise<void> {
+	await inSavepoint(client, 'order_complete_signals', () =>
+		raiseTradeSignals(client, { accounts: [ctx.signer, counterparty], asOf: ctx.blockTime })
+	).catch((err: unknown) => {
+		log.warn('trade_signals_failed', { err: String((err as Error)?.message ?? err) });
+	});
+}
 
 /** Blurt account names: 3-16 chars, lowercase, dot-separated segments. Same
  *  shape the other handlers accept. */
@@ -106,7 +126,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			return { ok: false, reason: 'counterparty_invalid' };
 		}
 		if (rawCp === ctx.signer) return { ok: false, reason: 'counterparty_is_self' };
-		// cp472 — accept the name ONLY with provable conversation evidence.
+		// accept the name ONLY with provable conversation evidence.
 		// Bounded to this op's block time so a replay can't see its own future.
 		const proven = await hasVerifiedChat(client, {
 			a: ctx.signer,
@@ -124,7 +144,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	);
 
 	if (res.rowCount === 0) {
-		// (v1.20.0 fix wave, G7) The seller's client auto-completes a paid order
+		// The seller's client auto-completes a paid order
 		// WITHOUT naming anyone (/my/orders), and the review form then sends a
 		// second completion that names the proven counterparty. That second op
 		// used to hit `target_already_completed`, so the buyer never got the
@@ -140,6 +160,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				[ctx.signer, permlink, counterparty, ctx.blockTime]
 			);
 			if ((fill.rowCount ?? 0) > 0) {
+				await tradeSignals(client, ctx, counterparty);
 				ctx.recordOrderbookChange(`${ctx.signer}/${permlink}`);
 				return { ok: true };
 			}
@@ -152,6 +173,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'target_already_' + (probe.rows[0]?.status ?? 'unknown') };
 	}
 
+	if (counterparty !== null) await tradeSignals(client, ctx, counterparty);
 	ctx.recordOrderbookChange(`${ctx.signer}/${permlink}`);
 	return { ok: true };
 };

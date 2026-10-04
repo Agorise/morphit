@@ -12,12 +12,13 @@
  * `MORPHIT_INDEXER_XMR_FEE_PICONERO` lines you can paste into
  * morphit.config.env.
  *
- * The indexer does NOT use this script automatically — fee
- * verification is BLURT-native and doesn't depend on USD prices.
- * This is a one-off operator convenience for setting BTC/XMR
- * amounts that are economically comparable to the BLURT fee.
+ * The indexer does NOT use this script automatically. The env
+ * amounts are only a FALLBACK: once a release op pins treasury
+ * amounts on chain (treasury-repin-broadcast.ts), every indexer
+ * checks fees against the pinned amounts and ignores these lines.
+ * Useful for a node with no pinned amount yet.
  *
- * Part 110: the price-fetch + math have been extracted into
+ * the price-fetch + math have been extracted into
  * `apps/indexer/src/lib/feeAmountCalc.ts` so the setup wizard
  * (apps/ops-cli) can reuse them without duplicating logic.
  *
@@ -26,10 +27,7 @@
  * prices manually.
  */
 
-import {
-	computeFeeAmounts,
-	fetchBtcXmrPricesFromCoingecko
-} from '../src/lib/feeAmountCalc';
+import { computeFeeAmounts, fetchBtcXmrPricesFromCoingecko } from '../src/lib/feeAmountCalc';
 // Canonical USD target — the single source of truth (the canonical
 // economics in @morphit/asset-registry).
 import { LISTING_FEE_USD } from '@morphit/asset-registry';
@@ -104,6 +102,8 @@ async function main(): Promise<void> {
 	console.log(`    MORPHIT_INDEXER_XMR_FEE_PICONERO=${xmrPiconero}`);
 	console.log('');
 	console.log('  Update morphit.config.env, then restart the indexer.');
+	console.log('  (Only used while no release op pins treasury amounts on chain;');
+	console.log('  a pinned amount takes precedence over these lines.)');
 	console.log('');
 }
 

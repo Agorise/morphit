@@ -1,6 +1,6 @@
 /**
- * The RPC health probe neither follows redirects nor reads unbounded bodies
- * (v1.18.0 deep-deep, M2).
+ * The RPC health probe neither follows redirects nor reads unbounded bodies.
+ *
  *
  * `probeOne` POSTed to every canonical RPC node — third parties, listed in the
  * on-chain directory — with fetch's defaults. A node answering `307 Location:

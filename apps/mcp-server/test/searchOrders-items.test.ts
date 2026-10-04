@@ -3,7 +3,7 @@
  *
  * `/v1/orderbook` answers `{ items, next_cursor }` (apps/indexer/src/api/
  * orderbook.ts). The tool read `rows`, a key the indexer never sends, so every
- * search an AI agent ran came back empty — found by the v1.18.0 deep-deep
+ * search an AI agent ran came back empty — found by the v1.18.0 deep audit
  * while fixing morphit_get_listing, which had the same mismatch.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

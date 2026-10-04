@@ -179,7 +179,7 @@ export class InviteEndpoint {
 			);
 		}
 
-		// Audit fix (this turn): read priorToday SYNCHRONOUSLY here,
+		// Audit fix: read priorToday SYNCHRONOUSLY here,
 		// before any await, so concurrent requests from the same IP
 		// see distinct priorToday values.  Pre-fix, both requests
 		// awaited the body-parse and then both read priorToday=0,

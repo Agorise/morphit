@@ -2,12 +2,12 @@
 /**
  * faq-keys-themed-section-smoke.
  *
- * Part 122 cp60 STRUCTURAL DEFENSE (LL #63 / O-13).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp59-D2 class: FAQ_KEYS array drifting into
+ * Closes the class: FAQ_KEYS array drifting into
  * chronological-accumulation order over many checkpoints despite
  * the source comment "New entries go into a thematic cluster,
- * not appended."  cp59 reorganized 126 keys into 11 themed
+ * not appended."  reorganized 126 keys into 11 themed
  * sections with comment dividers.  This smoke pins that structure
  * so the next checkpoint that appends a new key at the file-end
  * (instead of inserting under a themed section) fails CI before
@@ -28,11 +28,11 @@
  * every key is under a section.
  *
  * Recurring class scope progression (13 defenses across 12 checkpoints):
- *   cp48-O1 through cp57-O11 (as listed above)
- *   cp60-O12: brag-list K.I.S.S. budget
- *   cp60-O13: FAQ_KEYS themed-section structure (THIS)
+ *   through a later fix (as listed above)
+ *   brag-list K.I.S.S. budget
+ *   FAQ_KEYS themed-section structure (THIS)
  *
- * Mutation test verification: M-127 — appending a new key
+ * Mutation test verification: — appending a new key
  * `'cp60_test_orphan'` AFTER the closing `] as const;` (so it's
  * outside any section) — well, that won't parse.  Real mutation:
  * appending `'cp60_test_orphan',` BELOW the last key but still

@@ -1,20 +1,20 @@
 /**
- * Morphit indexer — /v1/price/morphit-native/receipt (cp127, defense G).
+ * Morphit indexer — /v1/price/morphit-native/receipt (defense G).
  *
  * The "show your work" endpoint for price derivation.  Parallels the
- * cp124 reputation-receipt endpoint in spirit and structure.
+ * reputation-receipt endpoint in spirit and structure.
  *
  * Why this exists
  * ───────────────
- * Reputation hardening (cp123-cp125) taught us that PROVABILITY beats
+ * Reputation hardening taught us that PROVABILITY beats
  * perfection.  The reputation receipt lets any chain reader re-derive
  * an account's score; this endpoint does the same for the morphit_native
  * price.
  *
- * Defense G in the cp127 black-hat checklist:
+ * Defense G in the black-hat checklist:
  *
  *   Patient sock-puppet attackers may build up legitimate-looking
- *   accounts over months, evading the cp123-cp125 Sybil signal
+ *   accounts over months, evading the Sybil signal
  *   tables, and then coordinate to manipulate the price.  We can't
  *   prevent that perfectly at intake time.  But we CAN make
  *   after-the-fact forensics easy: publish exactly which accounts
@@ -47,14 +47,20 @@
  *     been included if not flagged).  Useful for super-deep forensics
  *     but exposes Sybil-table flag pairs in a new way; deferred.
  *
+ * Shape
+ * ─────
+ * The body is a PriceReceiptBody (indexer/price/priceReceiptShape.ts),
+ * the same type peer instances parse it with (peerPriceMonitor) — one
+ * definition, so producer and consumer cannot drift apart again.
+ *
  * Caching
  * ───────
- * ETag based on the price + as_of timestamp.  Cache-Control: 60s.
- * Same as the reputation receipt's pattern.  Receipt is recomputed
- * on every cache miss; results are not cached because the underlying
- * morphit_native fetcher is already cached by the composite source's
- * background refresher.
+ * ETag over the body's content, excluding `as_of` (the derivation time,
+ * which changes on every call and would make every ETag unique).
+ * Cache-Control: 60s.  The receipt is re-derived on every request.
  */
+
+import { createHash } from 'node:crypto';
 
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -65,8 +71,13 @@ import { errorBody } from '$api/shared';
 import {
 	deriveMorphitNativePrice,
 	HARDCODED_OUTER_MIN_USD,
-	HARDCODED_OUTER_MAX_USD
+	HARDCODED_OUTER_MAX_USD,
+	NATIVE_MIN_DISTINCT_TRADERS,
+	NATIVE_MIN_STABLECOIN_COUNT_TIER2,
+	NATIVE_ORDER_AGE_GRACE_MINUTES
 } from '$indexer/price/morphitNativeFetcher';
+import { nativePlausibleEnvelope } from '$indexer/price/factory';
+import type { PriceReceiptBody } from '$indexer/price/priceReceiptShape';
 
 /** Loudly-visible warning in the receipt payload.  Defense H in the
  *  black-hat checklist: downstream protocols that ignore this and
@@ -85,9 +96,9 @@ const querySchema = z.object({
 	denomination_fiat: z.string().regex(/^[A-Za-z]{3,8}$/).optional()
 });
 
-/** Defaults used when query params are omitted.  cp127 wires only
+/** Defaults used when query params are omitted.  A later change wires only
  *  BLURT/USD; future iterations can route on the query params.
- *  cp128: denomination_fiat default now reads from config instead
+ *  denomination_fiat default now reads from config instead
  *  of being hardcoded 'USD' — operators can serve receipts in their
  *  configured denomination.  Query-param override still allowed
  *  for inspection of "what would this receipt look like for fiat
@@ -125,23 +136,27 @@ export function priceReceiptRoute(db: Database, config: Config): Hono {
 		// The receipt is informational — operators may want to see
 		// what the native fetcher WOULD produce even when it's off,
 		// for evaluation purposes.
+		//
+		// The envelope is the asset's own (nativePlausibleEnvelope): the
+		// operator's native envelope describes BLURT, and applied to BTC or
+		// XMR it rejected every price.
+		const envelope = nativePlausibleEnvelope(config, asset);
 		const derivation = await deriveMorphitNativePrice({
 			asset,
 			denominationFiat,
 			stablecoinKeys: config.priceFeedStablecoinKeys,
 			db,
 			operatorAccountName: config.operatorAccountName,
-			minPlausibleUsd:
-				config.priceFeedNativePlausibleMin ?? HARDCODED_OUTER_MIN_USD,
-			maxPlausibleUsd:
-				config.priceFeedNativePlausibleMax ?? HARDCODED_OUTER_MAX_USD
+			minPlausibleUsd: envelope.min,
+			maxPlausibleUsd: envelope.max
 		});
 
-		const response = {
+		const response: PriceReceiptBody = {
 			asset,
 			denomination_fiat: denominationFiat,
 			as_of: derivation.as_of,
 			price: derivation.price,
+			source: 'morphit_native',
 			tier_used: derivation.tier_used,
 			null_reason: derivation.null_reason ?? null,
 			tier_attempted: derivation.tier_attempted,
@@ -151,31 +166,18 @@ export function priceReceiptRoute(db: Database, config: Config): Hono {
 			envelope: {
 				hardcoded_outer_min_usd: HARDCODED_OUTER_MIN_USD,
 				hardcoded_outer_max_usd: HARDCODED_OUTER_MAX_USD,
-				operator_configured_min_usd:
-					config.priceFeedNativePlausibleMin ?? null,
-				operator_configured_max_usd:
-					config.priceFeedNativePlausibleMax ?? null
+				asset_min_usd: Math.max(envelope.min, HARDCODED_OUTER_MIN_USD),
+				asset_max_usd: Math.min(envelope.max, HARDCODED_OUTER_MAX_USD)
 			},
 			thresholds: {
-				min_distinct_traders: 3,
-				min_stablecoin_count_tier2: 2,
-				order_age_grace_minutes: 10
+				min_distinct_traders: NATIVE_MIN_DISTINCT_TRADERS,
+				min_stablecoin_count_tier2: NATIVE_MIN_STABLECOIN_COUNT_TIER2,
+				order_age_grace_minutes: NATIVE_ORDER_AGE_GRACE_MINUTES
 			},
 			warning: NOT_AN_ORACLE_WARNING
 		};
 
-		// ETag based on the price + as_of + contributing-trader set.
-		const etagInput =
-			asset +
-			'|' +
-			denominationFiat +
-			'|' +
-			derivation.as_of +
-			'|' +
-			(derivation.price ?? 'null') +
-			'|' +
-			derivation.contributing_traders.join(',');
-		const etag = `"${simpleHash(etagInput)}"`;
+		const etag = receiptEtag(response);
 		c.header('ETag', etag);
 		c.header('Cache-Control', 'public, max-age=60');
 
@@ -190,11 +192,8 @@ export function priceReceiptRoute(db: Database, config: Config): Hono {
 	return app;
 }
 
-/** Cheap deterministic hash for ETag; djb2 variant. */
-function simpleHash(s: string): string {
-	let h = 5381;
-	for (let i = 0; i < s.length; i++) {
-		h = ((h * 33) ^ s.charCodeAt(i)) | 0;
-	}
-	return (h >>> 0).toString(16).padStart(8, '0');
+/** ETag over everything in the body except `as_of`, the derivation time. */
+export function receiptEtag(body: PriceReceiptBody): string {
+	const { as_of: _asOf, ...content } = body;
+	return `"${createHash('sha256').update(JSON.stringify(content)).digest('base64url').slice(0, 22)}"`;
 }

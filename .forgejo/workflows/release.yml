@@ -43,6 +43,13 @@ jobs:
     # V8's ~2 GB default on the container executor.
     env:
       NODE_OPTIONS: --max-old-space-size=3072
+      # The ONLY keys whose signatures make a tag a release and sign its
+      # tarball (space-separated, upper-case fingerprints). Trust is decided
+      # here, never by which .asc files the tagged tree carries under
+      # .forgejo/release-signers/ (a tag pusher controls those). Must equal
+      # RELEASE_SIGNER_FINGERPRINTS in packages/operator-config, which installed
+      # nodes check tarball signatures against (release-signer-pin-smoke).
+      MORPHIT_RELEASE_SIGNERS: 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
     # Same Postgres sidecar as ci.yml's smokes job: the relay's drainer and
     # adversarial-RPC smokes drive a real database and fail the suite without one.
     services:
@@ -63,30 +70,6 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-
-      - name: Import authorized release-signer keys
-        # Part 122 cp8 — release-signer pubkeys live in
-        # `.forgejo/release-signers/*.asc` (ASCII-armored, one per
-        # authorized maintainer).  We import them into the runner's
-        # keyring so the next step can verify the tag signature.
-        # Adding a new signer = adding a new .asc file in that
-        # directory and getting the PR merged.
-        run: |
-          set -eu
-          if [ ! -d .forgejo/release-signers ]; then
-            echo "ERROR: .forgejo/release-signers/ directory missing — no authorized signers configured" >&2
-            exit 1
-          fi
-          asc_count=$(find .forgejo/release-signers -name '*.asc' -type f | wc -l)
-          if [ "$asc_count" -eq 0 ]; then
-            echo "ERROR: no *.asc pubkey files in .forgejo/release-signers/" >&2
-            exit 1
-          fi
-          for key in .forgejo/release-signers/*.asc; do
-            echo "Importing $key"
-            gpg --import "$key"
-          done
-          echo "Imported $asc_count authorized signer key(s)."
 
       - name: Restore annotated tag (actions/checkout strips signatures)
         # Forgejo Actions (and GitHub Actions) ship a version of
@@ -125,33 +108,72 @@ jobs:
           fi
           echo "✓ ${TAG} restored as annotated tag object"
 
-      - name: Verify tag is signed by an authorized key
-        # Part 122 cp8 — the tag itself must be a signed annotated
-        # tag (`git tag -s vX.Y.Z`).  `git verify-tag` consults
-        # the keyring populated above; if the tag isn't signed,
-        # or is signed by a key not in `.forgejo/release-signers/`,
-        # this step fails and the release does not proceed.
-        # Defense against a compromised CI runner producing
-        # tarballs from arbitrary commits.
+      - name: Verify tag is signed by a pinned release key and is on main
+        # The tag must be signed by a key whose fingerprint is in
+        # MORPHIT_RELEASE_SIGNERS (job env above). The .asc files in the
+        # tagged tree's .forgejo/release-signers/ only supply key MATERIAL:
+        # a tag pusher can commit their own key there, so a good signature
+        # from it counts for nothing. The tagged commit must also be on the
+        # protected main branch, so the code being released (this workflow
+        # included) is code that went through main.
+        # Runs before any dependency is installed or any repository code runs.
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -eu
-          echo "Verifying tag signature for $TAG"
-          git verify-tag "$TAG"
-          echo "✓ tag signed by an authorized key"
+          [ -n "${MORPHIT_RELEASE_SIGNERS:-}" ] || { echo "ERROR: no pinned release signers (MORPHIT_RELEASE_SIGNERS)" >&2; exit 1; }
+          [ "$(git cat-file -t "$TAG")" = tag ] || { echo "ERROR: $TAG is not an annotated tag" >&2; exit 1; }
+          # The signature covers the tag object, and the object names its tag:
+          # a ref pointed at another version's signed object is refused.
+          OBJ_TAG="$(git cat-file tag "$TAG" | sed -n '/^$/q; s/^tag //p')"
+          if [ "$OBJ_TAG" != "$TAG" ]; then
+            echo "ERROR: refs/tags/$TAG points at the signed tag object of '${OBJ_TAG}', not of $TAG" >&2
+            exit 1
+          fi
+          # What this job checked out, and builds, is the commit the tag names.
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse "${TAG}^{commit}")" ]; then
+            echo "ERROR: the checked-out commit is not the commit $TAG points at (was the tag moved after the push?)" >&2
+            exit 1
+          fi
+          GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          export GNUPGHOME
+          for key in .forgejo/release-signers/*.asc; do
+            [ -f "$key" ] && gpg --batch --import "$key" >/dev/null 2>&1 || true
+          done
+          if ! STATUS="$(git verify-tag --raw "$TAG" 2>&1 >/dev/null)"; then
+            echo "ERROR: $TAG is not signed, or its signature does not verify" >&2
+            rm -rf "$GNUPGHOME"
+            exit 1
+          fi
+          rm -rf "$GNUPGHOME"
+          SIGNER=""
+          for f in $(printf '%s\n' "$STATUS" | awk '$1=="[GNUPG:]" && $2=="VALIDSIG" {print $3; print $NF}'); do
+            for p in $MORPHIT_RELEASE_SIGNERS; do
+              if [ "$(printf '%s' "$f" | tr a-f A-F)" = "$(printf '%s' "$p" | tr a-f A-F)" ]; then SIGNER="$p"; fi
+            done
+          done
+          if [ -z "$SIGNER" ]; then
+            echo "ERROR: $TAG is signed, but not by a pinned release key (MORPHIT_RELEASE_SIGNERS)" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          if ! git merge-base --is-ancestor "${TAG}^{commit}" refs/remotes/origin/main; then
+            echo "ERROR: the commit $TAG points at is not on main" >&2
+            exit 1
+          fi
+          echo "✓ $TAG is signed by pinned key $SIGNER, names itself, is the checked-out commit, and is on main"
 
       - name: Install Node.js 22 LTS
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: 22
 
-      - name: Install build tools (for better-sqlite3 native)
+      - name: Install build tools + pip
         run: |
-          # cp190 — scope apt update to the base Ubuntu repos so a
-          # transient Hash-Sum-mismatch on a third-party repo in the
-          # runner image (e.g. repo.zabbix.com) can't fail the release
-          # build.  Matches the ci.yml hardening.
+          # Plain apt-get as root in the container executor (no sudo, no
+          # source-list overrides — see ci.yml); the retry loop rides out a
+          # brief mirror hiccup.
           for i in 1 2 3; do
             apt-get update -qq && break
             echo "apt-get update attempt $i failed; retrying in 5s..."
@@ -161,14 +183,21 @@ jobs:
             build-essential python3 python3-pip
 
       - name: Install workspace dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Install ansible-lint + collections
+        # No install scripts: the lockfile's packages are unpacked, nothing they
+        # ship is run. The two native add-ons the Matrix bot (and its smokes)
+        # load are then downloaded and checked against pinned SHA-256s
+        # (scripts/fetch-matrix-bot-natives.mjs, the pins Ansible installs use).
         run: |
-          pip3 install --break-system-packages --quiet \
-            ansible ansible-lint
-          ansible-galaxy collection install -r \
-            ops/ansible/collections/requirements.yml
+          set -eu
+          npm ci --ignore-scripts --no-audit --no-fund
+          node scripts/fetch-matrix-bot-natives.mjs .
+
+      - name: Install ansible-lint (pinned, hash-checked)
+        # The pinned `ansible` bundles the collections the playbook uses, so
+        # nothing is installed from Ansible Galaxy.
+        run: |
+          pip3 install --break-system-packages --quiet --require-hashes \
+            -r .forgejo/ansible-lint-requirements.txt
 
       - name: Typecheck sweep
         run: bash scripts/typecheck-sweep.sh
@@ -193,7 +222,7 @@ jobs:
         run: |
           set -eu
           TAG="${GITHUB_REF#refs/tags/}"
-          # AUDIT-CI-7 (cp17 deep-deep): validate the tag format
+          # AUDIT-CI-7: validate the tag format
           # STRICTLY before letting it flow into shell-interpolated
           # contexts.  git-check-ref-format permits `$`, `(`, `)`,
           # spaces, and other shell-metacharacters; we permit only
@@ -229,9 +258,10 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "tarball=morphit-${TAG}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "offline=morphit-${TAG}-offline.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Generate release-info.json (in-tarball provenance manifest)
-        # Part 122 cp8 — bake a manifest into the tarball that
+        # bake a manifest into the tarball that
         # `morphit-ops upgrade` reads to verify the operator is
         # extracting the version they think they are.  Survives
         # tarball-rename mistakes (operator renames the file
@@ -289,6 +319,10 @@ jobs:
         # from run 401).  Staging in /tmp and moving the finished
         # tarball back is the standard workaround.
         #
+        # ./private is the maintainer's private handoff (gitignored, so a CI
+        # checkout never has it); excluded here as well so no tree it does
+        # sit in can pack it (release-packers-exclude-private-smoke).
+        #
         # AUDIT-CI-7: tag value passed via env, not ${{ }}
         # interpolation, so bash sees a plain variable (no
         # command substitution on the tag content).
@@ -307,6 +341,7 @@ jobs:
               --exclude='./packages/*/node_modules' \
               --exclude='./packages/*/dist' \
               --exclude='*.log' \
+              --exclude='./private' \
               -czf "${STAGE}/${TARBALL}" .
           mv "${STAGE}/${TARBALL}" "./${TARBALL}"
           rmdir "${STAGE}"
@@ -319,52 +354,89 @@ jobs:
           sha256sum "$TARBALL" > "$TARBALL.sha256"
           cat "$TARBALL.sha256"
 
+      - name: Build the offline bundle (node_modules + this release's frontend)
+        # A zero-clearnet node takes a release with no clearnet and no npm:
+        # `morphit-ops upgrade --from-file=<this bundle>`. The bundle carries
+        # node_modules with the marker that makes the upgrade skip npm, the
+        # frontend this job built (the same bytes as the slim tarball), and the
+        # slim tarball itself. The next step signs it with the pinned key; an
+        # installed node (v1.20.2 included) checks that signature against its own
+        # .forgejo/release-signers before it uses a byte of it. A failure here
+        # fails the release.
+        # Built without Docker (this job runs in a container that has none): no
+        # apt packages and no images, which only a fresh, fully offline install
+        # would use; scripts/build-offline-bundle.sh without --without-docker
+        # still builds that appliance on any Ubuntu 24.04 box with Docker.
+        # No secret is in reach of this step.
+        env:
+          OFFLINE: ${{ steps.ver.outputs.offline }}
+        run: |
+          set -eu
+          bash scripts/build-offline-bundle.sh --without-docker --reuse-frontend
+          if [ ! -s "$OFFLINE" ] || [ ! -s "$OFFLINE.sha256" ]; then
+            echo "ERROR: $OFFLINE (+ .sha256) was not produced; the release needs it" >&2
+            exit 1
+          fi
+          sha256sum -c "$OFFLINE.sha256"
+          ls -lh "$OFFLINE"
+
       - name: Sign release tarball (detached GPG signature)
-        # beta5 — source-independent integrity for mirror downloads.
-        # `morphit-ops upgrade` verifies this `*.tar.gz.asc` against the
-        # release-signer PUBLIC keys shipped in the install at
-        # `.forgejo/release-signers/*.asc`, so a tarball fetched from ANY
-        # mirror is trustworthy (no need to trust the mirror).
-        #
-        # Requires two repo secrets (set them in Forgejo → repo →
+        # Installed nodes accept a tarball signed by a fingerprint pinned in
+        # @morphit/operator-config (or one matching @morphit's signed on-chain
+        # record). The key comes from two repo secrets (Forgejo → repo →
         # Settings → Actions → Secrets):
-        #   MORPHIT_RELEASE_SIGNING_KEY         — ASCII-armored PRIVATE
-        #     key whose PUBLIC half is committed under
-        #     .forgejo/release-signers/ (so operators can verify).
-        #   MORPHIT_RELEASE_SIGNING_PASSPHRASE  — its passphrase (or
-        #     empty if the key has none).
-        #
-        # If the secret is not set, signing is SKIPPED (CI still passes,
-        # the release is published unsigned) — but mirror installs will
-        # then fall back to primary-anchored-hash only.  See
-        # docs/UPGRADING.md.
+        #   MORPHIT_RELEASE_SIGNING_KEY         — ASCII-armored PRIVATE key of a
+        #     pinned fingerprint (MORPHIT_RELEASE_SIGNERS).
+        #   MORPHIT_RELEASE_SIGNING_PASSPHRASE  — its passphrase (may be empty).
+        # A missing key, or a key that is not pinned, FAILS the release: a
+        # release is never published unsigned. The passphrase reaches gpg on a
+        # file descriptor, never on its command line. The signature logic is
+        # inline here, not a repository script, so nothing a dependency wrote
+        # into the workspace earlier in this job is run with the key.
         env:
           TARBALL: ${{ steps.ver.outputs.tarball }}
+          OFFLINE: ${{ steps.ver.outputs.offline }}
           SIGNING_KEY: ${{ secrets.MORPHIT_RELEASE_SIGNING_KEY }}
           SIGNING_PASSPHRASE: ${{ secrets.MORPHIT_RELEASE_SIGNING_PASSPHRASE }}
         run: |
           set -eu
           if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "::warning::MORPHIT_RELEASE_SIGNING_KEY not set — publishing UNSIGNED release (mirror installs limited to primary-anchored-hash). See docs/UPGRADING.md."
-            exit 0
+            echo "ERROR: MORPHIT_RELEASE_SIGNING_KEY is not set. A release is never published unsigned." >&2
+            exit 1
           fi
           SIGN_HOME="$(mktemp -d)"
           chmod 700 "$SIGN_HOME"
           export GNUPGHOME="$SIGN_HOME"
-          printf '%s' "$SIGNING_KEY" | gpg --batch --import
-          KEYID="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')"
-          if [ -z "$KEYID" ]; then
-            echo "ERROR: no secret key found after import" >&2
-            rm -rf "$SIGN_HOME"; exit 1
+          trap 'rm -rf "$SIGN_HOME"' EXIT
+          printf '%s' "$SIGNING_KEY" | gpg --batch --import 2>/dev/null
+          FPR="$(gpg --list-secret-keys --with-colons | awk -F: '$1=="fpr" {print $10; exit}')"
+          PINNED=no
+          for p in $MORPHIT_RELEASE_SIGNERS; do
+            [ "$(printf '%s' "$FPR" | tr a-f A-F)" = "$(printf '%s' "$p" | tr a-f A-F)" ] && PINNED=yes
+          done
+          if [ -z "$FPR" ] || [ "$PINNED" != yes ]; then
+            echo "ERROR: the signing secret holds key '${FPR:-none}', which is not a pinned release key (MORPHIT_RELEASE_SIGNERS)." >&2
+            exit 1
           fi
-          gpg --batch --yes --pinentry-mode loopback \
-            --passphrase "${SIGNING_PASSPHRASE:-}" \
-            --local-user "$KEYID" \
-            --armor --detach-sign --output "$TARBALL.asc" "$TARBALL"
-          # Sanity: verify what we just produced before publishing.
-          gpg --batch --verify "$TARBALL.asc" "$TARBALL"
-          echo "Signed $TARBALL with key $KEYID."
-          rm -rf "$SIGN_HOME"
+          # The slim tarball and the offline bundle, with the same key.
+          for f in "$TARBALL" "${OFFLINE:-}"; do
+            if [ ! -s "$f" ]; then
+              echo "ERROR: '$f' is missing; the release signs the tarball and the offline bundle" >&2
+              exit 1
+            fi
+            printf '%s' "${SIGNING_PASSPHRASE:-}" | gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 --local-user "$FPR" \
+              --armor --detach-sign --output "$f.asc" "$f"
+            # Check what was produced before anything else uses it.
+            # VALIDSIG names the signing (sub)key first and the primary key last.
+            gpg --batch --status-fd 1 --verify "$f.asc" "$f" 2>/dev/null \
+              | awk -v k="$FPR" '$1=="[GNUPG:]" && $2=="VALIDSIG" && ($3==k || $NF==k) {ok=1} END {exit !ok}' || {
+              echo "ERROR: the fresh signature of $f does not verify as $FPR" >&2
+              exit 1
+            }
+            echo "Signed $f with pinned key $FPR."
+          done
+          printf '%s\n' "$FPR" > release-signer.fpr
 
       - name: Compute canonical IPFS CID (self-hosted seed model — Kubo, no pinning service)
         # v1.9.3: releases are hosted on our OWN nodes (the maintainer's release box seeds via
@@ -438,26 +510,34 @@ jobs:
           echo "Canonical IPFS CID (seeded by the release box + anchored on-chain): $CID"
           echo "  the seed hosts THIS exact CID; instances pin it; ipns://<name> repoints to it below."
 
+      - name: Install the IPNS signing tools (pinned, no install scripts, no secrets)
+        # scripts/ipns/ has its own package.json + package-lock.json. They are
+        # installed HERE, in a step that is given no secret, with install
+        # scripts off; the next step, which is given the IPNS key, runs node
+        # on them and installs nothing. NON-FATAL: IPNS is additive.
+        run: |
+          set -u
+          npm ci --prefix scripts/ipns --ignore-scripts --no-audit --no-fund >/dev/null 2>&1 \
+            || echo "WARNING: could not install the IPNS signing tools — the release goes out without ipns_record." >&2
+
       - name: Sign stable IPNS record (optional — DHT-native, sign-once/rebroadcast-only)
         # OPTIONAL "always find the latest" pointer, resolvable on the PUBLIC DHT
         # (v1.9.6). If a MORPHIT_IPNS_KEY secret is set, sign an IPNS record pointing
-        # Morphit's STABLE name at THIS release's CID — LOCALLY (scripts/ipns-sign.mjs;
-        # the key never leaves this process) with a 1-year lifetime. The signed record
-        # (base64) is written to ipns-record.txt and the k51… name to ipns-name.txt;
-        # both are carried into the on-chain anchor below. Every instance then reads the
+        # Morphit's STABLE name at THIS release's CID — scripts/ipns/ipns-sign.mjs,
+        # in this step only; the key is used by that one process — with a 1-year
+        # lifetime. The signed record (base64) is written to ipns-record.txt and the
+        # k51… name to ipns-name.txt, each only after checking its shape; both are
+        # carried into the on-chain anchor below. Every instance then reads the
         # record (via /v1/release) and rebroadcasts it to the DHT WITHOUT the key, so
         # ipns://<name> resolves on any gateway for as long as one instance lives — and
         # no instance can repoint it (minting/bumping requires the key; the sequence is
-        # signed). This REPLACES the old w3name publish: w3name stored records in its
-        # own service, OFF the DHT, so public gateways never resolved them.
+        # signed).
         #
         # The sequence is the build's unix timestamp: strictly monotonic across releases
-        # (newest wins on resolve) with no fragile chain read, and comfortably above any
-        # legacy w3name sequence so the DHT record supersedes anything cached. NO key →
-        # skipped; ANY failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid
-        # + git mirrors + on-chain SHA-256). Deps go in a scratch dir so the monorepo's
-        # lockfile stays untouched. Broadcast (Block 5) is laptop-only; signing the IPNS
-        # record is safe in CI — the key only repoints a name, never touches funds.
+        # (newest wins on resolve) with no fragile chain read. NO key → skipped; ANY
+        # failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid + git
+        # mirrors + on-chain SHA-256). Broadcast (Block 5) is laptop-only; the IPNS key
+        # only repoints a name, never touches funds.
         env:
           MORPHIT_IPNS_KEY: ${{ secrets.MORPHIT_IPNS_KEY }}
         run: |
@@ -466,28 +546,31 @@ jobs:
             echo "No MORPHIT_IPNS_KEY secret — skipping IPNS sign (release proceeds without ipns_record)."
             exit 0
           fi
-          if [ ! -s ipfs-cid.txt ]; then
-            echo "No ipfs-cid.txt (CID computation skipped/failed) — nothing to point the name at; skipping."
+          if [ ! -s ipfs-cid.txt ] || [ ! -d scripts/ipns/node_modules ]; then
+            echo "No CID or no IPNS signing tools — skipping IPNS sign (release proceeds without ipns_record)."
             exit 0
           fi
           RELEASE_CID=$(cat ipfs-cid.txt)
           SEQ=$(date -u +%s)
           echo "Signing IPNS record → /ipfs/${RELEASE_CID} (seq ${SEQ}) for DHT rebroadcast…"
-          WORK=$(mktemp -d)
-          cp scripts/ipns-sign.mjs "$WORK/ipns-sign.mjs"
-          ( cd "$WORK" && npm init -y >/dev/null 2>&1 && npm i ipns w3name @libp2p/peer-id >/dev/null 2>&1 ) || {
-            echo "WARNING: could not install ipns deps — skipping IPNS (no ipns_record)." >&2
-            exit 0
-          }
-          if RELEASE_CID="${RELEASE_CID}" MORPHIT_IPNS_SEQUENCE="${SEQ}" node "$WORK/ipns-sign.mjs" > ipns-sign.json 2> ipns-sign.log; then
+          if RELEASE_CID="${RELEASE_CID}" MORPHIT_IPNS_SEQUENCE="${SEQ}" node scripts/ipns/ipns-sign.mjs > ipns-sign.json 2> ipns-sign.log; then
             sed 's/^/  /' ipns-sign.log >&2 || true
-            node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync("ipns-sign.json","utf8"));fs.writeFileSync("ipns-name.txt",j.name);fs.writeFileSync("ipns-record.txt",j.record)'
-            echo "IPNS record signed: name=$(cat ipns-name.txt), record=$(wc -c < ipns-record.txt) b64 chars."
+            # Written only when each value has the exact shape the anchor allows.
+            node -e '
+              const fs = require("fs");
+              const j = JSON.parse(fs.readFileSync("ipns-sign.json", "utf8"));
+              if (typeof j.name !== "string" || !/^k51[a-z0-9]{50,70}$/.test(j.name)) throw new Error("bad IPNS name");
+              if (typeof j.record !== "string" || !/^[A-Za-z0-9+/]{64,1200}={0,2}$/.test(j.record)) throw new Error("bad IPNS record");
+              fs.writeFileSync("ipns-name.txt", j.name);
+              fs.writeFileSync("ipns-record.txt", j.record);
+            ' || { echo "WARNING: the IPNS output did not have the expected shape — continuing without ipns_record." >&2; rm -f ipns-name.txt ipns-record.txt; }
+            [ -s ipns-name.txt ] && echo "IPNS record signed: name=$(cat ipns-name.txt), record=$(wc -c < ipns-record.txt) b64 chars."
           else
             echo "WARNING: IPNS sign did not complete — continuing without ipns_record." >&2
             sed 's/^/  /' ipns-sign.log >&2 || true
             rm -f ipns-name.txt ipns-record.txt ipns-sign.json
           fi
+          true
 
       - name: Write distribution anchor (source_sha256 + gpg_fingerprint)
         # The on-chain morphit_release_v1 `distribution` block anchors the
@@ -496,51 +579,66 @@ jobs:
         # genuine against the chain. The hash MUST be the published tarball's —
         # this job built it; a laptop `git archive` would produce different
         # bytes and a mismatched anchor (the old release-sign.sh footgun). The
-        # fingerprint is derived from the committed release-signer PUBLIC key
-        # (no secret): it is the key that signed this tag (verified above), i.e.
-        # exactly what `git verify-tag` checks. The mirror list is a fixed
+        # fingerprint is the one the sign step signed the tarball with, which it
+        # checked against MORPHIT_RELEASE_SIGNERS. The mirror list is a fixed
         # default baked into the payload builder, so it is NOT written here. The
-        # ELI5 ceremony fetches this file back from the release and `source`s it
-        # before building the on-chain payload.
+        # ELI5 ceremony fetches this file back from the release and hands it to the
+        # payload builder (MORPHIT_BUILD_ANCHOR_FILE), which PARSES it against an
+        # allowlist of keys and value shapes. It is never sourced.
         env:
           TARBALL: ${{ steps.ver.outputs.tarball }}
           TAG: ${{ steps.ver.outputs.tag }}
+          OFFLINE: ${{ steps.ver.outputs.offline }}
         run: |
           set -eu
           SHA256=$(awk '{print $1}' "$TARBALL.sha256")
-          FPR=$(gpg --show-keys --with-colons .forgejo/release-signers/agorise.asc \
-                | awk -F: '$1=="fpr"{print $10; exit}')
-          if [ -z "${SHA256:-}" ] || [ -z "${FPR:-}" ]; then
-            echo "ERROR: could not derive the anchor (sha256='${SHA256:-}' fpr='${FPR:-}')" >&2
+          # The key that signed the tarball (the sign step checked it is pinned).
+          FPR=$(cat release-signer.fpr 2>/dev/null || true)
+          # The signed tag object this job verified and built. Block 4 (on the
+          # laptop that made the tag in Block 2) refuses an anchor naming any
+          # other object, so a tag re-pointed at an older signed object of the
+          # same name cannot reach the chain.
+          TAG_OBJECT=$(git rev-parse "refs/tags/${TAG}")
+          OFF_SHA=$(awk '{print $1}' "${OFFLINE}.sha256" 2>/dev/null || true)
+          if ! printf '%s' "${SHA256:-}" | grep -qE '^[0-9a-f]{64}$' || ! printf '%s' "${FPR:-}" | grep -qE '^[0-9A-F]{40}$' \
+             || ! printf '%s' "${TAG_OBJECT:-}" | grep -qE '^([0-9a-f]{40}|[0-9a-f]{64})$' || [ "$(git cat-file -t "${TAG_OBJECT}")" != tag ] \
+             || ! printf '%s' "${OFF_SHA:-}" | grep -qE '^[0-9a-f]{64}$'; then
+            echo "ERROR: could not derive the anchor (sha256='${SHA256:-}' fpr='${FPR:-}' tag object='${TAG_OBJECT:-}' offline sha256='${OFF_SHA:-}')" >&2
             exit 1
           fi
           {
-            echo "# Morphit distribution anchor for ${TAG} — source this before building the on-chain payload."
+            echo "# Morphit distribution anchor for ${TAG} — read by release-build-payload.ts (MORPHIT_BUILD_ANCHOR_FILE); never source it."
             echo "export MORPHIT_BUILD_SOURCE_SHA256=${SHA256}"
             echo "export MORPHIT_BUILD_GPG_FINGERPRINT=${FPR}"
+            echo "export MORPHIT_BUILD_TAG_OBJECT=${TAG_OBJECT}"
+            # The offline bundle's SHA-256 (signed above, like the tarball).
+            echo "export MORPHIT_BUILD_OFFLINE_SHA256=${OFF_SHA}"
             # Optional canonical IPFS CID from the compute step above (present
-            # unless Kubo download/staging failed). Sourced by the ELI5 Block 4,
+            # unless Kubo download/staging failed). Read by the payload builder at ELI5 Block 4,
             # it flows into the payload builder's `ipfs_cid` and is anchored
             # on-chain alongside the mirrors; the release box seeds THIS exact CID
             # and instances pin it. Absent → the block simply omits ipfs_cid
             # (schema-optional), exactly as before.
-            if [ -s ipfs-cid.txt ]; then
+            # Every value is written only when it has the exact shape the anchor
+            # allows: the ceremony PARSES this file (it is never sourced), and a
+            # value that is not a hash/CID/name/record has no business in it.
+            if [ -s ipfs-cid.txt ] && grep -qE '^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,110})$' ipfs-cid.txt; then
               echo "export MORPHIT_BUILD_IPFS_CID=$(cat ipfs-cid.txt)"
             fi
             # Optional stable IPNS name from the publish step above (present only
             # if a MORPHIT_IPNS_KEY secret is set and the publish succeeded).
-            # Sourced by ELI5 Block 4, it flows into the payload builder's
+            # Read at ELI5 Block 4, it flows into the payload builder's
             # `ipns_name` and is anchored on-chain as the canonical "always
             # latest" pointer. Absent → the block omits ipns_name (schema-optional).
-            if [ -s ipns-name.txt ]; then
+            if [ -s ipns-name.txt ] && grep -qE '^k51[a-z0-9]{50,70}$' ipns-name.txt; then
               echo "export MORPHIT_BUILD_IPNS_NAME=$(cat ipns-name.txt)"
             fi
             # Optional signed IPNS record (base64) from the sign step above (v1.9.6):
-            # the DHT-rebroadcast pointer. Sourced by ELI5 Block 4 into the payload
+            # the DHT-rebroadcast pointer. Read at ELI5 Block 4 into the payload
             # builder's `ipns_record` and anchored on-chain, where every instance reads
             # it (via /v1/release) and rebroadcasts it to the DHT. Absent → omitted
             # (schema-optional), exactly as before.
-            if [ -s ipns-record.txt ]; then
+            if [ -s ipns-record.txt ] && grep -qE '^[A-Za-z0-9+/]{64,1200}={0,2}$' ipns-record.txt; then
               echo "export MORPHIT_BUILD_IPNS_RECORD=$(cat ipns-record.txt)"
             fi
           } > distribution-anchor.env
@@ -556,7 +654,7 @@ jobs:
         # currently supported on GHES`).  Pin to v3, which uses
         # the older backend Forgejo does support.
         #
-        # v1.18.0 deep-deep (ops-3): pinned by COMMIT, like every other
+        # pinned by COMMIT, like every other
         # action here. This step's code runs after the tarball, .sha256,
         # .asc and distribution-anchor.env are written and before they are
         # published, so a moved tag could rewrite all of them consistently.
@@ -576,61 +674,6 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
-      - name: Build self-contained offline tarball (best-effort)
-        # The offline appliance: bundles node_modules PLUS the OS packages, Docker
-        # images, Node runtime and Kubo, so Morphit installs with NO internet.
-        # BEST-EFFORT (continue-on-error) so a runner without Docker — or without
-        # reach to Docker Hub / nodejs.org / dist.ipfs.tech / download.docker.com —
-        # can NEVER block the release: the slim source tarball still publishes, and
-        # this tarball can be built separately on any Ubuntu 24.04 + Docker box with
-        # `bash scripts/build-offline-bundle.sh`.  The attach loop below skips it
-        # when absent, so nothing downstream depends on this step succeeding.
-        continue-on-error: true
-        run: |
-          set -eu
-          bash scripts/build-offline-bundle.sh
-          ls -lh morphit-*-offline.tar.gz* || true
-          # v1.16.9 — anchor the offline bundle's SHA-256 so a hidden / air-gapped
-          # node can verify an offline upgrade against the chain (via its own
-          # indexer) with NO hand-signed .asc. Append to distribution-anchor.env
-          # (written earlier, attached to the release + sourced by the payload
-          # builder at ELI5 Block 4). Best-effort: if the bundle wasn't produced,
-          # nothing is appended and offline_sha256 is simply omitted this release.
-          if [ -f distribution-anchor.env ] && ls morphit-*-offline.tar.gz.sha256 >/dev/null 2>&1; then
-            OFF_SHA=$(awk '{print $1}' morphit-*-offline.tar.gz.sha256 | head -n1)
-            if [ -n "${OFF_SHA:-}" ]; then
-              echo "export MORPHIT_BUILD_OFFLINE_SHA256=${OFF_SHA}" >> distribution-anchor.env
-              echo "anchored offline_sha256=${OFF_SHA}"
-            fi
-          fi
-
-      - name: Verify offline bundle was produced (loud, non-blocking)
-        # cp675 — the build step above is best-effort (continue-on-error), so a
-        # runner without Docker / registry reach silently ships a release with NO
-        # -offline tarball, and offline operators can't install/upgrade to that
-        # version. This step never BLOCKS the release (the online path must always
-        # publish), but it makes a missing bundle IMPOSSIBLE to miss: a workflow
-        # ::warning:: annotation plus a banner in the log. If it fires, build the
-        # bundle on any Ubuntu 24.04 + Docker box (`bash scripts/build-offline-bundle.sh`)
-        # and attach it to the release before announcing the version.
-        run: |
-          set -eu
-          if ls morphit-*-offline.tar.gz >/dev/null 2>&1 \
-             && ls morphit-*-offline.tar.gz.sha256 >/dev/null 2>&1; then
-            echo "✓ offline bundle present: $(ls morphit-*-offline.tar.gz) (+ .sha256)"
-          else
-            echo "::warning title=Offline bundle MISSING::No self-contained -offline tarball was produced for this release. Offline operators cannot install or upgrade to this version. Build it on a Docker box (bash scripts/build-offline-bundle.sh) and attach it before announcing the release."
-            echo ""
-            echo "##########################################################################"
-            echo "#  WARNING: NO -offline TARBALL FOR THIS RELEASE                          #"
-            echo "#  Offline / air-gapped operators are NOT covered for this version.       #"
-            echo "#  Online installs + upgrades are unaffected and still publish.           #"
-            echo "#  To fix: on an Ubuntu 24.04 + Docker box, run                           #"
-            echo "#      bash scripts/build-offline-bundle.sh                               #"
-            echo "#  then attach morphit-<ver>-offline.tar.gz(+.sha256) to the release.     #"
-            echo "##########################################################################"
-          fi
-
       - name: Publish Forgejo release + attach assets
         # Auto-create the release for this tag and attach the artifacts, so the
         # operator downloads + uploads NOTHING (this replaces the old manual
@@ -648,6 +691,7 @@ jobs:
         env:
           TAG: ${{ steps.ver.outputs.tag }}
           TARBALL: ${{ steps.ver.outputs.tarball }}
+          OFFLINE: ${{ steps.ver.outputs.offline }}
           # Prefer an operator-supplied token (only needed if the default
           # Forgejo Actions token can't write releases); otherwise fall back
           # to the automatic token. Forgejo's `permissions:` key is ignored,
@@ -656,34 +700,51 @@ jobs:
           AUTO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
-          # v1.18.0 deep-deep (ops-3). Re-verify what is about to be published:
+          # Re-verify what is about to be published:
           # steps that ran after signing (a third-party action among them) could
           # have rewritten the tarball, .sha256 and anchor consistently. The
           # signing key left the runner when the sign step finished, so a
-          # rewritten tarball cannot carry a valid .asc. Signer keys are read
-          # from the signed tag's own tree, not from the workspace.
-          sha256sum -c "$TARBALL.sha256"
-          ANCHOR_SHA=$(sed -n 's/^export MORPHIT_BUILD_SOURCE_SHA256=//p' distribution-anchor.env | head -n1)
-          if [ "$ANCHOR_SHA" != "$(awk '{print $1}' "$TARBALL.sha256")" ]; then
-            echo "ERROR: distribution-anchor.env does not anchor the tarball being published." >&2
-            exit 1
-          fi
-          if [ -f "$TARBALL.asc" ]; then
-            VERIFY_HOME="$(mktemp -d)"
-            chmod 700 "$VERIFY_HOME"
-            for key in $(git ls-tree --name-only "$TAG" .forgejo/release-signers/ | grep '\.asc$'); do
-              git show "$TAG:$key" | gpg --homedir "$VERIFY_HOME" --batch --import
-            done
-            if ! gpg --homedir "$VERIFY_HOME" --batch --verify "$TARBALL.asc" "$TARBALL"; then
-              rm -rf "$VERIFY_HOME"
-              echo "ERROR: $TARBALL.asc does not verify against the release signers; not publishing." >&2
+          # rewritten tarball cannot carry a valid .asc. The signature must be
+          # there, and good, from a PINNED key (MORPHIT_RELEASE_SIGNERS); the
+          # key material is read from the signed tag's own tree.
+          # Both the slim tarball and the offline bundle: each must match its
+          # anchored SHA-256 and carry a good signature from a pinned key.
+          VERIFY_HOME="$(mktemp -d)"
+          chmod 700 "$VERIFY_HOME"
+          for key in $(git ls-tree --name-only "$TAG" .forgejo/release-signers/ | grep '\.asc$'); do
+            git show "$TAG:$key" | gpg --homedir "$VERIFY_HOME" --batch --import 2>/dev/null || true
+          done
+          for pair in "$TARBALL:MORPHIT_BUILD_SOURCE_SHA256" "${OFFLINE:-}:MORPHIT_BUILD_OFFLINE_SHA256"; do
+            F="${pair%%:*}"
+            KEY="${pair#*:}"
+            if [ -z "$F" ] || [ ! -f "$F" ] || [ ! -f "$F.sha256" ]; then
+              echo "ERROR: '$F' (+ .sha256) is missing; the release publishes the tarball and the offline bundle." >&2
               exit 1
             fi
-            rm -rf "$VERIFY_HOME"
-            echo "re-verified $TARBALL.asc against the release signers in ${TAG}"
-          else
-            echo "::warning::no $TARBALL.asc to re-verify (unsigned release)."
-          fi
+            sha256sum -c "$F.sha256"
+            ANCHOR_SHA=$(sed -n "s/^export ${KEY}=//p" distribution-anchor.env | head -n1)
+            if [ "$ANCHOR_SHA" != "$(awk '{print $1}' "$F.sha256")" ]; then
+              echo "ERROR: distribution-anchor.env does not anchor $F." >&2
+              exit 1
+            fi
+            if [ ! -f "$F.asc" ]; then
+              echo "ERROR: $F.asc is missing; nothing is published unsigned." >&2
+              exit 1
+            fi
+            VSTATUS="$(gpg --homedir "$VERIFY_HOME" --batch --status-fd 1 --verify "$F.asc" "$F" 2>/dev/null || true)"
+            GOOD=""
+            for f in $(printf '%s\n' "$VSTATUS" | awk '$1=="[GNUPG:]" && $2=="VALIDSIG" {print $3; print $NF}'); do
+              for p in $MORPHIT_RELEASE_SIGNERS; do
+                [ "$(printf '%s' "$f" | tr a-f A-F)" = "$(printf '%s' "$p" | tr a-f A-F)" ] && GOOD="$p"
+              done
+            done
+            if [ -z "$GOOD" ]; then
+              echo "ERROR: $F.asc is not a good signature from a pinned release key; not publishing." >&2
+              exit 1
+            fi
+            echo "re-verified $F.asc: good signature from pinned key $GOOD"
+          done
+          rm -rf "$VERIFY_HOME"
           TOKEN="${RELEASE_TOKEN:-$AUTO_TOKEN}"
           if [ -z "${TOKEN:-}" ]; then
             echo "ERROR: no token available. Add a token with repository (write) scope as an Actions secret named MORPHIT_RELEASE_TOKEN." >&2
@@ -731,6 +792,32 @@ jobs:
           fi
           REL_ID=$(node -e 'const o=JSON.parse(require("fs").readFileSync("/tmp/rel.json","utf8"));if(!o.id){console.error("no release id in API response");process.exit(1)}process.stdout.write(String(o.id))')
           echo "Release id: ${REL_ID}"
+          # 2b. A release for this tag already exists: a re-run of this job, or a
+          # tag moved back to another (older) signed object after it was
+          # published. Only the tag object that release was built from may add
+          # to it: its distribution-anchor.env (attached first) names it.
+          if [ "$REUSED" = "1" ]; then
+            OUR_OBJ=$(sed -n 's/^export MORPHIT_BUILD_TAG_OBJECT=//p' distribution-anchor.env | head -n1)
+            REL_ASSETS=$(node -e '
+              const o = JSON.parse(require("fs").readFileSync("/tmp/rel.json", "utf8"));
+              const all = o.assets || [];
+              const a = all.find((x) => x.name === "distribution-anchor.env");
+              process.stdout.write(`${all.length} ${a ? a.browser_download_url : "-"}`);
+            ')
+            N_ASSETS="${REL_ASSETS%% *}"
+            ANCHOR_URL="${REL_ASSETS#* }"
+            if [ "$ANCHOR_URL" != "-" ]; then
+              THEIR_OBJ=$(curl -sSfL -H "$AUTH" "$ANCHOR_URL" | sed -n 's/^export MORPHIT_BUILD_TAG_OBJECT=//p' | head -n1 || true)
+              if [ -z "$OUR_OBJ" ] || [ "$THEIR_OBJ" != "$OUR_OBJ" ]; then
+                echo "ERROR: release ${TAG} was already published from tag object '${THEIR_OBJ:-unknown}', and this run built '${OUR_OBJ}': the tag was moved after it was published. Nothing was attached." >&2
+                exit 1
+              fi
+              echo "release ${TAG} exists and was built from this same tag object (a re-run)."
+            elif [ "$N_ASSETS" != "0" ]; then
+              echo "ERROR: release ${TAG} already has ${N_ASSETS} asset(s) but no distribution-anchor.env naming the tag object they were built from; nothing was attached." >&2
+              exit 1
+            fi
+          fi
           # 3. On a re-run the release already existed, so the create call above
           # did not set the notes. PATCH the body now (tag_name omitted, so the
           # signed tag is never touched).
@@ -740,12 +827,11 @@ jobs:
               --data-binary @/tmp/rel-patch.json "${API}/repos/${REPO}/releases/${REL_ID}" || true
             echo "refreshed release body from ${NOTES_FILE}"
           fi
-          # 4. Attach each asset that exists (.asc is absent when unsigned; the
-          # -offline tarball is absent if the best-effort build step was skipped
-          # or the runner lacked Docker — either way the loop just skips it).
-          for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env \
-                   "morphit-${TAG}-offline.tar.gz" "morphit-${TAG}-offline.tar.gz.sha256"; do
-            if [ ! -f "$f" ]; then echo "skip (absent): $f"; continue; fi
+          # 4. Attach every asset (each was checked above). The anchor goes
+          # first (it names the tag object, see 2b); the large offline bundle
+          # last, after its signature.
+          for f in distribution-anchor.env "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" \
+                   "$OFFLINE.sha256" "$OFFLINE.asc" "$OFFLINE"; do
             NAME=$(basename "$f")
             CODE=$(curl -sS -o /tmp/asset.json -w '%{http_code}' -X POST \
               -H "$AUTH" -F "attachment=@${f}" \
@@ -780,8 +866,9 @@ jobs:
         env:
           TAG: ${{ steps.ver.outputs.tag }}
           TARBALL: ${{ steps.ver.outputs.tarball }}
+          OFFLINE: ${{ steps.ver.outputs.offline }}
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
-          GITEA_COM_TOKEN: ${{ secrets.GITEACOM_TOKEN }}  # gitea.com token — secret is GITEACOM_TOKEN (Forgejo RESERVES the GITEA_ prefix, so GITEA_COM_TOKEN cannot be created)
+          GITEA_COM_TOKEN: ${{ secrets.GITEACOM_TOKEN }} # gitea.com token — secret is GITEACOM_TOKEN (Forgejo RESERVES the GITEA_ prefix, so GITEA_COM_TOKEN cannot be created)
         run: |
           set -u
           # Reuse the SAME release JSON shape as the primary step (node-encoded body,
@@ -827,6 +914,19 @@ jobs:
             elif [ "$CODE" = "409" ]; then
               echo "${HOST}: release ${TAG} already exists; will attach assets."
               curl -sS -H "$AUTH" -o /tmp/mrel.json "${API}/repos/${REPO}/releases/tags/${TAG}" || true
+              # Same rule as the primary: only the tag object it was built from adds to it.
+              OUR_OBJ=$(sed -n 's/^export MORPHIT_BUILD_TAG_OBJECT=//p' distribution-anchor.env | head -n1)
+              M_ASSETS=$(node -e 'try{const o=JSON.parse(require("fs").readFileSync("/tmp/mrel.json","utf8"));const all=o.assets||[];const a=all.find((x)=>x.name==="distribution-anchor.env");process.stdout.write(`${all.length} ${a?a.browser_download_url:"-"}`)}catch(e){process.stdout.write("0 -")}')
+              if [ "${M_ASSETS#* }" != "-" ]; then
+                THEIR_OBJ=$(curl -sSfL -H "$AUTH" "${M_ASSETS#* }" | sed -n 's/^export MORPHIT_BUILD_TAG_OBJECT=//p' | head -n1 || true)
+                if [ -z "$OUR_OBJ" ] || [ "$THEIR_OBJ" != "$OUR_OBJ" ]; then
+                  echo "::warning::${HOST}: release ${TAG} was published from tag object '${THEIR_OBJ:-unknown}', not this run's '${OUR_OBJ}' (the tag was moved); nothing attached there."
+                  return 0
+                fi
+              elif [ "${M_ASSETS%% *}" != "0" ]; then
+                echo "::warning::${HOST}: release ${TAG} has assets but no anchor naming its tag object; nothing attached there."
+                return 0
+              fi
             else
               echo "::warning::${HOST}: could not create the release (HTTP ${CODE}) — skipping this mirror."
               cat /tmp/mrel.json || true
@@ -838,8 +938,8 @@ jobs:
               return 0
             fi
             # Attach each asset that exists (same set the primary attaches).
-            for f in "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" distribution-anchor.env \
-                     "morphit-${TAG}-offline.tar.gz" "morphit-${TAG}-offline.tar.gz.sha256"; do
+            for f in distribution-anchor.env "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" \
+                     "$OFFLINE.sha256" "$OFFLINE.asc" "$OFFLINE"; do
               [ -f "$f" ] || continue
               NAME=$(basename "$f")
               CODE=$(curl -sS -o /tmp/masset.json -w '%{http_code}' -X POST \

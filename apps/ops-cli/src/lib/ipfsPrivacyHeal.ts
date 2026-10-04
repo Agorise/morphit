@@ -1,6 +1,6 @@
 /**
  * Post-upgrade self-heal: bring an EXISTING node's Kubo to the privacy settings
- * a fresh install now gets (v1.18.0 deep-deep, H3).
+ * a fresh install now gets.
  *
  * WHY A HEAL. `morphit-ops upgrade` does not re-run Ansible, so the new ipfs-role
  * settings would reach only new installs. Every existing tor-only node would
@@ -36,6 +36,8 @@ export interface IpfsPrivacyRuntime {
 	restart(): boolean;
 	/** The daemon answers on its API. */
 	answers(): boolean;
+	/** Peers in the WAN DHT routing table (`ipfs stats dht wan`); null when the command fails. */
+	dhtPeers(): number | null;
 	sleep(ms: number): Promise<void>;
 	spinner(label: string): () => void;
 }
@@ -46,9 +48,15 @@ export type IpfsPrivacyOutcome =
 	| { kind: 'no-config' }
 	| { kind: 'apply-failed' }
 	| { kind: 'applied-not-running'; mode: 'hidden' | 'base' }
-	| { kind: 'applied'; mode: 'hidden' | 'base' }
+	| { kind: 'applied'; mode: 'hidden' }
+	| { kind: 'applied'; mode: 'base'; dhtPeers: number }
 	| { kind: 'rolled-back' }
 	| { kind: 'down-after-rollback' };
+
+const IPFS_REPO = '/var/lib/ipfs/.ipfs';
+const IPFS_USER = 'ipfs';
+const DHT_WAIT_MS = 60_000;
+const DHT_POLL_MS = 3_000;
 
 async function cameBack(rt: IpfsPrivacyRuntime, tries: number, waitMs: number): Promise<boolean> {
 	for (let i = 0; i < tries; i++) {
@@ -90,7 +98,8 @@ export async function applyAndVerifyIpfsPrivacy(opts: {
 	const what =
 		mode === 'hidden'
 			? 'IPFS now stays off the public IPFS network (hidden-only node); it still serves the release over Tor/I2P.'
-			: 'IPFS telemetry is now off.';
+			: 'IPFS now uses only its own settings (no AutoConf fetch from conf.ipfs-mainnet.org, no HTTP routers such as ' +
+				'cid.contact) and seeds the release over the public DHT.';
 	if (!wasActive) {
 		opts.info(`${what} (IPFS is not running; the settings apply when it starts.)`);
 		return { kind: 'applied-not-running', mode };
@@ -102,7 +111,29 @@ export async function applyAndVerifyIpfsPrivacy(opts: {
 	stop();
 	if (up && rt.runPrivacy(`check-${mode}`) === 0) {
 		opts.info(what);
-		return { kind: 'applied', mode };
+		if (mode === 'hidden') return { kind: 'applied', mode };
+		// The node now finds peers only through the DHT: see that it joined it.
+		// No roll-back when it has not yet — the settings check out, and peers
+		// can be slow to answer.
+		stop = rt.spinner('Checking that IPFS has joined the public DHT…');
+		let peers = 0;
+		try {
+			for (let waited = 0; ; waited += DHT_POLL_MS) {
+				peers = rt.dhtPeers() ?? 0;
+				if (peers > 0 || waited + DHT_POLL_MS >= DHT_WAIT_MS) break;
+				await rt.sleep(DHT_POLL_MS);
+			}
+		} finally {
+			stop();
+		}
+		if (peers > 0)
+			opts.info(`\u2713 IPFS is on the public DHT (${peers} peers in its routing table).`);
+		else
+			opts.warn(
+				'IPFS has its new settings but has not found DHT peers yet; on this server check later with: ' +
+					`sudo -u ${IPFS_USER} env IPFS_PATH=${IPFS_REPO} ipfs stats dht wan`
+			);
+		return { kind: 'applied', mode, dhtPeers: peers };
 	}
 
 	// Fall back: the previous file, byte for byte, and the service back up.
@@ -125,8 +156,13 @@ export async function applyAndVerifyIpfsPrivacy(opts: {
 	return { kind: 'down-after-rollback' };
 }
 
-const IPFS_REPO = '/var/lib/ipfs/.ipfs';
-const IPFS_USER = 'ipfs';
+/** Peer lines in `ipfs stats dht wan` output (one per peer, under the
+ *  `Bucket` headers); 0 when there is no bucket. PURE. */
+export function countDhtPeers(out: string): number {
+	if (!/^\s*Bucket\b/m.test(out)) return 0;
+	return out.split('\n').filter((l) => /^\s+@?\s*(?:12D3Koo|Qm)[1-9A-HJ-NP-Za-km-z]+/.test(l))
+		.length;
+}
 
 /** The privacy script from the tree this binary belongs to, falling back to
  *  the copy Ansible installs. */
@@ -183,6 +219,24 @@ export async function healIpfsPrivacy(deps: {
 			isActive: () => spawnSync('systemctl', ['is-active', '--quiet', 'ipfs']).status === 0,
 			restart: () => spawnSync('systemctl', ['restart', 'ipfs'], { timeout: 90_000 }).status === 0,
 			answers: () => asIpfs(['ipfs', '--timeout=5s', 'id'], 15_000) === 0,
+			dhtPeers: () => {
+				const r = spawnSync(
+					'sudo',
+					[
+						'-u',
+						IPFS_USER,
+						'env',
+						`IPFS_PATH=${IPFS_REPO}`,
+						'ipfs',
+						'--timeout=10s',
+						'stats',
+						'dht',
+						'wan'
+					],
+					{ encoding: 'utf8', timeout: 20_000 }
+				);
+				return r.status === 0 ? countDhtPeers(r.stdout ?? '') : null;
+			},
 			sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
 			spinner: deps.spinner
 		}

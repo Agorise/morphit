@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * FeaturedBidHistory — cp453 (t.txt #2). Was an inline grey section above the
+	 * FeaturedBidHistory. Was an inline grey section above the
 	 * bid form; now a small "View prior Featured orders" LINK (rendered in the
 	 * form header, top-right) that opens an ELI5 modal listing ALL of the user's
 	 * prior featured orders, newest first. Each row: the order's human summary
@@ -77,7 +77,7 @@
 	}
 
 	function shortDate(iso: string): string {
-		// cp509 (v1.8.4 D) — sitewide date standard: day-first, localized month
+		// (v1.8.4 D) — sitewide date standard: day-first, localized month
 		// ("8 Jul", not the old month-first "Jul 8"). formatDayMonthShort is the
 		// sanctioned compact form (day + 3-char localized month, UTC); fall back to
 		// the ISO date prefix only if it can't parse (shouldn't happen for a real

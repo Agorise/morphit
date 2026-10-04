@@ -8,7 +8,7 @@
  * active key, and marks the row broadcast_at + broadcast_trx_id
  * on success.
  *
- * Failure model (v1.20.0 fix wave 4 — the previous text here described a
+ * Failure model (the previous text here described a
  * retry-on-any-error design that paid twice):
  *   - Before anything is signed, nothing has left the process: a failure there
  *     (chain unreachable for the head read, validation, bookkeeping) is a
@@ -26,7 +26,7 @@
  * never been attempted are taken BEFORE unsettled ones, so a batch full of
  * unsettled rows cannot starve new payments.
  *
- * NEVER PAY TWICE (v1.20.0 fix wave, D1 + wave 4).
+ * NEVER PAY TWICE (D1 + wave 4).
  *   1. The row is CLAIMED by an atomic compare-and-set on
  *      broadcast_attempt_at, committed on its own (it also keeps two drainers
  *      off one row).
@@ -64,7 +64,7 @@ const log = logger('relay-drainer');
  *
  *  Per Blurt's `is_valid_account_name`, account names are dotted
  *  multi-segment (e.g. `alice.alpha`).  Canonicalized to allow
- *  dots — see REVISIT-LIST.md "C-19 follow-on consistency pass"
+ *  dots — see the project backlog "C-19 follow-on consistency pass"
  *  for context. Without dot allowance, any dotted-account user's
  *  welcome bonus would fail to deliver. */
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;

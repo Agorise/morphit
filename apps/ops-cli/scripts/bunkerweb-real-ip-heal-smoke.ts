@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * bunkerweb-real-ip-heal-smoke.ts — (v1.18.0 deep-deep, H1)
+ * bunkerweb-real-ip-heal-smoke.ts —
  *
  * BunkerWeb shipped USE_REAL_IP=yes with REAL_IP_FROM=0.0.0.0/0: the public
  * edge believed every visitor's X-Forwarded-For, so anyone could pick their

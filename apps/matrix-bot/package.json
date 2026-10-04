@@ -1,6 +1,6 @@
 {
 	"name": "morphit-matrix-bot",
-	"version": "1.20.3",
+	"version": "1.21.0",
 	"description": "Morphit matrix-bot sidecar — tails journalctl, classifies operator alerts by tier (CRITICAL/WARN/INFO), forwards to Matrix DM. Per OPERATIONS.md §16 'Routing alerts elsewhere'.",
 	"type": "module",
 	"private": true,
@@ -11,7 +11,7 @@
 	"scripts": {
 		"dev": "tsx watch src/main.ts",
 		"format": "prettier --write .",
-		"lint": "prettier --check .",
+		"lint": "tsx ../../scripts/lint-gate-smoke.ts",
 		"start": "tsx src/main.ts",
 		"test": "vitest run --passWithNoTests",
 		"test:watch": "vitest",

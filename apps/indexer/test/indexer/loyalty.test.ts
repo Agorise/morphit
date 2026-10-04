@@ -13,7 +13,7 @@ import { trackVerifiedBlurtFee, LOYALTY_MILESTONES } from '$indexer/loyalty';
 import { makeMockClient } from '../testutils/mockClient';
 
 /** Shortcut — arguments to trackVerifiedBlurtFee with sensible defaults.
- *  Part 111: `orderOperatorTag` and `instanceOperatorTag` default to
+ *  `orderOperatorTag` and `instanceOperatorTag` default to
  *  the same value ('morphit') so existing tests that don't override
  *  exercise the "served-by-us, queue payouts" path.  Tests of the
  *  federation-scope gate should override one of them. */
@@ -41,14 +41,14 @@ describe('trackVerifiedBlurtFee — guard conditions', () => {
 	it('no-op for zero amount', async () => {
 		const mock = makeMockClient();
 		const a = args({ amount: 0 });
-		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag);
+		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount);
 		expect(mock.queries).toHaveLength(0);
 	});
 
 	it('no-op for negative amount', async () => {
 		const mock = makeMockClient();
 		const a = args({ amount: -10 });
-		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag);
+		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount);
 		expect(mock.queries).toHaveLength(0);
 	});
 });
@@ -73,7 +73,7 @@ describe('trackVerifiedBlurtFee — below first milestone', () => {
 			{ match: /^RELEASE SAVEPOINT first_fee_welcome_sp$/ }
 		]);
 		const a = args({ amount: 75 });
-		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag);
+		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount);
 		// UPSERT + SAVEPOINT + welcome INSERT (throws) + ROLLBACK + RELEASE = 5.
 		expect(mock.queries).toHaveLength(5);
 	});
@@ -94,7 +94,7 @@ describe('trackVerifiedBlurtFee — below first milestone', () => {
 			{ match: /^RELEASE SAVEPOINT first_fee_welcome_sp$/ }
 		]);
 		const a = args({ amount: 20 });
-		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag);
+		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount);
 		expect(mock.queries).toHaveLength(5);
 	});
 });
@@ -121,14 +121,14 @@ describe('trackVerifiedBlurtFee — first milestone cross', () => {
 			{ match: 'INSERT INTO account_loyalty_milestones', rowCount: 1 },
 			{ match: /^RELEASE SAVEPOINT loyalty_ms_100_sp$/ },
 			{
-				match: 'SUM(bp_rewarded)',
-				rows: [{ cumulative_bp: '10' }],
+				match: 'SUM(m.bp_rewarded)',
+				rows: [{ bp: '10' }],
 				rowCount: 1
 			},
 			{ match: 'INSERT INTO relay_pending_transfers', rowCount: 1 }
 		]);
 		const a = args({ amount: 45 });
-		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag);
+		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount);
 
 		// UPSERT + welcome SP/INSERT/RBK/REL (4) +
 		// ms-100 SP/INSERT/REL (3) + SUM + queue = 10.
@@ -171,8 +171,8 @@ describe('trackVerifiedBlurtFee — multi-milestone cross (edge)', () => {
 			{ match: 'INSERT INTO account_loyalty_milestones', rowCount: 1 },
 			{ match: /^RELEASE SAVEPOINT loyalty_ms_100_sp$/ },
 			{
-				match: 'SUM(bp_rewarded)',
-				rows: [{ cumulative_bp: '10' }],
+				match: 'SUM(m.bp_rewarded)',
+				rows: [{ bp: '10' }],
 				rowCount: 1
 			},
 			{ match: 'INSERT INTO relay_pending_transfers', rowCount: 1 },
@@ -181,14 +181,14 @@ describe('trackVerifiedBlurtFee — multi-milestone cross (edge)', () => {
 			{ match: 'INSERT INTO account_loyalty_milestones', rowCount: 1 },
 			{ match: /^RELEASE SAVEPOINT loyalty_ms_500_sp$/ },
 			{
-				match: 'SUM(bp_rewarded)',
-				rows: [{ cumulative_bp: '60' }],
+				match: 'SUM(m.bp_rewarded)',
+				rows: [{ bp: '60' }],
 				rowCount: 1
 			},
 			{ match: 'INSERT INTO relay_pending_transfers', rowCount: 1 }
 		]);
 		const a = args({ amount: 460 });
-		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag);
+		await trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount);
 
 		// UPSERT (1) + welcome 4 (SP/INS/RBK/REL) +
 		// ms-100 5 (SP/INS/REL/SUM/QUEUE) +
@@ -230,7 +230,7 @@ describe('trackVerifiedBlurtFee — idempotent replay', () => {
 		]);
 		const a = args({ amount: 45 });
 		await expect(
-			trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag)
+			trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount)
 		).resolves.not.toThrow();
 		// UPSERT + welcome 4 + ms-100 4 = 9 queries, no queue.
 		expect(mock.queries).toHaveLength(9);
@@ -254,7 +254,7 @@ describe('trackVerifiedBlurtFee — idempotent replay', () => {
 		]);
 		const a = args({ amount: 45 });
 		await expect(
-			trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag)
+			trackVerifiedBlurtFee(mock.client, a.account, a.amount, a.blockNum, a.blockTime, a.orderOperatorTag, a.instanceOperatorTag, a.amount)
 		).rejects.toThrow('DB down');
 	});
 });

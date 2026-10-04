@@ -1,5 +1,5 @@
 /**
- * schema-drift-smoke (cp217).
+ * schema-drift-smoke.
  *
  * The drift detector's correctness boundary is its PURE parser + diff: a
  * false "drift" would tell an operator to wipe a healthy DB, and a missed
@@ -80,7 +80,7 @@ for (const col of ['account', 'permlink', 'side', 'asset', 'fiat_currency', 'sta
 //   syndicate_opt_in      → added via ALTER then DROP COLUMN'd
 //   amount_usd_equivalent → DROP COLUMN'd
 //
-// v1.18.0 deep-deep (rv2-10): a column added by a TOP-LEVEL `ALTER TABLE …
+// a column added by a TOP-LEVEL `ALTER TABLE …
 // ADD COLUMN` IS expected now — a fresh build of schema.sql always runs it.
 // This guard used to assert the opposite, which is how the two posting-key
 // trust columns (both ALTER-added) escaped the doctor entirely.

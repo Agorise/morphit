@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * paired-readonly-affordance-surfaces-smoke (ADR-0022, Part 116).
+ * paired-readonly-affordance-surfaces-smoke (ADR-0022).
  *
  * Sister smoke to paired-readonly-lifecycle-smoke.  Where the
  * lifecycle smoke validates the persistence layer (read/write/clear
  * round-trips through pairedSession.ts), THIS smoke pins down the
  * affordance wiring at every write-action call site: each of the
- * eight surfaces Part 114 left unwired must (a) import
+ * eight surfaces a later change left unwired must (a) import
  * WriteBlockedReadOnly OR widen the gate to $hasAnySession, and
  * (b) handle the paired-readonly case explicitly so paired users
  * never see the misleading "session locked, unlock to continue"
@@ -20,7 +20,7 @@
  * time and force the maintainer to update this file in the same
  * commit.  That's the audit-trail discipline we want.
  *
- * Coverage (each scenario maps 1:1 to a TARBALL.md Part-115-
+ * Coverage (each scenario maps 1:1 to a handoff-journal Part-115-
  * inventoried gap):
  *
  *   1. /my/orders page-shell three-way branch
@@ -135,10 +135,10 @@ const SCENARIOS: readonly Scenario[] = [
 		file: 'src/routes/[lang]/orderbook/+page.svelte',
 		mustHave: [
 			"import { isUnlocked, hasAnySession } from '$stores/identity'",
-			// cp384 #2: the link stays WIDENED to $hasAnySession (paired-readonly
+			// the link stays WIDENED to $hasAnySession (paired-readonly
 			// users still see it) but is now additionally gated on viewerHasOrdered
 			// — the "Posted an order but don't see it?" hint only makes sense once
-			// the viewer has actually posted an order (the maintainer's request). The gate is
+			// the viewer has actually posted an order. The gate is
 			// still BASED on $hasAnySession (NOT re-narrowed to $isUnlocked).
 			'{#if $hasAnySession && viewerAccount !== null && viewerHasOrdered}'
 		],
@@ -169,7 +169,7 @@ const SCENARIOS: readonly Scenario[] = [
 		]
 	},
 	{
-		// cp205 intentionally REMOVED the duplicate mobile-nav sign-in
+		// intentionally REMOVED the duplicate mobile-nav sign-in
 		// link: the header <AvatarMenu/> (no md:hidden, so visible on
 		// mobile too) already renders the "Sign in / Register" CTA when
 		// signed out, and a mobile-nav text link showed that label
@@ -264,8 +264,8 @@ if (failures > 0) {
 // Canonical success line — run-smokes.sh greps for `^✓ all` to tally
 // scenarios.  Without this, the runner counts this smoke as 0
 // scenarios even when it passes, which silently undercounts the
-// smoke total.  See J-2 finding (Part 87): sally-walkthrough was
-// added Part 68/69 but used a custom `N passed, M failed` format
+// smoke total.  See J-2 finding: sally-walkthrough was
+// added but used a custom `N passed, M failed` format
 // that the runner could not parse and was undercounted by 22 for
 // ~20 Parts before being caught.
 console.log(`✓ all ${SCENARIOS.length} paired-readonly-affordance-surfaces scenarios passed`);

@@ -1,10 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — modal viewport-fit smoke (v1.7.7, t.txt #5).
+ * Morphit — modal viewport-fit smoke (v1.7.7).
  *
- * [the maintainer]: "the send modal is too big for my mobile screen and will not let me
- * scroll my screen up or down so that i can see its full height or the submit
- * button at the bottom."
+ * Reported: on a phone the send modal was taller than the screen and could not be scrolled,
+ * hiding the submit button. It must size itself on load and scroll to show everything.
  *
  * THE BUG, and why it deserves a repo-wide guard rather than one fix:
  * `fixed inset-0` + `flex items-center` and no height cap. `fixed` pins the
@@ -18,7 +17,7 @@
  * card top at -22px, submit unreachable even after scrolling to the end. Also
  * fails at 800x360 (landscape) and 320x568. Fixed at all three.
  *
- * IT WAS IN TWELVE MODALS, not one. the maintainer only met it on the send screen, but
+ * IT WAS IN TWELVE MODALS, not one. The maintainer only met it on the send screen, but
  * PayBlurtModal is the same bug on the other money screen, and
  * PrivateKeyWarningModal is the dialog that warns you BEFORE you paste a private
  * key. Nothing errors in any of them — the button simply cannot be reached.
@@ -129,7 +128,7 @@ check(
 	'they hold no content — capping their height would mean nothing'
 );
 
-// ── hand-written CSS: a vh/dvh fallback pair must be ORDERED (cp478) ───
+// ── hand-written CSS: a vh/dvh fallback pair must be ORDERED ───
 //
 // Checks 1-6 cover the .svelte class attributes, where the rule is "bare dvh, never
 // a pair" — Tailwind emits utilities in ITS order, not the class attribute's, so a

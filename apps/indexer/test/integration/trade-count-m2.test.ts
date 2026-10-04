@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, M2 — completed-trade count must only count orders whose
+ * completed-trade count must only count orders whose
  * listing fee was actually paid.
  *
  * rv6 A3: post an order with NO fee transfer (row lands fee_status='missing'),

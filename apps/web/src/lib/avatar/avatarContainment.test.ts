@@ -1,5 +1,5 @@
 /**
- * (v1.18.0 deep-deep, M1) A profile picture must stay inside its frame.
+ * A profile picture must stay inside its frame.
  *
  * The sanitizer keeps `style` and `class`, and SVG avatars were inlined into
  * the page with `{@html}`. So `<svg style="position:fixed;inset:0;…">` or

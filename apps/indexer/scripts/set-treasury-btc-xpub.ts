@@ -7,7 +7,7 @@
  * treasury.btc.xpub). From the first release carrying it, each BTC-fee order
  * gets its own address of this key instead of paying the shared address.
  *
- *   npx tsx apps/indexer/scripts/set-treasury-btc-xpub.ts <xpub-or-zpub>
+ *   node_modules/.bin/tsx apps/indexer/scripts/set-treasury-btc-xpub.ts <xpub-or-zpub>
  *
  * Run on the LAPTOP, in the repo root. It refuses a private key (xprv/zprv…),
  * a testnet key, a nested-segwit or multisig key and anything that is not the
@@ -20,7 +20,7 @@
  *   --explorer <Esplora base URL>  ask this explorer instead (repeatable)
  *   --skip-history-check           save without asking (offline laptop; you
  *                                  must be sure the account is brand new)
- * Run it through Tor (`torsocks npx tsx …`) if the laptop's IP should not be
+ * Run it through Tor (`torsocks node_modules/.bin/tsx …`) if the laptop's IP should not be
  * seen asking about these addresses.
  *
  * On success it prints receive addresses #0, #1, #2: they MUST be the first

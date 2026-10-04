@@ -76,7 +76,7 @@
 		children?: import('svelte').Snippet;
 		/** When true, the dotted underline DISAPPEARS on hover/focus
 		 *  (border goes transparent) instead of recolouring to emerald.
-		 *  the maintainer asked for this specifically on the FAQ acronym tooltips;
+		 *  The maintainer asked for this specifically on the FAQ acronym tooltips;
 		 *  default false preserves the recolour behaviour everywhere else. */
 		hideUnderlineOnHover?: boolean;
 	}
@@ -226,7 +226,7 @@
 
 	const popoverId = $derived(`term-tip-${key}`);
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
@@ -258,7 +258,7 @@
 		</button>
 
 		{#if open}
-			<!-- cp511 [A] — PORTAL the popover to <body>. It's position:fixed, but
+			<!-- PORTAL the popover to <body>. It's position:fixed, but
 			     an FAQ answer carries `animate-fade-up`, whose end keyframe leaves
 			     a `transform` on the container — and a non-none transform makes a
 			     fixed descendant position relative to THAT box, not the viewport,

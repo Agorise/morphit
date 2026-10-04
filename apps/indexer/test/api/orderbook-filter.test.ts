@@ -1,10 +1,10 @@
 /**
- * v1.8.15 (cp555) — orderbook Filter: "test all 8 fields" (t.txt #4).
+ * v1.8.15 — orderbook Filter: "test all 8 fields".
  *
- * THE BUGS THIS GUARDS AGAINST (the maintainer, on live morphit.io):
+ * THE BUGS THIS GUARDS AGAINST (on live morphit.io):
  *   - Location was a PREFIX match (`region%`), so searching "zrh" could not
- *     find an order whose location is "a city a city zrh México Mexico"
- *     (that string starts with "Zur", not "zrh"). Now a case-insensitive
+ *     find an order whose location is "Zürich Zurich ZRH Schweiz Switzerland"
+ *     (that string starts with "Zür", not "zrh"). Now a case-insensitive
  *     SUBSTRING match.
  *   - The Asset filter matched only the TRADED asset (o.asset), so selecting
  *     "Tether" / "Monero" found nothing when the crypto was used to PAY
@@ -75,7 +75,7 @@ describe('buildWhereClauses — orderbook filter fields', () => {
 	it('location_region: case-insensitive SUBSTRING match, not prefix', () => {
 		const { sql, params } = clausesFor({ location_region: 'zrh' });
 		expect(sql).toContain('o.location_region ILIKE');
-		// The param must be wrapped %...% (contains), so "zrh" finds "...zrh...".
+		// The param must be wrapped %...% (contains), so "zrh" finds "...ZRH...".
 		const likeParam = params.find((v) => typeof v === 'string' && v.includes('zrh'));
 		expect(likeParam).toBe('%zrh%');
 		// Regression: must NOT be a bare prefix pattern.

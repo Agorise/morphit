@@ -2,12 +2,12 @@
 /**
  * arrr-trade-only-smoke.
  *
- * Part 122 cp41 sentinel: ARRR (Pirate Chain) must be
+ * ARRR (Pirate Chain) must be
  * `canPayListingFee: false` AND `canBeTraded: true` in BOTH the
  * canonical and frontend asset registries.  If a future contributor
  * toggles either value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping ARRR's flag to true would fail the
@@ -62,8 +62,8 @@ if (!canonArrr) {
 	pass('canonical registry contains ARRR entry');
 	if (canonArrr.canBeTraded === true) pass('canonical ARRR.canBeTraded === true');
 	else fail('canonical ARRR.canBeTraded === true', `actual: ${canonArrr.canBeTraded}`);
-	if (canonArrr.canPayListingFee === false) pass('canonical ARRR.canPayListingFee === false (memory #23)');
-	else fail('canonical ARRR.canPayListingFee === false (memory #23)', `actual: ${canonArrr.canPayListingFee}`);
+	if (canonArrr.canPayListingFee === false) pass('canonical ARRR.canPayListingFee === false (trade-only rule)');
+	else fail('canonical ARRR.canPayListingFee === false (trade-only rule)', `actual: ${canonArrr.canPayListingFee}`);
 	if (canonArrr.decimals === 8) pass('canonical ARRR.decimals === 8');
 	else fail('canonical ARRR.decimals === 8', `actual: ${canonArrr.decimals}`);
 	if (Array.isArray(canonArrr.supportedNetworks) && canonArrr.supportedNetworks.length === 1 && canonArrr.supportedNetworks[0] === 'mainnet') {
@@ -96,7 +96,7 @@ if (!feArrr) {
 	pass('frontend registry contains arrr entry');
 	if (feArrr.canBeTraded === true) pass('frontend arrr.canBeTraded === true');
 	else fail('frontend arrr.canBeTraded === true', `actual: ${feArrr.canBeTraded}`);
-	if (feArrr.canBeUsedForListingFee === false) pass('frontend arrr.canBeUsedForListingFee === false (memory #23)');
+	if (feArrr.canBeUsedForListingFee === false) pass('frontend arrr.canBeUsedForListingFee === false (trade-only rule)');
 	else fail('frontend arrr.canBeUsedForListingFee === false', `actual: ${feArrr.canBeUsedForListingFee}`);
 	if (feArrr.decimals === 8) pass('frontend arrr.decimals === 8');
 	else fail('frontend arrr.decimals === 8', `actual: ${feArrr.decimals}`);

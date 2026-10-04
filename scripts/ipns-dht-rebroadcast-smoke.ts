@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * scripts/ipns-dht-rebroadcast-smoke.ts  (v1.9.6, the maintainer)
+ * scripts/ipns-dht-rebroadcast-smoke.ts  (v1.9.6)
  *
  * The OPS half of the DHT-native IPNS model (the SIGN + chain + frontend half is
  * ipns-release-wiring-smoke.ts). Model: @morphit SIGNS an IPNS record ONCE per
@@ -42,22 +42,37 @@ const stripHash = (s: string) =>
 	const raw = read('ops/ipfs/morphit-ipns-rebroadcast.sh');
 	const code = stripHash(raw);
 	const checks: Array<[string, boolean]> = [
-		['reads from the instance OWN /v1/release', /\/v1\/release/.test(code) && /MORPHIT_RELEASE_URL/.test(code)],
+		[
+			'reads from the instance OWN /v1/release',
+			/\/v1\/release/.test(code) && /MORPHIT_RELEASE_URL/.test(code)
+		],
 		['extracts ipns_name from the release', /ipns_name/.test(code)],
 		['extracts ipns_record from the release', /ipns_record/.test(code)],
 		['base64-decodes the record before PUT', /base64 -d/.test(code)],
 		['refuses to PUT an invalid/empty record', /refusing to PUT/.test(raw)],
-		['PUTs under the /ipns/<name> routing key', /KEY="\/ipns\/\$NAME"/.test(code) && /routing put "\$KEY"/.test(code)],
+		[
+			'PUTs under the /ipns/<name> routing key',
+			/KEY="\/ipns\/\$NAME"/.test(code) && /routing put "\$KEY"/.test(code)
+		],
 		['supports a dry-run (validate without PUT)', /MORPHIT_IPNS_DRYRUN/.test(code)],
-		// cp591 — a hand-run must match the timer: the script sources the operator's
+		// a hand-run must match the timer: the script sources the operator's
 		// persisted config itself (systemd's EnvironmentFile isn't loaded for a manual
 		// `sudo …rebroadcast.sh`, so without this it fell to the wrong 127.0.0.1 default
 		// on non-localhost/BunkerWeb boxes).
-		['sources /etc/morphit/ipfs-pin.env so a hand-run matches the timer', /\.\s+\/etc\/morphit\/ipfs-pin\.env/.test(code)],
-		['skips cleanly when the release carries no record (older release / no key)', /nothing to rebroadcast/.test(raw)],
+		[
+			'sources /etc/morphit/ipfs-pin.env so a hand-run matches the timer',
+			/\.\s+\/etc\/morphit\/ipfs-pin\.env/.test(code)
+		],
+		[
+			'skips cleanly when the release carries no record (older release / no key)',
+			/nothing to rebroadcast/.test(raw)
+		],
 		['documents the Routing V1 HTTP PUT fallback', /routing\/v1\/ipns/.test(raw)],
 		// THE security property: the instance never holds the signing key
-		['NEVER references MORPHIT_IPNS_KEY (relay-only, no key on the box)', !/MORPHIT_IPNS_KEY/.test(code)]
+		[
+			'NEVER references MORPHIT_IPNS_KEY (relay-only, no key on the box)',
+			!/MORPHIT_IPNS_KEY/.test(code)
+		]
 	];
 	for (const [n, okp] of checks) okp ? ok(`rebroadcast.sh: ${n}`) : bad(`rebroadcast.sh: ${n}`);
 }
@@ -67,11 +82,23 @@ const stripHash = (s: string) =>
 	const raw = read('ops/ipfs/morphit-ipfs-setup.sh');
 	const code = stripHash(raw);
 	const checks: Array<[string, boolean]> = [
-		['installs the rebroadcast script into /usr/local/lib/morphit', /install .*morphit-ipns-rebroadcast\.sh/.test(code)],
-		['creates a oneshot rebroadcast service', /morphit-ipns-rebroadcast\.service/.test(code) && /Type=oneshot/.test(code)],
+		[
+			'installs the rebroadcast script into /usr/local/lib/morphit',
+			/install .*morphit-ipns-rebroadcast\.sh/.test(code)
+		],
+		[
+			'creates a oneshot rebroadcast service',
+			/morphit-ipns-rebroadcast\.service/.test(code) && /Type=oneshot/.test(code)
+		],
 		['service runs the rebroadcast script', /ExecStart=.*morphit-ipns-rebroadcast\.sh/.test(code)],
-		['service shares the pin EnvironmentFile (no new operator config)', /EnvironmentFile=-?\/etc\/morphit\/ipfs-pin\.env/.test(code)],
-		['creates a ~4h rebroadcast timer', /morphit-ipns-rebroadcast\.timer/.test(code) && /OnUnitActiveSec=4h/.test(code)],
+		[
+			'service shares the pin EnvironmentFile (no new operator config)',
+			/EnvironmentFile=-?\/etc\/morphit\/ipfs-pin\.env/.test(code)
+		],
+		[
+			'creates a ~4h rebroadcast timer',
+			/morphit-ipns-rebroadcast\.timer/.test(code) && /OnUnitActiveSec=4h/.test(code)
+		],
 		['enables the rebroadcast timer', /enable --now morphit-ipns-rebroadcast\.timer/.test(code)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`setup.sh: ${n}`) : bad(`setup.sh: ${n}`);
@@ -84,19 +111,42 @@ const stripHash = (s: string) =>
 // depends on a hand-managed box or the primary staying up.
 {
 	const tasks = read('ops/ansible/roles/ipfs/tasks/main.yml');
-	const svc = stripHash(read('ops/ansible/roles/ipfs/templates/morphit-ipns-rebroadcast.service.j2'));
-	const timer = stripHash(read('ops/ansible/roles/ipfs/templates/morphit-ipns-rebroadcast.timer.j2'));
+	const svc = stripHash(
+		read('ops/ansible/roles/ipfs/templates/morphit-ipns-rebroadcast.service.j2')
+	);
+	const timer = stripHash(
+		read('ops/ansible/roles/ipfs/templates/morphit-ipns-rebroadcast.timer.j2')
+	);
 	const checks: Array<[string, boolean]> = [
-		['role installs the rebroadcast script into /usr/local/lib/morphit', /morphit-ipns-rebroadcast\.sh/.test(tasks) && /\/usr\/local\/lib\/morphit\/morphit-ipns-rebroadcast\.sh/.test(tasks)],
-		['role templates the rebroadcast service + timer', /morphit-ipns-rebroadcast\.service\.j2/.test(tasks) && /morphit-ipns-rebroadcast\.timer\.j2/.test(tasks)],
-		['role enables the rebroadcast timer', /morphit-ipns-rebroadcast\.timer/.test(tasks) && /Enable \+ start the IPNS-rebroadcast timer/.test(tasks)],
-		['service is a oneshot that runs the rebroadcast script', /Type=oneshot/.test(svc) && /ExecStart=.*morphit-ipns-rebroadcast\.sh/.test(svc)],
-		['service shares the pin EnvironmentFile (no new operator config)', /EnvironmentFile=-?\/etc\/morphit\/ipfs-pin\.env/.test(svc)],
+		[
+			'role installs the rebroadcast script into /usr/local/lib/morphit',
+			/morphit-ipns-rebroadcast\.sh/.test(tasks) &&
+				/\/usr\/local\/lib\/morphit\/morphit-ipns-rebroadcast\.sh/.test(tasks)
+		],
+		[
+			'role templates the rebroadcast service + timer',
+			/morphit-ipns-rebroadcast\.service\.j2/.test(tasks) &&
+				/morphit-ipns-rebroadcast\.timer\.j2/.test(tasks)
+		],
+		[
+			'role enables the rebroadcast timer',
+			/morphit-ipns-rebroadcast\.timer/.test(tasks) &&
+				/Enable \+ start the IPNS-rebroadcast timer/.test(tasks)
+		],
+		[
+			'service is a oneshot that runs the rebroadcast script',
+			/Type=oneshot/.test(svc) && /ExecStart=.*morphit-ipns-rebroadcast\.sh/.test(svc)
+		],
+		[
+			'service shares the pin EnvironmentFile (no new operator config)',
+			/EnvironmentFile=-?\/etc\/morphit\/ipfs-pin\.env/.test(svc)
+		],
 		['timer re-announces every ~4h', /OnUnitActiveSec=4h/.test(timer)],
 		// key hygiene extends to the template: the unit must never carry the key
 		['service template NEVER references MORPHIT_IPNS_KEY', !/MORPHIT_IPNS_KEY/.test(svc)]
 	];
-	for (const [n, okp] of checks) okp ? ok(`ansible ipfs role: ${n}`) : bad(`ansible ipfs role: ${n}`);
+	for (const [n, okp] of checks)
+		okp ? ok(`ansible ipfs role: ${n}`) : bad(`ansible ipfs role: ${n}`);
 }
 
 // ── 3. key hygiene across the whole ops surface ──────────────────────
@@ -107,8 +157,8 @@ const stripHash = (s: string) =>
 		? ok('key hygiene: the IPNS signing key appears in NEITHER ops script (CI-only)')
 		: bad('key hygiene: an ops script references the signing key');
 	// the signer is the ONLY consumer of the key, and it lives under scripts/ (CI), not ops/
-	/MORPHIT_IPNS_KEY/.test(read('scripts/ipns-sign.mjs'))
-		? ok('the signer (scripts/ipns-sign.mjs, CI) is the sole key consumer')
+	/MORPHIT_IPNS_KEY/.test(read('scripts/ipns/ipns-sign.mjs'))
+		? ok('the signer (scripts/ipns/ipns-sign.mjs, CI) is the sole key consumer')
 		: bad('signer no longer reads the key?');
 }
 
@@ -117,5 +167,7 @@ if (fail > 0) {
 	console.log(`\u2717 ipns-dht-rebroadcast smoke FAILED (${fail})`);
 	process.exit(1);
 }
-console.log('\u2713 DHT rebroadcast wired: every instance re-announces the on-chain signed IPNS record to the DHT on a ~4h timer, WITHOUT the key');
+console.log(
+	'\u2713 DHT rebroadcast wired: every instance re-announces the on-chain signed IPNS record to the DHT on a ~4h timer, WITHOUT the key'
+);
 console.log(`\u2713 all ${pass} ipns-dht-rebroadcast scenarios passed`);

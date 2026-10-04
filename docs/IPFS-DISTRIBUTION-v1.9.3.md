@@ -1,10 +1,13 @@
 # IPFS + IPNS distribution — v1.9.3 design (self-hosted seed, no commercial pinners)
 
-**Status:** design / not yet implemented. Rewritten after the provider spikes
-(2026-07-27) proved that no commercial pinning service works for us on a free
-tier. This is the plan to build against — deliberately, when rested. v1.9.2 is
-live on the mirror + GPG-signature + on-chain-SHA-256 path, so there is **no
-deadline** and **no dead pointer** anywhere on-chain.
+**Status:** implemented (historical design record). The self-hosted seed,
+the per-instance Kubo pinning and the signed IPNS record shipped; the current
+procedure is `docs/OPERATIONS.md` §26/§48, and the IPNS tools now live in
+`scripts/ipns/` (`ipns-keygen.mjs`, `ipns-sign.mjs`; installed with
+`npm ci --prefix scripts/ipns --ignore-scripts`). The text below is the
+2026-07-27 design as written, after the provider spikes proved that no
+commercial pinning service works for us on a free tier; file names in it may
+have moved since.
 
 > Priorities (unchanged): privacy #1, decentralization #2, grandma-UX #3, tiny
 > footprint #4. Hard constraint from the maintainer: **no paid services, ever — no Pinata,
@@ -67,7 +70,7 @@ infrastructure we already run.
    `054c38a0…d840d156`). `ipfs add -r --cid-version 1 --only-hash <staged-dir>`
    yields the CID **offline** — no daemon, no network, no account, deterministic.
    CI does this to fill the on-chain anchor's `ipfs_cid`.
-2. **Host it on our own seed node** — the maintainer's release VPS (a Morphit instance
+2. **Host it on our own seed node** — The maintainer's release VPS (a Morphit instance
    running Kubo) `ipfs add -r --cid-version 1 <same staged-dir>` to actually store
    + announce it. Same tool + version + files ⇒ **identical CID** (verified equal
    to CI's `--only-hash` value; fail loud if not). That box is the origin + first
@@ -89,7 +92,7 @@ only ever a convenience seed (a nice always-up gateway URL). Instance-Kubo hosti
 was always the real decentralization. Removing the companies removes a dependency
 and a cost, and matches the project's ethos.
 
-### 2.1 Proven end-to-end (spikes, cp573) — the model is de-risked
+### 2.1 Proven end-to-end (spikes) — the model is de-risked
 Both halves confirmed live, zero paid services:
 - **Self-seed hosting ✅** — `ipfs add -rQ --cid-version 1` of a test dir on the VPS
   (`bafybeibebk6sxb…`) resolved on **`ipfs.io`** and **`dweb.link`** (independent
@@ -178,7 +181,7 @@ version, tag, tarball, sha256, repository, release_url, verify_guide) with a
 **fixed key order** — no timestamp, host, or random. **Implemented as one shared
 script, `ops/ipfs/stage-release-dir.sh <tag> <out-dir>`, called by BOTH CI and the
 seed**, so the staging can never drift between them. It also verifies the fetched
-tarball against its published `.sha256` before staging. (Written cp572; POSIX,
+tarball against its published `.sha256` before staging. (POSIX,
 deterministic, no secrets.)
 
 ---
@@ -228,7 +231,7 @@ A small POSIX script (sibling to `morphit-ipfs-pin.sh`) the **seed** runs. It:
    mismatch — the determinism check in practice),
 5. optionally `ipfs routing provide` to push the provider record promptly.
 
-`ops/ipfs/stage-release-dir.sh` already exists (cp572, syntax-verified). What
+`ops/ipfs/stage-release-dir.sh` already exists (syntax-verified). What
 remains for §5.2 is `morphit-ipfs-seed.sh` (the add + assert + provide wrapper)
 plus its `morphit-ops` wiring.
 
@@ -250,7 +253,7 @@ gateways and other instances to fetch the CID, the **seed's Kubo must be reachab
 on the DHT** — i.e. **TCP/UDP 4001 reachable from the internet** (public IP or port
 forward), and it must announce (provide) its content. Considerations:
 
-- the maintainer's VPS has a public IP — likely fine, but **the `lowpower` profile limits
+- The maintainer's VPS has a public IP — likely fine, but **the `lowpower` profile limits
   connections/DHT participation**; the seed may need a less-restricted profile or
   `Routing.Type=dhtserver` + `Reprovider` tuned so it announces reliably.
 - The **guard (§5.3) is the safety net**: if the seed isn't reachable, the CID
@@ -335,11 +338,11 @@ the release path.
 8. **Version bump** 1.9.2 → 1.9.3 (all 19 version-consistency touchpoints +
    lockfile via `npm install --package-lock-only`, **never** `npm audit fix`) +
    `RELEASE-NOTES-v1.9.3.md`.
-9. **Full deep-deep** — 5 persona walkthroughs + full ~563-runner battery in
+9. **Full deep audit** — 5 persona walkthroughs + full ~563-runner battery in
    ~30–45-runner chunks (re-verify `vitest-must-pass` #204 + `workspace-typecheck`
    #335 standalone) + static audit A–L.
 10. **Ship** via the 6 ELI5 blocks — the release now: seeds the CID from the maintainer's box,
-    publishes IPNS, anchors both; instances pick it up. the maintainer runs the one-time
+    publishes IPNS, anchors both; instances pick it up. The maintainer runs the one-time
     `morphit-ipfs-setup.sh` on `/opt/morphit` first so it *is* the seed.
 
 ---

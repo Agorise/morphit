@@ -19,6 +19,12 @@ declare global {
 	 *  Compared against the chain-announced release version by the
 	 *  release-trust-anchor store (Batch J). */
 	const __MORPHIT_VERSION__: string;
+
+	/** The origin the prerendered pages are built for (vite.config.js
+	 *  `define`; morphit.io for the release build). Read only in server-side
+	 *  code (src/lib/seo/urls.ts siteOrigin), so it never reaches the client
+	 *  bundle; install/upgrade rewrites it to the instance's own origin. */
+	const __MORPHIT_SITE_ORIGIN__: string;
 }
 
 export {};

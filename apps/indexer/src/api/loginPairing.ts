@@ -17,14 +17,19 @@
  *
  * What the indexer DOES do:
  *   - Holds an in-memory `pid → {bundleStr, exp, waiter}` map.
- *   - On `/deliver`, parses + size-checks the body, stores the
- *     bundle by pid, and if a waiter is currently subscribed,
- *     pushes the bundle to it immediately and deletes the entry.
- *   - On `/wait`, opens an SSE connection that emits the bundle
- *     (already-delivered case) or registers as the waiter
- *     (not-yet-delivered case) and waits up to `exp - now()`,
- *     max 5 minutes.
+ *   - On `/wait`, opens an SSE connection and registers as the
+ *     waiter for the pid, for at most 5 minutes. The entry lives
+ *     only while that connection is open: a client that leaves
+ *     takes its entry with it.
+ *   - On `/deliver`, parses + size-checks the body and hands the
+ *     bundle to the pid's waiter. A pid nobody is waiting on is
+ *     refused (404): nothing is parked for a /wait that does not
+ *     exist, so /deliver cannot fill the registry.
  *   - Janitor every 30s deletes expired entries.
+ *   - Bounds: /wait is rate-limited per client and holds a stream
+ *     slot (streamCaps.ts: per-client, shared-gateway and
+ *     instance-wide caps), so one client cannot fill the registry
+ *     and lock everyone out of QR sign-in.
  *
  * What the indexer does NOT do:
  *   - Verify signatures (the desktop does that).
@@ -80,6 +85,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { errorBody } from '$api/shared';
+import { acquireStreamSlot, streamCapResponse } from '$api/streamCaps';
 import { logger } from '$log';
 
 const log = logger('login-pairing');
@@ -127,10 +133,10 @@ export class PairingRegistry {
 	}
 
 	/** Phone-side delivery.  Returns:
-	 *    - 'ok': bundle accepted (handed off to a waiter if
-	 *      one was registered; otherwise parked for up to
-	 *      PID_TTL_MAX_MS).
-	 *    - 'over_capacity': registry is at hard cap; reject.
+	 *    - 'ok': bundle accepted (handed to the waiter, or parked
+	 *      on the entry its /wait created until the callback is
+	 *      installed).
+	 *    - 'no_waiter': nobody is waiting on this pid; refused.
 	 *    - 'already_delivered': this pid already has a parked
 	 *      bundle from a prior call (single-shot enforcement).
 	 */
@@ -138,7 +144,7 @@ export class PairingRegistry {
 		pid: string,
 		bundleJson: string,
 		nowMs: number
-	): 'ok' | 'over_capacity' | 'already_delivered' {
+	): 'ok' | 'no_waiter' | 'already_delivered' {
 		const entry = this.entries.get(pid);
 		if (entry !== undefined) {
 			// Pid is in registry — either as a parked bundle (if
@@ -166,16 +172,11 @@ export class PairingRegistry {
 			entry.bundleJson = bundleJson;
 			return 'ok';
 		}
-		// New pid.  Park the bundle until /wait shows up.
-		if (this.entries.size >= PID_REGISTRY_MAX_ENTRIES) {
-			return 'over_capacity';
-		}
-		this.entries.set(pid, {
-			expMs: nowMs + PID_TTL_MAX_MS,
-			bundleJson,
-			waiter: null
-		});
-		return 'ok';
+		// Nobody is waiting on this pid: refuse rather than park. A
+		// bundle parked for a /wait that may never come was the other
+		// way to fill the registry.
+		void nowMs;
+		return 'no_waiter';
 	}
 
 	/** Desktop-side: register a waiter for `pid`.  If a bundle
@@ -249,18 +250,12 @@ export class PairingRegistry {
 		return 'installed';
 	}
 
-	/** Cancel a waiting subscription (e.g. SSE client
-	 *  disconnected).  Removes the entry so a delivery doesn't
-	 *  pile up forever waiting for a waiter that's gone. */
+	/** Cancel a waiting subscription (the SSE client
+	 *  disconnected, or its time ran out).  Removes the entry,
+	 *  parked bundle included: an entry lives only while its
+	 *  /wait does. A desktop that reconnects registers afresh. */
 	cancelWait(pid: string): void {
-		const entry = this.entries.get(pid);
-		if (entry === undefined) return;
-		// Only cancel if no bundle has landed.  If a bundle did
-		// land, we keep it parked for the TTL window in case the
-		// user reconnects (rare but useful).
-		if (entry.bundleJson === null) {
-			this.entries.delete(pid);
-		}
+		this.entries.delete(pid);
 	}
 
 	/** Remove expired entries.  Called periodically by the
@@ -336,9 +331,8 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 			return c.json(errorBody('bad_request', 'pid_mismatch: body.pid does not equal URL pid'), 400);
 		}
 		const result = registry.deliver(pid, raw, Date.now());
-		if (result === 'over_capacity') {
-			log.warn('login-pairing: registry over capacity, rejecting deliver');
-			return c.json(errorBody('rate_limited', 'service_busy: pairing registry at capacity'), 503);
+		if (result === 'no_waiter') {
+			return c.json(errorBody('not_found', 'no_pairing: nobody is waiting on this code'), 404);
 		}
 		if (result === 'already_delivered') {
 			return c.json(errorBody('bad_request', 'already_delivered: pid has a parked bundle'), 409);
@@ -356,25 +350,43 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 				400
 			);
 		}
+		// A stream slot first: per client, per shared gateway and
+		// instance-wide (streamCaps.ts). Without it one client could
+		// hold every registry entry open.
+		const release = acquireStreamSlot(c);
+		if (release === null) return streamCapResponse(c);
 		const reg = registry.register(pid, Date.now());
 		if (reg.kind === 'over_capacity') {
+			release();
 			return c.json(errorBody('rate_limited', 'service_busy: pairing registry at capacity'), 503);
 		}
 		if (reg.kind === 'immediate') {
 			// Fast path — bundle was already delivered.  Emit
 			// once and close.
 			return streamSSE(c, async (stream) => {
-				await stream.writeSSE({
-					event: 'bundle',
-					data: reg.bundleJson
-				});
+				try {
+					await stream.writeSSE({
+						event: 'bundle',
+						data: reg.bundleJson
+					});
+				} finally {
+					release();
+				}
 			});
 		}
 		// Waiting path — register a callback, then SSE-stream
-		// until callback fires or TTL expires.
+		// until callback fires, the client leaves, or TTL expires.
 		return streamSSE(c, async (stream) => {
 			let resolved = false;
-			// G (cp295): keep-alive. Without periodic bytes a reverse proxy
+			let handedOff = false;
+			let settle: (bundleJson: string) => void = () => undefined;
+			// The client left: drop the entry and the slot now, not in
+			// five minutes.
+			stream.onAbort(() => {
+				registry.cancelWait(pid);
+				settle('');
+			});
+			// G: keep-alive. Without periodic bytes a reverse proxy
 			// closes this idle connection at ~60s, and the desktop shows
 			// "This code expired" even though the pairing is valid for the
 			// full 5-minute window server-side. An SSE comment every 25s
@@ -385,6 +397,16 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 			}, PAIRING_KEEPALIVE_INTERVAL_MS);
 			try {
 				const settled = new Promise<string>((resolve) => {
+					settle = (v: string): void => {
+						if (resolved) return;
+						resolved = true;
+						resolve(v);
+					};
+					if (stream.aborted) {
+						registry.cancelWait(pid);
+						settle('');
+						return;
+					}
 					const installed = registry.setWaiter(pid, (bundleJson) => {
 						if (resolved) return;
 						resolved = true;
@@ -410,6 +432,8 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 					}, PID_TTL_MAX_MS).unref?.();
 				});
 				const bundleJson = await settled;
+				handedOff = bundleJson !== '';
+				if (stream.aborted) return;
 				if (bundleJson === '') {
 					// Empty signals expired — close the stream
 					// cleanly with a sentinel event.
@@ -425,6 +449,10 @@ export function loginPairingRoute(registry: PairingRegistry): Hono {
 				}
 			} finally {
 				clearInterval(keepalive);
+				// A delivered bundle already removed its entry; anything else
+				// leaves nothing behind for this pid.
+				if (!handedOff) registry.cancelWait(pid);
+				release();
 			}
 		});
 	});

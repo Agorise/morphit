@@ -6,7 +6,7 @@
  * matched), so a locale-less or @-less path resolves to no route and the
  * notification click lands on a 404.
  *
- * cp470 — tester3 tapped an order notification and landed on
+ * tester3 tapped an order notification and landed on
  * /tester3/order-… → 404; the correct target is /en/@tester3/order-….
  * Three enqueue sites shared the defect (chat.ts, featureBid.ts,
  * feedback.ts).  This guard keeps every click_path locale-prefixed and
@@ -55,7 +55,7 @@ const feedback = read('src/indexer/handlers/feedback.ts');
 // head-block path notifies with the identical shape. The click-path invariant
 // this smoke exists for is unchanged; only its address moved.
 const feedbackEnqueue = read('src/indexer/feedbackPushEnqueue.ts');
-// cp471 — chat click-paths now live in the shared enqueue module.
+// chat click-paths now live in the shared enqueue module.
 const enqueue = read('src/indexer/chatPushEnqueue.ts');
 
 // ── Positive: the correct locale-prefixed shapes are present ──────────
@@ -65,7 +65,7 @@ scenario('chatPushEnqueue.ts order click_path is /${locale}/chat/${sender}?order
 		'chatPushEnqueue.ts order click_path is not the localized /chat/{sender}?order= deep-link'
 	);
 });
-// v1.7.5 (t.txt #1) — this used to assert the LITERAL `/${locale}/chat`, and in
+// v1.7.5 — this used to assert the LITERAL `/${locale}/chat`, and in
 // doing so it pinned the bug it was written near. A plain-chat push whose click
 // path had no peer landed the user on the inbox with nothing selected, the page
 // dropped the notification (`if (data.peer)`), and the badge waited ~60s for the

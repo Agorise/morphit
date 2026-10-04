@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — IdentityLabel truncation smoke (v1.7.7, t.txt #9).
+ * Morphit — IdentityLabel truncation smoke (v1.7.7).
  *
- * the maintainer photographed a chat card where "Super loong display name" ran past the
+ * The maintainer photographed a chat card where "Super loong display name" ran past the
  * card edge into the Restore button, while the RE: line directly beneath it
  * truncated at "RE: I'm bu…". Two lines in the same card, disagreeing about how
  * much room they had.
@@ -84,7 +84,7 @@ check(
 	/<span class="flex-none">\(\{orderStatusLabel\(convo\.order\)\}\)<\/span>/.test(page)
 );
 
-// ── t.txt #9: the feedback row ──────────────────────────────────────
+// ── the feedback row ──────────────────────────────────────
 check(
 	'10 the feedback row does NOT show the "I rated @x:" label',
 	!/<span class="font-medium"\s*>\{\$_\('profile\.given_rated'/.test(page),
@@ -112,10 +112,9 @@ check(
 );
 
 
-// ── t.txt #6: review cards ────────────────────────────────────────
-// [the maintainer]: "no need to show the (@username) in parenthesis, and be sure to
-// truncate the display name line since it is too wide for mobile. the layout of
-// those feedback/review cards on mobile is attrocious."
+// ── review cards ────────────────────────────────────────
+// Requirement: no (@username) here, and the display-name line truncates; the review cards were
+// far too wide on mobile.
 const profile = read('apps/web/src/routes/[lang]/[x+40][account=account]/+page.svelte');
 
 check(

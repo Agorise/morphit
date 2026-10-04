@@ -9,22 +9,24 @@
  *
  * Trust model is identical to the release handler (morphit_release_v1):
  *   1. signer MUST equal config.officialAccountName, AND
- *   2. that account's current on-chain posting pubkey MUST match the pinned
- *      config.officialPostingPubkey.
- * Only then are the nodes merged. An impersonator (wrong account) or a
- * key-compromise attempt (right account, wrong pubkey) is rejected, so a hostile
- * directory can never inject attacker-controlled RPC nodes into the pool.
+ *   2. the transaction carrying the op MUST be signed by the pinned
+ *      config.officialPostingPubkey (recovered from the block's own
+ *      transaction — see $indexer/officialOpTrust; no chain read).
+ * Only then are the nodes merged. An impersonator (wrong account), an
+ * unsigned op served by a hostile RPC node, or a signature from any other key
+ * is rejected, so a forged directory can never inject attacker-controlled RPC
+ * nodes into the pool.
  *
  * Merging is additive + idempotent (existing endpoints keep their health state),
  * and hidden endpoints are always reached via the routing dispatcher — clearnet
- * is unaffected. The pool merge is live (no restart); durable persistence across
- * a restart is a follow-up (the baked DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS always
- * seed Star/Jade regardless, so a restart never loses the core set).
+ * is unaffected. The pool merge is live (no restart). The latest trusted
+ * directory is also stored (`rpc_directory`), and at boot it is proved against
+ * the chain again before any of it joins the pool (rpcDirectoryReload.ts).
  */
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
-import { resolveSignerPostingPubkey } from '$blurt/verify';
+import { officialOpDistrust } from '$indexer/officialOpTrust';
 import {
 	validateRpcDirectoryPayload,
 	directoryEndpointUrls,
@@ -35,14 +37,18 @@ import { logger } from '$log';
 const log = logger('rpc-directory');
 
 /**
- * Who runs each directory address (v1.18.0 deep-deep, rv2-2): a node's
+ * Who runs each directory address: a node's
  * `.onion` and `.b32.i2p` are ONE operator, named by the node's name or, when
  * it has none, by its first address. The RPC quorum counts agreement per
  * operator; before this, a directory node's two addresses were two witnesses,
  * so one operator could meet a two-endpoint quorum by itself.
  */
 export function directoryOperators(payload: {
-	readonly nodes: ReadonlyArray<{ readonly name?: string; readonly onion?: string; readonly i2p?: string }>;
+	readonly nodes: ReadonlyArray<{
+		readonly name?: string;
+		readonly onion?: string;
+		readonly i2p?: string;
+	}>;
 }): Record<string, string> {
 	const out: Record<string, string> = {};
 	for (const n of payload.nodes) {
@@ -58,18 +64,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const v = validateRpcDirectoryPayload(ctx.payload);
 	if (!v.ok) return { ok: false, reason: v.reason };
 
-	// Trust check 1: signer is the configured official account.
-	if (ctx.signer !== ctx.config.officialAccountName) {
-		return { ok: false, reason: 'signer_not_official_account' };
-	}
-
-	// Trust check 2: the signer's current on-chain posting pubkey matches the
-	// pinned value. A chain-unreachable error re-throws so the dispatcher rolls
-	// back + retries — we'd rather delay than trust an unverified directory.
-	const account = await ctx.blurt.getAccount(ctx.signer, { userFacing: false });
-	const chainPubkey = resolveSignerPostingPubkey(account);
-	if (chainPubkey === null) return { ok: false, reason: 'signer_no_single_posting_key' };
-	if (chainPubkey !== ctx.config.officialPostingPubkey) return { ok: false, reason: 'pubkey_mismatch' };
+	// The official account, and a signature from the pinned key over the
+	// transaction the block carries.
+	const distrust = officialOpDistrust(ctx);
+	if (distrust !== null) return { ok: false, reason: distrust };
 
 	// Trusted → self-populate the hidden RPC pool with the directory's nodes.
 	const endpoints = directoryEndpointUrls(v.payload);

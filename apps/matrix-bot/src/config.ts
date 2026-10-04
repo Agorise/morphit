@@ -17,6 +17,10 @@ import { parseMxid, type MatrixMxid } from '@morphit/operator-config';
  *  alias (or vice versa). */
 export interface BotConfig {
 	readonly homeserver: string;
+	/** SOCKS5 proxy all Matrix traffic goes through ('' = direct). */
+	readonly socksProxy: string;
+	/** Tor-only node: only a loopback or .onion-via-SOCKS homeserver. */
+	readonly torOnly: boolean;
 	readonly accessToken: string;
 	/** Comma-separated MXIDs the operator wants alerts DM'd to.
 	 *  Multi-recipient supports vacation coverage: operator's
@@ -43,7 +47,7 @@ const SCHEMA = z.object({
 	MORPHIT_MATRIX_BOT_HOMESERVER: z
 		.string()
 		.url('homeserver must be a full URL, e.g. https://matrix.org')
-		// cp139 B-4: zod's .url() accepts any scheme (http://,
+		// zod's .url() accepts any scheme (http://,
 		// https://, file://, gopher://...).  An operator who
 		// copy-pasted `http://matrix.example.com` (no s) without
 		// noticing would emit alert traffic cleartext to the
@@ -58,10 +62,31 @@ const SCHEMA = z.object({
 		.refine(
 			(s) =>
 				/^https:\/\//i.test(s) ||
-				/^http:\/\/(localhost|127\.|\[::1\])/i.test(s),
-			'homeserver must use https:// (http:// allowed only for localhost / 127.x / [::1])'
+				/^http:\/\/(localhost|127\.|\[::1\])/i.test(s) ||
+				// A .onion address is end-to-end encrypted by Tor itself.
+				/^http:\/\/[a-z2-7]{56}\.onion(?::\d+)?(?:\/|$)/i.test(s),
+			'homeserver must use https:// (http:// allowed only for localhost / 127.x / [::1] and .onion)'
 		)
 		.default('https://matrix.org'),
+
+	/** Route the bot's Matrix traffic through a SOCKS5 proxy, e.g.
+	 *  `socks5h://127.0.0.1:9050` (Tor). Names are resolved by the proxy. */
+	MORPHIT_MATRIX_BOT_SOCKS_PROXY: z
+		.string()
+		.optional()
+		.refine(
+			(s) => s === undefined || s.trim() === '' || /^socks5h?:\/\/[^/\s]+:\d+\/?$/i.test(s.trim()),
+			'socks proxy must look like socks5h://127.0.0.1:9050'
+		),
+
+	/** Set on tor-only nodes. The bot then refuses any homeserver that is not
+	 *  loopback or a .onion reached through MORPHIT_MATRIX_BOT_SOCKS_PROXY: a
+	 *  clearnet homeserver would see this box's address next to the bot's
+	 *  account and the operator's MXID. */
+	MORPHIT_MATRIX_BOT_TOR_ONLY: z
+		.string()
+		.optional()
+		.transform((s) => s === 'true' || s === '1' || s === 'yes'),
 
 	MORPHIT_MATRIX_BOT_ACCESS_TOKEN: z
 		.string()
@@ -91,7 +116,7 @@ const SCHEMA = z.object({
 
 	MORPHIT_MATRIX_BOT_DIGEST_SEND_TIME_UTC: z
 		.string()
-		// cp139 B-3: was `/^[0-2]\d:[0-5]\d$/` — accepted "24:00"
+		// was `/^[0-2]\d:[0-5]\d$/` — accepted "24:00"
 		// through "29:59".  Date.UTC silently normalizes (24:00 →
 		// midnight next day; 29:00 → 5:00 next day) so a typo
 		// like "25:00" became "01:00 next day" with no error.
@@ -153,12 +178,30 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
 		alertMxids.push(parsed);
 	}
 
+	const socksProxy = (e.MORPHIT_MATRIX_BOT_SOCKS_PROXY ?? '').trim();
+	if (e.MORPHIT_MATRIX_BOT_TOR_ONLY) {
+		const host = new URL(e.MORPHIT_MATRIX_BOT_HOMESERVER).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+		const loopback = host === 'localhost' || host === '::1' || /^127\./.test(host);
+		const onionViaTor = host.endsWith('.onion') && socksProxy !== '';
+		if (!loopback && !onionViaTor) {
+			throw new Error(
+				`MORPHIT_MATRIX_BOT_TOR_ONLY is set (this is a tor-only node) and the homeserver ` +
+					`${e.MORPHIT_MATRIX_BOT_HOMESERVER} is neither on this machine nor a .onion reached ` +
+					`through MORPHIT_MATRIX_BOT_SOCKS_PROXY. Connecting to it would show the homeserver ` +
+					`this box's address next to the bot's account. Use a .onion homeserver with ` +
+					`MORPHIT_MATRIX_BOT_SOCKS_PROXY=socks5h://127.0.0.1:9050, or a homeserver on this machine.`
+			);
+		}
+	}
+
 	const journalctlUnits = e.MORPHIT_MATRIX_BOT_JOURNALCTL_UNITS.split(',')
 		.map((s) => s.trim())
 		.filter((s) => s.length > 0);
 
 	return {
 		homeserver: e.MORPHIT_MATRIX_BOT_HOMESERVER,
+		socksProxy,
+		torOnly: e.MORPHIT_MATRIX_BOT_TOR_ONLY,
 		accessToken: e.MORPHIT_MATRIX_BOT_ACCESS_TOKEN,
 		alertMxids,
 		journalctlUnits,

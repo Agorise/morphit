@@ -1,5 +1,5 @@
 /**
- * pair-target-resolve-smoke (cp214).
+ * pair-target-resolve-smoke.
  *
  * `/pair` is the `web+morphit:` protocol-handler landing route. The payload
  * is attacker-influenceable (any page can mint a `web+morphit://` link), so

@@ -1,12 +1,12 @@
 <script lang="ts">
 	/**
-	 * OrderCard (cp404) — the shared orderbook/profile order card.
+	 * OrderCard — the shared orderbook/profile order card.
 	 *
 	 * Replaces the two hand-duplicated inline cards (orderbook results +
 	 * profile "active orders") with one component so the layout stays in
 	 * sync. Layout, top to bottom:
 	 *
-	 *   • Title (bold), sitting cleanly ABOVE the avatar (cp420 — it used
+	 *   • Title (bold), sitting cleanly ABOVE the avatar (it used
 	 *     to tuck over the avatar; that was dropped). On phones the title
 	 *     clamps to 2 lines.
 	 *   • Top-right cluster (DESKTOP ≥sm): the ⏳ "Expires in…" pill, the
@@ -22,7 +22,7 @@
 	 *   • Terms — a single truncated line (full text on the order page).
 	 *   • Eyeball hide/show toggle, bottom-right (DESKTOP ≥sm only).
 	 *
-	 * MOBILE (<sm) declutter (cp420): the top-right pill + message button,
+	 * MOBILE (<sm) declutter: the top-right pill + message button,
 	 * the price-model line, and the eyeball are all hidden; instead a single
 	 * full-width "🗨 Message @username before <date>" button spans the foot
 	 * of the card (OrderCardMobileMessageButton).
@@ -40,11 +40,6 @@
 	import OrderPosterIdentity from '$lib/components/OrderPosterIdentity.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import OrderExpiryChip from '$lib/components/OrderExpiryChip.svelte';
-	// cp404: the "N talking now" engagement chip is hidden per the maintainer's
-	// request. The engagement_24h data still flows on OrderRecord — to
-	// display it again, restore this import and the commented block in
-	// OrderPosterIdentity.
-	// import EngagementChip from '$lib/components/EngagementChip.svelte';
 	import StablecoinPriceSubline from '$lib/components/StablecoinPriceSubline.svelte';
 	import { isStablecoinSublineTicker } from '$lib/assets/stablecoinSubline';
 	import MessageIcon from '$lib/components/MessageIcon.svelte';
@@ -87,20 +82,20 @@
 		onToggleHide?: (() => void) | null;
 		/** Fired when the Message button is clicked (e.g. view-count ping). */
 		onMessageClick?: (() => void) | null;
-		/** cp411 — lowercased search tokens from the orderbook's free-text
+		/** lowercased search tokens from the orderbook's free-text
 		 *  "Order details" filter. When non-empty, occurrences in the terms
 		 *  preview are wrapped in a <mark> so the searcher sees why the card
 		 *  matched. Omitted/empty everywhere except the filtered orderbook. */
 		highlightTokens?: readonly string[];
 		/** Extra classes for the root <li> (e.g. list animation). */
 		class?: string;
-		/** cp428 — render this card in the FEATURED style: an emerald border +
+		/** render this card in the FEATURED style: an emerald border +
 		 *  faint gradient wash + a "🎉 Featured" corner badge. The card content
 		 *  is identical to a normal order card (same layout on PC + mobile) —
 		 *  featuring only changes the frame, so a featured order reads exactly
 		 *  like every other card plus the badge. */
 		featured?: boolean;
-		/** t.txt (v1.4.9 #9) — true when this card was just prepended to a
+		/** true when this card was just prepended to a
 		 *  live-updating orderbook (a brand-new on-chain order arriving while
 		 *  the user watches). Plays a one-shot slide-in on the card's root, so
 		 *  the new order slides into first place instead of popping in. Default
@@ -151,7 +146,7 @@
 
 	const handle = $derived('@' + order.account);
 
-	// cp440/v1.1.5 — the top-right cluster (expiry pill, price-model line,
+	// the top-right cluster (expiry pill, price-model line,
 	// message button) is DESKTOP-only (all `hidden sm:block` / `sm:flex`). On
 	// phones the ONLY thing that can sit top-right is the stablecoin price
 	// subline, and only for USDT/USDC/DAI. So on mobile the title's `pr-24`
@@ -161,11 +156,11 @@
 	// title can use nearly the full card width and fit in fewer lines.
 	const hasMobileTopRight = $derived(isStablecoinSublineTicker(order.asset));
 
-	// cp406 — the card shows a single truncated line, so strip the terms'
+	// the card shows a single truncated line, so strip the terms'
 	// markdown (headings / bold / italics / lists / hr) and collapse line feeds
 	// to plain text. Full markdown renders on the order detail page (TermsText).
 	const termsPreview = $derived(order.terms ? stripMarkdown(order.terms) : '');
-	// cp411 — when the orderbook's "Order details" search is active, mark the
+	// when the orderbook's "Order details" search is active, mark the
 	// matched word(s) in the preview. highlightMatches escapes the text and only
 	// emits <mark class="…"> (static), so this {@html} is safe for user terms.
 	const termsPreviewHtml = $derived(
@@ -198,7 +193,7 @@
 	<div class="absolute top-3 z-10 flex flex-col items-end gap-1.5 ltr:right-3 rtl:left-3 sm:top-4 sm:ltr:right-4 sm:rtl:left-4">
 		{#if order.expires_at}
 			<div class="hidden sm:block">
-				<!-- v1.7.5 (t.txt #5) — `created_at`, NOT `updated_at`. The tooltip says
+				<!-- v1.7.5 — `created_at`, NOT `updated_at`. The tooltip says
 					     "Posted {age} ago", and `updated_at` doesn't mean that: feeAttest
 					     moves it when a BTC/XMR listing fee verifies, which happens to a
 					     live order hours after posting. -->
@@ -232,7 +227,7 @@
 		{/if}
 	</div>
 
-	<!-- cp428 — featured badge sits on its own line above the title (top-left),
+	<!-- featured badge sits on its own line above the title (top-left),
 	     so it never collides with the top-right expiry / message cluster. -->
 	{#if featured}
 		<p class="mb-2">
@@ -249,7 +244,7 @@
 	     sits at the EXPIRY-CHIP row (the Message button is lower, over the
 	     identity), so it only needs to clear that chip — which is compact in
 	     LTR ("Expires in 82d") but a whole phrase in RTL ("…روز دیگر منقضی
-	     می‌شود"), so the two directions get different pads (cp620: the old
+	     می‌شود"), so the two directions get different pads (the old
 	     symmetric sm:pr-[13rem] was sized for the Message button and left dead
 	     space after short LTR titles). RTL mirrors to the LEFT because the
 	     cluster does too. MOBILE: at most two lines (line-clamp-2); the cluster
@@ -264,7 +259,7 @@
 	</h3>
 
 	<!-- Identity row (shared with the order detail "POSTED BY" card via
-	     OrderPosterIdentity). cp420 — the avatar now sits cleanly below the
+	     OrderPosterIdentity). the avatar now sits cleanly below the
 	     title (was -mt-2, which tucked it up under the title). -->
 	<div class="mt-1">
 		<OrderPosterIdentity {order} {pending} {displayName} {avatarSvg} {avatarDataUri} {profileHref} />
@@ -336,7 +331,7 @@
 	     explains itself) sits to the LEFT of the hide/show eyeball. The
 	     eyeball is suppressed when chain-blocked (a stronger action was
 	     taken) or when no toggle is wired; the marker still shows. The
-	     eyeball is also hidden on phones (cp420); the marker still shows. -->
+	     eyeball is also hidden on phones; the marker still shows. -->
 	{#if blocked || hidden || onToggleHide}
 		<div class="absolute bottom-3 z-10 flex items-center gap-2 ltr:right-3 rtl:left-3">
 			{#if blocked}
@@ -353,7 +348,7 @@
 				</span>
 			{/if}
 			{#if onToggleHide && !blocked}
-				<!-- cp425 — the hide/show explainer moved from the native `title`
+				<!-- the hide/show explainer moved from the native `title`
 				     tooltip (small + hard to read) to the styled Tooltip. The
 				     desktop-only gate lives on the wrapper (was `sm:block` on the
 				     button); the button keeps its own toggle click handler. -->
@@ -421,7 +416,7 @@
 </li>
 
 <style>
-	/* t.txt (v1.4.9 #9) — a brand-new order prepended to the LIVE orderbook
+	/* a brand-new order prepended to the LIVE orderbook
 	   slides into first place instead of popping in. One-shot: the page clears
 	   the `justArrived` flag after the animation so it never replays. `:global`
 	   because the class is applied via a dynamic `{justArrived ? … : ''}`

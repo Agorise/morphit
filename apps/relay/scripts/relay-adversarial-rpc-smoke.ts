@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Relay spend paths under adversarial / broken RPC nodes (v1.20.0 fix wave 4).
+ * Relay spend paths under adversarial / broken RPC nodes.
  * Real RelayQueueDrainer + BlurtClient + CreateEndpoint against in-process fake
  * JSON-RPC nodes sharing one fake chain (scripts/lib/fakeBlurtChain.ts), and a
  * REAL Postgres table. The scenarios are the independent verifier's (V2):

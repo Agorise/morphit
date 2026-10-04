@@ -25,7 +25,7 @@ import {
 } from '../src/indexer/federationProbe.ts';
 import { readFileSync } from 'node:fs';
 
-// Cp3 (Part 122) — stub the DNS resolver too.  Without this the
+// stub the DNS resolver too.  Without this the
 // new DNS-rebinding defense runs a real lookup before fetch, which
 // fails offline for synthetic test hostnames like `https://test.example`.
 // The fetch stub below handles the network side; this handles the
@@ -222,7 +222,7 @@ await scenario('relay_account mismatch → mismatch', async () => {
 	assertEqual(out.status, 'mismatch' as ProbeStatus, 'status');
 });
 
-// cp775 — a split brand↔relay identity is allowed when BOTH accounts are reserved
+// a split brand↔relay identity is allowed when BOTH accounts are reserved
 // brand names (provably same owner, since reserved names can't be squatted).
 await scenario('cp775: both reserved (morphit operator / morphit-relay relay) → NOT mismatch', async () => {
 	stubRoutes({
@@ -234,7 +234,7 @@ await scenario('cp775: both reserved (morphit operator / morphit-relay relay) �
 	assertEqual(out.status !== ('mismatch' as ProbeStatus), true, 'both-reserved pairing is not flagged');
 });
 
-// cp775 — the exception is strictly both-reserved: a reserved operator advertising
+// the exception is strictly both-reserved: a reserved operator advertising
 // a NON-reserved relay account is still a mismatch (no spoofing loophole).
 await scenario('cp775: reserved operator + non-reserved relay → still mismatch', async () => {
 	stubRoutes({
@@ -423,7 +423,7 @@ await scenario('self-reachable: huge lag (initial sync) → syncing', async () =
 
 unstub();
 
-// ─── cp672 — pinned-agent lookup must speak undici's { all: true } array shape ───
+// ─── pinned-agent lookup must speak undici's { all: true } array shape ───
 // Regression for ERR_INVALID_IP_ADDRESS: undici 6/7 calls connect.lookup with
 // { all: true } and expects [{ address, family }]. The old single-address
 // callback returned undefined for the address, silently breaking EVERY peer

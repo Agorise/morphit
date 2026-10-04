@@ -106,12 +106,12 @@ describe('refreshSelfProfile', () => {
 		expect(get(selfProfile).avatarDataUri).toBeNull();
 	});
 
-	it('the maintainer v1.8.11: retries when the profile is not indexed YET, then shows it', async () => {
+	it('retries when the profile is not indexed YET, then shows it', async () => {
 		// A profile op takes ~45-63s to be indexed. On a fresh sign-in the
 		// first read can legitimately come back "no such profile" — which used
 		// to be applied as final, leaving the header on an identicon while the
 		// profile page (which fetches independently) showed the real avatar on
-		// the same screen. the maintainer hit exactly that in a private window.
+		// the same screen. The maintainer hit exactly that in a private window.
 		fetchMock
 			.mockResolvedValueOnce(mockBatchResponse({})) // not indexed yet
 			.mockResolvedValue(mockBatchResponse({ alice: mockProfileWithAvatar('alice') }));
@@ -183,10 +183,10 @@ describe('refreshSelfProfile', () => {
 	});
 });
 
-// v1.8.15 (t.txt #2) — the store now carries the user's own DISPLAY NAME, not
+// v1.8.15 — the store now carries the user's own DISPLAY NAME, not
 // just their avatar, so every IdentityLabel of self can show the custom name
 // consistently + instantly (the same treatment the avatar already had).
-describe('display name in the self store (t.txt #2)', () => {
+describe('display name in the self store', () => {
 	it('refreshSelfProfile publishes the display name from the profile', async () => {
 		fetchMock.mockResolvedValueOnce(mockBatchResponse({ alice: mockProfileWithAvatar('alice') }));
 		await refreshSelfProfile('alice');

@@ -53,8 +53,8 @@ describe('orderReplace handler', () => {
 		expect(mock.queries).toHaveLength(2);
 	});
 
-	// ─── cp425/cp440: barter accepted_assets on replace ─────────────
-	// cp440 — accepted_assets is now LOCKED on replace (bait-and-switch
+	// ─── barter accepted_assets on replace ─────────────
+	// accepted_assets is now LOCKED on replace (bait-and-switch
 	// guard), like side/asset/fiat/network. An unchanged set passes; a
 	// changed set is rejected. The validation still mirrors the order handler.
 	function validBarterReplacePayload() {
@@ -253,7 +253,7 @@ describe('orderReplace handler', () => {
 
 	it('validates payload before touching the DB', async () => {
 		// Malformed payload should short-circuit before the SELECT.
-		// Part 122 cp49 deep-deep A-2: synthetic non-ticker
+		// synthetic non-ticker
 		// '__UNKNOWN__' (formerly 'ETH').  See order.test.ts for
 		// rationale on why we don't hard-code a real ticker as
 		// the unknown stand-in.
@@ -355,11 +355,9 @@ describe('orderReplace handler', () => {
 
 	// ─── B1 regression: waiver substance protection ────────────────
 
-	it('B1: rejects replace below waiver floor when target is waived_first_buy', async () => {
-		// User created a $1+ waived first-buy order (passes the waiver
-		// floor in order.ts handler), now tries to replace with
-		// amount_min=$0.50 to dial back the commitment below the
-		// $1 USD-equivalent floor (cp369: fiat floor, not 500 BLURT).
+	it('B1: a waived order cannot be replaced into one with no stated minimum', async () => {
+		// A waiver claimed on a bounded order may not become unbounded.
+		// (The $1 USD-equivalent floor itself is advisory since the waiver decision.)
 		const createdAt = new Date('2026-05-01T12:00:00Z');
 		const blockTime = new Date('2026-05-01T12:01:00Z');
 		const mock = makeMockClient([
@@ -388,7 +386,7 @@ describe('orderReplace handler', () => {
 					asset: 'BLURT',
 					asset_network: null,
 					fiat_currency: 'USD',
-					amount_min: 0.5, // ← below the $1 USD-equivalent floor
+					amount_min: null, // ← no stated minimum
 					amount_max: 50,
 					price_model: { kind: 'fixed', price: 0.002 },
 					payment_methods: ['sepa']
@@ -483,11 +481,11 @@ describe('orderReplace handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'replace_below_waiver_floor' });
 	});
 
-	// v1.20.0 fix wave, G5 — an amount in a currency this node cannot convert
+	// an amount in a currency this node cannot convert
 	// used to be compared AS IF it were USD ("1000 ZZZ" ≥ $1), so the verdict
 	// depended on which FX rates a node happened to hold. Unconvertible now
 	// fails the floor outright.
-	it('G5: rejects replace of a waived order when its fiat cannot be converted to USD', async () => {
+	it('a waived order in a currency no FX table knows is replaced like any other', async () => {
 		const createdAt = new Date('2026-05-01T12:00:00Z');
 		const blockTime = new Date('2026-05-01T12:01:00Z');
 		const mock = makeMockClient([
@@ -511,7 +509,9 @@ describe('orderReplace handler', () => {
 			makeCtx({
 				signer: 'alice',
 				blockTime,
-				fiatToUsd: () => null,
+				fiatToUsd: () => {
+					throw new Error('the replace verdict consulted FX');
+				},
 				payload: {
 					permlink: 'first-buy-blurt-2026-05',
 					side: 'buy',
@@ -526,7 +526,7 @@ describe('orderReplace handler', () => {
 			}),
 			mock.client
 		);
-		expect(r).toEqual({ ok: false, reason: 'replace_below_waiver_floor' });
+		expect(r).toEqual({ ok: true });
 	});
 
 	it('B1: BLURT-paid orders can replace with any positive amount_min', async () => {
@@ -567,14 +567,14 @@ describe('orderReplace handler', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// cp30-DD-DD CODE-3 — asset_network gate test coverage.
+// asset_network gate test coverage.
 //
 // orderReplace handler treats asset_network as a frozen substance
 // field, parallel to side/asset/fiat: USDT and USDC orders REQUIRE
 // it, single-network assets must omit it, and replace cannot
 // change the value within the 15-minute window.
 //
-// These tests were filed as REVISIT in cp30-DD-DD and added now
+// These tests were filed in the backlog and added now
 // to close that follow-up.  Gate logic was correct on first ship;
 // these tests prevent future regression.
 // ─────────────────────────────────────────────────────────────────
@@ -865,9 +865,9 @@ describe('orderReplace asset_network gate (cp30-DD-DD CODE-3)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// cp31-DD DD-6 — DAI asset_network gate test coverage.
+// DAI asset_network gate test coverage.
 //
-// Mirror of the cp30-DD-DD CODE-3 USDC tests above, targeting DAI's
+// Mirror of the USDC tests above, targeting DAI's
 // 4-EVM-network allowlist and the same replace-substance lock.
 // DAI carries the most-amplified version of the cross-network mis-
 // send risk on Morphit because ALL FOUR DAI networks (ERC-20,

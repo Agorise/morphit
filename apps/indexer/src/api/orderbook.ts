@@ -3,16 +3,22 @@
  *
  * Filtered list of live orders, cursor-paginated. Query parameters:
  *   - asset:            AssetTicker (optional)
+ *   - asset_network:    the traded asset's network, multi-network assets only (optional)
  *   - side:             'buy' | 'sell' (optional)
  *   - fiat_currency:    comma-separated ISO codes, order matches any of (optional)
  *   - location_region:  string up to 128, case-insensitive substring match (optional)
- *   - payment_methods:  comma-separated list, order matches any of (optional)
+ *   - payment_methods:  comma-separated list, order matches any of (optional);
+ *                       `payment_method` is accepted as an alias
+ *   - langs:            comma-separated order languages; untagged orders always match
  *   - min_trades:       integer ≥0, filter to traders with ≥N COMPLETED TRADES (optional).
  *                       v1.5.5: real completions (both parties credited), not
  *                       the pre-v1.5.5 received-feedback proxy.
  *   - sort:             'recent' (default) | 'rating' | 'trades'
  *   - limit:            1..100 (default 50)
  *   - cursor:           opaque (returned from previous response)
+ *
+ * Every documented parameter is parsed: a bad value is refused (400), never
+ * silently dropped into a wider result.
  *
  * Default sort (recent): (updated_at DESC, account, permlink).
  * sort=rating: (weighted_rating DESC NULLS LAST, feedback_count DESC, ...tiebreakers).
@@ -44,14 +50,9 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
-import {
-	cryptoFacingSideWhere,
-	decodeCursor,
-	encodeCursor,
-	errorBody,
-	escapeLike
-} from '$api/shared';
-import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
+import { decodeCursor, encodeCursor, errorBody, isCursorTime } from '$api/shared';
+import { buildWhereClauses, orderbookOrderBy, rowToWire } from '$api/orderbookStreamHelpers';
+import { ASSET_TICKERS, getAsset, type AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
 
 const MAX_LIMIT = 100;
@@ -59,6 +60,13 @@ const DEFAULT_LIMIT = 50;
 
 const querySchema = z.object({
 	asset: z.enum(ASSET_TICKERS).optional(),
+	/** The traded asset's network, for a multi-network asset (USDT on
+	 *  trc20, …): only orders on that network. Refused for an asset that
+	 *  has one network or does not have this one. */
+	asset_network: z
+		.string()
+		.regex(/^[a-z0-9]{2,16}$/)
+		.optional(),
 	side: z.enum(['buy', 'sell']).optional(),
 	fiat_currency: z
 		.string()
@@ -76,13 +84,15 @@ const querySchema = z.object({
 		.max(256)
 		// Comma-separated list of short tokens. Split + validate.
 		.optional(),
+	/** Singular alias of payment_methods (the documented name). */
+	payment_method: z.string().min(1).max(256).optional(),
 	/** v1.15.0 — comma-separated language codes (SUPPORTED_LOCALES). When
 	 *  present, the orderbook returns only orders whose lang is one of these
 	 *  PLUS every untagged order (lang IS NULL is never hidden). Absent → no
 	 *  language filtering. */
 	langs: z.string().min(1).max(128).optional(),
-	/** Minimum completed-trade count (derived from received feedback
-	 *  count). Discrete values only — we deliberately restrict to
+	/** Minimum completed-trade count (fee-paid completed orders, both
+	 *  sides credited, sock-puppet pairs excluded). Discrete values only — we deliberately restrict to
 	 *  sensible presets instead of letting the frontend pass any
 	 *  integer, because UX testing will lock in 2-3 good thresholds
 	 *  rather than a free-form number that users have to guess at. */
@@ -125,8 +135,7 @@ function narrowCursor(v: unknown): Cursor | null {
 	if (typeof o.u !== 'string' || typeof o.a !== 'string' || typeof o.p !== 'string') {
 		return null;
 	}
-	const d = new Date(o.u);
-	if (Number.isNaN(d.getTime())) return null;
+	if (!isCursorTime(o.u)) return null;
 	const cursor: Cursor = { u: o.u, a: o.a, p: o.p };
 	// Optional sort-aware fields. Present on cursors minted for
 	// non-default sort; absent for cursors minted under the
@@ -148,9 +157,9 @@ interface OrderRow {
 	permlink: string;
 	side: 'buy' | 'sell';
 	asset: AssetTicker;
-	/** Part 121 / cp30 / cp31 — sub-network for multi-network
+	/** sub-network for multi-network
 	 *  assets.  Null for single-network assets (BTC/XMR/BLURT/
-	 *  BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP) and for pre-Part-121 rows.  One of
+	 *  BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP) and for older rows.  One of
 	 *  'erc20'|'trc20'|'spl'|'bep20' for USDT; one of 'erc20'|
 	 *  'spl'|'base'|'polygon' for USDC; one of 'erc20'|'polygon'|
 	 *  'base'|'arbitrum' for DAI. */
@@ -161,7 +170,7 @@ interface OrderRow {
 	price_model: unknown;
 	location_region: string | null;
 	payment_methods: string[];
-	/** cp425 — for a BARTER (goods/services) order, the crypto tickers the
+	/** for a BARTER (goods/services) order, the crypto tickers the
 	 *  seller accepts as settlement (e.g. ['BTC','XMR']). Null for every
 	 *  crypto asset (they settle in themselves). */
 	accepted_assets: string[] | null;
@@ -218,56 +227,11 @@ interface OrderRow {
 	profile_json_metadata: unknown;
 	created_at: Date;
 	updated_at: Date;
+	/** updated_at to the microsecond, for the cursor (a JS Date keeps
+	 *  milliseconds; a cursor cut to milliseconds skipped every order updated
+	 *  later within the same millisecond as a page's last row). */
+	updated_at_cursor: string;
 	expires_at: Date | null;
-}
-
-function rowToWire(r: OrderRow) {
-	return {
-		account: r.account,
-		permlink: r.permlink,
-		// cp510 [11d] — the query's WHERE clause guarantees o.status = 'live'
-		// (and expires_at > NOW()), but this mapping previously OMITTED status,
-		// so every wire order arrived with status=undefined. The frontend's
-		// client-side expiry guard isOrderLive(o) = (o.status === 'live' && …)
-		// then filtered out EVERY order, blanking the orderbook whenever it had
-		// any orders (the maintainer saw a live order missing + no empty-state card). The
-		// column is 'live' for every row this query returns, so it's a constant.
-		status: 'live' as const,
-		side: r.side,
-		asset: r.asset,
-		// Part 121 — null for single-network assets; one of
-		// erc20/trc20/spl/bep20 for USDT.
-		asset_network: r.asset_network ?? null,
-		fiat_currency: r.fiat_currency,
-		amount_min: r.amount_min === null ? null : Number(r.amount_min),
-		amount_max: r.amount_max === null ? null : Number(r.amount_max),
-		price_model: r.price_model,
-		location_region: r.location_region,
-		payment_methods: r.payment_methods,
-		accepted_assets: r.accepted_assets ?? null,
-		specific_barter_title: r.specific_barter_title ?? null,
-		terms: r.terms,
-		lang: r.lang ?? null,
-		fee_method: r.fee_method,
-		feedback_count: r.feedback_count,
-		weighted_rating: r.weighted_rating === null ? null : Number(r.weighted_rating),
-		reputation_score: computeReputationScore({
-			count: r.feedback_count,
-			weightedAvg: r.weighted_rating === null ? null : Number(r.weighted_rating),
-			lastFeedbackAtMs: r.last_feedback_at === null ? null : r.last_feedback_at.getTime()
-		}),
-		trade_count: r.trade_count,
-		is_new_trader: r.is_new_trader,
-		engagement_24h: r.engagement_24h,
-		first_trade_at:
-			r.first_trade_complete_at === null ? null : r.first_trade_complete_at.toISOString(),
-		posting_pubkey: r.posting_pubkey ?? null,
-		display_name: r.display_name ?? null,
-		profile_json_metadata: r.profile_json_metadata ?? null,
-		created_at: r.created_at.toISOString(),
-		updated_at: r.updated_at.toISOString(),
-		expires_at: r.expires_at === null ? null : r.expires_at.toISOString()
-	};
 }
 
 export function orderbookRoute(db: Database, poller: Poller, operatorAccount: string): Hono {
@@ -281,148 +245,44 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 				400
 			);
 		}
-		const q = parsed.data;
+		const q = {
+			...parsed.data,
+			payment_methods: parsed.data.payment_methods ?? parsed.data.payment_method
+		};
 		const limit = q.limit ?? DEFAULT_LIMIT;
+		if (q.asset_network !== undefined && q.asset !== undefined) {
+			const networks = getAsset(q.asset).supportedNetworks;
+			if (networks.length < 2 || !networks.includes(q.asset_network)) {
+				return c.json(
+					errorBody('bad_request', `asset_network: ${q.asset} is not traded on ${q.asset_network}`),
+					400
+				);
+			}
+		}
 
-		// Build parameterized SQL. Every filter is optional; we
-		// concatenate WHERE clauses and parameter indices.
-		// Base clauses: only live orders with an established fee
-		// appear in the public orderbook. Both 'verified' (indexer
-		// saw the BLURT transfer) and 'verified_by_attestation'
-		// (community validators attested an external-chain
-		// payment for BTC/XMR fees) count as established —
-		// Finding I's attestation path is a first-class
-		// verification route equivalent to native BLURT fees for
-		// the orderbook's purpose. Un-verified, under-paid, or
-		// pending_external orders are visible via
-		// /v1/orders/:account (owner's view) but not here.
-		//
-		// BATCH19A-orderbook-1 (2026-05-02 audit): also exclude
-		// orders whose expires_at has passed.  No sweep job
-		// flips status='live' → 'expired' when expires_at
-		// arrives (status='expired' is a valid CHECK constraint
-		// value but nothing currently writes it), so without
-		// this filter the orderbook serves stale entries
-		// indefinitely.  The filter uses NOW() so an order's
-		// visibility is computed per-request — no cron needed,
-		// no race window between sweep frequency and request
-		// arrival.
-		const where: string[] = [
-			`o.status = 'live'`,
-			`o.fee_status IN ('verified', 'verified_by_attestation')`,
-			`(o.expires_at IS NULL OR o.expires_at > NOW())`
-		];
-		const params: unknown[] = [];
+		// The WHERE clauses come from the ONE orderbook builder the live stream
+		// and the RSS/Atom/JSON feeds also use (orderbookStreamHelpers.ts):
+		// live, fee-established (verified or verified_by_attestation), not past
+		// expires_at, not from an account this operator blocked, plus the
+		// optional filters. Here a filter that would silently match nothing is
+		// refused instead of dropped.
+		if (q.payment_methods) {
+			const methods = q.payment_methods
+				.split(',')
+				.map((s) => s.trim())
+				.filter((s) => s.length > 0 && s.length <= 32);
+			if (methods.length === 0) {
+				return c.json(errorBody('bad_request', 'payment_methods: no valid tokens'), 400);
+			}
+		}
+		if (q.langs && !q.langs.split(',').some((s) => isOrderLang(s.trim()))) {
+			return c.json(errorBody('bad_request', 'langs: no valid language codes'), 400);
+		}
+		const { where, params } = buildWhereClauses(q, 0, operatorAccount);
 		const p = (v: unknown): string => {
 			params.push(v);
 			return `$${params.length}`;
 		};
-
-		// beta5 — instance-local moderation: hide listings from accounts
-		// this operator has blocked (operator_blocks, state='blocked';
-		// local OR chain-origin both apply). Keeps blocked sellers out of
-		// the public orderbook on THIS instance only.
-		where.push(
-			`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(operatorAccount)} AND ob.blocked = o.account AND ob.state = 'blocked')`
-		);
-
-		if (q.asset) {
-			// v1.8.15 — the Asset filter surfaces every order INVOLVING the
-			// selected crypto, not only ones whose TRADED asset is it: match the
-			// traded asset, OR the canonical crypto payment method for it
-			// (pay_<ticker>, e.g. an order that PAYS in USDT), OR a barter order
-			// that ACCEPTS it (accepted_assets).  the maintainer: selecting "Tether" must
-			// also find a "pays with Tether" order.  pay_<ticker> keys are
-			// canonical (see apps/web/src/lib/payments/registry.ts) so this is an
-			// exact structured match, not a fuzzy string one.  BARTER has no
-			// pay_ key and never appears in accepted_assets, so it degrades to
-			// the plain o.asset match.  accepted_assets is NULL-safe: X = ANY(NULL)
-			// is NULL, i.e. no match.
-			const assetParam = p(q.asset);
-			const payKey = p(`pay_${q.asset.toLowerCase()}`);
-			where.push(
-				`(o.asset = ${assetParam} ` +
-					`OR EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ${payKey}) ` +
-					`OR ${assetParam} = ANY(o.accepted_assets))`
-			);
-		}
-		// Crypto-facing side filter — BARTER's o.side is the goods direction and
-		// flips (see cryptoFacingSideWhere). t.txt v1.8.16 #3.
-		if (q.side) where.push(cryptoFacingSideWhere(q.side, p));
-		if (q.fiat_currency) {
-			// One or more ISO codes — match orders in ANY of them.
-			const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
-			where.push(`o.fiat_currency = ANY(${p(fiats)}::text[])`);
-		}
-		if (q.location_region) {
-			// U2.1 — NFC-normalize filter input so it byte-matches
-			// the NFC-stored values from order/orderReplace handlers
-			// (post-§F.21 O3.4).  Without this, a user submitting
-			// decomposed-form input doesn't match their own
-			// NFC-stored orders.
-			const normalizedRegion = q.location_region.normalize('NFC');
-			// v1.8.15 — case-insensitive SUBSTRING (contains) match, LIKE
-			// metacharacters escaped so "100%" stays literal.  Was a prefix
-			// match (region%), which couldn't find "zrh" inside
-			// "a city a city zrh México Mexico" (that string starts "Zur").
-			where.push(
-				`o.location_region ILIKE ${p('%' + escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`
-			);
-		}
-		if (q.payment_methods) {
-			// Split the comma-separated token list, trim, validate each
-			// token (avoid arbitrary string injection into an array
-			// literal — pg binds as text[] so a malicious payload would
-			// be text, not SQL, but we still guard on length).
-			//
-			// Matching is case-INSENSITIVE: a user who posted
-			// "PayPal" should match a filter for "paypal" or "PAYPAL".
-			// We lowercase the query tokens here and use a correlated
-			// EXISTS over unnest(payment_methods) with lower() on
-			// each row value. This is slower than the former `&&`
-			// array-overlap operator (GIN-indexable), but correct
-			// for the UX — and orderbook scale (live orders in the
-			// thousands) makes the per-row lower() cost negligible.
-			//
-			// U2.1 — also NFC-normalize for the same reason as
-			// location_region above.
-			const methods = q.payment_methods
-				.split(',')
-				.map((s) => s.trim())
-				.filter((s) => s.length > 0 && s.length <= 32)
-				.map((s) => s.normalize('NFC').toLowerCase());
-			if (methods.length === 0) {
-				return c.json(errorBody('bad_request', 'payment_methods: no valid tokens'), 400);
-			}
-			where.push(
-				`EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ANY(${p(methods)}::text[]))`
-			);
-		}
-		if (q.langs) {
-			// v1.15.0 — language filter. Untagged orders (lang IS NULL) are ALWAYS
-			// shown: the filter only ever hides orders that DECLARED a DIFFERENT
-			// language, so it can never blank the pre-feature orderbook.
-			const langs = q.langs
-				.split(',')
-				.map((s) => s.trim())
-				.filter((s) => isOrderLang(s));
-			if (langs.length === 0) {
-				return c.json(errorBody('bad_request', 'langs: no valid language codes'), 400);
-			}
-			where.push(`(o.lang IS NULL OR o.lang = ANY(${p(langs)}::text[]))`);
-		}
-
-		// Minimum-trades filter. Requires the feedback aggregate
-		// subquery (joined below). We reference f.c, treating NULL
-		// (no feedback rows at all) as zero.
-		if (typeof q.min_trades === 'number' && q.min_trades > 0) {
-			// v1.5.5 — filters REAL completed trades. This read `f.c` (the
-			// FEEDBACK count) while calling itself min_trades, so the orderbook
-			// could show "3 trades · ★…" from the new count and still filter
-			// that trader out at min_trades=3 because they had 2 reviews. Two
-			// different numbers under one name.
-			where.push(`COALESCE(tc.c, 0) >= ${p(q.min_trades)}`);
-		}
 
 		// Sort mode. Default "recent" preserves pre-phase-5d
 		// ordering; "rating"/"trades" surface top traders without
@@ -448,7 +308,9 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 				return c.json(errorBody('bad_request', 'cursor sort mismatch — reset pagination'), 400);
 			}
 
-			const uParam = p(new Date(c2.u));
+			// Microsecond-exact (cursors from before carry milliseconds and
+			// still work, as they always did).
+			const uParam = `${p(c2.u)}::timestamptz`;
 			const aParam = p(c2.a);
 			const pParam = p(c2.p);
 
@@ -508,20 +370,10 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 		// updated_at DESC, account ASC, permlink ASC — this stable
 		// ordering is what makes the cursor-seek logic deterministic
 		// when sort values match across rows.
-		let orderBy: string;
-		if (sort === 'rating') {
-			orderBy =
-				'f.r DESC NULLS LAST, COALESCE(f.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
-		} else if (sort === 'trades') {
-			// v1.5.5 — sorts REAL trades. This MUST stay in lockstep with the
-			// sort='trades' seek predicate above: the cursor's `c` is compared
-			// against the same expression the ORDER BY uses, so if one reads
-			// tc.c and the other f.c the seek walks a different ordering than
-			// the sort produces and pagination silently skips or repeats rows.
-			orderBy = 'COALESCE(tc.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
-		} else {
-			orderBy = 'o.updated_at DESC, o.account ASC, o.permlink ASC';
-		}
+		// v1.5.5 — sort=trades sorts REAL trades; the seek predicates above
+		// compare the same expressions orderbookOrderBy uses, or pagination
+		// would skip or repeat rows.
+		const orderBy = orderbookOrderBy(sort);
 
 		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 			        o.amount_min::text, o.amount_max::text, o.price_model,
@@ -543,13 +395,14 @@ export function orderbookRoute(db: Database, poller: Poller, operatorAccount: st
 			        COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 			        a.first_trade_complete_at,
 			        a.posting_pubkey,
-			        -- v1.8.13 (the maintainer): inline so the card is correct on FIRST paint.
+			        -- v1.8.13: inline so the card is correct on FIRST paint.
 			        -- Without these the browser made a second round-trip and the
 			        -- card visibly swapped @account+identicon for the real
 			        -- identity seconds later, which reads as a scam.
 			        pr.display_name,
 			        pr.json_metadata AS profile_json_metadata,
-			        o.created_at, o.updated_at, o.expires_at
+			        o.created_at, o.updated_at, o.expires_at,
+			        to_char(o.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_cursor
 			 FROM orders o
 			 ${feedbackAggregateJoin('o')}
 ${tradeCountJoin('o')}
@@ -572,7 +425,7 @@ ${tradeCountJoin('o')}
 			rows.pop(); // trim the lookahead row
 			const last = rows[rows.length - 1]!;
 			const cursorPayload: Cursor = {
-				u: last.updated_at.toISOString(),
+				u: last.updated_at_cursor,
 				a: last.account,
 				p: last.permlink,
 				s: sort,
@@ -588,7 +441,7 @@ ${tradeCountJoin('o')}
 			nextCursor = encodeCursor(cursorPayload);
 		}
 
-		// cp512 [O8] — the live orderbook must never be cached. The default
+		// the live orderbook must never be cached. The default
 		// security-middleware header is `public, max-age=3`, which let a
 		// browser (and any shared/edge cache) serve a stale, order-less list
 		// for a few seconds — long enough that a just-posted, just-paid order

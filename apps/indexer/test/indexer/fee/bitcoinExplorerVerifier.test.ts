@@ -44,11 +44,9 @@ function claim(overrides: Partial<FeeClaim> = {}): FeeClaim {
 
 /** Shape a mock fetch that returns a canned JSON response. */
 function mockFetchJson(body: unknown, status = 200): typeof fetch {
-	return vi.fn(async () => ({
-		ok: status >= 200 && status < 300,
-		status,
-		json: async () => body
-	})) as unknown as typeof fetch;
+	return vi.fn(
+		async () => new Response(JSON.stringify(body), { status: status })
+	) as unknown as typeof fetch;
 }
 
 /** Mock fetch that returns different responses per URL substring. */
@@ -61,11 +59,7 @@ function mockFetchByUrl(
 			if (url.includes(match)) {
 				if (cfg.throws) throw cfg.throws;
 				const status = cfg.status ?? 200;
-				return {
-					ok: status >= 200 && status < 300,
-					status,
-					json: async () => cfg.body
-				};
+				return new Response(JSON.stringify(cfg.body), { status: status });
 			}
 		}
 		throw new Error(`unmocked URL: ${url}`);
@@ -201,7 +195,7 @@ describe('BitcoinExplorerFeeVerifier — rejection paths', () => {
 
 describe('BitcoinExplorerFeeVerifier — explorer disagreement', () => {
 	it('majority agrees, single dissenter is outvoted → verified', async () => {
-		// cp166 — under the old "any disagreement = reject" model,
+		// under the old "any disagreement = reject" model,
 		// a single misbehaving explorer could DoS a legitimate trade.
 		// Under the new quorum-with-early-return model, the dissenter
 		// is outvoted by the agreeing majority.  Strict improvement
@@ -291,7 +285,7 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 		const result = await verifier.verify(claim());
 		expect(result.kind).toBe('pending_external');
 		if (result.kind === 'pending_external') {
-			// cp166 — reason wording changed to surface the quorum-
+			// reason wording changed to surface the quorum-
 			// gate language uniformly.  When everyone transport-fails,
 			// no equivalence bucket forms, so the all_responses_in
 			// branch reports "quorum not met" with 0 usable responses.
@@ -341,7 +335,7 @@ describe('BitcoinExplorerFeeVerifier — pending_external paths', () => {
 		}
 	});
 
-	// (v1.18.0 deep-deep, H1) A quorum of explorers answering 404 is a
+	// A quorum of explorers answering 404 is a
 	// definitive "this tx does not exist": the fee is MISSING. This used to
 	// assert pending_external — the state the attestation path could promote,
 	// which is how a made-up txid became a free "verified" listing.
@@ -433,7 +427,7 @@ describe('BitcoinExplorerFeeVerifier — quorum gate (Part 109)', () => {
 		expect(result.kind).toBe('pending_external');
 		if (result.kind === 'pending_external') {
 			expect(result.reason).toMatch(/quorum not met/);
-			// cp166 — new reason wording references the agreeing-bucket
+			// new reason wording references the agreeing-bucket
 			// size in plain language ("best group had < N agreeing")
 			// rather than the old "N/M" fraction.
 			expect(result.reason).toMatch(/< 2 agreeing/);
@@ -470,7 +464,7 @@ describe('BitcoinExplorerFeeVerifier — quorum gate (Part 109)', () => {
 	});
 
 	it('quorum=1 (default back-compat) with 2 URLs, only 1 responds → verified', async () => {
-		// Confirms the pre-Part-109 behavior is preserved when an
+		// Confirms the older behavior is preserved when an
 		// operator leaves the env at its default of 1.
 		const okBody = {
 			txid: VALID_TXID,
@@ -491,9 +485,9 @@ describe('BitcoinExplorerFeeVerifier — quorum gate (Part 109)', () => {
 });
 
 /**
- * cp78-D20: tip-height depth-check coverage.
+ * tip-height depth-check coverage.
  *
- * cp77 audit (Lesson #5) flagged that no test exercises the
+ * (Lesson #5) flagged that no test exercises the
  * `minConfirmations > 1` path in production code at
  * `apps/indexer/src/indexer/fee/bitcoinExplorerVerifier.ts:266+`,
  * which calls `fetchTipHeight()` which in turn calls
@@ -504,7 +498,7 @@ describe('BitcoinExplorerFeeVerifier — quorum gate (Part 109)', () => {
  *
  * This block exercises the path explicitly and proves the mock
  * contract production needs — closing the coverage gap surfaced
- * in cp77 audit.
+ * audit.
  */
 describe('BitcoinExplorerFeeVerifier — minConfirmations > 1 depth check', () => {
 	/** Mock that responds to /tx with JSON and /blocks/tip/height with
@@ -519,18 +513,10 @@ describe('BitcoinExplorerFeeVerifier — minConfirmations > 1 depth check', () =
 		return vi.fn(async (input: Parameters<typeof fetch>[0]) => {
 			const url = typeof input === 'string' ? input : input.toString();
 			if (url.includes('/blocks/tip/height')) {
-				return {
-					ok: tipStatus >= 200 && tipStatus < 300,
-					status: tipStatus,
-					text: async () => tipHeightText
-				};
+				return new Response(tipHeightText, { status: tipStatus });
 			}
 			// Default to /tx response shape.
-			return {
-				ok: true,
-				status: 200,
-				json: async () => txBody
-			};
+			return new Response(JSON.stringify(txBody), { status: 200 });
 		}) as unknown as typeof fetch;
 	}
 

@@ -5,7 +5,7 @@
  * (or bundled-default) public block explorers.  Native Blurt
  * transactions get linked to our own /explorer route.
  *
- * Part 109 (priority-1 follow-up): the BTC and XMR templates are
+ * (priority-1 follow-up): the BTC and XMR templates are
  * operator-configurable via `MORPHIT_FRONTEND_{BTC,XMR}_CHAT_LINK_URL`,
  * which flows through `/v1/instance.chat_link_urls` into the
  * `instance` store and is consulted here on every call.  Privacy-
@@ -124,7 +124,7 @@ export type ExternalAsset = 'BTC' | 'XMR' | 'BCH' | 'LTC' | 'DASH' | 'DOGE' | 'Z
  *  `chat_link_urls.<lowerTicker>` field to the instance store
  *  shape — no hardcoded `if (asset === '<TICKER>')` branches.
  *
- *  Per memory #23: trade-only assets (like a future USDT)
+ *  Per the trade-only rule: trade-only assets (like a future USDT)
  *  cannot pay listing fees, but their txids may still appear
  *  in chat (buyer-to-seller payment evidence), and the chat
  *  ChatMessage component auto-links txids it recognizes.  The
@@ -133,7 +133,7 @@ interface ExplorerEntry {
 	readonly txidRe: RegExp;
 	readonly instanceTplKey: 'btc' | 'xmr' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp';
 	readonly bundledDefault: string;
-	/** cp167 — full bundled list, best→worst.  bundledDefault is
+	/** full bundled list, best→worst.  bundledDefault is
 	 *  always bundledList[0]; the rest are alternatives the user
 	 *  can pick from a dropdown.  Operators who override via env
 	 *  prepend their URL to this list at lookup time. */
@@ -228,7 +228,7 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 	if (!entry.txidRe.test(txid)) return null;
 	const lower = txid.toLowerCase();
 	const operatorTpl = getInstanceSnapshot().chat_link_urls[entry.instanceTplKey];
-	// cp30-DD-DD SEC-1 (defense-in-depth) — re-validate the
+	// (defense-in-depth) — re-validate the
 	// operator-supplied template before using it.  The indexer's
 	// zod schema is supposed to catch malformed templates at
 	// startup, but a hostile or compromised indexer could serve
@@ -243,7 +243,7 @@ export function externalExplorerUrl(asset: ExternalAsset, txid: string): string 
 	return substituteTxidIntoTemplate(tpl, lower);
 }
 
-/** cp167 — Returns the full ordered list of explorer URLs for a
+/** Returns the full ordered list of explorer URLs for a
  *  given asset/txid, best→worst.  First element is what
  *  `externalExplorerUrl` returns (operator override if valid,
  *  bundled primary otherwise); the rest are bundled alternatives.
@@ -311,7 +311,7 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 	const usdtOverrides = getInstanceSnapshot().chat_link_urls.usdt;
 	const override = usdtOverrides ? usdtOverrides[network] : null;
 
-	// cp30-DD-DD SEC-1 (defense-in-depth) — re-validate the
+	// (defense-in-depth) — re-validate the
 	// operator-supplied template before using it.  Without this,
 	// a hostile/compromised indexer could serve a `javascript:`
 	// URL that becomes an `<a href={...}>` and executes on click.
@@ -320,7 +320,7 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 	if (override && isValidChatLinkTemplate(override)) {
 		// Operator configured a per-network template — substitute
 		// the txid into it.  Normalize the txid the same way the
-		// bundled-default path does (cp30-DD-DD SEC-4):
+		// bundled-default path does:
 		//   - SPL: base58 case-sensitive, no normalization
 		//   - EVM family (erc20, bep20): lowercase + 0x prefix
 		//   - TRC-20: lowercase, no prefix
@@ -343,7 +343,7 @@ export function usdtExplorerUrl(network: UsdtNetwork, txid: string): string | nu
 /** Builds the per-network USDC explorer URL.  Same shape as
  *  `usdtExplorerUrl` — operator override consulted first, bundled
  *  default from `lib/assets/networks.ts` if absent.  USDC-specific
- *  path because USDC is multi-network (Part 122 cp30) — the
+ *  path because USDC is multi-network — the
  *  generic `externalExplorerUrl(asset, txid)` is for SINGLE-
  *  network external assets only. */
 export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | null {
@@ -353,10 +353,10 @@ export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | nu
 	const usdcOverrides = getInstanceSnapshot().chat_link_urls.usdc;
 	const override = usdcOverrides ? usdcOverrides[network] : null;
 
-	// cp30-DD-DD SEC-1 (defense-in-depth) — same XSS-protection
+	// (defense-in-depth) — same XSS-protection
 	// posture as usdtExplorerUrl above.
 	if (override && isValidChatLinkTemplate(override)) {
-		// cp30-DD-DD SEC-4 — EVM-family normalization (USDC has no
+		// EVM-family normalization (USDC has no
 		// TRC-20 / BEP-20 branches; only SPL is non-EVM here).
 		let normalized: string;
 		if (network === 'spl') {
@@ -375,7 +375,7 @@ export function usdcExplorerUrl(network: UsdcNetwork, txid: string): string | nu
 /** Builds the per-network DAI explorer URL.  Same shape as
  *  `usdcExplorerUrl` — operator override consulted first, bundled
  *  default from `lib/assets/networks.ts` if absent.  DAI-specific
- *  path because DAI is multi-network (Part 122 cp31) — 4 EVM
+ *  path because DAI is multi-network — 4 EVM
  *  networks (ERC-20, Polygon, Base, Arbitrum), no SPL.  Simpler
  *  normalization than USDC because there's no case-sensitive SPL
  *  branch to preserve. */
@@ -386,12 +386,12 @@ export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null
 	const daiOverrides = getInstanceSnapshot().chat_link_urls.dai;
 	const override = daiOverrides ? daiOverrides[network] : null;
 
-	// cp30-DD-DD SEC-1 (defense-in-depth) — same XSS-protection
+	// (defense-in-depth) — same XSS-protection
 	// posture as usdtExplorerUrl + usdcExplorerUrl above.  Hostile
 	// indexer serving `javascript:...` template would be rejected
 	// here and the bundled default would be used instead.
 	if (override && isValidChatLinkTemplate(override)) {
-		// cp30-DD-DD SEC-4 — EVM-family normalization (all 4 DAI
+		// EVM-family normalization (all 4 DAI
 		// networks are EVM; no SPL/TRC-20 branch).  Etherscan,
 		// Polygonscan, Basescan, Arbiscan all return 404 to
 		// bare-hex; emit canonical 0x-prefixed lowercase.
@@ -404,7 +404,7 @@ export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null
 }
 
 // ──────────────────────────────────────────────────────────────
-// cp174 — plural explorer builders for the multi-network tokens.
+// plural explorer builders for the multi-network tokens.
 //
 // The singular usdt/usdc/daiExplorerUrl() above return ONE URL
 // (operator override, else bundled default).  These plural
@@ -413,13 +413,13 @@ export function daiExplorerUrl(network: DaiNetwork, txid: string): string | null
 // independent-infrastructure alternatives from
 // TOKEN_NETWORK_EXPLORER_URLS — so the funds-sent UI can offer the
 // same "+N more explorers" dropdown the native-chain assets get via
-// externalExplorerUrls().  This closes the cp166 deferral for the
-// three tokens that the cp167 widening didn't cover.
+// externalExplorerUrls().  This closes the deferral for the
+// three tokens that the widening didn't cover.
 // ──────────────────────────────────────────────────────────────
 
 /** Per-network txid normalization, shared by the plural builders.
- *  Identical rules to the singular builders' bundled-default path
- *  (cp30-DD-DD SEC-4): SPL is base58 case-sensitive (no change);
+ *  Identical rules to the singular builders' bundled-default path:
+ * SPL is base58 case-sensitive (no change);
  *  EVM-family (erc20, bep20, base, polygon, arbitrum) lowercase +
  *  require leading 0x; TRC-20 lowercase, no prefix. */
 function normalizeTokenTxid(network: string, txid: string): string {
@@ -449,7 +449,7 @@ function tokenExplorerUrls(
 		seen.add(url);
 		result.push(url);
 	};
-	// cp30-DD-DD SEC-1 (defense-in-depth) — re-validate the operator
+	// (defense-in-depth) — re-validate the operator
 	// template before use, exactly as the singular builders do.  A
 	// hostile/compromised indexer serving a `javascript:` template is
 	// rejected here and we fall through to the bundled list.

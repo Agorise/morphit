@@ -1,5 +1,5 @@
 /**
- * order-detail-expired-ui-smoke (cp438)
+ * order-detail-expired-ui-smoke
  *
  * The order-detail page (`[permlink]`) trusted the order's STORED status,
  * which the indexer keeps at 'live' until a sweep (expiry is enforced at query
@@ -92,14 +92,14 @@ check(
 	'Re-list uses the shared prefill builder + key (no inline duplication)',
 	/import\s*\{[^}]*buildRelistPrefill[^}]*RELIST_PREFILL_KEY[^}]*\}\s*from\s*'\$lib\/orders\/relist'/.test(
 		detail
-	) && /safeSession\.set\(RELIST_PREFILL_KEY, JSON\.stringify\(buildRelistPrefill\(order\)\)\)/.test(detail)
+	) && /safeSession\.set\(RELIST_PREFILL_KEY, JSON\.stringify\(buildRelistPrefill\(order, currentLang\)\)\)/.test(detail)
 );
 
 // ─── /my/orders re-lists via the SAME shared builder (no drift) ─────────────
 check(
 	'/my/orders re-lists via the shared buildRelistPrefill (extracted, not inline)',
 	/import\s*\{[^}]*buildRelistPrefill[^}]*\}\s*from\s*'\$lib\/orders\/relist'/.test(myOrders) &&
-		/buildRelistPrefill\(o\)/.test(myOrders) &&
+		/buildRelistPrefill\(o, currentLang\)/.test(myOrders) &&
 		// the old ~50-line inline price_model mapping is gone from /my/orders
 		!/if \(obj\.kind === 'spread' && typeof obj\.percent === 'number'\)/.test(myOrders)
 );
@@ -107,7 +107,7 @@ check(
 // ─── the shared module is well-formed ───────────────────────────────────────
 check(
 	'relist module exports buildRelistPrefill + RELIST_PREFILL_KEY',
-	/export function buildRelistPrefill\(o: OrderRecord\): RelistPrefill/.test(relistMod) &&
+	/export function buildRelistPrefill\(o: OrderRecord, locale: string\): RelistPrefill/.test(relistMod) &&
 		/export const RELIST_PREFILL_KEY = 'morphit\.post\.prefill'/.test(relistMod)
 );
 check(

@@ -1,11 +1,12 @@
 /**
  * Test-only Postgres client mock.
  *
- * Handlers only call `.query()` on the PoolClient they receive,
- * and they don't care about transaction state (the dispatcher
- * owns SAVEPOINT management). So a minimal mock that records
- * queries and returns canned results is sufficient for unit
- * tests.
+ * Handlers only call `.query()` on the PoolClient they receive. Some
+ * wrap a statement whose failure they tolerate in its own savepoint
+ * (SAVEPOINT / RELEASE / ROLLBACK TO — see indexer/savepoint.ts); that
+ * is transaction plumbing, not the handler's SQL, so a savepoint
+ * statement the next expectation does not ask for is acknowledged and
+ * not recorded. A test that cares lists it as an expectation.
  */
 
 import type pg from 'pg';
@@ -31,6 +32,8 @@ export interface MockClient {
 	readonly queries: readonly RecordedQuery[];
 }
 
+const SAVEPOINT_STATEMENT = /^\s*(?:SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)\b/i;
+
 export function makeMockClient(expectations: readonly QueryExpectation[] = []): MockClient {
 	const queries: RecordedQuery[] = [];
 	let expectationIdx = 0;
@@ -40,6 +43,11 @@ export function makeMockClient(expectations: readonly QueryExpectation[] = []): 
 			text: string,
 			params?: readonly unknown[]
 		): Promise<{ rows: readonly unknown[]; rowCount: number }> => {
+			const exp0 = expectations[expectationIdx];
+			const wanted =
+				exp0 !== undefined &&
+				(typeof exp0.match === 'string' ? text.includes(exp0.match) : exp0.match.test(text));
+			if (!wanted && SAVEPOINT_STATEMENT.test(text)) return { rows: [], rowCount: 0 };
 			queries.push({ text, params: params ?? [] });
 
 			// Find the next matching expectation. Expectations are

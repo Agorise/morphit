@@ -19,6 +19,13 @@
 	 *     /post — we never persist the password, and the
 	 *     plaintext active key only exists inside the
 	 *     useActiveKey callback.
+	 *   - The bid's BLURT moves with the op whatever the indexer
+	 *     decides, and a refused bid's BLURT is not returned. So
+	 *     before signing the form checks the order is live and
+	 *     fee-verified and how the bid ranks against the visible
+	 *     slots (bidOutlook), and after broadcasting it waits for
+	 *     the indexer's record of the bid (bidVerdict) before the
+	 *     parent says "featured".
 	 */
 
 	import { get } from 'svelte/store';
@@ -34,6 +41,23 @@
 	import { resolveFeeRecipient } from '$lib/orders/fee';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import FeaturedBidHistory from '$components/FeaturedBidHistory.svelte';
+	import StatusLine from '$components/StatusLine.svelte';
+	import { findOrder, getFeaturedBidHistory, getFeaturedOrderbook } from '$lib/indexer/client';
+	import {
+		bidOutlook,
+		bidVerdict,
+		type BidOutlook,
+		type BidVerdict
+	} from '$lib/orders/featureBidCheck';
+	/** The message for each reason a bid is not sent (literal keys, so the
+	 *  dead-key gate sees them). */
+	const BLOCKED_KEY = {
+		not_found: 'feature_bid.blocked_not_found',
+		not_live: 'feature_bid.blocked_not_live',
+		fee_not_verified: 'feature_bid.blocked_fee_not_verified'
+	} as const;
+	import { formatDayMonthTime } from '$i18n/formatters';
+	import type { FeaturedBidHistoryEntry } from '@morphit/indexer-client';
 	import { onMount } from 'svelte';
 	import { symbolAmountToUsd } from '$lib/prices';
 	import { fetchFxRates, usdToFiat } from '$lib/orders/fx';
@@ -54,16 +78,17 @@
 		 *  default. Surfacing this as a prop lets the parent
 		 *  override if it has fresher config data. */
 		feeBlurtPerHour?: number;
-		/** Called on successful broadcast so the parent can refetch
-		 *  or close the disclosure. */
-		onSuccess?: (result: { trx_id: string; blurtPaid: number }) => void;
+		/** Called once the bid is broadcast AND the indexer's record of it was
+		 *  awaited: `verdict` says whether it shows now, starts later, waits
+		 *  for a free slot, or is not recorded yet ('pending'). */
+		onSuccess?: (result: { trx_id: string; blurtPaid: number; verdict: BidVerdict }) => void;
 		/** Called when the user dismisses the form without bidding. */
 		onCancel?: () => void;
 	}
 
 	let { orderPermlink, feeBlurtPerHour = 50, onSuccess, onCancel }: Props = $props();
 
-	/** v1.8.15 (t.txt #3) — posting-only sessions hold no active key, so the
+	/** v1.8.15 — posting-only sessions hold no active key, so the
 	 *  Morphit-password path below dead-ends. When false we render the SAME
 	 *  <UnlockActiveKeyModal> the "Pay now" flow uses, so the user pastes their
 	 *  Active key (WIF) — and their Morphit password if they keep it — right here. */
@@ -77,7 +102,7 @@
 	let password = $state('');
 	let submitting = $state(false);
 	/** Broadcast/signing error (locked, identity mismatch, generic failure).
-	 *  cp420 — shown in red directly UNDER the password field (was a warn
+	 *  shown in red directly UNDER the password field (was a warn
 	 *  line at the card bottom, which read as disconnected from the action
 	 *  that failed). */
 	let errorMessage = $state('');
@@ -100,7 +125,7 @@
 	/** USD value of 1 BLURT, fetched once; drives the fiat-equivalent
 	 *  hint next to the BLURT total. null until loaded / on failure. */
 	let perBlurtUsd = $state<number | null>(null);
-	/** FX table for converting the USD fee into the user's default fiat (t.txt #3). */
+	/** FX table for converting the USD fee into the user's default fiat. */
 	let fxTable = $state<FxResponse | null>(null);
 
 	// Current account for the FeaturedBidHistory upsell.  Null
@@ -114,7 +139,7 @@
 	// Ceil at 3 decimals to match on-chain formatting and avoid
 	// an under-by-epsilon rendered vs. transferred discrepancy.
 	const totalBlurtDisplay = $derived((Math.ceil(totalBlurt * 1000) / 1000).toFixed(3));
-	// Fiat-equivalent hint. cp453 (t.txt #3) — prefer the fiat the user set as
+	// Fiat-equivalent hint. prefer the fiat the user set as
 	// their default in Settings (`userPreferences.fiat`) when we also have the FX
 	// table; otherwise fall back to the always-available USD value. Reactive to
 	// the hours picker.
@@ -127,9 +152,59 @@
 		const amount = usdToFiat(fxTable, totalUsd, fiat);
 		return amount === null ? null : `${formatFiat(amount, fiat)} ${fiat}`;
 	});
+	/** What this bid will do (checked when the form opens): null while
+	 *  loading. A blocked or too-small bid is not offered for signing. */
+	let outlook = $state<BidOutlook | null>(null);
+	/** The account's bid history before signing, so the bid this form sends
+	 *  can be told apart from earlier ones on the same order. */
+	let historyBefore: readonly FeaturedBidHistoryEntry[] = [];
+	/** True while waiting for the indexer to record the broadcast bid. */
+	let confirming = $state(false);
+	const canBid = $derived(
+		outlook !== null && (outlook.kind === 'visible' || outlook.kind === 'waits')
+	);
+
+	async function checkBid(): Promise<void> {
+		if (!signingAccount) {
+			outlook = { kind: 'blocked', reason: 'not_found' };
+			return;
+		}
+		const [order, featured, history] = await Promise.all([
+			findOrder(signingAccount, orderPermlink),
+			getFeaturedOrderbook(),
+			getFeaturedBidHistory(signingAccount)
+		]);
+		historyBefore = history.ok ? history.data.bids : [];
+		if (order === undefined) {
+			// The order could not be read: do not guess either way.
+			outlook = null;
+			errorMessage = $_('feature_bid.error_check_failed');
+			return;
+		}
+		outlook = bidOutlook(order, featured.ok ? featured.data : null, feeBlurtPerHour, Date.now());
+	}
+
+	/** After the broadcast: poll the account's bid history until the indexer
+	 *  records this bid (it applies a block 45-63 s after it is produced), for
+	 *  up to two minutes. */
+	async function awaitVerdict(): Promise<BidVerdict> {
+		if (!signingAccount) return { kind: 'pending' };
+		const deadline = Date.now() + 120_000;
+		while (Date.now() < deadline) {
+			await new Promise((r) => setTimeout(r, 6_000));
+			const h = await getFeaturedBidHistory(signingAccount);
+			if (!h.ok) continue;
+			const v = bidVerdict(historyBefore, h.data.bids, orderPermlink, Date.now());
+			if (v.kind !== 'pending') return v;
+		}
+		return { kind: 'pending' };
+	}
+
 	onMount(async () => {
+		void checkBid();
 		try {
-			perBlurtUsd = (await symbolAmountToUsd(1, 'BLURT')).usd;
+			// The indexer's live BLURT price, or no fiat hint at all.
+			perBlurtUsd = (await symbolAmountToUsd(1, 'BLURT'))?.usd ?? null;
 		} catch {
 			perBlurtUsd = null;
 		}
@@ -162,6 +237,7 @@
 			errorMessage = $_('feature_bid.error_locked');
 			return;
 		}
+		if (!canBid) return;
 		try {
 			const result = await broadcastFeatureBid(
 				state.live,
@@ -173,7 +249,10 @@
 				},
 				resolveFeeRecipient(getInstanceSnapshot().fee_recipient)
 			);
-			onSuccess?.({ trx_id: result.trx_id, blurtPaid: result.blurtPaid });
+			confirming = true;
+			const verdict = await awaitVerdict();
+			confirming = false;
+			onSuccess?.({ trx_id: result.trx_id, blurtPaid: result.blurtPaid, verdict });
 		} catch (err) {
 			const kind = (err as Error & { kind?: string }).kind;
 			if (kind === 'bad_password') {
@@ -187,7 +266,7 @@
 				passwordError = $_('feature_bid.error_password_required');
 				flashPasswordBorder();
 			} else if (err instanceof ChainRejectedError) {
-				// cp425 — the network rejected the tx. Surface the REAL reason
+				// the network rejected the tx. Surface the REAL reason
 				// (not enough liquid BLURT for the network fee, missing
 				// authority, etc. — NOT mana/RC, which is the Steem/Hive model)
 				// instead of a generic message that hides what went wrong.
@@ -207,7 +286,7 @@
 	// JIT-unlocks the active-key envelope; the plaintext key exists only inside
 	// the useActiveKey callback. (Phase F.5 audit fix F-18.)
 	async function submit(): Promise<void> {
-		if (submitting) return;
+		if (submitting || !canBid) return;
 		if (get(identity).state !== 'unlocked') {
 			errorMessage = $_('feature_bid.error_locked');
 			return;
@@ -240,13 +319,13 @@
 		submitting = false;
 	}
 
-	// v1.8.15 (t.txt #3) — POSTING-ONLY path. UnlockActiveKeyModal has verified
+	// v1.8.15 — POSTING-ONLY path. UnlockActiveKeyModal has verified
 	// the pasted Active-key WIF against this account's on-chain authorities and
 	// hands us the raw scalar. We sign directly (no envelope to unlock) and wipe
 	// it the moment signing is done — the same ephemeral pattern PayBlurtModal
 	// uses. This is what lets a posting-only user place a feature bid at all.
 	async function bidWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
-		if (submitting) {
+		if (submitting || !canBid) {
 			sodium.memzero(activeScalar);
 			return;
 		}
@@ -279,7 +358,7 @@
 			<FeaturedBidHistory account={historyAccount} />
 		{/if}
 	</div>
-	<!-- the maintainer — the explainer names the duration the user actually picked (it
+	<!-- the explainer names the duration the user actually picked (it
 	     updates as they tap 6h / 24h / 72h) and takes the slot count from the
 	     shared constant rather than hardcoding it in prose: this string used to
 	     claim "Max 5 concurrent slots" while the indexer and the FAQ both said
@@ -334,7 +413,39 @@
 		</p>
 	</div>
 
-	{#if hasActiveKey}
+	<!-- What this bid will do, checked before anything is signed. -->
+	{#if outlook === null && !errorMessage}
+		<div class="mb-3"><StatusLine kind="loading">{$_('feature_bid.checking')}</StatusLine></div>
+	{:else if outlook?.kind === 'blocked'}
+		<p class="mb-3 text-sm font-medium text-red-700 dark:text-red-300" role="alert">
+			{$_(BLOCKED_KEY[outlook.reason])}
+		</p>
+	{:else if outlook?.kind === 'too_small'}
+		<p class="mb-3 text-sm font-medium text-red-700 dark:text-red-300" role="alert">
+			{$_('feature_bid.too_small', {
+				values: {
+					rate: outlook.lowestRate,
+					required: Math.ceil(outlook.required * 1000) / 1000,
+					per_hour: feeBlurtPerHour
+				}
+			})}
+		</p>
+	{:else if outlook?.kind === 'waits'}
+		<p
+			class="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+		>
+			{outlook.freesAt
+				? $_('feature_bid.waits_until', {
+						values: { slots: MAX_FEATURED_SLOTS, when: formatDayMonthTime(outlook.freesAt) }
+					})
+				: $_('feature_bid.waits', { values: { slots: MAX_FEATURED_SLOTS } })}
+		</p>
+	{/if}
+	{#if confirming}
+		<div class="mb-3"><StatusLine kind="loading">{$_('feature_bid.confirming')}</StatusLine></div>
+	{/if}
+
+	{#if hasActiveKey && canBid}
 		<!-- Password prompt (session already holds an active key). Same JIT
 		     pattern as /post: never persisted, cleared after submit, and the
 		     plaintext active key only exists inside the useActiveKey callback. -->
@@ -359,8 +470,8 @@
 				{passwordError}
 			</p>
 		{/if}
-	{:else}
-		<!-- v1.8.15 (t.txt #3) — POSTING-ONLY. No active-key envelope to unlock,
+	{:else if canBid}
+		<!-- v1.8.15 — POSTING-ONLY. No active-key envelope to unlock,
 		     so instead of a password field that cannot work we render the SAME
 		     unlock modal the "Pay now" flow uses (inline here): the user pastes
 		     their Active key (WIF), plus their Morphit password if they keep it.
@@ -381,16 +492,18 @@
 		</p>
 	{/if}
 
-	{#if hasActiveKey}
+	{#if hasActiveKey || !canBid}
 		<div class="flex flex-col gap-2">
-			<BusyButton
-				variant="primary"
-				busy={submitting}
-				busyLabel={$_('common.broadcasting')}
-				onclick={submit}
-			>
-				{$_('feature_bid.submit_button')}
-			</BusyButton>
+			{#if hasActiveKey && canBid}
+				<BusyButton
+					variant="primary"
+					busy={submitting}
+					busyLabel={$_('common.broadcasting')}
+					onclick={submit}
+				>
+					{$_('feature_bid.submit_button')}
+				</BusyButton>
+			{/if}
 			{#if onCancel}
 				<BusyButton variant="ghost" onclick={() => onCancel?.()}>
 					{$_('feature_bid.cancel_button')}

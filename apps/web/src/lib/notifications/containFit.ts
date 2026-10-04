@@ -1,7 +1,7 @@
 /**
  * Morphit — fit a source image inside a square box WITHOUT distorting it.
  *
- * tt.txt #2: the favicon badge is painted by drawing the logo into a 32×32
+ * the favicon badge is painted by drawing the logo into a 32×32
  * canvas and stamping a dot on it. The draw was:
  *
  *     ctx.drawImage(img, 0, 0, FAVICON_SIZE, FAVICON_SIZE);
@@ -9,9 +9,8 @@
  * The Morphit mark is `viewBox="0 0 10.889 7.049"` — a WIDE logo. Forcing it
  * into a square stretches it vertically. The browser renders the plain SVG
  * correctly (it scales to fit, preserving aspect), so the logo looked right
- * until the moment a notification arrived — then it squashed. the maintainer: "our logo on
- * the browser tab should always look perfect and its dimensions should never
- * change."
+ * until the moment a notification arrived — then it squashed. Requirement: the logo on the
+ * browser tab always looks right and never changes its dimensions.
  *
  * `containFit` reproduces what the browser does for us: scale by the smaller of
  * the two ratios, centre the result, letterbox the rest.

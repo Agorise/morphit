@@ -101,7 +101,7 @@ export async function broadcastNewOrder(
 	input: OrderFormInput,
 	nth: number,
 	baseBlurt: number,
-	/** cp407 — the Blurt account this instance's operator collects BLURT fees
+	/** the Blurt account this instance's operator collects BLURT fees
 	 *  in (from `$instance.fee_recipient`). Defaults to the canonical treasury
 	 *  so callers that don't pass it stay correct on the canonical deployment. */
 	feeRecipient: string = FEE_RECIPIENT
@@ -110,7 +110,7 @@ export async function broadcastNewOrder(
 	if (!hint) {
 		throw new BroadcastError('no_account', 'You need a Blurt account before posting an order.');
 	}
-	// cp445 — the BLURT-fee path builds its own 2-op transaction (custom_json with
+	// the BLURT-fee path builds its own 2-op transaction (custom_json with
 	// `required_auths: [account]`, plus the fee transfers) and never passes through
 	// broadcastCustomJson's binding. It moves MONEY, so it gets the same rule: the
 	// account is resolved from the signing key, not from an origin-wide
@@ -199,7 +199,7 @@ export async function broadcastNewOrder(
 	const feeQuote = computeFee(nth, baseBlurt);
 	const memo = feeMemoFor(permlink);
 
-	// cp408 — split the fee at payment time: 90% to the instance's fee
+	// split the fee at payment time: 90% to the instance's fee
 	// recipient + 10% to the canonical treasury (or a single 100% transfer when
 	// the recipient IS canonical / fell back to it). `feeRecipient` is already
 	// resolved by the caller from /v1/instance.

@@ -47,6 +47,15 @@ describe.skipIf(!INTEGRATION_ENABLED)('push_pending stays bounded with push off'
 			   VALUES ($1, 'https://example.invalid/ep', 'p', 'a', 'standard', 'en')`,
 			[RECIPIENT]
 		);
+		// The recipient has written back to the sender, so every message
+		// notifies (the one-push-per-day cap for unanswered senders, is
+		// not what this suite is about).
+		await fx.db.query('DELETE FROM chat_messages');
+		await fx.db.query(
+			`INSERT INTO chat_messages (sender, recipient, ciphertext, header, created_at, source_trx_id)
+			   VALUES ($1, 'alice', 'AAAA', '{}'::jsonb, NOW() - INTERVAL '30 days', 'reply-0')`,
+			[RECIPIENT]
+		);
 	});
 
 	/** Queue a notification the way the indexer does, for an event `ageSec` old. */

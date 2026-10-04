@@ -2,10 +2,10 @@
 /**
  * apps/web/scripts/privacy-asset-sitemap-parity-smoke.ts
  *
- * Structural Defense (cp117 A7) — asset-registry × sitemap parity
+ * Structural Defense — asset-registry × sitemap parity
  * for the `/privacy/[asset]` dynamic route.
  *
- * cp117 flipped `privacy_asset` from `indexable: false` to `true`.  The
+ * A later change flipped `privacy_asset` from `indexable: false` to `true`.  The
  * sitemap builder expands the `[asset]` dynamic segment to one URL per
  * tradable ticker.  This smoke catches drift between the asset registry
  * and the rendered sitemap:
@@ -85,7 +85,7 @@ while ((m = locRe.exec(xml)) !== null) {
 }
 
 // P-2: every registered ticker present × 10 locales
-// cp425 — goods assets (BARTER) have no /privacy/<ticker> page (no on-chain
+// goods assets (BARTER) have no /privacy/<ticker> page (no on-chain
 // privacy guide; wares change hands off-platform), so they're exempt from the
 // required set and the exact count.
 const privacyTickers = (ASSET_TICKERS as readonly string[]).filter(

@@ -55,11 +55,7 @@ const OPTIONAL_SIDECAR_ROLES = [
 	'systemd_monitor',
 	'journald_monitor'
 ];
-const REQUIRED_COLLECTIONS = [
-	'community.general',
-	'community.postgresql',
-	'community.docker'
-];
+const REQUIRED_COLLECTIONS = ['community.general', 'community.postgresql', 'community.docker'];
 
 function readFile(path: string): string {
 	if (!existsSync(path)) {
@@ -117,9 +113,7 @@ for (const role of OPTIONAL_SIDECAR_ROLES) {
 	// the test is presence-of-the-flag, not the default value,
 	// since operators can change all.yml).
 	const presentInAll = new RegExp(`^${flag}:\\s*(true|false)`, 'm').test(allYaml);
-	const gatedInPlaybook = readFile(PLAYBOOK).includes(
-		`when: ${flag} | default(false)`
-	);
+	const gatedInPlaybook = readFile(PLAYBOOK).includes(`when: ${flag} | default(false)`);
 	results.push({
 		name: `optional role "${role}" has enable_${role} in group_vars/all.yml`,
 		ok: presentInAll,
@@ -167,9 +161,10 @@ for (const role of OPTIONAL_SIDECAR_ROLES) {
 	results.push({
 		name: `role "${role}" handler names start with uppercase`,
 		ok: lowerCaseFinds.length === 0,
-		detail: lowerCaseFinds.length === 0
-			? undefined
-			: `lowercase handler name(s): ${lowerCaseFinds.join('; ')}`
+		detail:
+			lowerCaseFinds.length === 0
+				? undefined
+				: `lowercase handler name(s): ${lowerCaseFinds.join('; ')}`
 	});
 }
 
@@ -204,16 +199,13 @@ const orphans = onDiskRoles.filter((r) => !declaredSet.has(r));
 results.push({
 	name: 'no orphan role directories on disk',
 	ok: orphans.length === 0,
-	detail:
-		orphans.length === 0
-			? undefined
-			: `orphan role dirs: ${orphans.join(', ')}`
+	detail: orphans.length === 0 ? undefined : `orphan role dirs: ${orphans.join(', ')}`
 });
 
 // ─── Scenario 7: every system user's LITERAL primary group is created ──
 // A `ansible.builtin.user` task with `group: <literal>` fails at RUNTIME with
 // "Group <name> does not exist" unless a `ansible.builtin.group` task creates
-// it first.  cp634: morphit-mcp had the user but not the group — the sandbox
+// it first.  morphit-mcp had the user but not the group — the sandbox
 // can't catch this class of bug because it never creates real system accounts,
 // so this static pairing check stands in for it.
 const baseTasksSrc = readFileSync(join(ROLES_DIR, 'base', 'tasks', 'main.yml'), 'utf-8');
@@ -238,18 +230,22 @@ const uncreatedGroups = literalUserGroups.filter((g) => !createdGroups.has(g));
 results.push({
 	name: 'every system user\'s literal primary group is created by a group task (no runtime "Group X does not exist")',
 	ok: uncreatedGroups.length === 0,
-	detail: uncreatedGroups.length === 0 ? undefined : `user primary group(s) never created: ${uncreatedGroups.join(', ')}`
+	detail:
+		uncreatedGroups.length === 0
+			? undefined
+			: `user primary group(s) never created: ${uncreatedGroups.join(', ')}`
 });
 
 // ─── Scenario 8: no BARE connection-var interpolation in any role file ──
 // `{{ ansible_user }}` (and other connection vars) are UNDEFINED on a local
 // install and crash the render — even inside a `#`-commented line, because
-// Jinja still evaluates `{{ }}` regardless of config-comment syntax.  cp633
-// hit this in the connection-safety assert; cp635 hit it in the hardening sshd
+// Jinja still evaluates `{{ }}` regardless of config-comment syntax.
+// hit this in the connection-safety assert; hit it in the hardening sshd
 // template (a scan of only when:/assert: missed it).  Every interpolation of a
 // connection var in a role's tasks/templates/handlers/vars must be
 // `| default(...)`-guarded.
-const connVarRe = /\{\{[^}]*\b(ansible_user|ansible_host|ansible_port|ansible_ssh_host|ansible_ssh_user|ansible_ssh_port)\b[^}]*\}\}/g;
+const connVarRe =
+	/\{\{[^}]*\b(ansible_user|ansible_host|ansible_port|ansible_ssh_host|ansible_ssh_user|ansible_ssh_port)\b[^}]*\}\}/g;
 const allRoleFiles = readdirSync(ROLES_DIR, { recursive: true })
 	.filter((f): f is string => typeof f === 'string' && (f.endsWith('.yml') || f.endsWith('.j2')))
 	.map((f) => join(ROLES_DIR, f));
@@ -257,7 +253,8 @@ const bareConnVars: string[] = [];
 for (const f of allRoleFiles) {
 	const fsrc = readFileSync(f, 'utf-8');
 	for (const m of fsrc.matchAll(connVarRe)) {
-		if (!/\|\s*default/.test(m[0])) bareConnVars.push(`${f.replace(REPO_ROOT + '/', '')} → ${m[0]}`);
+		if (!/\|\s*default/.test(m[0]))
+			bareConnVars.push(`${f.replace(REPO_ROOT + '/', '')} → ${m[0]}`);
 	}
 }
 results.push({
@@ -278,7 +275,9 @@ results.push({
 {
 	const sshSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ssh.yml'), 'utf-8');
 	const hasProbe =
-		/ansible\.builtin\.stat:[\s\S]{0,160}?path:\s*\/etc\/ssh\/sshd_config\b[\s\S]{0,160}?register:\s*\w+/.test(sshSrc);
+		/ansible\.builtin\.stat:[\s\S]{0,160}?path:\s*\/etc\/ssh\/sshd_config\b[\s\S]{0,160}?register:\s*\w+/.test(
+			sshSrc
+		);
 	const ungated: string[] = [];
 	for (const blk of sshSrc.split(/\n(?=- name:)/)) {
 		// The presence probe itself READS /etc/ssh/sshd_config (via stat) — it is
@@ -303,7 +302,7 @@ results.push({
 
 // ─── Scenario 9b: hardening never locks out a root-only-keyed box ──
 // Disabling root login when the ONLY authorized key belongs to root locks the
-// operator out (the maintainer/morphit.io). Hardening must set `PermitRootLogin no` ONLY when
+// operator out (morphit.io). Hardening must set `PermitRootLogin no` ONLY when
 // a NON-root keyed user exists, and `prohibit-password` (key-only root, still
 // reachable) otherwise — both in ssh.yml and the drop-in template.
 {
@@ -313,7 +312,8 @@ results.push({
 		'utf-8'
 	);
 	const probesNonroot =
-		/morphit_nonroot_ssh_key_present/.test(sshSrc) && /morphit_nonroot_ssh_key_present/.test(tplSrc);
+		/morphit_nonroot_ssh_key_present/.test(sshSrc) &&
+		/morphit_nonroot_ssh_key_present/.test(tplSrc);
 	const taskGated = /PermitRootLogin \{\{ 'no' if morphit_nonroot_ssh_key_present/.test(sshSrc);
 	const tplGated =
 		/morphit_nonroot_ssh_key_present[\s\S]{0,60}PermitRootLogin no/.test(tplSrc) &&
@@ -333,14 +333,15 @@ results.push({
 
 // ─── Scenario 9c: harden re-asserts Docker's firewall chains after UFW ──
 // Enabling UFW flushes nftables and wipes Docker's DOCKER/DOCKER-FORWARD chains,
-// taking the public site dark while the box looks healthy locally (the maintainer/morphit.io).
+// taking the public site dark while the box looks healthy locally (morphit.io).
 // ufw.yml must restart Docker after the UFW change AND verify the NAT rules came
 // back (fail loud if not), never assume.
 {
 	const ufwSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ufw.yml'), 'utf-8');
 	const restartsDocker = /name:\s*docker\s*\n\s*state:\s*restarted/.test(ufwSrc);
 	const detectsDocker = /systemctl is-active docker/.test(ufwSrc);
-	const verifiesNat = /iptables -t nat -S DOCKER/.test(ufwSrc) && /ansible\.builtin\.fail/.test(ufwSrc);
+	const verifiesNat =
+		/iptables -t nat -S DOCKER/.test(ufwSrc) && /ansible\.builtin\.fail/.test(ufwSrc);
 	const afterEnable =
 		ufwSrc.indexOf('state: enabled') < ufwSrc.indexOf('state: restarted') &&
 		ufwSrc.indexOf('state: enabled') !== -1;
@@ -362,7 +363,7 @@ results.push({
 // ─── Scenario 9d: harden runs a post-harden reachability self-test ──
 // The final step re-checks that harden didn't strand anyone: a key-based SSH
 // login path still exists (fail loud on lockout) and the public web ports are
-// open, so harden never hands back a box it just cut off (the maintainer).
+// open, so harden never hands back a box it just cut off.
 {
 	const mainSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'main.yml'), 'utf-8');
 	const verifyExists = existsSync(join(ROLES_DIR, 'hardening', 'tasks', 'verify.yml'));
@@ -393,7 +394,7 @@ results.push({
 // ─── Scenario 9e: an IPFS origin host opens swarm port 4001 (tcp+udp) ──
 // Stock ufw opens only 22/80/443; an IPFS-hosting box must ALSO accept inbound
 // 4001 or public gateways can't fetch the seeded release and the on-chain CID
-// never resolves (the maintainer/morphit.io v1.17.0). Gated on enable_ipfs (default true, to
+// never resolves (morphit.io v1.17.0). Gated on enable_ipfs (default true, to
 // match the playbook), both protocols (Kubo's QUIC transport uses udp/4001).
 {
 	const ufwSrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'ufw.yml'), 'utf-8');
@@ -422,7 +423,9 @@ results.push({
 	// it), not tcp OR udp — QUIC peers dial udp/4001 (review B7).
 	const verifySrc = readFileSync(join(ROLES_DIR, 'hardening', 'tasks', 'verify.yml'), 'utf-8');
 	const selfTestRequiresBoth =
-		/4001\/tcp/.test(verifySrc) && /4001\/udp/.test(verifySrc) && !/4001\(\/\(tcp\|udp\)\)\?/.test(verifySrc);
+		/4001\/tcp/.test(verifySrc) &&
+		/4001\/udp/.test(verifySrc) &&
+		!/4001\(\/\(tcp\|udp\)\)\?/.test(verifySrc);
 	results.push({
 		name: 'the 4001 UFW self-test requires BOTH tcp and udp (not either)',
 		ok: selfTestRequiresBoth,
@@ -446,7 +449,9 @@ results.push({
 		/morphit_service_home\s*}}\/\.ssh/.test(baseSrc) ||
 		/Propagate operator SSH login keys to the morphit service user/.test(baseSrc);
 	const morphitIsNologin =
-		/name:\s*"?\{\{\s*morphit_service_user\s*}}"?[\s\S]{0,200}?shell:\s*\/usr\/sbin\/nologin/.test(baseSrc);
+		/name:\s*"?\{\{\s*morphit_service_user\s*}}"?[\s\S]{0,200}?shell:\s*\/usr\/sbin\/nologin/.test(
+			baseSrc
+		);
 	results.push({
 		name: 'root does not write SSH keys into the nologin morphit user (canary uploads as root)',
 		ok: !writesMorphitKeys && morphitIsNologin,
@@ -462,7 +467,7 @@ results.push({
 // Ansible runs split_args over the WHOLE `shell:`/`command:` free-form string
 // BEFORE the shell strips `#` comments, so a lone apostrophe in a shell comment
 // (e.g. `# don't clobber`) reads as an unbalanced quote and the playbook fails to
-// load with "failed at splitting arguments" (the maintainer/v1.17.1 — a `don't` in the
+// load with "failed at splitting arguments" (v1.17.1 — a `don't` in the
 // service-user key-propagation task tanked ansible-lint). Regex smokes can't see
 // this, so pin it: scan every role task file, track when we're inside a shell/
 // command `|` block, and flag a comment line whose single-quote count is odd.
@@ -503,7 +508,10 @@ results.push({
 	results.push({
 		name: 'no lone apostrophe in a #-comment inside an inline shell/command block (split_args safe)',
 		ok: offenders.length === 0,
-		detail: offenders.length === 0 ? undefined : `unbalanced-quote comment(s): ${offenders.slice(0, 3).join(' | ')}`
+		detail:
+			offenders.length === 0
+				? undefined
+				: `unbalanced-quote comment(s): ${offenders.slice(0, 3).join(' | ')}`
 	});
 }
 
@@ -562,7 +570,9 @@ results.push({
 			const parent = dest.replace(/\/[^/]+$/, '');
 			if (!/\.d$/.test(parent)) continue; // only *.d drop-in dirs
 			if (alwaysPresent.has(parent) || ensuredDirs.has(parent)) continue;
-			unEnsuredDropins.push(`${f.replace(REPO_ROOT + '/', '')} → ${dest} (dir ${parent} not ensured)`);
+			unEnsuredDropins.push(
+				`${f.replace(REPO_ROOT + '/', '')} → ${dest} (dir ${parent} not ensured)`
+			);
 		}
 	}
 	results.push({
@@ -590,15 +600,21 @@ results.push({
 	const morphitTasks = existsSync(join(ROLES_DIR, 'morphit', 'tasks', 'main.yml'))
 		? readFileSync(join(ROLES_DIR, 'morphit', 'tasks', 'main.yml'), 'utf-8')
 		: '';
-	if (!/morphit-first-online\.service/.test(morphitTasks) || !/morphit-first-online\.timer/.test(morphitTasks))
+	if (
+		!/morphit-first-online\.service/.test(morphitTasks) ||
+		!/morphit-first-online\.timer/.test(morphitTasks)
+	)
 		fo.push('first-online units not in the morphit role systemd install loop');
-	if (!/morphit-first-online\.sh/.test(morphitTasks)) fo.push('first-online script not deployed by the morphit role');
-	if (!/first-online\.env/.test(morphitTasks)) fo.push('first-online.env not deployed by the morphit role');
+	if (!/morphit-first-online\.sh/.test(morphitTasks))
+		fo.push('first-online script not deployed by the morphit role');
+	if (!/first-online\.env/.test(morphitTasks))
+		fo.push('first-online.env not deployed by the morphit role');
 	if (!/morphit-first-online\.timer/.test(morphitTasks) || !/state:\s*started/.test(morphitTasks))
 		fo.push('first-online timer not enabled+started');
 	const envTmpl = join(ROLES_DIR, 'morphit', 'templates', 'first-online.env.j2');
 	if (!existsSync(envTmpl)) fo.push('first-online.env.j2 template missing');
-	else if (!/MORPHIT_AUTO_REGISTER/.test(readFileSync(envTmpl, 'utf-8'))) fo.push('first-online.env.j2 missing MORPHIT_AUTO_REGISTER');
+	else if (!/MORPHIT_AUTO_REGISTER/.test(readFileSync(envTmpl, 'utf-8')))
+		fo.push('first-online.env.j2 missing MORPHIT_AUTO_REGISTER');
 	// The service must be triggered by the network coming up.
 	if (existsSync(svc) && !/WantedBy=network-online\.target/.test(readFileSync(svc, 'utf-8')))
 		fo.push('first-online.service not WantedBy=network-online.target');
@@ -621,37 +637,69 @@ results.push({
 	const vendor = readIf(R('vendor/tasks/main.yml'));
 	if (!vendor) ob.push('vendor role missing');
 	else {
-		if (!/vendor\/apt\/Packages\.gz/.test(vendor)) ob.push('vendor role does not detect vendor/apt');
-		if (!/apt\.conf\.d\/99-morphit-offline\.conf/.test(vendor)) ob.push('vendor role does not write the reversible apt override');
-		if (!/when:\s*morphit_vendor_apt\.stat\.exists/.test(vendor)) ob.push('vendor role apt override not gated on the bundle');
+		if (!/vendor\/apt\/Packages\.gz/.test(vendor))
+			ob.push('vendor role does not detect vendor/apt');
+		if (!/apt\.conf\.d\/99-morphit-offline\.conf/.test(vendor))
+			ob.push('vendor role does not write the reversible apt override');
+		if (!/when:\s*morphit_vendor_apt\.stat\.exists/.test(vendor))
+			ob.push('vendor role apt override not gated on the bundle');
 		// Regression (air-gapped install died at `base: apt update`): the vendor
 		// role runs FIRST, before the morphit role copies the tree to
 		// morphit_repo_path (/opt/morphit), so it MUST look for the bundle in the
 		// extraction dir (morphit_local_source_path) — /opt/morphit is empty then.
-		if (!/morphit_local_source_path\s*\}\}\/vendor\/apt/.test(vendor)) ob.push('vendor role must reference the bundle via morphit_local_source_path (the extraction dir, present when vendor runs first)');
-		if (/morphit_repo_path\s*\}\}\/vendor\/apt/.test(vendor)) ob.push('vendor role must NOT use morphit_repo_path for the bundle (/opt/morphit is empty until the morphit role copies later)');
+		if (!/morphit_local_source_path\s*\}\}\/vendor\/apt/.test(vendor))
+			ob.push(
+				'vendor role must reference the bundle via morphit_local_source_path (the extraction dir, present when vendor runs first)'
+			);
+		if (/morphit_repo_path\s*\}\}\/vendor\/apt/.test(vendor))
+			ob.push(
+				'vendor role must NOT use morphit_repo_path for the bundle (/opt/morphit is empty until the morphit role copies later)'
+			);
 	}
 	const pb = existsSync(PLAYBOOK) ? readFileSync(PLAYBOOK, 'utf-8') : '';
 	if (!/role:\s*vendor/.test(pb)) ob.push('vendor role not wired into the playbook');
-	else if (pb.indexOf('role: vendor') > pb.indexOf('role: base')) ob.push('vendor role must run BEFORE base (apt redirected before any install)');
+	else if (pb.indexOf('role: vendor') > pb.indexOf('role: base'))
+		ob.push('vendor role must run BEFORE base (apt redirected before any install)');
 	const bw = readIf(R('bunkerweb/tasks/main.yml'));
-	if (!/vendor\/docker/.test(bw) || !/docker load/.test(bw)) ob.push('bunkerweb role does not load bundled Docker images');
-	const bobSh = existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh')) ? readFileSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'), 'utf-8') : '';
-	const bobCmd = bobSh.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+	if (!/vendor\/docker/.test(bw) || !/docker load/.test(bw))
+		ob.push('bunkerweb role does not load bundled Docker images');
+	const bobSh = existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'))
+		? readFileSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'), 'utf-8')
+		: '';
+	const bobCmd = bobSh
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('#'))
+		.join('\n');
 	// The bundle must save EXACTLY the docker images a guided install needs offline:
 	// every `image:` the bunkerweb compose pins (via group_vars) AND the frontend
 	// Dockerfile's FROM base (compose builds it with --build).  A wrong tag or a
 	// missing image makes `docker compose up` pull from Docker Hub and die offline.
 	const compose = readIf(R('bunkerweb/templates/docker-compose.yml.j2'));
 	for (const mm of compose.matchAll(/image:\s*\{\{\s*(\w+)\s*\}\}/g))
-		if (!new RegExp(`\\^${mm[1]}:`).test(bobCmd)) ob.push(`build-offline-bundle.sh does not read the compose image ${mm[1]} from group_vars to save it — offline docker compose up would pull it`);
-	if (/image:\s*\{\{/.test(compose) && /bunkerity\/bunkerweb:latest/.test(bobCmd)) ob.push('build-offline-bundle.sh saves bunkerity/bunkerweb:latest but compose pins a version — tag mismatch forces an offline pull');
-	if (existsSync(join(REPO_ROOT, 'ops', 'bunkerweb', 'frontend', 'Dockerfile')) && !/frontend\/Dockerfile/.test(bobCmd)) ob.push('build-offline-bundle.sh does not bundle the frontend Dockerfile FROM base image — docker compose up --build would pull it offline');
+		if (!new RegExp(`\\^${mm[1]}:`).test(bobCmd))
+			ob.push(
+				`build-offline-bundle.sh does not read the compose image ${mm[1]} from group_vars to save it — offline docker compose up would pull it`
+			);
+	if (/image:\s*\{\{/.test(compose) && /bunkerity\/bunkerweb:latest/.test(bobCmd))
+		ob.push(
+			'build-offline-bundle.sh saves bunkerity/bunkerweb:latest but compose pins a version — tag mismatch forces an offline pull'
+		);
+	if (
+		existsSync(join(REPO_ROOT, 'ops', 'bunkerweb', 'frontend', 'Dockerfile')) &&
+		!/frontend\/Dockerfile/.test(bobCmd)
+	)
+		ob.push(
+			'build-offline-bundle.sh does not bundle the frontend Dockerfile FROM base image — docker compose up --build would pull it offline'
+		);
 	// Offline install must NOT fetch Docker's repo key from the internet — docker-ce
 	// and friends are in the bundled apt closure.  The vendor role sets the fact.
 	const vend = readIf(R('vendor/tasks/main.yml'));
-	if (!/morphit_offline_install:\s*true/.test(vend)) ob.push('vendor role does not set morphit_offline_install when a bundle is present');
-	if (/download\.docker\.com/.test(bw) && !/not morphit_offline_install/.test(bw)) ob.push('bunkerweb fetches the Docker repo key unconditionally — must skip on an offline install (docker-ce is bundled)');
+	if (!/morphit_offline_install:\s*true/.test(vend))
+		ob.push('vendor role does not set morphit_offline_install when a bundle is present');
+	if (/download\.docker\.com/.test(bw) && !/not morphit_offline_install/.test(bw))
+		ob.push(
+			'bunkerweb fetches the Docker repo key unconditionally — must skip on an offline install (docker-ce is bundled)'
+		);
 	const ipfs = readIf(R('ipfs/tasks/main.yml'));
 	if (!/vendor\/kubo/.test(ipfs)) ob.push('ipfs role does not use a bundled Kubo when present');
 	// IPFS is release-hosting — a network job like certbot/register, which the
@@ -660,70 +708,149 @@ results.push({
 	// the unit is offline-safe (network.target not network-online; --migrate=false so
 	// it never tries to fetch a migration with no network).
 	const ipfsHandlers = readIf(R('ipfs/handlers/main.yml'));
-	const ipfsHandlersCmd = ipfsHandlers.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
-	const ipfsCmd = ipfs.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
-	if (!/state:\s*restarted[\s\S]{0,120}failed_when:\s*false/.test(ipfsHandlersCmd)) ob.push('ipfs Restart handler is not best-effort (failed_when: false) — an offline daemon start would fail the whole install');
-	if (!/name:\s*ipfs[\s\S]{0,120}state:\s*started[\s\S]{0,120}failed_when:\s*false/.test(ipfsCmd)) ob.push('ipfs "start the daemon" task is not best-effort — an offline Phase-1 box would fail here (the last role)');
+	const ipfsHandlersCmd = ipfsHandlers
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('#'))
+		.join('\n');
+	const ipfsCmd = ipfs
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('#'))
+		.join('\n');
+	if (!/state:\s*restarted[\s\S]{0,120}failed_when:\s*false/.test(ipfsHandlersCmd))
+		ob.push(
+			'ipfs Restart handler is not best-effort (failed_when: false) — an offline daemon start would fail the whole install'
+		);
+	if (!/name:\s*ipfs[\s\S]{0,120}state:\s*started[\s\S]{0,120}failed_when:\s*false/.test(ipfsCmd))
+		ob.push(
+			'ipfs "start the daemon" task is not best-effort — an offline Phase-1 box would fail here (the last role)'
+		);
 	const ipfsUnit = readIf(join(ROLES_DIR, 'ipfs', 'templates', 'ipfs.service.j2'));
-	const ipfsUnitCmd = ipfsUnit.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
-	if (/(After|Wants)=network-online\.target/.test(ipfsUnitCmd)) ob.push('ipfs.service requires network-online.target — stalls the daemon on an air-gapped box; use network.target');
-	if (/--migrate=true/.test(ipfsUnitCmd)) ob.push('ipfs.service uses --migrate=true — a migration can only be fetched over the network; use --migrate=false (pinned single-version Kubo never migrates)');
+	const ipfsUnitCmd = ipfsUnit
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('#'))
+		.join('\n');
+	if (/(After|Wants)=network-online\.target/.test(ipfsUnitCmd))
+		ob.push(
+			'ipfs.service requires network-online.target — stalls the daemon on an air-gapped box; use network.target'
+		);
+	if (/--migrate=true/.test(ipfsUnitCmd))
+		ob.push(
+			'ipfs.service uses --migrate=true — a migration can only be fetched over the network; use --migrate=false (pinned single-version Kubo never migrates)'
+		);
 	const nodejs = readIf(R('morphit/tasks/nodejs.yml'));
-	if (!/morphit_node_have/.test(nodejs)) ob.push('nodejs role does not skip NodeSource when Node is already present');
+	if (!/morphit_node_have/.test(nodejs))
+		ob.push('nodejs role does not skip NodeSource when Node is already present');
 	// Offline install would die at `npm install` unless the prebuilt node_modules
 	// is COPIED into place: the tar-pipe excludes node_modules for online installs
 	// but must INCLUDE it when the source carries the bundle marker.
 	const cb = readIf(R('morphit/tasks/clone_and_build.yml'));
-	if (!/morphit_source_bundle_marker/.test(cb)) ob.push('clone_and_build does not detect a bundled node_modules in the SOURCE (offline install would run npm install → hit the registry)');
-	if (!/morphit_source_bundle_marker\.stat\.exists[\s\S]*?--exclude=node_modules/.test(cb)) ob.push('clone_and_build unconditionally excludes node_modules — must keep it for an offline bundle');
+	if (!/morphit_source_bundle_marker/.test(cb))
+		ob.push(
+			'clone_and_build does not detect a bundled node_modules in the SOURCE (offline install would run npm install → hit the registry)'
+		);
+	if (!/morphit_source_bundle_marker\.stat\.exists[\s\S]*?--exclude=node_modules/.test(cb))
+		ob.push(
+			'clone_and_build unconditionally excludes node_modules — must keep it for an offline bundle'
+		);
 	// The copy MUST NOT strip node_modules/*/dist (root or nested): GNU tar lets `*`
 	// cross `/`, so anchored excludes need --no-wildcards-match-slash and there must
 	// be NO bare dist/build exclude (which would match node_modules/vite/dist etc.).
 	// Check the COMMAND only — comments here mention the bad pattern as a warning.
-	const cbCmd = cb.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
-	if (!/--no-wildcards-match-slash/.test(cbCmd)) ob.push('clone_and_build tar lacks --no-wildcards-match-slash — its ./apps/*/dist excludes will also strip node_modules/*/dist (offline build breaks with "Cannot find module …/dist/…")');
-	if (/--exclude=dist\b/.test(cbCmd) || /--exclude=build\b/.test(cbCmd)) ob.push('clone_and_build has an UNANCHORED --exclude=dist/build — strips every package dist in node_modules; anchor to ./apps/*/dist + add --no-wildcards-match-slash');
+	const cbCmd = cb
+		.split('\n')
+		.filter((l) => !l.trim().startsWith('#'))
+		.join('\n');
+	if (!/--no-wildcards-match-slash/.test(cbCmd))
+		ob.push(
+			'clone_and_build tar lacks --no-wildcards-match-slash — its ./apps/*/dist excludes will also strip node_modules/*/dist (offline build breaks with "Cannot find module …/dist/…")'
+		);
+	if (/--exclude=dist\b/.test(cbCmd) || /--exclude=build\b/.test(cbCmd))
+		ob.push(
+			'clone_and_build has an UNANCHORED --exclude=dist/build — strips every package dist in node_modules; anchor to ./apps/*/dist + add --no-wildcards-match-slash'
+		);
 	// The npm build + verify run as the nologin service user; their npm cache must
 	// live in the repo (writable, re-created each run), not the service user's
 	// $HOME/.npm — that home is not guaranteed writable and broke `npm exec` EACCES.
-	if ((cbCmd.match(/npm_config_cache:\s*"\{\{ morphit_repo_path \}\}\/\.npm-cache"/g) || []).length < 2) ob.push('clone_and_build npm build/verify do not pin npm_config_cache into the repo — npm falls back to $HOME/.npm (offline install fails EACCES)');
+	if (
+		(cbCmd.match(/npm_config_cache:\s*"\{\{ morphit_repo_path \}\}\/\.npm-cache"/g) || []).length <
+		2
+	)
+		ob.push(
+			'clone_and_build npm build/verify do not pin npm_config_cache into the repo — npm falls back to $HOME/.npm (offline install fails EACCES)'
+		);
 	// And base must make the service user actually own its home (create_home does not
 	// re-chown a pre-existing dir), or $HOME/.npm + Ansible become-temp are unwritable.
 	const baseMain = readIf(R('base/tasks/main.yml'));
-	if (!(/path:\s*"\{\{ morphit_service_home \}\}"[\s\S]{0,240}recurse:\s*true/.test(baseMain) && /morphit_service_home[\s\S]{0,240}owner:\s*"\{\{ morphit_service_user \}\}"/.test(baseMain))) ob.push('base does not recursively chown the service home to the service user — a root-owned/re-used home fails the offline install (npm exec EACCES)');
+	// The home itself is the service user's; the dot-directories npm and Ansible
+	// write (.npm, .ansible, .cache) are handed back to it even when an earlier
+	// run left them root-owned. NOT the whole home recursively: root keeps its own
+	// directories there.
+	const ownsHome =
+		/morphit_service_home[\s\S]{0,240}owner:\s*"\{\{ morphit_service_user \}\}"/.test(baseMain);
+	const dotDirs =
+		/for d in [^;\n]*\.npm[^;\n]*;[\s\S]{0,240}chown -R[\s\S]{0,80}morphit_service_user/.test(
+			baseMain
+		);
+	if (!(ownsHome && dotDirs))
+		ob.push(
+			'base does not give the service user its home and its .npm/.ansible dot-directories — a root-owned/re-used home fails the offline install (npm exec EACCES)'
+		);
 	// morphit-mcp is created ONLY by the morphit role (gated on mcp_enabled, isolated —
 	// NOT in the service group).  base must NOT also define it: two definitions with
 	// different homes force a `usermod` every converge that fails once the service is
 	// running ("user morphit-mcp is currently used by process …"), and base's variant
 	// wrongly put it in the service group, breaking the MCP's isolation.
-	if (/name:\s*morphit-mcp\b/.test(baseMain)) ob.push('base role defines a morphit-mcp user/group — it must be the morphit role ONLY (conflicting homes force a usermod that fails on re-run; service-group membership breaks MCP isolation)');
+	if (/name:\s*morphit-mcp\b/.test(baseMain))
+		ob.push(
+			'base role defines a morphit-mcp user/group — it must be the morphit role ONLY (conflicting homes force a usermod that fails on re-run; service-group membership breaks MCP isolation)'
+		);
 	const foPath = join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 	const fo = existsSync(foPath) ? readFileSync(foPath, 'utf-8') : '';
-	if (!/99-morphit-offline\.conf/.test(fo)) ob.push('first-online does not restore normal apt (remove the offline override) when online');
-	if (!existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh'))) ob.push('scripts/build-offline-bundle.sh (the bundle recipe) missing');
-	// The MCP deploy (on by default) runs `npm install` in a separate tree; offline
-	// that must use the bundled npm cache, which the build ships via `npm ci --cache`.
-	if (!/npm ci --cache "\$\{VENDOR\}\/npm-cache"/.test(bobSh)) ob.push('build-offline-bundle.sh does not ship an npm cache (npm ci --cache vendor/npm-cache) for the offline MCP deploy');
-	if (/--exclude='?\.\/apps\/\*\/dist'?/.test(bobCmd) && !/--no-wildcards-match-slash/.test(bobCmd)) ob.push('build-offline-bundle.sh packaging tar lacks --no-wildcards-match-slash — its ./apps/*/dist exclude also strips nested apps/*/node_modules/*/dist from the bundle');
+	if (!/99-morphit-offline\.conf/.test(fo))
+		ob.push('first-online does not restore normal apt (remove the offline override) when online');
+	if (!existsSync(join(REPO_ROOT, 'scripts', 'build-offline-bundle.sh')))
+		ob.push('scripts/build-offline-bundle.sh (the bundle recipe) missing');
+	if (/--exclude='?\.\/apps\/\*\/dist'?/.test(bobCmd) && !/--no-wildcards-match-slash/.test(bobCmd))
+		ob.push(
+			'build-offline-bundle.sh packaging tar lacks --no-wildcards-match-slash — its ./apps/*/dist exclude also strips nested apps/*/node_modules/*/dist from the bundle'
+		);
 	// The completeness gate must ALSO assert the runtime-critical SOURCE survived
 	// the packaging excludes: the services run from src via tsx (no dist is
 	// shipped) and every workspace package is a src-entry import, so a stripped
 	// entrypoint / package source would ship a bundle that INSTALLS but then
 	// crash-loops "Cannot find module …" on a fresh node.
-	if (!/apps\/indexer\/src\/main\[\.\]ts/.test(bobSh) || !/apps\/relay\/src\/main\[\.\]ts/.test(bobSh))
-		ob.push('build-offline-bundle.sh completeness gate does not assert the indexer/relay src entrypoints survived packaging (a stripped entrypoint ships a crash-looping bundle)');
+	if (
+		!/apps\/indexer\/src\/main\[\.\]ts/.test(bobSh) ||
+		!/apps\/relay\/src\/main\[\.\]ts/.test(bobSh)
+	)
+		ob.push(
+			'build-offline-bundle.sh completeness gate does not assert the indexer/relay src entrypoints survived packaging (a stripped entrypoint ships a crash-looping bundle)'
+		);
 	if (!/node_modules\/\[\.\]bin\/tsx/.test(bobSh))
-		ob.push('build-offline-bundle.sh completeness gate does not assert node_modules/.bin/tsx survived packaging (the services exec tsx)');
+		ob.push(
+			'build-offline-bundle.sh completeness gate does not assert node_modules/.bin/tsx survived packaging (the services exec tsx)'
+		);
 	if (!/packages\/\*\/src\/index\.ts/.test(bobSh))
-		ob.push('build-offline-bundle.sh completeness gate does not assert every workspace package src/ survived packaging (src-entry imports)');
-	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh')) ? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8') : '';
-	if (/npm install/.test(dmSh) && !/--offline --cache "\$REPO_DIR\/vendor\/npm-cache"/.test(dmSh)) ob.push('deploy-mcp.sh npm install is not offline-safe against the bundled npm cache');
-	// npm ci caches tarballs but NOT the packuments a fresh `npm install` needs to
-	// resolve the MCP deploy's rewritten package.json — so the build must WARM the
-	// cache by running deploy-mcp online once (MORPHIT_MCP_CACHE_WARM=1), and
-	// deploy-mcp must honour that override to force its online branch.
-	if (!/MORPHIT_MCP_CACHE_WARM=1[\s\S]{0,200}deploy-mcp\.sh/.test(bobCmd)) ob.push('build-offline-bundle.sh does not warm the npm cache for the offline MCP deploy (offline npm install would fail ENOTCACHED on the SDK packument)');
-	if (/vendor\/npm-cache/.test(dmSh) && !/MORPHIT_MCP_CACHE_WARM:-/.test(dmSh)) ob.push('deploy-mcp.sh does not honour MORPHIT_MCP_CACHE_WARM — the build cannot warm the cache online');
+		ob.push(
+			'build-offline-bundle.sh completeness gate does not assert every workspace package src/ survived packaging (src-entry imports)'
+		);
+	const dmSh = existsSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'))
+		? readFileSync(join(REPO_ROOT, 'ops', 'scripts', 'deploy-mcp.sh'), 'utf-8')
+		: '';
+	// The MCP deploy copies its runtime packages out of the install's locked
+	// node_modules (behaviour: test/deployMcp.test.ts); it must never resolve
+	// from a registry, which an offline or hidden-only node cannot reach.
+	if (
+		/\bnpm (install|ci|i)\b/.test(
+			dmSh
+				.split('\n')
+				.filter((l) => !l.trim().startsWith('#'))
+				.join('\n')
+		)
+	)
+		ob.push(
+			'deploy-mcp.sh runs an npm install — the MCP must be deployed from the locked install, with no registry'
+		);
 	results.push({
 		name: 'offline-appliance bundle wiring (apt/docker/kubo/node install offline when bundled; dormant online; apt restored when online)',
 		ok: ob.length === 0,
@@ -744,7 +871,8 @@ results.push({
 	const R = (p: string): string => join(ROLES_DIR, p);
 	const readIf = (p: string): string => (existsSync(p) ? readFileSync(p, 'utf-8') : '');
 	const gv = readIf(join(ANSIBLE_ROOT, 'group_vars', 'all.yml'));
-	if (!/morphit_source_dir\s*:/.test(gv)) ob.push('morphit_source_dir not defined in group_vars/all.yml');
+	if (!/morphit_source_dir\s*:/.test(gv))
+		ob.push('morphit_source_dir not defined in group_vars/all.yml');
 	const pb = existsSync(PLAYBOOK) ? readFileSync(PLAYBOOK, 'utf-8') : '';
 	const idxMorphit = pb.indexOf('role: morphit');
 	const before = (role: string): boolean => {
@@ -753,11 +881,22 @@ results.push({
 	};
 	// ddns updater script — no hardcoded /opt/morphit src; must use the source var.
 	const ddns = readIf(R('ddns/tasks/main.yml'));
-	if (before('ddns') && /src:\s*\/opt\/morphit\//.test(ddns)) ob.push('ddns copies from a HARDCODED /opt/morphit source (empty until the morphit copy) — use morphit_source_dir');
-	if (before('ddns') && /morphit-ddns-update\.sh/.test(ddns) && !/morphit_source_dir|morphit_local_source_path/.test(ddns)) ob.push('ddns updater-script src must use morphit_source_dir');
+	if (before('ddns') && /src:\s*\/opt\/morphit\//.test(ddns))
+		ob.push(
+			'ddns copies from a HARDCODED /opt/morphit source (empty until the morphit copy) — use morphit_source_dir'
+		);
+	if (
+		before('ddns') &&
+		/morphit-ddns-update\.sh/.test(ddns) &&
+		!/morphit_source_dir|morphit_local_source_path/.test(ddns)
+	)
+		ob.push('ddns updater-script src must use morphit_source_dir');
 	// postgres init.sql — must read from the source dir, not morphit_repo_path.
 	const pg = readIf(R('postgres/tasks/main.yml'));
-	if (before('postgres') && /-f \{\{\s*morphit_repo_path\s*\}\}\/ops\/postgres\/init\.sql/.test(pg)) ob.push('postgres reads init.sql from morphit_repo_path (/opt/morphit, empty until the copy) — use morphit_source_dir');
+	if (before('postgres') && /-f \{\{\s*morphit_repo_path\s*\}\}\/ops\/postgres\/init\.sql/.test(pg))
+		ob.push(
+			'postgres reads init.sql from morphit_repo_path (/opt/morphit, empty until the copy) — use morphit_source_dir'
+		);
 	results.push({
 		name: 'pre-copy roles read repo files from the source dir, not the empty /opt/morphit (ddns + postgres)',
 		ok: ob.length === 0,
@@ -780,7 +919,11 @@ results.push({
 	const shTxt = existsSync(bundleSh) ? readFileSync(bundleSh, 'utf-8') : '';
 	const m = shTxt.match(/PKGS="([\s\S]*?)"/);
 	const pkgs = new Set(
-		(m ? m[1] : '').replace(/\\/g, ' ').split(/\s+/).map((s) => s.trim()).filter(Boolean)
+		(m ? m[1] : '')
+			.replace(/\\/g, ' ')
+			.split(/\s+/)
+			.map((s) => s.trim())
+			.filter(Boolean)
 	);
 	if (pkgs.size === 0) ob.push('could not parse PKGS from build-offline-bundle.sh');
 	// Default-enabled roles for a home appliance (monitors/matrix_bot/trivy are off).
@@ -793,8 +936,12 @@ results.push({
 	const walk = (dir: string): string[] =>
 		existsSync(dir)
 			? readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
-					d.isDirectory() ? walk(join(dir, d.name)) : d.name.endsWith('.yml') ? [join(dir, d.name)] : []
-			  )
+					d.isDirectory()
+						? walk(join(dir, d.name))
+						: d.name.endsWith('.yml')
+							? [join(dir, d.name)]
+							: []
+				)
 			: [];
 	const aptPkgsInRole = (role: string): string[] => {
 		const out = new Set<string>();
@@ -802,20 +949,34 @@ results.push({
 			let inApt = false;
 			for (const raw of readFileSync(f, 'utf-8').split('\n')) {
 				const s = raw.trim();
-				if (/ansible\.builtin\.(apt|package)\s*:/.test(s) || /^(apt|package):/.test(s)) { inApt = true; continue; }
+				if (/ansible\.builtin\.(apt|package)\s*:/.test(s) || /^(apt|package):/.test(s)) {
+					inApt = true;
+					continue;
+				}
 				if (!inApt) continue;
 				const single = s.match(/^name:\s*["']?([a-z][a-zA-Z0-9.+_-]+)["']?\s*$/);
 				if (single) out.add(single[1]);
 				const item = s.match(/^-\s+["']?([a-z][a-zA-Z0-9.+_-]+)["']?\s*$/);
 				if (item) out.add(item[1]);
-				if (/^- name:/.test(s) || (/\S/.test(s) && !s.startsWith('-') && s.includes(':') && !/^(name|state|update_cache|cache_valid_time|install_recommends|autoremove|allow_unauth|force_apt_get|purge|deb):/.test(s) && !s.startsWith('#'))) inApt = false;
+				if (
+					/^- name:/.test(s) ||
+					(/\S/.test(s) &&
+						!s.startsWith('-') &&
+						s.includes(':') &&
+						!/^(name|state|update_cache|cache_valid_time|install_recommends|autoremove|allow_unauth|force_apt_get|purge|deb):/.test(
+							s
+						) &&
+						!s.startsWith('#'))
+				)
+					inApt = false;
 			}
 		}
 		return [...out].filter((p) => !['present', 'latest', 'true', 'false', 'yes', 'no'].includes(p));
 	};
 	for (const role of enabledRoles)
 		for (const p of aptPkgsInRole(role))
-			if (!notBundled.has(p) && !pkgs.has(p)) ob.push(`${role} apt-installs "${p}" but it is NOT in the offline bundle PKGS`);
+			if (!notBundled.has(p) && !pkgs.has(p))
+				ob.push(`${role} apt-installs "${p}" but it is NOT in the offline bundle PKGS`);
 	results.push({
 		name: 'offline bundle PKGS covers every enabled-role apt install (fresh minimal box installs with zero network)',
 		ok: ob.length === 0,

@@ -151,6 +151,14 @@ describe.skipIf(!INTEGRATION_ENABLED)('XMR fees: tx key (M-X1) and order binding
 		} finally {
 			client.release();
 		}
+		// The fee is stored pending_external; its first explorer check is the
+		// re-check job's, outside the block.
+		await recheckExternalFees({
+			db: fx.db,
+			verifiers: { xmr: v },
+			amounts: { xmrPiconero: 781_250_000n },
+			now: new Date(T0)
+		});
 	}
 
 	const row = async (account: string, permlink: string) =>
@@ -207,10 +215,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('XMR fees: tx key (M-X1) and order binding
 			xmr_tx_key: TXKEY,
 			xmr_payment_id: xmrFeePaymentId('alice', 'a1')
 		});
-		expect(e.claims.map((c) => c.xmrBinding?.paymentId)).toEqual([
-			xmrFeePaymentId('mallory', 'steal'),
-			xmrFeePaymentId('alice', 'a1')
-		]);
+		expect(e.claims.map((c) => c.xmrBinding?.paymentId).sort()).toEqual(
+			[xmrFeePaymentId('mallory', 'steal'), xmrFeePaymentId('alice', 'a1')].sort()
+		);
 		expect(e.claims.every((c) => c.xmrBinding?.primaryAddress === PRIMARY)).toBe(true);
 	});
 

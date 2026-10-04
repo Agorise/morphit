@@ -1,5 +1,5 @@
 /**
- * support-operator-matrix-removed-smoke — cp453 (t.txt #6)
+ * support-operator-matrix-removed-smoke
  *
  * The Support page's "Chat with the operator on Matrix" card was removed (its
  * three support.operator_matrix_* keys retired). The unrelated

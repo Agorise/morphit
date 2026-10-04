@@ -50,13 +50,22 @@
  * An operator who runs a service that legitimately creates
  * batched accounts (rare) can tune these higher or set the
  * threshold to a sentinel value to disable.
+ *
+ * Privacy: the bucket is never stored as given. Each record keeps
+ * HMAC-SHA256(per-boot random key, bucket) — enough to tell "same
+ * network" from "another network" for the hour a record lives, and
+ * nothing that names the network: the key never leaves this process
+ * and is gone on restart. Nothing here is logged.
  */
+
+import { createHmac, randomBytes } from 'node:crypto';
 
 /** Per-name+per-bucket recent-signup record.  Kept compact so
  *  the in-memory map doesn't grow unbounded. */
 interface RecentSignup {
 	readonly name: string;
-	readonly bucketKey: string;
+	/** Keyed hash of the bucket, never the bucket itself. */
+	readonly bucketTag: string;
 	readonly at: number; // epoch ms
 }
 
@@ -109,6 +118,8 @@ export class SequentialDetector {
 	private readonly thresholdCount: number;
 	private readonly minPrefixLen: number;
 	private readonly now: () => number;
+	/** Per-boot key for bucketTag(); never persisted, never exposed. */
+	private readonly tagKey = randomBytes(32);
 
 	constructor(options: SequentialDetectorOptions) {
 		this.windowMs = options.windowMs;
@@ -130,7 +141,11 @@ export class SequentialDetector {
 
 	recordSignup(name: string, bucketKey: string): void {
 		this.prune();
-		this.records.push({ name, bucketKey, at: this.now() });
+		this.records.push({ name, bucketTag: this.bucketTag(bucketKey), at: this.now() });
+	}
+
+	private bucketTag(bucketKey: string): string {
+		return createHmac('sha256', this.tagKey).update(bucketKey).digest('hex');
 	}
 
 	/**
@@ -151,7 +166,8 @@ export class SequentialDetector {
 		// Only consider records from the SAME bucket.  We don't
 		// punish a user whose neighbor on a different /64
 		// happens to have a similar name.
-		const sameBucket = this.records.filter((r) => r.bucketKey === bucketKey);
+		const tag = this.bucketTag(bucketKey);
+		const sameBucket = this.records.filter((r) => r.bucketTag === tag);
 		if (sameBucket.length < this.thresholdCount) {
 			return { blocked: false, reason: null, matchedPrior: [] };
 		}

@@ -4,14 +4,13 @@
  *
  * The indexer keeps a stored order status of 'live' until a cancel op or a
  * periodic sweep and enforces expiry at QUERY TIME (exactly as /v1/orderbook
- * does). Before cp427 the featured query filtered `o.status = 'live'` but NOT
+ * does). Previously the featured query filtered `o.status = 'live'` but NOT
  * `o.expires_at > NOW()`, so a featured slot whose underlying offer had
  * expired kept showing until the paid bid window closed (up to 168h later).
  * This pins the `o.expires_at > NOW()` guard added to featuredOrderbook.ts.
  *
- * Gated on INTEGRATION_ENABLED (needs a real Postgres; CI provides one — the
- * sandbox cannot, so this suite is skipped there and runs in the CI
- * integration job).
+ * Gated on INTEGRATION_ENABLED (needs a real Postgres; the CI integration job
+ * provides one).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';

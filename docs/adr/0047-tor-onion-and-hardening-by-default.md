@@ -4,6 +4,14 @@
 **Supersedes:** none
 **Superseded by:** none
 
+> **2026-10 audit note.** "All 16 sub-features" is overstated: 13 are
+> applied automatically; AppArmor (no per-service profile ships), the
+> default-deny outbound firewall and the GRUB password are advice the
+> playbook only prints. Tor-only nodes do get an enforced egress rule
+> (`ops/tor-only/morphit-tor-egress.sh`). Backups are encrypted only when
+> the operator gives an age public key. The onion key IS generated on the
+> server (by the wizard or by Tor).
+
 ## Context
 
 Privacy is Morphit's first stated priority, and "as much security by default"

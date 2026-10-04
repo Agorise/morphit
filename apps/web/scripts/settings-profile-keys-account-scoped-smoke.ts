@@ -1,5 +1,5 @@
 /**
- * settings-profile-keys-account-scoped-smoke (cp346)
+ * settings-profile-keys-account-scoped-smoke
  *
  * Regression guard for the cross-account profile-draft leak: signing out of
  * one account and into another used to show the previous account's cached
@@ -7,7 +7,7 @@
  * because those localStorage keys were GLOBAL (`morphit.displayName` etc.).
  *
  * This smoke is a static source scan of the settings page. It asserts the four
- * profile-draft keys are scoped by the current account, that the pre-cp346
+ * profile-draft keys are scoped by the current account, that the older
  * global keys are purged on mount, and that the form hydrates empty fields from
  * the on-chain profile (so a fresh device shows real values, not blanks) — and,
  * critically, that none of the four keys is ever written under its bare global

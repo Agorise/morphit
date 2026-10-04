@@ -3,14 +3,14 @@
 	logo on a re-branded instance — docs/BRANDING.md), with an OPTIONAL
 	occasional "shine" that sweeps along the logo's shapes to draw the eye.
 
-	HISTORY / WHY THIS IS NOW STATIC (cp228)
+	HISTORY / WHY THIS IS NOW STATIC
 
 	Earlier builds rendered a canvas element behind the wordmark running a
-	slow 3-body particle dance (mutual spring + centroid gravity).  the maintainer retired
+	slow 3-body particle dance (mutual spring + centroid gravity).  The maintainer retired
 	that perpetual canvas motion.  The remaining effect is a single subtle
-	glint every ~15s that traces the letterforms.  cp303 UPDATE: that glint
+	glint every ~15s that traces the letterforms.  UPDATE: that glint
 	(`shine`) is now enabled EVERYWHERE the wordmark appears — the top-left
-	header, the homepage hero, AND the footer — at the maintainer's request (earlier the
+	header, the homepage hero, AND the footer — at the request (earlier the
 	hero/footer were static).  This component is therefore a PURE presentational
 	wrapper
 	— no canvas element, no requestAnimationFrame, no IntersectionObserver,
@@ -25,9 +25,9 @@
 	    → all three use the same `shine` glint with NO extra effects. Header +
 	      hero show /brand/site-logo.svg; the footer shows
 	      /brand/site-logo-footer.svg (identical on a canonical build; an
-	      operator may give the footer its own wordmark).  (cp304: the footer's
+	      operator may give the footer its own wordmark).  (the footer's
 	      former `animate-morphit-hue-shift` was dropped so the footer matches
-	      the header exactly, at the maintainer's request.  Only the display height
+	      the header exactly, at the request.  Only the display height
 	      differs.)  Omitting `shine` still yields a fully static wordmark for
 	      any future placement that wants one.
 
@@ -130,7 +130,7 @@
 		wordmarkSrc ?? (variant === 'footer' ? SITE_LOGO_FOOTER_PATH : SITE_LOGO_PATH)
 	);
 
-	// cp428 — TEMPORARY beta marker. Small red "BETA" overlaid in the
+	// TEMPORARY beta marker. Small red "BETA" overlaid in the
 	// bottom-right corner of the logo, everywhere it appears (header, footer,
 	// hero). Sized relative to the logo so it stays proportional at every
 	// placement. Per-instance: an operator turns it off with
@@ -171,7 +171,7 @@
 			aria-hidden="true"><span class="morphit-logo-bling-band"></span></span
 		>
 	{/if}
-	<!-- cp428 — TEMPORARY beta marker (remove at stable public launch). -->
+	<!-- TEMPORARY beta marker (remove at stable public launch). -->
 	<span class="morphit-logo-bling-beta" style={betaFontStyle} aria-hidden="true">BETA</span>
 </div>
 
@@ -272,7 +272,7 @@
 	:global(html[data-brand-beta='off']) .morphit-logo-bling-beta {
 		display: none;
 	}
-	/* cp428 — TEMPORARY beta marker. Small red "BETA" pinned to the wordmark's
+	/* TEMPORARY beta marker. Small red "BETA" pinned to the wordmark's
 	 * bottom-right corner. z-index 3 so it sits above the wordmark (1) and the
 	 * shine (2); pointer-events:none so it never eats clicks on the wrapping
 	 * <a>. Line-height 1 keeps it tight in the corner. Remove at stable

@@ -85,7 +85,7 @@ for (const a of ASSETS) {
 		`asset '${a.ticker}' isCoordinationChain must be boolean`
 	);
 	if (isGoodsAsset(a.ticker)) {
-		// cp425 — goods assets (BARTER) are OFF-CHAIN: they settle in crypto
+		// goods assets (BARTER) are OFF-CHAIN: they settle in crypto
 		// but have no network of their own, so supportedNetworks is EMPTY and
 		// defaultNetwork is null. Assert that shape rather than non-empty.
 		assert(
@@ -117,14 +117,14 @@ for (const a of ASSETS) {
 			(typeof a.privacyWarningKey === 'string' && a.privacyWarningKey.length > 0),
 		`asset '${a.ticker}' privacyWarningKey must be null or non-empty string`
 	);
-	// Memory #23 invariant: only BLURT/BTC/XMR may have canPayListingFee=true.
+	// The frozen fee_method invariant: only BLURT/BTC/XMR may have canPayListingFee=true.
 	// The fee-method enum in apps/indexer/src/indexer/handlers/order.ts is frozen
 	// at 'blurt' | 'waived_first_buy' | 'btc' | 'xmr'; any asset with
 	// canPayListingFee=true must map to one of those tickers.
 	if (a.canPayListingFee) {
 		assert(
 			a.ticker === 'BLURT' || a.ticker === 'BTC' || a.ticker === 'XMR',
-			`asset '${a.ticker}' has canPayListingFee=true but only BLURT/BTC/XMR may pay listing fees (memory #23, fee_method enum is frozen)`
+			`asset '${a.ticker}' has canPayListingFee=true but only BLURT/BTC/XMR may pay listing fees (trade-only rule, fee_method enum is frozen)`
 		);
 	}
 	assert(
@@ -222,7 +222,7 @@ for (const a of ASSETS) {
 	let mutated = false;
 	try {
 		(first as { ticker: string }).ticker = 'HACKED';
-		// cp474 — read through the same cast the write used. Reading `first.ticker`
+		// read through the same cast the write used. Reading `first.ticker`
 		// directly let TS narrow to the AssetTicker union and call the comparison
 		// impossible; the runtime check is exactly what this scenario is for.
 		mutated = (first as { ticker: string }).ticker === 'HACKED';
@@ -235,9 +235,8 @@ for (const a of ASSETS) {
 	let mutated = false;
 	// Capture the original length BEFORE attempting mutation;
 	// hardcoded counts (the prior literal `4` was from a 4-asset
-	// era; pre-USDC cp30 had 7, cp30 had 8, cp31 had 9, cp33 has
-	// 10) drift every asset addition.  Dynamic capture per cp30-
-	// DD-DD LL #25 — never hardcode an asset count in a smoke.
+	// era; later literals 7, 8, 9 and
+	// 10) drift every asset addition.  Dynamic capture — never hardcode an asset count in a smoke.
 	const originalLength = ASSETS.length;
 	try {
 		(ASSETS as AssetEntry[]).push({
@@ -249,7 +248,7 @@ for (const a of ASSETS) {
 			supportedNetworks: ['mainnet'],
 			defaultNetwork: null,
 			privacyWarningKey: null,
-			// cp474 — REQUIRED by AssetEntry since Part 122 cp26 and missing here.
+			// REQUIRED by AssetEntry since an earlier release and missing here.
 			privacyFeatures: {
 				freshAddressAdvice: 'hd-derived',
 				optInPrivacyTech: null,
@@ -272,6 +271,18 @@ for (const a of ASSETS) {
 		// Proxy trap throws — good.
 	}
 	assert(!added, `ASSET_TICKERS_SET was mutable: 'HACKED' is now a member`);
+}
+
+// BLURT's address shape is the account-name rule (dotted names are valid
+// accounts; the shape used to refuse them).
+{
+	const shape = getAsset('BLURT').addressShape;
+	for (const ok of ['alice', 'alice.brave', 'a-b.c-d', 'trader42']) {
+		assert(shape.test(ok), `BLURT addressShape refuses the valid account ${ok}`);
+	}
+	for (const bad of ['Alice', '1alice', 'al', 'alice-', 'alice.', 'a'.repeat(17)]) {
+		assert(!shape.test(bad), `BLURT addressShape accepts the invalid account ${bad}`);
+	}
 }
 
 // ── Result ───────────────────────────────────────────────────────

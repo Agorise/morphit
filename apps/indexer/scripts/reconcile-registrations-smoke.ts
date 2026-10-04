@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * reconcile-registrations-smoke (cp710).
+ * reconcile-registrations-smoke.
  *
  * Proves the operator-registration reconciliation:
  *   1. queries ONLY rejected operator_register ops (never other ops);

@@ -5,7 +5,7 @@
  * Settings form (save side) and the profile-page render can share
  * one shape.
  *
- * the maintainer's rule for these cards: the ONLY validation is "is this a
+ * The maintainer's rule for these cards: the ONLY validation is "is this a
  * valid URL" (empty is fine). So, unlike a host-locked validator, we do NOT
  * lock the host — any host is allowed (youtube.com, rumble.com,
  * twitch.tv, blurt.media, a personal blog, …). We DO keep the

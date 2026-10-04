@@ -1,7 +1,7 @@
 /**
  * Morphit smoke — hardcoded-English-string detector.
  *
- * Closes C-26 from Audit Part 31(R3): the existing
+ * Closes an audit finding: the existing
  * `i18n-key-coverage-smoke` catches MISSING keys (code references
  * a key that doesn't exist) and `i18n-locale-parity-smoke` catches
  * translator drift.  Neither catches the case where a Svelte file
@@ -84,7 +84,7 @@ const ALLOWLIST_STRINGS = new Set<string>([
 	'Monero',
 	'Blurt',
 	'Nostr mirror',
-	'docs/PLAN.md',
+	'docs/adr/',
 	'docs/SECURITY.md',
 	'docs/adr/0015-chat-crypto.md',
 	'morphit',
@@ -231,6 +231,38 @@ scenario('apps/web/src/routes + lib/components: no hardcoded English in JSX', ()
 				`with a justification comment. First ${Math.min(10, allHits.length)}:${sample}`
 		);
 	}
+});
+
+// ─── Region-name tables ───────────────────────────────────────────
+// A list of countries as `{ code: 'DE', name: 'Germany' }` renders English
+// names to every reader; region names come from
+// Intl.DisplayNames([locale], { type: 'region' }) instead. Three or more such
+// entries in one file is a table (a single literal may be a test fixture).
+const REGION_ENTRY = /\{\s*code:\s*'[A-Z]{2}',\s*name:\s*'[A-Z][A-Za-z .'-]+'\s*\}/g;
+function regionTableHits(src: string): number {
+	return (src.match(REGION_ENTRY) ?? []).length;
+}
+
+scenario('region-name detector catches an English country table', () => {
+	const fixture = `const C = [{ code: 'AU', name: 'Australia' }, { code: 'CA', name: 'Canada' }, { code: 'DE', name: 'Germany' }];`;
+	if (regionTableHits(fixture) !== 3) throw new Error('detector missed the fixture table');
+	if (regionTableHits(`const c = { code: 'other', name: '' };`) !== 0) {
+		throw new Error('detector flagged a non-table');
+	}
+});
+
+scenario('apps/web/src: no hard-coded English country-name tables (use Intl.DisplayNames)', () => {
+	const hits: string[] = [];
+	for (const dir of [...SCAN_DIRS, path.join(REPO_ROOT, 'apps/web/src/lib')]) {
+		for (const file of walk(dir)) {
+			const rel = path.relative(REPO_ROOT, file);
+			if (EXCLUDE_PATH_PATTERNS.some((rx) => rx.test(rel))) continue;
+			const n = regionTableHits(readFileSync(file, 'utf8'));
+			if (n >= 3) hits.push(`${rel} (${n} entries)`);
+		}
+	}
+	if (hits.length > 0)
+		throw new Error(`English country-name tables in: ${[...new Set(hits)].join(', ')}`);
 });
 
 // ─── Summary ──────────────────────────────────────────────────────

@@ -2,8 +2,8 @@
  * Keep npm's "New major version of npm available! … To update run: npm install
  * -g npm@…" notice off an operator's screen — for good.
  *
- * npm prints it when the npm/npx process that STARTED a command exits: for the
- * `morphit-ops` launcher (`npm exec … morphit-ops`) or `npx morphit-ops`, that is
+ * npm prints it when the npm/npx process that STARTED a command exits: for a
+ * `morphit-ops` started through `npm exec` or `npx --no-install`, that is
  * after the whole install or upgrade, where nothing morphit-ops sets in its own
  * environment can reach it. Following the advice is harmful (the install pins
  * its own Node and npm). Three layers keep it off:
@@ -17,7 +17,7 @@
  * WHY NOT `npm config set --location=global`: npm chmods the global npmrc to
  * 0666 after saving (@npmcli/config save()), world-writable — any local account
  * could then add `script-shell=` or `node-options=` and run code as root the
- * next time root uses npm (verified in the v1.19.0 deep-deep). So the file is
+ * next time root uses npm (verified in the v1.19.0 deep audit). So the file is
  * edited here directly and left root-owned 0644, and an existing 0666 file (every
  * Ansible install, and anyone who ran `npm config set --location=global`) is
  * repaired.

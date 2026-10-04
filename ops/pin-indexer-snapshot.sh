@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# pin-indexer-snapshot.sh (cp766) — pin a signed indexer-DB snapshot to THIS
+# pin-indexer-snapshot.sh — pin a signed indexer-DB snapshot to THIS
 # node's kubo, publish an "always-newest" IPNS pointer, and emit a ready-to-
 # broadcast indexer_snapshot_v1 payload for indexer-snapshot-broadcast.ts.
 #
@@ -285,9 +285,9 @@ echo "  1. Copy the payload down:"
 # root@: the payload sits inside the IPFS repo, and the morphit service user has
 # no login shell. -O: hardened boxes turn SSH's SFTP off, which plain scp needs.
 echo "       scp -O root@<this-node>:$PAYLOAD ."
-echo "  2. In the Morphit repo (dry-run, then real — prompts for the @morphit POSTING WIF):"
+echo "  2. In the Morphit repo (dry run first, then --broadcast — asks for the @morphit POSTING WIF):"
 echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json --dry-run"
-echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json"
+echo "       node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts indexer-snapshot-payload-${LAST_BLOCK}.json --broadcast"
 echo ""
 echo "  A fresh node then fast-syncs with:  morphit-ops fast-sync"
 echo "  (or directly: snapshot-bootstrap.ts --from-chain --i-trust-signer)"

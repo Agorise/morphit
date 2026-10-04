@@ -4,8 +4,8 @@
  * Account creation happens in two calls:
  *   1. Client POSTs to /v1/account/invite. If the rate-limit
  *      and abuse checks pass, the relay returns a signed
- *      invite token bound to the client's IP and expiring in
- *      a few minutes.
+ *      invite token bound to the client's /24 (/64) network and
+ *      expiring in a few minutes.
  *   2. Client POSTs to /v1/account/create with the invite
  *      token in the body. The relay verifies the signature,
  *      non-expiry, and single-use, then processes the signup.
@@ -22,9 +22,10 @@
  *     impractical. An attacker who wants to pre-fetch 1000
  *     invites has to do 1000 PoW solutions AND use them all
  *     within the window.
- *   - Binding to IP hash prevents trivial replay across
- *     IP ranges. Combined with the per-IP limiter on the
- *     invite endpoint, this adds up.
+ *   - Binding to a keyed hash of the network prevents trivial
+ *     replay across networks. Combined with the per-network
+ *     limiter on the invite endpoint, this adds up. (Every
+ *     Tor/I2P visitor shares one network here: the local proxy.)
  *
  * What this does NOT do:
  *   - Protect against an attacker who BOTH controls many
@@ -49,10 +50,12 @@ export interface InvitePayload {
 	iat: number;
 	/** Expiry epoch ms. */
 	exp: number;
-	/** SHA-256 hex of the issuing client's IP. Used to bind
-	 *  the invite to the IP so a trivial cross-IP replay is
-	 *  blocked. We hash rather than store raw IP so the invite
-	 *  doesn't embed PII even in transit. */
+	/** HMAC-SHA256 (hex), under the relay's ip-binding sub-key, of the
+	 *  issuing client's /24 (IPv4) or /64 (IPv6) bucket. Binds the invite
+	 *  to the network it was issued to, so a trivial cross-network replay
+	 *  is blocked, without the token carrying the address: a keyed hash,
+	 *  because a bare SHA-256 of an IPv4 prefix is reversed by trying them
+	 *  all. */
 	ip_hash: string;
 }
 
@@ -71,7 +74,11 @@ export type InviteVerifyResult =
  * secret is generated (ephemeral, valid until next restart).
  */
 export class InviteTokenService {
-	private readonly secret: Buffer;
+	/** Two keys derived from the configured secret, one per purpose, so a
+	 *  value made for one (a token signature) can never stand in for the
+	 *  other (a bucket binding). */
+	private readonly signKey: Buffer;
+	private readonly ipKey: Buffer;
 	private readonly ttlMs: number;
 	private readonly clock: Clock;
 	/** Nonces of tokens already consumed. Single-use: redeeming
@@ -93,15 +100,18 @@ export class InviteTokenService {
 	private janitor: NodeJS.Timeout | null = null;
 
 	constructor(options: { secret?: Buffer | null; ttlMs?: number; clock?: Clock } = {}) {
+		let secret: Buffer;
 		if (options.secret) {
-			this.secret = options.secret;
+			secret = options.secret;
 			log.info('invite_secret_persistent');
 		} else {
-			this.secret = randomBytes(32);
+			secret = randomBytes(32);
 			log.warn('invite_secret_ephemeral', {
 				note: 'MORPHIT_RELAY_INVITE_HMAC_SECRET not set — using a random per-boot secret. In-flight invites will be invalidated on restart.'
 			});
 		}
+		this.signKey = createHmac('sha256', secret).update('morphit-invite:sign').digest();
+		this.ipKey = createHmac('sha256', secret).update('morphit-invite:ip-bucket').digest();
 		this.ttlMs = options.ttlMs ?? 10 * 60_000; // 10 minutes
 		this.clock = options.clock ?? defaultClock;
 
@@ -126,7 +136,7 @@ export class InviteTokenService {
 		};
 		const payloadJson = JSON.stringify(payload);
 		const payloadB64 = base64urlEncode(Buffer.from(payloadJson, 'utf8'));
-		const sig = createHmac('sha256', this.secret).update(payloadB64).digest();
+		const sig = createHmac('sha256', this.signKey).update(payloadB64).digest();
 		const sigB64 = base64urlEncode(sig);
 		return {
 			token: `${payloadB64}.${sigB64}`,
@@ -152,7 +162,7 @@ export class InviteTokenService {
 		// and compare. timingSafeEqual guards against timing
 		// oracles; length check first so timingSafeEqual never
 		// throws on size mismatch.
-		const expectedSig = createHmac('sha256', this.secret).update(payloadB64).digest();
+		const expectedSig = createHmac('sha256', this.signKey).update(payloadB64).digest();
 		let actualSig: Buffer;
 		try {
 			actualSig = base64urlDecode(sigB64);
@@ -263,17 +273,15 @@ export class InviteTokenService {
 		}
 	}
 
-	/** HMAC-SHA256 of the IP, keyed with the relay's per-instance
-	 *  secret.  Used for the invite's ip_hash field instead of a
-	 *  bare SHA-256 because the IPv4 space (2^32) is small enough
-	 *  for trivial rainbow-table recovery — bare SHA-256(IP) is
-	 *  not an opaque commitment.  The HMAC keeps the attacker
-	 *  who only sees invite bytes from recovering the source IP.
-	 *  (The relay itself already knows the IP at issue + verify
-	 *  time; this is purely about what an off-path observer can
-	 *  do with a leaked token.) */
+	/** HMAC-SHA256 of the client's /24 or /64 bucket under the ip-binding
+	 *  sub-key. Keyed rather than a bare SHA-256 because the IPv4 space is
+	 *  small enough to reverse a bare hash by trying every value; the HMAC
+	 *  keeps someone who only sees the token from recovering the network.
+	 *  (The relay itself already knows the bucket at issue + verify time;
+	 *  this is purely about what an off-path observer can do with a leaked
+	 *  token.) */
 	private hashIp(ip: string): string {
-		return createHmac('sha256', this.secret).update(ip).digest('hex');
+		return createHmac('sha256', this.ipKey).update(ip).digest('hex');
 	}
 }
 

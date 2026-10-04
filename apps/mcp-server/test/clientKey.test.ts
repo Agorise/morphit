@@ -1,6 +1,6 @@
 /**
  * The MCP rate limiter's client identity cannot be chosen by the client
- * (v1.18.0 deep-deep — the MCP twin of the relay's X-Forwarded-For finding).
+ * (the MCP twin of the relay's X-Forwarded-For finding).
  *
  * nginx's `$proxy_add_x_forwarded_for` APPENDS the real address to whatever the
  * visitor sent, so the leftmost entry is the visitor's own claim. Keyed on it,

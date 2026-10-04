@@ -21,13 +21,13 @@
 	    broadcast on.  The cross-network warning copy is the
 	    strongest of any picker for this reason.
 
-	Per memory #23 + Part 122 cp31 design (mirror of cp30 USDC
-	design): single DAI entry, network picked at trade time, no
+	Per the trade-only rule and the USDC picker design it
+	mirrors: single DAI entry, network picked at trade time, no
 	default.  The `network` prop binds two-way and starts as
 	null; parent components check for null before allowing
 	submit.
 
-	Per Memory #19 (privacy is priority #1): we surface the
+	Per the privacy-first rule (privacy is priority #1): we surface the
 	cross-network warning ABOVE the picker, not below — users
 	read top-down, the warning has to land before the choice.
 -->

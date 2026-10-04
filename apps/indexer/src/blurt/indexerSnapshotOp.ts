@@ -1,5 +1,5 @@
 /**
- * apps/indexer/src/blurt/indexerSnapshotOp.ts  (cp766)
+ * apps/indexer/src/blurt/indexerSnapshotOp.ts
  *
  * The `indexer_snapshot_v1` on-chain op — the canonical POINTER to a published
  * indexer-DB snapshot, posted by @morphit exactly like `chain_snapshot_v1` points

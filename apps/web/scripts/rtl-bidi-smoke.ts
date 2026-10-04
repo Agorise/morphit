@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/rtl-bidi-smoke.ts  (the maintainer — RTL)
+ * apps/web/scripts/rtl-bidi-smoke.ts  (RTL)
  *
  * Farsi (fa) is Morphit's one right-to-left locale. Two failure modes were
  * showing up as "an absolute mess" on the Farsi UI:
@@ -21,7 +21,7 @@
  *      values stay byte-clean (so the exact-match title smokes keep passing),
  *      and the settlement's localized connector stays in the RTL flow.
  *   C. `<html lang>/<dir>` at prerender (hooks.server.ts) + client (hooks.client)
- *      + the `?lang=` inline script (app.html).
+ *      + the `?lang=` hint script (static/lang-hint.js, loaded by app.html).
  *   D. `dir="auto"` / `<bdi>` on every user-typed surface.
  *
  * Source greps strip comments first, so a fix's own comment can't satisfy them.
@@ -94,7 +94,11 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	const en = orderTitleParts(order, (n) => String(n), undefined, { locale: 'en' });
 	const enLeak = Object.values(en.values).some(hasIsolate);
 	if (!enLeak) ok('LTR (en) title values are byte-clean — no bidi isolates');
-	else bad('en title values must NOT carry isolates (would break exact-match smokes)', JSON.stringify(en.values));
+	else
+		bad(
+			'en title values must NOT carry isolates (would break exact-match smokes)',
+			JSON.stringify(en.values)
+		);
 
 	const fa = orderTitleParts(order, (n) => String(n), undefined, { locale: 'fa' });
 	const v = fa.values as Record<string, string>;
@@ -113,7 +117,14 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 
 	// A Farsi user's barter goods label is isolated as a unit.
 	const faBarter = orderTitleParts(
-		{ side: 'sell', asset: 'BARTER', fiat_currency: 'USD', amount_min: null, amount_max: null, accepted_assets: ['BTC', 'XMR'] },
+		{
+			side: 'sell',
+			asset: 'BARTER',
+			fiat_currency: 'USD',
+			amount_min: null,
+			amount_max: null,
+			accepted_assets: ['BTC', 'XMR']
+		},
 		(n) => String(n),
 		'درختان موز',
 		{ locale: 'fa' }
@@ -129,7 +140,8 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	if (/lang="en" dir="ltr"/.test(server) && /transformPageChunk/.test(server))
 		ok('hooks.server.ts rewrites the <html> lang/dir at prerender via transformPageChunk');
 	else bad('hooks.server.ts should transform the <html> lang/dir');
-	if (/isRtlLocale/.test(server)) ok('hooks.server.ts derives dir from isRtlLocale (source of truth)');
+	if (/isRtlLocale/.test(server))
+		ok('hooks.server.ts derives dir from isRtlLocale (source of truth)');
 	else bad('hooks.server.ts should use isRtlLocale');
 	if (/SUPPORTED_LOCALES\.some/.test(server) || /SUPPORTED_LOCALES\.find/.test(server))
 		ok('hooks.server.ts only treats an EXACT supported prefix as a locale');
@@ -139,10 +151,14 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	if (/<html lang="en" dir="ltr"/.test(appHtml))
 		ok('app.html carries the lang="en" dir="ltr" default the hook targets');
 	else bad('app.html should carry <html lang="en" dir="ltr"> (the hook replace target)');
-	const appLive = stripComments(appHtml);
-	if (/documentElement\.dir\s*=/.test(appLive) && /'rtl'/.test(appLive))
-		ok('app.html ?lang= inline script sets dir=rtl for the fallback SPA case');
-	else bad('app.html inline script should set dir for the ?lang= case');
+	const hint = stripComments(read('static/lang-hint.js'));
+	if (
+		/<script src="%sveltekit\.assets%\/lang-hint\.js"><\/script>/.test(appHtml) &&
+		/documentElement\.dir\s*=/.test(hint) &&
+		/'rtl'/.test(hint)
+	)
+		ok('app.html loads the ?lang= hint, which sets dir=rtl for the fallback SPA case');
+	else bad('app.html should load static/lang-hint.js, which sets dir for the ?lang= case');
 
 	const client = live('src/hooks.client.ts');
 	if (/documentElement\.dir\s*=/.test(client) && /rtl/.test(client))
@@ -153,9 +169,13 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 // ── D. dir="auto" / <bdi> on user-typed surfaces ─────────────────────
 {
 	const card = live('src/lib/components/OrderCard.svelte');
-	if (/<bdi>\{order\.location_region\}<\/bdi>/.test(card)) ok('OrderCard isolates the location value (<bdi>)');
+	if (/<bdi>\{order\.location_region\}<\/bdi>/.test(card))
+		ok('OrderCard isolates the location value (<bdi>)');
 	else bad('OrderCard location should be wrapped in <bdi>');
-	if (/dir="auto"[^>]*truncate|truncate[^>]*dir="auto"/.test(card) || (card.match(/dir="auto"/g)?.length ?? 0) >= 2)
+	if (
+		/dir="auto"[^>]*truncate|truncate[^>]*dir="auto"/.test(card) ||
+		(card.match(/dir="auto"/g)?.length ?? 0) >= 2
+	)
 		ok('OrderCard terms preview carries dir="auto"');
 	else bad('OrderCard terms preview should carry dir="auto"');
 
@@ -167,7 +187,11 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	const inst = live('src/routes/[lang]/instances/+page.svelte');
 	if ((inst.match(/dir="auto"/g)?.length ?? 0) >= 2)
 		ok('instances card gives dir="auto" to the instance name + tagline');
-	else bad('instances card should carry dir="auto" on name + tagline', `found ${inst.match(/dir="auto"/g)?.length ?? 0}`);
+	else
+		bad(
+			'instances card should carry dir="auto" on name + tagline',
+			`found ${inst.match(/dir="auto"/g)?.length ?? 0}`
+		);
 
 	const chat = live('src/lib/components/ChatMessage.svelte');
 	if (/dir="auto" class="whitespace-pre-wrap"/.test(chat))
@@ -179,7 +203,7 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	else bad('TermsText should wrap its blocks in a dir="auto" container');
 }
 
-// ── E. RTL layout mirroring on OrderCard (cp620) ─────────────────────
+// ── E. RTL layout mirroring on OrderCard ─────────────────────
 // Farsi goes <html dir="rtl">, which mirrors the flow content — the poster
 // identity flips (avatar to the right). The card's own absolutely-positioned
 // clusters and the title pad use PHYSICAL sides, which do NOT auto-flip, so
@@ -204,7 +228,11 @@ const hasIsolate = (s: unknown) => typeof s === 'string' && (s.includes(FSI) || 
 	// Title pad reserved on the END side: RIGHT in LTR, LEFT in RTL.
 	if (/sm:ltr:pr-/.test(card) && /sm:rtl:pl-/.test(card))
 		ok('OrderCard title pad mirrors to the left in RTL (sm:ltr:pr-*/sm:rtl:pl-*)');
-	else bad('OrderCard title pad must mirror for RTL (sm:ltr:pr-*/sm:rtl:pl-*)', card.match(/<h3[\s\S]*?"/)?.[0] ?? '');
+	else
+		bad(
+			'OrderCard title pad must mirror for RTL (sm:ltr:pr-*/sm:rtl:pl-*)',
+			card.match(/<h3[\s\S]*?"/)?.[0] ?? ''
+		);
 
 	// The bottom hide/blocked cluster is also absolute + physical — mirror it too.
 	const hideCls = card.match(/class="(absolute[^"]*bottom-3[^"]*)"/)?.[1] ?? '';

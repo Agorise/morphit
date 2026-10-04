@@ -84,7 +84,7 @@
 		 *  from `maxlength` when using codepoint counting with a
 		 *  larger UTF-16 defense ceiling. */
 		counterLimit?: number;
-		/** cp384 (#4): when this number CHANGES (the parent increments it),
+		/** when this number CHANGES (the parent increments it),
 		 *  the textarea border flashes bright yellow 8× over ~8s — used to draw
 		 *  eye to a field that just became required (barter → Terms). */
 		flashToken?: number;
@@ -116,7 +116,7 @@
 		textareaEl?.focus();
 	}
 
-	// cp384 (#4) / cp425: flash the border yellow 8× over ~8s whenever flashToken
+	// (#4): flash the border yellow 8× over ~8s whenever flashToken
 	// changes. Toggling the class off → on (next frame) restarts the CSS
 	// animation, so repeated triggers (remove + re-add barter) re-flash each
 	// time. Plain `lastFlashToken` (non-reactive) avoids an extra effect run.
@@ -179,7 +179,7 @@
 		scan();
 	});
 
-	// Part 74: clear pending debounce on unmount.  Without this,
+	// clear pending debounce on unmount.  Without this,
 	// a user who types and immediately navigates leaves a
 	// setTimeout running that fires `scan()` against a stale
 	// component state.  Svelte 5's reactive runtime tolerates the

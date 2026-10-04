@@ -2,8 +2,17 @@
  * Morphit — in-app password change (K1.3).
  *
  * Decrypts the current envelope with the old password, re-encrypts
- * the same FullIdentity with the new password, persists the new
- * envelope, and updates the in-memory identity store.
+ * the same FullIdentity with the new password, and commits the new
+ * envelope to the session and — only when this session's keystore is
+ * the one this device remembers — to disk (commitSessionEnvelope).
+ *
+ * Which envelope is re-keyed: the session's, unless the device holds a
+ * DIFFERENT keystore for the SAME account (it decrypts with the old
+ * password to the same posting key) — then the device's copy is the
+ * newer truth (a YubiKey or 2FA change saved by another tab, or by an
+ * older build that wrote only the disk copy) and is the one re-keyed.
+ * Re-keying a stale session copy and writing it back is how a removed
+ * YubiKey used to come back.
  *
  * Pre-fix, users with a compromised password had no good recovery
  * path: they had to Sign Out → re-import seed → choose new
@@ -19,9 +28,8 @@
  *  - Persistent envelope is replaced ONLY after the new envelope
  *    is fully built and the decrypt-with-old succeeded.  An error
  *    mid-process leaves the user's old envelope intact.
- *  - In-memory store updated last so a failure during persistence
- *    rolls back cleanly (we re-throw and the caller sees an error
- *    result; the user's session is unchanged).
+ *  - Session and disk move together or not at all; a session that
+ *    is not the remembered one never writes to disk.
  *  - Old and new passwords are NOT wiped here — they're string
  *    parameters from the caller's let bindings.  Same contract as
  *    runWithActiveKey: the caller must clear them.
@@ -36,8 +44,9 @@ import {
 	type KeystoreEnvelope
 } from '$crypto/keystore';
 import { wipeFullIdentity } from '$crypto/keygen';
-import { writeEnvelope, readKeystoreMode } from '$crypto/persistentKeystore';
-import { identity, updateEnvelope } from '$stores/identity';
+import { readEnvelope, readKeystoreMode } from '$crypto/persistentKeystore';
+import { identity, updateEnvelope, commitSessionEnvelope } from '$stores/identity';
+import { sodium } from '$crypto/sodium';
 
 export type ChangePasswordErrKind =
 	/** Either password was an empty string. */
@@ -102,7 +111,23 @@ export async function changePassword(
 		return { ok: false, kind: 'locked' };
 	}
 
-	const currentEnv = state.envelope;
+	let currentEnv = state.envelope;
+	let adoptDeviceCopy = false;
+	const device = readKeystoreMode() === 'password' ? readEnvelope() : null;
+	if (device !== null && JSON.stringify(device) !== JSON.stringify(currentEnv)) {
+		try {
+			const f = await decryptIdentity(device, oldPassword);
+			try {
+				adoptDeviceCopy = sodium.memcmp(f.keys.posting.publicKey, state.live.posting.publicKey);
+			} finally {
+				wipeFullIdentity(f);
+			}
+		} catch {
+			// Not decryptable with this password, or not this account's: the
+			// device's keystore is someone else's — leave it alone.
+		}
+		if (adoptDeviceCopy) currentEnv = device;
+	}
 
 	// Decrypt with the old password.  This is the gate — if it
 	// fails, no other state changes.
@@ -155,46 +180,24 @@ export async function changePassword(
 	}
 
 	// We now have a valid new envelope.  full's job is done; wipe
-	// it BEFORE touching persistence.  If persistence fails, the
-	// user can still call changePassword again (the live session
-	// holds the active envelope; only the disk copy is stale).
+	// it BEFORE touching persistence.
 	wipeFullIdentity(full);
 
-	try {
-		// Persist the new envelope.  Only writes to disk if the
-		// user chose 'password' mode at onboarding — seed-only
-		// users have no persisted envelope, so this is a no-op
-		// for them but the in-memory store still updates.
-		//
-		// M8 fix: writeEnvelope returns false on storage failure
-		// (quota, private mode, disabled).  If the persist fails,
-		// the in-memory updateEnvelope below would mean tab-local
-		// JIT unlocks use the new password, but a fresh session on
-		// this device would fall back to the OLD envelope and
-		// expect the OLD password.  Surface as 'internal' so the
-		// caller knows persistence didn't take effect.
-		if (readKeystoreMode() === 'password') {
-			const persisted = writeEnvelope(newEnv);
-			if (!persisted) {
-				return {
-					ok: false,
-					kind: 'internal',
-					cause: new Error('persist failed — storage unavailable')
-				};
-			}
-		}
-		// Update the in-memory store.  Subsequent JIT unlocks
-		// will use newEnv with the new password.
-		updateEnvelope(newEnv);
-	} catch (err) {
-		// Persistence failed but we've already wiped full.  The
-		// user's session continues with the OLD envelope (since
-		// updateEnvelope didn't run if writeEnvelope threw — but
-		// safeStorage.set never throws, it returns false silently;
-		// updateEnvelope is the more likely failure path).
-		// Either way, surface as 'internal'.
-		return { ok: false, kind: 'internal', cause: err };
+	// The session first takes the device's copy it was re-keyed from (so
+	// the commit below sees the session as the remembered keystore).
+	if (adoptDeviceCopy) updateEnvelope(currentEnv);
+	const committed = commitSessionEnvelope(newEnv);
+	if (committed === 'persist_failed') {
+		// writeEnvelope returns false on storage failure (quota, private
+		// mode, disabled). Nothing changed: the session and the device both
+		// keep the old password.
+		return {
+			ok: false,
+			kind: 'internal',
+			cause: new Error('persist failed — storage unavailable')
+		};
 	}
+	if (committed === 'locked') return { ok: false, kind: 'locked' };
 
 	return { ok: true };
 }

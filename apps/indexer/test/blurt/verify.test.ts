@@ -79,7 +79,7 @@ describe('extractSigner', () => {
 		if (!r.ok) expect(r.reason).toBe('missing_required_auths_field');
 	});
 
-	// cp407 — fee-bearing ops (order-create, feature-bid, stranger-fee) are
+	// fee-bearing ops (order-create, feature-bid, stranger-fee) are
 	// active-level because they carry the fee transfer in the same tx. The
 	// dispatcher opts those in via allowActiveAuth=true.
 	it('accepts an active-level op when allowActiveAuth is true', () => {

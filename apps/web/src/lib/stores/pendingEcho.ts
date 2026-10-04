@@ -8,7 +8,7 @@
  * An echo store stages that locally so the UI can show it immediately, and drops
  * it the moment the indexer's authoritative copy arrives.
  *
- * `pendingFeatured` (cp431) invented this shape and it works. v1.7.0 needed the
+ * `pendingFeatured` invented this shape and it works. v1.7.0 needed the
  * same shape for orders, and two hand-copies of the same TTL and the same expiry
  * rule is exactly how they drift apart — one gets a bug fix, the other doesn't,
  * and nobody notices because both still look right. So the two rules that would

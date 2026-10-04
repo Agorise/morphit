@@ -2,13 +2,13 @@
 /**
  * per-asset-key-family-native-locale-floor-smoke.
  *
- * Part 122 cp55 STRUCTURAL DEFENSE (LL #59 / O-9).
+ * STRUCTURAL DEFENSE.
  *
- * Generalizes cp54-O8 (which was scoped only to `what_is_<asset>`)
+ * Generalizes (which was scoped only to `what_is_<asset>`)
  * to multiple per-asset i18n key families that have native-locale
- * policy implications per Memory #29.
+ * policy implications per the native-locale policy.
  *
- * Covered families (each a Memory #29 native-locale gate):
+ * Covered families (each a native-locale gate):
  *   - chat.address.address_invalid_<asset>     — error-message text
  *   - chat.address.address_placeholder_<asset> — input placeholder
  *   - chat.funds_sent.pill_title_<asset>       — pill label
@@ -18,33 +18,33 @@
  * Excluded families (intentionally — proper-noun byte-identical = correct):
  *   - chat.address.method_<asset>              — bare cryptocurrency name
  *   - chat.address.pill_method_<asset>         — "Name (TICKER)" labels
- *     for the cp31+ assets where EN itself uses bare ticker label
+ *     for the later assets where EN itself uses bare ticker label
  *     (BCH/BTC/XMR-style "X address" entries ARE in scope for those
  *     specific assets but the smoke doesn't bifurcate; safer to
- *     leave the whole family out and trust the cp54 lesson generalizes
+ *     leave the whole family out and trust the lesson generalizes
  *     to a smoke-per-family approach as drift surfaces.)
  *
- * Drift history surfaced at cp55:
- *   - DAI singletons (cp31): EN-fallback across all 3 native locales
+ * Drift history surfaced:
+ *   - DAI singletons: EN-fallback across all 3 native locales
  *     in address_invalid, address_placeholder, pill_title,
  *     cheat_sheet.section_assets — 12 strings missing.
- *   - asset_explainer 7-asset drift (cp31-cp49): DAI/ZEC/ARRR/DCR/
+ *   - asset_explainer 7-asset drift: DAI/ZEC/ARRR/DCR/
  *     SOL/ETH/XRP all EN-fallback in es/fr/de — 21 strings missing.
  *
- * Total cp55 closure: 33 native ES/FR/DE strings.
+ * Total closure: 33 native ES/FR/DE strings.
  *
  * Recurring class scope progression (9 defenses across 8 checkpoints):
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker tables
- *   cp51-O5: per-asset i18n FAQ key coverage
- *   cp52-O6: Ansible env-template required-vars
- *   cp53-O7: operator doc per-asset coverage
- *   cp54-O8: what_is_<asset> FAQ native-locale floor
- *   cp55-O9: multi-family per-asset native-locale floor (THIS)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker tables
+ *   per-asset i18n FAQ key coverage
+ *   Ansible env-template required-vars
+ *   operator doc per-asset coverage
+ *   what_is_<asset> FAQ native-locale floor
+ *   multi-family per-asset native-locale floor (THIS)
  *
- * Mutation test verification: M-123 — reverting es.json's
+ * Mutation test verification: — reverting es.json's
  * post_order.form.asset_explainer.xrp to EN-fallback fires:
  *   "per-asset-key-family-native-locale-floor FAILED:
  *    family `post_order.form.asset_explainer.<asset>`:

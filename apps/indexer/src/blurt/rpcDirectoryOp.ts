@@ -36,7 +36,6 @@ export const RPC_DIRECTORY_MAX_NODES = 32;
 /** Max length + charset for a node's optional operator handle. Safe for the
  *  chain (custom_json byte budget), JSON, the DOM, and a shell: letters, digits,
  *  and `. _ - @` (the last so a Blurt `@handle` works). No spaces, no `<>&"'`. */
-export const RPC_DIRECTORY_NAME_MAX = 32;
 export const RPC_DIRECTORY_NAME_RE = /^[A-Za-z0-9._@-]{1,32}$/;
 
 /** One node in the directory: at least one hidden-service address, plus an
@@ -44,7 +43,7 @@ export const RPC_DIRECTORY_NAME_RE = /^[A-Za-z0-9._@-]{1,32}$/;
  *  — nodes are still keyed purely by their opaque address; the name is never used
  *  to route, dedupe, or make a trust decision. Anonymity-preferring operators
  *  simply omit it and leak nothing onto the public chain. It exists only so a
- *  misbehaving node can be identified and its operator pinged (the maintainer). */
+ *  misbehaving node can be identified and its operator pinged. */
 export interface RpcDirectoryNode {
 	readonly onion?: string;
 	readonly i2p?: string;

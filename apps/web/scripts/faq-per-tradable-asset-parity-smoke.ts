@@ -2,33 +2,33 @@
 /**
  * faq-per-tradable-asset-parity-smoke.
  *
- * Part 122 cp51 STRUCTURAL DEFENSE (LL #55 / O-5).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp51-N1 pre-pattern-drift class: every tradable
+ * Closes the pre-pattern-drift class: every tradable
  * asset on Morphit (except the three coordination/founder assets
  * BTC/XMR/BLURT which have their own FAQ shape — `what_is_blurt`
  * exists as the coordination-chain FAQ) must have a
  * `what_is_<ticker>` FAQ entry in EVERY locale.
  *
  * Bug history that motivated this defense:
- *   - cp21 BCH addition: no `what_is_bch` FAQ shipped.
- *   - cp24 LTC addition: no `what_is_ltc` FAQ shipped.
- *   - cp27 DASH addition: no `what_is_dash` FAQ shipped.
- *   - cp30 USDT addition: pattern established — `what_is_usdt`
+ *   - BCH addition: no `what_is_bch` FAQ shipped.
+ *   - LTC addition: no `what_is_ltc` FAQ shipped.
+ *   - DASH addition: no `what_is_dash` FAQ shipped.
+ *   - USDT addition: pattern established — `what_is_usdt`
  *     FAQ DID ship.  Every subsequent asset (USDC/DAI/DOGE/ZEC/
  *     ARRR/DCR/SOL/ETH/XRP) followed the pattern.
- *   - cp51 deep-deep N-1: surfaced the gap.  3 missing FAQs
+ *   - surfaced the gap.  3 missing FAQs
  *     added × 10 locales (30 strings); this smoke pins the
  *     pattern forever.
  *
  * Recurring class scope progression:
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker hardcoded tables (CATEGORY_B_DESCRIPTIONS)
- *   cp51-O5: per-asset i18n FAQ key coverage (THIS smoke)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker hardcoded tables (CATEGORY_B_DESCRIPTIONS)
+ *   per-asset i18n FAQ key coverage (THIS smoke)
  *
- * Mutation test verification: M-119 — deleting the FAQ entry
+ * Mutation test verification: — deleting the FAQ entry
  * for any one asset (e.g. removing `what_is_xrp` from en.json)
  * fires:
  *   "faq-per-tradable-asset-parity FAILED:

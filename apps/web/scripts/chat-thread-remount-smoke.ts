@@ -1,5 +1,5 @@
 /**
- * chat-thread-remount-smoke — v1.4.8 (t.txt #4 root cause)
+ * chat-thread-remount-smoke — v1.4.8 (root cause)
  *
  * A conversation's identity is (peer, order_permlink). ConversationView's
  * controller captures BOTH once in onMount (`runtimeDeps(me, peer, …,

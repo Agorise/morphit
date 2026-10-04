@@ -13,12 +13,12 @@
 	    translators have a single context window for these
 	    related strings.
 
-	Per memory #23 + Part 121 Q1-B design: option B = single
+	Per the trade-only rule and the chosen design: a single
 	USDT entry, network picked at trade time, no default.
 	The `network` prop binds two-way and starts as null;
 	parent components check for null before allowing submit.
 
-	Per Memory #19 (privacy is priority #1): we surface the
+	Per the privacy-first rule (privacy is priority #1): we surface the
 	cross-network warning ABOVE the picker, not below — users
 	read top-down, the warning has to land before the choice.
 -->

@@ -138,6 +138,22 @@ export function readEnvelope(): KeystoreEnvelope | null {
 	}
 }
 
+/** Is `env` exactly the keystore this device remembers? (Byte comparison of
+ *  the stored JSON — an envelope carries no public account marker.) Used to
+ *  decide whether a change to the unlocked session's keystore may be written
+ *  to disk: it may only when the session's keystore IS the remembered one,
+ *  never over another account's. */
+export function isPersistedEnvelope(env: KeystoreEnvelope): boolean {
+	if (readKeystoreMode() !== 'password') return false;
+	const raw = safeLocal.get(ENVELOPE_KEY);
+	if (raw === null) return false;
+	try {
+		return raw === JSON.stringify(env);
+	} catch {
+		return false;
+	}
+}
+
 /** True when a persisted envelope exists and is readable. The
  *  login page uses this to decide "unlock with password" vs
  *  "import seed / keyfile" UI. */
@@ -147,7 +163,7 @@ export function hasPersistedKeystore(): boolean {
 
 /** Reactive mirror of `hasPersistedKeystore()`.
  *
- *  v1.8.11 (the maintainer) — the header CTA read the plain function inside a `$derived`
+ *  v1.8.11 — the header CTA read the plain function inside a `$derived`
  *  keyed on `$hasAnySession`, which works for lock (session flips true→false)
  *  but NOT for signing out while ALREADY locked: `hasAnySession` is false both
  *  before and after, so the derived never re-ran and the button stayed on

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * order-pay-amount-smoke (cp406).
+ * order-pay-amount-smoke.
  *
  * Locks the money math that seeds the "Pay now" amount: order fiat minimum →
  * crypto units, across every price model + every "can't compute → null" path.
@@ -95,7 +95,7 @@ check('22 — market USD (rate=1): 100 USD / 0.05 = 2000', (() => {
 	return r !== null && near(r.amount, 2000);
 })());
 
-// ── Pay-now asset resolution (cp406 case-fold fix) ──
+// ── Pay-now asset resolution (case-fold fix) ──
 // OrderRecord.asset is UPPERCASE ('BLURT'); the chat modals need the lowercase
 // ChatAssetTicker. Before the fix the compare failed and the modal fell back to
 // the free 16-coin picker — the root cause of the "Pay now modal messed up".

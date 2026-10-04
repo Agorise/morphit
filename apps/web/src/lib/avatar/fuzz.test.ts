@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Property-based fuzz harness for the SVG avatar sanitizer (cp426 audit,
+ * Property-based fuzz harness for the SVG avatar sanitizer (audit,
  * recommendation #2).
  *
  * The example-based tests in index.test.ts cover known attack paths one at a

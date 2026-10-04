@@ -32,7 +32,7 @@
 	 * so its meaning is shared between them only. (Pre-Phase-F.4
 	 * doc comment said "no memo" — that policy was superseded by
 	 * the opaque-token design at Phase F.4 ratification; comment
-	 * corrected Part 73.)
+	 * corrected later.)
 	 *
 	 * Empty memo means "seller didn't request a memo" — chain
 	 * memo field is left empty in that case.
@@ -77,10 +77,10 @@
 		recipient: string;
 		/** BLURT amount as a positive number, parsed from the
 		 *  address payload's amount field upstream. Optional: in the
-		 *  composer "Pay now" flow (cp402 [7b]) there is no pill, so the
+		 *  composer "Pay now" flow there is no pill, so the
 		 *  amount is entered in-modal instead (see `amountEditable`). */
 		amount?: number;
-		/** cp402 [7b] — when true, the modal was opened from the composer
+		/** when true, the modal was opened from the composer
 		 *  "Pay now" (no pill), so it shows a validated amount INPUT and
 		 *  uses that instead of the `amount` prop. The recipient is still
 		 *  fixed to `@peer` (never user-editable), so only the amount is
@@ -97,12 +97,12 @@
 		/** Called when the broadcast succeeds.  Receives the
 		 *  on-chain trx_id + the amount actually broadcast so the
 		 *  parent can auto-broadcast a morphit_funds_sent payload
-		 *  with the correct amount (cp402 [7b] — the composer flow's
+		 *  with the correct amount (the composer flow's
 		 *  amount is entered in-modal, not known to the parent). */
 		onPaid: (result: { trxId: string; blockNum: number; amount: number }) => void;
 		/** Called on cancel / dismiss. */
 		onCancel: () => void;
-		/** cp406 — optional one-line caption under the amount field explaining a
+		/** optional one-line caption under the amount field explaining a
 		 *  pre-filled amount (e.g. "The order's minimum is 500 MXN (≈ 588 BLURT)").
 		 *  Empty string renders nothing. */
 		payHint?: string;
@@ -145,7 +145,7 @@
 	let phase = $state<Phase>({ kind: 'ready' });
 	let passwordInput = $state('');
 	let passwordError = $state('');
-	/** cp470 — format a seed number to a clean BLURT-precision input string
+	/** format a seed number to a clean BLURT-precision input string
 	 *  (≤3 decimals, no trailing zeros / scientific notation) so a pre-filled
 	 *  value can never fail the shape check through float representation. */
 	function seedToInput(n: number): string {
@@ -154,10 +154,10 @@
 		return formatAmountForInput(Number(n.toFixed(3)), get(locale));
 	}
 
-	/** cp402 [7b] — the in-modal amount for the composer flow. Ignored
+	/** the in-modal amount for the composer flow. Ignored
 	 *  when `amountEditable` is false (the pill-provided `amount` is used
 	 *  verbatim, exactly as before).
-	 *  cp470 — pre-filled with the order-minimum seed (passed via `amount`
+	 *  pre-filled with the order-minimum seed (passed via `amount`
 	 *  in the composer flow) so the field starts VALID and the user can just
 	 *  confirm — or raise it. Previously it started empty, which left the
 	 *  amount invalid, `canPay` false, and no Send button in sight. */
@@ -169,10 +169,10 @@
 
 	const myAccount = getUserBlurtAccount();
 
-	/** cp402 [7b] — the amount that will actually be sent: the entered
+	/** the amount that will actually be sent: the entered
 	 *  value in composer mode, otherwise the pill-provided prop. Parsed
 	 *  to a number so the SAME validation + formatting applies to both. */
-	/** v1.20.0 fix wave, G6 — the field keeps what the user typed (either
+	/** the field keeps what the user typed (either
 	 *  decimal mark, any digit script); this reads it with the active locale's
 	 *  conventions. The old sanitizer deleted every "," as it was typed, so a
 	 *  German "12,5" paid 125 BLURT. Ambiguous input ("1,234" in en) is
@@ -187,7 +187,7 @@
 		formatBlurtAmount(Number.isFinite(effectiveAmount) && effectiveAmount > 0 ? effectiveAmount : 0)
 	);
 
-	/** #25 (the maintainer) — a BLURT transfer is signed with the ACTIVE key. An account
+	/** a BLURT transfer is signed with the ACTIVE key. An account
 	 *  imported posting-only has no active key on this device, so the transfer
 	 *  can never be signed. We used to let the user pick an amount, type their
 	 *  password, and only then fail with "Could not send the transfer." The
@@ -197,7 +197,7 @@
 	 *  Deliberately NOT hiding the Pay-now button: a user whose account can't
 	 *  pay deserves to learn WHY and what to do about it, not to watch a control
 	 *  quietly vanish. */
-	/** CAPABILITY, not provenance (tt.txt #11). A 'posting-active' session — a
+	/** CAPABILITY, not provenance. A 'posting-active' session — a
 	 *  posting-only import that chose to keep its verified Active key on this
 	 *  device — CAN sign a transfer. Asking `origin === 'morphit-seed'` would
 	 *  wrongly deny it. Ask whether the key is actually there. */
@@ -224,7 +224,7 @@
 	);
 	const amountPrecisionOk = $derived(amountEditable ? amountCheck.precisionOk : true);
 
-	/** cp470 — the order's minimum in BLURT (the seed passed via `amount` in
+	/** the order's minimum in BLURT (the seed passed via `amount` in
 	 *  the composer flow). The user may RAISE the amount but not drop it below
 	 *  this floor; too-low gets a red border + a specific message. Falls back
 	 *  to the absolute MIN_BLURT when the order min couldn't be derived (seed
@@ -254,7 +254,7 @@
 			passwordFilled
 	);
 
-	/** cp470 — whether to show the confirm summary + credential entry.  This
+	/** whether to show the confirm summary + credential entry.  This
 	 *  MUST be independent of `passwordFilled` and `hasActiveKey`: the password
 	 *  field (active-key path) AND the posting-only UnlockActiveKeyModal both
 	 *  live INSIDE the summary, so gating the summary on `canPay` (which
@@ -266,16 +266,16 @@
 		myAccount !== null && myAccount !== recipient && amountValid
 	);
 
-	/** cp470 — red border when the typed amount is present but invalid (bad
+	/** red border when the typed amount is present but invalid (bad
 	 *  numeric shape, or below the order minimum). Empty stays neutral. */
 	const amountFieldInvalid = $derived(
 		amountEditable && enteredAmount.trim().length > 0 && !amountValid
 	);
 
-	/** cp470 — the order minimum, formatted for the below-minimum message. */
+	/** the order minimum, formatted for the below-minimum message. */
 	const minBlurtDisplay = $derived(formatBlurtAmount(orderMinBlurt));
 
-	/** cp470 / v1.20.0 G6 — drop keystrokes that can never be part of an
+	/** / v1.20.0 G6 — drop keystrokes that can never be part of an
 	 *  amount (letters, symbols). Digits of any script, both decimal marks and
 	 *  grouping stay visible; `parseAmountInput` reads them and the precision
 	 *  check (≤3 decimals) reports too many decimals instead of silently
@@ -289,12 +289,12 @@
 		if (el.value !== v) el.value = v;
 	}
 
-	/** tt.txt #11 — a posting-only session unlocked its Active key just for this
+	/** a posting-only session unlocked its Active key just for this
 	 *  payment. The scalar exists in memory for the ~10ms signing window and is
 	 *  then wiped with `sodium.memzero`; it is NEVER written to the keystore.
 	 *
-	 *  the maintainer: "let the user SEAMLESSLY continue doing what they were doing without
-	 *  losing their place" — so this resumes the payment with the amount already
+	 *  Requirement: the user continues seamlessly, without losing their place — so this
+	 *  resumes the payment with the amount already
 	 *  typed, rather than closing the modal and making them start over. */
 	async function payWithEphemeralActiveKey(activeScalar: Uint8Array): Promise<void> {
 		if (!amountValid || myAccount === null || myAccount === recipient) return;
@@ -431,7 +431,7 @@
 		</h2>
 
 		{#if amountEditable}
-			<!-- cp402 [7b] — composer "Pay now": the amount is entered here
+			<!-- composer "Pay now": the amount is entered here
 			     (there is no address pill to carry it). Validated to a
 			     positive BLURT number; the confirmation summary + Send
 			     button below appear only once it is valid. The recipient
@@ -507,7 +507,7 @@
 					</button>
 				</div>
 			{:else}
-				<!-- cp402 [7b] — editable + amount not entered yet: no scary
+				<!-- editable + amount not entered yet: no scary
 				     error (the input above guides the user); offer Cancel. -->
 				<div class="mt-5 flex justify-center">
 					<button
@@ -581,7 +581,7 @@
 					</button>
 				</div>
 			{:else if !hasActiveKey}
-				<!-- #25 / tt.txt #11 — this account was imported posting-only, so there
+				<!-- #25 / this account was imported posting-only, so there
 				     is no active key on this device and a transfer can never be signed
 				     with what we hold. Rather than a dead end (or, worse, collecting a
 				     password that cannot work), unlock IN PLACE and resume: the amount
@@ -598,7 +598,7 @@
 				<!-- Password input -->
 				<label class="mt-5 block">
 					<span class="text-sm font-semibold">
-						<!-- #24 (the maintainer) — "Active key password" / "Your password" told the user
+						<!-- "Active key password" / "Your password" told the user
 						     nothing. Morphit stores the ACTIVE KEY encrypted; this field is
 						     the password that unlocks it. One field, not two. -->
 						{$_('chat.pay_blurt.password_label', { values: { account: myAccount ?? '' } })}

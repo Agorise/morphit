@@ -99,6 +99,19 @@ export class KeystoreError extends Error {
 	}
 }
 
+/** Why a file is not a keyfile this build can read — typed, so the import
+ *  page can say which (instead of classifying English messages). */
+export type KeyfileFormatErrorKind = 'too_large' | 'not_morphit' | 'too_new' | 'corrupt';
+
+export class KeyfileFormatError extends Error {
+	readonly kind: KeyfileFormatErrorKind;
+	constructor(kind: KeyfileFormatErrorKind, message: string) {
+		super(message);
+		this.name = 'KeyfileFormatError';
+		this.kind = kind;
+	}
+}
+
 /** The original single-wrap envelope.  Default when `scheme` is
  *  missing from a parsed envelope. */
 export interface SimplePassphraseEnvelope {
@@ -226,9 +239,7 @@ function jsonToIdentity(json: string): Identity {
 		seedBytes: string | null;
 		keys: Record<string, { pub: string; priv: string } | null>;
 		totpSecret?: string | null;
-		totpBackupCodes?:
-			| ReadonlyArray<{ hash: string; used: boolean; usedAt: number }>
-			| null;
+		totpBackupCodes?: ReadonlyArray<{ hash: string; used: boolean; usedAt: number }> | null;
 	};
 
 	const origin: 'morphit-seed' | 'posting-only' | 'posting-active' =
@@ -364,9 +375,18 @@ function jsonToIdentity(json: string): Identity {
 }
 
 /** Derive the symmetric key from password + salt via Argon2id. */
-async function deriveKey(password: string, salt: Uint8Array): Promise<Uint8Array> {
+/** Derive the wrap key. With `stored` (a decrypt), the envelope's own KDF
+ *  parameters are used — already checked to lie within [floor, ceiling] by
+ *  assertSafeKdfParams — so a keystore written with stronger parameters
+ *  still opens; without (an encrypt), this build's INTERACTIVE ones. */
+async function deriveKey(
+	password: string,
+	salt: Uint8Array,
+	stored?: { opslimit: number; memlimit: number }
+): Promise<Uint8Array> {
 	await ensureSodium();
-	const { ops, mem } = argonParams();
+	const { ops, mem } =
+		stored !== undefined ? { ops: stored.opslimit, mem: stored.memlimit } : argonParams();
 	return sodium.crypto_pwhash(
 		sodium.crypto_secretbox_KEYBYTES,
 		password,
@@ -444,7 +464,7 @@ export async function encryptIdentity(
  */
 export async function decryptIdentity(env: KeystoreEnvelope, password: string): Promise<Identity> {
 	await ensureSodium();
-	if (env.v !== 1) throw new Error(`Unsupported keystore version: ${env.v}`);
+	if (env.v !== 1) throw new KeystoreError('unsupported', `Unsupported keystore version: ${env.v}`);
 
 	if (env.scheme === 'layered-cek') {
 		return decryptLayeredWithPassphrase(env, password);
@@ -466,7 +486,7 @@ async function decryptSimplePassphrase(
 	const salt = fromB64(env.salt);
 	const nonce = fromB64(env.nonce);
 	const ciphertext = fromB64(env.ciphertext);
-	const key = await deriveKey(password, salt);
+	const key = await deriveKey(password, salt, env.kdfParams);
 
 	let plaintext: Uint8Array;
 	try {
@@ -518,7 +538,7 @@ async function recoverCekViaPassphrase(
 		const salt = fromB64(wrap.salt);
 		const wrapNonce = fromB64(wrap.nonce);
 		const wrapCt = fromB64(wrap.ciphertext);
-		const wrapKey = await deriveKey(password, salt);
+		const wrapKey = await deriveKey(password, salt, wrap.kdfParams);
 		try {
 			const cek = sodium.crypto_secretbox_open_easy(wrapCt, wrapNonce, wrapKey);
 			sodium.memzero(wrapKey);
@@ -704,9 +724,45 @@ export async function rewrapLayeredPassphrase(
 	}
 }
 
+/**
+ * Re-encrypt an updated identity (new TOTP state, a redeemed backup code, an
+ * added Active key) into an envelope of the SAME shape as `env`, under the
+ * same password. A simple-passphrase envelope stays simple; a layered one
+ * keeps its CEK and every wrap — only the identity blob changes — so an
+ * enrolled YubiKey keeps unlocking it. (Re-encrypting a layered keystore with
+ * `encryptIdentity` would emit a simple envelope and silently drop the
+ * YubiKey.) Throws 'bad_password' / 'no_passphrase_wrap' like decryptIdentity.
+ */
+export async function reencryptIdentityKeepingWraps(
+	env: KeystoreEnvelope,
+	password: string,
+	id: Identity
+): Promise<KeystoreEnvelope> {
+	await ensureSodium();
+	if (env.scheme !== 'layered-cek') return encryptIdentity(id, password);
+	validateLayeredEnvelope(env);
+	const cek = await recoverCekViaPassphrase(env, password);
+	try {
+		return await reencryptLayeredWithCek(env, cek, id);
+	} finally {
+		sodium.memzero(cek);
+	}
+}
+
+/** The same for a layered envelope whose CEK the caller already holds (the
+ *  YubiKey unlock path). Caller owns and wipes `cek`. */
+export async function reencryptLayeredWithCek(
+	env: LayeredCekEnvelope,
+	cek: Uint8Array,
+	id: Identity
+): Promise<LayeredCekEnvelope> {
+	const { cekNonce, ciphertext } = await encryptIdentityToCek(id, cek);
+	return { ...env, cekNonce: toB64(cekNonce), ciphertext: toB64(ciphertext) };
+}
+
 /** Defensive minimums for KDF parameters in a stored envelope.
  *
- *  cp138 C-1 — raised to libsodium's `crypto_pwhash_OPSLIMIT_
+ *  raised to libsodium's `crypto_pwhash_OPSLIMIT_
  *  INTERACTIVE` (=2) and `crypto_pwhash_MEMLIMIT_INTERACTIVE`
  *  (=64 MiB) values.  This closes the M4 finding from the
  *  2026-04-28 batch-I audit:
@@ -719,7 +775,7 @@ export async function rewrapLayeredPassphrase(
  *    is ~6000× cheaper than at INTERACTIVE — a downgrade attack
  *    against any user whose localStorage gets compromised.
  *
- *  Post-cp138: ops>=2, mem>=64 MiB.  Floor matches encrypt-time
+ *  newer: ops>=2, mem>=64 MiB.  Floor matches encrypt-time
  *  default exactly.  A tampered envelope that drops below this
  *  floor is rejected.  No drift surface left.
  *
@@ -737,13 +793,24 @@ export async function rewrapLayeredPassphrase(
 const MIN_KDF_OPSLIMIT = 2; // crypto_pwhash_OPSLIMIT_INTERACTIVE
 const MIN_KDF_MEMLIMIT = 64 * 1024 * 1024; // 64 MiB = crypto_pwhash_MEMLIMIT_INTERACTIVE
 
+/** Ceilings: a stored envelope may ask for at most libsodium's SENSITIVE
+ *  passes and MODERATE memory. Anything above is refused rather than run — a
+ *  hostile keyfile asking for gigabytes would otherwise freeze or crash the
+ *  tab the moment it is opened. */
+const MAX_KDF_OPSLIMIT = 4; // crypto_pwhash_OPSLIMIT_SENSITIVE
+const MAX_KDF_MEMLIMIT = 256 * 1024 * 1024; // 256 MiB = crypto_pwhash_MEMLIMIT_MODERATE
+
 function assertSafeKdfParams(p: { opslimit: number; memlimit: number } | undefined): void {
 	if (
 		!p ||
 		typeof p.opslimit !== 'number' ||
 		typeof p.memlimit !== 'number' ||
+		!Number.isSafeInteger(p.opslimit) ||
+		!Number.isSafeInteger(p.memlimit) ||
 		p.opslimit < MIN_KDF_OPSLIMIT ||
-		p.memlimit < MIN_KDF_MEMLIMIT
+		p.memlimit < MIN_KDF_MEMLIMIT ||
+		p.opslimit > MAX_KDF_OPSLIMIT ||
+		p.memlimit > MAX_KDF_MEMLIMIT
 	) {
 		throw new Error('Keystore envelope has invalid or unsafe KDF parameters');
 	}
@@ -864,21 +931,42 @@ const MAX_KEYFILE_BYTES = 64 * 1024;
 /** Parse a user-supplied keyfile back into an envelope. */
 export async function blobToEnvelope(blob: Blob): Promise<KeystoreEnvelope> {
 	if (blob.size > MAX_KEYFILE_BYTES) {
-		throw new Error(`Keyfile too large (${blob.size} bytes; cap is ${MAX_KEYFILE_BYTES})`);
+		throw new KeyfileFormatError(
+			'too_large',
+			`Keyfile too large (${blob.size} bytes; cap is ${MAX_KEYFILE_BYTES})`
+		);
 	}
 	const text = await blob.text();
-	const parsed = JSON.parse(text) as { format?: string } & KeystoreEnvelope;
-	if (parsed.format !== DOMAIN) {
-		throw new Error('Not a Morphit keyfile');
+	let parsed: { format?: string } & KeystoreEnvelope;
+	try {
+		parsed = JSON.parse(text) as { format?: string } & KeystoreEnvelope;
+	} catch {
+		throw new KeyfileFormatError('not_morphit', 'Not a Morphit keyfile (not JSON)');
+	}
+	if (parsed === null || typeof parsed !== 'object' || parsed.format !== DOMAIN) {
+		throw new KeyfileFormatError('not_morphit', 'Not a Morphit keyfile');
+	}
+	if (typeof parsed.v === 'number' && parsed.v > 1) {
+		throw new KeyfileFormatError(
+			'too_new',
+			`Keyfile version ${parsed.v} is newer than this app reads`
+		);
 	}
 	// P5-2 + audit 2026-05 finding 1-1: defense-in-depth — validate
 	// structure at parse time for BOTH schemes so callers don't
 	// have to remember.  Layered → validateLayeredEnvelope;
 	// simple-passphrase (default scheme) → validateSimpleEnvelope.
-	if (parsed.scheme === 'layered-cek') {
-		validateLayeredEnvelope(parsed);
-	} else {
-		validateSimpleEnvelope(parsed as SimplePassphraseEnvelope);
+	try {
+		if (parsed.scheme === 'layered-cek') {
+			validateLayeredEnvelope(parsed);
+		} else {
+			validateSimpleEnvelope(parsed as SimplePassphraseEnvelope);
+		}
+	} catch (err) {
+		throw new KeyfileFormatError(
+			'corrupt',
+			`Damaged keyfile: ${err instanceof Error ? err.message : String(err)}`
+		);
 	}
 	return parsed;
 }
@@ -911,8 +999,9 @@ export async function blobToEnvelope(blob: Blob): Promise<KeystoreEnvelope> {
  *    Account creation is the ONLY conceivable trigger, and even that
  *    is a new-account-creation flow we haven't shipped yet.  Once a
  *    Morphit account exists, the owner key sits encrypted in the
- *    keystore and is NEVER touched again.  If you find yourself
- *    writing code that calls `useOwnerKey`, stop and double-check.
+ *    keystore and is NEVER touched again. There is deliberately no
+ *    helper that hands it out; a future account-creation or key-rotation
+ *    flow would add one, with the same contract as useActiveKey.
  *
  *  • ACTIVE key — Morphit AVOIDS this in normal operation too.  The
  *    only legitimate triggers in current code:
@@ -987,42 +1076,6 @@ export async function useActiveKeyForPasswordChange<T>(
 	return useJitKey(env, password, 'active', fn, undefined);
 }
 
-/**
- * Just-in-time unlock of the BLURT OWNER private key.
- *
- * ELI5: the owner key is Blurt's "nuclear" credential — it can
- * change every other key on the account including itself.  Compromising
- * it = full account takeover.  Morphit's policy is to NEVER use this
- * key in normal operation.  See useActiveKey above for the full role-
- * key tier explainer.
- *
- * The only legitimate trigger is account creation (one signature, once
- * in the lifetime of the account, never again) or key rotation (a
- * recovery operation the user explicitly initiates).  Account creation
- * isn't shipped yet; key rotation isn't shipped yet either.  In the
- * current code path, this function is effectively dead — it exists for
- * the future flows that will need it.
- *
- * If you're reading this comment because you just landed in the
- * function, ask yourself whether the path you're on is REALLY one of
- * those two scenarios.  If it isn't, you should be using
- * `useActiveKey` (for BLURT transfers) or just the live posting key
- * (for chat/orders/comments) instead.
- *
- * Same safety contract as `useActiveKey`: decrypt → extract one role
- * → wipe everything else → run callback → wipe the role's key on
- * success or throw.  The owner private lives in JS memory for
- * ~milliseconds.
- */
-export async function useOwnerKey<T>(
-	env: KeystoreEnvelope,
-	password: string,
-	fn: (ownerPrivateKey: Uint8Array) => Promise<T>,
-	expectedPostingPub: Uint8Array
-): Promise<T> {
-	return useJitKey(env, password, 'owner', fn, expectedPostingPub);
-}
-
 /** Internal: shared JIT pattern for either recovery-tier role.
  *
  *  M6 fix: optional `expectedPostingPub` lets the caller pin the
@@ -1042,7 +1095,7 @@ export async function useOwnerKey<T>(
 async function useJitKey<T>(
 	env: KeystoreEnvelope,
 	password: string,
-	role: 'active' | 'owner',
+	role: 'active',
 	fn: (privateKey: Uint8Array) => Promise<T>,
 	expectedPostingPub?: Uint8Array
 ): Promise<T> {
@@ -1129,9 +1182,8 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 	return diff === 0;
 }
 
-
 /**
- * tt.txt #11 — promote a `posting-only` keystore to `posting-active` by storing
+ * promote a `posting-only` keystore to `posting-active` by storing
  * a verified Active key alongside the Posting key, re-encrypted under the SAME
  * password.
  *
@@ -1148,7 +1200,9 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
  *   • `activePublicKey` must be the public key of `activeScalar` — the caller
  *     already verified it against the chain's authorities, and we verify that
  *     the two halves it hands us actually belong together;
- *   • owner and memo stay null. An Active key cannot derive them.
+ *   • owner and memo stay null. An Active key cannot derive them;
+ *   • the envelope keeps its shape: a layered keystore keeps its CEK and every
+ *     wrap, so an enrolled YubiKey still unlocks it.
  *
  * Every private byte this function touches is zeroed before it returns,
  * including on the throw paths.
@@ -1168,6 +1222,13 @@ export async function upgradeToPostingActive(
 		if (activeScalar.length !== 32) {
 			throw new Error('upgradeToPostingActive: active scalar must be 32 bytes');
 		}
+		const { getPublicKey } = await import('@noble/secp256k1');
+		const derived = getPublicKey(activeScalar, true);
+		if (derived.length !== activePublicKey.length || !sodium.memcmp(derived, activePublicKey)) {
+			throw new Error(
+				'upgradeToPostingActive: the active public key does not belong to the scalar'
+			);
+		}
 		const upgraded: Identity = {
 			createdAt: full.createdAt,
 			origin: 'posting-active',
@@ -1185,7 +1246,7 @@ export async function upgradeToPostingActive(
 			totpSecret: full.totpSecret,
 			totpBackupCodes: full.totpBackupCodes
 		};
-		const next = await encryptIdentity(upgraded, password);
+		const next = await reencryptIdentityKeepingWraps(env, password, upgraded);
 		// Zero our copies of the active key material; the ciphertext holds it now.
 		const activeKp = upgraded.keys.active;
 		if (activeKp) sodium.memzero(activeKp.privateKey);

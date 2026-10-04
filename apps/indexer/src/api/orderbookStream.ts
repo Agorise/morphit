@@ -60,6 +60,7 @@ import {
 } from '$api/reputationJoin';
 import {
 	buildWhereClauses,
+	orderbookOrderBy,
 	makeFetchSerializer,
 	rowToWire,
 	sseEvent,
@@ -127,6 +128,10 @@ const orderbookStreamQuerySchema = z.object({
 		.refine((v) => validateOrderPermlink(v) === null)
 		.optional(),
 	asset: z.enum(ASSET_TICKERS).optional(),
+	asset_network: z
+		.string()
+		.regex(/^[a-z0-9]{2,16}$/)
+		.optional(),
 	side: z.enum(['buy', 'sell']).optional(),
 	fiat_currency: z
 		.string()
@@ -137,7 +142,9 @@ const orderbookStreamQuerySchema = z.object({
 		.optional(),
 	location_region: z.string().min(1).max(128).optional(),
 	payment_methods: z.string().min(1).max(256).optional(),
-	min_trades: z.coerce.number().int().min(0).max(100).optional()
+	langs: z.string().min(1).max(128).optional(),
+	min_trades: z.coerce.number().int().min(0).max(100).optional(),
+	sort: z.enum(['recent', 'rating', 'trades']).optional()
 });
 
 /**
@@ -147,7 +154,7 @@ const orderbookStreamQuerySchema = z.object({
  * the trade count, and a feedback-only name is how a reader talks themselves
  * out of checking whether the trade-shaped columns are here too.
  *
- * cp473 — this block used to be a HAND COPY of the feedback aggregate, the
+ * this block used to be a HAND COPY of the feedback aggregate, the
  * engagement counter and the accounts join, kept in sync with /v1/orderbook by
  * hand. reputationJoin's own docstring says why that is a mistake: "Getting one
  * of those exclusions wrong in a COPY of this SQL would silently publish
@@ -169,10 +176,11 @@ ${tradeCountJoin('o')}
 `;
 
 const ROW_SELECT = `
-	SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
+	SELECT o.account, o.permlink, o.side, o.asset, o.asset_network, o.fiat_currency,
 	       o.amount_min::text, o.amount_max::text, o.price_model,
 	       o.location_region, o.payment_methods, o.accepted_assets,
 	       o.specific_barter_title, o.terms,
+	       o.lang,
 	       o.fee_method,
 	       COALESCE(f.c, 0)::int AS feedback_count,
 	       CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
@@ -189,7 +197,7 @@ const ROW_SELECT = `
 	       COALESCE(e.distinct_senders_24h, 0)::int AS engagement_24h,
 	       a.first_trade_complete_at,
 	       a.posting_pubkey,
-	       -- v1.8.14 (the maintainer): identity INLINE on the live path too. v1.8.13 added
+	       -- v1.8.14: identity INLINE on the live path too. v1.8.13 added
 	       -- this to the REST query only, so orders arriving or refreshing via
 	       -- the stream still painted @account + identicon and swapped seconds
 	       -- later. That is why it was intermittent: "half of the time or so".
@@ -198,18 +206,19 @@ const ROW_SELECT = `
 	       o.created_at, o.updated_at, o.expires_at
 `;
 
-/** Fetch the snapshot — the "first page" matching the filter,
- *  sort=recent, limit=SNAPSHOT_LIMIT. */
+/** Fetch the snapshot — the "first page" matching the filter, in the
+ *  page's sort (it replaces the REST rows, so it must be the same page),
+ *  limit=SNAPSHOT_LIMIT. */
 async function fetchSnapshot(db: Database, q: OrderbookStreamQuery, operatorAccount: string): Promise<OrderbookStreamRow[]> {
 	const { where, params } = buildWhereClauses(q, 0, operatorAccount);
 	const sql = `${ROW_SELECT}
 		 FROM orders o
 		 ${CARD_JOINS}
 		 WHERE ${where.join(' AND ')}
-		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
+		 ORDER BY ${orderbookOrderBy(q.sort)}
 		 LIMIT ${SNAPSHOT_LIMIT}`;
 	const result = await db.query<OrderbookStreamRow>(sql, params);
-	// cp508 (tt.txt #1/#2) — skip orders the fast path just provisionally
+	// skip orders the fast path just provisionally
 	// removed (cancel/complete at head) that the durable table hasn't caught up
 	// on, so a freshly-connected stream doesn't re-show a just-cancelled order
 	// for ~60s. Self-heals via the memory's TTL once the poller sweeps the row.
@@ -263,7 +272,7 @@ async function fetchRecentlyChanged(
 		 LIMIT ${MAX_TRACKED_ORDERS}`;
 	const cutoff = new Date(Date.now() - FALLBACK_LOOKBACK_MS);
 	const result = await db.query<OrderbookStreamRow>(sql, [cutoff, ...params]);
-	// cp508 — same guard as fetchSnapshot: the fallback poll must not re-upsert
+	// same guard as fetchSnapshot: the fallback poll must not re-upsert
 	// an order the fast path just provisionally removed but whose durable row is
 	// still 'live' (poller behind). Without this, a just-cancelled order that
 	// was recently updated would flicker back in on the next 60s poll.
@@ -354,7 +363,7 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 				// Flush-forcing preamble (see instancesStream): a compressing/buffering
 				// proxy (BunkerWeb gzip/brotli) can hold an SSE stream's first bytes until
 				// its buffer fills, ignoring no-transform/X-Accel-Buffering and stalling the
-				// stream for minutes (the maintainer/timeapp). ~2 KB of SSE comment fills+flushes that
+				// stream for minutes (timeapp). ~2 KB of SSE comment fills+flushes that
 				// buffer at once; EventSource ignores ':'-prefixed lines, so it's invisible.
 				safePush(':' + ' '.repeat(2048) + '\n\n');
 

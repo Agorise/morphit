@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, M3 — a free first-buy waiver order must not be a review
+ * a free first-buy waiver order must not be a review
  * citation, and must not trigger the relay-paid welcome bonus.
  *
  * rv6 A4: the waiver order is inserted with fee_status='verified' at zero cost,

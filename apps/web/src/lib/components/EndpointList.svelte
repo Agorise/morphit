@@ -6,7 +6,7 @@
 	import type { RpcEndpointHealth } from '@morphit/indexer-client';
 
 	/** The canonical Blurt RPC pool + per-node health, fetched from the operator's
-	 *  indexer. cp410: this card is purely INFORMATIONAL — there is nothing for
+	 *  indexer. this card is purely INFORMATIONAL — there is nothing for
 	 *  the user to configure. The browser talks ONLY to the operator's indexer,
 	 *  which relays every chain read/write and measures these nodes server-side,
 	 *  so the browser NEVER contacts a Blurt node directly (the sole exception is
@@ -17,7 +17,7 @@
 	/** True while the indexer health fetch is in flight (initial load or a click
 	 *  on refresh) — drives the refresh icon's spin. */
 	let loading = $state(false);
-	/** Unix-ms of the last fetch START. t.txt #1 — the button stays clickable
+	/** Unix-ms of the last fetch START. the button stays clickable
 	 *  as fast as the user likes, but we never re-ping the indexer more than once
 	 *  per THROTTLE_MS so nobody can pound the pool. */
 	let lastFetchAt = $state(0);
@@ -33,7 +33,7 @@
 	 *  A single ?probe=1 miss is one sample; we don't let it override this. */
 	let passiveByUrl = new Map<string, RpcEndpointHealth>();
 
-	/** Never re-ping the indexer faster than this (t.txt #1). */
+	/** Never re-ping the indexer faster than this. */
 	const THROTTLE_MS = 5000;
 	/** Keep the spinner up at least this long so a fast fetch is still visible. */
 	const MIN_SPIN_MS = 550;
@@ -87,7 +87,7 @@
 
 	/** The refresh button handler. Always clickable; a click re-pings the indexer
 	 *  at most once per THROTTLE_MS. A rate-limited click gives a quick visual ack
-	 *  rather than silently doing nothing (t.txt #1). */
+	 *  rather than silently doing nothing. */
 	function onRefreshClick(): void {
 		if (loading) return;
 		if (Date.now() - lastFetchAt < THROTTLE_MS) {
@@ -101,7 +101,7 @@
 		})();
 	}
 
-	/** cp471 (tt.txt C) — a ONE-LINE reason a node is red, instead of a flat
+	/** a ONE-LINE reason a node is red, instead of a flat
 	 *  "unreachable" that sends the reader chasing the wrong problem (the maintainer's
 	 *  case: the node's operator had renovated the balancer certificate, so the
 	 *  node answered 200 to him while our TLS handshake failed).
@@ -112,7 +112,7 @@
 	 *
 	 *  Falls back to the plain "Unreachable" label when the indexer sent no
 	 *  reason (older indexer, or the passive pool snapshot) or when the node is
-	 *  genuinely not pingable — per the maintainer, "Unreachable" suffices for that. */
+	 *  genuinely not pingable — as requested, "Unreachable" suffices for that. */
 	function failureText(h: RpcEndpointHealth): string {
 		switch (h.failure_reason) {
 			case 'timeout':
@@ -169,7 +169,7 @@
 			};
 		}
 		// A failing node shows WHY it's failing (timed out / TLS / refused …) —
-		// the reason is the actionable signal (cp471). This takes precedence over
+		// the reason is the actionable signal. This takes precedence over
 		// the cooldown label: "cooling down" is an internal backoff detail, and a
 		// node in cooldown is always there BECAUSE it failed, so surfacing the
 		// reason instead avoids the passive-snapshot ("cooling down") → live-probe
@@ -236,7 +236,7 @@
 </script>
 
 <div>
-	<!-- v1.7.7 (t.txt #7) — the pool note is gone; `settings.endpoints.explain`
+	<!-- v1.7.7 — the pool note is gone; `settings.endpoints.explain`
 	     above already says what these nodes are and how they're picked, and the
 	     second paragraph only restated it. `justify-end` (not `justify-between`)
 	     because the refresh button is now the only child, and justify-between

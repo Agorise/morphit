@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/order-card-smoke.ts (cp404)
+ * apps/web/scripts/order-card-smoke.ts
  *
  * Structural invariants over the shared OrderCard component and its two
  * call sites (orderbook results + profile active-orders). Locks the
@@ -45,7 +45,7 @@ const check = (name: string, cond: boolean, detail = '') => {
 };
 
 const card = read('src/lib/components/OrderCard.svelte');
-// cp406 — the identity row (avatar + name·new-trader·⭐score, key·trades) was
+// the identity row (avatar + name·new-trader·⭐score, key·trades) was
 // extracted into the shared OrderPosterIdentity component. Assertions about
 // that row now read from it; card-level assertions stay on OrderCard.
 const identity = read('src/lib/components/OrderPosterIdentity.svelte');
@@ -90,8 +90,8 @@ check(
 // ─── "trades since {month}" gating ────────────────────────────────
 check(
 	'5 the cluster is UNBREAKABLE (nowrap + flex-none in a wrapping row)',
-	// the maintainer: "none of that chunk ever gets broken, no wrap. it stays together as a
-	// chunk of text or else it must go onto its own line." nowrap stops it
+	// Requirement: the chunk never breaks internally (no wrap); it stays together or moves to
+	// its own line. nowrap stops it
 	// breaking internally; flex-none stops a long display name squeezing it.
 	// The old "852 trades since July, 2026" line is deliberately gone: with the
 	// chunk nowrap by contract, a "since {month}" tail overflows a phone rather
@@ -126,19 +126,10 @@ check(
 	/\{#if onToggleHide && !blocked\}/.test(card)
 );
 
-// ─── Preserved / new signals (cp404 revision) ─────────────────────
+// ─── Preserved / new signals (revision) ─────────────────────
 check(
 	'11 keeps expiry (card) + new-trader (identity) chips',
 	/OrderExpiryChip/.test(card) && /NewTraderChip/.test(identity)
-);
-check(
-	'11b engagement chip commented out, data preserved',
-	// The import is commented (so it cannot be actively rendered —
-	// svelte-check would fail otherwise), the "hidden per the maintainer" marker is
-	// present, and engagement_24h still flows on the data model.
-	/\/\/ import EngagementChip from/.test(card) &&
-		/engagement_24h/.test(card) &&
-		/hidden per the maintainer/.test(card)
 );
 check(
 	'11c price-model subline shown under the expiry pill',
@@ -207,7 +198,7 @@ const LOCALES_DIR = resolve(WEB, 'src/lib/i18n/locales');
 // contract, a "since {month}" tail overflows a phone rather than wrapping. The
 // key was pruned from all 10 locales, and the i18n dead-key gate enforces that
 // no locale keeps a leaf that nothing references.
-// v1.7.5 (t.txt #8) — `reputation_aria` is deliberately gone. It backed the
+// v1.7.5 — `reputation_aria` is deliberately gone. It backed the
 // chatroom's HAND-ROLLED `⭐ {score}`, which was replaced by the shared
 // TradeRepCluster; the shared RatingChip announces via `orderbook.order.rating_aria`
 // instead, so screen-reader coverage is unchanged and this key had no consumer
@@ -257,11 +248,11 @@ if (failed > 0) {
 	process.exit(1);
 }
 
-// ─── v1.7.5 (t.txt #5, #6, #7) ───────────────────────────────────────
+// ─── v1.7.5 ───────────────────────────────────────
 const chip = read('src/lib/components/OrderExpiryChip.svelte');
 const ratingChip = read('src/lib/components/RatingChip.svelte');
 
-// t.txt #5 — the maintainer asked for "Posted 1h ago" and added "assuming that is correct".
+// The maintainer asked for "Posted 1h ago" and added "assuming that is correct".
 // It wasn't, quite: `orders.updated_at` starts equal to created_at but feeAttest
 // MOVES it when a BTC/XMR listing fee verifies — to a LIVE order, hours after
 // posting. So relabelling alone would have said "Posted 5m ago" about an order
@@ -278,7 +269,7 @@ check(
 );
 check('23 the tooltip says posted, not updated', /orderbook\.order\.posted_ago/.test(chip));
 
-// t.txt #6 — 0 hides entirely; 1 is singular; >1 plural.
+// 0 hides entirely; 1 is singular; >1 plural.
 check('24 zero trades renders nothing at all', /const showTrades = \$derived\(tradeCount > 0\);/.test(cluster));
 check(
 	'25 the plural selector gets the RAW count, not the compacted string',
@@ -286,7 +277,7 @@ check(
 	'formatCountCompact yields "1.2K"; a string never matches an ICU plural rule'
 );
 
-// t.txt #7 — rating pill FIRST, trade count to its right at the pill's size.
+// rating pill FIRST, trade count to its right at the pill's size.
 const ratingIdx = cluster.indexOf('<RatingChip count={ratingCount} {rating} />');
 const tradesIdx = cluster.indexOf('<span class="text-xs">{tradesText}</span>');
 check('26 the rating pill renders before the trade count', ratingIdx > 0 && tradesIdx > ratingIdx);
@@ -294,7 +285,7 @@ check('27 the trade count matches the pill\'s text-xs', tradesIdx > 0);
 check(
 	'28 the cluster is still ONE unbreakable chunk',
 	/inline-flex flex-none items-center gap-1\.5 whitespace-nowrap/.test(cluster),
-	"the maintainer: none of that chunk ever gets broken, no wrap"
+	"Requirement: none of that chunk ever gets broken, no wrap"
 );
 check(
 	'29 the rating count is no longer dimmed to 70%',

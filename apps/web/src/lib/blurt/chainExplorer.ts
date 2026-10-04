@@ -1,5 +1,5 @@
 /**
- * Morphit frontend — block-explorer block/tx fetchers (cp296).
+ * Morphit frontend — block-explorer block/tx fetchers.
  *
  * Fetches a block or a confirmed transaction FROM THE INDEXER,
  * same-origin, instead of calling Blurt `get_block` / `get_transaction`
@@ -70,7 +70,7 @@ export const CHAIN_TX_TIMEOUT_MS = 20_000;
 
 /** Fetch `GET /v1/chain/tx/:id` from the indexer.
  *
- *  (v1.18.0 deep-deep, L1) Bounded: this had no timeout, so a stalled request —
+ *  Bounded: this had no timeout, so a stalled request —
  *  an ordinary thing on a Tor circuit — never settled. The chat sweep asks this
  *  before calling a send failed, and a question that never returns left the
  *  message showing "confirmed" for as long as the request hung. The budget

@@ -1,13 +1,20 @@
 [Unit]
 # Morphit indexer — Blurt-chain -> Postgres materialisation + read-only REST
-# API (/v1/*). Matches the morphit-ops deployment: monorepo at /opt/morphit,
-# root-owned config, Postgres in a Docker container.
+# API (/v1/*). Monorepo at /opt/morphit (root-owned: only root can change the
+# code this runs or the config it reads), Postgres reached over TCP.
 #
-# Install (one-time, as root):
+# Runs as its own unprivileged user `morphit-indexer` (no shell, no home, no
+# capabilities, read-only view of the system): an exploit of this
+# internet-facing service is not root, cannot change its own code, and cannot
+# reach the Docker socket. Install (one-time, as root):
+#   groupadd --system morphit-indexer
+#   useradd --system --gid morphit-indexer --groups morphit --no-create-home \
+#     --home-dir /nonexistent --shell /usr/sbin/nologin morphit-indexer
 #   cp ops/systemd/morphit-indexer.service /etc/systemd/system/
 #   systemctl daemon-reload
 #   systemctl enable --now morphit-indexer
 #   journalctl -u morphit-indexer -f       # watch it boot + sync
+# (The Ansible install and `morphit-ops upgrade` do all of this.)
 #
 # After this, `morphit-ops upgrade` restarts it automatically and it survives
 # reboots — no screen sessions.
@@ -15,7 +22,7 @@ Description=Morphit indexer (Blurt-chain indexer and REST API)
 Documentation=https://git.agorise.net/agorise/morphit
 After=network-online.target docker.service
 Wants=network-online.target
-# Reboot recovery (cp597): disable the start-rate-limit so a power-cut restart
+# Reboot recovery: disable the start-rate-limit so a power-cut restart
 # never latches this unit into a permanent 'failed' state while Postgres (a
 # Docker container here) is still coming up — it keeps retrying every RestartSec
 # until the DB is reachable, with no ceiling on attempts.
@@ -23,23 +30,36 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-# Matches the current deployment (install tree + operator config are
-# root-owned). To de-privilege, chown /opt/morphit's config + data to a
-# dedicated service user and set User=/Group= here instead.
-User=root
+User=morphit-indexer
+Group=morphit-indexer
+# Read access to the operator config (/etc/morphit and the env files are
+# root:morphit 0750/0640). Nothing more: not the docker group, not the relay's
+# key.
+SupplementaryGroups=morphit
 WorkingDirectory=/opt/morphit/apps/indexer
+# Its only writable place: the RPC pool's health memory (latency/failure
+# history kept across restarts). systemd creates it owned by this user.
+StateDirectory=morphit-indexer
+StateDirectoryMode=0700
+Environment=MORPHIT_RPC_HEALTH_STATE=/var/lib/morphit-indexer/rpc-health.json
 # Source the operator env + config exactly like a manual start, then exec the
 # indexer. A shell wrapper (rather than EnvironmentFile=) is deliberate so env
 # files written in either `KEY=value` or `export KEY=value` form both load.
-# We source BOTH layouts, each guarded with `[ -f ]`: the ops-cli layout
-# (/opt/morphit/morphit.env + morphit.config.env, written by `morphit-ops
-# init` / `edit`) AND the Ansible layout (/etc/morphit/indexer.env, written by
-# the playbook). An Ansible install produces BOTH, so morphit.config.env is
-# sourced BEFORE indexer.env and env is last-wins — which means indexer.env must
-# NOT carry operator-editable keys (branding, fee recipient), or it would shadow
-# an operator's `morphit-ops edit`. Those keys live only in morphit.config.env.
-# loadConfig() reads process.env, so either path works.
-ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/indexer.env; do [ -f "$f" ] && . "$f"; done; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+# We source BOTH layouts: the ops-cli layout (/opt/morphit/morphit.env +
+# morphit.config.env, written by `morphit-ops init` / `edit`) AND the Ansible
+# layout (/etc/morphit/indexer.env, written by the playbook). An Ansible install
+# produces BOTH, so morphit.config.env is sourced BEFORE indexer.env and env is
+# last-wins — which means indexer.env must NOT carry operator-editable keys
+# (branding, fee recipient), or it would shadow an operator's `morphit-ops
+# edit`. Those keys live only in morphit.config.env. A file that exists but
+# cannot be read stops the start (exit 78, "configuration error") instead of
+# starting without its settings. loadConfig() reads process.env.
+# As root, just before each start: keep the env files it sources readable by
+# the service's group (root:morphit 0640) —
+# a tool that rewrote one atomically leaves it root-only. Root-owned helper;
+# it never makes anything writable (ops/scripts/morphit-service-perms.sh).
+ExecStartPre=+-/usr/local/lib/morphit/morphit-service-perms.sh indexer
+ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/indexer.env; do if [ -e "$f" ]; then [ -r "$f" ] || { echo "cannot read $f" >&2; exit 78; }; . "$f"; fi; done; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
 # v1.20.1: always — an exit with status 0 (a drained event loop) must restart
 # too; on-failure left morphitir's relay down for three days that way.
 Restart=always
@@ -50,17 +70,26 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=morphit-indexer
 
-# --- Hardening (safe with User=root) -------------------------------
+# --- Hardening -------------------------------------------------------
 NoNewPrivileges=yes
+# The whole file system is read-only for it except its StateDirectory and a
+# private /tmp (tsx keeps its compile cache there).
+ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+PrivateDevices=yes
+ProtectHostname=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
+# No capabilities at all, and none it could gain.
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
 ProtectProc=invisible
-# cp683 — ProcSubset MUST be 'all', not 'pid'. The indexer computes the
+# ProcSubset MUST be 'all', not 'pid'. The indexer computes the
 # /v1/health system block (cpu_pct, mem) from /proc/stat + /proc/meminfo; with
 # ProcSubset=pid the kernel hides those non-process files, so os.cpus() can't
 # read CPU counters (cpu_pct stays permanently null) and /proc/meminfo reads
@@ -74,12 +103,24 @@ RestrictNamespaces=yes
 SystemCallArchitectures=native
 # AF_NETLINK is required for os.networkInterfaces() (libuv uv_interface_addresses);
 # without it the relay-health probe's interface enumeration throws EAFNOSUPPORT
-# ("Unknown system error 97") and /v1/health reports a healthy relay as down. cp774.
+# ("Unknown system error 97") and /v1/health reports a healthy relay as down..
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 # A core dump could contain secrets read from env at boot.
 LimitCORE=0
 # Node's V8 JIT writes+executes in memory, so W^X must stay off.
 MemoryDenyWriteExecute=no
+# Memory cap. A burst of large requests must not take the whole box (on a
+# 2-4 GB server the kernel's OOM killer would pick the indexer, or Postgres
+# or Tor next to it). Measured on the real indexer (both of tsx's processes)
+# against local Blurt-shaped nodes: idle 278 MiB; a 150,000-block catch-up
+# with history and API load 593 MiB; the history route at its own cap (two
+# 10,000-entry pages in flight) 667 MiB resident, 735 MiB as the sum of each
+# process's peak. 1536M is about twice the highest of those. Above it the
+# kernel stops the indexer and systemd restarts it (Restart=always).
+# `morphit-ops upgrade` checks the running service carries it
+# (apps/ops-cli/src/lib/indexerMemoryHeal.ts). To set another size on purpose:
+# `sudo systemctl edit morphit-indexer` with [Service] MemoryMax=<size>.
+MemoryMax=1536M
 
 [Install]
 WantedBy=multi-user.target

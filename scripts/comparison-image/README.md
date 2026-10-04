@@ -49,17 +49,18 @@ the team and update both this README and the smoke.
   PNG bakes that in, and pngquant shrinks the result without
   visible quality loss.
 
-## Footer "As of YYYY-MM-DD"
+## Footer "As of <day> <Month>, <year>"
 
-The build script auto-stamps the footer with `date.today()` —
-every run advances the date. The freshness smoke (invariant #11)
-fails if the SVG's footer date is more than 7 days behind the SVG
-file's mtime, which catches hand-edits that forgot to re-run the
-build script.
+The build script stamps the footer with the claims list's "Last
+updated" date (the trailer of `MORPHIT-BRAG-LIST.md`), not the day
+it runs, so a rebuild of unchanged data is byte-identical. The
+freshness smoke checks that the stamp is present and well formed,
+and that the PNG's fingerprint matches the current SVG, which
+catches hand-edits that forgot to re-run the build script.
 
-## Wordmark — the maintainer's hand-placed logo
+## Wordmark — The maintainer's hand-placed logo
 
-the maintainer integrated the Morphit wordmark into the column header in
+The maintainer integrated the Morphit wordmark into the column header in
 Inkscape. The build script embeds it via two Python constants:
 
 - `WORDMARK_DEFS` — the `<linearGradient id="id0">` block

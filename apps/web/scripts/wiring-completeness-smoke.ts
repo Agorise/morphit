@@ -2,7 +2,7 @@
 /**
  * wiring-completeness-smoke — the "claim ⇒ wired" enforcer.
  *
- * Standing rule (the maintainer, recurring): every claim made in
+ * Standing rule (recurring): every claim made in
  * MORPHIT-BRAG-LIST.md and apps/web/src/lib/i18n/locales/en.json's
  * FAQ MUST be verifiable in code or honestly disclosed as backlog.
  * "Push notifications work" is a claim; if the code has no
@@ -215,7 +215,7 @@ const CHECKS: readonly Check[] = [
 		status: 'live'
 	},
 	{
-		// cp16 — brag list #65 (sig-verify on push subscribe).
+		// brag list #65 (sig-verify on push subscribe).
 		// The claim cites three components: (a) a canonical
 		// message format, (b) the cross-check smoke that defends
 		// the contract, (c) the rejection-reason coverage.
@@ -238,7 +238,7 @@ const CHECKS: readonly Check[] = [
 		status: 'live'
 	},
 	{
-		// cp16 walkthrough surfaced this — operator following
+		// A later change surfaced this — operator following
 		// the env-example file MUST see VAPID placeholders so
 		// they know push notifications need setup.  Without
 		// this, an operator who skips RUN-A-MORPHIT-NODE.md
@@ -254,12 +254,12 @@ const CHECKS: readonly Check[] = [
 		status: 'live'
 	},
 	{
-		// cp17 — featured-slot auction refinements (bid history).
+		// featured-slot auction refinements (bid history).
 		// Phase A claim: users see their own recent bids with
 		// visibility status above the bid form.
 		id: 'featured-bid-history-endpoint',
 		claim_source: 'brag_list',
-		claim_phrase: 'Bidders see their own recent bids inline',
+		claim_phrase: 'Bidders see their recent bids',
 		anchor: {
 			kind: 'any_of',
 			specs: [
@@ -276,10 +276,10 @@ const CHECKS: readonly Check[] = [
 		status: 'live'
 	},
 	{
-		// cp17 — outbid push notifications.
+		// outbid push notifications.
 		id: 'featured-bid-outbid-push',
 		claim_source: 'brag_list',
-		claim_phrase: 'displaced bidder gets a push notification',
+		claim_phrase: 'a displaced bidder gets a notification',
 		anchor: {
 			kind: 'grep',
 			pattern: 'outbid_notify_failed',
@@ -288,7 +288,7 @@ const CHECKS: readonly Check[] = [
 		status: 'live'
 	},
 	{
-		// cp18 — anti-snipe extension.  Soft-close auction rule:
+		// anti-snipe extension.  Soft-close auction rule:
 		// late bids extend the deadline so snipers can be
 		// countered.  Capped at MAX_EXTENSIONS to bound
 		// auction-drag.
@@ -302,12 +302,12 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp26 transparent-chain privacy framework ────────────────────
-	// 5 CHECK rows for the 5 brag entries cp26 added (29 updated +
+	// ─── transparent-chain privacy framework ────────────────────
+	// 5 CHECK rows for the 5 brag entries a later change added (29 updated +
 	// new 30/31/32/33/34).  Each pins the canonical code anchor
-	// that proves the claim.  Per cp26 DD-8: the standing rule
+	// that proves the claim.  Per DD-8: the standing rule
 	// (every brag-list claim must be wire-verifiable) was applied
-	// to cp26's new claims as a follow-up audit step.
+	// to the new claims as a follow-up audit step.
 	{
 		id: 'cp26-amount-jitter-generalized',
 		claim_source: 'brag_list',
@@ -325,7 +325,7 @@ const CHECKS: readonly Check[] = [
 		claim_phrase: 'Client-side address-reuse warning',
 		anchor: {
 			kind: 'grep',
-			pattern: 'export function findPriorShare',
+			pattern: 'export async function wasSharedBefore',
 			paths: ['apps/web/src/lib/privacy/addressHistory.ts']
 		},
 		status: 'live'
@@ -356,7 +356,7 @@ const CHECKS: readonly Check[] = [
 		// feature claim.  The anchor here is the privacy-guide
 		// content asserting the policy verbatim, since policy is
 		// enforced through content discipline rather than code
-		// gates.  This is the canonical pattern for cp26-style
+		// gates.  This is the canonical pattern for
 		// policy claims.
 		id: 'cp26-no-wallet-recommendation-policy',
 		claim_source: 'brag_list',
@@ -368,7 +368,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp27 DASH P2P ────────────────────────────────────────────────
+	// ─── DASH P2P ────────────────────────────────────────────────
 	// New brag entry #279 claims DASH is wired as a 4th Category-B
 	// trade-only asset.  Anchor on the canonical registry entry —
 	// if DASH ever loses its registry slot the brag claim drifts
@@ -384,13 +384,13 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp30 USDC P2P ────────────────────────────────────────────────
+	// ─── USDC P2P ────────────────────────────────────────────────
 	// New brag entry #280 claims USDC is wired as the 5th Category-B
 	// trade-only asset (parallel to USDT — multi-network).  Anchor
 	// on the canonical registry entry — if USDC ever loses its
 	// registry slot the brag claim drifts into vaporware and this
 	// CHECK row fires.  Brag #29 (amount-jitter) is also extended
-	// in cp30 to claim stablecoin coverage; this CHECK row implicitly
+	// to claim stablecoin coverage; this CHECK row implicitly
 	// covers that since #29 only makes sense if USDC is registered.
 	{
 		id: 'cp30-usdc-p2p',
@@ -403,9 +403,9 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp30-DD-11 USDT per-network explorer override actually works
+	// ─── USDT per-network explorer override actually works
 	// Anchor on the indexer-side body construction that DD-11 added.
-	// Before cp30-DD, the indexer-client declared this field but the
+	// The indexer-client declared this field but the
 	// indexer body never populated it — frontend defensive-fallback
 	// hid the bug.  Sentinel pins the new body-construction line.
 	{
@@ -419,7 +419,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp30-DD-10 USDC per-network explorer override actually works
+	// ─── USDC per-network explorer override actually works
 	// Same pattern as DD-11 above; anchor on the body-construction.
 	{
 		id: 'cp30-dd-10-usdc-per-network-override-wired',
@@ -432,8 +432,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp31 DAI P2P ─────────────────────────────────────────────────
-	// cp31 brag entry claims DAI is wired as the 6th Category-B
+	// ─── DAI P2P ─────────────────────────────────────────────────
+	// brag entry claims DAI is wired as the 6th Category-B
 	// trade-only asset (parallel to USDT and USDC — multi-network).
 	// Anchor on the canonical registry entry; if DAI ever loses its
 	// registry slot the brag claim drifts into vaporware and this
@@ -449,10 +449,10 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp31 DAI per-network explorer override actually works
-	// Same pattern as cp30-DD-10/11 — anchor on indexer-side body
+	// ─── DAI per-network explorer override actually works
+	// Same pattern as an earlier fix-10/11 — anchor on indexer-side body
 	// construction.  Catches the same "interface declared, body
-	// missing" class of bug DD-10 closed for USDC at cp30-DD.
+	// missing" class of bug DD-10 closed for USDC.
 	{
 		id: 'cp31-dai-per-network-override-wired',
 		claim_source: 'brag_list',
@@ -464,11 +464,11 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp31 DAI distinct privacy-warning class (not lumped with
+	// ─── DAI distinct privacy-warning class (not lumped with
 	// USDT/USDC).  Brag claims DAI gets the more-nuanced
 	// `dai_partly_centralized` warning rather than the
 	// freeze-power-implying `*_centralized` class.  Anchor on the
-	// ─── cp33 DOGE P2P ────────────────────────────────────────────────
+	// ─── DOGE P2P ────────────────────────────────────────────────
 	// New brag entry #282 claims DOGE is wired as a 7th Category-B
 	// trade-only asset.  Anchor on the canonical registry entry —
 	// if DOGE ever loses its registry slot the brag claim drifts
@@ -484,10 +484,10 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp33 DOGE payment-rail wired (cp32 LL #36) ───────────────────
-	// Cp32 LL #36: every tradable asset must also be wired as a
-	// payment rail.  Cp31 missed this for DAI (closed in cp32
-	// CODE-1); cp33 ships DOGE with both axes same-turn.  Anchor:
+	// ─── DOGE payment-rail wired ───────────────────
+	// every tradable asset must also be wired as a
+	// payment rail.  A later change missed this for DAI (closed
+	// CODE-1); a later change ships DOGE with both axes same-turn.  Anchor:
 	// payments/registry.ts must contain pay_doge.
 	{
 		id: 'cp33-doge-payment-rail-wired',
@@ -500,7 +500,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp33 DOGE explorer URL bundled default ───────────────────────
+	// ─── DOGE explorer URL bundled default ───────────────────────
 	// blockchair.com/dogecoin chosen from the maintainer's 9-explorer survey.
 	// Anchor on the constant; a renamed/removed constant means the
 	// frontend has lost its fallback default and operators see a
@@ -516,8 +516,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp39 ZEC P2P trading wired ───────────────────────────────────
-	// Zcash addition (cp39 — Part 122).  Eleventh tradable asset.
+	// ─── ZEC P2P trading wired ───────────────────────────────────
+	// Zcash addition.  Eleventh tradable asset.
 	// Brag list (entry #283) advertises ZEC peer-to-peer trading.
 	// Anchor: canonical registry must contain a ticker entry for ZEC.
 	// If ZEC ever loses its registry slot the brag claim drifts
@@ -533,10 +533,10 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp39 ZEC payment-rail wired (cp32 LL #36) ────────────────────
-	// Cp32 LL #36: every tradable asset must also be wired as a
-	// payment rail.  Cp39 ships ZEC with both axes same-turn per
-	// the pattern established in cp33 for DOGE.  Anchor:
+	// ─── ZEC payment-rail wired ────────────────────
+	// every tradable asset must also be wired as a
+	// payment rail.  A later change ships ZEC with both axes same-turn per
+	// the pattern established for DOGE.  Anchor:
 	// payments/registry.ts must contain pay_zec.
 	{
 		id: 'cp39-zec-payment-rail-wired',
@@ -549,7 +549,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp39 ZEC explorer URL bundled default ────────────────────────
+	// ─── ZEC explorer URL bundled default ────────────────────────
 	// mainnet.zcashexplorer.app chosen from the maintainer's 7-explorer survey
 	// as the community-run, project-aligned default.  Anchor on the
 	// constant; a renamed/removed constant means the frontend has
@@ -566,8 +566,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp41 ARRR P2P trading wired ─────────────────────────────────
-	// Pirate Chain addition (cp41 — Part 122).  Twelfth tradable asset.
+	// ─── ARRR P2P trading wired ─────────────────────────────────
+	// Pirate Chain addition.  Twelfth tradable asset.
 	// Brag list (new entry) advertises ARRR peer-to-peer trading.
 	// Anchor: canonical registry must contain a ticker entry for ARRR.
 	// If ARRR ever loses its registry slot the brag claim drifts
@@ -583,10 +583,10 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp41 ARRR payment-rail wired (cp32 LL #36) ──────────────────
-	// Cp32 LL #36: every tradable asset must also be wired as a
-	// payment rail.  Cp41 ships ARRR with both axes same-turn per
-	// the pattern established for DOGE at cp33 and ZEC at cp39.
+	// ─── ARRR payment-rail wired ──────────────────
+	// every tradable asset must also be wired as a
+	// payment rail.  A later change ships ARRR with both axes same-turn per
+	// the pattern established for DOGE and ZEC.
 	// Anchor: payments/registry.ts must contain pay_arrr.
 	{
 		id: 'cp41-arrr-payment-rail-wired',
@@ -599,7 +599,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp41 ARRR explorer URL bundled default ──────────────────────
+	// ─── ARRR explorer URL bundled default ──────────────────────
 	// explorer.piratechain.com chosen from the maintainer's 3-explorer survey
 	// as the official project pointer, project-aligned, free of
 	// third-party tracking.  Anchor on the constant; a renamed/
@@ -617,8 +617,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp43 DCR P2P trading wired ──────────────────────────────────
-	// Decred addition (cp43 — Part 122).  Thirteenth tradable asset.
+	// ─── DCR P2P trading wired ──────────────────────────────────
+	// Decred addition.  Thirteenth tradable asset.
 	// Brag list (new entry #285) advertises DCR peer-to-peer trading.
 	// Anchor: canonical registry must contain a ticker entry for DCR.
 	{
@@ -632,9 +632,9 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp43 DCR payment-rail wired (cp32 LL #36) ───────────────────
-	// Cp32 LL #36: every tradable asset must also be wired as a
-	// payment rail.  Cp43 ships DCR with both axes same-turn per the
+	// ─── DCR payment-rail wired ───────────────────
+	// every tradable asset must also be wired as a
+	// payment rail.  A later change ships DCR with both axes same-turn per the
 	// pattern established for DOGE/cp33, ZEC/cp39, and ARRR/cp41.
 	{
 		id: 'cp43-dcr-payment-rail-wired',
@@ -647,7 +647,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp43 DCR explorer URL bundled default ───────────────────────
+	// ─── DCR explorer URL bundled default ───────────────────────
 	// dcrdata.decred.org chosen from the maintainer's 4-explorer survey as the
 	// official project explorer.  Anchor on the constant; a renamed
 	// or removed constant means the frontend has lost its fallback
@@ -663,8 +663,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp45 SOL P2P trading wired ──────────────────────────────────
-	// Solana addition (cp45 — Part 122).  Fourteenth tradable asset.
+	// ─── SOL P2P trading wired ──────────────────────────────────
+	// Solana addition.  Fourteenth tradable asset.
 	// Brag entry #286 advertises SOL peer-to-peer trading.  Anchor on
 	// canonical registry SOL ticker entry.
 	{
@@ -678,8 +678,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp45 SOL payment-rail wired (cp32 LL #36) ──────────────────
-	// Every tradable asset MUST also be wired as a payment rail.  Cp45
+	// ─── SOL payment-rail wired ──────────────────
+	// Every tradable asset MUST also be wired as a payment rail.
 	// ships SOL with both axes same-turn per the pattern established
 	// for DOGE/cp33, ZEC/cp39, ARRR/cp41, DCR/cp43.
 	{
@@ -693,7 +693,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp45 SOL explorer URL bundled default ──────────────────────
+	// ─── SOL explorer URL bundled default ──────────────────────
 	// explorer.solana.com chosen from the maintainer's 5-explorer survey as the
 	// official project explorer.  Anchor on the constant; renamed or
 	// removed means the frontend has lost its fallback default.
@@ -708,8 +708,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp47 ETH P2P trading wired ──────────────────────────────────
-	// Ethereum addition (cp47 — Part 122).  Fifteenth tradable asset.
+	// ─── ETH P2P trading wired ──────────────────────────────────
+	// Ethereum addition.  Fifteenth tradable asset.
 	// Brag entry #287 advertises ETH peer-to-peer trading.
 	{
 		id: 'cp47-eth-p2p',
@@ -722,7 +722,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp47 ETH payment-rail wired (cp32 LL #36) ──────────────────
+	// ─── ETH payment-rail wired ──────────────────
 	{
 		id: 'cp47-eth-payment-rail-wired',
 		claim_source: 'brag_list',
@@ -734,7 +734,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp47 ETH explorer URL bundled default ──────────────────────
+	// ─── ETH explorer URL bundled default ──────────────────────
 	{
 		id: 'cp47-eth-explorer-bundled-default',
 		claim_source: 'brag_list',
@@ -746,8 +746,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp49 XRP P2P trading wired ──────────────────────────────────
-	// Ripple addition (cp49 — Part 122).  Sixteenth tradable asset.
+	// ─── XRP P2P trading wired ──────────────────────────────────
+	// Ripple addition.  Sixteenth tradable asset.
 	// Brag entry #288 advertises XRP peer-to-peer trading.
 	{
 		id: 'cp49-xrp-p2p',
@@ -760,7 +760,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp49 XRP payment-rail wired (cp32 LL #36) ──────────────────
+	// ─── XRP payment-rail wired ──────────────────
 	{
 		id: 'cp49-xrp-payment-rail-wired',
 		claim_source: 'brag_list',
@@ -772,7 +772,7 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp49 XRP explorer URL bundled default ──────────────────────
+	// ─── XRP explorer URL bundled default ──────────────────────
 	{
 		id: 'cp49-xrp-explorer-bundled-default',
 		claim_source: 'brag_list',
@@ -784,10 +784,10 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp34 I-1 closure — DAI post-page wired ───────────────────────
-	// Cp31 added DAI to the canonical registry + chat surfaces but
+	// ─── DAI post-page wired ───────────────────────
+	// A later change added DAI to the canonical registry + chat surfaces but
 	// MISSED the post page's DaiNetworkPicker mount + daiNetwork
-	// state.  DAI orders silently failed cp31→cp34 because the
+	// state.  DAI orders silently failed because the
 	// indexer requires asset_network for DAI and the form never
 	// supplied one.  This CHECK pins that DaiNetworkPicker is
 	// actually mounted in the post page; removing it again would
@@ -803,8 +803,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp34 I-3 closure — orderbook DAI network chip rendered ───────
-	// Cp30 (USDC) + cp31 (DAI) added the canonical registry entry +
+	// ─── orderbook DAI network chip rendered ───────
+	// (USDC) + (DAI) added the canonical registry entry +
 	// per-network address shapes but the orderbook page never
 	// rendered a network chip for non-USDT multi-network rows.  A
 	// USDC-ERC-20 order looked identical to USDC-Solana on the list;
@@ -815,7 +815,7 @@ const CHECKS: readonly Check[] = [
 		id: 'cp34-i3-orderbook-dai-chip-rendered',
 		claim_source: 'brag_list',
 		claim_phrase: 'Dai (DAI) peer-to-peer',
-		// cp442 — the per-row ternary (`daiRowNetwork`) was extracted into the
+		// the per-row ternary (`daiRowNetwork`) was extracted into the
 		// shared `networkChipFor` helper so the featured cards get the chip too.
 		anchor: {
 			kind: 'grep',
@@ -824,8 +824,8 @@ const CHECKS: readonly Check[] = [
 		},
 		status: 'live'
 	},
-	// ─── cp34 H-1 closure — cheat-sheet DAI + DOGE rows rendered ──────
-	// Cp31 (DAI) + cp33 (DOGE) added per-asset i18n strings under
+	// ─── cheat-sheet DAI + DOGE rows rendered ──────
+	// (DAI) + (DOGE) added per-asset i18n strings under
 	// cheat_sheet.section_assets but the cheat-sheet page never
 	// rendered <dd> for those new assets.  Strings existed in 10
 	// locales but were orphaned.  CP34 closure adds both rows.

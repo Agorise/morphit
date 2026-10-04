@@ -3,7 +3,7 @@ import { init, register, locale, addMessages, waitLocale, _ } from 'svelte-i18n'
 import LOCALE_PARTS from 'virtual:morphit-i18n-loaders';
 import { CORE_PART, type LazySection, type LocalePart } from './lazySections';
 import { isolateAtHandles } from './rtlHandle';
-import { derived, get, writable } from 'svelte/store';
+import { derived, get } from 'svelte/store';
 import { brand, brandRenderer, brandTextNow } from '$lib/brand/brand';
 import { applyBrandToMessages } from '$lib/brand/brandName';
 
@@ -65,7 +65,7 @@ function loaderFor(code: string, part: LocalePart): () => Promise<Dictionary> {
 		const load = LOCALE_PARTS[code]?.[part];
 		if (load === undefined) return Promise.resolve({});
 		return load().then((m) => {
-			// t.txt (the maintainer) — isolate @{handle} slots (LTR) at load time so usernames
+			// isolate @{handle} slots (LTR) at load time so usernames
 			// render "@alice", never "alice@", in RTL locales. See rtlHandle.ts.
 			const raw = isolateAtHandles(m.default ?? m) as Dictionary;
 			let parts = rawBundles.get(code);
@@ -280,9 +280,6 @@ export const currentLocale = derived(locale, ($l) => ($l ?? DEFAULT_LOCALE) as L
 
 export { _ };
 export const t = _;
-
-/** Used by the language switcher widget. */
-export const localeMenuOpen = writable(false);
 
 // Helper: call without subscribing (for imperative flows like pushing notifications).
 // `values` matches the shape svelte-i18n's MessageFormat accepts —

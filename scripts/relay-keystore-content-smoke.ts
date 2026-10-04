@@ -1,5 +1,5 @@
 /**
- * relay-keystore-content-smoke.ts (cp600) — pins the one pure, security-
+ * relay-keystore-content-smoke.ts — pins the one pure, security-
  * sensitive bit of the guided-install front-end: what bytes get written to the
  * relay keystore.  Encrypted mode must write the envelope JSON; plaintext must
  * write the WIF — never the wrong field, never a stray "undefined".

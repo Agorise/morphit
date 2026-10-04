@@ -263,10 +263,52 @@ const RESERVED_NAMES_RAW: readonly string[] = [
 
 const RESERVED_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.map(compileReservedRegex);
 
-/** Check whether an input string contains a visual impersonation
- *  of any reserved name. Substring semantics + byte-equality escape.
- *  Mirror of the frontend check. */
-export function impersonatesReservedName(input: string): boolean {
+/** Look-alikes the per-letter table does not list, folded before the
+ *  comparison under the strict rule only (so earlier verdicts stand). */
+const STRICT_EXTRA_FOLDS: Readonly<Record<string, string>> = {
+	'\u0585': 'o' // Armenian small oh
+};
+
+/**
+ * The skeleton a name is compared on under the strict rule: NFKD; every
+ * default-ignorable code point (zero-width joiners, LRM/RLM, soft hyphen,
+ * CGJ, MVS, variation selectors, tag characters, Hangul fillers …) and every
+ * combining mark removed; NFKC; lower-cased; then STRICT_EXTRA_FOLDS. This
+ * folds math alphanumerics, circled, fullwidth and superscript letters, the
+ * Kelvin sign, the long s and invisible padding to the plain letters the
+ * homoglyph table is written for. Used only for the comparison, never stored.
+ */
+export function confusableSkeleton(input: string): string {
+	const folded = input
+		.normalize('NFKD')
+		.replace(/[\p{Default_Ignorable_Code_Point}\p{M}]/gu, '')
+		.normalize('NFKC')
+		.toLowerCase();
+	let out = '';
+	for (const ch of folded) out += STRICT_EXTRA_FOLDS[ch] ?? ch;
+	return out;
+}
+
+/** Which rule applies: `strict` for ops in blocks at or after
+ *  CONSENSUS_V2_ACTIVATION_TIME (callers pass the gate's verdict for the
+ *  block's timestamp). */
+export interface ImpersonationRule {
+	readonly strict?: boolean;
+}
+
+/** Check whether an input string contains a visual impersonation of any
+ *  reserved name (substring semantics). Mirror of the frontend check.
+ *
+ *  Strict rule: compared on the skeleton as well as as written, and with no
+ *  exemption for the exact reserved string — the old byte-equality escape let
+ *  ANY signer set exactly `morphit-fees`; the rightful owner is exempted by
+ *  `ownsReservedName` instead. Before the activation time: as written, with
+ *  the escape (earlier verdicts stand). */
+export function impersonatesReservedName(input: string, rule: ImpersonationRule = {}): boolean {
+	if (rule.strict === true) {
+		const skeleton = confusableSkeleton(input);
+		return RESERVED_REGEXES.some((re) => re.test(input) || re.test(skeleton));
+	}
 	for (const raw of RESERVED_NAMES_RAW) {
 		if (input === raw) return false;
 	}
@@ -280,14 +322,14 @@ export function impersonatesReservedName(input: string): boolean {
  *
  *  The impersonation guard is substring-based, so any text CONTAINING a
  *  reserved name trips it. That is right for a stranger and wrong for the
- *  account itself: @agorise writing "Agorise", "@agorise" or "the maintainer @ Agorise"
+ *  account itself: @agorise writing "Agorise", "@agorise" or "Team @ Agorise"
  *  is not impersonating anybody — it is the one account for which the claim is
- *  true. Without this, the byte-equality escape in `impersonatesReservedName`
- *  let the owner set EXACTLY `agorise` and nothing else, not even capitalised.
+ *  true. Without this, the owner could set EXACTLY `agorise` and nothing
+ *  else, not even capitalised.
  *
  *  Deliberately narrow: it only exempts the signer with respect to the reserved
- *  name they actually hold. @testowner gets no latitude on "morphit-fees", and an
- *  unrelated account gets none at all. `signer` comes from `extractSigner`, so
+ *  name they actually hold: the holder of one reserved name gets no latitude on
+ *  another ("morphit-fees"), and an unrelated account gets none at all. `signer` comes from `extractSigner`, so
  *  it is chain-authenticated and cannot be spoofed by the payload.
  *
  *  Tag charset is ASCII `[a-z0-9._-]+`, so a lowercase comparison is the whole
@@ -295,7 +337,7 @@ export function impersonatesReservedName(input: string): boolean {
 /** Brand names an instance may legitimately incorporate into a longer, DISTINCT
  *  display name (e.g. "Morphit Latino", "Agorise Brasil"). Blocked only when the
  *  WHOLE name is the bare brand or a homograph of it; allowed as part of a longer
- *  name. cp670 — first-party regional instances brand themselves off the project
+ *  name. first-party regional instances brand themselves off the project
  *  name, so the strict substring guard used for user profiles is wrong here. */
 const BRAND_RESERVED_NAMES: readonly string[] = ['morphit', 'agorise'];
 
@@ -312,28 +354,39 @@ const PROTECTED_HANDLE_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.filter(
 	(n) => !BRAND_RESERVED_NAMES.includes(n)
 ).map(compileReservedRegex);
 
-/** Impersonation check for OPERATOR instance display names (cp670).
+/** Impersonation check for OPERATOR instance display names.
  *
  *  Unlike `impersonatesReservedName` (strict substring; used for user profiles),
  *  this ALLOWS the project brand as part of a longer, distinct name so regional
  *  first-party instances can brand themselves — while still blocking:
- *    (a) any infra handle appearing ANYWHERE ("morphit-fees", "kencode"), and
+ *    (a) any reserved infra handle appearing ANYWHERE ("morphit-fees", "kencode"), and
  *    (b) a BARE brand or its homograph as the WHOLE name ("morphit", "Мorphit", "agorise").
  *  So "Morphit Latino" passes, "morphit" / "@morphit" (also caught by the
  *  leading-@ rule) / "morphit-fees" / "kencode" do not. */
-export function impersonatesReservedOperatorName(input: string): boolean {
+export function impersonatesReservedOperatorName(
+	input: string,
+	rule: ImpersonationRule = {}
+): boolean {
 	const trimmed = input.trim();
-	for (const re of BRAND_ANCHORED_REGEXES) {
-		if (re.test(trimmed)) return true;
-	}
-	for (const re of PROTECTED_HANDLE_REGEXES) {
-		if (re.test(trimmed)) return true;
+	const forms = rule.strict === true ? [trimmed, confusableSkeleton(trimmed).trim()] : [trimmed];
+	for (const form of forms) {
+		for (const re of BRAND_ANCHORED_REGEXES) {
+			if (re.test(form)) return true;
+		}
+		for (const re of PROTECTED_HANDLE_REGEXES) {
+			if (re.test(form)) return true;
+		}
 	}
 	return false;
 }
 
-export function ownsReservedName(signer: string, input: string): boolean {
+export function ownsReservedName(
+	signer: string,
+	input: string,
+	rule: ImpersonationRule = {}
+): boolean {
 	const lower = signer.toLowerCase();
+	const forms = rule.strict === true ? [input, confusableSkeleton(input)] : [input];
 	for (const raw of RESERVED_NAMES_RAW) {
 		if (lower !== raw) continue;
 		// The signer holds this reserved name. Exempt them only when the text
@@ -342,12 +395,12 @@ export function ownsReservedName(signer: string, input: string): boolean {
 		// form the guard would otherwise reject (case, @-prefix, surrounding
 		// words, homoglyphs), and nothing beyond it.
 		const re = compileReservedRegex(raw);
-		if (re.test(input)) return true;
+		if (forms.some((f) => re.test(f))) return true;
 	}
 	return false;
 }
 
-/** (v1.18.0 deep-deep, L3) Confusable-aware reserved-name check for operator
+/** Confusable-aware reserved-name check for operator
  *  TAGS. What was wrong: tags were checked only by exact equality
  *  (`isReservedTag`), so `m0rphit`, `rnorphit` and `morphit-io` were all
  *  claimable (and a tag is immutable, so a look-alike is squatted for good),
@@ -361,7 +414,7 @@ export function ownsReservedName(signer: string, input: string): boolean {
  *  (`0`→o, `1`→i/l, …), and the two ASCII multi-letter look-alikes (`rn`→m,
  *  `vv`→w) plus `.`/`_` as separators are folded first.
  *
- *  Still allowed (earlier deliberate decisions, P6-3 and cp670): a tag that
+ *  Still allowed (earlier deliberate decisions): a tag that
  *  merely CONTAINS a brand with no separator after it, e.g. `mymorphit` or the
  *  first-party regional `morphitlat-relay`.
  *

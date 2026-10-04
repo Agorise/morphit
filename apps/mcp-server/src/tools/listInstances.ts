@@ -22,43 +22,48 @@ export const ListInstancesInputSchema = z.object({
 		.boolean()
 		.optional()
 		.describe(
-			'If true, include instances whose health-probe has failed ' +
-				'recently. Default false (only currently-reachable instances).'
+			'If true, include instances the configured instance could not ' +
+				'reach on its last probe (unreachable, stale, mismatched, never ' +
+				'probed). Default false: only instances last seen working.'
 		)
 });
 
 export type ListInstancesInput = z.infer<typeof ListInstancesInputSchema>;
 
+/** /v1/instances (apps/indexer/src/api/instances.ts). It used to be read as
+ *  `rows`, a key the indexer never sends, so this tool always answered []. */
 interface InstancesResponse {
-	rows: Array<Record<string, unknown>>;
+	instances?: Array<Record<string, unknown>>;
 }
+
+/** Probe statuses meaning "answered on its last probe". */
+const REACHABLE_STATUSES: ReadonlySet<unknown> = new Set(['good', 'quiet', 'syncing']);
 
 export async function listInstances(input: ListInstancesInput): Promise<{
 	instances: Array<Record<string, unknown>>;
 	note: string;
 }> {
-	const url = buildV1Url('/instances', {
-		include_offline: input.include_offline ? '1' : undefined
-	});
-	const res = await fetchJson<InstancesResponse>(url);
+	const res = await fetchJson<InstancesResponse>(buildV1Url('/instances'));
 
-	// Trim each instance row to just the fields useful to an AI agent
-	// (origin URL, operator tag, contact_url, declared region, last
-	// healthy timestamp, supports_tor).  Drop the operator-internal
-	// reconciliation metadata.
+	// Trim each instance to what an AI agent can use: where it is (clearnet
+	// origin and its Tor/I2P addresses), who runs it, how to reach them, and
+	// whether it is up. Probe counters and block heights are dropped.
 	const keep = new Set([
 		'origin',
+		'name',
+		'tagline',
 		'operator_tag',
 		'operator_display_name',
 		'contact_url',
-		'declared_region',
-		'last_healthy_at',
-		'supports_tor',
-		'tor_onion',
-		'has_signup_acts',
-		'declared_fiats'
+		'alt_networks',
+		'clearnet_eliminated',
+		'status',
+		'last_probed_at'
 	]);
-	const instances = (res.rows || []).map((row) => {
+	const rows = (res.instances ?? []).filter(
+		(row) => input.include_offline === true || REACHABLE_STATUSES.has(row['status'])
+	);
+	const instances = rows.map((row) => {
 		const out: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(row)) {
 			if (keep.has(k)) out[k] = v;
@@ -73,6 +78,7 @@ export async function listInstances(input: ListInstancesInput): Promise<{
 			'in your MCP client config, or by visiting that instance\'s web UI ' +
 			'directly. All instances share the same on-chain orderbook so the ' +
 			'listings you see are identical — what changes is the operator ' +
-			'(legal jurisdiction, terms of service, ACT-mint policy, etc.).'
+			'(legal jurisdiction, terms of service, whether it pays for new ' +
+			'accounts, etc.).'
 	};
 }

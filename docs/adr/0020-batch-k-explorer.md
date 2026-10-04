@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-29
-**Deciders:** Agorise team (Claude collaborating)
+**Deciders:** Agorise team
 **Supersedes:** —
 **Related:**
 - ADR-0008 (Phase 3b indexer architecture) — defines the
@@ -115,7 +115,7 @@ we surface.
 
 ### Real-exchange feel: volume + listings histogram (NOT depth chart)
 
-The user asked "make Morphit feel similar to a real exchange."
+The goal: make Morphit feel similar to a real exchange.
 The honest pushback is that Morphit isn't a matching engine —
 each order has its own payment methods, region, and price model.
 A traditional bid/ask depth chart would mislead users into
@@ -307,7 +307,7 @@ protocol rather than generic Blurt activity.
     aggregation + decorateOp).
 - i18n: 109 new keys × 10 locales = 1090 strings (88 page
   keys + 21 op labels). Drift = 0.
-- Audit doc: `docs/audit/2026-04-29-batch-k-explorer.md`.
+- Audit doc: the internal audit record batch-k-explorer (2026-04-29).
 
 ## Open questions / future work
 

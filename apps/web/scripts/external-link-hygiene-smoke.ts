@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * external-link-hygiene smoke — cp297.
+ * external-link-hygiene smoke.
  *
  * PRIVACY + SECURITY. Every anchor that points at a literal external
  * https(s) URL MUST open in a fresh tab (`target="_blank"`) and carry

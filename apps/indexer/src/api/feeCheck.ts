@@ -6,27 +6,33 @@
  *
  * The background pass looks at a fresh order's address every pass, but a
  * pass runs every 10 minutes. The pay panel's "I've paid — check now" button
- * lands here: the SAME address check the pass runs, for this one order, at
- * most once per order per FEE_CHECK_NOW_COOLDOWN_MS (stamped atomically in
- * the orders row, so it holds across requests and restarts), plus an
- * instance-wide budget so the button cannot be used to hammer the explorers.
- * The per-client HTTP rate limit (the `list` tier) applies on top (main.ts).
+ * lands here: it STARTS the same address check the pass runs, for this one
+ * order, in the background, and answers at once — the explorers are asked
+ * over Tor and an answer takes seconds, so no request waits for them; the
+ * result lands in the order row, which the pay panel polls. At most once per
+ * order per FEE_CHECK_NOW_COOLDOWN_MS (stamped atomically in the orders row,
+ * so it holds across requests and restarts), plus an instance-wide budget so
+ * the button cannot be used to hammer the explorers. The per-client HTTP rate
+ * limit (the `list` tier) applies on top (main.ts).
  *
  * Anyone may ask: the answer (has this public address been paid) is public
  * chain data, and the request changes nothing but the time of the next look.
  * Nothing is logged about who asked. Response (200):
- *   { fee_status, received_sats, unconfirmed_sats, checked, retry_after_s }
- * `checked: false` — within the cooldown, over the budget, or not an order
- * with an unpaid fee address; the current status is returned either way.
+ *   { fee_status, received_sats, unconfirmed_sats, checked, queued, retry_after_s }
+ * `queued: true` — a look was started now; `checked` is always false (no look
+ * finishes inside the request). `queued: false` — within the cooldown, over
+ * the budget, or not an order with an unpaid fee address. The current status
+ * is returned either way.
  *
  * (V3-5 / V3-6) Two read routes for cross-checking the numbering:
  *   GET /v1/orders/:account/:permlink/btc-fee
  *       this node's fee address for the order: { index, address, xpub } —
  *       what PEERS ask (public data, already in /v1/orders/:account);
  *   GET /v1/orders/:account/:permlink/btc-fee-crosscheck
- *       asks up to two directory peers the same question (btcFeeCrossCheck)
+ *       asks up to three directory peers the same question (btcFeeCrossCheck)
  *       and answers { verdict: 'agree' | 'disagree' | 'unchecked', asked,
- *       agreeing }. Cached per order for CROSSCHECK_CACHE_MS; at most
+ *       agreeing, disagreeing }; 'disagree' needs a majority of at least two
+ *       answering peers. Cached per order for CROSSCHECK_CACHE_MS; at most
  *       CROSSCHECK_GLOBAL_PER_MIN fresh cross-checks per minute instance-wide
  *       (over it: 'unchecked'). The pay panel shows no address on 'disagree'.
  */
@@ -37,10 +43,13 @@ import type { Database } from '$db/pool';
 import { validateOrderPermlink } from '$indexer/permlink';
 import { crossCheckBtcFee, type CrossCheckResult } from '$indexer/fee/btcFeeCrossCheck';
 import {
-	checkFeeAddressNow,
+	claimFeeAddressCheck,
 	FEE_CHECK_NOW_COOLDOWN_MS,
 	type ExternalFeeRecheckDeps
 } from '$indexer/fee/externalFeeRecheck';
+import { logger } from '$log';
+
+const log = logger('fee-check');
 
 /** Instance-wide "check now" lookups per minute (each is one explorer round). */
 export const FEE_CHECK_NOW_GLOBAL_PER_MIN = 30;
@@ -92,7 +101,7 @@ export function feeCheckRoute(deps: FeeCheckRouteDeps): Hono {
 					[account, permlink]
 				)
 			).rows[0] ?? null;
-		const unchanged = async (retryMs: number) => {
+		const answer = async (retryMs: number, queued: boolean) => {
 			const s = await status();
 			if (s === null) return c.json(errorBody('not_found', 'no such order'), 404);
 			return c.json({
@@ -100,6 +109,7 @@ export function feeCheckRoute(deps: FeeCheckRouteDeps): Hono {
 				received_sats: Number(s.r ?? 0),
 				unconfirmed_sats: Number(s.u ?? 0),
 				checked: false,
+				queued,
 				retry_after_s: Math.ceil(retryMs / 1000)
 			});
 		};
@@ -107,9 +117,9 @@ export function feeCheckRoute(deps: FeeCheckRouteDeps): Hono {
 			windowStart = nowMs;
 			used = 0;
 		}
-		if (used >= FEE_CHECK_NOW_GLOBAL_PER_MIN) return unchanged(windowStart + 60_000 - nowMs);
+		if (used >= FEE_CHECK_NOW_GLOBAL_PER_MIN) return answer(windowStart + 60_000 - nowMs, false);
 		const { verifiers, amounts } = deps.current();
-		const r = await checkFeeAddressNow({
+		const r = await claimFeeAddressCheck({
 			db: deps.db,
 			verifiers,
 			amounts,
@@ -118,17 +128,13 @@ export function feeCheckRoute(deps: FeeCheckRouteDeps): Hono {
 			permlink,
 			onChange: deps.onChange
 		});
-		if (r.kind === 'checked') {
+		if (r.kind === 'claimed') {
 			used++;
-			return c.json({
-				fee_status: r.fee_status,
-				received_sats: r.received_sats,
-				unconfirmed_sats: r.unconfirmed_sats,
-				checked: true,
-				retry_after_s: Math.ceil(FEE_CHECK_NOW_COOLDOWN_MS / 1000)
-			});
+			// Background: the explorers answer in seconds over Tor.
+			void r.run().catch((err) => log.warn('fee_check_now_failed', {}, err));
+			return answer(FEE_CHECK_NOW_COOLDOWN_MS, true);
 		}
-		return unchanged(r.kind === 'cooldown' ? r.retry_after_ms : FEE_CHECK_NOW_COOLDOWN_MS);
+		return answer(r.kind === 'cooldown' ? r.retry_after_ms : FEE_CHECK_NOW_COOLDOWN_MS, false);
 	});
 
 	const local = async (account: string, permlink: string) =>
@@ -184,7 +190,12 @@ export function feeCheckRoute(deps: FeeCheckRouteDeps): Hono {
 			ccWindow = nowMs;
 			ccUsed = 0;
 		}
-		const unchecked: CrossCheckResult = { verdict: 'unchecked', asked: 0, agreeing: 0 };
+		const unchecked: CrossCheckResult = {
+			verdict: 'unchecked',
+			asked: 0,
+			agreeing: 0,
+			disagreeing: 0
+		};
 		if (deps.crossCheck === undefined || ccUsed >= CROSSCHECK_GLOBAL_PER_MIN)
 			return c.json(unchecked);
 		ccUsed++;

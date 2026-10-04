@@ -1,5 +1,5 @@
 /**
- * Smoke — treasury auto-re-pin decision logic (cp372).
+ * Smoke — treasury auto-re-pin decision logic.
  *
  * Exercises the pure decideRepin() brain: drift detection in both
  * directions, the re-pin threshold, the canonical fresh-amount
@@ -7,11 +7,13 @@
  * failsafes: feed-down skips, sanity-ceiling rejection, and the
  * no-current-pin bootstrap case.
  *
- * Run: npx tsx --tsconfig ../../tsconfig.smoke.json scripts/treasury-repin-smoke.ts
+ * Run: ../../node_modules/.bin/tsx --tsconfig ../../tsconfig.smoke.json scripts/treasury-repin-smoke.ts
  */
 
 import {
 	decideRepin,
+	agreedPrice,
+	REPIN_BTC_SATOSHIS_MAX,
 	buildRepinnedTreasury,
 	parseReleaseTreasury,
 	DEFAULT_REPIN_DRIFT_THRESHOLD,
@@ -123,13 +125,55 @@ scenario('FAILSAFE: all feeds down → shouldRepin false', () => {
 });
 
 scenario('FAILSAFE: absurdly low BTC price → computed amount over ceiling → skipped', () => {
-	// $0.01 BTC would demand 0.25/0.01 × 1e8 = 2.5e9 sats — over the
-	// 1e11 ceiling? No, under. Use a price that pushes over 1e11:
-	// sats = 0.25/price × 1e8 > 1e11  ⟺ price < 0.25e-3 = 0.00025.
 	const d = decideRepin(ON_TARGET, { ...REF, btcUsd: 0.0001 });
 	assert(d.btc.due === false, 'absurd amount not proposed');
 	assert(d.btc.computed === null, 'computed suppressed');
 	assert(/ceiling/.test(d.btc.note), 'note explains ceiling rejection');
+});
+
+scenario('FAILSAFE: a $0.01 BTC price proposes nothing', () => {
+	const d = decideRepin(ON_TARGET, { ...REF, btcUsd: 0.01 });
+	assert(d.btc.due === false, 'a $0.01 BTC price proposed a re-pin');
+	assert(d.btc.computed === null, 'computed suppressed');
+	const boot = decideRepin(
+		{ btcSatoshis: null, xmrPiconero: null, blurtBase: null },
+		{ ...REF, btcUsd: 0.01 }
+	);
+	assert(boot.btc.due === false, 'a first pin from a $0.01 price was proposed');
+});
+
+scenario('FAILSAFE: realistic ceiling — no fee above 1e6 sats is ever proposed', () => {
+	const boot = decideRepin(
+		{ btcSatoshis: null, xmrPiconero: null, blurtBase: null },
+		{ ...REF, btcUsd: 10 }
+	);
+	assert(
+		boot.btc.due === false && boot.btc.computed === null,
+		`2.5e6 sats proposed (ceiling ${REPIN_BTC_SATOSHIS_MAX})`
+	);
+});
+
+scenario('FAILSAFE: one re-pin moves a pin by at most ×2 either way', () => {
+	const pinned = ON_TARGET.btcSatoshis!;
+	const tenfold = decideRepin(ON_TARGET, {
+		...REF,
+		btcUsd: LISTING_FEE_USD.btc / (pinned / 1e8) / 10
+	});
+	assert(tenfold.btc.due === false, 'a ×10 move was proposed in one re-pin');
+	assert(/×2/.test(tenfold.btc.note), 'note explains the bound');
+	const halfway = decideRepin(ON_TARGET, {
+		...REF,
+		btcUsd: LISTING_FEE_USD.btc / (pinned / 1e8) / 1.5
+	});
+	assert(halfway.btc.due === true, 'a ×1.5 move should still re-pin');
+});
+
+scenario('FAILSAFE: a price needs two independent sources that agree', () => {
+	assert(agreedPrice([60000]) === null, 'one source was enough');
+	assert(agreedPrice([60000, null, undefined]) === null, 'one usable source was enough');
+	assert(agreedPrice([60000, 30000]) === null, 'two disagreeing sources gave a price');
+	assert(agreedPrice([60000, 61000]) === 60500, 'two agreeing sources → their median');
+	assert(agreedPrice([0.01, 60000, 60600]) === 60300, 'an outlier among three is outvoted');
 });
 
 scenario('FAILSAFE: a bad price on one asset does not block re-pin of a healthy one', () => {
@@ -153,7 +197,10 @@ scenario('custom threshold is honored', () => {
 	// 8% drift: due under a 5% threshold, not under 10%.
 	const eightPct = 64_800; // +8% BTC
 	assert(decideRepin(ON_TARGET, { ...REF, btcUsd: eightPct }, 0.05).btc.due === true, 'due @5%');
-	assert(decideRepin(ON_TARGET, { ...REF, btcUsd: eightPct }, 0.1).btc.due === false, 'not due @10%');
+	assert(
+		decideRepin(ON_TARGET, { ...REF, btcUsd: eightPct }, 0.1).btc.due === false,
+		'not due @10%'
+	);
 });
 
 scenario('re-pinning resets drift to ~0 (computed amount is on-target)', () => {
@@ -232,23 +279,57 @@ scenario('parseReleaseTreasury: legacy block (no blurt) → blurtBase null', () 
 scenario('parseReleaseTreasury: garbage / null → all null (no throw)', () => {
 	for (const junk of [null, undefined, 42, 'x', [], { btc: 'nope', xmr: 5, blurt: [] }]) {
 		const p = parseReleaseTreasury(junk);
-		assert(p.pinned.btcSatoshis === null && p.pinned.blurtBase === null, `junk ${JSON.stringify(junk)} → null`);
+		assert(
+			p.pinned.btcSatoshis === null && p.pinned.blurtBase === null,
+			`junk ${JSON.stringify(junk)} → null`
+		);
 	}
 });
 
-scenario('parse → decide → build round-trips an on-target legacy pin into a BLURT-bearing one', () => {
-	// A legacy chain-pin (BTC/XMR only) + a BLURT feed → first BLURT
-	// pin gets proposed and built, addresses preserved.
-	const parsed = parseReleaseTreasury({
-		btc: { address: ADDRS.btcAddress, satoshis: 417 },
-		xmr: { address: ADDRS.xmrAddress, piconero: '781250000' }
+scenario(
+	'parse → decide → build round-trips an on-target legacy pin into a BLURT-bearing one',
+	() => {
+		// A legacy chain-pin (BTC/XMR only) + a BLURT feed → first BLURT
+		// pin gets proposed and built, addresses preserved.
+		const parsed = parseReleaseTreasury({
+			btc: { address: ADDRS.btcAddress, satoshis: 417 },
+			xmr: { address: ADDRS.xmrAddress, piconero: '781250000' }
+		});
+		const d = decideRepin(parsed.pinned, REF);
+		assert(d.blurt.due === true, 'blurt first-pin due (no current base)');
+		const t = buildRepinnedTreasury(d, parsed.addresses, parsed.pinned);
+		assert(t.blurt?.base === listingFeeBlurtBase(REF.blurtUsd!), 'blurt now pinned canonical');
+		assert(t.btc?.address === ADDRS.btcAddress, 'btc address preserved through round-trip');
+	}
+);
+
+// ── the re-pin tools' price fetch (treasury-repin-prices.ts) ──────
+// A fake network: CoinGecko answers $0.01 for BTC, the other sources are
+// down → no BTC price at all; then CoinPaprika and Kraken agree on XMR
+// while CoinGecko is off → that agreed price.
+{
+	const { fetchAgreedPrices } = await import('./treasury-repin-prices.ts');
+	const fake = (answers: Record<string, unknown>) =>
+		(async (url: string) => {
+			const hit = Object.entries(answers).find(([k]) => String(url).includes(k));
+			if (!hit) return new Response('down', { status: 503 });
+			return new Response(JSON.stringify(hit[1]), { status: 200 });
+		}) as typeof fetch;
+	const one = await fetchAgreedPrices(fake({ 'api.coingecko.com': { bitcoin: { usd: 0.01 } } }));
+	scenario('FAILSAFE: one source answering $0.01 BTC gives no BTC price', () => {
+		assert(one.prices.btcUsd === null, `btcUsd = ${one.prices.btcUsd}`);
 	});
-	const d = decideRepin(parsed.pinned, REF);
-	assert(d.blurt.due === true, 'blurt first-pin due (no current base)');
-	const t = buildRepinnedTreasury(d, parsed.addresses, parsed.pinned);
-	assert(t.blurt?.base === listingFeeBlurtBase(REF.blurtUsd!), 'blurt now pinned canonical');
-	assert(t.btc?.address === ADDRS.btcAddress, 'btc address preserved through round-trip');
-});
+	const two = await fetchAgreedPrices(
+		fake({
+			'xmr-monero': { quotes: { USD: { price: 320 } } },
+			'api.kraken.com': { error: [], result: { XXMRZUSD: { c: ['322.0', '1'] } } }
+		})
+	);
+	scenario('FAILSAFE: two sources that agree give the agreed price', () => {
+		assert(two.prices.xmrUsd === 321, `xmrUsd = ${two.prices.xmrUsd}`);
+		assert(two.prices.btcUsd === null && two.prices.blurtUsd === null, 'no agreement elsewhere');
+	});
+}
 
 if (failed > 0) {
 	console.log(`\n✗ ${failed}/${passed + failed} treasury-repin scenarios failed`);

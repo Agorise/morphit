@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — composite reputation score (cp404).
+ * Morphit indexer — composite reputation score.
  *
  * The orderbook shows distinct trust signals per trader, side by side:
  *   • the TRADE COUNT (`trade_count`: fee-verified COMPLETED orders, both

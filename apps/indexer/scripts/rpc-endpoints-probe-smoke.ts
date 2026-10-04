@@ -1,12 +1,12 @@
 /**
- * rpc-endpoints-probe-smoke — cp453 (t.txt #1)
+ * rpc-endpoints-probe-smoke
  *
  * The Settings "RPC endpoints" refresh button asks the indexer to ACTIVELY ping
  * every canonical Blurt node for fresh latency. Two invariants matter:
  *
  *   DDoS guard — a GLOBAL 5s cache means no volume of clicks can make the indexer
- *   ping the upstream nodes more than once per 5s (the maintainer: "we don't want some kid
- *   trying to ddos our server with massive clicks").
+ *   ping the upstream nodes more than once per 5s (Requirement: no volume of clicks may turn
+ *   the indexer into a flood against the nodes).
  *
  *   PRIVACY #1 — the browser never touches a Blurt node; the INDEXER probes them,
  *   and only the canonical PUBLIC nodes (`DEFAULT_BLURT_RPC_ENDPOINTS`), never the
@@ -65,8 +65,8 @@ check('after the cache is cleared, a fresh probe is produced', c !== a);
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const main = readFileSync(join(repo, 'apps/indexer/src/main.ts'), 'utf8');
 check(
-	'PRIVACY+cp767: route wires the CANONICAL clearnet list via canonicalProbeUrls, gated on usesClearnet, and never SPREADS raw private upstreams',
-	/canonicalProbeUrls\([\s\S]*?clearnetCanon:\s*DEFAULT_BLURT_RPC_ENDPOINTS/.test(main) &&
+	'PRIVACY+cp767: route wires the CANONICAL clearnet list via publishedRpcEndpoints, gated on usesClearnet, and never SPREADS raw private upstreams',
+	/publishedRpcEndpoints\([\s\S]*?clearnetCanon:\s*DEFAULT_BLURT_RPC_ENDPOINTS/.test(main) &&
 		/usesClearnet:\s*config\.blurtRpcEndpoints\.length\s*>\s*0/.test(main) &&
 		!/\.\.\.config\.blurtRpcEndpoints/.test(main)
 );
@@ -78,7 +78,7 @@ check(
 	/query\('probe'\) === '1'/.test(health) && /PROBE_MIN_INTERVAL_MS = 5_000/.test(health)
 );
 
-// ── cp767: a tor-only node's probe allow-list must EXCLUDE the clearnet canon ──
+// ── a tor-only node's probe allow-list must EXCLUDE the clearnet canon ──
 // so the active ?probe=1 never fetches a clearnet RPC (IP leak) and the widget
 // matches the real hidden-only pool instead of listing phantom clearnet nodes.
 const clearnetCanon = ['https://rpc.a.example', 'https://rpc.b.example'];

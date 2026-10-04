@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep (rv2-2, rv2-9) — the posting-key quorum counts OPERATORS.
+ * the posting-key quorum counts OPERATORS.
  *
  * Real BlurtClient + real rpc pool + real reconcile against a real Postgres,
  * with local JSON-RPC stubs standing in for the chain's nodes.
@@ -120,9 +120,91 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			const r = await reconcilePostingKeys(fx.db, blurt, { pauseMs: 0 });
 			const row = (await fx.db.query('SELECT posting_pubkey, posting_key_reconciled FROM accounts'))
 				.rows[0]!;
+			// The attacker's key is never written: its two addresses are one vote.
+			// Its lone dissent delays this round (VT5-1: it is not provably older),
+			// so nothing is confirmed yet and the reconcile asks again.
+			expect(row.posting_pubkey).toBe(VICTIM_PUB);
+			expect(row.posting_key_reconciled).toBe(false);
+			expect(r.remaining).toBe(1);
+		});
+
+		it('two honest operators confirm a key when nobody disagrees (rv2-2)', async () => {
+			const g1 = await make('127.0.0.1', VICTIM_PUB, 50);
+			const g2 = await make('127.0.0.1', VICTIM_PUB, 50);
+			const blurt = client(g1, g2);
+			blurt.mergeRpcEndpoints([g1.url, g2.url], { [g1.url]: 'good-1', [g2.url]: 'good-2' });
+			await reconcilePostingKeys(fx.db, blurt, { pauseMs: 0 });
+			const row = (await fx.db.query('SELECT posting_pubkey, posting_key_reconciled FROM accounts'))
+				.rows[0]!;
 			expect(row.posting_pubkey).toBe(VICTIM_PUB);
 			expect(row.posting_key_reconciled).toBe(true);
-			expect(r.checked).toBe(1);
+		});
+
+		it('a blip on the other operators never leaves one operator to confirm a key alone', async () => {
+			// A is hostile and fast; B and C are honest and fail ONE call each (a
+			// Tor blip), which used to drop the quorum to one operator: A's.
+			const blips = new Set<string>();
+			const servers: http.Server[] = [];
+			const mk = async (host: string, key: string, honest: boolean): Promise<string> => {
+				const server = http.createServer((req, res) => {
+					let body = '';
+					req.on('data', (c) => (body += c));
+					req.on('end', () => {
+						const j = JSON.parse(body) as { id?: unknown; method?: string; params?: unknown[] };
+						const m = j.method === 'call' ? String(j.params?.[1]) : String(j.method);
+						if (honest && !blips.has(host)) {
+							blips.add(host);
+							res.writeHead(502);
+							res.end();
+							return;
+						}
+						const auth = { weight_threshold: 1, account_auths: [], key_auths: [[key, 1]] };
+						const result = m.includes('get_accounts')
+							? [{ name: 'alice', posting: auth, owner: auth, active: auth, memo_key: key }]
+							: {
+									head_block_number: 1,
+									last_irreversible_block_num: 1,
+									time: '2026-10-01T00:00:00'
+								};
+						setTimeout(
+							() => {
+								if (res.destroyed) return;
+								res.writeHead(200, { 'content-type': 'application/json' });
+								res.end(JSON.stringify({ jsonrpc: '2.0', id: j.id ?? 0, result }));
+							},
+							honest ? 150 : 1
+						);
+					});
+				});
+				servers.push(server);
+				await new Promise<void>((r) => server.listen(0, host, () => r()));
+				return `http://${host}:${(server.address() as { port: number }).port}`;
+			};
+			const a = await mk('127.0.0.21', ATTACKER_PUB, false);
+			const b = await mk('127.0.0.22', VICTIM_PUB, true);
+			const c = await mk('127.0.0.23', VICTIM_PUB, true);
+			try {
+				const blurt = new BlurtClient({
+					localRpcEndpoints: [a, b, c],
+					blurtRpcEndpoints: []
+				} as never);
+				for (let i = 0; i < 3; i++) {
+					await (blurt as unknown as { getDynamicGlobalProperties(): Promise<unknown> })
+						.getDynamicGlobalProperties()
+						.catch(() => undefined);
+				}
+				expect(blips.size, 'both honest operators blipped once').toBe(2);
+				const agreed = await blurt.getAccountsAgreed(['alice'], agreeOn);
+				const key = agreed === null ? null : primaryPostingKey(agreed.get('alice')!);
+				expect(key, 'one operator decided a trusted key').not.toBe(ATTACKER_PUB);
+				// Its lone dissent delays the read (VT5-1); it never decides it.
+				expect(agreed).toBeNull();
+			} finally {
+				for (const s2 of servers) {
+					s2.closeAllConnections?.();
+					s2.close();
+				}
+			}
 		});
 
 		it('two ports on one host are one operator by default (rv2-2)', async () => {
@@ -137,20 +219,27 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 		});
 
 		it(
-			'a pool with one working operator and one dead one still reaches an answer (rv2-9)',
+			'a pool with one working operator and one dead one answers nothing it would trust',
 			{ timeout: 40_000 },
 			async () => {
+				// rv2-9 sized this quorum from the reachable count, so after one
+				// failed read the working operator decided alone. Two operators exist,
+				// so two must agree: until the other answers, there is no answer.
 				const dead: Stub = { url: 'http://127.0.0.5:9', hits: 0, close: async () => {} };
 				const g = await make('127.0.0.6', VICTIM_PUB, 1);
 				const blurt = client(dead, g);
-				// First read: both are presumed reachable, so two must agree; the dead
-				// one fails and is then known to be failing.
 				await blurt.getAccountsAgreed(['alice'], agreeOn);
 				const second = await blurt.getAccountsAgreed(['alice'], agreeOn);
-				expect(second).not.toBeNull();
-				expect(primaryPostingKey(second!.get('alice')!)).toBe(VICTIM_PUB);
+				expect(second).toBeNull();
 			}
 		);
+
+		it('a pool of ONE operator is its own quorum', async () => {
+			const g = await make('127.0.0.12', VICTIM_PUB, 1);
+			const m = await client(g).getAccountsAgreed(['alice'], agreeOn);
+			expect(m).not.toBeNull();
+			expect(primaryPostingKey(m!.get('alice')!)).toBe(VICTIM_PUB);
+		});
 
 		it('fan-out is capped: five agreeing operators, at most three asked (rv2-9)', async () => {
 			const eps = await Promise.all(

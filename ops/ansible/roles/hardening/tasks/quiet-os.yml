@@ -1,0 +1,85 @@
+---
+# Every node, clearnet ones too: the operating system's own fetches that a
+# server does not need are turned off (round 2: no third party unless it is
+# strictly needed). apt (security updates) and the clock (chrony's NTP) stay:
+# both are needed; a tor-only node gets them over Tor (roles/tor/tasks/tor-only-os.yml).
+#   motd news          motd.ubuntu.com, fetched for the login banner
+#   Ubuntu Pro apt news  news shown by apt, fetched at every refresh
+#   release-upgrade check  changelogs.ubuntu.com, for the "new release"
+#                      notice at login (/etc/update-manager/release-upgrades
+#                      Prompt=never; set Prompt=lts again to upgrade the release)
+#   fwupd-refresh      firmware metadata from cdn.fwupd.org, daily
+#   pollinate          entropy.ubuntu.com, at boot (the kernel's own random
+#                      number generator does not need it)
+# snapd and Ubuntu Pro's status timer stay on a clearnet node: installed snaps
+# and an attached Pro subscription need them (docs/OPERATIONS.md says how to
+# turn them off). The same scripts and modes as `morphit-ops upgrade`
+# (lib/osQuietHeal.ts), so a fresh install and a healed one end up the same.
+- name: Quiet OS — the script directory
+  ansible.builtin.file:
+    path: /usr/local/lib/morphit
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Quiet OS — install the shared scripts (root-owned copies)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../tor-only/{{ item }}"
+    dest: "/usr/local/lib/morphit/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - morphit-tor-only-os.sh
+    - morphit-tor-egress.sh
+
+- name: Quiet OS — a root-only place for backups
+  ansible.builtin.file:
+    path: /var/lib/morphit-quiet-os
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Quiet OS — are motd news, Ubuntu Pro apt news and the release-upgrade check already off?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-only-os.sh news-check
+  register: morphit_quiet_news
+  changed_when: false
+  failed_when: false
+
+- name: Quiet OS — turn them off
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-only-os.sh news-apply /var/lib/morphit-quiet-os/news
+  when: morphit_quiet_news.rc != 0
+  changed_when: true
+
+- name: Quiet OS — are fwupd's refresh and pollinate already off?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh quiet-check
+  register: morphit_quiet_units
+  changed_when: false
+  failed_when: false
+
+- name: Quiet OS — mask them
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh quiet-apply /var/lib/morphit-quiet-os/units
+  when: morphit_quiet_units.rc != 0
+  changed_when: true
+
+- name: Quiet OS — read the result back
+  ansible.builtin.shell:
+    cmd: >-
+      sh /usr/local/lib/morphit/morphit-tor-only-os.sh news-check &&
+      sh /usr/local/lib/morphit/morphit-tor-egress.sh quiet-check
+  register: morphit_quiet_after
+  changed_when: false
+  failed_when: false
+
+- name: Quiet OS — report
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'On this server: motd news, Ubuntu Pro apt news, the release-upgrade check, fwupd refresh and pollinate are off.'
+         if morphit_quiet_after.rc == 0 else
+         'On this server, not every OS news/refresh fetch could be turned off (' ~ (morphit_quiet_after.stderr | default('') | trim) ~ '). The next `sudo morphit-ops upgrade` tries again.' }}

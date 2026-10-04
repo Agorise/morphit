@@ -4,7 +4,7 @@
 # (SSH lockout) or the users (public site dark). Before declaring success we
 # actively RE-CHECK the reachability signals and FAIL LOUDLY on a regression —
 # never hand back a box that harden just cut off. Both of tonight's failure modes
-# (the maintainer/morphit.io: root-only SSH lockout; Docker forward-chain wiped by UFW) would
+# (morphit.io: root-only SSH lockout; Docker forward-chain wiped by UFW) would
 # have been caught here. Observe running state, don't assume (ARCHITECTURAL MANDATE).
 ---
 - name: Self-test — a key-based SSH login path still exists

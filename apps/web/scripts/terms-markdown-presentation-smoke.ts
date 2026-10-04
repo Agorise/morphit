@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * terms-markdown-presentation — cp474 (t.txt #11 + #12).
+ * terms-markdown-presentation.
  *
  * Two of the maintainer's reports about the order Terms field, both presentation living in
  * .svelte files that no vitest can reach.
@@ -62,7 +62,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 	}
 }
 
-console.log('\n── terms-markdown-presentation (cp474 / t.txt #11+#12) ─\n');
+console.log('\n── terms-markdown-presentation ─\n');
 
 const post = read('apps/web/src/routes/[lang]/post/+page.svelte');
 const terms = read('apps/web/src/lib/components/TermsText.svelte');
@@ -125,9 +125,9 @@ check(
 		(terms.match(/list-(disc|decimal) space-y-0\.5 ps-\d/g) ?? []).length === 2
 );
 
-// ─── cp595 (t.txt) — hr + list markers use the SAME emerald as the blockquote ─
-// the maintainer: "use that same green [as the order-terms blockquote] on the horizontal
-// rules and on the bullets/numbers of lists." Guard against a silent revert to
+// ─── hr + list markers use the SAME emerald as the blockquote ─
+// Requirement: the same green as the order-terms blockquote on horizontal rules and on list
+// bullets and numbers. Guard against a silent revert to
 // the old grey hr (border-ink-*) or the default (text-coloured) list markers.
 const hr = /<hr\s+class="([^"]*)"/.exec(terms)?.[1] ?? '';
 check('#green the hr was found', hr.length > 0);
@@ -143,10 +143,12 @@ check(
 );
 
 // ─── the premise the RTL reasoning rests on ─────────────────────────
-const appHtml = read('apps/web/src/app.html');
+// The ?lang= hint lives in static/lang-hint.js (an external script: the strict
+// CSP allows no inline one).
+const langHint = read('apps/web/static/lang-hint.js');
 check(
 	'RTL really is live for Farsi (premise of the logical-property checks)',
-	/documentElement\.dir = code === 'fa' \? 'rtl' : 'ltr'/.test(appHtml),
+	/documentElement\.dir = code === 'fa' \? 'rtl' : 'ltr'/.test(langHint),
 	'if this ever stops flipping dir, the ps-/ms-/border-s reasoning is moot'
 );
 

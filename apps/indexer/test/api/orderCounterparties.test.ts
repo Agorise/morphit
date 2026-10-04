@@ -1,5 +1,5 @@
 /**
- * Unit test — GET /v1/orders/:owner/:permlink/counterparties (cp421).
+ * Unit test — GET /v1/orders/:owner/:permlink/counterparties.
  *
  * Exercises the HTTP layer with a stubbed Database. The reviewable SQL
  * (the verified-chat conformance LATERAL) is evaluated by Postgres in

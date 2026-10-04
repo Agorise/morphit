@@ -42,7 +42,7 @@ describe('resolveOrigin', () => {
 	});
 
 	it('returns the bare origin (NO trailing slash) for the empty same-origin case', () => {
-		// cp305 regression guard. MORPHIT_INDEXER_ORIGIN is '' (same
+		// regression guard. MORPHIT_INDEXER_ORIGIN is '' (same
 		// origin). A trailing slash here let string-concatenating
 		// consumers build `https://host//v1/…` (double slash), which a
 		// merge_slashes-off proxy 404s — making valid indexer reads

@@ -2,8 +2,8 @@
 /**
  * Smoke for the identicon `<img src>` data URI format.
  *
- * Background — the "2 broken images on onboarding review" bug
- * (cp249):
+ * Background — the "2 broken images on onboarding review" bug:
+ *
  *
  *   The heart identicon (`apps/web/src/lib/crypto/identicon.ts`) is a
  *   pure-SVG avatar rendered into an `<img src="data:...">`. The SVG

@@ -2,35 +2,34 @@
 /**
  * operator-doc-per-asset-coverage-smoke.
  *
- * Part 122 cp53 STRUCTURAL DEFENSE (LL #57 / O-7).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp53-N1 documentation drift class: every Category-B
+ * Closes the documentation drift class: every Category-B
  * tradable asset (excluding the three Category-A fee-payable
  * assets BTC/XMR/BLURT which appear EVERYWHERE) MUST appear at
  * least once in every operator-facing setup doc.  This catches
  * the "asset added at cp<N>, but the operator guide was never
- * updated" failure mode that cp53 surfaced (BCH/LTC/DASH
- * tooltip-faqKey deep-links wired at cp51 but never reflected
- * in GRANDMA-FRIENDLY-INVESTIGATION; cp33-cp49 assets never got
+ * updated" failure mode that surfaced (BCH/LTC/DASH
+ * tooltip-faqKey deep-links wired but never reflected
+ * in the grandma-UX investigation; assets never got
  * dedicated chat-link explorer subsections in OPERATIONS.md).
  *
  * Recurring class scope progression (7 defenses across 6 checkpoints):
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker hardcoded tables
- *   cp51-O5: per-asset i18n FAQ key coverage
- *   cp52-O6: Ansible env template required-var parity
- *   cp53-O7: operator doc per-asset coverage (THIS)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker hardcoded tables
+ *   per-asset i18n FAQ key coverage
+ *   Ansible env template required-var parity
+ *   operator doc per-asset coverage (THIS)
  *
  * Scope of operator docs walked:
- *   - docs/PRE-LAUNCH-CHECKLIST.md
  *   - docs/OPERATIONS.md
  *
  * NOT walked (intentionally — these are for a different audience):
  *   - SECURITY.md (threat model — asset-agnostic by design)
  *   - LAUNCH-DAY.md / POST-LAUNCH-WEEK-ONE.md (operational rhythm)
- *   - BETA-INCIDENT-RUNBOOK.md (incident triage)
+ *   - INCIDENT-RUNBOOK.md (incident triage)
  *   - UPGRADING.md / SWITCHING-NETWORKS.md (workflow guides)
  *   - ADDING-A-COIN.md (developer guide, intentionally enumerates)
  *
@@ -41,7 +40,7 @@
  * configuration cannot find ANY information about it in that
  * canonical doc.
  *
- * Mutation test verification: M-121 — deleting all XRP mentions
+ * Mutation test verification: — deleting all XRP mentions
  * from OPERATIONS.md fires:
  *   "operator-doc-per-asset-coverage FAILED:
  *    docs/OPERATIONS.md never mentions tradable asset XRP."
@@ -50,7 +49,7 @@
  * (matches /\bXRP\b/), so the smoke ONLY catches "asset is
  * silently unmentioned" — it does NOT detect SHALLOW mentions
  * (e.g. mentioning XRP only in the headline summary while
- * skipping the per-asset config example).  The cp53 inline
+ * skipping the per-asset config example).  The inline
  * fixes addressed the shallow cases; this smoke pins the
  * "totally absent" floor.
  */
@@ -83,7 +82,6 @@ const CATEGORY_B = (ASSET_TICKERS as readonly string[]).filter(
 console.log(`Category-B tickers (${CATEGORY_B.length}): ${CATEGORY_B.join(', ')}\n`);
 
 const SCOPED_DOCS = [
-	'docs/PRE-LAUNCH-CHECKLIST.md',
 	'docs/OPERATIONS.md'
 ];
 

@@ -409,10 +409,13 @@ describe('cross-instance QR sign-in, end to end', () => {
 		});
 		const pid = newPid();
 		const d = delivery(pid);
+		// The desktop is waiting on B (a delivery to a code nobody waits on is refused).
+		expect(b.registry.register(pid, Date.now())).toEqual({ kind: 'waiting' });
 		const r = await phoneForward(b.app, { target: `http://${B_ONION}`, pid, delivery: d });
 		expect(r.status).toBe(200);
-		const reg = b.registry.register(pid, Date.now());
-		expect(reg).toEqual({ kind: 'immediate', bundleJson: JSON.stringify(d) });
+		let got = '';
+		expect(b.registry.setWaiter(pid, (json) => (got = json))).toBe('fired_immediately');
+		expect(got).toBe(JSON.stringify(d));
 		expect(tor.asked).toEqual([]);
 		expect(b.spies.clearnet).toEqual([]);
 	});
@@ -615,6 +618,8 @@ describe('what the forward refuses', () => {
 		});
 		for (let i = 0; i < 2; i++) {
 			const pid = newPid();
+			// A desktop on A waits on each code, as in real use.
+			await desktopWaits(a, pid);
 			expect(
 				(await phoneForward(b.app, { target: A_ORIGIN, pid, delivery: delivery(pid) })).status
 			).toBe(200);
@@ -665,6 +670,36 @@ describe('a hidden-only B never dials clearnet', () => {
 		expect(r.status).toBe(502);
 		expect(dead.count()).toBeGreaterThan(0);
 		expect(b.spies.clearnet, 'a hidden-only node dialled clearnet').toEqual([]);
+	});
+
+	it('the dialler itself skips a clearnet address on a hidden-only node (not only the directory)', async () => {
+		handle = installHiddenServiceDispatcher(
+			{ torSocks: '127.0.0.1:1', i2pHttpProxy: '' },
+			'refuse'
+		);
+		const dialled: string[] = [];
+		const pid = newPid();
+		const out = await dialPairingDeliver(
+			[{ origin: A_ORIGIN, hidden: false }],
+			pid,
+			JSON.stringify(delivery(pid)),
+			{
+				proxies: { torSocks: '127.0.0.1:1', i2pHttpProxy: '' },
+				hiddenTimeoutMs: 1_000,
+				clearnetTimeoutMs: 1_000,
+				now: () => Date.now(),
+				postHidden: async (url) => {
+					dialled.push(url);
+					return { status: 200, body: '' };
+				},
+				postClearnet: async (url) => {
+					dialled.push(url);
+					return { status: 200, body: '' };
+				}
+			}
+		);
+		expect(dialled, 'a hidden-only node dialled clearnet').toEqual([]);
+		expect(out).toEqual({ kind: 'unreachable' });
 	});
 
 	it('control: the same A over a working onion is delivered', async () => {

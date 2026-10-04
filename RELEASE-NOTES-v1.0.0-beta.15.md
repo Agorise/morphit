@@ -107,7 +107,7 @@ after the beta.14 deploy.
 
 ## Under the hood
 
-- **A comprehensive security and correctness audit ("deep-deep").** All 17
+- **A comprehensive security and correctness audit.** All 17
   indexer transaction handlers were read end-to-end, and the privacy defaults
   (no analytics, no third-party requests, self-hosted fonts), fee arithmetic
   (90/10 BLURT, 100/0 BTC/XMR), and operator docs were re-verified against the

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * settings-chain-crypto — v1.5.0 (tt.txt J) guard.
+ * settings-chain-crypto — v1.5.0 guard.
  *
  * The settings-to-chain feature mirrors a user's settings (notifications,
  * quiet hours, privacy, syndication, hidden/blocked accounts, preferences)
@@ -16,7 +16,7 @@
  * They also pin the lazy libsodium import: this module is reachable from the
  * shared [lang] layout (layout → settingsSync → settingsCrypto), so a static
  * `import sodium from 'libsodium-wrappers-sumo'` here drags ~1 MB into EVERY
- * page's preload closure. v1.5.0 shipped exactly that regression; cp471
+ * page's preload closure. v1.5.0 shipped exactly that regression
  * fixed it by routing through $crypto/sodium. libsodium-not-in-baseline-
  * closure-smoke guards the closure; this pins the cause at the source.
  */
@@ -51,7 +51,7 @@ function key(seed: number): Uint8Array {
 /*
  * Long, unique canary values — NOT short ones like 'MXN'.
  *
- * cp471: the confidentiality check below originally searched for 'MXN' (3
+ * the confidentiality check below originally searched for 'MXN' (3
  * chars) in the base64 BLOB TEXT, and it was wrong in BOTH directions:
  *
  *   FALSE POSITIVE — ciphertext base64 is effectively random text over a

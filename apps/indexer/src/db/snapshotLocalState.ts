@@ -1,5 +1,5 @@
 /**
- * apps/indexer/src/db/snapshotLocalState.ts — v1.18.0 deep-deep (rv2-5, rv2-1c)
+ * apps/indexer/src/db/snapshotLocalState.ts — (rv2-5, rv2-1c)
  *
  * What a published indexer snapshot may carry, and what a restore must scrub.
  *
@@ -37,7 +37,7 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	'moderation_flag_clearances',
 	// The RPC directory row is chain-derived, but the RELAY merges it into its
 	// pool at boot, before the indexer has re-verified it against the signed
-	// op (rv2-4). A restored row is the publisher's word, so it never travels:
+	// op. A restored row is the publisher's word, so it never travels:
 	// the node picks the directory up again from the next signed directory op.
 	'rpc_directory',
 	// Which fee ops THIS node already re-judged with a chain re-fetch (G1,
@@ -48,12 +48,27 @@ export const LOCAL_ONLY_TABLES: readonly string[] = [
 	// function of `ops` + `releases`. It is never taken on a snapshot's word:
 	// the restoring node rebuilds it from its own (op-log-checked) event log
 	// on the next BTC-fee order (fee/btcFeeAddressIndex.ts).
-	'btc_fee_address_log'
+	'btc_fee_address_log',
+	// This node's own hourly observations of the chain's account-creation
+	// fee, stamped with ITS wall clock: an install timeline, not chain state.
+	'witness_fee_history'
+];
+
+/** known_instances columns that come from the chain (the register op). The
+ *  rest are this node's probe opinions — raw error text, proxy addresses,
+ *  each peer's self-description as cached — and never leave it: the export
+ *  writes only these columns, and a restore resets the rest. */
+export const KNOWN_INSTANCES_CHAIN_COLUMNS: readonly string[] = [
+	'origin',
+	'operator_account',
+	'registered_at_block',
+	'registered_at_time'
 ];
 
 /** Tables rebuilt from the chain (ops, derived views, detector output over
  *  chain data). `operator_blocks` is mixed: its `origin = 'local'` rows are
- *  this operator's own blocks and are handled row by row. */
+ *  this operator's own blocks and are handled row by row. `known_instances`
+ *  is mixed by column (KNOWN_INSTANCES_CHAIN_COLUMNS). */
 export const CHAIN_DERIVED_TABLES: readonly string[] = [
 	'account_loyalty',
 	'account_loyalty_milestones',
@@ -91,16 +106,17 @@ export const CHAIN_DERIVED_TABLES: readonly string[] = [
 	'stranger_fees',
 	'suspicious_reciprocity',
 	'trade_concentration',
-	'user_settings',
-	'witness_fee_history'
+	'user_settings'
 ];
 
 /** `pg_dump` arguments that keep local-only rows out of the dump. */
 export function exportExclusionArgs(): string[] {
 	return [
 		...LOCAL_ONLY_TABLES.map((t) => `--exclude-table-data=public.${t}`),
-		// Mixed table: its chain rows are appended separately (snapshot-export).
-		'--exclude-table-data=public.operator_blocks'
+		// Mixed tables: their chain rows / chain columns are appended
+		// separately (snapshot-export).
+		'--exclude-table-data=public.operator_blocks',
+		'--exclude-table-data=public.known_instances'
 	];
 }
 
@@ -181,10 +197,19 @@ export function schemaRoutineNames(schemaSql: string): {
  * would otherwise run on this node — a trigger fires on the indexer's own
  * writes, an event trigger on its next migration. Returns what was dropped,
  * as human-readable names.
+ *
+ * `currentSchemaOnly` limits it to the connection's own schema (the boot-time
+ * check on a running node, whose database may hold other schemas); event
+ * triggers are database-wide and always checked.
  */
-export async function dropRoutinesNotInSchema(db: Database, schemaSql: string): Promise<string[]> {
+export async function dropRoutinesNotInSchema(
+	db: Pick<Database, 'query'>,
+	schemaSql: string,
+	opts: { readonly currentSchemaOnly?: boolean } = {}
+): Promise<string[]> {
 	const keep = schemaRoutineNames(schemaSql);
 	const dropped: string[] = [];
+	const scope = opts.currentSchemaOnly === true ? 'AND n.nspname = current_schema()' : '';
 
 	// Event triggers first: they fire on the DDL below. Superuser-only to
 	// create, so only a superuser restore can have any.
@@ -205,7 +230,7 @@ export async function dropRoutinesNotInSchema(db: Database, schemaSql: string): 
 		   JOIN pg_namespace n ON n.oid = c.relnamespace
 		  WHERE NOT t.tgisinternal
 		    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-		    AND n.nspname NOT LIKE 'pg\\_%'`
+		    AND n.nspname NOT LIKE 'pg\\_%' ${scope}`
 	);
 	for (const t of trg.rows) {
 		if (keep.triggers.has(t.tgname.toLowerCase())) continue;
@@ -220,7 +245,7 @@ export async function dropRoutinesNotInSchema(db: Database, schemaSql: string): 
 		   JOIN pg_namespace n ON n.oid = c.relnamespace
 		  WHERE r.rulename <> '_RETURN'
 		    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-		    AND n.nspname NOT LIKE 'pg\\_%'`
+		    AND n.nspname NOT LIKE 'pg\\_%' ${scope}`
 	);
 	for (const r of rules.rows) {
 		await db.query(`DROP RULE IF EXISTS ${quoteIdent(r.rulename)} ON ${r.rel} CASCADE`);
@@ -232,7 +257,7 @@ export async function dropRoutinesNotInSchema(db: Database, schemaSql: string): 
 		   FROM pg_proc p
 		   JOIN pg_namespace n ON n.oid = p.pronamespace
 		  WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-		    AND n.nspname NOT LIKE 'pg\\_%'
+		    AND n.nspname NOT LIKE 'pg\\_%' ${scope}
 		    AND NOT EXISTS (
 		          SELECT 1 FROM pg_depend d
 		           WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')`

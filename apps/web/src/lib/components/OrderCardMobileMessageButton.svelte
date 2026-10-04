@@ -1,5 +1,5 @@
 <!--
-	OrderCardMobileMessageButton (cp420) — the mobile-only, full-width message
+	OrderCardMobileMessageButton — the mobile-only, full-width message
 	CTA at the bottom of an OrderCard. Combines what desktop shows as two
 	separate top-right elements (the ⏳ expiry pill + the "Message / @user"
 	button) into ONE slim button: "🗨 Message @username before 26 Jun".

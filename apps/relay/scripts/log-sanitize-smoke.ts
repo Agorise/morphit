@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Morphit relay — log sanitize smoke (cp139-E-1).
+ * Morphit relay — log sanitize smoke.
  *
  * Asserts that textSink + formatValue strip terminal-control
  * escapes before writing to stdout/stderr.  jsonSink is also

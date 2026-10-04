@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the chat inbox is an inbox of DISCUSSIONS, not of people (cp446, the maintainer).
+ * Smoke: the chat inbox is an inbox of DISCUSSIONS, not of people.
  *
  * "I will have multiple discussions with the same person, but regarding
  * different orders." So: one card per (peer, order), an order-less thread gets
@@ -93,32 +93,32 @@ check('all three outgoing sites (pending, failed, restored unconfirmed) inherit 
 check('wire messages keep the order they arrived with', (service.match(/orderPermlink: rec\.order_permlink \?\? null/g) ?? []).length === 2);
 check('LocalMessage carries the order', /orderPermlink: string \| null;/.test(service));
 
-// ─── client: the inbox renders discussions, email-inbox style (cp450) ─
+// ─── client: the inbox renders discussions, email-inbox style ─
 check('the list is keyed on (peer, order), never on peer alone', /\{#each activeList as convo \(threadKey\(convo\)\)\}/.test(inbox));
 check('…and the key separator cannot occur in a name or permlink', /\\u0000/.test(inbox));
 check('a card opens its own thread, scoped by ?order=', /\$\{base\}\?order=\$\{encodeURIComponent\(c\.order\.permlink\)\}/.test(inbox));
 check('an order-less card opens the plain conversation', /return c\.order \? .* : base;/.test(inbox));
-check('the avatar is a uniform 40px on every card (t.txt 8)', /avatarSize=\{40\}/.test(inbox));
+check('the avatar is a uniform 40px on every card', /avatarSize=\{40\}/.test(inbox));
 
-// t.txt item 12 — the "RE:" line is ALWAYS shown; "RE: -" when there is no order.
+// the "RE:" line is ALWAYS shown; "RE: -" when there is no order.
 check('the RE: prefix renders unconditionally (not gated on convo.order)', /re_prefix'\)\}<\/span>\s*\{#if convo\.(pending|order)\}/.test(inbox));
 check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(inbox));
-// t.txt item 16 — the RE: line is plain text now; the whole card opens the chat.
+// the RE: line is plain text now; the whole card opens the chat.
 check('the RE: line no longer links to the order page', !/\/@\$\{convo\.order\.account\}\/\$\{convo\.order\.permlink\}/.test(inbox));
-// t.txt item 9 — the per-card unread green dot is gone.
+// the per-card unread green dot is gone.
 check('no per-card unread green dot', !/h-2 w-2 flex-none rounded-full bg-morphit-emerald/.test(inbox));
 
-// ─── the three folders replace Messages/Requests (cp450) ─────────────
+// ─── the three folders replace Messages/Requests ─────────────
 check('the tabs are the tri-state folder, not Messages/Requests', /type InboxTab = 'inbox' \| 'starred' \| 'archived'/.test(inbox));
 check('Inbox is the default tab', /let activeTab = \$state<InboxTab>\('inbox'\)/.test(inbox));
 check('all three tab labels render', /tab_inbox/.test(inbox) && /tab_starred/.test(inbox) && /tab_archived/.test(inbox));
 check('the lists are folder-based', /inboxList = \$derived\(sortedConversations\.filter\(\(c\) => c\.folder === 'inbox'\)\)/.test(inbox) && /starredList = \$derived\(sortedConversations\.filter\(\(c\) => c\.folder === 'starred'\)\)/.test(inbox) && /archivedList = \$derived\(sortedConversations\.filter\(\(c\) => c\.folder === 'archived'\)\)/.test(inbox));
-check('sorted by date newest-first, not unread-first (t.txt 6)', /withFlags\.sort\(\(a, b\) => b\.last_message_at\.localeCompare\(a\.last_message_at\)\)/.test(inbox) && !/if \(a\.unread && !b\.unread\) return -1/.test(inbox));
-check('every card has a star to the right of the time (t.txt 11)', /handleToggleStar\(convo\)/.test(inbox) && /starred \? '★' : '☆'/.test(inbox));
-check('every card has an Archive/Restore action box (t.txt 7)', /action_archive/.test(inbox) && /action_restore/.test(inbox) && /handleArchive\(convo\)/.test(inbox) && /handleRestore\(convo\)/.test(inbox));
+check('sorted by date newest-first, not unread-first', /withFlags\.sort\(\(a, b\) => b\.last_message_at\.localeCompare\(a\.last_message_at\)\)/.test(inbox) && !/if \(a\.unread && !b\.unread\) return -1/.test(inbox));
+check('every card has a star to the right of the time', /handleToggleStar\(convo\)/.test(inbox) && /starred \? '★' : '☆'/.test(inbox));
+check('every card has an Archive/Restore action box', /action_archive/.test(inbox) && /action_restore/.test(inbox) && /handleArchive\(convo\)/.test(inbox) && /handleRestore\(convo\)/.test(inbox));
 check('no leftover Messages/Requests machinery', !/const engaged =/.test(inbox) && !/requestsList/.test(inbox) && !/tab_messages/.test(inbox) && !/tab_requests/.test(inbox));
 
-// ─── the folder store: tri-state, default inbox, cleared on lock (cp450) ─
+// ─── the folder store: tri-state, default inbox, cleared on lock ─
 check('chatFolders is a tri-state per-discussion folder', /export type ChatFolder = 'inbox' \| 'starred' \| 'archived'/.test(chatFolders));
 check('…default inbox = ABSENCE from the map', /entry \? entry\.folder : 'inbox'/.test(chatFolders));
 check('…the star toggles inbox <-> starred', /isStarred\(peer, orderPermlink\) \? 'inbox' : 'starred'/.test(chatFolders));
@@ -126,7 +126,7 @@ check('…archive & restore exist', /export function archiveThread/.test(chatFol
 check('…keyed exactly like read-state (peer NUL order)', /\$\{peer\}\\u0000\$\{orderPermlink\}/.test(chatFolders));
 check('the folder state is wiped on explicit lock (same privacy class as read-state)', /clearChatFolders\(\)/.test(explicitLock));
 
-// ─── the chatroom star mirrors the inbox star (t.txt item 13) ────────
+// ─── the chatroom star mirrors the inbox star ────────
 // v1.7.7 — pins the REQUIREMENT (the kebab stars THIS thread, keyed by peer +
 // order, and reflects it) rather than the exact argument list. The original
 // spelled out `toggleStar(peer, orderPermlink ?? '')`, so it failed when the
@@ -146,7 +146,7 @@ check(
 	)
 );
 
-// ─── the unread badge excludes archived discussions (t.txt item 10) ──
+// ─── the unread badge excludes archived discussions ──
 check('the favicon / avatar-menu count skips archived discussions', /isArchived\(c\.peer, order\)/.test(chatUnread));
 
 // The FAQ describes this inbox to users; it must describe the NEW one.
@@ -158,9 +158,9 @@ check('…it describes the three folders Inbox / Starred / Archived', /\bInbox\b
 check('…the star, archive and restore actions', /star/i.test(faq) && /\bArchive\b/.test(faq) && /\bRestore\b/.test(faq));
 check('…with no leftover Messages/Requests/Dismiss model', !/Messages tab/i.test(faq) && !/Requests tab/i.test(faq) && !/\bDismiss\b/.test(faq));
 
-// ─── v1.7.5 (t.txt #3): the card must not squish on a phone ──────────
+// ─── v1.7.5: the card must not squish on a phone ──────────
 //
-// the maintainer's screenshot: "Super loong display name" wrapped to FOUR lines, dragging
+// The maintainer's screenshot: "Super loong display name" wrapped to FOUR lines, dragging
 // the 40px avatar and the RE: line out of alignment with it, and turning one
 // conversation into a ~600px-tall card.
 //
@@ -201,7 +201,7 @@ check(
 		/function whenTooltip\(iso: string\)/.test(inbox) &&
 		/formatDayMonthTime\(iso\)/.test(inbox) &&
 		!/<RelativeTime/.test(inbox),
-	't.txt #10 — "2h ago" moved into the card title ("… UTC · 2h ago") so the name/subject/feedback get the full width'
+	'"2h ago" moved into the card title ("… UTC · 2h ago") so the name/subject/feedback get the full width'
 );
 check(
 	'the star is a plain inline glyph just left of the Archive box, not a round corner badge',
@@ -209,7 +209,7 @@ check(
 		/handleToggleStar\(convo\)/.test(inbox) &&
 		/starred \? '★' : '☆'/.test(inbox) &&
 		inbox.indexOf('handleToggleStar(convo)') < inbox.indexOf("_('chat.inbox.action_archive')"),
-	't.txt #10 (moved) — the star is now a plain glyph left of the Archive box (no round badge, no circle); it precedes the Archive action in source order'
+	'the star is now a plain glyph left of the Archive box (no round badge, no circle); it precedes the Archive action in source order'
 );
 check(
 	'the archive/restore gutter is narrower on mobile, restored at sm',

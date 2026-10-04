@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the settings page "Missing Posting Authority" bug (the maintainer, twice).
+ * Smoke: the settings page "Missing Posting Authority" bug (twice).
  *
  * The Blurt account name lived in ONE origin-wide localStorage key with a
  * `storage` listener that rewrote it whenever ANOTHER tab signed in — while the
@@ -9,7 +9,7 @@
  * declaring `required_posting_auths: ["tester3"]`. The chain rejects it and
  * dumps three authorities at a user who just wanted to set a display name.
  *
- * cp440 "fixed" this by deleting the pre-flight check, reasoning that chat
+ * "fixed" this by deleting the pre-flight check, reasoning that chat
  * broadcasts worked and profile ones didn't. But chat messages travel over the
  * RELAY, not the chain — they never exercised this path. Deleting the check
  * only replaced a clear error with a chain dump.
@@ -68,7 +68,7 @@ const catchBlock = binding.slice(binding.indexOf('} catch (e) {'), binding.index
 check('FAILED lookups are NOT cached (no poisoned session)', catchBlock.length > 0 && !catchBlock.includes('cache.set'));
 check('the refusal paths do not cache either', !/throw new AccountBindingError[\s\S]{0,120}cache\.set/.test(binding));
 
-// cp445 (round 2) — the deeper fix. The account name is no longer origin-wide at
+// (round 2) — the deeper fix. The account name is no longer origin-wide at
 // all: it is stored under a key derived from the session's posting pubkey, so two
 // tabs holding two accounts cannot collide even before any network lookup runs.
 check('the stored account name is scoped to the session\u2019s posting key', /function scopedAccountKey\(sessionKeyId: string\): string \{/.test(profile));
@@ -80,9 +80,12 @@ check('profile.ts does NOT import the identity store (cycle: identity imports pr
 // The identity store drives the binding on EVERY transition, so no `internal.set`
 // call site can forget to do it.
 const idStore = strip(read('src', 'lib', 'stores', 'identity.ts'));
-check('every unlock/lock rebinds account storage to the session\u2019s key', /internal\.subscribe\(\(state\) => \{[\s\S]{0,240}bindSessionPostingKey/.test(idStore));
+// The subscription is derived from the session AND the persisted-keystore
+// flag, so a "just this session" sign-in binds without writing the name to disk.
+// Behaviour: src/lib/blurt/ops/accountNameScope.test.ts.
+check('every unlock/lock rebinds account storage to the session\u2019s key', /derived\(\[internal, persistedKeystorePresent\], \(\[state\]\) => state\)\.subscribe\(\(state\) => \{[\s\S]{0,240}bindSessionPostingKey/.test(idStore));
 // The identity store is on the every-page baseline: it must NOT reach for the
-// BLT formatter, which drags bip39 + secp256k1 into first paint (cp271).
+// BLT formatter, which drags bip39 + secp256k1 into first paint.
 check('…without importing $crypto/keygen into the baseline', !/from '\$crypto\/keygen'/.test(idStore));
 check('…using the public key itself as the session key id', /function sessionKeyId\(publicKey: Uint8Array\): string/.test(idStore));
 
@@ -109,7 +112,7 @@ check('…with a "wrong account" key', /wrong_account/.test(classifier));
 //
 // 18 pre-existing web .ts files already import this way and survive only
 // because no smoke happens to import them at runtime. That collision is filed
-// in REVISIT-LIST; this check pins the two files the battery DOES pull in.
+// in the backlog; this check pins the two files the battery DOES pull in.
 const noAliasImport = (src: string): boolean =>
 	!/^\s*import\s+(?!type\b)[^;]*from '\$blurt\//m.test(src);
 check('sign.ts imports accountBinding relatively, not through $blurt', noAliasImport(read('src', 'lib', 'blurt', 'sign.ts')));

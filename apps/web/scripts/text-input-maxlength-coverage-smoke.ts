@@ -15,7 +15,7 @@
  *   user immediate feedback, and (b) stops a pathological multi-MB
  *   paste from ever sitting in the DOM / reaching a validator.  This
  *   smoke makes that backstop a standing invariant so new fields
- *   can't silently ship without it (cp350 — the site-wide field
+ *   can't silently ship without it (the site-wide field
  *   audit that added maxlength to 23 previously-unbounded fields).
  *
  * SCOPE:

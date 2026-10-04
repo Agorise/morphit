@@ -4,7 +4,7 @@
 	 * time string ("5 min ago" / "2h" / "3 days ago").
 	 *
 	 * Why one component instead of four inline `formatRelativeTime`
-	 * functions: prior to Part 89 there were four near-identical
+	 * functions: previously there were four near-identical
 	 * impls scattered across `/my/orders`, `/orderbook`, `/@account`
 	 * profile, and `/chat`. Three were terse ("2h"), one was
 	 * descriptive ("2 hours ago"). Consolidating them gives:
@@ -12,8 +12,8 @@
 	 *   - Native `<time datetime>` for free a11y and machine-
 	 *     readability.
 	 *   - Free `title` tooltip with the absolute time, so a user
-	 *     hovering "2h" learns the exact instant. (Memory #15:
-	 *     grandma-friendliness without sacrificing density.)
+	 *     hovering "2h" learns the exact instant. (Grandma-
+	 *     friendliness without sacrificing density.)
 	 *   - Auto-tick: re-render once per minute (descriptive) or
 	 *     once per minute capped at hour boundaries (terse), so a
 	 *     long-mounted page doesn't show a frozen "just now" for
@@ -60,7 +60,7 @@
 		format?: 'terse' | 'descriptive';
 		/** Optional extra CSS classes for the rendered <time>. */
 		class?: string;
-		/** cp429 — when true (terse only), wrap the terse value in a per-locale
+		/** when true (terse only), wrap the terse value in a per-locale
 		 *  "ago" phrase (en "5d ago", de "vor 5T", es "hace 5d"). Used by
 		 *  /my/orders' "Posted {age} ago". Composes correctly after a prefix
 		 *  because the "ago" word attaches to the time, not the sentence. */

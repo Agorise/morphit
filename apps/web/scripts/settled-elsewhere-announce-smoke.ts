@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/settled-elsewhere-announce-smoke.ts
  *
- * Structural Defense (cp497, t.txt #5) — the auto-reply SENDER. When an order
+ * Structural Defense — the auto-reply SENDER. When an order
  * owner completes a trade with a chosen trader, `announceSettledElsewhere`
  * must E2E-send the text-free "order settled elsewhere" system message to every
  * OTHER inquirer on that order — and to nobody else.

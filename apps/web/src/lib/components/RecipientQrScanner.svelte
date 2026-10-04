@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * RecipientQrScanner — cp424. A camera overlay that scans a QR code and
+	 * RecipientQrScanner. A camera overlay that scans a QR code and
 	 * returns a candidate Blurt recipient to the Send modal.
 	 *
 	 * Modeled on ScanLoginQr's camera handling: the camera is only started

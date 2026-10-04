@@ -1,17 +1,17 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — IP-disclosure single-source smoke (v1.7.5, t.txt #10).
+ * Morphit — IP-disclosure single-source smoke (v1.7.5).
  *
- * the maintainer's rule, verbatim: "if a user leaks their ip one time to one of the rpc
+ * The maintainer's rule, verbatim: "if a user leaks their ip one time to one of the rpc
  * nodes because we made the conscious decision to do so, then i only want that
  * bad news mentioned in one faq article, and nowhere else on the site."
  *
- * Morphit makes exactly ONE direct browser→Blurt-node request: the boot-time
- * release-integrity check (`initRelease()` → `fetchVerifiedRelease()` →
- * `getDirectChainClient()`). It is deliberate — it is what makes `staleBuild`
- * meaningful, so an operator cannot pin a user to an old, genuinely-signed,
- * backdoored build. The privacy cost is one node learning that an IP loaded a
- * page.
+ * Morphit makes exactly ONE kind of direct browser→Blurt-node request: the
+ * release check (`initRelease()` → `fetchVerifiedRelease()` → one node, a
+ * second operator's node only when needed), at most once a day per browser. It
+ * is deliberate — it is what makes `staleBuild` meaningful, so an operator
+ * cannot pin a user to an old, genuinely-signed, backdoored build. The privacy
+ * cost is one node (two at most) learning that an IP loaded a page.
  *
  * This guard pins the three things that make that honest:
  *   1. The disclosure lives in exactly ONE user-facing string, in all 10 locales.
@@ -30,6 +30,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { searchEntries, type FaqEntry } from '../src/lib/utils/faqIndex';
+import { RELEASE_CACHE_TTL_MS } from '../src/lib/net/releaseCache';
+import {
+	RELEASE_CHECK_STEADY_STATE_REQUESTS,
+	RELEASE_HISTORY_WINDOWS
+} from '../src/lib/net/releaseFetch';
+import { MAX_NODES_PER_CHECK } from '../src/lib/net/releaseVerifyCore';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOCALES = resolve(__dirname, '..', 'src', 'lib', 'i18n', 'locales');
@@ -109,21 +115,50 @@ for (const f of files) {
 	);
 }
 
-// ── 1b. the article says how OFTEN, and that matches the code (v1.20.3) ──
-// The check used to run once per session and the article said so. Since
-// v1.20.3 a good answer is remembered for 24 h, while the site stays on the same
-// version ($net/releaseCache), so the article says "at most once a day (and once
-// after each site update)" and that it is two small requests — what a visitor
-// sees in the Network tab. No locale may still say "once per session".
+// ── 1b. the article says how OFTEN and HOW MANY requests, as the code does ──
+// The numbers come from the code itself (imported values, not its text): the
+// outcome is remembered for RELEASE_CACHE_TTL_MS; a check costs
+// RELEASE_CHECK_STEADY_STATE_REQUESTS requests to one node (each may be preceded
+// by the browser's CORS preflight), a second node only when needed
+// (MAX_NODES_PER_CHECK; the article does not promise that node is run by another
+// operator, since the default hidden nodes are not independent); the history windows are 100 then
+// 10,000. src/lib/net/releaseBudget.test.ts proves the code makes exactly that
+// many requests; this proves the article says the same. If a number changes,
+// update the article in all 10 locales.
 {
-	const cacheSrc = readFileSync(resolve(__dirname, '..', 'src', 'lib', 'net', 'releaseCache.ts'), 'utf8');
-	const ttl24h = /RELEASE_CACHE_TTL_MS\s*=\s*24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/.test(cacheSrc);
-	const enA = (JSON.parse(readFileSync(join(LOCALES, 'en.json'), 'utf8')) as { faq: { entries: Record<string, { a: string }> } }).faq.entries[KEY]!.a;
+	const WORDS: Record<number, string> = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
+	const enA = (
+		JSON.parse(readFileSync(join(LOCALES, 'en.json'), 'utf8')) as {
+			faq: { entries: Record<string, { a: string }> };
+		}
+	).faq.entries[KEY]!.a;
+	const budget = `${WORDS[RELEASE_CHECK_STEADY_STATE_REQUESTS]} small requests to one node`;
 	check(
-		'1b EN: the article says "at most once a day", "after each site update" and "two small requests" — as the code does',
-		ttl24h && /at most once a day/i.test(enA) && /after each site update/i.test(enA) && /two small requests/i.test(enA),
-		ttl24h ? 'article wording out of step with the code' : 'RELEASE_CACHE_TTL_MS is no longer 24 h — update the article in all 10 locales'
+		`1b EN: the article says "at most once a day", "after each site update" and "${budget}", the preflight and "another node" (no operator-independence claim) — as the code does`,
+		RELEASE_CACHE_TTL_MS === 24 * 60 * 60 * 1000 &&
+			MAX_NODES_PER_CHECK === 2 &&
+			RELEASE_HISTORY_WINDOWS[0] === 100 &&
+			RELEASE_HISTORY_WINDOWS[1] === 10_000 &&
+			/at most once a day/i.test(enA) &&
+			/after each site update/i.test(enA) &&
+			enA.includes(budget) &&
+			/is another node asked/i.test(enA) &&
+			/preflight/i.test(enA) &&
+			!/another operator/i.test(enA) &&
+			!/four small requests/i.test(enA),
+		RELEASE_CACHE_TTL_MS !== 24 * 60 * 60 * 1000
+			? 'RELEASE_CACHE_TTL_MS is no longer 24 h — update the article in all 10 locales'
+			: 'the budget in the code and the article differ — update the article in all 10 locales'
 	);
+	for (const f of files) {
+		const loc = f.replace('.json', '');
+		const d = JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
+		const a = ((((d.faq as Json)?.entries as Json)?.[KEY] as { a?: string }) ?? {}).a ?? '';
+		check(
+			`1b.${loc} the article states the budget (24 h, 100 entries, ~115 KB) and the per-origin pools (.onion, .i2p)`,
+			/24/.test(a) && /100/.test(a) && /115/.test(a) && /\.onion/.test(a) && /\.b32\.i2p/.test(a)
+		);
+	}
 	const ONCE_PER_SESSION: Record<string, RegExp> = {
 		en: /once per session/i,
 		es: /una vez por sesi[oó]n/i,
@@ -141,7 +176,11 @@ for (const f of files) {
 		const d = JSON.parse(readFileSync(join(LOCALES, f), 'utf8')) as Json;
 		const a = ((((d.faq as Json)?.entries as Json)?.[KEY] as { a?: string }) ?? {}).a ?? '';
 		const re = ONCE_PER_SESSION[loc];
-		check(`1b.${loc} the article no longer says "once per session"`, re !== undefined && !re.test(a), re ? '' : 'no pattern for this locale');
+		check(
+			`1b.${loc} the article no longer says "once per session"`,
+			re !== undefined && !re.test(a),
+			re ? '' : 'no pattern for this locale'
+		);
 	}
 }
 
@@ -150,7 +189,7 @@ for (const f of files) {
 	const loc = f.replace('.json', '');
 	const all = leaves(JSON.parse(readFileSync(join(LOCALES, f), 'utf8')));
 	// Pin the CLASS, not the phrasings. The first version of this guard listed the
-	// two sentences I had already found — and missed a third, `settings.endpoints
+	// two sentences already found — and missed a third, `settings.endpoints
 	// .pool_note`, which told users "your browser never talks to these nodes
 	// directly" on the very panel that LISTS the node the release check calls.
 	// Hardcoding known-bad literals is how a guard ends up certifying the bug it
@@ -164,9 +203,7 @@ for (const f of files) {
 	// universal quantifier ("every request", "all traffic"), not the phrase alone.
 	const ABSOLUTE_CLAIM =
 		/(browser|you)\s+never\s+(talks?|touch\w*|reach\w*|contact\w*|connect\w*)[\s\S]{0,40}(node|endpoint|third[- ]party)|(every|all)\s+(request|traffic)[\s\S]{0,40}nowhere else|no third[- ]party services|we don'?t know you'?re here|handles all blurt network traffic/i;
-	const bad = all.filter(
-		([k, v]) => ABSOLUTE_CLAIM.test(v) && !k.startsWith(`faq.entries.${KEY}`)
-	);
+	const bad = all.filter(([k, v]) => ABSOLUTE_CLAIM.test(v) && !k.startsWith(`faq.entries.${KEY}`));
 	check(
 		`4.${loc} no string outside the article claims the browser never reaches a node`,
 		bad.length === 0,

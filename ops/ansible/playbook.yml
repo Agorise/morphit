@@ -15,19 +15,19 @@
 #                       proxy IPs (§32)
 #
 # Optional sidecar roles (controlled by enable_* group_vars):
-#   matrix_bot        → operator-alerts to Matrix (cp9, §16)
-#   host_monitor      → disk/mem/swap/cpu monitor (cp10, §16)
-#   smartctl_monitor  → disk SMART health (cp11, §16)
-#   fail2ban_monitor  → fail2ban jail observability (cp11, §16)
-#   mdadm_monitor     → Linux software RAID health (cp11, §16)
-#   dmesg_monitor     → kernel-log scan (OOM, oops, MCE) (cp12, §16)
-#   trivy_monitor     → Docker image CVE rescan (cp12, §16)
-#   postfix_monitor   → mail queue depth (alerting-self-check) (cp12, §16)
-#   certbot_monitor   → TLS cert expiry + renewal-stall (cp13, §16)
-#   apt_monitor       → pending security update count (cp13, §16)
-#   compose_monitor   → Docker Compose service health (cp13, §16)
-#   systemd_monitor   → systemd unit health (cp14, §16)
-#   journald_monitor  → journal disk usage + rotation (cp14, §16)
+#   matrix_bot        → operator-alerts to Matrix
+#   host_monitor      → disk/mem/swap/cpu monitor
+#   smartctl_monitor  → disk SMART health
+#   fail2ban_monitor  → fail2ban jail observability
+#   mdadm_monitor     → Linux software RAID health
+#   dmesg_monitor     → kernel-log scan (OOM, oops, MCE)
+#   trivy_monitor     → Docker image CVE rescan
+#   postfix_monitor   → mail queue depth (alerting-self-check)
+#   certbot_monitor   → TLS cert expiry + renewal-stall
+#   apt_monitor       → pending security update count
+#   compose_monitor   → Docker Compose service health
+#   systemd_monitor   → systemd unit health
+#   journald_monitor  → journal disk usage + rotation
 #
 # Run with:
 #   ansible-playbook -i inventory/hosts.yml playbook.yml --check
@@ -220,7 +220,7 @@
       when: enable_journald_monitor | default(false)
 
   post_tasks:
-    # cp681 — start the deferred AIDE baseline build now, in post_tasks, AFTER
+    # start the deferred AIDE baseline build now, in post_tasks, AFTER
     # every role has written its files (the morphit code under
     # {{ morphit_repo_path }}, /etc/morphit/*.env, and the morphit-*.service/
     # .timer units are all in place). Building the baseline from this settled
@@ -247,7 +247,7 @@
     # Best-effort: a node with tor/i2pd disabled, or a slow onion publish, just
     # leaves the pills off — it never fails the run.  On re-converge the morphit
     # role slurp-preserves these, so lineinfile is a no-op (no restart churn).
-    - name: "cp663 #14 — capture Tor/i2p addresses into morphit.config.env"
+    - name: "Capture Tor/i2p addresses into morphit.config.env"
       when: (enable_tor | default(true)) or (enable_i2pd | default(true))
       block:
         - name: Wait for Tor to publish its onion hostname
@@ -361,6 +361,125 @@
             - (morphit_i2p_b32.stdout | trim | length) >= 60
           notify: Restart morphit-indexer
 
+
+    # Clearnet visitors reach BunkerWeb through Docker's published 80/443:
+    # DNAT to the container, then IPv4 FORWARDING.  Docker turns forwarding on
+    # when it starts; anything that turns it off afterwards (an older hardening
+    # drop-in did, through the sysctl handler that runs after Docker is up)
+    # drops every clearnet connection while loopback, Tor and I2P keep working,
+    # so no local self-test notices.  Checked here, after every handler ran.
+    - name: Clearnet forwarding check (Docker publishes BunkerWeb's 80/443)
+      when:
+        - enable_bunkerweb | default(true) | bool
+        - not (morphit_tor_only | default(false) | bool)
+      block:
+        - name: Read IPv4 forwarding
+          ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+          register: morphit_ip_forward
+          changed_when: false
+          failed_when: false
+
+        - name: Turn IPv4 forwarding back on
+          ansible.builtin.command: sysctl -w net.ipv4.ip_forward=1
+          when: (morphit_ip_forward.stdout | default('') | trim) != '1'
+          changed_when: true
+          failed_when: false
+
+        - name: Read IPv4 forwarding again
+          ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+          register: morphit_ip_forward_after
+          changed_when: false
+          failed_when: false
+
+        - name: Report clearnet forwarding
+          ansible.builtin.debug:
+            msg: >-
+              {{ 'IPv4 forwarding is on (read back), so clearnet visitors reach BunkerWeb.'
+                 if (morphit_ip_forward_after.stdout | default('') | trim) == '1'
+                 else 'IPv4 forwarding is still off on this server, so clearnet visitors cannot reach the site. On this server run: sudo sysctl -w net.ipv4.ip_forward=1 && sudo systemctl restart docker' }}
+
+    # A tor-only node: from here on only Tor and i2pd may reach the internet
+    # (ops/tor-only/morphit-tor-egress.sh; loaded at boot by
+    # morphit-tor-egress.service).  Loaded last, after every install step, and
+    # kept only when it is SEEN working: an ordinary user's test connection is
+    # refused by it, and Tor still reaches the Tor network.  If Tor stops
+    # working with it, it is lifted again.
+    - name: Tor-only egress rule (only Tor and i2pd reach the internet)
+      when: morphit_tor_only | default(false) | bool
+      block:
+        - name: Does Tor reach the Tor network now?
+          ansible.builtin.shell:
+            cmd: |
+              for u in {{ (morphit_hidden_rpc_seed | select('search', '\\.onion:') | list)[:3] | join(' ') }}; do
+                c=$(curl -s -o /dev/null -m 40 -w '%{http_code}' --socks5-hostname 127.0.0.1:{{ morphit_tor_socks_port | default(9050) }} "$u/")
+                case "$c" in [1-5][0-9][0-9]) echo up; exit 0 ;; esac
+              done
+              echo down
+          register: morphit_egress_tor_before
+          changed_when: false
+          failed_when: false
+
+        - name: Is the rule already loaded as this release writes it?
+          ansible.builtin.command:
+            cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh egress-check
+          register: morphit_egress_check
+          changed_when: false
+          failed_when: false
+
+        - name: Load the rule and load it at every boot
+          ansible.builtin.shell:
+            cmd: >-
+              sh /usr/local/lib/morphit/morphit-tor-egress.sh egress-apply /var/lib/morphit-tor-only/egress-backup
+              && systemctl enable morphit-tor-egress.service
+          when:
+            - morphit_egress_check.rc != 0
+            - "'up' in morphit_egress_tor_before.stdout"
+          register: morphit_egress_apply
+          changed_when: true
+          failed_when: false
+
+        - name: Check the rule on the running system (a refused test connection)
+          ansible.builtin.command:
+            cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh egress-probe
+          register: morphit_egress_probe
+          changed_when: false
+          failed_when: false
+          when: "'up' in morphit_egress_tor_before.stdout"
+
+        - name: Does Tor still reach the Tor network with the rule?
+          ansible.builtin.shell:
+            cmd: |
+              for u in {{ (morphit_hidden_rpc_seed | select('search', '\\.onion:') | list)[:3] | join(' ') }}; do
+                c=$(curl -s -o /dev/null -m 40 -w '%{http_code}' --socks5-hostname 127.0.0.1:{{ morphit_tor_socks_port | default(9050) }} "$u/")
+                case "$c" in [1-5][0-9][0-9]) echo up; exit 0 ;; esac
+              done
+              echo down
+          register: morphit_egress_tor_after
+          changed_when: false
+          failed_when: false
+          when: "'up' in morphit_egress_tor_before.stdout"
+
+        - name: Tor stopped working with the rule, so lift it again
+          ansible.builtin.shell:
+            cmd: >-
+              sh /usr/local/lib/morphit/morphit-tor-egress.sh egress-revert /var/lib/morphit-tor-only/egress-backup;
+              systemctl disable morphit-tor-egress.service
+          when:
+            - "'up' in morphit_egress_tor_before.stdout"
+            - "'up' not in (morphit_egress_tor_after.stdout | default(''))"
+          changed_when: true
+          failed_when: false
+
+        - name: Report the tor-only egress rule
+          ansible.builtin.debug:
+            msg: >-
+              {{ "Tor did not reach the Tor network just now, so the rule that lets only Tor and i2pd out was not loaded yet; the next `sudo morphit-ops upgrade` on this node loads it."
+                 if 'up' not in morphit_egress_tor_before.stdout
+                 else ("Tor stopped reaching the Tor network with the rule loaded, so it was lifted again and this server is as before; the next `sudo morphit-ops upgrade` tries again."
+                       if 'up' not in (morphit_egress_tor_after.stdout | default(''))
+                       else ("Only Tor and i2pd reach the internet from this server now: a test connection by an ordinary user was refused by the rule, and Tor still works. It is loaded at every boot."
+                             if (morphit_egress_probe.rc | default(1)) == 0
+                             else "The rule is loaded but a test connection was not refused; on this server run: sudo sh /usr/local/lib/morphit/morphit-tor-egress.sh egress-check")) }}
 
     # Tell a new operator, calmly, that alerts are off, so nobody goes on
     # believing they are monitored when they are not.

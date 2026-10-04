@@ -89,7 +89,7 @@ function utcDateKey(from: Date = new Date()): string {
 export class GlobalDailyCeiling {
 	private bucketDate: string;
 	private count = 0;
-	/** In-flight reservation count.  Audit fix (this turn): without
+	/** In-flight reservation count.  Audit fix: without
 	 *  this, two concurrent /v1/account/create requests both call
 	 *  canAccept() (returns true), both proceed past validation,
 	 *  both broadcast, both call recordSuccess() — count overshoots
@@ -115,7 +115,7 @@ export class GlobalDailyCeiling {
 	/** Time source.  Production uses defaultClock (real wall time);
 	 *  tests pass a ManualClock for deterministic UTC-rollover
 	 *  assertions, eliminating the midnight race that motivated
-	 *  the drain-defense-live-fire 90-second guard in Part 25. */
+	 *  the drain-defense-live-fire 90-second guard. */
 	private readonly clock: Clock;
 
 	constructor(
@@ -258,7 +258,7 @@ export class GlobalDailyCeiling {
 	 * MUST eventually call recordSuccess() or releaseReservation()
 	 * to balance the reservation), false if at the cap.
 	 *
-	 * Audit fix (this turn): closes a TOCTOU race where concurrent
+	 * Audit fix: closes a TOCTOU race where concurrent
 	 * /v1/account/create requests from N different IPs could each
 	 * call canAccept() (returning true) when count was at
 	 * ceiling-1, all proceed, and the ceiling overshoots by N-1.

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * anti-snipe-extension-smoke — Part 122 cp18.
+ * anti-snipe-extension-smoke.
  *
  * Static + behavioral smoke for the anti-snipe extension SQL.
  * Does NOT exercise the live handler (covered by
@@ -49,7 +49,7 @@ function minutesFromNow(m: number): Date {
 }
 
 /** Mirror of the featureBid.ts UPDATE predicate.  Returns true
- *  if the row WOULD be extended by the cp18 anti-snipe step. */
+ *  if the row WOULD be extended by the anti-snipe step. */
 function wouldExtend(b: BidSnapshot, rankAmongTopN: number | null): boolean {
 	// CTE predicate: in top-MAX_SLOTS active set
 	if (rankAmongTopN === null || rankAmongTopN > MAX_SLOTS) return false;
@@ -175,7 +175,7 @@ if (failed === 0) {
 	process.exit(1);
 }
 
-// cp474 — module marker. Without a top-level import/export tsc treats this
+// module marker. Without a top-level import/export tsc treats this
 // file as a global script, so its `scenarios`/`failed` consts collide with every
 // other script-style smoke when the suite is typechecked as one project. This
 // has no runtime effect under tsx.

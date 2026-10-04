@@ -1,17 +1,17 @@
-# ADR-0038 — Reputation hardening campaign: time decay + concentration detector + verifiable receipt + side distinction + dormancy signal (cp123–cp125)
+# ADR-0038 — Reputation hardening campaign: time decay + concentration detector + verifiable receipt + side distinction + dormancy signal
 
 **Status:** Accepted (shipped 2026-05; pre-launch hardening campaign)
 
 **Date:** 2026-05-23
-**Deciders:** project maintainer (the maintainer)
+**Deciders:** project maintainer
 **Related:** ADR-0009 (order posting, Signal A/B framing), ADR-0014
-(chat-and-counterparty-reputation, verified-chat badge), Part 113
+(chat-and-counterparty-reputation, verified-chat badge)
 audit (reputation attack-surface enumeration, 2026-05-10).
 
 ## Context
 
-Pre-cp123, Morphit shipped a comprehensive sybil-resistant reputation
-system audited in Part 113 (2026-05-10) across 15 attack vectors
+Previously, Morphit shipped a comprehensive sybil-resistant reputation
+system audited (2026-05-10) across 15 attack vectors
 (A1–A10 inflation, B1–B5 deflation, C1–C2 identity, D1–D3
 aggregation). Of those 15, **4 remained open**:
 
@@ -22,21 +22,21 @@ aggregation). Of those 15, **4 remained open**:
 | **D3** | Time decay / stale reputation | DEFERRED |
 | D1 | New trader cold-start penalty | DESIGN CHOICE — `is_new_trader` badge |
 
-the maintainer's cp123 ask ("make sure reputation scores cannot be spoofed,
+The maintainer's ask ("make sure reputation scores cannot be spoofed,
 faked, artificially pumped … real, verified feedbacks, successful
 trade counts, factor in as many variables as we need to ensure
 provability of one's reputation score") re-opened the deferred and
 residual items, and added a new explicit requirement: **provability**.
 
-Eight hardening opportunities were enumerated (H1–H8). the maintainer locked
+Eight hardening opportunities were enumerated (H1–H8). The maintainer locked
 in **H1 + H2 + H4 + H5 + H6**, skipping H3 (reviewer-credibility
 weighting — too punitive for newcomers) and H7/H8 (asymmetric-feedback
 signal and operator dashboard — lower-value).
 
 ## Decision
 
-Five coordinated changes, shipped across cp123 (foundation) → cp124
-(surfaces) → cp125 (docs).
+Five coordinated changes, shipped across (foundation) →
+(surfaces) → (docs).
 
 ### H1 — Time-decay weighting (closes D3)
 
@@ -187,11 +187,11 @@ posted a verified order AND never received feedback).
 in 18 months may no longer hold their key. Visible freshness
 informs trust without changing the numeric score.
 
-### H7 — Composite reputation score (cp404)
+### H7 — Composite reputation score
 
 Order cards show TWO distinct trust signals side by side: the raw
 trade **count** (`feedback_count`, e.g. "852" / "1.4K") and a 0–5
-**reputation score** (e.g. "4.06"). Prior to cp404 the only numeric
+**reputation score** (e.g. "4.06"). Previously the only numeric
 was `weighted_rating` (the H1 time-decayed mean), which answers
 "what's the average rating" but not "how much should I trust this,
 accounting for how much history exists and whether the trader
@@ -343,20 +343,19 @@ Per Morphit's priority #2:
 
 ## Related
 
-- ADR-0009 §5 (Signal A/B framing — Part 113 closure context)
+- ADR-0009 §5 (Signal A/B framing — context)
 - ADR-0014 Component C (verified-chat badge framing)
 - `apps/indexer/src/indexer/reputation/decay.ts` (the new
   shared formula module)
 - `apps/indexer/src/indexer/reputation/score.ts` (H7 composite
-  reputation score — cp404)
-- `apps/indexer/src/api/reputationReceipt.ts` (H4 endpoint; cp404
+  reputation score)
+- `apps/indexer/src/api/reputationReceipt.ts` (H4 endpoint
   extends its summary with the score breakdown)
 - `apps/indexer/scripts/reputation-decay-smoke.ts` (13 scenarios)
-- `apps/indexer/scripts/reputation-score-smoke.ts` (10 scenarios —
-  cp404)
+- `apps/indexer/scripts/reputation-score-smoke.ts` (10 scenarios)
 - `apps/indexer/scripts/reputation-receipt-shape-smoke.ts`
   (7 scenarios)
-- `docs/faq/how_to_build_high_reputation.md` (cp125 companion FAQ
-  — the maintainer's explicit ask: "make sure an faq article explains the
+- `docs/faq/how_to_build_high_reputation.md` (since removed) (companion FAQ
+  — The maintainer's explicit ask: "make sure an faq article explains the
   best ways to get yourself a high reputation score"; updated for
-  the cp404 composite score)
+  the composite score)

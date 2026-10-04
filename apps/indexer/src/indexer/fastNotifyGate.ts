@@ -1,6 +1,6 @@
 /**
- * fastNotifyGate — the ONE safe-subset gate for a fast-path chat message
- * (v1.18.0 deep-deep, rv1-2).
+ * fastNotifyGate — the ONE safe-subset gate for a fast-path chat message.
+ *
  *
  * It decides two things at once — whether the message may fast-notify (web
  * push) and whether it may be REPLAYED into a chatroom opened moments later —

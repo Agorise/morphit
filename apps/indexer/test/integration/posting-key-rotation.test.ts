@@ -175,6 +175,16 @@ describe.skipIf(!INTEGRATION_ENABLED)('a rotated posting key stops verifying', (
 		// No chain refresher: the verdict has to come from the durable column
 		// alone, which is the whole point of keeping it current.
 		const lookup = postingKeyLookupFromDb(fx.db);
+		// A rotation read from a block is one node's word, recorded UNCONFIRMED;
+		// with no chain to ask, it authenticates nothing yet (VT1-4).
+		expect(
+			(await verifyPushedChatOp({ trx: chatSignedWith(keyB) }, lookup)).ok,
+			'an unconfirmed key verified with no chain to confirm it'
+		).toBe(false);
+		// The quorum reconcile confirms it.
+		await fx.db.query('UPDATE accounts SET posting_key_reconciled = TRUE WHERE name = $1', [
+			ACCOUNT
+		]);
 
 		const withNew = await verifyPushedChatOp({ trx: chatSignedWith(keyB) }, lookup);
 		expect(withNew.ok, 'the owner, signing with the key they rotated TO, must verify').toBe(true);
@@ -302,6 +312,11 @@ describe.skipIf(!INTEGRATION_ENABLED)('a rotated posting key stops verifying', (
 		await apply([accountUpdate(ACCOUNT, pubB)]);
 		await apply([accountUpdate(ACCOUNT, pubC)]);
 		expect(await column()).toBe(pubC);
+		// The quorum reconcile confirms C (an unconfirmed C would verify nothing
+		// with no chain to ask — VT1-4).
+		await fx.db.query('UPDATE accounts SET posting_key_reconciled = TRUE WHERE name = $1', [
+			ACCOUNT
+		]);
 
 		// A lookup with no refresher, so the only sources are the cache and the
 		// column. The leaked B must no longer verify.

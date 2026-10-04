@@ -4,7 +4,7 @@
  *
  * EVERY KIND OF INSTANCE, BOTH DIRECTIONS, AND THE INBOX — under six seconds.
  *
- * the maintainer's bar, in his words: "regardless of which, or which kind of instance you
+ * The maintainer's bar, in his words: "regardless of which, or which kind of instance you
  * are on, legit chats need to be under 6 seconds, sending and receiving. The
  * initial notification of a new chatroom request (and its appearance in your
  * inbox) from a potential buyer or seller too."
@@ -99,7 +99,7 @@ const CHAIN_ACK_MS = 400;
 /**
  * The hidden-transport round trips the worst case is walked across.
  *
- * the maintainer's requirement is sub-six-seconds "across instances of all types across
+ * The maintainer's requirement is sub-six-seconds "across instances of all types across
  * multiple kinds of networks", and a matrix pinned to a single Tor-shaped
  * number does not answer that — it answers it for Tor and asserts the rest by
  * resemblance. These are run as real cases so the answer is measured.
@@ -411,9 +411,15 @@ async function startInstance(
 	const dispatcher = new ChatFastDispatcher({
 		db: {
 			async query<R extends pg.QueryResultRow>(): Promise<pg.QueryResult<R>> {
+				// Probe-verified peers only receive pushes, so the rows
+				// carry a probe status. The registered origin names the loopback
+				// port; `postIsolated` below stands in for Tor and dials it.
 				const rows = peerPortsProvider().map((p) => ({
-					origin: `http://127.0.0.1:${p}`,
-					reg_alt_networks: null
+					origin: `https://peer-${p}.example`,
+					reg_alt_networks: null,
+					last_probe_status: 'good',
+					last_probed_at: null,
+					registered_at_time: null
 				}));
 				return {
 					rows: rows as unknown as R[],
@@ -425,12 +431,19 @@ async function startInstance(
 			}
 		},
 		selfOrigin: `http://self-${kind}-${Math.random()}.invalid`,
-		proxies: { torSocks: '', i2pHttpProxy: '' },
-		postClearnet: async (url, body, timeoutMs) => {
+		// Tor configured (fan-out runs only over Tor); never dialled here, since
+		// `postIsolated` is injected.
+		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' },
+		// The instance knows its users' posting keys, as a real one does from
+		// chain sync. A message must verify against them before this instance
+		// fans it out early or delivers it to its own listeners: the node's
+		// "accepted" alone is one node's word.
+		lookupPostingKey: async (account) => pubs[account] ?? null,
+		postIsolated: async (url, body, _proxies, timeoutMs) => {
 			const ctrl = new AbortController();
 			const t = setTimeout(() => ctrl.abort(), timeoutMs);
 			try {
-				const r = await fetch(url, {
+				const r = await fetch(url.replace(/^https:\/\/peer-(\d+)\.example/, 'http://127.0.0.1:$1'), {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
 					body: JSON.stringify(body),

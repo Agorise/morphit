@@ -7,7 +7,15 @@
 	import Head from '$components/Head.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	import { currentEnvelope, isUnlocked, isPairedReadOnly, liveIdentity } from '$stores/identity';
+	import {
+		currentEnvelope,
+		isUnlocked,
+		isPairedReadOnly,
+		liveIdentity,
+		protectSessionWithPassword,
+		sessionPasswordIsEphemeral
+	} from '$stores/identity';
+	import { newPasswordProblem } from '$lib/auth/passwordStrength';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
 	import { markBackupVisited } from '$utils/backupVisited';
 	import { envelopeToBlob, decryptIdentity, KeystoreError } from '$crypto/keystore';
@@ -21,10 +29,41 @@
 	let downloaded = $state(false);
 	let downloadError = $state('');
 
-	// Sally finding H6 (Part 68): seed-display flow.  The seed
-	// lives in the encrypted envelope (`seedBytes`); a Sally who
-	// rushed past the onboarding seed display has no second
-	// chance without this surface.  Gated by password re-entry
+	// A seed imported "just for this session" is encrypted under a random
+	// password the user never saw: a keyfile of it would open with nothing the
+	// user knows, and "Show seed" would ask for a password that does not exist.
+	// So such a session first gets a password the user chooses (re-encrypted
+	// in memory; nothing is written to disk), then the usual backups work.
+	const needsPassword = $derived($currentEnvelope !== null && sessionPasswordIsEphemeral());
+	let newPassword = $state('');
+	let newPasswordConfirm = $state('');
+	let protecting = $state(false);
+	let protectError = $state('');
+
+	async function setBackupPassword(): Promise<void> {
+		protectError = '';
+		const problem = newPasswordProblem(newPassword, newPasswordConfirm);
+		if (problem !== null) {
+			protectError =
+				problem === 'too_weak'
+					? $_('backup_keys.set_password.error_weak')
+					: $_('backup_keys.set_password.error_mismatch');
+			return;
+		}
+		protecting = true;
+		try {
+			const outcome = await protectSessionWithPassword(newPassword);
+			if (outcome !== 'ok') protectError = $_('backup_keys.error_download_failed');
+		} finally {
+			newPassword = '';
+			newPasswordConfirm = '';
+			protecting = false;
+		}
+	}
+
+	// Seed display. The seed lives in the encrypted envelope
+	// (`seedBytes`); a user who rushed past the onboarding seed
+	// display has no second chance without this surface.  Gated by password re-entry
 	// because showing the seed is a high-sensitivity operation
 	// that should not be available behind a single-tap (e.g.
 	// shoulder-surfer or someone who walked up to an unlocked
@@ -45,7 +84,7 @@
 	// posting key), so we point there instead of showing a seed flow that
 	// would only error.
 	const isPostingOnly = $derived($liveIdentity?.origin === 'posting-only');
-	/** tt.txt #11 — an ex-posting-only account that kept its verified Active key.
+	/** an ex-posting-only account that kept its verified Active key.
 	 *  It has a REAL keyfile worth downloading (posting + active), but still no
 	 *  BIP-39 seed: a seed derives keys, and that chain is one-way — you cannot
 	 *  build one that reproduces two keys the user already had. */
@@ -64,6 +103,7 @@
 	});
 
 	async function downloadKeyfile(): Promise<void> {
+		if (needsPassword) return;
 		const env = $currentEnvelope;
 		if (!env) {
 			downloadError = $_('backup_keys.keyfile_download_err_locked');
@@ -91,6 +131,7 @@
 	}
 
 	function startShowSeed(): void {
+		if (needsPassword) return;
 		seedPassword = '';
 		seedPhase = { kind: 'prompting' };
 	}
@@ -132,7 +173,7 @@
 			// portable, paste-into-any-Blurt-tool form of the account.
 			const keys = await deriveBackupKeys(id);
 			// Wipe the FullIdentity copy now that we have the
-			// mnemonic.  Per Part 67 audit, the mnemonic string
+			// mnemonic. The mnemonic string
 			// returned here is a JS-immutable; this wipe covers
 			// the seedBytes / keypairs only.
 			wipeFullIdentity(id);
@@ -160,7 +201,7 @@
 				};
 			}
 			// Clear the password on error too — same posture as
-			// every other active-key call site (Part 67 audit).
+			// every other active-key call site.
 			seedPassword = '';
 		}
 	}
@@ -179,7 +220,7 @@
 		seedPhase = { kind: 'prompting' };
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// Per-locale internal-link wrapper. See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -201,7 +242,7 @@
 
 	<!-- The reality check. This section exists because the single
 	     most common catastrophic outcome in crypto is "I lost access
-	     to my keys." We make damn sure the user understands what
+	     to my keys." We make sure the user understands what
 	     that means before they walk away from this page. Red border
 	     + alert role so screen readers announce the severity. -->
 	<section
@@ -225,15 +266,8 @@
 	</section>
 
 	{#if $isPairedReadOnly}
-		<!-- Bob finding B-2 (Part 119): paired-readonly users have no
-		     keys on THIS device — they're on the phone.  Pre-fix, the
-		     page silently hid the seed/keyfile sections because
-		     $isUnlocked is false for paired sessions, leaving Bob on
-		     a "Title + Reality slogan" stub with no actionable next
-		     step.  Now we explicitly tell him: your keys are on the
-		     phone, do your backup there.  Deep-link to the phone's
-		     own backup-keys surface preserves the standard
-		     WriteBlockedReadOnly pattern. -->
+		<!-- A paired (read-only) device holds no keys: they are on the main
+		     device. Say so, and link to the backup page there. -->
 		<section
 			class="card mb-6 border-morphit-emerald/40 bg-morphit-emerald/5"
 			aria-labelledby="backup-paired-heading"
@@ -248,7 +282,7 @@
 				{$_('backup_keys.paired.deeplink_hint')}
 			</p>
 			<div class="mt-5">
-				<a href="web+morphit://backup-keys" class="btn-primary inline-flex items-center gap-2">
+				<a href="web+morphit:///backup-keys" class="btn-primary inline-flex items-center gap-2">
 					<span aria-hidden="true">📱</span>
 					{$_('backup_keys.paired.deeplink_cta')}
 				</a>
@@ -259,6 +293,56 @@
 	<!-- What to back up, and where. Three methods, most important
 	     listed first: the seed phrase (works with any BIP-39 wallet)
 	     above the Morphit-specific encrypted keyfile. -->
+	{#if $isUnlocked && needsPassword}
+		<section
+			class="card mb-6 border-amber-400/60 bg-amber-50/60 dark:border-amber-600/40 dark:bg-amber-950/20"
+			aria-labelledby="backup-set-password-heading"
+			data-testid="backup-set-password"
+		>
+			<h2 id="backup-set-password-heading" class="font-display text-2xl font-bold">
+				{$_('backup_keys.set_password.heading')}
+			</h2>
+			<p class="mt-3 text-ink-800 dark:text-ink-200">{$_('backup_keys.set_password.body')}</p>
+			<label class="mt-4 block">
+				<span class="block text-sm font-semibold"
+					>{$_('backup_keys.set_password.password_label')}</span
+				>
+				<input
+					type="password"
+					maxlength="64"
+					autocomplete="new-password"
+					bind:value={newPassword}
+					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+				/>
+			</label>
+			<label class="mt-3 block">
+				<span class="block text-sm font-semibold"
+					>{$_('backup_keys.set_password.confirm_label')}</span
+				>
+				<input
+					type="password"
+					maxlength="64"
+					autocomplete="new-password"
+					bind:value={newPasswordConfirm}
+					class="mt-1 w-full rounded-xl border border-ink-200 bg-white px-3 py-2 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+				/>
+			</label>
+			{#if protectError}
+				<div class="mt-3"><StatusLine kind="error">{protectError}</StatusLine></div>
+			{/if}
+			<div class="mt-4">
+				<BusyButton
+					variant="primary"
+					busy={protecting}
+					disabled={newPassword.length === 0}
+					onclick={setBackupPassword}
+				>
+					{$_('backup_keys.set_password.submit')}
+				</BusyButton>
+			</div>
+		</section>
+	{/if}
+
 	<section class="card mb-6">
 		<h2 class="font-display text-2xl font-bold">{$_('backup_keys.what_heading')}</h2>
 
@@ -269,7 +353,7 @@
 			<article>
 				<h3 class="font-display text-lg font-bold">{$_('backup_keys.seed_heading')}</h3>
 				{#if !hasSeed}
-					<!-- tt.txt #11 — a 12-word seed DERIVES keys through a one-way chain,
+					<!-- a 12-word seed DERIVES keys through a one-way chain,
 					     so one cannot be constructed for keys the user already had. Say
 					     that honestly rather than implying they're missing out on
 					     something we could have given them. -->
@@ -291,7 +375,7 @@
 						<li>{$_('backup_keys.seed_tip_digital_warning')}</li>
 					</ul>
 
-					<!-- Sally finding H6 (Part 68): show-my-seed flow.
+					<!-- Sally finding H6: show-my-seed flow.
 				     The seed lives in the encrypted envelope and
 				     can be recovered with the user's password.
 				     Gated behind a password re-prompt because
@@ -311,7 +395,7 @@
 
 							{#if seedPhase.kind === 'idle'}
 								<div class="mt-3">
-									<BusyButton variant="secondary" onclick={startShowSeed}>
+									<BusyButton variant="secondary" disabled={needsPassword} onclick={startShowSeed}>
 										{$_('backup_keys.show_seed.cta')}
 									</BusyButton>
 								</div>
@@ -433,6 +517,7 @@
 							busy={downloading}
 							done={downloaded}
 							busyLabel={$_('backup_keys.keyfile_downloading')}
+							disabled={needsPassword}
 							onclick={downloadKeyfile}
 						>
 							{#if downloaded}
@@ -479,7 +564,7 @@
 	     the most common ways people lose crypto. Every item here is
 	     framed around the SEED phrase, which a posting-key-only login
 	     doesn't have, so the whole section is hidden in that case
-	     (cp295) — the keyfile guidance above already covers the one
+	     — the keyfile guidance above already covers the one
 	     secret such a user holds. -->
 	{#if !isPostingOnly}
 		<section class="card mb-6">

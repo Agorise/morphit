@@ -19,9 +19,10 @@
  *     retires a row too stale to push;
  *   - a retired row is pruned after the same tombstone retention.
  * The table is then bounded by the same window it is bounded by when push works.
- * Subscriptions are left alone: push can come back (a corrected key, a relay
- * that is no longer hidden-only), and those users should not have to subscribe
- * again.
+ * Subscriptions are left alone here: on a relay whose VAPID keys are missing,
+ * push can come back once the operator fixes them, and those users should not
+ * have to subscribe again. A hidden-only relay is different — it never sends
+ * push — and removes every subscription and queued push at boot (main.ts).
  *
  * No aliases and no logger in the functions: they take the narrowest database
  * shape, so the integration suite can run them against a real Postgres.
@@ -34,8 +35,8 @@
 export const PUSH_TOMBSTONE_RETENTION_SECONDS = 3600;
 
 /**
- * The retention actually applied: never shorter than the push max age
- * (v1.18.0 deep-deep, rv2-11).
+ * The retention actually applied: never shorter than the push max age.
+ *
  *
  * A tombstone is what makes a late durable enqueue of an already-pushed
  * notification land on a conflict. Once it is pruned, the same notification
@@ -59,7 +60,7 @@ export interface PushQueueDb {
 }
 
 /** Delete retired rows older than the tombstone retention — which is never
- *  shorter than `maxAgeSeconds` (rv2-11). Returns how many. */
+ *  shorter than `maxAgeSeconds`. Returns how many. */
 export async function prunePushTombstones(db: PushQueueDb, maxAgeSeconds: number): Promise<number> {
 	const res = await db.query(
 		`DELETE FROM push_pending

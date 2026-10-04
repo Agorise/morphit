@@ -1,5 +1,5 @@
 /**
- * fee-split-smoke (cp408) — HIGH/CRITICAL regression for the payment-time
+ * fee-split-smoke — HIGH/CRITICAL regression for the payment-time
  * federation revenue split.
  *
  * Money routing: on a FEDERATION instance a BLURT listing/feature/stranger fee

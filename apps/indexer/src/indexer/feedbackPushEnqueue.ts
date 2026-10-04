@@ -5,9 +5,8 @@
  *   • the DURABLE handler (handlers/feedback.ts), ~irreversible, and
  *   • the FAST head-block tailer (headTailer.ts), ~5s after broadcast.
  *
- * the maintainer: "tester2 left a 4-star feedback (with text in the textarea) for
- * tester3, but tester3 did not get a notification at all (let alone within 6
- * seconds like it should have)" → "yes, i want fastfeedback too."
+ * Reported: a 4-star review with text, left by one user for another, produced no notification
+ * at all (it should arrive within 6 seconds), so reviews get the fast path too.
  *
  * THE DEDUP KEY IS THE POINT. Before v1.5.5 the durable handler enqueued with
  * NO source_trx_id. Adding a fast path on top of that would have reproduced the
@@ -130,8 +129,8 @@ export async function enqueueFeedbackPush(
 		// Click-through: the canonical account-profile page is
 		// /{locale}/@{account} (the [x+40][account=account] route), which renders
 		// the reviews section anchored at #reviews-heading. BOTH the [lang]
-		// segment and the `@` are required — cp82-B2 found `/profile/{subject}`
-		// had no matching route at all, and cp470 found a locale-less, @-less
+		// segment and the `@` are required — a later change found `/profile/{subject}`
+		// had no matching route at all, and a later change found a locale-less, @-less
 		// `/{subject}#reviews-heading` that still 404'd. Guarded by
 		// push-clickpath-locale-smoke.
 		const clickPath = `/${locale}/@${params.subject}#reviews-heading`;

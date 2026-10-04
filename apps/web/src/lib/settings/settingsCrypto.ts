@@ -17,14 +17,14 @@
  * Cipher matches chat messages + folders: ChaCha20-Poly1305 IETF (12-byte
  * nonce), wire format base64(nonce || ciphertext+tag).
  */
-// cp471 (tt.txt K): MUST be the lazy accessor, never a static
+// MUST be the lazy accessor, never a static
 // `import sodium from 'libsodium-wrappers-sumo'`. This module is reachable
 // from the shared [lang] layout (layout → settingsSync → here), so a static
 // import drags libsodium's ~1 MB into the modulepreload closure of EVERY
 // page — home, orderbook, FAQ — even for visitors who never sign in. That is
 // exactly the regression `libsodium-not-in-baseline-closure-smoke` exists to
 // catch, and v1.5.0's settings-to-chain feature reintroduced it. See
-// $crypto/sodium's header (cp267 measured 1040 KB on the baseline).
+// $crypto/sodium's header (measured 1040 KB on the baseline).
 //
 // Safe by the same contract keygen/keystore use: every sodium.* call below is
 // preceded by `await ready()` (→ ensureSodium()), so the binding is always

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/chain-snapshot-op-smoke.ts (cp765)
+ * apps/indexer/scripts/chain-snapshot-op-smoke.ts
  *
  * Locks the chain_snapshot_v1 on-chain op contract: the pure validator + builder
  * that decide what may be broadcast as @morphit's canonical block_log pointer.

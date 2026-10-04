@@ -42,7 +42,7 @@
 
 	const { count, rating }: Props = $props();
 
-	/** v1.8.14 (the maintainer) — the chip is now a BUTTON that explains itself.
+	/** v1.8.14 — the chip is now a BUTTON that explains itself.
 	 *  The number is a Bayesian-shrunk trust score, not the plain average, and
 	 *  nothing on screen said so: the maintainer had to ask why a profile showing "Average
 	 *  rating: 5.00" carried a 4.24 headline. If the person who commissioned the
@@ -57,7 +57,7 @@
 	 *  below that the star goes HOLLOW (☆) to flag "take this
 	 *  rating with a grain of salt."
 	 *
-	 *  v1.5.5 (the maintainer): this used to grey the WHOLE chip out. That's what made
+	 *  v1.5.5: this used to grey the WHOLE chip out. That's what made
 	 *  the reputation star look white next to the emerald ★★★★★ used for
 	 *  feedback everywhere else — the maintainer asked for one green star convention
 	 *  sitewide. The chip is now always emerald and the small-sample signal
@@ -67,7 +67,7 @@
 	const SAMPLE_CONFIDENCE = 3;
 
 	const muted = $derived(count < SAMPLE_CONFIDENCE);
-	// cp123: 2-decimal precision (per the maintainer's reputation-hardening
+	// 2-decimal precision (per the maintainer's reputation-hardening
 	// ask).  Server returns NUMERIC(3,2); displaying `.toFixed(1)`
 	// discards information.  4.74 conveys more than 4.7.
 	// v1.20.0 (G12) — in the reader's number format ("4,50" de, "۴٫۵۰" fa).
@@ -81,8 +81,8 @@
 			// The chip often sits inside a card-wide STRETCHED link (OrderCard's
 			// `<a class="absolute inset-0 z-0">`). Opening the explainer there needs
 			// BOTH: `relative z-10` on this button (class below) to lift it above
-			// that overlay so the click reaches the button at all (v1.8.15, t.txt
-			// #1 — the maintainer: clickable on review cards but not order cards, because the
+			// that overlay so the click reaches the button at all (v1.8.15,
+			// Requirement: clickable on review cards but not order cards, because the
 			// overlay swallowed it), AND stopPropagation so it doesn't also
 			// navigate to the order/profile.
 			e.preventDefault();
@@ -97,10 +97,9 @@
 			values: { rating: ratingStr, count }
 		})}
 	>
-		<!-- v1.5.5 (the maintainer): the star is ALWAYS emerald, and the small-sample signal
+		<!-- v1.5.5: the star is ALWAYS emerald, and the small-sample signal
 	     is carried by its SHAPE — hollow ☆ below 3 ratings, solid ★ at or
-	     above. the maintainer: "make it the green star hollowed-out (the stroke outline
-	     only of the star and the center of the star is transparent)."
+	     above. Requirement: a hollow green star (stroke outline only, transparent centre).
 	     The "white star" he spotted was this chip at count < 3: the whole pill
 	     greyed to flag a thin sample, which greyed the star with it and made
 	     the reputation star look like a different thing from the emerald
@@ -110,9 +109,9 @@
 	     stars already use. -->
 	<span aria-hidden="true" class="text-morphit-emerald">{muted ? '☆' : '★'}</span>
 		<span aria-hidden="true">{ratingStr}</span>
-		<!-- v1.7.5 (t.txt #7) — full opacity.
-		     the maintainer asked for this pill to be "just as bright as the Expires pill", so I
-		     measured his screenshot rather than guessing. The pill's tokens ALREADY
+		<!-- v1.7.5 — full opacity.
+		     The pill was asked to be "just as bright as the Expires pill"; measured
+		     on a screenshot rather than guessed, the pill's tokens ALREADY
 		     match it: both peak at #00DA69, both ring at emerald/30 (#0B4F33 vs
 		     #0B4F34 on screen), and this chip's background is actually the brighter
 		     of the two (/10 vs the Expires pill's /5 — #0D2824 vs #0E1E20 rendered).

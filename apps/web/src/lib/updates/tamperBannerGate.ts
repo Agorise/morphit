@@ -1,8 +1,8 @@
 /**
- * Morphit — tamper-banner suppression gates (cp514 / t.txt A, v1.8.7).
+ * Morphit — tamper-banner suppression gates (v1.8.7).
  *
  * THE PROBLEM.  The "Build integrity check failed" banner (TamperAlertBanner)
- * fires on an asset-hash mismatch.  cp508 already gates the byte check on
+ * fires on an asset-hash mismatch.  already gates the byte check on
  * `running === served === announced` to skip the routine deploy-skew, but on
  * some devices the scary red banner still flashes DURING an upgrade —
  * crucially, before the friendly "Load it now" snackbar (UpdateBanner) has a

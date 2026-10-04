@@ -9,10 +9,10 @@
  *   payload = version_byte(0x80) || scalar_32B || [compression_flag(0x01)]
  *   wif     = base58(payload || sha256d(payload)[0..4])
  *
- * Total WIF length is 51 chars (uncompressed) or 52 chars (compressed,
- * the modern norm — Blurt frontends emit compressed WIFs starting with
- * `5J`, `5K`, or `5H`).  Either form decodes to the same 32-byte scalar;
- * we accept both and discard the compression flag.
+ * Total WIF length is 51 chars (uncompressed: starts with `5H`, `5J` or
+ * `5K` — what Blurt/Graphene frontends emit) or 52 chars (compressed:
+ * starts with `K` or `L`).  Either form decodes to the same 32-byte
+ * scalar; we accept both and discard the compression flag.
  *
  * The decoder does NOT depend on dblurt or @beblurt/dblurt — those carry
  * a far larger graphene-stack surface than we need for one parser.  It

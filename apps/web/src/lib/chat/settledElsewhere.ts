@@ -1,12 +1,12 @@
 /**
- * Morphit chat — "order settled with someone else" auto-reply SENDER (t.txt #5).
+ * Morphit chat — "order settled with someone else" auto-reply SENDER.
  *
  * When an order owner completes their order with a chosen trader — they leave
  * feedback for that counterparty, which is what closes the trade — every OTHER
  * person who messaged about that order gets a friendly, localized auto-reply so
  * they aren't left hanging. The owner writes nothing: the message is a
  * text-free `order_settled_elsewhere` structured payload (see payload.ts), and
- * each recipient's client renders the (the maintainer-approved) copy in THEIR own locale.
+ * each recipient's client renders the (approved) copy in THEIR own locale.
  *
  * Client-side because the message is E2E-encrypted PER recipient — the indexer
  * can't encrypt on anyone's behalf. Best-effort throughout: a failure for one
@@ -30,6 +30,8 @@ import { encodeOrderSettledElsewherePayload } from '$lib/chat/payload';
 
 /** The encrypted envelope shape returned by `encrypt`. */
 interface ChatEnvelope {
+	/** 2 for the sender-authenticated envelope. */
+	readonly v?: 2;
 	readonly ciphertext: string;
 	readonly ephemeralPub: string;
 	readonly nonce: string;
@@ -51,13 +53,14 @@ export interface SettledElsewhereDeps {
 		live: LiveIdentity,
 		account: string
 	): Promise<{ priv: Uint8Array; pub: Uint8Array }>;
-	/** Encrypt plaintext to a recipient. */
+	/** Encrypt plaintext to a recipient (v2: `sender` is the owner's own chat
+	 *  identity, which authenticates the message). */
 	encrypt(
 		plaintext: string,
 		recipientPub: Uint8Array,
 		senderAccount: string,
 		recipientAccount: string,
-		senderChatPub: Uint8Array,
+		sender: { priv: Uint8Array; pub: Uint8Array },
 		includeSelfCopy: boolean
 	): Promise<ChatEnvelope>;
 	/** Broadcast a chat custom_json op.
@@ -145,11 +148,12 @@ export async function announceSettledElsewhere(
 			}
 			// Keep a sender self-copy so the owner can reread the auto-reply in
 			// their own thread with this inquirer (matches keep-history default).
-			const envelope = await deps.encrypt(wire, peerPub, me, peer, myId.pub, true);
+			const envelope = await deps.encrypt(wire, peerPub, me, peer, myId, true);
 			const payload: Record<string, unknown> = {
 				recipient: peer,
 				ciphertext: envelope.ciphertext,
 				header: {
+					...(envelope.v === 2 ? { v: 2 } : {}),
 					client_tag: deps.generateClientTag(),
 					ephemeral_pub: envelope.ephemeralPub,
 					nonce: envelope.nonce,
@@ -169,4 +173,3 @@ export async function announceSettledElsewhere(
 	}
 	return { sent, skipped, failed };
 }
-

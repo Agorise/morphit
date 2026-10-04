@@ -7,7 +7,7 @@ import type { IncomingMessage } from 'node:http';
  * says who the client is. It used to be the LEFTMOST X-Forwarded-For entry —
  * but nginx's `$proxy_add_x_forwarded_for` keeps whatever the visitor sent on
  * the left, so a visitor could claim a new address on every request and never
- * be limited (v1.18.0 deep-deep, the MCP twin of the relay's H1). The proxy's
+ * be limited (the MCP twin of the relay's H1). The proxy's
  * own `X-Real-IP` ($remote_addr) wins; failing that the RIGHTMOST entry, which
  * is the one our proxy appended. Any other peer is keyed on the socket.
  */

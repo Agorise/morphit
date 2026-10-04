@@ -2,7 +2,7 @@
 /**
  * Morphit — RPC User-Agent smoke.
  *
- * the maintainer's sysadmin runs a public Blurt RPC node and asked us to stop looking like
+ * The operator of a public Blurt RPC node asked us to stop looking like
  * an anonymous bot: Node's built-in fetch sends `user-agent: node` (verified on
  * Node 22, NOT the `node-fetch/1.0` he guessed), which every unnamed Node
  * service sends and which trips bot-traps — it names a runtime, not an

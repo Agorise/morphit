@@ -1,6 +1,6 @@
 # ADR-0024 — Bitcoin Cash (BCH) trade-only addition
 
-**Status:** Accepted (Part 122 cp21)
+**Status:** Accepted
 **Date:** 2026-05-17
 **Deciders:** project maintainer
 **Supersedes:** none
@@ -11,10 +11,10 @@ Category A/B trade-only pattern that BCH follows), ADR-0011
 
 ---
 
-**2026-05-17 (Part 122 cp22) forward-note — operator-stance UX
-closure.**  Same closure as ADR-0023's cp22 forward-note: the
+**2026-05-17 forward-note — operator-stance UX
+closure.**  Same closure as ADR-0023's forward-note: the
 `MORPHIT_INDEXER_DISABLED_ASSETS` env var path established here
-remains the canonical contract; cp22 adds an interactive wizard
+remains the canonical contract; a later change adds an interactive wizard
 step that walks operators through enabling/disabling each
 trade-only asset (USDT and BCH today, plus any future
 Category-B addition) and emits the right env-file line without
@@ -29,7 +29,7 @@ operators; design contract from this ADR unchanged.
 ## Context
 
 After USDT shipped as Morphit's first Category-B trade-only
-asset (ADR-0023, Part 121), the maintainer asked whether adding a few more
+asset (ADR-0023), the maintainer asked whether adding a few more
 trade-only coins — Bitcoin Cash, Dash, and similar — would be
 similarly contained, and committed to add BCH as the fifth
 tradable asset.
@@ -104,7 +104,7 @@ match BTC's behavior exactly.
 
 ### 6. Bundled chat-link explorer: `blockchair.com/bitcoin-cash`
 
-Operator surveyed eight BCH explorers at cp21 addition time:
+Operator surveyed eight BCH explorers addition time:
 
 1. https://blockchair.com/bitcoin-cash
 2. https://www.blockchain.com/explorer
@@ -132,7 +132,7 @@ XMR with the same probe-reachability check.
 
 ### 7. Default-ON instance-wide, operator opt-out via env var
 
-Per Memory #25 (every new asset ships default-ON instance-wide,
+Per the default-on rule for new assets (every new asset ships default-ON instance-wide,
 operator override).  An operator who wants to refuse BCH orders
 on their instance sets `MORPHIT_INDEXER_DISABLED_ASSETS="BCH"`
 (or includes BCH in a comma-separated list).  Federation-wise:
@@ -141,16 +141,16 @@ peer instance B — they still appear in A's read-only orderbook
 view.  A only refuses to ACCEPT new BCH orders posted FROM its
 own users.
 
-### 8. Community-canonical logo (updated Part 122 cp27-DD)
+### 8. Community-canonical logo (updated)
 
 `apps/web/static/icons/icon-bch.svg` ships the canonical
 Bitcoin Cash mark on a BCH-brand-green disc (#0AC18E): the
 official "Ƀ" glyph with two vertical strokes piercing the
 rounded body.  Operator-supplied from `bitcoincash.org`-style
 canonical artwork; minified via svgo to 0.8 KB while preserving
-viewBox.  Originally shipped at cp21 as a path-based placeholder
+viewBox.  Originally shipped as a path-based placeholder
 "B" stylization; replaced with the community-canonical SVG at
-Part 122 cp27-DD when the maintainer provided the authoritative artwork.
+when the maintainer provided the authoritative artwork.
 
 ## Files changed
 
@@ -225,8 +225,8 @@ i18n × 10 locales:
 
 Logo:
 - `apps/web/static/icons/icon-bch.svg` — community-canonical
-  Bitcoin Cash mark on green disc, swapped in from cp21
-  placeholder at cp27-DD when the maintainer provided authoritative
+  Bitcoin Cash mark on green disc, swapped in
+  placeholder when the maintainer provided authoritative
   artwork; minified via svgo to 0.8 KB.
 
 Smoke:

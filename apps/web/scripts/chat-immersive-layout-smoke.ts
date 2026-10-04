@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * chat-immersive-layout-smoke (cp402 [9]).
+ * chat-immersive-layout-smoke.
  *
  * Pins the mobile chat layout fix. The chat CONVERSATION route is an
  * immersive full-viewport view: ConversationView fills the space below

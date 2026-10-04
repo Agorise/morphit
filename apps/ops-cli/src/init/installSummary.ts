@@ -86,6 +86,26 @@ export interface SummaryProbe {
 	readonly relayBalanceBlurt: (account: string) => Promise<number | null>;
 	/** free disk on / and free memory are both above a safe floor. */
 	readonly systemHealth: () => SystemHealth;
+	/** Fingerprints of the keys in an armored key file (null: gpg missing or
+	 *  unreadable). Optional so older probes keep working. */
+	readonly pgpFingerprints?: (path: string) => string[] | null;
+}
+
+/** The canary key morphit.io publishes; every fresh build used to carry it as
+ *  the instance's /pgp_keys.asc. */
+export const UPSTREAM_CANARY_KEY_FPR = '78A82A999708048C16289BE0AFCADF278A83ECDA';
+
+/** Fingerprints in an armored key file, by `gpg --show-keys` (no keyring). */
+export function armoredKeyFingerprints(path: string): string[] | null {
+	const r = spawnSync('gpg', ['--batch', '--with-colons', '--show-keys', path], {
+		encoding: 'utf8',
+		timeout: 15_000,
+		env: { ...process.env, LC_ALL: 'C' }
+	});
+	if (r.error) return null;
+	// gpg exits 2 on a cosmetic armor complaint while still listing the keys.
+	const fprs = [...(r.stdout ?? '').matchAll(/^fpr:+([0-9A-F]{40}):/gm)].map((m) => m[1]!);
+	return fprs.length > 0 || r.status === 0 ? fprs : null;
 }
 
 export interface SummaryInputs {
@@ -155,7 +175,10 @@ export async function collectInstallSummary(
 		ok: relayUp,
 		detail: 'still unlocking/starting — re-check in a minute'
 	});
-	rows.push({ label: 'Marketplace indexer — service', ok: probe.serviceActive('morphit-indexer.service') });
+	rows.push({
+		label: 'Marketplace indexer — service',
+		ok: probe.serviceActive('morphit-indexer.service')
+	});
 	rows.push({
 		label: 'Marketplace indexer — responding (/v1/health)',
 		ok: indexer.reachable ? true : null,
@@ -181,7 +204,10 @@ export async function collectInstallSummary(
 		ok: indexer.reachable && indexer.rpcOk ? true : null,
 		detail: 'still connecting to the Blurt network — completes once this box is online'
 	});
-	rows.push({ label: 'MCP server (read-only orderbook API)', ok: probe.serviceActive('morphit-mcp.service') });
+	rows.push({
+		label: 'MCP server (read-only orderbook API)',
+		ok: probe.serviceActive('morphit-mcp.service')
+	});
 
 	// ── Economics ────────────────────────────────────────────────────
 	rows.push({
@@ -211,7 +237,10 @@ export async function collectInstallSummary(
 
 	// ── Web edge ─────────────────────────────────────────────────────
 	if (inputs.enableBunkerweb && !inputs.torOnly) {
-		rows.push({ label: 'Web firewall (BunkerWeb)', ok: probe.containerRunning({ image: 'bunkerity/bunkerweb' }) });
+		rows.push({
+			label: 'Web firewall (BunkerWeb)',
+			ok: probe.containerRunning({ image: 'bunkerity/bunkerweb' })
+		});
 	}
 	if (inputs.enableBunkerweb) {
 		// The front end is the container serving this install's web build.
@@ -263,7 +292,8 @@ export async function collectInstallSummary(
 	rows.push({
 		label: 'IPNS record keep-alive (4-hourly timer)',
 		ok: probe.serviceActive('morphit-ipns-rebroadcast.timer'),
-		detail: 're-PUTs the signed IPNS record to the DHT so ipns://<name> stays resolvable (records expire ~48h)'
+		detail:
+			're-PUTs the signed IPNS record to the DHT so ipns://<name> stays resolvable (records expire ~48h)'
 	});
 
 	// ── Transparency ─────────────────────────────────────────────────
@@ -273,13 +303,23 @@ export async function collectInstallSummary(
 		// it publishes automatically once the box is online; otherwise it's a
 		// one-time sign step. Show '?', never '✗'.
 		ok: canaryFresh(probe.readText(`${build}/canary.txt`)) ? true : null,
-		detail: 'publishes automatically once this box is online (or sign it now with  sudo morphit-ops harden)'
+		detail:
+			'publishes automatically once this box is online (or sign it now with  sudo morphit-ops harden)'
 	});
-	rows.push({
-		label: 'PGP contact key (/pgp_keys.asc)',
-		ok: probe.pathExists(`${build}/pgp_keys.asc`),
-		detail: 'add yours with  sudo morphit-ops harden'
-	});
+	{
+		const keyPath = `${build}/pgp_keys.asc`;
+		const present = probe.pathExists(keyPath);
+		const fprs = present ? (probe.pgpFingerprints?.(keyPath) ?? null) : null;
+		const upstream = fprs?.includes(UPSTREAM_CANARY_KEY_FPR) ?? false;
+		rows.push({
+			label: 'PGP contact key (/pgp_keys.asc)',
+			// ✓ only for the operator's own key; morphit.io's key is not theirs.
+			ok: !present ? false : upstream ? false : fprs === null ? null : true,
+			detail: upstream
+				? "this is morphit.io's canary key, not yours — add yours with  sudo morphit-ops harden"
+				: 'add yours with  sudo morphit-ops harden'
+		});
+	}
 	rows.push({
 		label: 'SEO surfaces (robots.txt + sitemap.xml)',
 		ok: probe.pathExists(`${build}/robots.txt`) && probe.pathExists(`${build}/sitemap.xml`),
@@ -289,7 +329,9 @@ export async function collectInstallSummary(
 	// ── Instance identity ────────────────────────────────────────────
 	rows.push({
 		label: 'Instance settings written (defaults + identity)',
-		ok: probe.pathExists('/etc/morphit/operator-config.env') || probe.pathExists('/etc/morphit/indexer.env')
+		ok:
+			probe.pathExists('/etc/morphit/operator-config.env') ||
+			probe.pathExists('/etc/morphit/indexer.env')
 	});
 	if (inputs.contactConfigured) {
 		// A Matrix CONTACT LINK (matrix.to) on the /instances card — a config value,
@@ -300,7 +342,10 @@ export async function collectInstallSummary(
 	}
 
 	// ── Operations ───────────────────────────────────────────────────
-	rows.push({ label: 'Automatic nightly backups (timer)', ok: probe.serviceActive('morphit-backup.timer') });
+	rows.push({
+		label: 'Automatic nightly backups (timer)',
+		ok: probe.serviceActive('morphit-backup.timer')
+	});
 	if (inputs.mode === 'home' && !inputs.torOnly) {
 		rows.push({
 			label: 'Automatic address updates (dynamic DNS)',
@@ -344,9 +389,14 @@ export function renderInstallSummary(
 	rows: readonly ComponentStatus[],
 	opts: { color?: boolean } = {}
 ): string {
-	const paint = (s: string, code: string): string => (opts.color ? `\u001b[${code}m${s}\u001b[0m` : s);
+	const paint = (s: string, code: string): string =>
+		opts.color ? `\u001b[${code}m${s}\u001b[0m` : s;
 	const mark = (ok: boolean | null): string =>
-		ok === true ? paint('\u2713', '1;32') : ok === false ? paint('\u2717', '1;31') : paint('?', '1;33');
+		ok === true
+			? paint('\u2713', '1;32')
+			: ok === false
+				? paint('\u2717', '1;31')
+				: paint('?', '1;33');
 	const width = rows.reduce((m, r) => Math.max(m, r.label.length), 0);
 	return rows
 		.map((r) => {
@@ -360,11 +410,21 @@ export function renderInstallSummary(
 /** Is a container running that matches (see SummaryProbe.containerRunning)?
  *  IMPURE (docker ps + docker inspect); false when docker can't answer. */
 export function containerRunningNow(match: ContainerMatch): boolean {
-	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8', timeout: 10_000 });
+	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], {
+		encoding: 'utf8',
+		timeout: 10_000
+	});
 	if (ps.status !== 0) return false;
-	const names = (ps.stdout ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
+	const names = (ps.stdout ?? '')
+		.split('\n')
+		.map((x) => x.trim())
+		.filter(Boolean);
 	if (names.length === 0) return false;
-	const insp = spawnSync('docker', ['inspect', ...names], { encoding: 'utf8', timeout: 15_000, maxBuffer: 64 * 1024 * 1024 });
+	const insp = spawnSync('docker', ['inspect', ...names], {
+		encoding: 'utf8',
+		timeout: 15_000,
+		maxBuffer: 64 * 1024 * 1024
+	});
 	const norm = (p: string): string => p.replace(/\/+$/, '');
 	const repo = match.image?.replace(/[/.-]/g, '\\$&');
 	const imageRe = repo !== undefined ? new RegExp(`(^|/)${repo}(?=$|[:@])`) : null;
@@ -374,6 +434,43 @@ export function containerRunningNow(match: ContainerMatch): boolean {
 			(imageRe === null || imageRe.test(c.image)) &&
 			(match.mounts === undefined || c.mounts.some((m) => norm(m) === norm(match.mounts!)))
 	);
+}
+
+/**
+ * This box's indexer health, as the summary needs it. Sends
+ * `x-morphit-local-health: 1`: the indexer answers the RPC and price-feed detail
+ * only to a loopback caller that asks for it (every public edge strips the
+ * header); the public body carries only `rpc_ok`.
+ */
+export async function readLocalIndexerHealth(
+	base = 'http://127.0.0.1:8081'
+): Promise<IndexerHealth> {
+	try {
+		const ctrl = new AbortController();
+		const t = setTimeout(() => ctrl.abort(), 4000);
+		const resp = await fetch(`${base}/v1/health`, {
+			signal: ctrl.signal,
+			headers: { 'x-morphit-local-health': '1' }
+		});
+		clearTimeout(t);
+		if (!resp.ok) return { reachable: false, synced: null, rpcOk: null, fxOk: null };
+		const b = (await resp.json()) as Record<string, unknown>;
+		const stale = b.stale === true || b.status === 'degraded';
+		const rpcHealthy = typeof b.rpc_endpoints_healthy === 'number' ? b.rpc_endpoints_healthy : null;
+		const pf = b.price_feeds as Record<string, unknown> | null | undefined;
+		const fxOk =
+			pf && typeof pf === 'object'
+				? pf.ok === true || pf.healthy === true || pf.status === 'ok'
+				: null;
+		return {
+			reachable: true,
+			synced: !stale,
+			rpcOk: rpcHealthy !== null ? rpcHealthy > 0 : typeof b.rpc_ok === 'boolean' ? b.rpc_ok : null,
+			fxOk: fxOk === undefined ? null : fxOk
+		};
+	} catch {
+		return { reachable: false, synced: null, rpcOk: null, fxOk: null };
+	}
 }
 
 function realProbe(): SummaryProbe {
@@ -397,31 +494,8 @@ function realProbe(): SummaryProbe {
 				return null;
 			}
 		},
-		indexerHealth: async (): Promise<IndexerHealth> => {
-			try {
-				const ctrl = new AbortController();
-				const t = setTimeout(() => ctrl.abort(), 4000);
-				const resp = await fetch('http://127.0.0.1:8081/v1/health', { signal: ctrl.signal });
-				clearTimeout(t);
-				if (!resp.ok) return { reachable: false, synced: null, rpcOk: null, fxOk: null };
-				const b = (await resp.json()) as Record<string, unknown>;
-				const stale = b.stale === true || b.status === 'degraded';
-				const rpcHealthy = typeof b.rpc_endpoints_healthy === 'number' ? b.rpc_endpoints_healthy : null;
-				const pf = b.price_feeds as Record<string, unknown> | null | undefined;
-				const fxOk =
-					pf && typeof pf === 'object'
-						? pf.ok === true || pf.healthy === true || pf.status === 'ok'
-						: null;
-				return {
-					reachable: true,
-					synced: !stale,
-					rpcOk: rpcHealthy === null ? null : rpcHealthy > 0,
-					fxOk: fxOk === undefined ? null : fxOk
-				};
-			} catch {
-				return { reachable: false, synced: null, rpcOk: null, fxOk: null };
-			}
-		},
+		indexerHealth: () => readLocalIndexerHealth(),
+		pgpFingerprints: (p) => armoredKeyFingerprints(p),
 		relayReachable: async (): Promise<boolean | null> => {
 			try {
 				const ctrl = new AbortController();
@@ -449,13 +523,15 @@ function realProbe(): SummaryProbe {
 			const cols = line.split(/\s+/);
 			if (cols.length >= 4) {
 				const availKb = parseInt(cols[3]!, 10);
-				if (Number.isFinite(availKb) && availKb < 1024 * 1024) problems.push('low disk (<1 GB free)');
+				if (Number.isFinite(availKb) && availKb < 1024 * 1024)
+					problems.push('low disk (<1 GB free)');
 			}
 			// free memory
 			try {
 				const mem = readFileSync('/proc/meminfo', 'utf8');
 				const avail = /MemAvailable:\s*(\d+)\s*kB/.exec(mem);
-				if (avail !== null && parseInt(avail[1]!, 10) < 200 * 1024) problems.push('low memory (<200 MB free)');
+				if (avail !== null && parseInt(avail[1]!, 10) < 200 * 1024)
+					problems.push('low memory (<200 MB free)');
 			} catch {
 				/* non-Linux / unreadable — skip */
 			}
@@ -476,8 +552,12 @@ export function allComponentsUp(rows: readonly ComponentStatus[]): boolean {
 
 /** Print the summary block. Best-effort: an unknown probe shows '?', never throws. */
 export function printInstallSummary(rows: readonly ComponentStatus[]): void {
-	console.log('\n  \u2500\u2500 What got installed \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
+	console.log(
+		'\n  \u2500\u2500 What got installed \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'
+	);
 	console.log(renderInstallSummary(rows, { color: true }));
-	console.log('\n    A \u2717 or ? usually just means that piece is still starting \u2014 re-check');
+	console.log(
+		'\n    A \u2717 or ? usually just means that piece is still starting \u2014 re-check'
+	);
 	console.log('    in a minute with:  sudo morphit-ops status');
 }

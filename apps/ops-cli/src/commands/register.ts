@@ -41,13 +41,19 @@
  * message.
  */
 
-import { readFileSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { withSpinner } from '../init/spinner.ts';
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { ask, askPassword, askYesNo, RELAY_KEY_UNLOCK_PROMPT } from '../init/prompt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
-import { printChainErrorHelp, classifyChainError, SUGGESTED_LIQUID_BLURT_BUFFER, broadcastCustomJson, errMsg } from './chainErrors.ts';
+import {
+	printChainErrorHelp,
+	classifyChainError,
+	SUGGESTED_LIQUID_BLURT_BUFFER,
+	broadcastCustomJson,
+	errMsg
+} from './chainErrors.ts';
 import {
 	isReservedTag,
 	ownsReservedName,
@@ -81,7 +87,7 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// ─── 1. Validate env ────
 	const env = readEnv();
 	if ('error' in env) {
-		// cp139-C-8: env.error is built from env-var validation
+		// env.error is built from env-var validation
 		// failures; it can include the offending env-var VALUE
 		// in the error message ("MORPHIT_INSTANCE_ORIGIN must
 		// be https://, got 'http://attacker$\x1b[2J/'").  Strip
@@ -90,7 +96,16 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 		console.log(`✗ ${sanitizeForTerm(env.error)}`);
 		return 1;
 	}
-	const { account, keyFile, instanceName, origin, contactUrl, operatorTag, altAddresses, feeRecipient } = env;
+	const {
+		account,
+		keyFile,
+		instanceName,
+		origin,
+		contactUrl,
+		operatorTag,
+		altAddresses,
+		feeRecipient
+	} = env;
 
 	console.log(`  Account:      @${sanitizeForTerm(account)}`);
 	console.log(`  Origin:       ${sanitizeForTerm(origin)}`);
@@ -182,29 +197,34 @@ export async function runRegister(ctx: RegisterCtx): Promise<number> {
 	// valid-looking op but their display_name / origin / contact never update
 	// (the trap that left morphitlat's title stale for 10 hours). Catch it here,
 	// against the local indexer, before the irreversible confirm + any mana.
-	const registeredTag = await withSpinner(
-		'Checking your existing on-chain registration…',
-		() => fetchRegisteredTag(account)
+	const registeredTag = await withSpinner('Checking your existing on-chain registration…', () =>
+		fetchRegisteredTag(account)
 	);
 	if (operatorTagConflict(registeredTag, tag)) {
-		console.log(`✗ @${sanitizeForTerm(account)} is already registered under the tag "${sanitizeForTerm(registeredTag as string)}".`);
+		console.log(
+			`✗ @${sanitizeForTerm(account)} is already registered under the tag "${sanitizeForTerm(registeredTag as string)}".`
+		);
 		console.log('  The federation tag is PERMANENT. Re-registering under a different tag');
 		console.log(`  ("${sanitizeForTerm(tag)}") is rejected on-chain as tag_immutable and changes`);
 		console.log('  nothing — your display name, origin, and contact would NOT update.');
 		console.log('');
-		console.log(`  Set MORPHIT_INSTANCE_OPERATOR_TAG="${sanitizeForTerm(registeredTag as string)}" (via`);
+		console.log(
+			`  Set MORPHIT_INSTANCE_OPERATOR_TAG="${sanitizeForTerm(registeredTag as string)}" (via`
+		);
 		console.log('  `sudo morphit-ops edit` → Operator tag, or the config file) so it matches');
 		console.log('  your registered tag, then re-run register to update the other fields.');
 		return 1;
 	}
 
-	// Pre-flight (v1.18.0 deep-deep, L3): the indexer now refuses, on FIRST
+	// Pre-flight: the indexer now refuses, on FIRST
 	// registration, a tag that looks like a reserved name (`m0rphit`,
 	// `morphit-io`) unless this account owns that name. An existing
 	// registration keeps its tag, so only a first registration is checked —
 	// the same rule the indexer applies, so the op is not broadcast for nothing.
 	if (registeredTag === null && tagImpersonatesReserved(tag) && !ownsReservedName(account, tag)) {
-		console.log(`✗ The tag "${sanitizeForTerm(tag)}" looks like a name reserved by the Morphit project`);
+		console.log(
+			`✗ The tag "${sanitizeForTerm(tag)}" looks like a name reserved by the Morphit project`
+		);
 		console.log('  (look-alikes such as m0rphit, or morphit- followed by anything, are held');
 		console.log('  back so nobody can pass as an official node). Choose a tag that');
 		console.log('  identifies YOUR node — your domain is a good choice — with');
@@ -409,7 +429,7 @@ export function buildRegisterPayload(env: ValidEnv, tag: string): Record<string,
 
 /**
  * Sign once and broadcast a register op, with a spinner and a hard limit.
- * v1.18.0 deep-deep, H1: a hidden-only node broadcasts through its own indexer
+ * a hidden-only node broadcasts through its own indexer
  * over Tor/I2P (see broadcastCustomJson), where a round trip plus the wait for
  * a block routinely takes longer than 15 s — so 200 s there, 15 s elsewhere.
  * Offline / air-gapped, the RPC calls would otherwise BLOCK FOREVER (the
@@ -543,7 +563,9 @@ function readEnv(): ValidEnv | { error: string } {
 				(legacyI2p && legacyI2p.endsWith('.b32.i2p') ? legacyI2p : null),
 			i2p_name:
 				((process.env.MORPHIT_INSTANCE_I2P_NAME_ADDRESS ?? '').trim() || null) ??
-				(legacyI2p && legacyI2p.endsWith('.i2p') && !legacyI2p.endsWith('.b32.i2p') ? legacyI2p : null),
+				(legacyI2p && legacyI2p.endsWith('.i2p') && !legacyI2p.endsWith('.b32.i2p')
+					? legacyI2p
+					: null),
 			lokinet: (process.env.MORPHIT_INSTANCE_LOKINET_ADDRESS ?? '').trim() || null,
 			ens: (process.env.MORPHIT_INSTANCE_ENS_NAME ?? '').trim() || null
 		},
@@ -556,28 +578,51 @@ function readEnv(): ValidEnv | { error: string } {
  *  (`/etc/morphit/relay_passphrase.cred`, sealed `--with-key=host`).  Returns
  *  the passphrase, or null if the cred is absent / systemd-creds is unavailable
  *  / decryption fails (e.g. not running as root, or a different host).  The
- *  decrypted secret lands only in a /run (tmpfs/RAM) file that is scrubbed
- *  immediately — never on persistent disk — exactly as first-online does. */
-function trySealedRelayPassphrase(): string | null {
+ *  decrypted secret is read from systemd-creds' standard output straight into
+ *  this process's memory: it is never written to any file (it used to pass
+ *  through a world-readable /run file). */
+export function trySealedRelayPassphrase(): string | null {
 	const cred = process.env.MORPHIT_RELAY_CRED_FILE || '/etc/morphit/relay_passphrase.cred';
 	if (!existsSync(cred)) return null;
-	const tmp = `/run/morphit-reg-${process.pid}-${randomBytes(6).toString('hex')}.pass`;
 	try {
-		const r = spawnSync('systemd-creds', ['decrypt', '--name=relay_passphrase', cred, tmp], {
-			stdio: 'ignore'
+		const r = spawnSync('systemd-creds', ['decrypt', '--name=relay_passphrase', cred, '-'], {
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'ignore'],
+			maxBuffer: 64 * 1024
 		});
-		if (r.status !== 0 || !existsSync(tmp)) return null;
-		const pass = readFileSync(tmp, 'utf8').replace(/\r?\n$/, '');
+		if (r.status !== 0 || typeof r.stdout !== 'string') return null;
+		const pass = r.stdout.replace(/\r?\n$/, '');
 		return pass.length > 0 ? pass : null;
 	} catch {
 		return null;
-	} finally {
+	}
+}
+
+/** Passphrase files older releases left in /run (`register` and the
+ *  fee-recipient heal decrypted the relay's sealed credential into
+ *  `/run/morphit-reg-<pid>-<hex>.pass`, mode 0644, removed afterwards — unless
+ *  the process was killed in between). */
+export const STALE_REG_PASS_RE = /^morphit-reg-\d+-[0-9a-f]{12}\.pass$/;
+
+/** Remove every such leftover in `dir`; returns how many were found and how
+ *  many are still there afterwards (read back). Never throws. */
+export function removeStaleRegPassFiles(dir = '/run'): { found: number; left: number } {
+	const list = (): string[] => {
 		try {
-			if (existsSync(tmp)) unlinkSync(tmp);
+			return readdirSync(dir).filter((n) => STALE_REG_PASS_RE.test(n));
 		} catch {
-			/* best-effort scrub */
+			return [];
+		}
+	};
+	const found = list();
+	for (const n of found) {
+		try {
+			unlinkSync(join(dir, n));
+		} catch {
+			/* reported below */
 		}
 	}
+	return { found: found.length, left: list().length };
 }
 
 /**

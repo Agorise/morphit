@@ -1,6 +1,6 @@
 /**
- * Runtime deps for the "order settled with someone else" auto-reply sender
- * (t.txt #5). Kept SEPARATE from settledElsewhere.ts so the announcer's pure
+ * Runtime deps for the "order settled with someone else" auto-reply sender.
+ * Kept SEPARATE from settledElsewhere.ts so the announcer's pure
  * logic stays unit-testable without dragging in the chat/crypto/indexer stack.
  *
  * The chat primitives (fetchPeerChatPub, encrypt, broadcast, identity, client-

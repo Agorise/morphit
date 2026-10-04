@@ -1,5 +1,5 @@
 ---
-# Wire the cp596 dynamic-DNS mechanism into the install for a HOME node.
+# Wire the dynamic-DNS mechanism into the install for a HOME node.
 # Guarded by `enable_ddns` at the playbook level, so a VPS never runs this.
 
 - name: Require a DNS provider update URL when DDNS is enabled

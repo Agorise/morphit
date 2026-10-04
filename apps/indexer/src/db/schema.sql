@@ -1,10 +1,14 @@
--- Morphit indexer — canonical schema (v1-v27 collapsed, May 2026 audit)
+-- Morphit indexer — canonical schema
 --
--- Pre-launch collapse: this single file represents the cumulative
--- effect of migration versions 1 through 27.  It is applied as a
--- single transaction on a fresh database; the migration runner
--- inserts (1, 2, 3, ..., 27) into schema_migrations after running
--- so historical version-tracking semantics are preserved.
+-- Migration v1. On a fresh database the runner applies this whole file
+-- in one transaction and records versions 2..36 as subsumed (they were
+-- collapsed into it before launch). The file ALSO carries a section for
+-- every later migration (v37 onward, each headed `-- ─── vNN`), so a
+-- fresh install has the current schema after this one file; the runner
+-- then applies v37.. as usual, which must therefore be idempotent. An
+-- existing database never re-runs this file — it gets each new version
+-- from migrations.ts. Keep the two in step (schema-migration-coverage
+-- smoke, schemaDrift, and the v66 upgrade test check it).
 --
 -- The original per-version files are archived under
 -- apps/indexer/src/db/historical/ — kept for archaeology, never
@@ -20,7 +24,7 @@
 -- ─── v1 (initial schema) ────────────────────────────────────────────
 -- Morphit indexer — schema v1
 -- Applied by src/db/migrations.ts on first boot.
--- See docs/PHASE-3b-DESIGN.md for the design rationale.
+-- See docs/adr/0008-phase3b-indexer-architecture.md for the design rationale.
 
 -- ─── Schema version tracking ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -84,6 +88,8 @@ CREATE TABLE IF NOT EXISTS orders (
     location_region TEXT,
     payment_methods TEXT[] NOT NULL,
     terms TEXT,
+    -- 'expired' is allowed but never written: expiry is decided at read
+    -- time from expires_at (and 'completed' arrives in a later section).
     status TEXT NOT NULL CHECK (status IN ('live', 'cancelled', 'expired')),
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
@@ -205,8 +211,9 @@ CREATE TABLE fee_transfers (
     UNIQUE (block_num, trx_in_block, op_in_trx)
 );
 
--- Looking up a fee transfer by the permlink it paid for is the
--- order handler's hot path.
+-- fee_transfers is an audit record: every fee transfer is written here,
+-- and nothing reads it at run time (fees are verified from the block's
+-- own operations). The index serves manual audit lookups.
 CREATE INDEX fee_transfers_permlink_idx ON fee_transfers (sender, memo_permlink)
     WHERE memo_permlink IS NOT NULL;
 
@@ -617,9 +624,8 @@ ALTER TABLE relay_pending_transfers
 --   registered_in_block: chain block where registration
 --                        completed; lets an indexer reconcile
 --                        or replay if state is lost.
---   is_active: cheap flag so suspension/offboarding (an eventual
---              policy question under ADR-0013 Q5) doesn't need
---              a row delete.
+--   is_active: always TRUE — no op sets it false. Readers filter
+--              on it so a future suspension needs no row delete.
 --
 -- Columns deliberately NOT included (gated on ADR-0013):
 --   registration_fee_paid_blurt: depends on Q1
@@ -633,10 +639,7 @@ CREATE TABLE IF NOT EXISTS operators (
     registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     registered_in_block BIGINT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Forward-compat: JSONB extras so we can stash ADR-0013
-    -- decisions (once accepted) without a v8 migration just for
-    -- adding a column. Contents are NOT authoritative — every
-    -- policy-relevant datum lands in a proper column once decided.
+    -- Unused: nothing writes or reads it (always '{}').
     extras JSONB NOT NULL DEFAULT '{}'::JSONB,
     UNIQUE (tag)
 );
@@ -705,7 +708,7 @@ CREATE INDEX IF NOT EXISTS operator_registration_events_account_idx
 --
 -- Rather than retroactively delete this file (which would shift
 -- every subsequent migration number), v8 stays as a recorded no-op.
--- Pre-launch we have no deployed instances — see REVISIT-LIST item
+-- Pre-launch we have no deployed instances — see the backlog item
 -- "collapse migration history" for the v1.0.0 cleanup.
 SELECT 1;
 
@@ -779,7 +782,7 @@ CREATE TABLE featured_slot_bids (
     cancelled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    -- Part 122 cp18 — anti-snipe extension tracking.
+    -- anti-snipe extension tracking.
     -- When a new bid arrives that would push someone out of the
     -- top-MAX_SLOTS, AND any current top-MAX_SLOTS bid expires
     -- within SNIPE_WINDOW_MINUTES, those expiring bids get their
@@ -804,8 +807,8 @@ CREATE TABLE featured_slot_bids (
 -- refund-tracking and anti-abuse analysis). The query-time
 -- predicate "AND order is still live" handles visibility.
 
--- v33.3a — idempotent backfill for upgrades from cp17 and earlier.
--- Fresh installs already have the columns from the CREATE above.
+-- v33.3a — the extension columns are added here, not in the CREATE
+-- above, on fresh installs and upgrades alike (idempotent).
 ALTER TABLE featured_slot_bids
     ADD COLUMN IF NOT EXISTS extension_count INT NOT NULL DEFAULT 0;
 ALTER TABLE featured_slot_bids
@@ -821,7 +824,7 @@ CREATE INDEX ix_featured_bids_bidder
 CREATE INDEX ix_featured_bids_order
     ON featured_slot_bids (order_permlink, expires_at DESC);
 
--- Part 122 cp18 — anti-snipe extension lookup.  The handler
+-- anti-snipe extension lookup.  The handler
 -- needs to find "active bids in the top-MAX_SLOTS whose
 -- expires_at is within SNIPE_WINDOW_MINUTES of NOW()".  The
 -- existing ix_featured_bids_active partial index covers the
@@ -863,7 +866,7 @@ CREATE INDEX IF NOT EXISTS ix_featured_bids_expires
 -- keep `invalid_reason IS NULL` and their valid/invalid status is
 -- unchanged.
 --
--- Ref: Finding J in docs/REVISIT-LIST.md §F.
+-- Ref: Finding J in the project backlog §F.
 
 ALTER TABLE releases
 	ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
@@ -926,7 +929,7 @@ ALTER TABLE orders
 --
 -- v11 added these columns for a syndication design that was later
 -- revised before shipping. The current implementation uses a
--- different mechanism (see docs/SYNDICATION-CHECKPOINT.md + Post A/B
+-- different mechanism (see ADR-0012 and the Post A/B
 -- patterns in the frontend) that does not consult either column.
 -- Neither column is read or written anywhere in the current code:
 --
@@ -994,8 +997,8 @@ COMMENT ON COLUMN chat_identities.chat_pub IS
 -- Morphit indexer — migration v14.
 --
 -- chat_read_state table for on-chain chat read receipts (Phase B
--- of the inbox design — see docs/REVISIT-LIST.md §D and the
--- accompanying design in docs/CHAT-READ-RECEIPTS-DESIGN.md).
+-- of the inbox design; what the public read-receipt op reveals is
+-- listed in docs/METADATA-LEAK-CATALOG.md).
 --
 -- Each row records that `reader_account` has acknowledged reading
 -- their conversation with `peer_account` up through `last_read_at`.
@@ -1195,7 +1198,7 @@ CREATE TABLE IF NOT EXISTS stranger_fees (
     -- enough precision for Blurt's 3-decimal-place amounts.
     amount_blurt              NUMERIC(20,3) NOT NULL,
 
-    -- NOTE (cp175 F-005): the legacy `amount_usd_equivalent` column
+    -- NOTE: the legacy `amount_usd_equivalent` column
     -- (a USD echo from the pre-BLURT-denomination fee model) is
     -- intentionally absent. It was created-then-dropped via a v20
     -- ALTER in earlier revisions of this collapsed baseline; since
@@ -1370,7 +1373,7 @@ COMMENT ON COLUMN relay_pending_transfers.broadcast_attempt_at IS
 -- records what was actually transferred; the USD echo was
 -- never authoritative and is now redundant.
 --
--- cp175 F-005: in this collapsed pre-launch baseline the column is
+-- in this collapsed pre-launch baseline the column is
 -- simply never declared (see the stranger_fees CREATE TABLE above),
 -- so the historical DROP is a harmless no-op kept only for
 -- version-tracking parity with the archived per-version migrations.
@@ -1477,55 +1480,34 @@ CREATE INDEX IF NOT EXISTS idx_known_instances_probe_due
 	ON known_instances (last_probed_at NULLS FIRST);
 
 -- ─── v22 ────────────────────────────────────────────
--- Phase G prep / task #14 — private viewcounts on trade offers.
+-- View counter on trade offers.
 --
--- Single-counter-per-order table.  When an unsigned-in or
--- signed-in user lands on an order detail page, the frontend
--- POSTs to /v1/orders/:permlink/view and we increment count.
--- The owner of the order can then see "your offer was viewed
--- N times" — that's it.
+-- Single counter per order.  When a visitor opens an order detail page
+-- the frontend POSTs to /v1/orders/:account/:permlink/view and count is
+-- incremented; GET …/views returns it.  Both are PUBLIC and
+-- unauthenticated: the web app shows the number only to the order's
+-- author, but anyone can read it.  So the row keeps nothing but the
+-- aggregate:
 --
--- PRIVACY DESIGN NOTES (DO NOT REGRESS):
---
---   - No IP column.  We deliberately don't track who's viewing.
---     Even the owner doesn't get IPs; they only get the count.
---   - No timestamps per view.  A timestamps column would let
---     someone with read access correlate view times against
---     external events (an order viewed exactly when a tweet
---     went out → social-graph leak).  We keep just the
---     aggregate.
---   - No per-viewer-account row.  Same rationale — knowing
---     "alice viewed your offer" defeats the purpose.
---   - Non-unique counts (same person reloading bumps the
---     counter).  This makes the metric weakly informative
---     rather than precise — which is the point.  Owners get a
---     rough signal of "is this generating interest" without
---     the metric being so detailed it becomes a surveillance
---     vector.
---   - Spam / abuse mitigation is at the reverse-proxy layer
---     (nginx limit_req zone), NOT at this layer.  If the
---     indexer were to track "X views from same IP in Y
---     seconds" it would have to log IPs, which would defeat
---     the whole privacy model.
---
--- The "owner only" gate is enforced by the GET endpoint, not
--- the table — the table is readable by the indexer process,
--- of course; the gating happens in api/orderViews.ts where the
--- request must carry a signature proving Auth as the order's
--- author.
+--   - No IP and no per-viewer row: nobody, the owner included, learns
+--     who viewed.
+--   - No time of any view: updated_at is never written since v66 (see
+--     the v66 section at the end).  A last-view time would let anyone
+--     correlate views with outside events.
+--   - Non-unique counts (a reload bumps the counter), so the number is a
+--     rough signal of interest, not a precise metric.
+--   - Abuse is bounded by the API's per-client rate limit, which keeps no
+--     record of who called.
 
 CREATE TABLE order_views (
     permlink   text     PRIMARY KEY,
     count      bigint   NOT NULL DEFAULT 0,
-    -- updated_at is here for ops debugging only (let an
-    -- operator see "was this row touched in the last hour"
-    -- when investigating) but it's the row's last-update
-    -- time, NOT a list of when individual views occurred.
-    -- Strictly aggregate.
+    -- Never written since v66, which makes it nullable with no default
+    -- and clears it. Kept so an older build that still writes it works.
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- The increment query (`UPDATE order_views SET count = count + 1`)
+-- The increment (`INSERT … ON CONFLICT DO UPDATE SET count = count + 1`)
 -- is the hot path.  Primary-key lookup by permlink already
 -- gives us O(log n) — no additional index needed.
 
@@ -1550,7 +1532,7 @@ CREATE TABLE order_views (
 -- originally permitted only the first two, so C and D were unclearable at the
 -- DATABASE level: an operator could delete the flag row and the detector
 -- re-created it on the next pass, suppressing a reputation permanently with no
--- recourse.  the maintainer hit exactly that on his own test accounts (two
+-- recourse.  The maintainer hit exactly that on his own test accounts (two
 -- review_concentration rows, invisible to `morphit-ops moderation`, deleted by
 -- hand, restored, and suppressed again on the next detector run).
 -- MIGRATIONS[51] widens this for EXISTING installs; the CHECK below is what
@@ -1755,7 +1737,7 @@ COMMENT ON COLUMN chat_messages.order_permlink IS
 -- the conformance against potentially-stale chat history.
 --
 -- Criteria for has_verified_chat = TRUE (must hold at the
--- time the feedback was signed; see REVISIT-LIST §G ratings-
+-- time the feedback was signed; see the backlog §G ratings-
 -- tying-to-chat-sessions for the full rationale):
 --   1. ≥2 chat_messages from reviewer to subject before
 --      feedback.created_at
@@ -1800,7 +1782,7 @@ COMMENT ON COLUMN feedback.has_verified_chat IS
 -- ─── v27 ────────────────────────────────────────────
 -- Morphit indexer — migration v27.
 --
--- Operator-earnings pipeline (REVISIT-LIST item 5).
+-- Operator-earnings pipeline (backlog item 5).
 --
 -- Background. The fee-attribution & payout pipeline was
 -- scaffolded in schema-v7.sql (operators + operator_earnings)
@@ -1835,7 +1817,7 @@ COMMENT ON COLUMN feedback.has_verified_chat IS
 -- actually queued for transfer (separate from
 -- cumulative_blurt_earned to allow future model divergence).
 --
--- cp408 — the operator's 90% is now paid DIRECTLY at payment
+-- the operator's 90% is now paid DIRECTLY at payment
 -- time (the fee split's owner leg), so there is no separate
 -- relay-payout enqueue. One append-only audit table remains:
 -- every attribution lands a row in operator_attribution_events.
@@ -1879,7 +1861,7 @@ CREATE TABLE IF NOT EXISTS operator_attribution_events (
 CREATE INDEX IF NOT EXISTS operator_attribution_events_operator_idx
     ON operator_attribution_events (operator_account, observed_at DESC);
 
--- ─── 2. operator_payouts: RETIRED (cp408) ─────────────────────
+-- ─── 2. operator_payouts: RETIRED ─────────────────────
 -- This table recorded one row per relay-transfer enqueue in the
 -- old "fee lands in a treasury, relay forwards the operator's
 -- 90%" model. That model is retired: the operator's 90% is now
@@ -1890,7 +1872,7 @@ CREATE INDEX IF NOT EXISTS operator_attribution_events_operator_idx
 -- in operator_earnings.
 
 -- ─── 3. operator_earnings: add lifetime_paid_blurt ──────────────
--- cp408 — the operator is paid directly at payment time (the fee
+-- the operator is paid directly at payment time (the fee
 -- split), so cumulative_blurt_earned (from v7) and
 -- lifetime_paid_blurt are equal: what the operator earned is what
 -- they were paid. The column is kept (separate from
@@ -1917,7 +1899,7 @@ END $$;
 -- ─── v28 ────────────────────────────────────────────
 -- Morphit indexer — migration v28.
 --
--- Treasury chain-pin (Part 106; Part 107 privacy correction).
+-- Treasury chain-pin (privacy correction).
 -- Adds a `treasury` JSONB column to the releases table.  When
 -- non-null, the column carries the canonical Morphit treasury
 -- BTC + XMR addresses and amounts, authoritatively pinned by
@@ -1939,7 +1921,7 @@ END $$;
 -- only fallback for fresh indexers that haven't seen a
 -- release op yet.
 --
--- Schema shape (Part 107 — viewkey REMOVED).  When set,
+-- Schema shape (viewkey REMOVED).  When set,
 -- treasury is a JSON object with the shape:
 --   {
 --     "btc": { "address": "bc1q...", "satoshis": 416 } | null,
@@ -1950,17 +1932,17 @@ END $$;
 -- "this release does not pin a treasury for this chain"
 -- (operators ramp up to chain-pin one chain at a time).
 -- The whole `treasury` column may also be NULL to indicate
--- "this release op pre-dates Part 106 and does not pin
+-- "this release op pre-dates and does not pin
 -- any treasury at all" — backward-compat for old releases.
 --
--- Privacy invariant (Part 107, refined Part 108++ and Part 109).
+-- Privacy invariant.
 -- The Monero PRIVATE view key is NEVER part of this column.
 -- The handler's validateTreasury() silently strips any
 -- `viewkey` field that a release op tries to include — the
 -- field never reaches the DB.
 --
--- Part 108++ replaced view-key-based decryption with per-
--- payment proof verification.  Part 109 removed the
+-- later+ replaced view-key-based decryption with per-
+-- payment proof verification.  A later change removed the
 -- `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env var entirely and
 -- removed the `viewkey` field from the in-memory XmrTreasury
 -- interface.  No Morphit indexer holds a view key anywhere,
@@ -1982,7 +1964,7 @@ COMMENT ON COLUMN releases.treasury IS
     'pin (env-var fallback applies).';
 
 
--- ─── Migration v29 — XMR per-payment tx_proof (Part 108++) ────────
+-- ─── Migration v29 — XMR per-payment tx_proof (later+) ────────
 --
 -- Adds an optional `tx_proof` TEXT column to the `orders` table.
 -- Used only when fee_method='xmr'; null for all other methods.
@@ -1990,14 +1972,14 @@ COMMENT ON COLUMN releases.treasury IS
 -- Why this column exists.  Pre-Part-108++, XMR payment
 -- verification required the indexer to hold the treasury wallet's
 -- private view key and decode every incoming transaction with it.
--- Part 107 already corrected the design error of broadcasting that
+-- already corrected the design error of broadcasting that
 -- key on chain, but it left the operator-private viewkey-on-the-
 -- box requirement in place — meaning canonical morphit.io was the
 -- only instance that could verify XMR payments, and community
 -- operators had to either run their own treasury wallet or
 -- disable XMR entirely.
 --
--- Part 108++ replaces that with Monero's standard `tx_proof`
+-- later+ replaces that with Monero's standard `tx_proof`
 -- mechanism: the user generates a per-payment proof from their
 -- wallet (e.g. monero-wallet-cli `get_tx_proof`, GUI "Prove
 -- transaction" dialog, Cake/Feather equivalents) and submits the
@@ -2026,7 +2008,7 @@ COMMENT ON COLUMN releases.treasury IS
 --     verification never depends on canonical's availability.
 --
 -- The column is nullable so existing rows from before this
--- migration (Part 108++) keep `tx_proof IS NULL`.  New XMR orders
+-- migration (later+) keep `tx_proof IS NULL`.  New XMR orders
 -- after this migration MUST include a tx_proof; the order
 -- handler's structural validator enforces presence + format.
 ALTER TABLE orders
@@ -2038,11 +2020,11 @@ COMMENT ON COLUMN orders.tx_proof IS
     'waived_first_buy.  Verified against (txid, treasury_address) '
     'via Monero explorer or local monerod RPC — no view key needed.';
 
--- ─── Migration v30 — Operator-scoped payout queue (Part 111) ─────────────
+-- ─── Migration v30 — Operator-scoped payout queue ─────────────
 --
 -- Adds `operator_tag` column to `orders` and indexes it for the
 -- low-balance scanner's candidate query.  Closes a federation-
--- cost gap: pre-Part-111, every operator's relay queued payouts
+-- cost gap: older, every operator's relay queued payouts
 -- (welcome bonus, low-balance refill, operator-payout 90%
 -- share, loyalty milestone BP) on EVERY morphit op it saw on
 -- chain, not just ops served by their own instance.  Result:
@@ -2093,7 +2075,7 @@ COMMENT ON COLUMN orders.operator_tag IS
     'matches this column queues the payout.  Migration v30 '
     '(Part 111).';
 
--- ─── Migration v31 — Signal C: one-way pile-on detection (Part 113) ───────
+-- ─── Migration v31 — Signal C: one-way pile-on detection ───────
 --
 -- Adds the `one_way_pile_on` table for Signal C — the third self-
 -- trade / reputation-attack heuristic.  Complements Signals A and B
@@ -2175,14 +2157,14 @@ COMMENT ON TABLE one_way_pile_on IS
     'just doesn''t drive the numeric rating.';
 
 -- ─────────────────────────────────────────────────────────────────
--- v32 / Part 121 — multi-network asset support (USDT)
+-- v32 — multi-network asset support (USDT)
 -- ─────────────────────────────────────────────────────────────────
 --
 -- Adds `asset_network` column to `orders` for multi-network
--- tradable assets.  Originally USDT-only at Part 121 launch
--- (ERC-20/TRC-20/SPL/BEP-20); Part 122 cp30 added USDC as a
+-- tradable assets.  Originally USDT-only launch
+-- (ERC-20/TRC-20/SPL/BEP-20); a later change added USDC as a
 -- second multi-network asset (ERC-20/SPL/Base/Polygon); Part
--- 122 cp31 added DAI as a third (ERC-20/Polygon/Base/Arbitrum).
+-- 122 a later change added DAI as a third (ERC-20/Polygon/Base/Arbitrum).
 -- Single-network assets (BTC, XMR, BLURT, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP)
 -- write NULL.
 --
@@ -2191,9 +2173,9 @@ COMMENT ON TABLE one_way_pile_on IS
 --   - asset='USDT' MUST have asset_network non-null and in
 --     ('erc20', 'trc20', 'spl', 'bep20')
 --   - asset='USDC' MUST have asset_network non-null and in
---     ('erc20', 'spl', 'base', 'polygon')   -- cp30 added
+--     ('erc20', 'spl', 'base', 'polygon')   -- a later change added
 --   - asset='DAI' MUST have asset_network non-null and in
---     ('erc20', 'polygon', 'base', 'arbitrum')   -- cp31 added
+--     ('erc20', 'polygon', 'base', 'arbitrum')   -- a later change added
 --   - any other asset MUST have asset_network NULL
 --
 -- The combined constraint mirrors the registry rule:
@@ -2202,7 +2184,7 @@ COMMENT ON TABLE one_way_pile_on IS
 -- 4-element list for USDC (erc20/spl/base/polygon); a 4-element
 -- list for DAI (erc20/polygon/base/arbitrum).  The wire-format-
 -- frozen `fee_method` enum stays at exactly
--- `'blurt'|'waived_first_buy'|'btc'|'xmr'` (memory #23) —
+-- `'blurt'|'waived_first_buy'|'btc'|'xmr'` (the trade-only rule) —
 -- `asset_network` is a SEPARATE column from fee_method and never
 -- conflates with it.
 --
@@ -2234,7 +2216,7 @@ COMMENT ON COLUMN orders.asset_network IS
     'is the only thing telling the sender which chain.';
 
 -- ─────────────────────────────────────────────────────────────────
--- v33 / Part 122 cp13 — Web Push subscription storage + delivery queue
+-- v33 — Web Push subscription storage + delivery queue
 -- ─────────────────────────────────────────────────────────────────
 --
 -- Honors the FAQ entry `push_notifications_privacy` (user
@@ -2297,17 +2279,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     -- HKDF salt for payload encryption.  Base64url-encoded.
     auth                TEXT        NOT NULL,
 
-    -- User-agent string sent at subscribe time, used for
-    -- operator-side "which devices are subscribed to my account"
-    -- in the Settings UI.  Truncated to 200 chars at insert
-    -- time to bound row size.  Never used for tracking.
+    -- No longer stored (v66): always NULL. It once held the
+    -- subscriber's User-Agent string; v66 cleared existing values.
     user_agent          TEXT,
 
-    -- The privacy mode the user chose at subscribe time.
-    -- 'standard' = browser's default push service (FCM/autopush/
-    -- APNS).  'self_hosted' = operator's own push server (the
-    -- endpoint URL points at the operator's domain).  Recorded
-    -- for the UI to show the user what mode each device is using.
+    -- Always 'standard' (the browser's push service: FCM/autopush/
+    -- APNS). 'self_hosted' is allowed by the check but nothing
+    -- writes it.
     privacy_mode        TEXT        NOT NULL
         CHECK (privacy_mode IN ('standard', 'self_hosted')),
 
@@ -2332,17 +2310,17 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     -- Locale tag the user subscribed with (e.g. 'en', 'zh-CN').
     -- Used by the indexer to localize push payload title/body
     -- strings at enqueue time.  Defaults to 'en' for any
-    -- subscription that didn't include a locale.  Part 122 cp14.
+    -- subscription that didn't include a locale..
     locale              TEXT        NOT NULL DEFAULT 'en',
 
     -- Categories this device has OPTED OUT of (blocklist).  Empty
     -- '{}' means nothing muted = every category on, which is the
-    -- pre-cp450 behaviour, so existing rows keep receiving all
+    -- older behaviour, so existing rows keep receiving all
     -- pushes until their client next re-syncs.  The push-sender
     -- skips a device whose array contains the pending row's
     -- category, so the per-category Settings toggle now governs
     -- Web Push (tab-closed) just as it already governed the
-    -- in-page (tab-open) path.  cp450 GAP A (v40).
+    -- in-page (tab-open) path.  (v40).
     muted_categories    TEXT[]      NOT NULL DEFAULT '{}',
 
     PRIMARY KEY (account, endpoint)
@@ -2351,7 +2329,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 CREATE INDEX IF NOT EXISTS push_subscriptions_account_idx
     ON push_subscriptions (account);
 
--- Part 122 cp15 audit DD-12 — the feedback + chat handlers do
+-- the feedback + chat handlers do
 -- `WHERE account = $1 ORDER BY created_at DESC LIMIT 1` on every
 -- enqueue.  The single-column account index makes WHERE fast but
 -- forces a heap sort over matched rows.  A composite index with
@@ -2359,10 +2337,10 @@ CREATE INDEX IF NOT EXISTS push_subscriptions_account_idx
 CREATE INDEX IF NOT EXISTS push_subscriptions_account_created_idx
     ON push_subscriptions (account, created_at DESC);
 
--- v33.1a — locale column added in Part 122 cp14 so the indexer
+-- v33.1a — locale column added so the indexer
 -- can localize push payload strings at enqueue time.  Idempotent
 -- with the inline column in the CREATE TABLE above; ALTER stays
--- as a no-op on fresh cp15+ installs and runs on cp13→cp15
+-- as a no-op on fresh later installs and runs on
 -- upgrades.
 ALTER TABLE push_subscriptions
     ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en';
@@ -2430,7 +2408,7 @@ CREATE TABLE IF NOT EXISTS push_pending (
     -- byte-identical to the in-page notification's tag and the
     -- browser collapses the two into one.  NULL for pushes with no
     -- in-page counterpart (plain chat / feedback / featured-bid) —
-    -- the sender then tags on the queue-row id.  cp450.
+    -- the sender then tags on the queue-row id..
     notification_id     TEXT
 );
 
@@ -2451,13 +2429,13 @@ COMMENT ON TABLE push_pending IS
     'failures at the SUBSCRIPTION level via '
     'push_subscriptions.consecutive_failures.';
 
--- v33.2a — drop the dead `attempts` column from cp13.  Idempotent
--- so cp15+ fresh installs (where the column was never created)
--- and cp13→cp15 upgrades (where it WAS) both succeed.
+-- v33.2a — drop the dead `attempts` column.  Idempotent
+-- so later fresh installs (where the column was never created)
+-- and upgrades (where it WAS) both succeed.
 ALTER TABLE push_pending DROP COLUMN IF EXISTS attempts;
 
--- ─── v34: review_concentration (cp123 H2, Signal D) ───────────
--- Closes Part 113 A4 "Signal B evasion via diversification".
+-- ─── v34: review_concentration (Signal D) ───────────
+-- Closes "Signal B evasion via diversification".
 -- Signal B requires distinct_subjects=1 (only reviewed the target).
 -- A smart attacker reviews 2-3 throwaway third parties to evade.
 -- Signal D catches the diversifying attacker:
@@ -2488,7 +2466,7 @@ CREATE TABLE IF NOT EXISTS review_concentration (
 CREATE INDEX IF NOT EXISTS review_concentration_subject_idx
     ON review_concentration (dominant_subject);
 
--- ─── v35: price_drift_baseline (cp127, defense B) ──────────────
+-- ─── v35: price_drift_baseline (defense B) ──────────────
 -- Persisted 7-day moving baseline per (asset, denominationFiat)
 -- pair.  Used by the drift monitor (apps/indexer/src/indexer/price/
 -- driftMonitor.ts) to detect slow-drift attacks where each refresh-
@@ -2508,7 +2486,7 @@ CREATE INDEX IF NOT EXISTS review_concentration_subject_idx
 -- B does NOT auto-correct the price — auto-correction is itself an
 -- attack vector (an attacker games the baseline to force a
 -- "correction" toward their target); B only makes the drift loudly
--- visible (logs + /v1/health) for operator response.  Wired in cp233.
+-- visible (logs + /v1/health) for operator response.  Wired.
 --
 -- One row per pair; the table never grows large (~10s of rows at
 -- most, one per asset Morphit tracks).
@@ -2522,7 +2500,7 @@ CREATE TABLE IF NOT EXISTS price_drift_baseline (
 );
 
 -- ───────────────────────────────────────────────────────────────────
--- cp129 — Defense F: cross-instance peer price observations
+-- Defense F: cross-instance peer price observations
 -- ───────────────────────────────────────────────────────────────────
 --
 -- ADR-0041 cross-instance peer disagreement detector.
@@ -2535,9 +2513,9 @@ CREATE TABLE IF NOT EXISTS price_drift_baseline (
 -- >4 hours fires an alert in the indexer logs and surfaces on
 -- /v1/health.
 --
--- Why this defense matters: cp127 designed the morphit_native
+-- Why this defense matters: designed the morphit_native
 -- fetcher with several manipulation defenses (sybil filtering,
--- per-trader caps, tier hierarchy).  Defense F (cp127's deferred
+-- per-trader caps, tier hierarchy).  Defense F (the deferred
 -- item) catches the case where an operator's *own* indexer is
 -- compromised or geographically isolated and is reporting a
 -- different price than the rest of the federation.  Peers in
@@ -2585,7 +2563,7 @@ ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
 -- Cleanup: a periodic job DELETEs WHERE observed_at < now() - 7 days.
 -- Index supports the bounded scan.
 
--- ─── v36: accounts.posting_pubkey (cp404) ─────────────────────
+-- ─── v36: accounts.posting_pubkey ─────────────────────
 -- Morphit indexer — migration v36.
 --
 -- Stores each account's PRIMARY posting public key (base58 "BLT…"
@@ -2611,7 +2589,7 @@ ON price_peer_observations (asset, denomination_fiat, observed_at DESC);
 --      the card omits the posting-key line for that trader until it fills.
 ALTER TABLE accounts
     ADD COLUMN IF NOT EXISTS posting_pubkey TEXT;
--- ─── v37: orders.accepted_assets (cp425 barter accepted-crypto set) ───
+-- ─── v37: orders.accepted_assets (barter accepted-crypto set) ───
 -- A BARTER (goods/services) listing settles in one of a SET of cryptos
 -- the seller accepts.  This column pins that set on the order row so
 -- the orderbook can (a) show buyers which cryptos they can pay in and
@@ -2634,9 +2612,9 @@ COMMENT ON COLUMN orders.accepted_assets IS
     '(never BARTER itself, never a goods asset).  A buyer may only '
     'settle in a crypto on this list.  NULL for every crypto asset — '
     'those settle in themselves and have no accepted-set.';
--- ─── v38: index accounts.posting_pubkey (cp440 key-references reverse lookup) ───
+-- ─── v38: index accounts.posting_pubkey (key-references reverse lookup) ───
 -- v36 added the column but no index — it was only ever SELECTed by account
--- name (the PK).  cp440's /v1/chain/key-references union does a REVERSE lookup
+-- name (the PK).  the /v1/chain/key-references union does a REVERSE lookup
 -- (SELECT name WHERE posting_pubkey = ANY(...)) on every posting-key login to
 -- auto-resolve pre-fork accounts the chain's account_by_key plugin misses.
 -- Without this index that seq-scans the accounts table.  Partial (NOT NULL):
@@ -2646,15 +2624,15 @@ CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
     ON accounts (posting_pubkey)
     WHERE posting_pubkey IS NOT NULL;
 
--- ─── v39: chat read-state is per DISCUSSION, not per peer (cp446) ───
--- the maintainer: "if I read one thread from a user, it should not mark other threads
--- with that user as read. Think of it like email."
+-- ─── v39: chat read-state is per DISCUSSION, not per peer ───
+-- Requirement: reading one thread with a user must not mark that user's other threads as read,
+-- like email.
 --
 -- The key column is never NULL: it is part of the primary key, and Postgres
 -- treats NULLs as DISTINCT in a unique index, so two NULL rows for the same
 -- (reader, peer) would both insert and the ON CONFLICT upsert would never fire.
 --
---   '*'  legacy PEER-WIDE ack — what every pre-cp446 client sent, and what an
+--   '*'  legacy PEER-WIDE ack — what every older client sent, and what an
 --        old client still sends. Existing rows are peer-wide by definition, so
 --        the DEFAULT backfills them correctly and nothing looks unread on
 --        upgrade day.
@@ -2664,7 +2642,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
 -- Neither '*' nor '' is a legal Blurt permlink, so no thread collides with a
 -- sentinel. Unread is evaluated against MAX(thread ack, peer-wide ack).
 --
--- DOWNGRADE HAZARD: an indexer older than cp446 upserts with
+-- DOWNGRADE HAZARD: an indexer older than an earlier fix upserts with
 -- `ON CONFLICT (reader_account, peer_account)`, and that constraint no longer
 -- exists. Rolling the indexer back after this migration breaks chat read acks
 -- until it is rolled forward again. Nothing else is affected.
@@ -2680,7 +2658,7 @@ ALTER TABLE chat_read_state
 COMMENT ON COLUMN chat_read_state.order_permlink IS
     'The discussion this ack is for: a permlink, or '''' for the order-less thread, or ''*'' for a legacy peer-wide ack.';
 
--- ─── v40: push_subscriptions.muted_categories (cp450 GAP A) ───
+-- ─── v40: push_subscriptions.muted_categories ───
 -- The per-category Settings toggle governed the in-page (tab-open)
 -- notification path but was silently ignored by Web Push (tab-closed):
 -- the push-sender fanned every chat / order / feedback push out to
@@ -2688,7 +2666,7 @@ COMMENT ON COLUMN chat_read_state.order_permlink IS
 -- gives each device the state the sender was missing.
 --
 -- BLOCKLIST, not allowlist: the array names the categories the user
--- turned OFF. Empty '{}' = nothing muted = all on = the pre-cp450
+-- turned OFF. Empty '{}' = nothing muted = all on = the older
 -- behaviour, so every existing subscription keeps receiving everything
 -- until its client next re-syncs (no surprise silence on upgrade). It
 -- is also future-proof — a new category is on by default until muted,
@@ -2703,7 +2681,7 @@ ALTER TABLE push_subscriptions
 COMMENT ON COLUMN push_subscriptions.muted_categories IS
     'Categories this device has OPTED OUT of (blocklist). Empty = all on. The push-sender skips a device whose array contains the notification''s category.';
 
--- ─── v41: push_pending.notification_id (cp450 dedup tag) ───
+-- ─── v41: push_pending.notification_id (dedup tag) ───
 -- An order-signal chat message fired TWO notifications for the
 -- recipient with an open-but-unfocused tab: the in-page trade listener
 -- and the category='order' Web Push each showed one, with different
@@ -2722,7 +2700,7 @@ COMMENT ON COLUMN push_pending.notification_id IS
     'Optional shared dedup tag matching the in-page notificationTag (e.g. ''morphit-trade-<permlink>''). NULL → the sender tags on the queue-row id.';
 
 -- ─── v42: chat_folders (encrypted chat folder organization) ───
--- t.txt (v1.4.9 #5). Per-account ENCRYPTED chat folder state: which threads
+-- Per-account ENCRYPTED chat folder state: which threads
 -- the user keeps in Inbox / Starred (everything else is Archived by default),
 -- synced across devices. The client encrypts the thread lists with a
 -- posting-key-derived key, so the indexer stores + serves OPAQUE ciphertext and
@@ -2740,7 +2718,7 @@ CREATE TABLE IF NOT EXISTS chat_folders (
 COMMENT ON TABLE chat_folders IS
     'Per-account ENCRYPTED chat folder organization (which threads are kept in Inbox/Starred; all others Archived). Opaque ciphertext — encrypted client-side with a posting-key-derived key, so the indexer never learns a user''s chat organization. Written only by morphit_chat_folders_v1; latest by block wins.';
 
--- ─── v43: push_pending.source_trx_id (cp471 fast-notification dedup) ───
+-- ─── v43: push_pending.source_trx_id (fast-notification dedup) ───
 -- Fast notifications. The head-block tailer (chatHeadTailer.ts) now enqueues the
 -- chat Web Push ~5s after send, alongside the durable handler (~irreversible).
 -- Both set source_trx_id = the on-chain trx id; the partial UNIQUE index makes
@@ -2873,7 +2851,7 @@ COMMENT ON TABLE trade_concentration IS
 -- A BARTER (goods/services) listing lets the seller type WHAT they're
 -- offering (e.g. "banana trees") inline where the summary would otherwise
 -- read the generic "goods/services".  That short label — letters + single
--- internal spaces, <=24 code points (t.txt #5 relaxed the original
+-- internal spaces, <=24 code points (relaxed from the original
 -- letters-only rule to allow multi-word wares) — is pinned here so the
 -- orderbook, the order detail page, and the on-chain Blurt announcement can
 -- render "…of banana trees" instead of the generic phrase.  NULL for every
@@ -2888,7 +2866,7 @@ COMMENT ON COLUMN orders.specific_barter_title IS
 -- ─── v53: releases.distribution (v1.9.x decentralized-distribution anchor) ───
 -- The optional distribution anchor from morphit_release_v1 (source_sha256,
 -- gpg_fingerprint, ipfs_cid, ipns_name, mirrors) was validated on ingest
--- since cp556 but not stored.  It is now persisted so /v1/release can
+-- since an earlier release but not stored.  It is now persisted so /v1/release can
 -- surface ipfs_cid/ipns_name AND every instance's built-in IPFS
 -- release-pinning service can read the current release's ipfs_cid from its
 -- OWN indexer and `ipfs pin add` it — decentralizing release availability
@@ -3248,3 +3226,103 @@ UPDATE orders
    AND xmr_tx_key IS NULL
    AND tx_proof LIKE 'OutProof%'
    AND fee_status IN ('unverified', 'missing', 'pending_external', 'verified_by_attestation');
+
+-- ─── v66: chat/account/avatar indexes, one queued dust refill, push and view-count data minimised, attestor loyalty measure ───
+-- (Migration 66 also re-marks every confirmed posting key unconfirmed, a data
+-- repair with nothing to do on a fresh database; see MIGRATIONS[66].dataSteps.)
+-- Chat lookups by sender and by recipient. The stranger gate, the fan-in and
+-- per-pair limits and the verified-chat gate run inside the block transaction
+-- for every incoming chat message, and the inbox query filters on
+-- `sender = $1 OR recipient = $1`; chat_pair_idx (LEAST/GREATEST) serves none
+-- of those predicates, so each was a full scan of chat_messages.
+CREATE INDEX IF NOT EXISTS chat_messages_sender_idx
+    ON chat_messages (sender, recipient, created_at);
+CREATE INDEX IF NOT EXISTS chat_messages_recipient_idx
+    ON chat_messages (recipient, created_at);
+
+-- Signal A groups accounts by creator and compares first-activity times.
+CREATE INDEX IF NOT EXISTS accounts_creator_first_activity_idx
+    ON accounts (creator, first_activity_at)
+    WHERE first_activity_at IS NOT NULL;
+
+-- At most one queued (not yet broadcast) low-balance refill per recipient.
+-- The scanner's INSERT ... WHERE NOT EXISTS is not atomic under READ
+-- COMMITTED, so two scanners could both queue one. Existing duplicates are
+-- removed first (the oldest queued row is kept) so the index can be built.
+DELETE FROM relay_pending_transfers d
+ USING relay_pending_transfers k
+ WHERE d.reason = 'dust_refill' AND d.broadcast_at IS NULL
+   AND k.reason = 'dust_refill' AND k.broadcast_at IS NULL
+   AND k.recipient = d.recipient
+   AND k.id < d.id;
+CREATE UNIQUE INDEX IF NOT EXISTS relay_pending_transfers_dust_refill_queued_uidx
+    ON relay_pending_transfers (recipient)
+    WHERE reason = 'dust_refill' AND broadcast_at IS NULL;
+
+-- Avatar uniqueness: the profile handler looks for another account holding
+-- the same image on every profile op. Hash indexes, because an avatar value
+-- can be several KB, more than a B-tree entry may hold.
+CREATE INDEX IF NOT EXISTS profiles_avatar_svg_hash_idx
+    ON profiles USING hash ((json_metadata->>'avatar_svg'))
+    WHERE json_metadata->>'avatar_svg' IS NOT NULL;
+CREATE INDEX IF NOT EXISTS profiles_avatar_data_uri_hash_idx
+    ON profiles USING hash ((json_metadata->>'avatar_data_uri'))
+    WHERE json_metadata->>'avatar_data_uri' IS NOT NULL;
+
+-- Push subscriptions no longer keep the browser's User-Agent (nothing reads
+-- it), and keep the language only as one of the 10 supported locale codes,
+-- mapped the way the push localizer maps it (pushLocalize.normalizeLocale).
+UPDATE push_subscriptions SET user_agent = NULL WHERE user_agent IS NOT NULL;
+UPDATE push_subscriptions
+   SET locale = CASE
+           WHEN split_part(locale, '-', 1) IN ('en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa')
+               THEN split_part(locale, '-', 1)
+           WHEN split_part(locale, '-', 1) = 'zh'
+               THEN CASE WHEN locale ~ '(Hant|TW|HK)' THEN 'zh-HK' ELSE 'zh-CN' END
+           ELSE 'en'
+       END
+ WHERE locale NOT IN ('en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa', 'zh-CN', 'zh-HK');
+COMMENT ON COLUMN push_subscriptions.user_agent IS
+    'Not stored: always NULL. Kept only so an older relay that still writes '
+    'the column does not fail.';
+COMMENT ON COLUMN push_subscriptions.locale IS
+    'One of the 10 supported locale codes, used to localize push text.';
+
+-- Order view counter: no time of any view is kept or served, only the count.
+ALTER TABLE order_views ALTER COLUMN updated_at DROP NOT NULL;
+ALTER TABLE order_views ALTER COLUMN updated_at DROP DEFAULT;
+UPDATE order_views SET updated_at = NULL WHERE updated_at IS NOT NULL;
+COMMENT ON COLUMN order_views.updated_at IS
+    'Not stored: always NULL. A last-view time would let anyone correlate '
+    'views with outside events.';
+
+-- One transaction may carry two fee-paid orders, each with its own operator
+-- attribution; a UNIQUE trx_id made the second one's earnings row collide and
+-- go missing. (order_account, order_permlink) stays unique, which is what
+-- keeps a replayed block from crediting an order twice.
+ALTER TABLE operator_attribution_events
+    DROP CONSTRAINT IF EXISTS operator_attribution_events_trx_id_key;
+
+-- The directory's zero-clearnet badge is the peer's own claim. An instance
+-- registered at a clearnet origin serves clearnet, so its claim is never kept
+-- (federationProbe.clearnetEliminatedClaimAccepted); clear any stored before.
+UPDATE known_instances SET cached_clearnet_eliminated = FALSE
+ WHERE cached_clearnet_eliminated
+   AND lower(coalesce(substring(origin from '^[A-Za-z][A-Za-z0-9+.-]*://([^/:?#]+)'), ''))
+       !~ '(^[a-z2-7]{56}\.onion|\.i2p|\.loki)$';
+COMMENT ON COLUMN known_instances.cached_clearnet_eliminated IS
+    'The peer''s own clearnet_eliminated claim from its /v1/instance, kept TRUE '
+    'only for an instance whose registered origin is an onion, I2P or Lokinet '
+    'address: one registered at a clearnet origin serves clearnet.';
+
+-- The attestor loyalty gate's measure: BLURT this account paid to the
+-- canonical treasury in listing fees from CONSENSUS_V2_ACTIVATION_TIME on. No
+-- backfill: the legs of older fees are not stored anywhere chain-derived, so an
+-- upgraded node and a fresh replay hold the same value.
+ALTER TABLE account_loyalty
+    ADD COLUMN IF NOT EXISTS canonical_blurt_paid NUMERIC NOT NULL DEFAULT 0
+    CHECK (canonical_blurt_paid >= 0);
+COMMENT ON COLUMN account_loyalty.canonical_blurt_paid IS
+    'BLURT this account paid to the canonical treasury in listing fees from '
+    'CONSENSUS_V2_ACTIVATION_TIME on; the attestor loyalty gate reads this, not '
+    'cumulative_blurt_paid (an owner leg can go to an account the payer controls).';

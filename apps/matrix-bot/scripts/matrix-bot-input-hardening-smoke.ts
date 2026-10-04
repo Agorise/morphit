@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * matrix-bot-input-hardening-smoke — regression for cp139
+ * matrix-bot-input-hardening-smoke — regression
  * matrix-bot deep-walk findings.
  *
  *   ME-1 (LOW)    parseJournalLine() must not throw on malformed

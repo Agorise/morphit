@@ -59,10 +59,8 @@ function explorer(
 		const url = typeof input === 'string' ? input : input.toString();
 		urls.push(url);
 		if (url.includes('/api/outputs')) {
-			return {
-				ok: true,
-				status: 200,
-				json: async () => ({
+			return new Response(
+				JSON.stringify({
 					status: 'success',
 					data: {
 						tx_hash: TXID,
@@ -73,14 +71,13 @@ function explorer(
 						tx_confirmations: 3,
 						tx_prove: true
 					}
-				})
-			};
+				}),
+				{ status: 200 }
+			);
 		}
 		if (url.includes(`/api/transaction/${TXID}`)) {
-			return {
-				ok: true,
-				status: 200,
-				json: async () => ({
+			return new Response(
+				JSON.stringify({
 					status: tx.status ?? 'success',
 					data: {
 						tx_hash: TXID,
@@ -89,8 +86,9 @@ function explorer(
 						extra: tx.extra ?? '',
 						confirmations: 3
 					}
-				})
-			};
+				}),
+				{ status: 200 }
+			);
 		}
 		throw new Error(`unmocked ${url}`);
 	}) as unknown as typeof fetch;

@@ -93,19 +93,27 @@
     create_home: true
     state: present
 
-- name: Ensure the morphit service user owns its home (recursively)
+- name: Ensure the morphit service user owns its home
   # `create_home: true` only chowns the home when useradd CREATES it; if the dir
   # pre-existed (a partial/earlier run, or a re-run on the same box) it is left
-  # root-owned, and then `npm exec`/`npm run` (which write $HOME/.npm) fail EACCES
-  # and Ansible's become-user temp dir (/var/lib/morphit/.ansible) is unwritable.
-  # This makes the home — and any stale root-owned dotfiles under it — the service
-  # user's, so those writes succeed on a fresh AND a re-used box.
+  # root-owned, and Ansible's become-user temp dir (/var/lib/morphit/.ansible) is
+  # unwritable.  NOT recursive: root keeps its own directories in here (the
+  # first-online state, a guided install's reachability safety net), and handing
+  # those to the service user would let it change what root later reads or runs.
   ansible.builtin.file:
     path: "{{ morphit_service_home }}"
     state: directory
     owner: "{{ morphit_service_user }}"
     group: "{{ morphit_service_group }}"
-    recurse: true
+
+- name: Give the service user back its own dot-directories (left root-owned by an earlier run)
+  ansible.builtin.shell:
+    cmd: >-
+      for d in .ansible .npm .cache backups; do
+      [ -d "{{ morphit_service_home }}/$d" ] && [ ! -L "{{ morphit_service_home }}/$d" ] &&
+      chown -R --no-dereference {{ morphit_service_user }}:{{ morphit_service_group }} "{{ morphit_service_home }}/$d";
+      done; true
+  changed_when: false
 
 # WARRANT-CANARY UPLOAD ACCOUNT (review B4).
 #
@@ -130,13 +138,11 @@
 # the upload is handled by the morphit role's chown + the upgrade's canary-owner
 # restore, not here.)
 
-# Part 122 cp5 F12 — the shipped morphit-relay.service specifies
-# `User=morphit-relay / Group=morphit-relay`.  Without this task,
-# `systemctl start morphit-relay` fails with "user morphit-relay
-# does not exist" on a first deploy, AND any earlier `chown
-# morphit-relay:morphit-relay /var/lib/morphit-relay` step fails
-# with "invalid user".  Pre-cp5 the playbook would never reach
-# "relay running" on a fresh box.
+# The relay and the indexer each run as their own unprivileged user
+# (ops/systemd/morphit-relay.service, morphit-indexer.service): no shell, no
+# home, no capabilities, member of the service group only to READ the
+# operator config.  Neither is the `morphit` user, which owns the backups and
+# (with a containerized database) is in the docker group.
 - name: Create morphit-relay system group
   ansible.builtin.group:
     name: morphit-relay
@@ -159,7 +165,27 @@
     system: true
     state: present
 
-# cp167 — MCP server (ops/systemd/morphit-mcp.service).  Same shape
+- name: Create morphit-indexer system group
+  ansible.builtin.group:
+    name: morphit-indexer
+    system: true
+    state: present
+
+- name: Create morphit-indexer system user
+  ansible.builtin.user:
+    name: morphit-indexer
+    group: morphit-indexer
+    # Read access to /etc/morphit/indexer.env and the install's env files
+    # (root:morphit_service_group 0640), nothing else.
+    groups: "{{ morphit_service_group }}"
+    append: true
+    home: /nonexistent
+    create_home: false
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+
+# MCP server (ops/systemd/morphit-mcp.service).  Same shape
 # as morphit-relay: dedicated system group + user, no shell, no home,
 # member of morphit_service_group so it can read /etc/morphit/*.env.
 # The MCP server holds no keys (it's read-only over the indexer's
@@ -182,7 +208,7 @@
     group: "{{ morphit_service_group }}"
     mode: '0750'
 
-# cp676 — shared helper-script dir used by several roles (ddns, backup, mcp,
+# shared helper-script dir used by several roles (ddns, backup, mcp,
 # ipfs). It was previously created only inside the ipfs role (which runs LATE),
 # so an earlier consumer — e.g. the ddns role when DDNS is enabled — failed with
 # "Destination directory /usr/local/lib/morphit does not exist". Create it here

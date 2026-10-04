@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, E12 — a restored snapshot does not bring the PUBLISHER's
+ * a restored snapshot does not bring the PUBLISHER's
  * probe opinions with it.
  *
  * `known_instances` rows are chain-derived (the register op writes them), but

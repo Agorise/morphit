@@ -1,5 +1,5 @@
 <script lang="ts">
-	/* Part 122 cp26 — Per-asset privacy guide page.
+	/* Per-asset privacy guide page.
 	 *
 	 *  Registry-driven: pulls `privacyFeatures` from the canonical
 	 *  asset registry for the URL-param asset, then renders shared
@@ -27,7 +27,7 @@
 	 *  static-rendered + client-hydrated.  Reads no user data;
 	 *  writes no telemetry.
 	 *
-	 *  cp112 SEO: converted from bare <svelte:head> to full <Head />
+	 *  SEO: converted from bare <svelte:head> to full <Head />
 	 *  component so canonical URL, hreflang alternates, OG / Twitter
 	 *  cards, robots, and onion-location are emitted on every per-
 	 *  asset privacy guide.  Adds two JSON-LD nodes: BreadcrumbList
@@ -40,7 +40,7 @@
 	import { ASSETS, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 	import Head from '$components/Head.svelte';
 	import { breadcrumbListSchema, type BreadcrumbItem } from '$seo/jsonld';
-	import { localizedUrl, CANONICAL_ORIGIN } from '$seo/urls';
+	import { localizedUrl, siteOrigin } from '$seo/urls';
 	import type { LocaleCode } from '$i18n/locales';
 
 	const lang = $derived(($page.params.lang ?? 'en') as LocaleCode);
@@ -50,7 +50,7 @@
 	$effect(() => {
 		// Unknown ticker → redirect to /[lang]/privacy index.  The
 		// alternative (404) loses the user's locale prefix; redirect
-		// preserves it. cp425: goods assets (BARTER) have no on-chain
+		// preserves it. goods assets (BARTER) have no on-chain
 		// privacy guide (the wares change hands off-platform), so treat
 		// them like an unknown ticker and redirect.
 		if (asset === undefined || isGoodsAsset(assetParam)) {
@@ -95,14 +95,14 @@
 			'@type': 'Article',
 			headline: $_('privacy.guide_heading', { values: { asset: ticker } }),
 			description: $_(`privacy.guides.${guideKey}.meta_description`),
-			image: `${CANONICAL_ORIGIN}/og-image.png`,
+			image: `${siteOrigin()}/og-image.png`,
 			inLanguage: lang,
 			mainEntityOfPage: {
 				'@type': 'WebPage',
 				'@id': localizedUrl(lang, assetPath)
 			},
-			author: { '@id': `${CANONICAL_ORIGIN}/#organization` },
-			publisher: { '@id': `${CANONICAL_ORIGIN}/#organization` }
+			author: { '@id': `${siteOrigin()}/#organization` },
+			publisher: { '@id': `${siteOrigin()}/#organization` }
 		};
 		return [breadcrumbListSchema(crumbs), articleSchema];
 	});

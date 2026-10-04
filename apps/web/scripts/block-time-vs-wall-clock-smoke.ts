@@ -5,7 +5,7 @@
  * THE RULE, one line: **anything compared against a block time must be measured
  * in block time.**
  *
- * the maintainer asked the question that produced this guard: "i guess we should no longer
+ * The maintainer asked the question that produced this guard: "i guess we should no longer
  * rely on the user's clock on their local pc, right? ... we do not want to have
  * any sync issues in the future, or especially when money is being transfered."
  *
@@ -113,10 +113,8 @@ check(
 
 
 // ── the no-order thread must be clamped too ────────────────────────
-// [the maintainer, v1.7.7]: "sometimes users use the chatroom to discuss a specific order
-// with a permlink … but other times those same users might just want to message
-// each other to have a separate chat thread about their girlfriends and that
-// thread does not have an order id permlink attached to it at all."
+// [v1.7.7] Requirement: users chat both about a specific order (a thread with a permlink) and
+// about anything else (a thread with no order permlink at all).
 //
 // `''` is a REAL thread key, not an absence — distinct from BOTH an
 // order-scoped thread with the same peer AND from the legacy `PEER_WIDE` ('*'),
@@ -142,8 +140,7 @@ check(
 
 
 // ── STARRED takes the same basis as ARCHIVED ───────────────────────
-// [the maintainer, v1.7.7]: "you did not mention the Starred tab/folder though. did you
-// forget about that one?"
+// [v1.7.7] Requirement: the Starred folder is covered too.
 //
 // Not a live bug when he asked — resurrectArchivedOnNewActivity bails on
 // `folder !== 'archived'`, so a starred `at` never met a block time. But:
@@ -153,7 +150,7 @@ check(
 //      stamp ahead of local now, sort newer, and STARRED is evicted first. The
 //      v1.7.7 watermark fix introduced that skew — before it both were
 //      `new Date()`: consistently wrong, but comparable.
-//   2. the maintainer has floated resurrecting starred threads on new activity, which would
+//   2. The maintainer has floated resurrecting starred threads on new activity, which would
 //      make a bare `now` here the archive bug over again.
 check(
 	'13 toggleStar accepts the block time to clamp against',
@@ -181,10 +178,8 @@ check(
 
 
 // ── the LAST-WRITE-WINS guard itself (the worst instance) ──────────
-// [the maintainer, v1.7.7]: "if i have 20 messages sitting in my inbox, and i want every
-// single one of them to move to Archived and i click on one archive link for
-// each message every half second, then nothing will malfunction or break,
-// right? ... experienced users will be clicking stuff pretty damn fast."
+// [v1.7.7] Requirement: archiving 20 inbox messages one by one, a click every half second, must
+// not malfunction; experienced users click fast.
 //
 // The answer was no. `markLocalChange` stamped `Date.now()` and the sync
 // compared it to `res.data.updated_at` (BLOCK time) to decide "am I ahead of the
@@ -246,9 +241,8 @@ check(
 
 
 // ── ADVERSARIAL: a block time from the network is UNTRUSTED ────────
-// [the maintainer, v1.7.7]: "when we do the walkthroughs and deep deep before a release,
-// this is exactly the type of thing that a black hat would try to do. he wants
-// to break things."
+// [v1.7.7] Requirement: the pre-release walkthroughs try exactly what a hostile user would do
+// to break things.
 //
 // Morphit is FEDERATED — `last_message_at` arrives from whichever operator's
 // indexer the user picked, and v1.7.7 made it load-bearing in three places at

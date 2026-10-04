@@ -2,7 +2,7 @@
 	/**
 	 * /chat/[peer] — a single conversation view.
 	 *
-	 * Layout (cp402 [9]): this is an IMMERSIVE full-viewport route — the
+	 * Layout: this is an IMMERSIVE full-viewport route — the
 	 * [lang] layout detects it (isImmersiveChat), gives <main> a definite
 	 * height as a min-h-0 flex column, and suppresses the marketing footer,
 	 * so ConversationView (and this loading shell) fill the space below the
@@ -54,7 +54,7 @@
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { recordRecentPeer } from '$lib/chat/recentPeers';
 	import { markConversationRead } from '$lib/chat/readState';
-	import { liveIdentity } from '$lib/stores/identity';
+	import { liveIdentity, hasAnySession } from '$lib/stores/identity';
 
 	// peer is a route parameter; always defined when this page
 	// renders.  The non-null assertion is safe because SvelteKit
@@ -112,7 +112,7 @@
 	onMount(() => {
 		// Wrap bootstrap in try/catch so any thrown error has a
 		// surfaced path (line 71's bootError state was unwired
-		// pre-Part 72; now it's actually reachable). The most
+		// older; now it's actually reachable). The most
 		// likely failure mode is `getUserBlurtAccount()` throwing
 		// from a corrupt localStorage entry; the user gets a
 		// friendly message instead of a blank screen.
@@ -131,7 +131,7 @@
 			// back unlock screen if a keystore is remembered, or sign-in/
 			// import options otherwise (which lead to onboarding only if they
 			// genuinely need a new account). Carry ?next= so a successful
-			// login forwards them back to this conversation (cp356), mirroring
+			// login forwards them back to this conversation, mirroring
 			// the <RequireLiveSession /> locked-visitor redirect below.
 			const here = window.location.pathname + window.location.search + window.location.hash;
 			gotoLocale('/login?next=' + encodeURIComponent(here));
@@ -142,6 +142,19 @@
 			gotoLocale('/chat');
 			return;
 		}
+		// The conversation's reads name the account: they wait for a session
+		// (a locked visit is sent to unlock by <RequireLiveSession />; a
+		// session restored a moment later starts them).
+		pendingAccount = myAccount;
+	});
+
+	let pendingAccount: string | null = null;
+	$effect(() => {
+		if (!$hasAnySession || pendingAccount === null || me !== null) return;
+		bootConversation(pendingAccount);
+	});
+
+	function bootConversation(myAccount: string): void {
 		me = myAccount;
 		// Record this conversation for the inbox fallback list. Idempotent.
 		recordRecentPeer(peer);
@@ -160,7 +173,7 @@
 				}>;
 
 				// Phase B read-ack — moved INSIDE the lazy-load .then
-				// callback (Part 72). Pre-Part-72 this fired in the
+				// callback. Pre-Part-72 this fired in the
 				// onMount body unconditionally, so a chunk-load failure
 				// would still mark the conversation read despite the
 				// user never having seen it. Now the ack only fires
@@ -201,7 +214,7 @@
 				// over-ack if a new message arrives during the mount
 				// frame; mitigated by re-opening the conversation
 				// (which re-acks).
-				// cp446 — the on-chain ack names the discussion, so reading one thread
+				// the on-chain ack names the discussion, so reading one thread
 				// with a peer never silences the others, on this device or any other.
 				markConversationRead(peer, orderPermlink ?? '');
 				const live = get(liveIdentity);
@@ -237,7 +250,7 @@
 		// (a future revisit could surface a "your chat is
 		// receivable" badge in some other route once this resolves).
 		void import('$lib/chat/ensureChatIdentity').then((m) => m.ensureChatIdentityPublished());
-	});
+	}
 </script>
 
 <Head routeKey="chat_conversation" noindex />
@@ -250,10 +263,7 @@
 	</section>
 {:else if lazyLoadError}
 	<section class="mx-auto max-w-2xl px-4 py-8">
-		<p class="text-red-700 dark:text-red-300">
-			{$_('chat.lazy_load_failed')}
-		</p>
-		<p class="mt-2 text-sm text-ink-500 dark:text-ink-500">{lazyLoadError}</p>
+		<p class="text-red-700 dark:text-red-300">{lazyLoadError}</p>
 	</section>
 {:else if me && ConversationViewComponent}
 	{@const Component = ConversationViewComponent}

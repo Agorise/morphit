@@ -2,19 +2,17 @@
 /**
  * address-history-helper-smoke.
  *
- * Part 122 cp26 sentinel for the client-side address-reuse
- * history helper.  Validates the load/record/find/clear behavior
- * end-to-end against an in-memory localStorage shim.
- *
- * Why this exists: the helper is the user-facing privacy
- * affordance for the reuse-warning chip.  Bugs in dedupe,
- * trim-to-max, or roundtrip silently degrade the warning's
- * reliability and the user never sees that.  This smoke pins
- * the contract so refactors can't drift.
+ * The address-reuse history behind the address-share modal's "you shared
+ * this address before" warning, run end to end against an in-memory
+ * localStorage. The history keeps salted HMAC tags, never the addresses,
+ * and an older build's plaintext record is converted and deleted.
+ * Unit coverage: src/lib/privacy/addressHistory.test.ts.
  */
 
-// Inline localStorage shim — Node has no DOM.  Stand up a Map-
-// backed mock with the surface area the helper uses.
+// A module (top-level await below), not a global script.
+export {};
+
+// Node has no DOM: a Map-backed localStorage with the surface the module uses.
 class MemStorage {
 	private data = new Map<string, string>();
 	getItem(k: string): string | null {
@@ -35,171 +33,90 @@ class MemStorage {
 	key(i: number): string | null {
 		return [...this.data.keys()][i] ?? null;
 	}
+	dump(): string {
+		return [...this.data.values()].join('\n');
+	}
 }
 const storage = new MemStorage();
 (globalThis as unknown as { localStorage: MemStorage }).localStorage = storage;
 
-import {
-	loadAddressHistory,
-	recordAddressShare,
-	findPriorShare,
+const {
+	ADDRESS_HISTORY_KEY,
+	LEGACY_ADDRESS_HISTORY_KEY,
+	addressHistoryCount,
 	clearAddressHistory,
-	type AddressHistoryEntry
-} from '../src/lib/privacy/addressHistory';
+	recordAddressShare,
+	shareAddress,
+	wasSharedBefore
+} = await import('../src/lib/privacy/addressHistory');
 
 let failed = 0;
 let passed = 0;
-
-function pass(name: string): void {
-	console.log(`  ✓ ${name}`);
-	passed++;
-}
-function fail(name: string, detail: string): void {
-	console.error(`  ✗ ${name}`);
-	console.error(`      ${detail}`);
-	failed++;
+function check(name: string, ok: boolean, detail = ''): void {
+	if (ok) {
+		console.log(`  ✓ ${name}`);
+		passed++;
+	} else {
+		console.error(`  ✗ ${name}${detail ? `\n      ${detail}` : ''}`);
+		failed++;
+	}
 }
 
 console.log('\n── address-history-helper smoke ──────────────────────\n');
 
-// ── Scenario 1 — empty history on first load ─────────────────
+const BTC = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
+const XMR = '44AFFq5kSiGBoZ4NMDwYtN18obc8AemS33DBLWs3H7otXft3XjrpDtQGv7SqSsaBYBb98uNbr2VBBEt7f2wfn3RVGQBEP3A';
+
 storage.clear();
-{
-	const h = loadAddressHistory();
-	if (h.length === 0) pass('empty history on first load');
-	else fail('empty history on first load', `got ${h.length} entries`);
-}
+check('empty history on first load', addressHistoryCount() === 0);
+check('nothing was shared before on an empty history', !(await wasSharedBefore('BTC', BTC)));
 
-// ── Scenario 2 — record then load roundtrip ──────────────────
-{
-	const entry: AddressHistoryEntry = {
-		asset: 'BTC',
-		address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-		sharedAt: '2026-05-17T20:00:00Z'
-	};
-	recordAddressShare(entry);
-	const h = loadAddressHistory();
-	if (h.length === 1 && h[0].address === entry.address) {
-		pass('record + load roundtrip');
-	} else {
-		fail('record + load roundtrip', `expected 1 entry, got ${h.length}`);
-	}
-}
+await recordAddressShare('BTC', BTC);
+check('a recorded address is recognised', await wasSharedBefore('BTC', BTC));
+check('the asset is part of the identity (same string, other asset → not shared)', !(await wasSharedBefore('XMR', BTC)));
+check('another address is not recognised', !(await wasSharedBefore('BTC', `${BTC}x`)));
+check('storage holds no plaintext address', !storage.dump().includes(BTC), storage.dump());
 
-// ── Scenario 3 — findPriorShare matches ──────────────────────
-{
-	const found = findPriorShare(
-		'BTC',
-		'1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-	);
-	if (found !== null && found.asset === 'BTC') {
-		pass('findPriorShare matches recorded entry');
-	} else {
-		fail('findPriorShare matches recorded entry', `got ${JSON.stringify(found)}`);
-	}
-}
+await recordAddressShare('BTC', BTC);
+check('recording the same address twice keeps one entry', addressHistoryCount() === 1);
 
-// ── Scenario 4 — findPriorShare null for unknown ─────────────
-{
-	const found = findPriorShare(
-		'BTC',
-		'1NotARealAddressJustForTestingNeverUsed'
-	);
-	if (found === null) pass('findPriorShare returns null for unknown address');
-	else fail('findPriorShare returns null for unknown address', `got ${JSON.stringify(found)}`);
-}
+for (let i = 0; i < 205; i++) await recordAddressShare('BTC', `addr-${i}`);
+check('the history is bounded at 200 entries', addressHistoryCount() === 200, String(addressHistoryCount()));
+check('the oldest entries are the ones dropped', !(await wasSharedBefore('BTC', BTC)) && (await wasSharedBefore('BTC', 'addr-204')));
 
-// ── Scenario 5 — different asset, same address: independent ──
-{
-	// (theoretical) — same address string under a different asset
-	// must be tracked separately.  Real addresses don't collide
-	// across assets, but the helper should not treat them as the
-	// same regardless.
-	const found = findPriorShare(
-		'XMR',
-		'1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-	);
-	if (found === null) pass('different-asset same-address-string is independent');
-	else fail('different-asset same-address-string is independent', 'cross-asset match');
-}
+clearAddressHistory();
+check('clear forgets everything', addressHistoryCount() === 0 && storage.getItem(ADDRESS_HISTORY_KEY) === null);
 
-// ── Scenario 6 — dedupe: re-recording updates timestamp ──────
-{
-	const updated: AddressHistoryEntry = {
-		asset: 'BTC',
-		address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-		sharedAt: '2026-05-17T21:00:00Z',
-		orderPermlink: '@alice/abc'
-	};
-	recordAddressShare(updated);
-	const h = loadAddressHistory();
-	if (h.length === 1 && h[0].sharedAt === updated.sharedAt) {
-		pass('dedupe: re-record updates timestamp + orderPermlink');
-	} else {
-		fail(
-			'dedupe: re-record updates timestamp + orderPermlink',
-			`got length=${h.length}, sharedAt=${h[0]?.sharedAt}`
-		);
-	}
+// A share that fails is not a reuse: the retry must not warn.
+let threw = false;
+try {
+	await shareAddress('XMR', XMR, async () => {
+		throw new Error('network down');
+	});
+} catch {
+	threw = true;
 }
+check('a failed send rethrows', threw);
+check('…and the address is not remembered', !(await wasSharedBefore('XMR', XMR)));
+await shareAddress('XMR', XMR, async () => {});
+await new Promise((r) => setTimeout(r, 50));
+check('a successful send is remembered', await wasSharedBefore('XMR', XMR));
 
-// ── Scenario 7 — rolling buffer trims at MAX_ENTRIES (200) ───
+// Older builds kept addresses, times and order ids in plaintext.
 storage.clear();
-{
-	for (let i = 0; i < 250; i++) {
-		recordAddressShare({
-			asset: 'BTC',
-			address: `addr-${i}`,
-			sharedAt: `2026-05-17T${String(i % 24).padStart(2, '0')}:00:00Z`
-		});
-	}
-	const h = loadAddressHistory();
-	if (h.length === 200) {
-		pass('rolling buffer trims to MAX_ENTRIES=200');
-	} else {
-		fail('rolling buffer trims to MAX_ENTRIES=200', `got ${h.length}`);
-	}
-	// And the oldest 50 should have been dropped.
-	const first = findPriorShare('BTC', 'addr-0');
-	if (first === null) pass('oldest entries dropped (addr-0 not found)');
-	else fail('oldest entries dropped', 'addr-0 still in history');
-	const recent = findPriorShare('BTC', 'addr-249');
-	if (recent !== null) pass('recent entries retained (addr-249 found)');
-	else fail('recent entries retained', 'addr-249 not in history');
-}
+storage.setItem(
+	LEGACY_ADDRESS_HISTORY_KEY,
+	JSON.stringify({
+		entries: [{ asset: 'BTC', address: BTC, sharedAt: '2026-05-17T20:00:00Z', orderPermlink: 'o-1' }]
+	})
+);
+check('a legacy plaintext address is still recognised', await wasSharedBefore('BTC', BTC));
+check('…and the plaintext record is deleted', storage.getItem(LEGACY_ADDRESS_HISTORY_KEY) === null);
+check('…with nothing readable left behind', !storage.dump().includes(BTC) && !storage.dump().includes('o-1'));
 
-// ── Scenario 8 — clear empties ───────────────────────────────
-{
-	clearAddressHistory();
-	const h = loadAddressHistory();
-	if (h.length === 0) pass('clear empties history');
-	else fail('clear empties history', `got ${h.length} entries`);
-}
-
-// ── Scenario 9 — corrupted JSON returns empty (fail-open) ────
-{
-	storage.setItem('morphit.address-history.v1', 'not valid json {[}');
-	const h = loadAddressHistory();
-	if (h.length === 0) pass('corrupted JSON returns empty (fail-open)');
-	else fail('corrupted JSON returns empty', `got ${h.length}`);
-}
-
-// ── Scenario 10 — wrong version returns empty (fail-open) ────
-{
-	storage.setItem(
-		'morphit.address-history.v1',
-		JSON.stringify({ v: 99, entries: [] })
-	);
-	const h = loadAddressHistory();
-	if (h.length === 0) pass('wrong version returns empty (fail-open)');
-	else fail('wrong version returns empty', `got ${h.length}`);
-}
-
-const total = passed + failed;
-console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
-
+console.log('');
 if (failed > 0) {
-	console.error('\naddress-history-helper smoke FAILED');
+	console.error(`✗ ${failed} of ${passed + failed} address-history-helper checks FAILED`);
 	process.exit(1);
 }
-console.log(`✓ all ${total} address-history-helper scenarios passed`);
+console.log(`✓ all ${passed} address-history-helper checks passed`);

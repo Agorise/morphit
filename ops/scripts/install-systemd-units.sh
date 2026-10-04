@@ -36,11 +36,18 @@
 #   sudo systemctl enable --now morphit-indexer
 #   sudo systemctl enable --now morphit-relay
 #
-# Note: services run as a non-root user (matrix-bot) need their
-# WorkingDirectory readable by that user.  Under /opt/morphit that's
-# automatic; if you cloned into a home directory, make sure the path
-# is traversable (a home on the root filesystem with normal perms is
-# fine; an encrypted or 0700 home is not).
+# The indexer and the relay run as their own unprivileged users
+# (morphit-indexer, morphit-relay; members of the `morphit` group so they can
+# read the config).  This script creates them if they are missing, and
+# installs the root-owned pre-start helper both units call
+# (/usr/local/lib/morphit/morphit-service-perms.sh).
+#
+# Note: services that run as a non-root user need their WorkingDirectory
+# readable by that user.  Under /opt/morphit that's automatic; if you cloned
+# into a home directory, make sure the path is traversable (a home on the root
+# filesystem with normal perms is fine; an encrypted or 0700 home is not).
+# Keep the checkout root-owned (`sudo chown -R root:root <checkout>`): root
+# runs the monitors and `morphit-ops` from it.
 #
 set -euo pipefail
 
@@ -78,6 +85,27 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
 	echo "       Try: sudo bash $0" >&2
 	exit 1
 fi
+
+# The users the indexer and relay units run as, and the group that reads
+# the config (idempotent).
+getent group morphit >/dev/null || groupadd --system morphit
+for u in morphit-indexer morphit-relay; do
+	getent group "$u" >/dev/null || groupadd --system "$u"
+	if ! getent passwd "$u" >/dev/null; then
+		useradd --system --gid "$u" --groups morphit --no-create-home \
+			--home-dir /nonexistent --shell /usr/sbin/nologin "$u"
+		echo "  created user $u"
+	elif ! id -nG "$u" | tr ' ' '\n' | grep -qx morphit; then
+		usermod --append --groups morphit "$u"
+	fi
+done
+install -d -o root -g root -m 0755 /usr/local/lib/morphit
+# Same path rewrite as the units, so it looks after THIS checkout's env files.
+sed "s#${DEFAULT_DIR}#${REPO_DIR}#g" "$REPO_DIR/ops/scripts/morphit-service-perms.sh" \
+	>/usr/local/lib/morphit/morphit-service-perms.sh
+chown root:root /usr/local/lib/morphit/morphit-service-perms.sh
+chmod 0755 /usr/local/lib/morphit/morphit-service-perms.sh
+echo "  installed /usr/local/lib/morphit/morphit-service-perms.sh"
 
 installed=0
 for unit in "${CORE_UNITS[@]}"; do

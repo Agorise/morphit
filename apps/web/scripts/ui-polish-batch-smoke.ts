@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the cp442 UI-polish batch (the maintainer, 2026-07-08).
+ * Smoke: the UI-polish batch.
  *
  *  1. WALLET CARD — the fiat approximation sits on the balance's baseline,
  *     separated by exactly one space; the three columns get an even gutter.
@@ -60,7 +60,7 @@ check('send validation lives in a pure, testable module', /export function valid
 check('amount precision is capped at BLURT\u2019s 3 decimals', /\^\\d\*\(\\\.\\d\{0,3\}\)\?\$/.test(validation));
 check('a sub-precision amount cannot become 0.000 BLURT', /MIN_BLURT = 0\.001/.test(validation) && /n >= MIN_BLURT/.test(validation));
 check('the modal uses the shared validator', /import \{[^}]*\bvalidateBlurtAmount\b[^}]*\} from '\$lib\/blurt\/sendValidation';/.test(send) && /validateBlurtAmount\(amountParse\.value, blurtBalance\)/.test(send));
-// deep-deep: "use full balance" must FLOOR, never round — toFixed(3) can fill
+// "use full balance" must FLOOR, never round — toFixed(3) can fill
 // the field with more BLURT than the user has, which the validator then rejects.
 check('use-full-balance floors to BLURT precision (never rounds up)', /floorToBlurtPrecision\(blurtBalance\)/.test(send) && !/amountInput = blurtBalance\.toFixed\(3\)/.test(send));
 check('canSend requires the active-key password', /passwordFilled/.test(send) && /canSend = \$derived\([\s\S]{0,220}passwordFilled/.test(send));
@@ -84,10 +84,10 @@ check('no inline copy of the four-class incantation remains', !/hover:bg-emerald
 check('download cards gained the hover', (download.match(/card-hover-emerald/g) ?? []).length >= 4);
 check('the already-emerald sections were left alone (hover would dim their border)', /<section class="card border-morphit-emerald\/40 bg-morphit-emerald\/5">/.test(download));
 
-// ─── 5. double-green focus border, repo-wide (cp468) ─────────────────
+// ─── 5. double-green focus border, repo-wide ─────────────────
 // The §2 site-wide rule turns a text field's border emerald + paints a 1px
 // ring on :focus-visible. A field that is `border-2` (2px) reads that as a
-// 2px emerald border PLUS the ring = TWO green edges (the maintainer, tester3). A field
+// 2px emerald border PLUS the ring = TWO green edges (tester3). A field
 // that ALSO declares its own emerald ring double-declares the same thing.
 // The fix made `border` (1px) + app.css the single source for EVERY text
 // field; these guards walk the whole .svelte tree so a new field can't

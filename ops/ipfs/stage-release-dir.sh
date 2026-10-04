@@ -1,6 +1,6 @@
 #!/bin/sh
 # stage-release-dir.sh — reconstruct the canonical, DETERMINISTIC IPFS release
-# directory for a given tag. (v1.9.5, the maintainer)
+# directory for a given tag. (v1.9.5)
 #
 # SINGLE SOURCE OF TRUTH for what goes into the release's IPFS directory, called
 # by BOTH:
@@ -14,7 +14,7 @@
 # That is the whole point of one shared script: drift here = CID mismatch = the
 # release guard rejects every release.
 #
-# DISCOVERABILITY (v1.9.5, the maintainer): the directory is a rich, self-describing bundle —
+# DISCOVERABILITY (v1.9.5): the directory is a rich, self-describing bundle —
 # a generated README.md, a keyword-tagged metadata.json, and the release notes —
 # so IPFS content crawlers (and humans browsing a gateway) can find + identify it.
 #
@@ -154,7 +154,7 @@ HAS_NOTES=0
 } > "$OUT/README.md"
 
 # 5. metadata.json — DETERMINISTIC ONLY. Fixed key order. No timestamp/host/random.
-# v1.9.5 (the maintainer): enriched for discoverability — a keywords array + pointers to the
+# v1.9.5: enriched for discoverability — a keywords array + pointers to the
 # README + notes. Every value is still tag/checksum-derived or fixed text, so both
 # callers emit byte-identical JSON. release_notes is present only when the tag
 # shipped notes (both paths agree via HAS_NOTES, so it stays deterministic).

@@ -1,5 +1,5 @@
 #!/bin/sh
-# morphit-ddns-setup.sh (cp596) — one-shot setup of dynamic DNS on a MANUAL
+# morphit-ddns-setup.sh — one-shot setup of dynamic DNS on a MANUAL
 # (non-Ansible) install.  Installs the updater + a 5-minute timer that keeps
 # your domain's A record pointed at this box's current public IP, so a home
 # node stays reachable at your OWN domain even when your ISP changes the IP.
@@ -43,7 +43,7 @@ esac
 mkdir -p /etc/morphit
 umask 077
 cat > "$ENV_FILE" <<EOF
-# Morphit dynamic DNS config (cp596).  CONTAINS YOUR PROVIDER SECRET — keep 0600.
+# Morphit dynamic DNS config.  CONTAINS YOUR PROVIDER SECRET — keep 0600.
 # The updater replaces {ip} with this box's detected public IP on each run.
 MORPHIT_DDNS_UPDATE_URL=$URL
 EOF
@@ -59,7 +59,7 @@ echo "  + installed $LIB/morphit-ddns-update.sh"
 
 # 3. systemd service (oneshot) + timer.
 cat > /etc/systemd/system/morphit-ddns.service <<EOF
-# Morphit — dynamic DNS update (cp596).  Pushes this box's current public IP to
+# Morphit — dynamic DNS update.  Pushes this box's current public IP to
 # your DNS provider.  See ops/ddns/morphit-ddns-update.sh for what it does.
 [Unit]
 Description=Morphit dynamic DNS update
@@ -93,7 +93,7 @@ SyslogIdentifier=morphit-ddns
 EOF
 
 cat > /etc/systemd/system/morphit-ddns.timer <<EOF
-# Morphit — dynamic DNS timer (cp596).  Checks the public IP shortly after boot
+# Morphit — dynamic DNS timer.  Checks the public IP shortly after boot
 # and every 5 minutes; the updater only calls the provider when it changed.
 [Unit]
 Description=Timer for morphit-ddns.service (keep your home DNS current)

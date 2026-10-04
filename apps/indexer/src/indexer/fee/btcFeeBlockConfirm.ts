@@ -18,25 +18,37 @@
  * good as this node's own, possibly unconfirmed, key history.) So a signature
  * rule is neither sound nor deterministic.
  *
- * WHAT IS SOUND. Inclusion is what independent endpoints agree on. For a
+ * WHAT IS SOUND. Inclusion is what several operators' endpoints agree on. For a
  * block that holds a numbering-relevant op — a morphit_order_v1 op in
  * per-order-address mode (fee_method 'btc', no txid) while an xpub pin is in
- * force, or any morphit_release_v1 op (it can move the pin) — ask the RPC pool
- * for the same block and require TWO independent operators to return exactly
- * the same transaction (id and content) at each such position as the block
- * being applied. A forged transaction does not survive that; a block that
- * fails is not applied (the error rolls the whole block back and the poller
- * fetches it again, normally from another endpoint).
+ * force, any morphit_release_v1 op (it can move the pin) or any morphit_rpc_v1
+ * op (it adds RPC nodes, each a quorum operator) — ask the RPC pool for the
+ * same block and require TWO operators (counted by node name) to return exactly the same
+ * transaction (id, content and signatures) at each such position as the block
+ * being applied. A forged transaction, or a real one served with its
+ * signatures stripped, does not survive that; a block that fails is not
+ * applied (the error rolls the whole block back and the poller fetches it
+ * again, normally from another endpoint).
  *
- * LIMITS, stated. (1) A node whose pool reaches fewer than two operators
- * cannot cross-check and applies the block single-source (logged); (2) when
- * two operators are reachable but do not agree for MAX_UNCONFIRMED_ATTEMPTS
- * tries (both lagging, flapping), the block is applied single-source rather
- * than stalling the node forever (logged as an error) — but a quorum that
- * AGREES on different content is never overridden; (3) a CENSORED block (a
- * real op withheld) looks like a block without such ops and is not caught
- * here. The browser's cross-check with other instances (btcFeeCrossCheck,
- * V3-5) is the backstop for all three.
+ * NEVER SINGLE-SOURCE when the pool has two operators or more. One reachable
+ * operator out of several (a Tor or I2P blip on the others) is not a quorum:
+ * the block waits until two agree, however long that takes — logged as an
+ * error every MAX_UNCONFIRMED_ATTEMPTS tries so the operator sees a stall. It
+ * used to be applied on one operator's word after a few tries, which is
+ * exactly when a hostile node is the only one answering.
+ *
+ * The agreement is the trusted-read rule (BlurtClient majorityRead): at least
+ * two operators agree and they are a majority of those that answered. A lone
+ * disagreeing node cannot stall the indexer at every such block, and it
+ * cannot confirm a block either. Two operators that agree on DIFFERENT
+ * content from the block being applied prove that block is not the chain's.
+ *
+ * LIMITS, stated. (1) A pool with only ONE operator configured has nothing to
+ * compare with and applies such blocks single-source (logged) — its operator
+ * already trusts that node with everything; (2) a CENSORED block (a real op
+ * withheld) looks like a block without such ops and is not caught here. The
+ * browser's cross-check with other instances (btcFeeCrossCheck, V3-5) is the
+ * backstop for the BTC numbering.
  */
 import type pg from 'pg';
 
@@ -46,13 +58,13 @@ import { addressModePermlink, btcPinAt } from '$indexer/fee/btcFeeAddressIndex';
 
 const log = logger('btc-fee-block-confirm');
 
-/** After this many failed attempts at reaching agreement for one block, apply
- *  it single-source (never when the agreed content differs). */
+/** Every this many failed attempts at reaching agreement for one block, the
+ *  stall is logged as an error. The block is never applied single-source. */
 export const MAX_UNCONFIRMED_ATTEMPTS = 5;
 
 export class BlockNotConfirmedError extends Error {
 	constructor(blockNum: number, why: string) {
-		super(`block ${blockNum} not confirmed by independent RPC operators (${why}); retrying`);
+		super(`block ${blockNum} not confirmed by two RPC operators (${why}); retrying`);
 		this.name = 'BlockNotConfirmedError';
 	}
 }
@@ -68,8 +80,8 @@ function parseJson(s: unknown): unknown {
 	}
 }
 
-/** Positions of transactions carrying a release op, and of those carrying an
- *  address-mode BTC order op. */
+/** Positions of transactions carrying a release or rpc-directory op (the
+ *  official ops), and of those carrying an address-mode BTC order op. */
 function relevantPositions(block: BlockHeader): { release: number[]; btcOrder: number[] } {
 	const release: number[] = [];
 	const btcOrder: number[] = [];
@@ -80,7 +92,7 @@ function relevantPositions(block: BlockHeader): { release: number[]; btcOrder: n
 		for (const op of Array.isArray(t?.operations) ? t.operations : []) {
 			if (!Array.isArray(op) || op[0] !== 'custom_json') continue;
 			const body = op[1] as { id?: unknown; json?: unknown } | undefined;
-			if (body?.id === 'morphit_release_v1') rel = true;
+			if (body?.id === 'morphit_release_v1' || body?.id === 'morphit_rpc_v1') rel = true;
 			if (body?.id === 'morphit_order_v1' && addressModePermlink(parseJson(body.json)) !== null)
 				btc = true;
 		}
@@ -133,7 +145,7 @@ export async function confirmFeeRelevantTransactions(
 
 	let operators = 0;
 	try {
-		operators = blurt.reachableOperatorCount();
+		operators = blurt.operatorCount();
 	} catch {
 		operators = 0;
 	}
@@ -141,7 +153,13 @@ export async function confirmFeeRelevantTransactions(
 		log.warn('fee_relevant_block_single_source', { block: blockNum, operators });
 		return 'single_source';
 	}
-	const local = positionsKey(block, positions);
+	let local: string;
+	try {
+		local = positionsKey(block, positions);
+	} catch {
+		// Content no honest node serves (it cannot even be keyed): fetch again.
+		throw new BlockNotConfirmedError(blockNum, 'served content cannot be compared');
+	}
 	let agreed: { key: string } | null = null;
 	try {
 		agreed = await blurt.condenserAgreed<BlockHeader>(
@@ -158,21 +176,19 @@ export async function confirmFeeRelevantTransactions(
 		return 'confirmed';
 	}
 	if (agreed !== null) {
-		// Independent operators agree on DIFFERENT content: the block we hold is
+		// Operators (counted by node name) agree on DIFFERENT content: the block we hold is
 		// not the chain's. Never applied, however many times it comes back.
 		log.error('fee_relevant_block_forged', { block: blockNum });
 		throw new BlockNotConfirmedError(
 			blockNum,
-			'content differs from what independent operators serve'
+			'content differs from what operators (counted by node name) serve'
 		);
 	}
 	const n = (attempts.get(blockNum) ?? 0) + 1;
 	attempts.set(blockNum, n);
 	if (attempts.size > 100) attempts.clear();
-	if (n >= MAX_UNCONFIRMED_ATTEMPTS) {
-		attempts.delete(blockNum);
-		log.error('fee_relevant_block_unconfirmed_applied', { block: blockNum, attempts: n });
-		return 'single_source';
+	if (n % MAX_UNCONFIRMED_ATTEMPTS === 0) {
+		log.error('fee_relevant_block_unconfirmed', { block: blockNum, attempts: n });
 	}
 	throw new BlockNotConfirmedError(blockNum, 'no two operators agreed yet');
 }

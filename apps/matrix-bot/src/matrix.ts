@@ -15,8 +15,11 @@
 import {
 	MatrixClient,
 	SimpleFsStorageProvider,
-	RustSdkCryptoStorageProvider
+	RustSdkCryptoStorageProvider,
+	getRequestFn,
+	setRequestFn
 } from 'matrix-bot-sdk';
+import { parseSocksProxy, SocksHttpAgent, SocksHttpsAgent } from './socksAgent.ts';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MatrixMxid } from '@morphit/operator-config';
@@ -29,6 +32,30 @@ export interface MatrixSender {
 
 	/** Clean shutdown. */
 	stop(): Promise<void>;
+}
+
+/**
+ * Route every request the Matrix SDK makes through a SOCKS5 proxy (Tor),
+ * name resolution included (MORPHIT_MATRIX_BOT_SOCKS_PROXY). Loopback
+ * homeservers are still reached directly. No-op when `proxyUrl` is empty.
+ *
+ * The SDK performs all HTTP through one replaceable `request`-compatible
+ * function; wrapping it with a SOCKS agent covers every call it makes —
+ * sync, sending, and the end-to-end-encryption key traffic alike.
+ */
+export function installMatrixProxy(proxyUrl: string | undefined): void {
+	const proxy = parseSocksProxy(proxyUrl);
+	if (proxy === null) return;
+	const httpAgent = new SocksHttpAgent(proxy);
+	const httpsAgent = new SocksHttpsAgent(proxy);
+	const inner = getRequestFn();
+	setRequestFn((params: Record<string, unknown>, cb: unknown) => {
+		const uri = String(params['uri'] ?? params['url'] ?? '');
+		const agent = uri.startsWith('https:') ? httpsAgent : httpAgent;
+		// `forever` would make `request` build its own keep-alive agent and
+		// ignore ours; the SOCKS agents keep connections alive themselves.
+		return inner({ ...params, agent, forever: false }, cb);
+	});
 }
 
 /** A drop-in replacement used in dry-run mode + tests.  Logs

@@ -2,7 +2,7 @@
  * update-banner-user-consent-smoke — the update snackbar reloads ONLY on an
  * explicit "Load it now" click, never on its own, and can't get stuck hidden.
  *
- * WHY (cp339): the banner broke on PC because (a) an AUTONOMOUS 'controllerchange'
+ * WHY: the banner broke on PC because (a) an AUTONOMOUS 'controllerchange'
  * listener (module/effect scope) auto-reloaded the page whenever the service
  * worker activated — refreshing behind the user's back — and (b) an "applying"
  * flag persisted in sessionStorage could get stuck `true` after a reload that
@@ -10,7 +10,7 @@
  * no AUTONOMOUS controllerchange auto-reload, and "applying" is in-memory only
  * (a reload resets it, so it can't wedge). "Later" only closes the snackbar.
  *
- * cp368 refinement: "Load it now" now registers a controllerchange listener
+ * refinement: "Load it now" now registers a controllerchange listener
  * INSIDE applyUpdate (so it fires only after the user clicks) and reloads the
  * instant the new worker takes control — one tap lands the new bundle on mobile.
  * Still consent-gated: the listener never exists outside applyUpdate.
@@ -39,7 +39,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 
 console.log('\n── update banner: user-consent only, never stuck ──────');
 
-// cp368: "Load it now" now waits for the new worker to take CONTROL
+// "Load it now" now waits for the new worker to take CONTROL
 // (controllerchange) before reloading, so a single tap lands the new bundle
 // even on mobile (where the old fixed 250ms reload could beat SW activation
 // and leave the tab on the stale bundle, making the version poll re-offer).
@@ -88,10 +88,10 @@ check('snackbar condition includes !applying', /&&\s*!applying/.test(src));
 check('snackbar dismiss is version-aware (dismissedForCurrent)', /!dismissedForCurrent/.test(src));
 
 // ── v1.1.5: the real "twice on mobile" fix — fresh shell on navigation ──────
-// cp364→438 chased the SW handoff timing (and cp438 added a cross-reload
+// Several earlier fixes chased the SW handoff timing (and a later change added a cross-reload
 // "resume + attempt cap" marker) — none held on-device. Root cause: a reload
 // could be answered from a stale HTTP-cached index.html, so the poll re-detected
-// the mismatch and cp438's resume machinery re-surfaced the snackbar at its cap
+// the mismatch and the resume machinery re-surfaced the snackbar at its cap
 // (the visible SECOND fire). Fix: the service worker fetches navigations with
 // `cache:'reload'` (fresh shell from origin every time), and the resume
 // machinery is REMOVED. These checks lock in that shape.
@@ -121,7 +121,7 @@ check(
 	/catch\s*\{[\s\S]*?cache\.match/.test(sw)
 );
 
-// ─── the snackbar must never offer the SAME build twice (v1.8.14, the maintainer) ───
+// ─── the snackbar must never offer the SAME build twice (v1.8.14) ───
 // the maintainer reported this FIVE times. Earlier attempts widened the SW handoff
 // timeout, which only narrows the race: if the reload lands before the new
 // worker takes control, the verify.json poll re-detects the same mismatch and

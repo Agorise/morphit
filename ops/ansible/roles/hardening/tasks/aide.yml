@@ -30,13 +30,13 @@
     path: /var/lib/aide/aide.db
   register: hardening_aide_db_stat
 
-# cp680 — the AIDE baseline hashes the WHOLE filesystem, which on a low-power CPU
+# the AIDE baseline hashes the WHOLE filesystem, which on a low-power CPU
 # takes 20-45+ min and used to BLOCK the wizard (blowing the 15-min target).
 # It doesn't need to: the baseline is built from the freshly-installed files, and
 # whether it finishes during the wizard or shortly after makes no security
 # difference. So we DEFER it to a low-priority background oneshot that runs after
 # the install and yields to the indexer's initial chain sync. The wizard no
-# longer waits on it. (Supersedes the cp678 in-wizard heartbeat.)
+# longer waits on it. (Supersedes the in-wizard heartbeat.)
 - name: Install the deferred AIDE-baseline builder script
   ansible.builtin.copy:
     dest: /usr/local/lib/morphit/morphit-aide-init.sh
@@ -54,7 +54,7 @@
       # interrupted run is discarded and rebuilt. The service stays enabled until
       # the baseline exists, so an interrupted build simply retries on next boot.
       #
-      # Failure-visible (cp682): if the build FAILS, this exits non-zero WITHOUT
+      # Failure-visible: if the build FAILS, this exits non-zero WITHOUT
       # self-removing, so the unit stays in systemd's "failed" state — which
       # morphit-systemd-monitor (it auto-watches every morphit-*.service) reports
       # to the operator's Matrix DM. It also logs a high-priority error and drops
@@ -120,7 +120,7 @@
     enabled: true
     daemon_reload: true
 
-# cp681 — the START of the baseline build is deferred to the play's post_tasks,
+# the START of the baseline build is deferred to the play's post_tasks,
 # NOT fired here. AIDE watches {{ morphit_repo_path }}/apps/* + /etc/morphit +
 # the morphit-*.service/.timer units, and those are written by the LATER morphit
 # role. Starting the build here (in the hardening role, before the morphit role
@@ -146,8 +146,14 @@
     mode: '0755'
     content: |
       #!/bin/sh
-      # Daily AIDE integrity check.  Output goes to operator email.
-      # cp680 — skip quietly until the deferred baseline has finished building,
-      # so we don't email a "no database" error while it's still building.
+      # Daily AIDE integrity check.  The latest result stays on this server in
+      # /var/log/morphit/aide-check.log{{ ' and is mailed to the operator' if (morphit_alert_mail_enabled | bool) else '' }}.
+      # Quiet until the deferred baseline has finished building (no "no
+      # database" report while it is still building).
       [ -f /var/lib/aide/aide.db ] || exit 0
-      aide --check 2>&1 | mail -s "[morphit] AIDE check $(date +%F)" {{ morphit_alert_email_to }}
+      mkdir -p /var/log/morphit
+      aide --check > /var/log/morphit/aide-check.log.new 2>&1
+      mv /var/log/morphit/aide-check.log.new /var/log/morphit/aide-check.log
+      {% if morphit_alert_mail_enabled | bool %}
+      mail -s "[morphit] AIDE check $(date +%F)" {{ morphit_alert_email_to | quote }} < /var/log/morphit/aide-check.log
+      {% endif %}

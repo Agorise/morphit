@@ -1,7 +1,7 @@
 /**
  * Morphit — markdown-to-plaintext helper for JSON-LD.
  *
- * cp119-A1: FAQ entries in i18n files use light markdown
+ * FAQ entries in i18n files use light markdown
  * (`**bold**`, backticks, paragraph `\n\n`, bullet `\n • `, and
  * occasional `[link](url)`) so the rendered HTML reads well.
  * Feeding those raw strings into `faqPageSchema()` is wrong:
@@ -15,7 +15,7 @@
  * i18n source — only the SERP-bound text gets stripped.
  *
  * Scope: SAFE strip of the patterns actually used in Morphit's
- * FAQ content as of cp117 (cataloged at cp119-A1 audit).  Not
+ * FAQ content (cataloged audit).  Not
  * a CommonMark parser; deliberately conservative.  If a new
  * markdown construct lands in FAQ copy, add a case here +
  * a fixture to the smoke.
@@ -40,11 +40,11 @@ export function stripMarkdown(input: string): string {
 		return `\u0000C${code.length - 1}\u0000`;
 	});
 
-	// cp406 — order `terms` may use headings and horizontal rules (the FAQ does
+	// order `terms` may use headings and horizontal rules (the FAQ does
 	// not, so these are no-ops there). Drop whole horizontal-rule lines, and
 	// strip leading heading markers (`#`…`######`) keeping the heading text.
 	// Done before emphasis stripping so an hr like `***` isn't mistaken for
-	// bold/italic. cp413 — also strip leading blockquote markers (`>`) so a
+	// bold/italic. also strip leading blockquote markers (`>`) so a
 	// quoted line reads as plain text in the compact card preview.
 	s = s.replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, '');
 	s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
@@ -71,7 +71,7 @@ export function stripMarkdown(input: string): string {
 	s = s.replace(/\u0000C(\d+)\u0000/g, (_m, i: string) => code[Number(i)] ?? '');
 
 	// List-marker normalization → flowing ". " sentence stream (plaintext
-	// previews don't preserve visual list structure). cp415 — covers EVERY
+	// previews don't preserve visual list structure). covers EVERY
 	// list marker the Terms renderer understands: "-"/"*"/"•" bullets AND
 	// ordered "N." markers, both mid-text (after a newline) and on the very
 	// first line, so no leftover marker survives on an OrderCard slice.

@@ -253,7 +253,7 @@ scenario('recordFundsSentPure: creates entry even without prior address pill', (
 
 // ─── recordVerificationPure ───────────────────────────────────────
 
-scenario('recordVerificationPure: first-wins between sibling terminals', () => {
+scenario('recordVerificationPure: a verified payment corrects an earlier mismatch', () => {
 	let m = recordFundsSentPure(empty, {
 		orderPermlink: 'ord-1',
 		peer: 'bob',
@@ -264,22 +264,50 @@ scenario('recordVerificationPure: first-wins between sibling terminals', () => {
 	});
 	m = recordVerificationPure(m, {
 		orderPermlink: 'ord-1',
-		verifyResult: { kind: 'mismatch', field: 'memo' }
+		verifyResult: { kind: 'mismatch', field: 'memo' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
 	assertEqual(m.get('ord-1')?.mismatchField, 'memo', 'mismatch field set');
 
-	// A subsequent verified result should NOT downgrade an
-	// existing mismatch.  Sibling terminal states are first-wins
-	// to prevent UI flicker and protect the user from a stale
-	// RPC re-resolve overwriting a real mismatch.  Both the
-	// phase AND the mismatchField stay intact.
+	// A later VERIFIED result replaces the mismatch: it means the chain
+	// holds a transfer from the counterparty that matches the order (e.g.
+	// the buyer forgot the memo, then paid again with it) — and a mismatch
+	// may have come from a claim the counterparty never made. The mismatch
+	// field goes with the phase.
 	m = recordVerificationPure(m, {
 		orderPermlink: 'ord-1',
-		verifyResult: { kind: 'verified' }
+		verifyResult: { kind: 'verified' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
 	const entry = m.get('ord-1');
-	assertEqual(entry?.phase, 'paid_mismatch', 'first wins (mismatch holds)');
-	assertEqual(entry?.mismatchField, 'memo', 'field preserved with phase');
+	assertEqual(entry?.phase, 'paid_verified', 'verified replaces the mismatch');
+	assertEqual(entry?.mismatchField, undefined, 'no stale mismatch field');
+
+	// An unverifiable result never replaces a mismatch (first wins between
+	// the two failures).
+	let u = recordFundsSentPure(empty, {
+		orderPermlink: 'ord-2',
+		peer: 'bob',
+		method: 'blurt',
+		txid: 'b'.repeat(40),
+		amount: 1700,
+		direction: 'outgoing'
+	});
+	u = recordVerificationPure(u, {
+		orderPermlink: 'ord-2',
+		verifyResult: { kind: 'mismatch', field: 'memo' },
+		counterparty: 'bob',
+		amountConfirmed: true
+	});
+	u = recordVerificationPure(u, {
+		orderPermlink: 'ord-2',
+		verifyResult: { kind: 'not_found' },
+		counterparty: 'bob',
+		amountConfirmed: true
+	});
+	assertEqual(u.get('ord-2')?.phase, 'paid_mismatch', 'a failed re-check keeps the mismatch');
 });
 
 scenario('recordVerificationPure: verified is sticky against later mismatch', () => {
@@ -293,27 +321,34 @@ scenario('recordVerificationPure: verified is sticky against later mismatch', ()
 	});
 	m = recordVerificationPure(m, {
 		orderPermlink: 'ord-1',
-		verifyResult: { kind: 'verified' }
+		verifyResult: { kind: 'verified' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
 	// A subsequent stale RPC error or re-render shouldn't
 	// downgrade.
 	m = recordVerificationPure(m, {
 		orderPermlink: 'ord-1',
-		verifyResult: { kind: 'rpc_error', message: 'late' }
+		verifyResult: { kind: 'rpc_error', message: 'late' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
 	const entry = m.get('ord-1');
 	assertEqual(entry?.phase, 'paid_verified', 'sticky verified');
 });
 
-scenario('recordVerificationPure: defensive entry creation', () => {
-	// Verification result for a permlink we haven't seen — record
-	// minimally rather than dropping.
+scenario('recordVerificationPure: no entry is created for an order never engaged', () => {
+	// A verification for a permlink this browser never engaged is refused:
+	// recording it as paid would let anyone's transfer mark an order paid.
+	// This scenario used to pin the old
+	// behaviour, which created a paid_verified entry.
 	const m = recordVerificationPure(empty, {
 		orderPermlink: 'ord-orphan',
-		verifyResult: { kind: 'verified' }
+		verifyResult: { kind: 'verified' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
-	assertTrue(m.get('ord-orphan') !== undefined, 'created');
-	assertEqual(m.get('ord-orphan')?.phase, 'paid_verified', 'phase');
+	assertTrue(m.get('ord-orphan') === undefined, 'not created');
 });
 
 // ─── End-to-end happy path ────────────────────────────────────────
@@ -345,7 +380,9 @@ scenario('e2e happy path: address → paid → verified', () => {
 
 	m = recordVerificationPure(m, {
 		orderPermlink: 'ord-1',
-		verifyResult: { kind: 'verified' }
+		verifyResult: { kind: 'verified' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
 	assertEqual(m.get('ord-1')?.phase, 'paid_verified', 'p3');
 });
@@ -371,7 +408,9 @@ scenario('e2e mismatch path: address → paid → mismatch', () => {
 	});
 	m = recordVerificationPure(m, {
 		orderPermlink: 'ord-1',
-		verifyResult: { kind: 'mismatch', field: 'memo' }
+		verifyResult: { kind: 'mismatch', field: 'memo' },
+		counterparty: 'bob',
+		amountConfirmed: true
 	});
 	const entry = m.get('ord-1');
 	assertEqual(entry?.phase, 'paid_mismatch', 'phase');

@@ -36,7 +36,8 @@ function assert(cond: boolean, msg: string): void {
 	if (!cond) throw new Error(msg);
 }
 
-const ALLOWED_SPAN = /<span class="json-(?:key|string|num|bool|null)">/g;
+const ALLOWED_SPAN =
+	/<span class="json-(?:key|string|num|bool|null)">|<span class="json-cont" aria-hidden="true">/g;
 
 /** Remove the whitelisted wrappers; anything left with a raw `<`/`>` is a leak. */
 function stripAllowedSpans(html: string): string {
@@ -70,7 +71,7 @@ scenario('adversarial values + keys are fully escaped (no raw HTML tag leaks)', 
 	const html = highlightJsonToHtml(JSON.stringify(ADVERSARIAL, null, 2));
 	assert(!html.includes('<script>'), 'raw <script> present');
 	assert(!html.includes('</script>'), 'raw </script> present');
-	// cp425 — `onerror="` can now legitimately appear as TEXT (escaped quotes
+	// `onerror="` can now legitimately appear as TEXT (escaped quotes
 	// are unescaped for readability), but only INSIDE an escaped `&lt;img…&gt;`,
 	// where it can't execute. The real guarantee is that the tag is neutralized,
 	// which `!<img` + `assertNoRawHtml` below already enforce.
@@ -88,13 +89,16 @@ scenario('an injected </span> in a key cannot break out of its wrapper', () => {
 
 scenario('only whitelisted json-* span classes appear (no other tags/attrs)', () => {
 	const html = highlightJsonToHtml(JSON.stringify(ADVERSARIAL, null, 2));
-	const strayTag = /<(?!span class="json-(?:key|string|num|bool|null)">|\/span>)/.test(html);
+	const strayTag =
+		/<(?!span class="json-(?:key|string|num|bool|null)">|span class="json-cont" aria-hidden="true">|\/span>)/.test(
+			html
+		);
 	assert(!strayTag, 'a tag other than the whitelisted json-* spans was emitted');
 });
 
 scenario('transform is lossless for non-display-escaped input (HTML-escaping round-trips)', () => {
 	// The highlighter intentionally TRANSFORMS display escapes for readability
-	// (\n/\t → real breaks/tabs; cp425: \" \\ \/ → their real char), so a value
+	// (\n/\t → real breaks/tabs behind a continuation marker; \/ → /), so a value
 	// carrying those is deliberately not byte-recoverable — that's the module's
 	// stated posture. This check pins the property that still matters for data
 	// integrity: the HTML-escaping of `< > &` (and everything else) round-trips
@@ -114,14 +118,12 @@ scenario('transform is lossless for non-display-escaped input (HTML-escaping rou
 	}
 });
 
-scenario('cp425 — literal \\" \\\\ \\/ escapes render as their real char (readability)', () => {
-	// the maintainer: short_bio `type some "weird" chars` must show real quotes.
+scenario('a quote or backslash inside a value stays escaped (a value cannot close itself)', () => {
+	// A memo must not be able to end its own string and draw fake fields.
 	const q = highlightJsonToHtml(JSON.stringify({ bio: 'type "weird" chars' }, null, 2));
-	assert(q.includes('type "weird" chars'), 'escaped quotes not unescaped for display');
-	assert(!q.includes('\\"weird\\"'), 'the literal \\" form should no longer appear');
-	// An escaped backslash `a\b` collapses to one backslash for display.
+	assert(q.includes('type \\"weird\\" chars'), 'a quote inside a value must stay escaped');
 	const b = highlightJsonToHtml(JSON.stringify({ p: 'a\\b' }, null, 2));
-	assert(b.includes('a\\b'), 'escaped backslash not collapsed for display');
+	assert(b.includes('a\\\\b'), 'a backslash inside a value must stay escaped');
 	// An escaped slash from a raw JSON payload shows as `/`.
 	const s = highlightJsonToHtml('{\n  "u": "x\\/y"\n}');
 	assert(s.includes('x/y'), 'escaped slash not unescaped for display');
@@ -140,7 +142,7 @@ scenario('benign tokens get the right classes', () => {
 	assert(html.includes('<span class="json-null">null</span>'), 'null class');
 });
 
-// ── expandNestedJsonStrings (cp411): the tx op view parses JSON-in-strings
+// ── expandNestedJsonStrings: the tx op view parses JSON-in-strings
 //    (e.g. a custom_json `json` field) before pretty-printing so nested keys
 //    indent instead of showing one escaped line. Pin: it expands objects/arrays,
 //    leaves ordinary/numeric strings alone, is bounded, and stays SAFE when its
@@ -190,7 +192,7 @@ scenario('deeply nested input is depth-bounded (no throw/hang)', () => {
 });
 
 scenario('multi-line string VALUES render with real line breaks (terms / post body)', () => {
-	// cp422 — an order's `terms` and a post `body` are multi-line markdown.
+	// an order's `terms` and a post `body` are multi-line markdown.
 	// The renderer shows their \n as REAL breaks (readable) while keeping
 	// every literal character HTML-escaped, so a hostile </span><script>
 	// pasted inside a multi-line value stays inert.

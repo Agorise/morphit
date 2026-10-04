@@ -151,9 +151,9 @@ async function clearFlagFlow(ctx: CommandCtx, operator: string): Promise<void> {
 	// (same creator, near-simultaneous first activity) usually trips Signal B
 	// too once they review each other, and the operator sees the consequences
 	// as one problem — a hidden reputation card AND subdued reviews.
-	// v1.8.12 (the maintainer) — offers ALL FOUR signals. It previously listed only A and
+	// v1.8.12 — offers ALL FOUR signals. It previously listed only A and
 	// B, so "Both signals" meant both of TWO while four can suppress a
-	// reputation. the maintainer's tester2/tester3 pair was flagged by Signal D: the
+	// reputation. tester2/tester3 pair was flagged by Signal D: the
 	// upgraded view showed the flags correctly, he picked "Both", and the
 	// command recorded clearances for A and B — leaving the concentration flags
 	// untouched and the reputations still hidden. Clearing the wrong thing while

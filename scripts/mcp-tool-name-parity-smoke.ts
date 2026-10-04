@@ -4,7 +4,7 @@
  * docs (OPERATIONS §45) and the `morphit-ops init` wizard MUST match
  * the tools actually registered in apps/mcp-server/src/main.ts.
  *
- * Why: cp251 found the §45 table + the wizard advertising
+ * Why: a later change found the §45 table + the wizard advertising
  * `morphit_list_operators` / `morphit_account_reputation` /
  * `morphit_federation_summary`, none of which exist — the code
  * registers `morphit_list_instances` / `morphit_list_payment_methods`

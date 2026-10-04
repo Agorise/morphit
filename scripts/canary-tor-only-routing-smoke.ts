@@ -2,11 +2,11 @@
 /**
  * scripts/canary-tor-only-routing-smoke.ts
  *
- * cp761 — locks the tor-only privacy fix for the warrant-canary freshness
+ * locks the tor-only privacy fix for the warrant-canary freshness
  * proofs (audit finding F-1). On a tor-only node the canary's outbound fetches
  * (Blurt chain-head, Bitcoin head, news RSS) must route through the co-located
  * Tor SOCKS proxy so the node's real clearnet IP is never revealed to those
- * endpoints — the same exposure cp755 closed for the indexer's own reads.
+ * endpoints — the same exposure a later change closed for the indexer's own reads.
  *
  * This smoke asserts, without needing a live Tor daemon:
  *   - the SOCKS5 wire bytes are correct (greeting, ATYP=domain CONNECT,

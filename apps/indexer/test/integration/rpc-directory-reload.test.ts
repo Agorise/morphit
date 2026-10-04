@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep (rv2-4) — the persisted rpc directory is re-proved against
+ * the persisted rpc directory is re-proved against
  * the chain at boot before any of its endpoints join the live pool.
  *
  * The boot step used to merge `rpc_directory.endpoints` as stored. A snapshot

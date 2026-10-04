@@ -37,7 +37,7 @@ import {
 	i2pdAvailable,
 	type I2pDestinationResult
 } from '../init/i2pGenerate.ts';
-import { startDotsSpinner, withSpinner} from '../init/spinner.ts';
+import { startDotsSpinner, withSpinner } from '../init/spinner.ts';
 import { validateAltAddress } from '../lib/altAddressValidate.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import {
@@ -206,7 +206,9 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		);
 		const proceed = await askYesNo('Continue with the setup anyway?', false);
 		if (!proceed) {
-			console.log('\nAborted.  Address the suggestions above and re-run — the installer will pick up where it left off.');
+			console.log(
+				'\nAborted.  Address the suggestions above and re-run — the installer will pick up where it left off.'
+			);
 			return 1;
 		}
 	}
@@ -215,7 +217,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const repoRoot = resolveOutputPath(ctx.flags.out, defaultRepoRoot());
 	const existingConfig = `${repoRoot}/morphit.config.env`;
 	if (existsSync(existingConfig)) {
-		// cp186 — re-running the full setup wizard on a configured
+		// re-running the full setup wizard on a configured
 		// instance is almost never what the operator wants: it walks
 		// all ~23 steps and overwrites the whole config.  The common
 		// real intent ("I just want to change my RPC URLs / description
@@ -302,9 +304,13 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 		console.log('  Found a setup already in progress');
 		console.log('━'.repeat(58));
 		console.log('');
-		console.log(`  It looks like you started setting up before (${describeAge(loadProgressSavedAt())}).`);
-		if (saved.instanceName) console.log(`    Instance:      ${sanitizeForTerm(saved.instanceName)}`);
-		if (saved.relayAccount?.name) console.log(`    Relay account: @${sanitizeForTerm(saved.relayAccount.name)}`);
+		console.log(
+			`  It looks like you started setting up before (${describeAge(loadProgressSavedAt())}).`
+		);
+		if (saved.instanceName)
+			console.log(`    Instance:      ${sanitizeForTerm(saved.instanceName)}`);
+		if (saved.relayAccount?.name)
+			console.log(`    Relay account: @${sanitizeForTerm(saved.relayAccount.name)}`);
 		console.log('');
 		console.log('  I can pick up where you left off — your answers are remembered,');
 		console.log('  and you only re-enter the two things that are NEVER saved to disk:');
@@ -390,7 +396,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	secretResumeNote('database connection');
 	const databaseUrl = await stepDatabase(); // SECRET — always asked, never saved
 	const relayAccount = await recall('relayAccount', () => stepRelayAccount(instanceName));
-	secretResumeNote("relay account\u2019s active key");
+	secretResumeNote('relay account\u2019s active key');
 	const activeKey = await stepActiveKey(relayAccount.name); // SECRET — always asked, never saved
 	const feesAccount = await recall('feesAccount', () => stepFeesAccount(undefined, instanceName));
 	const dailyCeiling = await recall('dailyCeiling', () => stepDailyCeiling(relayAccount.account));
@@ -408,7 +414,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	const backup = await recall('backup', () => stepBackup(databaseUrl));
 	const operatorTag = await recall('operatorTag', () => stepOperatorTag(origin));
 	const matrix = await recall('matrix', () => stepMatrixSurfaces());
-	// 19th step (F-2 from the cp136 walkthrough): RPC endpoints.
+	// 19th step (F-2 from the walkthrough): RPC endpoints.
 	// Defaults to DEFAULT_BLURT_RPC_ENDPOINTS — operators with a
 	// witness preference or self-hosted RPC override here.  Pressing
 	// Enter accepts the defaults; this is opt-in customization,
@@ -517,7 +523,7 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	try {
 		result = writeWizardOutput(answers, repoRoot);
 	} catch (err) {
-		// cp139-C-5: err.message could be filesystem error text
+		// err.message could be filesystem error text
 		// containing an attacker-influenced path component (e.g.
 		// operator typed `--out=$'\x1b[2J'`).  Sanitize.
 		console.log(
@@ -530,7 +536,9 @@ export async function runInit(ctx: InitCtx): Promise<number> {
 	console.log(`  ✓ wrote ${result.envBytes} bytes to ${sanitizeForTerm(result.envPath)}`);
 	console.log(`  ✓ wrote ${result.keystoreBytes} bytes to ${sanitizeForTerm(result.keystorePath)}`);
 	if (result.backupEnvPath) {
-		console.log(`  ✓ wrote ${result.backupEnvBytes} bytes to ${sanitizeForTerm(result.backupEnvPath)}`);
+		console.log(
+			`  ✓ wrote ${result.backupEnvBytes} bytes to ${sanitizeForTerm(result.backupEnvPath)}`
+		);
 		console.log('  ✓ permissions set to 600 on all four (only you can read them)');
 	} else {
 		console.log('  ✓ permissions set to 600 on all three (only you can read them)');
@@ -585,7 +593,9 @@ function printReview(answers: WizardAnswers): void {
 	console.log(
 		`  Tagline:              ${answers.tagline === '' ? '(none)' : sanitizeForTerm(answers.tagline)}`
 	);
-	console.log(`  Database URL:         ${sanitizeForTerm(maskDatabasePassword(answers.databaseUrl))}`);
+	console.log(
+		`  Database URL:         ${sanitizeForTerm(maskDatabasePassword(answers.databaseUrl))}`
+	);
 	console.log(`  Relay account:        @${sanitizeForTerm(answers.relayAccount.name)}`);
 	const keyDesc =
 		answers.activeKey.mode === 'encrypted'
@@ -594,13 +604,27 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  Active key:           ${keyDesc}`);
 	console.log(`  Fees account:         @${sanitizeForTerm(answers.feesAccount)}`);
 	console.log(`  Daily ceiling:        ${answers.dailyCeiling}`);
-	console.log(`  Contact URL:          ${answers.contactUrl !== null ? sanitizeForTerm(answers.contactUrl) : '(skipped)'}`);
-	console.log(`  Public origin:        ${answers.origin !== null ? sanitizeForTerm(answers.origin) : '(skipped — federation-invisible)'}`);
-	console.log(`  Tor address:          ${answers.altNetworks.tor !== null ? sanitizeForTerm(answers.altNetworks.tor) : '(skipped)'}`);
-	console.log(`  Lokinet address:      ${answers.altNetworks.lokinet !== null ? sanitizeForTerm(answers.altNetworks.lokinet) : '(skipped)'}`);
-	console.log(`  I2P b32:              ${answers.altNetworks.i2pB32 !== null ? sanitizeForTerm(answers.altNetworks.i2pB32) : '(skipped)'}`);
-	console.log(`  I2P vanity name:      ${answers.altNetworks.i2pName !== null ? sanitizeForTerm(answers.altNetworks.i2pName) : '(skipped)'}`);
-	console.log(`  Nostr pubkey:         ${answers.altNetworks.nostr !== null ? sanitizeForTerm(answers.altNetworks.nostr) : '(skipped)'}`);
+	console.log(
+		`  Contact URL:          ${answers.contactUrl !== null ? sanitizeForTerm(answers.contactUrl) : '(skipped)'}`
+	);
+	console.log(
+		`  Public origin:        ${answers.origin !== null ? sanitizeForTerm(answers.origin) : '(skipped — federation-invisible)'}`
+	);
+	console.log(
+		`  Tor address:          ${answers.altNetworks.tor !== null ? sanitizeForTerm(answers.altNetworks.tor) : '(skipped)'}`
+	);
+	console.log(
+		`  Lokinet address:      ${answers.altNetworks.lokinet !== null ? sanitizeForTerm(answers.altNetworks.lokinet) : '(skipped)'}`
+	);
+	console.log(
+		`  I2P b32:              ${answers.altNetworks.i2pB32 !== null ? sanitizeForTerm(answers.altNetworks.i2pB32) : '(skipped)'}`
+	);
+	console.log(
+		`  I2P vanity name:      ${answers.altNetworks.i2pName !== null ? sanitizeForTerm(answers.altNetworks.i2pName) : '(skipped)'}`
+	);
+	console.log(
+		`  Nostr pubkey:         ${answers.altNetworks.nostr !== null ? sanitizeForTerm(answers.altNetworks.nostr) : '(skipped)'}`
+	);
 	console.log(
 		`  BTC fee explorers:    ${answers.feeExplorers.btc.length} URL${answers.feeExplorers.btc.length === 1 ? '' : 's'}`
 	);
@@ -619,7 +643,7 @@ function printReview(answers: WizardAnswers): void {
 	console.log(`  SOL chat-link URL:    ${answers.chatLinkExplorers.sol}`);
 	console.log(`  ETH chat-link URL:    ${answers.chatLinkExplorers.eth}`);
 	console.log(`  XRP chat-link URL:    ${answers.chatLinkExplorers.xrp}`);
-	// Part 122 cp30-DD — multi-network chat-link URLs.  Each
+	// multi-network chat-link URLs.  Each
 	// asset spans 4 chains; summarize as "all defaults" if every
 	// URL matches its bundled default, otherwise "customized".
 	const usdtAllDefault =
@@ -632,7 +656,7 @@ function printReview(answers: WizardAnswers): void {
 		answers.chatLinkExplorers.usdc.spl === 'https://solscan.io/tx/{txid}' &&
 		answers.chatLinkExplorers.usdc.base === 'https://basescan.org/tx/{txid}' &&
 		answers.chatLinkExplorers.usdc.polygon === 'https://polygonscan.com/tx/{txid}';
-	// Part 122 cp31 — DAI per-network defaults.  All 4 EVM
+	// DAI per-network defaults.  All 4 EVM
 	// networks (no SPL); arbiscan is the new explorer name.
 	const daiAllDefault =
 		answers.chatLinkExplorers.dai.erc20 === 'https://etherscan.io/tx/{txid}' &&
@@ -660,9 +684,7 @@ function printReview(answers: WizardAnswers): void {
 			`(${answers.listingFee.source}) → ${answers.listingFee.btcSatoshis} sats / ` +
 			`${answers.listingFee.xmrPiconero} piconero`
 	);
-	console.log(
-		`  Fallback BLURT/USD:   $${answers.listingFee.fallbackBlurtPriceUsd}`
-	);
+	console.log(`  Fallback BLURT/USD:   $${answers.listingFee.fallbackBlurtPriceUsd}`);
 	console.log(`  Operator tag:         ${sanitizeForTerm(answers.operatorTag.tag)}`);
 	const seoOverridden =
 		answers.seo.title !== null || answers.seo.description !== null || answers.seo.keywords !== null;
@@ -709,8 +731,8 @@ function printNextSteps(
 	console.log('');
 	console.log("You're ready to bring up your instance.  In order:");
 	console.log('');
-	console.log('  1. Install dependencies:');
-	console.log('       npm install');
+	console.log('  1. Install dependencies (no install scripts):');
+	console.log('       npm ci --ignore-scripts');
 	console.log('');
 	console.log('  2. Source the critical-infra env file (sets database URL,');
 	console.log('     account names, active key path):');
@@ -759,7 +781,7 @@ function printNextSteps(
 		console.log('     installs script + config + systemd units, then enables');
 		console.log('     the timer):');
 		console.log(
-			// cp514 — 640 root:morphit, NOT 600 root:root. The unit runs
+			// 640 root:morphit, NOT 600 root:root. The unit runs
 			// `User=morphit` and the script gates on `[ -r $BACKUP_ENV ]`, so a
 			// root-only file makes the operator's FIRST `systemctl start` fail with
 			// `cannot read /etc/morphit/backup.env`. The Ansible template already
@@ -792,7 +814,9 @@ function printNextSteps(
 		// editing the shipped unit.
 		if (answers.backup.backupDir !== null && answers.backup.backupDir !== '/home/morphit/backups') {
 			console.log(`     ⚠  You picked a non-default backup directory`);
-			console.log(`        (${sanitizeForTerm(answers.backup.backupDir)}).  The shipped systemd unit`);
+			console.log(
+				`        (${sanitizeForTerm(answers.backup.backupDir)}).  The shipped systemd unit`
+			);
 			console.log(`        is wired to /home/morphit/backups; you need to add an`);
 			console.log(`        override so the dump isn't blocked by ProtectSystem:`);
 			console.log('');
@@ -843,7 +867,7 @@ function printNextSteps(
 			'Back up this file securely.  It is your raw active key —\n' +
 				'anyone with read access can spend BLURT and create accounts\n' +
 				"on behalf of your relay account.  Don't email it, don't put\n" +
-				'it in a public git repo, don\'t paste it into a chat.  A USB\n' +
+				"it in a public git repo, don't paste it into a chat.  A USB\n" +
 				'stick stored offline is good.'
 		);
 	}
@@ -903,7 +927,7 @@ function printNextSteps(
 		console.log('  → copy it to e.g. /var/lib/tor/morphit/ (owned by the tor user,');
 		console.log('    mode 0700), then in torrc:');
 		console.log('      HiddenServiceDir /var/lib/tor/morphit/');
-		// 8090 = the frontend fan-out (cp695), NOT the bare relay on 8080: the
+		// 8090 = the frontend fan-out, NOT the bare relay on 8080: the
 		// relay trusts X-Real-IP from its caller (a Tor visitor could set their
 		// own client IP) and 404s the site (review D11).
 		console.log('      HiddenServicePort 80 127.0.0.1:8090');

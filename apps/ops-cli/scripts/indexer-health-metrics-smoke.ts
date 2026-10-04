@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * indexer-health-metrics — cp683 + AIDE health-view.
+ * indexer-health-metrics — + AIDE health-view.
  *
- * cp683: the indexer computes the /v1/health system block (cpu_pct, mem) from
+ * the indexer computes the /v1/health system block (cpu_pct, mem) from
  * /proc/stat + /proc/meminfo. Its systemd unit MUST NOT set ProcSubset=pid,
  * which hides those non-process files (cpu_pct went permanently null, mem fell
  * back to a coarse source). This guards the invariant so re-hardening can't
@@ -65,7 +65,7 @@ check(
 	['built', 'building', 'failed', 'not-configured'].includes(checkAideBaseline().state)
 );
 
-// cp684 — Node-health verifies TLS, matrix alert address, and parallel sync.
+// Node-health verifies TLS, matrix alert address, and parallel sync.
 check(
 	'checkTlsCert reports HTTPS cert status (valid/expiring/expired/not-found)',
 	['valid', 'expiring', 'expired', 'not-found'].includes(checkTlsCert('/nonexistent-dir').state)

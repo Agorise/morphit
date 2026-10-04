@@ -1,5 +1,5 @@
 /**
- * edit-active-key smoke (cp167 LL #167).
+ * edit-active-key smoke.
  *
  * Locks in the behavior of the `morphit-ops edit-active-key`
  * subcommand — the recovery path for operators who pasted the

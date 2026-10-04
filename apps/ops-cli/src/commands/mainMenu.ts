@@ -1,5 +1,5 @@
 /**
- * morphit-ops main menu (cp186).
+ * morphit-ops main menu.
  *
  * When an operator runs bare `morphit-ops` on an interactive
  * terminal, instead of dumping the help text and exiting non-zero
@@ -63,7 +63,8 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 		items: [
 			{
 				label: 'Install / set up a new node (guided)',
-				blurb: 'First-time install: checks prerequisites, runs setup, offers hardening and a PATH shortcut.',
+				blurb:
+					'First-time install: checks prerequisites, runs setup, offers hardening and a PATH shortcut.',
 				subcommand: 'install',
 				tip: 'Start here on a fresh server. It can also set up firewall hardening and HTTPS for you.'
 			},
@@ -75,7 +76,8 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Fast-sync from a federation snapshot (recommended for a fresh node)',
-				blurb: 'Restore the newest on-chain-anchored snapshot so the orderbook is live in minutes, not days.',
+				blurb:
+					'Restore the newest on-chain-anchored snapshot so the orderbook is live in minutes, not days.',
 				subcommand: 'fast-sync',
 				tip: 'Downloads + verifies (sha256 three ways + a chain spot-check) the newest snapshot published by @morphit, then catches up the short tail. Prefer zero trust? Skip this and full-replay from genesis.'
 			}
@@ -92,13 +94,15 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Set up a Tor / Lokinet / I2P address',
-				blurb: 'Guided: make a privacy-network address (pick the first letters where possible) and show it in your site footer.',
+				blurb:
+					'Guided: make a privacy-network address (pick the first letters where possible) and show it in your site footer.',
 				subcommand: 'alt-address',
 				tip: 'Optional. Gives privacy-conscious users a censorship-resistant way to reach your instance.'
 			},
 			{
 				label: 'Branding — your logo, icons and site name',
-				blurb: 'Show or change your own logo, favicon, app icons and site name — asks for your SVG files, then applies them.',
+				blurb:
+					'Show or change your own logo, favicon, app icons and site name — asks for your SVG files, then applies them.',
 				subcommand: 'branding',
 				positional: ['setup'],
 				tip: 'Set it up once — every upgrade re-applies it. See docs/BRANDING.md. Without the menu: `sudo morphit-ops branding apply --logo FILE --icon FILE --name "…"`.'
@@ -123,7 +127,8 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Re-publish my registration on-chain',
-				blurb: 'Update your origin or display name in the federation directory (your tag is permanent).',
+				blurb:
+					'Update your origin or display name in the federation directory (your tag is permanent).',
 				subcommand: 'register',
 				tip: 'Run this after an origin or display-name change so other instances and users discover you correctly. Re-registering updates those fields; the tag cannot change.'
 			}
@@ -134,19 +139,22 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 		items: [
 			{
 				label: 'Harden this server',
-				blurb: 'Ubuntu/SSH/firewall/fail2ban/TLS + BunkerWeb + backups — generate a personalized checklist and walk each step.',
+				blurb:
+					'Ubuntu/SSH/firewall/fail2ban/TLS + BunkerWeb + backups — generate a personalized checklist and walk each step.',
 				subcommand: 'harden',
 				tip: 'Recommended for any public server. Safe to re-run — it re-checks what\u2019s still missing.'
 			},
 			{
 				label: 'SSL/TLS certificate (HTTPS)',
-				blurb: 'Check your HTTPS certificate expiry + auto-renewal, or get the exact steps to obtain a free Let\u2019s Encrypt cert.',
+				blurb:
+					'Check your HTTPS certificate expiry + auto-renewal, or get the exact steps to obtain a free Let\u2019s Encrypt cert.',
 				subcommand: 'ssl',
 				tip: 'Do this before the web firewall below — BunkerWeb needs a valid certificate or it won\u2019t start.'
 			},
 			{
 				label: 'Web firewall (BunkerWeb): install / status',
-				blurb: 'Check whether the optional BunkerWeb WAF is running + healthy, and (on a terminal) install + bring it up for you, with confirmations.',
+				blurb:
+					'Check whether the optional BunkerWeb WAF is running + healthy, and (on a terminal) install + bring it up for you, with confirmations.',
 				subcommand: 'bunkerweb',
 				tip: 'Optional but recommended for public instances. Needs Docker + a valid HTTPS cert; the installer guides both.'
 			}
@@ -157,31 +165,36 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 		items: [
 			{
 				label: 'Will my node start? (doctor)',
-				blurb: 'Read-only pre-flight: does the config on disk let the indexer + relay BOOT? Use this when the node won\u2019t start.',
+				blurb:
+					'Read-only pre-flight: does the config on disk let the indexer + relay BOOT? Use this when the node won\u2019t start.',
 				subcommand: 'doctor',
 				tip: 'Changes nothing. This is the \u201cwhy won\u2019t it boot?\u201d check — it inspects config, not a running process.'
 			},
 			{
 				label: 'Node health — indexer, relay, system, services, canary',
-				blurb: 'Live check of the RUNNING indexer over HTTP (/v1/health): sync state, last indexed block vs chain head, and lag.',
+				blurb:
+					'Live check of the RUNNING indexer over HTTP (/v1/health): sync state, last indexed block vs chain head, and lag.',
 				subcommand: 'health',
 				tip: 'The quickest \u201cis it synced right now?\u201d check. Needs the indexer running; doctor checks config instead.'
 			},
 			{
 				label: 'MCP server (AI-agent discovery): turn on or off',
-				blurb: 'The read-only, non-custodial MCP surface that lets AI agents answer \u201cwhere can I buy XMR no-KYC near me\u201d from your orderbook. On by default; this is the off-switch (and on-switch).',
+				blurb:
+					'The read-only, non-custodial MCP surface that lets AI agents answer \u201cwhere can I buy XMR no-KYC near me\u201d from your orderbook. On by default; this is the off-switch (and on-switch).',
 				subcommand: 'mcp',
 				tip: 'Holds no keys, signs no trades \u2014 it hands the user off to your web UI for the actual key-signing. Disabling it never affects human traders, only AI-agent discovery.'
 			},
 			{
 				label: 'Matrix alerts: set / clear your alert username',
-				blurb: 'Get operator alerts (low balance, service down, security) DM\u2019d to your Matrix account. The matrix-bot auto-starts when you set a username and stops when you clear it.',
+				blurb:
+					'Get operator alerts (low balance, service down, security) DM\u2019d to your Matrix account. The matrix-bot auto-starts when you set a username and stops when you clear it.',
 				subcommand: 'matrix',
 				tip: 'Set your personal MXID (@you:matrix.org) \u2014 NOT a #room alias (that would leak private alerts publicly). You also need a bot account access token in /etc/morphit/matrix-bot.env.'
 			},
 			{
 				label: 'Status dashboard',
-				blurb: 'Day-to-day operations: relay balance, queue depth, health, and your last 3 DB backups (with the file path).',
+				blurb:
+					'Day-to-day operations: relay balance, queue depth, health, and your last 3 DB backups (with the file path).',
 				subcommand: 'status',
 				tip: 'Your everyday operational view. If the node won\u2019t boot at all, use doctor; for sync only, use health.'
 			},
@@ -202,7 +215,8 @@ export const MENU_GROUPS: readonly MenuGroup[] = [
 			},
 			{
 				label: 'Moderation — review flags & block accounts',
-				blurb: 'Review reciprocity / related-account abuse flags, and block or unblock accounts on this instance.',
+				blurb:
+					'Review reciprocity / related-account abuse flags, and block or unblock accounts on this instance.',
 				subcommand: 'moderation'
 			}
 		]
@@ -228,7 +242,7 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 		if (cur !== null && latest === null) {
 			// The update check couldn't reach the release server (e.g. a slow or
 			// filtered link timed out). Say so explicitly — a FAILED check must not
-			// look like "up to date" (the maintainer/morphitir: a network-timed-out check
+			// look like "up to date" (seen on an instance: a network-timed-out check
 			// silently dropped the marker, making a still-outdated node look current).
 			s += '  ' + fmt.dim('(couldn\u2019t check for updates \u2014 network)');
 		}
@@ -237,7 +251,7 @@ export function itemSuffix(subcommand: string, ann?: MenuAnnotations): string {
 			// "update available" marker stays vivid on pale terminal
 			// themes where the standard yellow looked near-white.
 			s += '  ' + fmt.boldBrightYellow('\u25cf update available');
-			// cp667 — a signed tarball is sitting in the offline drop-dir, so the
+			// a signed tarball is sitting in the offline drop-dir, so the
 			// upgrade can run cable-unplugged; tell the operator it's ready offline.
 			if (ann.latestIsOffline) s += ' ' + fmt.dim('(offline tarball ready)');
 		}

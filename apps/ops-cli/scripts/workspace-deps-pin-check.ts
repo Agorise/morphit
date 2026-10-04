@@ -3,8 +3,8 @@
  * workspace-deps-pin-check — generalized deps-pin-check
  * covering ALL workspaces.
  *
- * The cp13 deps-pin-check covered only apps/matrix-bot because
- * that's where the cp11 lesson came from (matrix-bot-sdk API
+ * The deps-pin-check covered only apps/matrix-bot because
+ * that's where the lesson came from (matrix-bot-sdk API
  * changes between minors).  But the pattern applies to every
  * workspace.  This smoke checks ALL of them.
  *

@@ -4,7 +4,7 @@
 	 * session is fully unlocked (real signing keys in hand) but no Blurt
 	 * account name has been set yet.
 	 *
-	 * Why this exists (cp355): a user can finish the first three signup
+	 * Why this exists: a user can finish the first three signup
 	 * steps (generate keys → back up the seed → confirm it), at which
 	 * point the session is BOOTED, and then skip the final "claim a name"
 	 * step (register-name) — which is deliberately skippable so signup

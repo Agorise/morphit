@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/faq-glossary-terms-smoke.ts  (2026-07-19, the maintainer)
+ * apps/web/scripts/faq-glossary-terms-smoke.ts
  *
  * FAQ answers now auto-link technical acronyms to the glossary: the first
  * STANDALONE occurrence of each term renders as a <Term> (dotted underline that

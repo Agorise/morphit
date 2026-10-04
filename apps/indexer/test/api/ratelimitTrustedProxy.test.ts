@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, E2 — the indexer's per-IP limiter behind the shipped
+ * the indexer's per-IP limiter behind the shipped
  * BunkerWeb frontend.
  *
  * The frontend container (172.20.0.x on bunkerweb_net) is the socket peer of
@@ -13,10 +13,12 @@
  *   - the frontend sends ONE `X-Forwarded-For` entry and no X-Real-IP;
  *   - bare-metal nginx (loopback peer) sends `X-Real-IP $remote_addr`;
  *   - forwarded headers are believed only from a trusted peer (loopback +
- *     172.16.0.0/12 by default — Docker's default bridge pool, v1.20.0 wave 4 —
- *     or MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS);
+ *     the ansible-pinned bridge 172.20.0.0/16 by default, or
+ *     MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS, which upgrade sets to the detected
+ *     bridge);
  *   - X-Forwarded-For is read from the RIGHT, skipping trusted hops;
- *   - all-trusted (Tor/I2P via the bridge gateway) shares one bucket.
+ *   - all-trusted (Tor/I2P via the bridge gateway) shares one bucket, with the
+ *     shared ceiling.
  *
  * Drives the real middleware through Hono with the socket peer the Node
  * adapter would report.
@@ -26,7 +28,8 @@ import { Hono } from 'hono';
 import {
 	rateLimit,
 	configureTrustedProxies,
-	_resetRateLimitForTest
+	_resetRateLimitForTest,
+	SHARED_KEY_MULTIPLIER
 } from '../../src/api/middleware/ratelimit';
 
 const LIMIT = 120;
@@ -89,9 +92,52 @@ describe('indexer rate limit behind a trusted reverse proxy (E2)', () => {
 		expect(r.limited).toBe(10);
 	});
 
-	it('Tor/I2P through the bridge gateway (every hop trusted) share one bucket, as documented', async () => {
-		const r = await statuses('172.20.0.5', () => ({ 'x-forwarded-for': '172.20.0.1' }));
+	it('Tor/I2P through the bridge gateway (every hop trusted) share one bucket, with the SHARED ceiling', async () => {
+		// One shared key stands for every hidden-service visitor: the tier's
+		// ceiling times SHARED_KEY_MULTIPLIER, so one visitor's 120 list
+		// requests no longer lock out all the others.
+		const shared = LIMIT * SHARED_KEY_MULTIPLIER;
+		const r = await statuses(
+			'172.20.0.5',
+			() => ({ 'x-forwarded-for': '172.20.0.1' }),
+			shared + 10
+		);
 		expect(r.limited).toBe(10);
+		expect(r.ok).toBe(shared);
+	});
+
+	it('an IPv6 client is one client per /64, not 2^64 of them', async () => {
+		const r = await statuses('2001:db8:1:2::1', () => ({}), 1);
+		expect(r.ok).toBe(1);
+		const a = app();
+		let limited = 0;
+		for (let i = 0; i < LIMIT + 10; i++) {
+			const res = await a.request(
+				'/x',
+				{},
+				{
+					incoming: { socket: { remoteAddress: `2001:db8:5:6::${(i + 1).toString(16)}` } }
+				}
+			);
+			if (res.status === 429) limited++;
+		}
+		expect(limited).toBe(10);
+	});
+
+	it('by default only loopback and the ansible-pinned bridge are trusted, not every 172.16/12 network', async () => {
+		// Another container network on the host is an untrusted private proxy:
+		// its forwarded addresses are ignored, so rotating them buys no fresh
+		// bucket. Its own address stands for whoever is behind it (FAIL SAFE),
+		// so it gets the shared ceiling — and not one request more.
+		const shared = LIMIT * SHARED_KEY_MULTIPLIER;
+		const r = await statuses(
+			'172.31.255.255',
+			(i) => ({ 'x-forwarded-for': visitor(i) }),
+			shared + 10
+		);
+		expect(r.limited, 'another container network rotated X-Forwarded-For into fresh buckets').toBe(
+			10
+		);
 	});
 
 	it('bare-metal nginx (loopback): X-Real-IP is the client — unchanged', async () => {
@@ -110,9 +156,16 @@ describe('indexer rate limit behind a trusted reverse proxy (E2)', () => {
 		expect(r.limited).toBe(10);
 	});
 
-	it('the operator can narrow the trusted set: without 172.16/12 the frontend is untrusted again', async () => {
+	it('the operator can narrow the trusted set: without the bridge the frontend is untrusted again', async () => {
 		configureTrustedProxies(['127.0.0.0/8', '::1/128']);
-		const r = await statuses('172.20.0.5', (i) => ({ 'x-forwarded-for': visitor(i) }));
-		expect(r.limited).toBe(10);
+		const shared = LIMIT * SHARED_KEY_MULTIPLIER;
+		const r = await statuses('172.20.0.5', (i) => ({ 'x-forwarded-for': visitor(i) }), shared + 10);
+		expect(r.limited, 'one bucket (the shared ceiling), not one per forwarded visitor').toBe(10);
+	});
+
+	it('a bridge outside the default is trusted once configured (morphit.io: 172.18.0.0/24)', async () => {
+		configureTrustedProxies(['127.0.0.0/8', '::1/128', '172.18.0.0/24']);
+		const r = await statuses('172.18.0.3', (i) => ({ 'x-forwarded-for': visitor(i) }));
+		expect(r.limited).toBe(0);
 	});
 });

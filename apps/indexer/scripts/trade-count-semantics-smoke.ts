@@ -2,8 +2,8 @@
 /*
  * trade-count-semantics — v1.5.5 (t155) guard.
  *
- * the maintainer's model: "if an order was marked as completed (not canceled or expired),
- * then imo that counts as 1 completed trade even if no stars were left."
+ * The model: an order marked completed (not cancelled or expired) counts as one
+ * completed trade, even when no stars were left.
  *
  * WHAT THIS EXISTS FOR. Before v1.5.5 there WAS no trade data, so every
  * trade-shaped thing in the API used the FEEDBACK count as a stand-in. The
@@ -23,7 +23,7 @@
  * rating-shaped surface must keep reading the FEEDBACK count. They are
  * different numbers on purpose.
  *
- * cp473 — THIS GUARD SHIPPED THE BUG IT WAS WRITTEN TO PREVENT. It asserted
+ * THIS GUARD SHIPPED THE BUG IT WAS WRITTEN TO PREVENT. It asserted
  * "both endpoints expose trade_count", meaning orderbook.ts + orders.ts — but
  * FOUR endpoints feed the shared order card, and the two it never looked at
  * were still on the proxy:
@@ -36,7 +36,7 @@
  *   - /v1/orderbook/featured — same, on the cards a stranger is most likely to
  *     click.
  *
- * Proven against real Postgres 16 at cp473: on identical data the two
+ * Proven against real Postgres 16: on identical data the two
  * semantics are exactly INVERTED — a 5-trade/0-review veteran reads
  * is_new_trader=TRUE under f.c and FALSE under tc.c; a 0-trade/9-review novice
  * reads the reverse. So the sprout wasn't just stale on those surfaces, it was
@@ -51,6 +51,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { feedbackAggregateJoin } from '../src/api/reputationJoin.ts';
+import { orderbookOrderBy } from '../src/api/orderbookStreamHelpers.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string): string =>
@@ -59,7 +61,7 @@ const read = (rel: string): string =>
 const orderbook = read('src/api/orderbook.ts');
 const orders = read('src/api/orders.ts');
 const join = read('src/api/reputationJoin.ts');
-// cp473 — the two surfaces the original guard never looked at.
+// the two surfaces the original guard never looked at.
 const stream = read('src/api/orderbookStream.ts');
 const streamHelpers = read('src/api/orderbookStreamHelpers.ts');
 const featured = read('src/api/featuredOrderbook.ts');
@@ -89,12 +91,15 @@ check(
 );
 check(
 	'orderbook: min_trades filters trade_count',
-	/COALESCE\(tc\.c, 0\) >= \$\{p\(q\.min_trades\)\}/.test(orderbook),
+	// orderbook.ts takes its WHERE (min_trades included) from the shared builder.
+	/buildWhereClauses\(/.test(orderbook) &&
+		/COALESCE\(tc\.c, 0\) >= \$\{p\(q\.min_trades\)\}/.test(streamHelpers),
 	'a filter called min_TRADES that reads the feedback count contradicts the count shown on the very same card'
 );
 check(
 	'orderbook: sort=trades orders by trade_count',
-	/orderBy = 'COALESCE\(tc\.c, 0\) DESC/.test(orderbook),
+	// The ORDER BY comes from the shared orderbookOrderBy (REST + stream snapshot).
+	/orderbookOrderBy\(sort\)/.test(orderbook) && orderbookOrderBy('trades').startsWith('COALESCE(tc.c, 0) DESC'),
 	'"most experienced first" must mean most TRADES, or an unreviewed veteran sorts below a chatty novice'
 );
 check(
@@ -111,11 +116,14 @@ check(
 // ── the count itself ────────────────────────────────────────────────
 check(
 	'both polled endpoints expose trade_count on the wire',
-	/trade_count: r\.trade_count/.test(orderbook) && /trade_count: r\.trade_count/.test(orders),
+	// The REST orderbook maps rows with the shared rowToWire (orderbookStreamHelpers).
+	/import \{[^}]*rowToWire[^}]*\} from '\$api\/orderbookStreamHelpers'/.test(orderbook) &&
+		/trade_count: r\.trade_count/.test(streamHelpers) &&
+		/trade_count: r\.trade_count/.test(orders),
 	'the order card reads order.trade_count wherever it renders; an endpoint that omits it silently shows "no trades"'
 );
 
-// ── cp473: ALL FOUR order-card surfaces, not just the polled two ────
+// ── ALL FOUR order-card surfaces, not just the polled two ────
 // The shared OrderPosterIdentity reads `order.trade_count ?? 0` and
 // TradeRepCluster hides the trade half when that is 0. So an endpoint that
 // omits the column doesn't error — it silently renders a veteran as having
@@ -185,18 +193,20 @@ check(
 check(
 	'a completed order counts even with no review',
 	/WHERE o\.status = 'completed'/.test(join) && !/JOIN feedback/.test(join.split('TRADE_COUNT_SQL')[1] ?? ''),
-	"the maintainer: a completion counts as 1 trade even if no stars were left — the count must not be gated on feedback"
+	"Requirement: a completion counts as 1 trade even if no stars were left — the count must not be gated on feedback"
 );
 
 // ── rating-shaped surfaces must NOT drift onto the trade count ──────
 check(
 	'the rating average still counts RATINGS',
-	/ROUND\( SUM\(rating \*/.test(join) && /GROUP BY subject/.test(join),
+	// The rating aggregate is generated (weightedRatingSql); read the SQL it emits.
+	/SUM\(rating \*/.test(feedbackAggregateJoin('o')) &&
+		/FROM feedback fb[\s\S]*GROUP BY subject/.test(feedbackAggregateJoin('o')),
 	'"★5.00 (34)" must mean 34 ratings; sourcing that count from trades would make the chip lie'
 );
 check(
 	'sort=rating still tiebreaks on the feedback count',
-	/orderBy = 'f\.r DESC NULLS LAST, COALESCE\(f\.c, 0\) DESC/.test(orderbook),
+	orderbookOrderBy('rating').startsWith('f.r DESC NULLS LAST, COALESCE(f.c, 0) DESC'),
 	'rating ties are broken by how many RATINGS back the average — that is a rating-shaped question, not a trade-shaped one'
 );
 

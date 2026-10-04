@@ -31,7 +31,7 @@
  * The smoke also checks for graceful failure on NaN /
  * undefined / out-of-range inputs.
  *
- * cp128: `formatUsd` was removed; all call sites migrated to
+ * `formatUsd` was removed; all call sites migrated to
  * `formatFiat(amount, ticker)` with ticker coming from the
  * indexer's denomination_fiat config field.  This smoke was
  * updated accordingly.
@@ -55,7 +55,7 @@ interface Scenario {
 }
 
 const scenarios: readonly Scenario[] = [
-	// ─── formatFiat (cp128 — was formatUsd before the rename) ──
+	// ─── formatFiat (was formatUsd before the rename) ──
 	{
 		name: 'formatFiat(1234.5, "USD") — contains 1234.50',
 		fn: () => {
@@ -198,10 +198,10 @@ const scenarios: readonly Scenario[] = [
 		}
 	},
 
-	// ─── Canonical UI date/time (the maintainer's sitewide standard) ──
+	// ─── Canonical UI date/time ──
 	// TIME is 24-hour UTC with an explicit "UTC" suffix and seconds,
 	// built from getUTC* so it is timezone-independent (deterministic
-	// regardless of the sandbox's TZ): "…@ 16:45:18 UTC".
+	// regardless of the runner's TZ): "…@ 16:45:18 UTC".
 	{
 		name: 'formatDayMonthTime — 24h UTC time with explicit UTC suffix',
 		fn: () => {
@@ -256,7 +256,7 @@ const scenarios: readonly Scenario[] = [
 		fn: () => formatMonthYear('') === '—'
 	},
 	{
-		// cp420 — the compact mobile order-card date. "26 Jun": day + a
+		// the compact mobile order-card date. "26 Jun": day + a
 		// 3-char month, no year, no time.
 		name: 'formatDayMonthShort — day + 3-char month, no year',
 		fn: () => {

@@ -7,11 +7,11 @@
 **Superseded by:** none
 **Related:** ADR-0010 (key custody), ADR-0009 (order posting)
 
-> **2026-05-13 forward note (Part 121 — fee_method enum
+> **2026-05-13 forward note (fee_method enum
 > frozen):** the `fee_method` field type union described
 > throughout this ADR — `'blurt' | 'waived_first_buy' | 'btc' |
 > 'xmr'` — is now a **wire-format-frozen invariant**, not a
-> configuration knob.  Per memory #23 (2026-05-13): listing fees
+> configuration knob.  Per the trade-only rule (2026-05-13): listing fees
 > can ONLY be paid in BLURT, XMR, or BTC.  New tradable assets
 > added to Morphit (USDT, ARRR, etc.) are peer-to-peer TRADING
 > ONLY — they get `canPayListingFee: false` in the asset registry
@@ -27,13 +27,13 @@
 > and `docs/ADDING-A-COIN.md` §"2026-05-13 architectural update"
 > for the full rationale.
 
-> **2026-06-27 forward note (cp370 — canonical economics
+> **2026-06-27 forward note (canonical economics
 > source of truth):** the USD figures this ADR describes — the
 > ~$0.25 BTC/XMR listing fee, the ~$0.125 (50%-discounted) BLURT
 > listing fee, the $1 first-order minimum, and the Sybil
 > multipliers — are now hardcoded in ONE place:
 > `packages/asset-registry/src/index.ts` (the canonical economics
-> was briefly factored into an `economics.ts` at cp370 but
+> was briefly factored into an `economics.ts` but
 > RE-INLINED into `index.ts` the same session — the package is
 > consumed as raw source by the built mcp-server, which plain-Node
 > ESM resolution requires to be a single self-contained file)
@@ -45,8 +45,8 @@
 > 50%-BLURT-discount invariant + black-hat garbage-price
 > handling.
 >
-> **2026-06-27 forward note (cp372 — live tracking + chain-pinned
-> BLURT base shipped):** the deferral below is now RESOLVED.  cp372
+> **2026-06-27 forward note (live tracking + chain-pinned
+> BLURT base shipped):** the deferral below is now RESOLVED.
 > built the BTC/XMR USD price subsystem (multi-source averaging +
 > feed-health), made the *displayed* listing fee track the live
 > canonical USD target (Model-A Option 1), chain-pinned the BLURT
@@ -57,8 +57,19 @@
 > targets.  The enforced amount stays a fixed chain-pin (no price
 > read in the verifier → no fork, no quote→pay race);
 > `FEE_PRICE_TOLERANCE` absorbs the drift between re-pins.  See the
-> cp372 entries in TARBALL.md / docs/REVISIT-LIST.md and
+> A later change entries in the internal journals and
 > `OPERATIONS.md §40.3a`.
+
+> **2026-10 audit note — read before the Decision.** Two statements
+> below are superseded. (1) The Sybil tier table: the code
+> (`apps/indexer/src/indexer/fee.ts`) is 1× for the first 3 orders, then
+> ×1.25 compounding to ≈4.77× at the 10th, then ×1.5 per extra order —
+> not "1× / 1× / 1.25× / 1.5× / 1.75× / 2×". (2) "Recipient:
+> `@morphit-fees`" for BLURT fees: since an earlier release a BLURT fee is split in the
+> user's own transaction, 90% to the posting instance's fees account and
+> 10% to the treasury (`feeTransfersFor`); BTC/XMR fees still go 100% to
+> the treasury. The attestor loyalty threshold now counts only the
+> treasury's share (see OPERATIONS §20).
 
 ## Context
 
@@ -600,7 +611,7 @@ ourselves via `account_create`.
 
 ## Amendments
 
-### 2026-05-09 (Part 90, Category I ADR-fidelity audit) — fee model evolved to BLURT-native
+### 2026-05-09 (Category I ADR-fidelity audit) — fee model evolved to BLURT-native
 
 The body of this ADR describes a USD-denominated fee
 ($0.25 base, $0.125 BLURT-discounted, computed via dynamic
@@ -664,7 +675,7 @@ was simplified out.  The "Flat $0.25" and "$0.125 in
 BLURT" figures in the body should be read as historical
 target prices, not current configuration.
 
-### 2026-05-10 (Part 106) — treasury chain-pin closes the BTC/XMR fork-attack vector
+### 2026-05-10 — treasury chain-pin closes the BTC/XMR fork-attack vector
 
 **Background.**  ADR-0011's 2026-05-09 amendment established
 the policy that "BTC and XMR fees: 100% to treasury
@@ -672,7 +683,7 @@ the policy that "BTC and XMR fees: 100% to treasury
 themselves**.  Each operator's indexer trusted its own
 `MORPHIT_INDEXER_BTC_FEE_ADDRESS` and
 `MORPHIT_INDEXER_XMR_FEE_ADDRESS` env vars as gospel.  This
-left a real fork-attack vector unmitigated until Part 106:
+left a real fork-attack vector unmitigated until a later fix:
 
   1. A hostile fork edits its env vars to the attacker's
      own BTC/XMR addresses.
@@ -721,7 +732,7 @@ precedence:
 
   1. Most recent valid `morphit_release_v1` row's
      `treasury.{btc|xmr}` field — chain-pinned canonical.
-  2. The operator's env-var fallback (existing pre-Part-106
+  2. The operator's env-var fallback (existing older
      env vars) — bootstrap fallback for fresh indexers
      that haven't seen a treasury-bearing release op yet.
   3. `null` — meaning that fee method is disabled on this
@@ -734,8 +745,8 @@ required.
 
 The frontend reads the same chain-pinned addresses from
 `/v1/release` (validated by
-`@morphit/release-schema` (cp170; formerly
-`apps/web/src/lib/net/releaseValidate.ts`) with rules that
+`@morphit/release-schema` (formerly
+`packages/release-schema/src/releaseValidate.ts`) with rules that
 mirror the indexer's), and renders them on the post-order
 page (`ListingFeeAddressPanel.svelte`) with copy-button +
 QR code + "chain-pinned by @morphit" badge.  This closes
@@ -762,7 +773,7 @@ validator and vice versa):
   - XMR piconero: positive decimal string, 16-digit
     sanity bound (~1000 XMR).
 
-**Hostile-fork containment.**  After Part 106, a hostile
+**Hostile-fork containment.**  Later, a hostile
 fork that edits its own indexer to ignore the chain pin
 only succeeds in marking orders `verified` on **its
 own** instance — every other federated indexer still
@@ -778,7 +789,7 @@ design — view keys reveal incoming transactions to an
 address only, never outgoing spends or balance after
 spend.  This is the standard mechanism for transparency-
 required wallets (charity, escrow, treasury).  The
-`apps/indexer/scripts/verify-xmr-viewkey.ts` helper
+`apps/indexer/scripts/verify-xmr-viewkey.ts` (since removed) helper
 validates that a candidate (address, viewkey) pair
 actually decodes a known transaction before broadcast —
 operators MUST run it before any release op carrying a
@@ -806,9 +817,9 @@ because the txids paid the wrong address from canonical's
 perspective.  This deviation is permitted (federation,
 not centralization) but not in the spirit of the design.
 
-### 2026-05-10 (Part 107) — XMR view key REMOVED from chain-pin (privacy correction)
+### 2026-05-10 — XMR view key REMOVED from chain-pin (privacy correction)
 
-**Background.**  Part 106's design embedded the Monero
+**Background.**  the design embedded the Monero
 private view key in the chain-pinned `treasury` block
 under the rationale "the private view key is publish-safe
 by Monero design."  That framing is true narrowly (no
@@ -868,7 +879,7 @@ options for them:
 
   (a) **Trust canonical's federated XMR verdict** —
       requires a federation-trust path that doesn't
-      exist yet.  Tracked as Part 108+ work.
+      exist yet.  Tracked as later work.
 
   (b) **Run their own XMR treasury wallet** with their
       own env address + view key.  Deviates from
@@ -879,8 +890,8 @@ options for them:
   (c) **Disable XMR fee acceptance** on their instance.
       Cleanest option today.
 
-**The Part 106 chain-pin defense for ADDRESS still
-holds.**  Part 107 only changes the view key handling.
+**The chain-pin defense for ADDRESS still
+holds.**  only changes the view key handling.
 The fork-attack vector of "hostile fork redirects to a
 different XMR address" is closed by the address-
 chain-pin alone; the view key was never the defense for
@@ -897,11 +908,11 @@ release ops MUST NOT include a viewkey field (the
 builder script enforces this; the handler strips it
 defense-in-depth).
 
-### 2026-05-10 (Part 108++) — XMR per-payment tx_proof verification (no view key required by any indexer)
+### 2026-05-10 (later+) — XMR per-payment tx_proof verification (no view key required by any indexer)
 
 > **Superseded in v1.20.0 (M-X1):** the `tx_proof` / OutProof input below could never be verified by the explorers (their `txprove` takes the transaction private key). Orders now carry the payment's `tx_key`; see "v1.20.0 amendments" at the end of this ADR and OPERATIONS.md §40.13.
 
-**Background.**  Part 107 corrected the Part 106 design
+**Background.**  a later change corrected the design
 error of broadcasting the treasury wallet's private
 view key on chain (privacy regression).  The fix kept
 the view key env-only on the canonical operator's box
@@ -909,7 +920,7 @@ the view key env-only on the canonical operator's box
 verify XMR fees.  Community operators inheriting
 canonical's chain-pinned XMR address had no view key,
 so they faced a three-options dilemma documented in
-`OPERATIONS.md §40.8` (Part 107):
+`OPERATIONS.md §40.8`:
 
   (a) Trust canonical's federated verdict — required a
       federation-trust path that never shipped.
@@ -922,10 +933,10 @@ community indexer dependent on canonical morphit.io's
 existence and willingness to verify.  That contradicts
 priority #2 (decentralization, fully distributed,
 unstoppable — no chokepoints, no "morphit.io must be
-up" assumptions).  The path was tracked as a Part 108+
+up" assumptions).  The path was tracked as a later
 TODO but plowing it would have built the wrong thing.
 
-**Part 108++ resolves the dilemma structurally.**
+**later+ resolves the dilemma structurally.**
 Use Monero's standard per-payment proof mechanism
 (`get_tx_proof` / `prove_tx`).  The user generates a
 proof from their own wallet after paying; any indexer
@@ -945,7 +956,7 @@ indexer.
   verification secret (their tx_key, in their own
   wallet, never published).  Indexers hold nothing.
 
-  Compared with the Part 107 status quo (treasury view
+  Compared with the status quo (treasury view
   key on canonical operator's box, sent over HTTPS to
   the explorer for every verification), the proof
   approach is strictly less leaky:
@@ -1000,7 +1011,7 @@ Code changes:
   breaker + multi-explorer pattern as BTC.  Uses
   `txprove=1` mode of xmrchain.net's `/api/outputs`,
   passing the user's proof in place of a viewkey.
-  Includes tx_hash echo check (Item 4 / Audit Part 26
+  Includes tx_hash echo check (Item 4 /
   parity with BTC verifier).
 - Old `MoneroExplorerFeeVerifier` deleted along with
   its 2 test files.
@@ -1015,11 +1026,10 @@ Code changes:
   no more viewkey-required gate, address-only rebuild
   trigger.
 - `/v1/release.treasury` API endpoint already strips
-  any viewkey (Part 107 defense-in-depth) — invariant
+  any viewkey (defense-in-depth) — invariant
   preserved.
 - `release-build-payload.ts` already refuses to emit
-  payloads containing 64-hex strings (Part 107
-  defense-in-depth) — invariant preserved.
+  payloads containing 64-hex strings (defense-in-depth) — invariant preserved.
 - Frontend post-order page: new tx_proof state +
   validator + UI section (privacy reassurance banner,
   per-wallet instructions, textarea, error feedback).
@@ -1028,7 +1038,7 @@ Code changes:
 Config changes:
 - `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` is now a
   deprecated stub.  No code path reads it.  Removed
-  entirely in Part 109 (see Part 109 amendment below).
+  entirely ( amendment below).
 
 Test additions:
 - 25 new MoneroProofFeeVerifier unit tests (happy
@@ -1050,7 +1060,7 @@ Locale additions:
 
 Doc updates:
 - `OPERATIONS.md §40` — major rewrite (~400 lines).
-  New §40.2 "Three priorities: how Part 108++
+  New §40.2 "Three priorities: how later+
   realizes them."  New §40.4 "Choosing your XMR
   explorer backend" with self-hosted Docker recipe.
   Simplified §40.7 community-operator section (was
@@ -1059,24 +1069,24 @@ Doc updates:
 - `RUN-A-MORPHIT-NODE.md §8` community-operator
   callout simplified — every operator can verify
   XMR independently now.
-- This ADR-0011 Part 108++ amendment.
-- `AUDIT-2026-05.md` Part 108++ entry.
+- This ADR-0011 later+ amendment.
+- The internal audit record AUDIT-2026-05, later+ entry.
 - `MORPHIT-BRAG-LIST.md` new entry on per-payment
   proofs eliminating any need for view keys on any
   indexer.
 
-**The Part 106 ADDRESS chain-pin defense and Part 107
-privacy invariant both remain in force.**  Part 108++
+**The ADDRESS chain-pin defense and
+privacy invariant both remain in force.**  later+
 is additive on top: it changes XMR verification
 mechanics, not the address-pinning trust model and not
 the view-key-never-published invariant.  All three
 parts compose:
 
-- Part 106: BTC/XMR addresses + amounts pinned on
+- BTC/XMR addresses + amounts pinned on
   chain by `@morphit`.
-- Part 107: View key NEVER on chain, NEVER in API,
+- View key NEVER on chain, NEVER in API,
   NEVER in logs.
-- Part 108++: View key NEVER required at all.  Per-
+- later+: View key NEVER required at all.  Per-
   payment proofs replace it.
 
 **Federation behavior change (positive).**  Pre-Part-
@@ -1088,7 +1098,7 @@ Federation health is strictly improved.
 
 ---
 
-## Part 109 amendment (2026-05-10)
+## (2026-05-10)
 
 **Title: cleanup + hardening — viewkey env removed,
 multi-explorer quorum gate, per-instance chat-link
@@ -1102,8 +1112,8 @@ the priorities lens (#1 privacy, #2 decentralization,
 ### Changes
 
 **1. `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` removed
-entirely.**  Part 108++ marked the env var "deprecated
-stub" pending one transitional cycle.  Part 109 deletes
+entirely.**  later+ marked the env var "deprecated
+stub" pending one transitional cycle.  A later change deletes
 it:
 
 - env-var dropped from `apps/indexer/src/config/index.ts`
@@ -1120,10 +1130,10 @@ it:
 - env example, OPERATIONS.md, RUN-A-MORPHIT-NODE.md
   swept clean
 - treasurySource.ts header comment block rewritten
-  for Part 109
+ 
 - schema.sql `treasury` column comment updated
 
-Stale `viewkey` fields on Part 106-vintage chain-pin
+Stale `viewkey` fields on early chain-pin
 rows continue to be silently stripped at parse time
 (belt-and-suspenders: the validator has never persisted
 the field, and the resolver never reads it).
@@ -1137,7 +1147,7 @@ of N configured explorers fail (or return
 weaker than the multi-explorer cross-check the operator
 signed up for.
 
-Part 109 adds a `minSuccessfulResponses` config field
+A later change adds a `minSuccessfulResponses` config field
 (both verifiers; default 1 preserves back-compat),
 plumbed from new env vars:
 
@@ -1204,10 +1214,10 @@ CLI gains:
 - existing SEO and Backup steps renumbered (13/14).
   TOTAL_STEPS bumped from 12 to 14.
 
-**5. `docs/PRE-LAUNCH-CHECKLIST.md` consolidated.**
+**5. Pre-launch checklist consolidated (an internal record).**
 A single document tracks every pre-launch operator
 action item across Parts 106/107/108++/109, with
-explicit memory-rule binding ("update in same turn as
+explicit rule binding ("update in the same change as
 any change that adds or closes an item") so it never
 goes stale.
 
@@ -1240,7 +1250,7 @@ Each change was checked against the three priorities:
   point users at self-hosted explorers.  Quorum gate
   reduces the attack surface of a single compromised
   explorer (verifier needs N agreeing responses, not
-  just N=1).  Viewkey removal completes the Part 107
+  just N=1).  Viewkey removal completes the
   privacy invariant.
 - **Decentralization (#2)**: every change keeps
   morphit.io optional.  No new central dependencies.
@@ -1258,35 +1268,35 @@ Each change was checked against the three priorities:
 No federation behavior changes.  Quorum and chat-link
 URLs are per-instance operator decisions; community
 operators who keep defaults see the same behavior they
-saw in Part 108++.
+saw in later+.
 
-**The Part 106 ADDRESS chain-pin defense, Part 107
-privacy invariant, and Part 108++ no-view-key
-verification model all remain in force.**  Part 109
+**The ADDRESS chain-pin defense
+privacy invariant, and later+ no-view-key
+verification model all remain in force.**
 is additive cleanup + hardening; it changes operator
 configurability and adds defensive gates, not the
 fundamental design.
 
 ---
 
-## Part 110 amendment (2026-05-10)
+## (2026-05-10)
 
 **Title: operator-facing cleanup + listing-fee
 configurability in the wizard.**
 
 This part is mostly cleanup and one operator-requested
 UX improvement.  No design changes; the BLURT-native
-fee verification model from Part 105+ and the per-
-payment XMR proof model from Part 108++ are unchanged.
+fee verification model from later and the per-
+payment XMR proof model from later+ are unchanged.
 
 ### Changes
 
-**1. `verify-xmr-viewkey.ts` retired.**  The Part 107-
-era diagnostic helper for sanity-checking a (XMR
+**1. `verify-xmr-viewkey.ts` retired.**  The early
+diagnostic helper for sanity-checking a (XMR
 address, view key) pair against a real test
-transaction is gone.  Part 108++ replaced view-key-
-based verification with per-payment proofs; Part 109
-removed the view-key env var; Part 110 retires the
+transaction is gone.  later+ replaced view-key-
+based verification with per-payment proofs
+removed the view-key env var; a later change retires the
 script.  Sanity-checking your XMR fee address now
 flows through the modern path: configure
 `MORPHIT_INDEXER_XMR_FEE_ADDRESS`, restart the
@@ -1301,7 +1311,7 @@ as a Part-110-retirement notice; OPERATIONS.md §40
 keys-table updated; OPERATIONS.md runbook command-ref
 cleaned; `release-build-payload.ts` header + trailer
 comments updated; `releaseValidate.ts` stale comment
-fixed; PRE-LAUNCH-CHECKLIST.md XMR setup entry
+fixed; the pre-launch checklist's XMR setup entry
 updated.
 
 **2. Listing fee USD target now configurable in the
@@ -1309,7 +1319,7 @@ wizard with live Coingecko recompute.**  Pre-Part-110,
 the operator had to run a separate CLI helper
 (`recommend-fee-amounts.ts --target-usd 0.25`) and
 paste BTC sat + XMR piconero values into
-`morphit.config.env` by hand.  Part 110 promotes this
+`morphit.config.env` by hand.  A later change promotes this
 to a first-class wizard step (new step 13, after fee-
 explorer URLs and chat-link URLs):
 
@@ -1352,13 +1362,13 @@ Operators who need to change it can edit
 
 **5. Pre-launch + day-zero + post-launch docs.**
 Three new operator-facing documents:
-- `docs/PRE-LAUNCH-CHECKLIST.md` (Part 109; extended
-  in Part 110 with relay-funding `[blocking]` item
+- the pre-launch checklist (an internal record) (extended
+  with relay-funding `[blocking]` item
   and listing-fee review `[recommended]` item).
-- `docs/LAUNCH-DAY.md` (Part 110, new): T-minus 24h,
+- `docs/LAUNCH-DAY.md` (new): T-minus 24h,
   T-minus 1h, T-zero, what-to-watch first hour,
   rollback, 24h pacing, end-of-day retrospective.
-- `docs/POST-LAUNCH-WEEK-ONE.md` (Part 110, new):
+- `docs/POST-LAUNCH-WEEK-ONE.md` (new):
   daily AM/PM checks, weekly rollups, paging
   thresholds, common situations playbook.
 
@@ -1380,7 +1390,7 @@ Three new operator-facing documents:
   feeAmountCalc)
 - Frontend tests: 550 (unchanged)
 - Relay tests: 244 (unchanged)
-- Smoke scenarios: 2,271 (no change; Part 110 adds
+- Smoke scenarios: 2,271 (no change; a later change adds
   no new smoke files)
 - Locale parity: 2,424 × 10 (unchanged — wizard
   text is operator-facing, English-only)
@@ -1417,29 +1427,29 @@ No federation behavior changes.
 
 **All previous parts' invariants remain in force:**
 
-- Part 106: BTC/XMR addresses + amounts pinned on
+- BTC/XMR addresses + amounts pinned on
   chain by `@morphit`.
-- Part 107: View key NEVER on chain, NEVER in API,
+- View key NEVER on chain, NEVER in API,
   NEVER in logs.
-- Part 108++: View key NEVER required at all.  Per-
+- later+: View key NEVER required at all.  Per-
   payment proofs replace it.
-- Part 109: View-key env var REMOVED.  Wizard
+- View-key env var REMOVED.  Wizard
   configures fee-verifier explorer URLs + chat-link
   URLs with live health probes.  Quorum gate on both
   verifiers.
-- Part 110: Wizard configures listing-fee USD target
+- Wizard configures listing-fee USD target
   + fallback BLURT price.  Retired diagnostic
   helper.  Pre-launch / launch-day / week-one
   runbooks shipped.
 
 ---
 
-## Part 111 amendment (2026-05-10)
+## (2026-05-10)
 
 **Title: federation-cost attribution via `operator_tag` gating.**
 
 This part closes a federation-design gap that pre-
-dated Part 110: pre-Part-111, every operator's relay
+dated: older, every operator's relay
 queued payouts on every chain-op it saw, multiplying
 treasury spend by the federation count.  Account
 creation was already correctly scoped (HTTP endpoint)
@@ -1447,7 +1457,7 @@ but the chain-op-triggered payouts (welcome bonus,
 low-balance refill, operator earnings, loyalty BP)
 were not.
 
-> **cp408 amendment (2026-07-04):** operator earnings
+> **Amendment (2026-07-04):** operator earnings
 > no longer flow through a relay payout — the owner's
 > 90% is paid directly by the payment-time fee split
 > (see ADR-0013 amendment + FEES-AND-REWARDS.md). The
@@ -1538,7 +1548,7 @@ Four queue insertion sites, each guards on
 
 Adds `orders.operator_tag TEXT` column (nullable)
 plus index `(operator_tag, account, created_at)` for
-the scanner's JOIN.  Backward-compat: pre-Part-111
+the scanner's JOIN.  Backward-compat: older
 rows stay NULL.  Pre-launch reality means this
 compat is for replay tests only.
 
@@ -1612,18 +1622,18 @@ the new function signatures.
 **Federation-cost is now properly scoped.**  All
 previous-part invariants remain in force:
 
-- Part 106: BTC/XMR addresses + amounts pinned on
+- BTC/XMR addresses + amounts pinned on
   chain by `@morphit`.
-- Part 107: View key NEVER on chain.
-- Part 108++: View key NEVER required at all.
-- Part 109: View-key env var REMOVED.  Wizard
+- View key NEVER on chain.
+- later+: View key NEVER required at all.
+- View-key env var REMOVED.  Wizard
   configures fee-verifier + chat-link URLs with
   health probes.  Quorum gate on both verifiers.
-- Part 110: Wizard configures listing-fee USD
+- Wizard configures listing-fee USD
   target + fallback BLURT price.  Retired
   diagnostic helper.  Pre-launch / launch-day /
   week-one runbooks.
-- **Part 111: Federation-cost attribution via
+- **Federation-cost attribution via
   `operator_tag` gating.  Each operator's relay
   pays only for ops served by their own instance.**
 
@@ -1639,7 +1649,7 @@ confirmation. A txid claim after the pin is refused
 (`btc_fee_txid_after_xpub_pin`). No attestation path for these orders: the
 address itself is the proof. See OPERATIONS.md §40.12.
 
-**Amendment v1.20.0 (M-X1, MK-H2) — XMR.** The Part 108++ `tx_proof`
+**Amendment v1.20.0 (M-X1, MK-H2) — XMR.** The later+ `tx_proof`
 design never worked: the explorers' `txprove` takes the transaction PRIVATE key
 (64 hex), not an OutProof. Orders now carry `tx_key`; OutProof-only orders are
 `proof_unsupported` (intake and the v65 upgrade, deterministic, txid

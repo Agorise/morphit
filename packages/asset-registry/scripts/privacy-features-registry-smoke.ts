@@ -2,7 +2,7 @@
 /**
  * privacy-features-registry-smoke.
  *
- * Part 122 cp26 sentinel: every asset in the canonical registry
+ * every asset in the canonical registry
  * must have a non-null, well-formed `privacyFeatures` field.
  * Catches future asset additions that forget to populate it.
  *
@@ -176,7 +176,7 @@ for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 			);
 		} else if (
 			actual.length !== expected.length ||
-			// cp474 — `expected` is the smoke's own string[] table; `actual` is the
+			// `expected` is the smoke's own string[] table; `actual` is the
 			// registry's narrow union. Compare as strings rather than asking the
 			// union to accept an arbitrary string.
 			!expected.every((t) => (actual as readonly string[]).includes(t))
@@ -191,12 +191,12 @@ for (const [ticker, expected] of Object.entries(EXPECTED_TECH)) {
 	}
 }
 
-// ── Scenario 4 — every registered tech tag has its i18n keys (cp40-I2) ─
+// ── Scenario 4 — every registered tech tag has its i18n keys ─
 // CP39 shipped 'shielded-pools' tech tag for ZEC but forgot to add the
 // corresponding `privacy.opt_in_tech.shielded-pools.{name,explain}` i18n
 // keys. The /privacy/zec route reads these dynamically via
 // `$_(\`privacy.opt_in_tech.${tech}.name\`)`, so a missing key surfaces
-// as literal-key text to the user. Cp40 closed the bug and added this
+// as literal-key text to the user. A later change closed the bug and added this
 // defensive smoke so any future tech addition that forgets the i18n
 // pairs fires loud.
 import { readFileSync } from 'node:fs';

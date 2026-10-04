@@ -5,8 +5,7 @@
  * authority: the truncated public key, always shown beside it, is the
  * cryptographic anchor that can't be forged.
  *
- * This module enforces the name-sanitization rules from docs/SECURITY.md
- * and docs/PLAN.md:
+ * This module enforces the name-sanitization rules from docs/SECURITY.md:
  *   - max 40 characters
  *   - no control characters (C0/C1)
  *   - no zero-width joiners / formatters (invisible characters)
@@ -29,7 +28,7 @@
 import { formatPublicKey } from './keygen';
 import { impersonatesReservedName, ownsReservedName } from './confusables';
 
-// cp404 — capDisplayName + the length constants live in the keygen-free
+// capDisplayName + the length constants live in the keygen-free
 // $lib/crypto/displayName module so light, baseline-closure consumers
 // (profileProps.ts) can import the cap without pulling keygen → bip39 into
 // every page's modulepreload. Imported here for this module's own use
@@ -60,8 +59,33 @@ const FORBIDDEN_CODEPOINTS = new Set<number>([
 	0x2061, // FUNCTION APPLICATION
 	0x2062, // INVISIBLE TIMES
 	0x2063, // INVISIBLE SEPARATOR
-	0x2064 // INVISIBLE PLUS
+	0x2064, // INVISIBLE PLUS
+	// Other invisible / default-ignorable characters that could pad a
+	// look-alike name
+	0x200e, // LEFT-TO-RIGHT MARK
+	0x200f, // RIGHT-TO-LEFT MARK
+	0x00ad, // SOFT HYPHEN
+	0x034f, // COMBINING GRAPHEME JOINER
+	0x180e, // MONGOLIAN VOWEL SEPARATOR
+	0x115f, // HANGUL CHOSEONG FILLER
+	0x1160, // HANGUL JUNGSEONG FILLER
+	0x3164, // HANGUL FILLER
+	0xffa0 // HALFWIDTH HANGUL FILLER
 ]);
+
+/** Variation selectors other than U+FE0F (which asks for the emoji form of
+ *  the character before it, as in ❤️, and so stays allowed). Invisible. */
+function isStrayVariationSelector(code: number): boolean {
+	return (code >= 0xfe00 && code <= 0xfe0e) || (code >= 0xe0100 && code <= 0xe01ef);
+}
+
+/** Tag characters are invisible; their one legitimate use is a subdivision
+ *  flag (🏴 U+1F3F4 + tag letters + U+E007F, e.g. the flag of Scotland). */
+const BLACK_FLAG = 0x1f3f4;
+const CANCEL_TAG = 0xe007f;
+function isTag(code: number): boolean {
+	return code >= 0xe0000 && code <= 0xe007f;
+}
 
 export interface DisplayNameValidation {
 	ok: boolean;
@@ -103,12 +127,15 @@ export function validateDisplayName(raw: string, signer?: string): DisplayNameVa
 		return { ok: false, reasonKey: 'profile.display_name.errors.too_long', cleaned: s };
 	}
 
+	let inFlagTags = false;
 	for (const ch of codepoints) {
 		const code = ch.codePointAt(0) ?? 0;
 		if (isControlChar(code)) {
 			return { ok: false, reasonKey: 'profile.display_name.errors.control_char', cleaned: s };
 		}
-		if (FORBIDDEN_CODEPOINTS.has(code)) {
+		const strayTag = isTag(code) && !inFlagTags;
+		inFlagTags = code === BLACK_FLAG || (inFlagTags && isTag(code) && code !== CANCEL_TAG);
+		if (FORBIDDEN_CODEPOINTS.has(code) || isStrayVariationSelector(code) || strayTag) {
 			return { ok: false, reasonKey: 'profile.display_name.errors.invisible_char', cleaned: s };
 		}
 	}
@@ -138,7 +165,7 @@ export function validateDisplayName(raw: string, signer?: string): DisplayNameVa
 	// chars) take precedence — easier for the user to understand
 	// "the @ sign isn't allowed" than "your name is a homograph
 	// of a reserved operator".
-	// v1.8.10 (the maintainer): the signed-in account is exempt on its OWN reserved name —
+	// v1.8.10: the signed-in account is exempt on its OWN reserved name —
 	// @agorise setting "Agorise" is not impersonation. Mirrors the indexer,
 	// which enforces the same rule against the chain-authenticated signer and
 	// remains the authority; this keeps the FORM from rejecting what the chain
@@ -236,7 +263,7 @@ export function fingerprint(publicKey: Uint8Array): string {
  * for recognizability, while the canonical paste-correct form is now
  * produced by `formatPublicKeyBLT` in `$crypto/keygen`.
  *
- * cp165 byte-budget: the sync `fullPublicKey` helper was REMOVED.
+ * byte-budget: the sync `fullPublicKey` helper was REMOVED.
  * Its previous body called dblurt's `PublicKey.toString()` which
  * statically imported the 2 MB dblurt+libsodium+secp256k1 chunk into
  * every authenticated page through the identity-store transitive
@@ -252,7 +279,7 @@ export function fingerprint(publicKey: Uint8Array): string {
  * throughout the UI. If display name is empty/unset, returns just the
  * fingerprint — the key is always the authoritative anchor.
  *
- * cp165 byte-budget: this helper used to also return a `full` field
+ * byte-budget: this helper used to also return a `full` field
  * (the canonical BLT-base58check string).  That field required dblurt's
  * PublicKey class which is part of a 2 MB chunk.  Callers that need
  * the canonical full key string (tooltip on hover, clipboard copy)

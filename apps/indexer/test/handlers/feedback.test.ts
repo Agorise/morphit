@@ -9,8 +9,10 @@ describe('feedback handler', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' }
 		]);
 		const r = await handler(
@@ -79,8 +81,10 @@ describe('feedback handler', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback', throwError: pgErr }
 		]);
 		const r = await handler(
@@ -100,8 +104,10 @@ describe('feedback handler', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback', throwError: pgErr }
 		]);
 		await expect(
@@ -145,9 +151,21 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// The push enqueue runs in its own savepoint (no subscription here).
+			{ match: 'SAVEPOINT feedback_push_enqueue' },
+			{ match: 'FROM push_subscriptions', rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT feedback_push_enqueue' },
+			// The review signals, at the review's block time, in their own savepoint.
+			{ match: 'SAVEPOINT feedback_signals' },
+			{ match: 'INSERT INTO suspicious_reciprocity' },
+			{ match: 'INSERT INTO one_way_pile_on' },
+			{ match: 'INSERT INTO review_concentration' },
+			{ match: 'RELEASE SAVEPOINT feedback_signals' },
 			{ match: 'SAVEPOINT' },
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',
@@ -187,9 +205,21 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// The push enqueue runs in its own savepoint (no subscription here).
+			{ match: 'SAVEPOINT feedback_push_enqueue' },
+			{ match: 'FROM push_subscriptions', rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT feedback_push_enqueue' },
+			// The review signals, at the review's block time, in their own savepoint.
+			{ match: 'SAVEPOINT feedback_signals' },
+			{ match: 'INSERT INTO suspicious_reciprocity' },
+			{ match: 'INSERT INTO one_way_pile_on' },
+			{ match: 'INSERT INTO review_concentration' },
+			{ match: 'RELEASE SAVEPOINT feedback_signals' },
 			{ match: 'SAVEPOINT' },
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',
@@ -226,9 +256,21 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// The push enqueue runs in its own savepoint (no subscription here).
+			{ match: 'SAVEPOINT feedback_push_enqueue' },
+			{ match: 'FROM push_subscriptions', rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT feedback_push_enqueue' },
+			// The review signals, at the review's block time, in their own savepoint.
+			{ match: 'SAVEPOINT feedback_signals' },
+			{ match: 'INSERT INTO suspicious_reciprocity' },
+			{ match: 'INSERT INTO one_way_pile_on' },
+			{ match: 'INSERT INTO review_concentration' },
+			{ match: 'RELEASE SAVEPOINT feedback_signals' },
 			{ match: 'SAVEPOINT' },
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',
@@ -266,9 +308,21 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// The push enqueue runs in its own savepoint (no subscription here).
+			{ match: 'SAVEPOINT feedback_push_enqueue' },
+			{ match: 'FROM push_subscriptions', rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT feedback_push_enqueue' },
+			// The review signals, at the review's block time, in their own savepoint.
+			{ match: 'SAVEPOINT feedback_signals' },
+			{ match: 'INSERT INTO suspicious_reciprocity' },
+			{ match: 'INSERT INTO one_way_pile_on' },
+			{ match: 'INSERT INTO review_concentration' },
+			{ match: 'RELEASE SAVEPOINT feedback_signals' },
 			{ match: 'SAVEPOINT' },
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',
@@ -302,12 +356,12 @@ describe('feedback handler — delayed welcome bonus (ADR-0011)', () => {
 describe('feedback handler — provable-counterparty gate (cp420)', () => {
 	it('rejects a ghost review: no chat with the subject', async () => {
 		// from_a/from_b both 0 = the reviewer never had a
-		// conversation with the subject. Pre-cp420 this inserted (chat
+		// conversation with the subject. Previously, this inserted (chat
 		// was only a badge); now it is a hard gate.
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '0', from_b: '0', span_seconds: null, has_recip_flag: false }]
+				rows: [{ from_a: '0', from_b: '0', span_seconds: null }]
 			}
 		]);
 		const r = await handler(
@@ -325,7 +379,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '3', from_b: '0', span_seconds: '600', has_recip_flag: false }]
+				rows: [{ from_a: '3', from_b: '0', span_seconds: '600' }]
 			}
 		]);
 		const r = await handler(
@@ -336,13 +390,15 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 	});
 
 	it('rejects a review from a flagged suspicious-reciprocity pair', async () => {
-		// Bidirectional chat exists, but the sockpuppet detector already
-		// flagged this pair — blocked from reviewing each other.
+		// Bidirectional chat exists, but the pair's own review history shows
+		// the reciprocity pattern — blocked from reviewing each other.
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '5', from_b: '5', span_seconds: '9000', has_recip_flag: true }]
-			}
+				rows: [{ from_a: '5', from_b: '5', span_seconds: '9000' }]
+			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: true }] }
 		]);
 		const r = await handler(
 			makeCtx({ signer: 'alice', payload: { subject: 'bob', rating: 5 } }),
@@ -353,13 +409,13 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 
 	it('rejects a two-way chat below the verified-chat bar (1 each way, no 15-min span)', async () => {
 		// 1 message each way, no 15-min span — a real but ultra-fast
-		// exchange. the maintainer chose the STRICT gate (cp421): this is below the
+		// exchange. The STRICT gate applies: this is below the
 		// ≥2-each-way + ≥15-min bar, so it is rejected. (Under the older
 		// looser bidirectional-only gate this would have been accepted.)
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '1', from_b: '1', span_seconds: null, has_recip_flag: false }]
+				rows: [{ from_a: '1', from_b: '1', span_seconds: null }]
 			}
 		]);
 		const r = await handler(
@@ -376,7 +432,7 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '4', from_b: '4', span_seconds: '300', has_recip_flag: false }]
+				rows: [{ from_a: '4', from_b: '4', span_seconds: '300' }]
 			}
 		]);
 		const r = await handler(
@@ -392,8 +448,10 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 		const mock = makeMockClient([
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' }
 		]);
 		const r = await handler(
@@ -406,16 +464,28 @@ describe('feedback handler — provable-counterparty gate (cp420)', () => {
 	it('order citation accepts an order posted by the REVIEWER (maker reviewing taker on /my/orders)', async () => {
 		// The direction /my/orders uses: the maker (signer=alice, who
 		// posted the order) reviews the taker (bob), citing the maker's
-		// OWN order. Pre-cp420 the ownership check was `account = subject`
+		// OWN order. Previously, the ownership check was `account = subject`
 		// and rejected this (account=alice≠bob). Now it is
 		// `account IN (subject, reviewer)`.
 		const mock = makeMockClient([
 			{ match: 'FROM orders', rowCount: 1 },
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history: has the reciprocity pattern ever held?
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback' },
+			// The push enqueue runs in its own savepoint (no subscription here).
+			{ match: 'SAVEPOINT feedback_push_enqueue' },
+			{ match: 'FROM push_subscriptions', rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT feedback_push_enqueue' },
+			// The review signals, at the review's block time, in their own savepoint.
+			{ match: 'SAVEPOINT feedback_signals' },
+			{ match: 'INSERT INTO suspicious_reciprocity' },
+			{ match: 'INSERT INTO one_way_pile_on' },
+			{ match: 'INSERT INTO review_concentration' },
+			{ match: 'RELEASE SAVEPOINT feedback_signals' },
 			{ match: 'SAVEPOINT' },
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',

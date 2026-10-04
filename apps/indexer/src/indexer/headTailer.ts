@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — chat head-block fast-path tailer (cp403 [1], ADR-0048).
+ * Morphit indexer — chat head-block fast-path tailer (ADR-0048).
  *
  * PROBLEM. The durable poller (poller.ts) only applies blocks up to
  * `last_irreversible_block_num` (ADR-0008), so a chat message isn't
@@ -80,16 +80,9 @@ import {
 	type TrxSignerCheck
 } from '$indexer/chainTrxSignature';
 import { logger } from '$log';
+import { transactionIdOf } from '$blurt/snapshotOpTrust';
 
 const log = logger('head-tailer');
-
-/** Opt-in fast-path emit tracing. Same gate as the durable handler
- *  (MORPHIT_CHAT_DEBUG=1). Metadata only. Shows whether a head-block
- *  message is emitted to SSE subscribers or dropped by the block check. */
-const CHAT_DEBUG = process.env.MORPHIT_CHAT_DEBUG === '1';
-function tailerDbg(event: string, data: Record<string, unknown>): void {
-	if (CHAT_DEBUG) log.info(event, data);
-}
 
 /** The one op id this tailer cares about. Kept as a local literal
  *  (not imported from the dispatcher) so this file has no dependency
@@ -128,6 +121,32 @@ const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=
  *  fast-emit-ledger-smoke.ts asserts the two still agree. */
 export const MAX_CATCHUP_BLOCKS = 120;
 
+/**
+ * Freshness, the part of a head block that a signature does not prove.
+ * Every old transaction is public and correctly signed, so a node could put
+ * one in a "head block" and have it shown live as new, with a push. A head
+ * block is a few seconds old, and the chain only includes a transaction before
+ * its expiration, which is at most an hour after it was broadcast. So:
+ *   - a block whose time is more than HEAD_BLOCK_MAX_SKEW_MS from this box's
+ *     clock is not a head block, and nothing in it is shown live;
+ *   - a transaction is shown live only when block time - 60 s < expiration
+ *     ≤ block time + TRX_MAX_EXPIRATION_S;
+ *   - a chat transaction the durable path has already stored is not news.
+ * Anything refused here still arrives by the durable path if it is real.
+ */
+export const HEAD_BLOCK_MAX_SKEW_MS = 10 * 60_000;
+export const TRX_MAX_EXPIRATION_S = 3600;
+
+/** Is this transaction's expiration plausible for a block at `blockTime`? */
+export function trxFreshAt(trx: unknown, blockTime: Date): boolean {
+	const exp = (trx as { expiration?: unknown } | null)?.expiration;
+	if (typeof exp !== 'string') return false;
+	const t = Date.parse(exp.endsWith('Z') ? exp : `${exp}Z`);
+	if (!Number.isFinite(t)) return false;
+	const b = blockTime.getTime();
+	return t > b - 60_000 && t <= b + TRX_MAX_EXPIRATION_S * 1000;
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -155,7 +174,7 @@ export function clientTagFromHeader(header: unknown): string | null {
  *      which ADR-0051 keeps durable-only. Publishing one provisionally would let
  *      anyone put unpaid orders in front of every user for ~60s at a time — a fee
  *      bypass with extra steps. The person who POSTED an order sees it instantly
- *      anyway, client-side, via `pendingOrders` — which is what the maintainer actually asked
+ *      anyway, client-side, via `pendingOrders` — which is what was actually asked
  *      for ("the order i just placed") and costs no such hole.
  *    - `morphit_order_replace_v1` (edit) is EXCLUDED because it carries the
  *      order's free text. A rejected edit would flash arbitrary content into every
@@ -294,7 +313,7 @@ export interface LocatedChatOp {
 	readonly ciphertext: string;
 	readonly header: Record<string, unknown>;
 	readonly clientTag: string;
-	/** cp446 — the order this message is about (plaintext field on the op body),
+	/** the order this message is about (plaintext field on the op body),
 	 *  or null. The inbox threads by it and the transcript filters on it, so a
 	 *  fast-path message that arrived without it would surface in the wrong
 	 *  discussion for the ~6s before the durable row replaced it. */
@@ -347,7 +366,7 @@ export function locateChatOp(op: ChainOperation): LocatedChatOp | null {
 	// Same serialized-size gate the handler applies to the header jsonb.
 	if (!checkJsonbSize(payload.header).ok) return null;
 
-	// cp406 — mirror the handler's OPTIONAL sender self-copy bound
+	// mirror the handler's OPTIONAL sender self-copy bound
 	// (handlers/chat.ts): self_ciphertext/self_nonce are a pair, and the
 	// self-copy is capped exactly like the main ciphertext, so the fast path
 	// never provisionally emits a message the durable handler would reject.
@@ -423,6 +442,20 @@ export class HeadTailer {
 		opts: { readonly signedBySigner?: TrxSignerCheck } = {}
 	) {
 		this.signedBySigner = opts.signedBySigner ?? trxSignedByPostingKey(reconciledColumnLookup(db));
+	}
+
+	/** Has the durable path stored this chat transaction already? A failed
+	 *  read counts as "yes": nothing is shown live that cannot be checked. */
+	private async storedChat(trxId: string): Promise<boolean> {
+		try {
+			const r = await this.db.query<{ exists: boolean }>(
+				'SELECT EXISTS (SELECT 1 FROM chat_messages WHERE source_trx_id = $1) AS exists',
+				[trxId]
+			);
+			return r.rows[0]?.exists === true;
+		} catch {
+			return true;
+		}
 	}
 
 	/** Verify, never throwing: a failure to verify is a "no". */
@@ -543,16 +576,33 @@ export class HeadTailer {
 	private async scanBlock(block: BlockHeader): Promise<void> {
 		// Head-block timestamps are UTC; normalise like the dispatcher.
 		const createdAt = new Date(block.timestamp + (block.timestamp.endsWith('Z') ? '' : 'Z'));
+		// Not a head block (see HEAD_BLOCK_MAX_SKEW_MS): nothing in it is live.
+		if (
+			!Number.isFinite(createdAt.getTime()) ||
+			Math.abs(Date.now() - createdAt.getTime()) > HEAD_BLOCK_MAX_SKEW_MS
+		) {
+			return;
+		}
 
 		for (let ti = 0; ti < block.transactions.length; ti++) {
 			const trx = block.transactions[ti];
 			if (!trx) continue;
+			// A replayed old transaction: signed, but not new (see trxFreshAt).
+			if (!trxFreshAt(trx, createdAt)) {
+				continue;
+			}
+			// The transaction's id, recomputed from its content (VT1-9). The
+			// block's `transaction_ids` are the serving node's word: under an id
+			// of its choosing, a message already stored or already delivered on
+			// the fast path was shown live again, and its push dedupe missed.
+			// Every dedupe and notify key below is this one.
+			const trxId = transactionIdOf(trx);
+			if (trxId === null) continue;
 			for (const op of trx.operations) {
 				if (!op) continue;
 
-				// v1.5.5 fastfeedback — the maintainer: "tester2 left a 4-star feedback for
-				// tester3, but tester3 did not get a notification at all (let
-				// alone within 6 seconds)". Only chat had a head-block path, so a
+				// v1.5.5 fastfeedback — a 4-star review produced no notification
+				// at all, let alone within 6 seconds. Only chat had a head-block path, so a
 				// review notification could never beat the durable ~60s. Same
 				// shape as the chat fast path: a strict SUBSET of durable
 				// admission, deduped with the durable enqueue on the trx id.
@@ -565,20 +615,17 @@ export class HeadTailer {
 					// signal, so it must be the owner's signal, not a node's.
 					const owner = orderOp.orderId.slice(0, orderOp.orderId.indexOf('/'));
 					if (!(await this.verified(trx, owner))) {
-						tailerDbg('tailer.DROP.orderStatusUnverified', { order: orderOp.orderId });
 						continue;
 					}
 					orderbookEventBus.emitProvisional({ orderId: orderOp.orderId, kind: orderOp.kind });
 					this.emitted++;
-					tailerDbg('tailer.EMIT.orderStatus', { order: orderOp.orderId, kind: orderOp.kind });
 					continue;
 				}
 
 				const feedbackOp = locateFeedbackOp(op);
 				if (feedbackOp !== null) {
-					const trxIdFb = block.transaction_ids[ti];
-					if (trxIdFb !== undefined && (await this.verified(trx, feedbackOp.reviewer))) {
-						await this.maybeFastFeedbackNotify(feedbackOp, trxIdFb, createdAt);
+					if (await this.verified(trx, feedbackOp.reviewer)) {
+						await this.maybeFastFeedbackNotify(feedbackOp, trxId, createdAt);
 					}
 					continue;
 				}
@@ -597,28 +644,19 @@ export class HeadTailer {
 					// blocked, we don't emit (the durable path will
 					// deliver it once irreversible, with its own check).
 					log.warn('block_check_failed', {}, err);
-					tailerDbg('tailer.DROP.blockCheckFailed', {
-						sender: located.signer,
-						recipient: located.recipient
-					});
 					continue;
 				}
 				if (blocked) {
-					tailerDbg('tailer.DROP.blocked', {
-						sender: located.signer,
-						recipient: located.recipient
-					});
 					continue;
 				}
 
 				const lo = located.signer < located.recipient ? located.signer : located.recipient;
 				const hi = located.signer < located.recipient ? located.recipient : located.signer;
-				// cp471/v1.5.5 — evaluate the SAFE-SUBSET gate ONCE, here, and use
+				// evaluate the SAFE-SUBSET gate ONCE, here, and use
 				// the single answer for BOTH the fast Web Push and whether this
 				// event may be replayed into a later-opened chatroom. Two
 				// independent evaluations of "is this sender established?" is
 				// exactly the drift chatGates.ts exists to prevent.
-				const trxId = block.transaction_ids[ti];
 
 				// Already delivered on the fast path — by our own broadcast relay
 				// (both parties on this instance) or by a peer's push — so emitting
@@ -630,8 +668,11 @@ export class HeadTailer {
 				// The ledger records only messages that were genuinely EMITTED, so a
 				// fast attempt that was dropped or could not evaluate its gate does
 				// not suppress this one. See fastEmitLedger.ts.
-				if (trxId !== undefined && wasFastEmitted(trxId)) {
-					tailerDbg('tailer.SKIP_ALREADY_FAST', { trxId });
+				if (wasFastEmitted(trxId)) {
+					continue;
+				}
+				// Already stored by the durable path: an old message, not news.
+				if (await this.storedChat(trxId)) {
 					continue;
 				}
 
@@ -644,8 +685,7 @@ export class HeadTailer {
 				// Re-reading immediately before the emit closes that window; the
 				// earlier check stays because it saves the gate queries entirely in
 				// the common case, which is that the fast path got there first.
-				if (trxId !== undefined && wasFastEmitted(trxId)) {
-					tailerDbg('tailer.SKIP_ALREADY_FAST_LATE', { trxId });
+				if (wasFastEmitted(trxId)) {
 					continue;
 				}
 
@@ -656,19 +696,9 @@ export class HeadTailer {
 				// not shown LIVE from this block — a peer's verified push or the
 				// durable poller still brings it.
 				if (!(await this.verified(trx, located.signer))) {
-					tailerDbg('tailer.DROP.unverified', {
-						sender: located.signer,
-						recipient: located.recipient
-					});
 					continue;
 				}
 
-				tailerDbg('tailer.EMIT', {
-					sender: located.signer,
-					recipient: located.recipient,
-					order: located.orderPermlink ?? null,
-					replayable: fastAllowed
-				});
 				chatEventBus.emitFast({
 					lo,
 					hi,
@@ -686,17 +716,17 @@ export class HeadTailer {
 				});
 				this.emitted++;
 
-				// cp471 — fast Web Push for this (already block-passed) message.
+				// fast Web Push for this (already block-passed) message.
 				// Gated to a SAFE SUBSET of durable admission so a first-contact
 				// stranger is never fast-notified.
-				if (fastAllowed && trxId !== undefined) {
+				if (fastAllowed) {
 					await this.maybeFastNotify(located, trxId, createdAt);
 				}
 			}
 		}
 	}
 
-	/** cp471/v1.5.5 — the SAFE-SUBSET gate, evaluated ONCE per message.
+	/** the SAFE-SUBSET gate, evaluated ONCE per message.
 	 *
 	 *  True iff this already-block-passed message is clearly allowed: the order
 	 *  tag (if any) names a real order owned by a party, AND either the two have
@@ -711,8 +741,8 @@ export class HeadTailer {
 	 *  path still delivers, just at its own pace). */
 	private async fastNotifyAllowed(located: LocatedChatOp, createdAt: Date): Promise<boolean> {
 		try {
-			// ONE gate, shared with the federation intake (v1.18.0 deep-deep,
-			// rv1-2). The two used to be copies, and both let the "recent
+			// ONE gate, shared with the federation intake.
+			// The two used to be copies, and both let the "recent
 			// outbound" shortcut answer before the order tag was validated — so
 			// a tag the durable handler rejects outright could still notify and
 			// be replayed. See fastNotifyGate.ts. Block time is the admission
@@ -727,7 +757,7 @@ export class HeadTailer {
 		}
 	}
 
-	/** cp471 — enqueue a fast chat Web Push for an already-block-passed message
+	/** enqueue a fast chat Web Push for an already-block-passed message
 	 *  whose safe-subset gate has ALREADY passed (see fastNotifyAllowed — the
 	 *  caller evaluates it once and shares the answer with snapshot replay).
 	 *  Dedup on the trx id collapses this with the durable enqueue to exactly
@@ -808,7 +838,7 @@ export class HeadTailer {
 	private async fastFeedbackAllowed(fb: LocatedFeedbackOp, createdAt: Date): Promise<boolean> {
 		// 1. Fee-verified order citation owned by one of the two parties. Same
 		//    shape as the durable handler's citation gate.
-		//    (v1.18.0 deep-deep, rv6-L1) THE durable handler's predicate, not a
+		//    THE durable handler's predicate, not a
 		//    copy of it: the copy here also accepted 'verified_by_attestation',
 		//    so a review the durable path rejects still notified — and, never
 		//    indexed, it could be re-sent without the duplicate check below
@@ -816,7 +846,11 @@ export class HeadTailer {
 		const cited = await reviewCitesFeePaidOrder(this.db, {
 			permlink: fb.orderPermlink,
 			subject: fb.subject,
-			reviewer: fb.reviewer
+			reviewer: fb.reviewer,
+			// Always the stricter rule: the fast path admits a subset of what the
+			// durable handler will.
+			pairBound: true,
+			asOf: createdAt
 		});
 		if (!cited) return false;
 

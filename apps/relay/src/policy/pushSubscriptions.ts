@@ -16,18 +16,25 @@
  *   - deleteByEndpoint: explicit unsubscribe (UI) OR the worker
  *     received 410 Gone / 404 from the push service.
  *
- * Privacy: no IP, no full user-agent free-text logging beyond the
- * 200-char column.  The endpoint URL itself reveals which push
- * service the user's browser uses, which is unavoidable for Web
- * Push to function.
+ * Privacy: what a row holds is the account, its push endpoint and
+ * keys, a supported UI locale and the muted categories — no IP, no
+ * User-Agent (the column stays for old relays and is always written
+ * NULL), and no account name in the log. The endpoint URL itself
+ * reveals which push service the user's browser uses, which is
+ * unavoidable for Web Push to function.
  */
 
 import type pg from 'pg';
+import { ORDER_LANG_CODES } from '@morphit/operator-config';
 import type { Database } from '$db/pool';
 import { logger } from '$log';
+import { isAllowedPushEndpoint } from './pushEndpoint.ts';
 
 const log = logger('relay-push-subscriptions');
 
+/** 'self_hosted' was never wired to anything (an operator push server that
+ *  does not exist). The wire still accepts it from older cached clients, but
+ *  every row is stored as 'standard'. */
 export type PushPrivacyMode = 'standard' | 'self_hosted';
 
 export interface PushSubscription {
@@ -35,7 +42,6 @@ export interface PushSubscription {
 	readonly endpoint: string;
 	readonly p256dh: string;
 	readonly auth: string;
-	readonly userAgent: string | null;
 	readonly privacyMode: PushPrivacyMode;
 	readonly createdAt: Date;
 	readonly lastDeliveryAt: Date | null;
@@ -43,23 +49,38 @@ export interface PushSubscription {
 	/** Locale tag the user subscribed with (e.g. 'en', 'zh-CN').
 	 *  Used by the push-sender to look up localized title/body
 	 *  strings.  Defaults to 'en' when the client doesn't pass
-	 *  one.  Part 122 cp14. */
+	 *  one.. */
 	readonly locale: string;
 	/** Categories this device has OPTED OUT of (blocklist). Empty
-	 *  means every category is on — the pre-cp450 behaviour. The
+	 *  means every category is on — the older behaviour. The
 	 *  push-sender skips a device whose array contains the pending
 	 *  notification's category, so the per-category Settings toggle
 	 *  governs Web Push (tab-closed) as it already governs the
-	 *  in-page (tab-open) path.  cp450 GAP A. */
+	 *  in-page (tab-open) path.. */
 	readonly mutedCategories: readonly string[];
 }
 
-/** Maximum length we accept for a user-agent string.  Bound on
- *  row size; anything beyond 200 chars is browser introspection
- *  cruft of no value. */
-const MAX_USER_AGENT_LEN = 200;
+/** The UI locales push strings exist in: the 10 supported codes, from the
+ *  shared list a parity smoke keeps equal to the web's SUPPORTED_LOCALES. */
+const SUPPORTED_LOCALES: readonly string[] = ORDER_LANG_CODES;
 
-/** cp138 D-2 — Maximum number of push subscriptions per account.
+/** Map a client locale tag to one of the supported codes — the same rule the
+ *  indexer's pushLocalize uses and migration v66 applied to existing rows:
+ *  an exact code is kept; a tag whose language is supported keeps only the
+ *  language (`fa-IR` → `fa`); Chinese goes to zh-HK when the tag says
+ *  Traditional / Taiwan / Hong Kong, else zh-CN; anything else is `en`.
+ *  Storing the raw navigator.language narrowed the user's region. */
+export function normalizePushLocale(tag: string | null | undefined): string {
+	if (typeof tag !== 'string') return 'en';
+	const t = tag.trim();
+	const exact = SUPPORTED_LOCALES.find((l) => l.toLowerCase() === t.toLowerCase());
+	if (exact !== undefined) return exact;
+	const head = t.split(/[-_]/)[0]!.toLowerCase();
+	if (head === 'zh') return /hant|tw|hk|mo/i.test(t) ? 'zh-HK' : 'zh-CN';
+	return SUPPORTED_LOCALES.includes(head) ? head : 'en';
+}
+
+/** Maximum number of push subscriptions per account.
  *
  *  Without this cap, a single account can register thousands of
  *  `(account, endpoint)` pairs.  The push-sender's fan-out loop
@@ -77,7 +98,8 @@ const MAX_USER_AGENT_LEN = 200;
  *  before the new one is inserted — same as a sliding window.
  *  This guarantees that a user who switches devices regularly
  *  doesn't get permanently locked out by old/dead subscriptions
- *  occupying their slot. */
+ *  occupying their slot.  Concurrent subscribes for one account are
+ *  serialised by a transaction-scoped advisory lock (see upsert). */
 const MAX_SUBSCRIPTIONS_PER_ACCOUNT = 20;
 
 /** The notification categories the app can push.  A subscription's
@@ -104,11 +126,9 @@ export class PushSubscriptionStore {
 	constructor(private readonly db: Database) {}
 
 	/** Upsert one subscription.  Idempotent on (account, endpoint).
-	 *  Returns the row that's now in the DB. */
-	/** Upsert one subscription.  Idempotent on (account, endpoint).
 	 *  Returns the row that's now in the DB.
 	 *
-	 *  cp138 D-2: enforces MAX_SUBSCRIPTIONS_PER_ACCOUNT.  If the
+	 *  enforces MAX_SUBSCRIPTIONS_PER_ACCOUNT.  If the
 	 *  caller already has the max number of distinct endpoints and
 	 *  this upsert would add a NEW one (no conflict on the unique
 	 *  key), the oldest existing subscription is evicted first.
@@ -120,25 +140,26 @@ export class PushSubscriptionStore {
 		endpoint: string;
 		p256dh: string;
 		auth: string;
-		userAgent: string | null;
 		privacyMode: PushPrivacyMode;
 		locale: string;
 		mutedCategories: readonly string[];
 	}): Promise<PushSubscription> {
-		const ua =
-			input.userAgent === null
-				? null
-				: input.userAgent.slice(0, MAX_USER_AGENT_LEN);
 		const mutedCategories = sanitizeMutedCategories(input.mutedCategories);
+		const locale = normalizePushLocale(input.locale);
 
-		// cp138 D-2 — eviction step.  ONLY runs when the incoming
+		// eviction step.  ONLY runs when the incoming
 		// endpoint is NEW for this account (the ON CONFLICT path
 		// is a no-op for cap purposes since it doesn't add a row).
-		// We need a transaction so a race between two parallel
-		// upserts can't both see the same "under cap" snapshot and
-		// both insert.  PoolClient.transaction here makes the
-		// SELECT-DELETE-INSERT atomic.
+		// A READ COMMITTED transaction alone does NOT make the
+		// COUNT → DELETE → INSERT atomic: two concurrent upserts both
+		// counted "under the cap" and both inserted (40 concurrent
+		// subscribes left 22+ rows). The advisory lock below, taken
+		// first and held until COMMIT, serialises upserts for the same
+		// account; other accounts are not blocked.
 		return this.db.withTx(async (tx) => {
+			await tx.query(`SELECT pg_advisory_xact_lock(hashtext('push_subscriptions:' || $1))`, [
+				input.account
+			]);
 			// Step 1: count this account's existing subscriptions
 			// (cheap — account is indexed).
 			const countRes = await tx.query<{ c: string; has_endpoint: boolean }>(
@@ -170,36 +191,27 @@ export class PushSubscriptionStore {
 					[input.account, toEvict]
 				);
 				log.info('evicted_for_cap', {
-					account: input.account,
 					evicted: toEvict,
 					max_per_account: MAX_SUBSCRIPTIONS_PER_ACCOUNT
 				});
 			}
 
-			// Step 3: the actual upsert.
+			// Step 3: the actual upsert. user_agent is always NULL and
+			// privacy_mode always 'standard' (see the type comments).
 			const result = await tx.query<RawRow>(
 				`INSERT INTO push_subscriptions
 				   (account, endpoint, p256dh, auth, user_agent, privacy_mode, locale, muted_categories)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				 VALUES ($1, $2, $3, $4, NULL, 'standard', $5, $6)
 				 ON CONFLICT (account, endpoint) DO UPDATE
 				   SET p256dh = EXCLUDED.p256dh,
 				       auth = EXCLUDED.auth,
-				       user_agent = EXCLUDED.user_agent,
-				       privacy_mode = EXCLUDED.privacy_mode,
+				       user_agent = NULL,
+				       privacy_mode = 'standard',
 				       locale = EXCLUDED.locale,
 				       muted_categories = EXCLUDED.muted_categories,
 				       consecutive_failures = 0
 				 RETURNING *`,
-				[
-					input.account,
-					input.endpoint,
-					input.p256dh,
-					input.auth,
-					ua,
-					input.privacyMode,
-					input.locale,
-					mutedCategories
-				]
+				[input.account, input.endpoint, input.p256dh, input.auth, locale, mutedCategories]
 			);
 			const row = result.rows[0];
 			if (!row) {
@@ -209,7 +221,7 @@ export class PushSubscriptionStore {
 				// hand back undefined.
 				throw new Error('upsert returned no row');
 			}
-			log.info('upsert', { account: input.account, privacy_mode: input.privacyMode });
+			log.info('upsert', { new_device: !hasEndpoint });
 			return rowToSub(row);
 		});
 	}
@@ -223,7 +235,7 @@ export class PushSubscriptionStore {
 	 *  per-category Settings toggle takes effect for Web Push. An
 	 *  unknown category matches nobody's blocklist, so it fans out to
 	 *  every device (fail-open: a category this build doesn't model is
-	 *  never silently swallowed).  cp450 GAP A. */
+	 *  never silently swallowed).. */
 	async listByAccount(
 		account: string,
 		category?: string
@@ -276,7 +288,35 @@ export class PushSubscriptionStore {
 			`DELETE FROM push_subscriptions WHERE account = $1 AND endpoint = $2`,
 			[account, endpoint]
 		);
-		log.info('delete', { account });
+		log.info('delete');
+	}
+
+	/** Delete every stored subscription whose endpoint the relay would no
+	 *  longer send to (policy/pushEndpoint.ts) — rows taken before the policy
+	 *  existed. Run at boot; returns how many were deleted. */
+	async pruneEndpointsOutsidePolicy(extraHosts: readonly string[]): Promise<number> {
+		const rows = await this.db.query<{ account: string; endpoint: string }>(
+			`SELECT account, endpoint FROM push_subscriptions`
+		);
+		let n = 0;
+		for (const r of rows.rows) {
+			if (isAllowedPushEndpoint(r.endpoint, extraHosts)) continue;
+			await this.db.query(`DELETE FROM push_subscriptions WHERE account = $1 AND endpoint = $2`, [
+				r.account,
+				r.endpoint
+			]);
+			n++;
+		}
+		return n;
+	}
+
+	/** Delete every subscription and every queued push. For a relay that will
+	 *  never send push (hidden-only: every browser push service is a clearnet
+	 *  host), the account ↔ device mapping is a liability with no use. */
+	async deleteAll(): Promise<{ subscriptions: number; pending: number }> {
+		const subs = await this.db.query(`DELETE FROM push_subscriptions`);
+		const pending = await this.db.query(`DELETE FROM push_pending`);
+		return { subscriptions: subs.rowCount ?? 0, pending: pending.rowCount ?? 0 };
 	}
 
 	/** Count for operator metrics / health endpoint. */
@@ -295,7 +335,6 @@ interface RawRow {
 	endpoint: string;
 	p256dh: string;
 	auth: string;
-	user_agent: string | null;
 	privacy_mode: string;
 	created_at: Date;
 	last_delivery_at: Date | null;
@@ -310,7 +349,6 @@ function rowToSub(r: RawRow): PushSubscription {
 		endpoint: r.endpoint,
 		p256dh: r.p256dh,
 		auth: r.auth,
-		userAgent: r.user_agent,
 		privacyMode: r.privacy_mode as PushPrivacyMode,
 		createdAt: r.created_at,
 		lastDeliveryAt: r.last_delivery_at,

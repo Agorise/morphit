@@ -42,166 +42,152 @@ export interface ClassifiedAlert {
 	readonly alert: StructuredAlert;
 }
 
-// ─── Tier matchers ───────────────────────────────────────────────
+// ─── Tier rules ──────────────────────────────────────────────────
+//
+// One row per (module, event) an emitter in this tree actually produces —
+// the indexer and relay loggers, and the ops sidecars (ops/scripts/*.sh via
+// lib/emit.sh). classifier-emitter-coverage-smoke fails on a row nothing
+// emits: a rule for an event that never happens is an alert that can never
+// fire, and it hides the real event the operator needed to hear about.
+// Anything without a row is INFO and waits for the daily digest.
 
-const CRITICAL_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
-	// operator-balance: LOW_BALANCE at zero or below is CRITICAL
-	// (relay halts welcome bonuses).  Above zero is WARN below.
-	(a) =>
-		a.module === 'operator-balance' &&
-		a.event === 'low_balance' &&
-		typeof a.payload?.['balance_blurt'] === 'number' &&
-		(a.payload['balance_blurt'] as number) <= 0,
-	// relay-acts: the relay's liquid BLURT is below the
-	// account_creation_fee it pays inline per account_create, so it is
-	// REFUSING signups right now (relay_out_of_funds). Blurt disabled the
-	// ACT model at HF2; signup readiness gates on liquid balance now.
-	(a) => a.module === 'relay-acts' && a.event === 'relay_low_balance_for_signups',
-	// operator-balance: indexer can't reach the chain — alerting is BLIND.
-	(a) => a.module === 'operator-balance' && a.event === 'rpc_sustained_failure',
-	// operator-balance: balance shape unparseable — chain upgrade?
-	(a) => a.module === 'operator-balance' && a.event === 'shape_error',
-	// signup-ceiling: daily ceiling hit (likely under attack).
-	(a) => a.module === 'signup-ceiling' && a.event === 'ceiling_reached',
-	// kill-switch: signups halted (manual or auto-on-startup).
-	(a) => a.module === 'kill-switch' && a.event === 'kill_switch_activated',
-	(a) => a.module === 'kill-switch' && a.event === 'kill_switch_active_at_startup',
-	// witness-fee poller blind (aspirational — emit code pending).
-	(a) => a.module === 'witness-fee' && a.event === 'rpc_sustained_failure',
-	// tamper detection (aspirational).
-	(a) => a.module === 'tamper' && a.event === 'bundle_hash_mismatch',
-	(a) => a.module === 'tamper' && a.event === 'pubkey_mismatch',
-	(a) => a.module === 'tamper' && a.event === 'invalid_payload',
-	// Backup unit failure.
-	(a) => a.module === 'backup' && a.event === 'failed',
-	// AIDE integrity violation.
-	(a) => a.module === 'aide' && a.event === 'integrity_violation',
-	// fee-verifier invariant violation attempt (Memory #23).
-	(a) => a.module === 'fee-verifier' && a.event === 'invalid_fee_method',
+export interface TierRule {
+	readonly module: string;
+	readonly event: string;
+	readonly tier: 'CRITICAL' | 'WARN';
+	/** Extra condition on the payload; the row applies only when it holds. */
+	readonly when?: (a: StructuredAlert) => boolean;
+}
 
-	// cp10 host-resource — disk/mem/swap/swap-thrashing/cpu
-	// at CRITICAL level.  Emit code: ops/scripts/morphit-host-monitor.sh.
-	(a) => a.module === 'host-resource' && a.event === 'disk_critical',
-	(a) => a.module === 'host-resource' && a.event === 'mem_critical',
-	(a) => a.module === 'host-resource' && a.event === 'swap_critical',
-	(a) => a.module === 'host-resource' && a.event === 'swap_thrashing_critical',
-	(a) => a.module === 'host-resource' && a.event === 'cpu_saturated_critical',
+const crit = (module: string, event: string, when?: TierRule['when']): TierRule => ({
+	module,
+	event,
+	tier: 'CRITICAL',
+	...(when ? { when } : {})
+});
+const warn = (module: string, event: string): TierRule => ({ module, event, tier: 'WARN' });
 
-	// cp11 extended monitoring — disk SMART, fail2ban, mdadm RAID.
-	// Emit code: ops/scripts/morphit-{smartctl,fail2ban,mdadm}-monitor.sh.
-	(a) => a.module === 'smartctl' && a.event === 'smart_failed',
-	(a) => a.module === 'smartctl' && a.event === 'self_test_failed',
-	(a) => a.module === 'smartctl' && a.event === 'temperature_critical',
-	(a) => a.module === 'fail2ban' && a.event === 'daemon_unreachable',
-	(a) => a.module === 'fail2ban' && a.event === 'jail_critical_ban_count',
-	(a) => a.module === 'mdadm' && a.event === 'array_failed',
-	(a) => a.module === 'mdadm' && a.event === 'array_degraded',
+/** First matching row wins; CRITICAL rows come first. */
+export const TIER_RULES: readonly TierRule[] = [
+	// ─── CRITICAL ───
+	// operator-balance: LOW_BALANCE at zero or below is CRITICAL (relay halts
+	// welcome bonuses). Above zero it is the WARN row further down.
+	crit(
+		'operator-balance',
+		'low_balance',
+		(a) => typeof a.payload?.['balance_blurt'] === 'number' && (a.payload['balance_blurt'] as number) <= 0
+	),
+	// The relay's liquid BLURT is below the account_creation_fee it pays inline
+	// per account_create, so it is REFUSING signups right now.
+	crit('relay-acts', 'relay_low_balance_for_signups'),
+	// The chain fee spiked past 1.5x the configured fee: signups refused until
+	// the operator confirms the new fee.
+	crit('relay-create', 'relay_fee_spike_refused'),
+	// The indexer cannot read the chain — alerting is BLIND.
+	crit('operator-balance', 'rpc_sustained_failure'),
+	crit('witness-fee', 'rpc_sustained_failure'),
+	// A chain answer Morphit cannot parse — chain upgrade?
+	crit('operator-balance', 'shape_error'),
+	crit('witness-fee', 'shape_error'),
+	// RPC operators serve DIFFERENT content for the same block: one of them is
+	// lying or the chain forked.
+	crit('btc-fee-block-confirm', 'fee_relevant_block_forged'),
+	crit('poller', 'chain_consistency_disagreement'),
+	// Daily signup ceiling hit (likely under attack).
+	crit('signup-ceiling', 'ceiling_reached'),
+	// Signups halted (manual or still on at startup).
+	crit('kill-switch', 'kill_switch_activated'),
+	crit('kill-switch', 'kill_switch_active_at_startup'),
+	// Host sidecars (ops/scripts/morphit-*-monitor.sh).
+	crit('host-resource', 'disk_critical'),
+	crit('host-resource', 'mem_critical'),
+	crit('host-resource', 'swap_critical'),
+	crit('host-resource', 'swap_thrashing_critical'),
+	crit('host-resource', 'cpu_saturated_critical'),
+	crit('host-resource', 'mount_critical'),
+	crit('smartctl', 'smart_failed'),
+	crit('smartctl', 'self_test_failed'),
+	crit('smartctl', 'temperature_critical'),
+	crit('fail2ban', 'daemon_unreachable'),
+	crit('fail2ban', 'jail_critical_ban_count'),
+	crit('mdadm', 'array_failed'),
+	crit('mdadm', 'array_degraded'),
+	crit('dmesg', 'oom_kill'),
+	crit('dmesg', 'kernel_oops'),
+	crit('dmesg', 'kernel_panic'),
+	crit('dmesg', 'hardware_error'),
+	crit('dmesg', 'segfault_in_morphit'),
+	crit('trivy', 'image_critical_vulns'),
+	// Postfix queue depth (silent-alerting-failure detector).
+	crit('postfix', 'queue_critical'),
+	crit('certbot', 'cert_expiry_critical'),
+	crit('certbot', 'renewal_stalled'),
+	crit('apt', 'security_updates_critical'),
+	crit('compose', 'service_unhealthy'),
+	crit('compose', 'service_exited'),
+	// A failed unit — the backup unit included — is reported here.
+	crit('systemd', 'unit_failed'),
+	crit('journald', 'journal_size_critical'),
 
-	// cp12 — dmesg kernel-log events.  All CRITICAL except
-	// segfault_other (WARN) and dmesg_unreadable (INFO).
-	(a) => a.module === 'dmesg' && a.event === 'oom_kill',
-	(a) => a.module === 'dmesg' && a.event === 'kernel_oops',
-	(a) => a.module === 'dmesg' && a.event === 'kernel_panic',
-	(a) => a.module === 'dmesg' && a.event === 'hardware_error',
-	(a) => a.module === 'dmesg' && a.event === 'segfault_in_morphit',
-
-	// cp12 — trivy Docker image vulnerability scan.
-	(a) => a.module === 'trivy' && a.event === 'image_critical_vulns',
-
-	// cp12 — postfix queue depth (silent-alerting-failure detector).
-	(a) => a.module === 'postfix' && a.event === 'queue_critical',
-
-	// cp13 — certbot TLS cert expiry + renewal-stall.
-	(a) => a.module === 'certbot' && a.event === 'cert_expiry_critical',
-	(a) => a.module === 'certbot' && a.event === 'renewal_stalled',
-
-	// cp13 — apt pending security updates.
-	(a) => a.module === 'apt' && a.event === 'security_updates_critical',
-
-	// cp13 — Docker Compose service health.
-	(a) => a.module === 'compose' && a.event === 'service_unhealthy',
-	(a) => a.module === 'compose' && a.event === 'service_exited',
-
-	// cp14 — systemd unit health.
-	(a) => a.module === 'systemd' && a.event === 'unit_failed',
-
-	// cp14 — journald disk usage (filling-disk-silently).
-	(a) => a.module === 'journald' && a.event === 'journal_size_critical',
-
-	// cp15 — host-resource bind-mount + tmpfs critical.
-	(a) => a.module === 'host-resource' && a.event === 'mount_critical'
-];
-
-const WARN_MATCHERS: ReadonlyArray<(a: StructuredAlert) => boolean> = [
-	// operator-balance: low but above zero.  CRITICAL caught zero-or-below.
-	(a) => a.module === 'operator-balance' && a.event === 'low_balance',
-	// witness-fee: chain fee changed.
-	(a) => a.module === 'witness-fee' && a.event === 'changed',
-	// Price feed stale.
-	(a) => a.module === 'price' && a.event === 'feed_stale',
-	(a) => a.module === 'price-coingecko' && a.event === 'feed_stale',
-	// signup-anomaly probe.
-	(a) => a.module === 'signup-anomaly' && a.event === 'single_ip_spike',
-	// federation peer down a while.
-	(a) => a.module === 'federation-probe' && a.event === 'peer_down_24h',
-	// sequential pattern (Layer 8).
-	(a) => a.module === 'sequential-detector' && a.event === 'pattern_detected',
-
-	// cp10 host-resource — WARN tier.
-	(a) => a.module === 'host-resource' && a.event === 'disk_warn',
-	(a) => a.module === 'host-resource' && a.event === 'mem_warn',
-	(a) => a.module === 'host-resource' && a.event === 'swap_warn',
-	(a) => a.module === 'host-resource' && a.event === 'swap_thrashing_warn',
-	(a) => a.module === 'host-resource' && a.event === 'cpu_saturated_warn',
-
-	// cp11 extended monitoring — WARN tier.
-	(a) => a.module === 'smartctl' && a.event === 'reallocated_sectors',
-	(a) => a.module === 'smartctl' && a.event === 'pending_sectors',
-	(a) => a.module === 'smartctl' && a.event === 'temperature_warn',
-	(a) => a.module === 'fail2ban' && a.event === 'jail_high_ban_count',
-	(a) => a.module === 'fail2ban' && a.event === 'jail_ban_rate_warn',
-
-	// cp12 — WARN tier.
-	(a) => a.module === 'dmesg' && a.event === 'segfault_other',
-	(a) => a.module === 'dmesg' && a.event === 'fd_exhausted',
-	(a) => a.module === 'trivy' && a.event === 'image_high_vulns',
-	(a) => a.module === 'trivy' && a.event === 'image_scan_failed',
-	(a) => a.module === 'postfix' && a.event === 'queue_warn',
-
-	// cp13 — WARN tier.
-	(a) => a.module === 'certbot' && a.event === 'cert_expiry_warn',
-	(a) => a.module === 'apt' && a.event === 'security_updates_warn',
-	(a) => a.module === 'compose' && a.event === 'service_restart_loop',
-
-	// cp14 — WARN tier.
-	(a) => a.module === 'systemd' && a.event === 'unit_restart_loop',
-	(a) => a.module === 'systemd' && a.event === 'unit_missing',
-	(a) => a.module === 'journald' && a.event === 'journal_size_warn',
-	(a) => a.module === 'journald' && a.event === 'journal_rotation_stale',
-
-	// cp15 — host-resource mount warn (bind-mount / tmpfs).
-	(a) => a.module === 'host-resource' && a.event === 'mount_warn',
-
-	// cp15 — smartctl SCT thermal-log trend analysis.
-	(a) => a.module === 'smartctl' && a.event === 'temperature_sustained_high',
-	(a) => a.module === 'smartctl' && a.event === 'temperature_overlimit_count',
-
-	// cp600 — a NEW Morphit release is available (from morphit-release-monitor).
-	// WARN so the operator/grandma gets a prompt individual DM (deduped 1/hour)
-	// rather than it being buried in the once-a-day INFO digest — this is the
-	// Matrix twin of the desktop upgrade-notify toast, gated on her having set a
-	// Matrix alert MXID in the wizard.  Observation-only (rule #29): the DM tells
-	// her to run `sudo morphit-ops`; nothing auto-upgrades.
-	(a) => a.module === 'release' && a.event === 'release_available'
+	// ─── WARN (rate-limited to one per hour per (module, event)) ───
+	warn('operator-balance', 'low_balance'),
+	// Blurt witnesses changed the account-creation fee.
+	warn('witness-fee', 'fee_changed'),
+	// Every price upstream failed and there is no cached price: the instance
+	// shows its static floor price.
+	warn('price', 'all_upstreams_failed_no_cache_serving_floor'),
+	// A whole fee re-verification pass failed.
+	warn('fee-recheck', 'fee_recheck_pass_failed'),
+	// A fee-relevant block no two RPC operators confirm (indexing waits on it),
+	// or one applied on a single operator's word.
+	warn('poller', 'block_not_confirmed'),
+	warn('btc-fee-block-confirm', 'fee_relevant_block_unconfirmed'),
+	warn('btc-fee-block-confirm', 'fee_relevant_block_single_source'),
+	// Probing a federation peer failed unexpectedly.
+	warn('federation-probe', 'probe_threw'),
+	// Signups refused as a sequential pattern (Layer 8): situational awareness.
+	warn('relay-create', 'sequential_pattern_rejected'),
+	// The relay paid for something the chain cannot confirm or deny: never
+	// re-sent automatically, the operator decides.
+	warn('relay-create', 'create_outcome_unknown'),
+	warn('relay-drainer', 'row_escalated_outcome_unknown'),
+	// A new Morphit release is available (morphit-release-monitor): a prompt
+	// individual DM rather than a line in the daily digest. Nothing
+	// auto-upgrades; the DM tells the operator to run `sudo morphit-ops`.
+	warn('release', 'release_available'),
+	warn('host-resource', 'disk_warn'),
+	warn('host-resource', 'mem_warn'),
+	warn('host-resource', 'swap_warn'),
+	warn('host-resource', 'swap_thrashing_warn'),
+	warn('host-resource', 'cpu_saturated_warn'),
+	warn('host-resource', 'mount_warn'),
+	warn('smartctl', 'reallocated_sectors'),
+	warn('smartctl', 'pending_sectors'),
+	warn('smartctl', 'temperature_warn'),
+	warn('smartctl', 'temperature_sustained_high'),
+	warn('smartctl', 'temperature_overlimit_count'),
+	warn('fail2ban', 'jail_high_ban_count'),
+	warn('fail2ban', 'jail_ban_rate_warn'),
+	warn('dmesg', 'segfault_other'),
+	warn('dmesg', 'fd_exhausted'),
+	warn('trivy', 'image_high_vulns'),
+	warn('trivy', 'image_scan_failed'),
+	warn('postfix', 'queue_warn'),
+	warn('certbot', 'cert_expiry_warn'),
+	warn('apt', 'security_updates_warn'),
+	warn('compose', 'service_restart_loop'),
+	warn('systemd', 'unit_restart_loop'),
+	warn('systemd', 'unit_missing'),
+	warn('journald', 'journal_size_warn'),
+	warn('journald', 'journal_rotation_stale')
 ];
 
 export function classify(alert: StructuredAlert): ClassifiedAlert {
 	const category: AlertCategory = `${alert.module}:${alert.event}`;
-	for (const match of CRITICAL_MATCHERS) {
-		if (match(alert)) return { tier: 'CRITICAL', category, alert };
-	}
-	for (const match of WARN_MATCHERS) {
-		if (match(alert)) return { tier: 'WARN', category, alert };
+	for (const rule of TIER_RULES) {
+		if (rule.module !== alert.module || rule.event !== alert.event) continue;
+		if (rule.when !== undefined && !rule.when(alert)) continue;
+		return { tier: rule.tier, category, alert };
 	}
 	return { tier: 'INFO', category, alert };
 }
@@ -214,7 +200,7 @@ interface AlertCopyEntry {
 }
 
 const ALERT_COPY: Record<string, AlertCopyEntry> = {
-	// ─── WIRED IN CODE TODAY (operator-balance) ───────────────
+	// ─── operator-balance ───────────────────────────────────────
 	'operator-balance:low_balance': {
 		title: 'Operator account low: @{account}',
 		advice:
@@ -258,7 +244,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'poll (within ~30s).'
 	},
 
-	// ─── cp600 — a new Morphit release is available (Matrix twin of the
+	// ─── a new Morphit release is available (Matrix twin of the
 	// desktop upgrade-notify toast; observation-only per rule #29) ───
 	'release:release_available': {
 		title: 'New Morphit release available: {latest}',
@@ -269,19 +255,20 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'Details: {release_url}'
 	},
 
-	// ─── WIRED IN CODE TODAY (signup-ceiling) ─────────────────
+	// ─── signup-ceiling ─────────────────────────────────────────
 	'signup-ceiling:ceiling_reached': {
 		title: 'Daily signup ceiling hit — likely under attack',
 		advice:
 			'Your instance hit the daily ceiling of {ceiling} signups. New ' +
 			'signups will be refused until {resets_at}. This usually means an ' +
 			'active attack. Check `journalctl -u morphit-relay --since "1 hour ' +
-			'ago" | grep signup` for source IPs and patterns. Consider: lowering ' +
+			'ago" | grep rejected` for the refusal reasons (the relay never logs ' +
+			'client addresses). Consider: lowering ' +
 			'the ceiling, toggling MORPHIT_RELAY_SIGNUP_ENABLED=false, or ' +
 			'following the response playbook in OPERATIONS.md §38.'
 	},
 
-	// ─── WIRED IN CODE TODAY (kill-switch) ────────────────────
+	// ─── kill-switch ────────────────────────────────────────────
 	'kill-switch:kill_switch_activated': {
 		title: 'Kill-switch activated — signups halted',
 		advice:
@@ -304,102 +291,125 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'The kill-switch file at {path} is gone. Account creation is back ON.'
 	},
 
-	// ─── ASPIRATIONAL (matcher reserved; emit code pending) ───
+	// ─── witness fee, chain trust, money paths ──────────────────
 	'witness-fee:rpc_sustained_failure': {
 		title: 'Witness fee poller cannot reach Blurt chain',
 		advice:
-			'The poller failed multiple consecutive checks. Your relay is using ' +
-			'its fallback MORPHIT_RELAY_ACCOUNT_CREATION_FEE_BLURT — if witnesses ' +
-			'raised the fee, your relay will start refusing signups (sanity ' +
-			'check rejects the mismatch).'
+			'The poller failed {consecutive_failures} consecutive checks. If the ' +
+			'witnesses raise the account-creation fee meanwhile, nobody here will ' +
+			'notice until signups start failing. Check the node\'s RPC endpoints.'
 	},
-	'witness-fee:changed': {
-		title: 'Blurt witnesses changed the chain account-creation fee',
+	'witness-fee:shape_error': {
+		title: 'Witness fee answer is unparseable',
 		advice:
-			'Chain fee went from {old} → {new} BLURT. Update ' +
-			'MORPHIT_RELAY_ACCOUNT_CREATION_FEE_BLURT in /etc/morphit/relay.env ' +
-			'to {new} and restart the relay.'
+			'The chain returned an account-creation fee Morphit could not parse. ' +
+			'Usually a Blurt chain upgrade changed the RPC response shape; ' +
+			'upgrade Morphit.'
 	},
-	'tamper:bundle_hash_mismatch': {
-		title: 'Frontend code does not match the on-chain signed release',
+	'witness-fee:fee_changed': {
+		title: 'Blurt witnesses changed the account-creation fee',
 		advice:
-			'Users visiting your instance right now may be running modified code. ' +
-			'Check your web server + CDN. If you did not deploy a hot-fix, this ' +
-			'could be a compromise. See OPERATIONS.md §37.10.1.'
+			'The chain fee went from {old_blurt} to {new_blurt} BLURT ({direction}, ' +
+			'{delta_pct}%). Update MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT in ' +
+			'/etc/morphit/relay.env and /etc/morphit/indexer.env to {new_blurt} and ' +
+			'restart both. Above 1.5x the configured value the relay refuses ' +
+			'signups until you do.'
 	},
-	'tamper:pubkey_mismatch': {
-		title: 'Release-signing pubkey does not match expected',
+	'relay-create:relay_fee_spike_refused': {
+		title: 'Signups DOWN: the chain account-creation fee spiked',
 		advice:
-			'The pubkey signing release ops is not the one this instance expects. ' +
-			'Either you rotated the key and forgot to redeploy, OR the chain ' +
-			'account that signs releases has been compromised.'
+			'The live fee is {observed_blurt} BLURT, more than 1.5x the configured ' +
+			'{configured_blurt} BLURT, so the relay refuses to pay it. If the ' +
+			'witnesses really raised it, set MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT ' +
+			'to the new value in /etc/morphit/relay.env and /etc/morphit/indexer.env ' +
+			'and restart both.'
 	},
-	'tamper:invalid_payload': {
-		title: 'Release op carries an invalid payload',
+	'relay-create:create_outcome_unknown': {
+		title: 'A signup broadcast could not be confirmed either way',
 		advice:
-			'The frontend tamper-detector found a release op on chain whose ' +
-			'payload is structurally invalid. Either an attacker is broadcasting ' +
-			'fake release ops, or you accidentally broadcast a malformed one.'
+			'The relay signed and sent an account_create for @{account} (txid ' +
+			'{trx_id}) and no two RPC operators could say whether it landed. It ' +
+			'is counted as spent and never re-signed. Look the txid up in a block ' +
+			'explorer if signups keep failing.'
 	},
-	'price:feed_stale': {
-		title: 'BLURT/USD price feed stale',
+	'relay-drainer:row_escalated_outcome_unknown': {
+		title: 'A relay payment needs a manual check',
 		advice:
-			'Feed is {last_update_age_min} min old. Fee verification is ' +
-			'unaffected (Morphit verifies fees in native BLURT, not USD). USD ' +
-			'echoes on the frontend will be off until the feed recovers.'
+			'Queued payment row {row_id} (txid {trx_id}) could not be settled: ' +
+			'no two RPC operators could say whether it landed. It is NOT re-sent ' +
+			'automatically. {hint}'
 	},
-	'signup-anomaly:single_ip_spike': {
-		title: 'Signup spike from a single IP',
+	'relay-create:sequential_pattern_rejected': {
+		title: 'Signups refused as a sequential pattern',
 		advice:
-			'IP {ip} made {count} signup attempts within the detection window. ' +
-			'Your existing rate limits already blocked most of these. If repeat ' +
-			'spikes persist, consider banning the IP via ufw or BunkerWeb.'
+			'A signup was refused because recent signups from the same network ' +
+			'followed a pattern ({reason}, {matched_count} earlier). The Layer 8 ' +
+			'detector is doing its job; nothing was spent. Situational awareness ' +
+			'only — rate-limited to one alert per hour.'
 	},
-	'federation-probe:peer_down_24h': {
-		title: 'Federation peer offline for over 24 hours',
+	'btc-fee-block-confirm:fee_relevant_block_forged': {
+		title: 'An RPC node served a FORGED block',
 		advice:
-			'{peer} has not responded to /v1/health for >24h. Their orders will ' +
-			'not appear in your orderbook. Auto-recovers when they come back.'
+			'Block {block} as served to this indexer differs from what other ' +
+			'RPC operators (counted by node name) serve. The block was NOT applied. One of the nodes in ' +
+			'your RPC list is lying (or the chain forked). The list is ' +
+			'MORPHIT_INDEXER_RPC_ENDPOINTS / MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS ' +
+			'in /etc/morphit/indexer.env on this server; remove nodes you do not trust.'
 	},
-	'sequential-detector:pattern_detected': {
-		title: 'Sequential signup pattern detected',
+	'btc-fee-block-confirm:fee_relevant_block_unconfirmed': {
+		title: 'A fee-relevant block is still unconfirmed',
 		advice:
-			'{count} signups in a row used the prefix "{prefix}" (e.g. {prefix}01, ' +
-			'{prefix}02). The Layer 8 detector already rejected these — no ACTs ' +
-			'consumed. Situational awareness only.'
+			'Block {block} has not been confirmed by two RPC operators (counted by node name) ' +
+			'after {attempts} attempts. Indexing waits on it. Usually the other ' +
+			'operators are slow or unreachable (Tor/I2P); if it persists, check ' +
+			'that this node can reach several RPC operators.'
 	},
-	'fee-verifier:invalid_fee_method': {
-		title: 'Someone attempted a listing fee in a disallowed asset',
+	'btc-fee-block-confirm:fee_relevant_block_single_source': {
+		title: 'A fee-relevant block rests on one RPC operator',
 		advice:
-			'A user tried to pay a listing fee using "{attempted}". The Morphit ' +
-			'invariant (BLURT/BTC/XMR only) blocked it at the database CHECK ' +
-			'constraint. Order rejected.'
+			'Block {block} could only be read from {operators} RPC operator(s). ' +
+			'Its fee data is not cross-checked. Add or restore RPC endpoints run ' +
+			'by other operators.'
 	},
-	'backup:failed': {
-		title: 'Backup did not complete',
+	'poller:block_not_confirmed': {
+		title: 'Indexing is waiting for a block to be confirmed',
 		advice:
-			'morphit-backup.service failed. reason={reason}. Every hour without ' +
-			'backups is potential data loss. Check: disk space (`df -h`), backup ' +
-			'destination, `journalctl -u morphit-backup --since "1 hour ago"`.'
+			'Block {block} carries fee-relevant operations and two RPC operators ' +
+			'(counted by node name) have not confirmed it yet. Indexing retries it with backoff.'
 	},
-	'backup:succeeded': {
-		title: 'Backup completed',
-		advice: 'Wrote {size_mb} MB. Normal operation.'
-	},
-	'aide:integrity_violation': {
-		title: 'System files modified without authorization',
+	'poller:chain_consistency_disagreement': {
+		title: 'RPC nodes DISAGREE on an irreversible block',
 		advice:
-			'AIDE detected {changed} unauthorized changes to monitored system ' +
-			'files. Could be legitimate (you applied an update) or a compromise. ' +
-			'Run `sudo journalctl -t aide` for the list. OPERATIONS.md §37.9 has ' +
-			'the response procedure.'
+			'Only {agreeing} of {contacted} RPC operators returned the same ' +
+			'irreversible block {height} (needed {required}). One of the nodes in ' +
+			'your RPC list serves a different chain. The list is ' +
+			'MORPHIT_INDEXER_RPC_ENDPOINTS / MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS ' +
+			'in /etc/morphit/indexer.env on this server.'
 	},
-	'federation-probe:discovered': {
-		title: 'New federation peer discovered',
-		advice: '{peer} is now visible in the federation directory.'
+	'price:all_upstreams_failed_no_cache_serving_floor': {
+		title: 'Every price source failed — showing the floor price',
+		advice:
+			'No price upstream answered and there is no cached price, so prices ' +
+			'are shown at the static floor ({floor}). Fee verification is ' +
+			'unaffected (fees are checked in native units). Check this server\'s ' +
+			'outbound connectivity.'
+	},
+	'fee-recheck:fee_recheck_pass_failed': {
+		title: 'A BTC/XMR fee re-check pass failed',
+		advice:
+			'The periodic re-verification of BTC/XMR listing fees failed as a whole ' +
+			'this time. It runs again on its schedule; if this repeats, check ' +
+			'`journalctl -u morphit-indexer --since "1 hour ago" | grep fee-recheck`.'
+	},
+	'federation-probe:probe_threw': {
+		title: 'Probing a federation peer failed unexpectedly',
+		advice:
+			'Probing {origin} threw instead of returning a result; it is marked ' +
+			'unreachable for now. Usually a bug or an odd peer answer — see ' +
+			'`journalctl -u morphit-indexer | grep probe_threw`.'
 	},
 
-	// ─── cp10 host-resource sidecar ────────────────────────────
+	// ─── host-resource sidecar ────────────────────────────
 	'host-resource:disk_critical': {
 		title: 'Disk almost full: {path}',
 		advice:
@@ -507,7 +517,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'threshold {threshold}x cores). Bundled into the daily digest.'
 	},
 
-	// ─── cp11 smartctl sidecar ─────────────────────────────────
+	// ─── smartctl sidecar ─────────────────────────────────
 	'smartctl:smart_failed': {
 		title: 'Disk SMART self-assessment FAILED: {device}',
 		advice:
@@ -561,7 +571,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'PATH. {hint}. Until then, no disk-health monitoring will happen.'
 	},
 
-	// ─── cp11 fail2ban sidecar ─────────────────────────────────
+	// ─── fail2ban sidecar ─────────────────────────────────
 	'fail2ban:daemon_unreachable': {
 		title: 'fail2ban daemon is not responding',
 		advice:
@@ -604,7 +614,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'surfaces are NOT being protected against brute-force.'
 	},
 
-	// ─── cp11 mdadm sidecar ────────────────────────────────────
+	// ─── mdadm sidecar ────────────────────────────────────
 	'mdadm:array_failed': {
 		title: 'RAID array FAILED: {array}',
 		advice:
@@ -631,7 +641,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'reduced until complete. Check progress with `cat /proc/mdstat`.'
 	},
 
-	// ─── cp12 dmesg sidecar ────────────────────────────────────
+	// ─── dmesg sidecar ────────────────────────────────────
 	'dmesg:oom_kill': {
 		title: 'OOM-killer activated — process killed: {victim_proc}',
 		advice:
@@ -701,7 +711,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'oops, hardware errors) is OFF.'
 	},
 
-	// ─── cp12 trivy sidecar ────────────────────────────────────
+	// ─── trivy sidecar ────────────────────────────────────
 	'trivy:image_critical_vulns': {
 		title: 'Docker image has CRITICAL CVEs: {image}',
 		advice:
@@ -744,7 +754,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'will happen.'
 	},
 
-	// ─── cp12 postfix sidecar ──────────────────────────────────
+	// ─── postfix sidecar ──────────────────────────────────
 	'postfix:queue_critical': {
 		title: 'Mail queue is stuck — operator alerting may be FAILING',
 		advice:
@@ -781,7 +791,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'alerting smarthost setup may not work either.'
 	},
 
-	// ─── cp13 certbot sidecar ──────────────────────────────────
+	// ─── certbot sidecar ──────────────────────────────────
 	'certbot:cert_expiry_critical': {
 		title: 'TLS cert expires very soon: {cert}',
 		advice:
@@ -819,7 +829,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'TLS certs. {hint}. Until then, TLS expiry monitoring is OFF.'
 	},
 
-	// ─── cp13 apt sidecar ──────────────────────────────────────
+	// ─── apt sidecar ──────────────────────────────────────
 	'apt:security_updates_critical': {
 		title: '{security_updates} pending security updates',
 		advice:
@@ -869,7 +879,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'manually to investigate.'
 	},
 
-	// ─── cp13 compose sidecar ──────────────────────────────────
+	// ─── compose sidecar ──────────────────────────────────
 	'compose:service_unhealthy': {
 		title: 'Docker Compose service unhealthy: {service}',
 		advice:
@@ -907,7 +917,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'timer if you do not use Docker at all.'
 	},
 
-	// ─── cp14 systemd sidecar ──────────────────────────────────
+	// ─── systemd sidecar ──────────────────────────────────
 	'systemd:unit_failed': {
 		title: 'systemd unit FAILED: {unit}',
 		advice:
@@ -947,7 +957,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'use systemd.'
 	},
 
-	// ─── cp14 journald sidecar ─────────────────────────────────
+	// ─── journald sidecar ─────────────────────────────────
 	'journald:journal_size_critical': {
 		title: 'Journal disk usage critical: {size_mb} MB',
 		advice:
@@ -987,7 +997,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'not use systemd-journald.'
 	},
 
-	// ─── cp15 host-resource mount_* (bind-mount + tmpfs sweep) ─
+	// ─── host-resource mount_* (bind-mount + tmpfs sweep) ─
 	'host-resource:mount_critical': {
 		title: 'Bind-mount / tmpfs at {percent}%: {path} ({fstype})',
 		advice:
@@ -1017,7 +1027,7 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 			'{threshold}%). Bundled into the daily digest.'
 	},
 
-	// ─── cp15 smartctl SCT thermal log (trend analysis) ──────
+	// ─── smartctl SCT thermal log (trend analysis) ──────
 	'smartctl:temperature_sustained_high': {
 		title: 'Disk reached high temperature at least once: {device}',
 		advice:
@@ -1041,6 +1051,11 @@ const ALERT_COPY: Record<string, AlertCopyEntry> = {
 	}
 };
 
+/** The (module, event) keys that have a written template. */
+export function alertCopyKeys(): string[] {
+	return Object.keys(ALERT_COPY);
+}
+
 const TIER_COLOR: Record<AlertTier, string> = {
 	CRITICAL: '#dc2626',
 	WARN: '#d97706',
@@ -1055,15 +1070,15 @@ const TIER_EMOJI: Record<AlertTier, string> = {
 
 /** Sanitize a payload value before rendering.  Defenses:
  *
- *  AUDIT-2 (cp18): strip ASCII control chars except tab + newline.
- *  The cp17 json_str() fix encodes them as \uXXXX in the JSON wire
+ *  AUDIT-2: strip ASCII control chars except tab + newline.
+ *  The json_str() fix encodes them as \uXXXX in the JSON wire
  *  format, but JSON.parse decodes them back to raw bytes here.  In
  *  Matrix-client plain-text bodies the chars render literally
  *  (mostly invisible), but operators viewing journalctl directly
  *  via terminal would see them — ANSI ESC sequences could clear
  *  screen, set window title, or worse.
  *
- *  AUDIT-3 (cp18): defang Matrix mxid + room-alias patterns
+ *  AUDIT-3: defang Matrix mxid + room-alias patterns
  *  (@user:server, #room:server) by inserting a zero-width joiner
  *  after the sigil.  Visually near-identical (the ZWJ is invisible
  *  in most fonts), but the regex Matrix clients use to detect
@@ -1109,7 +1124,7 @@ export function renderAlertBody(c: ClassifiedAlert): { plain: string; html: stri
 		? substitute(copy.advice, alert.payload)
 		: 'No specific guidance for this alert kind. Raw payload follows.';
 
-	// AUDIT-4 (cp18 deep-deep): cap per-field and total payload-
+	// AUDIT-4: cap per-field and total payload-
 	// line size so a compromised sidecar emitting a mega-payload
 	// can't DoS the bot.  Matrix plain-text body limit is ~65KB;
 	// HTML body too.  We cap aggressively well below that so

@@ -65,12 +65,7 @@ function fetchBy(routes: Record<string, Reply>) {
 		const r = routes[key]!;
 		if (r.throws) throw r.throws;
 		const status = r.status ?? 200;
-		return {
-			ok: status >= 200 && status < 300,
-			status,
-			json: async () => r.body,
-			text: async () => r.text ?? JSON.stringify(r.body)
-		};
+		return new Response(r.text ?? JSON.stringify(r.body), { status: status });
 	}) as unknown as typeof fetch;
 	return { f, calls };
 }

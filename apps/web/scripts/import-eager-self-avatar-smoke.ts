@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/import-eager-self-avatar-smoke.ts  (v1.9.0, the maintainer tester3)
+ * apps/web/scripts/import-eager-self-avatar-smoke.ts  (v1.9.0, tester3)
  *
  * After a keyfile/seed sign-in the "You're signed in — one more choice" screen showed
  * the heart identicon, not the user's custom avatar, until they clicked "Remember me

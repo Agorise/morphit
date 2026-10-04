@@ -80,7 +80,7 @@ export interface AssetEntry {
 	readonly canBeTraded: boolean;
 	/** True if the asset can be used to PAY the listing fee.
 	 *
-	 *  ARCHITECTURAL INVARIANT (memory #23, 2026-05-13): listing
+	 *  ARCHITECTURAL INVARIANT (trade-only rule): listing
 	 *  fees can ONLY be paid in BLURT, XMR, or BTC.  New tradable
 	 *  assets (USDT, ARRR, etc.) are peer-to-peer TRADING ONLY —
 	 *  never used to pay listing fees, cold-message fees, or
@@ -117,11 +117,11 @@ export interface AssetEntry {
 	 *  transparent / centrally-controllable assets (Tether can
 	 *  freeze any USDT address; USDT-ERC20 is blockchain-analytics
 	 *  -tagged).  The locale value behind the key is the warning
-	 *  text the user sees.  Per memory #19 (privacy #1), users
+	 *  text the user sees.  Under privacy rule #1, users
 	 *  must be told when an asset they're considering is not
 	 *  private. */
 	readonly privacyWarningKey: string | null;
-	/** Part 122 cp26 — Privacy-practices metadata.  Even on
+	/** Privacy-practices metadata.  Even on
 	 *  fully-decentralized transparent chains (BTC/BCH/LTC/BLURT)
 	 *  users can take wallet-side and trade-flow steps to reduce
 	 *  on-chain linkability of their trades.  This field drives
@@ -168,10 +168,11 @@ export interface AssetEntry {
 		readonly privacyGuideKey: string;
 	};
 	/** Address shape — a permissive regex that matches well-formed
-	 *  addresses for this asset.  Used by frontend forms for inline
-	 *  typo detection.  Indexer-side and explorer-side verification
-	 *  always happens independently — never trust the regex alone
-	 *  for a security-relevant decision.
+	 *  addresses for this asset.  A REFERENCE shape only: no form,
+	 *  validator or handler reads it today (the web app's address checks
+	 *  live in apps/web/src/lib/assets), and the registry smokes pin it
+	 *  so the documented overlaps between chains stay documented.  Never
+	 *  use it for a security-relevant decision.
 	 *
 	 *  For multi-network assets, this regex must match a VALID
 	 *  address on ANY of the supported networks; per-network
@@ -183,9 +184,11 @@ export interface AssetEntry {
 	 *
 	 *  IMPORTANT: A regex match is NOT a checksum.  A user-supplied
 	 *  address that passes this regex can still be wrong (bit-flip
-	 *  in the address bar, malicious paste).  The regex defends
-	 *  against form typos, not malice — receiver-side verification
-	 *  in their wallet is the real check. */
+	 *  in the address bar, malicious paste).  Nor will every wallet
+	 *  catch a typo: Solana/SPL addresses carry no checksum, and an
+	 *  all-lowercase EVM address carries no EIP-55 checksum, so a
+	 *  mistyped one can be a valid address that nobody controls —
+	 *  funds sent to it are lost, not bounced. */
 	readonly addressShape: RegExp;
 }
 
@@ -246,9 +249,8 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 			optInPrivacyTech: ['coinjoin', 'payjoin'],
 			privacyGuideKey: 'btc'
 		},
-		// P2PKH (1...), P2SH (3...), or Bech32 (bc1...).
-		// Excludes P2TR for now — receiver wallets that support
-		// taproot will accept Bech32 too.
+		// P2PKH (1...), P2SH (3...), or Bech32/Bech32m (bc1...),
+		// which includes Taproot (bc1p...).
 		// Bech32 charset is BIP-173: 0-9 a-z minus {1, b, i, o}.
 		addressShape:
 			/^(1[1-9A-HJ-NP-Za-km-z]{25,34}|3[1-9A-HJ-NP-Za-km-z]{25,34}|bc1[023456789acdefghjklmnpqrstuvwxyz]{6,87})$/
@@ -270,9 +272,11 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 			optInPrivacyTech: null,
 			privacyGuideKey: 'blurt'
 		},
-		// Blurt account name: 3-16 chars, must start/end with
-		// alphanumeric, lowercase + dashes only.
-		addressShape: /^[a-z][a-z0-9-]{1,14}[a-z0-9]$/
+		// Blurt account name: 3-16 chars, lowercase letter first,
+		// alphanumeric last; lowercase, digits, dashes and dots
+		// (dotted names like alice.brave are valid) — the same rule as
+		// the indexer's isAccountName.
+		addressShape: /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/
 	}),
 	Object.freeze({
 		ticker: 'USDT',
@@ -283,7 +287,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 6,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: USDT is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: USDT is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The asset-registry-smoke + fee-method-enum-frozen-smoke
 		// pin this from two directions.
@@ -334,7 +338,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 6,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: USDC is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: USDC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum is frozen at BLURT/BTC/XMR; USDC joins
 		// USDT/DAI/BCH/LTC/DASH/DOGE as Category-B trade-only assets.
@@ -404,7 +408,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 18,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: DAI is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: DAI is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum is frozen at BLURT/BTC/XMR; DAI joins
 		// USDT/USDC/BCH/LTC/DASH/DOGE as Category-B trade-only assets.
@@ -423,7 +427,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		//   - BNB Smart Chain (BEP-20): Binance-Peg DAI is wrapped
 		//     not Maker-native; same exclusion rationale as USDC's
 		//     BEP-20 (ADR-0028 §1).
-		//   - Arbitrum Nova: only Arbitrum One ships in cp31; Nova
+		//   - Arbitrum Nova: only Arbitrum One ships; Nova
 		//     is a separate chain with different security
 		//     assumptions and is a separate decision.
 		// See ADR-0029 §1 for the full network-set rationale.  If
@@ -476,7 +480,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: BCH is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: BCH is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; bch-trade-only-smoke pins this from
@@ -525,7 +529,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: LTC is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: LTC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; ltc-trade-only-smoke pins this from
@@ -575,7 +579,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: DASH is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: DASH is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; dash-trade-only-smoke pins this from
@@ -623,7 +627,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: DOGE is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: DOGE is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; doge-trade-only-smoke pins this from
@@ -673,7 +677,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: ZEC is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: ZEC is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; zec-trade-only-smoke pins this from
@@ -732,7 +736,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: ARRR is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: ARRR is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; arrr-trade-only-smoke pins this from
@@ -792,7 +796,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 8,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: DCR is trade-only.  It cannot pay
+		// TRADE-ONLY INVARIANT: DCR is trade-only.  It cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// The fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}; dcr-trade-only-smoke pins this from
@@ -830,7 +834,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 			// withdrawal.  Similar in posture to Dash's PrivateSend
 			// (opt-in, wallet-side, defeats chain-graph analysis)
 			// or Bitcoin's coinjoin (off-protocol mixing).
-			// New tech tag introduced at cp43.
+			// New tech tag introduced.
 			optInPrivacyTech: ['csppmix'],
 			privacyGuideKey: 'dcr'
 		},
@@ -857,7 +861,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		decimals: 9,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: SOL is trade-only.  Cannot pay
+		// TRADE-ONLY INVARIANT: SOL is trade-only.  Cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}.  sol-trade-only-smoke pins this from
@@ -917,18 +921,18 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		ticker: 'ETH',
 		// Ethereum uses 18 decimals on-chain — 1 ETH = 10^18 wei.
 		// SAME on-chain precision as DAI (both are EVM-native).
-		// However, the cp31 DAI design choice (ADR-0029) clamps
+		// However, the DAI design choice (ADR-0029) clamps
 		// jitter to 6-decimal display precision regardless of
-		// the underlying token's decimals.  Cp47 jitterEthAmount
+		// the underlying token's decimals.  jitterEthAmount
 		// applies the same 6-decimal clamp: at $2500/ETH a 0-999
 		// microether jitter range is $0.0025 max — the same
 		// $0.001-magnitude jitter UX the stablecoins use.  This
-		// is verified at cp46 asset-payload-precision-parity-
+		// is verified asset-payload-precision-parity-
 		// smoke with expectedJitterDecimals: 6 for ETH.
 		decimals: 18,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: ETH is trade-only.  Cannot pay
+		// TRADE-ONLY INVARIANT: ETH is trade-only.  Cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}.  eth-trade-only-smoke pins this
@@ -980,17 +984,19 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		//   - Hex chars are case-insensitive at the protocol
 		//     layer; EIP-55 defines a mixed-case checksum
 		//     scheme that wallet UX uses to detect typos
-		//   - Morphit accepts both lowercase and mixed-case
-		//     (EIP-55 checksum), since both round-trip identically
-		//     to the same on-chain address
+		//   - Morphit accepts both lowercase and mixed-case,
+		//     since both are the same on-chain address — and does
+		//     NOT verify the EIP-55 checksum, so a mistyped
+		//     address passes (all-lowercase ones carry no checksum
+		//     at all)
 		// MAJOR LL #50 OVERLAP: ETH addresses share their shape
 		// with USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
 		// USDC-Polygon, USDC-Arbitrum, DAI-Polygon, DAI-Arbitrum,
 		// DAI-Base — every EVM token-account address.  Context
 		// disambiguates at the order layer via the asset field
 		// (and for multi-network assets, the network field).
-		// Cp42 address-shape-overlap-smoke extended with ETH
-		// specimens at cp47 — many new EXPECTED_OVERLAPS entries.
+		// A later change address-shape-overlap-smoke extended with ETH
+		// specimens — many new EXPECTED_OVERLAPS entries.
 		// CONTRACT-ADDRESS DESTINATIONS: ETH can be sent to a
 		// smart contract address that may not implement an ETH-
 		// receive function (or implements one that rejects).
@@ -1009,14 +1015,14 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		// XRP uses 6 decimals on the XRP Ledger — 1 XRP =
 		// 1,000,000 drops.  Same smallest-unit precision as
 		// USDT/USDC/DAI, but XRP is the NATIVE token of XRPL,
-		// not an ERC-20 token.  Cp49 jitterXrpAmount handles
+		// not an ERC-20 token.  jitterXrpAmount handles
 		// the 6-decimal arithmetic with a clear separate
 		// function (not reusing jitterStablecoinAmount) for
 		// clarity since XRP is not a stablecoin.
 		decimals: 6,
 		isCoordinationChain: false,
 		canBeTraded: true,
-		// MEMORY #23 INVARIANT: XRP is trade-only.  Cannot pay
+		// TRADE-ONLY INVARIANT: XRP is trade-only.  Cannot pay
 		// listing fees, cold-message fees, or featured-slot bids.
 		// fee_method enum stays frozen at {blurt, btc, xmr,
 		// waived_first_buy}.  xrp-trade-only-smoke pins this
@@ -1045,7 +1051,7 @@ export const ASSETS: ReadonlyArray<AssetEntry> = Object.freeze([
 		addressShape: /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/
 	}),
 	Object.freeze({
-		// cp425 — BARTER: goods/services as a first-class tradable "asset".
+		// BARTER: goods/services as a first-class tradable "asset".
 		// UNLIKE every other entry it is NOT a crypto: a barter listing is
 		// the wares themselves (described in the listing's Terms), valued
 		// directly in the seller's local fiat (min/max), and settled in one
@@ -1421,7 +1427,7 @@ export const FEE_FALLBACK = Object.freeze({
 } as const);
 
 /**
- * Model-A verification tolerance (cp372).
+ * Model-A verification tolerance.
  *
  * The ENFORCED fee amount stays chain-pinned (a fork can't set its
  * own — see the poller's TreasurySource), but the live USD-targeted
@@ -1466,7 +1472,7 @@ export function isFeeCapableAsset(ticker: AssetTicker): ticker is 'BLURT' | 'BTC
 	return ticker === 'BLURT' || ticker === 'BTC' || ticker === 'XMR';
 }
 
-/** cp425 — True iff this "asset" is goods/services (barter), NOT a crypto.
+/** True iff this "asset" is goods/services (barter), NOT a crypto.
  *  A barter listing is wares valued directly in the seller's fiat and settled
  *  in one of a SET of accepted cryptos (the order's `accepted_assets`); it has
  *  no chain amount, no receive address, and no price feed. Every code path
@@ -1477,4 +1483,30 @@ export function isFeeCapableAsset(ticker: AssetTicker): ticker is 'BLURT' | 'BTC
  *  indexer, which both import it. */
 export function isGoodsAsset(ticker: AssetTicker): ticker is 'BARTER' {
 	return ticker === 'BARTER';
+}
+
+/**
+ * Review text policy, shared by the indexer's review handlers (feedback,
+ * feedback response) and the web app's pre-broadcast check, so a review the
+ * indexer would refuse is refused before it is broadcast.
+ *
+ * They had drifted: the web allowed U+2028/U+2029 and U+2060–U+2064, the
+ * indexer refused them, and such a review was paid for, broadcast and then
+ * silently dropped.
+ *
+ * Forbidden: C0 and C1 controls, zero-width space, line and paragraph
+ * separators, bidi embeddings/overrides and isolates, the invisible operators
+ * U+2060–U+2064, and the byte-order mark.
+ */
+export const FORBIDDEN_REVIEW_TEXT_CHARS =
+	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+
+/** A review comment's length limit, in code points (an emoji is one). */
+export const MAX_REVIEW_COMMENT_CODEPOINTS = 256;
+
+/** Null when `comment` is acceptable review text, else why not. PURE. */
+export function reviewCommentProblem(comment: string): 'too_long' | 'forbidden_chars' | null {
+	if ([...comment].length > MAX_REVIEW_COMMENT_CODEPOINTS) return 'too_long';
+	if (FORBIDDEN_REVIEW_TEXT_CHARS.test(comment)) return 'forbidden_chars';
+	return null;
 }

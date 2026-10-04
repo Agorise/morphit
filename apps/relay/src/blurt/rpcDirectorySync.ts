@@ -1,6 +1,6 @@
 /**
- * Morphit relay — keep the RPC pool in step with the on-chain RPC directory
- * (v1.20.0 fix wave, D12).
+ * Morphit relay — keep the RPC pool in step with the on-chain RPC directory.
+ *
  *
  * The indexer persists the latest trusted `morphit_rpc_v1` directory (signed
  * by @morphit, pubkey-pinned — see apps/indexer/src/indexer/handlers/

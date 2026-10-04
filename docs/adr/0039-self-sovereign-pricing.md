@@ -1,14 +1,14 @@
-# ADR-0039 — Self-sovereign price derivation (morphit_native): tiered anchor architecture with cross-stablecoin depeg detection (cp127)
+# ADR-0039 — Self-sovereign price derivation (morphit_native): tiered anchor architecture with cross-stablecoin depeg detection
 
 **Status:** Accepted (shipped 2026-05; pre-launch hardening campaign)
 
 **Date:** 2026-05-23
-**Deciders:** project maintainer (the maintainer)
-**Related:** ADR-0011 (fee-collection design, where BTC/XMR fees came from); §F.11 BLURT-native fee refactor (which removed price-source dependency from fee verification); cp123-cp125 reputation hardening (whose Sybil-signal tables this design reuses).
+**Deciders:** project maintainer
+**Related:** ADR-0011 (fee-collection design, where BTC/XMR fees came from); §F.11 BLURT-native fee refactor (which removed price-source dependency from fee verification); reputation hardening (whose Sybil-signal tables this design reuses).
 
 ## Context
 
-Pre-cp127, Morphit's BLURT/USD price feed used a composite source
+Previously, Morphit's BLURT/USD price feed used a composite source
 that tried external upstreams (Klingex → Coingecko) before falling
 back to an operator-set static floor (default `$0.002`).  This worked
 during phases 3-4 when BLURT price was relatively flat, but had
@@ -34,7 +34,7 @@ several structural problems:
    external check; a compromised Klingex value would be served as
    truth.
 
-the maintainer's cp127 request: derive a self-sovereign price from on-platform
+The maintainer's request: derive a self-sovereign price from on-platform
 trade data, eventually reducing reliance on Klingex/Coingecko as
 on-platform volume grows.  Subsequent discussion expanded the scope
 to handle scenarios where stablecoins themselves shut down, USD
@@ -100,7 +100,7 @@ stablecoins remain), cross-ratio detection cannot run.  All
 stablecoins are reported as "unknown".  Tier 2 is skipped in this
 state; Tier 1 USD-direct covers the derivation.
 
-### Hardened against the cp127 black-hat scenarios
+### Hardened against the black-hat scenarios
 
 The design explicitly defends against the conspiracy-theorist
 attack scenarios surfaced in pre-implementation discussion:
@@ -112,7 +112,7 @@ attack scenarios surfaced in pre-implementation discussion:
 | C | Klingex compromise undetected | Cross-source disagreement detector; opt-in priority flip env var |
 | D | Post-and-cancel race | 10-minute order-age grace period before order qualifies; live status re-checked at query time |
 | E | Operator-config envelope widening | Hardcoded outer plausibility bounds (`HARDCODED_OUTER_MIN_USD = 0.00001`, `HARDCODED_OUTER_MAX_USD = 10_000_000`) that operator config can only TIGHTEN, never widen |
-| F | Cross-instance federation manipulation | Peer disagreement detector — implemented cp129 (ADR-0041); surfaces on `/v1/health` as of cp233 |
+| F | Cross-instance federation manipulation | Peer disagreement detector — implemented (ADR-0041); surfaces on `/v1/health` |
 | G | Patient sock-puppet evading Sybil filters | Price-derivation receipt endpoint `/v1/price/morphit-native/receipt` for after-the-fact forensics |
 | H | Downstream oracle abuse | NOT-AN-ORACLE warning in receipt payload + listing-fee payload + ADR + FAQ |
 
@@ -127,7 +127,7 @@ Additional structural defenses:
 - **Cold-start floor**: each contributing account must have ≥1
   prior verified-fee completed order.  Same protection as the
   `is_new_trader` orderbook badge.
-- **Sybil-table filters**: reuses cp123-cp125 reputation tables
+- **Sybil-table filters**: reuses reputation tables
   (`suspicious_reciprocity`, `related_accounts`,
   `one_way_pile_on`, `review_concentration`).  Price manipulation
   requires the same level of sophistication as reputation
@@ -146,7 +146,7 @@ Tier 1 still works.  Tier 3 falls back to Tier 1 alone.
 
 **Brand new world currency replaces USD** → operator changes the
 `denominationFiat` factory parameter (currently hardcoded to 'USD'
-in the cp127 factory call site, but the module is parameterized).
+in the factory call site, but the module is parameterized).
 Same factory works with new fiat code; no schema change needed
 since `orders.fiat_currency` is already a generic TEXT field.
 
@@ -167,7 +167,7 @@ enough on-platform data.
   entity legitimately runs >50% of volume, they ARE the market by
   definition.  Not a bug.
 - **Patient sock-puppet long-game (months of building reputation
-  before activation)** — the cp123-cp125 Sybil filters catch
+  before activation)** — the Sybil filters catch
   concentration patterns at intake, but a patient diversified
   attacker can evade.  Defense G (receipt endpoint) makes
   post-hoc forensics easy; anticipation is the deterrent.
@@ -186,10 +186,9 @@ enough on-platform data.
 - **Optional**: operators can enable the native fetcher via
   `MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED=true` when they trust
   their platform's trade volume to support self-sovereign pricing.
-- **Optional**: operators with mature data can flip
-  `MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING=true` to
-  prefer the native price over external sources during sustained
-  disagreement.
+- (Superseded, 2026-10: a `PREFER_NATIVE_WHEN_DISAGREEING` switch was
+  planned here but never had any effect and has been removed. On a
+  disagreement alert the operator investigates by hand.)
 
 ## Performance posture
 
@@ -230,10 +229,10 @@ Per priority #2:
 
 ## Future work
 
-Tracked as REVISIT items for cp128+:
+Tracked as backlog items for later:
 
 - ~~**Defense F (cross-instance peer disagreement detector)**~~ —
-  **Done, cp129 (ADR-0041).**  Samples peer instances' receipts and
+  **Done, (ADR-0041).**  Samples peer instances' receipts and
   alerts on sustained cross-instance divergence.
 - **Per-asset wiring for BTC/USD, XMR/USD**: the factory is generic;
   wire additional asset/fiat instances when needed for the
@@ -245,12 +244,12 @@ Tracked as REVISIT items for cp128+:
   to an operator config field so non-USD operator instances can use
   morphit_native too.
 
-## Update — cp233 (runtime wiring of B + C; `/v1/health` surfacing for B + C + F)
+## Update — (runtime wiring of B + C; `/v1/health` surfacing for B + C + F)
 
 Defenses **B** (slow-drift) and **C** (cross-source disagreement)
-were *built* in cp127 (modules + contract smokes) but were not yet
-invoked in the live price-refresh path — only **F** (cp129) was
-runtime-wired.  cp233 closes that gap and makes all three observable:
+were *built* (modules + contract smokes) but were not yet
+invoked in the live price-refresh path — only **F** was
+runtime-wired.  A later change closes that gap and makes all three observable:
 
 - **B** runs on every successful price refresh
   (`compositeSource.refreshOnce` → `updateAndCheckDrift`, per-asset),

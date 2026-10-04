@@ -12,6 +12,7 @@
 		formatPublicKeyBLT,
 		wipeFullIdentity,
 		wipeLiveIdentity,
+		SeedPhraseError,
 		type FullIdentity,
 		type LiveIdentity
 	} from '$crypto/keygen';
@@ -19,16 +20,22 @@
 		blobToEnvelope,
 		decryptIdentity,
 		encryptIdentity,
+		KeyfileFormatError,
+		KeystoreError,
 		type KeystoreEnvelope
 	} from '$crypto/keystore';
 	import { writeKeystoreMode, writeEnvelope } from '$crypto/persistentKeystore';
-	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
+	import {
+		scorePassword,
+		isPasswordAcceptable,
+		newPasswordProblem
+	} from '$lib/auth/passwordStrength';
 	import { wifToRawPrivateKey, WifDecodeError, type WifError } from '$crypto/wif';
 	import { verifyPostingKey } from '$crypto/postingVerify';
 	import { normalizeSeedPhrase, seedWordCount } from '$crypto/seedNormalize';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
-	import { bootFromEnvelope, liveIdentity } from '$stores/identity';
+	import { bootFromEnvelope, liveIdentity, noteEphemeralSessionPassword } from '$stores/identity';
 	import { setUserBlurtAccount } from '$blurt/ops/profile';
 	import { resolveAccountsByPublicKeys } from '$blurt/accountByKey';
 	import * as secp256k1 from '@noble/secp256k1';
@@ -43,9 +50,9 @@
 	let postingWif = $state('');
 	let postingNewPassword = $state('');
 	let postingNewPasswordConfirm = $state('');
-	// H (cp295): has the user blurred the Confirm-password field at least
+	// H: has the user blurred the Confirm-password field at least
 	// once? The red mismatch border only appears after a blur (and only
-	// while the two differ), per the maintainer's spec — not while still typing.
+	// while the two differ), as requested — not while still typing.
 	let postingConfirmBlurred = $state(false);
 	let working = $state(false);
 	let errorMsg = $state('');
@@ -63,6 +70,11 @@
 	let wifFieldLocked = $state(true);
 	let seedInvalid = $state(false);
 	let keyfilePwInvalid = $state(false);
+	/** A keyfile with 2FA enrolled: the password opened it, now the
+	 *  authenticator (or a backup) code is asked for, and the next submit
+	 *  repeats the import with it. */
+	let keyfileNeedsTotp = $state(false);
+	let keyfileTotpCode = $state('');
 	// The error banner's element, so we can scroll it into view when an
 	// error appears (it renders at the top of the form; without this a
 	// user who submitted from the bottom never sees why it failed).
@@ -71,7 +83,7 @@
 		if (errorMsg && errorEl) errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 	});
 
-	// I (cp295): when the import flow advances to the "remember me" card
+	// I: when the import flow advances to the "remember me" card
 	// (after a successful posting-key login), scroll the page back to the
 	// top so the card's heading is in view — the user submitted from the
 	// bottom of the form and would otherwise be left scrolled down.
@@ -139,7 +151,7 @@
 	// valid, red triangle if not, nothing while empty/untouched). Mirrors
 	// the account-name field's tri-state. The live red border above
 	// (wifLooksInvalid) still flags as the user types; this only adds the
-	// affirm/deny ICON on blur. (cp323)
+	// affirm/deny ICON on blur.
 	let wifStatus = $state<'idle' | 'valid' | 'invalid'>('idle');
 	function checkWifLooksOk(): void {
 		const v = postingWif.trim();
@@ -150,7 +162,7 @@
 		wifStatus = looksLikeBlurtWif(v) ? 'valid' : 'invalid';
 	}
 
-	// ── cp434 — prefork-key manual account name ─────────────────────
+	// ── prefork-key manual account name ─────────────────────
 	// Some accounts predate Blurt (created on Steem before the fork). Their
 	// posting key still logs in fine, but the reverse key→account lookup
 	// (get_key_references) can't find them, so the username can't be
@@ -276,7 +288,7 @@
 		manualDebounce = setTimeout(() => void validateManualAccount(), 450);
 	}
 
-	/** cp137 H-1 — post-seed-import "remember me on this device" step.
+	/** post-seed-import "remember me on this device" step.
 	 *  After a successful seed-mode import, instead of redirecting to
 	 *  /settings immediately, we show a small intermediate screen that
 	 *  asks the user whether to persist the encrypted envelope on this
@@ -361,6 +373,53 @@
 		if (cleaned !== seed) seed = cleaned;
 	}
 
+	/** The localized message for a seed/keyfile import failure (and the field
+	 *  to mark), from the error's TYPE — never its English text. */
+	function importErrorMessage(err: unknown): string {
+		if (err instanceof SeedPhraseError) {
+			seedInvalid = true;
+			if (err.kind === 'word_count') {
+				return $_('onboarding.import.error.seed_word_count', {
+					values: { count: seedWordCount(seed) }
+				});
+			}
+			return $_('onboarding.import.error.seed_invalid');
+		}
+		if (err instanceof KeyfileFormatError) {
+			switch (err.kind) {
+				case 'too_large':
+					return $_('onboarding.import.error.keyfile_too_large');
+				case 'too_new':
+					return $_('onboarding.import.error.keyfile_too_new');
+				default:
+					return $_('onboarding.import.error.keyfile_corrupt');
+			}
+		}
+		if (err instanceof KeystoreError) {
+			switch (err.kind) {
+				case 'bad_password':
+					keyfilePwInvalid = true;
+					return $_('onboarding.import.error.keyfile_password_wrong');
+				case 'totp_required':
+					keyfileNeedsTotp = true;
+					return $_('onboarding.import.error.keyfile_totp_required');
+				case 'totp_invalid':
+					keyfileTotpCode = '';
+					return $_('settings.totp.unlock_prompt.err_invalid_code');
+				case 'totp_unavailable':
+					keyfileTotpCode = '';
+					return $_('settings.totp.unlock_prompt.err_unavailable_insecure');
+				case 'no_passphrase_wrap':
+					return $_('onboarding.import.error.keyfile_yubikey_only');
+				case 'unsupported':
+					return $_('onboarding.import.error.keyfile_too_new');
+				default:
+					return $_('onboarding.import.error.keyfile_corrupt');
+			}
+		}
+		return $_('onboarding.import.error.generic');
+	}
+
 	async function unlockSeedOrKeyfile(): Promise<void> {
 		let full: FullIdentity | null = null;
 		// O2.1 — also track the LiveIdentity returned from
@@ -380,7 +439,7 @@
 				live = result.live;
 				// Seed-path users haven't picked a password yet.  Encrypt
 				// with a random session key for now; the remember-me
-				// choice step (cp137 H-1) will either re-encrypt with the
+				// choice step will either re-encrypt with the
 				// user's password and persist, OR keep this session-only
 				// random-key envelope (privacy-positive default).
 				const rnd = crypto.getRandomValues(new Uint8Array(24));
@@ -392,7 +451,13 @@
 				usedPassword = password;
 			}
 
-			await bootFromEnvelope(env, usedPassword);
+			await bootFromEnvelope(
+				env,
+				usedPassword,
+				mode === 'keyfile' && keyfileNeedsTotp ? keyfileTotpCode.replace(/\s/g, '') : undefined
+			);
+			keyfileNeedsTotp = false;
+			keyfileTotpCode = '';
 			// Capture the POSTING public key from the just-booted session so we
 			// can reverse-resolve the account name on-chain — NEITHER a seed nor
 			// a keyfile carries the account name. Reading it from the live
@@ -429,14 +494,14 @@
 			seed = '';
 			password = '';
 
-			// cp137 H-1 — for seed-mode imports, pause here and ask
+			// for seed-mode imports, pause here and ask
 			// the user whether to persist the envelope.  Stash env +
 			// session-password until the choice is made.  For
 			// keyfile-mode imports (and posting-only via its own
 			// path), the envelope is already persistent by virtue of
 			// the user-set password, so we proceed straight to the
 			// redirect.
-			// cp137 H-1 (cp290 extended) — pause on the remember-me choice
+			// pause on the remember-me choice
 			// so the user ALWAYS sees the (default-unchecked) persist option.
 			// Seed: the session env uses an ephemeral random key, so the
 			// choice collects a real password (passwordAlreadyChosen=false).
@@ -456,7 +521,7 @@
 			pendingNeedsAccountName = true;
 			pendingDestination = '/settings#account-name-heading';
 			importStage = 'remember_me_choice';
-			// v1.9.0 (the maintainer) — resolve the account name in the BACKGROUND so the user's
+			// v1.9.0 — resolve the account name in the BACKGROUND so the user's
 			// custom avatar replaces the heart identicon ON the remember-me screen,
 			// not only after they click "Remember me and continue". AvatarMenu only
 			// fetches selfProfile once blurtAccountName is set; deferring the reverse
@@ -473,28 +538,13 @@
 			void resolveSelfAccountEagerly();
 			return;
 		} catch (err) {
-			// Map known error messages to localized keys.  The
-			// raw err.message text is English (e.g. "Seed must be
-			// 12 words") and shouldn't surface to non-English
-			// users.  Any unrecognized message falls back to a
-			// generic localized "import failed" string.
-			const raw = err instanceof Error ? err.message : String(err); // smoke-ok-raw-local: used only for regex classification + console.warn
-			console.warn('[import] seed/keyfile path failed:', raw);
-			if (/seed must be 12 words/i.test(raw)) {
-				const count = seed.trim().split(/\s+/).filter(Boolean).length;
-				errorMsg = $_('onboarding.import.error.seed_word_count', { values: { count } });
-				seedInvalid = true;
-			} else if (/invalid seed phrase/i.test(raw)) {
-				errorMsg = $_('onboarding.import.error.seed_invalid');
-				seedInvalid = true;
-			} else if (/decrypt|password|wrong key/i.test(raw)) {
-				errorMsg = $_('onboarding.import.error.keyfile_password_wrong');
-				keyfilePwInvalid = true;
-			} else if (/parse|json/i.test(raw)) {
-				errorMsg = $_('onboarding.import.error.keyfile_corrupt');
-			} else {
-				errorMsg = $_('onboarding.import.error.generic');
-			}
+			// Typed errors map to localized keys; the English messages never
+			// surface. Anything unrecognized gets the generic string.
+			console.warn(
+				'[import] seed/keyfile path failed:',
+				err instanceof Error ? err.name : typeof err
+			);
+			errorMsg = importErrorMessage(err);
 			if (full) wipeFullIdentity(full);
 			if (live) wipeLiveIdentity(live);
 			// Clear the password input on error too — UX cost is the
@@ -502,12 +552,13 @@
 			// password doesn't sit in component state across the
 			// retry pause.  Seed stays — the user almost certainly
 			// wants to re-submit the same seed (typo correction,
-			// brief network glitch, etc).
-			password = '';
+			// brief network glitch, etc). Kept only while the 2FA code
+			// is being asked for: the next submit needs both.
+			if (!keyfileNeedsTotp) password = '';
 		}
 	}
 
-	/** cp137 H-1 — finalize the "remember me on this device" choice
+	/** finalize the "remember me on this device" choice
 	 *  for seed-mode imports.
 	 *
 	 *  When `rememberMe` is FALSE (default): the envelope stays in
@@ -527,7 +578,7 @@
 	 *  unlock form.  The re-decrypt path is the cleanest way to
 	 *  do this: it avoids exposing the FullIdentity outside of
 	 *  this scoped block. */
-	/** v1.9.0 (the maintainer) — best-effort, background reverse-resolve of the account name
+	/** v1.9.0 — best-effort, background reverse-resolve of the account name
 	 *  from the just-booted posting key, run WHILE the remember-me choice screen is
 	 *  up, so the user's on-chain custom avatar replaces the heart identicon there
 	 *  instead of only after they commit. A UNIQUE match is authoritative (the key
@@ -581,7 +632,7 @@
 				}
 			}
 			if (pendingNeedsAccountName) {
-				// Sally finding H2 (Part 68): seed/keyfile imports don't carry
+				// Sally finding H2: seed/keyfile imports don't carry
 				// the account name, so we flag the one-shot /settings banner
 				// that explains why the user landed there to set + verify it.
 				try {
@@ -604,6 +655,12 @@
 			// Session-only (privacy-positive default). The identity store
 			// already holds the live session from the earlier boot; nothing
 			// is written to disk. When the last tab closes the keys are gone.
+			// A seed session is encrypted under a random password the user
+			// never saw: tell the store, so the backup page asks for a real
+			// one before exporting anything.
+			if (!passwordAlreadyChosen && pendingEnvelope) {
+				noteEphemeralSessionPassword(pendingEnvelope, pendingSessionPassword);
+			}
 			await continueAfterChoice();
 			return;
 		}
@@ -676,7 +733,7 @@
 	}
 
 	async function unlockPostingOnly(): Promise<void> {
-		// Up-front validation before we do any crypto. cp406 — there's no account
+		// Up-front validation before we do any crypto. there's no account
 		// field: we reverse-resolve the account from the posting key's PUBLIC key
 		// on-chain (the same same-origin get_key_references lookup the seed/keyfile
 		// imports use) after deriving it. A posting key uniquely identifies its
@@ -685,8 +742,13 @@
 			errorMsg = $_('common.password_too_short');
 			return;
 		}
-		if (postingNewPassword !== postingNewPasswordConfirm) {
-			errorMsg = $_('onboarding.import.posting_only.error.passwords_mismatch');
+		// The same password policy as every other place a password is set.
+		const problem = newPasswordProblem(postingNewPassword, postingNewPasswordConfirm);
+		if (problem !== null) {
+			errorMsg =
+				problem === 'too_weak'
+					? $_('onboarding.import.remember_me.error.password_weak')
+					: $_('onboarding.import.posting_only.error.passwords_mismatch');
 			return;
 		}
 
@@ -734,7 +796,7 @@
 				account = matches.length === 1 ? matches[0] : undefined;
 			}
 			if (!account) {
-				// cp434 — couldn't auto-detect and no valid manual name (e.g. the
+				// couldn't auto-detect and no valid manual name (e.g. the
 				// user hit submit before blurring the key). Reveal the Username
 				// field so they can supply it, rather than dead-ending.
 				accountFieldNeeded = true;
@@ -749,7 +811,7 @@
 				errorMsg = $_('onboarding.import.posting_only.error.account_not_found', {
 					values: { account }
 				});
-				// Sally finding H1 (Part 68): account-not-found is a
+				// Sally finding H1: account-not-found is a
 				// user-input error, NOT a credential failure.  Keep
 				// the password fields populated so the user only has
 				// to fix the typo'd account name and resubmit.
@@ -803,7 +865,7 @@
 			full = null;
 			wipeLiveIdentity(live);
 			live = null;
-			// cp290 — pause on the remember-me choice (the env is already
+			// pause on the remember-me choice (the env is already
 			// encrypted with the password the user just set, so it's a plain
 			// checkbox, no password sub-form). The account name is already
 			// captured, so the post-choice destination is /orderbook. Hold
@@ -862,7 +924,7 @@
 		file = input.files?.[0] ?? null;
 	}
 
-	// H (cp295): show the Confirm-password mismatch border once the field
+	// H: show the Confirm-password mismatch border once the field
 	// has been blurred and has content but doesn't match.
 	const postingConfirmMismatch = $derived(
 		postingConfirmBlurred &&
@@ -872,7 +934,7 @@
 
 	const submitDisabled = $derived(
 		mode === 'seed'
-			? // cp338: stay disabled until exactly 12 words are present (Morphit
+			? // stay disabled until exactly 12 words are present (Morphit
 				// only accepts 12-word BIP-39 mnemonics). Counted on the normalized
 				// form so comma-separated input counts before the on-blur tidy;
 				// checksum validity is enforced on submit, not here (a one-word
@@ -880,12 +942,12 @@
 				seedWordCount(seed) !== 12
 			: mode === 'keyfile'
 				? !file || !password
-				: // posting-only (N + H, cp295): the "Unlock my account" button
+				: // posting-only (N + H): the "Unlock my account" button
 					// stays disabled until the key + password fields hold
 					// proper-looking values — a WIF that passes the Blurt-WIF shape
 					// check (not a 1-char stub), a device password of at least the
 					// 8-char floor the handler enforces, and a confirmation that
-					// actually MATCHES. cp406 — the account name is auto-detected
+					// actually MATCHES. the account name is auto-detected
 					// from the key, so there's no account field to gate the button.
 					!postingWif.trim() ||
 					wifLooksInvalid ||
@@ -1028,6 +1090,22 @@
 							: 'border-ink-200 dark:border-ink-700'}"
 					/>
 				</label>
+				{#if keyfileNeedsTotp}
+					<label class="mt-4 block">
+						<span class="mb-2 block font-semibold">
+							{$_('settings.totp.unlock_prompt.code_label')}
+						</span>
+						<input
+							type="text"
+							inputmode="numeric"
+							maxlength="16"
+							autocomplete="one-time-code"
+							bind:value={keyfileTotpCode}
+							placeholder={$_('settings.totp.unlock_prompt.code_placeholder')}
+							class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2 font-mono tracking-wide focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+						/>
+					</label>
+				{/if}
 			{:else}
 				<!-- Posting-only mode: existing Blurt user importing with one role-key WIF. -->
 
@@ -1137,11 +1215,11 @@
 				</label>
 
 				{#if detectedAccount}
-					<!-- v1.8.12 (the maintainer) — CONFIRM the auto-detection.
+					<!-- v1.8.12 — CONFIRM the auto-detection.
 					     `detectedAccount` was set here but rendered NOWHERE, so a
 					     successful lookup produced no visible change at all: the
 					     username field simply never appeared and the user was left
-					     staring at a key field wondering what had gone wrong. the maintainer
+					     staring at a key field wondering what had gone wrong. The maintainer
 					     hit exactly this on @testowner and asked whether the feature
 					     had been removed or broken. It had done neither — it had
 					     started WORKING (his account is now in the indexer's
@@ -1159,7 +1237,7 @@
 				{/if}
 
 				{#if accountFieldNeeded}
-					<!-- cp434 — shown ONLY when the account can't be auto-detected from
+					<!-- shown ONLY when the account can't be auto-detected from
 					     the key (typically a pre-Blurt/prefork account). Required, and
 					     validated in real time against the pasted key. -->
 					<label class="mt-4 block">
@@ -1305,7 +1383,7 @@
 			</div>
 		</div>
 	{:else if importStage === 'remember_me_choice'}
-		<!-- cp137 H-1 — post-seed-import "remember me on this device"
+		<!-- post-seed-import "remember me on this device"
 		     choice.  Default is UNCHECKED (privacy-positive).  The
 		     qualifier in the checkbox label ("assuming nobody else
 		     uses it") makes the privacy implication visible at the

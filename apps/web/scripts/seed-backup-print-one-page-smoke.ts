@@ -3,11 +3,11 @@
  * Smoke for the "My Morphit backup card" one-page print layout.
  *
  * History:
- *   - cp249 fixed "huge blank bands top and bottom" by isolating the card
+ *   - A later change fixed "huge blank bands top and bottom" by isolating the card
  *     for print with `visibility: hidden` everywhere + collapsing the
  *     `#svelte` app subtree to zero height, with the card `position: fixed`
  *     so it escaped the clip.
- *   - cp261: that approach printed a SINGLE BLANK PAGE on print-to-PDF
+ *   - that approach printed a SINGLE BLANK PAGE on print-to-PDF
  *     engines that drop a `position: fixed` element whose entire normal-flow
  *     context is zero-height. Replaced with a robust approach — the card is
  *     PORTALED to be a direct child of <body> (the bodyPortal action) and

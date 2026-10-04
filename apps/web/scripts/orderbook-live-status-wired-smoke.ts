@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the orderbook wire response carries `status`, so the client-side
- * expiry filter doesn't blank the whole book. Anchor cp510 [11d].
+ * expiry filter doesn't blank the whole book. Anchor.
  *
- * THE BUG THIS GUARDS. cp508 added a client-side expiry guard on the orderbook:
+ * THE BUG THIS GUARDS. A later change added a client-side expiry guard on the orderbook:
  * `visibleItems` filters each row through `isOrderLive(o, now)`, which is
  * `o.status === 'live' && !isOrderExpired(o, now)`. But the orderbook query's
- * row → wire mapping (`rowToWire` in apps/indexer/src/api/orderbook.ts) OMITTED
+ * row → wire mapping (`rowToWire`, now in apps/indexer/src/api/orderbookStreamHelpers.ts) OMITTED
  * `status`, even though the SQL WHERE clause guarantees `o.status = 'live'`. So
  * every wire order arrived with `status === undefined`, `isOrderLive` returned
  * false for ALL of them, and the orderbook rendered a BLANK orders section the
@@ -53,7 +53,10 @@ const read = (rel: string): string => {
 };
 
 // ── 1. rowToWire emits status ──
-const orderbookApi = read('apps/indexer/src/api/orderbook.ts');
+// The REST orderbook, the SSE stream and the RSS feed share one rowToWire and
+// one WHERE builder (orderbookStreamHelpers.ts); orderbook.ts imports both.
+const orderbookApi =
+	read('apps/indexer/src/api/orderbook.ts') + read('apps/indexer/src/api/orderbookStreamHelpers.ts');
 const rowToWireIdx = orderbookApi.indexOf('function rowToWire');
 const rowToWireBody = rowToWireIdx >= 0 ? orderbookApi.slice(rowToWireIdx, rowToWireIdx + 1600) : '';
 if (/\bstatus:\s*'live'/.test(rowToWireBody)) {

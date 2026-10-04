@@ -1,6 +1,6 @@
 /**
- * local-install-smoke.ts (cp600) — locks the two changes that make the Ansible
- * playbook safe to run LOCALLY on grandma's box (the real run is a mini PC-only,
+ * local-install-smoke.ts — locks the two changes that make the Ansible
+ * playbook safe to run LOCALLY on grandma's box (the real run needs a real machine,
  * so this guards against a future edit silently reintroducing a hard-fail):
  *   1. the pre-flight allows running as root when morphit_local_install is set
  *      (a local console has no SSH session to lock out);

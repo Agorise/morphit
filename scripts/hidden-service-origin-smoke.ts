@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * hidden-service-origin — cp702 (v1.11.0 hidden-service-only node, Layer 1).
+ * hidden-service-origin — (v1.11.0 hidden-service-only node, Layer 1).
  *
  * The on-chain foundation for a node with NO clearnet domain:
  *   - operatorRegister accepts http:// origins for Tor/I2P/Lokinet hosts

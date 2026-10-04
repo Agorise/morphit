@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * indexer-relay-account — cp673.
+ * indexer-relay-account.
  *
  * `/v1/instance.relay_account` is served from `MORPHIT_INDEXER_RELAY_ACCOUNT`,
  * which DEFAULTS to the canonical `'morphit-relay'`. If an install writer leaves

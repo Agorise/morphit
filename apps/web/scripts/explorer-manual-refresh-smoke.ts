@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * explorer-manual-refresh smoke — cp298.
+ * explorer-manual-refresh smoke.
  *
  * The explorer account page auto-polls (5s, backing off to 60s when the
  * account is idle), so a brand-new transaction can take up to a minute to
- * appear on its own. cp298 adds a manual "refresh now" button that
+ * appear on its own. A later change adds a manual "refresh now" button that
  * re-fetches balance + the latest history in place, CACHE-BYPASSED, plus
  * a delay notice on both the account page and the search landing. This
  * smoke fails if any of that wiring regresses.

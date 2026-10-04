@@ -20,12 +20,23 @@ and compatible with AGPL-3.0:
   _MIT OR WTFPL_ package) are used under their permissive branch.
 - `caniuse-lite` (**CC-BY-4.0**) is build-time browser-compatibility _data_ and
   is not distributed as part of the runtime application.
+- The fonts in the repository are under the **SIL Open Font License 1.1**, with
+  the license file next to them: Comfortaa (`apps/web/static/fonts`, served to
+  browsers) and Comfortaa + Vazirmatn (`apps/ops-cli/assets/og`, used on the
+  server to draw a branded instance's link-preview image).
 
-To regenerate the full picture from an installed tree:
+**What the browser receives.** The web build writes
+`apps/web/build/licenses.txt`: every package whose code is in the JavaScript a
+Morphit site sends to the browser, with its version, license and the notices
+its authors ship (for example `@beblurt/dblurt`, libsodium, and `pako`
+(MIT AND Zlib) and `rgbcolor` (MIT), which arrive inside `jspdf` for the chat
+PDF export). Every instance serves it at `/licenses.txt`, linked from the
+site footer.
+
+To see the full dependency graph from an installed tree:
 
 ```bash
-npx license-checker --summary     # high-level counts
-npm ls --all                      # full dependency graph
+npm ls --all
 ```
 
 ## Notable: `@beblurt/dblurt` — BSD-3-Clause-No-Military-License
@@ -62,3 +73,35 @@ transaction _types_ — have permissively licensed equivalents. A migration off
 `@beblurt/dblurt` is tracked as a possible future change. For now the
 dependency is disclosed here so operators and redistributors can make an
 informed decision.
+
+## The offline bundles
+
+Every release ships `morphit-X.Y.Z-offline.tar.gz` (signed), built by the
+release job: Morphit's source, its npm dependencies (above), the prebuilt
+frontend, and the Node.js runtime and Kubo where those are downloaded. The
+**appliance** bundle, built by anyone with `scripts/build-offline-bundle.sh` on
+an Ubuntu 24.04 machine with Docker so that a node can be installed with no
+network, also carries the Ubuntu packages and the container images. Between them
+they redistribute third-party software under that software's own licenses:
+
+| Contents | Where in the bundle | License | Source |
+|---|---|---|---|
+| Node.js runtime (22.x) | `vendor/node/` | MIT, with bundled components under their own permissive licenses (its `LICENSE` file lists them) | https://github.com/nodejs/node, tag of the bundled version |
+| Kubo (IPFS) | `vendor/kubo/` | MIT OR Apache-2.0 | https://github.com/ipfs/kubo, tag of the bundled version |
+| Ubuntu 24.04 packages, appliance bundle only (the `.deb` closure: PostgreSQL, Tor, i2pd, Docker Engine, Ansible, fail2ban, AIDE, rkhunter, Postfix, certbot and their dependencies) | `vendor/apt/` | each package's own license, in its `/usr/share/doc/<package>/copyright` once installed (GPL, LGPL, BSD, MIT, Apache-2.0, PostgreSQL and others) | Ubuntu: `apt-get source <package>` on a 24.04 system, or https://launchpad.net/ubuntu/+source/<package>; Docker Engine: https://github.com/moby/moby |
+| BunkerWeb 1.5.10 and its scheduler (container images), appliance bundle only | `vendor/docker/` | AGPL-3.0 (BunkerWeb), with the images' Linux userland under its own licenses | https://github.com/bunkerity/bunkerweb, tag `v1.5.10` |
+| nginx (alpine) base image of the `frontend` container, appliance bundle only | `vendor/docker/` | BSD-2-Clause (nginx), Alpine userland under its own licenses | https://nginx.org/en/download.html and https://gitlab.alpinelinux.org/alpine/aports |
+
+`vendor/BUNDLE-MANIFEST.txt` in each bundle lists the exact versions and
+checksums.
+
+## Written offer for source code
+
+For the GPL-, LGPL- and AGPL-licensed software in the offline bundle, the
+corresponding source code is available from the upstream locations in the table
+above, at the versions listed in that bundle's `BUNDLE-MANIFEST.txt`. If you
+cannot obtain it there, ask the Morphit maintainers in the public Matrix room
+`#agorise:matrix.org` within three years of the release, and we will provide
+the corresponding source for that release, for no more than the cost of
+providing it. Morphit's own source is in the same release, and every operator
+running a modified Morphit must offer theirs under the AGPL.

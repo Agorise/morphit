@@ -1,7 +1,7 @@
 /**
  * Morphit indexer — the User-Agent line we send to RPC nodes.
  *
- * the maintainer's sysadmin, who runs a public Blurt RPC node, asked us to stop looking
+ * The operator of a public Blurt RPC node asked us to stop looking
  * like an anonymous bot. Node's built-in fetch (undici) defaults to the bare
  * string `node` — every unnamed Node service on the internet sends exactly
  * that, which is why it trips bot-traps: it names a runtime, not an

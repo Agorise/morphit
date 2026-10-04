@@ -1,6 +1,6 @@
 {
 	"name": "morphit",
-	"version": "1.20.3",
+	"version": "1.21.0",
 	"private": true,
 	"description": "Morphit — non-custodial, no-KYC P2P fiat↔BTC/XMR/BLURT marketplace",
 	"license": "AGPL-3.0-or-later",
@@ -29,13 +29,26 @@
 		"lint": "tsx scripts/lint-gate-smoke.ts",
 		"test": "npm run test --workspaces --if-present"
 	},
-	"dependencies": {
-		"jsdom": "^29.1.1"
-	},
 	"overrides": {
 		"undici": "^7.29.1",
-		"fast-uri": "^3.1.4",
-		"js-yaml": "^4.3.1",
+		"fast-uri": "^3.1.8",
+		"js-yaml": "^4.3.2",
+		"postcss": "^8.5.28",
+		"sanitize-html": "^2.18.0",
+		"morgan": "^1.12.1",
+		"dompurify": "^3.4.16",
+		"body-parser@^2.0.0": "^2.3.0",
+		"postcss-selector-parser@^6.1.0": "^6.1.4",
 		"nanoid": "^3.3.18"
+	},
+	"devDependencies": {
+		"@beblurt/dblurt": "^0.17.0",
+		"@morphit/hidden-transport": "*",
+		"@morphit/operator-config": "*",
+		"@noble/secp256k1": "^2.3.0",
+		"hono": "^4.13.12",
+		"js-yaml": "^4.3.2",
+		"undici": "^7.29.1",
+		"yaml": "^1.10.3"
 	}
 }

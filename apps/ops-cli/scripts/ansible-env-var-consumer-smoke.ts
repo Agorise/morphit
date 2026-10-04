@@ -13,11 +13,11 @@
  * had been silently bypassed.  F13 fixed that one instance;
  * this smoke prevents the class from recurring.
  *
- * cp131 HIGH-002 fix: pre-cp131 the smoke gated on `MORPHIT_*`
+ * older the smoke gated on `MORPHIT_*`
  * prefix on both the template-side AND consumer-side regex.
  * That let backup.env.j2 ship 5 dead env vars (AGE_RECIPIENT,
  * REMOTE_DESTINATION, SSH_KEY, DB_HOST, DB_PORT) — exactly the
- * F13 bug-class the smoke was supposed to catch.  cp131 drops
+ * F13 bug-class the smoke was supposed to catch.  A later change drops
  * the prefix gate and widens the consumer scan to include
  * ops/backup/*.sh, so any uppercase env-var declared in a
  * template MUST appear in some consumer file.
@@ -32,7 +32,7 @@
  *   - ops/scripts/lib/*.sh (shared sidecar helpers)
  *   - ops/backup/*.sh (backup script)
  *   - ops/ipfs/*.sh (IPFS release-hosting pin + setup scripts, v1.9.0)
- *   - ops/ddns/*.sh (dynamic-DNS update + setup scripts, cp596)
+ *   - ops/ddns/*.sh (dynamic-DNS update + setup scripts)
  *
  * Template lines where the var NAME itself is Jinja-templated
  * (e.g. `MORPHIT_FAIL2BAN_{{ var_jail }}_CRITICAL=...`) are
@@ -130,7 +130,7 @@ function collectTemplateVars(): Array<{ template: string; varName: string; exter
 			// (no Jinja).  If the LHS contains `{{`, the var name
 			// is dynamic — skip.
 			//
-			// cp131 HIGH-002 fix: previously hard-gated on
+			// previously hard-gated on
 			// MORPHIT_* prefix, which silently let non-prefixed
 			// vars (AGE_RECIPIENT, REMOTE_DESTINATION, SSH_KEY,
 			// DB_HOST, DB_PORT, BACKUP_DIR, RETAIN_DAYS, DB_NAME,
@@ -153,7 +153,7 @@ function collectTemplateVars(): Array<{ template: string; varName: string; exter
  *  token appearing in production code, scripts, or sidecars.
  *  Returns the set of var names found.
  *
- *  cp131: widened from `MORPHIT_*` to all `[A-Z][A-Z0-9_]+` so
+ *  widened from `MORPHIT_*` to all `[A-Z][A-Z0-9_]+` so
  *  non-prefixed vars (AGE_RECIPIENT, DB_HOST, RSYNC_ARGS, ...)
  *  are caught. */
 function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
@@ -165,13 +165,13 @@ function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
 	const consumerFiles = [
 		...walkFiles(APPS_DIR, tsPred),
 		// packages/ — shared workspace libraries are real consumers too.
-		// cp708: @morphit/node-health reads MORPHIT_HEALTH_DISK_PATH (via
+		// @morphit/node-health reads MORPHIT_HEALTH_DISK_PATH (via
 		// resolveHealthDiskPath) on behalf of both the indexer and ops-cli,
 		// so the literal lives in packages/, not apps/.
 		...walkFiles(PACKAGES_DIR, tsPred),
 		// ops/scripts/ — sidecar shell scripts.
 		...walkFiles(OPS_SCRIPTS_DIR, shPred),
-		// ops/backup/ — backup script (cp131 added; previously
+		// ops/backup/ — backup script (a later change added; previously
 		// skipped, which let AGE_RECIPIENT et al. slip past).
 		...walkFiles(join(REPO_ROOT, 'ops', 'backup'), shPred),
 		// ops/ipfs/ — IPFS release-hosting scripts (v1.9.0). The pin +
@@ -179,7 +179,7 @@ function collectConsumerSurface(): { names: Set<string>; fileCount: number } {
 		// that the ipfs Ansible role's env templates declare; before this
 		// directory was scanned those vars had no discoverable consumer.
 		...walkFiles(join(REPO_ROOT, 'ops', 'ipfs'), shPred),
-		// ops/ddns/ — dynamic-DNS scripts (cp596). morphit-ddns-update.sh
+		// ops/ddns/ — dynamic-DNS scripts. morphit-ddns-update.sh
 		// consumes MORPHIT_DDNS_UPDATE_URL / _IP_URL / _STATE_FILE, which the
 		// ddns Ansible role's env template declares; scanned here so those
 		// vars have a discoverable consumer.

@@ -82,7 +82,7 @@ describe('AltchaService', () => {
 		// altcha currently encodes sig as hex (4-bit-per-digit, no
 		// padding-equivalent positions), so any single-char flip
 		// changes the decoded bytes — last-char flip works fine
-		// here.  But Part 85 documented the broader anti-pattern
+		// here.  But a later change documented the broader anti-pattern
 		// for base64url HMACs, where last-char flips ~6% of the
 		// time decode to the same bytes.  Using first-char flip
 		// here keeps the test resilient if altcha's encoding ever
@@ -108,7 +108,7 @@ describe('AltchaService', () => {
 	});
 
 	it('verify: rejects altcha_expired for past-expiry challenges', () => {
-		// Item 6 / Audit Part 27: ManualClock makes this
+		// Item 6: ManualClock makes this
 		// deterministic and instant.  Previously: real
 		// setTimeout(150) on a 100ms TTL.
 		const clock = new ManualClock('2026-05-15T12:00:00Z');
@@ -143,6 +143,69 @@ describe('AltchaService', () => {
 				expect(['altcha_malformed', 'altcha_bad_signature', 'altcha_expired']).toContain(r.code);
 			}
 		}
+	});
+
+	// One honest solve must buy exactly one accepted solution. `challenge` is
+	// SHA-256(salt + number), so moving leading digits of `number` onto the end
+	// of `salt` keeps salt+number — and the challenge — byte-identical. When the
+	// signature covered only the challenge, every such split verified, each was
+	// a "new" salt for the replay check, and the digits landed in the expiry.
+	it('verify: a solved challenge cannot be re-split into further accepted solutions', () => {
+		const svc = make({ maxnumber: 200_000 });
+		let c = svc.issue();
+		let sol = solve(c);
+		// Need a number with at least two digits and no leading zero after a split.
+		while (sol.number < 100 || String(sol.number)[1] === '0') {
+			c = svc.issue();
+			sol = solve(c);
+		}
+		expect(svc.verify(sol).ok).toBe(true);
+		const digits = String(sol.number);
+		let accepted = 0;
+		for (let k = 1; k < digits.length; k++) {
+			const rest = digits.slice(k);
+			if (String(Number(rest)) !== rest) continue;
+			const spliced: AltchaSolution = {
+				...sol,
+				salt: sol.salt + digits.slice(0, k),
+				number: Number(rest)
+			};
+			if (svc.verify(spliced).ok) accepted++;
+		}
+		expect(accepted).toBe(0);
+	});
+
+	it('verify: an expired solve cannot be revived by moving digits into the expiry', () => {
+		const clock = new ManualClock('2026-05-15T12:00:00Z');
+		const svc = make({ ttlMs: 100, maxnumber: 200_000, clock });
+		let c = svc.issue();
+		let sol = solve(c);
+		while (sol.number < 10 || String(sol.number)[1] === '0') {
+			c = svc.issue();
+			sol = solve(c);
+		}
+		clock.advance(150);
+		expect(svc.verify(sol).ok).toBe(false);
+		// One digit moved: the expiry in the salt becomes ten times larger.
+		const digits = String(sol.number);
+		const revived: AltchaSolution = {
+			...sol,
+			salt: sol.salt + digits[0],
+			number: Number(digits.slice(1))
+		};
+		expect(svc.verify(revived).ok).toBe(false);
+	});
+
+	it('verify: a number above maxnumber or a salt of the wrong shape is refused', () => {
+		const svc = make();
+		const c = svc.issue();
+		const sol = solve(c);
+		expect(svc.verify({ ...sol, number: c.maxnumber + 1 }).ok).toBe(false);
+		expect(svc.verify({ ...sol, salt: sol.salt + ' ' }).ok).toBe(false);
+		expect(svc.verify({ ...sol, number: -1 }).ok).toBe(false);
+		expect(svc.verify({ ...sol, number: 1.5 }).ok).toBe(false);
+		// The untouched solution still verifies after the refusals.
+		expect(svc.verify(sol).ok).toBe(true);
 	});
 
 	it("different service instances cannot verify each other's challenges", () => {

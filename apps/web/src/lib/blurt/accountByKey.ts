@@ -6,7 +6,7 @@
  * name is chosen at account creation and lives only on-chain). To spare a
  * seed-importing user from typing their account name, we ask the operator's
  * indexer which account(s) reference their derived PUBLIC keys. Server-side
- * that endpoint unions TWO sources (cp440): the chain's
+ * that endpoint unions TWO sources: the chain's
  * `condenser_api.get_key_references` AND the indexer's own
  * `accounts.posting_pubkey` index. The second catches PRE-FORK / genesis
  * accounts — Blurt's `account_by_key` plugin only indexes keys set by a
@@ -22,8 +22,8 @@
  * user's IP and the exact moment they restore their account — a high-value
  * deanonymization point (IP ↔ account at login). Routed same-origin, third
  * parties see only the indexer's request; the browser opens no cross-origin
- * RPC connection. This is the read sibling of the cp344 broadcast proxy and
- * the cp298 account-keys proxy. Public keys are already on-chain, so the
+ * RPC connection. This is the read sibling of the broadcast proxy and
+ * the account-keys proxy. Public keys are already on-chain, so the
  * lookup reveals nothing new — it only moves WHO asks the chain.
  *
  * DELIBERATELY no direct-RPC fallback. Unlike a broadcast (which must

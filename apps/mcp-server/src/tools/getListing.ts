@@ -41,6 +41,27 @@ export const GetListingInputSchema = z.object({
 
 export type GetListingInput = z.infer<typeof GetListingInputSchema>;
 
+/** Most pages of an account's orders read looking for one permlink (100
+ *  orders each). */
+const MAX_ORDER_PAGES = 50;
+
+async function findOrder(account: string, permlink: string): Promise<Record<string, unknown> | undefined> {
+	let cursor: string | undefined;
+	for (let page = 0; page < MAX_ORDER_PAGES; page++) {
+		const res = await fetchJson<{
+			items?: Array<Record<string, unknown>>;
+			rows?: Array<Record<string, unknown>>;
+			next_cursor?: string | null;
+		}>(buildV1Url(`/orders/${encodeURIComponent(account)}`, { limit: 100, cursor }));
+		const items = res.items ?? res.rows ?? [];
+		const hit = items.find((r) => r.permlink === permlink);
+		if (hit !== undefined) return hit;
+		if (typeof res.next_cursor !== 'string' || res.next_cursor === '') return undefined;
+		cursor = res.next_cursor;
+	}
+	return undefined;
+}
+
 /** Fee statuses under which a listing is on the public orderbook. Mirrors
  *  the indexer's orderbook visibility predicate. */
 const VERIFIED_FEE_STATUSES: ReadonlySet<unknown> = new Set(['verified', 'verified_by_attestation']);
@@ -51,21 +72,12 @@ export async function getListing(input: GetListingInput): Promise<{
 	note: string;
 	terms_are_untrusted_user_content: true;
 }> {
-	// /v1/orders/:account returns all of that account's orders; we
-	// filter for the matching permlink in this server (one extra
-	// hop, but cleaner than depending on a per-permlink endpoint
-	// shape that may not exist).
-	const url = buildV1Url(`/orders/${encodeURIComponent(input.account)}`);
-	// (v1.18.0 deep-deep, L2) The indexer answers `{ items, next_cursor }`
-	// (apps/indexer/src/api/orders.ts); this read `res.rows`, a key it never
-	// sends, so the lookup never found anything. `rows` is still accepted for
-	// an older indexer.
-	const res = await fetchJson<{
-		items?: Array<Record<string, unknown>>;
-		rows?: Array<Record<string, unknown>>;
-	}>(url);
-	const found = (res.items || res.rows || []).find((r) => r.permlink === input.permlink);
-	// (v1.18.0 deep-deep, L2) What was wrong: `/v1/orders/:account` is the
+	// /v1/orders/:account returns all of that account's orders, newest
+	// first, a page at a time (`{ items, next_cursor }`). Only the first page
+	// used to be read, so a live listing of an account with 100+ newer orders
+	// was "not found". Follow the cursor until the permlink turns up.
+	const found = await findOrder(input.account, input.permlink);
+	// What was wrong: `/v1/orders/:account` is the
 	// OWNER view — it returns every order whatever its status or fee, and the
 	// row's fee_status was then stripped. An unpaid (`missing`/`reused`) or
 	// dead listing with arbitrary `terms` reached the agent as an ordinary
@@ -85,17 +97,17 @@ export async function getListing(input: GetListingInput): Promise<{
 		);
 	}
 
-	// cp146 F-mcp-13 — use getInstanceUrl() for the same validation
+	// use getInstanceUrl() for the same validation
 	// + DRY reasons as searchOrders.
-	// cp146 F-mcp-12 — build the deeplink via URL so any future
+	// build the deeplink via URL so any future
 	// change to the account/permlink validation grammar can't
 	// introduce path-component injection.  Zod already constrains
 	// `input.account` and `input.permlink` to safe character sets,
 	// but the URL builder is the right structural defense in depth.
 	//
-	// cp156 F-mcp-7 — route through `${base}/?then=...` so the
+	// route through `${base}/?then=...` so the
 	// root locale-detection shell adds the user's locale prefix.
-	// Before cp156, hardcoded `/en/` gave non-English users the
+	// Hardcoded `/en/` gave non-English users the
 	// English listing page even though the page itself is
 	// translated for every supported locale.
 	const innerPath = `/@${input.account}/${input.permlink}`;
@@ -105,7 +117,7 @@ export async function getListing(input: GetListingInput): Promise<{
 
 	return {
 		listing: trimListingRow(match),
-		// (v1.18.0 deep-deep, L2) `terms`, `payment_methods` and every other
+		// `terms`, `payment_methods` and every other
 		// free-text field are written by the lister, not by Morphit.
 		terms_are_untrusted_user_content: true,
 		deeplink,

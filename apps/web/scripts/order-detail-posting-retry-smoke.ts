@@ -1,12 +1,14 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the order-detail page no longer flashes a scary "Order not found"
- * at a user who just posted (the maintainer #16). Anchor 2026-07-08.
+ * at a user who just posted. Anchor 2026-07-08.
  *
- * A freshly-posted order is likely still indexing, so the page shows a
- * reassuring "still posting" state and auto-retries before ever saying
- * not-found; a manual "Check again" is offered; and the not-found copy is
- * reworded to be reassuring. All strings exist in every locale.
+ * A freshly-posted order is likely still indexing, so the POSTER sees a
+ * reassuring "still posting" state and auto-retries before ever seeing
+ * not-found; a manual "Check again" is offered. Anyone else asking for an
+ * order the indexer does not have gets the plain not-found answer at once —
+ * telling a stranger "your order is being posted" about a mistyped or removed
+ * link was wrong. All strings exist in every locale.
  */
 
 import { readFileSync } from 'node:fs';
@@ -40,12 +42,24 @@ check('loadOrder retries on not-found instead of giving up immediately', /attemp
 // irreversibility: 90s of spinner is not a fix, and the owner never reaches this
 // path any more.
 check('a modest retry still smooths a genuine race', /ORDER_RETRY_ATTEMPTS = 8/.test(page) && /ORDER_RETRY_INTERVAL_MS = 3000/.test(page));
-// THE thing that actually delivers the maintainer's #16: the owner cannot hit not-found,
-// because their own browser staged the order at broadcast.
-check("the owner can't reach not-found at all (the staged order answers first)", /mergePendingOrders\(r\.data\.items, get\(pendingOrders\)/.test(page));
+// What actually keeps a poster from not-found: their own browser staged the
+// order at broadcast, and the staged copy is merged before the verdict.
+check(
+	"the owner can't reach not-found at all (the staged order answers first)",
+	/mergePendingOrders\(indexed, get\(pendingOrders\)/.test(page)
+);
 check('the retry is no longer what stands between a poster and "not found"', /pendingOrders/.test(page));
 check('only shows pending (not not_found) while retries remain', /phase = 'pending';[\s\S]{0,120}orderRetryTimer = setTimeout/.test(page));
-check('retry timer is cleared on destroy (no dangling timer)', /onDestroy\(\(\) => \{[\s\S]{0,120}clearTimeout\(orderRetryTimer\)/.test(page));
+check(
+	'the "being posted" wait is only for the poster (a stranger gets not-found at once)',
+	/if \(viewerAccount === a && attempt < ORDER_RETRY_ATTEMPTS\) \{\s*phase = 'pending';/.test(page)
+);
+// The load runs in an $effect keyed on account + permlink; its teardown (route
+// change or destroy) clears the pending retry.
+check(
+	'retry timer is cleared on teardown (no dangling timer)',
+	/return \(\) => \{[\s\S]{0,120}clearTimeout\(orderRetryTimer\)/.test(page)
+);
 check('manual retryLoadOrder exists', /function retryLoadOrder/.test(page));
 
 // pending branch UI
@@ -66,19 +80,18 @@ for (const loc of LOCALES) {
 }
 check('all 10 locales have not_found_* + posting_* + check_again', locOk);
 const en = JSON.parse(readFileSync(join(WEB, 'src', 'lib', 'i18n', 'locales', 'en.json'), 'utf8')).order_detail;
-// the maintainer specified this copy verbatim. The page a user hits seconds after paying a
-// listing fee must say WAIT, not GONE — an earlier rewrite of mine fixed the
-// tone ("We couldn't find this order") while keeping the "it's missing" meaning.
+// The poster, seconds after paying a listing fee, sees the posting copy, which
+// must say WAIT, not GONE. The not-found copy is what a stranger (or the poster
+// after every retry) sees, so it must not claim the order is being posted.
 check(
-	'EN not-found title is the maintainer\'s exact "Order is loading"',
-	en.not_found_title === 'Order is loading'
+	'EN posting copy says the order is on its way and is checked automatically',
+	/being (?:posted|confirmed)/i.test(en.posting_title + ' ' + en.posting_body) &&
+		/automatically/i.test(en.posting_body)
 );
 check(
-	'EN not-found body is the maintainer\'s exact wording',
-	en.not_found_body ===
-		'This order is being posted by the blockchain and may take a minute for it to appear.'
+	'EN not-found copy does not tell a stranger the order is being posted',
+	!/being (?:posted|confirmed)|loading/i.test(en.not_found_title + ' ' + en.not_found_body)
 );
-check('the copy never leads with "doesn\'t exist"', !en.not_found_body.startsWith('This order doesn'));
 
 console.log('');
 if (fail === 0) {

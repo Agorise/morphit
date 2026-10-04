@@ -1,8 +1,8 @@
 <script lang="ts">
 	/**
-	 * LoadingDots — a label whose trailing "…" types itself out (t.txt item 2).
+	 * LoadingDots — a label whose trailing "…" types itself out.
 	 *
-	 * the maintainer: transient "Loading account…"-style text should have its three dots
+	 * Requirement: transient "Loading account…"-style text should have its three dots
 	 * animate like a typewriter — appearing one at a time, then resetting —
 	 * rather than sitting there static. Pass the FULL label (with or without a
 	 * trailing ellipsis); the component strips any trailing dots/ellipsis and

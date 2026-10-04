@@ -20,7 +20,7 @@
  * account. Two things broke that in practice:
  *
  *   1. `morphit.userPreferences.v1` (fiat + region) has NO suffix, so it is
- *      simply shared. the maintainer watched his tester3 region ("Your place or mine,
+ *      simply shared. The maintainer watched his tester3 region ("Your place or mine,
  *      whatever.") carry straight into a fresh testowner session.
  *   2. The suffix is resolved from `getUserBlurtAccount()` at COMPONENT INIT.
  *      Sign out and back in without a reload and the component never
@@ -54,7 +54,14 @@
  *  out" — if it holds anything about a person, it does not belong there. */
 export const DEVICE_KEYS: readonly string[] = deviceKeys();
 
-import { deviceKeys } from './storageKeyRegistry';
+/** Per-account sealed slots (`<family>.<slot>`): encrypted under that account's
+ *  own key and naming nobody, so the sweep leaves them — one account's Sign Out
+ *  must not strip another's sealed state (registry protection 'sealed'). */
+export const SEALED_FAMILIES: readonly string[] = STORAGE_KEYS.filter(
+	(k) => k.protection === 'sealed'
+).map((k) => k.key);
+
+import { deviceKeys, STORAGE_KEYS } from './storageKeyRegistry';
 
 /** Prefix every Morphit-owned key shares. Anything outside it belongs to
  *  another app on the origin and is none of our business. */
@@ -78,12 +85,14 @@ export function sweepAccountStorageOnSignOut(storage?: Storage): void {
 
 	const device = new Set(DEVICE_KEYS);
 	const doomed: string[] = [];
+	const sealed = (key: string): boolean =>
+		SEALED_FAMILIES.some((p) => key === p || key.startsWith(`${p}.`));
 	try {
 		for (let i = 0; i < store.length; i++) {
 			const key = store.key(i);
 			if (key === null) continue;
 			if (!key.startsWith(MORPHIT_PREFIX)) continue;
-			if (device.has(key)) continue;
+			if (device.has(key) || sealed(key)) continue;
 			doomed.push(key);
 		}
 	} catch {
@@ -97,6 +106,48 @@ export function sweepAccountStorageOnSignOut(storage?: Storage): void {
 			store.removeItem(key);
 		} catch {
 			// Isolated: one failed removal must not abort the rest.
+		}
+	}
+}
+
+/** What a tab may hold about the person in its OWN sessionStorage: the account
+ *  name of a "just this session" sign-in (`morphit.blurtAccount`, and its
+ *  per-key `.<id>` form) and the account-tier keys such a sign-in keeps there
+ *  instead of on disk (chat read state, recent peers). */
+const SESSION_PERSON_KEYS: readonly string[] = [
+	'morphit.blurtAccount',
+	...STORAGE_KEYS.filter((k) => k.tier === 'account').map((k) => k.key)
+];
+
+/**
+ * Explicit Sign Out, this tab's sessionStorage. Each tab has its own, so the
+ * tab that signed out cannot reach a sibling's: every tab runs this when it
+ * learns of the sign-out ($stores/identity). Only the person's keys go —
+ * per-tab UI state (a dismissed banner, the reload guard of an update) stays.
+ * Best-effort and never throws, like the localStorage sweep.
+ */
+export function sweepSessionAccountKeysOnSignOut(storage?: Storage): void {
+	let store: Storage;
+	try {
+		store = storage ?? window.sessionStorage;
+	} catch {
+		return;
+	}
+	const doomed: string[] = [];
+	try {
+		for (let i = 0; i < store.length; i++) {
+			const key = store.key(i);
+			if (key === null) continue;
+			if (SESSION_PERSON_KEYS.some((p) => key === p || key.startsWith(`${p}.`))) doomed.push(key);
+		}
+	} catch {
+		return;
+	}
+	for (const key of doomed) {
+		try {
+			store.removeItem(key);
+		} catch {
+			// Isolated, as above.
 		}
 	}
 }

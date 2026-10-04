@@ -4,7 +4,7 @@
 # Polls /proc/meminfo + df + /proc/loadavg + /proc/vmstat, emits
 # structured JSON alerts to journalctl when thresholds are
 # crossed.  The matrix-bot tails this unit and tier-routes the
-# alerts (cp9 + cp10) to the operator's MXID.
+# alerts to the operator's MXID.
 #
 # Run from a systemd timer every 5 minutes (default — see the
 # accompanying .timer file).

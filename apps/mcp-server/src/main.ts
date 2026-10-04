@@ -67,10 +67,12 @@ import {
 /** Convert a Zod schema to JSON Schema for MCP's tool advertisement.
  *  Use a minimal hand-rolled converter rather than pulling in
  *  zod-to-json-schema; the surface is small enough that this
- *  costs ~30 lines and saves a dependency.
+ *  costs ~50 lines and saves a dependency.
  *
- *  Honours: object, string (+regex, min/max), number (+int, min/max),
- *  boolean, enum, optional, describe(). */
+ *  Honours: object, string (+regex → pattern, min/max → minLength/
+ *  maxLength), number (+int → integer, min/max → minimum/maximum),
+ *  boolean, enum, optional, describe() on the field or on its
+ *  .optional() wrapper. */
 function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
 	if (schema instanceof z.ZodObject) {
 		const shape = (schema as z.ZodObject<z.ZodRawShape>).shape;
@@ -89,16 +91,29 @@ function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
 		return out;
 	}
 	if (schema instanceof z.ZodOptional) {
-		return zodToJsonSchema((schema as z.ZodOptional<z.ZodTypeAny>).unwrap());
+		const out = zodToJsonSchema((schema as z.ZodOptional<z.ZodTypeAny>).unwrap());
+		// `.optional().describe(...)` puts the description on the wrapper.
+		if (schema.description && out.description === undefined) out.description = schema.description;
+		return out;
 	}
 	if (schema instanceof z.ZodString) {
 		const out: Record<string, unknown> = { type: 'string' };
+		for (const c of schema._def.checks) {
+			if (c.kind === 'min') out.minLength = c.value;
+			else if (c.kind === 'max') out.maxLength = c.value;
+			else if (c.kind === 'regex') out.pattern = c.regex.source;
+		}
 		const desc = schema.description;
 		if (desc) out.description = desc;
 		return out;
 	}
 	if (schema instanceof z.ZodNumber) {
 		const out: Record<string, unknown> = { type: 'number' };
+		for (const c of schema._def.checks) {
+			if (c.kind === 'int') out.type = 'integer';
+			else if (c.kind === 'min') out[c.inclusive ? 'minimum' : 'exclusiveMinimum'] = c.value;
+			else if (c.kind === 'max') out[c.inclusive ? 'maximum' : 'exclusiveMaximum'] = c.value;
+		}
 		const desc = schema.description;
 		if (desc) out.description = desc;
 		return out;
@@ -135,7 +150,7 @@ interface ToolRegistration<I extends z.ZodTypeAny> {
  *  repo version-consistency smoke (Category B) so it can't drift from the
  *  root package.json on a release bump — mirrors the relay/indexer
  *  health.ts VERSION constants. */
-const MCP_VERSION = '1.20.3';
+const MCP_VERSION = '1.21.0';
 
 const TOOLS: ToolRegistration<z.ZodTypeAny>[] = [
 	{

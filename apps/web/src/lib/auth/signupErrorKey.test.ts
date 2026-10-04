@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave (D2/D4 → F): two new relay create-endpoint codes must NOT
+ * (D2/D4 → F): two new relay create-endpoint codes must NOT
  * fall through to 'broadcast_failed' ("the chain rejected…"), which would be
  * false — nothing was rejected. Every key returned must exist in en.json.
  */

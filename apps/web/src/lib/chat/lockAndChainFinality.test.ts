@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep — M3, L1, L2: what a conversation does when the session
+ * M3, L1, L2: what a conversation does when the session
  * locks, when the chain has a message the indexers refused, and what comes back
  * when a thread is reopened.
  *

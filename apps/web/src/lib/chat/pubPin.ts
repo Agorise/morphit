@@ -19,10 +19,18 @@
  *   - On first contact:   pin (TOFU).
  *   - Same ref on later
  *     fetches:            trust the pinned pub.
- *   - Newer ref:          legitimate-looking key rotation.  The
- *                         caller must verify the new op against a
- *                         Blurt RPC (see chainVerify.ts) before
- *                         updating the pin.
+ *   - Newer ref:          the peer republished their chat
+ *                         identity.  The op is checked (see
+ *                         chainVerify.ts) — but that check reads
+ *                         the chain THROUGH the operator's own
+ *                         indexer, which could forge both the
+ *                         transaction and the authority it is
+ *                         checked against.  So a newer ref that
+ *                         carries the SAME key moves the pin, and
+ *                         one that carries a DIFFERENT key is held
+ *                         back as a pending "safety number
+ *                         changed" until the user confirms it
+ *                         (acceptKeyChange) — never silently.
  *   - Older ref:          impossible without rollback;
  *                         rollbacks of the chat-identity table
  *                         shouldn't happen on a forward-only
@@ -40,13 +48,25 @@
  * pathological 5MB localStorage budget allows ~50000 peers.
  *
  * Privacy: the pin set IS sensitive ("which peers have I ever
- * chatted with?").  runExplicitLockExtras() must wipe this key.
- * That wiring lives in explicitLock.ts; see clearAllPins() below.
+ * chatted with?"). An explicit Lock therefore does not leave it readable:
+ * sealPinsForLock() encrypts the pins (and pending key changes, under
+ * 'morphit.chat.pub_pin_pending') with a key derived from the posting key
+ * and removes the readable copies; the next unlock of the same account
+ * restores them (unsealPins). Wiping them instead would let a hostile
+ * operator substitute a key after any lock with no "safety number changed"
+ * step. Each account seals into its own slot (an id derived one-way from its
+ * posting key), so a second account on the same browser — its Lock or its
+ * Sign Out — never replaces or removes the first one's seal. Sign Out
+ * (another person may sign in next) clears the readable pins (clearAllPins);
+ * a seal names nobody and only its own account's key opens it, so it stays.
  */
 
 import { safeLocal } from '$utils/safeStorage';
+import { sodium, ensureSodium } from '$crypto/sodium';
+import { unsealSettled } from './unsealGate';
 
 const KEY = 'morphit.chat.pub_pins';
+const PENDING_KEY = 'morphit.chat.pub_pin_pending';
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const TRX_ID_RE = /^[a-f0-9]{40}$/;
 
@@ -61,7 +81,15 @@ export interface ChatPubPin {
 	/** Base64-encoded 32-byte X25519 pub.  Same encoding the
 	 *  indexer returns. */
 	readonly pubB64: string;
+	/** Keys pinned for this peer BEFORE an accepted key change, newest first
+	 *  (at most MAX_PAST_PUBS). They only DECRYPT history the peer sent under
+	 *  an older key; a message they open is never authenticated (a key is
+	 *  usually replaced because it leaked, so whoever holds it could write
+	 *  "from" the peer today). */
+	readonly pastPubsB64?: readonly string[];
 }
+
+const MAX_PAST_PUBS = 4;
 
 /** Outcome of comparing what the indexer just returned to what
  *  we have pinned.  Drives the caller's response: trust, verify,
@@ -75,8 +103,12 @@ export type PinComparison =
 
 type PinMap = Record<string, ChatPubPin>;
 
-function readRaw(): PinMap {
-	const raw = safeLocal.get(KEY);
+function readRaw(key: string = KEY): PinMap {
+	return parsePinMap(safeLocal.get(key));
+}
+
+/** A stored pin map, validated entry by entry (anything malformed is dropped). */
+function parsePinMap(raw: string | null): PinMap {
 	if (raw === null) return {};
 	try {
 		const parsed: unknown = JSON.parse(raw);
@@ -92,10 +124,16 @@ function readRaw(): PinMap {
 			if (!Number.isFinite(r.blockNum) || r.blockNum < 0) continue;
 			if (typeof r.trxId !== 'string' || !TRX_ID_RE.test(r.trxId)) continue;
 			if (typeof r.pubB64 !== 'string' || r.pubB64.length === 0) continue;
+			const past = Array.isArray(r.pastPubsB64)
+				? (r.pastPubsB64 as unknown[])
+						.filter((x): x is string => typeof x === 'string' && x.length > 0)
+						.slice(0, MAX_PAST_PUBS)
+				: [];
 			out[k] = {
 				blockNum: r.blockNum,
 				trxId: r.trxId,
-				pubB64: r.pubB64
+				pubB64: r.pubB64,
+				...(past.length > 0 ? { pastPubsB64: past } : {})
 			};
 		}
 		return out;
@@ -104,9 +142,9 @@ function readRaw(): PinMap {
 	}
 }
 
-function writeRaw(map: PinMap): void {
+function writeRaw(map: PinMap, key: string = KEY): void {
 	try {
-		safeLocal.set(KEY, JSON.stringify(map));
+		safeLocal.set(key, JSON.stringify(map));
 	} catch {
 		// Quota / private-mode write failures are best-effort.
 		// On failure, the next session sees no pins for these
@@ -126,8 +164,9 @@ export function getPin(peer: string): ChatPubPin | null {
  *  caller has either:
  *    - established the pin for the first time (TOFU on first
  *      contact), OR
- *    - successfully verified the new op against a Blurt RPC
- *      and the user has implicitly accepted the rotation.
+ *    - seen a newer op for the SAME key, OR
+ *    - the user explicitly accepted a changed key
+ *      (acceptKeyChange).
  *
  *  Direct callers outside chatService should not exist.  The
  *  pin contract is "what the local user trusts for this peer."
@@ -168,6 +207,65 @@ export function comparePin(peer: string, incoming: ChatPubPin): PinComparison {
 	return { kind: 'older_ref', oldPin, newRef: incoming };
 }
 
+/** A changed key for `peer` that waits for the user's confirmation, or
+ *  null. The Verify-peer panel shows the safety number computed with it, so
+ *  the user can compare BEFORE accepting. */
+export function pendingKeyChange(peer: string): ChatPubPin | null {
+	if (!ACCOUNT_NAME_RE.test(peer)) return null;
+	return readRaw(PENDING_KEY)[peer] ?? null;
+}
+
+function setPending(peer: string, next: ChatPubPin): void {
+	const current = readRaw(PENDING_KEY);
+	current[peer] = next;
+	writeRaw(current, PENDING_KEY);
+}
+
+function clearPending(peer: string): void {
+	const current = readRaw(PENDING_KEY);
+	if (peer in current) {
+		delete current[peer];
+		writeRaw(current, PENDING_KEY);
+	}
+}
+
+/** The user confirmed "safety number changed" for `peer`: the pending key
+ *  becomes the pin. Returns false when nothing was pending. */
+export function acceptKeyChange(peer: string): boolean {
+	const next = pendingKeyChange(peer);
+	if (next === null) return false;
+	const old = getPin(peer);
+	const past =
+		old === null
+			? []
+			: [old.pubB64, ...(old.pastPubsB64 ?? [])]
+					.filter((p) => p !== next.pubB64)
+					.slice(0, MAX_PAST_PUBS);
+	setPin(peer, {
+		blockNum: next.blockNum,
+		trxId: next.trxId,
+		pubB64: next.pubB64,
+		...(past.length > 0 ? { pastPubsB64: past } : {})
+	});
+	clearPending(peer);
+	return true;
+}
+
+/** The key pinned for `peer` now — the only one a v2 message from this peer
+ *  is AUTHENTICATED with. Empty when the peer is not pinned. */
+export function pinnedPubsFor(peer: string): string[] {
+	const p = getPin(peer);
+	return p === null ? [] : [p.pubB64];
+}
+
+/** The keys an accepted key change replaced, newest first: they open older
+ *  messages (and our self-copies to the peer) for reading only, never as
+ *  proof of who sent them. */
+export function replacedPubsFor(peer: string): string[] {
+	const p = getPin(peer);
+	return p === null ? [] : [...(p.pastPubsB64 ?? [])];
+}
+
 /** Remove the pin for a single peer.  Used by recovery flows
  *  (e.g. user explicitly accepts a 'older_ref' / 'tampered'
  *  state and wants to re-TOFU).  Not exposed in normal UX. */
@@ -180,11 +278,150 @@ export function clearPin(peer: string): void {
 	}
 }
 
-/** Wipe every pin.  Called by runExplicitLockExtras() — the
- *  pinned-peers set is privacy-sensitive metadata about who the
- *  user has been talking to. */
+/** Wipe every readable pin. Called on Sign Out: the next person on this
+ *  browser must not inherit (or read) who this one talked to. Sealed copies
+ *  stay: each names nobody, opens only with its own account's posting key, and
+ *  is that account's protection against a substituted key — another account
+ *  signing out on the same browser must not strip it. */
 export function clearAllPins(): void {
 	safeLocal.remove(KEY);
+	safeLocal.remove(PENDING_KEY);
+}
+
+/** Remove the readable pins and pending changes (a sealed copy stays). */
+export function dropReadablePins(): void {
+	safeLocal.remove(KEY);
+	safeLocal.remove(PENDING_KEY);
+}
+
+/** The pins of a locked session, encrypted (see the file header): one slot
+ *  per account, `<SEALED_PREFIX>.<slot id>`, so one account's Lock never
+ *  replaces another's seal. */
+export const SEALED_PREFIX = 'morphit.chat.pub_pin_sealed';
+const SEAL_INFO = 'morphit-chat-pins-v1/seal';
+const SLOT_INFO = 'morphit-chat-pins-v1/slot';
+const SEAL_AAD = 'morphit-chat-pins-v1';
+const SEAL_NONCE_BYTES = 12;
+
+function sealKey(postingPriv: Uint8Array): Uint8Array {
+	return sodium.crypto_generichash(32, new TextEncoder().encode(SEAL_INFO), postingPriv);
+}
+
+/** This account's slot: a one-way id from its posting key (it says nothing
+ *  about the account, and no other account's key reaches it). */
+function sealSlot(postingPriv: Uint8Array): string {
+	const id = sodium.crypto_generichash(16, new TextEncoder().encode(SLOT_INFO), postingPriv);
+	return `${SEALED_PREFIX}.${sodium.to_hex(id)}`;
+}
+
+/**
+ * Explicit Lock: take the readable pins off disk NOW (synchronously, so
+ * nothing readable outlives the lock) and store them encrypted under a key
+ * only the same account's posting key gives. `postingPriv` is copied; the
+ * caller may wipe its own copy at once.
+ */
+export function sealPinsForLock(postingPriv: Uint8Array): Promise<void> {
+	const pins = readRaw();
+	const pending = readRaw(PENDING_KEY);
+	safeLocal.remove(KEY);
+	safeLocal.remove(PENDING_KEY);
+	if (Object.keys(pins).length === 0 && Object.keys(pending).length === 0) {
+		return Promise.resolve();
+	}
+	const priv = Uint8Array.from(postingPriv);
+	const done = (async () => {
+		await ensureSodium();
+		const key = sealKey(priv);
+		const slot = sealSlot(priv);
+		try {
+			// Keep anything an earlier lock of this account sealed.
+			const prior = openSealed(slot, key);
+			const nonce = sodium.randombytes_buf(SEAL_NONCE_BYTES);
+			const plain = new TextEncoder().encode(
+				JSON.stringify({
+					pins: { ...(prior?.pins ?? {}), ...pins },
+					pending: { ...(prior?.pending ?? {}), ...pending }
+				})
+			);
+			const ct = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+				plain,
+				new TextEncoder().encode(SEAL_AAD),
+				null,
+				nonce,
+				key
+			);
+			const blob = new Uint8Array(nonce.length + ct.length);
+			blob.set(nonce, 0);
+			blob.set(ct, nonce.length);
+			safeLocal.set(slot, sodium.to_base64(blob, sodium.base64_variants.ORIGINAL));
+		} finally {
+			sodium.memzero(key);
+			sodium.memzero(priv);
+		}
+	})();
+	// An unlock that comes before this write lands waits for it.
+	sealing = done.catch(() => undefined);
+	return done;
+}
+
+/** The seal being written, if any (see unsealPins). */
+let sealing: Promise<void> = Promise.resolve();
+
+function openSealed(slot: string, key: Uint8Array): { pins: PinMap; pending: PinMap } | null {
+	const raw = safeLocal.get(slot);
+	if (raw === null) return null;
+	try {
+		const blob = sodium.from_base64(raw, sodium.base64_variants.ORIGINAL);
+		if (blob.length <= SEAL_NONCE_BYTES) return null;
+		const plain = sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+			null,
+			blob.slice(SEAL_NONCE_BYTES),
+			new TextEncoder().encode(SEAL_AAD),
+			blob.slice(0, SEAL_NONCE_BYTES),
+			key
+		);
+		const parsed = JSON.parse(new TextDecoder().decode(plain)) as {
+			pins?: unknown;
+			pending?: unknown;
+		};
+		// Validated exactly like the readable copy.
+		return {
+			pins: parsePinMap(JSON.stringify(parsed.pins ?? {})),
+			pending: parsePinMap(JSON.stringify(parsed.pending ?? {}))
+		};
+	} catch {
+		return null; // damaged: nothing to restore
+	}
+}
+
+/**
+ * Unlock: restore the pins a Lock sealed, when they are this account's.
+ * A sealed pin wins over a readable one for the same peer (it is the one
+ * the user had before the lock; a different key met since then is then
+ * compared against it again). Resolves true when pins were restored.
+ * `stillUnlocked` is asked once the crypto is ready: when the session that
+ * asked has been locked meanwhile, nothing is restored (the seal stays).
+ */
+export async function unsealPins(
+	postingPriv: Uint8Array,
+	stillUnlocked: () => boolean = () => true
+): Promise<boolean> {
+	await sealing;
+	await ensureSodium();
+	if (!stillUnlocked()) return false;
+	const slot = sealSlot(postingPriv);
+	if (safeLocal.get(slot) === null) return false;
+	const key = sealKey(postingPriv);
+	try {
+		const sealed = openSealed(slot, key);
+		if (sealed === null) return false;
+		writeRaw({ ...readRaw(), ...sealed.pins });
+		writeRaw({ ...sealed.pending, ...readRaw(PENDING_KEY) }, PENDING_KEY);
+		safeLocal.remove(slot);
+		return true;
+	} finally {
+		sodium.memzero(key);
+	}
 }
 
 /** For tests / debugging only: list all currently-pinned peers. */
@@ -203,7 +440,10 @@ export const PUB_PIN_ERROR = {
 	older_indexer_ref: 'pub_pin_older_indexer_ref',
 	chain_reports_none: 'pub_pin_chain_reports_none',
 	chain_older_than_pin: 'pub_pin_chain_older_than_pin',
-	malformed_indexer_response: 'pub_pin_malformed_indexer_response'
+	malformed_indexer_response: 'pub_pin_malformed_indexer_response',
+	/** The peer's key changed. Not an error the user can do nothing about:
+	 *  they compare the new safety number and accept it (acceptKeyChange). */
+	key_changed: 'pub_pin_key_changed'
 } as const;
 export type PubPinErrorCode = (typeof PUB_PIN_ERROR)[keyof typeof PUB_PIN_ERROR];
 
@@ -282,6 +522,9 @@ export async function resolveChatPubFromIndexer(
 		);
 	}
 
+	// The pins a Lock sealed are compared against too: wait for this unlock's
+	// unseal before deciding anything is a first contact.
+	await unsealSettled();
 	const cmp = comparePin(peer, indexerPin);
 
 	switch (cmp.kind) {
@@ -342,9 +585,9 @@ export async function resolveChatPubFromIndexer(
 			);
 		}
 		case 'newer_ref': {
-			// Indexer reports a NEWER op than the one we pinned —
-			// looks like a legitimate posting-key rotation.  Don't
-			// take the indexer's word; go to the chain.
+			// Indexer reports a NEWER op than the one we pinned.  Check
+			// the op (through the relay — see the file header for why
+			// that check alone may not move a changed key).
 			const chain = await verifyOnChain(peer, indexerPin);
 			if (chain === null) {
 				throw new PubPinError(
@@ -360,17 +603,29 @@ export async function resolveChatPubFromIndexer(
 					`chain reports an older chat-identity than the pinned one for @${peer}`
 				);
 			}
-			// Chain has an op ≥ our pin.  Trust whatever the chain
-			// says is current — that's the authoritative source.
-			// Update pin to the chain's view (which may or may not
-			// match the indexer's claim; the chain wins either way).
 			const verifiedPin: ChatPubPin = {
 				blockNum: chain.blockNum,
 				trxId: chain.trxId,
 				pubB64: chain.chatPubB64
 			};
-			setPin(peer, verifiedPin);
-			return verifiedPin.pubB64;
+			// Same key, newer op (the identity was republished): nothing the
+			// user would see changes, so the pin follows.
+			if (verifiedPin.pubB64 === cmp.oldPin.pubB64) {
+				setPin(peer, {
+					...verifiedPin,
+					...(cmp.oldPin.pastPubsB64 ? { pastPubsB64: cmp.oldPin.pastPubsB64 } : {})
+				});
+				clearPending(peer);
+				return verifiedPin.pubB64;
+			}
+			// A DIFFERENT key. Hold it until the user confirms; until then
+			// nothing is encrypted to it.
+			setPending(peer, verifiedPin);
+			throw new PubPinError(
+				PUB_PIN_ERROR.key_changed,
+				peer,
+				`@${peer}'s chat key changed; waiting for the user to confirm the new safety number`
+			);
 		}
 	}
 }

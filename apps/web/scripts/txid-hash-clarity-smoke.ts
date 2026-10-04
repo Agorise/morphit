@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: transaction-ID / Hash clarity (the maintainer #7). Anchor 2026-07-08.
+ * Smoke: transaction-ID / Hash clarity. Anchor 2026-07-08.
  *
  *   - a generic `what_is_a_txid` FAQ exists (explains it's also called Hash,
  *     ~64 chars, Mycelium's "Hash", how to find it), in every locale;

@@ -1,5 +1,5 @@
 /**
- * Who is listening on the indexer's port? (v1.18.0 deep-deep, ops-1)
+ * Who is listening on the indexer's port?
  *
  * `morphit-ops upgrade` runs as root and took the release it installs from
  * whatever answered first on 127.0.0.1 / 172.18.0.1 / 172.17.0.1 port 8081.

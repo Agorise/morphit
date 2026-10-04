@@ -18,6 +18,7 @@
 import { Hono } from 'hono';
 
 import type { Database } from '$db/pool';
+import { sanitizeStoredProfileMetadata } from '$indexer/handlers/profile';
 import { errorBody, isAccountName } from '$api/shared';
 
 interface ProfileRow {
@@ -35,7 +36,7 @@ interface ProfileRow {
 	 *  more — an accounts-anchored batch returns a row for every known
 	 *  account. */
 	has_profile: boolean;
-	/** cp471 (D7/E): the account's posting public key (base58 TEXT),
+	/** (D7/E): the account's posting public key (base58 TEXT),
 	 *  joined from `accounts`, so profile cards can show the truncated
 	 *  key under a display name. Null for an account we've never indexed
 	 *  a key for. */
@@ -51,7 +52,9 @@ const MAX_BATCH_SIZE = 100;
  *  blocks; a profile update propagates to orderbook-row avatars
  *  within 90s, which is acceptable for a nice-to-have surface.
  *  stale-while-revalidate lets the CDN serve slightly stale responses
- *  while refreshing in the background. */
+ *  while refreshing in the background. Mounted under /v1, the security
+ *  middleware replaces it with `no-store` (the request names accounts,
+ *  VT3-6); it applies only where this route is served without it. */
 const BATCH_CACHE_CONTROL = 'public, max-age=90, stale-while-revalidate=60';
 
 /** #2 — cache header for a batch response that OMITS at least one requested
@@ -71,15 +74,17 @@ const BATCH_CACHE_CONTROL = 'public, max-age=90, stale-while-revalidate=60';
  *  Positive results stay cacheable for the full 90s: a profile that exists
  *  can only be superseded by a later profile op, and 90s of staleness there
  *  is the documented, acceptable trade. Negative results must not be pinned.
- *  Mirrors the client-side soft-null policy (cp428) and the same reasoning as
- *  the dynamic-data service-worker exclusion (cp324). */
+ *  Mirrors the client-side soft-null policy and the same reasoning as
+ *  the dynamic-data service-worker exclusion. */
 const BATCH_CACHE_CONTROL_PARTIAL = 'no-store';
 
 function rowToProfile(r: ProfileRow) {
 	return {
 		account: r.account,
 		display_name: r.display_name,
-		json_metadata: r.json_metadata,
+		// Rows stored before the profile handler tightened its rules may hold
+		// values it now refuses (a javascript: link, a bidi bio): served without them.
+		json_metadata: r.json_metadata === null ? null : sanitizeStoredProfileMetadata(r.json_metadata),
 		// v1.5.5 — both NULL for an account with no profile op. This used to
 		// call parseInt()/toISOString() unconditionally, which was safe only
 		// because the query could never return a profile-less row. Now it can.
@@ -89,10 +94,10 @@ function rowToProfile(r: ProfileRow) {
 	};
 }
 
-/** In-process positive-profile cache (t.txt avatar-latency batch).
+/** In-process positive-profile cache.
  *
- *  the maintainer: profiles "STILL taking up to 7 seconds to appear for some accounts …
- *  the server itself can cache the user avatars and display name text". This
+ *  Requirement: profiles took up to 7 seconds to appear for some accounts, so
+ *  the server caches avatars and display names itself. This
  *  query is PK-indexed and touches only THIS indexer's own DB (never the
  *  chain), so the latency is round-trip + Postgres contention while the poller
  *  hammers the DB applying blocks — not a slow plan. A tiny in-memory cache in
@@ -106,7 +111,7 @@ function rowToProfile(r: ProfileRow) {
  *  `no-store`-on-partial header avoids. Positives are the big, slow rows anyway
  *  (they carry the inline ~8 KB avatar); negatives are cheap to re-read.
  *  TTL-only, no explicit invalidation: 60s of staleness for a profile EDIT is
- *  within the 90s the Cache-Control header already promises, and the editor's
+ *  within the 90s this route's own Cache-Control allows, and the editor's
  *  own view is covered client-side by primeProfile. Per-route-instance (see
  *  {@link profilesRoute}) so tests get a fresh cache and an in-process second
  *  indexer can't share state. */
@@ -117,11 +122,41 @@ interface CachedProfileEntry {
 	readonly at: number;
 }
 
-export function profilesRoute(db: Database): Hono {
+/** Most profiles kept warm. A cached profile carries its inline avatar
+ *  (up to ~8 KB), and the cache used to grow with every account anyone
+ *  looked up — about 150 MiB per 20,000 profiles. */
+export const PROFILE_MEM_MAX_ENTRIES = 2_000;
+
+/** A Map kept in recency order: a hit moves to the end, and inserting past
+ *  `max` evicts from the front (least recently used). */
+class ProfileLru {
+	private readonly map = new Map<string, CachedProfileEntry>();
+	constructor(private readonly max: number) {}
+	get(key: string, now: number): CachedProfileEntry | undefined {
+		const hit = this.map.get(key);
+		if (hit === undefined) return undefined;
+		this.map.delete(key);
+		if (now - hit.at >= PROFILE_MEM_TTL_MS) return undefined;
+		this.map.set(key, hit);
+		return hit;
+	}
+	set(key: string, entry: CachedProfileEntry): void {
+		this.map.delete(key);
+		this.map.set(key, entry);
+		while (this.map.size > this.max) {
+			const oldest = this.map.keys().next().value;
+			if (oldest === undefined) break;
+			this.map.delete(oldest);
+		}
+	}
+}
+
+export function profilesRoute(db: Database, opts: { readonly maxCached?: number } = {}): Hono {
 	const app = new Hono();
 
-	/** Per-instance warm-positive cache (see {@link PROFILE_MEM_TTL_MS}). */
-	const memCache = new Map<string, CachedProfileEntry>();
+	/** Per-instance warm-positive cache (see {@link PROFILE_MEM_TTL_MS}),
+	 *  bounded at {@link PROFILE_MEM_MAX_ENTRIES}. */
+	const memCache = new ProfileLru(opts.maxCached ?? PROFILE_MEM_MAX_ENTRIES);
 
 	// Batch lookup — MUST be registered before the /:account route
 	// so Hono resolves `/` (batch) before treating the empty segment
@@ -184,8 +219,8 @@ export function profilesRoute(db: Database): Hono {
 		const profiles: Record<string, ReturnType<typeof rowToProfile>> = {};
 		const toQuery: string[] = [];
 		for (const a of accounts) {
-			const hit = memCache.get(a);
-			if (hit && now - hit.at < PROFILE_MEM_TTL_MS) {
+			const hit = memCache.get(a, now);
+			if (hit) {
 				profiles[a] = hit.value;
 			} else {
 				toQuery.push(a);

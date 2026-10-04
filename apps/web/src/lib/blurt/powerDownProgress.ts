@@ -1,6 +1,6 @@
 /**
  * powerDownProgress — compute an in-progress power-down (withdraw_vesting) for
- * the wallet's power-down modal (cp439).
+ * the wallet's power-down modal.
  *
  * Blurt pays a power-down out in equal WEEKLY installments (Blurt uses a 4-week
  * schedule vs Steem/Hive's 13, but this derives the count from the actual

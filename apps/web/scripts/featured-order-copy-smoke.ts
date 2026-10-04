@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the "🚀 Feature this order!" copy and the homepage featured section
- * (the maintainer, 2026-07-08).
+ * Smoke: the "🚀 Feature this order!" copy and the homepage featured section.
  *
  *  - The explainer names the duration the user actually selected (6h / 24h /
  *    72h), not a vague "the selected duration".

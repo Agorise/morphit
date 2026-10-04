@@ -1,5 +1,5 @@
 /**
- * Morphit cp22 — disabled-assets wizard step smoke.
+ * Morphit — disabled-assets wizard step smoke.
  *
  * Verifies:
  *   1. Category-B filter returns exactly the trade-only tickers
@@ -7,7 +7,7 @@
  *      BCH + LTC + DASH + DOGE + ZEC).
  *   2. `stepDisabledAssets()` returns a DisabledAssetsResult
  *      whose disabledTickers is empty when the operator says
- *      "enable everything" (default posture per Memory #25).
+ *      "enable everything" (default posture per the default-on rule for new assets).
  *   3. The render.ts emission produces a valid
  *      MORPHIT_INDEXER_DISABLED_ASSETS line for both empty +
  *      populated cases.
@@ -30,9 +30,7 @@ const scenarios: Scenario[] = [
 	{
 		name: 'Category-B filter returns the 13 trade-only cryptos + BARTER (14 total) from canonical registry',
 		check: () => {
-			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
-				(a) => a.ticker
-			);
+			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map((a) => a.ticker);
 			return (
 				catB.includes('USDT') &&
 				catB.includes('USDC') &&
@@ -55,9 +53,7 @@ const scenarios: Scenario[] = [
 	{
 		name: 'Category-A (fee-payable) assets do NOT appear in Category-B filter',
 		check: () => {
-			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
-				(a) => a.ticker
-			);
+			const catB = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map((a) => a.ticker);
 			return !catB.includes('BTC') && !catB.includes('XMR') && !catB.includes('BLURT');
 		}
 	},
@@ -137,11 +133,12 @@ const scenarios: Scenario[] = [
 			const stepsSrc = await import('node:fs/promises').then((m) =>
 				m.readFile(new URL('../src/init/steps.ts', import.meta.url), 'utf-8')
 			);
-			const catBTickers = ASSETS.filter(
-				(a) => a.canBeTraded && !a.canPayListingFee
-			).map((a) => a.ticker);
+			const catBTickers = ASSETS.filter((a) => a.canBeTraded && !a.canPayListingFee).map(
+				(a) => a.ticker
+			);
 			for (const t of catBTickers) {
-				if (!stepsSrc.includes(`${t}: '`)) {
+				// (a long description sits on the next line once formatted)
+				if (!new RegExp(`\\b${t}:\\s*'`).test(stepsSrc)) {
 					console.error(`  CATEGORY_B_DESCRIPTIONS missing entry for ${t}`);
 					return false;
 				}

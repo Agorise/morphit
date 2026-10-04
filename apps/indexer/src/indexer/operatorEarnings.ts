@@ -7,7 +7,7 @@
  * operator earned their 90% share of the fee — for the operator
  * dashboard and a per-order audit trail.
  *
- * cp408 — this module NO LONGER queues a relay payout. The
+ * this module NO LONGER queues a relay payout. The
  * operator's 90% is paid DIRECTLY at payment time: the user's fee
  * transaction splits into a 90% transfer to the instance's fee
  * recipient (the operator's account) plus a 10% transfer to the
@@ -20,8 +20,8 @@
  * canonical case), which is exactly why it broke for independent
  * federation owners.
  *
- * REVISIT-LIST item 5 — attribution pipeline shipped 2026-05-02;
- * relay payout removed 2026-07-04 (cp408) in favor of the
+ * Backlog item 5 — attribution pipeline shipped 2026-05-02;
+ * relay payout removed 2026-07-04 in favor of the
  * payment-time split.
  *
  * ─── Policy of record ──────────────────────────────────────
@@ -72,9 +72,10 @@
  *    Money-loser; not a serious attack vector.  Logged in
  *    operator_attribution_events for transparency.
  *
- * 3. *Replay.*  trx_id UNIQUE on operator_attribution_events
- *    rejects double-credit.  (order_account, order_permlink)
- *    UNIQUE is the secondary defense.  CRUCIALLY: if the
+ * 3. *Replay.*  The (order_account, order_permlink) UNIQUE on
+ *    operator_attribution_events rejects double-credit (one trx
+ *    may attribute several orders, so trx_id is NOT unique).
+ *    CRUCIALLY: if the
  *    attribution event insert fails, NO downstream writes
  *    happen — no relay queue, no operator_payouts, no
  *    operator_earnings update.  All-or-nothing per op.
@@ -87,11 +88,12 @@
  *    parameterized queries; the cheap-check just stops payload
  *    spam from costing us a SELECT.
  *
- * 5. *Operator deactivation race.*  We require `is_active=TRUE`
- *    on the lookup.  Deactivated operators stop earning new
- *    attribution.  Their PRIOR earnings are already paid (in
- *    the immediate-payout model) so deactivation has clean
- *    semantics: no funny pending-balance edge cases.
+ * 5. *Operator deactivation.*  The lookup requires
+ *    `is_active=TRUE`. Nothing sets it false today (no op
+ *    deactivates an operator), so the filter only matters once
+ *    one does; then a deactivated operator earns no new
+ *    attribution, and earlier fees were already paid to it at
+ *    payment time.
  *
  * 6. *Negative or zero-fee attribution.*  Fees that pass the
  *    order-handler's verification have amount > 0 by
@@ -143,6 +145,7 @@
 import type pg from 'pg';
 import { splitListingFeeBlurt } from '@morphit/asset-registry';
 import { logger } from '$log';
+import { inSavepoint, isUniqueViolation } from '$indexer/savepoint';
 
 const log = logger('operator-earnings');
 
@@ -172,7 +175,7 @@ export type AttributionResult =
 	| { kind: 'tag_malformed' }
 	| { kind: 'tag_unknown' }
 	| { kind: 'duplicate_attribution' }
-	/** Part 111 — the order op's operator_tag does not match
+	/** the order op's operator_tag does not match
 	 *  THIS instance's MORPHIT_INSTANCE_OPERATOR_TAG.  The op is
 	 *  for another operator's instance; this indexer records the
 	 *  order for orderbook/audit purposes but does NOT record
@@ -185,7 +188,7 @@ export type AttributionResult =
  *  for unit testing.  Returned as 3-decimal strings ready for
  *  Postgres NUMERIC parameters.
  *
- *  cp408 — delegates to `splitListingFeeBlurt` (the same helper the
+ *  delegates to `splitListingFeeBlurt` (the same helper the
  *  frontend uses to build the fee transaction), so the recorded
  *  earnings match to the milliBLURT what the operator was actually
  *  paid by the split. */
@@ -225,7 +228,7 @@ interface AttributeArgs {
 	readonly trxId: string;
 	readonly blockNum: number;
 	readonly blockTime: Date;
-	/** Part 111 — THIS instance's operator tag, from
+	/** THIS instance's operator tag, from
 	 *  `ctx.config.instanceOperatorTag`.  If undefined or empty,
 	 *  the indexer is unregistered (canonical bootstrap state or
 	 *  community operator pre-registration) and all attributions
@@ -239,7 +242,7 @@ interface AttributeArgs {
 /** Record that a verified BLURT listing fee attributed to a
  *  registered operator earned that operator their 90% share.
  *
- *  cp408 — audit only. The operator's 90% was already paid at
+ *  audit only. The operator's 90% was already paid at
  *  payment time by the fee split; this queues NO transfer. All
  *  writes happen inside the caller's transaction (the order
  *  handler's per-op savepoint); a failure anywhere rolls back the
@@ -250,7 +253,7 @@ interface AttributeArgs {
  *    - UPSERT operator_earnings (cumulative_blurt_earned += share,
  *      total_orders_attributed += 1)
  *
- *  Part 111 — when `operator_tag !== instanceOperatorTag`:
+ *  when `operator_tag !== instanceOperatorTag`:
  *    - NO DB writes at all.  Returns `attributed_other_instance`.
  *    - The op is for a different operator's instance; their
  *      indexer books its earnings.  This indexer recorded the order
@@ -266,7 +269,7 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 	}
 	const tag = tagCheck.tag;
 
-	// Part 111 federation-scope gate.  Each operator pays only
+	// federation-scope gate.  Each operator pays only
 	// for ops attributed to their own tag — the operator getting
 	// the 90% reward is the operator obligated for the
 	// consequences.  Economic alignment: a spammer trying to
@@ -279,7 +282,7 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 	// operator can re-run their wizard or set the env var and
 	// restart to start participating.
 	if (args.instanceOperatorTag === undefined || tag !== args.instanceOperatorTag) {
-		// Part 112 hardening — log the skip so operators have an
+		// log the skip so operators have an
 		// audit trail of "saw this op, intentionally didn't queue
 		// payouts because it's not for our instance."  Public-data-
 		// only: op_tag is on chain, our_tag is in operator env,
@@ -318,29 +321,34 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 	const operatorShareNum = Number(operatorShareBlurt);
 
 	// Insert the attribution event (audit of what this operator earned on
-	// this order — the 90% was already paid to them by the split).
+	// this order — the 90% was already paid to them by the split). In its own
+	// savepoint: a unique violation must not abort the block transaction (see
+	// $indexer/savepoint).
+	const client = args.client;
 	try {
-		await args.client.query(
-			`INSERT INTO operator_attribution_events (
+		await inSavepoint(client, 'operator_attribution_insert', () =>
+			client.query(
+				`INSERT INTO operator_attribution_events (
 				operator_account, operator_tag,
 				order_account, order_permlink,
 				fee_blurt, operator_share_blurt, treasury_share_blurt,
 				split_percent_at_event,
 				trx_id, block_num, block_time_at
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			[
-				operatorAccount,
-				tag,
-				args.orderAccount,
-				args.orderPermlink,
-				args.feeBlurt.toFixed(3),
-				operatorShareBlurt,
-				treasuryShareBlurt,
-				OPERATOR_BLURT_SPLIT_PERCENT,
-				args.trxId,
-				args.blockNum,
-				args.blockTime
-			]
+				[
+					operatorAccount,
+					tag,
+					args.orderAccount,
+					args.orderPermlink,
+					args.feeBlurt.toFixed(3),
+					operatorShareBlurt,
+					treasuryShareBlurt,
+					OPERATOR_BLURT_SPLIT_PERCENT,
+					args.trxId,
+					args.blockNum,
+					args.blockTime
+				]
+			)
 		);
 	} catch (err) {
 		if (isUniqueViolation(err)) {
@@ -349,7 +357,7 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 		throw err;
 	}
 
-	// cp408 — no relay payout is queued: the operator's 90% was paid directly
+	// no relay payout is queued: the operator's 90% was paid directly
 	// by the fee split at the moment the user's order cleared. This module only
 	// keeps the running earnings tally the dashboard reads.
 	//
@@ -380,14 +388,4 @@ export async function attributeBlurtFeeToOperator(args: AttributeArgs): Promise<
 		operatorAccount,
 		operatorShareBlurt: operatorShareNum
 	};
-}
-
-/** Postgres SQLSTATE 23505 = unique_violation. */
-function isUniqueViolation(err: unknown): boolean {
-	return (
-		typeof err === 'object' &&
-		err !== null &&
-		'code' in err &&
-		(err as { code: unknown }).code === '23505'
-	);
 }

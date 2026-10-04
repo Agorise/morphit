@@ -54,7 +54,10 @@ const st = (name: string, present: boolean, status: string, health: string): Con
 	const a = parseContainerState('bunkerweb', 'running|healthy\n');
 	expect('parse: running|healthy', a.present && a.status === 'running' && a.health === 'healthy');
 	const b = parseContainerState('bunkerweb', 'running|none');
-	expect('parse: running|none (no healthcheck)', b.present && b.status === 'running' && b.health === 'none');
+	expect(
+		'parse: running|none (no healthcheck)',
+		b.present && b.status === 'running' && b.health === 'none'
+	);
 	const c = parseContainerState('bunkerweb', '');
 	expect('parse: empty → absent', !c.present && c.status === 'absent');
 }
@@ -64,50 +67,75 @@ expect('verdict: docker missing', bunkerwebVerdict(false, []).kind === 'docker-m
 
 expect(
 	'verdict: no containers → not-running',
-	bunkerwebVerdict(true, BUNKERWEB_CONTAINERS.map((n) => st(n, false, 'absent', 'none'))).kind === 'not-running'
+	bunkerwebVerdict(
+		true,
+		BUNKERWEB_CONTAINERS.map((n) => st(n, false, 'absent', 'none'))
+	).kind === 'not-running'
 );
 
 expect(
 	'verdict: one missing → partial',
-	bunkerwebVerdict(true, [st('bunkerweb', true, 'running', 'healthy'), st('bunkerweb-scheduler', false, 'absent', 'none')]).kind === 'partial'
+	bunkerwebVerdict(true, [
+		st('bunkerweb', true, 'running', 'healthy'),
+		st('bunkerweb-scheduler', false, 'absent', 'none')
+	]).kind === 'partial'
 );
 
 expect(
 	'verdict: present but exited → partial',
-	bunkerwebVerdict(true, [st('bunkerweb', true, 'exited', 'none'), st('bunkerweb-scheduler', true, 'running', 'none')]).kind === 'partial'
+	bunkerwebVerdict(true, [
+		st('bunkerweb', true, 'exited', 'none'),
+		st('bunkerweb-scheduler', true, 'running', 'none')
+	]).kind === 'partial'
 );
 
 expect(
 	'verdict: running but unhealthy → unhealthy',
-	bunkerwebVerdict(true, [st('bunkerweb', true, 'running', 'unhealthy'), st('bunkerweb-scheduler', true, 'running', 'none')]).kind === 'unhealthy'
+	bunkerwebVerdict(true, [
+		st('bunkerweb', true, 'running', 'unhealthy'),
+		st('bunkerweb-scheduler', true, 'running', 'none')
+	]).kind === 'unhealthy'
 );
 
 expect(
 	'verdict: all running healthy → running',
-	bunkerwebVerdict(true, [st('bunkerweb', true, 'running', 'healthy'), st('bunkerweb-scheduler', true, 'running', 'none')]).kind === 'running'
+	bunkerwebVerdict(true, [
+		st('bunkerweb', true, 'running', 'healthy'),
+		st('bunkerweb-scheduler', true, 'running', 'none')
+	]).kind === 'running'
 );
 
 expect(
 	'verdict: running, health still starting → running (re-check)',
-	bunkerwebVerdict(true, [st('bunkerweb', true, 'running', 'starting'), st('bunkerweb-scheduler', true, 'running', 'none')]).kind === 'running'
+	bunkerwebVerdict(true, [
+		st('bunkerweb', true, 'running', 'starting'),
+		st('bunkerweb-scheduler', true, 'running', 'none')
+	]).kind === 'running'
 );
 
 // bunkerwebCommands
 {
 	const cmds = bunkerwebCommands();
-	expect('commands: bring-up uses docker compose up -d', cmds.bringUp.some((l) => l.includes('docker compose up -d')));
-	expect('commands: bring-up copies shipped config', cmds.bringUp.some((l) => l.includes('cp -r ops/bunkerweb /etc/bunkerweb')));
+	expect(
+		'commands: bring-up uses docker compose up -d',
+		cmds.bringUp.some((l) => l.includes('docker compose up -d'))
+	);
+	expect(
+		'commands: bring-up copies shipped config',
+		cmds.bringUp.some((l) => l.includes('cp -r ops/bunkerweb /etc/bunkerweb'))
+	);
 	// BunkerWeb runs with logging driver `none` (nothing stored), so the only way to
-// see it is a live attach that never forwards signals/stdin to the container.
-expect(
-	'commands: logs is the live attach view (docker compose logs cannot read a none-driver container)',
-	/docker attach --no-stdin --sig-proxy=false bunkerweb/.test(cmds.logs) && !cmds.logs.includes('docker compose logs')
-);
+	// see it is a live attach that never forwards signals/stdin to the container.
+	expect(
+		'commands: logs is the live attach view (docker compose logs cannot read a none-driver container)',
+		/docker attach --no-stdin --sig-proxy=false bunkerweb/.test(cmds.logs) &&
+			!cmds.logs.includes('docker compose logs')
+	);
 	expect('commands: down present', cmds.down.includes('docker compose down'));
 }
 
-// ─── cp231: shipped-config SPA/PWA safety + example↔ansible parity ──
-// The cp231 incident: /v1/ was rate-limited at 60r/m (1 r/s), tighter
+// ─── shipped-config SPA/PWA safety + example↔ansible parity ──
+// The incident: /v1/ was rate-limited at 60r/m (1 r/s), tighter
 // than a normal page-load burst of /v1/* calls, so legitimate browsing
 // produced 429s that bad-behavior counted into an hour-long, self-
 // feeding IP ban. These assertions pin the fix: the edge rate must stay
@@ -152,7 +180,11 @@ expect(
 		);
 		const codesRaw = get(content, 'BAD_BEHAVIOR_STATUS_CODES');
 		const codes = (codesRaw ?? '').split(/\s+/).filter(Boolean);
-		expect(`${label}: BAD_BEHAVIOR_STATUS_CODES is set`, codes.length > 0, 'must be set explicitly');
+		expect(
+			`${label}: BAD_BEHAVIOR_STATUS_CODES is set`,
+			codes.length > 0,
+			'must be set explicitly'
+		);
 		for (const banned of ['400', '403', '404', '429']) {
 			expect(
 				`${label}: bad-behavior does NOT count ${banned}`,
@@ -162,39 +194,61 @@ expect(
 		}
 	}
 
-	// v1.16.9 — the upgrade self-heal must be MULTI-STRATEGY (the maintainer's mandate):
-// all three fixes, tried more than one way, verified against the container.
-const up = readFileSync(resolve(root, 'apps/ops-cli/src/commands/upgrade.ts'), 'utf8');
-// Called from the shared heal list since the final v1.18.0 review (runSelfHeals).
-expect(
-	'self-heal: healBunkerWebWaf exists + is called',
-	/function healBunkerWebWaf\(/.test(up) &&
-		/healBunkerWebWaf\(undefined, installBuildDir\(\)/.test(up) &&
-		/\(\) => startWebProxyHeals\(\)/.test(up) &&
-		/await runSelfHeals\(\)/.test(up)
-);
-expect('self-heal fixes MAX_CLIENT_SIZE (413)', /MAX_CLIENT_SIZE/.test(up) && /RELAY_BODY_FLOOR/.test(up));
-expect('self-heal drops 400 from bad-behavior (403 ban)', /BAD_BEHAVIOR_STATUS_CODES/.test(up) && /c !== '400'/.test(up));
-// v1.20.1 — ONE copy only: the file copy (v1.16.9–v1.20.0) made BunkerWeb refuse
-// every new config on morphitir ("Rule id: 1990001 is duplicated"). The behaviour
-// is driven for real in test/bunkerwebWafIdentify.test.ts.
-expect(
-	'self-heal keeps ONE copy of the ModSec exemption (the setting) and removes extra copies',
-	/CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) &&
-		!/morphit-json-api-off\.conf/.test(up) &&
-		/planRuleDedupe\(/.test(up) &&
-		/removeRuleCopies\(/.test(up)
-);
-expect('self-heal has a reload FALLBACK chain (not one method)', /strategies: Array<\(\) => boolean>/.test(up) && /docker-compose/.test(up));
-expect(
-	"self-heal reads BunkerWeb's own verdict and VERIFIES the exemption on the live site (and puts copies back if /v1/ is blocked)",
-	/waitForSchedulerCycle\(/.test(up) && /exemption verified live/.test(up) && /restoreRuleCopies\(/.test(up)
-);
-expect('self-heal PROBES a real-sized body against the live endpoint (413 detect)', /v1\/broadcast/.test(up) && /50 \* 1024|A'\.repeat/.test(up));
-expect('self-heal escalates the ModSec request-body limit (the real 413 source when client_max_body_size is generous)', /SecRequestBodyNoFilesLimit/.test(up) && /SecRequestBodyLimitAction ProcessPartial/.test(up));
+	// v1.16.9 — the upgrade self-heal must be MULTI-STRATEGY:
+	// all three fixes, tried more than one way, verified against the container.
+	const up = readFileSync(resolve(root, 'apps/ops-cli/src/commands/upgrade.ts'), 'utf8');
+	// Called from the shared heal list since the final v1.18.0 review (runSelfHeals).
+	expect(
+		'self-heal: healBunkerWebWaf exists + is called',
+		/function healBunkerWebWaf\(/.test(up) &&
+			/healBunkerWebWaf\(undefined, installBuildDir\(\)/.test(up) &&
+			/\(\) => startWebProxyHeals\(\)/.test(up) &&
+			/await runSelfHeals\(\)/.test(up)
+	);
+	expect(
+		'self-heal fixes MAX_CLIENT_SIZE (413)',
+		/MAX_CLIENT_SIZE/.test(up) && /RELAY_BODY_FLOOR/.test(up)
+	);
+	expect(
+		'self-heal drops 400 from bad-behavior (403 ban)',
+		/BAD_BEHAVIOR_STATUS_CODES/.test(up) && /c !== '400'/.test(up)
+	);
+	// v1.20.1 — ONE copy only: the file copy (v1.16.9–v1.20.0) made BunkerWeb refuse
+	// every new config on morphitir ("Rule id: 1990001 is duplicated"). The behaviour
+	// is driven for real in test/bunkerwebWafIdentify.test.ts.
+	expect(
+		'self-heal keeps ONE copy of the ModSec exemption (the setting) and removes extra copies',
+		/CUSTOM_CONF_MODSEC_morphit_json_api_off/.test(up) &&
+			!/morphit-json-api-off\.conf/.test(up) &&
+			/planRuleDedupe\(/.test(up) &&
+			/removeRuleCopies\(/.test(up)
+	);
+	expect(
+		'self-heal has a reload FALLBACK chain (not one method)',
+		/strategies: Array<\(\) => boolean>/.test(up) && /docker-compose/.test(up)
+	);
+	expect(
+		"self-heal reads BunkerWeb's own verdict and VERIFIES the exemption on the live site (and puts copies back if /v1/ is blocked)",
+		/waitForSchedulerCycle\(/.test(up) &&
+			/exemption verified live/.test(up) &&
+			/restoreRuleCopies\(/.test(up)
+	);
+	expect(
+		'self-heal PROBES a real-sized body against the live endpoint (413 detect)',
+		/v1\/broadcast/.test(up) && /50 \* 1024|A'\.repeat/.test(up)
+	);
+	expect(
+		'self-heal escalates the ModSec request-body limit (the real 413 source when client_max_body_size is generous)',
+		/SecRequestBodyNoFilesLimit/.test(up) && /SecRequestBodyLimitAction ProcessPartial/.test(up)
+	);
 
-// example ↔ ansible parity on the security-critical knobs
-	for (const key of ['LIMIT_REQ_RATE_1', 'LIMIT_REQ_RATE_2', 'BAD_BEHAVIOR_STATUS_CODES', 'MAX_CLIENT_SIZE']) {
+	// example ↔ ansible parity on the security-critical knobs
+	for (const key of [
+		'LIMIT_REQ_RATE_1',
+		'LIMIT_REQ_RATE_2',
+		'BAD_BEHAVIOR_STATUS_CODES',
+		'MAX_CLIENT_SIZE'
+	]) {
 		expect(
 			`example↔ansible agree on ${key}`,
 			get(envExample, key) === get(ansible, key),
@@ -208,7 +262,8 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 	// currentServerName
 	expect(
 		'installer: currentServerName reads the value',
-		currentServerName('# x\nSERVER_NAME=trade.example.org\nSERVER_TYPE=http\n') === 'trade.example.org'
+		currentServerName('# x\nSERVER_NAME=trade.example.org\nSERVER_TYPE=http\n') ===
+			'trade.example.org'
 	);
 	expect('installer: currentServerName null when absent', currentServerName('no key') === null);
 
@@ -216,7 +271,10 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 	for (const ph of ['morphit.example.com', '', 'foo.example.net', 'x.example.org']) {
 		expect(`installer: "${ph || '<empty>'}" is a placeholder`, isPlaceholderServerName(ph));
 	}
-	expect('installer: a real domain is not a placeholder', !isPlaceholderServerName('trade.agorise.net'));
+	expect(
+		'installer: a real domain is not a placeholder',
+		!isPlaceholderServerName('trade.agorise.net')
+	);
 
 	// validateServerName
 	expect('installer: validate accepts a real hostname', validateServerName('trade.agorise.net').ok);
@@ -224,7 +282,10 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 	expect('installer: validate rejects a URL', !validateServerName('https://x.org').ok);
 	expect('installer: validate rejects whitespace', !validateServerName('a b.com').ok);
 	expect('installer: validate rejects no-dot', !validateServerName('localhost').ok);
-	expect('installer: validate rejects the placeholder', !validateServerName('morphit.example.com').ok);
+	expect(
+		'installer: validate rejects the placeholder',
+		!validateServerName('morphit.example.com').ok
+	);
 	expect('installer: validate rejects empty', !validateServerName('   ').ok);
 
 	// setServerName: replace / idempotent / cert-line preserved / insert
@@ -239,11 +300,16 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 			!sset.text.includes('morphit.example.com') &&
 			sset.text.includes('${SERVER_NAME}/fullchain.pem')
 	);
-	expect('installer: setServerName is idempotent', !setServerName(sset.text, 'trade.agorise.net').changed);
+	expect(
+		'installer: setServerName is idempotent',
+		!setServerName(sset.text, 'trade.agorise.net').changed
+	);
 	const sins = setServerName('SOME=thing\n', 'trade.agorise.net');
 	expect(
 		'installer: setServerName inserts when the key is absent',
-		sins.changed && sins.previous === null && sins.text.startsWith('SERVER_NAME=trade.agorise.net\n')
+		sins.changed &&
+			sins.previous === null &&
+			sins.text.startsWith('SERVER_NAME=trade.agorise.net\n')
 	);
 
 	// certPathsForServerName
@@ -255,8 +321,12 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 	);
 
 	// setFrontendBuildPath: canonical no-op / custom rewrite / no-match no-op
-	const compose = '  frontend:\n    volumes:\n      - /opt/morphit/apps/web/build:/usr/share/nginx/html:ro\n';
-	expect('installer: setFrontendBuildPath no-op on the canonical /opt/morphit', !setFrontendBuildPath(compose, '/opt/morphit').changed);
+	const compose =
+		'  frontend:\n    volumes:\n      - /opt/morphit/apps/web/build:/usr/share/nginx/html:ro\n';
+	expect(
+		'installer: setFrontendBuildPath no-op on the canonical /opt/morphit',
+		!setFrontendBuildPath(compose, '/opt/morphit').changed
+	);
 	const fb = setFrontendBuildPath(compose, '/home/op/morphit');
 	expect(
 		'installer: setFrontendBuildPath rewrites the bind path for a custom install dir',
@@ -264,19 +334,64 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 			fb.text.includes('/home/op/morphit/apps/web/build:/usr/share/nginx/html:ro') &&
 			!fb.text.includes('/opt/morphit/apps/web/build')
 	);
-	expect('installer: setFrontendBuildPath no-op when the bind line is absent', !setFrontendBuildPath('no bind', '/home/op/morphit').changed);
+	expect(
+		'installer: setFrontendBuildPath no-op when the bind line is absent',
+		!setFrontendBuildPath('no bind', '/home/op/morphit').changed
+	);
+	// The REAL manual compose on an install that is not at /opt/morphit: every
+	// /opt/morphit bind source (build, frontend nginx.conf, the scheduler's job
+	// lists) must point into the install, and each must exist there as what its
+	// target is (a file over a file) — a missing source makes Docker create an
+	// empty DIRECTORY and the scheduler cannot start.
+	{
+		const { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, existsSync } =
+			await import('node:fs');
+		const { tmpdir } = await import('node:os');
+		const { join } = await import('node:path');
+		const repo = join(import.meta.dirname, '..', '..', '..');
+		const inst = mkdtempSync(join(tmpdir(), 'morphit-bw-install-'));
+		try {
+			cpSync(join(repo, 'ops', 'bunkerweb'), join(inst, 'ops', 'bunkerweb'), { recursive: true });
+			mkdirSync(join(inst, 'apps', 'web', 'build'), { recursive: true });
+			const real = readFileSync(join(repo, 'ops', 'bunkerweb', 'docker-compose.yml'), 'utf8');
+			const out = setFrontendBuildPath(real, inst);
+			const binds = [...out.text.matchAll(/^\s*-\s+(\/[^:\s]+):(\/[^:\s]+)(?::ro)?\s*$/gm)].map(
+				(m) => [m[1]!, m[2]!]
+			);
+			const leftover = binds.filter(([s]) => s.startsWith('/opt/morphit/'));
+			const bad = binds
+				.filter(([s]) => s.startsWith(`${inst}/`))
+				.filter(([s, d]) => !existsSync(s) || statSync(s).isDirectory() !== !/\.[a-z]+$/.test(d));
+			expect(
+				'installer: the real compose on a custom install dir mounts every Morphit file from that install (none left at /opt/morphit, each source exists as a file or directory like its target)',
+				out.changed &&
+					leftover.length === 0 &&
+					bad.length === 0 &&
+					binds.some(([s]) => s.endsWith('/mmdb-local.py')),
+				`leftover: ${leftover.map(([s]) => s).join(', ')}; bad: ${bad.map(([s]) => s).join(', ')}`
+			);
+		} finally {
+			rmSync(inst, { recursive: true, force: true });
+		}
+	}
 
 	// installDirFromEnv
-	expect('installer: installDirFromEnv defaults to /opt/morphit', installDirFromEnv({}) === '/opt/morphit');
-	expect('installer: installDirFromEnv trims an override', installDirFromEnv({ MORPHIT_INSTALL_DIR: '  /srv/m  ' }) === '/srv/m');
+	expect(
+		'installer: installDirFromEnv defaults to /opt/morphit',
+		installDirFromEnv({}) === '/opt/morphit'
+	);
+	expect(
+		'installer: installDirFromEnv trims an override',
+		installDirFromEnv({ MORPHIT_INSTALL_DIR: '  /srv/m  ' }) === '/srv/m'
+	);
 
 	// dockerInstallGuidance
 	const g = dockerInstallGuidance();
 	expect(
-		'installer: dockerInstallGuidance gives an official apt route + a convenience script',
+		'installer: dockerInstallGuidance gives the apt route only (no remote script piped into a root shell)',
 		g.official.length >= 2 &&
 			g.official.some((l) => l.includes('apt-get install')) &&
-			g.convenience.includes('get.docker.com') &&
+			!JSON.stringify(g).includes('get.docker.com') &&
 			g.docs.startsWith('https://')
 	);
 }
@@ -291,10 +406,7 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 	});
 	expect(
 		'planner: already-running → no install steps',
-		already.alreadyRunning &&
-			!already.needDocker &&
-			!already.copyConfig &&
-			!already.willBringUp
+		already.alreadyRunning && !already.needDocker && !already.copyConfig && !already.willBringUp
 	);
 
 	const fresh = planBunkerwebInstall({
@@ -331,7 +443,10 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 		alreadyFullyRunning: false,
 		configDirExists: false
 	});
-	expect('planner: docker without the compose plugin still needs the docker step', noPlugin.needDocker);
+	expect(
+		'planner: docker without the compose plugin still needs the docker step',
+		noPlugin.needDocker
+	);
 }
 
 // ─── beta11: image-tag parity with the shipped compose ──────────────
@@ -352,19 +467,43 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 		'utf8'
 	);
 	const want: Array<{ re: RegExp; desc: string }> = [
-		{ re: /async function runBunkerwebInstaller\(/, desc: 'the guided installer orchestrator exists' },
+		{
+			re: /async function runBunkerwebInstaller\(/,
+			desc: 'the guided installer orchestrator exists'
+		},
 		{
 			re: /process\.stdin\.isTTY === true && ctx\.flags\.status !== 'true'/,
 			desc: 'runBunkerWeb gates the installer on an interactive TTY (and a --status opt-out)'
 		},
-		{ re: /return await runBunkerwebInstaller\(/, desc: 'runBunkerWeb hands off to the installer when interactive + not running' },
-		{ re: /planBunkerwebInstall\(\{/, desc: 'the installer derives its plan from planBunkerwebInstall' },
-		{ re: /certPathsForServerName\(domain\)/, desc: 'the installer checks the cert path before bring-up' },
-		{ re: /existsSync\(certs\.fullchain\)/, desc: 'the cert check is the crash-loop guard (existsSync on fullchain)' },
-		{ re: /\['compose', '-f', composePath, 'up', '-d'\]/, desc: 'the installer runs docker compose up -d' },
+		{
+			re: /return await runBunkerwebInstaller\(/,
+			desc: 'runBunkerWeb hands off to the installer when interactive + not running'
+		},
+		{
+			re: /planBunkerwebInstall\(\{/,
+			desc: 'the installer derives its plan from planBunkerwebInstall'
+		},
+		{
+			re: /certPathsForServerName\(domain\)/,
+			desc: 'the installer checks the cert path before bring-up'
+		},
+		{
+			re: /existsSync\(certs\.fullchain\)/,
+			desc: 'the cert check is the crash-loop guard (existsSync on fullchain)'
+		},
+		{
+			re: /\['compose', '-f', composePath, 'up', '-d'\]/,
+			desc: 'the installer runs docker compose up -d'
+		},
 		{ re: /\['compose', '-f', composePath, 'pull'\]/, desc: 'the installer pulls images first' },
-		{ re: /if \(plan\.copyConfig\) \{/, desc: 'config is copied only when the plan says so (never clobbering existing)' },
-		{ re: /realCmd = root \? cmd : 'sudo'/, desc: 'host-mutating commands run via sudo when not root' }
+		{
+			re: /if \(plan\.copyConfig\) \{/,
+			desc: 'config is copied only when the plan says so (never clobbering existing)'
+		},
+		{
+			re: /realCmd = root \? cmd : 'sudo'/,
+			desc: 'host-mutating commands run via sudo when not root'
+		}
 	];
 	for (const w of want) {
 		expect(`wiring: ${w.desc}`, w.re.test(src), `missing: ${w.desc}`);
@@ -378,7 +517,6 @@ expect('self-heal escalates the ModSec request-body limit (the real 413 source w
 		'the installer DOES run docker compose now; the old read-only claim must go'
 	);
 }
-
 
 console.log('');
 console.log(`${pass} passed, ${fail} failed`);

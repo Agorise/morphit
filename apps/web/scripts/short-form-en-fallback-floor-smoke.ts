@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * short-form-en-fallback-floor smoke — Part 122 cp81
- * (LL #82 / O-28).
+ * short-form-en-fallback-floor smoke.
  *
- * Sibling defense to cp80-O26 (long-form-en-fallback-floor).
+ *
+ * Sibling defense to (long-form-en-fallback-floor).
  * Covers the next-down length class.
  *
  * Length tiers and policy:
@@ -12,7 +12,7 @@
  *   |-----------------|-----------------|---------------------------------|
  *   |   < 50 chars    |    tiny         |    EN-fallback permitted        |
  *   |  50 – 199 chars |    short-form   |    ZERO EN-fallback (THIS SMOKE)|
- *   |  >= 200 chars   |    long-form    |    ZERO EN-fallback (cp80-O26)  |
+ *   |  >= 200 chars   |    long-form    |    ZERO EN-fallback  |
  *
  * Why the tiers:
  *
@@ -22,24 +22,24 @@
  *     and protocol identifiers (USDT-ERC20).  Translating these
  *     would either change the meaning (a ticker is not a name) or
  *     add zero comprehension value (most users globally know what
- *     "Chat" means).  Memory #29's original short-form carve-out
+ *     "Chat" means).  The native-locale policy's original short-form carve-out
  *     stands for this tier.
  *
  *   50–199 ch tier — these are sentences of UI prose: button
  *     labels with explanatory subtext, modal headlines, in-line
  *     hints, short FAQ-card titles, error messages, banner copy.
  *     A user genuinely benefits from seeing these in their
- *     language.  cp76–cp80 closed long-form (>=200 ch) translation
+ *     language.  A later change closed long-form (>=200 ch) translation
  *     across the 6 backlog locales; community-translation passes
- *     across cp1–cp79 incidentally also closed the short-form
- *     tier (verified by inventory at cp81 — 0 EN-fallback short-
+ *     across incidentally also closed the short-form
+ *     tier (verified by inventory — 0 EN-fallback short-
  *     form keys in any backlog locale).  This smoke locks that
  *     state in: future UI prose additions in this tier must
  *     translate in all 6 backlog locales, not just rely on the
  *     EN-fallback escape valve.
  *
  *   >= 200 ch tier — FAQ answers, privacy guides, long
- *     explanatory bodies.  Covered by cp80-O26.
+ *     explanatory bodies.  Covered.
  *
  * Rule:
  *
@@ -52,12 +52,12 @@
  *
  * Mutation tests:
  *
- *   M-151: replace any short-form (50-199 ch) value in any
+ *   replace any short-form (50-199 ch) value in any
  *     backlog locale JSON with its EN-equivalent → smoke fires
  *     naming the key + locale.
- *   M-152: add a new short-form UI string to en.json without
+ *   add a new short-form UI string to en.json without
  *     translating in one backlog locale → smoke fires.
- *   M-153: add a tiny (<50 ch) EN-only string → smoke ignores
+ *   add a tiny (<50 ch) EN-only string → smoke ignores
  *     (tier policy: tiny tier permits EN-fallback).
  */
 import { readFileSync } from 'node:fs';

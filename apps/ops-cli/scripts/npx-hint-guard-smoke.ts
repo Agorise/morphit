@@ -1,19 +1,29 @@
 /**
  * npx-hint-guard smoke (review H-5).
  *
- * Operator-facing hints must tell people to run `sudo morphit-ops <cmd>` (the
- * installed launcher), not `npx morphit-ops <cmd>`. `npx morphit-ops` is only
- * legitimate for the BOOTSTRAP that runs from the repo before the launcher
- * exists — `install` / `init` — and for the generic `<command>` placeholder the
- * PATH-shortcut step prints while explaining the shortcut isn't installed yet.
- * Any other `npx morphit-ops <real-subcommand>` is a stale hint.
+ * `morphit-ops`, `morphit-mcp` and `@morphit/*` are not published on npm (the
+ * packages are private). A hint to run `npx morphit-ops …` or
+ * `npx -y morphit-mcp` therefore asks npm's registry for a package of that
+ * name — one anybody could publish — and runs it, as root on a server.
+ *
+ * Operator-facing hints say `sudo morphit-ops <cmd>` (the installed launcher)
+ * or, before the launcher exists, `sudo node apps/ops-cli/bin/morphit-ops.mjs
+ * <cmd>` from the install directory. `npx --no-install …` never reaches the
+ * registry and is allowed.
+ *
+ * Scans ops-cli's source, morphit-setup.sh and the MCP server's README, and
+ * checks that the two CLI packages are private.
+ *   MORPHIT_NPX_SCAN_ROOT=<other tree> tsx apps/ops-cli/scripts/npx-hint-guard-smoke.ts
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
-const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const ALLOWED_AFTER_NPX = new Set(['install', 'init']);
+const ROOT = resolve(
+	process.env.MORPHIT_NPX_SCAN_ROOT ??
+		join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+);
+const SRC = join(ROOT, 'apps', 'ops-cli', 'src');
 
 const files: string[] = [];
 (function walk(d: string): void {
@@ -23,19 +33,28 @@ const files: string[] = [];
 		else if (p.endsWith('.ts')) files.push(p);
 	}
 })(SRC);
+for (const extra of ['morphit-setup.sh', 'apps/mcp-server/README.md']) {
+	if (existsSync(join(ROOT, extra))) files.push(join(ROOT, extra));
+}
+
+/** `npx` (any flags, except --no-install) followed by one of our package names. */
+const NPX_OURS =
+	/\bnpx\b((?:\s+-{1,2}[\w-]+)*)\s+(?:"?)(morphit-ops|morphit-mcp|@morphit\/[\w-]+)\b/g;
+/** The JSON form an MCP client config takes: "command": "npx", "args": ["-y", "morphit-mcp"]. */
+const NPX_JSON = /"command"\s*:\s*"npx"[\s\S]{0,80}?"(morphit-mcp|morphit-ops)"/g;
 
 const offenders: string[] = [];
 for (const f of files) {
 	const text = readFileSync(f, 'utf8');
-	for (const m of text.matchAll(/npx morphit-ops\s+(\S+)/g)) {
-		const raw = (m[1] ?? '').replace(/[^A-Za-z0-9<>[\]_-].*$/, '');
-		// A `<command>` / `[cmd]` placeholder (the PATH-shortcut step's generic
-		// "run it as npx morphit-ops <command> until the shortcut is installed")
-		// is allowed; only a NAMED operational subcommand is a stale hint.
-		if (raw.startsWith('<') || raw.startsWith('[')) continue;
-		if (!ALLOWED_AFTER_NPX.has(raw)) {
-			offenders.push(`${f.split('/apps/ops-cli/')[1]}: npx morphit-ops ${raw}`);
-		}
+	const rel = relative(ROOT, f);
+	for (const m of text.matchAll(NPX_OURS)) {
+		if (/--no-install/.test(m[1] ?? '')) continue;
+		const line = text.slice(0, m.index).split('\n').length;
+		offenders.push(`${rel}:${line}: ${m[0].replace(/\s+/g, ' ')}`);
+	}
+	for (const m of text.matchAll(NPX_JSON)) {
+		const line = text.slice(0, m.index).split('\n').length;
+		offenders.push(`${rel}:${line}: "command": "npx" … ${m[1]}`);
 	}
 }
 
@@ -50,10 +69,14 @@ const check = (name: string, cond: boolean): void => {
 };
 
 check(
-	'no stale `npx morphit-ops <operational-subcommand>` hints in ops-cli src',
+	'no `npx` hint that would fetch morphit-ops / morphit-mcp / @morphit/* from npm',
 	offenders.length === 0
 );
-for (const o of offenders) console.log(`      ${o} → use \`sudo morphit-ops …\``);
+for (const o of offenders) console.log(`      ${o}`);
+for (const pkg of ['apps/ops-cli/package.json', 'apps/mcp-server/package.json']) {
+	const j = JSON.parse(readFileSync(join(ROOT, pkg), 'utf8')) as { private?: unknown };
+	check(`${pkg} is private (never published by accident)`, j.private === true);
+}
 
 console.log(
 	fail === 0 ? `✓ all ${pass} npx-hint-guard checks hold` : `✗ ${fail} failed (${pass} passed)`

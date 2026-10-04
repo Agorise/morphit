@@ -2,7 +2,7 @@
 /**
  * Smoke: featured order cards show the SAME trust signals as normal order
  * cards — 🌱 new-trader sprout, ⭐ reputation score, trade count, and the
- * truncated posting-key anchor (the maintainer, 2026-07-08).
+ * truncated posting-key anchor.
  *
  * Featured cards already rendered through the shared `OrderCard`, so this was
  * never a rendering bug: `/v1/featured` simply never joined the reputation and
@@ -87,7 +87,7 @@ check('FeaturedOrders hands the whole order to OrderCard', /<OrderCard[\s\S]{0,8
 check('OrderCard always renders the identity row (featured only changes the frame)', /<OrderPosterIdentity \{order\}/.test(orderCard) && !/\{#if !featured\}[\s\S]{0,120}<OrderPosterIdentity/.test(orderCard));
 
 // ─── the featured payload is a COMPLETE OrderRecord ──────────────────
-// FeaturedSlot.order is TYPED as OrderRecord. Before cp442 the endpoint sent a
+// FeaturedSlot.order is TYPED as OrderRecord. Previously the endpoint sent a
 // subset, so the type was lying to every consumer (the web app, the MCP server,
 // any third party reading indexer-client).
 check('featured carries asset_network (a USDT order must name its chain)', /o\.asset_network/.test(featuredApi) && /asset_network: r\.asset_network/.test(featuredApi));

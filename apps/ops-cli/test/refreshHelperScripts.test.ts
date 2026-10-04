@@ -43,7 +43,7 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 const installed = (name: string): string => join(helperDir, name);
 
 describe('refreshHelperScripts', () => {
-	it('covers first-online, ipfs-pin, ipns-rebroadcast, ipfs-privacy, backup, and (v1.20.0) the IPFS clean-up + tor-only OS scripts', () => {
+	it('covers first-online, ipfs-pin, ipns-rebroadcast, ipfs-privacy, backup, (v1.20.0) the IPFS clean-up + tor-only OS scripts, the service-permissions helper, the DDNS updater and the tor-only egress rule', () => {
 		const names = HELPER_SCRIPTS.map((h) => h.name).sort();
 		expect(names).toEqual(
 			[
@@ -54,7 +54,10 @@ describe('refreshHelperScripts', () => {
 				'morphit-ipns-rebroadcast.sh',
 				'morphit-ipfs-gc.sh',
 				'morphit-tor-only-os.sh',
-				'morphit-tor-timesync.sh'
+				'morphit-tor-timesync.sh',
+				'morphit-service-perms.sh',
+				'morphit-ddns-update.sh',
+				'morphit-tor-egress.sh'
 			].sort()
 		);
 		// Each one exists in the release tree at the path the refresh reads.

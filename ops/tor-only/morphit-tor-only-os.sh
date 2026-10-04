@@ -27,9 +27,11 @@
 #           Time then comes from morphit-tor-timesync (HTTP Date headers of
 #           several onion services, read over Tor). The CALLER only does this
 #           after that Tor time check has been seen to work.
-#   news    /etc/default/motd-news ENABLED=0, and Ubuntu Pro's apt news off
-#           (`pro config set apt_news=false`) — both are clearnet fetches that
-#           apt's proxy does not cover.
+#   news    /etc/default/motd-news ENABLED=0, Ubuntu Pro's apt news off
+#           (`pro config set apt_news=false`) and the release-upgrade check
+#           off (Prompt=never in /etc/update-manager/release-upgrades) — all
+#           clearnet fetches that apt's proxy does not cover. (The hardening
+#           role and `morphit-ops upgrade` run this part on EVERY node.)
 #
 # Nothing here runs `apt-get update` or restarts a service: the caller does,
 # and VERIFIES the result on the running system (an apt refresh over Tor; zero
@@ -406,8 +408,16 @@ chrony_apply() {
 	done <"$LIST"
 }
 
-# ── news (motd-news, Ubuntu Pro apt news) ────────────────────────────────────
+# ── news (motd-news, Ubuntu Pro apt news, the release-upgrade check) ─────────
 MOTD="$R/etc/default/motd-news"
+# update-manager-core's login-time check (update-motd.d/91-release-upgrade →
+# check-new-release, once a day as root) fetches changelogs.ubuntu.com's
+# meta-release list; Prompt=never makes MetaRelease return before any request
+# (seen: Prompt=lts asked changelogs.ubuntu.com:443, Prompt=never asked
+# nothing). A release upgrade stays possible by hand: do-release-upgrade after
+# setting Prompt=lts again.
+RELUPG="$R/etc/update-manager/release-upgrades"
+relupg_on() { [ -f "$RELUPG" ] && ! grep -qiE '^[[:space:]]*Prompt[[:space:]]*=[[:space:]]*(never|no)[[:space:]]*$' "$RELUPG"; }
 PRO="${MORPHIT_PRO_BIN:-pro}" # tests point this at a stub; never set on a real box
 pro_apt_news() { command -v "$PRO" >/dev/null 2>&1 && "$PRO" config show apt_news 2>/dev/null | awk '{print $2}'; }
 
@@ -421,6 +431,10 @@ news_check() {
 		log "Ubuntu Pro apt news is still on"
 		ok=1
 	fi
+	if relupg_on; then
+		log "the release-upgrade check still asks changelogs.ubuntu.com ($RELUPG)"
+		ok=1
+	fi
 	return "$ok"
 }
 
@@ -431,6 +445,13 @@ news_apply() {
 			rewrite "$MOTD" sed 's/^ENABLED=.*/ENABLED=0/' || exit 3
 		else
 			rewrite "$MOTD" sed '$a ENABLED=0' || exit 3
+		fi
+	fi
+	if relupg_on && [ ! -L "$RELUPG" ]; then
+		if grep -qiE '^[[:space:]]*Prompt[[:space:]]*=' "$RELUPG"; then
+			rewrite "$RELUPG" sed -E 's/^[[:space:]]*[Pp]rompt[[:space:]]*=.*/Prompt=never/' || exit 3
+		else
+			rewrite "$RELUPG" sed '$a Prompt=never' || exit 3
 		fi
 	fi
 	if [ "$(pro_apt_news)" = "True" ]; then

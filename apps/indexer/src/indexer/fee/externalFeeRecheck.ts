@@ -1,15 +1,22 @@
 /**
- * External (BTC/XMR) listing-fee re-check (v1.18.0 deep-deep, H1).
+ * External (BTC/XMR) listing-fee verification and re-check.
  *
- * What was wrong: a BTC/XMR order was verified exactly once, when its order op
- * was indexed. If the explorers were unreachable (or disagreed) it landed as
- * `pending_external` and NOTHING ever looked at it again — the only way out was
- * the attestation path, which the red team showed could be satisfied by the
- * poster plus one sock for a txid that does not exist. Legitimate payers whose
- * explorers were briefly down were stranded the same way.
+ * A BTC/XMR txid order is stored `pending_external` by the order handler and
+ * verified HERE, never inside the block transaction: asking the explorers
+ * there held every block open for the outbound round trips (a block of junk
+ * XMR orders stalled indexing linearly and fanned requests out from every
+ * node) and made the stored verdict depend on each node's explorers at that
+ * moment. Rows never looked at yet get a pass of their own every
+ * FRESH_CHECK_INTERVAL_MS (at most FRESH_CHECKS_PER_PASS lookups), so a paid
+ * order is normally verified within a minute of its block.
  *
- * This job periodically re-runs the SAME verifier the order handler uses on:
- *   - live `pending_external` orders,
+ * Before this job existed, an order the explorers
+ * could not answer for stayed `pending_external` forever — the only way out
+ * was the attestation path, which the red team showed could be satisfied by
+ * the poster plus one sock for a txid that does not exist.
+ *
+ * Each pass runs the verifier for the order's method on:
+ *   - live `pending_external` orders (new ones included),
  *   - live `verified_by_attestation` orders (attestation is only the fallback
  *     for "the explorers could not answer" — once they can, their answer wins),
  *   - live `missing` orders less than MISSING_RECHECK_HOURS old (a txid that a
@@ -33,7 +40,7 @@
  * sees the flip) changes; the order row itself is untouched. `reused` rows are
  * never touched (they carry no external_tx_id).
  *
- * (v1.20.0 fix wave, G3) Fair scheduling. The pass used to take the OLDEST
+ * Fair scheduling. The pass used to take the OLDEST
  * candidates first (ORDER BY created_at ASC), 25 per run with a 30-minute
  * per-order spacing, so it only ever cycled the oldest ~75 rows: ~75 fake
  * orders (a made-up txid costs nothing but Blurt RC) starved every real
@@ -62,7 +69,8 @@
  * pinned, a BTC order carries no txid: it is posted `awaiting_payment` with
  * its own address (orders.btc_fee_address). This loop is what watches those
  * addresses, through the verifier's checkAddressPayment (the same explorer
- * set and quorum as the txid path; onion explorers on hidden-only nodes):
+ * set and quorum as the txid path; on a zero-clearnet node, its onion
+ * explorers only — see externalFeeAvailability.ts):
  *
  *   address paid (confirmed ≥ amount)  → 'verified'
  *   less / nothing confirmed yet       → stays 'awaiting_payment'; the seen
@@ -103,6 +111,10 @@ export const AWAITING_SLOW_SPACING_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_RECHECK_BATCH = 25;
 /** How often the poller runs a re-check pass. */
 export const RECHECK_INTERVAL_MS = 10 * 60 * 1000;
+/** How often rows never checked yet (new orders) get a pass of their own. */
+export const FRESH_CHECK_INTERVAL_MS = 30 * 1000;
+/** Most verifier calls in one pass over new rows. */
+export const FRESH_CHECKS_PER_PASS = 10;
 /** Minimum spacing between two re-checks of the same order. */
 export const PER_ORDER_MIN_SPACING_MS = 30 * 60 * 1000;
 
@@ -114,6 +126,8 @@ export interface ExternalFeeRecheckDeps {
 	readonly now: Date;
 	/** Max verifier calls this run. */
 	readonly limit?: number;
+	/** Only rows never checked yet (new orders); skips the address pass. */
+	readonly freshOnly?: boolean;
 
 	/** Called for every order whose fee_status changed. */
 	readonly onChange?: (orderId: string) => void;
@@ -157,7 +171,7 @@ export function waitedMsOf(createdAt: Date | string | null | undefined, now: Dat
 }
 
 /**
- * (v1.20.0 fix wave, G9) The amount to verify against: the LOWER of today's
+ * The amount to verify against: the LOWER of today's
  * pin and the pin in force when the order was posted. A payer who paid the
  * quoted amount must not be flipped to `underpaid` because the maintainer
  * re-pinned a higher amount (the coin fell) while the order was still
@@ -222,6 +236,7 @@ export async function recheckExternalFees(
 		           OR fee_status = 'verified_by_attestation'
 		           OR (fee_status = 'missing' AND created_at >= $1))
 		      AND (fee_rechecked_at IS NULL OR fee_rechecked_at <= $4)
+		      AND (NOT $8::boolean OR fee_rechecked_at IS NULL)
 		 )
 		 SELECT c.account, c.permlink, c.fee_status, c.fee_method, c.external_tx_id, c.tx_proof,
 		        c.btc_fee_address, c.btc_fee_sats, c.btc_fee_received_sats, c.btc_fee_unconfirmed_sats,
@@ -245,7 +260,8 @@ export async function recheckExternalFees(
 			MISSING_PER_PASS,
 			// Rows whose method is no longer configured are skipped below, so
 			// read a little past the batch.
-			limit * 2
+			limit * 2,
+			deps.freshOnly === true
 		]
 	);
 
@@ -307,7 +323,7 @@ export async function recheckExternalFees(
 			if (result.kind === 'verified') {
 				next = 'verified';
 			} else if (result.kind === 'rejected') {
-				// Same mapping as the order handler at intake.
+				// The reason code distinguishes underpaid from absent.
 				next = result.reason.startsWith('underpaid') ? 'underpaid' : 'missing';
 			} else if (row.fee_status === 'missing') {
 				// No answer now does not overturn an earlier definitive "not found".
@@ -342,6 +358,7 @@ export async function recheckExternalFees(
 			log.warn('fee_recheck_failed', { order: orderId }, err);
 		}
 	}
+	if (deps.freshOnly === true) return { checked, changed };
 	// (MK-H2, V3-3) Per-order BTC fee addresses: their own budget.
 	const addr = await recheckFeeAddresses(deps);
 	return { checked: checked + addr.checked, changed: changed + addr.changed };
@@ -516,19 +533,32 @@ export type FeeCheckNowResult =
 	| { readonly kind: 'not_awaiting' }
 	| { readonly kind: 'unavailable' };
 
+export type FeeCheckClaim =
+	| {
+			readonly kind: 'claimed';
+			/** Ask the explorers and persist the answer (seconds over Tor). */
+			readonly run: () => Promise<FeeCheckNowResult>;
+	  }
+	| { readonly kind: 'cooldown'; readonly retry_after_ms: number }
+	| { readonly kind: 'not_awaiting' }
+	| { readonly kind: 'unavailable' };
+
 /**
- * (V3-3) "Check my payment now" for one order with its own fee address: runs
- * the same address check as the pass, at most once per order per
- * FEE_CHECK_NOW_COOLDOWN_MS (the stamp is taken atomically, so two requests
- * racing cannot both ask the explorers). Anyone may ask — the answer is public
- * chain data — but only an awaiting, live, unexpired order is looked at.
+ * (V3-3) "Check my payment now" for one order with its own fee address, in two
+ * steps so a request never waits on an explorer: this claims the look (the
+ * database part, quick) and returns `run`, which asks the explorers — the
+ * route starts it in the background and answers at once. At most once per
+ * order per FEE_CHECK_NOW_COOLDOWN_MS (the stamp is taken atomically, so two
+ * requests racing cannot both ask the explorers). Anyone may ask — the answer
+ * is public chain data — but only an awaiting, live, unexpired order is looked
+ * at.
  */
-export async function checkFeeAddressNow(
+export async function claimFeeAddressCheck(
 	deps: Omit<ExternalFeeRecheckDeps, 'limit'> & {
 		readonly account: string;
 		readonly permlink: string;
 	}
-): Promise<FeeCheckNowResult> {
+): Promise<FeeCheckClaim> {
 	const now = deps.now;
 	const cur = await deps.db.query<AddressRow & { rechecked: Date | null }>(
 		`SELECT account, permlink, fee_status, btc_fee_address, btc_fee_sats::text,
@@ -559,25 +589,49 @@ export async function checkFeeAddressNow(
 		return { kind: 'cooldown', retry_after_ms: Math.max(1_000, FEE_CHECK_NOW_COOLDOWN_MS - since) };
 	}
 	deps.onChecked?.(`${row.account}/${row.permlink}`);
-	await checkAddressRow(deps, watcher, row, expected);
-	const after = await deps.db.query<{ fee_status: string; r: string | null; u: string | null }>(
-		`SELECT fee_status, btc_fee_received_sats::text AS r, btc_fee_unconfirmed_sats::text AS u
-		   FROM orders WHERE account = $1 AND permlink = $2`,
-		[deps.account, deps.permlink]
-	);
-	const a = after.rows[0];
 	return {
-		kind: 'checked',
-		fee_status: a?.fee_status ?? row.fee_status,
-		received_sats: Number(a?.r ?? 0),
-		unconfirmed_sats: Number(a?.u ?? 0)
+		kind: 'claimed',
+		run: async () => {
+			await checkAddressRow(deps, watcher, row, expected);
+			const after = await deps.db.query<{ fee_status: string; r: string | null; u: string | null }>(
+				`SELECT fee_status, btc_fee_received_sats::text AS r, btc_fee_unconfirmed_sats::text AS u
+				   FROM orders WHERE account = $1 AND permlink = $2`,
+				[deps.account, deps.permlink]
+			);
+			const a = after.rows[0];
+			return {
+				kind: 'checked',
+				fee_status: a?.fee_status ?? row.fee_status,
+				received_sats: Number(a?.r ?? 0),
+				unconfirmed_sats: Number(a?.u ?? 0)
+			};
+		}
 	};
 }
 
-/** Self-throttling wrapper the poller calls every tick. */
+/** Claim and run the look in one go (the background pass and tests; the
+ *  HTTP route claims and runs it detached, claimFeeAddressCheck). */
+export async function checkFeeAddressNow(
+	deps: Omit<ExternalFeeRecheckDeps, 'limit'> & {
+		readonly account: string;
+		readonly permlink: string;
+	}
+): Promise<FeeCheckNowResult> {
+	const c = await claimFeeAddressCheck(deps);
+	return c.kind === 'claimed' ? c.run() : c;
+}
+
+/**
+ * Self-throttling wrapper the poller calls every tick. maybeRun() only STARTS
+ * a pass, in the background, and returns: explorers are asked over Tor (seconds
+ * per answer), and the poller loop must go on indexing meanwhile. One pass at a
+ * time; whenIdle() resolves when the current one has finished.
+ */
 export class ExternalFeeRechecker {
 	private lastRunAt = 0;
+	private lastFreshAt = 0;
 	private inFlight = false;
+	private pass: Promise<void> | null = null;
 
 	constructor(
 		private readonly db: Database,
@@ -591,24 +645,40 @@ export class ExternalFeeRechecker {
 
 	async maybeRun(): Promise<void> {
 		const now = this.clock();
-		if (this.inFlight || now - this.lastRunAt < RECHECK_INTERVAL_MS) return;
-		this.lastRunAt = now;
+		if (this.inFlight) return;
+		const full = now - this.lastRunAt >= RECHECK_INTERVAL_MS;
+		if (!full && now - this.lastFreshAt < FRESH_CHECK_INTERVAL_MS) return;
+		const { verifiers, amounts } = this.current();
+		if (verifiers.btc === undefined && verifiers.xmr === undefined) return;
+		if (full) this.lastRunAt = now;
+		this.lastFreshAt = now;
 		this.inFlight = true;
-		try {
-			const { verifiers, amounts } = this.current();
-			if (verifiers.btc === undefined && verifiers.xmr === undefined) return;
-			// Spacing + rotation live in orders.fee_rechecked_at (G3, v63).
-			await recheckExternalFees({
-				db: this.db,
-				verifiers,
-				amounts,
-				now: new Date(now),
-				onChange: this.onChange
-			});
-		} catch (err) {
-			log.warn('fee_recheck_pass_failed', {}, err);
-		} finally {
-			this.inFlight = false;
-		}
+		this.pass = (async () => {
+			try {
+				// Spacing + rotation live in orders.fee_rechecked_at (G3, v63).
+				await recheckExternalFees({
+					db: this.db,
+					verifiers,
+					amounts,
+					now: new Date(now),
+					onChange: this.onChange,
+					...(full ? {} : { freshOnly: true, limit: FRESH_CHECKS_PER_PASS })
+				});
+			} catch (err) {
+				log.warn('fee_recheck_pass_failed', {}, err);
+			} finally {
+				this.inFlight = false;
+			}
+		})();
+	}
+
+	/** Whether a pass is out. */
+	running(): boolean {
+		return this.inFlight;
+	}
+
+	/** Resolves when the pass started last has finished (shutdown, tests). */
+	whenIdle(): Promise<void> {
+		return this.pass ?? Promise.resolve();
 	}
 }

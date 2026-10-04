@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * ansible-shared-script-dir — cp676.
+ * ansible-shared-script-dir.
  *
  * Several ansible roles install helper scripts into the shared directory
  * `/usr/local/lib/morphit` (ddns, backup, mcp, ipfs, …). That directory used to

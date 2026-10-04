@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — /v1/account/:account/balance endpoint. Anchor cp295.
+ * Morphit indexer — /v1/account/:account/balance endpoint. Anchor.
  *
  *   GET /v1/account/:account/balance
  *     → { account: { name, balance, vesting_shares, voting_manabar },
@@ -27,27 +27,15 @@
  * same-origin (`/v1/account/...`), so it never opens a cross-origin
  * connection to an RPC node at all.
  *
- * Balance is public on-chain data, so the response is `public`-
- * cacheable for a short window — a single indexer fetch then serves
- * every viewer of that account, collapsing RPC load and widening the
- * privacy set.
+ * Balance is public on-chain data, but the URL names the account a user
+ * looked up, so the answer is never stored (`no-store` from the security
+ * middleware, VT3-6).
  */
 
 import { Hono } from 'hono';
 
 import type { BlurtClient } from '$blurt/client';
 import { errorBody, isAccountName } from '$api/shared';
-
-/** Short public cache. Balances move ~every 3s block, so the window
- *  must stay tiny: a 2s max-age still collapses sub-block bursts (and
- *  repeat explorer views of the same account) without ever serving a
- *  meaningfully stale balance. NO stale-while-revalidate — on a balance
- *  that is exactly the failure mode: swr serves the last cached copy
- *  while a background revalidation runs, and if that revalidation fails
- *  against a flaky node it keeps serving the old number indefinitely.
- *  A live wallet must refetch, not coast on a cached value. `public` is
- *  correct — an account's balance is public chain data, not private. */
-const BALANCE_CACHE_CONTROL = 'public, max-age=2';
 
 /** Response body. Mirrors the fields the frontend balance math
  *  (`vestsToBlurtPower`, `manaPercentage`, `computeBlurtVestingApr`)
@@ -75,7 +63,7 @@ interface AccountBalanceBody {
 		/** First posting-authority pubkey, or null — lets the block
 		 *  explorer's account page avoid a direct getAccount RPC read. */
 		readonly posting_pub: string | null;
-		/** cp396 — unclaimed author/curation rewards waiting to be claimed
+		/** unclaimed author/curation rewards waiting to be claimed
 		 *  via claim_reward_balance. `reward_blurt_balance` is liquid BLURT;
 		 *  `reward_vesting_balance` is the VESTS amount (what the claim op
 		 *  consumes); `reward_vesting_blurt` is the chain-provided BLURT
@@ -84,7 +72,7 @@ interface AccountBalanceBody {
 		readonly reward_blurt_balance: string;
 		readonly reward_vesting_balance: string;
 		readonly reward_vesting_blurt: string;
-		/** cp439 — power-down (withdraw_vesting) progress, forwarded so the
+		/** power-down (withdraw_vesting) progress, forwarded so the
 		 *  wallet can show an in-progress power-down (amount left + finish
 		 *  date). `vesting_withdraw_rate` per-week VESTS payout; `next_
 		 *  vesting_withdrawal` next-payout ISO timestamp (epoch sentinel when
@@ -179,12 +167,12 @@ export function accountBalanceRoute(blurt: BlurtClient): Hono {
 				voting_power: acct.voting_power ?? null,
 				last_vote_time: acct.last_vote_time ?? null,
 				posting_pub: postingPub,
-				// cp396 — unclaimed rewards. Zero sentinels keep the frontend
+				// unclaimed rewards. Zero sentinels keep the frontend
 				// math safe if a node omits them (no rewards → line hidden).
 				reward_blurt_balance: acct.reward_blurt_balance ?? '0.000 BLURT',
 				reward_vesting_balance: acct.reward_vesting_balance ?? '0.000000 VESTS',
 				reward_vesting_blurt: acct.reward_vesting_blurt ?? '0.000 BLURT',
-				// cp439 — power-down progress. Sentinels for an idle account:
+				// power-down progress. Sentinels for an idle account:
 				// rate "0.000000 VESTS", next-withdrawal the 1970 epoch, totals
 				// "0". `to_withdraw`/`withdrawn` are int-ish (string OR number
 				// off the node) → normalise to string for a stable wire shape.
@@ -201,7 +189,6 @@ export function accountBalanceRoute(blurt: BlurtClient): Hono {
 			}
 		};
 
-		c.header('Cache-Control', BALANCE_CACHE_CONTROL);
 		return c.json(body);
 	});
 

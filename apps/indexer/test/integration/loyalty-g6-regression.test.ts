@@ -77,13 +77,22 @@ async function orderHandlerBody(
 			account, permlink, side, asset, fiat_currency,
 			amount_min, amount_max, price_model, location_region,
 			payment_methods, terms, status, created_at, updated_at,
-			expires_at, fee_status, fee_method
+			expires_at, fee_status, fee_method, operator_tag
 		) VALUES ($1, $2, 'sell', 'BTC', 'USD', NULL, NULL,
 		          '{}'::jsonb, NULL, ARRAY['cash']::text[], NULL,
-		          'live', $3, $3, NULL, 'verified', 'blurt')`,
+		          'live', $3, $3, NULL, 'verified', 'blurt', 'morphit')`,
 		[account, permlink, BLOCK_TIME]
 	);
-	await trackVerifiedBlurtFee(client, account, feeBlurt, BLOCK_NUM, BLOCK_TIME, 'morphit', 'morphit');
+	await trackVerifiedBlurtFee(
+		client,
+		account,
+		feeBlurt,
+		BLOCK_NUM,
+		BLOCK_TIME,
+		'morphit',
+		'morphit',
+		feeBlurt
+	);
 }
 
 describe.skipIf(!INTEGRATION_ENABLED)(

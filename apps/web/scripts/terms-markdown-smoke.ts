@@ -1,5 +1,5 @@
 /**
- * Terms restricted-markdown smoke (cp406).
+ * Terms restricted-markdown smoke.
  *
  * Locks two things:
  *  1. parseTermsMarkdown() — the pure parser behind TermsText.svelte. Covers
@@ -12,7 +12,7 @@
  *  2. stripMarkdown() — the compact-card path (single plain line) now also
  *     strips headings, horizontal rules, and blockquote markers.
  *
- * cp413 — added blockquotes.
+ * added blockquotes.
  *
  * Usage: tsx apps/web/scripts/terms-markdown-smoke.ts
  */
@@ -244,7 +244,7 @@ scenario('parser is total on odd markers (never throws)', () => {
 	}
 });
 
-// ── stripMarkdown extension: headings + hr (cp406) ──────────────────────────
+// ── stripMarkdown extension: headings + hr ──────────────────────────
 scenario('stripMarkdown drops heading markers', () => {
 	assert(stripMarkdown('# Title') === 'Title', `got "${stripMarkdown('# Title')}"`);
 	assert(stripMarkdown('### Sub head') === 'Sub head', `got "${stripMarkdown('### Sub head')}"`);

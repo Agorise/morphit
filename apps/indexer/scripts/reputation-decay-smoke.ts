@@ -2,13 +2,13 @@
 /**
  * apps/indexer/scripts/reputation-decay-smoke.ts
  *
- * Structural Defense (cp123, H1) — invariants over the time-decay
+ * Structural Defense — invariants over the time-decay
  * reputation formula in apps/indexer/src/indexer/reputation/decay.ts.
  *
  * The JavaScript implementation (`reputationDecayWeight`) and the
  * SQL formula (`POWER(0.5, age_seconds / (365 * 86400))`) MUST
  * produce equivalent results for the verifiable-receipt endpoint
- * (cp124, H4) to work — readers will re-derive scores locally from
+ * to work — readers will re-derive scores locally from
  * chain data using the JS implementation.
  *
  * Scenarios:

@@ -2,7 +2,7 @@
 /*
  * profiles-batch-accounts-anchored — v1.5.5 (t155) guard.
  *
- * the maintainer: on the profile's review cards, the truncated posting key was missing
+ * Requirement: on the profile's review cards, the truncated posting key was missing
  * under @tester2 while every other card showed theirs.
  *
  * ROOT CAUSE. `posting_pubkey` lives on `accounts`, but the batch query STARTED
@@ -26,7 +26,7 @@
  *      endpoint shared by FeaturedOrders, the profile page and the orderbook.
  *
  *   2. NEGATIVE CACHING breaks silently. The endpoint serves partial batches
- *      `no-store` because "negative results must not be pinned" (cp428 soft-null
+ *      `no-store` because "negative results must not be pinned" (soft-null
  *      policy). Once every known account returns a row, a row-COUNT test calls
  *      such a batch complete and pins it for 90s — so a user who sets their
  *      first profile stays invisible for a minute and a half. The completeness
@@ -58,7 +58,7 @@ function check(name: string, ok: boolean, why = ''): void {
 check(
 	'the batch is anchored on accounts, not profiles',
 	/FROM accounts a LEFT JOIN profiles p ON p\.account = a\.name/.test(flat),
-	'posting_pubkey lives on `accounts`; anchoring on `profiles` returns NOTHING for an account that never set a display name — key included (the maintainer: no truncated key under @tester2)'
+	'posting_pubkey lives on `accounts`; anchoring on `profiles` returns NOTHING for an account that never set a display name — key included (no truncated key under @tester2)'
 );
 check(
 	'the batch filters on the accounts table',

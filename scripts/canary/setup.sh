@@ -56,7 +56,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GENERATE="$REPO_ROOT/scripts/canary/generate.sh"
 STATIC_DIR="$REPO_ROOT/apps/web/static"
 BUILD_DIR="$REPO_ROOT/apps/web/build"
-# cp693 — the SERVED build dir. On a manual/source install the source tree IS
+# the SERVED build dir. On a manual/source install the source tree IS
 # what nginx serves, so this defaults to $REPO_ROOT/apps/web/build. But on an
 # ansible/home install the wizard runs this script from the SOURCE tarball
 # (~/Downloads/morphit) while the frontend container serves the DEPLOYED tree
@@ -64,7 +64,7 @@ BUILD_DIR="$REPO_ROOT/apps/web/build"
 # the signed canary + weekly refresh land where it's actually served, not in the
 # source tree where nothing reads it.
 SERVE_DIR="${MORPHIT_CANARY_SERVE_DIR:-$REPO_ROOT/apps/web/build}"
-# cp763 — USER-WRITABLE staging dir for the signed canary + public key. The old
+# USER-WRITABLE staging dir for the signed canary + public key. The old
 # flow staged both in the in-tree apps/web/static/, which is root-owned on a
 # root-installed /opt/morphit — so a first-time setup run as a non-root operator
 # died at "pgp_keys.asc: Permission denied" (set -e) before it ever wrote the
@@ -133,7 +133,7 @@ if [ "$MODE" = remote ]; then
 	ssh -o BatchMode=yes -o ConnectTimeout=10 "$REMOTE_SSH" 'true' 2>/dev/null \
 		|| die "couldn't connect to $REMOTE_SSH without a password. Set up an SSH key first (ssh-copy-id $REMOTE_SSH), then re-run."
 	info "SSH OK."
-	# cp622 — a fresh root install leaves the served build/ dir root-owned, so the
+	# a fresh root install leaves the served build/ dir root-owned, so the
 	# very FIRST canary upload from this (non-root) SSH login would hit "Permission
 	# denied." If this login has passwordless sudo on the server, hand build/ to it
 	# now so uploads just work — no manual chown. Best-effort: if sudo isn't
@@ -154,7 +154,7 @@ if [ "$MODE" = remote ]; then
 	# canary silently goes STALE, which reads as a FALSE warrant-canary trip. Offer a
 	# dedicated, passphrase-less key used ONLY for the canary upload, behind an ssh
 	# alias so it never touches the interactive key. This is the exact manual dance an
-	# operator otherwise does by hand (the maintainer/morphit.io v1.17.0). The key logs into ONE
+	# operator otherwise does by hand (morphit.io v1.17.0). The key logs into ONE
 	# account for ONE path — fine for an always-on signing box. Every step degrades
 	# gracefully back to the normal login, so a failure never blocks setup.
 	if confirm "Set up a dedicated key so the weekly refresh NEVER prompts you (recommended)?"; then
@@ -271,7 +271,7 @@ if ! printf 'canary-selftest' | gpg --batch --yes --local-user "$KEY_ID" --clear
 fi
 
 # Publish the PUBLIC key so readers can verify the canary (served at /pgp_keys.asc).
-# cp763 — stage it in the user-writable STAGE_DIR (the refresh copies it into the
+# stage it in the user-writable STAGE_DIR (the refresh copies it into the
 # served build/ dir); writing the root-owned static/ here is what used to abort
 # a non-root first-time setup with "Permission denied".
 gpg --armor --export "$KEY_ID" > "$STAGE_DIR/pgp_keys.asc"
@@ -349,7 +349,7 @@ mkdir -p "$MORPHIT_HOME"
 	printf "SERVE='%s'\n" "$SERVE_DIR"
 	printf "STAGE='%s'\n" "$STAGE_DIR"
 	printf 'cd "$REPO"\n'
-	# cp763 — sign into the user-writable staging dir, not the root-owned source
+	# sign into the user-writable staging dir, not the root-owned source
 	# tree, so the weekly refresh never hits a permission wall on a root install.
 	printf 'export MORPHIT_CANARY_OUT="$STAGE/canary.txt"\n'
 	printf 'bash scripts/canary/generate.sh\n'
@@ -368,7 +368,7 @@ mkdir -p "$MORPHIT_HOME"
 		printf '# Remote server: upload the freshly-signed canary to the served build/ dir.\n'
 		printf "REMOTE_SSH='%s'\n" "$REMOTE_SSH"
 		printf "REMOTE_PATH='%s'\n" "$REMOTE_PATH"
-		# cp (the maintainer — canary triple-prompt): reuse ONE authenticated SSH connection
+		# cp (canary triple-prompt): reuse ONE authenticated SSH connection
 		# across the mkdir + both uploads, so the operator enters their SSH key
 		# passphrase ONCE, not per operation. The master is torn down at the end.
 		printf 'CANARY_SSH_CTL="$HOME/.ssh/morphit-canary-cm-%%r@%%h:%%p"\n'
@@ -409,7 +409,7 @@ say ""
 # service runs with a minimal PATH and does NOT source the operator's shell rc,
 # so an nvm / version-manager node (which lives only in the interactive shell's
 # PATH) is invisible to the timer → the weekly run dies with "node not found" and
-# the canary silently goes stale (the maintainer/morphit.io v1.17.0). Detecting it here makes
+# the canary silently goes stale (morphit.io v1.17.0). Detecting it here makes
 # autorenew work out of the box regardless of how node was installed.
 NODE_BIN="$(command -v node 2>/dev/null || true)"
 SERVICE_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

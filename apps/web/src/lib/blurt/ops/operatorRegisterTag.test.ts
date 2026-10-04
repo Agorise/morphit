@@ -1,6 +1,6 @@
 /**
- * The run-a-node form refuses the tags the indexer refuses (v1.18.0 deep-deep,
- * L3 follow-through): a look-alike of a reserved name on a first registration,
+ * The run-a-node form refuses the tags the indexer refuses:
+ * a look-alike of a reserved name on a first registration,
  * unless the registering account owns the name. Before, the form checked exact
  * reserved names only, so an operator could broadcast `m0rphit` and the network
  * would silently ignore the registration.

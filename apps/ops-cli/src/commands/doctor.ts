@@ -1,5 +1,5 @@
 /**
- * `morphit-ops doctor` (cp194)
+ * `morphit-ops doctor`
  *
  * A READ-ONLY preflight: tells the operator, in plain English,
  * whether the indexer and relay will start with the config that is
@@ -38,7 +38,7 @@
  *     VM-validated checkpoint and is deliberately not done here.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultRepoRoot, safeCwd } from '../lib/repoRoot.ts';
 import {
@@ -101,7 +101,8 @@ async function checkService(
 		return {
 			name,
 			ok: false,
-			detail: 'could not run the check (bash not found). Try starting the service manually to see config errors.'
+			detail:
+				'could not run the check (bash not found). Try starting the service manually to see config errors.'
 		};
 	}
 	if (r.status === 0) {
@@ -299,7 +300,9 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 
 	// ─── Security audit (advisory) ──────────────────────────────
 	const warns = security.filter((s) => s.level === 'warn');
-	console.log(`  Security ${warns.length === 0 ? c.green('(all clear)') : c.yellow(`(${warns.length} to review)`)}`);
+	console.log(
+		`  Security ${warns.length === 0 ? c.green('(all clear)') : c.yellow(`(${warns.length} to review)`)}`
+	);
 	for (const s of security) {
 		if (s.level === 'ok') {
 			console.log(`    ${c.green('✓')} ${s.label}: ${c.dim(s.detail)}`);
@@ -326,11 +329,8 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 		console.log('━'.repeat(60));
 		console.log('');
 	} else {
-		const verdictColor =
-			rpc.healthy === 0 ? c.red : rpc.healthy < rpc.total ? c.yellow : c.green;
-		console.log(
-			`  RPC endpoints ${verdictColor(`(${rpc.healthy} of ${rpc.total} reachable)`)}`
-		);
+		const verdictColor = rpc.healthy === 0 ? c.red : rpc.healthy < rpc.total ? c.yellow : c.green;
+		console.log(`  RPC endpoints ${verdictColor(`(${rpc.healthy} of ${rpc.total} reachable)`)}`);
 		const lines = formatRpcProbeLines(rpc);
 		// Last line is the verdict; the rest are per-endpoint.
 		for (const line of lines.slice(0, -1)) {
@@ -390,7 +390,7 @@ export async function runDoctor(ctx: DoctorCtx): Promise<number> {
 	return allOk ? 0 : 1;
 }
 
-interface SecurityFinding {
+export interface SecurityFinding {
 	readonly level: 'ok' | 'warn';
 	readonly label: string;
 	/** Plain-English detail / remediation. */
@@ -539,7 +539,10 @@ export async function checkFederationBodyCap(
 	// indexer itself uses for recognising its own directory row.
 	const instanceOrigin = await readEnvVar(envPath, configEnvPath, 'MORPHIT_INSTANCE_ORIGIN');
 	const publicOrigin = await readEnvVar(envPath, configEnvPath, 'MORPHIT_INDEXER_PUBLIC_ORIGIN');
-	const origin = (instanceOrigin || publicOrigin.replace(/\/\/indexer\./, '//')).replace(/\/+$/, '');
+	const origin = (instanceOrigin || publicOrigin.replace(/\/\/indexer\./, '//')).replace(
+		/\/+$/,
+		''
+	);
 
 	const manual =
 		'Send a large body to /v1/federation/chat-fast through your PUBLIC origin (not ' +
@@ -595,10 +598,7 @@ export async function checkFederationBodyCap(
 		// who depend on federated chat MOST with the one configuration nobody
 		// verified. Tor and i2pd hand their traffic to a local front end, so
 		// that front end can be asked directly.
-		const hidden = await probeFederationBody(
-			`http://127.0.0.1:${hiddenFrontendPort}`,
-			body
-		);
+		const hidden = await probeFederationBody(`http://127.0.0.1:${hiddenFrontendPort}`, body);
 		if (hidden.status === 413) {
 			return {
 				level: 'warn',
@@ -668,6 +668,65 @@ export async function checkFederationBodyCap(
  *  most the first byte of the key file (to detect an envelope) and
  *  NEVER prints key material. Findings are advisory — they do not
  *  change doctor's boot-readiness exit code. */
+/** The relay service's group (ops/systemd/morphit-relay.service). */
+export const RELAY_GROUP = 'morphit-relay';
+
+/** gid of a group from /etc/group, or null. */
+function groupIdOf(name: string, groupFile = '/etc/group'): number | null {
+	try {
+		const line = readFileSync(groupFile, 'utf8')
+			.split('\n')
+			.find((l) => l.startsWith(`${name}:`));
+		const gid = Number(line?.split(':')[2]);
+		return line !== undefined && Number.isInteger(gid) ? gid : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The relay keystore's permissions, judged by the rule the relay itself
+ * applies at boot (apps/relay/src/config/keystorePerms.ts): owner-only
+ * (0400/0600), or root:<the relay's group> 0440/0640 — what the installer and
+ * the relay's pre-start helper set so the unprivileged relay reads it through
+ * its group. Anything looser is a warning naming the fix. PURE.
+ */
+export function keyFilePermissionFinding(
+	st: { readonly mode: number; readonly uid: number; readonly gid: number },
+	relayGid: number | null,
+	keyPath: string
+): SecurityFinding {
+	const mode = st.mode & 0o777;
+	const shown = `0${mode.toString(8).padStart(3, '0')}`;
+	const fix =
+		relayGid !== null
+			? `chown root:${RELAY_GROUP} ${keyPath} && chmod 0640 ${keyPath}`
+			: `chmod 0600 ${keyPath}`;
+	const warn = (why: string): SecurityFinding => ({
+		level: 'warn',
+		label: 'active key permissions',
+		detail: `key file is ${shown}: ${why}. Fix: ${fix}`
+	});
+	if ((mode & 0o077) === 0) {
+		return {
+			level: 'ok',
+			label: 'active key permissions',
+			detail: `key file is ${shown}, readable by its owner only (good).`
+		};
+	}
+	if ((mode & 0o007) !== 0) return warn('other users can access it');
+	if ((mode & 0o030) !== 0) return warn('its group may write or execute it');
+	if (st.uid !== 0) return warn(`it is group-readable but owned by uid ${st.uid}, not root`);
+	if (relayGid === null || st.gid !== relayGid) {
+		return warn(`its group (gid ${st.gid}) is not the relay's group (${RELAY_GROUP})`);
+	}
+	return {
+		level: 'ok',
+		label: 'active key permissions',
+		detail: `key file is ${shown}, root:${RELAY_GROUP} — only root and the relay's group can read it (good).`
+	};
+}
+
 async function securityAudit(
 	installDir: string,
 	envPath: string,
@@ -718,27 +777,17 @@ async function securityAudit(
 				detail:
 					'the relay active key is stored in PLAINTEXT. Anyone who can read the file has your relay key. ' +
 					'Encrypt it with `morphit-ops edit-active-key` (you will set a passphrase). ' +
-					'Trade-off: an encrypted key must be unlocked by hand each time the relay starts — there is no auto-unlock.'
+					"The relay then unlocks it at every start from the passphrase sealed with this host's systemd " +
+					'credential key (/etc/morphit/relay_passphrase.cred, --with-key=host; no TPM): it protects a copied ' +
+					'key file, not a full image of this disk — use disk encryption (LUKS) for that.'
 			});
 		}
-		// Key-file permissions (the relay also enforces this at boot;
-		// surfacing it here makes the audit complete).
+		// Key-file permissions: the same shapes the relay accepts at boot
+		// (apps/relay/src/config/keystorePerms.ts).
 		if (!onWin) {
 			try {
-				const mode = statSync(keyPath).mode & 0o777;
-				if ((mode & 0o077) !== 0) {
-					findings.push({
-						level: 'warn',
-						label: 'active key permissions',
-						detail: `key file is mode 0${mode.toString(8)}; tighten it: chmod 0600 ${keyPath}`
-					});
-				} else {
-					findings.push({
-						level: 'ok',
-						label: 'active key permissions',
-						detail: 'key file is not group/other-readable (good).'
-					});
-				}
+				const st = statSync(keyPath);
+				findings.push(keyFilePermissionFinding(st, groupIdOf(RELAY_GROUP), keyPath));
 			} catch {
 				/* ignore */
 			}
@@ -779,8 +828,6 @@ async function securityAudit(
 
 	return findings;
 }
-
-
 
 /** Minimal ANSI helper, matching the rest of the CLI's color gating. */
 function makeColor(enabled: boolean) {

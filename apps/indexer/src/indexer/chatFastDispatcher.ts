@@ -7,16 +7,13 @@
  *      refreshed on a slow cadence because it changes on the scale of days, and
  *      cached so a send never waits on a database query.
  *
- *   2. KEEPING THE ROUTE WARM. A cold Tor circuit or I2P tunnel costs 30-60
- *      seconds to build. If the first message of a conversation paid that, the
- *      six-second target would be met for every message except the one that
- *      matters most — the first one, where the other person has no reason to be
- *      watching yet. So connections to hidden peers are established in the
- *      background, before anyone is waiting, and refreshed inside the idle
- *      timeout that would otherwise reclaim them.
+ *   2. KEEPING ROUTES KNOWN. Peers' onions are visited in the background, so
+ *      Tor already holds their descriptors and a dead local daemon is noticed
+ *      before the first message rather than by it. Pushes themselves never use
+ *      these connections: each push builds its own isolated circuit.
  *
- *   3. FANNING OUT. Concurrently, bounded, and never in a way that can slow or
- *      fail the send it came from.
+ *   3. FANNING OUT. Only to probed peers, only over Tor, concurrently, bounded,
+ *      and never in a way that can slow or fail the send it came from.
  *
  * Nothing here ever throws into its caller. A peer being unreachable is an
  * ordinary condition in this federation — that is the whole reason the hidden
@@ -57,10 +54,9 @@ const log = logger('chat-fast-dispatch');
 const DIRECTORY_REFRESH_MS = 5 * 60 * 1000;
 
 /**
- * How often a hidden peer's connection is refreshed. Comfortably inside both
- * Tor's ~10-minute idle circuit timeout and the pool's own keep-alive window,
- * so a peer we have not messaged in a while is still one round trip away rather
- * than one tunnel build away.
+ * How often peers' onions are visited (see warmAll). Inside the pool's
+ * keep-alive window, so the visit itself reuses its connection; often enough
+ * that a dead local Tor is noticed within minutes.
  */
 export const WARM_INTERVAL_MS = 3 * 60 * 1000;
 
@@ -85,8 +81,9 @@ export interface ChatFastDispatcherOptions {
 	 *  matters and why this is the only self-exclusion that is correct. */
 	readonly selfOrigin: string;
 	readonly proxies: HiddenServiceProxyConfig;
-	/** Injected so the smoke can drive the whole thing without a network. */
-	readonly postClearnet: DispatchDeps['postClearnet'];
+	/** One push over a fresh, isolated Tor circuit. Defaults to the real
+	 *  one; injected so tests and smokes can drive the whole thing on loopback. */
+	readonly postIsolated?: DispatchDeps['postIsolated'];
 	/**
 	 * The warm-up itself. Defaults to the real pooled one.
 	 *
@@ -98,10 +95,10 @@ export interface ChatFastDispatcherOptions {
 	 * with the real transport "all failed" and "any failed" are the same
 	 * experiment and a mutation between them survives.
 	 *
-	 * The case that separates them is real, and it is Lokinet: there is no proxy
-	 * there, each `.loki` name resolves on its own, and an unresolvable one is a
-	 * local fault. Under "any", a single peer with a stale Lokinet name would
-	 * take the network away from every other peer on it.
+	 * The cases that separate them are verdicts a real dead or live Tor cannot
+	 * produce side by side: one onion failing locally while another answers, or
+	 * a local fault next to a peer-side one. Under "any", one peer's bad route
+	 * would take Tor away from every other peer.
 	 */
 	readonly warmOrigin?: (
 		origin: string,
@@ -118,10 +115,13 @@ export interface ChatFastDispatcherOptions {
 	readonly warmIntervalMs?: number;
 	readonly directoryRefreshMs?: number;
 	/**
-	 * The posting-key lookup the pre-send check verifies against (rv1-1).
-	 * Defaults to this instance's own `accounts` column, no chain read: the
-	 * check is a filter on what we SEND, not a trust decision — every peer
-	 * verifies for itself — so it must never wait on the network.
+	 * The posting-key lookup the pre-send check verifies against. It
+	 * is also a TRUST decision: a message it passes is delivered to this
+	 * instance's own listeners at once (/v1/broadcast), while peers
+	 * verify for themselves. Called with `network: false` — it never waits on
+	 * the chain. main.ts passes the shared lookup with the quorum refresher;
+	 * the default reads this instance's `accounts` column and, with no chain
+	 * to ask, trusts only a CONFIRMED key there (VT1-4).
 	 */
 	readonly lookupPostingKey?: PostingKeyLookup;
 }
@@ -168,7 +168,7 @@ export class ChatFastDispatcher {
 	/** Counters, surfaced in /v1/health so an operator can see the path working
 	 *  rather than infer it from message timing. */
 	private dispatched = 0;
-	/** Chat transactions this instance declined to fan out (rv1-1). */
+	/** Chat transactions this instance declined to fan out. */
 	private refusedLocally = 0;
 	/** Chat transactions fanned out only after the node accepted them. */
 	private dispatchedAfterChain = 0;
@@ -183,7 +183,7 @@ export class ChatFastDispatcher {
 		this.sender = new PeerSender({
 			proxies: options.proxies,
 			timeoutMs: options.pushTimeoutMs ?? PUSH_TIMEOUT_MS,
-			postClearnet: options.postClearnet
+			postIsolated: options.postIsolated
 		});
 		this.lookupPostingKey = options.lookupPostingKey ?? postingKeyLookupFromDb(options.db);
 		this.opts = {
@@ -378,50 +378,24 @@ export class ChatFastDispatcher {
 	}
 
 	/**
-	 * Establish/refresh connections to every hidden peer.
+	 * Visit every fan-out peer's onion in the background.
 	 *
-	 * ALSO THE INSTANCE'S CHEAPEST TRANSPORT DIAGNOSTIC. This runs at boot,
-	 * before a single message has been sent, and again every few minutes. So it
-	 * is where a dead local Tor daemon or an i2pd that has not finished coming
-	 * up gets NOTICED — and, because the outcome feeds the sender's reachability
-	 * tracker, the first chat message of the day is dialled over a route that
-	 * already works rather than discovering the dead daemon on its own time.
-	 * A route that comes back up clears the mark here too, so recovery needs no
-	 * failed message to be observed through.
+	 * Pushes never ride these connections — each push builds its own isolated
+	 * circuit — so this is not about keeping a connection warm for a
+	 * message. It does two other things. Tor fetches and caches each peer's
+	 * onion descriptor, which is the slow part of reaching an onion the first
+	 * time, so a push's fresh circuit does not also pay for that. And it is the
+	 * instance's cheapest transport diagnostic: it runs at boot, before a single
+	 * message has been sent, and again every few minutes, so a dead local Tor
+	 * daemon is noticed — and fed to the sender's reachability tracker — before
+	 * a user's message discovers it.
 	 */
 	async warmAll(): Promise<void> {
 		const peers = await this.peersNow();
-		// SKIP THE PEERS WE ARE TALKING TO. A hidden origin holds exactly one
-		// pooled connection — deliberately, because a second one costs a circuit
-		// build — so a warm-up GET and a chat push to the same peer contend for
-		// it, and the warm-up is allowed sixty seconds while a push is allowed
-		// four. A slow peer's warm-up would therefore park in front of real
-		// messages and make them time out for a reason that has nothing to do
-		// with the peer refusing them. A peer with traffic in flight needs no
-		// warming anyway: the traffic IS the warm connection.
-		//
-		// WHICH ADDRESSES, and why not simply all of them.
-		//
-		// The preferred hidden address of every peer is warmed — that is the one a
-		// message will actually use. Warming a peer's ALTERNATES as well is only
-		// worth its cost where the failover has nowhere cheap to land:
-		//
-		//   - A peer with a clearnet origin falls back to it, and clearnet has no
-		//     circuit to build. Warming its second hidden address would buy a few
-		//     milliseconds on a path that is already fast enough.
-		//
-		//   - A peer with NO clearnet address anywhere — a zero-clearnet instance,
-		//     the case this whole subsystem exists for — can only fall back to
-		//     another hidden network. Cold, that is a 30-60 second tunnel build,
-		//     which does not miss the six-second target so much as ignore it. For
-		//     those peers the alternates are warmed too.
-		//
-		// The distinction matters because the cost is not free. Every warmed
-		// hidden origin holds a pooled connection and, underneath it, a live
-		// circuit or tunnel pair — and I2P tunnels in particular are not cheap to
-		// the local router. Warming every address of every peer would multiply
-		// that by however many networks the federation happens to publish, to
-		// protect a failover most peers will never need.
+		// Skip peers with traffic in flight: their pushes are already telling us
+		// whether Tor works. Fan-out peers carry only Tor addresses (an onion,
+		// then an https origin reached through an exit); the onion is visited —
+		// the preferred one only, unless the peer has no other address.
 		const targets: { origin: string; network: HiddenNetwork; peer: string }[] = [];
 		const seen = new Set<string>();
 		for (const peer of peers) {
@@ -526,7 +500,7 @@ export class ChatFastDispatcher {
 	 * blocking it on a fan-out would be a comic way to lose the benefit.
 	 */
 	/**
-	 * WHAT IS SENT, AND WHEN (v1.18.0 deep-deep, rv1-1).
+	 * WHAT IS SENT, AND WHEN.
 	 *
 	 * WHAT WAS WRONG. Anything with a chat op in it was queued to every peer
 	 * the moment it reached /v1/broadcast, before the chain had looked at it:

@@ -49,7 +49,7 @@ TS_IGNORE_DEPRECATIONS="--ignoreDeprecations 5.0"
 #   - The cascade TS18046 in apps/relay/{src,test}.
 #   - ALL errors in the three relay test files that imported most
 #     heavily through aliases (create / drainer / unlock).
-# Part 89 (J-7) flipped relay to `moduleResolution: "Bundler"` +
+# (J-7) flipped relay to `moduleResolution: "Bundler"` +
 # `module: "Preserve"`, which makes tsc honor the `paths` map and
 # eliminates both the primary error and the cascade.  The two
 # relay-cascade clauses (TS18046 and the test-file allowlist)
@@ -62,7 +62,7 @@ TS_IGNORE_DEPRECATIONS="--ignoreDeprecations 5.0"
 # single-error narrow, scoped to that exact code, and unrelated
 # to the relay flip.
 #
-# cp22 (Part 121): the TS6133 unused-variable clause was previously
+# the TS6133 unused-variable clause was previously
 # `error TS6133 .* is declared but` — a literal space between
 # `TS6133` and `.*`.  Real `tsc` output is `error TS6133: '<name>'
 # is declared but its value is never read.` — a COLON, not a
@@ -102,7 +102,7 @@ project() {
 
 cd "$REPO_ROOT"
 
-# REVISIT-LIST A (Part 121 cp21 finding) — when node_modules is
+# Backlog A — when node_modules is
 # missing or @morphit/* workspace packages aren't built, every
 # `import from '@morphit/...'` resolves to "Cannot find module"
 # which the noise filter swallows.  Any `satisfies <Type>` clause
@@ -112,7 +112,7 @@ cd "$REPO_ROOT"
 # Disclose the resolution state explicitly so the "0 errors"
 # line can't be trusted without context.
 #
-# DEEP-DEEP NOTE (DD-cp16-4): this check assumes npm workspaces.
+# NOTE: this check assumes npm workspaces.
 # pnpm and yarn berry (PnP) resolve workspace packages without a
 # `node_modules/@morphit` directory; if Morphit ever migrates,
 # update the heuristic.  Today the repo is npm-workspaces only.

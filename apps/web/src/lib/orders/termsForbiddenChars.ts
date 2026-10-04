@@ -1,7 +1,9 @@
 /**
- * termsForbiddenChars — frontend mirror of the indexer's terms character
- * gate, so a user can never BROADCAST (and pay the listing fee for) an order
- * whose terms the indexer will silently reject.
+ * termsForbiddenChars — frontend mirrors of the indexer's order-text
+ * character gates, so a user can never BROADCAST (and pay the listing fee
+ * for) an order the indexer will silently reject: the multi-line gate for
+ * `terms`, and the single-line gate for `location_region` and the
+ * payment-method items.
  *
  * The `terms` field is a multi-line markdown textarea, so TAB (U+0009),
  * LF (U+000A), and CR (U+000D) are PERMITTED. Everything the indexer blocks —
@@ -21,4 +23,26 @@ export const FORBIDDEN_TERMS_CHARS =
  *  to NFC first, exactly like the indexer, so the two agree byte-for-byte. */
 export function termsHasForbiddenChar(terms: string): boolean {
 	return FORBIDDEN_TERMS_CHARS.test(terms.normalize('NFC'));
+}
+
+/**
+ * The single-line gate (location_region, payment_methods items): the
+ * multi-line class without the TAB / LF / CR exemption.
+ *
+ * CRITICAL: BYTE-IDENTICAL to `FORBIDDEN_TEXT_CHARS` in
+ * `apps/indexer/src/indexer/handlers/order.ts` and `orderReplace.ts`
+ * (terms-forbidden-char-parity smoke).
+ */
+export const FORBIDDEN_SINGLE_LINE_CHARS =
+	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+
+const FORBIDDEN_SINGLE_LINE_GLOBAL = new RegExp(FORBIDDEN_SINGLE_LINE_CHARS.source, 'g');
+
+/** A single-line field as the indexer will accept it: NFC-normalized (as the
+ *  indexer stores it) with every character of the single-line gate removed.
+ *  These are invisible (zero-width, bidi, control) characters a paste brings
+ *  along; removing them changes nothing the user can see, and keeping them
+ *  meant an order whose fee was paid and that the indexer then refused. */
+export function stripSingleLineForbidden(s: string): string {
+	return s.normalize('NFC').replace(FORBIDDEN_SINGLE_LINE_GLOBAL, '');
 }

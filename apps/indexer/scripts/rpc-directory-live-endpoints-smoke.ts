@@ -128,7 +128,7 @@ async function run(): Promise<void> {
 		__resetDirectoryHiddenCacheForTest();
 		const dirHidden = await directoryHiddenEndpoints(fakeDb([NEW_ONION]), 1000);
 		const list = canonicalProbeUrls({
-			usesClearnet: false, // tor-only box (cp755/cp767)
+			usesClearnet: false, // tor-only box
 			clearnetCanon: [CLEARNET],
 			hidden: unionHidden([SEED], dirHidden),
 			local: [],

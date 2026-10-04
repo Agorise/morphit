@@ -4,7 +4,8 @@
 #
 # ⚠️  THE CANONICAL RELEASE IS BUILT BY CI, NOT BY THIS SCRIPT.  ⚠️
 # `.forgejo/workflows/release.yml` (fired by the pushed signed tag) builds the
-# tarball, hashes it (SHA-256), signs it if a signing secret is set, PUBLISHES
+# tarball, hashes it (SHA-256), signs it with the pinned key (a release without
+# the signing key fails), PUBLISHES
 # the Forgejo release, attaches the assets, and writes the on-chain
 # `distribution-anchor.env`. The bytes people download come from THAT job, and
 # the ELI5 ceremony fetches the anchor it wrote. You normally never run this.
@@ -104,7 +105,7 @@ else
         --exclude='.git' \
         --exclude='*.log' \
         --exclude='release' \
-        --exclude='/mnt' \
+        --exclude='./private' \
         .
 fi
 
@@ -168,7 +169,7 @@ else
 
     # Full GPG fingerprint (40-hex v4 / 64-hex v5) — the `fpr` colon
     # record is the whole fingerprint, unlike the "using ... key XXXX"
-    # line which is only the long key-id. cp556: the distribution anchor
+    # line which is only the long key-id. the distribution anchor
     # pins the FULL fingerprint, so extract it here.
     FPR_KEYSPEC="${MORPHIT_GPG_KEY:-}"
     GPG_FINGERPRINT="$(gpg --list-secret-keys --with-colons ${FPR_KEYSPEC} 2>/dev/null \
@@ -180,7 +181,7 @@ else
         echo "  verify they have the right public key."
     fi
 
-    # ─── cp556: distribution-anchor values, ready to paste ────────────
+    # ─── distribution-anchor values, ready to paste ────────────
     # These feed the release-op payload builder so the SAME signed bytes
     # can be anchored on-chain (morphit_release_v1 → distribution). The
     # payload build step `source`s the env file written below.

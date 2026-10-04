@@ -121,15 +121,33 @@ function startB(opts: {
 	return { ask, calls };
 }
 
+/** An order as the compare page needs it: the three fields it reads. */
+const kept = (i: number) => {
+	const o = order(i);
+	return { account: o.account, permlink: o.permlink, updated_at: o.updated_at };
+};
+
 describe('validatePeerOrderbook — only what the compare page needs is passed on', () => {
-	it('keeps orders with a string account + permlink, drops the rest and every other key', () => {
+	it('keeps valid orders reduced to account, permlink, updated_at; drops the rest and every other key', () => {
 		const v = validatePeerOrderbook({
 			items: [order(1), { account: 'x' }, 'junk', null, order(2)],
 			indexed_block: 5,
 			next_cursor: 'c1',
 			injected: '<script>'
 		});
-		expect(v).toEqual({ items: [order(1), order(2)], indexed_block: 5, next_cursor: 'c1' });
+		expect(v).toEqual({ items: [kept(1), kept(2)], indexed_block: 5, next_cursor: 'c1' });
+	});
+	it('a peer cannot relay its own keys or bulk inside an item', () => {
+		const v = validatePeerOrderbook({
+			items: [
+				{ ...order(1), injected: '<script>', profile_json_metadata: 'x'.repeat(500_000) },
+				{ ...order(2), account: 'NOT A NAME' },
+				{ ...order(3), permlink: '../../etc' },
+				{ ...order(4), updated_at: 'yesterday' }
+			]
+		});
+		expect(v?.items).toEqual([kept(1)]);
+		expect(JSON.stringify(v).length).toBeLessThan(200);
 	});
 	it('at most one page of orders; nonsense block/cursor become null; not an orderbook → null', () => {
 		const v = validatePeerOrderbook(page(150, { indexed_block: -1, next_cursor: 7 }));
@@ -148,7 +166,12 @@ describe('GET /v1/compare/orderbook', () => {
 		const b = startB({ rows: [row(A_ORIGIN)], getJson: async () => page(3, { evil: 1 }) });
 		const r = await b.ask('https://a.example/');
 		expect(r.status).toBe(200);
-		expect(r.json).toEqual({ status: 'ok', origin: A_ORIGIN, ...page(3) });
+		expect(r.json).toEqual({
+			status: 'ok',
+			origin: A_ORIGIN,
+			...page(3),
+			items: [0, 1, 2].map(kept)
+		});
 		expect(b.calls).toEqual([
 			{ url: 'https://a.example/v1/orderbook?limit=100', hidden: false, timeoutMs: 12_000 }
 		]);

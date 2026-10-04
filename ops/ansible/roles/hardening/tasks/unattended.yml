@@ -18,7 +18,7 @@
       Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
       Unattended-Upgrade::Remove-Unused-Dependencies "true";
       Unattended-Upgrade::Automatic-Reboot "false";
-      Unattended-Upgrade::Mail "{{ morphit_alert_email_to }}";
+      Unattended-Upgrade::Mail "{{ morphit_alert_email_to if (morphit_alert_mail_enabled | bool) else '' }}";
       Unattended-Upgrade::MailReport "on-change";
 
 - name: Enable periodic apt updates

@@ -2,15 +2,15 @@
 /**
  * apps/web/scripts/faq-jsonld-no-markdown-smoke.ts
  *
- * Structural Defense (cp119 A1) — FAQ JSON-LD must contain no
+ * Structural Defense — FAQ JSON-LD must contain no
  * markdown characters that would render as literal asterisks /
  * backticks / linebreaks in Google's FAQ rich-snippet.
  *
- * cp112 introduced faqPageSchema() which emits FAQPage JSON-LD.
+ * A later change introduced faqPageSchema() which emits FAQPage JSON-LD.
  * Google renders `acceptedAnswer.text` as plain text in SERPs.
- * cp119 audit found 77 of 128 FAQ entries in EN contain light
+ * found 77 of 128 FAQ entries in EN contain light
  * markdown — those were leaking into the JSON-LD unchanged.
- * cp119-A1 fix: stripMarkdown() applied in faqPageSchema().
+ * stripMarkdown() applied in faqPageSchema().
  *
  * This smoke catches:
  *   - regression of stripMarkdown bypass (e.g. a refactor that

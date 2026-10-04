@@ -249,7 +249,7 @@ describe('the dispatcher asks at boot, before any message', () => {
 			db: { query: async () => ({ rows: [], rowCount: 0 }) } as never,
 			selfOrigin: 'https://self.example',
 			proxies: PROXIES,
-			postClearnet: async () => ({ status: 200, body: '' }),
+			postIsolated: async () => ({ status: 200, body: '' }),
 			warmOrigin: async () => ({ ok: true }) as never,
 			checkLocalTransports: async () => ({ tor: false, i2p: true, loki: false })
 		});
@@ -266,7 +266,7 @@ describe('the dispatcher asks at boot, before any message', () => {
 			db: { query: async () => ({ rows: [], rowCount: 0 }) } as never,
 			selfOrigin: 'https://self.example',
 			proxies: PROXIES,
-			postClearnet: async () => ({ status: 200, body: '' }),
+			postIsolated: async () => ({ status: 200, body: '' }),
 			checkLocalTransports: async () => ({ tor: true, i2p: true, loki: true })
 		});
 		await d.checkTransports();

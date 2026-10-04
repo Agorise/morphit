@@ -1,9 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * i18n-dead-key-gate-smoke (cp419).
+ * i18n-dead-key-gate-smoke.
  *
  * Fails CI if any i18n key is defined in the locale files but referenced
- * NOWHERE in the app source — dead weight that bloats every locale bundle.
+ * NOWHERE in the code production can load — dead weight that bloats every
+ * locale bundle. (A key used only by a test, a dead module or a /dev page is
+ * dead: see "the production module graph" below.)
  *
  * Why AST, not grep: keys are referenced in shapes a text search can't resolve
  * reliably — held in data structures (`{ key: 'nav.orderbook' }` then
@@ -53,7 +55,7 @@ function extractFromJs(code: string, staticLits: Set<string>, dynPairs: Set<stri
 			flattenPlus(node.right, out);
 		} else out.push(node);
 	}
-	/** cp445 — a dynamic (prefix, suffix) pair whitelists everything between them,
+	/** a dynamic (prefix, suffix) pair whitelists everything between them,
 	 *  so harvesting them from EVERY template literal in the tree is dangerous.
 	 *  `ChatComposer.svelte` builds a localStorage draft key as `` `chat.${peer}` ``.
 	 *  That is not an i18n key at all, but it produced the pair
@@ -124,7 +126,13 @@ function extractFromSvelte(source: string, staticLits: Set<string>, dynPairs: Se
 	}
 }
 
-// ── walk the source tree ────────────────────────────────────────────────────
+// ── the production module graph ──────────────────────────────────────────
+// Only modules a production build can load count as references: starting from
+// the SvelteKit entries (every +page/+layout/+server/+error under src/routes,
+// except the /dev subtree, which 404s in production), the hooks, the service
+// worker and the param matchers, follow every static `import … from`,
+// `export … from` and dynamic `import('…')` of a source file. Test files, dead
+// modules and the /dev pages therefore keep no key alive.
 function walk(dir: string, files: string[]): void {
 	for (const name of readdirSync(dir)) {
 		if (name === 'node_modules' || name.startsWith('.')) continue;
@@ -135,14 +143,83 @@ function walk(dir: string, files: string[]): void {
 	}
 }
 
+/** kit.alias from svelte.config.js ($lib, $components, …). */
+const ALIASES: Array<[string, string]> = (() => {
+	const cfg = readFileSync(join(WEB, 'svelte.config.js'), 'utf8');
+	const block = /alias:\s*\{([\s\S]*?)\}/.exec(cfg)?.[1] ?? '';
+	const out: Array<[string, string]> = [['$lib', 'src/lib']];
+	for (const m of block.matchAll(/(\$[A-Za-z]+):\s*'([^']+)'/g)) out.push([m[1]!, m[2]!]);
+	return out;
+})();
+
+function resolveImport(from: string, spec: string): string | null {
+	let base: string | null = null;
+	if (spec.startsWith('.')) base = resolve(dirname(from), spec);
+	else {
+		for (const [a, target] of ALIASES) {
+			if (spec === a || spec.startsWith(`${a}/`)) {
+				base = join(WEB, target, spec.slice(a.length));
+				break;
+			}
+		}
+	}
+	if (base === null) return null; // a package, $app/…, or a virtual module
+	for (const c of [base, `${base}.ts`, `${base}.svelte`, `${base}.js`, join(base, 'index.ts'), join(base, 'index.js')]) {
+		try {
+			if (statSync(c).isFile()) return c;
+		} catch {
+			/* next candidate */
+		}
+	}
+	return null;
+}
+
+const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"]([^'"\n]+)['"]/g;
+
+/** Every production-reachable .ts / .svelte file under src. */
+export function productionModules(): string[] {
+	const all: string[] = [];
+	walk(SRC, all);
+	const entries = all.filter((f) => {
+		const rel = f.slice(SRC.length + 1).split('\\').join('/');
+		if (rel.startsWith('routes/')) {
+			return /(^|\/)\+(page|layout|server|error)(@[^/]*)?\.(svelte|ts)$/.test(rel) && !/\/dev(\/|$)/.test(rel);
+		}
+		return /^(hooks\.(client|server)\.ts|service-worker\.ts|params\/[^/]+\.ts)$/.test(rel);
+	});
+	const seen = new Set<string>(entries);
+	const queue = [...entries];
+	while (queue.length > 0) {
+		const f = queue.pop()!;
+		const src = readFileSync(f, 'utf8');
+		for (const m of src.matchAll(IMPORT_RE)) {
+			const r = resolveImport(f, m[1]!);
+			if (r !== null && (r.endsWith('.ts') || r.endsWith('.svelte')) && !r.endsWith('.d.ts') && !seen.has(r)) {
+				seen.add(r);
+				queue.push(r);
+			}
+		}
+	}
+	return [...seen].sort();
+}
+
 const staticLits = new Set<string>();
 const dynPairs = new Set<string>();
-const files: string[] = [];
-walk(SRC, files);
+const files = productionModules();
 for (const f of files) {
 	const src = readFileSync(f, 'utf8');
 	if (f.endsWith('.svelte')) extractFromSvelte(src, staticLits, dynPairs);
 	else extractFromJs(src, staticLits, dynPairs);
+}
+
+// Self-test C: the graph must exclude what production cannot load.
+const graphProblems: string[] = [];
+if (files.some((f) => f.endsWith('.test.ts'))) graphProblems.push('a test file is in the production graph');
+if (files.some((f) => /\/routes\/\[lang\]\/dev\//.test(f))) graphProblems.push('a /dev page is in the production graph');
+if (!files.some((f) => f.endsWith('/lib/components/OrderCard.svelte'))) graphProblems.push('OrderCard.svelte is missing from the graph');
+if (graphProblems.length > 0) {
+	console.error(`\u2717 SELF-TEST FAILED — module graph: ${graphProblems.join('; ')}`);
+	process.exit(1);
 }
 
 // ── locale leaves ────────────────────────────────────────────────────────────
@@ -188,7 +265,7 @@ function referenced(key: string): boolean {
 		if (!pfx && !sfx) continue;
 		if (!key.startsWith(pfx) || !key.endsWith(sfx)) continue;
 		if (key.length < pfx.length + sfx.length) continue;
-		// cp445 — RULE 1: the interpolated hole must fill EXACTLY ONE key segment.
+		// RULE 1: the interpolated hole must fill EXACTLY ONE key segment.
 		// `$_(\`a.b.\${x}\`)` can produce `a.b.foo`, never `a.b.foo.bar`. Without
 		// this, a pair with an empty suffix matched every descendant key in the
 		// namespace, however deep — which is how a dead `chat.pay_blurt.*` key
@@ -196,7 +273,7 @@ function referenced(key: string): boolean {
 		const hole = key.slice(pfx.length, key.length - sfx.length);
 		if (hole.includes('.') || hole.length === 0) continue;
 
-		// cp445 — RULE 2: an EMPTY suffix means the template ends in the hole, so
+		// RULE 2: an EMPTY suffix means the template ends in the hole, so
 		// the pair covers a whole namespace level. Demand that the prefix name at
 		// least two levels first. `ChatComposer` builds a localStorage draft key
 		// as `chat.${peer}` — not an i18n key at all — and that one-level prefix
@@ -211,7 +288,7 @@ function referenced(key: string): boolean {
 }
 
 // ── self-test A (false NEGATIVE): the gate must be able to FAIL ──────────────
-// cp445 — the gate reported "all 3327 checks passed" while
+// the gate reported "all 3327 checks passed" while
 // `chat.pay_blurt.needs_active_key` was orphaned: `ChatComposer` builds a
 // localStorage draft key as `chat.${peer}`, which the extractor read as an i18n
 // pair ('chat.', '') and used to whitelist every key under `chat.*`. A gate that
@@ -249,7 +326,9 @@ const selfTestFailures = KNOWN_LIVE.filter((k) => leaves.includes(k) && !referen
 // ── report ────────────────────────────────────────────────────────────────
 const dead = leaves.filter((k) => !referenced(k));
 console.log('i18n-dead-key-gate:\n');
-console.log(`  parsed ${files.length} source files (${svelteCompileFailures} .svelte fell back to script-scan)`);
+console.log(
+	`  parsed ${files.length} production-reachable source files (${svelteCompileFailures} .svelte fell back to script-scan)`
+);
 console.log(`  extracted ${staticLits.size} string literals, ${dynPairs.size} dynamic (prefix,suffix) pairs`);
 console.log(`  ${leaves.length} locale leaf keys checked\n`);
 

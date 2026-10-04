@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * scripts/ipfs-hidden-only-execution-smoke.ts (v1.18.0 deep-deep, H3)
+ * scripts/ipfs-hidden-only-execution-smoke.ts
  *
  * A tor-only node ran a stock Kubo and its IPFS scripts talked to clearnet:
  *   - morphit-ipfs-seed.sh curled git.agorise.net for the tag's CID whenever it
@@ -417,11 +417,18 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 						`${r.status} ${(r.stdout ?? '').slice(-600)} ${JSON.stringify(c)}`
 					);
 				} else {
+					// Round 2, item 6: no AutoConf fetch, no HTTP routers (cid.contact);
+					// it seeds over the public DHT with the bootstrap list written out
+					// (behaviour: apps/ops-cli:kubo-no-phone-home-smoke, a real Kubo).
 					check(
-						'ansible, clearnet node: routing stays auto, bootstrap untouched, telemetry off',
+						'ansible, clearnet node: DHT only (no AutoConf, no HTTP routers), bootstrap peers written out, telemetry off',
 						r.status === 0 &&
-							c.Routing.Type === 'auto' &&
-							JSON.stringify(c.Bootstrap) === '["auto"]' &&
+							c.Routing.Type === 'dht' &&
+							JSON.stringify(c.Routing.DelegatedRouters) === '[]' &&
+							c.AutoConf?.Enabled === false &&
+							Array.isArray(c.Bootstrap) &&
+							c.Bootstrap.length > 0 &&
+							!c.Bootstrap.includes('auto') &&
 							c.Plugins?.Plugins?.telemetry?.Config?.Mode === 'off',
 						`${r.status} ${(r.stdout ?? '').slice(-600)} ${JSON.stringify(c)}`
 					);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * identityPaired.test.ts — identity store tests for the paired-
- * readonly session path (ADR-0022 QR-pair, Option A, Part 114).
+ * readonly session path (ADR-0022 QR-pair, Option A).
  *
  * Unlike the cross-tab envelope tests (which run libsodium and are
  * skipped under jsdom for realm-shim reasons), the paired-readonly

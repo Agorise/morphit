@@ -18,12 +18,12 @@
  * addition to {USDT,USDC,DAI}_NETWORKS plus a matching i18n key
  * triplet (assets.{usdt,usdc,dai}.network.<key>.{displayName,feeHint,warning}).
  *
- * Per the maintainer's design decisions:
- *   - USDT (Part 121): NATIVE USDT ONLY on each network.
+ * per the maintainer's design decisions:
+ *   - USDT: NATIVE USDT ONLY on each network.
  *     Bridged versions (USDT.e on Avalanche L2, etc.) are
  *     excluded.  Omni Layer USDT is excluded — Tether deprecated
  *     it.
- *   - USDC (Part 122 cp30): NATIVE USDC ONLY on each network.
+ *   - USDC: NATIVE USDC ONLY on each network.
  *     Bridged versions (USDC.e on Avalanche, USDbC, etc.) are
  *     excluded for the same footgun-minimization reason.  The
  *     four shipped networks (ERC-20, SPL, Base, Polygon) follow
@@ -158,7 +158,7 @@ export function validateUsdtTxid(network: UsdtNetwork, txid: string): boolean {
 export function bundledUsdtExplorerUrl(network: UsdtNetwork, txid: string): string | null {
 	if (!validateUsdtTxid(network, txid)) return null;
 	const md = getUsdtNetworkMetadata(network);
-	// cp30-DD-DD SEC-4 — normalize txids per-network so the resulting
+	// normalize txids per-network so the resulting
 	// URL actually resolves on the target explorer:
 	//   - EVM family (erc20, bep20): lowercase + REQUIRE leading 0x.
 	//     Our regex accepts both `0x...` and bare 64-hex (some
@@ -182,7 +182,7 @@ export function bundledUsdtExplorerUrl(network: UsdtNetwork, txid: string): stri
 }
 
 // ──────────────────────────────────────────────────────────────
-// USDC (added Part 122 cp30)
+// USDC (added)
 // ──────────────────────────────────────────────────────────────
 
 /** The set of networks we ship USDC support for at launch.
@@ -190,7 +190,7 @@ export function bundledUsdtExplorerUrl(network: UsdtNetwork, txid: string): stri
  *  explorer survey: Ethereum mainnet (ERC-20), Solana (SPL),
  *  Base (Coinbase L2), and Polygon PoS.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
- *  (file as REVISIT to add non-breaking later if demand
+ *  (file in the backlog to add non-breaking later if demand
  *  materializes). */
 export const USDC_NETWORKS = ['erc20', 'spl', 'base', 'polygon'] as const;
 
@@ -251,7 +251,7 @@ export const USDC_NETWORK_METADATA: Readonly<Record<UsdcNetwork, UsdcNetworkMeta
 			// resolve a lowercased copy.
 			txidShape: /^[1-9A-HJ-NP-Za-km-z]{64,90}$/,
 			// Solscan — most widely-used Solana explorer.
-			// Per the maintainer's URL list 2026-05-17.
+			// per the maintainer's URL list 2026-05-17.
 			bundledExplorerUrl: 'https://solscan.io/tx/{txid}'
 		}),
 		base: Object.freeze({
@@ -278,7 +278,7 @@ export const USDC_NETWORK_METADATA: Readonly<Record<UsdcNetwork, UsdcNetworkMeta
 			// Polygon txid: 0x + 64 hex (EVM).
 			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
 			// Polygonscan — the canonical Polygon explorer.
-			// Per the maintainer's URL list 2026-05-17.
+			// per the maintainer's URL list 2026-05-17.
 			bundledExplorerUrl: 'https://polygonscan.com/tx/{txid}'
 		})
 	});
@@ -319,7 +319,7 @@ export function validateUsdcTxid(network: UsdcNetwork, txid: string): boolean {
 export function bundledUsdcExplorerUrl(network: UsdcNetwork, txid: string): string | null {
 	if (!validateUsdcTxid(network, txid)) return null;
 	const md = getUsdcNetworkMetadata(network);
-	// cp30-DD-DD SEC-4 — normalize txids per-network so the resulting
+	// normalize txids per-network so the resulting
 	// URL resolves on the target explorer (same logic as
 	// bundledUsdtExplorerUrl above):
 	//   - EVM family (erc20, base, polygon): lowercase + REQUIRE
@@ -339,7 +339,7 @@ export function bundledUsdcExplorerUrl(network: UsdcNetwork, txid: string): stri
 }
 
 // ──────────────────────────────────────────────────────────────
-// DAI (added Part 122 cp31)
+// DAI (added)
 // ──────────────────────────────────────────────────────────────
 
 /** The set of networks we ship DAI support for at launch.
@@ -393,7 +393,7 @@ export const DAI_NETWORK_METADATA: Readonly<Record<DaiNetwork, DaiNetworkMetadat
 			// Ethereum txid: 0x + 64 hex (canonical), or 64 hex
 			// without prefix (some wallets strip it)
 			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
-			// Etherscan — canonical Ethereum explorer.  Per the maintainer's
+			// Etherscan — canonical Ethereum explorer.  per the maintainer's
 			// DAI URL list 2026-05-18.
 			bundledExplorerUrl: 'https://etherscan.io/tx/{txid}'
 		}),
@@ -405,7 +405,7 @@ export const DAI_NETWORK_METADATA: Readonly<Record<DaiNetwork, DaiNetworkMetadat
 			addressShape: /^0x[a-fA-F0-9]{40}$/,
 			// Polygon txid: EVM 0x + 64 hex.
 			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
-			// Polygonscan — canonical Polygon explorer.  Per the maintainer's
+			// Polygonscan — canonical Polygon explorer.  per the maintainer's
 			// DAI URL list 2026-05-18.
 			bundledExplorerUrl: 'https://polygonscan.com/tx/{txid}'
 		}),
@@ -417,7 +417,7 @@ export const DAI_NETWORK_METADATA: Readonly<Record<DaiNetwork, DaiNetworkMetadat
 			addressShape: /^0x[a-fA-F0-9]{40}$/,
 			// Base txid: EVM 0x + 64 hex.
 			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
-			// Basescan — canonical Base explorer.  Per the maintainer's DAI
+			// Basescan — canonical Base explorer.  per the maintainer's DAI
 			// URL list 2026-05-18.
 			bundledExplorerUrl: 'https://basescan.org/tx/{txid}'
 		}),
@@ -429,7 +429,7 @@ export const DAI_NETWORK_METADATA: Readonly<Record<DaiNetwork, DaiNetworkMetadat
 			addressShape: /^0x[a-fA-F0-9]{40}$/,
 			// Arbitrum txid: EVM 0x + 64 hex.
 			txidShape: /^(0x)?[a-fA-F0-9]{64}$/,
-			// Arbiscan — canonical Arbitrum explorer.  Per the maintainer's
+			// Arbiscan — canonical Arbitrum explorer.  per the maintainer's
 			// DAI URL list 2026-05-18.
 			bundledExplorerUrl: 'https://arbiscan.io/tx/{txid}'
 		})
@@ -478,7 +478,7 @@ export function validateDaiTxid(network: DaiNetwork, txid: string): boolean {
 export function bundledDaiExplorerUrl(network: DaiNetwork, txid: string): string | null {
 	if (!validateDaiTxid(network, txid)) return null;
 	const md = getDaiNetworkMetadata(network);
-	// cp30-DD-DD SEC-4 — normalize txids: lowercase + REQUIRE
+	// normalize txids: lowercase + REQUIRE
 	// leading 0x.  Every explorer for the 4 DAI networks
 	// (Etherscan, Polygonscan, Basescan, Arbiscan) returns 404
 	// to bare-hex paths; our regex accepts both forms but the

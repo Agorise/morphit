@@ -1,5 +1,5 @@
 #!/bin/sh
-# morphit-upgrade-notify-setup.sh (cp598) — one-shot setup of the desktop
+# morphit-upgrade-notify-setup.sh — one-shot setup of the desktop
 # "an upgrade is available" notification on a home node with a graphical desktop.
 #
 # A desktop toast must run in the LOGGED-IN USER's graphical session, so this
@@ -45,7 +45,7 @@ echo "  + installed $LIB/morphit-upgrade-notify.sh"
 # 3. System-wide USER units (apply to every user's session manager).
 install -d "$USER_UNIT_DIR"
 cat > "$USER_UNIT_DIR/morphit-upgrade-notify.service" <<EOF
-# Morphit — desktop "upgrade available" notifier (cp598).  Runs in the user's
+# Morphit — desktop "upgrade available" notifier.  Runs in the user's
 # graphical session; the script bails quietly if no desktop is reachable.
 [Unit]
 Description=Notify me on my desktop when a Morphit upgrade is available
@@ -58,7 +58,7 @@ ExecStart=$LIB/morphit-upgrade-notify.sh
 EOF
 
 cat > "$USER_UNIT_DIR/morphit-upgrade-notify.timer" <<EOF
-# Morphit — desktop upgrade-notification timer (cp598).  Checks a couple of
+# Morphit — desktop upgrade-notification timer.  Checks a couple of
 # minutes after login, then every $CHECK_INTERVAL.
 [Unit]
 Description=Timer for the Morphit desktop upgrade notification

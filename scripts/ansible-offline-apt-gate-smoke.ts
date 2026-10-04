@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * ansible-offline-apt-gate — cp679.
+ * ansible-offline-apt-gate.
  *
  * The offline bundle redirects apt to a bundled local repo so an air-gapped box
  * can install with no network. But that redirect makes Linux Mint's Update

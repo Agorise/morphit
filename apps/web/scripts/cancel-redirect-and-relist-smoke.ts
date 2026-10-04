@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: cancelling an order takes you somewhere that PROVES it worked, and a
- * cancelled order can be re-listed (the maintainer, 2026-07-08).
+ * cancelled order can be re-listed.
  *
  *  1. Confirming the cancel modal on /@user/permlink used to leave you on the
  *     same page, still looking at the red "Cancel this order" button — nothing
@@ -45,7 +45,7 @@ function check(name: string, ok: boolean): void {
 
 // ─── 1. cancel → /my/orders ──────────────────────────────────────────
 check('confirmCancel navigates to /my/orders after a successful broadcast', /await gotoLocale\('\/my\/orders'\);/.test(detail));
-// cp462 (#6/#7) — the stale "live" flash is now prevented OPTIMISTICALLY, not
+// (#6/#7) — the stale "live" flash is now prevented OPTIMISTICALLY, not
 // by waiting: the order page records the cancel (sessionStorage) before landing,
 // and /my/orders' applyRecentCancels overrides the just-cancelled order's status
 // to "cancelled" immediately — so there is no window where it reads "live". The
@@ -69,7 +69,7 @@ const cancelledBranch = myOrders.slice(
 check('the cancelled branch exists and still shows the Cancelled pill', /action_cancelled/.test(cancelledBranch));
 check('the cancelled branch now offers Re-list', /relistOrder\(o\)/.test(cancelledBranch) && /action_relist'/.test(cancelledBranch));
 check('the cancelled branch shows the re-list hint', /action_relist_hint/.test(cancelledBranch));
-// the maintainer (2026-07-19): Paid orders are re-listable too — you sold, and want to
+// The maintainer (2026-07-19): Paid orders are re-listable too — you sold, and want to
 // offer the same again. Same fresh-permlink prefill path; the paid order stays.
 const paidBranch = myOrders.slice(
 	myOrders.indexOf("{:else if o.status === 'completed' || paidPermlinks.has(o.permlink)}"),

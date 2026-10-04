@@ -55,7 +55,7 @@ if (!create) {
 	}
 }
 // every ALTER TABLE operators ADD COLUMN [IF NOT EXISTS] <col> — in migrations.ts
-// AND in schema.sql itself (v1.18.0 deep-deep, M4: `operators.origin` is added
+// AND in schema.sql itself (`operators.origin` is added
 // by an ALTER in schema.sql, which this scan used to miss, so the probe's new
 // read of `o2.origin` was reported as a missing column although it exists).
 for (const m of (schema + '\n' + migrations).matchAll(/ALTER TABLE operators\s+ADD COLUMN\s+(?:IF NOT EXISTS\s+)?([a-z_][a-z0-9_]*)/gi)) {

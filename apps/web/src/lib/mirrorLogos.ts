@@ -45,7 +45,7 @@ export const MIRROR_LOGO_PATHS: Record<string, string> = {
 	ipfs: 'M12 0L1.608 6v12L12 24l10.392-6V6zm-1.073 1.445h.001a1.8 1.8 0 002.138 0l7.534 4.35a1.794 1.794 0 000 .403l-7.535 4.35a1.8 1.8 0 00-2.137 0l-7.536-4.35a1.795 1.795 0 000-.402zM21.324 7.4c.109.08.226.147.349.201v8.7a1.8 1.8 0 00-1.069 1.852l-7.535 4.35a1.8 1.8 0 00-.349-.2l-.009-8.653a1.8 1.8 0 001.07-1.851zm-18.648.048l7.535 4.35a1.8 1.8 0 001.069 1.852v8.7c-.124.054-.24.122-.349.202l-7.535-4.35a1.8 1.8 0 00-1.069-1.852v-8.7c.124-.054.24-.122.35-.202z'
 };
 
-// v1.9.6 (the maintainer) — the IPNS "always latest" card shares the IPFS cube mark (same
+// v1.9.6 — the IPNS "always latest" card shares the IPFS cube mark (same
 // ecosystem). Assigned here rather than duplicating the long path in the literal.
 MIRROR_LOGO_PATHS.ipns = MIRROR_LOGO_PATHS.ipfs ?? '';
 
@@ -55,20 +55,20 @@ MIRROR_LOGO_PATHS.ipns = MIRROR_LOGO_PATHS.ipfs ?? '';
  * to "0 0 24 24" for every other mirror, so MIRROR_LOGO_PATHS values
  * are never rescaled by hand.
  *
- * v1.8.16 (the maintainer) — the only two overrides (GitFlic 36×43, Radicle 44×44)
+ * v1.8.16 — the only two overrides (GitFlic 36×43, Radicle 44×44)
  * belonged to mirrors that were removed, so this is now empty; every
  * remaining logo is a simple-icons 24×24 glyph. Kept as an exported map
  * (rather than deleted) so a future non-square logo has an obvious home.
  */
 export const MIRROR_LOGO_VIEWBOX: Record<string, string> = {
-	// v1.9.6 (the maintainer) — Gitea + Framagit ship as their real multi-element brand art
+	// v1.9.6 — Gitea + Framagit ship as their real multi-element brand art
 	// (see MIRROR_LOGO_INNER), so they carry their native viewBoxes.
 	gitea: '0 0 640 640',
 	framagit: '0 0 14.29 14.29'
 };
 
 /**
- * v1.9.6 (the maintainer) — Multi-element brand marks that can't reduce to one monochrome path.
+ * v1.9.6 — Multi-element brand marks that can't reduce to one monochrome path.
  * Gitea (official green teacup) and Framagit (Framasoft's dot-cascade + mascot) were
  * supplied as real brand SVGs; their FILLS are stripped here so every shape inherits
  * the download page's fill="currentColor" — monochrome + legible in both light and
@@ -85,7 +85,7 @@ export const MIRROR_LOGO_INNER: Record<string, string> = {
 };
 
 /**
- * v1.11.1 (the maintainer) — nine new push-mirrors on indie git hosts (gitgud.io,
+ * v1.11.1 — nine new push-mirrors on indie git hosts (gitgud.io,
  * forge.chapril.org, git.disroot.org, git.kaki87.net, codefloe.com, git.gay,
  * bolha.dev, opencommit.eu, sij.ai). None has a simple-icons brand glyph, and
  * fabricating a brand mark for a small community host would be guesswork, so

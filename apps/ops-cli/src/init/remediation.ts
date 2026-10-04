@@ -71,13 +71,18 @@ export function remediationFor(check: Check): Remediation | null {
 					problem: 'localhost does not resolve',
 					suggestion:
 						'The local install inventory and the Postgres URL both need localhost. Adding it to /etc/hosts fixes it.',
-					autoFix: { command: "echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts", needsSudo: true, defaultYes: true }
+					autoFix: {
+						command: "echo '127.0.0.1 localhost' | sudo tee -a /etc/hosts",
+						needsSudo: true,
+						defaultYes: true
+					}
 				};
 			}
 			return {
 				checkName: check.name,
 				problem: `localhost maps to ${check.actual}`,
-				suggestion: 'Harmless — the wizard already normalises the database host to 127.0.0.1 for you, so no action is needed.'
+				suggestion:
+					'Harmless — the wizard already normalises the database host to 127.0.0.1 for you, so no action is needed.'
 			};
 
 		case 'Port availability':
@@ -85,7 +90,7 @@ export function remediationFor(check: Check): Remediation | null {
 				checkName: check.name,
 				problem: check.actual,
 				suggestion:
-					'Another service already holds a port Morphit needs (80/443/5432). Run `sudo ss -tlnp` to see what it is, then stop or move it and re-run. I can\'t safely stop your other apps for you.'
+					"Another service already holds a port Morphit needs (80/443/5432). Run `sudo ss -tlnp` to see what it is, then stop or move it and re-run. I can't safely stop your other apps for you."
 			};
 
 		case 'Docker subnet':
@@ -93,7 +98,7 @@ export function remediationFor(check: Check): Remediation | null {
 				checkName: check.name,
 				problem: check.actual,
 				suggestion:
-					'An existing docker network overlaps Morphit\'s 172.20.0.0/16 subnet. Remove or relocate it (`docker network ls` / `docker network rm <name>`), then re-run. A compose subnet override is coming in a future release.'
+					"An existing docker network overlaps Morphit's 172.20.0.0/16 subnet. Remove or relocate it (`docker network ls` / `docker network rm <name>`), then re-run. A compose subnet override is coming in a future release."
 			};
 
 		case 'PostgreSQL':
@@ -102,8 +107,8 @@ export function remediationFor(check: Check): Remediation | null {
 				problem: `PostgreSQL is ${check.actual}`,
 				suggestion:
 					check.actual === 'not found'
-						? 'Install PostgreSQL (Ubuntu 24.04\'s `apt install postgresql` = 16, which is fine), then re-run. The installer can also set it up for you.'
-						: 'Morphit needs PostgreSQL >= 14. Your server is older — install a newer one (PGDG apt repo, apt.postgresql.org) and migrate your data; I won\'t auto-upgrade Postgres since that touches your database. Then re-run.'
+						? "Install PostgreSQL (Ubuntu 24.04's `apt install postgresql` = 16, which is fine), then re-run. The installer can also set it up for you."
+						: "Morphit needs PostgreSQL >= 14. Your server is older — install a newer one (PGDG apt repo, apt.postgresql.org) and migrate your data; I won't auto-upgrade Postgres since that touches your database. Then re-run."
 			};
 
 		case 'Ansible version':
@@ -116,7 +121,8 @@ export function remediationFor(check: Check): Remediation | null {
 					command:
 						'sudo apt-get remove -y ansible; sudo apt-get install -y pipx && pipx ensurepath && pipx install --include-deps ansible',
 					needsSudo: true,
-					defaultYes: true
+					// Installs packages: never on a bare Enter.
+					defaultYes: false
 				}
 			};
 
@@ -126,10 +132,16 @@ export function remediationFor(check: Check): Remediation | null {
 				checkName: check.name,
 				problem: check.actual,
 				suggestion:
-					'Docker is only needed for the BunkerWeb web firewall. Install it (`curl -fsSL https://get.docker.com | sudo sh`) and add yourself to the docker group (`sudo usermod -aG docker $USER`, then log out/in), or choose the plain-nginx path which needs no Docker.',
-				autoFix: check.actual === 'not installed'
-					? { command: 'curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker "$USER"', needsSudo: true, defaultYes: true }
-					: undefined
+					"Docker is only needed for the BunkerWeb web firewall. Install it from Ubuntu's packages (`sudo apt-get install -y docker.io docker-compose-v2`), or choose the plain-nginx path which needs no Docker.",
+				// Installs packages: never on a bare Enter.
+				autoFix:
+					check.actual === 'not installed'
+						? {
+								command: 'sudo apt-get install -y docker.io docker-compose-v2',
+								needsSudo: true,
+								defaultYes: false
+							}
+						: undefined
 			};
 
 		case 'RAM total':
@@ -151,7 +163,7 @@ export function remediationFor(check: Check): Remediation | null {
 				checkName: check.name,
 				problem: `Node.js ${check.actual}`,
 				suggestion:
-					'The ops-cli needs Node 22+. Upgrade with nvm (`nvm install 22`) or NodeSource. I won\'t auto-upgrade Node so I don\'t disturb your other tooling.'
+					"The ops-cli needs Node 22+. Upgrade with nvm (`nvm install 22`) or NodeSource. I won't auto-upgrade Node so I don't disturb your other tooling."
 			};
 
 		case 'Disk free':
@@ -173,9 +185,10 @@ export function remediationFor(check: Check): Remediation | null {
 				return {
 					checkName: check.name,
 					problem: check.actual,
-					suggestion: guidance && guidance.length > 0
-						? guidance
-						: 'The installer hit a problem it could not classify or work around on its own.',
+					suggestion:
+						guidance && guidance.length > 0
+							? guidance
+							: 'The installer hit a problem it could not classify or work around on its own.',
 					lastResort: !(guidance && guidance.length > 0)
 				};
 			}
@@ -218,16 +231,42 @@ export async function runRemediations(
 				const okFix = deps.exec(rem.autoFix.command);
 				if (okFix) {
 					deps.print('     \u2713 done.');
-					journal.push({ checkName: rem.checkName, problem: rem.problem, outcome: 'fixed', detail: `you approved: ${rem.autoFix.command}`, lastResort: false });
+					journal.push({
+						checkName: rem.checkName,
+						problem: rem.problem,
+						outcome: 'fixed',
+						detail: `you approved: ${rem.autoFix.command}`,
+						lastResort: false
+					});
 				} else {
-					deps.print('     \u2717 that fix did not complete — you can run the command above yourself.');
-					journal.push({ checkName: rem.checkName, problem: rem.problem, outcome: 'fix-failed', detail: `tried but failed: ${rem.autoFix.command}. ${rem.suggestion}`, lastResort: false });
+					deps.print(
+						'     \u2717 that fix did not complete — you can run the command above yourself.'
+					);
+					journal.push({
+						checkName: rem.checkName,
+						problem: rem.problem,
+						outcome: 'fix-failed',
+						detail: `tried but failed: ${rem.autoFix.command}. ${rem.suggestion}`,
+						lastResort: false
+					});
 				}
 			} else {
-				journal.push({ checkName: rem.checkName, problem: rem.problem, outcome: 'declined', detail: rem.suggestion, lastResort: rem.lastResort ?? false });
+				journal.push({
+					checkName: rem.checkName,
+					problem: rem.problem,
+					outcome: 'declined',
+					detail: rem.suggestion,
+					lastResort: rem.lastResort ?? false
+				});
 			}
 		} else {
-			journal.push({ checkName: rem.checkName, problem: rem.problem, outcome: 'manual', detail: rem.suggestion, lastResort: rem.lastResort ?? false });
+			journal.push({
+				checkName: rem.checkName,
+				problem: rem.problem,
+				outcome: 'manual',
+				detail: rem.suggestion,
+				lastResort: rem.lastResort ?? false
+			});
 		}
 	}
 	return journal;
@@ -250,7 +289,12 @@ export function renderRemediationReport(journal: RemediationJournal): string {
 	if (pending.length > 0) {
 		lines.push('', 'Still needs your attention:');
 		for (const r of pending) {
-			const tag = r.outcome === 'declined' ? '(skipped)' : r.outcome === 'fix-failed' ? '(fix failed)' : '(manual)';
+			const tag =
+				r.outcome === 'declined'
+					? '(skipped)'
+					: r.outcome === 'fix-failed'
+						? '(fix failed)'
+						: '(manual)';
 			lines.push(`  \u2022 ${r.checkName} ${tag} \u2014 ${r.detail}`);
 		}
 	}

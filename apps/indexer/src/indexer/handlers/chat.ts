@@ -78,19 +78,9 @@ import { validateChatOrderPermlink } from '$indexer/permlink';
 import { logger } from '$log';
 import { checkChatOrder } from '$indexer/chatGates';
 import { enqueueChatPush } from '$indexer/chatPushEnqueue';
+import { inSavepoint } from '$indexer/savepoint';
 
 const log = logger('chat');
-
-/** Opt-in per-message delivery tracing. OFF by default; enable with
- *  MORPHIT_CHAT_DEBUG=1 in the indexer's env, then read via
- *  `sudo docker logs <indexer-container>`. Logs METADATA ONLY (never
- *  ciphertext): sender, recipient, order_permlink, and the exact
- *  admission decision, so an operator can see precisely why a given
- *  message was persisted or dropped. */
-const CHAT_DEBUG = process.env.MORPHIT_CHAT_DEBUG === '1';
-function chatDbg(event: string, data: Record<string, unknown>): void {
-	if (CHAT_DEBUG) log.info(event, data);
-}
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 /** Hard cap on ciphertext envelope size.
@@ -115,7 +105,7 @@ const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const MAX_CIPHERTEXT_CHARS = 1536;
 
 /** Base64 well-formedness: multiple-of-4 length, at most 2 trailing '='.
- *  Shared by the main ciphertext and the cp406 self-copy checks. */
+ *  Shared by the main ciphertext and the self-copy checks. */
 const CHAT_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 /** Finding H layer 3 — per-recipient rate limits to deter
@@ -195,7 +185,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'header_too_large' };
 	}
 
-	// cp406 — OPTIONAL sender self-copy (ChatEnvelopeWire.selfCiphertext): a
+	// OPTIONAL sender self-copy (ChatEnvelopeWire.selfCiphertext): a
 	// second ciphertext of the SAME plaintext, decryptable only by the sender,
 	// so they can reread their own history from chain (keep-history mode). It
 	// lives in the otherwise-opaque header, but we bound it EXACTLY like the
@@ -239,7 +229,6 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		[recipient, ctx.signer]
 	);
 	if (blockCheck.rows[0]?.exists) {
-		chatDbg('chat.DROP.blocked', { sender: ctx.signer, recipient });
 		return { ok: false, reason: 'recipient_blocked_sender' };
 	}
 
@@ -276,7 +265,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (claimedPermlink !== undefined && claimedPermlink !== null) {
 		const permlinkFail = validateChatOrderPermlink(claimedPermlink);
 		if (permlinkFail) return { ok: false, reason: permlinkFail };
-		// cp446 — `order_permlink` does TWO jobs, and conflating them was a bug.
+		// `order_permlink` does TWO jobs, and conflating them was a bug.
 		//
 		//   1. THREAD TAG. The inbox groups conversations by (peer, order), like an
 		//      email inbox, and the transcript is scoped to one thread. Every
@@ -312,7 +301,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			// invented or points at a third party's listing. Reject, exactly as
 			// before — a tag must never be a free-text field on chain.
 			//
-			// BATCH19A-chat-1 (2026-05-02 audit): the pre-cp440 query did not filter
+			// BATCH19A-chat-1 (2026-05-02 audit): the older query did not filter
 			// by status, so a cancelled order's permlink could be replayed
 			// indefinitely to bypass the stranger-fee gate. That filter now lives on
 			// the BYPASS decision below, where it belongs, and the gate itself is
@@ -321,19 +310,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		}
 		// Bypass ONLY when the recipient owns a live, unexpired order. Identical to
 		// the previous condition — deliberately so.
-		// cp471: the order-tag query + this bypass are now the shared
+		// the order-tag query + this bypass are now the shared
 		// `checkChatOrder` (chatGates.ts) so the fast notification path
 		// evaluates order validity identically. Bypass ONLY when the
 		// recipient owns a live, unexpired order — deliberately unchanged.
 		orderResponseBypass = orderCheck.ownedByRecipient && orderCheck.live;
-		chatDbg('chat.orderCheck', {
-			sender: ctx.signer,
-			recipient,
-			claimedPermlink,
-			ownerIsRecipient: orderCheck.ownedByRecipient,
-			orderLive: orderCheck.live,
-			bypass: orderResponseBypass
-		});
 	}
 
 	// Finding H layer 2: stranger-fee gate. First-contact
@@ -378,12 +359,11 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// apply uniformly regardless of whether each individual
 	// message used the bypass.  An attacker spawning sock
 	// accounts to abuse the bypass therefore tops out at 20
-	// distinct sock accounts per victim per 24h before the
-	// rate limit shuts the spam down.  The cost of 20 sock
-	// accounts (~$4 in account-creation fees) is weighed
-	// against the marginal spam value; the economics still
-	// favor the defender.  See the Part 14 audit (Q11 STRIDE
-	// + attack tree analysis) for the full reasoning.
+	// distinct sock accounts per victim per 24h — but each may
+	// send up to 50 unanswered messages, 1,000 a day in all. The
+	// NOTIFICATIONS are capped separately: until the recipient
+	// replies, a sender earns one push per 24h
+	// (chatPushEnqueue.ts), so 20 socks make at most 20 pushes.
 	if (!orderResponseBypass) {
 		const admitCheck = await client.query<{ admitted: boolean }>(
 			`SELECT EXISTS (
@@ -397,10 +377,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			[recipient, ctx.signer]
 		);
 		if (!admitCheck.rows[0]?.admitted) {
-			chatDbg('chat.DROP.strangerGate', { sender: ctx.signer, recipient });
 			return { ok: false, reason: 'stranger_fee_required' };
 		}
-		chatDbg('chat.admit.strangerGatePassed', { sender: ctx.signer, recipient });
 	}
 
 	// Finding H layer 3: fan-in and per-sender rate limits.
@@ -408,12 +386,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// replied to the sender. One reply lifts both caps for the
 	// pair forever.
 	//
-	// Computed in a single round-trip. Postgres evaluates both
-	// expressions against the chat_messages_recipient_idx /
-	// chat_messages_sender_idx composites with little overhead.
-	// At production scale (millions of messages) we'd revisit
-	// with a materialized counter table, but at Morphit's
-	// current scale this is cheap.
+	// Computed in a single round-trip. Every chat_messages predicate
+	// here and in the stranger gate above is a `sender = … AND
+	// recipient = …` or `recipient = … AND created_at > …` lookup,
+	// served by chat_messages_sender_idx (sender, recipient,
+	// created_at) and chat_messages_recipient_idx (recipient,
+	// created_at) — both added by migration v66; before it, each
+	// incoming chat scanned the whole table three times inside the
+	// block transaction.
 	//
 	// The fan-in subquery EXCLUDES senders the recipient has
 	// blocked (security finding S5). Without that exclusion, a
@@ -467,7 +447,6 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (row) {
 		const fanIn = Number(row.unique_fan_in);
 		if (Number.isFinite(fanIn) && fanIn > FAN_IN_UNIQUE_SENDERS_24H) {
-			chatDbg('chat.DROP.fanIn', { sender: ctx.signer, recipient, fanIn });
 			return { ok: false, reason: 'recipient_fan_in_exceeded' };
 		}
 		if (row.per_pair_count !== null) {
@@ -476,17 +455,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			// reject when accepting this would push the count
 			// past the cap — i.e. when already ≥ cap.
 			if (Number.isFinite(perPair) && perPair >= PER_PAIR_NO_REPLY_CAP) {
-				chatDbg('chat.DROP.perPairCap', { sender: ctx.signer, recipient, perPair });
 				return { ok: false, reason: 'sender_no_reply_cap_exceeded' };
 			}
 		}
 	}
-	chatDbg('chat.ADMITTED', {
-		sender: ctx.signer,
-		recipient,
-		order: claimedPermlink ?? null,
-		bypass: orderResponseBypass
-	});
 
 	try {
 		const insertRes = await client.query<{ id: string }>(
@@ -542,20 +514,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				messageId: parseInt(inserted.id, 10)
 			});
 		}
-		// MORPHIT_CHAT_DEBUG diagnostic (metadata-only, gated): confirms the row
-		// COMMITTED, not merely that admission passed. `chat.ADMITTED` fires just
-		// before the INSERT; if that line appears in the log but this one does not,
-		// the INSERT threw after admission (re-thrown above → surfaces as a poller
-		// error) or the surrounding op-batch transaction rolled back. The full
-		// happy path reads: chat.orderCheck → chat.ADMITTED → chat.stored.
-		chatDbg('chat.stored', {
-			id: inserted?.id ?? null,
-			sender: ctx.signer,
-			recipient,
-			order: claimedPermlink ?? null
-		});
-
-		// ─── Web Push enqueue (Part 122 cp13; localized cp14) ──
+		// ─── Web Push enqueue (localized) ──
 		// Notify `recipient` of an inbound message.  When the
 		// message carries a validated `order_permlink`, this is
 		// a trade signal — route under category='order'.
@@ -565,17 +524,26 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// plaintext.  Chat is E2EE on chain; the indexer doesn't
 		// have the keys to decrypt anyway.  Non-fatal on enqueue
 		// failure: the message is already stored.
-		// cp471 — enqueue the chat Web Push through the shared, dedup-aware
+		// enqueue the chat Web Push through the shared, dedup-aware
 		// helper (chatPushEnqueue.ts). source_trx_id = the on-chain trx id, so
 		// this durable enqueue and the fast head-block enqueue collapse to
 		// exactly ONE notification (fast when the tailer wins). Order signal =
 		// a valid order tag is present (both directions). Non-fatal on failure.
-		await enqueueChatPush(client, {
-			recipient,
-			sender: ctx.signer,
-			orderPermlink: typeof claimedPermlink === 'string' ? claimedPermlink : null,
-			sourceTrxId: ctx.trxId,
-			eventAt: ctx.blockTime
+		// In its own savepoint, so a failed enqueue cannot abort the block
+		// transaction and take the stored message with it.
+		await inSavepoint(client, 'chat_push_enqueue', () =>
+			enqueueChatPush(client, {
+				recipient,
+				sender: ctx.signer,
+				orderPermlink: typeof claimedPermlink === 'string' ? claimedPermlink : null,
+				sourceTrxId: ctx.trxId,
+				eventAt: ctx.blockTime
+			})
+		).catch((err: unknown) => {
+			log.warn('push_enqueue_failed', {
+				recipient,
+				err: String((err as Error)?.message ?? err)
+			});
 		});
 	} catch (err) {
 		if (isUniqueViolation(err)) {

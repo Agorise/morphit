@@ -122,7 +122,7 @@ export function buildDigestBody(
 
 	for (const [cat, list] of sortedCategories) {
 		plainLines.push(`  ${cat}: ${list.length}`);
-		// cp139 ME-2: cat is `${e.module}:${e.event}` from parsed
+		// cat is `${e.module}:${e.event}` from parsed
 		// journal JSON — type-narrowed as `string` but not format-
 		// checked.  Today Morphit's own loggers emit hardcoded
 		// constants so there's no user-controlled path, but the

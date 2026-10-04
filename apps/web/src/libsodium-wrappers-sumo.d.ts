@@ -84,7 +84,7 @@ declare module 'libsodium-wrappers-sumo' {
 
 		// ── Ed25519 detached signatures ─────────────────────────
 		//
-		// cp474 — added the moment `scripts/**` became typechecked, which is
+		// added the moment `scripts/**` became typechecked, which is
 		// exactly the trigger this file's header describes.  Used by
 		// `desktop-pairing-crypto-smoke.ts` to stand in for a real Blurt posting
 		// key when exercising the pairing-bundle sign/verify round trip: it needs

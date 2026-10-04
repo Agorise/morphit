@@ -447,7 +447,7 @@ describe('the heal is proven on the running relay, not announced', () => {
 		expect(r.warnings.join(' ')).toMatch(/put back as it was/);
 	});
 
-	// v1.18.0 deep-deep (ops-4). The relay does not listen until its first
+	// The relay does not listen until its first
 	// chain read succeeds, and over Tor that read tries each hidden endpoint
 	// with a 60 s timeout. A healthy relay could take minutes to answer, so the
 	// 60 s deadline put a tor-only node's relay back on CLEARNET RPC on every

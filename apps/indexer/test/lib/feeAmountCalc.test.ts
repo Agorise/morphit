@@ -134,7 +134,7 @@ describe('fetchBtcXmrPricesFromCoingecko', () => {
 		);
 	});
 
-	// Part 112 hardening — pre-tightening, these would have
+	// pre-tightening, these would have
 	// coerced through `Number()` to surprising values
 	// (`Number(null) === 0`, `Number(true) === 1`,
 	// `Number([42]) === 42`, etc) and only `0` would have been

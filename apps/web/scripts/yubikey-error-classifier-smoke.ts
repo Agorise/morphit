@@ -1,5 +1,5 @@
 /**
- * YubiKey error classifier smoke (REVISIT-LIST item 3).
+ * YubiKey error classifier smoke (backlog item 3).
  *
  * The classifier maps an arbitrary caught error to a stable
  * YubikeyKeystoreErrorKind so the UI can pick localized,

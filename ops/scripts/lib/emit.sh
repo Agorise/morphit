@@ -50,7 +50,7 @@ iso_now() {
 # Handles backslash + double-quote (raw-illegal in JSON strings)
 # AND all C0 control characters (0x00-0x1F).
 #
-# AUDIT-1 (cp17 deep-deep): without control-char encoding, an
+# AUDIT-1: without control-char encoding, an
 # unprivileged user can forge journal entries via the dmesg-monitor
 # code path.  Linux lets userspace set a process's `comm` name to
 # anything (via prctl PR_SET_NAME or `exec -a $'name\n{evil}'`);
@@ -219,14 +219,14 @@ emit() {
 # classifier doesn't expect it), embedded letters, control chars,
 # spaces, anything that could break JSON or look like injection.
 #
-# AUDIT-NUMERIC (cp18 deep-deep): sidecars embed external-tool
+# AUDIT-NUMERIC: sidecars embed external-tool
 # output in numeric JSON positions:
 #   payload='{"percent":'$pct',"threshold":'$DISK_CRITICAL'}'
 # If $pct comes from a hostile FUSE filesystem reporting `"95; junk"`
 # in df output, the resulting JSON is malformed; matrix-bot drops it
 # silently — operator never learns the disk is full.  Not RCE (the
 # variable is inside a string-literal context, no shell interpret-
-# ation), but a real alert-suppression DoS.  Mount-sweep (cp15)
+# ation), but a real alert-suppression DoS.  Mount-sweep
 # already validates via `case "$mount_pct_num" in *[!0-9]*) ...`;
 # this helper generalizes the pattern.
 #

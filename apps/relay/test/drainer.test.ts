@@ -338,7 +338,7 @@ describe('RelayQueueDrainer', () => {
 		const drainer = new RelayQueueDrainer(makeConfig(), db, makeBlurt());
 		await drainer.drainOnce();
 		expect(capturedSelect).toContain('error_count <');
-		// Never-attempted rows first, then FIFO (fix wave 4, A3: unsettled rows
+		// Never-attempted rows first, then FIFO (unsettled rows
 		// must not starve new payments).
 		expect(capturedSelect).toContain(
 			'ORDER BY (broadcast_attempt_at IS NOT NULL) ASC, created_at ASC'

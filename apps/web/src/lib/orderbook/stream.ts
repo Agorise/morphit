@@ -62,9 +62,10 @@ interface BufferedEvent {
 	remove?: { account: string; permlink: string };
 }
 
-/** Construct the SSE URL for the given filter.  Mirrors the
- *  query-string format the REST orderbook endpoint accepts. */
-function buildStreamUrl(query: OrderbookQuery): string {
+/** Construct the SSE URL for the given filter: the same parameters the REST
+ *  orderbook read takes (getOrderbook), so the stream's snapshot is the page
+ *  the REST read showed — including the sort and the language filter. */
+export function buildStreamUrl(query: OrderbookQuery): string {
 	const params = new URLSearchParams();
 	// v1.7.0 — watch one trader, or with permlink, one order (the detail page).
 	if (query.account) params.set('account', query.account);
@@ -74,9 +75,11 @@ function buildStreamUrl(query: OrderbookQuery): string {
 	if (query.fiat_currency) params.set('fiat_currency', query.fiat_currency);
 	if (query.location_region) params.set('location_region', query.location_region);
 	if (query.payment_methods) params.set('payment_methods', query.payment_methods);
+	if (query.langs) params.set('langs', query.langs);
 	if (query.min_trades !== undefined && query.min_trades > 0) {
 		params.set('min_trades', String(query.min_trades));
 	}
+	if (query.sort && query.sort !== 'recent') params.set('sort', query.sort);
 	const qs = params.toString();
 	// Root-absolute path + new URL() → `<origin>/v1/orderbook/stream`,
 	// discarding any path on the configured origin. Append the query

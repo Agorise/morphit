@@ -4,6 +4,10 @@
 **Date:** 2026-07-09
 **Supersedes:** nothing. **Amends:** the identity model established alongside ADR-0007 (keygen) and the posting-only import path.
 
+> **2026-10 audit note.** The keystore container is Argon2id +
+> **XSalsa20-Poly1305** (libsodium `crypto_secretbox`,
+> `apps/web/src/lib/crypto/keystore.ts`), not XChaCha20 as written below.
+
 ## Context
 
 A `FullIdentity` carried `origin: 'morphit-seed' | 'posting-only'`, recording **where the identity came from**. Every feature that needed to know whether a transfer could be signed asked the same question:

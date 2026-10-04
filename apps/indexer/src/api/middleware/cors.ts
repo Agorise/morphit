@@ -1,29 +1,37 @@
 /**
  * Morphit indexer — CORS middleware.
  *
- * Cross-origin: GET + OPTIONS only, from ANY origin. The API is NOT read-only —
- * /v1/broadcast, /v1/federation/chat-fast, /v1/chain (condenser, key
- * references), login-pairing delivery and order views take POSTs — but those
- * are called same-origin (the instance's own frontend) or server-to-server
- * (peers). A page on another origin cannot pass the preflight a JSON POST
- * needs, and cannot read the answer to any POST. The orderbook and other
- * /v1 reads are PUBLIC data with NO credentials (no cookies, no auth), so
- * `Access-Control-Allow-Origin: *` is safe — and it's REQUIRED for the
- * cross-instance features (the /compare orderbook diff fetches a *peer's*
- * /v1/orders from the browser; a per-instance allowlist could never scale to the
- * whole federation, which is why compare failed with a CORS NetworkError). We
- * never set Access-Control-Allow-Credentials, so `*` can't leak anything.
+ * A public READ API: `Access-Control-Allow-Origin: *` on GET, HEAD and the
+ * OPTIONS preflight, and never `Access-Control-Allow-Credentials` (there are
+ * no cookies or auth to send). The reads are public data, and `*` is required
+ * for the cross-instance features: the /compare orderbook diff fetches a
+ * PEER's /v1/orders from the browser, and a per-instance allowlist could never
+ * cover the whole federation.
  *
- * `allowedOrigins` is kept for callers/tests but no longer gates the header —
- * a public read API has nothing to gate.
+ * Writes are NOT cross-origin. /v1/broadcast, /v1/chain (condenser, key
+ * references), /v1/pairing/forward, login-pairing delivery, order views, fee
+ * checks and the federation push are called same-origin (the instance's own
+ * frontend) or server-to-server (peers), neither of which needs CORS. So a
+ * write's response carries no Allow-Origin header — a page on another origin
+ * cannot read it — and every write must be `application/json`
+ * (middleware/jsonWrites.ts), which a cross-origin page can only send after a
+ * preflight this middleware does not grant for POST. Without both, a
+ * `text/plain` or bodyless POST needs no preflight, and any website could use
+ * its visitors' browsers as clients of the write endpoints.
  */
 
 import type { MiddlewareHandler } from 'hono';
 
-export function cors(_allowedOrigins: readonly string[] = []): MiddlewareHandler {
+const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export function cors(): MiddlewareHandler {
 	return async (c, next) => {
+		if (!READ_METHODS.has(c.req.method)) {
+			await next();
+			return;
+		}
 		c.header('access-control-allow-origin', '*');
-		c.header('access-control-allow-methods', 'GET, OPTIONS');
+		c.header('access-control-allow-methods', 'GET, HEAD, OPTIONS');
 		c.header('access-control-allow-headers', 'content-type');
 		c.header('access-control-max-age', '600');
 

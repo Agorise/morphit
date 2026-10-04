@@ -26,10 +26,16 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// The module reads the signed-in account to decide whether to connect at all.
+// The module reads the signed-in account, and whether there is a session at
+// all, to decide whether to connect.
 vi.mock('$blurt/ops/profile', () => ({
 	getUserBlurtAccount: () => 'bob'
 }));
+const session = vi.hoisted(() => ({ live: true }));
+vi.mock('$stores/identity', async () => {
+	const { readable } = await import('svelte/store');
+	return { hasAnySession: readable(true, (set) => set(session.live)) };
+});
 
 // Folder state is per-thread browser storage; the default (inbox) is what a
 // brand-new conversation has, and is all these cases need.
@@ -78,6 +84,7 @@ describe('globalChatActivityStream — an inbound ping becomes an inbox card', (
 
 	beforeEach(() => {
 		vi.resetModules();
+		session.live = true;
 		FakeEventSource.last = null;
 		(globalThis as unknown as { EventSource: unknown }).EventSource = FakeEventSource;
 	});
@@ -114,6 +121,13 @@ describe('globalChatActivityStream — an inbound ping becomes an inbox card', (
 		const stopThis = stop ?? ((): void => undefined);
 		return { pending: listFastPending(), stop: stopThis };
 	}
+
+	it('a locked or signed-out visit opens no stream naming the account', async () => {
+		session.live = false;
+		const { startGlobalChatActivity } = await import('./globalChatActivityStream');
+		stop = startGlobalChatActivity();
+		expect(FakeEventSource.last).toBeNull();
+	});
 
 	it('files a brand-new conversation so the inbox can draw a card for it', async () => {
 		const { pending } = await startAndDeliver(INDEXER_FRAME);

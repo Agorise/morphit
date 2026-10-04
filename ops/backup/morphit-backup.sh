@@ -3,7 +3,7 @@
 # Morphit indexer — daily PostgreSQL backup script.
 #
 # Promoted from the RUN-A-MORPHIT-NODE.md copy-paste recipe to a
-# first-class repo file in Audit Part 32 (2026-05-04).  The
+# first-class repo file (2026-05-04).  The
 # `morphit-ops init` wizard installs this + its systemd timer
 # by default; operators who want manual control can copy it to
 # their own location and edit.
@@ -34,7 +34,8 @@
 #                             inside the container, hitting its
 #                             container-local socket = trust/peer
 #                             auth, no password).
-#   2. pg_dump the indexer DB, gzip the output, optionally
+#   2. pg_dump the indexer DB (the Web Push tables without their
+#      rows), gzip the output, optionally
 #      pipe through `age -r "$AGE_RECIPIENT"` for encryption,
 #      write to a .partial file first.  pg_dump's OWN exit status
 #      is recorded through a status file, because POSIX sh has no
@@ -50,7 +51,7 @@
 #      this so the operator can grep `journalctl -u
 #      morphit-backup.service`.
 #
-# Placeholder-value guardrail (cp131 hardening):
+# Placeholder-value guardrail:
 #   If AGE_RECIPIENT or REMOTE_DESTINATION still contains a
 #   placeholder marker like "REPLACE", "XXXXX", or "example.com",
 #   the script REFUSES to use that feature — same posture as the
@@ -116,7 +117,7 @@ umask 077
 #                         someone unrelated (leak vector)
 # We refuse to use either placeholder value and log a clear
 # warning.  Local plaintext-backup behavior continues — that's the
-# pre-cp131 baseline, which is no worse than what an operator who
+# older baseline, which is no worse than what an operator who
 # never configured the optional fields gets.
 is_placeholder() {
 	# Echo nonempty string if $1 looks like a placeholder; empty
@@ -255,6 +256,12 @@ if [ -n "$DB_CONTAINER" ]; then
 else
 	DUMP_CMD="pg_dump $PG_ARGS"
 fi
+# The Web Push tables keep their structure but not their rows: a subscription
+# row ties an account to a browser's push endpoint (a device), and the queue
+# holds pending notifications. Neither is needed to restore a node — users
+# simply subscribe again — and a backup file, copied off the box, would carry
+# that account↔device mapping for as long as it is kept.
+DUMP_CMD="$DUMP_CMD --exclude-table-data=push_subscriptions --exclude-table-data=push_pending"
 
 # ─── Dump → (optionally encrypt) → atomically rename ──────────────────
 # Write to .partial first so a half-written file isn't named like

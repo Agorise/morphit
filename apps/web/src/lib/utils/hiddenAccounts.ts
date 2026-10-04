@@ -67,13 +67,6 @@ export const hiddenAccounts: Readable<Set<string>> = {
 	subscribe: internal.subscribe
 };
 
-/** Count of hidden accounts. Used by Settings to show "N hidden"
- *  or to show/hide empty states. */
-export const hiddenCount: Readable<number> = derived(
-	internal,
-	($hidden: Set<string>) => $hidden.size
-);
-
 /** Hide all orders from this account. Idempotent — adding an
  *  already-hidden name is a no-op. */
 export function hideAccount(account: string): void {

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * onion-frontend-target — cp695.
+ * onion-frontend-target.
  *
  * The Tor .onion and I2P .b32.i2p addresses must reach the FRONTEND (the nginx
  * that serves the site + fans out /v1 -> indexer, /relay -> relay), not the bare

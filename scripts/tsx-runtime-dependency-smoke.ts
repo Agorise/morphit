@@ -16,8 +16,8 @@
  *   every one of those services dies at launch with
  *   `Cannot find module '.../tsx/...'` (MODULE_NOT_FOUND).
  *
- *   ops-cli already enforces this for itself (cp161,
- *   apps/ops-cli/scripts/install-invariants-smoke.ts), because an
+ *   ops-cli already enforces this for itself
+ *   (apps/ops-cli/scripts/install-invariants-smoke.ts), because an
  *   operator actually hit "command not found" from exactly this
  *   cause.  The long-running services are even MORE exposed: they run
  *   tsx DIRECTLY from systemd with no compiled-dist fallback, so a
@@ -71,10 +71,7 @@ function readJson(rel: string): Record<string, unknown> {
  * declaration into one of four states from its deps/devDeps maps.
  */
 type TsxState = 'dependency-only' | 'devDependency-only' | 'both' | 'absent';
-function classifyTsx(
-	deps: Record<string, string>,
-	devDeps: Record<string, string>
-): TsxState {
+function classifyTsx(deps: Record<string, string>, devDeps: Record<string, string>): TsxState {
 	const inDeps = deps.tsx !== undefined;
 	const inDev = devDeps.tsx !== undefined;
 	if (inDeps && inDev) return 'both';
@@ -200,25 +197,18 @@ for (const rt of RUNTIME_TSX) {
 
 /* ---------------- guard the MCP isolated-deploy promotion ---------------- */
 
-// The MCP server runs from its OWN isolated tree (deploy-mcp.sh),
-// installed with `npm install --omit=dev`.  Even though the source
-// package.json now declares tsx in dependencies, the deploy script
-// must keep tsx in the deployed package.json's `dependencies` (it
-// deletes devDependencies for a lean runtime tree).  Pin that so a
-// future deploy-script edit can't reintroduce the strip-on-omit-dev
-// bug for the most-exposed service.
+// The MCP server runs from its OWN isolated tree (deploy-mcp.sh), copied out of
+// the install's locked node_modules: its production dependencies, tsx among
+// them. The deploy must refuse to finish without a working tsx in that tree,
+// or the MCP unit (npm start = tsx src/main.ts) breaks at launch.
 {
 	const deployMcp = readText('ops/scripts/deploy-mcp.sh');
-	const setsTsxDep = /pkg\.dependencies\.tsx\s*=/.test(deployMcp);
-	const omitsDev = /npm install --omit=dev/.test(deployMcp);
-	if (setsTsxDep && omitsDev) {
-		pass('deploy-mcp.sh keeps tsx in the deployed dependencies before its --omit=dev install');
+	if (/node_modules\/\.bin\/tsx" --version/.test(deployMcp)) {
+		pass('deploy-mcp.sh checks the deployed tree has a working tsx');
 	} else {
 		fail(
-			'deploy-mcp.sh keeps tsx a runtime dep across its --omit=dev install',
-			`setsTsxDep=${setsTsxDep} omitsDev=${omitsDev} — the isolated MCP deploy installs with ` +
-				`--omit=dev, so the deployed package.json must declare tsx in dependencies (it does this ` +
-				`via the package.json rewrite step). Without it the MCP unit breaks at launch.`
+			'deploy-mcp.sh checks the deployed tree has a working tsx',
+			'the isolated MCP deploy must run the deployed node_modules/.bin/tsx before it reports success'
 		);
 	}
 }

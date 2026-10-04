@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep (rv2-1, rv2-5, rv2-6, rv2-8) — the snapshot pipeline,
+ * the snapshot pipeline,
  * executed for real: snapshot-export.ts and snapshot-bootstrap.ts run as child
  * processes (exactly as fast-sync and the publish timer run them) against real
  * Postgres databases, local JSON-RPC stubs and a stub IPFS gateway.
@@ -334,6 +334,17 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			await pool.query(
 				`INSERT INTO moderation_flag_clearances (signal, account_a, account_b, note) VALUES ('reciprocity', 'a1', 'b1', '${MARK}')`
 			);
+			// this node's own probe opinions and wall-clock observations.
+			await pool.query(
+				`INSERT INTO known_instances (origin, operator_account, registered_at_block, registered_at_time,
+				                              last_probed_at, last_probe_status, last_probe_error, cached_name)
+				 VALUES ('https://peer.chain.example', 'peerop', 42, '2026-09-01T00:00:00Z',
+				         now(), 'unreachable', 'connect ECONNREFUSED 10.9.8.7:9050 ${MARK}', 'Peer ${MARK}')`
+			);
+			await pool.query(
+				`INSERT INTO witness_fee_history (observed_at, account_creation_fee_blurt, observation_kind)
+				 VALUES ('2026-09-01T10:04:05Z', 3, 'initial')`
+			);
 			await pool.query(
 				`INSERT INTO operator_blocks (operator, blocked, state, reason, since_block_num, since_trx_id, last_action_block_num, created_at, updated_at, origin)
 			 VALUES ('op1', 'chainblocked', 'blocked', 'on chain', 1, 't1', 1, now(), now(), 'chain'),
@@ -393,6 +404,20 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			// The chain row of the mixed table is still there.
 			expect(sql).toContain('chainblocked');
 			expect(sql).not.toContain('localblocked');
+			// known_instances travels with its chain columns only — the
+			// probe error (raw proxy address included) and cached name do not;
+			// no wall-clock witness-fee row; every timestamp in UTC; no pg_dump
+			// header describing the publishing box.
+			expect(sql).toContain('https://peer.chain.example');
+			expect(sql).not.toContain('ECONNREFUSED');
+			expect(sql).not.toContain('10.9.8.7');
+			expect(sql).not.toContain('2026-09-01 10:04:05');
+			expect(sql).not.toMatch(/^-- Dumped (from database|by pg_dump) version/m);
+			expect(
+				sql
+					.match(/\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}(?::\d{2})?\b/g)
+					?.filter((t) => !/\+00$/.test(t)) ?? []
+			).toEqual([]);
 		});
 
 		it('a dump with a psql shell command at the start of a line is refused, nothing runs (rv2-1)', async () => {
@@ -494,7 +519,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			expect(new Set(Object.values(said)).size, JSON.stringify(said)).toBe(3);
 		}, 120_000);
 
-		it('an older-style dump (owner, local rows, foreign code) restores under another role and is tidied (rv2-8, rv2-5, rv2-1c)', async () => {
+		it('an older-style dump (owner, local rows) restores under another role and is tidied (rv2-8, rv2-5)', async () => {
 			await freshDst();
 			const t = tarball(
 				work,
@@ -505,9 +530,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 					`GRANT ALL ON TABLE public.accounts TO some_publisher_role_${tag};\n` +
 					`INSERT INTO public.push_subscriptions (account, endpoint, p256dh, auth, privacy_mode) VALUES ('bob', 'https://x/${MARK}', 'p', 'a', 'standard');\n` +
 					`INSERT INTO public.relay_pending_transfers (recipient, kind, amount_blurt, reason, created_at) VALUES ('bob', 'liquid', 5, 'x', now());\n` +
-					`INSERT INTO public.rpc_directory (id, endpoints, node_count, published_ts, block_num) VALUES (1, ARRAY['http://${'x'.repeat(56)}.onion'], 1, now(), 1) ON CONFLICT (id) DO UPDATE SET endpoints = EXCLUDED.endpoints;\n` +
-					`CREATE FUNCTION public.evil_fn() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;\n` +
-					`CREATE TRIGGER evil_trg BEFORE INSERT ON public.accounts FOR EACH ROW EXECUTE FUNCTION public.evil_fn();\n`
+					`INSERT INTO public.rpc_directory (id, endpoints, node_count, published_ts, block_num) VALUES (1, ARRAY['http://${'x'.repeat(56)}.onion'], 1, now(), 1) ON CONFLICT (id) DO UPDATE SET endpoints = EXCLUDED.endpoints;\n`
 			);
 			const r = await run(
 				'snapshot-bootstrap.ts',
@@ -523,13 +546,30 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			).toBe(0);
 			// The relay merges rpc_directory into its pool at boot, before the
 			// indexer's own verification of the row has run: a restored row is
-			// the publisher's word, so a restore must not carry it (deep-deep, rv2-4
+			// the publisher's word, so a restore must not carry it (rv2-4
 			// follow-through).
 			expect((await q(DST, `SELECT count(*)::int AS n FROM rpc_directory`)).rows[0].n).toBe(0);
-			expect(
-				(await q(DST, `SELECT count(*)::int AS n FROM pg_trigger WHERE tgname = 'evil_trg'`))
-					.rows[0].n
-			).toBe(0);
+		}, 60_000);
+
+		// a dump that defines code is refused outright — nothing is
+		// restored, so no trigger it carries can fire on the writes after it.
+		it('a dump that defines a function or trigger is refused and the database is left as it was', async () => {
+			await freshDst();
+			const t = tarball(
+				work,
+				baseTar,
+				(s) =>
+					s +
+					`\nCREATE FUNCTION public.evil_fn() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;\n` +
+					`CREATE TRIGGER evil_trg BEFORE INSERT ON public.accounts FOR EACH ROW EXECUTE FUNCTION public.evil_fn();\n`
+			);
+			const r = await run(
+				'snapshot-bootstrap.ts',
+				[t.tar, '--i-trust-this-source', '--force'],
+				env(DST)
+			);
+			expect(r.code).not.toBe(0);
+			expect(await dstIntact()).toBe(true);
 			expect(
 				(await q(DST, `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'evil_fn'`)).rows[0].n
 			).toBe(0);

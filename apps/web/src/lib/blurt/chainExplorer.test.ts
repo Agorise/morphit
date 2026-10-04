@@ -1,5 +1,5 @@
 /**
- * (v1.18.0 deep-deep, L1) fetchChainTx must settle. It had no timeout, and the
+ * fetchChainTx must settle. It had no timeout, and the
  * chat sweep asks it before calling a send failed — a lookup that hung (an
  * ordinary thing on a Tor circuit) left the message "confirmed" for as long as
  * the request did.

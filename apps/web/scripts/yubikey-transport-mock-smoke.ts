@@ -1,10 +1,10 @@
 /**
- * Morphit — YubiKey WebHID transport mock round-trip smoke (cp594).
+ * Morphit — YubiKey WebHID transport mock round-trip smoke.
  *
  * The WebHID transport (`lib/crypto/yubikey/transport.ts`) speaks the
  * Yubico OTP-applet HID feature-report protocol to perform an
  * HMAC-SHA1 challenge-response.  It cannot run in CI against a real
- * key — WebHID has no sandbox — but the SEND framing (70-byte
+ * key — WebHID needs the hardware — but the SEND framing (70-byte
  * YK_FRAME + CRC-16 + 0x80|seq flags) and the READ assembly
  * (RESP_PENDING seq chunks, de-dup, dummy-report reset) are pure byte
  * logic that a faithful device SIMULATOR can exercise end to end.

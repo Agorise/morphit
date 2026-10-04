@@ -13,14 +13,25 @@
  * branch here: point it at a scratch dir with no reachable RPC and confirm it
  * exits 0 having done nothing irreversible.
  */
-import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync, readdirSync, mkdirSync, chmodSync } from 'node:fs';
+import {
+	readFileSync,
+	existsSync,
+	mkdtempSync,
+	writeFileSync,
+	rmSync,
+	readdirSync,
+	mkdirSync,
+	chmodSync
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 // MORPHIT_FIRST_ONLINE_SCRIPT=<older copy> runs these checks against it.
-const SCRIPT = process.env.MORPHIT_FIRST_ONLINE_SCRIPT ?? join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
+const SCRIPT =
+	process.env.MORPHIT_FIRST_ONLINE_SCRIPT ??
+	join(REPO_ROOT, 'ops', 'first-online', 'morphit-first-online.sh');
 
 const ANSI_GREEN = '\x1b[32m';
 const ANSI_RED = '\x1b[31m';
@@ -43,19 +54,27 @@ check('script exists at ops/first-online/morphit-first-online.sh', src.length > 
 check('is POSIX sh with set -eu', /^#!\/bin\/sh/.test(src) && /set -eu/.test(src));
 check(
 	'online GATE probes MULTIPLE RPC endpoints (never a single host / link-state)',
-	/check_online\(\)/.test(src) && /for ep in \$\(rpc_endpoints\)/.test(src) && /FALLBACK_RPC=/.test(src)
+	/check_online\(\)/.test(src) &&
+		/for ep in \$\(rpc_endpoints\)/.test(src) &&
+		/FALLBACK_RPC=/.test(src)
 );
 check(
 	'has per-step done-markers (tls / register / rpc / canary) for idempotency',
-	/tls\.done/.test(src) && /register\.done/.test(src) && /rpc\.done/.test(src) && /canary\.done/.test(src)
+	/tls\.done/.test(src) &&
+		/register\.done/.test(src) &&
+		/rpc\.done/.test(src) &&
+		/canary\.done/.test(src)
 );
 check(
 	'TLS step runs certbot only when there is no Let\u2019s Encrypt cert yet',
-	/certbot certonly/.test(src) && /letsencrypt\/live\/\$\{MORPHIT_DOMAIN\}\/fullchain\.pem/.test(src)
+	/certbot certonly/.test(src) &&
+		/LE_LIVE="\$\{MORPHIT_FIRST_ONLINE_LE_LIVE:-\/etc\/letsencrypt\/live\}"/.test(src) &&
+		/\$\{LE_LIVE\}\/\$\{MORPHIT_DOMAIN\}\/fullchain\.pem/.test(src)
 );
 check(
 	'RPC step restarts the indexer + relay to connect promptly',
-	/systemctl restart morphit-indexer\.service/.test(src) && /systemctl restart morphit-relay\.service/.test(src)
+	/systemctl restart morphit-indexer\.service/.test(src) &&
+		/systemctl restart morphit-relay\.service/.test(src)
 );
 // v1.12.3 — an OFFLINE-installed box starts i2pd + tor with no network; they must
 // be restarted on first-online or i2pd sits with an empty netDb forever.
@@ -92,7 +111,10 @@ check(
 	'retires its own timer once every deferred step is done',
 	/all_done/.test(src) && /systemctl disable --now morphit-first-online\.timer/.test(src)
 );
-check('state dir + env file are overridable (so this can be exercised offline)', /MORPHIT_FIRST_ONLINE_STATE_DIR/.test(src) && /MORPHIT_FIRST_ONLINE_ENV/.test(src));
+check(
+	'state dir + env file are overridable (so this can be exercised offline)',
+	/MORPHIT_FIRST_ONLINE_STATE_DIR/.test(src) && /MORPHIT_FIRST_ONLINE_ENV/.test(src)
+);
 
 // ── Functional: the OFFLINE branch must no-op cleanly ──
 // Run the real script pointed at a scratch state dir, with an indexer env whose
@@ -136,14 +158,20 @@ if (src.length > 0) {
 		}
 		check('offline run exits 0 (clean, will retry later)', exit === 0, `exit=${exit}`);
 		check('offline run reports no internet yet', /no internet yet/.test(out), out.slice(0, 200));
-		const markers = existsSync(stateDir) ? readdirSync(stateDir).filter((f) => f.endsWith('.done')) : [];
-		check('offline run created NO done-markers (nothing half-finished)', markers.length === 0, `markers: ${markers.join(', ')}`);
+		const markers = existsSync(stateDir)
+			? readdirSync(stateDir).filter((f) => f.endsWith('.done'))
+			: [];
+		check(
+			'offline run created NO done-markers (nothing half-finished)',
+			markers.length === 0,
+			`markers: ${markers.join(', ')}`
+		);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
 }
 
-// ── Functional: a HIDDEN-ONLY node never probes clearnet (v1.18.0 deep-deep, H4) ──
+// ── Functional: a HIDDEN-ONLY node never probes clearnet ──
 // A tor-only install writes MORPHIT_INDEXER_RPC_ENDPOINTS= (present, EMPTY).  The
 // script used to read that as "unconfigured" and probe six clearnet RPCs from the
 // box's home IP, every five minutes while clearnet stayed firewalled.  Run the
@@ -163,14 +191,20 @@ if (process.env.STUB_HEALTH && /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\/v1\\/health$/
 if (process.env.STUB_CURL_OK && new RegExp(process.env.STUB_CURL_OK).test(argv.join(' '))) process.exit(0);
 process.exit(7);
 `;
-	const runFo = (indexerEnv: string, extra: Record<string, string>): { exit: number; out: string; curls: string[][]; systemctl: string } => {
+	const runFo = (
+		indexerEnv: string,
+		extra: Record<string, string>
+	): { exit: number; out: string; curls: string[][]; systemctl: string } => {
 		const dir = mkdtempSync(join(tmpdir(), 'morphit-fo-hidden-'));
 		try {
 			const bin = join(dir, 'bin');
 			mkdirSync(bin);
 			writeFileSync(join(bin, 'curl'), STUB_CURL);
 			for (const name of ['systemctl', 'logger', 'apt-get', 'certbot', 'docker']) {
-				writeFileSync(join(bin, name), `#!/bin/sh\necho "${name} $*" >> "${join(dir, 'calls.log')}"\nexit 0\n`);
+				writeFileSync(
+					join(bin, name),
+					`#!/bin/sh\necho "${name} $*" >> "${join(dir, 'calls.log')}"\nexit 0\n`
+				);
 			}
 			for (const f of readdirSync(bin)) chmodSync(join(bin, f), 0o755);
 			writeFileSync(join(dir, 'calls.log'), '');
@@ -180,7 +214,10 @@ process.exit(7);
 			// step 4 is a no-op: this run is about the GATE.
 			mkdirSync(join(dir, 'build'));
 			writeFileSync(join(dir, 'build', 'canary.txt'), 'x');
-			writeFileSync(join(dir, 'first-online.env'), `MORPHIT_DOMAIN=\nMORPHIT_AUTO_REGISTER=no\nMORPHIT_OPS_DIR=${dir}\nMORPHIT_CANARY_SERVE_DIR=${join(dir, 'build')}\n`);
+			writeFileSync(
+				join(dir, 'first-online.env'),
+				`MORPHIT_DOMAIN=\nMORPHIT_AUTO_REGISTER=no\nMORPHIT_OPS_DIR=${dir}\nMORPHIT_CANARY_SERVE_DIR=${join(dir, 'build')}\n`
+			);
 			const r = spawnSync('sh', [SCRIPT], {
 				encoding: 'utf-8',
 				timeout: 120_000,
@@ -195,8 +232,16 @@ process.exit(7);
 					...extra
 				}
 			});
-			const curls = readFileSync(join(dir, 'curl.log'), 'utf-8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as string[]);
-			return { exit: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}`, curls, systemctl: readFileSync(join(dir, 'calls.log'), 'utf-8') };
+			const curls = readFileSync(join(dir, 'curl.log'), 'utf-8')
+				.split('\n')
+				.filter((l) => l !== '')
+				.map((l) => JSON.parse(l) as string[]);
+			return {
+				exit: r.status ?? -1,
+				out: `${r.stdout ?? ''}${r.stderr ?? ''}`,
+				curls,
+				systemctl: readFileSync(join(dir, 'calls.log'), 'utf-8')
+			};
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -219,25 +264,47 @@ process.exit(7);
 		'MORPHIT_INDEXER_TOR_SOCKS=127.0.0.1:9050\nMORPHIT_INDEXER_I2P_HTTP_PROXY=127.0.0.1:4444\nMORPHIT_INDEXER_LISTEN_PORT=8081\n';
 
 	let r = runFo(hiddenEnv, {});
-	check('hidden-only, nothing reachable: exits 0 and waits (no internet yet)', r.exit === 0 && /no internet yet/.test(r.out), r.out.slice(0, 300));
-	check('hidden-only, nothing reachable: NO clearnet curl (no fallback RPC list)', clearnet(r.curls).length === 0, clearnet(r.curls).join(' '));
-	check('hidden-only: probes its .onion RPC through Tor SOCKS (remote DNS) and its .b32.i2p through the i2pd proxy',
-		r.curls.some((a) => a.includes('--socks5-hostname') && a.includes(ONION)) && r.curls.some((a) => a.includes('-x') && a.includes(I2P)));
+	check(
+		'hidden-only, nothing reachable: exits 0 and waits (no internet yet)',
+		r.exit === 0 && /no internet yet/.test(r.out),
+		r.out.slice(0, 300)
+	);
+	check(
+		'hidden-only, nothing reachable: NO clearnet curl (no fallback RPC list)',
+		clearnet(r.curls).length === 0,
+		clearnet(r.curls).join(' ')
+	);
+	check(
+		'hidden-only: probes its .onion RPC through Tor SOCKS (remote DNS) and its .b32.i2p through the i2pd proxy',
+		r.curls.some((a) => a.includes('--socks5-hostname') && a.includes(ONION)) &&
+			r.curls.some((a) => a.includes('-x') && a.includes(I2P))
+	);
 
 	r = runFo(hiddenEnv, { STUB_CURL_OK: '--socks5-hostname .*\\.onion' });
-	check('hidden-only, .onion RPC answers over Tor: online → deferred steps run (indexer nudged), still no clearnet curl',
-		r.exit === 0 && /reachable over a hidden service/.test(r.out) && /restart morphit-indexer/.test(r.systemctl) && clearnet(r.curls).length === 0,
-		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`);
+	check(
+		'hidden-only, .onion RPC answers over Tor: online → deferred steps run (indexer nudged), still no clearnet curl',
+		r.exit === 0 &&
+			/reachable over a hidden service/.test(r.out) &&
+			/restart morphit-indexer/.test(r.systemctl) &&
+			clearnet(r.curls).length === 0,
+		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`
+	);
 
 	r = runFo(hiddenEnv, { STUB_HEALTH: '{"status":"ok","rpc_endpoints_healthy":2}' });
-	check('hidden-only, hidden probes fail but the local indexer reaches the chain: online, no clearnet curl',
+	check(
+		'hidden-only, hidden probes fail but the local indexer reaches the chain: online, no clearnet curl',
 		r.exit === 0 && /local indexer reaches the chain/.test(r.out) && clearnet(r.curls).length === 0,
-		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`);
+		`${r.out.slice(0, 300)} | ${clearnet(r.curls).join(' ')}`
+	);
 
 	// Control: the key ABSENT still means "unconfigured" → the clearnet fallback,
 	// which also proves the recorder sees a clearnet probe when one happens.
 	r = runFo('MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=\n', {});
-	check('control: key ABSENT (clearnet install) still probes the baked clearnet fallback list', clearnet(r.curls).length >= 1, JSON.stringify(r.curls).slice(0, 200));
+	check(
+		'control: key ABSENT (clearnet install) still probes the baked clearnet fallback list',
+		clearnet(r.curls).length >= 1,
+		JSON.stringify(r.curls).slice(0, 200)
+	);
 }
 
 // ── Warrant canary step: never a searched-for script, never as root (v1.20.0, C3) ──
@@ -247,14 +314,18 @@ process.exit(7);
 // signing key is not in root's keyring). These run the real script: an armed
 // refresh must run as its OWNER with the owner's HOME; nothing unarmed runs.
 if (src.length > 0) {
-	const runCanary = (opts: { refresh: string | null; homeRoot: string | null }): { out: string; marker: string | null; exit: number } => {
+	const runCanary = (opts: {
+		refresh: string | null;
+		homeRoot: string | null;
+	}): { out: string; marker: string | null; exit: number } => {
 		const dir = mkdtempSync(join(tmpdir(), 'morphit-fo-canary-'));
 		try {
 			const bin = join(dir, 'bin');
 			mkdirSync(bin);
 			// curl answers → "online"; everything else a no-op recorder.
 			writeFileSync(join(bin, 'curl'), '#!/bin/sh\nexit 0\n');
-			for (const name of ['systemctl', 'logger', 'apt-get', 'certbot', 'docker']) writeFileSync(join(bin, name), '#!/bin/sh\nexit 0\n');
+			for (const name of ['systemctl', 'logger', 'apt-get', 'certbot', 'docker'])
+				writeFileSync(join(bin, name), '#!/bin/sh\nexit 0\n');
 			for (const f of readdirSync(bin)) chmodSync(join(bin, f), 0o755);
 			mkdirSync(join(dir, 'build'));
 			mkdirSync(join(dir, 'state'));
@@ -281,13 +352,22 @@ if (src.length > 0) {
 				writeFileSync(join(dir, 'fo.sh'), readFileSync(SCRIPT));
 				r = spawnSync(
 					'unshare',
-					['-m', '--propagation', 'private', 'sh', '-c', `mount --bind "${opts.homeRoot}/home" /home && mount --bind "${opts.homeRoot}/root" /root && exec sh "${join(dir, 'fo.sh')}"`],
+					[
+						'-m',
+						'--propagation',
+						'private',
+						'sh',
+						'-c',
+						`mount --bind "${opts.homeRoot}/home" /home && mount --bind "${opts.homeRoot}/root" /root && exec sh "${join(dir, 'fo.sh')}"`
+					],
 					{ encoding: 'utf-8', timeout: 120_000, env }
 				);
 			} else {
 				r = spawnSync('sh', [SCRIPT], { encoding: 'utf-8', timeout: 120_000, env });
 			}
-			const markerPath = opts.refresh ? join(dirname(opts.refresh), 'ran-as') : join(opts.homeRoot ?? dir, 'ran-as');
+			const markerPath = opts.refresh
+				? join(dirname(opts.refresh), 'ran-as')
+				: join(opts.homeRoot ?? dir, 'ran-as');
 			const marker = existsSync(markerPath) ? readFileSync(markerPath, 'utf-8').trim() : null;
 			return { out: `${r.stdout ?? ''}${r.stderr ?? ''}`, marker, exit: r.status ?? -1 };
 		} finally {
@@ -297,7 +377,9 @@ if (src.length > 0) {
 	const isRoot = process.getuid?.() === 0;
 	const canUnshare = isRoot && spawnSync('unshare', ['-m', 'true']).status === 0;
 	if (!isRoot) {
-		console.log('  (not root: the canary owner/namespace scenarios need root to chown and mount — skipped)');
+		console.log(
+			'  (not root: the canary owner/namespace scenarios need root to chown and mount — skipped)'
+		);
 	} else {
 		// A refresh owned by uid 4243 (no passwd entry needed), in <home>/.morphit/.
 		const t = mkdtempSync(join(tmpdir(), 'morphit-fo-owner-'));
@@ -305,7 +387,10 @@ if (src.length > 0) {
 			const home = join(t, 'user');
 			mkdirSync(join(home, '.morphit'), { recursive: true });
 			const refresh = join(home, '.morphit', 'update-canary.sh');
-			writeFileSync(refresh, `echo "uid=$(id -u) home=$HOME" > "${join(home, '.morphit', 'ran-as')}"\n`);
+			writeFileSync(
+				refresh,
+				`echo "uid=$(id -u) home=$HOME" > "${join(home, '.morphit', 'ran-as')}"\n`
+			);
 			chmodSync(t, 0o755);
 			execFileSync('chown', ['-R', '4243:4243', home]);
 			const r = runCanary({ refresh, homeRoot: null });
@@ -322,7 +407,8 @@ if (src.length > 0) {
 		} else {
 			const t2 = mkdtempSync(join(tmpdir(), 'morphit-fo-planted-'));
 			try {
-				for (const d of ['home/zed/.morphit', 'root/.morphit']) mkdirSync(join(t2, d), { recursive: true });
+				for (const d of ['home/zed/.morphit', 'root/.morphit'])
+					mkdirSync(join(t2, d), { recursive: true });
 				const plant = `echo "uid=$(id -u)" > "${join(t2, 'ran-as')}"\n`;
 				writeFileSync(join(t2, 'home/zed/.morphit/update-canary.sh'), plant);
 				writeFileSync(join(t2, 'root/.morphit/update-canary.sh'), plant);
@@ -340,14 +426,19 @@ if (src.length > 0) {
 	}
 }
 
-// ── RPC-endpoint var name must MATCH what the install writes (cp660) ──
+// ── RPC-endpoint var name must MATCH what the install writes ──
 // first-online silently ignored the operator's configured endpoints because it read
 // MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS while indexer.env.j2 (and the indexer itself)
 // write/read MORPHIT_INDEXER_RPC_ENDPOINTS. This is a STATIC check (network-
 // independent) so it catches the typo even in a sandbox where the fallback RPCs are
 // unreachable and a behavioural test can't tell the difference.
-const idxTemplate = existsSync(join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates', 'indexer.env.j2'))
-	? readFileSync(join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates', 'indexer.env.j2'), 'utf-8')
+const idxTemplate = existsSync(
+	join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates', 'indexer.env.j2')
+)
+	? readFileSync(
+			join(REPO_ROOT, 'ops', 'ansible', 'roles', 'morphit', 'templates', 'indexer.env.j2'),
+			'utf-8'
+		)
 	: '';
 check(
 	'first-online reads the SAME RPC-endpoint var the install writes (MORPHIT_INDEXER_RPC_ENDPOINTS, never \u2026BLURT_RPC\u2026)',
@@ -355,7 +446,7 @@ check(
 		!/MORPHIT_INDEXER_BLURT_RPC_ENDPOINTS/.test(src) &&
 		/^MORPHIT_INDEXER_RPC_ENDPOINTS=/m.test(idxTemplate)
 );
-// cp661: first-online must NOT SOURCE indexer.env with `.` — sourcing RUNS it as a
+// first-online must NOT SOURCE indexer.env with `.` — sourcing RUNS it as a
 // shell script, so an unquoted value with spaces (valid for systemd's EnvironmentFile,
 // e.g. a marketplace name) returns non-zero and, under this script's `set -e`, aborts
 // $(rpc_endpoints) before the fallback → check_online got ZERO endpoints and reported
@@ -365,7 +456,7 @@ check(
 	!/\.[ \t]+["']?\$\{INDEXER_ENV\}/.test(src) &&
 		/sed -n [^\n]*MORPHIT_INDEXER_RPC_ENDPOINTS=/.test(src)
 );
-// cp661: the two env files first-online DOES need loaded whole (its own config +
+// the two env files first-online DOES need loaded whole (its own config +
 // relay.env for the register step) must be sourced with errexit OFF — a single
 // unquoted spaced value would otherwise EXECUTE under `.` and, with `set -e`, abort
 // (killing the script at the config read, or silently skipping registration). Assert
@@ -379,7 +470,7 @@ check(
 		srcLines.length >= 1 && srcLines.every((l) => /set \+e/.test(l))
 	);
 }
-// cp661: the auto-register step must feed register the vars it reads from the
+// the auto-register step must feed register the vars it reads from the
 // ENVIRONMENT — including MORPHIT_INSTANCE_ORIGIN, which lives ONLY in
 // morphit.config.env (relay.env doesn't carry it; the old code sourced relay.env and
 // register failed on the missing var no matter the relay balance). Assert it reads the

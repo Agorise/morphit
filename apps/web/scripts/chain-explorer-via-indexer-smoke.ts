@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the block-explorer's block + transaction reads go through the
- * indexer, not direct browser RPC. Anchor cp296.
+ * indexer, not direct browser RPC. Anchor.
  *
  * PRIVACY INVARIANT (priority #1). The explorer's block and tx pages used
  * to call Blurt `get_block` / `get_transaction` straight from the browser,
- * leaking the user's IP and which block/tx they inspected. cp296 routes
+ * leaking the user's IP and which block/tx they inspected. A later change routes
  * both through `/v1/chain/block/:num` and `/v1/chain/tx/:id` on the
  * operator's own indexer (same-origin), siblings of the balance/account/
  * history proxies. With the account-page migration (separate smoke), the
@@ -57,7 +57,7 @@ const checks: readonly Check[] = [
 			const s = read(P.main);
 			return (
 				/import \{ chainExplorerRoute \}/.test(s) &&
-				/chainApp\.route\('\/', chainExplorerRoute\(blurt, db\)\)/.test(s) &&
+				/chainApp\.route\('\/', chainExplorerRoute\(blurt, (?:api)?[dD]b\)\)/.test(s) &&
 				/app\.route\('\/v1\/chain', chainApp\)/.test(s)
 			);
 		}
@@ -106,8 +106,8 @@ for (const c of checks) {
 
 // ── Tamper tests ──
 {
-	const mutated = read(P.main).replace(/\n\tchainApp\.route\('\/', chainExplorerRoute\(blurt, db\)\);/, '');
-	const stillOk = /chainApp\.route\('\/', chainExplorerRoute\(blurt, db\)\)/.test(mutated);
+	const mutated = read(P.main).replace(/\n\tchainApp\.route\('\/', chainExplorerRoute\(blurt, (?:api)?[dD]b\)\);/, '');
+	const stillOk = /chainApp\.route\('\/', chainExplorerRoute\(blurt, (?:api)?[dD]b\)\)/.test(mutated);
 	if (mutated === read(P.main)) {
 		console.error('  \u2717 tamper wiring error: could not drop the /v1/chain mount');
 		fail++;

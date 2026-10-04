@@ -12,8 +12,8 @@
  * only transcript snapshots and node_modules) for any
  * "gitea" / "Gitea" mention.
  *
- * Why a smoke and not a one-shot fix: a Claude session
- * that hasn't read Memory fact #16 might re-introduce
+ * Why a smoke and not a one-shot fix: a contributor
+ * who does not know the rule might re-introduce
  * "Gitea" while writing a release blurb, an integration-
  * test plan, or a CI doc.  The smoke fails fast at CI
  * time so the drift is caught before tarball.
@@ -23,7 +23,7 @@
  * legitimately needs to mention Gitea (e.g. a
  * comparison-with-other-forges doc), it can be added to
  * `ALLOW_LIST` below with an explanatory comment.  As of
- * Part 102 the allow-list is empty.
+ * the allow-list is empty.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -40,21 +40,15 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 // which trips a substring match on "gitea".  The registration
 // is the smoke's own identity, not a project mention of Gitea.
 //
-// `TARBALL.md` and `docs/REVISIT-LIST.md` are allow-listed
-// because they are META-DOCUMENTATION about the policy — they
-// explain what was changed FROM (Gitea) and TO (Forgejo) in
-// past parts.  Erasing the historical context would make future
-// sessions unable to reconstruct why entries reference "Forgejo
-// cleanup."  These files describe past Gitea mentions in the
-// context of fixing them; that's the right place for the word
-// to appear.
+// `private/` (the maintainer's private handoff: gitignored, never
+// packed, absent from public clones) is not scanned.
 //
 // `MORPHIT-BRAG-LIST.md` is NOT allow-listed — the brag list
 // is public-facing marketing and must use "Forgejo" cleanly,
 // even when describing past fixes.  If a "Gitea" mention
 // appears there, it's a real bug to fix.
 //
-// v1.9.6 (the maintainer) — gitea.com is now a legitimate THIRD-PARTY release
+// v1.9.6 — gitea.com is now a legitimate THIRD-PARTY release
 // MIRROR (like GitHub / GitLab / Codeberg).  Naming that mirror is
 // NOT a policy violation — the policy is about never mis-naming OUR
 // host (git.agorise.net = Forgejo).  Two allowances encode this:
@@ -67,8 +61,6 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 //      about our host (the Forgejo glyph there is keyed `forgejo:`).
 const ALLOW_LIST: ReadonlySet<string> = new Set([
 	'scripts/run-smokes.sh',
-	'TARBALL.md',
-	'docs/REVISIT-LIST.md',
 	'apps/web/src/lib/mirrorLogos.ts'
 ]);
 
@@ -96,7 +88,8 @@ const IGNORE_DIRS = new Set([
 	'.next',
 	'.git',
 	'__pycache__',
-	'transcripts'
+	'transcripts',
+	'private'
 ]);
 
 interface Hit {
@@ -174,12 +167,10 @@ const scenarios = [
 		ok: hits.length === 0
 	},
 	{
-		name: 'allow-list contains the documented self-references, meta-docs, and mirror-glyph data',
+		name: 'allow-list contains only the documented self-reference and mirror-glyph data',
 		ok:
-			ALLOW_LIST.size === 4 &&
+			ALLOW_LIST.size === 2 &&
 			ALLOW_LIST.has('scripts/run-smokes.sh') &&
-			ALLOW_LIST.has('TARBALL.md') &&
-			ALLOW_LIST.has('docs/REVISIT-LIST.md') &&
 			ALLOW_LIST.has('apps/web/src/lib/mirrorLogos.ts')
 	},
 	{

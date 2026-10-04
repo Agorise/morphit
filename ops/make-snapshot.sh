@@ -10,7 +10,8 @@
 # The output archive is what hidden-rpc v0.1.6's installer expects: a tar
 # containing a file named `block_log` (its place_block_log accepts
 # .tar.zst/.tar.gz/.tar/bare). sha256 + blurtd's own replay make the download
-# trustless, so it's safe to host anywhere (Forgejo).
+# trustless, so it's safe to host anywhere (Forgejo). The mirror repository's
+# README is ops/snapshot-repo-README.md.
 #
 #   sudo bash make-snapshot.sh
 #

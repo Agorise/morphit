@@ -1,6 +1,6 @@
 /**
- * Morphit indexer — what a PEER may put in this node's federation directory
- * (v1.20.0 fix wave, E7).
+ * Morphit indexer — what a PEER may put in this node's federation directory.
+ *
  *
  * The probe caches the name, tagline, contact link and alt addresses a peer's
  * own /v1/instance serves, and /v1/instances hands them to every browser that

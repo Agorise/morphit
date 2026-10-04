@@ -42,7 +42,7 @@ one.  Each takes ~2 minutes.
 > queries work as shown.  Operator-opt-in is by design
 > (audit finding NEW-9-8: keeps an attacker from timing
 > drain attempts against an unhardened instance via the
-> public health endpoint).  Surfaced Part 119
+> public health endpoint).  Surfaced
 > (Sally-operator finding So-3).
 
 ### Morning checks
@@ -360,7 +360,7 @@ configured differently than yours, and one or more of
 their explorers is currently slow/down.  Their
 verifier returns `pending_external` (quorum not met)
 rather than committing to a verdict based on one
-explorer.  This is the **Part 109 quorum gate working
+explorer.  This is the **Quorum gate working
 as designed** — not a defect.
 
 What they should do:
@@ -377,7 +377,7 @@ configuration, not your treasury.
 ### "The brag list says X but I'm observing Y"
 
 The brag list is operator-facing marketing claims.
-Per Memory #15, every entry must be verifiable in
+Every entry must be verifiable in
 code or honestly disclosed as backlog.  If you find a
 mismatch in production, that's a real bug — file an
 issue.
@@ -422,7 +422,7 @@ land in `journalctl -u morphit-backup.service` alongside
 your other Morphit logs.
 
 If you skipped the wizard's backup step or your install
-predates Part 32, re-run `morphit-ops init` and answer
+predates the backup step, re-run `morphit-ops init` and answer
 **Yes** to the backup prompt — your existing config files
 won't be touched if you answer **No** at the "write
 configuration" review prompt, only the backup section
@@ -439,9 +439,9 @@ Don't skip backups.
 
 ---
 
-## Memory rule
+## Standing rule
 
-**Per Memory #5: this file must be updated in the
-same turn as any change that adds new monitoring
+**Per the keep-docs-current rule: this file must be updated in the
+same change as any change that adds new monitoring
 surfaces, alerts, or operational concerns for the
 post-launch period.**

@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G3 (wave 4) — a steady or bursty flood of fake BTC/XMR
+ * (wave 4) — a steady or bursty flood of fake BTC/XMR
  * orders must not starve a real payer's fee re-check.
  *
  * Mirrors the verifier's harness (scratchpad V2/g3-flood.ts) against the REAL
@@ -94,7 +94,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('G3 — re-check survives a fake-order flo
 				const perms = Array.from({ length: n }, () => `fake-${fakes++}`);
 				await insertOrders('spammer', perms, clock - 1000, 'missing');
 			}
+			// maybeRun only starts the pass (it runs in the background); wait for it.
 			await rc.maybeRun();
+			await rc.whenIdle();
 			clock += PASS_MS;
 		}
 		return { checks, confirmed };

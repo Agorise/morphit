@@ -1,5 +1,5 @@
 /**
- * Morphit — treasury auto-re-pin decision logic (cp372).
+ * Morphit — treasury auto-re-pin decision logic.
  *
  * Model A keeps the *enforcement* floor on a chain-pinned amount
  * (deterministic across the federation, no price read in the
@@ -21,13 +21,18 @@
  * this, and broadcast the new release op iff `shouldRepin`.
  *
  * Failsafes (all enforced here, the deterministic layer):
+ *   - Prices come from agreedPrice(): at least TWO independent sources
+ *     within REPIN_MAX_SOURCE_SPREAD of each other, else no price.
  *   - A missing / non-finite / non-positive price for an asset
  *     means that asset is SKIPPED entirely — never re-pinned from
  *     a bad price.  A feed outage can never move the pin.
- *   - A freshly-computed amount that exceeds the same sanity
- *     ceiling the release validator enforces is REJECTED — a
- *     wildly wrong price (e.g. a $0.01 BTC tick) can never pin an
- *     absurd amount.  The old pin is kept.
+ *   - A freshly-computed amount above a REALISTIC ceiling (BTC ≤ 1e6
+ *     sats, XMR ≤ 1 XMR, BLURT ≤ 100,000 — each far above today's fee,
+ *     far below what the release validator would still accept) is
+ *     REJECTED; the old pin is kept.
+ *   - One re-pin moves an existing pin by at most ×2 or ÷2; a larger
+ *     move is skipped and left to the operator (a real market move that
+ *     large is rare; a broken price is not).
  *   - Re-pin fires only when drift exceeds the threshold, which
  *     sits INSIDE the verifier's tolerance band — so quotes are
  *     never rejected mid-drift, and the chain isn't spammed with
@@ -46,13 +51,50 @@ import {
 } from '@morphit/asset-registry';
 import type { ReleaseTreasuryBlock } from '@morphit/release-schema';
 
-/** Sanity ceilings — mirror the release validator's bounds so a
- *  computed amount that would be rejected on write is never even
- *  proposed.  (releaseValidate.ts: BTC_SATOSHIS_MAX,
- *  XMR_PICONERO_MAX_LEN ⇒ 1e16, BLURT_BASE_MAX.) */
-const BTC_SATOSHIS_MAX = 100_000_000_000;
-const XMR_PICONERO_MAX = 9_999_999_999_999_999n; // 16 nines, matches len ≤ 16
-const BLURT_BASE_MAX = 10_000_000;
+/** Realistic ceilings for a re-pinned listing fee (LISTING_FEE_USD is a
+ *  fraction of a dollar): 1e6 sats is that fee at a BTC price of $25,
+ *  1 XMR at an XMR price of $0.25, 100,000 BLURT at a BLURT price far
+ *  below any it has traded at. Well inside the release validator's
+ *  own bounds (releaseValidate.ts), which only stop absurd values. */
+export const REPIN_BTC_SATOSHIS_MAX = 1_000_000;
+export const REPIN_XMR_PICONERO_MAX = 1_000_000_000_000n;
+export const REPIN_BLURT_BASE_MAX = 100_000;
+const BTC_SATOSHIS_MAX = REPIN_BTC_SATOSHIS_MAX;
+const XMR_PICONERO_MAX = REPIN_XMR_PICONERO_MAX;
+const BLURT_BASE_MAX = REPIN_BLURT_BASE_MAX;
+
+/** One re-pin moves an existing pin by at most this factor either way. */
+export const REPIN_MAX_MOVE = 2;
+
+/** Independent price sources must agree within this fraction. */
+export const REPIN_MAX_SOURCE_SPREAD = 0.05;
+
+/**
+ * The price at least TWO independent sources agree on: the median of the
+ * quotes within `maxSpread` of the median of all usable quotes, when there
+ * are two or more such quotes; else null (no re-pin from that asset). PURE.
+ */
+export function agreedPrice(
+	quotes: ReadonlyArray<number | null | undefined>,
+	maxSpread: number = REPIN_MAX_SOURCE_SPREAD
+): number | null {
+	const ok = quotes
+		.filter((q): q is number => typeof q === 'number' && Number.isFinite(q) && q > 0)
+		.sort((a, b) => a - b);
+	if (ok.length < 2) return null;
+	const median = (xs: readonly number[]): number => {
+		const m = Math.floor(xs.length / 2);
+		return xs.length % 2 === 1 ? xs[m]! : (xs[m - 1]! + xs[m]!) / 2;
+	};
+	const mid = median(ok);
+	const close = ok.filter((q) => Math.abs(q - mid) / mid <= maxSpread);
+	return close.length >= 2 ? median(close) : null;
+}
+
+/** True when `fresh` is within ×/÷REPIN_MAX_MOVE of `pinned`. */
+function boundedMove(fresh: number, pinned: number): boolean {
+	return fresh <= pinned * REPIN_MAX_MOVE && fresh * REPIN_MAX_MOVE >= pinned;
+}
 
 /** Currently chain-pinned fee amounts (whatever the latest release
  *  op declared).  Any asset may be absent (null) — e.g. an
@@ -141,16 +183,34 @@ function decideBtc(
 		return { computed: null, drift: null, due: false, note: 'btc: canonical amount uncomputable' };
 	}
 	if (fresh > BTC_SATOSHIS_MAX) {
-		// A wildly-wrong (too-low) price would demand an absurd
+		// A wildly-wrong (too-low) price would demand an unrealistic
 		// satoshi amount; refuse to propose it.
-		return { computed: null, drift: null, due: false, note: 'btc: computed amount over sanity ceiling — skipped' };
+		return {
+			computed: null,
+			drift: null,
+			due: false,
+			note: 'btc: computed amount over sanity ceiling — skipped'
+		};
 	}
 	if (pinnedSats === null || pinnedSats <= 0) {
 		// Nothing pinned yet — propose the canonical amount but only
 		// flag "due" so a first pin happens.
-		return { computed: fresh, drift: null, due: true, note: 'btc: no current pin — proposing canonical' };
+		return {
+			computed: fresh,
+			drift: null,
+			due: true,
+			note: 'btc: no current pin — proposing canonical'
+		};
 	}
 	const drift = driftFrac((pinnedSats / 1e8) * btcUsd, LISTING_FEE_USD.btc);
+	if (drift > threshold && !boundedMove(fresh, pinnedSats)) {
+		return {
+			computed: null,
+			drift,
+			due: false,
+			note: `btc: ${pinnedSats} → ${fresh} sats is more than ×${REPIN_MAX_MOVE} in one re-pin — skipped (re-pin by hand if the market really moved)`
+		};
+	}
 	const due = drift > threshold;
 	return {
 		computed: fresh,
@@ -173,13 +233,31 @@ function decideXmr(
 		return { computed: null, drift: null, due: false, note: 'xmr: canonical amount uncomputable' };
 	}
 	if (fresh > XMR_PICONERO_MAX) {
-		return { computed: null, drift: null, due: false, note: 'xmr: computed amount over sanity ceiling — skipped' };
+		return {
+			computed: null,
+			drift: null,
+			due: false,
+			note: 'xmr: computed amount over sanity ceiling — skipped'
+		};
 	}
 	if (pinnedPiconero === null || pinnedPiconero <= 0n) {
-		return { computed: fresh, drift: null, due: true, note: 'xmr: no current pin — proposing canonical' };
+		return {
+			computed: fresh,
+			drift: null,
+			due: true,
+			note: 'xmr: no current pin — proposing canonical'
+		};
 	}
 	const pinnedUsdValue = (Number(pinnedPiconero) / 1e12) * xmrUsd;
 	const drift = driftFrac(pinnedUsdValue, LISTING_FEE_USD.xmr);
+	if (drift > threshold && !boundedMove(Number(fresh), Number(pinnedPiconero))) {
+		return {
+			computed: null,
+			drift,
+			due: false,
+			note: `xmr: ${pinnedPiconero} → ${fresh} piconero is more than ×${REPIN_MAX_MOVE} in one re-pin — skipped (re-pin by hand if the market really moved)`
+		};
+	}
 	const due = drift > threshold;
 	return {
 		computed: fresh,
@@ -199,15 +277,38 @@ function decideBlurt(
 	}
 	const fresh = listingFeeBlurtBase(blurtUsd);
 	if (fresh === null || fresh <= 0) {
-		return { computed: null, drift: null, due: false, note: 'blurt: canonical amount uncomputable' };
+		return {
+			computed: null,
+			drift: null,
+			due: false,
+			note: 'blurt: canonical amount uncomputable'
+		};
 	}
 	if (fresh > BLURT_BASE_MAX) {
-		return { computed: null, drift: null, due: false, note: 'blurt: computed amount over sanity ceiling — skipped' };
+		return {
+			computed: null,
+			drift: null,
+			due: false,
+			note: 'blurt: computed amount over sanity ceiling — skipped'
+		};
 	}
 	if (pinnedBase === null || pinnedBase <= 0) {
-		return { computed: fresh, drift: null, due: true, note: 'blurt: no current pin — proposing canonical' };
+		return {
+			computed: fresh,
+			drift: null,
+			due: true,
+			note: 'blurt: no current pin — proposing canonical'
+		};
 	}
 	const drift = driftFrac(pinnedBase * blurtUsd, LISTING_FEE_USD.blurt);
+	if (drift > threshold && !boundedMove(fresh, pinnedBase)) {
+		return {
+			computed: null,
+			drift,
+			due: false,
+			note: `blurt: ${pinnedBase} → ${fresh} BLURT is more than ×${REPIN_MAX_MOVE} in one re-pin — skipped (re-pin by hand if the market really moved)`
+		};
+	}
 	const due = drift > threshold;
 	return {
 		computed: fresh,
@@ -267,7 +368,11 @@ export function buildRepinnedTreasury(
 	const xmr =
 		addresses.xmrAddress !== null && xmrPico !== null && xmrPico > 0n
 			? xmrPrimary !== null
-				? { address: addresses.xmrAddress, piconero: xmrPico.toString(), primary_address: xmrPrimary }
+				? {
+						address: addresses.xmrAddress,
+						piconero: xmrPico.toString(),
+						primary_address: xmrPrimary
+					}
 				: { address: addresses.xmrAddress, piconero: xmrPico.toString() }
 			: null;
 

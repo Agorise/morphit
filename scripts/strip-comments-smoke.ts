@@ -1,9 +1,9 @@
 /**
- * strip-comments self-test smoke (cp153).
+ * strip-comments self-test smoke.
  *
  * The shared helper at `scripts/lib/strip-comments.ts` is
- * imported by `scripts/spawn-dist-prebuild-coverage-smoke.ts`
- * (cp142).  This smoke is its dedicated regression test —
+ * imported by `scripts/spawn-dist-prebuild-coverage-smoke.ts`.
+ * This smoke is its dedicated regression test —
  * if `stripComments` ever silently drifts (e.g. an order-of-
  * passes refactor breaks the handling of block-and-line
  * comment interleaving), this smoke catches it before the

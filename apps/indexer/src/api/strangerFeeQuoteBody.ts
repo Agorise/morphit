@@ -5,9 +5,8 @@
  * be unit-tested without spinning up Hono.  The route is now a
  * thin wrapper around this and account-name validation.
  *
- * Lives in its own module because tsx-style smokes can't load
- * modules that import `hono` (the package isn't installed in the
- * sandbox).
+ * Lives in its own module so smokes and unit tests can load it without
+ * the HTTP framework (`hono`).
  */
 
 import {

@@ -16,14 +16,20 @@
  *
  *   POST /v1/account/invite       → issue a short-lived invite token
  *                                    or surface an altcha challenge
- *   POST /v1/account/create       → broadcast the create_claimed_account
- *                                    op via the relay's active key (relay holds the active key; never a posting key)
+ *   POST /v1/account/create       → broadcast an `account_create` op
+ *                                    (op 5) signed with the relay's active
+ *                                    key, paying the chain's account-creation
+ *                                    fee inline (Blurt disabled the
+ *                                    claimed-account ops at HF2); the relay
+ *                                    never holds a user key
  *   GET  /v1/account/availability → check whether a candidate username
  *                                    is structurally valid AND not
  *                                    already on-chain (best-effort)
- *   GET  /v1/health               → liveness/readiness probe; verbose
- *                                    fields only when verboseHealth=true
- *                                    in the operator's config
+ *   GET  /v1/health               → liveness/readiness probe; the
+ *                                    operator block only for local callers
+ *                                    (X-Morphit-Local-Health: 1, no
+ *                                    forwarding headers) or when the
+ *                                    operator set MORPHIT_RELAY_VERBOSE_HEALTH
  *
  * **Middleware-level rejections can preempt any endpoint.**  Origin
  * enforcement, content-type validation, and chunked-transfer rejection
@@ -34,8 +40,8 @@
  * includes the full middleware/internal rejection shapes alongside
  * the domain-success shapes.
  *
- * Part 122 cp6 — initial package landing.
- * Part 122 cp7 — deep-deep audit closed seven contract gaps:
+ * initial package landing.
+ * deep audit closed seven contract gaps:
  *   F16 ghost code `invite_required` removed (relay never emits it)
  *   F17 chunked_unsupported (security middleware) added
  *   F18 malformed_request (content-type + availability + security) added
@@ -120,6 +126,10 @@ export type RelayErrorCode =
 	/** Origin header present but not in operator's allowlist.
 	 *  (origin_enforcement.ts) */
 	| 'origin_not_allowed'
+	// ─── /v1/push/subscribe (apps/relay/src/api/push.ts) ───
+	/** The subscription endpoint is not an https URL on a browser push
+	 *  service (or an operator-added host). HTTP 400, `status: 'bad_request'`. */
+	| 'push_endpoint_not_allowed'
 	// ─── Catch-all (apps/relay/src/main.ts onError) ───
 	/** Unhandled exception in the handler.  Returned with HTTP 500
 	 *  and `status: 'error'`.  Stack traces never leak over the
@@ -270,26 +280,50 @@ export type RelayAvailabilityResponse =
 
 // ─── /v1/health ────────────────────────────────────────────────────
 
-/** Minimal health body returned when the operator has NOT enabled
- *  `verboseHealth`.  This is the production default — operators
- *  opt in to verbose for monitoring dashboards. */
+/** What every caller gets from `GET /v1/health`. */
 export interface RelayHealthMinimal {
 	readonly status: 'ok';
+	/** At least one RPC endpoint is out of cooldown. */
+	readonly rpc_ok: boolean;
+	/** The relay reaches the chain over hidden services only. */
+	readonly hidden_only: boolean;
 }
 
-/** Verbose health body returned when `verboseHealth: true` is set in
- *  the relay config.  All extended fields are optional on the wire
- *  because individual fields may be absent depending on the relay's
- *  initialization state (e.g. signup_stats is absent until the
- *  ceiling has been wired in). */
+/** One RPC endpoint in the operator block. */
+export interface RelayRpcEndpointHealth {
+	readonly url: string;
+	readonly state: 'closed' | 'half_open' | 'open';
+	readonly consecutive_failures: number;
+	readonly cooldown_remaining_ms: number;
+	readonly ewma_latency_ms: number | null;
+	readonly last_success_age_s: number | null;
+}
+
+/** The body with the operator block: served to local callers
+ *  (X-Morphit-Local-Health: 1 and no forwarding headers — the indexer's
+ *  signup-anomaly probe, `morphit-ops health`), or to everyone when the
+ *  operator set MORPHIT_RELAY_VERBOSE_HEALTH=true. Optional fields are
+ *  absent until the relay has the data (first balance poll, ceiling and
+ *  queue wiring). */
 export interface RelayHealthVerbose extends RelayHealthMinimal {
-	readonly version?: string;
-	readonly uptime_sec?: number;
-	readonly node_version?: string;
-	readonly blurt_balance?: string | number;
-	readonly pending_claimed_accounts?: number;
-	readonly last_refresh_unix?: number;
+	/** RPC endpoints out of cooldown / configured. */
+	readonly rpc_endpoints_healthy: number;
+	readonly rpc_endpoints_total: number;
+	readonly version: string;
+	readonly uptime_sec: number;
+	readonly node_version: string;
+	/** Web Push can be sent (all three VAPID values set, not hidden-only). */
+	readonly web_push: boolean;
+	/** Liquid balance string ("123.456 BLURT") or 'unknown' before the first poll. */
+	readonly blurt_balance: string;
+	readonly last_refresh_unix: number;
+	/** The chain's live account-creation fee, when the last poll could read it. */
+	readonly account_creation_fee_blurt?: number;
+	/** No trustworthy balance (never polled, account missing, or too old). */
 	readonly stale?: true;
+	readonly rpc_endpoints: readonly RelayRpcEndpointHealth[];
+	/** Pending relay payments: unsettled, and escalated to the operator. */
+	readonly transfer_queue?: { readonly unsettled: number; readonly escalated: number };
 	readonly signup_stats?: RelaySignupStats;
 }
 

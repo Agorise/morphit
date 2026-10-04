@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * onion-location-header — cp700.
+ * onion-location-header.
  *
  * Brave (and other header-only Tor browsers) show the ".onion available" pill
  * ONLY when the clearnet site sends the Onion-Location HTTP HEADER. Morphit

@@ -12,7 +12,7 @@
  *      (broadcastTransport.submitSignedTransaction → POST /v1/broadcast),
  *      and NOT directly to a Blurt node — there is no fallback, because a
  *      direct browser→node broadcast would leak the user's IP with their
- *      action (cp344, cp410)
+ *      action
  *
  * The net effect: dblurt's well-tested crypto is used as a library, chain
  * access is relayed through the operator's own indexer (no cross-origin RPC,
@@ -68,8 +68,8 @@ function rawToPrivateKey(raw: Uint8Array): PrivateKey {
  *  Client INSTANCE.
  *
  *  Morphit's local `BlurtClient` wrapper (in `./client.ts`) is a
- *  separate class that uses our endpoint rotator for transport;
- *  it does NOT expose dblurt's broadcast helper.  Since
+ *  separate class for reads; it does NOT expose dblurt's broadcast
+ *  helper.  Since
  *  `broadcast.sign` is PURE CRYPTO with no network round-trip
  *  (verified by unit-test against an unreachable endpoint), we
  *  construct a throwaway dblurt Client whose endpoints are never
@@ -95,7 +95,7 @@ function signTransactionWithKey(
 	if (SIGNER_BACKEND === 'noble') {
 		// ADR-0046 opt-in path.  Reuse dblurt's serializer + chain-id binding to
 		// compute the EXACT same digest the dblurt path would sign, then run the
-		// ECDSA with @noble/secp256k1 instead of dblurt's elliptic-based signer.
+		// ECDSA with Morphit's own @noble/secp256k1 call instead of dblurt's signer.
 		// The chain verifies by public-key recovery, so this is accepted as long
 		// as the (canonical) signature recovers to the signing key — proven in
 		// scripts/blurt-noble-signer-recovery-proof.ts and the tx-level
@@ -114,7 +114,7 @@ function signTransactionWithKey(
 		signatures.push(sigHex);
 		return { ...tx, signatures } as SignedTransaction;
 	}
-	// Default path (unchanged): dblurt's well-tested elliptic-based signer.
+	// Default path: dblurt's own signer (itself @noble/secp256k1 since 0.17).
 	return getSigningClient().broadcast.sign(tx, key);
 }
 
@@ -143,9 +143,9 @@ async function getRefBlockInfo(): Promise<{
 	ref_block_prefix: number;
 	expiration: string;
 }> {
-	// cp344: read the chain head SAME-ORIGIN (indexer proxy, direct-RPC
-	// fallback) so building a broadcast no longer depends on a third-party
-	// RPC node being browser-reachable — the same node a broadcast hits.
+	// Read the chain head SAME-ORIGIN (the indexer proxy; there is no
+	// direct-RPC fallback), so building a broadcast never depends on a
+	// third-party RPC node being browser-reachable.
 	const props = await fetchDynamicGlobalProperties();
 
 	// Graphene-lineage chains (Steem, Hive, Blurt) derive ref_block_num
@@ -285,7 +285,7 @@ export async function prepareUnsignedTransferToVesting(
  *  async, no key needed. Requires ACTIVE authority.
  *
  *  Power-DOWN unstakes VESTS back to liquid BLURT over the chain's
- *  4-week / 13-weekly-payment schedule (the chain enforces the schedule;
+ *  4-week schedule, paid out weekly (the chain enforces the schedule;
  *  this op just STARTS it — the UI must say so honestly, never imply
  *  the funds arrive instantly). `vestingShares` is a 6-decimal VESTS
  *  string (NOT BLURT): the caller converts the user's BP figure via
@@ -349,7 +349,7 @@ export async function prepareUnsignedOrderWithFee(
 
 	const { ref_block_num, ref_block_prefix, expiration } = await getRefBlockInfo();
 
-	// cp407 — this order op is ACTIVE-level, not posting. The sibling `transfer`
+	// This order op is ACTIVE-level, not posting. The sibling `transfer`
 	// (the listing fee) below needs active authority, and Blurt (Graphene)
 	// rejects any tx that mixes posting-level and active-level ops
 	// (`required_active.size() == 0` assertion). So the whole tx is active-level:
@@ -359,7 +359,7 @@ export async function prepareUnsignedOrderWithFee(
 	// unchanged. (Waived/BTC/XMR orders carry no transfer, so they stay
 	// posting-level via the single-op broadcastCustomJson path.)
 	//
-	// cp408 — the fee is now paid as ONE OR TWO sibling transfers (the
+	// The fee is paid as ONE OR TWO sibling transfers (the
 	// federation revenue split, computed by `feeTransfersFor`): 90% to the
 	// instance owner + 10% to the canonical treasury, or a single 100% transfer
 	// when the recipient IS the canonical treasury. Every leg shares the same
@@ -403,10 +403,7 @@ export async function prepareUnsignedOrderWithFee(
 	};
 }
 
-/** Phase F.5 audit fix (F-18) — sign an order-with-fee
- *  transaction with both posting and active keys.  Pure, sync.
- *  Active key lifetime is the duration of this call. */
-/** cp407 — sign the order-with-fee transaction. Both the order custom_json
+/** Sign the order-with-fee transaction. Both the order custom_json
  *  and the fee transfer are now ACTIVE-level (Blurt forbids mixing posting +
  *  active in one tx), so the tx takes exactly ONE active signature — adding a
  *  posting signature would be an irrelevant/extra sig the chain can reject.
@@ -427,7 +424,7 @@ export function signOrderWithFeeWithKey(
 export async function broadcastSignedTransaction(
 	signed: SignedTransaction
 ): Promise<{ block_num: number; trx_id: string }> {
-	// cp344/cp410: same-origin broadcast proxy, and nothing else. See broadcastTransport.ts.
+	// Same-origin broadcast proxy, and nothing else. See broadcastTransport.ts.
 	return submitSignedTransaction(signed);
 }
 
@@ -532,8 +529,6 @@ async function signCustomJsonTx(
 	// network, no key-exfiltration opportunity.
 	const postingKey = rawToPrivateKey(live.posting.privateKey);
 	const signed: SignedTransaction = signTransactionWithKey(tx, postingKey, live.posting.privateKey);
-
-	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
 	return signed;
 }
 
@@ -550,7 +545,7 @@ export async function broadcastCustomJson(
 	payload: unknown,
 	blurtAccount: string
 ): Promise<{ block_num: number; trx_id: string }> {
-	// cp344: broadcast SAME-ORIGIN through the indexer proxy — no cross-origin
+	// Broadcast SAME-ORIGIN through the indexer proxy — no cross-origin
 	// RPC connection, no IP leak to third-party nodes. See broadcastTransport.ts.
 	const signed = await signCustomJsonTx(live, id, payload, blurtAccount);
 	return submitSignedTransaction(signed);
@@ -587,7 +582,7 @@ export const MORPHIT_OP_IDS = OP_IDS;
 /**
  * Broadcast a `claim_reward_balance` op signed by the user's posting key,
  * sweeping the account's unclaimed author/curation rewards into its usable
- * (liquid BLURT + powered-up BP) balances. cp396.
+ * (liquid BLURT + powered-up BP) balances.
  *
  * Same-origin via the indexer broadcast proxy (claim_reward_balance is on
  * its op whitelist). No direct-RPC fallback; the behaviour is inherited from

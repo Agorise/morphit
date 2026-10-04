@@ -1,7 +1,7 @@
 /**
- * ops-cli register-diagnostics smoke (cp178).
+ * ops-cli register-diagnostics smoke.
  *
- * Covers the operator-UX fixes shipped in cp178:
+ * Covers the operator-UX fixes shipped:
  *   1. classifyChainError maps representative error strings to the
  *      right kind (a fee / insufficient-balance shortfall — and any
  *      leftover Steem-lineage "mana"/"rc" daemon wording — → the
@@ -80,7 +80,10 @@ for (const [msg, want] of classifyCases) {
 }
 
 // ─── 2. guidance text ───
-function capture(raw: string, ctxOverrides: Partial<Parameters<typeof printChainErrorHelp>[1]> = {}): string {
+function capture(
+	raw: string,
+	ctxOverrides: Partial<Parameters<typeof printChainErrorHelp>[1]> = {}
+): string {
 	const lines: string[] = [];
 	printChainErrorHelp(
 		raw,
@@ -107,7 +110,8 @@ scenarios.push({
 		// model ("do NOT power up"), so we don't forbid the word "power" — we
 		// forbid the WRONG framings and require the disclaimer.
 		if (/resource credit|\(RC\)| RC /i.test(t)) return 'must not say RC / resource credits';
-		if (/regenerate|recharge/i.test(t)) return 'must not tell operator to wait for mana to recharge';
+		if (/regenerate|recharge/i.test(t))
+			return 'must not tell operator to wait for mana to recharge';
 		if (!/do NOT power|does NOT help/i.test(t))
 			return 'should clarify that powering up is NOT the fix';
 		return null;
@@ -150,7 +154,8 @@ scenarios.push({
 	name: 'invalid_origin explains loopback/private origins are rejected, points at edit',
 	run() {
 		const t = capture('origin_loopback');
-		if (!/loopback|private|localhost|127\.0\.0\.1|LAN/i.test(t)) return 'should explain the private/loopback rule';
+		if (!/loopback|private|localhost|127\.0\.0\.1|LAN/i.test(t))
+			return 'should explain the private/loopback rule';
 		if (!/edit/.test(t)) return 'should point at `morphit-ops edit`';
 		return null;
 	}
@@ -244,7 +249,7 @@ scenarios.push({
 	}
 });
 
-// ─── 4. cp182 — broadcast output hygiene ───
+// ─── 4. broadcast output hygiene ───
 // Two operator-visible bugs in the broadcast path:
 //   (a) "Block: undefined" — code printed result.block_num, but
 //       blurtd's async broadcast_transaction returns no block (the
@@ -254,7 +259,7 @@ scenarios.push({
 //       banner, because dblurt only fails over on timeout-class
 //       errors and OUR loop does the real failover on a 429.
 // These check the source-level invariants that fix both (the live
-// broadcast itself needs a chain, which the sandbox can't do).
+// broadcast itself needs a chain, which a test run does not have).
 import { readFileSync as _readFileSync } from 'node:fs';
 import { fileURLToPath as _fileURLToPath } from 'node:url';
 import { dirname as _dirname, join as _join } from 'node:path';
@@ -272,7 +277,8 @@ scenarios.push({
 		const reg = _read('register.ts');
 		const pm = _read('paymentMethod.ts');
 		if (!reg.includes('broadcastCustomJson(')) return 'register.ts must use broadcastCustomJson';
-		if (!pm.includes('broadcastCustomJson(')) return 'paymentMethod.ts must use broadcastCustomJson';
+		if (!pm.includes('broadcastCustomJson('))
+			return 'paymentMethod.ts must use broadcastCustomJson';
 		if (/async function broadcastRegister/.test(reg))
 			return 'register.ts must NOT keep a private broadcastRegister (use the shared helper)';
 		if (/async function broadcastPaymentMethod/.test(pm))
@@ -309,7 +315,7 @@ scenarios.push({
 	}
 });
 
-// cp182's "buffer dblurt's console chatter" scenario is retired: since D12 the
+// the "buffer dblurt's console chatter" scenario is retired: since D12 the
 // broadcast no longer uses dblurt's network Client at all — dblurt only SIGNS
 // (cryptoUtils.signTransaction), and the transport is ops-cli's own fetch via
 // lib/chainAccess.ts, which prints nothing. Routing, sign-once and the

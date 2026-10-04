@@ -2,7 +2,7 @@
  * @morphit/release-schema — shared `morphit_release_v1` op schema +
  * validator.
  *
- * cp170 extracted this from `apps/web/src/lib/net/{release,
+ * A later change extracted this from `apps/web/src/lib/net/{release,
  * releaseValidate}.ts` into a standalone package so that BOTH the
  * frontend (apps/web) and the indexer (apps/indexer — its release
  * handler's parity test + its release-build / release-validator
@@ -11,7 +11,7 @@
  *
  * Why the move: the indexer's release.test.ts proves byte-for-byte
  * parity between the indexer handler and this frontend validator
- * (Part 106/107 invariant).  When that test (run under vitest)
+ * (invariant).  When that test (run under vitest)
  * transformed the apps/web source file, vite auto-discovered
  * apps/web/tsconfig.json — which `extends ./.svelte-kit/tsconfig.json`,
  * a SvelteKit-generated file absent in the CI smoke job.  That broke
@@ -52,6 +52,7 @@ export { checkPinnedKeyInAuthority } from './releaseTrustAnchor.js';
 export {
 	parseAccountXpub,
 	deriveBtcFeeAddress,
+	isBtcMainnetAddress,
 	deriveChildXpub,
 	p2wpkhAddress,
 	BTC_FEE_MAX_INDEX

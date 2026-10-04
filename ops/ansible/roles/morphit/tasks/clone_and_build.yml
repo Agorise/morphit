@@ -1,10 +1,19 @@
 # Clone the repo + npm install + build.
+#
+# The install tree stays ROOT-OWNED, from the first file to the last: root
+# units execute code from it (the indexer's tsx, ops/scripts/*, `npm exec
+# morphit-ops`) and source config from it, so any other owner could turn a
+# write into root.  npm runs as root WITH --ignore-scripts: no dependency's
+# install script runs at all (the two the Matrix bot needs are fetched below and
+# checked against pinned SHA-256 sums).  Running npm as an unprivileged user
+# would not help here: the service user is in the docker group on a
+# containerized-DB box (root-equivalent), and root runs the built output anyway.
 ---
 # Silence npm's noise for EVERY npm/npx call on this box (all users) — not just
 # the workspace install below. The per-command env we set on the workspace
 # install doesn't cover the MCP-deploy `npm install` or `npx morphit-ops`, so the
-# "New major version of npm available!" update-notifier still leaked (the maintainer:
-# should be gone on fresh installs AND upgrades). Writing the GLOBAL npmrc fixes
+# "New major version of npm available!" update-notifier still leaked (it
+# must be gone on fresh installs AND upgrades). Writing the GLOBAL npmrc fixes
 # it system-wide, including future `morphit-ops upgrade` runs.
 - name: Silence npm update-notifier + fund globally (all npm/npx calls)
   ansible.builtin.command:
@@ -18,7 +27,7 @@
 # `npm config set --location=global` leaves the global npmrc world-writable
 # (npm chmods it 0666 after saving). Any local account could then add
 # `script-shell=` / `node-options=` and run code as root the next time root runs
-# npm (v1.19.0 deep-deep). Make it root-owned 0644 again.
+# npm. Make it root-owned 0644 again.
 - name: Find the global npmrc
   ansible.builtin.command:
     cmd: npm config get globalconfig
@@ -43,17 +52,15 @@
     update: true
     force: false
   become: true
-  become_user: "{{ morphit_service_user }}"
   when: (morphit_local_source_path | default('')) | length == 0
-  # The repo is owned by the service user so npm runs as it.
 
 
 - name: Ensure the repo dir exists (local install — copying the downloaded release)
   ansible.builtin.file:
     path: "{{ morphit_repo_path }}"
     state: directory
-    owner: "{{ morphit_service_user }}"
-    group: "{{ morphit_service_group }}"
+    owner: root
+    group: root
     mode: "0755"
   when:
     - (morphit_local_source_path | default('')) | length > 0
@@ -85,12 +92,13 @@
   # own build dirs (which the source tree doesn't even carry — build-offline-bundle.sh
   # never builds before packaging), and every package's dist/ survives intact.
   # `--exclude=node_modules` (online only) has no wildcard, so it still drops every
-  # node_modules (root + nested) for the npm rebuild.
+  # node_modules (root + nested) for the npm rebuild. ./private (the maintainer's
+  # private handoff, gitignored) never belongs on a server.
   ansible.builtin.shell:
     cmd: >-
       tar --no-wildcards-match-slash -C {{ morphit_local_source_path | quote }}
       {{ '' if (morphit_source_bundle_marker.stat.exists | default(false)) else '--exclude=node_modules' }}
-      --exclude=./.git --exclude=./translator-output
+      --exclude=./.git --exclude=./translator-output --exclude=./private
       --exclude=./apps/*/.svelte-kit
       --exclude=./apps/*/dist --exclude=./packages/*/dist
       -cf - . | tar -C {{ morphit_repo_path | quote }} -xf -
@@ -99,12 +107,16 @@
     - morphit_local_source_path != morphit_repo_path
   changed_when: true
 
-- name: Ensure repo ownership is correct
+- name: Keep the install tree root-owned and writable by root only
+  # Also takes back a tree an earlier version of this role handed to the
+  # service user.  (The env files the services read are put back to
+  # root:{{ morphit_service_group }} 0640 by the morphit role's template tasks.)
   ansible.builtin.file:
     path: "{{ morphit_repo_path }}"
     state: directory
-    owner: "{{ morphit_service_user }}"
-    group: "{{ morphit_service_group }}"
+    owner: root
+    group: root
+    mode: "go-w"
     recurse: true
 
 - name: Detect a bundled (complete) node_modules
@@ -116,73 +128,139 @@
     path: "{{ morphit_repo_path }}/node_modules/.morphit-bundle-complete"
   register: morphit_bundle_marker
 
-- name: npm install (workspace root)
+- name: npm install (workspace root, no dependency install scripts)
   ansible.builtin.command:
-    cmd: npm install --workspaces --include-workspace-root
+    cmd: npm install --workspaces --include-workspace-root --ignore-scripts
     chdir: "{{ morphit_repo_path }}"
   environment:
-    # Keep npm's cache in the repo (owned by the service user, re-created every
-    # run) instead of $HOME/.npm — the nologin service user's home is not a place
-    # npm should need to write, and depending on it is fragile (see base role).
+    # Keep npm's cache in the (root-owned) repo instead of $HOME/.npm.
     npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
     # Silence npm's "New major version of npm available!" update-notifier
     # banner — it prints at the end of the run and looks like scary noise to
     # a new operator finishing the wizard. Nothing here should ever act on it.
     npm_config_update_notifier: "false"
   become: true
-  become_user: "{{ morphit_service_user }}"
   register: morphit_npm_install_result
   changed_when: "'changed' in morphit_npm_install_result.stdout or 'added' in morphit_npm_install_result.stdout"
   when: not morphit_bundle_marker.stat.exists
 
-- name: Ensure the matrix-bot E2EE crypto native binary is present
-  # matrix-bot-sdk eager-loads its E2EE CryptoClient on import, which needs the
-  # native @matrix-org/matrix-sdk-crypto-nodejs binary. That binary is fetched by
-  # a NETWORK postinstall (download-lib.js → GitHub releases) that can silently
-  # not run (e.g. an --ignore-scripts install) or fail to reach GitHub, leaving
-  # the bot to crash-loop with a cryptic MODULE_NOT_FOUND. Only matters when the
-  # operator actually uses Matrix alerts. We verify it, run the fetch explicitly
-  # if it's missing, and fail LOUDLY rather than let the alert bot crash-loop.
+- name: Fetch and check the Matrix bot's two native binaries (bot enabled only)
+  # matrix-bot-sdk needs @matrix-org/matrix-sdk-crypto-nodejs (E2EE) and
+  # better-sqlite3 (its store), both NATIVE.  Their own install scripts would
+  # download them from GitHub unverified; with --ignore-scripts above nothing ran,
+  # so they are fetched here — only when the bot is on — and each is checked
+  # against the SHA-256 pinned below (the GitHub release assets for exactly the
+  # versions in package-lock.json, Node 22 / ABI 127).  A file that does not
+  # match is replaced by a download that is itself checked before it is put in
+  # place; a download that does not match stops the install loudly.  An offline
+  # bundle already carries them: they are checked the same way.  A tor-only
+  # box never downloads them (GitHub is clearnet): it needs the offline bundle.
   when: enable_matrix_bot | default(false)
   vars:
     morphit_matrix_crypto_dir: "{{ morphit_repo_path }}/node_modules/@matrix-org/matrix-sdk-crypto-nodejs"
-    morphit_matrix_crypto_bin_path: "{{ morphit_repo_path }}/node_modules/@matrix-org/matrix-sdk-crypto-nodejs/matrix-sdk-crypto.linux-x64-gnu.node"
+    morphit_native_arch: "{{ 'arm64' if ansible_architecture in ['aarch64', 'arm64'] else 'x64' }}"
+    morphit_matrix_crypto_file: "matrix-sdk-crypto.linux-{{ morphit_native_arch }}-gnu.node"
+    morphit_matrix_crypto_sha256:
+      x64: f9b8ca0350a2085d189e06b19ffada5689ef843a394705e473a1106893d9f483
+      arm64: c1c166690787b12a6bd97070871e8c729082b7d3d3038e15d100612df15e2881
+    morphit_sqlite_dir: "{{ morphit_repo_path }}/node_modules/better-sqlite3"
+    morphit_sqlite_tarball_sha256:
+      x64: ea6a09d12d43cca31782ab0e09ecf442b8e2a49f5a02b219f5f117a6601ed306
+      arm64: 7bdf1d50d7ba21f91a4d3c31da7b1acc1c10d7ef51dd887a6e07d851a75388da
+    # …and of the better_sqlite3.node inside each tarball.
+    morphit_sqlite_node_sha256:
+      x64: d7d9272b12d11c1dc2bb787741b1b7c4037d336155f316ace3420410c28fda37
+      arm64: 2bdcfde76d902d1b83aa957fc359aa37b98e7291d6103f57da4a802ee1cb1aef
   block:
-    - name: Check for the matrix crypto native binary
-      ansible.builtin.stat:
-        path: "{{ morphit_matrix_crypto_bin_path }}"
-      register: morphit_matrix_crypto_bin
-
-    - name: Fetch the matrix crypto native binary (runs its download step explicitly)
+    - name: Read the versions package-lock.json installed
       ansible.builtin.command:
-        cmd: node download-lib.js
-        chdir: "{{ morphit_matrix_crypto_dir }}"
-      environment:
-        npm_config_cache: "{{ morphit_repo_path }}/.npm-cache"
-      become: true
-      become_user: "{{ morphit_service_user }}"
-      changed_when: true
-      failed_when: false
-      when: not morphit_matrix_crypto_bin.stat.exists
+        cmd: >-
+          node -p "require('{{ morphit_matrix_crypto_dir }}/package.json').version + ' ' +
+          require('{{ morphit_sqlite_dir }}/package.json').version + ' ' + process.versions.modules"
+      register: morphit_native_versions
+      changed_when: false
 
-    - name: Re-check the matrix crypto native binary
-      ansible.builtin.stat:
-        path: "{{ morphit_matrix_crypto_bin_path }}"
-      register: morphit_matrix_crypto_bin2
-      when: not morphit_matrix_crypto_bin.stat.exists
-
-    - name: Verify the matrix E2EE crypto binary is present
+    - name: Stop when the pinned sums do not cover these versions
       ansible.builtin.fail:
         msg: >-
-          The Matrix alert bot needs the E2EE crypto native binary
-          (@matrix-org/matrix-sdk-crypto-nodejs), which is fetched from GitHub and
-          isn't present on this box. On an OFFLINE install, rebuild the offline
-          bundle on a machine with internet so it vendors the binary. ONLINE,
-          make sure this box can reach github.com and re-run. The rest of the
-          node runs fine without it — alerts just stay off until it's in place.
+          The Matrix bot's native binaries are pinned for matrix-sdk-crypto-nodejs
+          0.1.0-beta.6 and better-sqlite3 11.10.0 on Node 22, but this tree has
+          {{ morphit_native_versions.stdout }} (versions, Node ABI). Update the pinned
+          sums in roles/morphit/tasks/clone_and_build.yml together with
+          package-lock.json. The rest of the node runs fine; alerts stay off.
+      when: morphit_native_versions.stdout | trim != '0.1.0-beta.6 11.10.0 127'
+
+    - name: Check the Matrix crypto binary already present
+      ansible.builtin.stat:
+        path: "{{ morphit_matrix_crypto_dir }}/{{ morphit_matrix_crypto_file }}"
+        checksum_algorithm: sha256
+      register: morphit_matrix_crypto_bin
+
+    - name: Download the Matrix crypto binary (pinned SHA-256)
+      ansible.builtin.get_url:
+        url: "https://github.com/matrix-org/matrix-rust-sdk/releases/download/matrix-sdk-crypto-nodejs-v0.1.0-beta.6/{{ morphit_matrix_crypto_file }}"
+        dest: "{{ morphit_matrix_crypto_dir }}/{{ morphit_matrix_crypto_file }}"
+        checksum: "sha256:{{ morphit_matrix_crypto_sha256[morphit_native_arch] }}"
+        owner: root
+        group: root
+        mode: "0644"
+        force: true
       when:
-        - not morphit_matrix_crypto_bin.stat.exists
-        - not (morphit_matrix_crypto_bin2.stat.exists | default(false))
+        - (morphit_matrix_crypto_bin.stat.checksum | default('')) != morphit_matrix_crypto_sha256[morphit_native_arch]
+        - not (morphit_tor_only | default(false))
+
+    - name: Stop when the Matrix crypto binary is not the pinned one (tor-only, no download)
+      ansible.builtin.fail:
+        msg: >-
+          {{ morphit_matrix_crypto_dir }}/{{ morphit_matrix_crypto_file }} is not the pinned
+          build, and a tor-only node does not download it from GitHub. Install from the
+          offline bundle (it carries both add-ons), or turn the Matrix bot off.
+      when:
+        - (morphit_matrix_crypto_bin.stat.checksum | default('')) != morphit_matrix_crypto_sha256[morphit_native_arch]
+        - morphit_tor_only | default(false)
+
+    - name: Check the better-sqlite3 binary already present
+      ansible.builtin.stat:
+        path: "{{ morphit_sqlite_dir }}/build/Release/better_sqlite3.node"
+        checksum_algorithm: sha256
+      register: morphit_sqlite_bin
+
+    - name: Download the better-sqlite3 prebuilt (pinned SHA-256)
+      ansible.builtin.get_url:
+        url: "https://github.com/WiseLibs/better-sqlite3/releases/download/v11.10.0/better-sqlite3-v11.10.0-node-v127-linux-{{ morphit_native_arch }}.tar.gz"
+        dest: "{{ morphit_repo_path }}/.npm-cache/better-sqlite3-v11.10.0-node-v127-linux-{{ morphit_native_arch }}.tar.gz"
+        checksum: "sha256:{{ morphit_sqlite_tarball_sha256[morphit_native_arch] }}"
+        mode: "0644"
+      register: morphit_sqlite_tarball
+      when:
+        - (morphit_sqlite_bin.stat.checksum | default('')) != morphit_sqlite_node_sha256[morphit_native_arch]
+        - not (morphit_tor_only | default(false))
+
+    - name: Unpack the better-sqlite3 prebuilt
+      ansible.builtin.unarchive:
+        src: "{{ morphit_sqlite_tarball.dest }}"
+        dest: "{{ morphit_sqlite_dir }}"
+        remote_src: true
+        owner: root
+        group: root
+      when:
+        - (morphit_sqlite_bin.stat.checksum | default('')) != morphit_sqlite_node_sha256[morphit_native_arch]
+        - not (morphit_tor_only | default(false))
+
+    - name: Re-check the better-sqlite3 binary
+      ansible.builtin.stat:
+        path: "{{ morphit_sqlite_dir }}/build/Release/better_sqlite3.node"
+        checksum_algorithm: sha256
+      register: morphit_sqlite_bin2
+
+    - name: Stop when the better-sqlite3 binary is not the pinned one
+      ansible.builtin.fail:
+        msg: >-
+          {{ morphit_sqlite_dir }}/build/Release/better_sqlite3.node is not the pinned
+          better-sqlite3 11.10.0 build for this machine (a tor-only node does not
+          download it: use the offline bundle). The rest of the node runs fine
+          without it — Matrix alerts just stay off until it is in place.
+      when: (morphit_sqlite_bin2.stat.checksum | default('')) != morphit_sqlite_node_sha256[morphit_native_arch]
 
 - name: Preserve the CANONICAL prebuilt web frontend (shipped in the release tarball)
   # A federated operator must serve @morphit's EXACT frontend bytes to pass the
@@ -201,7 +279,6 @@
     chdir: "{{ morphit_repo_path }}"
     executable: /bin/bash
   become: true
-  become_user: "{{ morphit_service_user }}"
   changed_when: false
 
 - name: Build workspaces (relay + indexer + ops-cli + indexer-client + asset-registry)
@@ -215,10 +292,9 @@
     # a new operator finishing the wizard. Nothing here should ever act on it.
     npm_config_update_notifier: "false"
   become: true
-  become_user: "{{ morphit_service_user }}"
   register: npm_build_result
   changed_when: true
-  # cp162: ops-cli now HAS a `build` script (esbuild bundle →
+  # ops-cli now HAS a `build` script (esbuild bundle →
   # dist/main.js), so `--if-present` builds it here.  The
   # published bin is a launcher shim that runs the compiled
   # dist/main.js under plain `node` when present (no tsx), and
@@ -240,7 +316,6 @@
     chdir: "{{ morphit_repo_path }}"
     executable: /bin/bash
   become: true
-  become_user: "{{ morphit_service_user }}"
   changed_when: false
 
 - name: Verify the web frontend has a root entry point (index.html)
@@ -255,7 +330,6 @@
     path: "{{ morphit_repo_path }}/apps/web/build/index.html"
   register: morphit_web_index
   become: true
-  become_user: "{{ morphit_service_user }}"
 
 - name: Fail loudly if the web frontend is missing its root entry point
   ansible.builtin.fail:
@@ -279,13 +353,12 @@
     # a new operator finishing the wizard. Nothing here should ever act on it.
     npm_config_update_notifier: "false"
   become: true
-  become_user: "{{ morphit_service_user }}"
   register: morphit_ops_smoke
   changed_when: false
   # `npm exec --offline --workspace` resolves the ops-cli bin
   # purely from the local workspace and forbids any registry
   # access — if `npm install` didn't wire up the tool, or tsx
-  # (a production dep since cp161) is absent, this fails the play
+  # (a production dep since an earlier release) is absent, this fails the play
   # with a clear error instead of letting the operator hit
   # "command not found" at their first `morphit-ops init`.
   # NOTE: we use `npm exec --offline`, NOT `npx --no-install` —

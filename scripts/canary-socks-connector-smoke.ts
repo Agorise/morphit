@@ -2,7 +2,7 @@
 /**
  * scripts/canary-socks-connector-smoke.ts
  *
- * v1.18.0 deep-deep, L1 — the canary's Tor SOCKS connector is the SHARED one.
+ * the canary's Tor SOCKS connector is the SHARED one.
  *
  * `scripts/canary/torSocksDispatcher.ts` carried its own copy of the SOCKS5
  * connector, without the fixes the shared one in @morphit/hidden-transport got
@@ -58,7 +58,7 @@ function connect(port: number, onSocket?: (s: net.Socket) => void): Settle[] {
 const GREETED = Buffer.from([0x05, 0x00]);
 
 async function main(): Promise<void> {
-	console.log('\n── canary SOCKS connector smoke (v1.18.0 deep-deep, L1) ──\n');
+	console.log('\n── canary SOCKS connector smoke ──\n');
 
 	// 1. Settles exactly once, even when a pooled tunnel errors later.
 	{

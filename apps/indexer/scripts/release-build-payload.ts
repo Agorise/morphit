@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — release-op payload builder (Part 106; Part 107).
+ * Morphit indexer — release-op payload builder.
  *
  * Operator-facing CLI that prompts for the values that go into
  * a `morphit_release_v1` op, validates them against the same
@@ -17,18 +17,18 @@
  *      operator can rotate one field at a time without
  *      reconstructing the whole payload.
  *
- * **Privacy note (Part 107).**  This builder NEVER prompts for
+ * **Privacy note.**  This builder NEVER prompts for
  * the Monero view key, and its output payload NEVER contains a
- * view key.  The view key stays in the operator's
- * `/etc/morphit/indexer.env` file on the canonical box; it is
- * never broadcast on chain.  The Part 106 design did embed the
+ * view key.  No indexer uses one any more (XMR fees are checked
+ * from per-payment proofs), no env file holds one, and it is
+ * never broadcast on chain.  The design did embed the
  * view key in the payload under the rationale that "it's
  * publish-safe by Monero design"; that was a privacy mistake
- * (the key reveals every incoming payment forever).  Part 107
+ * (the key reveals every incoming payment forever).
  * removes the viewkey from the chain-pinned `treasury` block.
- * If you have a custom payload from before Part 107 with a
+ * If you have a custom payload from previously with a
  * viewkey field, you should regenerate it WITHOUT the viewkey
- * before broadcasting.  (Part 110: the previous
+ * before broadcasting.  (the previous
  * `verify-xmr-viewkey.ts` diagnostic helper has been retired —
  * no view-key sanity check is needed anymore; the new
  * verification path uses per-payment proofs that exercise the
@@ -57,20 +57,124 @@
 
 import * as readline from 'node:readline';
 import * as fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { stdin as input, stdout as output } from 'node:process';
-import { validateReleasePayload, validateTreasury, validateDistribution } from '@morphit/release-schema';
+import {
+	validateReleasePayload,
+	validateTreasury,
+	validateDistribution
+} from '@morphit/release-schema';
 import type {
 	ReleasePayloadV1,
 	ReleaseTreasuryBlock,
 	ReleaseDistributionBlock
 } from '@morphit/release-schema';
 import { CANONICAL_TREASURY } from '../src/config/canonicalTreasury.ts';
+import { RELEASE_SIGNER_FINGERPRINTS } from '@morphit/operator-config';
 import { checkTreasuryXpubInput } from '../src/lib/treasuryXpubInput.ts';
 import { checkTreasuryXmrPrimaryInput } from '../src/lib/treasuryXmrPrimaryInput.ts';
 
 function fail(reason: string): never {
 	process.stderr.write(`\n✗ ${reason}\n`);
 	process.exit(1);
+}
+
+/** The keys release.yml writes into distribution-anchor.env, each with the one
+ *  shape its value may have. */
+const ANCHOR_KEYS: Readonly<Record<string, RegExp>> = {
+	MORPHIT_BUILD_SOURCE_SHA256: /^[0-9a-f]{64}$/,
+	MORPHIT_BUILD_OFFLINE_SHA256: /^[0-9a-f]{64}$/,
+	MORPHIT_BUILD_GPG_FINGERPRINT: /^(?:[0-9A-F]{40}|[0-9A-F]{64})$/,
+	MORPHIT_BUILD_IPFS_CID: /^(?:Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,110})$/,
+	MORPHIT_BUILD_IPNS_NAME: /^k51[a-z0-9]{50,70}$/,
+	MORPHIT_BUILD_IPNS_RECORD: /^[A-Za-z0-9+/]{64,1200}={0,2}$/,
+	MORPHIT_BUILD_TAG_OBJECT: /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+};
+
+/**
+ * Read the release job's distribution-anchor.env WITHOUT a shell. It used to be
+ * `source`d on the laptop that then asks for the @morphit WIF, so anything
+ * the release job wrote into it ran there. Each line must be a comment, blank,
+ * or `export <one of ANCHOR_KEYS>=<value of that key's shape>`; anything else
+ * refuses the whole file. Returns the values by key. PURE apart from the throw.
+ */
+export function parseAnchorEnv(text: string): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const [i, raw] of text.split('\n').entries()) {
+		const line = raw.trim();
+		if (line === '' || line.startsWith('#')) continue;
+		const m = /^export ([A-Z0-9_]+)=(.*)$/.exec(line);
+		if (m === null) throw new Error(`line ${i + 1} is not "export KEY=value"`);
+		const [, key, value] = m as unknown as [string, string, string];
+		const shape = ANCHOR_KEYS[key];
+		if (shape === undefined)
+			throw new Error(`line ${i + 1} sets ${key}, which an anchor never carries`);
+		if (!shape.test(value))
+			throw new Error(`line ${i + 1}: ${key} does not have the expected shape`);
+		if (key in out) throw new Error(`${key} is set twice`);
+		out[key] = value;
+	}
+	if (out.MORPHIT_BUILD_SOURCE_SHA256 === undefined)
+		throw new Error('it carries no MORPHIT_BUILD_SOURCE_SHA256');
+	return out;
+}
+
+/** MORPHIT_BUILD_ANCHOR_FILE → the anchor's values in process.env. A value an
+ *  earlier step left in the environment for one of those keys refuses, so a
+ *  previous release's CID or record can never ride along. */
+function loadAnchorFile(): void {
+	const path = (process.env.MORPHIT_BUILD_ANCHOR_FILE ?? '').trim();
+	if (path === '') return;
+	for (const k of Object.keys(ANCHOR_KEYS)) {
+		if ((process.env[k] ?? '') !== '') {
+			fail(
+				`${k} is already set in this terminal (left over from an earlier release?) — open a new terminal; the anchor file supplies it`
+			);
+		}
+	}
+	let values: Record<string, string>;
+	try {
+		values = parseAnchorEnv(fs.readFileSync(path, 'utf8'));
+	} catch (e) {
+		fail(`the anchor ${path} was refused: ${e instanceof Error ? e.message : String(e)}`);
+	}
+	const fpr = values.MORPHIT_BUILD_GPG_FINGERPRINT;
+	if (fpr !== undefined && !RELEASE_SIGNER_FINGERPRINTS.includes(fpr)) {
+		fail(`the anchor names signing key ${fpr}, which is not a pinned release signer`);
+	}
+	const why = tagObjectMismatch(
+		values.MORPHIT_BUILD_TAG_OBJECT,
+		(process.env.MORPHIT_BUILD_VERSION ?? '').trim(),
+		(ref) => {
+			const r = spawnSync('git', ['rev-parse', '--verify', '-q', ref], { encoding: 'utf8' });
+			return r.status === 0 ? r.stdout.trim() : null;
+		}
+	);
+	if (why !== null) fail(why);
+	for (const [k, v] of Object.entries(values)) process.env[k] = v;
+}
+
+/**
+ * The release job built the signed tag object the anchor names; this
+ * repository made and pushed v<version> in Block 2. They must be the same
+ * object: a tag moved after the push (pointed back at an older signed object
+ * of the same name) would otherwise get its build anchored on chain. Returns
+ * why not, or null when they match. `localTag` resolves a ref to an object id.
+ */
+export function tagObjectMismatch(
+	anchored: string | undefined,
+	version: string,
+	localTag: (ref: string) => string | null
+): string | null {
+	if (anchored === undefined)
+		return 'the anchor names no tag object (MORPHIT_BUILD_TAG_OBJECT): use the distribution-anchor.env attached to this release';
+	if (version === '') return 'MORPHIT_BUILD_VERSION is not set, so the tag cannot be checked';
+	const local = localTag(`refs/tags/v${version}`);
+	if (local === null)
+		return `this repository has no tag v${version}: run this in the repository where you made and pushed the tag`;
+	if (local !== anchored)
+		return `the release job built tag object ${anchored}, but the v${version} tag made here is ${local}: the tag was moved after it was pushed. Do not broadcast this release, and delete the release (its tarball, bundle and signatures are already published) on git.agorise.net, codeberg.org and gitea.com.`;
+	return null;
 }
 
 function isInteractive(): boolean {
@@ -131,9 +235,9 @@ interface Inputs {
 	xmrPiconero: string;
 	/** v1.20.0 (MK-H2) — treasury Monero PRIMARY address (`4…`). Empty = omit. */
 	xmrPrimary?: string;
-	/** cp372 — chain-pinned BLURT fee base (tier-1).  Empty = omit. */
+	/** chain-pinned BLURT fee base (tier-1).  Empty = omit. */
 	blurtBase: string;
-	/** cp556 — decentralized-distribution anchor.  All empty = omit the
+	/** decentralized-distribution anchor.  All empty = omit the
 	 *  whole block.  source_sha256 + gpg_fingerprint are required TOGETHER
 	 *  when either is set; ipfs_cid + mirrors are independently optional. */
 	sourceSha256: string;
@@ -169,7 +273,7 @@ async function gatherInputs(): Promise<Inputs> {
 	if (!manifestPath) fail('hash_manifest file path is required');
 	const hashManifest = readJsonFile(manifestPath, 'hash_manifest');
 
-	// cp436 — endpoints is OPTIONAL and normally OMITTED. the maintainer's rule: don't
+	// endpoints is OPTIONAL and normally OMITTED. The maintainer's rule: don't
 	// pin the blurt_rpc list on-chain (redundant with the frontend's baked-in
 	// DEFAULT_BLURT_RPC_ENDPOINTS; avoid chain-bloat). Set
 	// MORPHIT_BUILD_ENDPOINTS_FILE only to deliberately announce a pool.
@@ -179,13 +283,12 @@ async function gatherInputs(): Promise<Inputs> {
 	);
 	const endpoints = endpointsPath ? readJsonFile(endpointsPath, 'endpoints') : undefined;
 
-	process.stderr.write('\n── Treasury (Part 106; Part 107) ─────────────────────────\n');
+	process.stderr.write('\n── Treasury ─────────────────────────────────────────\n');
 	process.stderr.write('Leave any treasury field empty to omit that chain.\n');
 	process.stderr.write('Both BTC and XMR fields independently optional.\n');
-	process.stderr.write('NOTE: this builder does NOT prompt for the XMR view\n');
-	process.stderr.write('key — it stays env-only on the indexer machine and\n');
-	process.stderr.write('is never broadcast on chain (Part 107 privacy\n');
-	process.stderr.write('invariant).  See ops/env/indexer.env.example.\n\n');
+	process.stderr.write('NOTE: this builder does NOT ask for the XMR view key.\n');
+	process.stderr.write('No indexer needs one (XMR fees are checked from\n');
+	process.stderr.write('per-payment proofs) and it is never broadcast on chain.\n\n');
 
 	const btcAddress = await ask(
 		'BTC fee address (mainnet bc1q.../1.../3...)',
@@ -222,7 +325,7 @@ async function gatherInputs(): Promise<Inputs> {
 		process.env.MORPHIT_BUILD_XMR_PRIMARY ?? CANONICAL_TREASURY.xmrPrimary
 	);
 
-	// cp372 — chain-pinned BLURT fee base.  Empty omits it (older
+	// chain-pinned BLURT fee base.  Empty omits it (older
 	// shape); when set, makes the BLURT floor deterministic across
 	// the federation like BTC/XMR.  The canonical floor is 125 BLURT
 	// (~12.5¢ at the $0.001 reference price); the release ceremony passes it
@@ -233,16 +336,19 @@ async function gatherInputs(): Promise<Inputs> {
 		process.env.MORPHIT_BUILD_BLURT_BASE ?? ''
 	);
 
-	// cp556 — decentralized-distribution anchor.  In the normal (CI) flow
+	// decentralized-distribution anchor.  In the normal (CI) flow
 	// these come from the `distribution-anchor.env` that release.yml wrote and
 	// attached to the release: source_sha256 is the PUBLISHED tarball's hash and
 	// gpg_fingerprint is the release-signer key.  The ELI5 ceremony fetches that
-	// file and `source`s it, so these env vars are already set here; the mirror
-	// list is a fixed default baked into buildDistribution().  Leave all empty
-	// to omit the block (a release cut before the anchor was available).
-	process.stderr.write('\n── Distribution anchor (cp556) ───────────────────────────\n');
+	// file and passes it as MORPHIT_BUILD_ANCHOR_FILE (loadAnchorFile, above —
+	// parsed, never sourced); the mirror list is a fixed default baked into
+	// buildDistribution().  Leave all empty to omit the block (a release cut
+	// before the anchor was available).
+	process.stderr.write('\n── Distribution anchor ─────────────────────────────────\n');
 	process.stderr.write('Verifiable pointer to the published source tarball\n');
-	process.stderr.write('(auto-mirrored to Codeberg / GitHub / SourceForge / SourceHut).  Leave ALL empty to omit.\n');
+	process.stderr.write(
+		'(auto-mirrored to Codeberg / GitHub / SourceForge / SourceHut).  Leave ALL empty to omit.\n'
+	);
 	process.stderr.write('source_sha256 + gpg_fingerprint go together; both come from\n');
 	process.stderr.write('the release-attached distribution-anchor.env.\n\n');
 
@@ -295,7 +401,7 @@ async function gatherInputs(): Promise<Inputs> {
 	};
 }
 
-/** cp556 — build the optional distribution anchor from the operator's
+/** build the optional distribution anchor from the operator's
  *  inputs.  Returns null when the whole block is omitted.  GPG prints
  *  fingerprints with spaces; we strip them so the validator (which
  *  forbids spaces) accepts a copy-pasted fingerprint. */
@@ -331,10 +437,20 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 		.filter((m) => m.length > 0);
 
 	// The whole block is omitted only when NOTHING was supplied.
-	if (sha === '' && fpr === '' && cid === '' && ipns === '' && ipnsRec === '' && mirrorList.length === 0) return null;
+	if (
+		sha === '' &&
+		fpr === '' &&
+		cid === '' &&
+		ipns === '' &&
+		ipnsRec === '' &&
+		mirrorList.length === 0
+	)
+		return null;
 
 	if (sha === '' || fpr === '') {
-		fail('distribution needs BOTH source_sha256 and gpg_fingerprint (or leave all fields empty to omit)');
+		fail(
+			'distribution needs BOTH source_sha256 and gpg_fingerprint (or leave all fields empty to omit)'
+		);
 	}
 
 	// The mirrors are a FIXED decentralization breadcrumb: Forgejo auto-pushes
@@ -345,17 +461,17 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	// would make mirrorList always non-empty, so an anchor-less build could no
 	// longer omit the whole block by leaving sha + fpr empty (it would trip the
 	// "needs BOTH" failure above). Emitted only alongside a real anchor.
-	// v1.8.16 (the maintainer) — SourceForge + SourceHut added; both mirror the same signed
+	// v1.8.16 — SourceForge + SourceHut added; both mirror the same signed
 	// bytes and appear as live cards on the download page. GitLab, Bitbucket and
 	// Launchpad added once their Forgejo push-mirrors were confirmed live.
-	// v1.9.6 (the maintainer) — gitea.com + framagit.org push-mirrors confirmed live; NINE total.
+	// v1.9.6 — gitea.com + framagit.org push-mirrors confirmed live; NINE total.
 	// on-chain cap was bumped 8 -> 10 (handlers/release.ts + release-schema) to fit
 	// them, so — exactly like Launchpad's `+` regex — a release carrying this list
 	// only validates on a v1.9.6+ instance; the ceremony upgrades the canonical
 	// instance before it broadcasts (older instances reject the op until they
 	// upgrade, keeping the prior release until then). Launchpad's URL still carries
 	// a `+` (`/+git/`) needing the relaxed mirror regex.
-	// v1.11.1 (the maintainer) — NINE new push-mirrors confirmed live (gitgud.io,
+	// v1.11.1 — NINE new push-mirrors confirmed live (gitgud.io,
 	// forge.chapril.org, git.disroot.org, git.kaki87.net, codefloe.com, git.gay,
 	// bolha.dev, opencommit.eu, sij.ai) → EIGHTEEN total. The on-chain cap was
 	// bumped 10 -> 32 (same forward-compat pattern: v1.11.1+ only; ceremony
@@ -430,9 +546,9 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 	// operator left the address empty they don't want XMR pinned
 	// at all this release.
 	//
-	// Part 107: NO viewkey field built into the treasury block.
-	// View key stays in the operator's env on the indexer
-	// machine and is never part of a chain-broadcast payload.
+	// NO viewkey field built into the treasury block.
+	// No indexer uses a view key; it is never part of a
+	// chain-broadcast payload.
 	const hasXmr = i.xmrAddress !== '';
 	const hasBlurt = i.blurtBase.trim() !== '';
 	if (!hasBtc && !hasXmr && !hasBlurt) return null;
@@ -455,8 +571,12 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 		if (!check.ok) fail(`BTC treasury key refused — ${check.message}`);
 		btc = { ...btc!, xpub: check.xpub };
 		process.stderr.write('\n── BTC treasury key (MK-H2) ──────────────────────────────\n');
-		process.stderr.write(`key id ${check.keyId}. Receive addresses #0-#2 — these MUST be the first\n`);
-		process.stderr.write("three rows of the treasury wallet's Addresses tab (Receive Addresses):\n");
+		process.stderr.write(
+			`key id ${check.keyId}. Receive addresses #0-#2 — these MUST be the first\n`
+		);
+		process.stderr.write(
+			"three rows of the treasury wallet's Addresses tab (Receive Addresses):\n"
+		);
 		check.receive.forEach((a, n) => process.stderr.write(`  #${n}  ${a}\n`));
 	}
 
@@ -478,12 +598,16 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 		if (!check.ok) fail(`XMR treasury main address refused — ${check.message}`);
 		xmr = { ...xmr!, primary_address: check.address };
 		process.stderr.write('\n── XMR treasury main address (MK-H2) ─────────────────────\n');
-		process.stderr.write('In the treasury wallet (monero-wallet-cli), `integrated_address ' + check.sample.paymentId + '`\n');
+		process.stderr.write(
+			'In the treasury wallet (monero-wallet-cli), `integrated_address ' +
+				check.sample.paymentId +
+				'`\n'
+		);
 		process.stderr.write('MUST print exactly:\n');
 		process.stderr.write(`  ${check.sample.integrated}\n`);
 	}
 
-	// cp372 — optional BLURT base.  Parsed as a float (BLURT has
+	// optional BLURT base.  Parsed as a float (BLURT has
 	// 3-decimal precision).  Only attached when present so a release
 	// without it serializes byte-identically to the legacy shape.
 	if (hasBlurt) {
@@ -495,6 +619,7 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 }
 
 async function main(): Promise<void> {
+	loadAnchorFile();
 	const inputs = await gatherInputs();
 	const treasury = buildTreasury(inputs);
 
@@ -507,7 +632,7 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// cp556 — build + validate the distribution anchor independently too.
+	// build + validate the distribution anchor independently too.
 	const distribution = buildDistribution(inputs);
 	if (distribution !== null) {
 		const dResult = validateDistribution(distribution);
@@ -519,7 +644,7 @@ async function main(): Promise<void> {
 	const payload: ReleasePayloadV1 = {
 		version: inputs.version,
 		hash_manifest: inputs.hashManifest as ReleasePayloadV1['hash_manifest'],
-		// cp436 — omit endpoints entirely unless one was explicitly provided.
+		// omit endpoints entirely unless one was explicitly provided.
 		...(inputs.endpoints !== undefined
 			? { endpoints: inputs.endpoints as ReleasePayloadV1['endpoints'] }
 			: {}),
@@ -535,12 +660,12 @@ async function main(): Promise<void> {
 		fail(`payload validation failed: ${result.reason}`);
 	}
 
-	// Sanity gate (Part 107) — defense-in-depth: scan the serialized
+	// Sanity gate — defense-in-depth: scan the serialized
 	// payload for anything that looks like a 64-hex view key.  If
 	// something looks like one, refuse to emit (the operator may have
 	// hand-crafted a payload that re-introduces the viewkey field).
 	//
-	// cp556: the distribution anchor LEGITIMATELY contains 64-hex fields
+	// the distribution anchor LEGITIMATELY contains 64-hex fields
 	// (source_sha256 is always 64 lowercase hex; gpg_fingerprint may be
 	// the 64-hex v5 form) — those are the tarball hash + signing key
 	// fingerprint, NOT a view key, and are strictly validated by
@@ -553,7 +678,7 @@ async function main(): Promise<void> {
 	if (VIEWKEY_LOOKING_RE.test(serialized)) {
 		fail(
 			'payload contains a 64-hex string that looks like an XMR view key — ' +
-				'Part 107 forbids embedding view keys in release ops.  Check your ' +
+				'View keys must never be embedded in release ops.  Check your ' +
 				'inputs and remove any viewkey field before retrying.'
 		);
 	}
@@ -571,13 +696,13 @@ async function main(): Promise<void> {
 	process.stderr.write('Sign with the @morphit PRIVATE posting key (the WIF —\n');
 	process.stderr.write('starts "5...", NOT the public posting key).  See\n');
 	process.stderr.write('docs/OPERATIONS.md §40.5 for the full ceremony.\n\n');
-	// Part 110 note: previous versions of this script printed a
+	// previous versions of this script printed a
 	// reminder to run `verify-xmr-viewkey.ts` before broadcasting,
 	// because the view key was operator-private and a typo would
-	// silently break XMR verification.  Since Part 108++ the view
+	// silently break XMR verification.  Since later+ the view
 	// key is no longer used by any indexer (per-payment proofs
-	// replaced view-key-based decryption); Part 109 removed the
-	// env var entirely; Part 110 retired the script.  No
+	// replaced view-key-based decryption); a later change removed the
+	// env var entirely; a later change retired the script.  No
 	// pre-broadcast viewkey check is needed — the only thing
 	// chain-pinned here is the public XMR address, which is
 	// verified by-construction at payload-build time.

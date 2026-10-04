@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/faq-inline-render-smoke.ts  (cp218)
+ * apps/web/scripts/faq-inline-render-smoke.ts
  *
  * FAQ answers are authored with light inline markdown (`**bold**`,
  * `*italic*`, `` `code` ``, the odd `[text](url)`). The visible answer used to
@@ -67,7 +67,7 @@ const bad = (m: string, d = '') => {
 		ok('internal link → <a> without target');
 	else bad('internal link render wrong', r);
 }
-// ── cp425: localizeHref (locale-prefix internal path links) ──────────
+// ── localizeHref (locale-prefix internal path links) ──────────
 {
 	// A path-internal link is passed through the caller's localizer.
 	const lp = (p: string) => (p.startsWith('/en/') ? p : '/en' + p);

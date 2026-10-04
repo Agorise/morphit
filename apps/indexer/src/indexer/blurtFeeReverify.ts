@@ -430,7 +430,8 @@ export class BlurtFeeReverifier {
 								blockNum,
 								blockTime,
 								tag,
-								cfg.instanceOperatorTag
+								cfg.instanceOperatorTag,
+								fee.toCanonicalBlurt
 							);
 							await attributeBlurtFeeToOperator({
 								client,

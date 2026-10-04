@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Structural smoke for cp130 multi-asset price-source factory.
+ * Structural smoke for multi-asset price-source factory.
  *
  * What this verifies (without spinning up Postgres or Coingecko —
  * those are integration concerns):
@@ -14,14 +14,14 @@
  *      BLURT primary, went out of business in 2026 and was removed).
  *   4. Coingecko coin IDs match the well-known Coingecko ids.
  *   5. createMultiAssetPriceSources returns a Map keyed by asset
- *      ticker with exactly the cp130 launch set (BLURT, BTC, XMR).
+ *      ticker with exactly the launch set (BLURT, BTC, XMR).
  *   6. Each source is a separate BlurtPriceSource instance (no
  *      shared cache, no aliasing).
  *   7. Per-asset static-floor wiring: BLURT reads
  *      priceFeedStaticFloor; BTC reads priceFeedBtcStaticFloor;
  *      XMR reads priceFeedXmrStaticFloor.
  *   8. Backwards-compatibility: createPriceSource returns a
- *      BLURT-shaped source (same upstream chain as pre-cp130 except
+ *      BLURT-shaped source (same upstream chain as older except
  *      morphit_native is denomination-aware).
  */
 
@@ -78,7 +78,7 @@ scenario('CP130-1: CP130_ASSET_DEFAULTS is an object', () => {
 	if (typeof CP130_ASSET_DEFAULTS !== 'object') throw new Error('not an object');
 });
 
-// ─── CP130-2: defaults shape + cp130 launch set ──
+// ─── CP130-2: defaults shape + launch set ──
 scenario('CP130-2: CP130_ASSET_DEFAULTS covers BLURT + BTC + XMR (the cp130 launch set)', () => {
 	const keys = Object.keys(CP130_ASSET_DEFAULTS).sort();
 	const expected = ['BLURT', 'BTC', 'XMR'].sort();
@@ -194,10 +194,9 @@ scenario('CP130-9: EUR denomination flows through to all per-asset sources (smok
 });
 
 // ─── CP130-10: doc-comment design pillars ──
-scenario('CP130-10: factory.ts source still documents the cp130 architecture decisions', () => {
+scenario('CP130-10: factory.ts source still documents the multi-asset architecture decisions', () => {
 	const src = readFileSync(FACTORY_PATH, 'utf-8');
 	const markers = [
-		'cp130',
 		'went out of business', // the Klingex-removal historical note
 		'preemptive complexity', // why per-asset denomination wasn't added
 		'multi-asset',

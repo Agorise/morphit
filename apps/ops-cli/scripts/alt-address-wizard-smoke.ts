@@ -1,5 +1,5 @@
 /**
- * alt-address-wizard-smoke (cp216).
+ * alt-address-wizard-smoke.
  *
  * The alt-address wizard writes an operator-chosen string into
  * morphit.config.env, so its address VALIDATORS are the correctness boundary
@@ -122,7 +122,7 @@ else bad('isValidI2pName');
 	else bad('validateI2pName garbage/empty');
 }
 
-// ── ENS .eth name validation (cp334) ─────────────────────────────────
+// ── ENS .eth name validation ─────────────────────────────────
 if (
 	isValidEnsName('morphit.eth') &&
 	isValidEnsName('node.morphit.eth') &&
@@ -215,7 +215,7 @@ else bad('isValidEnsName');
 	else bad('generate-lokinet.sh', 'missing keyfile=/ONS guidance');
 }
 
-// ── cp311: Nostr pubkey validation ───────────────────────────────────
+// ── Nostr pubkey validation ───────────────────────────────────
 {
 	const NPUB = 'npub1' + 'q'.repeat(58); // matches /^npub1[a-z0-9]{58,}$/i
 	const HEX = 'a'.repeat(64);
@@ -237,7 +237,7 @@ else bad('isValidEnsName');
 	else bad('validateNostr garbage should fail');
 }
 
-// ── cp311: alt-address CRUD shape (show / clear / nostr / i2p dual-key) ─
+// ── alt-address CRUD shape (show / clear / nostr / i2p dual-key) ─
 {
 	const altSrc = readFileSync(join(OPS, 'src', 'commands', 'altAddress.ts'), 'utf8');
 	if (/Current:/.test(altSrc)) ok('CRUD: shows the current value before acting');

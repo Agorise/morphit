@@ -70,7 +70,7 @@ await scenario('G1.1: feedback WITHOUT order_permlink does NOT trigger bonus', a
 	});
 	const exps: QueryExpectation[] = [
 		// Verified-chat conformance query runs first (ADR-0014).
-		// cp472: the gate moved to $indexer/chatGates (ONE impl, shared with
+		// the gate moved to $indexer/chatGates (ONE impl, shared with
 		// morphit_order_complete_v1's counterparty check). Identical rule and
 		// identical SQL shape — only the column ALIASES are generic now
 		// (from_a/from_b instead of from_reviewer/from_subject), since the
@@ -81,12 +81,13 @@ await scenario('G1.1: feedback WITHOUT order_permlink does NOT trigger bonus', a
 				{
 					from_a: '2',
 					from_b: '2',
-					span_seconds: '900',
-					has_recip_flag: false
+					span_seconds: '900'
 				}
 			],
 			rowCount: 1
 		},
+		// the reciprocity pattern, evaluated as of the review
+		{ match: 'WITH moments AS', rows: [{ held: false }] },
 		// INSERT INTO feedback succeeds.
 		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
 		// Crucially: NO INSERT INTO accounts (the bonus claim) and
@@ -125,17 +126,18 @@ await scenario('G1.1: feedback WITH valid order_permlink DOES trigger bonus', as
 				{
 					from_a: '2',
 					from_b: '2',
-					span_seconds: '900',
-					has_recip_flag: false
+					span_seconds: '900'
 				}
 			],
 			rowCount: 1
 		},
+		// the reciprocity pattern, evaluated as of the review
+		{ match: 'WITH moments AS', rows: [{ held: false }] },
 		// 2. INSERT INTO feedback.
 		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 },
 		// 3. SAVEPOINT welcome_bonus_sp.
 		{ match: 'SAVEPOINT welcome_bonus_sp', rows: [] },
-		// 3.5 (Part 111). Cited order operator_tag lookup — gates
+		// 3.5. Cited order operator_tag lookup — gates
 		// whether THIS instance is obligated for the welcome bonus.
 		{
 			match: 'FROM orders\n\t\t\t  WHERE account',
@@ -208,7 +210,7 @@ await scenario('G1.1: feedback with order_permlink owned by attacker rejects', a
 await scenario(
 	'Part 113 A5: feedback citing an order with fee_status != verified rejects',
 	async () => {
-		// Part 113 hardening — A5/B2 vector closure.  Pre-Part-113
+		// A5/B2 vector closure.  Pre-Part-113
 		// the feedback handler only checked the order existed and
 		// belonged to the subject.  An attacker could broadcast a
 		// `morphit_order_v1` op with NO fee transfer and the row
@@ -237,16 +239,10 @@ await scenario(
 			}),
 			siblingOps: []
 		});
-		const exps: QueryExpectation[] = [
-			{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }
-		];
+		const exps: QueryExpectation[] = [{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }];
 		const mock = makeMockClient(exps);
 		const r = await handler(ctx, mock.client);
-		assertEqual(
-			r,
-			{ ok: false, reason: 'order_permlink_not_found_or_unverified' },
-			'result'
-		);
+		assertEqual(r, { ok: false, reason: 'order_permlink_not_found_or_unverified' }, 'result');
 	}
 );
 
@@ -265,21 +261,15 @@ await scenario(
 			}),
 			siblingOps: []
 		});
-		const exps: QueryExpectation[] = [
-			{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }
-		];
+		const exps: QueryExpectation[] = [{ match: 'SELECT 1 FROM orders', rows: [], rowCount: 0 }];
 		const mock = makeMockClient(exps);
 		await handler(ctx, mock.client);
-		const ordersQuery = mock.queries.find((q) =>
-			q.text.includes('SELECT 1 FROM orders')
-		);
+		const ordersQuery = mock.queries.find((q) => q.text.includes('SELECT 1 FROM orders'));
 		if (!ordersQuery) {
 			throw new Error('no SELECT 1 FROM orders query observed');
 		}
 		if (!ordersQuery.text.includes("fee_status = 'verified'")) {
-			throw new Error(
-				`orders query is missing fee_status filter; got: ${ordersQuery.text}`
-			);
+			throw new Error(`orders query is missing fee_status filter; got: ${ordersQuery.text}`);
 		}
 	}
 );
@@ -303,15 +293,16 @@ await scenario(
 					{
 						from_a: '2',
 						from_b: '2',
-						span_seconds: '900',
-						has_recip_flag: false
+						span_seconds: '900'
 					}
 				],
 				rowCount: 1
 			},
+			// the reciprocity pattern, evaluated as of the review
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 },
 			{ match: 'SAVEPOINT welcome_bonus_sp', rows: [] },
-			// Part 111 cited-order operator_tag lookup.
+			// A later change cited-order operator_tag lookup.
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',
 				rows: [{ operator_tag: 'morphit' }],
@@ -457,12 +448,13 @@ await scenario('O3.3: NFC-normalizes comment before length check', async () => {
 				{
 					from_a: '2',
 					from_b: '2',
-					span_seconds: '900',
-					has_recip_flag: false
+					span_seconds: '900'
 				}
 			],
 			rowCount: 1
 		},
+		// the reciprocity pattern, evaluated as of the review
+		{ match: 'WITH moments AS', rows: [{ held: false }] },
 		{ match: 'INSERT INTO feedback' }
 	]);
 	const r = await handler(
@@ -517,12 +509,13 @@ await scenario('ADR-0014: badge=true when 2+ in each direction, ≥15min span, n
 				{
 					from_a: '3',
 					from_b: '4',
-					span_seconds: '1800', // 30 min
-					has_recip_flag: false
+					span_seconds: '1800' // 30 min
 				}
 			],
 			rowCount: 1
 		},
+		// the reciprocity pattern, evaluated as of the review
+		{ match: 'WITH moments AS', rows: [{ held: false }] },
 		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
 	]);
 	const r = await handler(ctx, mock.client);
@@ -535,33 +528,35 @@ await scenario('ADR-0014: badge=true when 2+ in each direction, ≥15min span, n
 	}
 });
 
-await scenario('cp421: gate REJECTS when only 1 message from reviewer (below verified-chat bar)', async () => {
-	const ctx = makeCtx({
-		signer: 'alice',
-		payload: feedbackPayload({ subject: 'bob' }),
-		siblingOps: []
-	});
-	const mock = makeMockClient([
-		{
-			match: 'COUNT(*) FILTER (WHERE sender',
-			rows: [
-				{
-					from_a: '1',
-					from_b: '5',
-					span_seconds: '1800',
-					has_recip_flag: false
-				}
-			],
-			rowCount: 1
-		},
-		{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
-	]);
-	const r = await handler(ctx, mock.client);
-	// cp421: the gate now == the verified-chat bar, so a below-bar
-	// conformance (only 1 message from the reviewer) is REJECTED, not
-	// stored with badge=false.
-	assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
-});
+await scenario(
+	'cp421: gate REJECTS when only 1 message from reviewer (below verified-chat bar)',
+	async () => {
+		const ctx = makeCtx({
+			signer: 'alice',
+			payload: feedbackPayload({ subject: 'bob' }),
+			siblingOps: []
+		});
+		const mock = makeMockClient([
+			{
+				match: 'COUNT(*) FILTER (WHERE sender',
+				rows: [
+					{
+						from_a: '1',
+						from_b: '5',
+						span_seconds: '1800'
+					}
+				],
+				rowCount: 1
+			},
+			{ match: 'INSERT INTO feedback', rows: [], rowCount: 1 }
+		]);
+		const r = await handler(ctx, mock.client);
+		// the gate now == the verified-chat bar, so a below-bar
+		// conformance (only 1 message from the reviewer) is REJECTED, not
+		// stored with badge=false.
+		assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
+	}
+);
 
 await scenario('cp421: gate REJECTS when span < 15 minutes (below verified-chat bar)', async () => {
 	const ctx = makeCtx({
@@ -576,8 +571,7 @@ await scenario('cp421: gate REJECTS when span < 15 minutes (below verified-chat 
 				{
 					from_a: '3',
 					from_b: '4',
-					span_seconds: '600', // 10 min, too fast
-					has_recip_flag: false
+					span_seconds: '600' // 10 min, too fast
 				}
 			],
 			rowCount: 1
@@ -600,12 +594,13 @@ await scenario('cp421: gate REJECTS a flagged suspicious_reciprocity pair', asyn
 				{
 					from_a: '5',
 					from_b: '5',
-					span_seconds: '7200', // 2h — plenty
-					has_recip_flag: true // but flagged
+					span_seconds: '7200' // 2h — plenty
 				}
 			],
 			rowCount: 1
-		}
+		},
+		// the reciprocity pattern, evaluated as of the review
+		{ match: 'WITH moments AS', rows: [{ held: true }] } // the pair matched the reciprocity pattern
 	]);
 	const r = await handler(ctx, mock.client);
 	assertEqual(r, { ok: false, reason: 'no_verified_counterparty' }, 'result');
@@ -624,8 +619,7 @@ await scenario('cp421: gate REJECTS when no chat messages exist (span_seconds=nu
 				{
 					from_a: '0',
 					from_b: '0',
-					span_seconds: null, // pg returns NULL on empty set
-					has_recip_flag: false
+					span_seconds: null // pg returns NULL on empty set
 				}
 			],
 			rowCount: 1

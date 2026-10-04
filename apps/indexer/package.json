@@ -1,6 +1,6 @@
 {
 	"name": "morphit-indexer",
-	"version": "1.20.3",
+	"version": "1.21.0",
 	"private": true,
 	"type": "module",
 	"description": "Morphit chain indexer — reads morphit_* ops from Blurt, maintains queryable state in Postgres",
@@ -13,7 +13,6 @@
 		"format": "prettier --write .",
 		"lint": "tsx ../../scripts/lint-gate-smoke.ts",
 		"migrate": "tsx src/db/migrations.ts",
-		"migrate:rebuild": "tsx src/db/migrations.ts --rebuild-materialized",
 		"start": "tsx src/main.ts",
 		"test": "vitest run",
 		"test:integration": "vitest run --config vitest.integration.config.ts",
@@ -22,7 +21,7 @@
 	},
 	"dependencies": {
 		"@beblurt/dblurt": "^0.17.0",
-		"@hono/node-server": "^1.13.0",
+		"@hono/node-server": "^1.19.17",
 		"@morphit/asset-registry": "*",
 		"@morphit/hidden-transport": "*",
 		"@morphit/net-defense": "*",
@@ -31,13 +30,15 @@
 		"@morphit/release-schema": "*",
 		"@morphit/rpc-pool": "*",
 		"@noble/curves": "1.9.7",
-		"hono": "^4.12.25",
+		"@noble/hashes": "^1.8.0",
+		"hono": "^4.13.12",
 		"pg": "^8.13.0",
 		"tsx": "^4.19.0",
 		"undici": "^7.29.1",
 		"zod": "^3.23.0"
 	},
 	"devDependencies": {
+		"@morphit/indexer-client": "*",
 		"@types/node": "^22.9.0",
 		"@types/pg": "^8.11.10",
 		"prettier": "~3.6.2",

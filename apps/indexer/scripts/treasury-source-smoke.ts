@@ -5,7 +5,7 @@
  * the request-coalescing, and the "rebuild on address change"
  * detection logic the poller uses.
  *
- * Part 109: viewkey concepts removed entirely.  The
+ * viewkey concepts removed entirely.  The
  * TreasurySourceEnvFallback no longer has `xmrViewkey`, the
  * XmrTreasury return shape no longer has `viewkey`, and
  * legacy chain rows that contain a stray `viewkey` field are
@@ -47,7 +47,7 @@ const ENV_FALLBACK: TreasurySourceEnvFallback = {
 	btcSatoshis: 416,
 	xmrAddress: '4' + 'E'.repeat(94),
 	xmrPiconero: '781250000',
-	// cp474 — REQUIRED since cp372 and absent here until now.  `resolveBlurt`
+	// REQUIRED since an earlier release and absent here until now.  `resolveBlurt`
 	// gates on `this.env.blurtBase > 0`; with the field missing that read
 	// `undefined > 0` === false, so the env-fallback branch was unreachable in
 	// every scenario in this file.
@@ -59,7 +59,7 @@ const EMPTY_ENV: TreasurySourceEnvFallback = {
 	btcSatoshis: 0,
 	xmrAddress: '',
 	xmrPiconero: '',
-	// cp474 — 0 is the "operator set nothing" sentinel resolveBlurt tests for.
+	// 0 is the "operator set nothing" sentinel resolveBlurt tests for.
 	blurtBase: 0
 };
 
@@ -76,7 +76,7 @@ async function run(): Promise<void> {
 		}
 		if (snap.xmr?.address !== ENV_FALLBACK.xmrAddress) throw new Error('xmr env addr');
 		if (snap.hasChainPin !== false) throw new Error('hasChainPin should be false');
-		// Part 109: snapshot.xmr MUST NOT have a viewkey field.
+		// snapshot.xmr MUST NOT have a viewkey field.
 		if ('viewkey' in (snap.xmr as object)) {
 			throw new Error('Part 109 invariant: xmr snapshot must not expose a viewkey field');
 		}
@@ -175,7 +175,7 @@ async function run(): Promise<void> {
 
 	// Case 4c: community-operator state — chain XMR address, env
 	// address empty.  Pre-Part-108++ this would mean "verifier
-	// disabled"; in Part 109 the verifier works fine (per-payment
+	// disabled"; the verifier works fine (per-payment
 	// proofs from users; no operator-side viewkey required).
 	{
 		const partialEnv: TreasurySourceEnvFallback = {
@@ -183,7 +183,7 @@ async function run(): Promise<void> {
 			btcSatoshis: 0,
 			xmrAddress: '',
 			xmrPiconero: '',
-			blurtBase: 0 // cp474 — required since cp372
+			blurtBase: 0 // required since an earlier release
 		};
 		const db = new FakeDatabase([
 			{
@@ -215,7 +215,7 @@ async function run(): Promise<void> {
 			{ treasury: { btc: { address: VALID_BTC_ADDR_1, satoshis: 500 }, xmr: null } }
 		]);
 		const src = new TreasurySource(db as unknown as never, ENV_FALLBACK, 30_000, clock);
-		// cp474 — read the counter into a fresh local at each checkpoint. Comparing
+		// read the counter into a fresh local at each checkpoint. Comparing
 		// `db.queries` directly let TS narrow it to the literal `1` at the first
 		// guard and keep that narrowing across the awaits (it can't see
 		// `src.current()` mutate the fake), which made the final `!== 2` look
@@ -307,7 +307,7 @@ async function run(): Promise<void> {
 			btcSatoshis: 0,
 			xmrAddress: VALID_XMR_ADDR,
 			xmrPiconero: '',
-			blurtBase: 0 // cp474 — required since cp372
+			blurtBase: 0 // required since an earlier release
 		};
 		const db = new FakeDatabase([]);
 		const src = new TreasurySource(db as unknown as never, partialEnv);

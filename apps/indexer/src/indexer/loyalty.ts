@@ -19,6 +19,7 @@
  */
 
 import type pg from 'pg';
+import { consensusV2Active } from '$indexer/consensusActivation';
 import { logger } from '$log';
 
 const log = logger('loyalty');
@@ -76,11 +77,41 @@ function isUniqueViolation(err: unknown): boolean {
 	);
 }
 
+/**
+ * The BP this instance's relay should delegate to `account`: the rewards of
+ * the milestones (and the first-fee welcome) reached by fees on orders tagged
+ * to THIS instance. A delegation SETS the level from the delegating account,
+ * so each instance's relay must carry only its own share. It used to carry
+ * the account's whole cumulative total, so once a user's milestones were
+ * reached through two instances, both relays delegated the earlier ones.
+ * A milestone row is attributed through the order its fee paid for (same
+ * account, same block time, the instance's tag).
+ */
+async function delegationTargetBp(
+	client: pg.PoolClient,
+	account: string,
+	instanceTag: string
+): Promise<number> {
+	const r = await client.query<{ bp: string }>(
+		`SELECT COALESCE(SUM(m.bp_rewarded), 0)::text AS bp
+		   FROM account_loyalty_milestones m
+		  WHERE m.account = $1
+		    AND EXISTS (
+		          SELECT 1 FROM orders o
+		           WHERE o.account = m.account
+		             AND o.operator_tag = $2
+		             AND o.created_at = m.triggered_at
+		        )`,
+		[account, instanceTag]
+	);
+	return Number(r.rows[0]?.bp ?? '0');
+}
+
 /** Called when an order pays a BLURT fee with fee_status='verified'.
  *  Updates cumulative total and queues any newly-crossed milestone
  *  rewards. Must run inside a transaction owning the given client.
  *
- *  Part 111 — `instanceOperatorTag` and `orderOperatorTag` are
+ *  `instanceOperatorTag` and `orderOperatorTag` are
  *  used to gate the relay-queue inserts for federation cost-
  *  attribution.  If the order op's operator_tag does NOT match
  *  THIS instance's tag, the cumulative total is still updated
@@ -89,6 +120,13 @@ function isUniqueViolation(err: unknown): boolean {
  *  queued — the operator named on the op is the one obligated
  *  for the BP delegation, not us.  If `instanceOperatorTag` is
  *  undefined (unregistered), no delegations queue.
+ *
+ *  `canonicalBlurt` is the part of the fee that reached the canonical
+ *  treasury. From CONSENSUS_V2_ACTIVATION_TIME on it is also added to
+ *  `canonical_blurt_paid`, the measure the attestor loyalty gate reads:
+ *  the owner leg can go to an account the payer controls (any account can
+ *  register an operator naming itself as fee recipient), so only the
+ *  canonical leg is money the payer really parted with.
  */
 export async function trackVerifiedBlurtFee(
 	client: pg.PoolClient,
@@ -97,11 +135,16 @@ export async function trackVerifiedBlurtFee(
 	blockNum: number,
 	blockTime: Date,
 	orderOperatorTag: string | null,
-	instanceOperatorTag: string | undefined
+	instanceOperatorTag: string | undefined,
+	canonicalBlurt: number
 ): Promise<void> {
 	if (amountBlurt <= 0) return;
+	const canonicalCounted =
+		consensusV2Active(blockTime) && Number.isFinite(canonicalBlurt) && canonicalBlurt > 0
+			? canonicalBlurt
+			: 0;
 
-	// Part 111 federation-scope gate.  Whether THIS instance is
+	// federation-scope gate.  Whether THIS instance is
 	// the operator obligated for the delegation BP payouts.
 	const isOurInstance =
 		instanceOperatorTag !== undefined &&
@@ -115,16 +158,18 @@ export async function trackVerifiedBlurtFee(
 		previous_total: string;
 		new_total: string;
 	}>(
-		`INSERT INTO account_loyalty (account, cumulative_blurt_paid, updated_at)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO account_loyalty (account, cumulative_blurt_paid, canonical_blurt_paid, updated_at)
+		 VALUES ($1, $2, $4, $3)
 		 ON CONFLICT (account) DO UPDATE
 		   SET cumulative_blurt_paid =
 		         account_loyalty.cumulative_blurt_paid + EXCLUDED.cumulative_blurt_paid,
+		       canonical_blurt_paid =
+		         account_loyalty.canonical_blurt_paid + EXCLUDED.canonical_blurt_paid,
 		       updated_at = EXCLUDED.updated_at
 		 RETURNING
 		   (cumulative_blurt_paid - $2)::text AS previous_total,
 		   cumulative_blurt_paid::text AS new_total`,
-		[account, amountBlurt, blockTime]
+		[account, amountBlurt, blockTime, canonicalCounted]
 	);
 	const row = upsert.rows[0];
 	if (row === undefined) return; // defensive — RETURNING should always yield
@@ -153,14 +198,14 @@ export async function trackVerifiedBlurtFee(
 	//
 	// Caught pre-launch by the integration test suite, which
 	// was failing all along but wasn't part of the default CI
-	// gate (REVISIT-LIST: integration-suite-in-default-gate).
+	// gate (backlog: integration-suite-in-default-gate).
 	let firstFeeWelcomeFired = false;
 	const welcomeSavepoint = 'first_fee_welcome_sp';
 	await client.query(`SAVEPOINT ${welcomeSavepoint}`);
 	try {
 		await client.query(
-			// cp138 D-1: write triggered_at explicitly with block
-			// time, not NOW().  Pre-cp138 the DEFAULT NOW() was
+			// write triggered_at explicitly with block
+			// time, not NOW().  Previously, the DEFAULT NOW was
 			// the indexer's wall clock at insert moment, which
 			// would diverge across replays.  Column is currently
 			// unread; this preempts a future reader tripping on
@@ -186,39 +231,35 @@ export async function trackVerifiedBlurtFee(
 	}
 
 	if (firstFeeWelcomeFired && isOurInstance) {
-		// Cumulative includes the 1 BP we just inserted; if no
+		// The target includes the 1 BP we just inserted; if no
 		// milestone crosses on this same fee, this is just the 1.
-		// If a milestone DOES cross, it'll re-query cumulative
-		// inside the loop and pick up this row plus the milestone
-		// row, so the delegation target stays correct.
+		// If a milestone DOES cross, the loop re-computes it and
+		// picks up this row plus the milestone row.
 		//
-		// Part 111: only queue the relay-payout when THIS instance
+		// only queue the relay-payout when THIS instance
 		// is the named operator.  The milestone insert above
 		// happens unconditionally (global loyalty state); only the
 		// federation-cost-bearing queue insert is gated.
-		const cumResult = await client.query<{ cumulative_bp: string }>(
-			`SELECT COALESCE(SUM(bp_rewarded), 0)::text AS cumulative_bp
-			   FROM account_loyalty_milestones
-			  WHERE account = $1`,
-			[account]
-		);
-		const cumulativeBp = Number(cumResult.rows[0]?.cumulative_bp ?? '0');
-		await client.query(
-			`INSERT INTO relay_pending_transfers
-			   (recipient, kind, amount_blurt, amount_bp, reason, created_at)
-			 VALUES ($1, 'delegation', 0, $2, $3, $4)`,
-			[account, cumulativeBp, 'first_listing_fee_welcome', blockTime]
-		);
+		const cumulativeBp = await delegationTargetBp(client, account, orderOperatorTag!);
+		if (cumulativeBp <= 0) {
+			// Nothing attributable to this instance (no tagged order row for
+			// the fee): never queue a zero delegation, which would undelegate.
+			log.warn('loyalty_delegation_unattributed', { account, block_num: blockNum });
+		} else {
+			await client.query(
+				`INSERT INTO relay_pending_transfers
+				   (recipient, kind, amount_blurt, amount_bp, reason, created_at)
+				 VALUES ($1, 'delegation', 0, $2, $3, $4)`,
+				[account, cumulativeBp, 'first_listing_fee_welcome', blockTime]
+			);
+		}
 	} else if (firstFeeWelcomeFired && !isOurInstance) {
-		// Part 112 hardening — log the skip.  Per-op audit trail
+		// log the skip.  Per-op audit trail
 		// for operators reviewing "why didn't we delegate BP
 		// after this user's first verified fee?"  All public
 		// chain data — no PII.
 		log.info('first_fee_welcome_bp_skipped_other_instance', {
-			reason:
-				orderOperatorTag === null
-					? 'order_no_tag'
-					: 'order_tag_mismatch',
+			reason: orderOperatorTag === null ? 'order_no_tag' : 'order_tag_mismatch',
 			account,
 			order_operator_tag: orderOperatorTag,
 			our_tag: instanceOperatorTag ?? null,
@@ -248,7 +289,7 @@ export async function trackVerifiedBlurtFee(
 			// awarded on a previous crossing; continue to check
 			// subsequent milestones.
 			await client.query(
-				// cp138 D-1: see first INSERT — explicit
+				// see first INSERT — explicit
 				// triggered_at = blockTime for replay determinism.
 				`INSERT INTO account_loyalty_milestones
 				   (account, milestone_blurt, bp_rewarded, triggered_at, triggered_in_block)
@@ -263,27 +304,24 @@ export async function trackVerifiedBlurtFee(
 			throw err;
 		}
 
-		// Compute the CUMULATIVE BP target across all milestones
-		// this account has reached so far (including the one we
-		// just inserted). The relay's delegate_vesting_shares op
-		// SETS the delegation level rather than adding — so the
-		// queued row must carry the absolute target, not the
-		// per-milestone increment.
+		// The relay's delegate_vesting_shares op SETS the delegation
+		// level rather than adding — so the queued row carries the
+		// absolute target of THIS instance's relay: the rewards of
+		// the milestones reached through this instance
+		// (delegationTargetBp), not the per-milestone increment and
+		// not the account's federation-wide total.
 		//
-		// Part 111: only queue the relay-payout when THIS instance
+		// only queue the relay-payout when THIS instance
 		// is the named operator.  The milestone INSERT above
 		// happens unconditionally (global loyalty state stays
 		// consistent across the federation); only the federation-
 		// cost-bearing queue insert is gated.
 		if (!isOurInstance) {
-			// Part 112 hardening — log per-milestone skip.  Public
+			// log per-milestone skip.  Public
 			// chain data only.  Fires once per crossed milestone
 			// per fee payment; volume bounded by milestone count.
 			log.info('loyalty_milestone_skipped_other_instance', {
-				reason:
-					orderOperatorTag === null
-						? 'order_no_tag'
-						: 'order_tag_mismatch',
+				reason: orderOperatorTag === null ? 'order_no_tag' : 'order_tag_mismatch',
 				account,
 				milestone_blurt: ms.thresholdBlurt,
 				bp_rewarded: ms.bpReward,
@@ -294,17 +332,17 @@ export async function trackVerifiedBlurtFee(
 			continue;
 		}
 
-		const cumResult = await client.query<{ cumulative_bp: string }>(
-			`SELECT COALESCE(SUM(bp_rewarded), 0)::text AS cumulative_bp
-			   FROM account_loyalty_milestones
-			  WHERE account = $1`,
-			[account]
-		);
-		const cumulativeBp = Number(cumResult.rows[0]?.cumulative_bp ?? '0');
+		const cumulativeBp = await delegationTargetBp(client, account, orderOperatorTag!);
+		if (cumulativeBp <= 0) {
+			// Nothing attributable to this instance (no tagged order row for
+			// the fee): never queue a zero delegation, which would undelegate.
+			log.warn('loyalty_delegation_unattributed', { account, block_num: blockNum });
+			continue;
+		}
 
 		// Queue the delegation for the relay drainer to broadcast.
 		// The relay's delegate_vesting_shares call will convert
-		// cumulative_bp (BLURT Power) to VESTS at broadcast time
+		// the BP target (BLURT Power) to VESTS at broadcast time
 		// using the chain's current ratio — we store the BP target.
 		await client.query(
 			`INSERT INTO relay_pending_transfers

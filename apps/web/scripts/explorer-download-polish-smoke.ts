@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the block-explorer + download polish from t.txt (cp450, items 1–4).
+ * Smoke: the block-explorer + download polish from  (items 1–4).
  *
  *   1. The explorer ACCOUNT page loads its four independent fetches
  *      CONCURRENTLY (balance/keys/avatar/history), not as four serial

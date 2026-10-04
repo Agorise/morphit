@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/sync-profile.ts  (cp762 — diagnostic, not a smoke)
+ * apps/indexer/scripts/sync-profile.ts  (diagnostic, not a smoke; see OPERATIONS.md
+ * "Measuring where a slow initial sync spends its time")
  *
  * WHY: "the initial chain sync takes days" — before optimising, MEASURE where
  * the wall-clock actually goes, because the fix differs completely by regime:
@@ -11,8 +12,9 @@
  *                    wall. Batch/DB tuning is the lever.
  *
  * This runs the REAL fetch primitive (`BlurtClient.getBlocks`) against the
- * indexer's REAL configured pool, over whatever transport that pool uses
- * (clearnet or, after a tor-only re-provision, hidden-only over Tor). It then
+ * indexer's REAL configured pool, routed exactly as the service routes it
+ * (bootChainClient.ts: `.onion` over Tor, `.b32.i2p` over i2pd, and on a node
+ * with no clearnet RPC no clearnet host at all). It then
  * projects the full-sync fetch time and — only with --with-db — probes the
  * per-window commit cost. It is SAFE to run alongside a live sync:
  *   - fetch profiling is READ-ONLY (no DB connection at all);
@@ -34,7 +36,7 @@
  */
 import { performance } from 'node:perf_hooks';
 import { loadConfig } from '../src/config/index.ts';
-import { BlurtClient } from '../src/blurt/client.ts';
+import { bootChainClient } from '../src/indexer/bootChainClient.ts';
 import { createDatabase } from '../src/db/pool.ts';
 
 const BLOCK_FETCH_BATCH = 20; // mirrors poller.ts
@@ -69,7 +71,7 @@ function fmtDur(ms: number): string {
 
 async function main(): Promise<void> {
 	const config = loadConfig();
-	const client = new BlurtClient(config);
+	const client = bootChainClient(config);
 
 	const windows = num(flag('windows'), 12);
 	const batch = num(flag('batch'), BLOCK_FETCH_BATCH);

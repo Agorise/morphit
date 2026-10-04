@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, D12 — the laptop broadcast scripts sign ONCE and fall back
+ * the laptop broadcast scripts sign ONCE and fall back
  * through health-ranked nodes with that same transaction.
  *
  * Before: each script called dblurt's `customJson` per node in a fixed order,
@@ -106,5 +106,42 @@ describe('sign once, broadcast to ranked nodes (D12)', () => {
 			})
 		).rejects.toThrow(/expired before any node confirmed/);
 		expect(sent.length).toBe(1);
+	});
+
+	it('one node claiming a higher head is not used for TaPoS unless another node confirms that block', async () => {
+		const liar: NodeHealth = { url: 'liar', ok: true, ms: 1, headBlock: 5000, props: props(5000) };
+		const sent: Array<{ ref_block_num: number }> = [];
+		await signOnceAndBroadcast(op, key, [liar, ok('b', 2, 101), ok('c', 3, 100)], {
+			log: () => undefined,
+			// b knows block 100 with the id c reported; nobody has the liar's block 5000.
+			getBlock: async (url, num) =>
+				num === 100 && url === 'b' ? { block_id: props(100).head_block_id } : null,
+			sleep: async () => undefined,
+			send: async (_url, tx) => {
+				sent.push(tx as { ref_block_num: number });
+				return { block_num: 102 };
+			}
+		});
+		expect(sent[0]!.ref_block_num, 'built on the unconfirmed head of one node').toBe(100);
+	});
+
+	it('"accepted" is checked on another node; a lone claim is reported as not confirmed', async () => {
+		const lines: string[] = [];
+		const lone = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
+			log: (l) => void lines.push(l),
+			getBlock: async () => ({ block_id: 'x', transaction_ids: [] }),
+			sleep: async () => undefined,
+			send: async () => ({ block_num: 101 })
+		});
+		expect(lone.confirmedBy).toBeNull();
+		expect(lines.join('\n')).toMatch(/NOT confirmed by a second node/);
+		const seen = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
+			log: () => undefined,
+			getBlock: async (url) =>
+				url === 'b' ? { block_id: 'x', transaction_ids: [lone.trxId] } : null,
+			sleep: async () => undefined,
+			send: async () => ({ block_num: 101 })
+		});
+		expect(seen.confirmedBy).toBe('b');
 	});
 });

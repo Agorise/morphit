@@ -83,8 +83,8 @@
 		// filter doesn't need description matching).
 		//
 		// No result cap: the registry has grown past 50 methods, and any
-		// fixed cap silently hid the tail of the alphabet (the maintainer: "the select
-		// options only go as far as S").  The dropdown is scrollable and the
+		// fixed cap silently hid the tail of the alphabet (Reported: the options stopped at S).
+		// The dropdown is scrollable and the
 		// registry is bounded, so show EVERY matching method.
 		return searchMod
 			.searchPaymentMethods(all, query, () => null)

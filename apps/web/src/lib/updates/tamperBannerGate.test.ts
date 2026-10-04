@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * cp514 (t.txt A) — the "Build integrity check failed" banner still flashed on
+ * the "Build integrity check failed" banner still flashed on
  * some devices during a routine upgrade, BEFORE the friendly "Load it now"
  * snackbar could appear. These gates suppress the scary asset-tamper banner
  * while a new build is landing (swUpdatePending) and for a short grace window
@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { swUpdatePending, tamperGraceElapsed, TAMPER_BANNER_GRACE_MS } from './tamperBannerGate';
 
-describe('cp514 (t.txt A) — tamper-banner suppression gates', () => {
+describe('cp514 — tamper-banner suppression gates', () => {
 	afterEach(() => vi.useRealTimers());
 
 	it('swUpdatePending resting-false when no service worker is available', () => {

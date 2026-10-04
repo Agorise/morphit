@@ -1,5 +1,5 @@
 /**
- * Blurt price-feed fetcher — api.blurt.blog/price_info (cp425).
+ * Blurt price-feed fetcher — api.blurt.blog/price_info.
  *
  * A Blurt-native BLURT/USD source added alongside the market
  * aggregators (Coingecko, CoinPaprika, …). It joins the same

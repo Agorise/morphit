@@ -14,13 +14,13 @@
  *
  *   I-2  Operator-disabled filter — the carousel checks
  *        $instance.disabled_assets and skips any ticker listed
- *        there.  Memory rule: never show a coin the operator
+ *        there.  Rule: never show a coin the operator
  *        explicitly turned off.
  *
  *   I-3  Dedupe by icon-file basename — if two registry entries
  *        share an icon file (e.g. ETH used as both an asset
  *        and a network indicator), only one carousel slot
- *        renders.  Memory rule: don't display the same icon
+ *        renders.  Rule: don't display the same icon
  *        twice in the same carousel.
  *
  *   I-4  Lazy-loaded images — every <img> in the carousel has
@@ -237,9 +237,9 @@ const scenarios: Scenario[] = [
 	{
 		name: 'I-10: icons render at uniform opacity: 0.85 (no color modification)',
 		test: () => {
-			// cp115-cp4: the maintainer wants the asset ICON ARTWORK shipped full-
+			// the maintainer wants the asset ICON ARTWORK shipped full-
 			// color, no SVG modification, no `filter: grayscale`-style
-			// color tampering.  cp115-cp6: but the carousel-item gets
+			// color tampering.  but the carousel-item gets
 			// a uniform 0.85 alpha applied at the stacking level so it
 			// sits as a decorative ribbon under the bolder priorities-
 			// cards above without competing for attention.  This smoke
@@ -277,7 +277,7 @@ const scenarios: Scenario[] = [
 	{
 		name: 'I-11: two carousel rows declared (rowA + rowB)',
 		test: () => {
-			// cp115-cp6: the maintainer asked for two rows so all 22+ slots can be
+			// the maintainer asked for two rows so all 22+ slots can be
 			// seen sooner without waiting for a 60-second loop.  Verify
 			// both derived row variables exist in the script section
 			// (not just inline filter() in the template).
@@ -327,11 +327,11 @@ const scenarios: Scenario[] = [
 	{
 		name: 'I-13: row split is balanced (alternating even/odd)',
 		test: () => {
-			// cp115-cp6 rationale: as the registry grows, the split
+			// rationale: as the registry grows, the split
 			// must stay 50/50.  Alternating is the simplest balanced
 			// strategy (rowA = even-index, rowB = odd-index).  Catches
 			// a future regression to slice(0, N/2) which would put all
-			// the cp3-era coins in one row + all cp21+ additions in
+			// the coins in one row + all later additions in
 			// the other.
 			if (!/rowA\s*=\s*\$derived\(visibleSlots\.filter\(\(_,\s*i\)\s*=>\s*i\s*%\s*2\s*===\s*0\)\)/.test(src)) {
 				return 'rowA split is not "i % 2 === 0" alternating — risk of unbalanced rows as catalogue grows';

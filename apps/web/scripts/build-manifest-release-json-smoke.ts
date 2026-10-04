@@ -1,8 +1,8 @@
 /**
- * build-manifest-release-json-smoke (cp319)
+ * build-manifest-release-json-smoke
  *
  * Guards the launch-critical release-op hash_manifest pipeline that
- * had silently diverged before cp319 (the release op has never been
+ * had silently diverged previously (the release op has never been
  * broadcast, so nobody had run generator → builder → validator as a
  * pipeline).  The two artifacts build-manifest.mjs emits are DISTINCT:
  *
@@ -27,8 +27,8 @@
  *      schema's byteLengthOfJson measures, and an over-cap manifest is
  *      detectable (the CLI refuses it).
  *   7. Static wiring: build-manifest.mjs exposes the --release-json
- *      mode + size guard, and PRE-LAUNCH-CHECKLIST §B drives the
- *      builder via the MORPHIT_BUILD_HASH_MANIFEST_FILE env var (NOT a
+ *      mode + size guard, and OPERATIONS.md drives the payload builder
+ *      via the MORPHIT_BUILD_HASH_MANIFEST_FILE env var (NOT a
  *      nonexistent --hash-manifest flag).
  */
 
@@ -180,17 +180,16 @@ async function main(): Promise<void> {
 		ok('build-manifest.mjs exposes --release-json mode + the 64 KB size guard');
 	else bad('build-manifest.mjs lost the release-json mode/guard', 'launch generator regressed');
 
-	const checklist = await readFile(join(REPO, 'docs/PRE-LAUNCH-CHECKLIST.md'), 'utf-8');
+	const operations = await readFile(join(REPO, 'docs/OPERATIONS.md'), 'utf-8');
 	if (
-		checklist.includes('--release-json') &&
-		checklist.includes('MORPHIT_BUILD_HASH_MANIFEST_FILE') &&
-		!checklist.includes('--hash-manifest')
+		operations.includes('MORPHIT_BUILD_HASH_MANIFEST_FILE') &&
+		!operations.includes('--hash-manifest')
 	)
-		ok('PRE-LAUNCH-CHECKLIST §B drives the builder via the real env var (no dead --hash-manifest flag)');
+		ok('OPERATIONS.md drives the payload builder via the real env var (no dead --hash-manifest flag)');
 	else
 		bad(
-			'PRE-LAUNCH-CHECKLIST release-manifest instructions stale',
-			'must use --release-json + MORPHIT_BUILD_HASH_MANIFEST_FILE, not --hash-manifest'
+			'OPERATIONS.md release-manifest instructions stale',
+			'must use MORPHIT_BUILD_HASH_MANIFEST_FILE, not --hash-manifest'
 		);
 
 	console.log(`\n${'─'.repeat(54)}`);

@@ -1,5 +1,5 @@
 /**
- * ops/test/lib/signed-snapshot-op.mjs — test fixture (v1.18.0 deep-deep, rv2-1)
+ * ops/test/lib/signed-snapshot-op.mjs — test fixture
  *
  * Since v1.18.0 fast-sync and the mirror accept an indexer_snapshot_v1 op only
  * when two RPC operators agree on it and on its block, and when its signature

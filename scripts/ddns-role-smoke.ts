@@ -1,6 +1,6 @@
 /**
- * ddns-role-smoke.ts (cp600) — guards the `ddns` Ansible role that wires the
- * cp596 dynamic-DNS mechanism into the full install for HOME nodes (the one
+ * ddns-role-smoke.ts — guards the `ddns` Ansible role that wires the
+ * dynamic-DNS mechanism into the full install for HOME nodes (the one
  * home-specific ADDITION to the otherwise-identical VPS stack; a VPS leaves
  * enable_ddns off).  Can't run Ansible in CI, so this pins the role's shape +
  * that every YAML file actually parses.
@@ -52,10 +52,10 @@ check('group_vars carries a DUMMY morphit_ddns_update_url with {ip} examples', /
 // ── defaults ──────────────────────────────────────────────────────
 check('defaults define lib + env + state + update_url + ip_url + on_calendar', /morphit_ddns_lib:/.test(defaults) && /morphit_ddns_env_file:/.test(defaults) && /morphit_ddns_state_file:/.test(defaults) && /morphit_ddns_update_url:/.test(defaults) && /morphit_ddns_ip_url:/.test(defaults) && /morphit_ddns_on_calendar:/.test(defaults));
 
-// ── env template (matches the cp596 updater's contract) ───────────
+// ── env template (matches the updater's contract) ───────────
 check('env template writes MORPHIT_DDNS_UPDATE_URL + STATE_FILE (IP_URL optional)', /MORPHIT_DDNS_UPDATE_URL=\{\{ morphit_ddns_update_url \}\}/.test(envtpl) && /MORPHIT_DDNS_STATE_FILE=/.test(envtpl) && /\{% if morphit_ddns_ip_url/.test(envtpl));
 
-// ── service unit (mirrors cp596 hardened service) ─────────────────
+// ── service unit (mirrors a later change hardened service) ─────────────────
 check('service is oneshot, reads the env file, retries transient (SuccessExitStatus=0 1)', /Type=oneshot/.test(svctpl) && /EnvironmentFile=-\{\{ morphit_ddns_env_file \}\}/.test(svctpl) && /SuccessExitStatus=0 1/.test(svctpl));
 check('service is hardened (ProtectSystem=strict, NoNewPrivileges, ReadWritePaths=state dir)', /ProtectSystem=strict/.test(svctpl) && /NoNewPrivileges=true/.test(svctpl) && /ReadWritePaths=\{\{ morphit_ddns_state_file \| dirname \}\}/.test(svctpl));
 

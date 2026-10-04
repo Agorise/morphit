@@ -1,5 +1,5 @@
 /**
- * explorer-urls-multi smoke (cp167 LL #168).
+ * explorer-urls-multi smoke.
  *
  * Covers the new externalExplorerUrls() plural API in
  * apps/web/src/lib/explorer/urls.ts.  Locks in the contract:
@@ -231,7 +231,7 @@ scenario('uppercase txid is lowercased in output URLs', () => {
 	if (result[0]!.includes('A'.repeat(64))) throw new Error('uppercase leaked');
 });
 
-// ─── cp174 — multi-network token explorer widening (USDT/USDC/DAI) ───
+// ─── multi-network token explorer widening (USDT/USDC/DAI) ───
 //
 // Mirrors urls.ts tokenExplorerUrls(): per-network normalization
 // (SPL case-sensitive; TRC-20 lowercase-no-prefix; EVM lowercase+0x),

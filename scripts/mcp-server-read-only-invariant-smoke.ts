@@ -1,7 +1,7 @@
 /**
- * mcp-server read-only invariant smoke (cp149).
+ * mcp-server read-only invariant smoke.
  *
- * Locks in the cp148 walkthrough's load-bearing trust claim:
+ * Locks in the walkthrough's load-bearing trust claim:
  * Charlie (the AI-agent persona invoking Morphit via the MCP
  * server) is read-only by construction.  The MCP server can
  * search orders, fetch listings, list instances, list payment
@@ -9,7 +9,7 @@
  * MUTATE any user state, BROADCAST any transaction, or HOLD
  * any keys.
  *
- * The cp148 walkthrough verified this inline with a grep over
+ * The walkthrough verified this inline with a grep over
  * `apps/mcp-server/src/`.  This smoke codifies that grep so
  * the property gets re-checked on every CI run.  If anyone
  * ever imports a signing primitive into the MCP server, that's
@@ -32,10 +32,10 @@
  *   3. The `fetchJson` callsite cardinality matches expectation.
  *      Every network call in apps/mcp-server/src/ must go through
  *      the centralized `fetchJson` from `indexerClient.ts`.  Raw
- *      `fetch(` in tool code would bypass the cp146 SSRF defenses
+ *      `fetch(` in tool code would bypass the SSRF defenses
  *      (redirect:'manual', User-Agent, URL redaction).
  *
- * Together: Charlie's trust posture as documented in cp148
+ * Together: Charlie's trust posture as documented
  * Persona 4 walkthrough is enforced by code, not just by
  * convention.
  */
@@ -273,7 +273,7 @@ if (mutationHits.length === 0) {
 /* ---------------- invariant 3: all network calls via fetchJson ---------------- */
 
 /**
- * The cp146 hardening (redirect:'manual', URL redaction in
+ * The hardening (redirect:'manual', URL redaction in
  * errors, User-Agent header, timeout via AbortController) is
  * concentrated in `indexerClient.ts`'s `fetchJson()`.  Any tool
  * that uses raw `fetch(` instead of `fetchJson(` would bypass
@@ -299,14 +299,14 @@ for (const file of mcpFiles) {
 	const text = readFileSync(file, 'utf8');
 	const lines = text.split('\n');
 	let inBlockComment = false;
-	// cp153 — the simpler `stripComments` helper at
+	// the simpler `stripComments` helper at
 	// `scripts/lib/strip-comments.ts` does a whole-text regex
 	// strip, which is faster but destroys line-number alignment
 	// (a multi-line `/* */` collapses to an empty string,
 	// shifting all subsequent lines).  This smoke reports raw
 	// fetch() hits with file:line for remediation, so we need
 	// per-line state that preserves the original line numbers.
-	// Hence the inline state machine here.  Confirmed in cp153
+	// Hence the inline state machine here.  Confirmed
 	// that consolidation would lose the diagnostic precision.
 	for (let i = 0; i < lines.length; i++) {
 		let line = lines[i];

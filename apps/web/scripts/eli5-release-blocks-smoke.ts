@@ -2,9 +2,9 @@
 /**
  * Smoke: the ELI5 release blocks must be REAL and COPY-PASTEABLE.
  *
- * cp445 — the six blocks were reconstructed from memory instead of reproduced
+ * the six blocks were reconstructed from memory instead of reproduced
  * from the record, inventing a `<your-vps>` placeholder, a `morphit-ops
- * canary-repair` command that does not exist, and wrong script paths. the maintainer had to
+ * canary-repair` command that does not exist, and wrong script paths. The maintainer had to
  * catch it. Guidance ("copy it exactly") is not a control; a check is.
  *
  * `scripts/eli5-release.sh <version>` is now the single source of the blocks.
@@ -42,8 +42,14 @@ if (!existsSync(GEN)) process.exit(1);
 const out = execFileSync('bash', [GEN, '9.9.9', 'test message'], { encoding: 'utf8' });
 
 // ─── the version is substituted everywhere, nothing left to hand-edit ───
-check('the version is interpolated into the tag', /git tag -s v9\.9\.9 -m "Morphit v9\.9\.9"/.test(out));
-check('the version is interpolated into the payload build', /MORPHIT_BUILD_VERSION=9\.9\.9/.test(out));
+check(
+	'the version is interpolated into the tag',
+	/git tag -s v9\.9\.9 -m "Morphit v9\.9\.9"/.test(out)
+);
+check(
+	'the version is interpolated into the payload build',
+	/MORPHIT_BUILD_VERSION=9\.9\.9/.test(out)
+);
 check('the commit message is interpolated', /git commit -m "test message"/.test(out));
 
 // ─── NO PLACEHOLDERS. This is the exact class of bug that shipped. ───
@@ -68,19 +74,48 @@ check('no invented command (morphit-ops canary-repair does not exist)', !/canary
 // passed the check above, because the real path still appeared on the next line.
 // So: EVERY path-shaped token in the output must exist on disk, and the two
 // broadcast invocations must be exactly the canonical ones.
-const paths = [...out.matchAll(/\b(?:apps|packages|scripts)\/[\w./-]+\.(?:ts|mjs|js|sh)\b/g)].map((m) => m[0]);
+const paths = [...out.matchAll(/\b(?:apps|packages|scripts)\/[\w./-]+\.(?:ts|mjs|js|sh)\b/g)].map(
+	(m) => m[0]
+);
 const missing = paths.filter((rel) => !existsSync(join(REPO, rel)));
 check('every path named in the blocks exists on disk', missing.length === 0);
 if (missing.length > 0) for (const m of missing) console.error(`      missing: ${m}`);
 
-check('the dry-run line is exactly canonical', out.includes('npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run'));
-check('the real-broadcast line is exactly canonical', /npx tsx apps\/indexer\/scripts\/release-broadcast\.ts release\.json\n/.test(out));
-check('the blocks never invoke ops-cli (release tooling lives in apps/indexer)', !/apps\/ops-cli/.test(out));
+check(
+	'the dry-run line is exactly canonical',
+	out.includes(
+		'./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run'
+	)
+);
+check(
+	'the real-broadcast line is exactly canonical',
+	/\n\.\/node_modules\/\.bin\/tsx apps\/indexer\/scripts\/release-broadcast\.ts release\.json\n/.test(
+		out
+	)
+);
+check(
+	'the blocks never run npx (it can fetch a package that is not installed)',
+	!/\bnpx\b/.test(out)
+);
+check(
+	'the blocks never invoke ops-cli (release tooling lives in apps/indexer)',
+	!/apps\/ops-cli/.test(out)
+);
 
 // ─── env vars must match what the payload builder actually reads ───
-const builder = readFileSync(join(REPO, 'apps', 'indexer', 'scripts', 'release-build-payload.ts'), 'utf8');
-for (const v of ['MORPHIT_BUILD_VERSION', 'MORPHIT_BUILD_HASH_MANIFEST_FILE', 'MORPHIT_BUILD_BLURT_BASE']) {
-	check(`${v} is read by release-build-payload.ts and named in the blocks`, builder.includes(`process.env.${v}`) && out.includes(v));
+const builder = readFileSync(
+	join(REPO, 'apps', 'indexer', 'scripts', 'release-build-payload.ts'),
+	'utf8'
+);
+for (const v of [
+	'MORPHIT_BUILD_VERSION',
+	'MORPHIT_BUILD_HASH_MANIFEST_FILE',
+	'MORPHIT_BUILD_BLURT_BASE'
+]) {
+	check(
+		`${v} is read by release-build-payload.ts and named in the blocks`,
+		builder.includes(`process.env.${v}`) && out.includes(v)
+	);
 }
 // The BLURT floor must be CHAIN-PINNED, not left to the builder's empty default:
 // BLOCK 4 runs with `< /dev/null`, so an unset value would OMIT the floor and let
@@ -96,66 +131,124 @@ check('there are exactly six blocks', headers.length === 6);
 for (const h of headers) {
 	check(`BLOCK ${h[1]} names the machine it runs on`, MACHINE.test(h[2] ?? ''));
 }
-check('BLOCK 3 (the upgrade) runs on morphit.io', /^\*\*BLOCK 3\*\* — [^\n]*\(morphit\.io\b/m.test(out));
-check('BLOCKS 5 and 6 (key and canary) run on the laptop, never the server', /^\*\*BLOCK 5\*\* — [^\n]*\(laptop\b/m.test(out) && /^\*\*BLOCK 6\*\* — [^\n]*\(laptop\b/m.test(out));
+check(
+	'BLOCK 3 (the upgrade) runs on morphit.io',
+	/^\*\*BLOCK 3\*\* — [^\n]*\(morphit\.io\b/m.test(out)
+);
+check(
+	'BLOCKS 5 and 6 (key and canary) run on the laptop, never the server',
+	/^\*\*BLOCK 5\*\* — [^\n]*\(laptop\b/m.test(out) &&
+		/^\*\*BLOCK 6\*\* — [^\n]*\(laptop\b/m.test(out)
+);
 
 // ─── the gates ───
 check('BLOCK 2 waits for CI to go green', /GATE: wait for CI to go green/.test(out));
-check('the tag is SIGNED with a message (the maintainer\u2019s git config rejects bare tags)', /git tag -s /.test(out) && !/git tag v/.test(out));
-check('`< /dev/null` is present (the payload builder prompts, and would hang)', /release-build-payload\.ts < \/dev\/null/.test(out));
-check('a dry-run precedes the real broadcast', out.indexOf('--dry-run') < out.lastIndexOf('release-broadcast.ts release.json'));
-check('BLOCK 6 repairs the canary via the migrated refresh ~/.morphit/update-canary.sh (upgrade wipes build/canary.txt)', /\.morphit\/update-canary\.sh/.test(out) && !/morphit-canary-setup\.sh/.test(out));
+check(
+	'the tag is SIGNED with a message (the maintainer\u2019s git config rejects bare tags)',
+	/git tag -s /.test(out) && !/git tag v/.test(out)
+);
+check(
+	'`< /dev/null` is present (the payload builder prompts, and would hang)',
+	/release-build-payload\.ts < \/dev\/null/.test(out)
+);
+check(
+	'a dry-run precedes the real broadcast',
+	out.indexOf('--dry-run') < out.lastIndexOf('release-broadcast.ts release.json')
+);
+check(
+	'BLOCK 6 repairs the canary via the migrated refresh ~/.morphit/update-canary.sh (upgrade wipes build/canary.txt)',
+	/\.morphit\/update-canary\.sh/.test(out) && !/morphit-canary-setup\.sh/.test(out)
+);
 
 // ─── BLOCK 4 installs the lockfile before running any repo tooling ───
 // (v1.20.0) The laptop repo is refreshed by unpacking the release tarball, which
 // leaves node_modules as it was. The payload builder then imported a library
 // whose installed copy predated the lockfile and died before writing
-// release.json. BLOCK 4's FIRST command must be `npm ci`, ahead of every
-// `npx tsx` in the ceremony.
+// release.json. BLOCK 4's FIRST command must be `npm ci`, ahead of every tsx
+// run in the ceremony — and with no install scripts, on the machine that holds
+// the @morphit WIF.
 {
 	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
 	const firstCmd = (/```\n([^\n]*)/.exec(b4) ?? [])[1] ?? '';
 	check(
-		'BLOCK 4 starts with `npm ci` (unpacking a tarball does not update node_modules)',
-		/^npm ci\b/.test(firstCmd) && out.indexOf('npm ci') < out.indexOf('npx tsx')
+		'BLOCK 4 starts with `npm ci --ignore-scripts` (unpacking a tarball does not update node_modules)',
+		/^npm ci --ignore-scripts\b/.test(firstCmd) &&
+			out.indexOf('npm ci') < out.indexOf('node_modules/.bin/tsx')
 	);
 }
 
 // ─── (v1.20.3) BLOCK 4 clears the previous ceremony's values first ───
-// `source` only SETS what the anchor names. v1.20.2's anchor had no CID, so the
-// CID and IPNS record that v1.20.1's ceremony had sourced into the same terminal
-// went into the v1.20.2 payload. The unset must come BEFORE the source.
+// v1.20.2's payload carried the CID and IPNS record v1.20.1's ceremony had left
+// in the same terminal. The unset comes BEFORE the payload build, which also
+// refuses such a value itself (MORPHIT_BUILD_ANCHOR_FILE).
 {
 	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
 	const unsetAt = b4.indexOf("unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')");
 	check(
-		'BLOCK 4 unsets every MORPHIT_BUILD_* value before sourcing the anchor',
-		unsetAt !== -1 && unsetAt < b4.indexOf('source /tmp/morphit-anchor.env')
+		'BLOCK 4 unsets every MORPHIT_BUILD_* value before building the payload',
+		unsetAt !== -1 && unsetAt < b4.indexOf('release-build-payload.ts')
 	);
 }
 
-// ─── the manifest must come from the VPS, not a laptop build ───
-check('the manifest is derived from the VPS\u2019s SERVED verify.json', /curl -fsSL https:\/\/morphit\.io\/verify\.json/.test(out));
-check('no laptop build feeds the manifest (cross-machine hashes differ)', !/npm run build/.test(out) && !/build-manifest\.mjs/.test(out));
-check('the on-chain payload pins no blurt_rpc endpoints', !/ENDPOINTS_FILE/.test(out) && !/blurt_rpc/.test(out));
+// ─── the manifest: from the anchored tarball, checked against the served site ───
+// (behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs Block 4)
+check(
+	'the manifest is computed from the published tarball, checked against the served verify.json',
+	/verify-json-to-release-manifest\.mjs --anchor \S+ --tarball \S+ --served \S+/.test(out) &&
+		/curl -fsSL https:\/\/morphit\.io\/verify\.json/.test(out)
+);
+check(
+	'no laptop build feeds the manifest (cross-machine hashes differ)',
+	!/npm run build/.test(out) && !/build-manifest\.mjs/.test(out)
+);
+check(
+	'the on-chain payload pins no blurt_rpc endpoints',
+	!/ENDPOINTS_FILE/.test(out) && !/blurt_rpc/.test(out)
+);
 
 // ─── decentralized-distribution: the anchor comes from CI, not a laptop sign ───
 // release.yml builds + hashes + signs the canonical tarball and attaches a
-// distribution-anchor.env; the ceremony FETCHES that and sources it. It must
+// distribution-anchor.env; the ceremony FETCHES that and the payload builder
+// PARSES it (never `source`). It must
 // NOT run release-sign.sh (its git-archive bytes differ from the published
-// tarball → a mismatched on-chain hash — the footgun removed at the cp560 cut).
-check('the ceremony does NOT run release-sign.sh (CI builds the canonical tarball)', !/release-sign\.sh/.test(out));
-check('the ceremony fetches the anchor from the published release', /releases\/download\/[^\s]*distribution-anchor\.env/.test(out));
-check('the payload build sources the fetched distribution anchor', /source \/tmp\/morphit-anchor\.env/.test(out));
-check('the blocks note that mirroring to GitHub + Codeberg is automatic', /GitHub \+ Codeberg/.test(out));
+// tarball → a mismatched on-chain hash — the footgun removed at the cut).
+check(
+	'the ceremony does NOT run release-sign.sh (CI builds the canonical tarball)',
+	!/release-sign\.sh/.test(out)
+);
+check(
+	'the ceremony fetches the anchor from the published release',
+	/releases\/download\/[^\s]*distribution-anchor\.env/.test(out)
+);
+check(
+	'the payload build reads the fetched anchor itself and nothing sources it',
+	/MORPHIT_BUILD_ANCHOR_FILE=\/tmp\/morphit-anchor\.env /.test(out) &&
+		!/^\s*(source|\.)\s/m.test(out) &&
+		builder.includes('MORPHIT_BUILD_ANCHOR_FILE')
+);
+check(
+	'the blocks note that mirroring to GitHub + Codeberg is automatic',
+	/GitHub \+ Codeberg/.test(out)
+);
 // IPFS is OPTIONAL + off by default: the ceremony must NOT force an ipfs add
 // or a manual mirror push (the maintainer's Forgejo auto-mirrors those refs already).
 check('the ceremony does not force an ipfs add step', !/ipfs add/.test(out));
-check('the ceremony does not do a manual codeberg push (auto-mirrored)', !/git push codeberg/.test(out));
+check(
+	'the ceremony does not do a manual codeberg push (auto-mirrored)',
+	!/git push codeberg/.test(out)
+);
 // The mirror list is now a FIXED default baked into the payload builder, so the
 // operator never supplies it (Forgejo auto-pushes to these hosts anyway).
-check('the payload builder bakes the Codeberg + GitHub mirror default', /codeberg\.org\/agorise\/morphit/.test(builder) && /github\.com\/agorise\/morphit/.test(builder));
-for (const v of ['MORPHIT_BUILD_SOURCE_SHA256', 'MORPHIT_BUILD_GPG_FINGERPRINT', 'MORPHIT_BUILD_IPFS_CID', 'MORPHIT_BUILD_MIRRORS']) {
+check(
+	'the payload builder bakes the Codeberg + GitHub mirror default',
+	/codeberg\.org\/agorise\/morphit/.test(builder) && /github\.com\/agorise\/morphit/.test(builder)
+);
+for (const v of [
+	'MORPHIT_BUILD_SOURCE_SHA256',
+	'MORPHIT_BUILD_GPG_FINGERPRINT',
+	'MORPHIT_BUILD_IPFS_CID',
+	'MORPHIT_BUILD_MIRRORS'
+]) {
 	check(`${v} is read by release-build-payload.ts`, builder.includes(`process.env.${v}`));
 }
 
@@ -164,16 +257,37 @@ for (const v of ['MORPHIT_BUILD_SOURCE_SHA256', 'MORPHIT_BUILD_GPG_FINGERPRINT',
 // future edit that drops the anchor write, the auto-publish, or (critically)
 // leaks the chain broadcast into CI is caught here.
 const releaseYml = readFileSync(join(REPO, '.forgejo', 'workflows', 'release.yml'), 'utf8');
-check('release.yml writes the anchor from the PUBLISHED tarball sha256', /distribution-anchor\.env/.test(releaseYml) && /\$TARBALL\.sha256/.test(releaseYml));
-check('release.yml auto-creates the release + attaches assets', /\/releases\b/.test(releaseYml) && /attachment=@/.test(releaseYml));
-check('release.yml sets the release body from RELEASE-NOTES-${TAG}.md (node-encoded JSON)', /RELEASE-NOTES-\$\{TAG\}\.md/.test(releaseYml) && /rel-create\.json/.test(releaseYml));
-check('the re-run body refresh uses a tag_name-free PATCH (never touches the signed tag)', /-X PATCH/.test(releaseYml) && /rel-patch\.json/.test(releaseYml));
-check('release.yml declares NO `permissions:` key (Forgejo ignores it, warns)', !/^\s*permissions:/m.test(releaseYml));
-check('release.yml publishes with an operator token, falling back to the auto-token', /RELEASE_TOKEN:-\$AUTO_TOKEN/.test(releaseYml));
-check('release.yml NEVER broadcasts to the chain (no spending key in CI)', !/release-broadcast/.test(releaseYml));
+check(
+	'release.yml writes the anchor from the PUBLISHED tarball sha256',
+	/distribution-anchor\.env/.test(releaseYml) && /\$TARBALL\.sha256/.test(releaseYml)
+);
+check(
+	'release.yml auto-creates the release + attaches assets',
+	/\/releases\b/.test(releaseYml) && /attachment=@/.test(releaseYml)
+);
+check(
+	'release.yml sets the release body from RELEASE-NOTES-${TAG}.md (node-encoded JSON)',
+	/RELEASE-NOTES-\$\{TAG\}\.md/.test(releaseYml) && /rel-create\.json/.test(releaseYml)
+);
+check(
+	'the re-run body refresh uses a tag_name-free PATCH (never touches the signed tag)',
+	/-X PATCH/.test(releaseYml) && /rel-patch\.json/.test(releaseYml)
+);
+check(
+	'release.yml declares NO `permissions:` key (Forgejo ignores it, warns)',
+	!/^\s*permissions:/m.test(releaseYml)
+);
+check(
+	'release.yml publishes with an operator token, falling back to the auto-token',
+	/RELEASE_TOKEN:-\$AUTO_TOKEN/.test(releaseYml)
+);
+check(
+	'release.yml NEVER broadcasts to the chain (no spending key in CI)',
+	!/release-broadcast/.test(releaseYml)
+);
 
 // ─── canonical IPFS CID (self-hosted seed; NO pinning service) — additive, never fails a release ───
-// v1.9.3 (the maintainer): release.yml computes a DETERMINISTIC directory CID with the pinned
+// v1.9.3: release.yml computes a DETERMINISTIC directory CID with the pinned
 // Kubo (`ipfs add --only-hash`) over the shared staging script — no upload, no
 // secret, no account — and carries it on-chain via the anchor's optional ipfs_cid.
 // Our own nodes host it (the seed box + every instance's Kubo). Pin the wiring so a

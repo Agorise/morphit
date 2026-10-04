@@ -40,7 +40,7 @@ let ORIGIN_PORT = Number(originPortRaw); // the real port once listening (0 = ke
 const HTTP_PROXY_PORT = Number(httpProxyPortRaw);
 const SOCKS_PORT = Number(socksPortRaw);
 const BODY = process.env.MORPHIT_STUB_BODY ?? '{}';
-// Optional per-method answers (v1.18.0 deep-deep, rv2-1): a JSON object mapping a
+// Optional per-method answers: a JSON object mapping a
 // JSON-RPC method (e.g. "condenser_api.get_block") to its result. A method not
 // in the map gets BODY, as before.
 const RPC_BY_METHOD = process.env.MORPHIT_STUB_RPC ? JSON.parse(process.env.MORPHIT_STUB_RPC) : {};

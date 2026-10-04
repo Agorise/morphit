@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: deployed-version update poll wiring (UpdateBanner). Anchor cp294.
+ * Smoke: deployed-version update poll wiring (UpdateBanner). Anchor.
  *
  * Background. The "update available" snackbar (UpdateBanner.svelte) was not
  * appearing after deploys on mobile OR PC. Root cause: it relied solely on
@@ -134,8 +134,8 @@ if (!pollBody) {
 } else {
 	// #3 cache-busted + no-store fetch of verify.json
 	// v1.20.3: the read goes through the shared reader ($lib/updates/
-	// servedVersion), which the release check uses too, so verify.json is
-	// downloaded once on page load. The cache-proofing lives there now.
+	// servedVersion); the cache-proofing lives there. (The release check no
+	// longer reads verify.json at all, so this poll is its only reader.)
 	const shared = readFileSync(join(REPO_ROOT, 'apps/web/src/lib/updates/servedVersion.ts'), 'utf-8');
 	const fetchesBusted = /verifyJsonPollUrl\s*\(/.test(shared);
 	const noStore = /cache:\s*['"]no-store['"]/.test(shared);

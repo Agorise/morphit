@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * mcp-webpush-install-defaults-smoke — locks down the maintainer's cp251
+ * mcp-webpush-install-defaults-smoke — locks down the maintainer's
  * requirement: web push AND the MCP server are installed, enabled,
  * and started BY DEFAULT on a fresh node (via the canonical Ansible
  * installer), and stay operator-controllable.
@@ -12,7 +12,7 @@
  * its deps, the relay sourcing the VAPID file) is exercised
  * separately — the deploy was verified end-to-end by hand, and the
  * relay ExecStart snippet by a bash dry-run — but ONLY a real fresh
- * Ubuntu box validates the full systemd activation. (See REVISIT.)
+ * Ubuntu box validates the full systemd activation. (See the backlog.)
  *
  * Guards, by area:
  *   MCP (§45):
@@ -21,8 +21,8 @@
  *       isolated /opt/morphit-mcp dir, runs deploy-mcp.sh, installs
  *       the unit, and enables+starts it — ALL gated on the toggle
  *     - a Restart morphit-mcp handler exists
- *     - deploy-mcp.sh vendors BOTH workspace deps + rewrites them to
- *       file: deps + runs npm install (the isolation contract)
+ *     - deploy-mcp.sh copies BOTH workspace deps and the runtime packages
+ *       out of the locked install, with no npm install (the isolation contract)
  *   Web push (§46):
  *     - group_vars morphit_enable_web_push (true) + morphit_vapid_subject
  *     - the role generates VAPID ONCE (creates: guard) gated on the
@@ -33,7 +33,8 @@
  * Emits one canonical line at column 0 on success.
  */
 
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -72,7 +73,7 @@ check(
 	'group_vars: morphit_enable_web_push defaults true',
 	/^morphit_enable_web_push:\s*true\s*$/m.test(groupVars)
 );
-// cp756: morphit_vapid_subject is no longer a single-line quoted origin
+// morphit_vapid_subject is no longer a single-line quoted origin
 // string.  It is now a tor-only-aware `>-` block scalar: the clearnet
 // branch still derives `https://{{ morphit_domain }}` (origin), while a
 // tor-only node gets a mailto: from its contact URL or an empty subject
@@ -89,12 +90,20 @@ check(
 );
 
 // ── MCP role wiring ───────────────────────────────────────────────
-check('role: creates morphit-mcp group', /ansible\.builtin\.group:[\s\S]*?name:\s*morphit-mcp/.test(roleMain));
+check(
+	'role: creates morphit-mcp group',
+	/ansible\.builtin\.group:[\s\S]*?name:\s*morphit-mcp/.test(roleMain)
+);
 check(
 	'role: creates morphit-mcp user (system, nologin)',
-	/ansible\.builtin\.user:[\s\S]*?name:\s*morphit-mcp[\s\S]*?system:\s*true[\s\S]*?nologin/.test(roleMain)
+	/ansible\.builtin\.user:[\s\S]*?name:\s*morphit-mcp[\s\S]*?system:\s*true[\s\S]*?nologin/.test(
+		roleMain
+	)
 );
-check('role: ensures /opt/morphit-mcp dir', /path:\s*\/opt\/morphit-mcp[\s\S]*?state:\s*directory/.test(roleMain));
+check(
+	'role: ensures /opt/morphit-mcp dir',
+	/path:\s*\/opt\/morphit-mcp[\s\S]*?state:\s*directory/.test(roleMain)
+);
 check('role: runs deploy-mcp.sh', /deploy-mcp\.sh/.test(roleMain));
 check(
 	'role: installs morphit-mcp.service unit',
@@ -107,29 +116,49 @@ check(
 // every MCP task is gated on the toggle (count `when: morphit_mcp_enabled`
 // occurrences ≥ the number of MCP tasks: group, user, dir, deploy, unit, enable = 6)
 const mcpGateCount = (roleMain.match(/when:\s*morphit_mcp_enabled\s*\|\s*bool/g) ?? []).length;
-check(`role: MCP tasks gated on morphit_mcp_enabled (found ${mcpGateCount}, need >=6)`, mcpGateCount >= 6);
+check(
+	`role: MCP tasks gated on morphit_mcp_enabled (found ${mcpGateCount}, need >=6)`,
+	mcpGateCount >= 6
+);
 check('handlers: Restart morphit-mcp exists', /name:\s*Restart morphit-mcp/.test(roleHandlers));
 
 // ── deploy-mcp.sh isolation contract ──────────────────────────────
-check('deploy-mcp.sh: vendors asset-registry', /vendor\/asset-registry/.test(deployScript));
-check('deploy-mcp.sh: vendors net-defense', /vendor\/net-defense/.test(deployScript));
 check(
-	'deploy-mcp.sh: rewrites @morphit/* to file: deps',
-	/file:\.\/vendor\/asset-registry/.test(deployScript) && /file:\.\/vendor\/net-defense/.test(deployScript)
+	'deploy-mcp.sh: copies asset-registry + net-defense into node_modules/@morphit',
+	/for pkg in asset-registry net-defense/.test(deployScript) &&
+		/node_modules\/@morphit\/\$pkg/.test(deployScript)
 );
-check('deploy-mcp.sh: runs npm install', /npm install/.test(deployScript));
-check('deploy-mcp.sh: chowns to the service user (isolation)', /chown\s+-R\s+"?\$SVC_USER/.test(deployScript));
+check(
+	'deploy-mcp.sh: deploys from the locked install, never npm install',
+	/package-lock\.json/.test(deployScript) && !/^[^#]*\bnpm (install|ci)\b/m.test(deployScript)
+);
+check(
+	'deploy-mcp.sh: chowns to the service user (isolation)',
+	/chown\s+-R\s+"?\$SVC_USER/.test(deployScript)
+);
 // the unit it deploys for must actually be the isolated one
-check('mcp unit: runs as morphit-mcp from /opt/morphit-mcp', /User=morphit-mcp/.test(mcpUnit) && /WorkingDirectory=\/opt\/morphit-mcp/.test(mcpUnit));
+check(
+	'mcp unit: runs as morphit-mcp from /opt/morphit-mcp',
+	/User=morphit-mcp/.test(mcpUnit) && /WorkingDirectory=\/opt\/morphit-mcp/.test(mcpUnit)
+);
 
 // ── Web push / VAPID wiring ───────────────────────────────────────
+// generated once, into a temporary file moved into place only when the
+// private key is in it (a failed first run used to leave an empty file that a
+// `creates:` guard then trusted for ever), and again when the file is empty.
+const vapidTask =
+	/- name: Generate Web Push VAPID keypair[\s\S]*?(?=\n- name:|$)/.exec(roleMain)?.[0] ?? '';
 check(
-	'role: generates VAPID with a creates: guard (generate-once)',
-	/generate-vapid-keys\.sh[\s\S]*?creates:\s*\/etc\/morphit\/relay-vapid\.env/.test(roleMain)
+	'role: generates VAPID once, via a temporary file moved into place only with the key in it',
+	/mktemp[\s\S]*?generate-vapid-keys\.sh[\s\S]*?grep -q '\^MORPHIT_RELAY_VAPID_PRIVATE_KEY=\.'[\s\S]*?mv -f "\$tmp" \/etc\/morphit\/relay-vapid\.env/.test(
+		vapidTask
+	)
 );
 check(
-	'role: VAPID generation gated on morphit_enable_web_push',
-	/generate-vapid-keys\.sh[\s\S]*?when:\s*morphit_enable_web_push\s*\|\s*bool/.test(roleMain)
+	'role: VAPID generation gated on morphit_enable_web_push, and runs when the file is missing or empty',
+	/when:\s*\n\s*- morphit_enable_web_push \| bool\s*\n\s*- not \(morphit_vapid_file\.stat\.exists[^\n]*stat\.size[^\n]*== 0/.test(
+		vapidTask
+	)
 );
 check(
 	'role: VAPID generation passes --bare --subject',
@@ -142,13 +171,15 @@ check(
 check(
 	'relay unit: sources /etc/morphit/relay-vapid.env (in the guarded source list)',
 	/\/etc\/morphit\/relay-vapid\.env/.test(relayUnit) &&
-		/for f in[^;]*relay-vapid\.env[^;]*;\s*do\s*\[\s*-f\s*"\$f"\s*\]\s*&&\s*\.\s*"\$f"/.test(relayUnit)
+		/for f in[^;]*relay-vapid\.env[^;]*;\s*do\s*if\s*\[\s*-e\s*"\$f"\s*\];\s*then\s*\[\s*-r\s*"\$f"\s*\]\s*\|\|\s*\{[^}]*exit 78;\s*\};\s*\.\s*"\$f";\s*fi;\s*done/.test(
+			relayUnit
+		)
 );
 check('vapid script: supports --subject', /--subject/.test(vapidScript));
 check('vapid script: supports --bare/--env', /--bare\|--env/.test(vapidScript));
 
 // ── Env-routing: relay + indexer units source BOTH layouts ────────
-// (the cp251 divergence fix — they must source the /etc/morphit/*.env
+// (the divergence fix — they must source the /etc/morphit/*.env
 // files the Ansible playbook writes, not only the ops-cli /opt files)
 check(
 	'relay unit sources /etc/morphit/relay.env (Ansible layout)',
@@ -176,7 +207,10 @@ check(
 	'mcp unit no longer hard-requires relay.env (isolation + no stale dep)',
 	!/EnvironmentFile=\/etc\/morphit\/relay\.env/.test(mcpUnit)
 );
-check('role deploys mcp.env template', /mcp\.env\.j2/.test(roleMain) && /dest:\s*\/etc\/morphit\/mcp\.env/.test(roleMain));
+check(
+	'role deploys mcp.env template',
+	/mcp\.env\.j2/.test(roleMain) && /dest:\s*\/etc\/morphit\/mcp\.env/.test(roleMain)
+);
 check(
 	'group_var morphit_mcp_instance_url defined (origin-derived)',
 	/^morphit_mcp_instance_url:\s*".*morphit_domain.*"\s*$/m.test(groupVars)
@@ -250,7 +284,7 @@ check(
 );
 
 // ── MCP public exposure wired into the canonical BunkerWeb path (§45) ──
-// Closes the cp255 gap: a fresh Ansible node's MCP must be reachable
+// Closes the gap: a fresh Ansible node's MCP must be reachable
 // through BunkerWeb with NO manual step (it was loopback-only + unrouted).
 check(
 	'group_vars: morphit_mcp_bind_host + morphit_mcp_bind_port defined',
@@ -286,6 +320,26 @@ check(
 		indexerEnvTmpl
 	)
 );
+
+// The generator itself: an explicit empty subject in --bare mode stays empty
+// (push off until the operator sets one), never the example.com placeholder.
+if (existsSync(join(repoRoot, 'node_modules', 'web-push'))) {
+	const gen = (args: string[]): string =>
+		spawnSync('bash', [join(repoRoot, 'scripts', 'generate-vapid-keys.sh'), ...args], {
+			encoding: 'utf8',
+			timeout: 60_000
+		}).stdout ?? '';
+	const subjectOf = (out: string): string | undefined =>
+		/^MORPHIT_RELAY_VAPID_SUBJECT=(.*)$/m.exec(out)?.[1];
+	check(
+		'generate-vapid-keys.sh --bare --subject "" writes an empty subject',
+		subjectOf(gen(['--bare', '--subject', ''])) === ''
+	);
+	check(
+		'generate-vapid-keys.sh --bare --subject <url> writes that subject',
+		subjectOf(gen(['--bare', '--subject', 'mailto:ops@node.test'])) === 'mailto:ops@node.test'
+	);
+}
 
 // ── Result ────────────────────────────────────────────────────────
 if (failures.length > 0) {

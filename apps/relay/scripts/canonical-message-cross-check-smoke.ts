@@ -3,7 +3,7 @@
  * canonical-message-cross-check-smoke — runtime contract test
  * for the Web Push subscribe signature canonical message format.
  *
- * Part 122 cp15 audit finding DD-5.  The cp14 sig-verify
+ * finding DD-5.  The sig-verify
  * canonical message format
  *
  *   morphit:push:subscribe:<account>:<sha256_hex(endpoint)>:<timestamp>
@@ -300,7 +300,7 @@ async function buildClientCanonical(
 	);
 }
 
-// ─── cp131 MED-009 — unsubscribe signature mirror + ACTION-binding
+// ─── unsubscribe signature mirror + ACTION-binding
 //     replay defense ─────────────────────────────────────────────
 {
 	const { verifyPushUnsubscribeSignature } = await import(

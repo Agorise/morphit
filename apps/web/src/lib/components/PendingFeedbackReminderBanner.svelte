@@ -28,7 +28,7 @@
 	import LeaveFeedbackForm from './LeaveFeedbackForm.svelte';
 	import IdentityLabel from './IdentityLabel.svelte';
 	import { identity } from '$stores/identity';
-	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { sessionAccountName } from '$stores/sessionAccount';
 	import { getFeedback, getFeedbackGiven } from '$indexer/client';
 	import {
 		computePendingFeedbackReminders,
@@ -85,7 +85,9 @@
 	async function refresh(): Promise<void> {
 		if (!browser) return;
 		const myGen = ++fetchGen;
-		const acct = getUserBlurtAccount();
+		// Only with a session: a remembered name on a locked visit does not
+		// read the account's feedback.
+		const acct = sessionAccountName();
 		if (!acct) return;
 
 		// Fetch both directions in parallel.  Limit 100 each is
@@ -99,7 +101,7 @@
 		// OR if the user signed out / switched account.  Critical
 		// here because the next block fires OS notifications.
 		if (myGen !== fetchGen) return;
-		if (getUserBlurtAccount() !== acct) return;
+		if (sessionAccountName() !== acct) return;
 		if (!received.ok || !given.ok) return;
 
 		const list = computePendingFeedbackReminders({
@@ -135,10 +137,10 @@
 	}
 
 	onMount(() => {
-		// Only fetch once identity is ready — getUserBlurtAccount
-		// returns null before the keystore is loaded.
+		// Only fetch once a session exists (sessionAccountName is null
+		// while locked or before the keystore is loaded).
 		const unsub = identity.subscribe(async () => {
-			if (getUserBlurtAccount()) {
+			if (sessionAccountName()) {
 				await refresh();
 			}
 		});

@@ -2,12 +2,12 @@
 /**
  * ltc-trade-only-smoke.
  *
- * Part 122 cp24 sentinel: LTC must be `canPayListingFee: false`
+ * LTC must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping LTC's flag to true would fail the
@@ -52,10 +52,10 @@ if (canonLtc) {
 
 // ── Scenario 2 — canonical LTC.canPayListingFee === false ────────
 if (canonLtc && canonLtc.canPayListingFee === false) {
-	pass('canonical LTC.canPayListingFee === false (memory #23)');
+	pass('canonical LTC.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical LTC.canPayListingFee === false (memory #23)',
+		'canonical LTC.canPayListingFee === false (trade-only rule)',
 		`LTC must be trade-only.  Got canPayListingFee=${canonLtc?.canPayListingFee}`
 	);
 }

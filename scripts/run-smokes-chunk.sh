@@ -16,7 +16,7 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"; cd "$repo"
 # runners or neither; `smoke-runner-env-parity-smoke` now enforces that.
 export MORPHIT_EMIT_DEDUP=0
 # Resolve tsx portably (workspace first, then PATH) — mirrors scripts/run-smokes.sh.
-# (Previously this hardcoded an absolute sandbox path, which broke on every
+# (Previously this hardcoded an absolute build-machine path, which broke on every
 # other machine and leaked the build environment's directory layout.)
 if [ -x "$repo/node_modules/.bin/tsx" ]; then
   TSX="$repo/node_modules/.bin/tsx"
@@ -39,7 +39,7 @@ SMOKE_TIMEOUT="${MORPHIT_SMOKE_TIMEOUT:-240}"
 SLOW_SMOKE_TIMEOUT="${MORPHIT_SLOW_SMOKE_TIMEOUT:-600}"
 smoke_timeout_for() {
 	case "$1" in
-	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke)
+	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke | bunkerweb-no-phone-home-smoke | kubo-no-phone-home-smoke)
 		if [ "$SLOW_SMOKE_TIMEOUT" -gt "$SMOKE_TIMEOUT" ]; then echo "$SLOW_SMOKE_TIMEOUT"; else echo "$SMOKE_TIMEOUT"; fi
 		;;
 	*) echo "$SMOKE_TIMEOUT" ;;
@@ -54,7 +54,7 @@ for entry in "${SMOKES[@]}"; do
   dir="${entry%:*}"; name="${entry##*:}"
   path="$repo/$dir/scripts/$name.ts"
   if [ ! -f "$path" ]; then echo "  ✗ [$idx] $name (missing)"; failed=$((failed+1)); continue; fi
-  # Prefer a workspace-local tsconfig.smoke.json (cp448) — apps/web ships its
+  # Prefer a workspace-local tsconfig.smoke.json — apps/web ships its
   # own so $blurt/$indexer resolve to WEB, not the indexer. Mirror run-smokes.sh
   # exactly; hardcoding the repo-root config mis-resolves those per-app aliases.
   if [ -f "$repo/$dir/tsconfig.smoke.json" ]; then CFG="$repo/$dir/tsconfig.smoke.json"; else CFG="$repo/tsconfig.smoke.json"; fi

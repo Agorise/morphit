@@ -32,7 +32,7 @@ The screen now uses the real limits, and says three different things depending o
 
 ## You can use your own name
 
-If you sign in as **@agorise** or **@testowner**, you can now write that in your display name. Those names are protected so strangers can't pose as them, but the protection was catching the actual owners: you could set exactly `agorise` and nothing else — not `Agorise` with a capital, not `@agorise`, not `the maintainer @ Agorise`.
+If you sign in as one of the project's own protected accounts, you can now write that name in your display name. Those names are protected so strangers can't pose as them, but the protection was catching the actual owners: you could set exactly `agorise` and nothing else — not `Agorise` with a capital, not `@agorise`, not `the maintainer @ Agorise`.
 
 Signing in proves who you are, so the account that holds a protected name is now free to use it. Everyone else is still blocked, including lookalikes built from Cyrillic or accented characters. Your short bio was never restricted.
 

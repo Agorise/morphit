@@ -56,7 +56,7 @@ export interface InstanceState {
 	 *  unknown (older indexer, lookup failed) — never shown as a problem. */
 	readonly fee_recipient_registered: boolean | null;
 	readonly relay_account: string;
-	/** REVISIT-LIST item 5 — operator earnings.  When non-null,
+	/** Backlog item 5 — operator earnings.  When non-null,
 	 *  the post-order form includes this in every order op so
 	 *  the indexer credits the operator with 90% of BLURT-paid
 	 *  listing fees.  See $blurt/ops/order. */
@@ -65,42 +65,42 @@ export interface InstanceState {
 		readonly title: string | null;
 		readonly description: string | null;
 		readonly keywords: string | null;
-		/** cp119-A4: optional Twitter/X handle (`@morphit`).
+		/** optional Twitter/X handle (`@morphit`).
 		 *  Null = omit twitter:site meta tag. */
 		readonly twitter_site: string | null;
 	};
 	/** Per-instance chat-link external explorer URL templates
-	 *  (Part 109).  Each field is either a `https://…/{txid}…`
+	 * Each field is either a `https://…/{txid}…`
 	 *  template (operator override) or null (use frontend
 	 *  bundled default).  The `urls.ts` lookup checks this
 	 *  store first, falls back to the bundled default. */
 	readonly chat_link_urls: {
 		readonly btc: string | null;
 		readonly xmr: string | null;
-		/** Part 122 cp21 — BCH chat-link explorer URL override.
+		/** BCH chat-link explorer URL override.
 		 *  Single-network like BTC/XMR (no per-network sub-map).
 		 *  Operator can override the bundled
 		 *  blockchair.com/bitcoin-cash default via
 		 *  MORPHIT_FRONTEND_BCH_CHAT_LINK_URL. */
 		readonly bch: string | null;
-		/** Part 122 cp24 — LTC chat-link explorer URL override.
+		/** LTC chat-link explorer URL override.
 		 *  Single-network like BTC/XMR/BCH (no per-network sub-map).
 		 *  Operator can override the bundled litecoinspace.org
 		 *  default via MORPHIT_FRONTEND_LTC_CHAT_LINK_URL. */
 		readonly ltc: string | null;
-		/** Part 122 cp27 — DASH chat-link explorer URL override.
+		/** DASH chat-link explorer URL override.
 		 *  Single-network like BTC/XMR/BCH/LTC (no per-network
 		 *  sub-map).  Operator can override the bundled
 		 *  insight.dash.org default via
 		 *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL. */
 		readonly dash: string | null;
-		/** Part 122 cp33 — DOGE chat-link explorer override.
+		/** DOGE chat-link explorer override.
 		 *  Single-network like BTC/XMR/BCH/LTC/DASH (no per-
 		 *  network sub-map).  Operator can override the
 		 *  bundled blockchair.com/dogecoin default via
 		 *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL. */
 		readonly doge: string | null;
-		/** Part 122 cp39 — ZEC chat-link explorer override.
+		/** ZEC chat-link explorer override.
 		 *  Single-network like BTC/XMR/BCH/LTC/DASH/DOGE (no
 		 *  per-network sub-map).  Operator can override the
 		 *  bundled mainnet.zcashexplorer.app default via
@@ -111,7 +111,7 @@ export interface InstanceState {
 		readonly sol: string | null;
 		readonly eth: string | null;
 		readonly xrp: string | null;
-		/** Part 121 — USDT per-network explorer URL overrides.
+		/** USDT per-network explorer URL overrides.
 		 *  Each field is either a `https://…/{txid}…` template
 		 *  (operator override) or null (use frontend bundled
 		 *  default from `lib/assets/networks.ts`).  Adding a
@@ -123,13 +123,13 @@ export interface InstanceState {
 			readonly spl: string | null;
 			readonly bep20: string | null;
 		};
-		/** Part 122 cp30 — USDC per-network explorer URL overrides.
+		/** USDC per-network explorer URL overrides.
 		 *  Same shape as `usdt` above: per-network nullable override
 		 *  with bundled defaults in `lib/assets/networks.ts`.
 		 *  USDC's four shipped networks are ERC-20, SPL, Base, and
 		 *  Polygon.  Adding a new USDC network here requires the
 		 *  matching entry in `USDC_NETWORK_METADATA` in
-		 *  networks.ts.  Pre-cp30 indexers may omit this field
+		 *  networks.ts.  Previously, indexers may omit this field
 		 *  entirely; the defensive fallback at fetch time fills
 		 *  in all-nulls. */
 		readonly usdc: {
@@ -138,10 +138,10 @@ export interface InstanceState {
 			readonly base: string | null;
 			readonly polygon: string | null;
 		};
-		/** Part 122 cp31 — DAI per-network explorer URL overrides.
+		/** DAI per-network explorer URL overrides.
 		 *  4 networks (all EVM-family): ERC-20 (Ethereum native),
 		 *  Polygon, Base, Arbitrum.  No SPL/TRC-20/BEP-20 per
-		 *  ADR-0029 §1.  Pre-cp31 indexers may omit this field
+		 *  ADR-0029 §1.  Previously, indexers may omit this field
 		 *  entirely; the defensive fallback at fetch time fills
 		 *  in all-nulls. */
 		readonly dai: {
@@ -152,7 +152,7 @@ export interface InstanceState {
 		};
 	};
 	/** Trade-only assets this instance has disabled via the
-	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (the default-on rule for new assets).
 	 *  Uppercase tickers; empty array = no operator-side
 	 *  disabling.  Pre-Part-121-cp6 indexers may omit the wire
 	 *  field, in which case the store defaults to `[]`.  Used
@@ -163,7 +163,7 @@ export interface InstanceState {
 	 *  instance (e.g. "barter_goods").  Picker + orderbook filter
 	 *  hide them; absent on older indexers → defaults to []. */
 	readonly disabled_payment_methods: readonly string[];
-	/** Part 121 cp9 — PUBLIC Matrix room alias for user→operator
+	/** PUBLIC Matrix room alias for user→operator
 	 *  contact (format: `#room:server`).  Rendered on /support,
 	 *  /about-this-instance, and footer as a "Contact via Matrix"
 	 *  link.  null = operator didn't configure a Matrix contact
@@ -173,7 +173,22 @@ export interface InstanceState {
 	 *  private alert MXID lives in the matrix-bot's env and is
 	 *  not API-exposed; surface-invariant smoke enforces. */
 	readonly operator_matrix_room: string | null;
+	/** Whether this instance takes listing fees in BTC / XMR: its
+	 *  /v1/instance `treasury` entry is an address (true) or null (false —
+	 *  the operator emptied the address, no explorer is configured, or the
+	 *  node is hidden-only; the indexer refuses such fees). null = unknown
+	 *  (not loaded, or an older indexer without the field). */
+	readonly fee_methods: { readonly btc: boolean | null; readonly xmr: boolean | null };
 	readonly loaded: boolean;
+}
+
+/** fee_methods from the wire `treasury` object (see InstanceState). */
+export function feeMethodsFromWire(treasury: unknown): InstanceState['fee_methods'] {
+	if (typeof treasury !== 'object' || treasury === null) return { btc: null, xmr: null };
+	const t = treasury as { btc?: unknown; xmr?: unknown };
+	const one = (v: unknown): boolean | null =>
+		v === undefined ? null : typeof v === 'string' && v.trim() !== '';
+	return { btc: one(t.btc), xmr: one(t.xmr) };
 }
 
 /** Hardcoded fallback used during SSR and as the post-fetch
@@ -220,6 +235,7 @@ const FALLBACK: InstanceState = {
 	disabled_assets: [],
 	disabled_payment_methods: [],
 	operator_matrix_room: null,
+	fee_methods: { btc: null, xmr: null },
 	loaded: false
 };
 
@@ -287,13 +303,14 @@ export function initInstance(): Promise<void> {
 					...result.data,
 					alt_networks: normalizeAltNetworksFromWire(result.data.alt_networks),
 					operator_tag: result.data.operator_tag ?? null,
+					fee_methods: feeMethodsFromWire((result.data as { treasury?: unknown }).treasury),
 					fee_recipient_registered: feeRecipientRegisteredOf(result.data.fee_recipient_registered),
 					seo: result.data.seo
 						? {
 								title: result.data.seo.title ?? null,
 								description: result.data.seo.description ?? null,
 								keywords: result.data.seo.keywords ?? null,
-								// cp119-A4: tolerate older indexer responses
+								// tolerate older indexer responses
 								// that don't carry twitter_site yet.
 								twitter_site: result.data.seo.twitter_site ?? null
 							}

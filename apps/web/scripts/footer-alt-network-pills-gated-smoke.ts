@@ -2,7 +2,7 @@
  * footer-alt-network-pills-gated-smoke — every alt-network footer pill is shown
  * ONLY when the operator has configured an address for that network.
  *
- * WHY (cp339): tor / lokinet / i2p_b32 / nostr previously rendered a greyed-out,
+ * WHY: tor / lokinet / i2p_b32 / nostr previously rendered a greyed-out,
  * disabled "cursor-not-allowed" placeholder chip when unconfigured, advertising
  * networks the operator never set up (the maintainer had no lokinet/nostr address but the
  * pills still showed in the footer). All alt-network pills must be pure

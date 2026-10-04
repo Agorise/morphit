@@ -134,10 +134,13 @@ await scenario('launch phase: admits on age-only', async () => {
 		eligibilitySeed(60, 0),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT fa.attestor)',
-			rows: [{ n: '1' }],
-			rowCount: 1
-		}
+			match: 'SELECT DISTINCT fa.attestor',
+			// The INDEPENDENT attestors (never the poster, never a pair flagged
+			// with the poster); each is then checked for the reciprocity pattern
+			// with the poster as of its attestation (none here).
+			rows: [{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') }]
+		},
+		{ match: 'WITH moments AS', rows: [{ held: false }] }
 	]);
 	const r = await handler(ctxFor({ phase: 'launch' }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
@@ -149,10 +152,13 @@ await scenario('launch phase: admits on loyalty-only', async () => {
 		eligibilitySeed(5, 150),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT fa.attestor)',
-			rows: [{ n: '1' }],
-			rowCount: 1
-		}
+			match: 'SELECT DISTINCT fa.attestor',
+			// The INDEPENDENT attestors (never the poster, never a pair flagged
+			// with the poster); each is then checked for the reciprocity pattern
+			// with the poster as of its attestation (none here).
+			rows: [{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') }]
+		},
+		{ match: 'WITH moments AS', rows: [{ held: false }] }
 	]);
 	const r = await handler(ctxFor({ phase: 'launch' }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
@@ -164,10 +170,13 @@ await scenario('steady phase: admits when both gates pass', async () => {
 		eligibilitySeed(60, 500),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT fa.attestor)',
-			rows: [{ n: '1' }],
-			rowCount: 1
-		}
+			match: 'SELECT DISTINCT fa.attestor',
+			// The INDEPENDENT attestors (never the poster, never a pair flagged
+			// with the poster); each is then checked for the reciprocity pattern
+			// with the poster as of its attestation (none here).
+			rows: [{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') }]
+		},
+		{ match: 'WITH moments AS', rows: [{ held: false }] }
 	]);
 	const r = await handler(ctxFor({ phase: 'steady' }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
@@ -203,12 +212,17 @@ await scenario('promotes order when ≥2 independent attestors + eligibility pas
 		eligibilitySeed(60, 500),
 		{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 		{
-			match: 'COUNT(DISTINCT fa.attestor)',
-			// v1.18.0 deep-deep (H1): the count is of INDEPENDENT attestors
-			// (never the poster, never a pair flagged with the poster).
-			rows: [{ n: '2' }],
-			rowCount: 1
+			match: 'SELECT DISTINCT fa.attestor',
+			// The INDEPENDENT attestors (never the poster, never a pair flagged
+			// with the poster); each is then checked for the reciprocity pattern
+			// with the poster as of its attestation (none here).
+			rows: [
+				{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') },
+				{ attestor: 'att1', as_of: new Date('2026-04-19T12:00:00Z') }
+			]
 		},
+		{ match: 'WITH moments AS', rows: [{ held: false }] },
+		{ match: 'WITH moments AS', rows: [{ held: false }] },
 		{ match: 'UPDATE orders', rowCount: 1 }
 	]);
 	const r = await handler(ctxFor({ phase: 'launch' }), mock.client);
@@ -218,7 +232,7 @@ await scenario('promotes order when ≥2 independent attestors + eligibility pas
 	if (!updateRan) throw new Error('expected UPDATE to run');
 });
 
-// v1.18.0 deep-deep (H1): the poster can never attest their own order — it
+// the poster can never attest their own order — it
 // used to be recorded and count as one of the two required attestors.
 await scenario(
 	'rejects self-attestation outright (attestor_is_poster), nothing recorded',

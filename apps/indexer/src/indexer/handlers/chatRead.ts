@@ -5,12 +5,15 @@
  *   {
  *     "peer": string (blurt account name),
  *     "last_read_at": string (ISO 8601 UTC timestamp),
- *     "order_permlink"?: string (cp446 — WHICH discussion was read:
+ *     "order_permlink"?: string (WHICH discussion was read:
  *        the order's permlink, or "" for the thread that cites no order.
- *        OMITTED by pre-cp446 clients, and that means what it always
+ *        OMITTED by older clients, and that means what it always
  *        meant: everything with this peer. Stored as the '*' sentinel.
  *        A client may not send "*" itself — it would forge a peer-wide
- *        ack — and a permlink longer than 256 chars is rejected.)
+ *        ack — and a permlink longer than 256 chars is rejected; from
+ *        CONSENSUS_V2_ACTIVATION_TIME it must also have a permlink's
+ *        shape, and a reader keeps at most MAX_THREADS_PER_PEER thread
+ *        rows per peer.)
  *   }
  *
  * Effect: record that ctx.signer has acknowledged reading their
@@ -36,8 +39,13 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
+import { consensusV2Active } from '$indexer/consensusActivation';
+import { validateChatOrderPermlink } from '$indexer/permlink';
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
+
+/** Most per-thread read rows one reader keeps for one peer. */
+export const MAX_THREADS_PER_PEER = 500;
 
 /** Allow up to 60 seconds of clock skew past block time. Blurt's
  *  block producers stamp the block time; a well-behaved client
@@ -93,7 +101,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'last_read_at_too_old' };
 	}
 
-	// cp446 — WHICH DISCUSSION was read. Optional: a pre-cp446 client omits it,
+	// WHICH DISCUSSION was read. Optional: an older client omits it,
 	// and that op means exactly what it always meant — "everything with this peer".
 	// We record that as the '*' sentinel rather than guessing a thread, so an old
 	// client can never silently mark one thread and leave the rest looking read.
@@ -111,6 +119,23 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'order_permlink_invalid' };
 	} else {
 		orderPermlink = rawOrder; // '' is the order-less thread; anything else is a permlink
+	}
+	// From CONSENSUS_V2_ACTIVATION_TIME a permlink must have a permlink's
+	// shape, and one reader keeps at most MAX_THREADS_PER_PEER thread rows per
+	// peer: each distinct value used to cost one more stored row, for free.
+	if (consensusV2Active(ctx.blockTime) && orderPermlink !== '*' && orderPermlink !== '') {
+		if (validateChatOrderPermlink(orderPermlink) !== null) {
+			return { ok: false, reason: 'order_permlink_invalid' };
+		}
+		const rows = await client.query<{ n: number; mine: boolean }>(
+			`SELECT COUNT(*)::int AS n, bool_or(order_permlink = $3) AS mine
+			   FROM chat_read_state WHERE reader_account = $1 AND peer_account = $2`,
+			[ctx.signer, peer, orderPermlink]
+		);
+		const r = rows.rows[0];
+		if (r !== undefined && r.mine !== true && r.n >= MAX_THREADS_PER_PEER) {
+			return { ok: false, reason: 'chat_read_threads_limit' };
+		}
 	}
 
 	// Insert or monotonic-advance update. The WHERE clause in the

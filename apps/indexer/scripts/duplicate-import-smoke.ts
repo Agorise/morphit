@@ -85,7 +85,7 @@ async function main(): Promise<void> {
 	const findings: Finding[] = [];
 	let scanned = 0;
 
-	// cp131 — fail loudly on stale SCAN_ROOTS.  Pre-cp131 the walk()
+	// fail loudly on stale SCAN_ROOTS.  Previously, the walk()
 	// helper silently caught ENOENT and returned, so paths like
 	// `apps/avatar/src` (long-since-removed) sat in the list
 	// unnoticed.  Stale roots are silent drift: a real bug in a

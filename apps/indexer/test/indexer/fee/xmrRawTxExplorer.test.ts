@@ -31,12 +31,9 @@ function fetcher(route: Route) {
 		const r = route(url);
 		if (r === undefined) throw new Error(`unrouted ${url}`);
 		const status = r.status ?? 200;
-		return {
-			ok: status >= 200 && status < 300,
-			status,
-			json: async () => r.json,
-			text: async () => r.text ?? JSON.stringify(r.json)
-		} as unknown as Response;
+		return new Response(r.text ?? JSON.stringify(r.json), {
+			status: status
+		}) as unknown as Response;
 	}) as typeof fetch;
 	return { f, urls };
 }

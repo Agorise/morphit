@@ -32,16 +32,16 @@ export const MORPHIT_RELAY_ACCOUNT = 'morphit-relay';
 /**
  * Posting public key of the canonical `@morphit` Blurt account.
  *
- * Used by the client to verify the signer of `morphit_release_v1`
- * release-discovery ops. If a malicious or compromised RPC node
- * serves a forged release op, this pubkey's signature check fails
- * and the client ignores the op rather than trusting its contents
- * (endpoint list, release hashes, etc.).
+ * The browser's release check ($net/releaseFetch) accepts a
+ * `morphit_release_v1` op only when the transaction that carries it, read
+ * from the block that holds it, has a signature that recovers to this key. A node that serves a made-up op cannot produce that signature, so the
+ * op is refused and its contents (release hashes, treasury addresses) are
+ * never used.
  *
- * Source of truth: blocks.blurtwallet.com/#/@morphit. If the operator
- * ever rotates this key, the rotation itself is a signed on-chain
- * `account_update` op that older clients can follow; this constant
- * gets updated in a coordinated release.
+ * Source of truth: blocks.blurtwallet.com/#/@morphit. If @morphit ever
+ * rotates this key, releases signed by the new key show as a trust-anchor
+ * mismatch in clients that still pin the old one, until a release that pins
+ * the new key ships.
  *
  * This value is NON-SENSITIVE — posting pubkeys are public by design,
  * visible on every op the account has ever signed.
@@ -54,7 +54,7 @@ export const MORPHIT_OFFICIAL_POSTING_PUBKEY =
  *
  * The relay is a small service on the operator's VPS that pays
  * the Blurt account-creation fee (in BLURT) for new users on their
- * behalf, without ever holding user private keys (see PHASE-3a-DESIGN.md).
+ * behalf, without ever holding user private keys (see docs/adr/0006-security-posture-phase3a.md).
  *
  * Default is a same-origin relative path ('/relay') assuming
  * the colocated topology documented in OPERATIONS.md §14: nginx
@@ -79,7 +79,7 @@ export const MORPHIT_RELAY_ORIGIN = '/relay';
  * Base location for the Morphit indexer — the read-only HTTP
  * API that exposes queryable state derived from on-chain
  * `morphit_*` ops (orderbook, profiles, feedback, release
- * discovery, chat ciphertext). See docs/PHASE-3b-DESIGN.md and
+ * discovery, chat ciphertext). See docs/adr/0008-phase3b-indexer-architecture.md and
  * ADR-0008.
  *
  * The indexer is public-read, no authentication; every response
@@ -143,7 +143,7 @@ export function resolveOrigin(originOrPath: string): string {
 	// and a string-concatenating consumer then produced "https://host//v1/…"
 	// — a DOUBLE slash that a reverse proxy with `merge_slashes off`
 	// (e.g. BunkerWeb) 404s, which made valid indexer reads (account-keys
-	// existence check) read as "invalid". cp305 root-cause fix.
+	// existence check) read as "invalid". root-cause fix.
 	if (originOrPath === '') {
 		return window.location.origin;
 	}
@@ -153,46 +153,33 @@ export function resolveOrigin(originOrPath: string): string {
 	return `${window.location.origin}${path}`;
 }
 
-/** Default Blurt RPC endpoints seeded into every BROWSER client. The
- *  endpoint-rotation client (`$lib/net/endpoints.ts`) health-checks each,
- *  picks a live one, and fails over when requests error. Users can add /
- *  pin / remove entries in Settings.
+/** The clearnet Blurt RPC nodes a BROWSER may contact directly.
  *
- *  cp344: chain WRITES (and the ref-block read that precedes them) now go
- *  SAME-ORIGIN through the indexer proxy first (`POST /v1/broadcast`, `GET
- *  /v1/chain/properties` — see `broadcastTransport.ts`). This pool is NOT a
- *  fallback for those writes: cp410 removed the fallback outright, because a
- *  direct browser→node broadcast hands a third party the user's IP alongside
- *  the exact action they just took, and an unreachable proxy must fail loudly
- *  rather than leak quietly. It is now only the transport for the reads not yet
- *  proxied
- *  (endpoint-settings pings, QR-pairing `get_accounts`, chat-identity
- *  verification, release verification). The CORS-clean requirement below
- *  still applies because those paths talk to these nodes directly.
+ *  Every chain read and write the app makes goes SAME-ORIGIN through the
+ *  operator's indexer (`/v1/chain/condenser`, `/v1/broadcast`), so the
+ *  visitor's IP never reaches a third party for those. The one exception is
+ *  the release check ($net/releaseFetch): it exists to catch an operator
+ *  serving a tampered build, so it must read the chain without the operator.
+ *  This list (with the hidden tiers below) is that check's pool, chosen per
+ *  page origin by `selectRpcPool` in ./endpoints.ts.
  *
  *  ⚠ This is the BROWSER-CORS-CLEAN SUBSET of the canonical pool, NOT the
  *  whole pool. The canonical source of truth is
  *  `DEFAULT_BLURT_RPC_ENDPOINTS` in `@morphit/operator-config` (6 nodes),
  *  which the indexer + relay use SERVER-side where CORS does not apply.
  *  A browser, however, can only use a node that returns a single valid
- *  `Access-Control-Allow-Origin`. Re-verified live 2026-07 (cp452): FIVE of
- *  the six canonical nodes now return a single valid `*` and are browser-
- *  usable — drakernoise, saboin, beblurt, dagobert, and blurt.blog. beblurt
- *  and dagobert FIXED their CORS since the cp268 check (beblurt no longer
- *  sends a doubled `https://morphit.io, *`; dagobert now sends the header),
- *  so they moved UP into this browser set. The one omission:
- *    • rpc.blurt.one — no valid `Access-Control-Allow-Origin` (cp268), and
- *      currently 521/down; stays SERVER-only until re-verified.
+ *  `Access-Control-Allow-Origin`. Re-verified live 2026-07: FIVE of the six
+ *  canonical nodes return a single valid `*` and are browser-usable —
+ *  drakernoise, saboin, beblurt, dagobert, and blurt.blog. The one omission:
+ *    • rpc.blurt.one — no valid `Access-Control-Allow-Origin`; stays
+ *      SERVER-only until re-verified.
  *  Liveness is a SEPARATE axis from CORS, handled by the rotator's cooldown:
- *  a browser node that is temporarily down (e.g. blurt.blog right now — the
- *  Blurt core team's node, expected back shortly) is skipped while cooling and
- *  used again on recovery, so it STAYS in this CORS-clean set. The rpc-
- *  endpoint-canon smoke enforces this list is a SUBSET of canon (no stray).
+ *  a node that is temporarily down is skipped while cooling and used again on
+ *  recovery, so it stays in this set. The rpc-endpoint-canon smoke enforces
+ *  this list is a SUBSET of canon (no stray).
  *
- *  Order is NOT priority. The rotator picks based on measured round-trip
- *  latency + success rate; first-probe order is randomized on each boot
- *  so the default pool doesn't centralize load on whichever appears
- *  first in this list.
+ *  Order is NOT priority: the rotator shuffles it on each boot and then
+ *  prefers nodes by measured latency and success.
  */
 export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
 	'https://rpc.drakernoise.com',
@@ -202,26 +189,29 @@ export const DEFAULT_RPC_ENDPOINTS: readonly string[] = [
 	'https://rpc.blurt.blog'
 ] as const;
 
-/** Hidden-service Blurt RPC endpoints (`.onion` / `.b32.i2p`), tried BEFORE any
- *  clearnet node for the one-time direct-to-chain release check. On Tor Browser
- *  (or a browser with an I2P proxy) this means the release is verified without
- *  the visitor's IP ever touching the clear net — privacy priority #1. A normal
- *  browser can't route these, fails fast (a `.onion`/`.i2p` host is not a real
- *  DNS name, so it errors instantly), and falls back to the clearnet pool above.
- *
- *  BROWSER SCOPE: only `.onion` lives here. Tor Browser can reach `.onion`
- *  directly; NO ordinary browser (Tor Browser included) can route `.b32.i2p`
- *  without a dedicated I2P proxy — those endpoints are reached server-side by
- *  the indexer (via its i2pd) and belong to the indexer pool, not this seed.
- *
- *  Every public hidden-rpc node's .onion (git.agorise.net/agorise/hidden-rpc)
- *  — the .onion half of @morphit/operator-config's
- *  DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, same order. v1.20.0 (D12): this listed
- *  only Star + Jade, so on a .onion page the release check failed whenever
- *  those two were down although five more nodes were up.
- *  apps/web/scripts/hidden-rpc-browser-tier-canon-smoke.ts pins the match, and
- *  the hidden-origin CSP connect-src in ops/bunkerweb/frontend/nginx.conf must
- *  list the same origins (scripts/csp-header-consistency-smoke.ts). */
+/** The public hidden-rpc nodes (git.agorise.net/agorise/hidden-rpc), in
+ *  @morphit/operator-config's order. Each node answers on a `.onion` AND a
+ *  `.b32.i2p` address; both addresses are ONE operator (see
+ *  `HIDDEN_RPC_OPERATORS`), which matters when the release check asks two
+ *  operators. Operators are counted by node name; nothing proves two names
+ *  are independent parties (the default hidden nodes are run by the project). */
+const HIDDEN_RPC_NODE_NAMES: readonly string[] = [
+	'Star',
+	'Jade',
+	'kc',
+	'oldpc',
+	'mama',
+	'j2',
+	's2'
+];
+
+/** The `.onion` half of @morphit/operator-config's
+ *  DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS, same order — the release check's pool
+ *  on a `.onion` page (Tor Browser reaches these directly).
+ *  apps/web/scripts/hidden-rpc-browser-tier-canon-smoke.ts
+ *  pins the match, and the `.onion` CSP connect-src in
+ *  ops/bunkerweb/frontend/nginx.conf must list the same origins
+ *  (scripts/csp-header-consistency-smoke.ts). */
 export const DEFAULT_HIDDEN_RPC_ENDPOINTS: readonly string[] = [
 	// Star
 	'http://f6cijlm7vn32tc4kxr3vxve5pkbysoq2etlihvx25spwtkpqsa25siad.onion:8091',
@@ -239,6 +229,39 @@ export const DEFAULT_HIDDEN_RPC_ENDPOINTS: readonly string[] = [
 	'http://qci6a2fsuljqk2q3coeyqiipmzv3yqykvgibbktt6fcojysl2yw3gaad.onion:8091'
 ] as const;
 
+/** The `.b32.i2p` half of the same nodes, same order — the release check's
+ *  pool on an `.i2p` page. A visitor on an I2P site is by definition using an
+ *  I2P proxy, which routes `.b32.i2p` and cannot route `.onion` (a separate
+ *  network), so an `.i2p` page gets these and nothing else. The `.i2p` CSP
+ *  connect-src must list the same origins. */
+export const DEFAULT_I2P_RPC_ENDPOINTS: readonly string[] = [
+	// Star
+	'http://zgkfadmkqx75enpfhfrlfbwqk7c53uwmr55yplk3colaznepusxa.b32.i2p:8091',
+	// Jade
+	'http://7tea4n3co3q2ozke2ovgqn7j5zirkauxipfttudbhthkat6fzlcq.b32.i2p:8091',
+	// kc
+	'http://xenmlfwajcaiavtt24a3lwzzjiv4pgvfjaps4etlpvgmvupvvcea.b32.i2p:8091',
+	// oldpc
+	'http://5cfk2jmub7gnte536sxezapgkykirje6v6omouhpymfo52eh473a.b32.i2p:8091',
+	// mama
+	'http://jtkaeepcpj2gfgv7swwnplffpu4zpf37bojtpigyrii5glwmrd6q.b32.i2p:8091',
+	// j2
+	'http://ogmildopmgbdyy2kc724ezhrnmvhnf2x52qw7lqgo2jna5juc3kq.b32.i2p:8091',
+	// s2
+	'http://5jsepybvuw66r4e7xejv26r67ewoimtmx3iwedpflh7a2t5y66sa.b32.i2p:8091'
+] as const;
+
+/** Hidden endpoint URL → the node (operator) behind it. A node's `.onion` and
+ *  `.b32.i2p` map to the same name, so the release check's second node is
+ *  always another operator's. Clearnet nodes are told apart by hostname
+ *  (./endpoints.ts `rpcOperatorOf`). */
+export const HIDDEN_RPC_OPERATORS: Readonly<Record<string, string>> = Object.freeze(
+	Object.fromEntries([
+		...DEFAULT_HIDDEN_RPC_ENDPOINTS.map((u, i) => [u, HIDDEN_RPC_NODE_NAMES[i] ?? u]),
+		...DEFAULT_I2P_RPC_ENDPOINTS.map((u, i) => [u, HIDDEN_RPC_NODE_NAMES[i] ?? u])
+	])
+);
+
 /** The canonical Blurt RPC node(s) the indexer + relay use SERVER-side but a
  *  browser cannot reach (no valid CORS — see the omission note on
  *  DEFAULT_RPC_ENDPOINTS above). Listed here ONLY so the endpoint-settings
@@ -254,8 +277,9 @@ export const SERVER_ONLY_CANONICAL_RPC_ENDPOINTS: readonly string[] = [
 	'https://rpc.blurt.one'
 ] as const;
 
-/** localStorage key under which the user's (possibly-modified) endpoint
- *  list is persisted. If missing, DEFAULT_RPC_ENDPOINTS is used. */
+/** localStorage key that once held a user-edited endpoint list. Nothing reads
+ *  it any more (the custom-endpoint setting was removed); the name is kept so
+ *  the storage classification still covers a value an older build left. */
 export const ENDPOINTS_STORAGE_KEY = 'morphit.rpcEndpoints';
 
 /** Morphit-specific `custom_json` op ids, all versioned with a `_vN`
@@ -314,18 +338,17 @@ export const RPC_MAX_RETRIES_PER_CALL = 3;
 /** Which library performs the secp256k1 ECDSA when signing Blurt
  *  transactions.
  *
- *  - `'dblurt'` (default): @beblurt/dblurt's bundled signer, which uses
- *    `elliptic`.  Battle-tested against the live chain, but `elliptic` is
- *    unmaintained and carries CVE-2025-14505 (see docs/SECURITY.md).
- *  - `'noble'`: a @noble/secp256k1-based signer (constant-time, maintained;
- *    already this app's keygen library).  Proven equivalent for chain
- *    acceptance — the chain verifies by public-key recovery, and noble
- *    signatures recover to the correct key under dblurt's own verifier
- *    (scripts/blurt-noble-signer-recovery-proof.ts: 300/300).  See ADR-0046.
+ *  - `'dblurt'` (default): @beblurt/dblurt's own signer.  dblurt 0.17
+ *    itself signs with @noble/secp256k1 (RFC 6979 with extra entropy,
+ *    canonical-signature loop); `elliptic` is not in the dependency tree.
+ *  - `'noble'`: Morphit's direct @noble/secp256k1 signer over the same
+ *    digest (nobleSigner.ts; already this app's keygen library).  Proven
+ *    equivalent for chain acceptance — the chain verifies by public-key
+ *    recovery, and these signatures recover to the correct key under
+ *    dblurt's own verifier (scripts/blurt-noble-signer-recovery-proof.ts:
+ *    300/300).  See ADR-0046.
  *
- *  DEFAULT IS `'dblurt'` ON PURPOSE.  Flipping to `'noble'` is gated on a
- *  real Blurt chain broadcast confirming end-to-end acceptance, which can't
- *  be done in a code-review sandbox.  Both paths reuse dblurt's serializer +
- *  chain-id binding to compute the digest, so the only difference is which
- *  library runs the ECDSA over that identical digest. */
+ *  Both use the same curve library, so the choice is about which code path
+ *  emits the signature, not about a vulnerable dependency.  Both reuse
+ *  dblurt's serializer + chain-id binding to compute the digest. */
 export const SIGNER_BACKEND: 'dblurt' | 'noble' = 'dblurt';

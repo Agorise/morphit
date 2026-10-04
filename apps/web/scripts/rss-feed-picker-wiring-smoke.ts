@@ -13,7 +13,7 @@
  *      picker appends the extension per chosen format),
  *   2. the picker references all eight rss.* i18n keys,
  *   3. those keys exist with full parity across all 10 locales,
- *   4. (cp229) Head.svelte emits all three feed MIME types and the
+ *   4. Head.svelte emits all three feed MIME types and the
  *      home + orderbook pages advertise all three formats via
  *      <link rel="alternate"> auto-discovery.
  *
@@ -167,7 +167,7 @@ scenario('format-name keys are the same proper nouns in every locale', () => {
 	}
 });
 
-// ── Head <link rel="alternate"> auto-discovery (cp229) ──────────────
+// ── Head <link rel="alternate"> auto-discovery ──────────────
 // Separate from the on-page RssFeedPicker: feed readers and SEO
 // crawlers probe <head> for rel="alternate" links.  Head.svelte
 // emits one per entry in its `feeds` prop.  The picker surfaces all

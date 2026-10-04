@@ -293,11 +293,13 @@ const FOUR_PEERS = [
 	{ origin: 'https://named-peer.example', reg_alt_networks: { i2p_name: I2P_NAME } },
 	{ origin: 'https://loki-peer.example', reg_alt_networks: { lokinet: LOKI } }
 ];
+// The producer's real receipt shape (price/priceReceiptShape.ts PriceReceiptBody).
 const receipt = (price: number) => ({
 	asset: 'BLURT',
 	denomination_fiat: 'USD',
-	derived_price: price,
-	source: 'morphit_native'
+	price,
+	source: 'morphit_native',
+	tier_used: 'tier1_usd_direct'
 });
 const priceSource = {
 	currentDetailed: () => ({ price: 0.004, stale: false })

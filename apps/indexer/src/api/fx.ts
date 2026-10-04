@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — /v1/fx endpoint (cp372).
+ * Morphit indexer — /v1/fx endpoint.
  *
  * Serves the indexer's cached USD→fiat rate table so the browser
  * can compute the "$1 USD-equivalent" first-order minimum (and any
@@ -14,14 +14,12 @@
  * from this endpoint (no per-currency query param).  This is why we
  * deliberately do NOT offer a `/v1/fx/:currency` lookup.
  *
- * The data is identical to what already drives the indexer-side
- * first-order floor (`OpContext.fiatToUsd`), so the client's
- * pre-submit check and the indexer's authoritative check agree.
+ * The client uses this table for its own pre-submit $1 first-order
+ * check, which is advisory; the indexer does not judge the floor.
  *
  * 404 when FX is disabled on this instance
- * (`MORPHIT_INDEXER_FX_FEED_ENABLED=false`) — the client then falls
- * back to treating the entered minimum as already-USD (the
- * pre-cp372 behaviour) and the indexer's own floor still applies.
+ * (`MORPHIT_INDEXER_FX_FEED_ENABLED=false`) — the client then treats
+ * the entered minimum as already-USD.
  */
 
 import { Hono } from 'hono';

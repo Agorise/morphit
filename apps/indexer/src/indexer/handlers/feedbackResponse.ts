@@ -23,10 +23,14 @@
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
+import {
+	FORBIDDEN_REVIEW_TEXT_CHARS,
+	MAX_REVIEW_COMMENT_CODEPOINTS
+} from '@morphit/asset-registry';
 
-const MAX_COMMENT_CODEPOINTS = 256;
-const FORBIDDEN_COMMENT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+// Shared with feedback.ts and the web composer, so the three cannot drift.
+const MAX_COMMENT_CODEPOINTS = MAX_REVIEW_COMMENT_CODEPOINTS;
+const FORBIDDEN_COMMENT_CHARS = FORBIDDEN_REVIEW_TEXT_CHARS;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -92,7 +96,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			`INSERT INTO feedback_responses (
 				feedback_id, responder, comment, created_at, source_trx_id
 			) VALUES ($1, $2, $3, $4, $5)`,
-			// cp138 A-2: pass the BIGINT id as a string rather than
+			// pass the BIGINT id as a string rather than
 			// parseInt(...,10).  pg accepts strings for BIGINT params
 			// and preserves the full 2^63 range.  parseInt loses
 			// precision above 2^53 (~9e15 rows).  Pre-launch + tiny

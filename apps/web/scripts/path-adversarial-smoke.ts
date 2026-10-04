@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Adversarial-input audit for $i18n/path helpers (Part 121 cp7
- * deep-deep item #3 — cp6 self-audit, path.ts attack surface).
+ * Adversarial-input audit for $i18n/path helpers (a self-audit of
+ * the path.ts attack surface).
  *
  * Confirms the helpers can't be coerced into producing unsafe
  * paths.  Catches inputs the original smoke didn't exercise:

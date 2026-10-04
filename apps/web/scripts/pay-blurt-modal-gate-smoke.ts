@@ -1,6 +1,6 @@
 /**
  * pay-blurt-modal-gate-smoke — guards PayBlurtModal's composer ("Pay now")
- * flow against the cp470 regressions.
+ * flow against the regressions.
  *
  * The bug: the confirm summary (which CONTAINS the password field and the
  * posting-only UnlockActiveKeyModal) was gated on `canPay`, and `canPay`

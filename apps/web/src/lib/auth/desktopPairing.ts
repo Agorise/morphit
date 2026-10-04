@@ -4,9 +4,11 @@
  * Implements the QR-based desktop pairing protocol where a phone
  * (which holds the user's posting key) signs a one-time pairing
  * bundle for a desktop browser (which holds only an ephemeral
- * X25519 keypair).  Same primitives as chat/crypto.ts: X25519 key
- * agreement, BLAKE2b key derivation, ChaCha20-Poly1305 IETF AEAD
- * for the symmetric leg.  No new dependencies.
+ * X25519 keypair).  The same primitives as chat/crypto.ts (X25519 key
+ * agreement, BLAKE2b key derivation, ChaCha20-Poly1305 IETF AEAD for the
+ * symmetric leg), though not the same KDF arrangement: here the BLAKE2b
+ * KEY is the public context label and the shared secret is the message.
+ * No new dependencies.
  *
  * ─── The flow in one paragraph ──────────────────────────────────
  *

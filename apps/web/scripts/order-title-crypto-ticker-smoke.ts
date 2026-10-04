@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/order-title-crypto-ticker-smoke.ts  (cp615, the maintainer)
+ * apps/web/scripts/order-title-crypto-ticker-smoke.ts
  *
- * the maintainer's two screenshots: he LIKES a barter order's title listing accepted
+ * The maintainer's two screenshots: he LIKES a barter order's title listing accepted
  * cryptos by TICKER ("… for BCH, BTC, ETH, or SOL"), and DISLIKES a crypto
  * order's title listing its payment rails by FULL NAME ("… for Litecoin (LTC),
  * Dogecoin (DOGE), …") — which also ran to three lines and bled right up to the
@@ -175,7 +175,7 @@ const settlementOf = (o: OrderTitleInput, goodsLabel?: string, locale = 'en'): s
 		// so the title need only clear the chip. The chip is COMPACT in LTR
 		// ("Expires in 82d") but a whole phrase in RTL ("…روز دیگر منقضی می‌شود"),
 		// so the two directions carry different pads, each mirrored to the
-		// correct side (cp620). LTR pads the RIGHT; a sane window [8rem,11rem]
+		// correct side. LTR pads the RIGHT; a sane window [8rem,11rem]
 		// clears the compact chip without the old dead space (the retired
 		// sm:pr-[13rem] was sized for the button, not the chip). RTL pads the
 		// LEFT and must be wide enough (≥12rem) for the verbose phrase.

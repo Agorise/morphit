@@ -63,6 +63,7 @@ import { getStrangerFeeQuote } from '$indexer/strangerFeePricing';
 import { canonicalShareOk, meetsMinimumMilli, sumFeeTransfers } from '$indexer/fee';
 import { ownerRecipientsFor } from '$indexer/feeRecipients';
 import { CANONICAL_TREASURY } from '../../config/canonicalTreasury';
+import { inSavepoint, isUniqueViolation } from '$indexer/savepoint';
 
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
@@ -70,16 +71,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function isUniqueViolation(err: unknown): boolean {
-	return (
-		typeof err === 'object' &&
-		err !== null &&
-		'code' in err &&
-		(err as { code: unknown }).code === '23505'
-	);
-}
-
-/** cp408 — the stranger-fee sibling transfer(s) are located + summed by the
+/** the stranger-fee sibling transfer(s) are located + summed by the
  *  shared `sumFeeTransfers` in `$indexer/fee`, which honors the payment-time
  *  federation split (90% owner / 10% canonical, memo
  *  `morphit-stranger:<recipient>`). */
@@ -153,7 +145,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	}
 
 	// ─── Fee transfer verification ──────────────────────────────
-	// cp408 — the stranger fee is paid as a payment-time split (90% to this
+	// the stranger fee is paid as a payment-time split (90% to this
 	// instance's recipient + 10% to the canonical treasury, or a single 100%
 	// transfer when the recipient is canonical). Sum both legs, then confirm
 	// the canonical treasury received its cut.
@@ -189,13 +181,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 
 	// ─── Record payment ─────────────────────────────────────────
 
+	// In its own savepoint: a unique violation must not abort the block
+	// transaction (see $indexer/savepoint).
 	try {
-		await client.query(
-			`INSERT INTO stranger_fees
-			   (sender, recipient, paid_block_num, paid_trx_id,
-			    paid_at, amount_blurt)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			[ctx.signer, recipient, ctx.blockNum, ctx.trxId, ctx.blockTime, fee.totalBlurt]
+		await inSavepoint(client, 'stranger_fee_insert', () =>
+			client.query(
+				`INSERT INTO stranger_fees
+				   (sender, recipient, paid_block_num, paid_trx_id,
+				    paid_at, amount_blurt)
+				 VALUES ($1, $2, $3, $4, $5, $6)`,
+				[ctx.signer, recipient, ctx.blockNum, ctx.trxId, ctx.blockTime, fee.totalBlurt]
+			)
 		);
 	} catch (err) {
 		// Race: another op in the same block paid for the same

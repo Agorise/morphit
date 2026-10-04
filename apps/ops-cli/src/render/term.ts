@@ -7,7 +7,7 @@
  * Color mode comes from Config.color and tty.isTTY.  When
  * disabled, all wrappers become identity functions.
  *
- * cp139-C: defense against terminal-escape injection via
+ * defense against terminal-escape injection via
  * external content (DB rows, RPC responses, error messages
  * containing chain-influenced text).  Every primitive that
  * writes to stdout/stderr funnels through `sanitizeForTerm`,
@@ -22,7 +22,7 @@
  * systemCheck.ts renderer, which predate this hardening) and
  * (2) `process.stderr.write` in main.ts's last-resort
  * handler.  Those sites apply `sanitizeForTerm` inline when
- * they emit external content; see the cp139-C-* findings for
+ * they emit external content; see term-sanitize-smoke for
  * the call-site coverage.
  */
 
@@ -50,7 +50,7 @@ const FG_BLUE = '\x1b[34m';
 const FG_CYAN = '\x1b[36m';
 const FG_GRAY = '\x1b[90m';
 
-// ─── Terminal-escape sanitization (cp139-C) ──────────────────────
+// ─── Terminal-escape sanitization ──────────────────────
 
 /** Strip control bytes that could be interpreted by the operator's
  *  terminal as commands rather than text.  Allowlist:
@@ -172,7 +172,7 @@ export function initColor(config: Config): void {
  *  `morphit-ops` interactive menu, which renders before the full
  *  config is loaded). Without this the menu drew with colorEnabled
  *  still false, so the "update available" marker and the relay-balance
- *  warnings showed as plain text. (cp307 fix.) */
+ *  warnings showed as plain text. */
 export function initColorMode(mode: 'auto' | 'always' | 'never'): void {
 	if (mode === 'never') {
 		colorEnabled = false;

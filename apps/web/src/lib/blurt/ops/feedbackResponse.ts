@@ -2,8 +2,8 @@
  * Morphit — feedback-response op broadcaster.
  *
  * Builds a `morphit_feedback_response_v1` custom_json payload,
- * signs it with the user's posting key, and broadcasts via the
- * endpoint rotator. Parallels feedback.ts — same pattern, same
+ * signs it with the user's posting key, and broadcasts it same-origin
+ * through this instance's indexer. Parallels feedback.ts — same pattern, same
  * key role, same BroadcastError class.
  *
  * Responses are only valid when sent by the subject of the
@@ -18,7 +18,7 @@
  * to say, don't say it), no control/bidi/zero-width characters.
  */
 
-// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// Byte budget: broadcastCustomJson is dynamically imported
 // at the call site below so dblurt (a 2 MB chunk) doesn't land in
 // the eager-load graph of routes that pull this ops file for its
 // types/helpers but don't immediately trigger a broadcast.
@@ -26,14 +26,7 @@ import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from './profile';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
-
-/** Must match the indexer handler's MAX_COMMENT_CODEPOINTS. */
-const MAX_COMMENT_CODEPOINTS = 256;
-
-/** Same injection-resistant character class as the feedback
- *  handler + profile display-name validation. */
-const FORBIDDEN_COMMENT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B\uFEFF]/;
+import { MAX_REVIEW_COMMENT_CODEPOINTS, reviewCommentProblem } from '@morphit/asset-registry';
 
 /** Blurt trx_id is a 40-char hex string. The handler accepts
  *  1..64 to be generous about format (testnets sometimes use
@@ -78,13 +71,15 @@ export function validateFeedbackResponse(payload: FeedbackResponsePayload): void
 	if (payload.comment.length < 1) {
 		throw new FeedbackResponseValidationError('comment_empty', 'Response cannot be empty.');
 	}
-	if ([...payload.comment].length > MAX_COMMENT_CODEPOINTS) {
+	// The indexer's own rule (shared package).
+	const problem = reviewCommentProblem(payload.comment);
+	if (problem === 'too_long') {
 		throw new FeedbackResponseValidationError(
 			'comment_too_long',
-			`Response must be at most ${MAX_COMMENT_CODEPOINTS} characters.`
+			`Response must be at most ${MAX_REVIEW_COMMENT_CODEPOINTS} characters.`
 		);
 	}
-	if (FORBIDDEN_COMMENT_CHARS.test(payload.comment)) {
+	if (problem === 'forbidden_chars') {
 		throw new FeedbackResponseValidationError(
 			'comment_forbidden_char',
 			'Response contains forbidden characters.'

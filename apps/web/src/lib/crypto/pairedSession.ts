@@ -34,7 +34,7 @@
  *     and by an explicit reset({ clearDisk: true }) on real sign-out
  *     / account upgrade.  NOTE: a bare reset() — used by pagehide
  *     (tab close / refresh) and the cross-tab storage mirror — does
- *     NOT clear this.  Post-cp334 disk-clearing is opt-in, so the
+ *     NOT clear this.  Disk-clearing is opt-in, so the
  *     marker is deliberately preserved across a reload to let the
  *     paired-readonly session auto-restore.
  *
@@ -107,10 +107,10 @@ export function hasPairedSession(): boolean {
  *  that the 1970-epoch attack fails.  This is a sanity bound, NOT
  *  an active expiration policy — sessions don't expire after a year
  *  during normal use because the paired marker is refreshed every
- *  time the user re-pairs.  Pre-Part 122 cp4 this check was missing
+ *  time the user re-pairs.  Previously, this check was missing
  *  despite the docblock comment promising it ("Reject obviously-
  *  bogus timestamps (negative, far past, far future)").  F9 from
- *  Part 122 cp1's audit-pattern lesson: defense contracts in
+ *  the audit-pattern lesson: defense contracts in
  *  comments must match defense reality in code. */
 const MAX_PAIRED_AGE_SECONDS = 365 * 86400;
 
@@ -144,6 +144,6 @@ function isValidPairedSession(x: unknown): x is PairedSession {
 	const now = Math.floor(Date.now() / 1000);
 	if (r.pairedAt < 0) return false;
 	if (r.pairedAt > now + 86400) return false; // far future: > 24h ahead
-	if (r.pairedAt < now - MAX_PAIRED_AGE_SECONDS) return false; // far past: > 365d behind (Part 122 cp4 F9 fix)
+	if (r.pairedAt < now - MAX_PAIRED_AGE_SECONDS) return false; // far past: > 365d behind
 	return true;
 }

@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the balance card reads via the indexer, not direct RPC. Anchor cp295.
+ * Smoke: the balance card reads via the indexer, not direct RPC. Anchor.
  *
  * PRIVACY INVARIANT (priority #1). A browser fetching an account's
  * balance straight from public Blurt RPC nodes leaks the user's IP and
- * which account they're viewing to third-party operators. cp295 routes
+ * which account they're viewing to third-party operators. A later change routes
  * that read through the operator's own indexer (same-origin), so the
  * third parties only ever see the indexer's server-side request. This
  * smoke fails if any leg of that wiring regresses:
@@ -83,7 +83,7 @@ if (importsHelper && callsHelper) {
 	bad('MyBalanceCard does not use fetchAccountBalance for the balance read');
 }
 
-// 5. cp439 — power-down-in-progress chain: the withdraw_vesting progress the
+// 5. power-down-in-progress chain: the withdraw_vesting progress the
 //    Power down modal's 💡 note shows must flow indexer → client type → web
 //    helper module → card → modal → all 10 locales.
 const PD_FIELDS = ['vesting_withdraw_rate', 'next_vesting_withdrawal', 'to_withdraw', 'withdrawn'];

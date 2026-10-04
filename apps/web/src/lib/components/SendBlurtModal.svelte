@@ -3,7 +3,7 @@
 	 * SendBlurtModal — confirm + broadcast a BLURT transfer to any Blurt
 	 * account from the user's own Morphit-bound wallet.
 	 *
-	 * cp424 wallet security pass. Unlike the chat Pay-now flow
+	 * wallet security pass. Unlike the chat Pay-now flow
 	 * (PayBlurtModal), the recipient here is USER-ENTERED, so it is
 	 * validated in two stages before a signature is ever produced:
 	 *
@@ -88,7 +88,7 @@
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-	/** cp424 — the recipient QR scanner is lazy-loaded (camera + qr-scanner)
+	/** the recipient QR scanner is lazy-loaded (camera + qr-scanner)
 	 *  and shown only when the user taps the scan icon. */
 	const loadScanner = () =>
 		import('$components/RecipientQrScanner.svelte').then((m) => m.default);
@@ -115,7 +115,7 @@
 	}
 
 	const normalizedRecipient = $derived(normalizeAccount(recipient));
-	/** v1.20.0 fix wave, G6 — read the typed amount with the active locale's
+	/** read the typed amount with the active locale's
 	 *  conventions (either decimal mark, any digit script). A German "12,5"
 	 *  used to be rejected as "not a number"; an ambiguous "1,234" (en) is
 	 *  refused with its own message rather than guessed. */
@@ -145,11 +145,11 @@
 	 *  A wrong password still fails at submit with `error_bad_password`. */
 	const passwordFilled = $derived(passwordInput.length > 0);
 
-	/** tt.txt #11 — a posting-only session has no active key on this device, so a
+	/** a posting-only session has no active key on this device, so a
 	 *  transfer can never be signed with what we hold. Rather than hiding Send (as
 	 *  the wallet card used to) we offer it and unlock in place, resuming the send
 	 *  with everything the user already typed. */
-	/** CAPABILITY, not provenance (tt.txt #11). A 'posting-active' session — a
+	/** CAPABILITY, not provenance. A 'posting-active' session — a
 	 *  posting-only import that chose to keep its verified Active key on this
 	 *  device — CAN sign a transfer. Asking `origin === 'morphit-seed'` would
 	 *  wrongly deny it. Ask whether the key is actually there. */
@@ -338,11 +338,9 @@
 	});
 </script>
 
-<!-- v1.7.7 (t.txt #5) — the modal must FIT, and when it can't, it must SCROLL.
-     [the maintainer]: "the send modal is too big for my mobile screen and will not let me
-     scroll my screen up or down so that i can see its full height or the submit
-     button at the bottom. please size it correctly on load and let me scroll to
-     see the whole thing."
+<!-- v1.7.7 — the modal must FIT, and when it can't, it must SCROLL.
+     Reported: on a phone the send modal was taller than the screen and could not be scrolled,
+     hiding the submit button. It must size itself on load and scroll to show everything.
 
      What was wrong: `fixed inset-0` + `items-center` with no height cap and no
      scroller. `fixed` pins the backdrop to exactly one viewport, so there is
@@ -377,7 +375,7 @@
      last — and in CSS, last wins. A fallback you cannot order is not a fallback;
      it is a coin flip. `dvh` has been in every major engine since 2022, so the
      pair buys nothing and risks silently pinning the wrong one.
-     (See REVISIT-LIST: `app.css` body has exactly that pair, in the losing
+     (See the backlog: `app.css` body has exactly that pair, in the losing
      order — `100dvh` then `100vh` — so its dvh line has never once applied.) -->
 <div
 	class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm"
@@ -557,7 +555,7 @@
 				<span>{$_('profile.send.memo_privacy_warning')}</span>
 			</p>
 
-			<!-- tt.txt #11 — a posting-only session cannot sign a transfer with what we
+			<!-- a posting-only session cannot sign a transfer with what we
 			     hold. Offer the Active-key unlock IN PLACE rather than a password field
 			     that cannot work; recipient / amount / memo above stay exactly as typed
 			     and the send resumes on success. The unlock CTA stays disabled until the

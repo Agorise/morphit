@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G7 — the buyer must not lose their trade credit because
+ * the buyer must not lose their trade credit because
  * the seller's client auto-completed the order first.
  *
  * /my/orders auto-completes a paid order with NO counterparty; the review form

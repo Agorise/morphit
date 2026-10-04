@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * rpc-probe-failure-reason — cp471 (tt.txt C) guard.
+ * rpc-probe-failure-reason — guard.
  *
  * The settings "RPC endpoints" card used to render a flat red "unreachable"
  * for EVERY failure mode, because `probeOne` collapsed TLS errors, non-2xx
@@ -94,7 +94,7 @@ for (const [reason, why] of [
 	if (new RegExp(`reason: '${reason}'`).test(flatHealth)) {
 		ok(`probe reports '${reason}' for ${why}`);
 	} else {
-		bad('probe', `no longer reports '${reason}' — ${why} would collapse back into a flat "unreachable" (cp471, tt.txt C)`);
+		bad('probe', `no longer reports '${reason}' — ${why} would collapse back into a flat "unreachable"`);
 	}
 }
 

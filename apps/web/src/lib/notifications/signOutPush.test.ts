@@ -1,5 +1,5 @@
 /**
- * (v1.18.0 deep-deep, M2) Signing out stops this browser's notifications.
+ * Signing out stops this browser's notifications.
  *
  * broadcastSignOut() used to leave both halves of the push subscription alive:
  * the browser's subscription AND the relay row linking the account to this

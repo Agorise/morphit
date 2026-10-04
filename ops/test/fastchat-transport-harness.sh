@@ -444,7 +444,7 @@ try 'T5  the cause chain is walked without cycle protection' "$HT" \
 	'	while (cur !== null && cur !== undefined && out.length < maxDepth) {'
 
 # ── which address a peer is reached at ───────────────────────────────
-# Re-aimed after the v1.18.0 deep-deep (TP-C1): the origin is now added under a
+# Re-aimed after an audit finding: the origin is now added under a
 # hidden-only condition; the mutation adds the old "only if nothing hidden was
 # found" guard to that line (as M35 in federation-chat-fast-harness).
 # Re-aimed in v1.20.0: a hidden origin is dialled as http (S9,

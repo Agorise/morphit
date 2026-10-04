@@ -34,7 +34,11 @@ const PRE_V120_LIST = [
 	'https://exploremonero.com',
 	'https://moneroexplorer.org'
 ];
+/** The default sources such a list lacks: since v1.20.3 the two onion
+ *  explorers (first in the default list), then the v1.20.0–v1.20.2 ones. */
 const NEW_SOURCES = [
+	'http://xmrexplrthytnunr4jasr3vnjc6jo5idsyxzv74a7ep7dy7lwcv2eoyd.onion',
+	'http://nklwsomtuok6dhqqecp3a26xzgokfgmeuaplcdkaxehncg57yzarvbad.onion',
 	'raw-tx+https://moneroblocks.info',
 	'node+https://xmr-node.cakewallet.com:18081',
 	'node+https://node.monero.fail',
@@ -64,7 +68,7 @@ const wizardEnv = (list: readonly string[]) =>
 	].join('\n');
 
 describe('planXmrExplorerList', () => {
-	it('a pre-v1.20 list: the three dead explorers go, the four newer sources come, the two live ones stay', () => {
+	it('a pre-v1.20 list: the three dead explorers go, the six newer sources come, the two live ones stay', () => {
 		const p = planXmrExplorerList(PRE_V120_LIST, new Set());
 		expect(p.removed).toEqual(RETIRED_XMR_FEE_EXPLORERS);
 		expect(p.added).toEqual(NEW_SOURCES);
@@ -109,8 +113,8 @@ describe('healXmrExplorerList on a box', () => {
 			wizardEnv(['https://xmrchain.net', 'https://moneroexplorer.org', ...NEW_SOURCES])
 		);
 		expect(statSync(f).mode & 0o777).toBe(0o600);
-		expect(logs[0]).toMatch(/^Monero fee checks: added raw-tx\+https:\/\/moneroblocks\.info/);
-		expect(JSON.parse(readFileSync(offeredStatePath(root), 'utf8')).offered).toHaveLength(6);
+		expect(logs[0]).toMatch(/^Monero fee checks: added http:\/\/xmrexplr/);
+		expect(JSON.parse(readFileSync(offeredStatePath(root), 'utf8')).offered).toHaveLength(8);
 		expect(healXmrExplorerList(root)).toEqual({ kind: 'already' });
 	});
 	it('respects a later removal by the operator on the next upgrade', () => {

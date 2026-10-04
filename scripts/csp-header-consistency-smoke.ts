@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * scripts/csp-header-consistency-smoke.ts  (cp235)
+ * scripts/csp-header-consistency-smoke.ts
  *
- * Guards the two security response headers that cp233 root-caused and
+ * Guards the two security response headers that root-caused and
  * shipped — Content-Security-Policy and Permissions-Policy — against
  * SURFACE DRIFT.  Both headers live, by deliberate design (no build-time
  * templating across an nginx config + Markdown docs + a BunkerWeb env
@@ -26,7 +26,7 @@
  * (RUN-A-MORPHIT-NODE.md is now grandma-only — the verbatim security
  * headers live in OPERATIONS.md §15, not in the friendly quick-start.)
  *
- * Why this exists.  cp233 verified all four BYTE-IDENTICAL by hand but
+ * Why this exists.  A later change verified all four BYTE-IDENTICAL by hand but
  * left no guard.  The most likely regression: an operator-facing tweak
  * lands in web.conf (the live config) and the three doc/WAF copies are
  * forgotten — so an operator who pastes the OPERATIONS.md snippet, or deploys
@@ -54,6 +54,15 @@
  *      every HTML-serving block, so this catches "added CSP to a new block
  *      but forgot Permissions-Policy" without hardcoding a brittle block
  *      count.
+ *   F. The frontend container: .onion names get connect-src = the hidden
+ *      nodes' .onion addresses, .i2p names their .b32.i2p addresses; every
+ *      location repeats the security headers.
+ *   H. script-src allows no inline script and no eval on any surface or
+ *      origin ('wasm-unsafe-eval' stays: the keystore runs WebAssembly).
+ *   I. Every nginx config hides its version (server_tokens off), and every
+ *      location of the two web configs that proxies to Morphit clears the
+ *      headers no upstream may receive from a visitor (X-Morphit-Local-Health,
+ *      X-I2P-DestB64/B32/Hash).
  *
  * Output contract: emits `✓ all N scenarios passed` on the last line.
  */
@@ -61,8 +70,11 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { DEFAULT_HIDDEN_RPC_ENDPOINTS } from '../apps/web/src/lib/net/config';
+import {
+	DEFAULT_HIDDEN_RPC_ENDPOINTS,
+	DEFAULT_I2P_RPC_ENDPOINTS,
+	DEFAULT_RPC_ENDPOINTS
+} from '../apps/web/src/lib/net/config';
 import { addHeaders, findBlocks, mapEntries, parseNginx } from './lib/nginx-conf';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -235,19 +247,17 @@ for (const [tok, why] of REQUIRED_CSP_TOKENS) {
 	if (canonicalCsp.includes(tok)) ok(`CSP retains \`${tok}\` (${why})`);
 	else bad(`CSP MISSING required directive \`${tok}\` (${why})`, 'a uniform-but-weakened CSP edit was detected');
 }
-// ── C2. connect-src RPC origins are EXACTLY the canonical default pool ──
-// Derived from @morphit/operator-config (the single source of truth that
-// rpc-endpoint-canon-smoke also pins frontend + both env examples against),
-// so adding or removing a Blurt RPC endpoint there automatically updates what
-// this guard requires.  A hand-maintained subset would fall behind the CSP —
-// exactly how the two cp261 additions (rpc.drakernoise.com, blurtrpc.dagobert.uk)
-// were left un-pinned even though they were correctly added to all 4 surfaces.
+// ── C2. connect-src RPC origins are EXACTLY the browser's RPC pool ────────
+// connect-src is what the BROWSER contacts: DEFAULT_RPC_ENDPOINTS in
+// apps/web/src/lib/net/config.ts (the canonical pool minus the server-only
+// node with no CORS, which rpc-endpoint-canon-smoke pins). Derived, so adding
+// or removing a browser endpoint there updates what this guard requires.
 {
 	const connectSrc = canonicalCsp.match(/connect-src([^;]*)/i)?.[1] ?? '';
 	const cspOrigins = new Set(
 		(connectSrc.match(/https:\/\/[^\s;'"]+/g) ?? []).map((o) => o.replace(/\/+$/, ''))
 	);
-	const canonOrigins = DEFAULT_BLURT_RPC_ENDPOINTS.map((e) => e.replace(/\/+$/, ''));
+	const canonOrigins = DEFAULT_RPC_ENDPOINTS.map((e) => e.replace(/\/+$/, ''));
 	for (const origin of canonOrigins) {
 		if (cspOrigins.has(origin)) ok(`CSP connect-src includes canonical RPC origin ${origin}`);
 		else
@@ -262,12 +272,12 @@ for (const [tok, why] of REQUIRED_CSP_TOKENS) {
 	if (extra.length === 0) ok('CSP connect-src carries no https origin beyond the canonical RPC pool');
 	else
 		bad(
-			`CSP connect-src has ${extra.length} non-canonical https origin(s): ${extra.join(', ')}`,
-			"connect-src must equal 'self' + the canonical Blurt RPC pool only (privacy + parity)"
+			`CSP connect-src has ${extra.length} https origin(s) the browser never calls: ${extra.join(', ')}`,
+			"connect-src must equal 'self' + the browser's Blurt RPC pool only (privacy + parity)"
 		);
 }
 // connect-src must NOT silently re-admit an external price API (privacy —
-// cp233 dropped CoinGecko; the client provider is unwired).  Catch a
+// A later change dropped CoinGecko; the client provider is unwired).  Catch a
 // re-introduction of the most likely candidate.
 if (!/connect-src[^;]*coingecko/i.test(canonicalCsp))
 	ok('CSP connect-src does not re-admit coingecko (privacy — cp233)');
@@ -300,12 +310,17 @@ if (cspWebAll.length === ppWeb.length && cspWeb.length >= 1) {
 // ── F. the frontend container (Tor/I2P path + BunkerWeb upstream) ───
 {
 	// F1. hidden names get the canonical policy with connect-src = 'self' + the
-	// hidden RPC nodes the app uses on a hidden origin — derived, not typed.
-	const hiddenOrigins = DEFAULT_HIDDEN_RPC_ENDPOINTS.map((u) => u.replace(/\/+$/, ''));
-	const expectHidden = canonicalCsp.replace(/connect-src[^;]*/, `connect-src 'self' ${hiddenOrigins.join(' ')}`);
-	for (const key of ['~*\\.onion$', '~*\\.i2p$']) {
+	// hidden RPC nodes the app uses on that kind of origin (selectRpcPool):
+	// .onion → their .onion addresses, .i2p → their .b32.i2p addresses (an I2P
+	// proxy cannot reach a .onion) — derived, not typed.
+	for (const [key, list] of [
+		['~*\\.onion$', DEFAULT_HIDDEN_RPC_ENDPOINTS],
+		['~*\\.i2p$', DEFAULT_I2P_RPC_ENDPOINTS]
+	] as const) {
+		const origins = list.map((u) => u.replace(/\/+$/, ''));
+		const expectHidden = canonicalCsp.replace(/connect-src[^;]*/, `connect-src 'self' ${origins.join(' ')}`);
 		const v = frontendCspMap?.get(key);
-		if (v === expectHidden) ok(`${FRONTEND}: ${key} gets the canonical CSP with connect-src = 'self' + the ${hiddenOrigins.length} hidden RPC node(s)`);
+		if (v === expectHidden) ok(`${FRONTEND}: ${key} gets the canonical CSP with connect-src = 'self' + the ${origins.length} hidden RPC node(s) of that network`);
 		else bad(`${FRONTEND}: ${key} hidden CSP wrong or missing`, `expected: ${expectHidden.slice(0, 120)}…\n      got:      ${String(v).slice(0, 120)}…`);
 	}
 	// F2. server-level header set; no HSTS (plain-http hidden services).
@@ -356,6 +371,56 @@ for (const [rel, text] of [
 	const xf = envValue(text, 'X_FRAME_OPTIONS');
 	if (rp === 'no-referrer' && xf === 'DENY') ok(`${rel}: REFERRER_POLICY=no-referrer and X_FRAME_OPTIONS=DENY`);
 	else bad(`${rel}: REFERRER_POLICY / X_FRAME_OPTIONS not set`, `REFERRER_POLICY=${rp} X_FRAME_OPTIONS=${xf} (BunkerWeb's defaults leak the origin cross-site)`);
+}
+
+// ── H. no inline script, no eval — on every surface and origin ──────────
+{
+	const scriptSrcOf = (csp: string): string[] =>
+		(/(?:^|;)\s*script-src([^;]*)/i.exec(csp)?.[1] ?? '').trim().split(/\s+/);
+	const pageCsps: Array<[string, string]> = [
+		...allCsp.map((v, i) => [`page CSP #${i + 1}`, v] as [string, string]),
+		...[...(frontendCspMap ?? new Map<string, string>())].map(
+			([k, v]) => [`${FRONTEND} map ${k}`, v] as [string, string]
+		)
+	];
+	const loose = pageCsps.filter(([, v]) =>
+		scriptSrcOf(v).some((t) => t === "'unsafe-inline'" || t === "'unsafe-eval'")
+	);
+	if (pageCsps.length > 0 && loose.length === 0)
+		ok(`script-src allows no inline script and no eval in all ${pageCsps.length} page policies`);
+	else bad(`script-src allows inline script or eval`, loose.map(([n]) => n).join(', '));
+	if (scriptSrcOf(canonicalCsp).includes("'wasm-unsafe-eval'")) ok("script-src keeps 'wasm-unsafe-eval' (WebAssembly only)");
+	else bad("script-src lost 'wasm-unsafe-eval'", 'the keystore runs as WebAssembly');
+}
+
+// ── I. version hidden; visitor-supplied headers cleared on every proxy ───
+{
+	const NGINX = [FRONTEND, WEB_CONF, 'ops/nginx/relay.conf', 'ops/nginx/indexer.conf'];
+	for (const rel of NGINX) {
+		const servers = findBlocks(parseNginx(read(rel)), 'server');
+		const tls = servers.filter((sv) =>
+			sv.block.some((d) => d.name === 'location' || d.name === 'proxy_pass' || d.name === 'root')
+		);
+		const hidden = tls.every((sv) => sv.block.some((d) => d.name === 'server_tokens' && d.args[0] === 'off'));
+		if (tls.length > 0 && hidden) ok(`${rel}: server_tokens off (no nginx version in headers or error pages)`);
+		else bad(`${rel}: a server block shows the nginx version`, 'add `server_tokens off;`');
+	}
+	const MUST_CLEAR = ['x-morphit-local-health', 'x-i2p-destb64', 'x-i2p-destb32', 'x-i2p-desthash'];
+	for (const rel of [FRONTEND, WEB_CONF, 'ops/nginx/relay.conf', 'ops/nginx/indexer.conf']) {
+		const tree = parseNginx(read(rel));
+		for (const sv of findBlocks(tree, 'server')) {
+			const serverSet = sv.block.filter((d) => d.name === 'proxy_set_header');
+			for (const loc of findBlocks(sv.block, 'location')) {
+				if (!loc.block.some((d) => d.name === 'proxy_pass')) continue;
+				const own = loc.block.filter((d) => d.name === 'proxy_set_header');
+				// nginx: a location with any proxy_set_header of its own inherits none.
+				const eff = new Map((own.length > 0 ? own : serverSet).map((d) => [String(d.args[0]).toLowerCase(), d.args[1] ?? '']));
+				const missing = MUST_CLEAR.filter((h) => eff.get(h) !== '');
+				if (missing.length === 0) ok(`${rel}: location ${loc.args.join(' ')} clears the visitor-supplied headers`);
+				else bad(`${rel}: location ${loc.args.join(' ')} passes ${missing.join(', ')} through`, 'add `proxy_set_header <name> "";`');
+			}
+		}
+	}
 }
 
 // ─── Report ──────────────────────────────────────────────────────────

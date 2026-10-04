@@ -57,12 +57,9 @@ function fetcher(...routes: Route[]) {
 		}
 		if (r === undefined || r === 'throw') throw new TypeError(`fetch failed: ${url}`);
 		const status = r.status ?? 200;
-		return {
-			ok: status >= 200 && status < 300,
-			status,
-			json: async () => r.json,
-			text: async () => r.text ?? JSON.stringify(r.json)
-		} as unknown as Response;
+		return new Response(r.text ?? JSON.stringify(r.json), {
+			status: status
+		}) as unknown as Response;
 	}) as typeof fetch;
 	return { f, calls };
 }
@@ -174,9 +171,11 @@ describe('the node source kind', () => {
 		expect(parseXmrExplorer('node+https://u:p@node.example')).toBeNull();
 		expect(parseXmrExplorer('node+')).toBeNull();
 	});
-	it('the default list has the three explorers and three nodes, all valid', () => {
-		expect(DEFAULT_XMR_EXPLORERS).toHaveLength(6);
+	it('the default list has two onion explorers, the three clearnet explorers and three nodes, all valid', () => {
+		expect(DEFAULT_XMR_EXPLORERS).toHaveLength(8);
 		expect(DEFAULT_XMR_EXPLORERS.map((u) => parseXmrExplorer(u)?.kind)).toEqual([
+			'txprove',
+			'txprove',
 			'txprove',
 			'txprove',
 			'raw-tx',

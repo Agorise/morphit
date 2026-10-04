@@ -65,7 +65,7 @@ export interface AssetMetadata {
 	 *  not duplicate the wallet's own validation. */
 	readonly addressValidator: AddressValidator;
 	/** Whether the asset can be used for the LISTING-FEE payment
-	 *  on this instance.  Memory #23 (2026-05-13): only BLURT/
+	 *  on this instance.  The frozen fee_method rule (2026-05-13): only BLURT/
 	 *  BTC/XMR may have this true.  Trade-only assets (USDT,
 	 *  ARRR, etc.) MUST set this false. */
 	readonly canBeUsedForListingFee: boolean;
@@ -102,12 +102,12 @@ const XMR_INTEGRATED_RE = /^4[1-9A-HJ-NP-Za-km-z]{105}$/;
 
 // Blurt account name — validates as the recipient identifier
 // since BLURT transfers are routed by account name, not a hex
-// address.  cp175 F-007: aligned to the CANONICAL Morphit account
+// address.  aligned to the CANONICAL Morphit account
 // pattern (the same /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/ used by
 // isValidBlurtAccount in $lib/chat/payload and the ops/ validators)
 // so all account-name validators in the frontend agree. Multi-
 // segment dotted names are accepted, but the name must end
-// alphanumeric — cp176 tightened the canonical so a trailing dash or
+// alphanumeric — a later change tightened the canonical so a trailing dash or
 // dot is rejected (real Blurt names can't end in punctuation). This
 // is a client-side UX shape check only — the authoritative account
 // check is the chain + indexer extractSigner. Parity across copies
@@ -140,7 +140,7 @@ const validateUsdt: AddressValidator = (s) =>
 // USDC — Ethereum + Base + Polygon all share the EVM 0x[40 hex]
 // address format; SPL is base58 32-44 chars.  Note no TRC-20
 // variant (Circle doesn't issue on Tron) and no BEP-20 in the
-// initial set (filed as REVISIT for non-breaking later add).
+// initial set (filed in the backlog for non-breaking later add).
 // Per-network disambiguation is the network picker's job; this
 // validator is the form-level "is this even plausibly a USDC
 // address" check.
@@ -193,7 +193,7 @@ const validateLtc: AddressValidator = (s) =>
 	LTC_LEGACY_P2SH_3_RE.test(s) ||
 	LTC_BECH32_RE.test(s);
 
-// DASH address regex (cp27).  P2PKH starts with `X`, P2SH starts
+// DASH address regex.  P2PKH starts with `X`, P2SH starts
 // with `7`; both base58, 34 chars total.  Permissive shape check
 // — receiving wallet does checksum and chain-binding.  See
 // payload.ts and the canonical asset-registry entry for the full
@@ -204,7 +204,7 @@ const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
 const validateDash: AddressValidator = (s) =>
 	DASH_P2PKH_RE.test(s) || DASH_P2SH_RE.test(s);
 
-// DOGE address regex (cp33).  P2PKH starts with `D`, P2SH starts
+// DOGE address regex.  P2PKH starts with `D`, P2SH starts
 // with `9` or `A` (multi-sig variants).  No bech32 — Dogecoin
 // Core has not activated segwit as of 2026-05.  Length is 34
 // chars total (33 after the version-byte prefix).
@@ -214,7 +214,7 @@ const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
 const validateDoge: AddressValidator = (s) =>
 	DOGE_P2PKH_RE.test(s) || DOGE_P2SH_RE.test(s);
 
-// ZEC address regex (cp39).  Zcash supports both transparent
+// ZEC address regex.  Zcash supports both transparent
 // (base58, t1/t3 prefixes, ~35 chars total) and shielded
 // (bech32/bech32m, zs1 Sapling pool or u1 Unified Address) formats.
 // All four are first-class on the protocol; Morphit accepts any
@@ -228,7 +228,7 @@ const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
 const validateZec: AddressValidator = (s) =>
 	ZEC_T_RE.test(s) || ZEC_ZS_RE.test(s) || ZEC_U_RE.test(s);
 
-// ARRR address regex (cp41 — Part 122).  Pirate Chain ships
+// ARRR address regex.  Pirate Chain ships
 // chain-level default-shielded transactions via the Sapling zk-SNARK
 // pool.  Only one address format: `zs1` Sapling shielded
 // (bech32, 78 chars total — same shape as Zcash Sapling addresses).
@@ -240,7 +240,7 @@ const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
 
 const validateArrr: AddressValidator = (s) => ARRR_ZS_RE.test(s);
 
-// DCR address regex (cp43 — Part 122).  Decred uses base58check
+// DCR address regex.  Decred uses base58check
 // with two address types used for receiving payments:
 //   - `Ds` P2PKH-Secp256k1 (most common)
 //   - `Dc` P2SH (multisig / scripts)
@@ -253,7 +253,7 @@ const DCR_RE = /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/;
 
 const validateDcr: AddressValidator = (s) => DCR_RE.test(s);
 
-// SOL address regex (cp45 — Part 122).  Solana public keys are
+// SOL address regex.  Solana public keys are
 // 32 bytes encoded as base58 (32-44 chars, most are 44).  Same
 // character class as USDT/USDC SPL addresses — context (the
 // asset field) disambiguates at the order layer per LL #50.
@@ -266,14 +266,14 @@ const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const validateSol: AddressValidator = (s) => SOL_RE.test(s);
 
-// ETH address regex (cp47 — Part 122).  Ethereum addresses are
+// ETH address regex.  Ethereum addresses are
 // 20-byte hex with 0x prefix — exactly 42 chars total.  Both
 // lowercase and EIP-55 mixed-case checksum forms accepted.
 //
 // SAME shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, and every
 // EVM token-account address on Base/Polygon/Arbitrum/BSC.
 // Context disambiguates at the order layer (asset field +
-// network field for multi-network assets) per LL #50.  cp47
+// network field for multi-network assets) per LL #50.
 // extends address-shape-overlap-smoke with ETH specimens.
 //
 // CONTRACT ADDRESSES match this regex but are smart-contract
@@ -290,7 +290,7 @@ const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
 
 const validateEth: AddressValidator = (s) => ETH_RE.test(s);
 
-// XRP address regex (cp49 — Part 122).  XRPL addresses start with
+// XRP address regex.  XRPL addresses start with
 // 'r' followed by 24-34 base58 chars.  DESTINATION TAGS ride
 // separately in URI `?dt=N` (NOT in the regex).  RESERVE
 // REQUIREMENT: XRPL accounts need ≥1 XRP base reserve to exist.
@@ -305,11 +305,11 @@ const validateXrp: AddressValidator = (s) => XRP_RE.test(s);
  *  Bitcoin second; BLURT last because it's the chain-of-record,
  *  not the typical traded asset).
  *
- *  cp474 — the literal below is `as const`, which is a COMPILE-time
+ *  the literal below is `as const`, which is a COMPILE-time
  *  claim only: it vanishes at runtime, so anything holding a
  *  reference could rewrite an entry in place.  This registry ships
- *  to the BROWSER and carries `addressShape` (the regex behind
- *  inline address-typo detection) and the display tickers users
+ *  to the BROWSER and carries `addressValidator` (behind inline
+ *  address-typo detection) and the display tickers users
  *  read before sending funds, so a mutated entry is a
  *  user-visible integrity problem, not just a tidiness one.  The
  *  sibling `@morphit/asset-registry` freezes for exactly this
@@ -383,7 +383,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 6, // Same on all four supported networks
 		supportsMemo: false,
 		addressValidator: validateUsdt,
-		// MEMORY #23 INVARIANT: USDT cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: USDT cannot pay listing fees.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20, TRC-20, SPL, BEP-20.
@@ -411,14 +411,14 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 6, // Same on all four supported networks (Circle standard)
 		supportsMemo: false,
 		addressValidator: validateUsdc,
-		// MEMORY #23 INVARIANT: USDC cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: USDC cannot pay listing fees.
 		// Trade-only Category B asset alongside USDT/DAI/BCH/LTC/DASH/DOGE.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
 		// Multi-network: ERC-20, SPL, Base, Polygon.  Native USDC
 		// only — bridged versions (USDC.e, USDbC, etc.) excluded.
 		// No TRC-20 (Circle doesn't issue on Tron) and no BEP-20
-		// in the initial set; see ADR-0028 + REVISIT-LIST for the
+		// in the initial set; see ADR-0028 + backlog for the
 		// non-breaking later-add path.
 		supportedNetworks: ['erc20', 'spl', 'base', 'polygon'],
 		// null forces explicit user choice every trade.  Note
@@ -433,7 +433,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		ticker: 'dai',
 		displayTicker: 'DAI',
 		displayName: 'Dai',
-		// Honest one-liner per ADR-0029 §2 + Memory #29 ("respectful
+		// Honest one-liner per ADR-0029 §2 and the respectful-marketing rule ("respectful
 		// to that coin's community").  Acknowledges DAI's
 		// decentralization edge over single-issuer stablecoins
 		// without overselling — the PSM/USDC backing dependency is
@@ -460,7 +460,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 18,
 		supportsMemo: false,
 		addressValidator: validateDai,
-		// MEMORY #23 INVARIANT: DAI cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: DAI cannot pay listing fees.
 		// Trade-only Category B asset alongside USDT/USDC/BCH/LTC/DASH/DOGE.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -502,7 +502,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 8, // Same as BTC — sat-denominated smallest unit
 		supportsMemo: false, // BCH transactions don't carry memos (same as BTC)
 		addressValidator: validateBch,
-		// MEMORY #23 INVARIANT: BCH cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: BCH cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -529,7 +529,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 8, // Same as BTC — litoshi == satoshi
 		supportsMemo: false, // LTC transactions don't carry memos (same as BTC)
 		addressValidator: validateLtc,
-		// MEMORY #23 INVARIANT: LTC cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: LTC cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -557,7 +557,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 8, // Same as BTC — duff == satoshi
 		supportsMemo: false, // DASH transactions don't carry memos (same as BTC)
 		addressValidator: validateDash,
-		// MEMORY #23 INVARIANT: DASH cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: DASH cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -590,7 +590,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 8, // Same as BTC — shibatoshi == satoshi
 		supportsMemo: false, // DOGE transactions don't carry memos (same as BTC)
 		addressValidator: validateDoge,
-		// MEMORY #23 INVARIANT: DOGE cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: DOGE cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -627,7 +627,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 8, // Same as BTC — zatoshi == satoshi
 		supportsMemo: false, // Memo content travels inside the shielded payload, not the address
 		addressValidator: validateZec,
-		// MEMORY #23 INVARIANT: ZEC cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: ZEC cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -663,7 +663,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		decimals: 8, // Same as BTC — Sapling inherited the 8-decimal smallest-unit convention from Bitcoin
 		supportsMemo: false, // Memo content travels inside the shielded payload, not the address
 		addressValidator: validateArrr,
-		// MEMORY #23 INVARIANT: ARRR cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: ARRR cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -688,14 +688,14 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		// Decred brand teal-green (#2dd8a3) and blue (#2970ff) — use
 		// text-teal-500 to land a clean teal accent distinct from
 		// every existing assignment: BTC amber-500, USDT amber-400,
-		// USDC blue-500, DAI yellow-600 (cp42), BCH lime-500, LTC
+		// USDC blue-500, DAI yellow-600, BCH lime-500, LTC
 		// slate-400, DASH sky-500, DOGE yellow-500, ZEC yellow-400,
 		// ARRR amber-600, XMR orange-500.
 		accentClass: 'text-teal-500',
 		decimals: 8, // Same as BTC — Decred inherited the 8-decimal smallest-unit convention from Bitcoin
 		supportsMemo: false,
 		addressValidator: validateDcr,
-		// MEMORY #23 INVARIANT: DCR cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: DCR cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -723,13 +723,13 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		// USDT amber-400, USDC blue-500, DAI yellow-600, BCH
 		// lime-500, LTC slate-400, DASH sky-500, DOGE yellow-500,
 		// ZEC yellow-400, ARRR amber-600, XMR orange-500, DCR
-		// teal-500.  Verified at cp45 via cp42 asset-accent-class-
+		// teal-500.  Verified via asset-accent-class-
 		// uniqueness-smoke.
 		accentClass: 'text-violet-500',
 		decimals: 9, // 1 SOL = 1,000,000,000 lamports
 		supportsMemo: false,
 		addressValidator: validateSol,
-		// MEMORY #23 INVARIANT: SOL cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: SOL cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -751,13 +751,13 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		logoSvgPath: '/icons/icon-eth.svg',
 		// Ethereum brand color is #627EEA (a blue-purple).
 		// text-indigo-500 lands a clean indigo accent distinct
-		// from every existing assignment.  Verified at cp47 via
-		// cp42 asset-accent-class-uniqueness-smoke.
+		// from every existing assignment.  Verified via
+		// asset-accent-class-uniqueness-smoke.
 		accentClass: 'text-indigo-500',
 		decimals: 18, // 1 ETH = 10^18 wei
 		supportsMemo: false,
 		addressValidator: validateEth,
-		// MEMORY #23 INVARIANT: ETH cannot pay listing fees.
+		// TRADE-ONLY INVARIANT: ETH cannot pay listing fees.
 		// Trade-only Category B coin.
 		canBeUsedForListingFee: false,
 		canBeTraded: true,
@@ -791,7 +791,7 @@ const ASSETS_SOURCE: ReadonlyArray<AssetMetadata> = [
 		privacyWarningKey: null
 	},
 	{
-		// cp425 — BARTER: goods/services as a tradable asset (not a crypto).
+		// BARTER: goods/services as a tradable asset (not a crypto).
 		// Display metadata only; every crypto-shaped path (address, price,
 		// network, memo, listing-fee) is gated away by isGoodsAsset().
 		ticker: 'barter',
@@ -847,7 +847,7 @@ export function getAsset(ticker: ChatAssetTicker): AssetMetadata {
 	return a;
 }
 
-/** cp406 — resolve a ticker that may be UPPERCASE to the lower-case
+/** resolve a ticker that may be UPPERCASE to the lower-case
  *  ChatAssetTicker used across the chat UI + payment modals, or null when it
  *  isn't a tradable chat asset. `OrderRecord.asset` is the canonical UPPERCASE
  *  AssetTicker ('BLURT'), but this registry + ChatAssetTicker are lower-case

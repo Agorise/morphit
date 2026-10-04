@@ -4,7 +4,7 @@
  * `RelayErrorCode` union in sync with what the relay code actually
  * emits on the wire.
  *
- * Part 122 cp7 — created after the cp6 deep-deep found seven
+ * created after the seven
  * contract gaps in the initial relay-client extraction:
  *
  *   F16 — ghost code `invite_required` was in the union but the
@@ -103,7 +103,7 @@ function parseRelayErrorCodeUnion(): Set<string> {
 	// (e.g. "Chunked transfer-encoding rejected; client must send
 	// Content-Length.") which would otherwise truncate the union
 	// at the first comment-internal semicolon.  Bug caught during
-	// cp7 smoke development.
+	// smoke development.
 	src = src.replace(/\/\*[\s\S]*?\*\//g, '');
 	// Strip line comments too for the same reason.
 	src = src.replace(/^[ \t]*\/\/.*$/gm, '');

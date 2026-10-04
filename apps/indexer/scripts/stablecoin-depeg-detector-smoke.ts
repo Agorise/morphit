@@ -2,7 +2,7 @@
 /**
  * apps/indexer/scripts/stablecoin-depeg-detector-smoke.ts
  *
- * Structural defense (cp127) — invariants for the cross-stablecoin
+ * Structural defense — invariants for the cross-stablecoin
  * depeg detector module.
  *
  * These are STRUCTURAL checks (constants, types, contracts) — not

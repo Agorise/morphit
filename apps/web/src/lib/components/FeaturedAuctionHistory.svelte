@@ -15,8 +15,8 @@
 	 *
 	 * Visualization: SVG bar chart, no external library.  Each
 	 * day is one bar; bar height encodes clearing_blurt_per_hour;
-	 * bar color encodes whether the day was full (5/5 visible
-	 * slots = saturated) or under-filled (faded — clearing price
+	 * bar color encodes whether the day was full (every visible
+	 * slot taken, active_visible_count ≥ max_slots = saturated) or under-filled (faded — clearing price
 	 * is 0 / "anyone wins").  The under-filled state is the most
 	 * common case in early days, so it's the default visual.
 	 *
@@ -35,7 +35,7 @@
 	let windowDays = $state<WindowDays>(30);
 	let points = $state<readonly ClearingPricePoint[]>([]);
 	let loaded = $state(false);
-	// cp429 — live featured-order count, reported up by the embedded
+	// live featured-order count, reported up by the embedded
 	// <FeaturedOrders>. Distinguishes "nobody has ever bid" (show the
 	// "be the first" prompt) from "a bid is live right now, just no settled
 	// clearing-price history yet" (show a neutral history-empty note).
@@ -124,7 +124,7 @@
 		return n.toFixed(2);
 	}
 
-	// t.txt (the maintainer) — hide the whole "🎉 Featured" card when there's nothing to
+	// hide the whole "🎉 Featured" card when there's nothing to
 	// show: no live featured orders AND no settled clearing-price history. The
 	// <section> is display:none'd (not {#if}-removed) so the embedded
 	// <FeaturedOrders> below stays mounted and keeps reporting liveFeaturedCount
@@ -159,14 +159,14 @@
 			</div>
 		</div>
 
-		<!-- cp428 — the LIVE featured orders live at the top of the unified
+		<!-- the LIVE featured orders live at the top of the unified
 		     "🎉 Featured" card (was a separate "FEATURED RIGHT NOW" section that
 		     read as a jumbled second block). Renders the shared OrderCard, and
 		     self-hides when nothing is featured — leaving just the auction
 		     history + "be the first" prompt below. -->
 		<FeaturedOrders embedded variant="stack" oncount={(n) => (liveFeaturedCount = n)} />
 
-		<!-- the maintainer: with NO featured orders on the board, "1 of 3 slots filled today"
+		<!-- Requirement: with NO featured orders on the board, "1 of 3 slots filled today"
 		     is worse than useless — it sat directly above "No featured-slot bids in
 		     the last 30 days yet." and contradicted it. `liveFeaturedCount` is the
 		     authoritative count of what is actually visible right now (emitted by
@@ -228,8 +228,14 @@
 									: 'fill-ink-300 dark:fill-ink-600'}
 						>
 							<title
-								>{p.day}: {formatBlurtPerHour(p.clearing_blurt_per_hour)} BLURT/hr · {p.active_visible_count}/{p.max_slots}
-								slots filled</title
+								>{$_('clearing_price.bar_title', {
+									values: {
+										day: p.day,
+										rate: formatBlurtPerHour(p.clearing_blurt_per_hour),
+										filled: p.active_visible_count,
+										max: p.max_slots
+									}
+								})}</title
 							>
 						</rect>
 					{/each}
@@ -245,7 +251,7 @@
 		{:else}
 			<div class="rounded-lg bg-ink-50 p-3 text-sm text-ink-600 dark:bg-ink-800 dark:text-ink-300">
 				{#if liveFeaturedCount > 0}
-					<!-- cp429 — a featured order IS live (shown above); the history
+					<!-- a featured order IS live (shown above); the history
 					     endpoint just has no settled clearing prices for this window
 					     yet. Don't claim "no bids — be the first". -->
 					{$_('clearing_price.no_history_yet_active', {

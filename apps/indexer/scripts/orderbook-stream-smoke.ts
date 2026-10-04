@@ -80,13 +80,14 @@ function makeRow(overrides: Partial<OrderbookStreamRow> = {}): OrderbookStreamRo
 		permlink: 'sell-btc-eur-2026-04',
 		side: 'sell',
 		asset: 'BTC',
+		asset_network: null,
 		fiat_currency: 'EUR',
 		amount_min: '50.00',
 		amount_max: '500.00',
 		price_model: 'mid+1%',
 		location_region: 'Berlin',
 		payment_methods: ['cash', 'sepa'],
-		// cp474 — REQUIRED by OrderbookStreamRow and previously absent from this
+		// REQUIRED by OrderbookStreamRow and previously absent from this
 		// fixture, so every makeRow() produced a shape the SQL never emits.
 		// `rowToWire` reads engagement_24h with no `??` default, so the wire
 		// payload silently dropped the key. null here = a crypto (non-barter)
@@ -95,18 +96,21 @@ function makeRow(overrides: Partial<OrderbookStreamRow> = {}): OrderbookStreamRo
 		specific_barter_title: null,
 		engagement_24h: 3,
 		terms: 'meet at café',
+		lang: null,
 		fee_method: 'blurt',
 		feedback_count: 5,
-		// cp473 — a DIFFERENT number from feedback_count on purpose. The card
+		// a DIFFERENT number from feedback_count on purpose. The card
 		// reads this; when the stream omitted it, every live orderbook card
 		// rendered "no trades".
 		trade_count: 9,
 		weighted_rating: '4.5',
-		// cp404 — reputation-score inputs + posting key now read by rowToWire.
+		// reputation-score inputs + posting key now read by rowToWire.
 		last_feedback_at: new Date('2026-04-20T00:00:00Z'),
 		first_trade_complete_at: new Date('2026-02-01T00:00:00Z'),
 		posting_pubkey: 'BLT6vSMDaw3sLdJP7SjSxHCbtwLQoyTA2oc9dWDdmKZ2Jjw6Bh7d',
 		is_new_trader: false,
+		display_name: null,
+		profile_json_metadata: null,
 		created_at: new Date('2026-04-01T10:00:00Z'),
 		updated_at: new Date('2026-04-26T12:00:00Z'),
 		expires_at: new Date('2026-05-01T00:00:00Z'),
@@ -164,7 +168,7 @@ scenario('buildWhereClauses: asset filter matches traded OR pays-with OR accepte
 
 scenario('buildWhereClauses: side filter binds correctly (barter-aware)', () => {
 	const { where, params } = buildWhereClauses({ side: 'sell' });
-	// v1.8.16 (the maintainer) — barter orders store o.side as the GOODS direction, the
+	// v1.8.16 — barter orders store o.side as the GOODS direction, the
 	// inverse of the crypto direction, so the crypto-facing side filter emits a
 	// two-branch clause (shared cryptoFacingSideWhere) binding the requested side
 	// AND its opposite: "sell crypto" matches crypto SELL or barter BUY.
@@ -189,7 +193,7 @@ scenario('buildWhereClauses: location_region uses ILIKE substring match', () => 
 		'ILIKE substring with escape'
 	);
 	// v1.8.15 — case-insensitive SUBSTRING (contains) match, was prefix region%,
-	// so "zrh" finds "a city zrh". Param is wrapped %...%.
+	// so "zrh" finds "Zürich ZRH". Param is wrapped %...%.
 	assertEqual(params, ['%Berl%'], 'normalized + wrapped param');
 });
 
@@ -226,7 +230,7 @@ scenario('buildWhereClauses: payment_methods empty after filter → no EXISTS', 
 
 scenario('buildWhereClauses: min_trades > 0 adds clause', () => {
 	const { where, params } = buildWhereClauses({ min_trades: 3 });
-	// cp473 — was pinned to `COALESCE(f.c, 0)`, i.e. this scenario ENCODED the
+	// was pinned to `COALESCE(f.c, 0)`, i.e. this scenario ENCODED the
 	// bug: a filter named min_TRADES that actually counted REVIEWS, disagreeing
 	// with the REST endpoint the stream's snapshot then overwrote.
 	assertEqual(where[3], 'COALESCE(tc.c, 0) >= $1', 'min_trades clause');
@@ -367,7 +371,7 @@ scenario('rowToWire: full row → full wire shape', () => {
 	assertEqual(w.amount_max, 500, 'amount_max as number');
 	assertEqual(w.weighted_rating, 4.5, 'weighted_rating as number');
 	assertEqual(w.feedback_count, 5, 'feedback_count');
-	// cp473 — trade_count MUST cross the wire. The orderbook page treats this
+	// trade_count MUST cross the wire. The orderbook page treats this
 	// stream's snapshot as authoritative and replaces the REST rows with it, so
 	// a missing field here doesn't degrade the live path — it wipes the trade
 	// count off cards the REST fetch had already rendered correctly.
@@ -380,7 +384,7 @@ scenario('rowToWire: full row → full wire shape', () => {
 	assertEqual(w.created_at, '2026-04-01T10:00:00.000Z', 'created_at iso');
 	assertEqual(w.updated_at, '2026-04-26T12:00:00.000Z', 'updated_at iso');
 	assertEqual(w.expires_at, '2026-05-01T00:00:00.000Z', 'expires_at iso');
-	// cp404 — composite reputation score, earliest-trade ISO, posting key.
+	// composite reputation score, earliest-trade ISO, posting key.
 	assertEqual(typeof w.reputation_score, 'number', 'reputation_score is a number');
 	assertEqual(w.first_trade_at, '2026-02-01T00:00:00.000Z', 'first_trade_at iso');
 	assertEqual(
@@ -569,7 +573,7 @@ await asyncScenario('serializer: schedule after completion starts a fresh fetch'
 	assertEqual(state.has('alice/perma'), false, 'cleared');
 });
 
-// cp405 regression guard — the beta.44 outage: the orderbook query joined
+// regression guard — the beta.44 outage: the orderbook query joined
 // `accounts a` on `a.account`, but the accounts table keys on `name` (every
 // OTHER table uses `account`, so the typo looked right). No smoke executes the
 // SQL, so it shipped and 500'd every orderbook load. This asserts every `a.<col>`

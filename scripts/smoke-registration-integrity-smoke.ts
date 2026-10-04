@@ -9,9 +9,9 @@
  *      fails loudly on this at run time; this catches it statically too.
  *   2. A `*-smoke.ts` file exists on disk but is NOT registered — so it never
  *      runs in the battery or CI and silently rots. This is exactly what
- *      happened to `forbidden-char-consistency-smoke` (cp232 created it as the
+ *      happened to `forbidden-char-consistency-smoke` (created it as the
  *      forbidden-character drift guard but never wired it into the runner, so
- *      the guard was dead until cp242 found it). A guard that doesn't run is
+ *      the guard was dead until a later fix found it). A guard that doesn't run is
  *      worse than no guard — it gives false confidence.
  *
  * NOTE on the canonical `✓ all N …` tally line: it is NOT checked statically
@@ -111,7 +111,11 @@ function main(): void {
 
 	// 2) No duplicate registrations.
 	const dupes = registered.filter((e, i) => registered.indexOf(e) !== i);
-	check('no_duplicate_registrations', dupes.length === 0, dupes.length ? `dupes: ${[...new Set(dupes)].join(', ')}` : 'none');
+	check(
+		'no_duplicate_registrations',
+		dupes.length === 0,
+		dupes.length ? `dupes: ${[...new Set(dupes)].join(', ')}` : 'none'
+	);
 
 	// 3) Every on-disk *-smoke.ts is registered (or explicitly allowlisted).
 	const disk = onDiskSmokes();
@@ -119,7 +123,32 @@ function main(): void {
 	check(
 		'no_orphaned_smoke_files',
 		orphans.length === 0,
-		orphans.length ? `orphans (exist but unregistered): ${orphans.join(', ')}` : `all ${disk.length} *-smoke.ts files registered`
+		orphans.length
+			? `orphans (exist but unregistered): ${orphans.join(', ')}`
+			: `all ${disk.length} *-smoke.ts files registered`
+	);
+
+	// 4) Every ops/test mutation harness is either run by a registered smoke or
+	//    listed in ops/test/README.md as one to run by hand: a harness
+	//    nothing runs and nothing documents is a guarantee nobody re-checks.
+	const harnessDir = join(ROOT, 'ops', 'test');
+	const harnesses = existsSync(harnessDir)
+		? readdirSync(harnessDir).filter((f) => f.endsWith('-harness.sh'))
+		: [];
+	const smokeText = registered
+		.map((e) => join(ROOT, entryPath(e)))
+		.filter((p) => existsSync(p))
+		.map((p) => readFileSync(p, 'utf-8'))
+		.join('\n');
+	const readmePath = join(harnessDir, 'README.md');
+	const readme = existsSync(readmePath) ? readFileSync(readmePath, 'utf-8') : '';
+	const unrun = harnesses.filter((h) => !smokeText.includes(h) && !readme.includes(`\`${h}\``));
+	check(
+		'every_ops_test_harness_is_run_or_documented',
+		harnesses.length > 10 && unrun.length === 0,
+		unrun.length
+			? `neither run by a registered smoke nor listed in ops/test/README.md: ${unrun.join(', ')}`
+			: `all ${harnesses.length} harnesses run by a smoke or listed for manual runs`
 	);
 
 	let pass = 0;

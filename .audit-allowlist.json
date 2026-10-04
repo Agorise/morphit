@@ -1,251 +1,154 @@
 {
-  "_comment": "Baseline supply-chain advisory allowlist. Each entry is an npm-audit advisory ACCEPTED after the triage in docs/audits (SECURITY-AUDIT-dependencies.md). The audit gate (scripts/audit-gate.mjs) fails CI on any high/critical advisory NOT listed here \u2014 i.e. a NEW vulnerable dependency entering the tree. Re-triage and update this file when bumping deps.",
+  "_comment": "THE one supply-chain advisory allowlist (scripts/audit-gate.mjs and apps/web/scripts/npm-audit-gate-smoke.ts both read it). Each entry is an npm-audit advisory accepted after triage, with the reason and the date of that triage. The gate fails on: any moderate/high/critical advisory not listed here; any listed advisory npm no longer reports (remove it); any advisory npm can fix without a major version change (update instead); and when the audit cannot run.",
   "_categories": {
-    "dev-build-only": "Dev/build/test tooling only; never shipped in the deployed relay, indexer, or browser bundle.",
-    "not-reachable": "Present transitively but not reachable in Morphit usage (see SECURITY-AUDIT-dependencies.md triage): SSRF validator does not use ip-address; dompurify/sanitize-html unused by Morphit code; @hono/node-server bug is Windows-only; the request-family transport is only used by the matrix-bot against a FIXED operator-configured homeserver (no attacker input).",
-    "runtime-accepted": "Runtime dependency with low real exposure; no directly-exploitable path in the deployed key-handling/core logic. Patch when convenient; not release-blocking."
+    "dev-build-only": "Dev/build/test tooling only; never shipped to or run on a node.",
+    "not-reachable": "Shipped, but the vulnerable code path cannot be reached with outside input in Morphit's use (the reason names the path).",
+    "runtime-accepted": "Shipped and reachable in principle; the exposure is bounded as the reason says. No fix exists without a major version change. Patch when one lands."
   },
-  "_generated_baseline": "2026-08 audit set",
   "allow": {
-    "GHSA-22jq-vg5j-6vgg": {
-      "package": "ip-address",
+    "GHSA-4mjr-xmp4-gh2g": {
+      "package": "qs",
       "severity": "moderate",
       "category": "not-reachable",
-      "title": "ip-address: misclassification of IPv4-mapped/NAT64 IPv6 addresses can bypass SSRF and trust-boundary"
-    },
-    "GHSA-2883-xcg3-v3hh": {
-      "package": "js-yaml",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources (reached only via eslint \\u2192 @eslint/eslintrc at lint time; never shipped or run in production; parses only Morphit's own trusted ESLint config)"
-    },
-    "GHSA-29g2-3rmr-qm68": {
-      "package": "@sveltejs/kit",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "SvelteKit: ReDoS (O(n^2)) in content negotiation \u2014 unauthenticated DoS via the Accept header"
-    },
-    "GHSA-3jxr-9vmj-r5cp": {
-      "package": "brace-expansion",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups"
-    },
-    "GHSA-4vj7-5mj6-jm8m": {
-      "package": "morgan",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "morgan vulnerable to Log Forging via unneutralized control characters in :remote-user"
+      "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+      "lastReviewed": "2026-10-02",
+      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
     },
     "GHSA-4w7w-66w2-5vf9": {
       "package": "vite",
       "severity": "moderate",
       "category": "dev-build-only",
-      "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling"
-    },
-    "GHSA-4xrf-jv44-h6hh": {
-      "package": "ip-address",
-      "severity": "moderate",
-      "category": "not-reachable",
-      "title": "ip-address: a CIDR suffix on the parsed address suppresses special-use classification and can bypass"
-    },
-    "GHSA-54fx-42gc-7vw4": {
-      "package": "hono",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "Hono: Algorithmic Complexity DoS in Language Middleware"
-    },
-    "GHSA-55q2-fjhq-7xh7": {
-      "package": "dompurify",
-      "severity": "moderate",
-      "category": "not-reachable",
-      "title": "DOMPurify: IN_PLACE hook removal leaves a detached subtree executable, causing XSS"
+      "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Dev server only."
     },
     "GHSA-5xrq-8626-4rwp": {
       "package": "vitest",
       "severity": "critical",
       "category": "dev-build-only",
-      "title": "When Vitest UI server is listening, arbitrary file can be read and executed"
+      "title": "When Vitest UI server is listening, arbitrary file can be read and executed",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Morphit never starts the Vitest UI (no @vitest/ui; only `vitest run`)."
     },
     "GHSA-67mh-4wv8-2f99": {
       "package": "esbuild",
       "severity": "moderate",
-      "category": "dev-build-only",
-      "title": "esbuild enables any website to send any requests to the development server and read the response"
+      "category": "runtime-accepted",
+      "title": "esbuild enables any website to send any requests to the development server and read the response",
+      "lastReviewed": "2026-10-02",
+      "rationale": "esbuild is a RUNTIME dependency: tsx transpiles the indexer, relay and ops-cli TypeScript with it on every node. The advisory needs esbuild's serve (dev server) mode, which neither tsx nor the ops-cli bundle step uses; Vite's dev server is local development only. The fix is a new esbuild major (0.25+/0.28) that tsx/vite pin below."
     },
     "GHSA-6rw7-vpxm-498p": {
       "package": "qs",
       "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "qs's arrayLimit bypass in its bracket notation allows DoS via memory exhaustion"
+      "category": "not-reachable",
+      "title": "qs's arrayLimit bypass in its bracket notation allows DoS via memory exhaustion",
+      "lastReviewed": "2026-10-02",
+      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
     },
     "GHSA-72xf-g2v4-qvf3": {
       "package": "tough-cookie",
       "severity": "moderate",
       "category": "not-reachable",
-      "title": "tough-cookie Prototype Pollution vulnerability"
+      "title": "tough-cookie Prototype Pollution vulnerability",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. Cookies come only from the operator's homeserver."
     },
-    "GHSA-79qm-7rj5-m7r9": {
-      "package": "hono",
-      "severity": "low",
-      "category": "runtime-accepted",
-      "title": "Hono: Proxy Helper does not remove response headers listed in the `Connection` header"
-    },
-    "GHSA-7p8r-x3mc-p8w7": {
-      "package": "fast-uri",
-      "severity": "high",
-      "category": "runtime-accepted",
-      "title": "fast-uri vulnerable to host confusion via backslash authority introducer"
-    },
-    "GHSA-866w-xmhq-wj7x": {
-      "package": "@sveltejs/kit",
+    "GHSA-82fw-gwwq-j7x9": {
+      "package": "vitest",
       "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "SvelteKit: Prototype pollution in file input deletion path in remote-function forms"
-    },
-    "GHSA-8j4g-w8fx-2239": {
-      "package": "hono",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "Hono: ReDoS in CORS middleware via Access-Control-Request-Headers"
-    },
-    "GHSA-c2j3-45gr-mqc4": {
-      "package": "dompurify",
-      "severity": "low",
-      "category": "not-reachable",
-      "title": "DOMPurify: `CUSTOM_ELEMENT_HANDLING` bypasses `afterSanitizeElements` for allowed custom elements."
-    },
-    "GHSA-f23p-vx2j-j53r": {
-      "package": "hono",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "Hono: `memo()` retains SSR output across requests, leading to cross-user data disclosure"
+      "category": "dev-build-only",
+      "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Triggers only while running a test suite with attacker-supplied mock redirects; Morphit's tests control their own mocks."
     },
     "GHSA-fjxv-7rqg-78g4": {
       "package": "form-data",
       "severity": "critical",
       "category": "not-reachable",
-      "title": "form-data uses unsafe random function in form-data for choosing boundary"
-    },
-    "GHSA-frvp-7c67-39w9": {
-      "package": "@hono/node-server",
-      "severity": "moderate",
-      "category": "not-reachable",
-      "title": "Node.js Adapter for Hono: Path traversal in `serve-static` on Windows via encoded backslash (`%5C`)"
+      "title": "form-data uses unsafe random function in form-data for choosing boundary",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. A predictable multipart boundary matters only for attacker-influenced multipart bodies; the bot sends none."
     },
     "GHSA-fx2h-pf6j-xcff": {
       "package": "vite",
       "severity": "high",
       "category": "dev-build-only",
-      "title": "vite: `server.fs.deny` bypass on Windows alternate paths"
-    },
-    "GHSA-fxqj-rqcc-2cmp": {
-      "package": "postcss",
-      "severity": "moderate",
-      "category": "dev-build-only",
-      "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q \u2014 attacker-controlled sourceMappingURL reads arbitrar"
+      "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Needs the Vite dev server on Windows; production never starts it."
     },
     "GHSA-g7r4-m6w7-qqqr": {
       "package": "esbuild",
       "severity": "low",
-      "category": "dev-build-only",
-      "title": "esbuild allows arbitrary file read when running the development server on Windows"
+      "category": "runtime-accepted",
+      "title": "esbuild allows arbitrary file read when running the development server on Windows",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Runtime dependency (via tsx), but the advisory needs esbuild's dev server on Windows; nodes run Linux and never start it."
     },
     "GHSA-hmw2-7cc7-3qxx": {
       "package": "form-data",
       "severity": "high",
       "category": "not-reachable",
-      "title": "form-data: CRLF injection in form-data via unescaped multipart field names and filenames"
-    },
-    "GHSA-hvrm-45r6-mjfj": {
-      "package": "hono",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "hono/jsx does not isolate context per request, leading to cross-request data disclosure"
-    },
-    "GHSA-mh99-v99m-4gvg": {
-      "package": "brace-expansion",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash"
-    },
-    "GHSA-mwp4-54f8-5fhr": {
-      "package": "ip-address",
-      "severity": "high",
-      "category": "not-reachable",
-      "title": "ip-address: Address4 decodes leading-zero octets as decimal while resolvers decode them as octal, al"
+      "title": "form-data: CRLF injection in form-data via unescaped multipart field names and filenames",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. The bot builds its own field names; none come from outside."
     },
     "GHSA-p8p7-x288-28g6": {
       "package": "request",
       "severity": "moderate",
       "category": "not-reachable",
-      "title": "Server-Side Request Forgery in Request"
+      "title": "Server-Side Request Forgery in Request",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. The SSRF needs an attacker-chosen URL or redirect target; the homeserver is the operator's own choice."
     },
     "GHSA-pxg6-pf52-xh8x": {
       "package": "cookie",
       "severity": "low",
-      "category": "runtime-accepted",
-      "title": "cookie accepts cookie name, path, and domain with out of bounds characters"
+      "category": "dev-build-only",
+      "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
+      "lastReviewed": "2026-10-02",
+      "rationale": "cookie 0.6 under @sveltejs/kit 2, used at build time only (the frontend is prerendered with adapter-static; nodes serve static files). The fix needs SvelteKit 3 (a major)."
     },
     "GHSA-q8mj-m7cp-5q26": {
       "package": "qs",
       "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in "
-    },
-    "GHSA-r28c-9q8g-f849": {
-      "package": "postcss",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .m"
-    },
-    "GHSA-rgw5-rvv9-x895": {
-      "package": "brace-expansion",
-      "severity": "high",
-      "category": "dev-build-only",
-      "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation"
-    },
-    "GHSA-v422-hmwv-36x6": {
-      "package": "body-parser",
-      "severity": "low",
-      "category": "runtime-accepted",
-      "title": "body-parser vulnerable to denial of service when invalid limit value silently disables size enforcem"
+      "category": "not-reachable",
+      "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set",
+      "lastReviewed": "2026-10-02",
+      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
     },
     "GHSA-v6wh-96g9-6wx3": {
       "package": "vite",
       "severity": "moderate",
       "category": "dev-build-only",
-      "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows"
+      "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). The dev server's open-in-editor helper, Windows only."
     },
-    "GHSA-vccv-cmxp-4j9h": {
-      "package": "sanitize-html",
-      "severity": "moderate",
-      "category": "not-reachable",
-      "title": "sanitize-html has incomplete URI scheme validation in that allows javascript: URIs through action, f"
+    "GHSA-vfj7-8cjw-p6xm": {
+      "package": "braces",
+      "severity": "high",
+      "category": "dev-build-only",
+      "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+      "lastReviewed": "2026-10-03",
+      "rationale": "braces 3.0.3 (also reported through micromatch and tailwindcss's chokidar) is reached only by build tooling: tailwindcss 3, fast-glob, svelte-check; every one is a devDependency (package-lock marks braces, micromatch, chokidar dev). The patterns it expands are the repo's own globs (tailwind content paths, file watchers), never a request or user input, so no outside party can hand it a deeply nested pattern. No fixed release exists (3.0.3 is the latest, the advisory covers <=3.0.3); npm's only offer is tailwindcss 4, a major change. Revisit when braces publishes a fix or when tailwindcss 4 is adopted."
     },
     "GHSA-w5hq-g745-h8pq": {
       "package": "uuid",
       "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided"
+      "category": "not-reachable",
+      "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+      "lastReviewed": "2026-10-02",
+      "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. request calls uuid v4 without a caller buffer; the v3/v5/v6 buffer path is never used."
     },
-    "GHSA-w62v-xxxg-mg59": {
-      "package": "hono",
+    "GHSA-x5fp-wj9c-mxmx": {
+      "package": "qs",
       "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "Hono: Server-Side XSS via JSX Escaping Bypass in cx() Utility"
-    },
-    "GHSA-wqjv-9729-c5q2": {
-      "package": "@sveltejs/kit",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "SvelteKit: Big remote form function payloads can cause Node process to crash"
-    },
-    "GHSA-xgm2-5f3f-mvvc": {
-      "package": "hono",
-      "severity": "moderate",
-      "category": "runtime-accepted",
-      "title": "Hono: API Gateway v1 adapter can drop a distinct repeated request header value during de-duplication"
+      "category": "not-reachable",
+      "title": "qs array-limit bypass via bracket-key comma parsing",
+      "lastReviewed": "2026-10-02",
+      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
     }
   }
 }

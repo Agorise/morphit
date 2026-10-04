@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * offline-account-lookup-smoke (cp709).
+ * offline-account-lookup-smoke.
  *
  * The wizard's relay-account step looks the account up on Blurt to
  * catch typos.  On a deliberately-offline / air-gapped install there
  * is no internet — the lookup fails with a connectivity error, which
  * is EXPECTED (the wizard needs no network; the node self-verifies the
- * account the first time it comes online).  Before cp709 the operator
+ * account the first time it comes online).  Previously the operator
  * saw an alarming "⚠ Could not reach any Blurt RPC (fetch failed)"
  * that read like a setup failure.
  *

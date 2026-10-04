@@ -1,25 +1,23 @@
 <!--
 	TradeRepCluster — "★5.00 (34) · 1 trade" as ONE unbreakable chunk.
 
-	v1.7.5 (t.txt #6 + #7): the rating pill now comes FIRST and the trade count
+	v1.7.5: the rating pill now comes FIRST and the trade count
 	sits to its right at text-xs, matching the pill. The count is ICU-pluralised
 	("1 trade" / "5 trades"), and zero trades still renders nothing at all.
 
 	v1.5.5 (t155). Two changes ride in this component:
 
-	  1. TRADES AND RATINGS ARE DIFFERENT NUMBERS NOW. the maintainer: "if an order was
-	     marked as completed (not canceled or expired), then imo that counts as
-	     1 completed trade even if no stars were left." So the trade count comes
+	  1. TRADES AND RATINGS ARE DIFFERENT NUMBERS NOW. Requirement: an order marked completed
+	     (not cancelled or expired) counts as one completed trade, even when no stars were left.
+	     So the trade count comes
 	     from COMPLETED ORDERS (both sides credited), while the star average and
 	     its "(34)" still come from RATINGS. Fusing them would make the chip
 	     lie — "★5.00 (34)" has to mean 34 ratings back that 5.00, not 34
 	     trades.
 
-	  2. IT MUST NEVER BREAK. the maintainer: "that chunk looks ok on mobile and none of
-	     that chunk ever gets broken, no wrap. it stays together as a chunk of
-	     text or else it must go onto its own line, or at the end of another
-	     line if it fits more nicely there. i like user identities and
-	     ordercards to be nice and tight, on mobile and pc."
+	  2. IT MUST NEVER BREAK. Requirement: the chunk never breaks internally (no wrap); it stays
+	     together, or moves to its own line or to the end of another line where it fits better.
+	     Identities and order cards stay compact on mobile and desktop.
 
 	     So: the whole cluster is ONE inline-flex with `whitespace-nowrap` and
 	     `flex-none` — it cannot break internally, and it cannot be squeezed by
@@ -47,11 +45,11 @@
 
 	let { tradeCount, rating = null, ratingCount = 0 }: Props = $props();
 
-	/** t.txt #6 rule 1: zero trades shows NOTHING — not "0 trades". Already the
+	/**  rule 1: zero trades shows NOTHING — not "0 trades". Already the
 	 *  behaviour since v1.5.5; pinned by a test so it stays. */
 	const showTrades = $derived(tradeCount > 0);
 	const showRating = $derived(ratingCount > 0 && rating !== null);
-	/** t.txt #6 rules 2+3: "1 trade" singular, "5 trades" plural.
+	/**  rules 2+3: "1 trade" singular, "5 trades" plural.
 	 *
 	 *  TWO values, deliberately. `n` is the RAW count and drives ICU plural
 	 *  selection; `count` is the display string, which `formatCountCompact` may
@@ -72,11 +70,10 @@
 
 {#if showTrades || showRating}
 	<span class="inline-flex flex-none items-center gap-1.5 whitespace-nowrap">
-		<!-- v1.7.5 (t.txt #7) — RATING FIRST, then the trade count.
-		     the maintainer: "put that text to the right of the reputation pill, not to the
-		     left of it. just reverse their order. this way, the reputation pill
-		     will appear first right after the new-trader pill (or the display name
-		     if the new-trader pill does not appear)."
+		<!-- v1.7.5 — RATING FIRST, then the trade count.
+		     Requirement: that text goes to the right of the reputation pill, so the pill comes
+		     first, right after the new-trader pill (or the display name when there is no
+		     new-trader pill).
 		     The chunk stays ONE unbreakable inline-flex (see the header) — only the
 		     internal order changed, so it still sits at the end of the name line or
 		     drops WHOLE onto the next. -->
@@ -87,7 +84,7 @@
 			<span aria-hidden="true" class="opacity-50">·</span>
 		{/if}
 		{#if showTrades}
-			<!-- v1.7.5 (t.txt #7) — text-xs, matching the rating pill beside it.
+			<!-- v1.7.5 — text-xs, matching the rating pill beside it.
 			     This span had no size of its own, so it inherited the card's larger
 			     body text and read a size bigger than the pill it sits against. -->
 			<span class="text-xs">{tradesText}</span>

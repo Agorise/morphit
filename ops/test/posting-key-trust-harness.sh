@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run on: the sandbox/dev container, or any box with a scratch Postgres
+# Run on: a dev checkout or container with a scratch Postgres
 # (NOT a production node). Needs TEST_DATABASE_URL, e.g.
 #   TEST_DATABASE_URL=postgres://morphit:morphit@localhost:5433/morphit_a \
 #     bash ops/test/posting-key-trust-harness.sh
@@ -148,7 +148,7 @@ else
 fi
 
 # ── F37: the posting key a pushed message is checked against ─────────
-# K1, K2 and K11 re-aimed after the v1.18.0 deep-deep (rv1-3): the unconfirmed-row
+# K1, K2 and K11 re-aimed after an audit: the unconfirmed-row
 # (F37) and durable-behind (D6) conditions merged into one `if` whose chain read
 # is charged to a `verify` or `mismatch` budget. K1 and K11 each drop their own
 # half of that condition; K2 falls back to the stale column when the read is empty.

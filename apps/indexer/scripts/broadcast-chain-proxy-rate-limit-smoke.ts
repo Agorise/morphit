@@ -1,7 +1,7 @@
 /**
- * broadcast-chain-proxy-rate-limit-smoke (cp347)
+ * broadcast-chain-proxy-rate-limit-smoke
  *
- * Deep-deep finding (cp347): the cp344 forwarding proxies /v1/chain (block
+ * Audit finding: the forwarding proxies /v1/chain (block
  * explorer + ref-block properties) and /v1/broadcast (the write proxy) each
  * forward ONE upstream Blurt RPC call per request, yet were mounted WITHOUT the
  * per-IP rate-limit tier that every other upstream-touching proxy (/v1/account,

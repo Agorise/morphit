@@ -136,8 +136,11 @@ async function main_(): Promise<void> {
 	});
 
 	await scenario(
-		'the phone’s forward path → B → A’s mounted deliver route → parked for A’s desktop',
+		'the phone’s forward path → B → A’s mounted deliver route → handed to A’s waiting desktop',
 		async () => {
+			// A's desktop is already waiting on the code it shows; a bundle for
+			// a code nobody waits on is refused.
+			assert(regA.register(pid, Date.now()).kind === 'waiting', 'A: register');
 			const res = await appB.request(webForward ?? '/__missing', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
@@ -146,8 +149,9 @@ async function main_(): Promise<void> {
 			assert(res.status === 200, `POST ${webForward} → ${res.status} ${await res.text()}`);
 			assert(dialled.length === 1, `dialled ${dialled.length}`);
 			assert(dialled[0] === `http://${A_ONION}${lpPrefix}/${pid}/deliver`, `dialled ${dialled[0]}`);
-			const r = regA.register(pid, Date.now());
-			assert(r.kind === 'immediate', `A's registry: ${JSON.stringify(r)}`);
+			let got: string | null = null;
+			const r = regA.setWaiter(pid, (json) => (got = json));
+			assert(r === 'fired_immediately' && got !== null, `A's registry: ${r}`);
 		}
 	);
 
@@ -155,6 +159,7 @@ async function main_(): Promise<void> {
 		'the phone’s same-instance deliver path reaches the mounted deliver route',
 		async () => {
 			const p2 = randomBytes(32).toString('hex');
+			assert(regB.register(p2, Date.now()).kind === 'waiting', 'B: register');
 			const path = `${webDeliver?.[1]}${p2}${webDeliver?.[2]}`;
 			const res = await appB.request(path, {
 				method: 'POST',

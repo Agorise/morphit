@@ -1,6 +1,7 @@
 /**
- * Morphit indexer — the federation chat push to a CLEARNET peer, resolved and
- * pinned (v1.20.0 fix wave, S7).
+ * Morphit indexer — a POST to a federation peer's CLEARNET origin, resolved and
+ * pinned. Used by the login-pairing forward. (Chat
+ * fan-out no longer dials clearnet directly: it goes over Tor.)
  *
  * WHAT WAS WRONG. The chat fan-out POSTed to a peer's registered clearnet
  * origin with the global fetch: the system resolver's answer, whatever it was,
@@ -62,7 +63,7 @@ async function pinnedAgentFor(
 }
 
 /**
- * POST JSON to a clearnet peer. Signature matches `DispatchDeps.postClearnet`.
+ * POST JSON to a clearnet peer.
  * Throws on a refused address (non-https, hidden-only node, or any resolved
  * address non-public) before any connection is made.
  */

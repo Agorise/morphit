@@ -91,7 +91,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 	});
 
 	it('push_subscriptions has the muted_categories column added in v40 (all-on default)', async () => {
-		// cp450 GAP A — the per-category Web Push opt-in blocklist.
+		// the per-category Web Push opt-in blocklist.
 		const res = await fx.db.query<{ column_name: string; data_type: string }>(
 			`SELECT column_name, data_type FROM information_schema.columns
 			 WHERE table_schema = $1 AND table_name = 'push_subscriptions'
@@ -113,7 +113,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 	});
 
 	it('push_pending has the notification_id column added in v41 (nullable dedup tag)', async () => {
-		// cp450 double-fire fix — shared tag so an order-signal push and its
+		// double-fire fix — shared tag so an order-signal push and its
 		// in-page notification collapse.
 		const res = await fx.db.query<{ column_name: string; is_nullable: string }>(
 			`SELECT column_name, is_nullable FROM information_schema.columns
@@ -307,8 +307,8 @@ describe.skipIf(!INTEGRATION_ENABLED)('migrations — integration', () => {
 			// v27
 			'operator_attribution_events'
 			// NOTE: `operator_payouts` was introduced at v27 but RETIRED at
-			// cp408 (a v28+ change) — see schema.sql "operator_payouts:
-			// RETIRED (cp408)". The runner applies the consolidated schema.sql
+			// (a v28+ change) — see schema.sql "operator_payouts:
+			// RETIRED". The runner applies the consolidated schema.sql
 			// (current state), which correctly omits the table, so it must NOT
 			// appear in this expected-superset. (No live code references it;
 			// the collapsed baseline is authoritative.)

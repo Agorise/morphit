@@ -20,14 +20,17 @@ import {
 	mergeRemoteReadState,
 	__reloadFromStorage
 } from './readState';
+import { setPersonStorageTier } from '$lib/storage/personStorage';
 
 const KEY = 'morphit.chat.read_state';
 
-/** cp446 — a read-state key is a DISCUSSION: peer + NUL + (permlink | '' | '*'). */
+/** a read-state key is a DISCUSSION: peer + NUL + (permlink | '' | '*'). */
 const tk = (peer: string, order = ''): string => `${peer}\u0000${order}`;
 
 describe('readState', () => {
 	beforeEach(() => {
+		// A remembered session: the state lives in localStorage.
+		setPersonStorageTier('local');
 		try {
 			localStorage.removeItem(KEY);
 		} catch {
@@ -94,8 +97,8 @@ describe('readState', () => {
 		expect(isUnread('TOO-UPPER', '', '2026-04-24T12:00:00Z', false)).toBe(false);
 	});
 
-	it('your own last word is never unread — on ANY device (t.txt #2)', () => {
-		// the maintainer: signed in on a PC and a phone. He sends "badges test" from the PC;
+	it('your own last word is never unread — on ANY device', () => {
+		// Requirement: signed in on a PC and a phone. He sends "badges test" from the PC;
 		// his PHONE lights up unread. His own message, nagging him.
 		//
 		// The phone's read cursor is per-device and stale by definition — it has
@@ -179,7 +182,7 @@ describe('readState', () => {
 			})
 		);
 		__reloadFromStorage();
-		// cp446 — the two well-formed LEGACY keys (bare peer names, written before
+		// the two well-formed LEGACY keys (bare peer names, written before
 		// threading) are migrated to peer-wide acks rather than dropped. Dropping
 		// them would light up every existing user's whole inbox as unread on the
 		// morning they upgrade.
@@ -199,7 +202,7 @@ describe('readState', () => {
 		expect(isUnread('alice', 'order-xmr', '2026-04-24T13:00:00Z', false)).toBe(true);
 	});
 
-	// THE BEHAVIOUR the maintainer ASKED FOR: reading one thread must not read the others.
+	// THE BEHAVIOUR ASKED FOR: reading one thread must not read the others.
 	it('reading one thread does not mark another thread with the same peer read', () => {
 		markConversationRead('alice', 'order-xmr', new Date('2026-04-24T12:00:00Z'));
 		expect(isUnread('alice', 'order-xmr', '2026-04-24T11:00:00Z', false)).toBe(false);
@@ -248,6 +251,13 @@ describe('mergeRemoteReadState', () => {
 			// best-effort
 		}
 		__reloadFromStorage();
+	});
+
+	it('a cursor in the future from the indexer is ignored (it would mute the thread for good)', () => {
+		const year3000 = '3000-01-01T00:00:00Z';
+		mergeRemoteReadState([{ peer: 'mallory', last_read_at: year3000, order_permlink: '' }]);
+		expect(getLastVisited('mallory', '')).toBeNull();
+		expect(isUnread('mallory', '', new Date(Date.now() + 60_000).toISOString(), false)).toBe(true);
 	});
 
 	it('handles empty remote list', () => {
@@ -312,7 +322,7 @@ describe('mergeRemoteReadState', () => {
 		markConversationRead('alice', '', new Date('2026-04-24T15:00:00Z'));
 		markConversationRead('bob', '', new Date('2026-04-24T16:00:00Z'));
 		const before = JSON.stringify(get(readState));
-		// cp446 — a remote ack names the discussion it acknowledges. These name the
+		// a remote ack names the discussion it acknowledges. These name the
 		// same order-less threads the local acks cover, and are older, so nothing
 		// moves. (An ack WITHOUT order_permlink is a legacy peer-wide ack: new
 		// information, and it would legitimately be stored — see the test below.)

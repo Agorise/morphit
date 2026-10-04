@@ -13,10 +13,14 @@ import type { AssetTicker } from '@morphit/asset-registry';
 
 // ─── Health ────────────────────────────────────────────────────────
 
+/** GET /v1/health. The public body carries the chain position and coarse
+ *  booleans only; `version`, `uptime_sec`, the RPC counts and host figures are
+ *  added for a LOCAL caller (X-Morphit-Local-Health: 1, stripped at every
+ *  public edge), so they are optional here. */
 export interface HealthResponse {
 	readonly status: 'ok' | 'degraded';
-	readonly version: string;
-	readonly uptime_sec: number;
+	readonly version?: string;
+	readonly uptime_sec?: number;
 	readonly chain_head_block: number;
 	readonly indexed_block: number;
 	readonly lag_blocks: number;
@@ -27,14 +31,17 @@ export interface HealthResponse {
 	readonly stale: boolean;
 	/** Catch-up progress for the UI while a fresh node replays the chain.
 	 *  Optional: indexers older than v1.13.3 don't send it. `behind` is false
-	 *  once synced; `eta_utc` is null until there's enough signal to estimate. */
+	 *  once synced; `eta_utc` is null until there's enough signal to estimate.
+	 *  `blocks_per_sec` (the host's rate) is sent to a local caller only. */
 	readonly sync?: {
 		readonly behind: boolean;
 		readonly pct_complete: number | null;
-		readonly blocks_per_sec: number;
+		readonly blocks_per_sec?: number;
 		readonly eta_seconds: number | null;
 		readonly eta_utc: string | null;
 	};
+	/** At least one Blurt RPC endpoint is answering. */
+	readonly rpc_ok?: boolean;
 }
 
 // ─── Listing fee ───────────────────────────────────────────────────
@@ -61,7 +68,7 @@ export interface HealthResponse {
  *  BRL, CNY, INR, RUB, AED, XDR, XAU, etc.).  Default USD.  See
  *  ADR-0040 for the design.
  *
- *  cp128 rename: pre-cp128 these were `base_fee_usd` and
+ *  rename: older these were `base_fee_usd` and
  *  `blurt_price_usd`.  Renamed denomination-agnostic. */
 export interface ListingFeeResponse {
 	readonly base_fee_blurt: number;
@@ -72,12 +79,12 @@ export interface ListingFeeResponse {
 	readonly base_fee_fiat?: number;
 	readonly blurt_price_fiat?: number;
 	readonly denomination_fiat?: string;
-	/** cp372 Model A: true when `base_fee_blurt` is the live
+	/** Model A: true when `base_fee_blurt` is the live
 	 *  USD-tracked amount (canonical LISTING_FEE_USD.blurt re-priced at
 	 *  the current rate), false/absent when it's the pinned fallback
 	 *  (price feed off/stale, or a non-USD denomination). */
 	readonly base_fee_blurt_live?: boolean;
-	/** cp372 Model A: live BTC fee amount the UI should quote — the
+	/** Model A: live BTC fee amount the UI should quote — the
 	 *  canonical USD target (LISTING_FEE_USD.btc ≈ $0.25) converted at
 	 *  the current BTC/USD rate.  Present iff USD-denominated, the BTC
 	 *  price feed is live, and the operator accepts BTC for fees.  The
@@ -91,7 +98,7 @@ export interface ListingFeeResponse {
 	readonly btc_price_fiat?: number;
 	/** True alongside the BTC live-amount fields. */
 	readonly btc_fee_live?: boolean;
-	/** cp372 Model A: live XMR fee amount as a piconero decimal string
+	/** Model A: live XMR fee amount as a piconero decimal string
 	 *  (matches /v1/release's representation). Same gating + semantics
 	 *  as the BTC fields. */
 	readonly xmr_fee_piconero?: string;
@@ -101,32 +108,33 @@ export interface ListingFeeResponse {
 	readonly xmr_price_fiat?: number;
 	/** True alongside the XMR live-amount fields. */
 	readonly xmr_fee_live?: boolean;
-	/** cp127 defense H — NOT-AN-ORACLE warning string.  Present
+	/** defense H — NOT-AN-ORACLE warning string.  Present
 	 *  alongside the `_fiat` fields.  Downstream protocols using
 	 *  these numbers as oracle input do so against this explicit
 	 *  recommendation.  See ADR-0039. */
 	readonly price_warning?: string;
 }
 
-// ─── Order viewcounts (task #14) ───────────────────────────────────
+// ─── Order view counts ─────────────────────────────────────────────
 
-/** GET /v1/orders/:account/:permlink/views response.  See
- *  apps/indexer/src/api/orderViews.ts header for the full
- *  privacy-design rationale.
- *
- *  In short: this endpoint is public-readable, but the
- *  frontend only DISPLAYS the count to the order's author.
- *  The count itself is non-identifying (a soft popularity
- *  signal), and we deliberately track no per-viewer detail. */
+/** GET /v1/orders/:account/:permlink/views response.  The counter is
+ *  public and unauthenticated (the web app displays it only to the
+ *  order's author); it carries the count and nothing else — no viewer
+ *  and no time of any view.  See apps/indexer/src/api/orderViewsLogic.ts. */
 export interface OrderViewsResponse {
 	readonly count: number;
-	readonly updated_at: string | null;
 }
 
 /** POST /v1/orders/:account/:permlink/view response.  Returns
  *  the post-increment count. */
 export interface OrderViewIncrementResponse {
 	readonly count: number;
+}
+
+/** GET /v1/orders/:account/view_counts?permlinks=a,b,… (at most 100) — the
+ *  counts for several of one account's orders; 0 for an order nobody viewed. */
+export interface OrderViewCountsResponse {
+	readonly counts: Readonly<Record<string, number>>;
 }
 
 // ─── Orderbook ─────────────────────────────────────────────────────
@@ -153,11 +161,11 @@ export interface OrderRecord {
 	readonly price_model: unknown; // opaque to the indexer; frontend interprets
 	readonly location_region: string | null;
 	readonly payment_methods: readonly string[];
-	/** cp425 — for a BARTER (goods/services) order, the crypto tickers the
+	/** for a BARTER (goods/services) order, the crypto tickers the
 	 *  seller accepts as settlement (e.g. ['BTC','XMR']). Null/absent for
-	 *  every crypto asset (they settle in themselves) and on pre-cp425 rows. */
+	 *  every crypto asset (they settle in themselves) and on older rows. */
 	readonly accepted_assets?: readonly string[] | null;
-	/** v1.9.0 (the maintainer) — a BARTER order's inline "what am I offering" label (e.g.
+	/** v1.9.0 — a BARTER order's inline "what am I offering" label (e.g.
 	 *  "bananas"), rendered in the order title + on-chain announcement in place of
 	 *  the generic "goods/services". Letters-only, ≤24 chars. Absent/null for
 	 *  crypto orders and blank barter titles; optional for backward-compat. */
@@ -183,7 +191,7 @@ export interface OrderRecord {
 		// listings hits this status.  The order is recorded for
 		// audit visibility but is not part of the live orderbook.
 		| 'reused'
-		// Part 70 fix — type drift correction.  These three values
+		// type drift correction.  These three values
 		// are emitted by the BLURT-fee verifier path AND are in
 		// the DB CHECK constraint at apps/indexer/src/db/schema.sql,
 		// but were missing from this published type.  The order-
@@ -224,12 +232,12 @@ export interface OrderRecord {
 	 *    'waived_first_buy'   — onboarding waiver, one per account
 	 *    'btc' / 'xmr'        — sub-phase 4b; not yet emitted */
 	readonly fee_method?: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr';
-	/** Part 121 / cp30 / cp31 — sub-network for multi-network assets
+	/** sub-network for multi-network assets
 	 *  (USDT, USDC, DAI).  For USDT: one of 'erc20'|'trc20'|'spl'|
 	 *  'bep20' when `asset === 'USDT'`.  For USDC: one of
 	 *  'erc20'|'spl'|'base'|'polygon' when `asset === 'USDC'`.  For
 	 *  DAI: one of 'erc20'|'polygon'|'base'|'arbitrum' when
-	 *  `asset === 'DAI'`.  Null otherwise (pre-Part-121 rows and
+	 *  `asset === 'DAI'`.  Null otherwise (older rows and
 	 *  orders with single-network assets BTC/XMR/BLURT/BCH/LTC/DASH/
 	 *  DOGE). */
 	readonly asset_network?: string | null;
@@ -248,7 +256,7 @@ export interface OrderRecord {
 	 *  (see indexer/reputation/score.ts). Null when feedback_count is
 	 *  zero (card shows nothing; the 🌱 chip signals newness). The card
 	 *  shows this as "⭐ 4.06" and the trade COUNT separately. Optional
-	 *  for backward compatibility with pre-cp404 indexer instances. */
+	 *  for backward compatibility with older indexer instances. */
 	readonly reputation_score?: number | null;
 	/** True when the poster has fewer than 4 received feedback
 	 *  rows. Drives the "🌱 New trader" chip in the frontend
@@ -275,9 +283,9 @@ export interface OrderRecord {
 	 *  Optional/absent from older indexers. */
 	readonly trade_count?: number;
 	/** v1.5.5: now `trade_count < 4` (was: fewer than 4 reviews). Consistent
-	 *  across all four card surfaces since cp473. */
+	 *  across all four card surfaces since an earlier release. */
 	readonly is_new_trader?: boolean;
-	/** v1.8.15 (t.txt #5) — true iff this order's owner appears in a
+	/** v1.8.15 — true iff this order's owner appears in a
 	 *  suspicious_reciprocity pair (Signal B). Populated by
 	 *  /v1/orders/:account so the order DETAIL page's "POSTED BY" card can
 	 *  render the same trust pill as the profile Reputation card. Optional:
@@ -295,21 +303,21 @@ export interface OrderRecord {
 	 *  (earliest counterparty feedback). Drives the "N trades since
 	 *  {month year}" line on order cards. Null/omitted when the account
 	 *  has never completed a trade (card shows the count with no
-	 *  "since"). Optional for backward compatibility with pre-cp404
+	 *  "since"). Optional for backward compatibility with older
 	 *  indexer instances. */
 	readonly first_trade_at?: string | null;
 	/** Primary posting public key (base58 "BLT…") of this order's owner,
 	 *  for the display-only truncated identity anchor "(BLT5vw…7Bjw)" on
 	 *  order cards. Served inline by the indexer (accounts.posting_pubkey)
 	 *  so the frontend needn't resolve keys per-card. Null/omitted when
-	 *  not captured yet, or on pre-cp404 indexer instances. Never used for
+	 *  not captured yet, or on older indexer instances. Never used for
 	 *  verification — signatures resolve keys live from the chain. */
 	readonly posting_pubkey?: string | null;
 	/** The poster's display name and profile metadata, served INLINE by the
 	 *  indexer (LEFT JOIN profiles) so an order card renders the correct
 	 *  identity on FIRST paint.
 	 *
-	 *  v1.8.13 (the maintainer): without these the browser made a SECOND round-trip for
+	 *  v1.8.13: without these the browser made a SECOND round-trip for
 	 *  names and avatars, so cards painted `@account` + identicon and swapped to
 	 *  the real identity seconds later (~7s on morphit.io). His objection was
 	 *  not slowness but TRUST — a card that rewrites its own identity in front
@@ -365,7 +373,7 @@ export interface OrderbookResponse {
 
 // ─── Featured orderbook ───────────────────────────────────────────
 //
-// Phase 5 item 5 — featured-slot auction. Up to 5 concurrently
+// Phase 5 item 5 — featured-slot auction. Up to 3 concurrently
 // active featured slots; `max_slots` surfaces the hard cap so
 // clients can render "N of 3 slots filled" UX without guessing.
 
@@ -427,8 +435,8 @@ export interface ClearingPriceHistoryResponse {
 // ─── Bid history (featured-slot auction) ───────────────────────────
 
 /** A single bid placed by some account on one of their orders.
- *  Returned by /v1/orderbook/featured/bids?account=X.  Part 122
- *  cp17 — gives a bidder context on their own recent activity
+ *  Returned by /v1/orderbook/featured/bids?account=X.
+ *  gives a bidder context on their own recent activity
  *  ("what did I pay last time, how did it perform"). */
 export interface FeaturedBidHistoryEntry {
 	/** Permlink of the bidder's own order that this bid promoted. */
@@ -449,7 +457,7 @@ export interface FeaturedBidHistoryEntry {
 	 *  bid won't appear in featured orderbook even if it would
 	 *  rank — important UX context. */
 	readonly order_status: string;
-	/** cp453 (t.txt #2) — the promoted order's summary fields, so the "prior
+	/** the promoted order's summary fields, so the "prior
 	 *  featured orders" modal can render a human line. All null when the order has
 	 *  since been pruned (the bid history LEFT JOINs orders). */
 	readonly order_side: string | null;
@@ -457,19 +465,19 @@ export interface FeaturedBidHistoryEntry {
 	readonly order_fiat_currency: string | null;
 	readonly order_amount_min: number | null;
 	readonly order_amount_max: number | null;
-	/** v1.9.5 (the maintainer) — the promoted order's settlement, so the bid-history line
+	/** v1.9.5 — the promoted order's settlement, so the bid-history line
 	 *  names it ("…for BTC or XMR" / "…with Bank transfer"). accepted_assets for
 	 *  barter, payment_methods for crypto; both null when the order was pruned. */
 	readonly order_accepted_assets: readonly string[] | null;
 	readonly order_payment_methods: readonly string[] | null;
-	/** Part 122 cp18 — number of anti-snipe extensions applied
+	/** number of anti-snipe extensions applied
 	 *  to this bid.  Zero on a normally-elapsed bid; non-zero
 	 *  if a later bidder triggered the soft-close extension
 	 *  while this bid was in the top-MAX_SLOTS and expiring
 	 *  within the snipe window. */
 	readonly extension_count: number;
 	/** ISO timestamp of the most-recent extension, or null if
-	 *  never extended.  Part 122 cp18. */
+	 *  never extended.. */
 	readonly last_extended_at: string | null;
 }
 
@@ -488,6 +496,22 @@ export interface AccountOrdersResponse {
 	readonly next_cursor: string | null;
 }
 
+/** GET /v1/orders/:account/:permlink — one order (404 when this instance has
+ *  none, or hides its owner). Use this, not a search of AccountOrdersResponse,
+ *  which is only the newest page. */
+export interface OrderResponse {
+	readonly item: OrderRecord;
+}
+
+/** GET /v1/orders/:account/sybil_tier[?at=ISO] — how many of the account's
+ *  orders count toward its Sybil fee tier at `at` (default now): live then, or
+ *  created in the 24 hours before. The next order is the (count + 1)-th. */
+export interface SybilTierResponse {
+	readonly account: string;
+	readonly at: string;
+	readonly count: number;
+}
+
 // ─── Profiles ──────────────────────────────────────────────────────
 
 export interface ProfileResponse {
@@ -502,14 +526,14 @@ export interface ProfileResponse {
 	readonly source_block_num: number | null;
 	/** v1.5.5: NULL for a profile-less account. */
 	readonly updated_at: string | null;
-	/** cp471 (D7/E): the account's posting public key (base58), joined
+	/** (D7/E): the account's posting public key (base58), joined
 	 *  from `accounts`, so a profile/review card can render the truncated
 	 *  key under a display name. Optional/absent from older indexers;
 	 *  null when no key has been indexed for the account. */
 	readonly posting_pubkey?: string | null;
 }
 
-/** Response shape for `GET /v1/account/:account/balance` (cp295).
+/** Response shape for `GET /v1/account/:account/balance`.
  *  The indexer fetches the account + dynamic global properties from
  *  the Blurt RPC pool SERVER-side and returns just the fields the
  *  frontend balance math needs, so the browser never opens a
@@ -545,7 +569,7 @@ export interface AccountBalanceResponse {
 		 *  the account has none. Lets the block explorer's account page
 		 *  render the posting key WITHOUT a direct getAccount RPC read. */
 		readonly posting_pub: string | null;
-		/** cp396 — unclaimed author/curation rewards awaiting claim_reward_balance.
+		/** unclaimed author/curation rewards awaiting claim_reward_balance.
 		 *  `reward_blurt_balance` is liquid BLURT ("0.000 BLURT");
 		 *  `reward_vesting_balance` is the VESTS the claim op consumes
 		 *  ("0.000000 VESTS"); `reward_vesting_blurt` is the chain's BLURT
@@ -554,7 +578,7 @@ export interface AccountBalanceResponse {
 		readonly reward_blurt_balance: string;
 		readonly reward_vesting_balance: string;
 		readonly reward_vesting_blurt: string;
-		/** cp439 — power-down (withdraw_vesting) progress. `vesting_withdraw_rate`
+		/** power-down (withdraw_vesting) progress. `vesting_withdraw_rate`
 		 *  is the per-week VESTS payout ("0.000000 VESTS" when idle);
 		 *  `next_vesting_withdrawal` is the next-payout ISO timestamp (a 1970
 		 *  epoch sentinel when idle); `to_withdraw` / `withdrawn` are raw
@@ -585,7 +609,7 @@ export interface AccountHistoryOp {
 }
 export type AccountHistoryEntry = readonly [number, AccountHistoryOp];
 
-/** Response shape for `GET /v1/account/:account/history?from=&limit=` (cp296).
+/** Response shape for `GET /v1/account/:account/history?from=&limit=`.
  *  The indexer relays ONE page of Blurt `get_account_history` from the
  *  RPC pool SERVER-side, so the browser never opens a cross-origin
  *  connection to a third-party RPC node (privacy #1: those nodes never
@@ -597,7 +621,7 @@ export interface AccountHistoryResponse {
 	readonly entries: readonly AccountHistoryEntry[];
 }
 
-/** Response shapes for the `/v1/chain` explorer proxies (cp296). Both
+/** Response shapes for the `/v1/chain` explorer proxies. Both
  *  relay the Blurt condenser result VERBATIM (the indexer is a privacy
  *  passthrough — the browser never opens a cross-origin RPC connection),
  *  so the payload is typed `unknown` here and the web consumer narrows it
@@ -617,7 +641,7 @@ export interface BlurtAuthority {
 	key_auths: Array<[string, number]>;
 }
 
-/** Response for `GET /v1/account/:name/keys` (cp298). PUBLIC key
+/** Response for `GET /v1/account/:name/keys`. PUBLIC key
  *  authorities only — used for client-side key-verify at login/import so
  *  the browser never reveals IP↔account to third-party RPC operators. No
  *  secret is ever present. */
@@ -653,8 +677,8 @@ export interface FeedbackRecord {
 	readonly rating: 1 | 2 | 3 | 4 | 5;
 	readonly comment: string | null;
 	readonly order_permlink: string | null;
-	/** cp471 (D1/D2): the OWNER account of the cited order — the
-	 *  subject OR the reviewer (intake cp420 accepts either). The
+	/** (D1/D2): the OWNER account of the cited order — the
+	 *  subject OR the reviewer (intake accepts either). The
 	 *  "View the order" link must target THIS account, not the review's
 	 *  subject, or it 404s to the "being posted" limbo. Null when there's
 	 *  no cited order; optional/absent from older indexers (fall back to
@@ -678,7 +702,7 @@ export interface FeedbackRecord {
 	 *  behavior for indexers that haven't run the signal detectors
 	 *  yet on a fresh DB. */
 	readonly suppressed?: boolean;
-	/** cp471 (t.txt E): the REVIEWED account's current reputation —
+	/** the REVIEWED account's current reputation —
 	 *  exclusion-filtered + decay-weighted, identical to the headline
 	 *  figure on their own profile. Present on `/feedback-given`
 	 *  responses so a "reviews this user has left" card can show
@@ -688,7 +712,7 @@ export interface FeedbackRecord {
 		readonly count: number;
 		readonly weighted_rating: number | null;
 	} | null;
-	/** v1.8.0 (t.txt): the REVIEWER's current reputation —
+	/** v1.8.0: the REVIEWER's current reputation —
 	 *  exclusion-filtered + decay-weighted, identical to the headline
 	 *  figure on their own profile. Present on `/accounts/:account/feedback`
 	 *  (received) responses so a "reviews this user has received" card can
@@ -730,7 +754,7 @@ export interface FeedbackSummary {
 	readonly count: number;
 	readonly weighted_rating: number; // 0..5, 2-decimal precision
 	readonly by_rating: Readonly<Record<'1' | '2' | '3' | '4' | '5', number>>;
-	// cp124 H5: separate weighted_rating + count for buy-side and
+	// separate weighted_rating + count for buy-side and
 	// sell-side trades.  Useful when a trader's experience differs
 	// dramatically by role (great buyer, careless seller, or vice
 	// versa).  Each leaf is null when count on that side is 0.
@@ -738,13 +762,13 @@ export interface FeedbackSummary {
 		readonly buy: FeedbackSidedRating;
 		readonly sell: FeedbackSidedRating;
 	};
-	// cp124 H6: ISO-8601 timestamp of the account's most recent
+	// ISO-8601 timestamp of the account's most recent
 	// trade-relevant activity (verified-fee order posted OR
 	// feedback received).  Null when the account has neither.
 	// Readers see "last traded N days/months/years ago" — informs
 	// trust without changing the numeric score.
 	readonly last_traded_at: string | null;
-	// cp511 [E]: true iff the account appears in a suspicious_reciprocity
+	// true iff the account appears in a suspicious_reciprocity
 	// pair (Signal B, ADR-0009 §5) — surfaced as a trust pill on the profile
 	// Reputation card (green when false = no reciprocity concerns). Optional so
 	// older payloads without the field read as "not flagged".
@@ -757,7 +781,7 @@ export interface AccountFeedbackResponse {
 	readonly next_cursor: string | null;
 }
 
-/** cp124 H4: Reputation receipt — the "show your work" endpoint.
+/** Reputation receipt — the "show your work" endpoint.
  *
  *  Returns the FULL set of feedback rows about an account (including
  *  excluded ones, with reasons), plus the computed weighted_rating
@@ -779,7 +803,10 @@ export type ReputationExclusionReason =
 	| 'suspicious_reciprocity'
 	| 'related_accounts'
 	| 'one_way_pile_on'
-	| 'review_concentration';
+	| 'review_concentration'
+	/** The reviewer has a later order-bound review of this subject; only the
+	 *  latest per (reviewer, subject) counts. */
+	| 'superseded_by_later_review';
 
 export interface ReputationReceiptRow {
 	readonly source_trx_id: string;
@@ -805,14 +832,14 @@ export interface ReputationReceiptResponse {
 		readonly count_total: number;
 		readonly count_included: number;
 		readonly count_excluded: number;
-		/** cp473 — COMPLETED TRADES (both parties credited, sock-puppet-pair
+		/** COMPLETED TRADES (both parties credited, sock-puppet-pair
 		 *  filtered). What the 🌱 new-trader sprout keys off since v1.5.5,
 		 *  matching every order-card surface. Optional/absent from older
 		 *  indexers; treat absent as 0. */
 		readonly trade_count?: number;
 		readonly weight_sum: number;
 		readonly weighted_rating: number | null;
-		// Composite reputation score + factor breakdown (cp404) — the
+		// Composite reputation score + factor breakdown — the
 		// "⭐ 4.06" shown on order cards, re-derivable from `rows`.
 		readonly reputation_score?: number | null;
 		readonly reputation_base?: number | null;
@@ -848,7 +875,7 @@ export interface ReleaseResponse {
 	readonly created_at: string;
 }
 
-/** cp372 — GET /v1/fx.  The indexer's cached USD→fiat table so the
+/** GET /v1/fx.  The indexer's cached USD→fiat table so the
  *  client can compute the "$1 USD-equivalent" first-order minimum
  *  (and other fiat echoes) in the user's LOCAL currency without
  *  itself calling an FX provider.  The whole table is served; the
@@ -887,7 +914,7 @@ export interface StatsResponse {
  * filtered out server-side). Kept in sync with the indexer's
  * buildRpcEndpointsResponse (apps/indexer/src/api/rpcHealth.ts).
  */
-/** cp471 (tt.txt C) — WHY the indexer's active probe of a node failed. Closed
+/** WHY the indexer's active probe of a node failed. Closed
  *  vocabulary; mirrors `RpcProbeFailure` in the indexer's api/rpcHealth.ts.
  *  NOTE: there is deliberately no 'cors' member — the probe is server-side, so
  *  CORS can never be the cause of a node showing red on the settings card. */
@@ -915,7 +942,7 @@ export interface RpcEndpointHealth {
 	readonly latency_ms: number | null;
 	readonly consecutive_failures: number;
 	readonly cooldown_ms: number;
-	/** cp471 (tt.txt C): why the most recent ACTIVE probe failed, so the card
+	/** why the most recent ACTIVE probe failed, so the card
 	 *  shows a one-line reason instead of a flat "unreachable". Absent/null when
 	 *  healthy or on the passive pool snapshot (no reason retained there). */
 	readonly failure_reason?: RpcProbeFailure | null;
@@ -944,10 +971,10 @@ export interface ChatMessageRecord {
 	/** Blurt transaction id of the custom_json op that anchored this
 	 *  message on-chain — the immutable, signed, publicly-verifiable
 	 *  proof of authorship + time. Present on all messages served by a
-	 *  cp404+ indexer; optional so older clients/instances still type-
+	 *  later indexer; optional so older clients/instances still type-
 	 *  check. Consumed by the chat PDF export for on-chain evidence. */
 	readonly source_trx_id?: string;
-	/** cp446 — the order this message is about, or null. The inbox threads
+	/** the order this message is about, or null. The inbox threads
 	 *  conversations by it and the transcript filters on it, so a reply about
 	 *  order A never appears in the discussion about order B. Optional so an
 	 *  older instance that doesn't send it still type-checks. */
@@ -1057,7 +1084,7 @@ export interface ConversationSummary {
 	 *  A thread whose last word is your own has nothing waiting to be read, on ANY
 	 *  device. Without this the client can only compare `last_message_at` against
 	 *  a LOCAL read cursor, so a message you send from your laptop marks the
-	 *  thread unread on your phone — your own words, nagging you (t.txt #2).
+	 *  thread unread on your phone — your own words, nagging you.
 	 *
 	 *  Optional so an older instance still type-checks; absent is treated as
 	 *  "unknown", which falls back to the old timestamp-only rule rather than
@@ -1069,7 +1096,7 @@ export interface ConversationSummary {
 	readonly order: ConversationOrderRef | null;
 }
 
-/* cp446 — items are DISCUSSIONS, not people. The same `peer` may appear several
+/* items are DISCUSSIONS, not people. The same `peer` may appear several
  * times, once per order discussed plus once for an order-less thread, so `peer`
  * alone is not a unique key. Key a list on `(peer, order?.permlink ?? null)`. */
 
@@ -1085,14 +1112,15 @@ export interface ConversationsResponse {
 	readonly items: readonly ConversationSummary[];
 }
 
-// ─── Order counterparties (feedback gate, cp421) ────────────────
+// ─── Order counterparties (feedback gate) ────────────────
 
 /** One candidate trade partner for an order: someone who messaged the
- *  order owner naming this order. `reviewable` is an OPAQUE boolean —
- *  true iff the owner may leave feedback on this peer for this order
- *  (owner has replied ≥once AND the pair is not flagged). It never
- *  reveals WHICH condition failed, so it can't leak the sockpuppet
- *  detector's state. See GET /v1/orders/:owner/:permlink/counterparties. */
+ *  order owner naming this order. `reviewable` is true iff the owner may
+ *  leave feedback on this peer for this order (≥2 messages each way over
+ *  ≥15 minutes AND the pair is not flagged for suspicious reciprocity).
+ *  It does not say which condition failed, but the conversation is public,
+ *  so `false` on a qualifying conversation reveals the flag. See
+ *  GET /v1/orders/:owner/:permlink/counterparties. */
 export interface OrderCounterparty {
 	readonly peer: string;
 	readonly reviewable: boolean;
@@ -1105,6 +1133,14 @@ export interface OrderCounterpartiesResponse {
 	readonly items: readonly OrderCounterparty[];
 }
 
+/** Response from GET /v1/orders/:owner/counterparty_lists?permlinks=a,b,…
+ *  (at most 50 orders, each list at most 50 peers): every named order's list,
+ *  as the single read returns it (empty when nobody wrote about it). */
+export interface OrderCounterpartyListsResponse {
+	readonly owner: string;
+	readonly lists: Readonly<Record<string, readonly OrderCounterparty[]>>;
+}
+
 // ─── Chat read state (on-chain read receipts, Phase B inbox) ─────
 
 /** One (peer, last_read_at) pair for a given reader, derived from
@@ -1113,9 +1149,9 @@ export interface OrderCounterpartiesResponse {
 export interface ChatReadStateEntry {
 	readonly peer: string;
 	readonly last_read_at: string;
-	/** cp446 — WHICH discussion this ack is for: the order's permlink, `''` for
+	/** WHICH discussion this ack is for: the order's permlink, `''` for
 	 *  the thread that cites no order, or `'*'` for a legacy peer-wide ack.
-	 *  Optional so a client still type-checks against a pre-cp446 instance,
+	 *  Optional so a client still type-checks against an older instance,
 	 *  where every ack was peer-wide by construction. */
 	readonly order_permlink?: string;
 }
@@ -1130,7 +1166,7 @@ export interface ChatReadStateResponse {
 }
 
 /** GET /v1/chat-folders/:account — the account's ENCRYPTED chat folder
- *  organization blob (t.txt v1.4.9 #5), or `enc: null` if never saved. The
+ *  organization blob, or `enc: null` if never saved. The
  *  blob is opaque ciphertext, decrypted client-side with a posting-key-derived
  *  key. */
 export interface ChatFoldersResponse {
@@ -1294,9 +1330,10 @@ export interface InstanceResponse {
 	readonly relay_account: string;
 	/** v1.16.1 — this instance proved zero clearnet use (every private-transport leg). */
 	readonly clearnet_eliminated: boolean;
-	/** v1.16.1 — legs still preventing elimination (empty ⇔ eliminated). Operator diagnostic. */
-	readonly clearnet_eliminated_missing: readonly string[];
-	/** REVISIT-LIST item 5 — operator earnings.  When non-null,
+	/** v1.16.1 — legs still preventing elimination (empty ⇔ eliminated). Operator
+	 *  diagnostic, sent only to a local caller (X-Morphit-Local-Health: 1). */
+	readonly clearnet_eliminated_missing?: readonly string[];
+	/** Backlog item 5 — operator earnings.  When non-null,
 	 *  the frontend includes this on every order op as
 	 *  `operator_tag`, and the indexer credits 90% of BLURT-paid
 	 *  listing fees to the operator who registered this tag.
@@ -1313,13 +1350,13 @@ export interface InstanceResponse {
 		readonly title: string | null;
 		readonly description: string | null;
 		readonly keywords: string | null;
-		/** cp119-A4: optional Twitter/X handle for twitter:site
-		 *  card attribution.  Older indexer builds (pre-cp119) omit
+		/** optional Twitter/X handle for twitter:site
+		 *  card attribution.  Older indexer builds (older) omit
 		 *  the field; frontend treats absence as null. */
 		readonly twitter_site?: string | null;
 	};
-	/** Frontend chat-link URL templates (Part 109).  Optional —
-	 *  older indexer builds (pre-Part-109) omit the field; in that
+	/** Frontend chat-link URL templates.  Optional —
+	 *  older indexer builds (older) omit the field; in that
 	 *  case the frontend uses its bundled defaults (mempool.space
 	 *  for BTC, xmrchain.net for XMR).  When present, each field
 	 *  is either a `https://…/{txid}…` template or null (meaning
@@ -1327,52 +1364,52 @@ export interface InstanceResponse {
 	readonly chat_link_urls?: {
 		readonly btc: string | null;
 		readonly xmr: string | null;
-		/** Part 122 cp21 — BCH chat-link explorer URL override.
-		 *  Optional; older indexer builds (pre-Part-122-cp21) omit
+		/** BCH chat-link explorer URL override.
+		 *  Optional; older indexer builds (older-cp21) omit
 		 *  the field.  When present, either an `https://…/{txid}…`
 		 *  template (operator override) or null (use bundled
 		 *  blockchair.com/bitcoin-cash default). */
 		readonly bch?: string | null;
-		/** Part 122 cp24 — LTC chat-link explorer URL override.
+		/** LTC chat-link explorer URL override.
 		 *  Same pattern as BCH.  Bundled default:
 		 *  litecoinspace.org.  Optional for back-compat with pre-
-		 *  cp24 indexers.
+		 *  indexers.
 		 *
 		 *  CP33 NOTE: this field was MISSING from the indexer-
-		 *  client mirror until cp33 — cp24 shipped the indexer-
+		 *  client mirror until a later fix — a later change shipped the indexer-
 		 *  side InstanceResponse with `ltc: string | null` but
-		 *  never extended this mirror.  cp31-DD's "4 canonical
+		 *  never extended this mirror.  the "4 canonical
 		 *  wire-format surface" sweep caught the USDT analog
-		 *  (cp30-DD CODE-3) but didn't notice LTC.  Closed in
-		 *  cp33 as CODE-4. */
+		 *  but didn't notice LTC.  Closed in
+		 *  as CODE-4. */
 		readonly ltc?: string | null;
-		/** Part 122 cp27 — DASH chat-link explorer URL override.
+		/** DASH chat-link explorer URL override.
 		 *  Same pattern as BCH/LTC.  Bundled default:
 		 *  insight.dash.org.  Optional for back-compat with
-		 *  pre-cp27 indexers.
+		 *  older indexers.
 		 *
 		 *  CP33 NOTE: same wire-format-asymmetry as LTC above —
-		 *  cp27 shipped the indexer side without extending this
-		 *  mirror.  Closed in cp33 as CODE-4. */
+		 *  A later change shipped the indexer side without extending this
+		 *  mirror.  Closed as CODE-4. */
 		readonly dash?: string | null;
-		/** Part 122 cp33 — DOGE chat-link explorer URL override.
+		/** DOGE chat-link explorer URL override.
 		 *  Same pattern as BCH/LTC/DASH (single-network mainnet).
 		 *  Bundled default: blockchair.com/dogecoin.  Optional
-		 *  for back-compat with pre-cp33 indexers. */
+		 *  for back-compat with older indexers. */
 		readonly doge?: string | null;
-		/** Part 122 cp39 — ZEC chat-link explorer URL override.
+		/** ZEC chat-link explorer URL override.
 		 *  Same pattern as BCH/LTC/DASH/DOGE (single-network
 		 *  mainnet).  Bundled default:
 		 *  mainnet.zcashexplorer.app.  Optional for back-compat
-		 *  with pre-cp39 indexers. */
+		 *  with older indexers. */
 		readonly zec?: string | null;
 		readonly arrr?: string | null;
 		readonly dcr?: string | null;
 		readonly sol?: string | null;
 		readonly eth?: string | null;
 		readonly xrp?: string | null;
-		/** Part 121 — USDT per-network explorer URL overrides.
-		 *  Optional sub-map; older indexer builds (pre-Part-121)
+		/** USDT per-network explorer URL overrides.
+		 *  Optional sub-map; older indexer builds (older)
 		 *  omit this field, in which case the frontend uses its
 		 *  bundled defaults from `lib/assets/networks.ts`.  Each
 		 *  per-network field is either a `https://…/{txid}…`
@@ -1384,11 +1421,11 @@ export interface InstanceResponse {
 			readonly spl: string | null;
 			readonly bep20: string | null;
 		};
-		/** Part 122 cp30 — USDC per-network explorer URL overrides.
+		/** USDC per-network explorer URL overrides.
 		 *  Same shape as USDT above with USDC's 4-network set
 		 *  (erc20/spl/base/polygon).  BEP-20 intentionally absent
 		 *  per ADR-0028 §1 (Binance-Peg + 18-decimal divergence).
-		 *  Older indexer builds (pre-cp30) omit this field; frontend
+		 *  Older indexer builds (older) omit this field; frontend
 		 *  defensive-fallback supplies a 4-network null sub-map. */
 		readonly usdc?: {
 			readonly erc20: string | null;
@@ -1396,11 +1433,11 @@ export interface InstanceResponse {
 			readonly base: string | null;
 			readonly polygon: string | null;
 		};
-		/** Part 122 cp31 — DAI per-network explorer URL overrides.
+		/** DAI per-network explorer URL overrides.
 		 *  4 networks (all EVM-family): ERC-20 (Ethereum native),
 		 *  Polygon, Base, Arbitrum.  No SPL/TRC-20/BEP-20 per
 		 *  ADR-0029 §1 (no canonical Maker-issued DAI on those
-		 *  chains).  Older indexer builds (pre-cp31) omit this
+		 *  chains).  Older indexer builds (older) omit this
 		 *  field; frontend defensive-fallback supplies a 4-network
 		 *  null sub-map. */
 		readonly dai?: {
@@ -1411,14 +1448,14 @@ export interface InstanceResponse {
 		};
 	};
 	/** Trade-only assets this instance has DISABLED via the
-	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25).
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (the default-on rule for new assets).
 	 *  Wire format: array of uppercase asset tickers (e.g.
 	 *  `['USDT']` or `['USDT', 'ARRR']` — both are real working
-	 *  ticker values as of cp41).  Empty array = this
+	 *  ticker values).  Empty array = this
 	 *  instance accepts every asset in the canonical registry.
 	 *
 	 *  Optional in the response — older indexer builds
-	 *  (pre-Part-121 cp6) omit the field entirely, in which
+	 *  (older) omit the field entirely, in which
 	 *  case clients should default to an empty array (assume
 	 *  no operator-side asset disabling).  Federation
 	 *  visibility lets `/run-a-node` and `/operators` surfaces
@@ -1430,9 +1467,9 @@ export interface InstanceResponse {
 	 *  filter hide these; the indexer refuses orders whose methods
 	 *  are ALL disabled.  Absent on older indexers → treat as []. */
 	readonly disabled_payment_methods?: readonly string[];
-	/** Part 121 cp9 — public Matrix room alias for user→operator
+	/** public Matrix room alias for user→operator
 	 *  contact (format: `#room:server`).  Optional for back-compat
-	 *  with pre-cp9 indexers — older instances omit the field
+	 *  with older indexers — older instances omit the field
 	 *  entirely; clients should treat absent === null === "operator
 	 *  did not configure a Matrix contact surface" and hide the
 	 *  link.

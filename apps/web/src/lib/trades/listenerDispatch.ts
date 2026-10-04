@@ -71,10 +71,14 @@ export type StoreEffect =
 export interface VerifyEffect {
 	readonly recipient: string;
 	readonly sender: string;
+	/** The CLAIMED amount. tradeVerify checks the transfer against the
+	 *  amount the seller asked for, not this, whenever one was asked. */
 	readonly amountBlurt: number;
 	readonly echoedMemo: string;
 	readonly orderPermlink: string;
 	readonly txid: string;
+	/** Always 'incoming' here: the listener only routes payments TO us. */
+	readonly direction: 'incoming';
 }
 
 /** A toast + notification intent. */
@@ -175,7 +179,8 @@ export function planListenerDispatch(
 					amountBlurt: amountNum,
 					echoedMemo: decoded.payload.memo ?? '',
 					orderPermlink,
-					txid: decoded.payload.txid
+					txid: decoded.payload.txid,
+					direction: 'incoming'
 				};
 			}
 		}

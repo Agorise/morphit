@@ -11,7 +11,7 @@ describe('KillSwitch', () => {
 	let switches: KillSwitch[] = [];
 
 	beforeEach(() => {
-		// cp76-D16: replaced real-time setTimeout(1500) with fake timers
+		// replaced real-time setTimeout(1500) with fake timers
 		// to eliminate the CI-flake class.  The poll interval is 1000ms;
 		// 1500ms real-time wait gave only 500ms margin under CPU contention,
 		// which sometimes vanished on slow runners.  Fake timers advance

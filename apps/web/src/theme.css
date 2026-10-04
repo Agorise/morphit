@@ -33,7 +33,7 @@
 	--brand-primary-rgb: 0 218 105; /* primary accent: links, accent text, borders, rings, badges (Tailwind morphit-emerald); ≥ 4.5:1 on every dark surface */
 	--brand-secondary-rgb: 2 166 178; /* secondary accent text/borders (Tailwind morphit-teal); ≥ 4.5:1 on every dark surface */
 	--brand-soft-rgb: 16 185 129; /* soft attention tint: FAQ search highlight, focused-field pulse */
-	/* t155 (the maintainer): "all of the green bubbles (the Payment Receipts too) on the
+	/* t155: "all of the green bubbles (the Payment Receipts too) on the
 	 * chatroom page are a bit too bright and it makes the thin black text hard
 	 * for me to see. maybe dim that green just a bit."
 	 *
@@ -48,7 +48,7 @@
 	 * text harder to read, not easier — the opposite of the ask. A fixed
 	 * deepened value behaves the same on both themes.
 	 *
-	 * v1.8.0 (the maintainer): dimmed one more step, #00b85a → #009e51, because the
+	 * v1.8.0: dimmed one more step, #00b85a → #009e51, because the
 	 * previous green still read as too bright behind the thin bubble text. The
 	 * new value measures ~5.8:1 against the bubble's ink (ink-950 #070A10) —
 	 * still comfortably past WCAG AA (4.5:1) with the now-heavier bubble weight,

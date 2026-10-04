@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, E3 + E4 — the SSE streams.
+ * the SSE streams.
  *
  * E3: a client that disconnected from /v1/orderbook/stream left its
  * provisional-bus listener subscribed forever (cancel() unsubscribed the

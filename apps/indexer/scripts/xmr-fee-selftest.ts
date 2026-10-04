@@ -4,25 +4,26 @@
  * whole checklist):
  *
  *   # 1. where to send the test payment (nothing is sent anywhere):
- *   npx tsx apps/indexer/scripts/xmr-fee-selftest.ts \
+ *   node_modules/.bin/tsx apps/indexer/scripts/xmr-fee-selftest.ts \
  *     --account <blurt account> --permlink <permlink> --primary <4… treasury main address>
  *
  *   # 2. after paying it (1+ confirmation), check it end to end:
- *   npx tsx apps/indexer/scripts/xmr-fee-selftest.ts \
+ *   node_modules/.bin/tsx apps/indexer/scripts/xmr-fee-selftest.ts \
  *     --txid <64 hex> --txkey <64 hex> --account <blurt account> --permlink <permlink> \
  *     --primary <4… treasury main address> [--piconero 781250000] \
  *     [--explorer https://xmrchain.net --explorer raw-tx+https://moneroblocks.info …]
  *
  *   # the pre-pin (unbound) path: a plain payment to the shared fee address
- *   npx tsx apps/indexer/scripts/xmr-fee-selftest.ts \
+ *   node_modules/.bin/tsx apps/indexer/scripts/xmr-fee-selftest.ts \
  *     --txid <64 hex> --txkey <64 hex> --unbound <the fee address> [--piconero …] [--explorer …]
  *
- * Without --explorer it uses the indexer's defaults (xmrchain.net,
- * moneroexplorer.org, raw-tx+https://moneroblocks.info). It asks the explorers
+ * Without --explorer it uses the indexer's default list
+ * (DEFAULT_XMR_EXPLORERS in apps/indexer/src/config/xmrExplorers.ts: explorers,
+ * raw-transaction explorers and public Monero nodes). It asks them
  * about that one transaction exactly as every indexer will: a txprove explorer
  * (`https://…`) gets the txid and its tx key; a raw-tx explorer
  * (`raw-tx+https://…`) gets only the txid, and the payment is checked here
- * from the raw transaction. It prints each step and exits 0 only on PASS. Run it through Tor (`torsocks npx tsx …`) if the laptop's
+ * from the raw transaction. It prints each step and exits 0 only on PASS. Run it through Tor (`torsocks node_modules/.bin/tsx …`) if the laptop's
  * IP should not be seen asking about a treasury payment.
  */
 import {

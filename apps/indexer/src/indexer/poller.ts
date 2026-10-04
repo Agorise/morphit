@@ -32,19 +32,31 @@ import { flowBackfill, makeGovernor } from '$indexer/flowBackfill';
 import { memoryBudgetBytes, processRssBytes } from '$indexer/memoryBudget';
 import { orderbookEventBus } from '$indexer/orderbookEventBus';
 import { chatEventBus } from '$indexer/chatEventBus';
-import { detectSuspiciousReciprocity, detectRelatedAccounts, detectOneWayPileOn, detectReviewConcentration, detectTradeConcentration } from '$indexer/signals';
+import { detectRelatedAccounts } from '$indexer/signals';
 import { WitnessFeePoller } from '$indexer/witnessFeePoller';
 import { LowBalanceScanner } from '$indexer/lowBalanceScanner';
 import { OperatorAccountBalanceScanner } from '$indexer/operatorAccountBalanceScanner';
 import { FederationProbeScheduler } from '$indexer/federationProbe';
 import { buildSignupAnomalyProbe } from '$indexer/signupAnomalyProbe';
 import type { FeeVerifier } from '$indexer/fee/verifier';
-import { BitcoinExplorerFeeVerifier } from '$indexer/fee/bitcoinExplorerVerifier';
-import { MoneroProofFeeVerifier } from '$indexer/fee/moneroProofVerifier';
+import { buildBtcFeeVerifier, buildXmrFeeVerifier } from '$indexer/fee/externalFeeVerifiers';
+import type { TieredFeeVerifier } from '$indexer/fee/tieredFeeVerifier';
+import { FeeSourceHealth } from '$indexer/fee/feeSourceHealth';
+import { makeSourceFetch, sourceClearnetAllowed, isClearnetSource } from '$indexer/sourceFetch';
+import {
+	hiddenServiceProxyConfigFromEnv,
+	type HiddenServiceProxyConfig
+} from '@morphit/hidden-transport';
 import { BlockNotConfirmedError } from '$indexer/fee/btcFeeBlockConfirm';
 import { reconcileAfterUpgrade } from '$indexer/reconcileUpgrade';
 import { ExternalFeeRechecker } from '$indexer/fee/externalFeeRecheck';
+import { healForeignDatabaseCode } from '$indexer/foreignCodeHeal';
+import {
+	externalFeeAvailability,
+	type ExternalFeeAvailability
+} from '$indexer/fee/externalFeeAvailability';
 import { BlurtFeeReverifier } from '$indexer/blurtFeeReverify';
+import { OfficialOpReverifier } from '$indexer/officialOpReverify';
 import type { EndpointState } from '@morphit/rpc-pool';
 import { TreasurySource } from '$indexer/treasurySource';
 import type { BlurtPriceSource } from '$indexer/price/source';
@@ -68,11 +80,11 @@ export interface PollerStatus {
 	readonly startedAt: Date;
 	readonly lastError: string | null;
 	readonly lastErrorAt: Date | null;
-	/** (v1.18.0 deep-deep, rv2-7) wall time the chain head was last read, or
+	/** wall time the chain head was last read, or
 	 *  null before the first read. Lets the fast path tell a lag it has
 	 *  measured from a head it has not seen for a long time. */
 	readonly chainHeadSeenAt?: Date | null;
-	/** (v1.18.0 deep-deep, rv2-7) block time of the last committed block, or
+	/** block time of the last committed block, or
 	 *  null before one is committed this run. */
 	readonly indexedBlockTime?: Date | null;
 }
@@ -141,7 +153,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 /** The Poller is a long-lived object — constructed once, `run()` is
  *  called to drive the loop, `stop()` triggers graceful shutdown. */
-/** v1.7.5 (t.txt #4) — blocks per JSON-RPC batch during catch-up.
+/** v1.7.5 — blocks per JSON-RPC batch during catch-up.
  *
  *  20 is a deliberate middle: it cuts catch-up request count by 20x (a 5,000
  *  block backlog goes from 5,000 requests to 250), while keeping any single
@@ -173,13 +185,16 @@ export class Poller {
 	private readonly lowBalanceScanner: LowBalanceScanner;
 	private readonly operatorBalanceScanner: OperatorAccountBalanceScanner;
 	private readonly federationProbe: FederationProbeScheduler;
-	/** (v1.18.0 deep-deep, H1) periodic re-verification of pending /
-	 *  attested / recently-missing BTC+XMR listing fees. Nothing re-checked
-	 *  them before, so a pending order stayed pending (or attested) forever. */
+	/** Verifies BTC/XMR txid listing fees (the order handler stores them
+	 *  `pending_external`) and re-checks pending / attested / recently-missing
+	 *  ones, outside any block transaction. */
 	private readonly externalFeeRechecker: ExternalFeeRechecker;
 	/** v1.20.0 (G1) — one-shot re-judging of BLURT fee ops indexed before the
 	 *  tagged operator's fee account was known here. */
 	private readonly blurtFeeReverifier: BlurtFeeReverifier;
+	/** Re-judges stored release / rpc-directory ops by their signature, from
+	 *  agreed blocks (officialOpReverify.ts). */
+	private readonly officialOpReverifier: OfficialOpReverifier;
 	/** F4 — origins already alerted for sharing our relay account, so we
 	 *  don't re-log every probe cycle. Per-process (a restart re-alerts,
 	 *  which is fine — the operator wants to know on every boot). */
@@ -187,7 +202,7 @@ export class Poller {
 	/** Fee verifiers for BTC/XMR orders. Built initially from
 	 *  env-var fallbacks in the constructor; subsequently
 	 *  rebuilt by `refreshFeeVerifiersFromTreasury()` whenever
-	 *  the chain-pinned treasury (Part 106 — `releases.treasury`)
+	 *  the chain-pinned treasury (`releases.treasury`)
 	 *  resolves to an address different from what the active
 	 *  verifier was constructed with.  Mutable on purpose: the
 	 *  fork-attack defense requires verifiers to follow the
@@ -197,9 +212,16 @@ export class Poller {
 	 *  rejects orders claiming an unconfigured method with a
 	 *  clear reason code. */
 	private feeVerifiers: {
-		btc?: BitcoinExplorerFeeVerifier;
-		xmr?: MoneroProofFeeVerifier;
+		btc?: TieredFeeVerifier;
+		xmr?: TieredFeeVerifier;
 	};
+	/** How every explorer is reached: onion over a fresh Tor circuit per
+	 *  request, clearnet only where allowed (indexer/sourceFetch.ts). */
+	private readonly sourceFetch: typeof fetch;
+	/** (zero-clearnet nodes) Background probe of the onion explorers: a
+	 *  method is advertised only while one of its onion explorers answers.
+	 *  Null on a node that may use clearnet. */
+	readonly feeSourceHealth: FeeSourceHealth | null;
 	/** Tracks the address each active verifier was constructed
 	 *  with, so refreshFeeVerifiersFromTreasury() can detect
 	 *  when a rebuild is needed.  Undefined when no verifier
@@ -208,16 +230,22 @@ export class Poller {
 		btc?: string;
 		xmr?: string;
 	} = {};
-	/** Part 106 — canonical fee amounts in the asset's smallest
+	/** canonical fee amounts in the asset's smallest
 	 *  unit, resolved from the same TreasurySource as the
 	 *  verifiers above.  Threaded through to the order handler
 	 *  via OpContext.feeAmounts so a hostile fork can't
 	 *  underprice their env satoshis/piconero independently of
 	 *  the chain-pinned address. */
+	/** Whether this node takes BTC / XMR fees at all, and which explorers
+	 *  it may ask — fixed by its config (externalFeeAvailability.ts). */
+	private readonly feeAvailability: {
+		btc: ExternalFeeAvailability;
+		xmr: ExternalFeeAvailability;
+	};
 	private feeAmounts: {
 		btcSatoshis?: number;
 		xmrPiconero?: bigint;
-		/** cp372 — chain-pinned BLURT fee base (tier-1, pre-multiplier),
+		/** chain-pinned BLURT fee base (tier-1, pre-multiplier),
 		 *  resolved chain-pin > env by the same TreasurySource.  Threaded
 		 *  to the order handler so the BLURT floor is deterministic across
 		 *  the federation rather than each node's own env value. */
@@ -234,7 +262,7 @@ export class Poller {
 	 *  BTC and XMR verifiers.  `/v1/health?verbose=1` calls this to
 	 *  render the per-explorer health table for the operator.
 	 *
-	 *  cp166 — replaces the old shared `explorerBreaker` field
+	 *  replaces the old shared `explorerBreaker` field
 	 *  (CircuitBreaker).  Each verifier now owns its own EndpointPool
 	 *  with latency-aware ordering; this accessor merges their
 	 *  snapshots into one list keyed by URL.  Strict superset of
@@ -272,7 +300,10 @@ export class Poller {
 		 *  null when the operator has disabled the FX feed — the
 		 *  floor then falls back to USD-only treatment (see
 		 *  fiatToUsd below). */
-		private readonly fxSource: FxRateSource | null = null
+		private readonly fxSource: FxRateSource | null = null,
+		/** The Tor / I2P proxies the fee explorers are reached through
+		 *  (default: config.hiddenProxies, else the environment). */
+		proxies?: HiddenServiceProxyConfig
 	) {
 		this.witnessFeePoller = new WitnessFeePoller(db, blurt);
 		this.lowBalanceScanner = new LowBalanceScanner(
@@ -369,7 +400,7 @@ export class Poller {
 				const st = this.getStatus();
 				return st.running && st.chainHeadBlock > 0 ? st.chainHeadBlock : null;
 			},
-			// cp311: our own branding, straight from config (same values
+			// our own branding, straight from config (same values
 			// /v1/instance serves).  The self row is never network-probed,
 			// so this is the ONLY way its cached_name/tagline/contact/alt
 			// columns get populated — without it the operator's own
@@ -393,17 +424,17 @@ export class Poller {
 					nostr: config.instanceNostrPubkey ?? null
 				}
 			}),
-			// cp316: the resolved (chain-pin > env > canonical default)
+			// the resolved (chain-pin > env > canonical default)
 			// treasury addresses THIS indexer verifies against.  The
 			// probe compares each peer's advertised /v1/instance treasury
 			// against this; a non-null divergence → 'mismatch' (a peer
 			// trying to redirect fee payments to a non-canonical address).
-			canonicalTreasury: () => this.currentTreasuryAddresses()
+			canonicalTreasury: () => this.verifierTreasuryAddresses()
 		});
 
 		// ADR-0011 sub-phase 4b: fee verifiers. Build each only if
 		// an address is available — initially from env-var
-		// cp166 — each verifier now owns its own EndpointPool with
+		// each verifier now owns its own EndpointPool with
 		// per-explorer latency tracking + cooldown ladder.  The
 		// poller no longer instantiates a shared CircuitBreaker;
 		// the `explorerHealthSnapshot` accessor above merges both
@@ -433,8 +464,29 @@ export class Poller {
 		// in the table.  Worst case: one block applied with the
 		// env-var address before the chain-pin takes over.
 		this.feeVerifiers = {};
+		this.feeAvailability = {
+			btc: externalFeeAvailability(config, 'btc'),
+			xmr: externalFeeAvailability(config, 'xmr')
+		};
+		this.sourceFetch = makeSourceFetch({
+			proxies: proxies ?? config.hiddenProxies ?? hiddenServiceProxyConfigFromEnv(process.env),
+			clearnetAllowed: sourceClearnetAllowed(config)
+		});
+		this.feeSourceHealth =
+			config.blurtRpcEndpoints.length === 0
+				? new FeeSourceHealth(
+						(['btc', 'xmr'] as const).flatMap((method) =>
+							this.feeAvailability[method].off === null
+								? this.feeAvailability[method].explorerUrls
+										.filter((spec) => !isClearnetSource(spec.replace(/^(raw-tx|node)\+/, '')))
+										.map((spec) => ({ method, spec }))
+								: []
+						),
+						this.sourceFetch
+					)
+				: null;
 		this.buildVerifiersFromBootstrap();
-		// (v1.18.0 deep-deep, H1) reads the CURRENT verifiers/amounts on every
+		// reads the CURRENT verifiers/amounts on every
 		// pass, so a chain re-pin of the treasury is followed automatically.
 		this.externalFeeRechecker = new ExternalFeeRechecker(
 			db,
@@ -447,6 +499,7 @@ export class Poller {
 			config,
 			onOrderVerified: (orderId) => orderbookEventBus.emit(orderId)
 		});
+		this.officialOpReverifier = new OfficialOpReverifier({ db, blurt: this.blurt, config });
 
 		this.status = {
 			running: false,
@@ -472,48 +525,59 @@ export class Poller {
 	 *  refresh happens before any block is processed in run(),
 	 *  so even that one-block window is unlikely. */
 	private buildVerifiersFromBootstrap(): void {
-		const envBtcAddress = this.config.btcFeeAddress;
-		const envBtcSatoshis = this.config.btcFeeSatoshis;
-		if (envBtcAddress.length > 0 && this.config.btcExplorerUrls.length > 0) {
-			this.feeVerifiers.btc = new BitcoinExplorerFeeVerifier(
-				{
-					feeAddress: envBtcAddress,
-					explorerUrls: this.config.btcExplorerUrls,
-					minConfirmations: 1,
-					requestTimeoutMs: 5_000,
-					minSuccessfulResponses: this.config.btcMinSuccessfulResponses
-				}
-			);
-			this.feeVerifierAddresses.btc = envBtcAddress;
-			this.feeAmounts.btcSatoshis = envBtcSatoshis;
+		if (this.feeAvailability.btc.off === null) {
+			this.feeVerifiers.btc = this.btcVerifierFor(this.config.btcFeeAddress);
+			this.feeVerifierAddresses.btc = this.config.btcFeeAddress;
+			this.feeAmounts.btcSatoshis = this.config.btcFeeSatoshis;
 		}
-		if (
-			this.config.xmrFeeAddress.length > 0 &&
-			this.config.xmrExplorerUrls.length > 0
-		) {
-			// Part 108++ — no view key required.  Per-payment proof
+		if (this.feeAvailability.xmr.off === null) {
+			// later+ — no view key required.  Per-payment proof
 			// verification is the new design; the indexer holds NO
-			// xmr secrets.  Part 109 removed the `xmrFeeViewKey`
-			// config field entirely.
-			this.feeVerifiers.xmr = new MoneroProofFeeVerifier(
-				{
-					feeAddress: this.config.xmrFeeAddress,
-					explorerUrls: this.config.xmrExplorerUrls,
-					minConfirmations: 1,
-					requestTimeoutMs: 10_000,
-					minSuccessfulResponses: this.config.xmrMinSuccessfulResponses
-				}
-			);
+			// xmr secrets.
+			this.feeVerifiers.xmr = this.xmrVerifierFor(this.config.xmrFeeAddress);
 			this.feeVerifierAddresses.xmr = this.config.xmrFeeAddress;
 			this.feeAmounts.xmrPiconero = this.config.xmrFeePiconero;
 		}
-		// cp372 — BLURT is always an accepted fee method; seed the
+		// Say once, at boot, why a method is off — an empty address line left
+		// over from the old "leave it empty to inherit the pinned address"
+		// advice now turns the method off, and the operator must see that.
+		for (const m of ['btc', 'xmr'] as const) {
+			const off = this.feeAvailability[m].off;
+			if (off === 'disabled_by_operator') {
+				log.warn(`${m}_fee_off`, {
+					reason: off,
+					hint: `MORPHIT_INDEXER_${m.toUpperCase()}_FEE_ADDRESS is set empty, which turns ${m.toUpperCase()} fees off on this node; delete the line to take the address pinned on chain`
+				});
+			} else if (off !== null) {
+				log.info(`${m}_fee_off`, { reason: off });
+			}
+		}
+		// BLURT is always an accepted fee method; seed the
 		// base from env at bootstrap.  The first treasury refresh
 		// replaces it with the chain-pinned value when one exists.
 		this.feeAmounts.blurtBase = this.config.feeBaseBlurt;
 	}
 
-	/** Per-cycle verifier refresh — Part 106.
+	/** The BTC / XMR verifiers for `address` (fee/externalFeeVerifiers.ts). */
+	private btcVerifierFor(address: string): TieredFeeVerifier {
+		return buildBtcFeeVerifier(
+			address,
+			this.feeAvailability.btc,
+			this.config.btcMinSuccessfulResponses,
+			this.sourceFetch
+		);
+	}
+
+	private xmrVerifierFor(address: string): TieredFeeVerifier {
+		return buildXmrFeeVerifier(
+			address,
+			this.feeAvailability.xmr,
+			this.config.xmrMinSuccessfulResponses,
+			this.sourceFetch
+		);
+	}
+
+	/** Per-cycle verifier refresh.
 	 *
 	 *  Called from the poller loop on each iteration.  Asks the
 	 *  TreasurySource for the currently-canonical addresses
@@ -545,8 +609,12 @@ export class Poller {
 			return;
 		}
 
-		// BTC.
-		const btcWanted = snapshot.btc?.address;
+		// BTC. A method this node does not take (externalFeeAvailability:
+		// an empty env address — even with an address pinned on chain — no
+		// usable explorer, or a hidden-only node with no hidden explorer)
+		// gets no verifier, whatever the pin says.
+		const btcOn = this.feeAvailability.btc.off === null;
+		const btcWanted = btcOn ? snapshot.btc?.address : undefined;
 		const btcCurrent = this.feeVerifierAddresses.btc;
 		if (btcWanted !== btcCurrent) {
 			if (btcWanted === undefined) {
@@ -556,15 +624,7 @@ export class Poller {
 				this.feeAmounts.btcSatoshis = undefined;
 				log.info('btc_verifier_disabled', { reason: 'no_address_available' });
 			} else {
-				this.feeVerifiers.btc = new BitcoinExplorerFeeVerifier(
-					{
-						feeAddress: btcWanted,
-						explorerUrls: this.config.btcExplorerUrls,
-						minConfirmations: 1,
-						requestTimeoutMs: 5_000,
-						minSuccessfulResponses: this.config.btcMinSuccessfulResponses
-					}
-				);
+				this.feeVerifiers.btc = this.btcVerifierFor(btcWanted);
 				this.feeVerifierAddresses.btc = btcWanted;
 				log.info('btc_verifier_rebuilt', {
 					source: snapshot.btc?.source ?? 'unknown'
@@ -574,13 +634,13 @@ export class Poller {
 		// Always sync amount even if address unchanged — operator
 		// might rotate the amount on the same address (e.g. price
 		// move).  Cheap to update; the order handler reads it.
-		if (snapshot.btc !== null) {
+		if (btcOn && snapshot.btc !== null) {
 			this.feeAmounts.btcSatoshis = snapshot.btc.satoshis;
 		} else {
 			this.feeAmounts.btcSatoshis = undefined;
 		}
 
-		// XMR — Part 108++.
+		// XMR — later+.
 		//
 		// The verifier no longer needs (or accepts) a view key.  Per-
 		// payment tx_proof verification means the indexer holds NO
@@ -589,10 +649,12 @@ export class Poller {
 		// changes; viewkey rotation is no longer a concept that
 		// affects the verifier.
 		//
-		// When no address is available (neither chain-pin nor env),
-		// the verifier is left undefined and the order handler
-		// rejects xmr orders with `fee_method_not_configured_xmr`.
-		const xmrWanted = snapshot.xmr?.address;
+		// When this node does not take XMR fees, or no address is
+		// available (neither chain-pin nor env), the verifier is left
+		// undefined and the order handler rejects xmr orders with
+		// `fee_method_not_configured_xmr`.
+		const xmrOn = this.feeAvailability.xmr.off === null;
+		const xmrWanted = xmrOn ? snapshot.xmr?.address : undefined;
 		const xmrCurrent = this.feeVerifierAddresses.xmr;
 		if (xmrWanted !== xmrCurrent) {
 			if (xmrWanted === undefined) {
@@ -602,15 +664,7 @@ export class Poller {
 					reason: 'no_address_available'
 				});
 			} else {
-				this.feeVerifiers.xmr = new MoneroProofFeeVerifier(
-					{
-						feeAddress: xmrWanted,
-						explorerUrls: this.config.xmrExplorerUrls,
-						minConfirmations: 1,
-						requestTimeoutMs: 10_000,
-						minSuccessfulResponses: this.config.xmrMinSuccessfulResponses
-					}
-				);
+				this.feeVerifiers.xmr = this.xmrVerifierFor(xmrWanted);
 				this.feeVerifierAddresses.xmr = xmrWanted;
 				log.info('xmr_verifier_rebuilt', {
 					addressSource: snapshot.xmr?.addressSource ?? 'unknown'
@@ -622,7 +676,7 @@ export class Poller {
 		// move).  Catch the case where a hand-crafted DB row has a
 		// malformed value (validateTreasury rejected it at write
 		// time, so this is defense-in-depth only).
-		if (snapshot.xmr !== null) {
+		if (xmrOn && snapshot.xmr !== null) {
 			try {
 				this.feeAmounts.xmrPiconero = BigInt(snapshot.xmr.piconero);
 			} catch (err) {
@@ -636,7 +690,7 @@ export class Poller {
 			this.feeAmounts.xmrPiconero = undefined;
 		}
 
-		// cp372 — sync the BLURT base (chain-pin > env).  BLURT is
+		// sync the BLURT base (chain-pin > env).  BLURT is
 		// always an accepted method, so resolveBlurt yields a value
 		// whenever the env fallback is positive; only an operator who
 		// zeroed MORPHIT_INDEXER_FEE_BASE_BLURT (with no chain-pin)
@@ -652,6 +706,12 @@ export class Poller {
 	/** Start the loop. Resolves only when `stop()` is called (or on
 	 *  a fatal, non-recoverable error). */
 	async run(): Promise<void> {
+		// Before this node writes anything (even the state row below): drop
+		// database code Morphit never creates (a hostile snapshot's trigger,
+		// say) and hold the payouts it may have queued for the operator. Never
+		// throws. foreignCodeHeal.ts.
+		await healForeignDatabaseCode(this.db);
+
 		// Chain-id pinning — first-boot initialises, subsequent boots
 		// defend against accidentally-switched networks.
 		const { lastApplied, chainId } = await ensureStateRow(this.db, this.config);
@@ -674,10 +734,13 @@ export class Poller {
 			chain_id_prefix: chainId.slice(0, 8),
 			last_applied_block: lastApplied
 		});
+		// Zero-clearnet nodes: start probing the onion fee explorers (a method
+		// is advertised only while one answers). Background, never awaited.
+		this.feeSourceHealth?.start();
 
-		// cp710 — one-shot reconciliation of operator registrations this
+		// one-shot reconciliation of operator registrations this
 		// indexer previously recorded as REJECTED.  Self-heals the case
-		// where a validator bug (e.g. cp670 regional-brand names, cp671
+		// where a validator bug (e.g. regional-brand names
 		// Persian ZWNJ) wrongly rejected a valid registration: once the
 		// fixed indexer boots, the already-rejected op is replayed through
 		// the register handler and materialised.  The handler is an UPSERT,
@@ -728,7 +791,7 @@ export class Poller {
 
 		while (!this.abort.signal.aborted) {
 			try {
-				// Part 106 — per-cycle treasury refresh.  Reads
+				// per-cycle treasury refresh.  Reads
 				// the most recent valid release op's treasury
 				// block and rebuilds the BTC/XMR verifiers if the
 				// canonical address has changed.  TreasurySource
@@ -759,14 +822,21 @@ export class Poller {
 				// which (if any) instances are due.  Errors caught
 				// internally and logged.
 				await this.federationProbe.maybeScan();
-				// (v1.18.0 deep-deep, H1) BTC/XMR fee re-check — self-throttling
-				// (every 10 min, ≤25 explorer lookups, each order ≤ once per 30
-				// min). Errors are caught and logged inside.
+				// BTC/XMR fee verification, outside any block transaction —
+				// self-throttling: new orders every 30 s (≤10 explorer lookups),
+				// a full re-check every 10 min (≤25, each order ≤ once per 30
+				// min). It only STARTS a pass here: the pass runs in the
+				// background (explorers over Tor take seconds each) and the
+				// loop goes on indexing. Errors are caught and logged inside.
 				await this.externalFeeRechecker.maybeRun();
 				// (v1.20.0, G1) BLURT fee re-verification — self-throttling (every
 				// 10 min, ≤20 block fetches through the full RPC pool); each op is
 				// re-judged once. Errors are caught and logged inside.
 				await this.blurtFeeReverifier.maybeRun();
+				// Release / rpc-directory ops stored before their signature was
+				// checked are re-judged once each, from agreed blocks — first pass at
+				// once, then while any wait for a quorum. Never throws.
+				await this.officialOpReverifier.maybeRun();
 			} catch (err) {
 				this.status = {
 					...this.status,
@@ -807,7 +877,7 @@ export class Poller {
 			return;
 		}
 
-		// ─── Concurrent prefetch, strictly in-order apply (cp664/cp666) ─────
+		// ─── Concurrent prefetch, strictly in-order apply ─────
 		// The DB write and the volunteer-run RPC nodes want opposite things: the
 		// DB wants bounded, in-order transactions; the nodes want few, spread-out
 		// requests. We satisfy both. The FETCH is parallelised — up to
@@ -815,7 +885,7 @@ export class Poller {
 		// endpoint (pool startOffset rotation) so no single node is dogpiled and a
 		// stalled node's window transparently falls back through the pool to
 		// another. The APPLY is strictly ascending block order, ONE TRANSACTION
-		// PER WINDOW (cp666 — the ≤BLOCK_FETCH_BATCH blocks of a fetch window
+		// PER WINDOW (the ≤BLOCK_FETCH_BATCH blocks of a fetch window
 		// share a single tx, amortising the per-commit fsync ~BLOCK_FETCH_BATCH×).
 		// The tx is still SHORT — one window, never the whole catch-up — so a long
 		// backfill never holds a tx open for minutes, holding locks + bloating
@@ -847,7 +917,7 @@ export class Poller {
 		};
 
 		// Apply one fetched window's blocks in strict ascending order, in a SINGLE
-		// bounded transaction per window (cp666 — the fetch batch is also the apply
+		// bounded transaction per window (the fetch batch is also the apply
 		// batch). Wrapping the ≤BLOCK_FETCH_BATCH-block window in one withTx
 		// amortises the per-commit fsync ~BLOCK_FETCH_BATCH× — the change that
 		// turns a multi-hour backfill on a home-server disk into minutes. The tx
@@ -873,7 +943,7 @@ export class Poller {
 			// indexedBlock never advances past a block that didn't commit.
 			type Committed = {
 				n: number;
-				/** Block timestamp, for `indexedBlockTime` (rv2-7). */
+				/** Block timestamp, for `indexedBlockTime`. */
 				time: string;
 				orderbookChanges: readonly string[];
 				chatChanges: readonly { lo: string; hi: string; messageId: number }[];
@@ -1120,17 +1190,28 @@ export class Poller {
 	 *  ADR-0009 §5). Runs at most once per SIGNALS_INTERVAL_MS.
 	 *  Failures are logged but swallowed — signal detection is
 	 *  advisory and must never halt block processing. */
+	/** Starts the hourly Signal A pass in the BACKGROUND: the block loop does
+	 *  not wait for it (one pass at a time; the statement is time-capped). */
 	private async maybeRunSignals(): Promise<void> {
 		const SIGNALS_INTERVAL_MS = 60 * 60 * 1000; // 1h
 		const now = Date.now();
-		if (now - this.lastSignalsAt < SIGNALS_INTERVAL_MS) return;
+		if (this.signalsInFlight || now - this.lastSignalsAt < SIGNALS_INTERVAL_MS) return;
 		this.lastSignalsAt = now;
+		this.signalsInFlight = true;
+		void this.runSignalsPass().finally(() => {
+			this.signalsInFlight = false;
+		});
+	}
+
+	private signalsInFlight = false;
+
+	private async runSignalsPass(): Promise<void> {
 		try {
 			const flaggedA = await detectRelatedAccounts(this.db, {
-				// Exclude the relay account from the "same creator"
-				// pair signal — it creates the majority of onboarded
-				// accounts, so creator-match against it is normal
-				// coincidence, not evidence of relation (Finding N28).
+				// This instance's relay creates most of its users' accounts, so
+				// a shared creator there is coincidence, not relation (Finding
+				// N28). Every REGISTERED operator account is excluded inside the
+				// detector too; this covers our relay before it registers.
 				excludeCreators: [this.config.relayAccount]
 			});
 			if (flaggedA > 0) {
@@ -1139,64 +1220,15 @@ export class Poller {
 		} catch (err) {
 			log.error('signal_a_failed', {}, err);
 		}
-		try {
-			const flaggedB = await detectSuspiciousReciprocity(this.db);
-			if (flaggedB > 0) {
-				log.info('signal_b_flagged', { new_pairs: flaggedB });
-			}
-		} catch (err) {
-			log.error('signal_b_failed', {}, err);
-		}
-		try {
-			// Signal C — one-way pile-on detection (Part 113).
-			// Catches coordinated low-star attacks from clusters
-			// of newly-active accounts with narrow review diversity.
-			// Companion to Signals A and B; same advisory-not-
-			// dispositive treatment.
-			const flaggedC = await detectOneWayPileOn(this.db);
-			if (flaggedC > 0) {
-				log.info('signal_c_flagged', { new_subjects: flaggedC });
-			}
-		} catch (err) {
-			log.error('signal_c_failed', {}, err);
-		}
-		try {
-			// Signal D — review-concentration detection (cp123 H2).
-			// Closes Part 113 A4 "Signal B evasion via diversification."
-			// Catches reviewers who concentrate ≥80% of their reviews
-			// on a single high-star target across a 30-day window,
-			// even if they also reviewed a few throwaway third parties
-			// to evade Signal B's stricter distinct_subjects=1 filter.
-			const flaggedD = await detectReviewConcentration(this.db);
-			if (flaggedD > 0) {
-				log.info('signal_d_flagged', { new_pairs: flaggedD });
-			}
-		} catch (err) {
-			log.error('signal_d_failed', {}, err);
-		}
-		try {
-			// Signal E — completed-trade concentration (v1.5.5).
-			// The TRADE analogue of Signal D. v1.5.5 credits the counterparty
-			// an order owner NAMES, and the provable-counterparty bar it must
-			// clear is per-PAIR, not per-trade — so after one genuine
-			// conversation an owner could keep completing orders naming the
-			// same confederate and mint a trade credit per listing fee,
-			// forever. None of the review signals see it (suspicious_
-			// reciprocity watches mutual REVIEWS). This flags an account whose
-			// trade credits are ≥80% concentrated on one peer across the
-			// window; TRADE_COUNT_SQL then stops counting those credits.
-			const flaggedE = await detectTradeConcentration(this.db);
-			if (flaggedE > 0) {
-				log.info('signal_e_flagged', { new_pairs: flaggedE });
-			}
-		} catch (err) {
-			log.error('signal_e_failed', {}, err);
-		}
+		// Signals B-E are evaluated per op, on the op's block time, by the
+		// feedback and order-complete handlers (signals.ts) — not here on the
+		// wall clock, which made the flags depend on when this ran.
 	}
 
 	/** Ask the loop to stop at the next safe boundary. */
 	stop(): void {
 		log.info('stop_requested');
+		this.feeSourceHealth?.stop();
 		this.abort.abort();
 	}
 
@@ -1228,16 +1260,6 @@ export class Poller {
 		return this.operatorBalanceScanner.getCurrentState();
 	}
 
-	/** cp316 — the RESOLVED treasury addresses the fee verifiers are
-	 *  currently checking against: chain-pinned release op > operator
-	 *  env > baked canonical default (treasurySource.ts resolution).
-	 *  `feeVerifierAddresses` is re-synced every loop by
-	 *  refreshFeeVerifiersFromTreasury(), so this follows a
-	 *  chain-pin rotation within one poll cycle.  null = that method
-	 *  has no address (disabled on this instance).  Surfaced on
-	 *  /v1/instance (so peers can audit it) and used as the canonical
-	 *  reference by the federation probe's treasury-mismatch check.
-	 *  Safe to call concurrently with run(); does no I/O. */
 	/** (v1.20.0, V3-3) The CURRENT fee verifiers and amounts, for the
 	 *  "check my payment now" route (api/feeCheck.ts). No I/O. */
 	feeCheckCurrent(): {
@@ -1247,7 +1269,30 @@ export class Poller {
 		return { verifiers: this.feeVerifiers, amounts: this.feeAmounts };
 	}
 
+	/** the treasury addresses this instance ADVERTISES on
+	 *  /v1/instance: the ones the fee verifiers check (chain-pinned release
+	 *  op > operator env > baked canonical default, treasurySource.ts),
+	 *  re-synced every loop by refreshFeeVerifiersFromTreasury(), so a
+	 *  chain-pin rotation is followed within one poll cycle. null = this
+	 *  instance does not take that method now: disabled here, or (a
+	 *  zero-clearnet node) none of its onion explorers is answering.
+	 *  Safe to call concurrently with run(); does no I/O. */
 	currentTreasuryAddresses(): { btc: string | null; xmr: string | null } {
+		const v = this.verifierTreasuryAddresses();
+		const h = this.feeSourceHealth;
+		// A zero-clearnet node verifies only through onion explorers: it
+		// offers a method only while one of them answers (feeSourceHealth.ts).
+		if (h === null) return v;
+		return {
+			btc: v.btc !== null && h.healthyCount('btc') > 0 ? v.btc : null,
+			xmr: v.xmr !== null && h.healthyCount('xmr') > 0 ? v.xmr : null
+		};
+	}
+
+	/** The addresses the verifiers check, whether or not the method is
+	 *  advertised right now — the federation probe's reference for a peer's
+	 *  advertised treasury. No I/O. */
+	verifierTreasuryAddresses(): { btc: string | null; xmr: string | null } {
 		return {
 			btc: this.feeVerifierAddresses.btc ?? null,
 			xmr: this.feeVerifierAddresses.xmr ?? null

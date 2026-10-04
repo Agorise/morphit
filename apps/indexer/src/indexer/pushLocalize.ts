@@ -1,7 +1,7 @@
 /**
  * Morphit indexer — minimal i18n for Web Push payload strings.
  *
- * Part 122 cp14.  The indexer's notification handlers enqueue
+ * The indexer's notification handlers enqueue
  * push_pending rows with pre-localized `title` and `body`
  * (the service worker renders them verbatim; the SW has no i18n
  * runtime).  The indexer reads the recipient's preferred locale
@@ -17,7 +17,7 @@
  *
  * The locale tags are a STRICT subset of the apps/web client's
  * 10 supported locales (en, es, fr, de, it, pl, ru, fa, zh-CN,
- * zh-HK).  Pre-cp14 subscriptions defaulted to 'en' (via the
+ * zh-HK).  Previously, subscriptions defaulted to 'en' (via the
  * schema ADD COLUMN default), so existing users keep working.
  *
  * Why not reuse apps/web's i18n bundles?  Two reasons:

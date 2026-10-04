@@ -1,5 +1,5 @@
 /**
- * cp311 regression — self-instance directory card branding.
+ * regression — self-instance directory card branding.
  *
  * Bug: the indexer never network-probes its own origin (hairpin-NAT
  * fragile), so `persistSelfReachable` was the only writer of the self
@@ -40,7 +40,7 @@ function makeMockDb(): { db: Database; queries: CapturedQuery[] } {
 		const t = text.trim().toUpperCase();
 		if (t.startsWith('DELETE')) return { rows: [], rowCount: 0 };
 		if (t.startsWith('SELECT')) {
-			// v1.18.0 deep-deep (M4): pickDueInstances runs a never-probed query
+			// pickDueInstances runs a never-probed query
 			// and a due-established query. This row is never-probed, so the
 			// established query returns nothing. Since v1.20.0 (E14) the two are
 			// told apart by last_probed_at (a row listed as 'never' but already

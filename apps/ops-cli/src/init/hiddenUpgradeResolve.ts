@@ -7,9 +7,13 @@
  *   - hidden-only but a step fails → THROW (fail-closed; the caller aborts and
  *     stays on the current version — NEVER a clearnet fallback).
  *
- * Security note: the fetched tarball is verified against the on-chain
- * `source_sha256` inside `fetchHiddenUpgrade` (it throws on mismatch), so a
- * bad/rolled-back tarball can never be returned from here.
+ * Security note: what to fetch (version, SHA-256, CID, IPNS name) comes from
+ * @morphit's `morphit_release_v1` op, read through this node's own indexer and
+ * accepted only when its transaction signature recovers to the pinned posting
+ * key (lib/releaseAnchor.ts). The indexer's `/v1/release` only says which
+ * version to look for. The fetched tarball is checked against that SHA-256
+ * inside `fetchHiddenUpgrade` (it throws on mismatch), so a forged or rolled-back
+ * tarball can never be returned from here.
  *
  * Offline-safe: only node built-ins + the dependency-free @morphit/hidden-transport
  * + undici (already bundled). Nothing new to fetch at install time.
@@ -19,8 +23,23 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { hiddenServiceProxyConfigFromEnv } from '@morphit/hidden-transport';
-import { fetchHiddenUpgrade, resolvePeerGateways, type PeerDirectoryRow } from './hiddenUpgradeFetch.js';
+import {
+	fetchHiddenUpgrade,
+	resolvePeerGateways,
+	type PeerDirectoryRow
+} from './hiddenUpgradeFetch.js';
 import { makeHiddenTarballFetcher } from './hiddenUpgradeTransport.js';
+import { localCondenser } from '../lib/hiddenOnly.ts';
+import {
+	readSignedReleaseAnchor,
+	type CondenserRead,
+	type ReleaseAnchor
+} from '../lib/releaseAnchor.ts';
+import {
+	MORPHIT_RELEASE_ACCOUNT,
+	MORPHIT_OFFICIAL_POSTING_PUBKEY,
+	BLURT_MAINNET_CHAIN_ID
+} from '@morphit/operator-config';
 import {
 	readIndexerConfig,
 	locateLocalIndexer,
@@ -30,7 +49,7 @@ import {
 
 /** A release version as the chain publishes it: X.Y.Z with an optional
  *  prerelease. Anything else is refused before it names a file or reaches the
- *  terminal (v1.18.0 deep-deep, ops-7). */
+ *  terminal. */
 export const RELEASE_VERSION_RE = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 /** Concise, host-only label for a hidden gateway base, tagged with its network,
@@ -58,7 +77,10 @@ export function isHiddenOnlyFromEnvFile(candidatePaths: readonly string[]): bool
 		// read as non-empty, mis-detecting a hidden-only node as clearnet (v1.16.6).
 		const m = text.match(/^[ \t]*MORPHIT_INDEXER_RPC_ENDPOINTS[ \t]*=[ \t]*(.*)$/m);
 		if (!m) return false; // key absent → treat as clearnet (safe default)
-		const val = (m[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
+		const val = (m[1] ?? '')
+			.trim()
+			.replace(/^["']|["']$/g, '')
+			.trim();
 		return val === ''; // empty clearnet pool ⇒ hidden-only
 	}
 	return false; // no config found → not hidden-only (safe default)
@@ -71,7 +93,7 @@ export interface HiddenOnlyOptions extends LocalIndexerOptions {
 }
 
 /**
- * Is this node hidden-only? (v1.18.0 deep-deep, ops-1 + H2)
+ * Is this node hidden-only?
  *
  * WHAT WAS WRONG. The answer came first from whatever answered plain HTTP on
  * port 8081 (`/v1/instance` `clearnet_eliminated`). Any local process could
@@ -95,21 +117,22 @@ export async function isHiddenOnly(opts: HiddenOnlyOptions): Promise<boolean> {
 	const cfg = readIndexerConfig(opts.unitEnvFiles);
 	if (cfg.readable) {
 		// Unset means the built-in default pool, which is clearnet.
-		return cfg.rpcEndpoints !== undefined && cfg.rpcEndpoints.split(',').every((x) => x.trim() === '');
+		return (
+			cfg.rpcEndpoints !== undefined && cfg.rpcEndpoints.split(',').every((x) => x.trim() === '')
+		);
 	}
 	const base = locateLocalIndexer(opts);
-	const inst = await getLocalIndexerJson<{ clearnet_eliminated?: unknown; clearnet_eliminated_missing?: unknown }>(
-		base,
-		'/v1/instance',
-		4000
-	);
+	const inst = await getLocalIndexerJson<{
+		clearnet_eliminated?: unknown;
+		clearnet_eliminated_missing?: unknown;
+	}>(base, '/v1/instance', 4000);
 	if (inst.clearnet_eliminated === true) return true;
 	if (Array.isArray(inst.clearnet_eliminated_missing)) {
 		return !inst.clearnet_eliminated_missing.includes('chainHidden');
 	}
 	throw new Error(
-		"could not tell whether this node reads the chain over hidden services only: its config is " +
-			"readable only by root, and its indexer did not say. Run the command with sudo."
+		'could not tell whether this node reads the chain over hidden services only: its config is ' +
+			'readable only by root, and its indexer did not say. Run the command with sudo.'
 	);
 }
 
@@ -150,6 +173,8 @@ export interface HiddenUpgradeResolution {
 	readonly tarballPath: string;
 	readonly version: string;
 	readonly servedBy: string;
+	/** The verified on-chain release record the tarball matched. */
+	readonly anchor: ReleaseAnchor;
 }
 
 /**
@@ -165,15 +190,23 @@ export interface HiddenUpgradeResolution {
  * The version comes from the same on-chain record the real upgrade verifies
  * against; nothing is fetched from a peer, and nothing leaves the box.
  */
-export async function readHiddenReleaseTarget(opts: HiddenOnlyOptions): Promise<{ readonly tag: string } | null> {
+export async function readHiddenReleaseTarget(
+	opts: HiddenOnlyOptions
+): Promise<{ readonly tag: string } | null> {
 	if (!(await isHiddenOnly(opts))) return null;
-	// v1.18.0 deep-deep (ops-1): only the authenticated indexer is asked, and
+	// only the authenticated indexer is asked, and
 	// only the first address with a listener — never the next one after it.
-	const rel = await getLocalIndexerJson<ReleaseTargetResponse>(locateLocalIndexer(opts), '/v1/release');
+	const rel = await getLocalIndexerJson<ReleaseTargetResponse>(
+		locateLocalIndexer(opts),
+		'/v1/release'
+	);
 	const version = typeof rel.version === 'string' ? rel.version.trim() : '';
-	if (version === '') throw new Error('hidden upgrade: the local indexer returned no release version');
+	if (version === '')
+		throw new Error('hidden upgrade: the local indexer returned no release version');
 	if (!RELEASE_VERSION_RE.test(version)) {
-		throw new Error('hidden upgrade: the local indexer returned a release version that is not a version number');
+		throw new Error(
+			'hidden upgrade: the local indexer returned a release version that is not a version number'
+		);
 	}
 	return { tag: version.startsWith('v') ? version : `v${version}` };
 }
@@ -185,24 +218,54 @@ export async function readHiddenReleaseTarget(opts: HiddenOnlyOptions): Promise<
  * (fail-closed) when hidden-only but the release can't be privately obtained.
  */
 export async function tryResolveHiddenUpgrade(
-	opts: HiddenOnlyOptions & { onProgress?: (msg: string) => void }
+	opts: HiddenOnlyOptions & {
+		onProgress?: (msg: string) => void;
+		/** Tests only: the pinned posting key and the chain reader. */
+		postingPubkey?: string;
+		chainRead?: CondenserRead;
+	}
 ): Promise<HiddenUpgradeResolution | null> {
 	if (!(await isHiddenOnly(opts))) return null;
-	// v1.18.0 deep-deep (ops-1): every answer below comes from ONE authenticated
+	// every answer below comes from ONE authenticated
 	// listener — the indexer's own process, found at its configured address.
 	const base = locateLocalIndexer(opts);
 
-	opts.onProgress?.('hidden-only node — resolving the release from the federation over Tor/I2P (zero clearnet)…');
+	opts.onProgress?.(
+		'hidden-only node — resolving the release from the federation over Tor/I2P (zero clearnet)…'
+	);
 
-	// 1. Target: version + on-chain SHA + IPNS name, from the LOCAL indexer.
+	// 1. Target. The local indexer says which version is current; the hashes and
+	//    the CID come from @morphit's signed op for that version, verified here.
 	const rel = await getLocalIndexerJson<ReleaseTargetResponse>(base, '/v1/release');
 	if (typeof rel.version !== 'string' || !RELEASE_VERSION_RE.test(rel.version.trim())) {
-		throw new Error('hidden upgrade: the on-chain release has no valid version number — staying put (fail-closed)');
+		throw new Error(
+			'hidden upgrade: the on-chain release has no valid version number — staying put (fail-closed)'
+		);
 	}
 	const version = rel.version.trim().replace(/^v/, '');
-	const sha = rel.distribution?.source_sha256?.trim() ?? '';
-	const ipns = rel.distribution?.ipns_name?.trim() ?? '';
-	const cid = rel.distribution?.ipfs_cid?.trim() ?? '';
+	opts.onProgress?.(
+		`checking @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for v${version} (through this node's own indexer)…`
+	);
+	const read: CondenserRead =
+		opts.chainRead ??
+		((method, params) => localCondenser(method, params, { bases: [base], timeoutMs: 60_000 }));
+	const verified = await readSignedReleaseAnchor(read, {
+		tag: version,
+		signer: MORPHIT_RELEASE_ACCOUNT,
+		pinnedPubkey: opts.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
+		chainId: BLURT_MAINNET_CHAIN_ID
+	});
+	if (!verified.ok) {
+		// (`in`, not the ok flag: the smoke typecheck runs without strictNullChecks.)
+		const why = 'reason' in verified ? verified.reason : 'unknown';
+		throw new Error(
+			`hidden upgrade: no signed release record for v${version} could be verified (${why}) — staying put (fail-closed)`
+		);
+	}
+	const anchor = verified.anchor;
+	const sha = anchor.sourceSha256;
+	const ipns = anchor.ipnsName ?? '';
+	const cid = anchor.ipfsCid ?? '';
 	const problem = hiddenReleaseTargetProblem(sha, ipns, cid);
 	if (problem !== null) throw new Error(problem);
 	opts.onProgress?.(
@@ -229,11 +292,16 @@ export async function tryResolveHiddenUpgrade(
 	});
 	const peerGateways = resolvePeerGateways(rows);
 	if (peerGateways.length === 0) {
-		throw new Error('hidden upgrade: no federation peer advertises a Tor/I2P address in the directory yet — staying put (fail-closed)');
+		throw new Error(
+			'hidden upgrade: no federation peer advertises a Tor/I2P address in the directory yet — staying put (fail-closed)'
+		);
 	}
 	// Tell the operator EXACTLY which hidden services are in play — a zero-clearnet
 	// node should never be left guessing where its bytes came from.
-	const shown = peerGateways.slice(0, 4).map((g) => hiddenGatewayLabel(g)).join(', ');
+	const shown = peerGateways
+		.slice(0, 4)
+		.map((g) => hiddenGatewayLabel(g))
+		.join(', ');
 	opts.onProgress?.(
 		`fetching over ${peerGateways.length} hidden gateway${peerGateways.length === 1 ? '' : 's'} (Tor/I2P): ${shown}${peerGateways.length > 4 ? ', …' : ''}`
 	);
@@ -242,7 +310,12 @@ export async function tryResolveHiddenUpgrade(
 	const fetchTarball = makeHiddenTarballFetcher({ proxy: hiddenServiceProxyConfigFromEnv() });
 	const result = await fetchHiddenUpgrade(
 		{ ipnsName: ipns, ipfsCid: cid, expectedSha256: sha, version, path: 'morphit-latest.tar.gz' },
-		{ peerGateways, fetchTarball, sha256: (b) => createHash('sha256').update(b).digest('hex'), onProgress: opts.onProgress }
+		{
+			peerGateways,
+			fetchTarball,
+			sha256: (b) => createHash('sha256').update(b).digest('hex'),
+			onProgress: opts.onProgress
+		}
 	);
 
 	// 4. Write to a resolver-owned temp dir + a sibling .sha256, so the existing
@@ -255,5 +328,5 @@ export async function tryResolveHiddenUpgrade(
 	opts.onProgress?.(
 		`verified release fetched over Tor/I2P from ${hiddenGatewayLabel(result.peer)} — applying (zero clearnet, no git.agorise.net / mirrors touched)`
 	);
-	return { tarballPath, version, servedBy: result.peer };
+	return { tarballPath, version, servedBy: result.peer, anchor };
 }

@@ -48,7 +48,7 @@
 		visible = false;
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
@@ -64,7 +64,7 @@
 		<div
 			class="mx-auto flex max-w-5xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3"
 		>
-			<!-- cp429 — on mobile the message used to be squished into a narrow
+			<!-- on mobile the message used to be squished into a narrow
 			     flex-1 column while the two actions kept their width on the
 			     right. Now the icon+message take the full width on their own
 			     row (flex-col) and the actions sit below; on ≥sm everything is

@@ -14,7 +14,7 @@
  *
  *     Missing Posting Authority tester3
  *
- * …and dumps tester3's three authorities at the user. cp440 tried to fix this
+ * …and dumps tester3's three authorities at the user. A later change tried to fix this
  * by deleting the pre-flight check, on the theory that the check itself was the
  * difference between a working chat broadcast and a failing profile one. It
  * wasn't: chat messages travel over the relay, not the chain, so they never
@@ -91,7 +91,7 @@ export async function resolveBroadcastAccount(
 	}
 
 	if (accounts.length === 0) {
-		// PRE-FORK / STEEM-ERA ACCOUNTS (v1.8.10, the maintainer).
+		// PRE-FORK / STEEM-ERA ACCOUNTS.
 		//
 		// An empty result does NOT mean the key controls nothing — it means
 		// neither reverse-lookup source could SEE the account. Blurt's
@@ -170,12 +170,20 @@ export async function assertKeyControlsAccount(
 	const memo = `${account}\u0000${pub}`;
 	if (authorityCache.has(memo)) return;
 
-	const authorities = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetchImpl);
+	const authorities = await fetchAccountKeys(
+		resolveOrigin(MORPHIT_INDEXER_ORIGIN),
+		account,
+		fetchImpl
+	);
 	if (!authorities) {
-		// Can't check ⇒ don't guess, and don't silently broadcast either. The
-		// resolver above already proved the key maps to this account, so a
-		// transient indexer blip here is not grounds to refuse.
-		return;
+		// The chain has no such account (the indexer's 404; an unreachable chain
+		// throws instead). The reverse lookup may not have proved anything — on
+		// the pre-fork path the account is only the user's hint — so this is a
+		// refusal, not a pass.
+		throw new AccountBindingError(
+			'no_account_for_key',
+			`@${account} does not exist on the blockchain.`
+		);
 	}
 	const listed = authorities.posting.key_auths.some(([k]) => k === pub);
 	if (!listed) {

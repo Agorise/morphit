@@ -1,25 +1,25 @@
 #!/usr/bin/env tsx
 /**
- * brag-list-trailer-invariants smoke — Part 122 cp75 (LL #75 / O-23).
+ * brag-list-trailer-invariants smoke.
  *
  * MORPHIT-BRAG-LIST.md's trailer summarises the file ("288 specific
  * selling points... Last updated 2026-05-19").  Three drift classes
- * accumulated across cp70→cp74 with no defense to catch them:
+ * accumulated across with no defense to catch them:
  *
  *   1. Trailer entry-count went stale (claimed 288, actually 299).
  *      Every checkpoint that inserted a new brag entry forgot to
  *      bump the trailer.  Eleven entries of drift accumulated.
  *
  *   2. Trailer "Last updated" date went stale (claimed 2026-05-19;
- *      cp74 work was 2026-05-20).  cp74's mediakit regeneration
+ *      work was 2026-05-20).  the mediakit regeneration
  *      touched the file but didn't refresh the trailer date.
  *
  *   3. Trailer claimed "ADR-0001-*.md through ADR-0036-*.md"
  *      misleads since 0016 is absent (35 actual ADRs, not 36).
  *      Adding ADR 0036 didn't trigger a recount of the range claim.
  *
- * cp60-O12 brag-list-kiss-budget audits PER-ENTRY length but not
- * the trailer.  cp66-O16 cross-document-value-invariants covers
+ * brag-list-kiss-budget audits PER-ENTRY length but not
+ * the trailer.  A later change cross-document-value-invariants covers
  * config invariants (DB names, ports, CIDR) but not summary-vs-
  * content.  This smoke fills the gap.
  *
@@ -31,12 +31,12 @@
  *   I-3: trailer ADR range claim "ADR-XXXX-*.md through ADR-YYYY-*.md"
  *        matches max numbered ADR in docs/adr/ (template excluded)
  *   I-4: no duplicate entry numbers within the body (TOC excluded).
- *        Catches the cp75-D12 drift class: two checkpoints both
+ *        Catches the drift class: two checkpoints both
  *        appending entries that should be numbered N+1 but separately
- *        picking the same N. Surfaced at cp75 — 6 collisions found
+ *        picking the same N. Surfaced — 6 collisions found
  *        (155, 156, 236-239), all renumbered to 294-299.
  *
- * Self-test (M-146):
+ * Self-test:
  *   - Change trailer "299" → "287" → smoke fires.
  *   - Change trailer "4 June, 2026" → "1 April, 2026" → smoke fires.
  *   - Change trailer to ISO "2026-06-04" → smoke fires (not verbatim).
@@ -44,9 +44,9 @@
  *   - Add ADR-0037 without trailer bump → smoke fires.
  *
  * Recurring class scope progression for trailer/summary discipline:
- *   cp60-O12: per-entry length budget
- *   cp66-O16: cross-document config-value invariants
- *   cp75-O23: document-trailer summary-vs-content (THIS smoke)
+ *   per-entry length budget
+ *   cross-document config-value invariants
+ *   document-trailer summary-vs-content (THIS smoke)
  *
  * Limitation: only checks MORPHIT-BRAG-LIST.md's trailer.  Other
  * documents (RELEASE-NOTES, README) have their own summary
@@ -222,8 +222,8 @@ if (!adrRangeMatch) {
 // Simpler heuristic: skip any line above the first occurrence of a
 // `^1\.` line whose context is in a section header — we instead
 // identify the TOC region as the contiguous run of `^N\.` lines
-// from the top until a non-`^N\.` line breaks the run (line 12-30
-// at cp75). After that point, all `^N. **` entries are body items
+// from the top until a non-`^N\.` line breaks the run (line 12-30).
+// After that point, all `^N. **` entries are body items
 // that should be globally-unique.
 //
 // Concrete: ignore everything before the first `^## 1\.` header
@@ -272,7 +272,7 @@ if (dups.length === 0) {
 }
 
 // ─── I-5 entries appear in strictly ascending sequential order
-//     1, 2, 3, ..., N (no gaps, no jumps, no out-of-order).  cp76
+//     1, 2, 3, ..., N (no gaps, no jumps, no out-of-order).
 //     surfaced "entries 319-322 inserted in the middle of section
 //     3 with original numbers"; renumber + this invariant locks
 //     the discipline so any future drift fails CI. ──

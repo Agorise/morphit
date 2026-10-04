@@ -1,5 +1,5 @@
 /**
- * order-fee-active-auth-smoke (cp407)
+ * order-fee-active-auth-smoke
  *
  * Regression guard for the BLURT-fee broadcast fix.
  *

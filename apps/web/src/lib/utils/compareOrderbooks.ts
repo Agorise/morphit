@@ -60,9 +60,15 @@
 
 import type { OrderRecord } from '@morphit/indexer-client';
 
-/** One side's fetched page, as returned by `/v1/orderbook`. */
+/** The fields a comparison reads from an order: its identity and the API's
+ *  sort key. A peer's page arrives reduced to exactly these
+ *  (/v1/compare/orderbook relays nothing else). */
+export type OrderKey = Pick<OrderRecord, 'account' | 'permlink' | 'updated_at'>;
+
+/** One side's fetched page, as returned by `/v1/orderbook` (or the peer's
+ *  reduced page from `/v1/compare/orderbook`). */
 export interface OrderbookSide {
-	readonly items: readonly OrderRecord[];
+	readonly items: readonly OrderKey[];
 	/** Non-null when the instance has more orders than it returned. */
 	readonly next_cursor: string | null;
 	readonly indexed_block: number;
@@ -74,16 +80,21 @@ export type CompareVerdict =
 	/** Both sides complete over the compared window, and they differ. */
 	| 'differ'
 	/** No window exists in which both sides are known-complete. */
-	| 'inconclusive';
+	| 'inconclusive'
+	/** A side answered a page that cannot be right: it says more orders
+	 *  exist (a next cursor) but sent none. A first page with a cursor always
+	 *  holds rows, so this is what an instance that hides every order looks
+	 *  like (`malformedSide` names it). */
+	| 'malformed';
 
 export interface CompareResult {
 	readonly verdict: CompareVerdict;
 	/** Orders present here but not there, WITHIN the compared window. */
-	readonly onlyHere: readonly OrderRecord[];
+	readonly onlyHere: readonly OrderKey[];
 	/** Orders present on both, WITHIN the compared window. */
-	readonly inBoth: readonly OrderRecord[];
+	readonly inBoth: readonly OrderKey[];
 	/** Orders present there but not here, WITHIN the compared window. */
-	readonly onlyThere: readonly OrderRecord[];
+	readonly onlyThere: readonly OrderKey[];
 	/** ISO timestamp the comparison starts at, or null when it covers
 	 *  everything both sides returned (neither side was truncated). */
 	readonly windowStart: string | null;
@@ -102,9 +113,11 @@ export interface CompareResult {
 	/** |indexed_block here − indexed_block there|. A large gap explains
 	 *  genuine differences among the most recent orders. */
 	readonly blockGap: number;
+	/** Which side sent the impossible page, when the verdict is 'malformed'. */
+	readonly malformedSide: 'here' | 'there' | null;
 }
 
-const keyOf = (o: OrderRecord): string => `${o.account}/${o.permlink}`;
+const keyOf = (o: OrderKey): string => `${o.account}/${o.permlink}`;
 
 /** The API's sort key for one row: `updated_at DESC, account ASC, permlink ASC`
  *  (apps/indexer/src/api/orderbook.ts). */
@@ -114,7 +127,7 @@ interface SortKey {
 	readonly permlink: string;
 }
 
-const sortKeyOf = (o: OrderRecord): SortKey => ({
+const sortKeyOf = (o: OrderKey): SortKey => ({
 	updatedAt: o.updated_at,
 	account: o.account,
 	permlink: o.permlink
@@ -138,7 +151,7 @@ function comparePageOrder(a: SortKey, b: SortKey): number {
 /** The LAST row of a page in the API's ordering — the row the cut fell on.
  *  Computed by scanning rather than taking `items[items.length - 1]`, because a
  *  remote instance is untrusted and may not return its page in order. */
-function boundaryRow(items: readonly OrderRecord[]): SortKey | null {
+function boundaryRow(items: readonly OrderKey[]): SortKey | null {
 	let last: SortKey | null = null;
 	for (const o of items) {
 		const k = sortKeyOf(o);
@@ -183,7 +196,7 @@ export function compareOrderbooks(here: OrderbookSide, there: OrderbookSide): Co
 	// there is no ambiguity left to defend against — the tie that motivated the
 	// exclusion is resolved by account and permlink, exactly as the API resolves
 	// it — so nothing needs to be discarded at all.
-	const inWindow = (o: OrderRecord): boolean =>
+	const inWindow = (o: OrderKey): boolean =>
 		boundary === null ? true : comparePageOrder(sortKeyOf(o), boundary) <= 0;
 
 	const hereIn = here.items.filter(inWindow);
@@ -195,9 +208,9 @@ export function compareOrderbooks(here: OrderbookSide, there: OrderbookSide): Co
 	const hereMap = new Map(hereIn.map((o) => [keyOf(o), o]));
 	const thereMap = new Map(thereIn.map((o) => [keyOf(o), o]));
 
-	const onlyHere: OrderRecord[] = [];
-	const inBoth: OrderRecord[] = [];
-	const onlyThere: OrderRecord[] = [];
+	const onlyHere: OrderKey[] = [];
+	const inBoth: OrderKey[] = [];
+	const onlyThere: OrderKey[] = [];
 
 	for (const [k, o] of hereMap) {
 		if (thereMap.has(k)) inBoth.push(o);
@@ -207,13 +220,15 @@ export function compareOrderbooks(here: OrderbookSide, there: OrderbookSide): Co
 		if (!hereMap.has(k)) onlyThere.push(o);
 	}
 
-	// A side that reports more rows exist but returns none of them has told us
-	// nothing about any row, so there is no range in which both sides are known
-	// complete. Reporting the other side's entire orderbook as "only there"
-	// would be an accusation resting on no evidence at all.
-	const blindSide =
-		(here.next_cursor !== null && here.items.length === 0) ||
-		(there.next_cursor !== null && there.items.length === 0);
+	// A side that reports more rows exist but returns none of them has sent a
+	// page that cannot be right: the first page of a non-empty orderbook holds
+	// rows. That is not "nothing to compare" (an honest answer); it is how an
+	// instance that hides every order would answer. The verdict names the side
+	// ('malformed') and lists no order: no row was compared, so none is
+	// accused of being missing.
+	const blindHere = here.next_cursor !== null && here.items.length === 0;
+	const blindThere = there.next_cursor !== null && there.items.length === 0;
+	const blindSide = blindHere || blindThere;
 
 	// When NEITHER side was truncated, both returned their complete orderbooks
 	// and the diff is authoritative — including when both are empty, which is a
@@ -222,17 +237,19 @@ export function compareOrderbooks(here: OrderbookSide, there: OrderbookSide): Co
 	// agree" would be a lie of omission and "they differ" would be the original
 	// bug.
 	const comparable = !blindSide && (!truncated || hereIn.length > 0 || thereIn.length > 0);
-	const verdict: CompareVerdict = !comparable
-		? 'inconclusive'
-		: onlyHere.length === 0 && onlyThere.length === 0
-			? 'agree'
-			: 'differ';
+	const verdict: CompareVerdict = blindSide
+		? 'malformed'
+		: !comparable
+			? 'inconclusive'
+			: onlyHere.length === 0 && onlyThere.length === 0
+				? 'agree'
+				: 'differ';
 
-	// An inconclusive comparison must not hand the UI a list of "findings" to
-	// render. Nothing was established, so there is nothing to show — and a
-	// blind side would otherwise emit the whole of the other instance's
+	// An inconclusive or malformed comparison must not hand the UI a list of
+	// "findings" to render. No row was compared, so there is nothing to show —
+	// and a blind side would otherwise emit the whole of the other instance's
 	// orderbook as differences.
-	if (verdict === 'inconclusive') {
+	if (verdict === 'inconclusive' || verdict === 'malformed') {
 		onlyHere.length = 0;
 		onlyThere.length = 0;
 		inBoth.length = 0;
@@ -258,6 +275,7 @@ export function compareOrderbooks(here: OrderbookSide, there: OrderbookSide): Co
 		excludedHere: here.items.length - hereIn.length,
 		excludedThere: there.items.length - thereIn.length,
 		excludedDistinct: excludedKeys.size,
-		blockGap: Math.abs(here.indexed_block - there.indexed_block)
+		blockGap: Math.abs(here.indexed_block - there.indexed_block),
+		malformedSide: blindHere ? 'here' : blindThere ? 'there' : null
 	};
 }

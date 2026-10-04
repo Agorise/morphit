@@ -4,16 +4,18 @@
 	 *
 	 * The /dev subtree is for operator and contributor diagnostics
 	 * (icon catalog, responsive viewport preview, WebAuthn probe).
-	 * Before cp136 this directory had three children but no index,
+	 * Previously this directory had three children but no index,
 	 * so a direct visit to /dev returned 404 with no signpost to
 	 * the actual tools.  Sally-operator finding F-3.
 	 *
 	 * No telemetry, no auth, no chain calls — pure static link list.
+	 *
+	 * English only, like the tools it links: the page 404s in production
+	 * (./+layout.ts), so its copy is not shipped in the locale files.
 	 */
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { _ } from 'svelte-i18n';
 	import Head from '$components/Head.svelte';
 
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -26,18 +28,18 @@
 	const TOOLS = [
 		{
 			path: '/dev/icons',
-			titleKey: 'dev.index.icons.title',
-			bodyKey: 'dev.index.icons.body'
+			title: 'Icon catalog',
+			body: 'Browse every icon shipped in the codebase. Click any tile to copy its name. Handy when adding a custom payment-method or alt-network glyph.'
 		},
 		{
 			path: '/dev/responsive',
-			titleKey: 'dev.index.responsive.title',
-			bodyKey: 'dev.index.responsive.body'
+			title: 'Responsive preview',
+			body: 'Render the current site at five simulated viewport widths (320 / 375 / 768 / 1024 / 1440 px). Useful when QA-ing custom branding on mobile.'
 		},
 		{
 			path: '/dev/yubikey-probe',
-			titleKey: 'dev.index.yubikey_probe.title',
-			bodyKey: 'dev.index.yubikey_probe.body'
+			title: 'WebAuthn / YubiKey probe',
+			body: 'Test whether your hardware key works with this instance, list known credentials, register or remove an authenticator. Same code path the Settings → Hardware key card uses.'
 		}
 	] as const;
 </script>
@@ -46,10 +48,11 @@
 
 <section class="mx-auto max-w-3xl px-4 py-12 md:px-6">
 	<h1 class="font-display text-3xl font-extrabold tracking-tight">
-		{$_('dev.index.heading')}
+		Developer &amp; operator tools
 	</h1>
 	<p class="mt-3 text-ink-600 dark:text-ink-300">
-		{$_('dev.index.subhead')}
+		Diagnostic utilities for operators customizing their instance and contributors verifying build
+		output. None of these collect telemetry or require sign-in.
 	</p>
 
 	<ul class="mt-8 grid gap-4">
@@ -66,11 +69,11 @@
 							{t.path}
 						</code>
 						<h2 class="font-display text-lg font-bold">
-							{$_(t.titleKey)}
+							{t.title}
 						</h2>
 					</div>
 					<p class="mt-2 text-sm text-ink-600 dark:text-ink-300">
-						{$_(t.bodyKey)}
+						{t.body}
 					</p>
 				</a>
 			</li>
@@ -78,6 +81,7 @@
 	</ul>
 
 	<p class="mt-10 text-sm text-ink-500 dark:text-ink-400">
-		{$_('dev.index.footnote')}
+		These pages are intentionally unstyled and information-dense. If you stumbled here as a regular
+		user, head to the homepage — these tools are not for trading.
 	</p>
 </section>

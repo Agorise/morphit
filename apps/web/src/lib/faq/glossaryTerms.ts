@@ -1,5 +1,5 @@
 /**
- * Morphit — FAQ acronym → glossary auto-linking (2026-07-19, the maintainer).
+ * Morphit — FAQ acronym → glossary auto-linking.
  *
  * WHY THIS EXISTS
  * ---------------

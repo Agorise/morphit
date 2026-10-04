@@ -24,11 +24,11 @@
  * refetch-before-broadcast to know the current state — just
  * issue the intent and trust the indexer to converge.
  *
- * Finding H layer 1. See docs/REVISIT-LIST.md §Finding H for
+ * Finding H layer 1. See the project backlog §Finding H for
  * the belt-and-suspenders rationale.
  */
 
-// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// byte-budget: broadcastCustomJson is dynamically imported
 // at the call site below so dblurt (a 2 MB chunk) doesn't land in
 // the eager-load graph of routes that pull this ops file for its
 // types/helpers but don't immediately trigger a broadcast.

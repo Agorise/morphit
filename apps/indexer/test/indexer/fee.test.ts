@@ -70,7 +70,7 @@ describe('expectedFeeBlurt', () => {
 	});
 });
 
-// cp408 — payment-time federation split verification.
+// payment-time federation split verification.
 const CANON = 'morphit-fees';
 const OWNER = 'community-op';
 const SIGNER = 'alice';

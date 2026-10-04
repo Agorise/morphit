@@ -64,7 +64,7 @@ SIZE="$(stat -c %s "$TARBALL")"
 # without any baked-in list — it is already reading this account's history to
 # find the snapshot, and the alt_addresses ride along for free.
 #
-# v1.18.0 deep-deep (rv2-1): the snapshot op must be SIGNED by the pinned key and
+# the snapshot op must be SIGNED by the pinned key and
 # served with its block, and two RPC operators must agree on it — so the fixture
 # is built by signed-snapshot-op.mjs with a test key, that key is pinned below,
 # and every run lists two RPC addresses (two operators) on the same transport.

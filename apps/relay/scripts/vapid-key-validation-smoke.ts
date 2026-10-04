@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * vapid-key-validation-smoke (cp404).
+ * vapid-key-validation-smoke.
  *
  * The relay serves MORPHIT_RELAY_VAPID_PUBLIC_KEY verbatim to clients as
  * pushManager.subscribe()'s applicationServerKey. A malformed key (wrong

@@ -1,6 +1,6 @@
 /**
  * highlightMatches — wrap search-token matches in a <mark> for the orderbook's
- * free-text "Order details" filter (cp411). Highlights the word(s) a user is
+ * free-text "Order details" filter. Highlights the word(s) a user is
  * searching inside an order's terms/details preview, mirroring the FAQ search's
  * "show me where it matched" affordance.
  *

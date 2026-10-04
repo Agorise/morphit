@@ -22,11 +22,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { recordRecentPeer, loadRecentPeers, clearRecentPeers } from './recentPeers';
+import { setPersonStorageTier } from '$lib/storage/personStorage';
 
 const KEY = 'morphit.chat.recent_peers';
 
 describe('recentPeers', () => {
 	beforeEach(() => {
+		// A remembered session: the list lives in localStorage.
+		setPersonStorageTier('local');
 		// Clear the slot before each test so cross-test state
 		// doesn't leak.
 		try {

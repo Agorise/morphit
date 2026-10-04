@@ -1,7 +1,7 @@
 /**
  * Handler: morphit_chat_folders_v1
  *
- * Stores a user's ENCRYPTED chat folder organization (t.txt v1.4.9 #5). The
+ * Stores a user's ENCRYPTED chat folder organization. The
  * client encrypts the thread lists (Inbox / Starred; everything else Archived)
  * with a posting-key-derived key, so this handler only ever sees opaque
  * ciphertext — the indexer never learns which threads a user keeps or with whom.

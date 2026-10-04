@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/chat-feedback-cancel-smoke.ts  (v1.9.0, the maintainer)
+ * apps/web/scripts/chat-feedback-cancel-smoke.ts  (v1.9.0)
  *
  * The "Mark this trade complete" card's Cancel button did nothing: LeaveFeedbackForm
  * wired its Cancel to an `onCancel` prop, but ConversationView never passed one, so

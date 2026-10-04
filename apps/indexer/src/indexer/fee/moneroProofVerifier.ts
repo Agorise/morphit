@@ -5,8 +5,8 @@
  * per-payment TRANSACTION KEY r (in the order op since v1.20.0, M-X1). No
  * indexer holds any view key; every indexer verifies every payment on its own.
  *
- * Two kinds of explorer, one quorum (v1.20.0, wave 4):
- *   - 'txprove' (plain `https://…`): an onion-monero-blockchain-explorer
+ * Three kinds of source, one quorum (v1.20.0, wave 4; v1.20.2):
+ *   - 'txprove' (`https://…`, or `http://<onion>`): an onion-monero-blockchain-explorer
  *     instance. `/api/outputs?txhash&address&viewkey=<r>&txprove=1` returns
  *     the outputs r proves for the address, with amounts and confirmations;
  *     for a bound fee `/api/transaction/<txid>` gives the encrypted payment
@@ -29,7 +29,8 @@
  * count toward MORPHIT_INDEXER_XMR_MIN_SUCCESSFUL_RESPONSES alike.
  *
  * When the quorum cannot be met (v1.20.2). Two agreeing sources are asked
- * for, out of all configured ones (six by default), fastest first. If only
+ * for, out of the tier's configured ones (fee/tieredFeeVerifier.ts: the two
+ * default onion explorers first, then all eight), fastest first. If only
  * ONE source can be reached for a long time, the payer is not left waiting
  * for days: once the order has waited `loneAnswerAfterMs` (2 h) its answer
  * alone is accepted — but only if the payment is at least
@@ -42,17 +43,14 @@
  * Bound fees (MK-H2): the amount is proven at the pinned PRIMARY address and
  * the encrypted payment ID must decrypt, with the same r, to the order's ID.
  *
- * Defaults (checked live 2026-09-28): xmrchain.net and moneroexplorer.org
- * answer the onion-explorer JSON API; moneroblocks.info serves raw
- * transactions. Dropped: localmonero.co/blocks (now redirects to
- * moneroblocks.info — a different API — and redirects are not followed),
- * monerohash.com/explorer (explorer UI, but /api/* answers 404: JSON API
- * off), exploremonero.com (a JavaScript front end; /api/* serves its HTML
- * shell). See docs/OPERATIONS.md §40.4.
+ * Defaults: config/xmrExplorers.ts (two onion xmrblocks explorers, then the
+ * clearnet fallback). See docs/OPERATIONS.md §40.4.
  *
- * Privacy: the txid and r (both already public in the order op) go over HTTPS
- * to each explorer; only base URLs are logged. HTTPS-only is enforced by the
- * config validator and again at construction.
+ * Privacy: the txid and r (both already public in the order op) go to each
+ * explorer over Tor (an onion; the network encrypts end to end, on a fresh
+ * circuit per request — indexer/sourceFetch.ts) or over HTTPS; only base URLs
+ * are logged. Never plain HTTP over the open internet: enforced by the config
+ * validator and again at construction.
  */
 
 import type { FeeClaim, FeeVerifier, FeeVerifyResult } from './verifier';
@@ -61,6 +59,7 @@ import { minAcceptablePiconero, FEE_PRICE_TOLERANCE } from '@morphit/asset-regis
 import { logger } from '../../log/index';
 import { encryptedPaymentIdsFromExtra, xmrDecryptPaymentId } from './xmrPaymentId';
 import { moneroTxHash, scanRawTxForAddress } from './xmrRawTx';
+import { explorerInit, readExplorerJson, readExplorerText } from './explorerHttp';
 import { parseXmrAddress } from '@morphit/release-schema';
 import { DEFAULT_XMR_EXPLORERS, parseXmrExplorer, type XmrExplorerKind } from '../../config/xmrExplorers';
 
@@ -71,22 +70,22 @@ export interface MoneroProofFeeVerifierConfig {
 	 *  the user paid TO; the verifier confirms the proof was
 	 *  generated for this exact address. */
 	readonly feeAddress: string;
-	/** Explorers: `https://…` = an onion-monero-blockchain-explorer
-	 *  (txprove); `raw-tx+https://…` = an explorer serving raw
-	 *  transactions (moneroblocks.info API), verified locally. */
+	/** Explorers: `https://…` / `http://<onion>` = an
+	 *  onion-monero-blockchain-explorer (txprove); `raw-tx+…` = an explorer
+	 *  serving raw transactions (moneroblocks.info API), verified locally;
+	 *  `node+…` = a public Monero node, verified locally. */
 	readonly explorerUrls: readonly string[];
 	/** Minimum confirmations required.  Default 1. */
 	readonly minConfirmations: number;
 	/** Per-explorer HTTP timeout.  Default 10_000ms. */
 	readonly requestTimeoutMs: number;
-	/** Part 109 quorum gate.  Minimum number of explorers that
+	/** quorum gate.  Minimum number of explorers that
 	 *  must return a successful, agreeing response before the
 	 *  verifier promotes to `verified`.  When the bar isn't met
 	 *  (degraded outage), the verifier returns `pending_external`
-	 *  instead of trusting a single source.  Default `1` preserves
-	 *  pre-Part-109 behavior for back-compat; the default 5-way
-	 *  explorer config makes a quorum of 2 (or 3) realistic for
-	 *  production deployments. */
+	 *  instead of trusting a single source.  Default 2 (two agreeing
+	 *  sources; config resolveXmrQuorum lowers it to the number of
+	 *  configured explorers when fewer are set). */
 	readonly minSuccessfulResponses: number;
 	/** (v1.20.2) How long an order must have waited before ONE reachable
 	 *  source's answer is accepted on its own (all others unreachable).
@@ -106,14 +105,11 @@ export const DEFAULT_MONERO_PROOF_VERIFIER_CONFIG: Omit<
 	MoneroProofFeeVerifierConfig,
 	'feeAddress'
 > = {
-	// Three independent operators, two kinds (see the header): the same
-	// list as MORPHIT_INDEXER_XMR_EXPLORER_URLS' default.
+	// The same list as MORPHIT_INDEXER_XMR_EXPLORER_URLS' default.
 	explorerUrls: [...DEFAULT_XMR_EXPLORERS],
 	minConfirmations: 1,
 	requestTimeoutMs: 10_000,
-	// Default of 1 preserves pre-Part-109 behavior.  Operators with
-	// the default 5-explorer list should bump to 2 or 3 in their
-	// indexer.env for true cross-source check on every payment.
+	// Two agreeing sources: one explorer's word is not enough.
 	minSuccessfulResponses: 2
 };
 
@@ -151,16 +147,13 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		if (config.explorerUrls.length === 0) {
 			throw new Error('MoneroProofFeeVerifier: at least one explorer URL required');
 		}
-		// Privacy-preservation invariant — every URL must be HTTPS.
-		// The config validator should already reject non-HTTPS URLs
-		// before we reach here, but defense-in-depth check at
-		// construction.  The proof string is less sensitive than the
-		// old view key (per-payment vs. wallet-lifetime), but still
-		// publicly verifiable claim and still warrants TLS.
+		// Privacy invariant — every URL must be HTTPS, or plain HTTP to a
+		// Tor/I2P hidden service (encrypted end to end by the network). The
+		// config validator already rejects anything else; checked again here.
 		for (const u of config.explorerUrls) {
 			if (parseXmrExplorer(u) === null) {
 				throw new Error(
-					`MoneroProofFeeVerifier: explorer URL must be https:// (or raw-tx+https://), got ${u}`
+					`MoneroProofFeeVerifier: explorer URL must be https://, or http:// to a .onion / .i2p service (optionally raw-tx+ / node+), got ${u}`
 				);
 			}
 		}
@@ -169,7 +162,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 
 	/** The address the verifier was constructed with.  Surfaced
 	 *  so the poller can detect when a treasury chain-pin updates
-	 *  the address and rebuild — see Part 106. */
+	 *  the address and rebuild — see. */
 	get currentAddress(): string {
 		return this.config.feeAddress;
 	}
@@ -330,7 +323,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		/** (v1.20.2) Accepting ONE source's answer: see the header. */
 		let lone = false;
 		if (quorumResult.kind === 'all_responses_in') {
-			// (v1.18.0 deep-deep, H1) A quorum answering "no such tx" is
+			// A quorum answering "no such tx" is
 			// definitive only when nothing usable contradicted it.
 			if (
 				notFoundCount >= this.config.minSuccessfulResponses &&
@@ -573,16 +566,21 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
 		}
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'POST',
-				headers: { accept: 'application/json', 'content-type': 'application/json' },
-				body: JSON.stringify(body),
-				signal: ac.signal,
-				redirect: 'manual'
-			} as RequestInit);
+			const res = await this.fetchImpl(
+				url,
+				explorerInit(
+					{
+						method: 'POST',
+						accept: 'application/json',
+						contentType: 'application/json',
+						body: JSON.stringify(body)
+					},
+					ac.signal
+				)
+			);
 			if (!res.ok) return { kind: 'transport_failure' };
 			try {
-				return { kind: 'ok', body: (await res.json()) as unknown };
+				return { kind: 'ok', body: await readExplorerJson(res, ac) };
 			} catch {
 				return { kind: 'data_malformed' };
 			}
@@ -604,14 +602,12 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 	private async rawTxConfirmations(base: string, txid: string, poolSignal?: AbortSignal): Promise<number | null> {
 		let page: string;
 		try {
-			const res = await this.fetchImpl(`${base}/tx/${txid}`, {
-				method: 'GET',
-				headers: { accept: 'text/html' },
-				signal: poolSignal ?? null,
-				redirect: 'manual'
-			} as RequestInit);
+			const res = await this.fetchImpl(
+				`${base}/tx/${txid}`,
+				explorerInit({ method: 'GET', accept: 'text/html' }, poolSignal ?? null)
+			);
 			if (!res.ok) return null;
-			page = (await res.text()).slice(0, 500_000);
+			page = await readExplorerText(res);
 		} catch {
 			return null;
 		}
@@ -650,15 +646,13 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
 		}
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'application/json' },
-				signal: ac.signal,
-				redirect: 'manual'
-			} as RequestInit);
+			const res = await this.fetchImpl(
+				url,
+				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
+			);
 			if (!res.ok) return { kind: 'transport_failure' };
 			try {
-				return { kind: 'ok', body: (await res.json()) as unknown };
+				return { kind: 'ok', body: await readExplorerJson(res, ac) };
 			} catch {
 				return { kind: 'data_malformed' };
 			}
@@ -693,16 +687,15 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
 		}
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'application/json' },
-				signal: ac.signal
-			});
+			const res = await this.fetchImpl(
+				url,
+				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
+			);
 			if (res.status === 404) return { kind: 'data_not_found' };
 			if (!res.ok) return { kind: 'transport_failure' };
 			let body: unknown;
 			try {
-				body = (await res.json()) as unknown;
+				body = await readExplorerJson(res, ac);
 			} catch {
 				return { kind: 'data_malformed' };
 			}
@@ -761,11 +754,10 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'application/json' },
-				signal: ac.signal
-			});
+			const res = await this.fetchImpl(
+				url,
+				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
+			);
 			if (res.status === 404) {
 				log.warn('explorer_tx_not_found', { explorer: baseUrl, txid });
 				return { kind: 'data_not_found' };
@@ -788,7 +780,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 			}
 			let body: unknown;
 			try {
-				body = (await res.json()) as unknown;
+				body = await readExplorerJson(res, ac);
 			} catch {
 				log.warn('explorer_non_json', { explorer: baseUrl, txid });
 				return { kind: 'data_malformed' };
@@ -813,7 +805,7 @@ export class MoneroProofFeeVerifier implements FeeVerifier {
 				});
 				return { kind: 'data_not_found' };
 			}
-			// Echo-check (Item 4 / Audit Part 26): if the explorer's
+			// Echo-check (Item 4): if the explorer's
 			// returned tx_hash is present and doesn't case-insensitively
 			// match what we asked about, treat as data_malformed.  This
 			// catches both bugs (response routing issues) and

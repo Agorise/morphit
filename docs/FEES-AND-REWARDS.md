@@ -56,17 +56,17 @@ running Morphit.)
   instance worldwide**, flow to the **canonical BTC/XMR accounts**.
   No federation split, no operator share.
 
-**On-chain verification (shipped — Part 106, NOT future):** the
+**On-chain verification (shipped, NOT future):** the
 canonical BTC and XMR fee-receiving addresses are pinned on-chain in
 the signed `morphit_release_v1` **treasury block** (the release-anchor
 pattern), so anyone can verify them independently. When present, the
 pin *authoritatively* declares those addresses: the post-order page
 renders them with copy + QR, and every federated indexer uses them for
 fee verification. The BLURT fee base is chain-pinned the same way
-(`treasury.blurt.base`, cp372). The pin is optional per release and
+(`treasury.blurt.base`). The pin is optional per release and
 carries only public information (address + memo policy) — see
 `packages/release-schema/src/release.ts` (`ReleaseTreasuryBlock`) and
-the Part 107 privacy invariant.
+the privacy invariant.
 
 ---
 
@@ -85,7 +85,7 @@ fee-recipient account.
   frontend quote and the indexer validation import from there, so
   they cannot drift.  At BLURT ≈ $0.002 that's roughly 60–62 BLURT;
   the env default base is `125` BLURT.
-- **Chain-pinned + auto-tracked (cp372).**  The enforced BLURT base
+- **Chain-pinned + auto-tracked.**  The enforced BLURT base
   — like the BTC/XMR amounts — comes from the most recent signed
   `morphit_release_v1` `treasury.blurt.base`, resolved chain-pin →
   env, so every federated indexer enforces the *same* floor (the
@@ -326,11 +326,13 @@ featured-slot, cold-message) whenever the signer is the recipient.
 ### Auditing per-operator earnings
 
 ```
-GET /v1/operators/:tag
+curl -s https://<instance>/v1/operators | jq '.operators[] | select(.tag == "<tag>")'
 ```
 
-Returns `cumulative_blurt_earned` and `total_orders_attributed`.
-Per-order earnings detail is in `operator_attribution_events`.
+Each operator's entry carries `stats.cumulative_blurt_earned` and
+`stats.total_orders_attributed` (there is no per-tag endpoint).
+Per-order earnings detail is in `operator_attribution_events`. The
+money itself is in the operator's fees account on chain.
 
 ### What if the configured operator_tag doesn't match a
 registered operator?
@@ -351,9 +353,10 @@ registration after first config.
 
 ### 1. Account creation — paid TO the Blurt chain when a user signs up
 
-- **Cost: ~100 BLURT (~$0.20) per new user**, set by Blurt
-  witness consensus (subject to change without notice on the
-  chain side).
+- **Cost: ~102 BLURT per new user** — the chain's
+  `account_creation_fee` (~100 BLURT, set by Blurt witness
+  consensus, subject to change without notice) plus a 2 BLURT
+  starter transfer so the new account can pay its first ops.
 - Source: `apps/relay/src/config/index.ts`
   (operator-tunable mirror of chain `account_creation_fee`)
 - Source: `apps/relay/src/blurt/client.ts`
@@ -451,16 +454,22 @@ fact.  That feedback IS visible.  But the money flow is not.
 
 ## Net economics for an operator at steady state
 
-At the current calibration a single listing fee (125 BLURT)
-already exceeds the cost of a new-user signup (~100 BLURT), so an
-operator is net positive at roughly **1 listing fee per new user
-signup**.
+The displayed BLURT listing fee tracks a ~12.5¢ target — about
+62 BLURT at BLURT ≈ $0.002 — and the operator keeps 90% of it,
+about 56 BLURT. A new-user signup costs the operator's relay about
+102 BLURT. So an operator breaks even at roughly **two BLURT-paid
+listings per new user**, before welcome bonuses; BTC/XMR-paid
+listings earn the operator nothing (100% to the treasury).
 
-- Income per listing: 125 BLURT
-- Cost per signup: ~100 BLURT
-- 5 listings × 125 = 625 BLURT income
-- 1 signup × 100 = 100 BLURT cost
-- Net: +525 BLURT per (5-listing × 1-signup) cycle
+- Income per BLURT-paid listing: ~56 BLURT (90% of ~62)
+- Cost per signup: ~102 BLURT
+- 5 listings × 56 = 280 BLURT income
+- 1 signup × 102 = 102 BLURT cost
+- Net: about +178 BLURT per (5-listing × 1-signup) cycle, before the
+  20-BLURT welcome bonus for users who trade
+
+These figures move with the BLURT price and the chain fee; treat them
+as an order of magnitude, not a promise.
 
 Welcome bonuses paid out (20 BLURT × users who actually trade)
 come from the same revenue pool.  Loyalty BP delegations are
@@ -504,7 +513,7 @@ env-var override.  The key file is
 The welcome bonus amounts (10 BLURT liquid, 10 BLURT vesting),
 loyalty tier thresholds, and stranger-fee base (5 BLURT) are
 currently hardcoded constants — making them env-tunable is a
-post-launch refactor.  See `docs/REVISIT-LIST.md` if a tunable
+post-launch refactor.  See the project backlog if a tunable
 is needed for your operator setup.
 
 ---
@@ -554,7 +563,7 @@ charter-level decisions, not routine PR adjustments.
 ---
 
 *Document created 2026-05-02 in response to user-flagged factual
-errors in an earlier flowchart.  Updated 2026-05-13 (Part 121)
+errors in an earlier flowchart.  Updated 2026-05-13
 with the trade-only-assets invariant.  Authority: this document
 supersedes any conflicting figure in chat history, prompts, or
 older docs.*

@@ -54,28 +54,28 @@
 		 *  method); free-choice when launched from the composer
 		 *  without context. */
 		initialMethod?: ChatAssetTicker;
-		/** cp402 [7a] — when set, the asset is LOCKED to this ticker
+		/** when set, the asset is LOCKED to this ticker
 		 *  (the modal was opened from the composer "Pay now" about an
 		 *  order, so the coin is fixed to the order's asset). The method
 		 *  picker is replaced by a read-only "Paying with X" line so the
 		 *  user (grandma) can't accidentally send the wrong coin. */
 		lockedMethod?: ChatAssetTicker;
-		/** cp402 [7a] — when true, the amount is REQUIRED (not optional):
+		/** when true, the amount is REQUIRED (not optional):
 		 *  the send stays disabled until a valid positive number is
 		 *  entered. Set for the composer "Pay now" flow. */
 		amountRequired?: boolean;
-		/** Part 121 — initial USDT network.  When the modal is
+		/** initial USDT network.  When the modal is
 		 *  triggered from a received USDT address pill, the
 		 *  network is already pinned and the picker is read-only
 		 *  so the buyer can't accidentally pick a different one. */
 		initialUsdtNetwork?: UsdtNetwork | null;
-		/** Part 122 cp30 — initial USDC network.  Same role as
+		/** initial USDC network.  Same role as
 		 *  initialUsdtNetwork: pre-pins the network when the modal
 		 *  is launched from a received USDC address pill so the
 		 *  buyer cannot accidentally pick a different chain when
 		 *  reporting the txid. */
 		initialUsdcNetwork?: UsdcNetwork | null;
-		/** Part 122 cp31 — initial DAI network.  Same role as
+		/** initial DAI network.  Same role as
 		 *  initialUsdtNetwork and initialUsdcNetwork: pre-pins the
 		 *  network when the modal is launched from a received DAI
 		 *  address pill so the buyer cannot accidentally pick a
@@ -95,18 +95,18 @@
 		/** Pre-filled order permlink, same role as in
 		 *  AddressShareModal. */
 		orderPermlink?: string;
-		/** cp406 — the counterparty's account name, for grandma-clear,
+		/** the counterparty's account name, for grandma-clear,
 		 *  peer-aware modal titles ("Confirm your payment to @peer"). */
 		peer: string;
 		/** Called with the encoded JSON payload. */
 		onShare: (payload: string) => Promise<void> | void;
 		/** Called when the user cancels. */
 		onCancel: () => void;
-		/** cp406 — optional one-line caption under the amount field explaining a
+		/** optional one-line caption under the amount field explaining a
 		 *  pre-filled amount (the order's fiat minimum + its crypto equivalent).
 		 *  Empty string renders nothing. */
 		payHint?: string;
-		/** cp425 — restrict the method tabs to this set (a BARTER order's
+		/** restrict the method tabs to this set (a BARTER order's
 		 *  accepted_assets). Undefined → all methods. Ignored when
 		 *  `lockedMethod` is set (the tabs aren't shown then). */
 		allowedMethods?: readonly ChatAssetTicker[];
@@ -128,7 +128,7 @@
 		allowedMethods
 	}: Props = $props();
 
-	/** cp425 — every method tab in on-screen order; `visibleMethods` filters
+	/** every method tab in on-screen order; `visibleMethods` filters
 	 *  it to `allowedMethods` when the modal is restricted (barter). */
 	const ALL_METHODS: readonly ChatAssetTicker[] = [
 		'btc',
@@ -154,7 +154,7 @@
 			: ALL_METHODS
 	);
 
-	/** cp402 [7a] — is the asset locked to the order's asset? Computed
+	/** is the asset locked to the order's asset? Computed
 	 *  once from the prop (the parent never changes it mid-session). */
 	// svelte-ignore state_referenced_locally
 	const methodLocked = lockedMethod !== undefined && lockedMethod !== null;
@@ -166,7 +166,7 @@
 	// svelte-ignore state_referenced_locally
 	// svelte-ignore state_referenced_locally
 	let method = $state<ChatAssetTicker>(lockedMethod ?? initialMethod);
-	// cp425 — when the tabs are restricted (barter accepted_assets) and not
+	// when the tabs are restricted (barter accepted_assets) and not
 	// locked, keep the selection inside the allowed set (default may not be in
 	// it). No-op when locked (tabs hidden) or unrestricted.
 	$effect(() => {
@@ -186,7 +186,7 @@
 	// front (came from an address pill).  Locks the matching
 	// picker as read-only so the buyer can't accidentally pick a
 	// different network when reporting the txid.
-	// cp138 — `xNetworkPinned` is computed ONCE at mount on purpose.
+	// `xNetworkPinned` is computed ONCE at mount on purpose.
 	// We want to know whether the parent pinned the network at the
 	// beginning of this modal session.  If the parent later updates
 	// the prop, the user has already committed to the picker shape;
@@ -233,7 +233,7 @@
 	const amountLooksValid = $derived.by(() => {
 		const wellFormed = /^\d{1,12}(?:\.\d{1,12})?$/.test(trimmedAmount);
 		if (amountRequired) {
-			// cp402 [7a] — required: a valid, strictly-positive number.
+			// required: a valid, strictly-positive number.
 			// (The regex alone would accept "0" / "0.00"; a payment of
 			// zero is never valid, so guard > 0 explicitly.)
 			return wellFormed && Number(trimmedAmount) > 0;
@@ -245,13 +245,13 @@
 
 	/** USDT-specific gate: network must be picked. */
 	const usdtNetworkPicked = $derived(method !== 'usdt' || usdtNetwork !== null);
-	/** USDC-specific gate (cp30): mirror of USDT — network must
+	/** USDC-specific gate: mirror of USDT — network must
 	 *  be picked.  Even more important than USDT's gate because
 	 *  ERC-20 / Base / Polygon all share the EVM 0x[64 hex] txid
 	 *  shape, so without a pinned network we couldn't tell which
 	 *  explorer to link to. */
 	const usdcNetworkPicked = $derived(method !== 'usdc' || usdcNetwork !== null);
-	/** DAI-specific gate (cp31): mirror of USDC — network must be
+	/** DAI-specific gate: mirror of USDC — network must be
 	 *  picked.  MOST important of the three because ALL FOUR DAI
 	 *  networks share the EVM 0x[64 hex] txid shape (no SPL
 	 *  branch to distinguish like USDC has). */
@@ -282,12 +282,12 @@
 	});
 
 	function selectMethod(m: ChatAssetTicker): void {
-		// cp402 [7a] — never change the asset when it's locked to the
+		// never change the asset when it's locked to the
 		// order's asset (the picker is hidden in that mode, but guard the
 		// handler too so no path can flip the coin out from under a send).
 		if (methodLocked) return;
 		method = m;
-		// Part 121 / cp30 / cp31: clear the picked network when
+		// clear the picked network when
 		// leaving a multi-network method.  On re-pick, the user
 		// must explicitly choose again.  Don't clear when the
 		// corresponding network was pinned by the parent — the
@@ -298,7 +298,7 @@
 		if (m !== 'dai' && !daiNetworkPinned) daiNetwork = null;
 	}
 
-	// Part 73: bring dismiss UX up to parity with the sibling
+	// bring dismiss UX up to parity with the sibling
 	// PayBlurtModal — Escape and backdrop-click both close.
 	// Pre-fix the modal could only be dismissed via the explicit
 	// Cancel button.
@@ -327,17 +327,17 @@
 				...(trimmedAmount.length > 0 ? { amount: trimmedAmount } : {}),
 				...(orderPermlink !== undefined ? { orderPermlink } : {}),
 				...(trimmedNote.length > 0 ? { note: trimmedNote } : {}),
-				// Part 121 — pin the USDT network on the message
+				// pin the USDT network on the message
 				// so the receiver's chat renders the right
 				// per-network explorer link.
 				...(method === 'usdt' && usdtNetwork !== null ? { network: usdtNetwork } : {}),
-				// Part 122 cp30 — same for USDC.  Especially critical
+				// same for USDC.  Especially critical
 				// because ERC-20 / Base / Polygon share the same EVM
 				// txid shape, so the network is the ONLY way to pick
 				// the right explorer URL (etherscan vs basescan vs
 				// polygonscan).
 				...(method === 'usdc' && usdcNetwork !== null ? { network: usdcNetwork } : {}),
-				// Part 122 cp31 — same for DAI.  MOST critical of the
+				// same for DAI.  MOST critical of the
 				// three stablecoins because ALL FOUR DAI networks
 				// (ERC-20, Polygon, Base, Arbitrum) share the same
 				// EVM 0x[64 hex] txid shape — the network field is
@@ -364,7 +364,7 @@
 	onkeydown={onModalKeydown}
 	tabindex="-1"
 >
-	<!-- v1.5.0 (tt.txt B2, sibling of AddressShareModal): same defect — no
+	<!-- v1.5.0 (sibling of AddressShareModal): same defect — no
 	     max-height, no overflow, so a phone couldn't scroll to the Send
 	     button. Same fix as the other chat modals. -->
 	<div class="card max-h-[95dvh] w-full max-w-md overflow-y-auto">
@@ -376,7 +376,7 @@
 		</p>
 
 		{#if methodLocked}
-			<!-- cp402 [7a] — asset locked to the order's asset. The picker
+			<!-- asset locked to the order's asset. The picker
 			     is replaced by this read-only line so the wrong coin can
 			     never be selected for a payment. -->
 			<div
@@ -387,7 +387,7 @@
 				})}
 			</div>
 		{:else}
-			<!-- v1.5.0 (tt.txt B1, sibling of AddressShareModal): coin SELECT with
+			<!-- v1.5.0 (sibling of AddressShareModal): coin SELECT with
 			     logos, replacing the 16 `flex-1` tab buttons. -->
 			<div class="mt-5">
 				<label for="funds-sent-asset" class="mb-1 block text-sm font-semibold">
@@ -405,7 +405,7 @@
 			</div>
 		{/if}
 
-		<!-- Part 121 — USDT network picker.  When the parent
+		<!-- USDT network picker.  When the parent
 		     pinned a network (came from an address pill we
 		     received), the picker is read-only so the buyer
 		     can't accidentally pick a different one and tell
@@ -430,7 +430,7 @@
 			</div>
 		{/if}
 
-		<!-- Part 122 cp30 — USDC network picker.  Same pinning
+		<!-- USDC network picker.  Same pinning
 		     semantics as USDT: when the parent triggered this
 		     modal from a received USDC address pill, the network
 		     is pinned and the picker renders as a read-only
@@ -456,7 +456,7 @@
 			</div>
 		{/if}
 
-		<!-- Part 122 cp31 — DAI network picker.  Same pinning
+		<!-- DAI network picker.  Same pinning
 		     semantics as USDC: when the parent triggered this
 		     modal from a received DAI address pill, the network
 		     is pinned and the picker renders as a read-only
@@ -509,9 +509,9 @@
 				spellcheck="false"
 				class="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-xs dark:border-ink-700 dark:bg-ink-900"
 			/>
-			<!-- Sally finding S-11 (Part 119): label says "Transaction ID"
+			<!-- Sally finding S-11: label says "Transaction ID"
 			     which is jargon to a grandma who's never sent crypto.  Inline
-			     help explains where to find it (Memory #21: teach jargon
+			     help explains where to find it (the explain-jargon rule: teach jargon
 			     inline).  Always rendered — even experienced users don't
 			     mind one line of context, and it keeps the height stable
 			     across error/no-error states. -->
@@ -553,7 +553,7 @@
 					{$_('chat.address.amount_invalid')}
 				</p>
 			{:else if amountRequired && trimmedAmount.length === 0}
-				<!-- cp402 [7a] — neutral (non-error) nudge so grandma knows
+				<!-- neutral (non-error) nudge so grandma knows
 				     the field is required before she's typed anything. -->
 				<p class="mt-1 text-xs text-ink-500 dark:text-ink-400">
 					{$_('chat.funds_sent.amount_required_hint')}

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * post-form-grandma-regression-smoke (cp360).
+ * post-form-grandma-regression-smoke.
  *
  * Pins the grandma-friendly overhaul of the new-order screen
  * (/post) so a later refactor cannot silently undo any of the
@@ -55,14 +55,14 @@ const STARTER_PACK = join(
 );
 const starterSrc = readFileSync(STARTER_PACK, 'utf8');
 
-// v1.9.5 (the maintainer) — the order-summary sentence was refactored to the SHARED
+// v1.9.5 — the order-summary sentence was refactored to the SHARED
 // orderTitleParts builder, which now owns the locale-aware payment-method
 // disjunction join (Intl.ListFormat). The form delegates to it, so the
 // "live summary card" assertion below reads the builder, not the form.
 const ORDER_TITLE = join(__dirname, '..', 'src', 'lib', 'utils', 'orderTitle.ts');
 const orderTitleSrc = readFileSync(ORDER_TITLE, 'utf8');
 
-// cp368: also read the en locale so we can assert the waiver-benefit
+// also read the en locale so we can assert the waiver-benefit
 // `_with_fiat` keys actually exist — when they were missing, svelte-i18n
 // rendered the raw key path ("post_order.waiver_benefits.tier_1")
 // straight into the "What your buy unlocks" box.
@@ -151,7 +151,7 @@ const SCENARIOS: Scenario[] = [
 	{
 		name: 'live summary card joins payment methods with a locale-aware disjunction list',
 		check: () => {
-			// v1.9.5 refactor (the maintainer): the summary sentence is built by the SHARED
+			// v1.9.5 refactor: the summary sentence is built by the SHARED
 			// orderTitleParts builder, which owns the locale-aware payment-method
 			// disjunction join. The form delegates to it — so verify the delegation
 			// (form → orderTitleParts) and that the builder does the Oxford-or join.
@@ -195,7 +195,7 @@ const SCENARIOS: Scenario[] = [
 	{
 		name: 'subtitle is hidden and the heading changes for first-time traders',
 		check: () => {
-			// cp406 — the subtitle is now also phase-gated (editing/reviewing
+			// the subtitle is now also phase-gated (editing/reviewing
 			// only), but the grandma-friendly `!isFirstTrade` guard remains.
 			if (!/\{#if !isFirstTrade\b/.test(src))
 				return 'subtitle is not gated on !isFirstTrade';
@@ -205,7 +205,7 @@ const SCENARIOS: Scenario[] = [
 		}
 	},
 	{
-		// cp364 the maintainer-reported: a first-time trader saw the asset card but
+		// reported: a first-time trader saw the asset card but
 		// NOTHING below it (no Step 2, no nav). Root: Step 2 is gated
 		// `{#if step1Done}` (needs side!==null && asset!==null), but the
 		// only thing forcing side='buy'/asset='BLURT' was a post-render
@@ -234,7 +234,7 @@ const SCENARIOS: Scenario[] = [
 		}
 	},
 	{
-		// cp364 (root cause of the vanishing form, found via the maintainer's console
+		// (root cause of the vanishing form, found via the maintainer's console
 		// `…trim is not a function`): a stale/old-schema restored draft could
 		// put a NON-STRING into fiatArr/amounts, and a downstream `.trim()`
 		// (step2Done reads fiat.trim() the instant step1Done flips) threw an
@@ -256,7 +256,7 @@ const SCENARIOS: Scenario[] = [
 		}
 	},
 	{
-		// cp364 the maintainer-reported: the "Your first order? Some safer defaults"
+		// reported: the "Your first order? Some safer defaults"
 		// starter-pack card must RE-APPEAR on a later /post visit if the
 		// user still hasn't placed their first order. The X is a per-VIEW
 		// "not now", never a persisted dismissal — so dismiss() must NOT
@@ -280,7 +280,7 @@ const SCENARIOS: Scenario[] = [
 		}
 	},
 	{
-		// cp365 the maintainer-reported: the "Read the full first-trade walkthrough ⇨"
+		// reported: the "Read the full first-trade walkthrough ⇨"
 		// link must turn the TEXT emerald on hover, not just the arrow.
 		// In dark mode the link defaults to white (`dark:text-white`), which
 		// out-specifies a plain `hover:text-morphit-emerald`, so the combined
@@ -301,7 +301,7 @@ const SCENARIOS: Scenario[] = [
 			return null;
 		}
 	},
-	// ─── cp368/cp369/cp372: first-trade /post screen ───
+	// ─── first-trade /post screen ───
 	{
 		name: 'waiver floor is the $1 USD-equivalent (FX-aware, fiat→USD), not a 500-BLURT constant (cp369 reverses §F.11; cp372 makes it multi-currency)',
 		check: () => {
@@ -314,7 +314,7 @@ const SCENARIOS: Scenario[] = [
 			)
 				return 'FIRST_ORDER_MIN_USD not imported from @morphit/asset-registry';
 			if (/WAIVER_MIN_BLURT/.test(src)) return 'stale WAIVER_MIN_BLURT constant remains';
-			// cp372 + v1.20.0 (G5): the gate is the shared, unit-tested
+			// + v1.20.0 (G5): the gate is the shared, unit-tested
 			// `waiverFloorStatus` (apps/web/src/lib/orders/fx.test.ts covers its
 			// behaviour: FX-aware, USD 1:1, and an UNCONVERTIBLE fiat is its own
 			// state — never treated as already-USD, matching the indexer's
@@ -332,7 +332,7 @@ const SCENARIOS: Scenario[] = [
 		check: () => {
 			// The seed effect must exist and bail out the instant the
 			// user has typed (amountTouched) — otherwise it would fight a
-			// user-entered value (a cp364-class bug).
+			// user-entered value (a bug).
 			if (!/if \(!isFirstTrade \|\| fxTable === null \|\| fiat === '' \|\| amountTouched\) return;/.test(src))
 				return 'seed effect missing its bail-out guard (not-first-trade / no-fx / empty-fiat / amountTouched)';
 			// It must track the last-seeded fiat so re-running with the
@@ -384,7 +384,7 @@ const SCENARIOS: Scenario[] = [
 		name: 'waiver-benefit ladder is fiat-first ($1/$4/$20/$100 breakpoints; fiat-named tier keys interpolate {amount}, never "{amount} BLURT")',
 		check: () => {
 			// amount_min and the tiers are fiat values; the floor is $1.
-			// cp370: the tier keys are now named for their fiat breakpoint
+			// the tier keys are now named for their fiat breakpoint
 			// (tier_1/4/20/100), not the old BLURT quantities (500/2000/…).
 			for (const t of ['tier_1', 'tier_4', 'tier_20', 'tier_100']) {
 				const k = `post_order.waiver_benefits.${t}`;

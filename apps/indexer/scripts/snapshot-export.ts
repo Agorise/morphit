@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/snapshot-export.ts  (cp764)
+ * apps/indexer/scripts/snapshot-export.ts
  *
  * Export a portable snapshot of THIS indexer's Postgres DB, so an operator can
  * bootstrap a fresh instance in minutes instead of replaying ~3.5M blocks over
@@ -38,7 +38,10 @@ import { loadConfig } from '../src/config/index.ts';
 import { createDatabase } from '../src/db/pool.ts';
 import { buildManifest, MANIFEST_FILENAME, DUMP_FILENAME } from '../src/db/snapshotManifest.ts';
 import { INDEXER_VERSION } from '../src/api/health.ts';
-import { exportExclusionArgs } from '../src/db/snapshotLocalState.ts';
+import {
+	exportExclusionArgs,
+	KNOWN_INSTANCES_CHAIN_COLUMNS
+} from '../src/db/snapshotLocalState.ts';
 
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
@@ -78,7 +81,7 @@ async function main(): Promise<void> {
 		const work = mkdtempSync(join(tmpdir(), 'morphit-snap-'));
 		try {
 			process.stderr.write(`snapshot: pg_dump (--clean --if-exists) → ${DUMP_FILENAME} …\n`);
-			// v1.18.0 deep-deep (rv2-5, rv2-8). This dumped the WHOLE database,
+			// This dumped the WHOLE database,
 			// and the relay shares it: every push subscription (device endpoint
 			// token, keys, user agent) and the push queue went out on public
 			// IPFS, as did this box's relay payout queue. Only chain-derived rows
@@ -108,15 +111,27 @@ async function main(): Promise<void> {
 						` && printf '%s\\n' "COPY public.operator_blocks (${cols}) FROM stdin;"` +
 						` && psql -X -q -v ON_ERROR_STOP=1 "$DBURL" -c "\\copy (SELECT ${cols} FROM public.operator_blocks` +
 						`${hasOrigin ? " WHERE origin <> 'local'" : ''}) TO STDOUT" && printf '%s\\n' '\\.'`;
+			// known_instances: the chain columns only (the probe columns are this
+			// node's own opinions, raw error text and proxy addresses included).
+			const kiCols = KNOWN_INSTANCES_CHAIN_COLUMNS.join(', ');
+			const knownInstancesRows =
+				` && printf '%s\\n' "COPY public.known_instances (${kiCols}) FROM stdin;"` +
+				` && psql -X -q -v ON_ERROR_STOP=1 "$DBURL" -c "\\copy (SELECT ${kiCols} FROM public.known_instances) TO STDOUT"` +
+				` && printf '%s\\n' '\\.'`;
+			// PGTZ=UTC: every timestamp is written as +00, not in this server's
+			// zone. The "Dumped from database version / by pg_dump version" header
+			// lines are dropped: they describe this box, not the chain.
 			const dump = spawnSync(
 				'bash',
 				[
 					'-c',
 					`set -o pipefail; { pg_dump --clean --if-exists --no-owner --no-privileges ` +
-						`${exportExclusionArgs().join(' ')} "$DBURL"${chainRows}; } | gzip -c > "${join(work, DUMP_FILENAME)}"`
+						`${exportExclusionArgs().join(' ')} "$DBURL"${chainRows}${knownInstancesRows}; } ` +
+						`| sed -e '1,40{/^-- Dumped from database version/d;/^-- Dumped by pg_dump version/d}' ` +
+						`| gzip -c > "${join(work, DUMP_FILENAME)}"`
 				],
 				{
-					env: { ...process.env, DBURL: config.databaseUrl },
+					env: { ...process.env, DBURL: config.databaseUrl, PGTZ: 'UTC' },
 					stdio: ['ignore', 'inherit', 'inherit']
 				}
 			);

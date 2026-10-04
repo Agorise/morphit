@@ -1,5 +1,5 @@
 /**
- * setup-bootstrap-smoke.ts (cp600) — guards the grandma bootstrap launcher
+ * setup-bootstrap-smoke.ts — guards the grandma bootstrap launcher
  * `morphit-setup.sh`, the ONE command that takes a bare extract to a running
  * install wizard.  It can't be executed in CI (it apt-installs Node), so this
  * pins the shape that keeps it safe + correct: root guard, apt-only guard that
@@ -34,24 +34,60 @@ function check(name: string, cond: boolean): void {
 	}
 }
 
-console.log('\u2500\u2500 setup-bootstrap smoke (cp600) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500');
+console.log(
+	'\u2500\u2500 setup-bootstrap smoke (cp600) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500'
+);
 
 // ── Safety guards ─────────────────────────────────────────────────
-check('runs from the extracted folder (checks package.json)', /\[ -f package\.json \]/.test(code) && /cd "\$HERE"/.test(code));
+check(
+	'runs from the extracted folder (checks package.json)',
+	/\[ -f package\.json \]/.test(code) && /cd "\$HERE"/.test(code)
+);
 check('requires root (id -u guard + exit)', /\[ "\$\(id -u\)" -ne 0 \]/.test(code));
-check('apt-only guard points at docs + STOPS on other package managers', /command -v apt-get/.test(code) && /RUN-A-MORPHIT-NODE\.md/.test(code) && /Unsupported package manager/.test(code));
-check('does NOT silently guess another package manager (no yum/dnf/pacman/brew install)', !/\b(yum|dnf|pacman|brew|zypper)\s+install/.test(code));
-check('non-destructive — no rm -rf / mkfs / dd on the box', !/rm\s+-rf\s+\//.test(code) && !/\bmkfs\b/.test(code) && !/\bdd\s+if=/.test(code));
+check(
+	'apt-only guard points at docs + STOPS on other package managers',
+	/command -v apt-get/.test(code) &&
+		/RUN-A-MORPHIT-NODE\.md/.test(code) &&
+		/Unsupported package manager/.test(code)
+);
+check(
+	'does NOT silently guess another package manager (no yum/dnf/pacman/brew install)',
+	!/\b(yum|dnf|pacman|brew|zypper)\s+install/.test(code)
+);
+check(
+	'non-destructive — no rm -rf / mkfs / dd on the box',
+	!/rm\s+-rf\s+\//.test(code) && !/\bmkfs\b/.test(code) && !/\bdd\s+if=/.test(code)
+);
 check('set -euo pipefail (fail fast, catch pipe errors)', /set -euo pipefail/.test(code));
 
 // ── Node install logic ────────────────────────────────────────────
-check('a real major-version threshold of 22 (not just "is node present")', /NODE_MAJOR_MIN=22/.test(code) && /process\.versions\.node/.test(code) && /-ge "\$NODE_MAJOR_MIN"/.test(code));
-check('installs Node from NodeSource for the SAME major when missing', /deb\.nodesource\.com\/setup_\$\{NODE_MAJOR_MIN\}\.x/.test(code) && /apt-get install -y nodejs/.test(code));
-check('idempotent — checks node_ok BEFORE installing (an "already installed" branch)', /if node_ok; then[\s\S]{0,120}already installed/.test(code));
-check('re-verifies Node after install (fails loudly if still too old)', /node_ok \|\| die/.test(code));
+check(
+	'a real major-version threshold of 22 (not just "is node present")',
+	/NODE_MAJOR_MIN=22/.test(code) &&
+		/process\.versions\.node/.test(code) &&
+		/-ge "\$NODE_MAJOR_MIN"/.test(code)
+);
+// A signed-by apt repo with a pinned key, never `setup_N.x | bash`;
+// behaviour: apps/ops-cli:apt-key-pin-smoke.
+check(
+	'installs Node from NodeSource for the SAME major when missing',
+	/deb\.nodesource\.com\/node_\$\{NODE_MAJOR_MIN\}\.x nodistro main/.test(code) &&
+		/apt-get install -y nodejs/.test(code)
+);
+check(
+	'idempotent — checks node_ok BEFORE installing (an "already installed" branch)',
+	/if node_ok; then[\s\S]{0,120}already installed/.test(code)
+);
+check(
+	're-verifies Node after install (fails loudly if still too old)',
+	/node_ok \|\| die/.test(code)
+);
 
 // ── Deps + hand-off ───────────────────────────────────────────────
-check('installs project libraries (npm install)', /\bnpm install\b/.test(code));
+check(
+	'installs project libraries (npm ci --ignore-scripts)',
+	/\bnpm ci --ignore-scripts\b/.test(code)
+);
 // `exec env npm_config_update_notifier=false … npx …`: the env prefix keeps npm's
 // update notice off the end of the wizard (npm-update-notice-silenced-smoke).
 check(
@@ -60,13 +96,21 @@ check(
 );
 check(
 	'installs git only if absent (guarded), from the offline bundle or apt',
-	/if ! command -v git\b/.test(code) && /(apt-get[\s\S]{0,40}install -y git|vendor\/apt\/git)/.test(code)
+	/if ! command -v git\b/.test(code) &&
+		/(apt-get[\s\S]{0,40}install -y git|vendor\/apt\/git)/.test(code)
 );
 
 // ── Real shell syntax check ───────────────────────────────────────
 const bn = spawnSync('bash', ['-n', SETUP], { encoding: 'utf-8' });
 check('passes `bash -n` (no shell syntax errors)', bn.status === 0);
-if (bn.status !== 0) console.log('    bash -n said:\n' + (bn.stderr || '').split('\n').map((l) => '      ' + l).join('\n'));
+if (bn.status !== 0)
+	console.log(
+		'    bash -n said:\n' +
+			(bn.stderr || '')
+				.split('\n')
+				.map((l) => '      ' + l)
+				.join('\n')
+	);
 
 console.log('');
 if (failed === 0) {

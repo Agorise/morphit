@@ -1,11 +1,11 @@
 <!--
 	AssetChoiceSelect — pick ONE coin from an explicit list, with logos.
 
-	v1.5.0 (tt.txt B). The "Share crypto address" modal used to render one
+	v1.5.0. The "Share crypto address" modal used to render one
 	tab-button per asset — 16 of them, each `flex-1` — which wrapped into a
-	wall of blocks that blew the modal past the viewport on a phone. the maintainer:
-	"Just use a select box that has all of the coin choices … in it with
-	their logo, rather than all of those blocks."
+	wall of blocks that blew the modal past the viewport on a phone. It is now
+	a single select box that lists every coin choice with its logo
+	instead of all of those blocks.
 
 	A native <select> cannot render per-option SVG logos, so this is a small
 	custom listbox (trigger button + popover), deliberately mirroring

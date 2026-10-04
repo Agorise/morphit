@@ -1,7 +1,7 @@
 /**
  * DNS-rebinding defense — tsx smoke runner.
  *
- * Part 122 cp3: federationProbe.ts ships a three-layer SSRF defense:
+ * federationProbe.ts ships a three-layer SSRF defense:
  *   1. isPrivateHostname() rejects literal-private hostnames in
  *      the URL itself (`https://127.0.0.1/`, `https://localhost/`,
  *      cloud-metadata addresses, etc.).

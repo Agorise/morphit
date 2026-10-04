@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * frontend-chatlink-env-doc-parity — cp175 F-008 guard.
+ * frontend-chatlink-env-doc-parity — guard.
  *
  * The per-asset / per-network explorer chat-link overrides
  * (MORPHIT_FRONTEND_<ASSET>[_<NETWORK>]_CHAT_LINK_URL) are read by the

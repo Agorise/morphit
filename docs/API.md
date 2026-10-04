@@ -25,10 +25,22 @@ no payment.  Just hit the URL.
 operator runs their own instance and sets their own caps; the
 defaults below are what you'll find on most instances.
 
-**Read-only.**  Every documented endpoint is `GET`.  Writes happen
-on the Blurt chain via `custom_json` ops, not via this API.  If
-your tool needs to write data, it broadcasts directly to a Blurt
-RPC node — see `apps/web/src/lib/blurt/sign.ts` for the pattern.
+**Read-only.**  Almost every documented endpoint is `GET`.  Writes
+happen on the Blurt chain via `custom_json` ops, not via this API.
+If your tool needs to write data, it signs a transaction and
+broadcasts it to a Blurt RPC node (the web app sends its signed
+transactions through its own indexer's `POST /v1/broadcast`; see
+`apps/web/src/lib/blurt/sign.ts`). The eight `POST` routes —
+`/v1/broadcast`, `/v1/chain/condenser`, `/v1/chain/key-references`,
+`/v1/orders/:account/:permlink/view`, `/v1/orders/:account/:permlink/check-fee`,
+`/v1/pairing/forward`, `/v1/login-pairing/:pid/deliver` and
+`/v1/federation/chat-fast` — accept only `Content-Type: application/json`
+(415 otherwise).
+
+**CORS.**  Reads (`GET`/`HEAD`) send `Access-Control-Allow-Origin: *`
+and never use credentials, so any web page may read this public data.
+Writes carry no `Access-Control-Allow-Origin`, so another website
+cannot drive or read them from its visitors' browsers.
 
 ## What we DON'T promise
 
@@ -76,7 +88,8 @@ return `application/rss+xml`).
 
 ## Authentication
 
-None.  Every documented endpoint is open to the public internet.
+None.  Every documented endpoint is open to the public internet:
+no API key, no login, no JWT, no signature.
 
 If you need higher rate limits than the operator's default, the
 intended path is **run your own indexer**.  The cost (~$5/month
@@ -93,8 +106,8 @@ Per-IP, per-minute, enforced by the indexer's middleware:
 | `resource`  | 600 req/min  | Single-record lookups, fee quotes                 |
 | `list`      | 120 req/min  | Listings, search, history pagination, RSS, the federation directory `/v1/instances`, and CONNECTING to any SSE stream (`/v1/orderbook/stream`, `/v1/chat/:a/:b/stream`, `/v1/chat-activity/:account/stream`, `/v1/instances/stream`) |
 
-`/v1/health` and `/v1/instance` are not rate-limited (in-memory, no
-database work).
+`/v1/health` and `/v1/instance` are not rate-limited (small
+responses, no per-request database scan).
 
 Open SSE streams are capped: at most 24 per client and 2,000 per
 instance. Past a cap the connect answers `503 {code: "stream_capacity"}`
@@ -129,8 +142,9 @@ The path `/v1/...` is the stable contract.  Breaking changes will
 introduce `/v2/...` with `/v1/...` remaining available for at
 least 12 months after `/v2/...` ships.
 
-The indexer reports its version in `GET /v1/health` (`version`
-field) so clients can warn users on stale instances.
+The release an instance runs is in `GET /v1/release` and in the
+page's own build; `/v1/health` carries `version` only for the
+operator's local tools (see below).
 
 ---
 
@@ -140,88 +154,56 @@ field) so clients can warn users on stale instances.
 
 #### `GET /v1/health`
 
-Tier: `resource`
+Tier: none (not rate-limited)
 
-Liveness check — also exposes block lag and indexer version.
+Liveness check — block lag, sync progress and coarse health flags.
+The public body:
 
 ```json
 {
   "status": "ok",
-  "version": "1.20.3",
-  "uptime_sec": 3742,
   "chain_head_block": 17234569,
   "indexed_block": 17234567,
   "lag_blocks": 2,
   "lag_blocks_note": "0–30 is normal (~90s behind; Blurt makes a block every 3s)",
   "stale": false,
-  "rpc_endpoints_healthy": 4,
-  "rpc_endpoints_total": 4,
+  "sync": { "behind": false, "pct_complete": 100, "eta_seconds": 0, "eta_utc": null },
+  "rpc_ok": true,
+  "ipfs_seeding": { "state": "ok" },
+  "relay": { "up": true },
   "price_feed": {
     "enabled": true,
     "blurt_fiat": 0.00130526,
     "denomination_fiat": "USD",
-    "source": "coingecko",
     "stale": false
   }
 }
 ```
 
-`status` is `"ok"` (lag below configured threshold) or
-`"degraded"` (lag exceeds threshold but indexer is still
-responsive).  If the indexer's database is unreachable, the
-endpoint itself returns 503 instead of a body.
+`status` is `"ok"` (lag below the configured threshold) or
+`"degraded"` (lag exceeds it, or the node has no chain head yet).
+`stale` is the same check as a boolean. `chain_head_block` is the
+most recent block the indexer has seen on its RPC pool;
+`indexed_block` the most recent it has fully written; `lag_blocks`
+the difference, with `lag_blocks_note` as a human hint. `sync`
+reports catch-up progress on a fresh node. `rpc_ok` says whether at
+least one configured RPC endpoint is answering. `price_feed`
+summarises the display-only fiat price (the same number as
+`blurt_price_fiat` on `/v1/listing-fee`); `enabled` is `false` when
+the operator turned the feed off.
 
-`stale` is a boolean mirror of the same threshold check, exposed
-as a separate field for clients that just want a yes/no without
-parsing the status enum.
-
-`uptime_sec` is seconds since the indexer process started.
-`chain_head_block` is the most recent block the indexer has seen
-on the Blurt RPC pool; `indexed_block` is the most recent block
-the indexer has fully written to its database.  `lag_blocks` is
-the difference.  `lag_blocks_note` is a human-readable hint for
-operators eyeballing the endpoint: a healthy indexer trails chain
-head by only a handful of blocks, so "normal" is reported as up to
-the same threshold the `stale` flag uses (default 30 blocks ≈ 90s
-at Blurt's 3-second block time).
-
-`rpc_endpoints_healthy` and `rpc_endpoints_total` report how many
-of the operator's configured Blurt RPC endpoints are currently
-reachable (out of cooldown) versus configured in total.  If
-`rpc_endpoints_healthy` reads `0` while the node is behind, the
-RPC endpoints — not the indexer — are the problem.  Per-endpoint
-URLs and detail stay in the operator-opt-in verbose block below.
-
-`price_feed` summarises the BLURT/USD price feed that powers the
-UI's fiat echoes (the same number served as `blurt_price_fiat` on
-`/v1/listing-fee`, so nothing here is more sensitive than that).
-`enabled` is `false` when the operator has
-`MORPHIT_INDEXER_PRICE_FEED_ENABLED=false` (the UI then shows
-BLURT only).  When enabled, `blurt_fiat` is the current 1-BLURT
-price, `denomination_fiat` is the fiat ticker it's quoted in
-(`MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`, default `USD`),
-`source` is the upstream currently serving
-(`coingecko` or `static_floor`), and `stale` is `true` when no
-live upstream has succeeded and the indexer is falling back to the
-static floor.  The per-upstream forensic detail (drift,
-disagreement, peer comparison) stays in the verbose block.
-
-Operators who set `MORPHIT_INDEXER_VERBOSE_HEALTH=1` may also see
-a `diagnostics` block in the response with breaker snapshots,
-queue depths, etc.  This is operator-opt-in because the verbose
-data leaks below-threshold signal that a public attacker could
-use to time a drain.
-
-The `diagnostics.price` object (present only when the optional price
-feed is enabled) reports the live BLURT/USD value, the serving
-upstream, and the three price-manipulation defenses (ADR-0039 /
-ADR-0041), all surfaced as of cp233: `drift` (defense B — deviation
-from a time-decayed moving baseline), `disagreement` (defense C —
-`morphit_native` vs the external market price), and `peer` (defense F
-— own price vs federation peer median).  Each carries an `alert`
-boolean that goes true on a sustained breach and is `null` until it
-has data.  See `docs/OPERATIONS.md` → "Monitoring the
-price-manipulation defenses".
+**Operator-only fields.** When the request carries
+`X-Morphit-Local-Health: 1` — which `morphit-ops` sends on the box
+itself, and which every public edge strips, so a public caller can
+never set it — the body also has `version`, `uptime_sec`,
+`rpc_endpoints_healthy` / `rpc_endpoints_total`, `system` (CPU,
+memory, disk), `ipfs_seeding.detail`, `price_feed.source`,
+`sync.blocks_per_sec`, `price_feeds`, `block_check` and `fastpath`.
+Operators who set `MORPHIT_INDEXER_VERBOSE_HEALTH=true` and pass
+`?verbose=1` also get a `diagnostics` block (breaker snapshots, queue
+depths, the price-manipulation defenses). Both stay off the public
+body because they leak below-threshold signal an attacker could use
+to time a drain.
 
 Use this endpoint for federation health monitors and uptime
 probes.
@@ -247,13 +229,22 @@ Per-instance branding and metadata as configured by the operator.
     "nostr":    "npub1..."
   },
   "fee_recipient":   "acme-fees",
+  "fee_recipient_registered": true,
   "relay_account":   "acme-relay",
   "operator_tag":    "acme",
+  "clearnet_eliminated": false,
+  "treasury":        { "btc": { "…": "…" }, "xmr": { "…": "…" } },
   "seo": {
     "title":       null,
     "description": null,
-    "keywords":    null
-  }
+    "keywords":    null,
+    "twitter_site": null
+  },
+  "chat_link_urls":  { "btc": null, "…": null },
+  "disabled_assets": [],
+  "disabled_payment_methods": [],
+  "operator_matrix_room": "#acme:matrix.org",
+  "mcp_url":         null
 }
 ```
 
@@ -272,8 +263,22 @@ contenthash to an IPFS copy of the site.  Display-only — the
 indexer does not resolve it; frontends render it as a footer pill
 linking to an ENS gateway.
 
-`operator_tag` is the operator-attribution tag used for
-operator-earnings split.  Null on unbranded instances.
+`operator_tag` is the operator-attribution tag written into orders
+posted through this instance.  Null on untagged instances.
+
+`clearnet_eliminated` is the instance's **own claim** that it uses
+no clearnet internet (all its private-transport legs pass on its
+own checks). Other instances accept it only from an instance
+registered at an onion/I2P/Lokinet origin, and nobody verifies it
+leg by leg; directories show it as "Says it uses no clearnet
+internet". The list of failing legs (`clearnet_eliminated_missing`)
+is returned only to the operator's local tools.
+
+`treasury.btc` / `treasury.xmr` are the listing-fee addresses this
+node uses; `null` means that fee method is not taken here (an
+explicitly empty address setting, an empty explorer list, or — on a
+zero-clearnet node, which verifies through onion explorers only — no
+onion explorer of that method answering right now; OPERATIONS §40.4a).
 
 `seo.{title,description,keywords}` are optional per-instance SEO
 overrides; null means the frontend uses its bundled localized
@@ -296,11 +301,13 @@ Query parameters (all optional):
 | Param            | Type    | Description |
 |---|---|---|
 | `asset`          | string  | Filter to `BTC`, `XMR`, `BLURT`, `USDT`, `USDC`, `DAI`, `BCH`, `LTC`, `DASH`, `DOGE`, `ZEC`, `ARRR`, `DCR`, `SOL`, `ETH`, or `XRP` |
-| `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon`; DAI → `erc20`/`polygon`/`base`/`arbitrum` |
+| `asset_network`  | string  | For multi-network assets: USDT → `erc20`/`trc20`/`spl`/`bep20`; USDC → `erc20`/`spl`/`base`/`polygon`; DAI → `erc20`/`polygon`/`base`/`arbitrum`. Only orders on that network; refused for an asset that has one network or not this one |
 | `side`           | string  | `buy` or `sell` |
-| `fiat_currency`  | string  | ISO-4217 e.g. `USD`, `EUR` |
-| `payment_method` | string  | e.g. `bank_transfer`, `paypal`; case-insensitive |
+| `fiat_currency`  | string  | ISO-4217, one or more, comma-separated, e.g. `USD` or `USD,EUR` |
+| `payment_methods`| string  | comma-separated method keys, e.g. `bank_transfer,paypal` (`payment_method` is accepted as an alias) |
 | `location_region`| string  | e.g. `US`, `EU` |
+| `langs`          | string  | comma-separated language codes; returns orders in those languages plus every order with no language |
+| `min_trades`     | integer | minimum completed trades of the poster (0–100) |
 | `sort`           | string  | `recent` (default), `rating`, `trades` |
 | `limit`          | integer | 1–100, default 50 |
 | `cursor`         | string  | opaque cursor from previous response's `next_cursor` |
@@ -344,8 +351,9 @@ Notable fields:
 - `engagement_24h` is the count of distinct accounts who messaged
   the order owner about THIS order in the last 24 hours.  Useful
   for "is this order actually being looked at" signals.
-- `is_new_trader` is `feedback_count < 4` — flag for the UI to
-  badge inexperienced counterparties.
+- `is_new_trader` is "fewer than 4 completed, fee-verified trades"
+  (the poster's `trade_count`) — flag for the UI to badge
+  inexperienced counterparties.
 - `fee_method` is one of: `'blurt'` (paid in BLURT — fee split
   90/10 operator/treasury), `'waived_first_buy'` (the user's
   one-time first-buy waiver per ADR-0011), `'btc'` (paid in
@@ -364,11 +372,12 @@ Notable fields:
 
 #### `GET /v1/orderbook/stream`
 
-Tier: SSE-specific (long-lived; one connection per IP-orderbook-filter)
+Tier: `list` for the connect (see "Rate limits" for the stream caps)
 
-Server-Sent Events stream of orderbook deltas.  Same query params
-as `/v1/orderbook` but instead of a snapshot, you get a live feed
-of `add`, `update`, and `remove` events as the chain moves.
+Server-Sent Events stream of orderbook changes.  Same filter params
+as `/v1/orderbook`. On connect you get one `snapshot` event, then
+`order_upserted` and `order_removed` events as the chain moves, and a
+`:keepalive` comment every 25 s.
 
 Use for explorers that need real-time orderbook display without
 polling.
@@ -397,16 +406,50 @@ trader's orderbook card.  `bid` carries `hours_requested`,
 
 Tier: `list`
 
-All orders for a specific account (live + expired + cancelled).
-Useful for "show me alice's complete order history."
+All orders for a specific account (live + expired + cancelled +
+completed), newest first, paged. Useful for "show me alice's
+complete order history."
 
-#### `GET /v1/orders/:account/:permlink/views`
+#### `GET /v1/orders/:account/:permlink`
 
 Tier: `list`
 
-Private viewcount for a specific order — only the order owner can
-read this (JWT-gated).  Documented for completeness; aggregators
-typically don't have access.
+One order: `{ "item": { …the /v1/orderbook item shape… } }`, or 404.
+
+#### `GET /v1/orders/:account/sybil_tier`
+
+Tier: `list`
+
+`{ "account", "at", "count" }` — how many orders count toward the
+account's listing-fee multiplier now (or `?at=<ISO time>`).
+
+#### `GET /v1/orders/:account/:permlink/views` and `POST …/view`
+
+Tier: `list`
+
+The order view counter. Both are **public and unauthenticated** (no
+key, no signature): `POST` adds one view (`application/json`), `GET`
+returns `{ "count": <n> }` only. The indexer stores no time and no
+viewer for a view. The web app shows the count only to the order's
+author; that is a display choice, not access control.
+
+#### `GET /v1/orders/:account/view_counts?permlinks=a,b,…`
+
+Tier: `list`
+
+View counts for up to 100 of the account's orders: `{ "counts": { "<permlink>": <n>, … } }`.
+
+#### `GET /v1/orders/:owner/counterparty_lists?permlinks=a,b,…`
+
+Tier: `list`
+
+For up to 50 of the owner's orders, the accounts that messaged the
+owner about each one: `{ "owner", "lists": { "<permlink>": [ { "peer",
+"reviewable" } ] } }` (up to 50 per order). `reviewable` is true when
+the conversation clears the review bar (2+ messages each way over 15+
+minutes, not a flagged pair). This is chat metadata that is public on
+chain anyway; note that a `false` on a conversation that otherwise
+clears the bar reveals that the pair is flagged.
 
 ---
 
@@ -445,14 +488,17 @@ All feedback received by `:account`.
 }
 ```
 
-- `suppressed: true` means the (reviewer, subject) pair is flagged
-  in `suspicious_reciprocity` or `related_accounts` and excluded
-  from the headline rating.  See ADR-0014 if you need the full
-  detector spec.
-- `has_verified_chat: true` means a real-looking conversation
-  preceded the review — see `FEES-AND-REWARDS.md` and
-  `apps/indexer/src/db/schema.sql` (search for the
-  `verified-chat` marker comments) for the conformance criteria.
+- `suppressed: true` means the row does not count toward the
+  headline rating: the (reviewer, subject) pair is flagged by the
+  anti-review-ring signals (`suspicious_reciprocity`,
+  `related_accounts`), the review cites no order, or **the reviewer
+  has a later order-bound review of this subject — only a reviewer's
+  latest review of a trader counts** (the reputation receipt marks
+  older ones `superseded_by_later_review`). See ADR-0014 / ADR-0038.
+- `has_verified_chat: true` means a real two-way conversation
+  preceded the review. New reviews without one are rejected
+  (`no_verified_counterparty`), so only older rows can show
+  `false`.
 
 #### `GET /v1/accounts/:account/feedback-given`
 
@@ -586,20 +632,25 @@ Directory of all known Morphit instances the indexer has probed.
 
 #### `GET /v1/instances/stream`
 
-Tier: SSE-specific
+Tier: `list` for the connect
 
-SSE stream of instance-directory changes.  Same shape as
-`/v1/instances`, delivered as add/update/remove events.
+SSE stream of instance-directory changes: one `snapshot` event, then
+`instance_added`, `instance_updated` and `instance_removed` events
+(items in the `/v1/instances` shape), and a `:keepalive` comment
+every 25 s.
 
 #### `GET /v1/operators`
 
 Tier: `list`
 
-All registered operators on the chain.  Distinct from /instances —
-operators are the chain identities, instances are the running
-servers.  An operator can run multiple instances; an instance can
-operate without registering (running unregistered = invisible to
-the federation directory).
+All registered operators on the chain: `{ "operators": [ { account,
+tag, display_name, contact_url, registered_at, is_active, stats? } ] }`
+(`stats` = `{ cumulative_blurt_earned, total_orders_attributed }`
+once an order has been attributed). No query parameters and no
+per-tag endpoint — filter client-side. Every account that has
+broadcast `morphit_operator_register_v1` is listed, active ones first
+(`is_active`). Distinct from /instances — operators are the chain
+identities, instances are the running servers.
 
 ---
 
@@ -637,14 +688,14 @@ ounces), or any 3-8 character uppercase ticker.  See ADR-0040
 for the design.
 
 The `price_warning` field carries a loud NOT-AN-ORACLE warning
-(cp127 defense H from ADR-0039).  Downstream protocols using the
+(see ADR-0039).  Downstream protocols using the
 `_fiat` numbers as oracle input do so against this explicit
 recommendation; the price is for Morphit UI display only and is
 NOT designed to be cryptoeconomically secure as a price feed for
 third-party value-bearing systems.  Use `/v1/price/morphit-native/receipt`
 for the full derivation transparency.
 
-> **cp128 rename**: pre-cp128 the optional fields were
+> **Renamed fields**: earlier pre-launch builds named the optional fields
 > `base_fee_usd` and `blurt_price_usd` (USD hardcoded).  No
 > external consumers depend on the old names — the rename
 > shipped during pre-launch hardening before any instance went
@@ -679,7 +730,7 @@ Tier: `resource`
 Latest `morphit_release_v1` op the indexer has seen.  Use for
 detecting stale instance bundles.  When the release carries a
 chain-pinned `treasury` block it is surfaced here (BTC/XMR
-addresses + amounts and, as of cp372, the BLURT fee base under
+addresses + amounts and the BLURT fee base under
 `treasury.blurt.base`) — all public information.  Any Monero
 view key on a legacy row is stripped before the response (it is
 never stored or served).
@@ -688,7 +739,7 @@ never stored or served).
 
 Tier: `resource`
 
-The indexer's cached USD→fiat rate table (cp372), so a client can
+The indexer's cached USD→fiat rate table, so a client can
 compute the "$1 USD-equivalent" first-order minimum and other fiat
 echoes in the user's LOCAL currency without itself calling an FX
 provider. Response: `{ base: "USD", rates: { EUR: 0.92, … },
@@ -730,15 +781,6 @@ with `Cache-Control: no-store`, because an absent account is usually
 just indexer lag right after that account's profile broadcast, and
 caching the negative result would pin it in the client's HTTP cache
 across page refreshes.
-
-#### `GET /v1/operators`
-
-Tier: `list`
-
-The federation's operator directory: every account that has
-broadcast `morphit_operator_register_v1` and that this instance
-considers active.  Useful for federation-health dashboards and
-operator-comparison tools.
 
 #### `GET /v1/instance/payment-methods`
 
@@ -821,11 +863,13 @@ amount-range or even outside it.  Don't quote these numbers as
 
 Tier: `list`
 
-Per-account: is this account currently eligible to act as a
-third-party fee attestor for the operator-paid-fee scheme?
-Returns `{eligible: bool, reason?: string}` where reason is a
-machine-readable code (`account_too_young`, `insufficient_stake`,
-`recently_attested_too_often`, etc.) when ineligible.
+Per-account: is this account currently eligible to attest a
+BTC/XMR fee? Returns `{ account, phase, eligible, reason,
+loyalty_blurt, age_days, missing_loyalty_blurt, days_until_eligible }`,
+where `reason` is `loyalty`, `age` or `both` when eligible, and
+`insufficient_loyalty_and_young_account`, `insufficient_loyalty`,
+`young_account` or `account_not_found` when not. `loyalty_blurt`
+counts only BLURT that reached the canonical treasury.
 
 Public read so operator-monitoring tools can verify their
 attestor pool stays healthy.
@@ -847,15 +891,21 @@ before any signing happens.
 
 ### RSS feeds (alternative format)
 
-Same data as `/v1/orderbook`, served as RSS for RSS readers and
-news aggregators.  Requires an nginx config block to proxy through;
-see `OPERATIONS.md §14` and `§24`.
+The 50 most recent live, fee-verified orders, built with the
+orderbook's own filter rules, served as RSS 2.0 (`.xml`), Atom 1.0
+(`.atom`) or JSON Feed 1.1 (`.json`):
 
-- `GET /rss/orderbook.xml` — full orderbook
-- `GET /rss/orderbook/by-asset/:asset.xml` — filtered to one asset
-- `GET /rss/orderbook/by-account/:account.xml` — one account's listings
+- `GET /rss/orderbook.{xml,atom,json}` — the global feed
+- `GET /rss/orderbook/by-asset/<asset>.{xml,atom,json}` — orders that
+  sell, pay in or accept that asset (as the orderbook page shows them)
+- `GET /rss/orderbook/by-account/<account>.{xml,atom,json}` — one
+  account's listings
 
-All `application/rss+xml` content type.
+The global and by-asset feeds take the optional filters `side`,
+`fiat_currency`, `location_region` (matched as a substring),
+`payment_methods`, `min_trades` (completed trades) and `langs`;
+expired orders are dropped. A filtered feed URL encodes the
+subscriber's criteria, so the bare URL is the least revealing.
 
 ### Streaming endpoints
 
@@ -874,8 +924,9 @@ SSE (Server-Sent Events) streams for real-time data:
   stays end-to-end encrypted and is re-fetched same-origin on the ping).
   A `ready` event on connect signals the stream is live.
 
-SSE clients must respect `Last-Event-ID` for resume-after-
-disconnect.  Server emits keep-alive comments every 30s.
+The server does not support `Last-Event-ID` resume: on reconnect a
+client gets a fresh `snapshot` (orderbook, directory) and should
+re-fetch anything it missed. Keep-alive comments arrive every 25 s.
 
 ---
 
@@ -909,6 +960,13 @@ to be useful:
   returns `{status, origin, items, indexed_block, next_cursor}` (the `/v1/orderbook` shape) rebuilt from validated fields; an
   unregistered origin is refused (`unknown_instance`). Cached 30 s per instance; it is not a
   general relay.
+- **`/v1/account`** and **`/v1/chain`** — the web app's chain reads, relayed by this
+  indexer so the browser never contacts an RPC node for them: an account's balance, keys and
+  history (`GET /v1/account/:account/history?from=&limit=`), the block explorer's reads and
+  `POST /v1/chain/condenser` / `POST /v1/chain/key-references`. A history page larger than a
+  reply of that `limit` may be is refused with 413 `reply_too_large` (ask for fewer entries), and
+  a busy indexer answers 503 `history_busy` with `Retry-After` (wait, then ask the same page
+  again). Pages over 1,000 entries are not hedged across nodes.
 
 If you have a genuine third-party use case for any of these,
 open an issue and we'll consider promoting it to a documented
@@ -948,7 +1006,7 @@ the API need to update).
 
 API bugs / inconsistencies / docs errata:
 - Open an issue at git.agorise.net/agorise/morphit
-- Or DM `@agorise:matrix.org` on Matrix
+- Or ask in the public Matrix room `#agorise:matrix.org`
 
-Security issues affecting the API: see `SECURITY.md` for the
-disclosure path.
+Security issues affecting the API go ONLY by private Matrix DM to
+`@agorise:matrix.org` — see `SECURITY.md`. Never in an issue.

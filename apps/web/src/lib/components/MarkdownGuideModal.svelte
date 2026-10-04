@@ -3,7 +3,7 @@
 	 * MarkdownGuideModal — a small reference of the exact markdown subset the
 	 * order Terms field supports (see TermsText / termsMarkdown.ts): headings,
 	 * bold, italics, blockquote, ordered/unordered lists, horizontal rule, and
-	 * links. t.txt (v1.4.9 #2). Opened from the subdued icon over the Terms
+	 * links. . Opened from the subdued icon over the Terms
 	 * field's top-right corner.
 	 *
 	 * The ELEMENT names + the heading are translated; the SYNTAX examples are

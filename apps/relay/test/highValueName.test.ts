@@ -40,8 +40,8 @@ describe('classifyHighValueName', () => {
 		it('flags crypto-tier vocabulary', () => {
 			expect(classifyHighValueName('bitcoin')).toBe('dictionary_brand');
 			expect(classifyHighValueName('ethereum')).toBe('dictionary_brand');
-			// Part 122 cp49 deep-deep J-1: symmetric coverage for
-			// 'ripple' + 'xrp' (cp49 high-value-name additions).
+			// symmetric coverage for
+			// 'ripple' + 'xrp' (high-value-name additions).
 			// Note: 'xrp' is length 3, so it's classified as
 			// 'short_name' (length <= 4 threshold) BEFORE the
 			// dictionary check fires.  short_name is a STRONGER

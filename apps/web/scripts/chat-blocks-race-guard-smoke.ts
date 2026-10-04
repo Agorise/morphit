@@ -1,8 +1,8 @@
 /**
- * cp398 — blocks store: optimistic-overwrite race guard + Settings
+ * blocks store: optimistic-overwrite race guard + Settings
  * refresh-on-mount.
  *
- * Two coupled invariants, both surfaced by the cp398 "Blocked Accounts
+ * Two coupled invariants, both surfaced by the "Blocked Accounts
  * went stale" bug:
  *
  *   1. Settings → Blocked Accounts must call refreshBlocks() on mount, not

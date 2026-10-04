@@ -1,5 +1,5 @@
 /**
- * pendingFeatured — optimistic, DISPLAY-ONLY featured slots (cp431).
+ * pendingFeatured — optimistic, DISPLAY-ONLY featured slots.
  *
  * WHY. The featured section is computed by the indexer from everyone's
  * feature bids (top MAX_SLOTS win). The durable indexer applies blocks

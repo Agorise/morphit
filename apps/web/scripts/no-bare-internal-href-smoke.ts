@@ -6,7 +6,7 @@
  * absolute path must carry a locale prefix — i.e. be wrapped in
  * `lp(...)` / `localePath(...)`, or already be `/${lang}/...`.
  *
- * Why this matters (cp242): the route tree lives under `[lang]/` with
+ * Why this matters: the route tree lives under `[lang]/` with
  * NO `lang` param matcher and NO `reroute` hook. `[lang]/+layout.ts`
  * redirects a non-locale FIRST segment to the prefixed URL — but that
  * only rescues 1-SEGMENT bare paths (`/@account`, `/orderbook`), which
@@ -14,9 +14,9 @@
  * (`/chat/<peer>`, `/@<account>/<permlink>`, `/inbox/<x>`) matches NO
  * route under `[lang]=<seg1>`, so the redirect never fires → hard 404.
  *
- * cp7 wrapped 88 link sites in `localePath()` and verified "0 bare
+ * A later change wrapped 88 link sites in `localePath()` and verified "0 bare
  * paths" — but that was a one-time MANUAL check. With no ongoing guard,
- * later edits reintroduced bare hrefs (cp242 found 21 across 8 files,
+ * later edits reintroduced bare hrefs (a later change found 21 across 8 files,
  * incl. core chat + order-detail links that 404'd). This smoke is that
  * missing guard. It complements `no-bare-path-goto-smoke` (which covers
  * the imperative `goto()` path, not `<a href>`).
@@ -53,7 +53,7 @@ const BT = String.fromCharCode(96); // backtick, written this way to stay unambi
  *  Empty by design — see file header. */
 const ALLOWLIST: ReadonlyArray<{ file: string; frag: string }> = [
 	{
-		// cp406 — the stats page's "view raw JSON" link points at the indexer
+		// the stats page's "view raw JSON" link points at the indexer
 		// API endpoint /v1/stats (same-origin, served by the backend, NOT a
 		// localized SvelteKit page). It carries data-sveltekit-reload for a full
 		// navigation. Locale-prefixing it (→ /en/v1/stats) would 404; the API

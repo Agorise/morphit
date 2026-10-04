@@ -501,7 +501,7 @@ const RESERVED_NAMES_RAW: readonly string[] = [
 	'morphit-ops',
 	'morphit-admin',
 	'morphit-support',
-	// Agorise (parent org) and testowner (principal)
+	// Accounts of the organisation behind the project
 	'agorise',
 	'kencode'
 ];
@@ -511,32 +511,52 @@ const RESERVED_NAMES_RAW: readonly string[] = [
  *  name. */
 const RESERVED_REGEXES: readonly RegExp[] = RESERVED_NAMES_RAW.map(compileReservedRegex);
 
+/** Look-alikes the per-letter table does not list, folded before the
+ *  comparison. Mirror of the indexer's STRICT_EXTRA_FOLDS. */
+const EXTRA_FOLDS: Readonly<Record<string, string>> = {
+	'\u0585': 'o' // Armenian small oh
+};
+
+/**
+ * The skeleton a name is compared on: NFKD; every default-ignorable code
+ * point (zero-width joiners, LRM/RLM, soft hyphen, CGJ, MVS, variation
+ * selectors, tag characters, Hangul fillers …) and every combining mark
+ * removed; NFKC; lower-cased; then EXTRA_FOLDS. Folds math alphanumerics,
+ * circled, fullwidth and superscript letters and invisible padding to the
+ * plain letters the homoglyph table is written for. Used only for the
+ * comparison, never stored. Mirror of the indexer's `confusableSkeleton`.
+ */
+export function confusableSkeleton(input: string): string {
+	const folded = input
+		.normalize('NFKD')
+		.replace(/[\p{Default_Ignorable_Code_Point}\p{M}]/gu, '')
+		.normalize('NFKC')
+		.toLowerCase();
+	let out = '';
+	for (const ch of folded) out += EXTRA_FOLDS[ch] ?? ch;
+	return out;
+}
+
 /**
  * Check whether an input string contains a visual impersonation
- * of any reserved name.
+ * of any reserved name — as written, or on its skeleton (above).
  *
  * Substring semantics: `impersonatesReservedName("morphit-fan")`
  * returns true because "morphit" appears as a substring. Full-string
  * check is too narrow — attackers prepend or append noise to evade
  * a strict equality check.
  *
- * Byte-equality escape: if the input is byte-identical to any
- * reserved name (the canonical lowercase Latin form), returns
- * false — the legitimate operator account can set its own name.
+ * No exemption for the exact reserved string: that escape let ANY
+ * account set exactly `morphit-fees`. The rightful owner is exempted by
+ * `ownsReservedName` (validateDisplayName passes the signer). Same rule as
+ * the indexer's strict rule.
  *
  * Cost: O(reserved_count × input_length). ~9 regex tests per call
  * on our reserved set; fast enough for per-keystroke validation.
  */
 export function impersonatesReservedName(input: string): boolean {
-	// Byte-equality escape first — cheapest check.
-	for (const raw of RESERVED_NAMES_RAW) {
-		if (input === raw) return false;
-	}
-	// Otherwise, test each reserved-name regex as a substring match.
-	for (const re of RESERVED_REGEXES) {
-		if (re.test(input)) return true;
-	}
-	return false;
+	const skeleton = confusableSkeleton(input);
+	return RESERVED_REGEXES.some((re) => re.test(input) || re.test(skeleton));
 }
 
 /**
@@ -575,7 +595,7 @@ export function skeleton(s: string): string {
 
 let SKELETON_REVERSE_MAP: Record<string, string> | null = null;
 
-/** (v1.18.0 deep-deep, L3) Mirror of the indexer's `tagImpersonatesReserved`:
+/** Mirror of the indexer's `tagImpersonatesReserved`:
  *  a tag that IS a reserved name under the homoglyph table, or a reserved
  *  name followed by a separator (`m0rphit`, `rnorphit`, `morphit-io`). The
  *  indexer refuses such a tag on first registration unless the signer owns
@@ -607,9 +627,9 @@ export function isReservedTag(tag: string): boolean {
  *
  *  The impersonation guard is substring-based, so any text CONTAINING a
  *  reserved name trips it. Correct for a stranger, wrong for the account
- *  itself: @agorise writing "Agorise" or "the maintainer @ Agorise" is not impersonating
+ *  itself: @agorise writing "Agorise" or "Team @ Agorise" is not impersonating
  *  anyone. Without this the owner could set EXACTLY `agorise` and nothing else,
- *  not even capitalised — which is what the maintainer hit on his own accounts.
+ *  not even capitalised — which is what the owners hit on their own accounts.
  *
  *  This exists so the FORM does not reject something the chain will accept. The
  *  indexer performs the same check against the chain-authenticated signer and

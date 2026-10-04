@@ -4,7 +4,7 @@
  * truth), and the indexer must echo that title without reconstructing any
  * label itself.
  *
- * the maintainer's requirement: "if we ever change the code for the values that the
+ * The maintainer's requirement: "if we ever change the code for the values that the
  * filter form presents, the rss feed generator needs to automatically reflect
  * those changes."  We meet it by building the title in the frontend from the
  * same i18n label keys + registries the form renders, passing it via the feed

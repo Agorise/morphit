@@ -96,10 +96,11 @@ function makeDeps(fetchMock: ReturnType<typeof vi.fn>): ChatControllerDeps {
 			ephemeralPub: b64('e'),
 			nonce: b64('n')
 		})) as unknown as ChatControllerDeps['encrypt'],
-		decrypt: (async (env: { ciphertext: string }) =>
-			new TextDecoder().decode(
-				Uint8Array.from(atob(env.ciphertext), (c) => c.charCodeAt(0))
-			)) as unknown as ChatControllerDeps['decrypt'],
+		// A proved sender (v2): only those drive trade state.
+		decrypt: (async (env: { ciphertext: string }) => ({
+			text: new TextDecoder().decode(Uint8Array.from(atob(env.ciphertext), (c) => c.charCodeAt(0))),
+			authenticated: true
+		})) as unknown as ChatControllerDeps['decrypt'],
 		onChange: () => undefined
 	};
 }

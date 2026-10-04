@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: update-surface no-cache config parity. Anchor cp294.
+ * Smoke: update-surface no-cache config parity. Anchor.
  *
  * THE BUG THIS GUARDS AGAINST. The update snackbar stopped appearing after
  * deploys because `/service-worker.js` was served stale by the upstream

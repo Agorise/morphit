@@ -9,8 +9,14 @@
  *
  * This module computes whether a given account is eligible to
  * attest based on two signals:
- *   - Loyalty: cumulative BLURT fees paid to Morphit (proxy
- *     for skin-in-the-game).
+ *   - Loyalty: BLURT fees paid (proxy for skin-in-the-game).
+ *     For ops in blocks at or after CONSENSUS_V2_ACTIVATION_TIME only
+ *     the canonical-treasury leg counts (`canonical_blurt_paid`, summed
+ *     from that time on): the owner leg can be paid to an account
+ *     the payer controls — register an operator naming yourself as
+ *     fee recipient and 90% of every fee comes back — so a sock
+ *     reached the 100-BLURT gate for 10 BLURT. Earlier ops keep the
+ *     old measure (every leg, `cumulative_blurt_paid`).
  *   - Age: days the account has existed on the Blurt chain
  *     (proxy for not being farmed specifically for the
  *     attack).
@@ -20,9 +26,10 @@
  *     Runs during ecosystem bootstrap when most accounts are
  *     too new to satisfy both.
  *   - 'steady' — AND gate. Both loyalty AND age required.
- *     Hard mode; attacker needs BOTH $20+ in BLURT fees per
- *     sock AND 30 days of patient aging per sock — sustained
- *     abuse becomes negative-ROI.
+ *     Hard mode; attacker needs BOTH 100 BLURT paid to the
+ *     canonical treasury per sock AND 30 days of aging per sock.
+ *     In 'launch', age ALONE qualifies, so aged accounts attest
+ *     without paying anything.
  *
  * The helper is used by both the feeAttest handler (to reject
  * ineligible attestations at intake) and the
@@ -31,9 +38,11 @@
  */
 
 import type pg from 'pg';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
-/** Minimum cumulative BLURT fees paid to count toward the
- *  loyalty threshold. Matches the first loyalty milestone. */
+/** Loyalty threshold, in BLURT paid: every leg before
+ *  CONSENSUS_V2_ACTIVATION_TIME, the canonical-treasury leg
+ *  only from that time on (see the module header). */
 export const ATTESTOR_LOYALTY_THRESHOLD_BLURT = 100;
 
 /** Minimum account age in days to count toward the age
@@ -105,23 +114,34 @@ export type EligibilityResult = EligibilityOk | EligibilityFail;
  *                `ctx.blockTime` for deterministic
  *                replay-friendly results; API endpoints pass
  *                `new Date()`.
+ * @param atTime  The timestamp of the block the attestation op is
+ *                in (handlers), which picks the loyalty measure.
+ *                Omitted (API): the timestamp of the newest block
+ *                this indexer has applied an op from — chain data,
+ *                never the wall clock; the next attestation's block
+ *                is no earlier.
  */
 export async function checkAttestorEligibility(
 	account: string,
 	phase: AttestationPhase,
 	db: Queryable,
-	now: Date
+	now: Date,
+	atTime?: Date
 ): Promise<EligibilityResult> {
-	// Fetch both data points in one round-trip. LEFT JOIN so a
-	// missing account_loyalty row (account has never paid a
-	// fee) yields cumulative_blurt_paid = NULL → treated as 0.
+	// Fetch everything in one round-trip. LEFT JOIN so a missing
+	// account_loyalty row (account has never paid a fee) yields
+	// NULL → treated as 0.
 	const result = await db.query<{
 		created_block_time: Date | null;
 		cumulative_blurt_paid: string | null;
+		canonical_blurt_paid: string | null;
+		latest_block_time: Date | null;
 	}>(
 		`SELECT
 		   a.created_block_time,
-		   al.cumulative_blurt_paid
+		   al.cumulative_blurt_paid,
+		   al.canonical_blurt_paid,
+		   (SELECT block_time FROM ops ORDER BY block_num DESC LIMIT 1) AS latest_block_time
 		 FROM accounts a
 		 LEFT JOIN account_loyalty al ON al.account = a.name
 		 WHERE a.name = $1`,
@@ -146,7 +166,10 @@ export async function checkAttestorEligibility(
 	}
 
 	const row = result.rows[0]!;
-	const loyaltyBlurt = Number(row.cumulative_blurt_paid ?? '0');
+	const judgedAt = atTime ?? row.latest_block_time ?? new Date(0);
+	const loyaltyBlurt = Number(
+		(consensusV2Active(judgedAt) ? row.canonical_blurt_paid : row.cumulative_blurt_paid) ?? '0'
+	);
 	const ageDays =
 		row.created_block_time === null
 			? 0

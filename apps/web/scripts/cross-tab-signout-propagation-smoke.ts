@@ -2,13 +2,13 @@
 /**
  * Smoke: cross-tab SIGN-OUT propagation for the in-memory session handoff.
  *
- * Anchor: cp290 BroadcastChannel session handoff + its flagged follow-up.
+ * Anchor: BroadcastChannel session handoff + its flagged follow-up.
  *
- * Background. cp290 added an in-memory cross-tab session handoff
+ * Background. A later change added an in-memory cross-tab session handoff
  * (`stores/identity.ts`, channel `morphit-session-handoff-v1`): a freshly
  * booted locked tab can be handed a live session by a sibling tab, in
  * memory, never touching disk. That closed a real UX gap (a new tab no
- * longer forces a re-login) but opened a SECURITY gap: the only pre-cp290
+ * longer forces a re-login) but opened a SECURITY gap: the only older
  * cross-tab sign-out mirror is `handleStorageEvent`, which fires solely on
  * an on-disk envelope CHANGE. For an in-memory-only session (the default —
  * "Remember me" unchecked → no persisted envelope), an explicit Sign Out
@@ -17,7 +17,7 @@
  * the user explicitly signed out. For a non-custodial wallet that is a real
  * defect ("I signed out but my keys are still live in another tab").
  *
- * Fix (cp290 follow-up): a `'signout'` message on the handoff channel plus
+ * Fix: a `'signout'` message on the handoff channel plus
  * an exported `broadcastSignOut()` that posts it and then resets THIS tab.
  * The explicit Sign Out button (`AvatarMenu.svelte` confirmSignOut)
  * calls `broadcastSignOut()` instead of `reset()`.
@@ -34,10 +34,15 @@
  * (the listener is registered only under the SvelteKit `browser` flag, false
  * in jsdom), so this source-level guard is the regression net for it.
  *
- * What this asserts against the on-disk source:
+ * BEHAVIOUR (#2): the cross-tab handlers are RUN — the vitest suites
+ * src/lib/stores/identity.test.ts and identity.lockAllTabs.test.ts drive
+ * handleSessionHandoffMessage / handleStorageEvent / broadcastSignOut /
+ * lockAllTabs with real messages and events; this smoke runs them and
+ * requires every case to pass, the sign-out ones by name.
+ *
+ * What this asserts against the on-disk source (the pagehide listener is
+ * registered only in the browser, so these stay structural):
  *   1. identity.ts declares a SessionHandoffMessage 'signout' variant.
- *   2. handleSessionHandoffMessage is exported and, on t === 'signout',
- *      calls reset().
  *   3. broadcastSignOut is exported, posts { t: 'signout' }, and calls
  *      reset().
  *   4. SAFETY: reset()'s body contains NO signout broadcast / postMessage.
@@ -61,6 +66,8 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -128,23 +135,50 @@ if (/type\s+SessionHandoffMessage\b[\s\S]*?\{\s*t\s*:\s*['"]signout['"]\s*\}/.te
 	);
 }
 
-// ── #2: handler resets on 'signout' ─────────────────────────────────────────
-const isExportedHandler = /export\s+function\s+handleSessionHandoffMessage\b/.test(store);
-const handlerBody = extractBody(store, /function\s+handleSessionHandoffMessage\b/);
-if (!isExportedHandler) {
-	fail(`handleSessionHandoffMessage not exported`, `must be exported so vitest can drive it`);
-} else if (!handlerBody) {
-	fail(`handleSessionHandoffMessage body not found`, `brace-match failed`);
-} else {
-	const handlesSignout = /['"]signout['"]/.test(handlerBody);
-	const resetsOnSignout = /\breset\s*\(\s*\)/.test(handlerBody);
-	if (handlesSignout && resetsOnSignout) {
-		pass(`handleSessionHandoffMessage handles 'signout' and calls reset()`);
+// ── #2: the handlers, RUN (vitest) ─────────────────────────────────────────
+{
+	const out = join(tmpdir(), `cross-tab-vitest-${process.pid}.json`);
+	const r = spawnSync(
+		'npx',
+		[
+			'vitest',
+			'run',
+			'src/lib/stores/identity.test.ts',
+			'src/lib/stores/identity.lockAllTabs.test.ts',
+			'--reporter=json',
+			`--outputFile=${out}`
+		],
+		{ cwd: join(REPO_ROOT, 'apps/web'), encoding: 'utf8', timeout: 600_000 }
+	);
+	let report: {
+		numFailedTests?: number;
+		numPassedTests?: number;
+		testResults?: { assertionResults?: { title: string; status: string }[] }[];
+	} = {};
+	try {
+		report = JSON.parse(readFileSync(out, 'utf-8')) as typeof report;
+	} catch {
+		// no report: counted as a failure below
+	}
+	const results = (report.testResults ?? []).flatMap((t) => t.assertionResults ?? []);
+	const passedTitle = (re: RegExp): boolean =>
+		results.some((a) => re.test(a.title) && a.status === 'passed');
+	if (
+		r.status === 0 &&
+		(report.numFailedTests ?? 1) === 0 &&
+		passedTitle(/'signout' from a sibling tab wipes our in-memory session/) &&
+		passedTitle(/broadcastSignOut resets THIS tab/) &&
+		passedTitle(/envelope deletion in another tab/) &&
+		passedTitle(/sibling tab that receives the Lock locks too/)
+	) {
+		pass(
+			`cross-tab handlers behave (${report.numPassedTests} vitest cases, sign-out/lock ones included)`
+		);
 	} else {
-		const missing: string[] = [];
-		if (!handlesSignout) missing.push("'signout' branch");
-		if (!resetsOnSignout) missing.push('reset() call');
-		fail(`handleSessionHandoffMessage signout handling incomplete`, `missing: ${missing.join('; ')}`);
+		fail(
+			`cross-tab handler behaviour`,
+			`vitest exit ${r.status}, ${report.numFailedTests ?? '?'} failed — run: npx vitest run src/lib/stores/identity.test.ts src/lib/stores/identity.lockAllTabs.test.ts`
+		);
 	}
 }
 
@@ -227,9 +261,10 @@ if (broadcastSites === 1) {
 }
 
 // ── #8: settings Sign Out button calls broadcastSignOut, not bare reset ─────
-const importsBroadcast = /import\s*\{[^}]*\bbroadcastSignOut\b[^}]*\}\s*from\s*['"]\$stores\/identity['"]/.test(
-	avatarMenu
-);
+const importsBroadcast =
+	/import\s*\{[^}]*\bbroadcastSignOut\b[^}]*\}\s*from\s*['"]\$stores\/identity['"]/.test(
+		avatarMenu
+	);
 const confirmBody = extractBody(avatarMenu, /function\s+confirmSignOut\s*\(\s*\)\s*:/);
 if (!importsBroadcast) {
 	fail(`AvatarMenu does not import broadcastSignOut`, `Sign Out must propagate cross-tab`);
@@ -243,7 +278,10 @@ if (!importsBroadcast) {
 	if (callsBroadcast && !callsBareReset) {
 		pass(`AvatarMenu confirmSignOut calls broadcastSignOut() (not a bare reset)`);
 	} else if (!callsBroadcast) {
-		fail(`confirmSignOut does not call broadcastSignOut()`, `cross-tab sign-out would not propagate`);
+		fail(
+			`confirmSignOut does not call broadcastSignOut()`,
+			`cross-tab sign-out would not propagate`
+		);
 	} else {
 		fail(
 			`confirmSignOut still calls a bare reset()/resetIdentity()`,
@@ -254,24 +292,45 @@ if (!importsBroadcast) {
 
 // ── #11: explicit Lock broadcasts 'lock' (never 'signout') ──────────────────
 const lockAllBody = extractBody(store, /export\s+function\s+lockAllTabs\s*\(/);
-const lockBranch = /msg\.t\s*===\s*['"]lock['"]\s*\)\s*\{([\s\S]*?)\}\s*else\s+if/.exec(store)?.[1] ?? null;
+const lockBranch =
+	/msg\.t\s*===\s*['"]lock['"]\s*\)\s*\{([\s\S]*?)\}\s*else\s+if/.exec(store)?.[1] ?? null;
 if (!lockAllBody) {
 	fail(`lockAllTabs() body not found`, `the explicit Lock must reach sibling tabs (v1.20.0 F-5)`);
-} else if (SIGNOUT_BROADCAST_RE.test(lockAllBody) || !/\{\s*t\s*:\s*['"]lock['"]\s*\}/.test(lockAllBody)) {
+} else if (
+	SIGNOUT_BROADCAST_RE.test(lockAllBody) ||
+	!/\{\s*t\s*:\s*['"]lock['"]\s*\}/.test(lockAllBody)
+) {
 	fail(`lockAllTabs() must post { t: 'lock' } and never 'signout'`, `Lock is not Sign Out`);
-} else if (lockBranch === null || !/\blockSession\s*\(/.test(lockBranch) || /clearDisk|reset\s*\(/.test(lockBranch)) {
-	fail(`the handler's 'lock' branch must call lockSession() and never clear the disk`, `Lock keeps the Remember-me envelope`);
+} else if (
+	lockBranch === null ||
+	!/\blockSession\s*\(/.test(lockBranch) ||
+	/clearDisk|reset\s*\(/.test(lockBranch)
+) {
+	fail(
+		`the handler's 'lock' branch must call lockSession() and never clear the disk`,
+		`Lock keeps the Remember-me envelope`
+	);
 } else {
-	pass(`explicit Lock broadcasts 'lock' (not 'signout') and siblings lock without clearing the disk`);
+	pass(
+		`explicit Lock broadcasts 'lock' (not 'signout') and siblings lock without clearing the disk`
+	);
 }
 
-// ── #9: broadcastSignOut clears the cached self-avatar (cp351) ───────────────
+// ── #9: broadcastSignOut clears the cached self-avatar ───────────────
 // The selfProfile store holds the logged-in user's own avatar (shown in the
 // menu + their IdentityLabels). On an EXPLICIT sign-out it must be dropped,
 // or the next account / signed-out view briefly shows the prior user's
-// avatar. Regression guard for the cp351 deep-deep find (clearSelfProfile was
-// defined but never called).
-if (broadcastBody && /clearSelfProfile/.test(broadcastBody)) {
+// avatar. Regression guard for the find (clearSelfProfile was
+// defined but never called). The per-tab part of a sign-out lives in
+// forgetAccountInThisTab(), which broadcastSignOut AND the sibling tabs'
+// 'signout' handler both call (behaviour: src/lib/stores/signOutSiblingTab.test.ts).
+const forgetBody = extractBody(store, /function\s+forgetAccountInThisTab\b/);
+const signOutClears = (body: string): boolean =>
+	/clearSelfProfile/.test(body) ||
+	(forgetBody !== null &&
+		/\bforgetAccountInThisTab\s*\(\s*\)/.test(body) &&
+		/clearSelfProfile/.test(forgetBody));
+if (broadcastBody && signOutClears(broadcastBody)) {
 	pass(`broadcastSignOut clears the cached self-avatar (clearSelfProfile)`);
 } else if (broadcastBody) {
 	fail(
@@ -294,7 +353,7 @@ if (resetBody && /clearSelfProfile/.test(resetBody)) {
 	pass(`SAFETY: reset() does not clear the self-avatar (persists across lock/tab-close)`);
 }
 
-// ── #11: broadcastSignOut clears the keystore SYNCHRONOUSLY (cp363) ──────────
+// ── #11: broadcastSignOut clears the keystore SYNCHRONOUSLY ──────────
 // The signed-out header CTA reads hasPersistedKeystore() inside a $derived
 // whose only reactive trigger is $hasAnySession — which flips synchronously
 // inside reset(). If the disk clear is deferred (reset()'s async clearDisk
@@ -303,11 +362,11 @@ if (resetBody && /clearSelfProfile/.test(resetBody)) {
 // layout, so the navigation home doesn't remount it to re-read, and
 // hasPersistedKeystore() is a plain localStorage read, not a reactive dep).
 // broadcastSignOut must therefore call clearKeystore() synchronously in its
-// own body, before reset() runs. cp428 — accept BOTH the direct call
+// own body, before reset() runs. accept BOTH the direct call
 // `clearKeystore()` and the isolated form `bestEffort(clearKeystore)`: the
 // sign-out hardening wraps each clear in a synchronous try/catch isolator
 // (`bestEffort` invokes its argument immediately), so the keystore is still
-// wiped synchronously and BEFORE reset() — the cp363 invariant is preserved,
+// wiped synchronously and BEFORE reset() — the invariant is preserved,
 // just wrapped. Strip line comments first so comment-mentions of `reset()` /
 // `clearKeystore` (this body has several) don't skew the presence/order check,
 // then assert the ordering (keystore clear precedes reset) on real code only.
@@ -316,8 +375,14 @@ const keystoreSyncIdx = broadcastBody
 	? broadcastCode.search(/\bclearKeystore\s*\(\s*\)|\bbestEffort\s*\(\s*clearKeystore\s*[),]/)
 	: -1;
 const resetCallIdx = broadcastBody ? broadcastCode.search(/\breset\s*\(\s*\)/) : -1;
-if (broadcastBody && keystoreSyncIdx !== -1 && (resetCallIdx === -1 || keystoreSyncIdx < resetCallIdx)) {
-	pass(`broadcastSignOut clears the keystore synchronously before reset() (header CTA reverts to Sign in, not Unlock)`);
+if (
+	broadcastBody &&
+	keystoreSyncIdx !== -1 &&
+	(resetCallIdx === -1 || keystoreSyncIdx < resetCallIdx)
+) {
+	pass(
+		`broadcastSignOut clears the keystore synchronously before reset() (header CTA reverts to Sign in, not Unlock)`
+	);
 } else if (broadcastBody) {
 	fail(
 		`broadcastSignOut does not clear the keystore synchronously before reset()`,

@@ -293,6 +293,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('MK-H2 — BTC fee address numbering', () 
 		// Two other RPC operators serve the REAL block 101 (no order op in it).
 		const honest101 = blockOf([], 101);
 		const chain = {
+			operatorCount: () => 3,
 			reachableOperatorCount: () => 3,
 			condenserAgreed: async (_m: string, _p: unknown[], keyOf: (b: unknown) => string | null) => {
 				const key = keyOf(honest101);

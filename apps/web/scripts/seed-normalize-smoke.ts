@@ -8,7 +8,7 @@
  * Tamper: drop the comma replacement or the toLowerCase → fails.
  *
  * Also covers `seedWordCount` — the gate that keeps the import "Unlock my
- * account" button disabled until exactly 12 words are present (cp338). The
+ * account" button disabled until exactly 12 words are present. The
  * regression this guards: the button used to enable on any non-empty text, so
  * a single pasted garbage token (e.g. "agrrtwreterwt...") counted as "filled"
  * and the button went live. seedWordCount must report 1 for that, 12 only for
@@ -51,7 +51,7 @@ check('already clean (no-op)', normalizeSeedPhrase('ripple cabin echo'), 'ripple
 const once = normalizeSeedPhrase('Ripple, CABIN ,echo');
 check('idempotent', normalizeSeedPhrase(once), once);
 
-// seedWordCount — the import button-enable gate (cp338).
+// seedWordCount — the import button-enable gate.
 const twelve = 'ripple cabin echo fox apple zebra lemon ocean tiger maple violet sugar';
 checkNum('empty → 0', seedWordCount(''), 0);
 checkNum('whitespace only → 0', seedWordCount('   \n\t '), 0);

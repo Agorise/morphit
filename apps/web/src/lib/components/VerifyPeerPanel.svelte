@@ -1,14 +1,13 @@
 <script lang="ts">
 	/**
-	 * VerifyPeerPanel — opt-in OOB fingerprint verification.
+	 * VerifyPeerPanel — opt-in out-of-band safety-number check.
 	 *
-	 * REVISIT-LIST item 11.  Lets a user compare their session's
-	 * computed 8-word fingerprint with their counterparty's via
-	 * a trusted out-of-band channel (voice, in-person, different
-	 * platform), as a defense against malicious-indexer MITM on
-	 * chat-key delivery.
+	 * Lets a user compare the conversation's 60-digit safety number
+	 * ($lib/chat/fingerprint) with their counterparty's over a channel
+	 * they already trust (voice, in person, another platform), as a
+	 * defense against an indexer substituting chat keys.
 	 *
-	 * ─── UX principles (per the maintainer's directive 2026-05-02) ───────
+	 * ─── UX principles ────────────────────────────────────────
 	 *
 	 * - Opt-in: only renders when explicitly opened from the
 	 *   conversation overflow menu.
@@ -18,7 +17,10 @@
 	 * - No verified-state persistence: comparing successfully
 	 *   does NOT change any UI state going forward.  We
 	 *   deliberately avoid a "verified" badge because that
-	 *   creates a two-tier system that pressures everyone.
+	 *   creates a two-tier system that pressures everyone.  The
+	 *   only thing remembered (per device) is that the one-time
+	 *   "the number is longer now, compare once more" note was
+	 *   dismissed — the old 8-word fingerprint was too short.
 	 * - Stays in-app: no external links.  FAQ excerpt shown
 	 *   inline so users who want to read more don't get
 	 *   redirected to an external page that could fingerprint
@@ -32,11 +34,10 @@
 	 *    fetcher in $lib/chat/peerPubFetch — same path the
 	 *    chat-send flow uses, so the fingerprint reflects the
 	 *    key actually being used to encrypt messages.
-	 * 3. computeFingerprint(myPub, peerPub) — pure function;
-	 *    sorts inputs lexicographically, hashes with SHA-256
-	 *    domain-tagged, maps 8 bytes through alternating PGP
-	 *    wordlists.
-	 * 4. Display the 8 words in a stable, readable layout.
+	 * 3. computeSafetyNumber(me, peer) — each party's 30 digits
+	 *    come from that party's own account + chat key, so a
+	 *    substituted key changes its half (see fingerprint.ts).
+	 * 4. Display the 12 groups of 5 digits in a stable layout.
 	 *
 	 * Failure modes surfaced to the UI:
 	 *   - peer hasn't published their chat key yet → "peer
@@ -58,12 +59,21 @@
 
 	import { _ } from 'svelte-i18n';
 	import { onDestroy, onMount } from 'svelte';
-	import { computeFingerprint } from '$lib/chat/fingerprint';
-	import { deriveChatIdentity } from '$lib/chat/crypto';
+	import { computeSafetyNumber } from '$lib/chat/fingerprint';
+	import { deriveChatIdentity, decodeChatPub } from '$lib/chat/crypto';
 	import { fetchPeerChatPubChainVerified } from '$lib/chat/peerPubFetch';
+	import { PUB_PIN_ERROR, acceptKeyChange, pendingKeyChange } from '$lib/chat/pubPin';
 	import { identity, isUnlocked } from '$stores/identity';
 	import { get } from 'svelte/store';
-	import { webCryptoAvailable } from '$lib/security/secureContext';
+	import { safeLocal } from '$lib/utils/safeStorage';
+
+	/** Device flag: the one-time "compare once more" note was dismissed. */
+	const REVERIFY_SEEN_KEY = 'morphit.chat.safetyNumberV2Seen';
+	let showReverify = $state(false);
+	function dismissReverify(): void {
+		showReverify = false;
+		safeLocal.set(REVERIFY_SEEN_KEY, '1');
+	}
 
 	interface Props {
 		readonly me: string;
@@ -79,6 +89,9 @@
 		| { kind: 'locked' }
 		| { kind: 'peer_not_ready' }
 		| { kind: 'tamper_detected'; code: string }
+		/** The peer's key changed: the NEW safety number, to compare before
+		 *  accepting (nothing is sent to the new key until then). */
+		| { kind: 'key_changed'; words: readonly string[] }
 		| { kind: 'error'; message: string }
 		| { kind: 'ready'; words: readonly string[] };
 
@@ -93,6 +106,7 @@
 	let aborted = false;
 
 	onMount(() => {
+		showReverify = safeLocal.get(REVERIFY_SEEN_KEY) !== '1';
 		void compute();
 		// Esc-key dismiss.
 		const onKey = (e: KeyboardEvent) => {
@@ -144,7 +158,18 @@
 				case 'not_published':
 					panelState = { kind: 'peer_not_ready' };
 					return;
-				case 'tamper_detected':
+				case 'tamper_detected': {
+					const pending =
+						peerResult.code === PUB_PIN_ERROR.key_changed ? pendingKeyChange(peer) : null;
+					if (pending !== null) {
+						const words = await computeSafetyNumber(
+							{ account: me, pub: mine.pub },
+							{ account: peer, pub: decodeChatPub(pending.pubB64) }
+						);
+						if (aborted) return;
+						panelState = { kind: 'key_changed', words };
+						return;
+					}
 					// Pub-pin or chain check FIRED.  We surface a
 					// specific state because this is a real
 					// security event the user should know about
@@ -152,6 +177,7 @@
 					// compare fingerprints.
 					panelState = { kind: 'tamper_detected', code: peerResult.code };
 					return;
+				}
 				case 'malformed_key':
 					panelState = {
 						kind: 'error',
@@ -178,16 +204,11 @@
 					break;
 			}
 
-			// v1.20.0 (F-9): the safety-number hash needs WebCrypto, which a
-			// plain-HTTP I2P address (not a secure context) does not have.
-			if (!webCryptoAvailable()) {
-				panelState = {
-					kind: 'error',
-					message: $_('chat.verify_peer.error_insecure_context') as string
-				};
-				return;
-			}
-			const words = await computeFingerprint(mine.pub, peerResult.pub);
+			// libsodium's SHA-512, so this works on plain-HTTP I2P addresses too.
+			const words = await computeSafetyNumber(
+				{ account: me, pub: mine.pub },
+				{ account: peer, pub: peerResult.pub }
+			);
 			if (aborted) return;
 			panelState = { kind: 'ready', words };
 		} catch (_err) {
@@ -204,6 +225,11 @@
 				myPriv.fill(0);
 			}
 		}
+	}
+
+	/** The user compared the new number with the peer and it matched. */
+	function acceptNewKey(): void {
+		if (acceptKeyChange(peer)) void compute();
 	}
 
 	function handleBackdropClick(e: MouseEvent): void {
@@ -224,7 +250,10 @@
 	}}
 	tabindex="-1"
 >
-	<div class="card max-h-[95dvh] overflow-y-auto overscroll-contain w-full max-w-lg" role="document">
+	<div
+		class="card max-h-[95dvh] w-full max-w-lg overflow-y-auto overscroll-contain"
+		role="document"
+	>
 		<h2 id="verify-peer-heading" class="font-display text-xl font-bold">
 			{$_('chat.verify_peer.title')}
 		</h2>
@@ -273,6 +302,35 @@
 					<span class="font-mono">code: {panelState.code}</span>
 				</p>
 			</div>
+		{:else if panelState.kind === 'key_changed'}
+			<div
+				class="mt-5 rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-100"
+			>
+				<p class="font-bold">{$_('chat.verify_peer.key_changed_heading')}</p>
+				<p class="mt-1">{$_('chat.verify_peer.key_changed_body', { values: { peer } })}</p>
+			</div>
+			<div
+				class="mt-4 grid grid-cols-3 gap-x-6 gap-y-2 rounded-lg border border-ink-300 p-4 font-mono text-base dark:border-ink-700 sm:grid-cols-4"
+				dir="ltr"
+				aria-label={$_('chat.verify_peer.fingerprint_aria') as string}
+			>
+				{#each panelState.words as group, i (i)}
+					<span
+						class="text-center font-semibold"
+						aria-label={`${$_('chat.verify_peer.word_n', { values: { n: i + 1 } })}: ${group}`}
+						>{group}</span
+					>
+				{/each}
+			</div>
+			<div class="mt-3">
+				<button
+					type="button"
+					class="rounded-lg border-2 border-ink-300 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-ink-100 dark:border-ink-600 dark:bg-ink-900 dark:hover:bg-ink-800"
+					onclick={acceptNewKey}
+				>
+					{$_('chat.verify_peer.key_changed_accept')}
+				</button>
+			</div>
 		{:else if panelState.kind === 'error'}
 			<div
 				class="mt-5 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
@@ -289,15 +347,29 @@
 				</button>
 			</div>
 		{:else if panelState.kind === 'ready'}
-			<!-- The words.  Display in 2 rows of 4, monospace, large
-			     enough to read aloud cleanly.  Equal visual weight
-			     for every word — we don't want users skimming and
-			     missing a tampered middle word. -->
+			{#if showReverify}
+				<div
+					class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+				>
+					<p class="font-semibold">{$_('chat.verify_peer.reverify_heading')}</p>
+					<p class="mt-1">{$_('chat.verify_peer.reverify_body')}</p>
+					<button
+						type="button"
+						class="mt-2 text-sm font-semibold underline underline-offset-2"
+						onclick={dismissReverify}
+					>
+						{$_('chat.verify_peer.reverify_ok')}
+					</button>
+				</div>
+			{/if}
+			<!-- The number: 12 groups of 5 digits, monospace, large enough to
+			     read aloud cleanly. Equal visual weight for every group — we
+			     don't want users skimming and missing a tampered middle group. -->
 			<div
 				class="mt-5 rounded-lg border-2 border-morphit-emerald bg-morphit-emerald/5 p-4"
 				aria-label={$_('chat.verify_peer.fingerprint_aria') as string}
 			>
-				<div class="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-base sm:grid-cols-4">
+				<div class="grid grid-cols-3 gap-x-6 gap-y-2 font-mono text-base sm:grid-cols-4" dir="ltr">
 					{#each panelState.words as word, i (i)}
 						<div
 							class="break-words text-center"

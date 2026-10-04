@@ -19,7 +19,7 @@ import { extractLabelPropsFromProfile } from '$lib/indexer/profileProps';
 export interface SelfProfileAvatar {
 	/** The account this avatar belongs to, or null when signed out. */
 	readonly account: string | null;
-	/** v1.8.15 (t.txt #2) — the user's own chosen display name, or null when
+	/** v1.8.15 — the user's own chosen display name, or null when
 	 *  they have none. Stored here for the SAME reason the avatar is: so every
 	 *  IdentityLabel of self can show the custom name (not just @account),
 	 *  consistently and instantly (optimistically after a broadcast), exactly
@@ -52,7 +52,7 @@ let latest = 0;
  */
 /** #2 — how many times a FAILED self-profile fetch is retried, and how long
  *  we wait between attempts. The profile cache negative-caches a failed fetch
- *  for 5s (cp428's soft TTL), so waiting slightly longer than that guarantees
+ *  for 5s (the soft TTL), so waiting slightly longer than that guarantees
  *  the retry actually re-hits the network rather than replaying the failure.
  *  Without this, a single blip on first load left the user staring at their
  *  identicon for the whole session — the store is only refreshed again on an
@@ -104,7 +104,7 @@ export async function refreshSelfProfile(
 				return;
 			}
 			const props = extractLabelPropsFromProfile(profile);
-			// v1.8.11 (the maintainer) — "no profile yet" is NOT a final answer.
+			// v1.8.11 — "no profile yet" is NOT a final answer.
 			//
 			// The retry above only covered a FAILED fetch. A fetch that
 			// SUCCEEDS and reports "this account has no profile" fell straight
@@ -212,7 +212,7 @@ export function setSelfAvatar(
 }
 
 /**
- * v1.8.15 (t.txt #2) — the display-name twin of setSelfAvatar. Publish the
+ * v1.8.15 — the display-name twin of setSelfAvatar. Publish the
  * user's own chosen name to the shared store the instant a profile broadcast
  * is confirmed, so every IdentityLabel of self updates immediately rather than
  * waiting ~45-63s for the indexer. Preserves the current avatar for the same

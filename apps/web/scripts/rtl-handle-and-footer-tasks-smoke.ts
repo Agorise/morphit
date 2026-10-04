@@ -1,5 +1,5 @@
 /**
- * t.txt (v1.9.15, the maintainer) — locks in four UI/i18n rules delivered in one batch:
+ * locks in four UI/i18n rules delivered in one batch:
  *
  *   Task 1  RTL @handle isolation — an @{handle} slot renders LEFT-TO-RIGHT
  *           ("@alice", never "alice@") in EVERY locale. Enforced at i18n load
@@ -35,7 +35,7 @@ function check(desc: string, cond: boolean): void {
 	}
 }
 
-console.log('\n── rtl-handle-and-footer-tasks (t.txt v1.9.15) ──\n');
+console.log('\n── rtl-handle-and-footer-tasks ──\n');
 
 // ─── Task 1: the isolate transform behaves ──────────────────────
 check(
@@ -100,14 +100,14 @@ check('footer "Peer-to-peer…" tagline render removed', !layout.includes('foote
 check('footer "Also reachable via" heading render removed', !layout.includes('footer.reachable_via'));
 check(
 	'footer link block is a responsive grid (2→3→5 columns)',
-	/aria-label="Footer"[^>]*class="grid[^"]*grid-cols-2[^"]*sm:grid-cols-3[^"]*lg:grid-cols-5/.test(
+	/aria-label=\{\$_\('a11y\.nav_footer'\)[^}]*\}[^>]*class="grid[^"]*grid-cols-2[^"]*sm:grid-cols-3[^"]*lg:grid-cols-5/.test(
 		layout
 	)
 );
 for (const k of ['col_federation', 'col_resources', 'col_security', 'col_media', 'col_support']) {
 	check(`footer renders column header footer.${k}`, layout.includes(`footer.${k}`));
 }
-// Canary + PGP share one line (the maintainer).
+// Canary + PGP share one line.
 check(
 	'Canary and PGP sit on the same line',
 	/footer\.canary'[\s\S]{0,220}footer\.pgp_keys'/.test(layout)

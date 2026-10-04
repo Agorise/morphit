@@ -1,11 +1,11 @@
 /**
- * tag-reserved-parity-smoke (v1.18.0 deep-deep, L3 follow-through).
+ * tag-reserved-parity-smoke (L3 follow-through).
  *
  * The indexer refuses, on first registration, an operator tag that looks like
  * a reserved name (`tagImpersonatesReserved`) unless the signer owns it. The
  * web form (run-a-node) and `morphit-ops register` must refuse the same tags,
  * or an operator broadcasts a registration the network silently ignores — the
- * gap the deep-deep's fixer noted. The web has its own copy of the confusables
+ * gap the deep audit's fixer noted. The web has its own copy of the confusables
  * tables (packages/indexer-client is types-only), so this RUNS both copies over
  * one corpus and requires identical verdicts. The web form's validator itself
  * is driven in src/lib/blurt/ops/operatorRegisterTag.test.ts.

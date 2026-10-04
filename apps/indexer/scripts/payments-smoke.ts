@@ -73,7 +73,7 @@ scenario('url is null or https://', () => {
 });
 
 scenario('every category in {crypto, in_person, by_mail, online}', () => {
-	// cp120: added 'by_mail' category for asynchronous mail-based
+	// added 'by_mail' category for asynchronous mail-based
 	// payment methods (currently just `cash_by_mail`).
 	const valid: ReadonlySet<PaymentCategory> = new Set([
 		'crypto',
@@ -111,7 +111,7 @@ scenario('non-crypto entries have no assetExclusion', () => {
 });
 
 scenario('PAYMENT_CATEGORIES_ORDERED is in UX-display order', () => {
-	// cp120: order is meaningful (UX), not alphabetical.  The
+	// order is meaningful (UX), not alphabetical.  The
 	// canonical order is: crypto → in_person → by_mail → online.
 	// This reflects the natural mental hierarchy: same-machine
 	// (crypto) → same-room (in_person) → same-country (by_mail)
@@ -214,8 +214,8 @@ scenario('search: whitespace-only query returns all entries', () => {
 });
 
 scenario('search: name match scores higher than desc match', () => {
-	// Search "money" — matches "Mercado Pago" via desc, "Mobile Money"
-	// not in any name… let me construct a clearer test.
+	// A custom description makes the desc-only match unambiguous: "wise"
+	// matches "money" only through its description.
 	const customDesc = (k: string): string | null => {
 		if (k === 'wise') return 'cross-border money transfers';
 		return null;
@@ -293,14 +293,14 @@ scenario('search: results sorted score desc, name asc on tie', () => {
 
 scenario('resolveLegacy: canonical key passes through', () => {
 	if (resolveLegacy('paypal') !== 'paypal') throw new Error('paypal');
-	// cp120: 'cash' was split into 'cash_in_person' + 'cash_by_mail'.
+	// 'cash' was split into 'cash_in_person' + 'cash_by_mail'.
 	if (resolveLegacy('cash_in_person') !== 'cash_in_person') throw new Error('cash_in_person');
 	if (resolveLegacy('cash_by_mail') !== 'cash_by_mail') throw new Error('cash_by_mail');
 });
 
 scenario('resolveLegacy: exact name → canonical key', () => {
 	if (resolveLegacy('PayPal') !== 'paypal') throw new Error('PayPal');
-	// cp120: 'Cash' (in person) and 'Cash by mail' both resolve.
+	// 'Cash' (in person) and 'Cash by mail' both resolve.
 	if (resolveLegacy('Cash (in person)') !== 'cash_in_person') throw new Error('Cash (in person)');
 	if (resolveLegacy('Cash by mail') !== 'cash_by_mail') throw new Error('Cash by mail');
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * backup-script-posix-safety — cp514 (post-v1.8.7, found live on the maintainer's VPS).
+ * backup-script-posix-safety — (post-v1.8.7, found live on the maintainer's VPS).
  *
  * THE BUG THIS EXISTS TO CATCH. `ops/backup/morphit-backup.sh` is `#!/bin/sh`,
  * which on every Debian/Ubuntu host is DASH. It carried:
@@ -13,7 +13,7 @@
  * `set -e`. The `2>/dev/null` swallowed the one diagnostic. Net effect: the
  * script exited 2, silently, BEFORE pg_dump ever ran — so the built-in
  * Docker-aware backup shipped in v1.8.4 never produced a single dump on any
- * Ubuntu box. the maintainer hit it as a bare `status=2/INVALIDARGUMENT` with no message.
+ * Ubuntu box. The maintainer hit it as a bare `status=2/INVALIDARGUMENT` with no message.
  *
  * WHY NOTHING CAUGHT IT: the backup work shipped with STATIC smokes only —
  * nothing ever EXECUTED the script, and `sh -n` parses it fine (it's a runtime
@@ -109,9 +109,9 @@ try {
 }
 
 /* ────────────────────────────────────────────────────────────────────
- * cp526 — THE SECOND, DEEPER BUG IN THE SAME LINE OF DEFENCE.
+ * THE SECOND, DEEPER BUG IN THE SAME LINE OF DEFENCE.
  *
- * cp514 (above) proved the script no longer DIES at the pipefail probe.
+ * (above) proved the script no longer DIES at the pipefail probe.
  * It did not prove the script NOTICES A FAILED DUMP — and it did not,
  * because the probe is FALSE on the platform we target: Debian/Ubuntu
  * build dash WITHOUT pipefail. So `pg_dump | gzip` reported gzip's 0,
@@ -124,7 +124,7 @@ try {
  *
  * The only thing that can see this is EXECUTING THE WHOLE SCRIPT with a
  * failing pg_dump under BOTH shells. Static greps and the guard-snippet
- * run above are both blind to it. Same lesson as cp514, one layer down:
+ * run above are both blind to it. Same lesson as an earlier fix, one layer down:
  * prove the behaviour, not the syntax.
  *
  * Tamper tests (each must turn this red):

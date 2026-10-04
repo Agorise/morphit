@@ -16,10 +16,10 @@
 		</p>
 	</header>
 
-	<!-- Sally finding L11 closure (Part 70): phase status is now
+	<!-- Sally finding L11 closure: phase status is now
 	     data-driven from the manifest at $lib/plan/phases.ts.  The
-	     hardcoded "in progress" chip on Phase 1 was removed in
-	     Part 68; this is the proper replacement.  When a phase
+	     hardcoded "in progress" chip on Phase 1 was removed;
+	     this is the proper replacement.  When a phase
 	     ships, flip its status in the manifest and the badge
 	     here updates with the build. -->
 	<ol class="space-y-4">
@@ -50,9 +50,9 @@
 		<p>
 			{$_('plan.footer_prefix')}
 			<a
-				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/PLAN.md"
+				href="https://git.agorise.net/agorise/morphit/src/branch/main/docs/adr"
 				class="text-morphit-emerald hover:underline"
-				target="_blank" rel="noopener noreferrer">docs/PLAN.md</a
+				target="_blank" rel="noopener noreferrer">docs/adr/</a
 			>.
 		</p>
 	</footer>

@@ -2,17 +2,13 @@
 /**
  * price-provider-coverage-parity-smoke.
  *
- * CP42 O-93 coverage gap closure: every ASSET_TICKER must have a
- * matching entry in (a) the writable internal store's initialState,
- * (b) the Coingecko provider's COIN_ID map, (c) the fallback
- * provider's FALLBACK_USD map.  A typo or missing entry in any one
- * of these means the price for that asset silently returns null in
- * production — orders display correctly but volume/USD-estimate
- * calculations break for the affected asset.
+ * Every priced ticker (every ASSET_TICKER except goods assets) has an
+ * initial-state slot in the price store (apps/web/src/lib/prices/index.ts).
+ * A missing slot means the store has no key for that asset, so UI that
+ * reads `priceStore[symbol]` sees `undefined` instead of "unknown" (null).
  *
- * Catches: future asset additions that forget to register with one
- * of the three providers; typos in Coingecko slug; stale fallback
- * map after asset removal.
+ * Catches: an asset added to the registry without a price-store slot, and a
+ * stale slot left behind after an asset is removed.
  */
 
 import { ASSET_TICKERS, isGoodsAsset, type AssetTicker } from '../src/index';
@@ -22,8 +18,8 @@ let passed = 0;
 
 console.log('\n── price-provider coverage parity smoke ──────────────\n');
 
-// Parse the three sources textually because we can't easily import .ts files
-// from packages/asset-registry without resolving the SvelteKit + svelte deps.
+// Parse the source textually: importing the module from packages/asset-registry
+// would need the SvelteKit + svelte deps resolved.
 // Adjust paths relative to the smoke location.
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
@@ -32,10 +28,8 @@ const SMOKE_DIR = dirname(fileURLToPath(import.meta.url));
 const APP_WEB_LIB = join(SMOKE_DIR, '../../../apps/web/src/lib/prices');
 
 const idxSrc = readFileSync(join(APP_WEB_LIB, 'index.ts'), 'utf8');
-const cgSrc = readFileSync(join(APP_WEB_LIB, 'providers/coingecko.ts'), 'utf8');
-const fbSrc = readFileSync(join(APP_WEB_LIB, 'providers/fallback.ts'), 'utf8');
 
-// Extract tickers from each map
+// Extract the tickers of a `TICKER: <value>` map
 function extractTickers(source: string, valueShape: RegExp): Set<string> {
 	const re = new RegExp(`(${ASSET_TICKERS.join('|')}):\\s*${valueShape.source}`, 'g');
 	const out = new Set<string>();
@@ -47,12 +41,9 @@ function extractTickers(source: string, valueShape: RegExp): Set<string> {
 }
 
 const initialEntries = extractTickers(idxSrc, /null/);
-const cgEntries = extractTickers(cgSrc, /'[^']+'/);
-const fbEntries = extractTickers(fbSrc, /[0-9.]+/);
 
-// cp425 — goods assets (BARTER) have NO crypto price: a barter listing is
-// valued directly in the seller's fiat, so it has no Coingecko slug / fallback
-// USD / initial price-state entry. Exempt them from the coverage requirement.
+// Goods assets (BARTER) have NO crypto price: a barter listing is valued
+// directly in the seller's fiat, so it has no price-state entry. Exempt them.
 const expected = new Set(
 	(ASSET_TICKERS as readonly string[]).filter((t) => !isGoodsAsset(t as AssetTicker))
 );
@@ -76,8 +67,6 @@ function check(name: string, observed: Set<string>): void {
 }
 
 check('initialState (prices/index.ts)', initialEntries);
-check('Coingecko COIN_ID map (providers/coingecko.ts)', cgEntries);
-check('Fallback FALLBACK_USD map (providers/fallback.ts)', fbEntries);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

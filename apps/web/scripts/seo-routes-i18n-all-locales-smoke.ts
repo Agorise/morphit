@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * seo-routes-i18n-all-locales smoke — Part 122 cp74 (LL #74 / O-22).
+ * seo-routes-i18n-all-locales smoke.
  *
  * The web vitest test `apps/web/src/lib/seo/routes.test.ts` already
  * verifies that every route in `apps/web/src/lib/seo/routes.ts` has
  * a matching `seo.<key>.title` and `seo.<key>.description` in
- * en.json.  That test caught cp73-D11 (missing seo.privacy_index
- * keys) — but only AFTER cp73 extended cp71-O19 vitest-must-pass
+ * en.json.  That test caught (missing seo.privacy_index
+ * keys) — but only AFTER a later change extended vitest-must-pass
  * to monitor the web workspace.
  *
  * This smoke generalizes the same check to ALL 10 locales, not just
@@ -18,7 +18,7 @@
  * Self-test: temporarily delete `seo.privacy_index.title` from any
  * locale → smoke fires naming the locale + the missing key.
  *
- * Mutation test M-145 (this smoke's verification):
+ * Mutation test (this smoke's verification):
  *   - Remove the title from one locale → smoke fires.
  *   - Restore → smoke passes.
  */
@@ -117,7 +117,7 @@ const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {
 	console.error('\nseo-routes-i18n-all-locales smoke FAILED');
-	console.error('Memory rule: locale parity — every user-facing string change must be translated into all 10 locales in the same turn.');
+	console.error('Rule: locale parity — every user-facing string change must be translated into all 10 locales in the same change.');
 	process.exit(1);
 }
 console.log(`✓ all ${total} seo-routes-i18n-all-locales scenarios passed`);

@@ -1,6 +1,6 @@
 /**
  * Re-merge the persisted on-chain RPC directory at boot — only what the chain
- * proves (v1.18.0 deep-deep, rv2-4).
+ * proves.
  *
  * WHAT WAS WRONG. On boot the indexer read `rpc_directory.endpoints` and merged
  * every URL into its live RPC pool as-is. The signer and pinned-key checks only
@@ -10,7 +10,7 @@
  * nodes its catch-up reads blocks from and its posting-key quorum asks.
  *
  * WHAT HAPPENS NOW. The row is only a pointer: its `block_num`. The block is
- * fetched from independent RPC operators that must agree on it, the directory
+ * fetched from RPC operators (counted by node name) that must agree on it, the directory
  * op in it must be signed by the pinned official posting key, and the endpoints
  * merged are the ones parsed from that signed op — never the row's copy. If the
  * agreed block holds no such signed op, the row is false and is deleted. If the
@@ -35,7 +35,7 @@ export type DirectoryReloadOutcome =
 	| { readonly kind: 'rejected' }
 	| { readonly kind: 'unreachable' };
 
-type Reader = Pick<BlurtClient, 'condenserAgreed' | 'mergeRpcEndpoints' | 'reachableOperatorCount'>;
+type Reader = Pick<BlurtClient, 'condenserAgreed' | 'mergeRpcEndpoints' | 'trustedQuorumSize'>;
 
 export async function reloadVerifiedRpcDirectory(
 	db: Pick<Database, 'query'>,
@@ -53,7 +53,9 @@ export async function reloadVerifiedRpcDirectory(
 		signer: config.officialAccountName,
 		pinnedPubkey: config.officialPostingPubkey,
 		chainId: config.chainId,
-		minAgree: Math.min(2, Math.max(1, blurt.reachableOperatorCount()))
+		// Two operators whenever the pool has two, however many answered lately:
+		// one reachable operator alone must not decide what joins the pool.
+		minAgree: blurt.trustedQuorumSize()
 	});
 	if (!res.ok && res.reason === 'no_quorum') return { kind: 'unreachable' };
 	const v = res.ok ? validateRpcDirectoryPayload(res.payload) : null;

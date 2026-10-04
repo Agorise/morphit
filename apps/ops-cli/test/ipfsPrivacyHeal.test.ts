@@ -1,5 +1,5 @@
 /**
- * The post-upgrade IPFS privacy heal (v1.18.0 deep-deep, H3).
+ * The post-upgrade IPFS privacy heal.
  *
  * `morphit-ops upgrade` does not re-run Ansible, so without this heal every
  * EXISTING tor-only node would keep a stock Kubo that joins the public IPFS DHT
@@ -14,7 +14,11 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { applyAndVerifyIpfsPrivacy, type IpfsPrivacyRuntime } from '../src/lib/ipfsPrivacyHeal.ts';
+import {
+	applyAndVerifyIpfsPrivacy,
+	countDhtPeers,
+	type IpfsPrivacyRuntime
+} from '../src/lib/ipfsPrivacyHeal.ts';
 
 const SCRIPT = join(
 	import.meta.dirname,
@@ -87,8 +91,13 @@ function readCfg(): Record<string, any> {
 function runtime(opts: {
 	active: boolean;
 	startsWith?: (cfg: Record<string, any>) => boolean;
-}): IpfsPrivacyRuntime & { state: { active: boolean; restarts: number } } {
-	const state = { active: opts.active, restarts: 0 };
+	/** `ipfs stats dht wan` peer counts, one per poll (the last repeats). */
+	dht?: Array<number | null>;
+}): IpfsPrivacyRuntime & {
+	state: { active: boolean; restarts: number; dhtPolls: number; slept: number };
+} {
+	const state = { active: opts.active, restarts: 0, dhtPolls: 0, slept: 0 };
+	const dht = opts.dht ?? [12];
 	return {
 		state,
 		kuboPresent: () => true,
@@ -106,12 +115,22 @@ function runtime(opts: {
 			return state.active;
 		},
 		answers: () => state.active,
-		sleep: async () => undefined,
+		dhtPeers: () => dht[Math.min(state.dhtPolls++, dht.length - 1)] ?? null,
+		sleep: async (ms) => void (state.slept += ms),
 		spinner: () => () => undefined
 	};
 }
 
 const quiet = { info: () => undefined, warn: () => undefined };
+const said = () => {
+	const info: string[] = [];
+	const warn: string[] = [];
+	return {
+		info,
+		warn,
+		io: { info: (m: string) => info.push(m), warn: (m: string) => warn.push(m) }
+	};
+};
 
 describe('IPFS privacy heal', { timeout: 30_000 }, () => {
 	it('hidden-only node on a stock Kubo: leaves the public IPFS network, restarts, is running', async () => {
@@ -137,7 +156,7 @@ describe('IPFS privacy heal', { timeout: 30_000 }, () => {
 		// Untouched: the gateway that serves the release over Tor/I2P.
 		expect(c.Addresses.Gateway).toBe('/ip4/0.0.0.0/tcp/8082');
 		expect(c.Gateway.NoFetch).toBe(true);
-		expect(rt.state).toEqual({ active: true, restarts: 1 });
+		expect(rt.state).toMatchObject({ active: true, restarts: 1, dhtPolls: 0 });
 	});
 
 	it('already private: changes nothing and restarts nothing', async () => {
@@ -174,22 +193,68 @@ describe('IPFS privacy heal', { timeout: 30_000 }, () => {
 		const out = await applyAndVerifyIpfsPrivacy({ hiddenOnly: true, runtime: rt, ...quiet });
 		expect(out).toEqual({ kind: 'applied-not-running', mode: 'hidden' });
 		expect(readCfg().Routing.Type).toBe('none');
-		expect(rt.state).toEqual({ active: false, restarts: 0 });
+		expect(rt.state).toMatchObject({ active: false, restarts: 0 });
 	});
 
-	it('clearnet node: only telemetry is turned off; routing and swarm stay as they were', async () => {
-		const rt = runtime({ active: true });
+	it('clearnet node: its own settings only (DHT, no AutoConf, no HTTP routers), still on the public network, and seen in the DHT', async () => {
+		const rt = runtime({ active: true, dht: [0, 0, 7] });
+		const s = said();
 		const out = await applyAndVerifyIpfsPrivacy({
 			hiddenOnly: false,
 			runtime: rt,
-			...quiet,
+			...s.io,
 			tries: 3
 		});
-		expect(out).toEqual({ kind: 'applied', mode: 'base' });
+		expect(out).toEqual({ kind: 'applied', mode: 'base', dhtPeers: 7 });
 		const c = readCfg();
 		expect(c.Plugins.Plugins.telemetry.Config.Mode).toBe('off');
-		expect(c.Routing.Type).toBe('auto');
-		expect(c.Bootstrap).toEqual(['auto']);
+		expect(c.Routing.Type).toBe('dht');
+		expect(c.Routing.DelegatedRouters).toEqual([]);
+		expect(c.AutoConf.Enabled).toBe(false);
+		expect(c.Bootstrap.length).toBeGreaterThan(0);
+		expect(c.Bootstrap).not.toContain('auto');
 		expect(c.Addresses.Swarm).toEqual(STOCK.Addresses.Swarm);
+		expect(rt.state.dhtPolls).toBe(3);
+		expect(s.info.join('\n')).toMatch(
+			/no AutoConf fetch from conf\.ipfs-mainnet\.org, no HTTP routers such as\s+cid\.contact/
+		);
+		expect(s.info.join('\n')).toMatch(
+			/✓ IPFS is on the public DHT \(7 peers in its routing table\)\./
+		);
+		expect(s.warn).toEqual([]);
+	});
+
+	it('clearnet node with no DHT peers within 60 s: settings kept (no roll-back), a calm warning with the command', async () => {
+		const rt = runtime({ active: true, dht: [0, null, 0] });
+		const s = said();
+		const out = await applyAndVerifyIpfsPrivacy({
+			hiddenOnly: false,
+			runtime: rt,
+			...s.io,
+			tries: 3
+		});
+		expect(out).toEqual({ kind: 'applied', mode: 'base', dhtPeers: 0 });
+		expect(readCfg().Routing.Type).toBe('dht');
+		expect(rt.state.restarts).toBe(1);
+		expect(rt.state.dhtPolls).toBe(20); // every 3 s for 60 s
+		expect(rt.state.slept).toBeGreaterThanOrEqual(57_000);
+		expect(s.warn.join('\n')).toMatch(
+			/has its new settings but has not found DHT peers yet; on this server check later with:\s+sudo -u ipfs env IPFS_PATH=\/var\/lib\/ipfs\/\.ipfs ipfs stats dht wan/
+		);
+	});
+});
+
+describe('counting DHT peers', () => {
+	// Real `ipfs stats dht` output (Kubo 0.42.0, two daemons connected on loopback).
+	const empty = 'DHT wan (0 peers):          \n';
+	const one =
+		'DHT lan (1 peers):                                                                   \n' +
+		'  Bucket  0 (1 peers) - refreshed 1s ago:                                            \n' +
+		'    Peer                                                  last useful  last queried  Agent Version\n' +
+		'  @ 12D3KooWFPSv9iYMha2d4KBknVJyN5wVfFfz53DSEAyj6i1i7QqH  1s ago       1s ago        kubo/0.42.0\n' +
+		'                                                                                     \n';
+	it('no bucket = 0; one peer line under a bucket = 1', () => {
+		expect(countDhtPeers(empty)).toBe(0);
+		expect(countDhtPeers(one)).toBe(1);
 	});
 });

@@ -2,7 +2,7 @@
 /**
  * apps/indexer/scripts/price-source-hardening-smoke.ts
  *
- * Combined structural smokes for the three cp127 hardening modules:
+ * Combined structural smokes for the three modules:
  *
  *   - Price-receipt endpoint shape (defense G)
  *   - Drift monitor (defense B)
@@ -274,7 +274,7 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 
 // ── Factory + composite wiring ───────────────────────────────────
 
-// FW-1 factory wires morphit_native as the FALLBACK tier.  cp372:
+// FW-1 factory wires morphit_native as the FALLBACK tier.
 // native is no longer blended into the external priority chain — it's
 // the fallback tier consulted only when all external sources are
 // down, which keeps defense C's external-vs-native cross-check
@@ -300,24 +300,53 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 	}
 }
 
-// FW-2 config exposes the cp127 env vars
+// FW-2 the native-price env vars reach the parsed config — and the knob that
+// did nothing (…PREFER_NATIVE_WHEN_DISAGREEING: parsed, never read; removed)
+// is gone rather than silently accepted. BEHAVIOURAL: the real
+// loadConfig() runs on a real environment and its result is read.
 {
-	const src = readFileSync(
-		resolve(__dirname, '..', 'src', 'config', 'index.ts'),
-		'utf-8'
-	);
-	const required = [
-		'MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED',
-		'MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING',
-		'MORPHIT_INDEXER_PRICE_FEED_STABLECOIN_KEYS',
-		'MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN',
-		'MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX'
-	];
-	const missing = required.filter((k) => !src.includes(k));
-	if (missing.length === 0) {
-		pass('FW-2 config exposes all 5 cp127 env vars');
-	} else {
-		fail('FW-2', `missing env vars: ${missing.join(', ')}`);
+	const prior: Record<string, string | undefined> = {};
+	const setEnv = (k: string, v: string): void => {
+		prior[k] = process.env[k];
+		process.env[k] = v;
+	};
+	setEnv('MORPHIT_INDEXER_DATABASE_URL', 'postgres://u:p@localhost:5432/morphit_indexer');
+	setEnv('MORPHIT_INDEXER_RELAY_ACCOUNT', 'tester');
+	setEnv('MORPHIT_INDEXER_FEE_RECIPIENT', 'tester');
+	setEnv('MORPHIT_INDEXER_CHAIN_ID', 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f');
+	setEnv('MORPHIT_INDEXER_PUBLIC_ORIGIN', 'https://indexer.example');
+	setEnv('MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY', 'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9');
+	setEnv('MORPHIT_INDEXER_PRICE_FEED_NATIVE_ENABLED', 'true');
+	setEnv('MORPHIT_INDEXER_PRICE_FEED_STABLECOIN_KEYS', 'usdt,dai');
+	setEnv('MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MIN', '0.0002');
+	setEnv('MORPHIT_INDEXER_PRICE_FEED_NATIVE_PLAUSIBLE_MAX', '0.05');
+	setEnv('MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING', 'true');
+	try {
+		const { loadConfig } = await import('../src/config/index.ts');
+		const cfg = loadConfig() as unknown as Record<string, unknown>;
+		const got = {
+			native: cfg.priceFeedNativeEnabled,
+			keys: (cfg.priceFeedStablecoinKeys as string[] | undefined)?.join(','),
+			min: cfg.priceFeedNativePlausibleMin,
+			max: cfg.priceFeedNativePlausibleMax
+		};
+		if (got.native === true && got.keys === 'usdt,dai' && got.min === 0.0002 && got.max === 0.05) {
+			pass('FW-2 the native-price env vars reach the parsed config');
+		} else {
+			fail('FW-2', `parsed: ${JSON.stringify(got)}`);
+		}
+		if (!('priceFeedPreferNativeWhenDisagreeing' in cfg)) {
+			pass('FW-2 the no-op PREFER_NATIVE_WHEN_DISAGREEING knob is gone from the config');
+		} else {
+			fail('FW-2', 'priceFeedPreferNativeWhenDisagreeing is still parsed, and nothing reads it');
+		}
+	} catch (e) {
+		fail('FW-2', `loadConfig threw: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+	} finally {
+		for (const [k, v] of Object.entries(prior)) {
+			if (v === undefined) delete process.env[k];
+			else process.env[k] = v;
+		}
 	}
 }
 
@@ -335,7 +364,7 @@ console.log('\n── price-source-hardening invariants smoke (cp127) ───\
 }
 
 // ─────────────────────────────────────────────────────────────────
-// cp233 — defense B + C RUNTIME WIRING.  The contract checks above
+// defense B + C RUNTIME WIRING.  The contract checks above
 // prove the modules behave; these prove they are actually invoked in
 // the refresh path / main.ts / health, so a future refactor cannot
 // silently unwire them (precisely the failure mode these exist to

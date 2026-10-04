@@ -1,15 +1,13 @@
 /**
- * v1.20.3 — ONE read of the served build's version (/verify.json) for both of
- * its readers on page load:
+ * The served build's version, read from /verify.json, for the update check
+ * (UpdateBanner): is a newer build deployed than the one this tab runs?
  *
- *   - the release check ($stores/release): is the operator serving the
- *     announced build? (gates the byte-for-byte integrity check);
- *   - the update check (UpdateBanner): is a newer build deployed than the one
- *     this tab runs?
+ * The build-integrity check ($stores/release) deliberately does NOT read it:
+ * that check is decided by the running build and the signed release alone, so
+ * nothing the operator serves here can switch it off.
  *
- * verify.json carries the whole file-hash manifest (~80 KB on the wire), and
- * each reader used to download it separately within seconds of each other.
- * Concurrent reads now share one download, and a read within `maxAgeMs` of the
+ * verify.json carries the whole file-hash manifest (~80 KB on the wire), so
+ * concurrent reads share one download, and a read within `maxAgeMs` of the
  * last successful one reuses its answer. The periodic update poll passes 0 and
  * always asks afresh. The URL is cache-busted and fetched with no-store, so no
  * proxy or browser cache can answer it stale (see ./deployedVersion.ts).

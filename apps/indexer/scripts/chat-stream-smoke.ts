@@ -139,7 +139,7 @@ function makeRow(overrides: Partial<ChatStreamRow> = {}): ChatStreamRow {
 		ciphertext: 'opaque-base64-blob',
 		header: { client_tag: 'abc123', ephemeral_pub: 'xyz', nonce: '789' },
 		created_at: new Date('2026-04-27T12:00:00Z'),
-		// cp474 — both REQUIRED by ChatStreamRow and previously absent, so every
+		// both REQUIRED by ChatStreamRow and previously absent, so every
 		// makeRow() built a shape the SQL never returns and `rowToWire`'s copy of
 		// them was asserted by nothing.
 		source_trx_id: 'aabbccdd11223344556677889900aabbccddeeff',
@@ -153,9 +153,9 @@ scenario('rowToWire: created_at becomes ISO string', () => {
 	assertEqual(w.created_at, '2026-04-27T12:00:00.000Z', 'iso');
 });
 
-// ─── cp474 drift guard ───────────────────────────────────────────
+// ─── drift guard ───────────────────────────────────────────
 //
-// cp470 fixed a HIGH bug: `rowToWire` simply wasn't copying
+// A later change fixed a HIGH bug: `rowToWire` simply wasn't copying
 // `order_permlink`, so every SSE event (snapshot, fast-path provisional AND
 // durable bus push) went out with an implicit `null` tag.  The client threads
 // by (peer, order) and drops live messages whose tag doesn't match the open
@@ -179,14 +179,14 @@ scenario('rowToWire: every ChatStreamRow field reaches the wire (drift guard)', 
 				'see cp470 (order_permlink omission = ~60s fast-chat outage)'
 		);
 	}
-	// Value fidelity for the two the cp470 bug actually hit. `created_at` is
+	// Value fidelity for the two the bug actually hit. `created_at` is
 	// deliberately transformed to an ISO string and is covered above.
 	assertEqual(w.order_permlink, 'sell-btc-eur-2026-04', 'order_permlink tag copied');
 	assertEqual(w.source_trx_id, row.source_trx_id, 'source_trx_id copied');
 });
 
 scenario('rowToWire: a general (order-less) thread keeps a null tag', () => {
-	// The null case is the one that masked the cp470 bug — general threads were
+	// The null case is the one that masked the bug — general threads were
 	// unaffected because their tag is genuinely null, so the bug only showed up
 	// in order threads.  Pin both.
 	const w = rowToWire(makeRow({ order_permlink: null }));

@@ -2,21 +2,20 @@
 /**
  * operator-doc-per-asset-config-example-coverage-smoke.
  *
- * Part 122 cp56 STRUCTURAL DEFENSE (LL #60 / O-10).
+ * STRUCTURAL DEFENSE.
  *
- * Deepens cp53-O7 from "ticker totally absent" to "ticker absent
+ * Deepens from "ticker totally absent" to "ticker absent
  * from CONFIG EXAMPLES" — catches the shallow-mention failure mode
  * where an asset is mentioned once in the headline but skipped in
- * the per-asset config example.  That was the exact pattern cp53
+ * the per-asset config example.  That was the exact pattern
  * surfaced manually in OPERATIONS.md (`MORPHIT_INDEXER_DISABLED_ASSETS
  * value listed 7 of 13 Category-B tickers while the comment claimed
- * "everything that isn't BLURT+XMR+BTC"`) — cp53 inline-fixed it,
- * cp56 pins the floor mechanically.
+ * "everything that isn't BLURT+XMR+BTC"`) — inline-fixed it,
+ * A later change pins the floor mechanically.
  *
  * Coverage requirement: each Category-B tradable asset MUST appear
  * at least once inside a `MORPHIT_INDEXER_DISABLED_ASSETS=...` env
- * example in EACH of the 3 scoped operator docs:
- *   - docs/PRE-LAUNCH-CHECKLIST.md
+ * example in the scoped operator doc:
  *   - docs/OPERATIONS.md
  *
  * Why DISABLED_ASSETS specifically: it's the most concrete operator-
@@ -28,25 +27,25 @@
  * no concrete syntax to copy.
  *
  * Recurring class scope progression (10 defenses across 9 checkpoints):
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker tables
- *   cp51-O5: per-asset i18n FAQ key coverage
- *   cp52-O6: Ansible env-template required-vars
- *   cp53-O7: operator doc per-asset coverage ("totally absent" floor)
- *   cp54-O8: what_is_<asset> FAQ native-locale floor
- *   cp55-O9: multi-family per-asset native-locale floor
- *   cp56-O10: operator doc per-asset CONFIG EXAMPLE coverage (THIS)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker tables
+ *   per-asset i18n FAQ key coverage
+ *   Ansible env-template required-vars
+ *   operator doc per-asset coverage ("totally absent" floor)
+ *   what_is_<asset> FAQ native-locale floor
+ *   multi-family per-asset native-locale floor
+ *   operator doc per-asset CONFIG EXAMPLE coverage (THIS)
  *
- * Mutation test verification: M-124 — stripping all
+ * Mutation test verification: — stripping all
  * `MORPHIT_INDEXER_DISABLED_ASSETS=...XRP...` examples from
  * OPERATIONS.md fires:
  *   "operator-doc-per-asset-config-example-coverage FAILED:
  *    docs/OPERATIONS.md is missing XRP from every DISABLED_ASSETS
  *    config example."
  *
- * Layered with cp53-O7: cp53-O7 catches "totally absent"; cp56-O10
+ * Layered: a later change catches "totally absent"
  * catches "present but only as headline mention".  Together they
  * pin both shallow-and-shallower drift floors.
  */
@@ -74,7 +73,6 @@ const CATEGORY_B = (ASSET_TICKERS as readonly string[]).filter(
 );
 
 const SCOPED_DOCS = [
-	'docs/PRE-LAUNCH-CHECKLIST.md',
 	'docs/OPERATIONS.md'
 ];
 

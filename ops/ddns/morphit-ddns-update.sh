@@ -1,5 +1,5 @@
 #!/bin/sh
-# morphit-ddns-update.sh (cp596) — provider-agnostic dynamic-DNS updater.
+# morphit-ddns-update.sh — provider-agnostic dynamic-DNS updater.
 #
 # Pushes THIS box's current public IPv4 to your DNS provider so a home node
 # stays reachable at your OWN domain even when your ISP changes your address.
@@ -24,8 +24,12 @@
 #                                Njalla:    https://njal.la/update/?h=DOMAIN&k=KEY&a={ip}
 #                                Namecheap: https://dynamicdns.park-your-domain.com/update?host=HOST&domain=DOMAIN&password=PASS&ip={ip}
 #     MORPHIT_DDNS_IP_URL      space-separated list of plain-text "echo my IP"
-#                              services, tried in order (default: three public
-#                              ones).  Override to self-host the IP check.
+#                              services, tried in order until one answers
+#                              (default: three public ones).  Every run (every
+#                              5 minutes by default) asks the first that
+#                              answers, so THAT service sees this box's public
+#                              address each time — set your own single choice,
+#                              or a service you host, to decide who that is.
 #     MORPHIT_DDNS_STATE_FILE  caches the last-pushed IP (default
 #                              /var/lib/morphit/ddns.last) so an unchanged IP
 #                              is a no-op — we never hammer the provider.
@@ -34,9 +38,20 @@ set -u
 log() { echo "morphit-ddns: $*" >&2; }
 
 # Manual runs (not via systemd) don't inherit the unit's EnvironmentFile, so
-# load the operator's persisted config here too.  Root-written 0600 trusted
-# config; simple KEY=value lines, safe under `set -u`.
-[ -r /etc/morphit/ddns.env ] && . /etc/morphit/ddns.env
+# read the operator's persisted config here too — PARSED, not sourced: the
+# documented provider URLs contain `&`, which a shell reading the file would
+# take as "run in the background", leaving the URL cut short and the updater
+# "not configured".  A value already in the environment (the unit's) wins.
+DDNS_ENV="${MORPHIT_DDNS_ENV:-/etc/morphit/ddns.env}"
+cfg_value() { # cfg_value KEY → the last KEY=value in ddns.env, quotes removed
+	sed -n "s/^[[:space:]]*$1=//p" "$DDNS_ENV" 2>/dev/null | tail -n 1 |
+		sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+if [ -r "$DDNS_ENV" ]; then
+	[ -n "${MORPHIT_DDNS_UPDATE_URL:-}" ] || MORPHIT_DDNS_UPDATE_URL="$(cfg_value MORPHIT_DDNS_UPDATE_URL)"
+	[ -n "${MORPHIT_DDNS_IP_URL:-}" ] || MORPHIT_DDNS_IP_URL="$(cfg_value MORPHIT_DDNS_IP_URL)"
+	[ -n "${MORPHIT_DDNS_STATE_FILE:-}" ] || MORPHIT_DDNS_STATE_FILE="$(cfg_value MORPHIT_DDNS_STATE_FILE)"
+fi
 
 URL_TMPL="${MORPHIT_DDNS_UPDATE_URL:-}"
 IP_URLS="${MORPHIT_DDNS_IP_URL:-https://api.ipify.org https://ipv4.icanhazip.com https://ifconfig.me/ip}"

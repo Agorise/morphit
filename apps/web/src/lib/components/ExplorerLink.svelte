@@ -1,23 +1,23 @@
 <!--
-  ExplorerLink.svelte — cp167 progressive-disclosure UI for multiple
+  ExplorerLink.svelte — progressive-disclosure UI for multiple
   block-explorer alternatives.
 
   Why this exists:
     Each non-BLURT chain (BTC, XMR, ETH, etc.) has multiple public
     block explorers.  Different users trust different explorers
     (privacy posture, jurisdiction, JavaScript-required-or-not,
-    censorship resistance).  Before cp167 the frontend picked one
+    censorship resistance).  Previously the frontend picked one
     URL for the user — either the operator's configured override
     or a bundled default.  Grandma got exactly one link.
 
-    After cp167, urls.externalExplorerUrls(asset, txid) returns the
+    Urls.externalExplorerUrls(asset, txid) returns the
     ORDERED list of all available URLs (operator override first if
     set, then bundled best→worst).  This component renders that
     list grandma-friendly:
 
       - urls.length === 0:  renders nothing (returns null)
       - urls.length === 1:  renders exactly the same single link
-                            that ChatMessage used pre-cp167; no
+                            that ChatMessage used older; no
                             visual change for users who don't have
                             multiple options.
       - urls.length > 1:    primary link renders identically; a

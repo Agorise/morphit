@@ -116,7 +116,7 @@ export function chatActivityStreamRoute(): Hono {
 				// thread is about, and whether the message was INBOUND — all
 				// on-chain-public metadata, never content.
 				//
-				// v1.7.5 (t.txt #1) — `order` and `inbound` are new, and they are what
+				// v1.7.5 — `order` and `inbound` are new, and they are what
 				// make the badge fast for a user who has NOT granted push permission.
 				// Before, this ping said only "something happened with <peer>", so the
 				// client's only move was to re-poll `getConversations` — which reads
@@ -135,7 +135,7 @@ export function chatActivityStreamRoute(): Hono {
 				// `inbound` matters as much as `order`: this stream fires for messages
 				// the account SENT as well as received (it's a participant stream). A
 				// client that lit its badge on every ping would nag the sender about
-				// their own message on their other devices — exactly the bug t.txt #2
+				// their own message on their other devices — exactly the bug
 				// reports. The client uses this to light only what's genuinely waiting.
 				const pushActivity = (
 					peer: string,
@@ -193,11 +193,10 @@ export function chatActivityStreamRoute(): Hono {
 					);
 				});
 
-				// v1.7.5 (t.txt #1) — REPLAY before `ready`.
+				// v1.7.5 — REPLAY before `ready`.
 				//
-				// the maintainer: "even when the browser itself or tab is closed completely, and
-				// then I open a new tab and go to Morphit, I want the badges in 6
-				// seconds or less."
+				// Requirement: with the browser fully closed, opening Morphit in a new tab
+				// shows the badges within 6 seconds.
 				//
 				// A cold start cannot learn this any other way. The page mounts and
 				// reads `getConversations`, which is the durable table — and the fast

@@ -57,7 +57,7 @@ export interface Config {
 	 *  matching the on-chain block handler (`operatorBlock.ts` gates on
 	 *  `operatorAccountName`). Falls back to `officialAccount` when no
 	 *  separate operator account is configured — exactly the indexer's
-	 *  rule (cp258: was wrongly keyed on `officialAccount`, which made
+	 *  rule (was wrongly keyed on `officialAccount`, which made
 	 *  ops-cli blocks inert for a separate-operator-account instance). */
 	readonly operatorAccount: string;
 
@@ -160,7 +160,7 @@ export function loadConfig(): Config {
 		// what the indexer's read surfaces filter by). Same fallback rule
 		// the indexer uses: MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME if set,
 		// else the official account. So local + chain blocks agree on one
-		// key (cp258: was officialAccount — inert for separate-operator).
+		// key (was officialAccount — inert for separate-operator).
 		operatorAccount:
 			envStr('MORPHIT_INDEXER_OPERATOR_ACCOUNT_NAME', '') ||
 			envStr('MORPHIT_INDEXER_OFFICIAL_ACCOUNT_NAME', 'morphit'),

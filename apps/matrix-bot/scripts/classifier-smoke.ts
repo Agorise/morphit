@@ -87,44 +87,29 @@ const scenarios: Scenario[] = [
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── CRITICAL — aspirational (matcher reserved) ──────────
+	// ─── CRITICAL — chain reads, chain trust, signup money ─────
 	{
 		name: 'witness-fee rpc_sustained_failure → CRITICAL',
 		alert: a('witness-fee', 'rpc_sustained_failure'),
 		expectedTier: 'CRITICAL'
 	},
 	{
-		name: 'tamper bundle_hash_mismatch → CRITICAL',
-		alert: a('tamper', 'bundle_hash_mismatch'),
+		name: 'btc-fee-block-confirm fee_relevant_block_forged → CRITICAL (a node served a forged block)',
+		alert: a('btc-fee-block-confirm', 'fee_relevant_block_forged', { block: 123 }),
 		expectedTier: 'CRITICAL'
 	},
 	{
-		name: 'tamper pubkey_mismatch → CRITICAL',
-		alert: a('tamper', 'pubkey_mismatch'),
+		name: 'poller chain_consistency_disagreement → CRITICAL',
+		alert: a('poller', 'chain_consistency_disagreement', { height: 1, agreeing: 1, contacted: 3, required: 2 }),
 		expectedTier: 'CRITICAL'
 	},
 	{
-		name: 'tamper invalid_payload → CRITICAL',
-		alert: a('tamper', 'invalid_payload'),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'backup failed → CRITICAL',
-		alert: a('backup', 'failed', { reason: 'disk_full' }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'aide integrity_violation → CRITICAL',
-		alert: a('aide', 'integrity_violation', { changed: 5 }),
-		expectedTier: 'CRITICAL'
-	},
-	{
-		name: 'fee-verifier invalid_fee_method → CRITICAL (Memory #23 USDT block)',
-		alert: a('fee-verifier', 'invalid_fee_method', { attempted: 'usdt' }),
+		name: 'relay-create relay_fee_spike_refused → CRITICAL (signups refused)',
+		alert: a('relay-create', 'relay_fee_spike_refused', { observed_blurt: 300, configured_blurt: 100 }),
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── CRITICAL — cp10 host-resource ────────────────────────
+	// ─── CRITICAL — host-resource ────────────────────────
 	{
 		name: 'host-resource disk_critical → CRITICAL',
 		alert: a('host-resource', 'disk_critical', {
@@ -176,7 +161,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
-	// ─── WARN — cp600 new release available (Matrix twin of the desktop toast) ───
+	// ─── WARN — new release available (Matrix twin of the desktop toast) ───
 	{
 		name: 'release release_available → WARN (prompt DM, not buried in the daily digest)',
 		alert: a('release', 'release_available', {
@@ -187,45 +172,32 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
-	// ─── WARN — aspirational ──────────────────────────────────
+	// ─── WARN — chain, price, federation, signup layers ───────
 	{
-		name: 'witness-fee changed → WARN',
-		alert: a('witness-fee', 'changed', { old: 100, new: 110 }),
+		name: 'witness-fee fee_changed → WARN',
+		alert: a('witness-fee', 'fee_changed', { old_blurt: 100, new_blurt: 110 }),
 		expectedTier: 'WARN'
 	},
 	{
-		name: 'price feed_stale → WARN (verification unaffected)',
-		alert: a('price', 'feed_stale', { last_update_age_min: 90 }),
+		name: 'price all_upstreams_failed_no_cache_serving_floor → WARN (verification unaffected)',
+		alert: a('price', 'all_upstreams_failed_no_cache_serving_floor', { floor: 0.001 }),
 		expectedTier: 'WARN'
 	},
 	{
-		name: 'price-coingecko feed_stale → WARN',
-		alert: a('price-coingecko', 'feed_stale', { last_update_age_min: 60 }),
+		name: 'federation-probe probe_threw → WARN',
+		alert: a('federation-probe', 'probe_threw', { origin: 'https://other.example' }),
 		expectedTier: 'WARN'
 	},
 	{
-		name: 'signup-anomaly single_ip_spike → WARN',
-		alert: a('signup-anomaly', 'single_ip_spike', {
-			ip: '198.51.100.1',
-			count: 7
-		}),
-		expectedTier: 'WARN'
-	},
-	{
-		name: 'federation-probe peer_down_24h → WARN',
-		alert: a('federation-probe', 'peer_down_24h', { peer: 'other.example' }),
-		expectedTier: 'WARN'
-	},
-	{
-		name: 'sequential-detector pattern_detected → WARN',
-		alert: a('sequential-detector', 'pattern_detected', {
-			prefix: 'spam',
-			count: 3
+		name: 'relay-create sequential_pattern_rejected → WARN',
+		alert: a('relay-create', 'sequential_pattern_rejected', {
+			reason: 'sequential_numeric_suffix',
+			matched_count: 2
 		}),
 		expectedTier: 'WARN'
 	},
 
-	// ─── WARN — cp10 host-resource ────────────────────────────
+	// ─── WARN — host-resource ────────────────────────────
 	{
 		name: 'host-resource disk_warn → WARN',
 		alert: a('host-resource', 'disk_warn', {
@@ -284,13 +256,8 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 	{
-		name: 'backup succeeded → INFO',
-		alert: a('backup', 'succeeded', { size_mb: 432 }),
-		expectedTier: 'INFO'
-	},
-	{
-		name: 'federation-probe discovered → INFO',
-		alert: a('federation-probe', 'discovered', { peer: 'new.example' }),
+		name: 'federation-probe dropped_dead_instances → INFO',
+		alert: a('federation-probe', 'dropped_dead_instances', { count: 1 }),
 		expectedTier: 'INFO'
 	},
 	{
@@ -328,7 +295,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 
-	// ─── CRITICAL — cp11 smartctl/fail2ban/mdadm ─────────────
+	// ─── CRITICAL — smartctl/fail2ban/mdadm ─────────────
 	{
 		name: 'smartctl smart_failed → CRITICAL',
 		alert: a('smartctl', 'smart_failed', { device: '/dev/sda' }),
@@ -387,7 +354,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── WARN — cp11 smartctl/fail2ban ───────────────────────
+	// ─── WARN — smartctl/fail2ban ───────────────────────
 	{
 		name: 'smartctl reallocated_sectors → WARN',
 		alert: a('smartctl', 'reallocated_sectors', {
@@ -433,7 +400,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
-	// ─── INFO — cp11 catch-alls ──────────────────────────────
+	// ─── INFO — catch-alls ──────────────────────────────
 	{
 		name: 'mdadm array_resyncing → INFO (digest)',
 		alert: a('mdadm', 'array_resyncing', {
@@ -457,7 +424,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 
-	// ─── CRITICAL — cp12 dmesg ────────────────────────────────
+	// ─── CRITICAL — dmesg ────────────────────────────────
 	{
 		name: 'dmesg oom_kill → CRITICAL',
 		alert: a('dmesg', 'oom_kill', {
@@ -496,7 +463,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── CRITICAL — cp12 trivy + postfix ─────────────────────
+	// ─── CRITICAL — trivy + postfix ─────────────────────
 	{
 		name: 'trivy image_critical_vulns → CRITICAL',
 		alert: a('trivy', 'image_critical_vulns', {
@@ -518,7 +485,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── WARN — cp12 ───────────────────────────────────────────
+	// ─── WARN — ───────────────────────────────────────────
 	{
 		name: 'dmesg segfault_other → WARN',
 		alert: a('dmesg', 'segfault_other', {
@@ -562,7 +529,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
-	// ─── INFO — cp12 catch-alls ───────────────────────────────
+	// ─── INFO — catch-alls ───────────────────────────────
 	{
 		name: 'dmesg dmesg_unreadable → INFO (digest)',
 		alert: a('dmesg', 'dmesg_unreadable', { hint: 'run as root' }),
@@ -593,7 +560,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 
-	// ─── CRITICAL — cp13 ───────────────────────────────────────
+	// ─── CRITICAL — ───────────────────────────────────────
 	{
 		name: 'certbot cert_expiry_critical → CRITICAL',
 		alert: a('certbot', 'cert_expiry_critical', {
@@ -646,7 +613,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── WARN — cp13 ───────────────────────────────────────────
+	// ─── WARN — ───────────────────────────────────────────
 	{
 		name: 'certbot cert_expiry_warn → WARN',
 		alert: a('certbot', 'cert_expiry_warn', {
@@ -678,7 +645,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
-	// ─── INFO — cp13 catch-alls ───────────────────────────────
+	// ─── INFO — catch-alls ───────────────────────────────
 	{
 		name: 'apt updates_pending_info → INFO',
 		alert: a('apt', 'updates_pending_info', {
@@ -692,7 +659,7 @@ const scenarios: Scenario[] = [
 		alert: a('apt', 'apt_unavailable', { hint: 'not Debian/Ubuntu' }),
 		expectedTier: 'INFO'
 	},
-	// Part 122 cp1 — apt-monitor observability fix (AV14)
+	// apt-monitor observability fix (AV14)
 	{
 		name: 'apt apt_refresh_failed → INFO (timeout / mirror unreachable)',
 		alert: a('apt', 'apt_refresh_failed', {
@@ -720,7 +687,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 
-	// ─── CRITICAL — cp14 ───────────────────────────────────────
+	// ─── CRITICAL — ───────────────────────────────────────
 	{
 		name: 'systemd unit_failed → CRITICAL',
 		alert: a('systemd', 'unit_failed', {
@@ -740,7 +707,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'CRITICAL'
 	},
 
-	// ─── WARN — cp14 ───────────────────────────────────────────
+	// ─── WARN — ───────────────────────────────────────────
 	{
 		name: 'systemd unit_restart_loop → WARN',
 		alert: a('systemd', 'unit_restart_loop', {
@@ -778,7 +745,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'WARN'
 	},
 
-	// ─── INFO — cp14 catch-alls ───────────────────────────────
+	// ─── INFO — catch-alls ───────────────────────────────
 	{
 		name: 'systemd systemctl_unavailable → INFO',
 		alert: a('systemd', 'systemctl_unavailable', {
@@ -794,7 +761,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 
-	// ─── cp15 mount_* (bind-mount + tmpfs) ────────────────────
+	// ─── mount_* (bind-mount + tmpfs) ────────────────────
 	{
 		name: 'host-resource mount_critical → CRITICAL (bind-mount filling)',
 		alert: a('host-resource', 'mount_critical', {
@@ -826,7 +793,7 @@ const scenarios: Scenario[] = [
 		expectedTier: 'INFO'
 	},
 
-	// ─── cp15 smartctl SCT thermal log ────────────────────────
+	// ─── smartctl SCT thermal log ────────────────────────
 	{
 		name: 'smartctl temperature_sustained_high → WARN (lifetime max breached threshold+5)',
 		alert: a('smartctl', 'temperature_sustained_high', {

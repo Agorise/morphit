@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * relay-health-probe — cp696.
+ * relay-health-probe.
  *
  * The indexer's /v1/health reports relay.up by probing the co-located relay's
  * /v1/health. That URL (MORPHIT_INDEXER_RELAY_HEALTH_URL) defaulted to '' and

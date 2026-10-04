@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * scripts/ipfs-release-hosting-smoke.ts  (v1.9.x, the maintainer)
+ * scripts/ipfs-release-hosting-smoke.ts  (v1.9.x)
  *
  * Every Morphit instance runs a small Kubo node that pins THIS instance's
  * current signed release, so releases stay available even if every commercial

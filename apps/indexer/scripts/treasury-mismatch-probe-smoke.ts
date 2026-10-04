@@ -1,5 +1,5 @@
 /**
- * treasury-mismatch-probe-smoke (cp316)
+ * treasury-mismatch-probe-smoke
  *
  * Guards the federation treasury-address Mismatch detection: a peer
  * instance that advertises a fee address DIFFERENT from the canonical
@@ -20,7 +20,7 @@
  *   WIRING (static drift guards):
  *     8. probeOne calls treasuryMismatchReason and returns mkMismatch
  *     9. /v1/instance exposes the resolved `treasury` block
- *    10. poller exposes currentTreasuryAddresses + feeds the scheduler
+ *    10. poller exposes currentTreasuryAddresses + feeds the verifier addresses to the scheduler
  */
 
 import { readFileSync } from 'node:fs';
@@ -85,7 +85,7 @@ const probeSrc = readFileSync(join(REPO, 'apps/indexer/src/indexer/federationPro
 if (probeSrc.includes('treasuryMismatchReason(canonicalTreasury, instanceData.treasury)') && probeSrc.includes('return mkMismatch(treasuryReason)'))
 	ok('probeOne calls treasuryMismatchReason and returns mkMismatch on divergence');
 else bad('probeOne no longer wires the treasury mismatch check', 'redirection would go unflagged');
-// cp768 — probePool now WITHHOLDS the treasury opinion (passes null) until our
+// probePool now WITHHOLDS the treasury opinion (passes null) until our
 // own indexer is synced, so a mid-sync incomplete baseline can't false-flag a
 // legit peer as fee-redirection. The relay-account/shape checks are unaffected.
 // (F4 added a trailing selfCheck arg to the clearnet call, so match the treasury
@@ -111,8 +111,15 @@ else bad('/v1/instance no longer exposes treasury', 'peers cannot audit the addr
 
 // 10 — poller wiring
 const pollerSrc = readFileSync(join(REPO, 'apps/indexer/src/indexer/poller.ts'), 'utf-8');
-if (pollerSrc.includes('currentTreasuryAddresses()') && pollerSrc.includes('canonicalTreasury: () => this.currentTreasuryAddresses()'))
-	ok('poller exposes currentTreasuryAddresses + feeds it to the probe scheduler');
+// v1.20.3: /v1/instance advertises currentTreasuryAddresses() — on a zero-clearnet
+// node null while no onion explorer answers — but the probe's reference stays the
+// address the verifiers check (verifierTreasuryAddresses), advertised or not.
+if (
+	pollerSrc.includes('currentTreasuryAddresses()') &&
+	pollerSrc.includes('verifierTreasuryAddresses()') &&
+	pollerSrc.includes('canonicalTreasury: () => this.verifierTreasuryAddresses()')
+)
+	ok('poller exposes currentTreasuryAddresses + feeds the verifier addresses to the probe scheduler');
 else bad('poller no longer feeds the resolved treasury to the probe', 'canonical reference lost');
 const mainSrc = readFileSync(join(REPO, 'apps/indexer/src/main.ts'), 'utf-8');
 // (v1.20.0: the route also takes the DB for fee_recipient_registered — a

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * address-share-modal-ux — v1.5.0 (tt.txt B) guard.
+ * address-share-modal-ux — v1.5.0 guard.
  *
  * Three findings from the maintainer's mobile testing of "Share crypto address":
  *
@@ -46,12 +46,12 @@ const flatSelect = select.replace(/\s+/g, ' ');
 if (/<AssetChoiceSelect/.test(flatModal)) {
 	ok('B1: the asset picker is the coin SELECT (AssetChoiceSelect)');
 } else {
-	bad('B1', 'AddressShareModal no longer uses AssetChoiceSelect — the per-asset block wall would be back (tt.txt B1).');
+	bad('B1', 'AddressShareModal no longer uses AssetChoiceSelect — the per-asset block wall would be back.');
 }
 if (/role="tablist"/.test(flatModal)) {
 	bad(
 		'B1',
-		'a role="tablist" is back in AddressShareModal — that is the 16-tab wall the maintainer asked to replace with a select (tt.txt B1).'
+		'a role="tablist" is back in AddressShareModal — that is the 16-tab wall the maintainer asked to replace with a select.'
 	);
 } else {
 	ok('B1: no per-asset tablist remains');
@@ -87,7 +87,7 @@ if (capped && scrolls) {
 } else {
 	bad(
 		'B2',
-		`the modal card must cap its height in dvh AND scroll, or on a phone the content runs past the viewport with no way to reach Send (tt.txt B2). capped=${capped} scrolls=${scrolls}`
+		`the modal card must cap its height in dvh AND scroll, or on a phone the content runs past the viewport with no way to reach Send. capped=${capped} scrolls=${scrolls}`
 	);
 }
 
@@ -100,7 +100,7 @@ if (/{#if addressErrorKey}/.test(flatModal)) {
 if (/{addressBorderClass}/.test(flatModal)) {
 	ok('B3: the invalid-entry red border still renders');
 } else {
-	bad('B3', 'the red invalid-address border is gone (tt.txt B3 — verify entries in real time).');
+	bad('B3', 'the red invalid-address border is gone (verify entries in real time).');
 }
 
 // ── Escape must not blow away the whole dialog ──────────────────────

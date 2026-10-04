@@ -1,6 +1,6 @@
 /**
  * Morphit relay — clock interface for time injection
- * (Item 6, Audit Part 26).
+ * (Item 6).
  *
  * Modules that consult the wall clock (drain-defense ceiling,
  * rate limiter, invite token TTL, altcha challenge expiry)
@@ -8,8 +8,8 @@
  * defaults to `defaultClock` which reads `Date.now()` directly.
  * Tests pass a manual clock that returns deterministic
  * timestamps, eliminating the wall-clock-dependency that
- * caused the drain-defense-live-fire UTC midnight flake
- * (Part 25).
+ * caused the drain-defense-live-fire UTC midnight flake.
+ *
  *
  * Why an interface and not just a function: the policy modules
  * also occasionally need a `Date` object (for hour-of-day

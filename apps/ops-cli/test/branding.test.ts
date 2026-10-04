@@ -412,7 +412,7 @@ describe('normalizeSvg', () => {
 		],
 		['<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>', 'viewBox'],
 		['<html></html>', 'html'],
-		// The deep-deep red team's bypasses of the old regex check:
+		// The deep audit red team's bypasses of the old regex check:
 		[
 			'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" xmlns:h="http://www.w3.org/1999/xhtml"><h:script>alert(1)</h:script></svg>',
 			'script'
@@ -1175,7 +1175,9 @@ describe('resolveCallerPath — a relative --logo resolves where the operator ty
 		expect(r('/etc/x.svg', install, { MORPHIT_OPS_CALLER_CWD: '/home/tester' }, cliDir)).toBe(
 			'/etc/x.svg'
 		);
-		expect(r('~/logo.svg', install, { HOME: '/home/tester' }, cliDir)).toBe('/home/tester/logo.svg');
+		expect(r('~/logo.svg', install, { HOME: '/home/tester' }, cliDir)).toBe(
+			'/home/tester/logo.svg'
+		);
 		expect(r("'/tmp/a b.svg'", install, {}, cliDir)).toBe('/tmp/a b.svg');
 	});
 });

@@ -1,18 +1,19 @@
 # Morphit — launch-day runbook
 
 > The morning-of and first-24-hour procedure for a Morphit
-> node operator going live.  This is distinct from
-> `PRE-LAUNCH-CHECKLIST.md` (which covers everything you must
-> have *done* before this morning) and from
-> `POST-LAUNCH-WEEK-ONE.md` (which covers ongoing monitoring
-> after day-zero).
+> node operator going live.  This is distinct from the install
+> and configuration in `RUN-A-MORPHIT-NODE.md` and
+> `OPERATIONS.md` (everything you must have *done* before this
+> morning) and from `POST-LAUNCH-WEEK-ONE.md` (which covers
+> ongoing monitoring after day-zero).
 
 **Audience:** node operator (probably you, possibly a
 sysadmin handed this doc).
 
-**Assumption:** every box in `PRE-LAUNCH-CHECKLIST.md` is
-already ticked.  If anything is unchecked, this runbook is
-not yet for you — go finish the checklist first.
+**Assumption:** the node is installed and configured as
+`RUN-A-MORPHIT-NODE.md` and `OPERATIONS.md` describe.  If it
+is not, this runbook is not yet for you — finish the setup
+first.
 
 ---
 
@@ -83,8 +84,8 @@ problem has time to surface without crisis pressure.
       ```
       Expect 3,300+ scenarios passed, 0 runners failed
       (baseline ticks up as smokes are added each release;
-      Part 122 cp27 baseline was 3,327; subsequent checkpoints
-      from cp30 through cp52 added scenarios on top — current
+      an early baseline was 3,327; later releases added
+      scenarios on top — current
       lower-bound floor is whatever your `run-smokes.sh` prints
       against the repo state, with 0 runners failed being the
       load-bearing assertion).
@@ -153,7 +154,7 @@ bonuses/refills paid from the running balance:
 | 100 signups + 100 refills | ~10,000 BLURT fees + ~2,200 BLURT | **~12,500 BLURT** |
 
 **Don't get caught short.**  An operator who funds
-just 250 BLURT (the pre-Part-112 figure, since
+just 250 BLURT (the older figure, since
 corrected) cannot cover the creation fee for even 3
 signups.  The old sizing (50/250/500 BLURT) assumed
 a ~1 BLURT/signup chain fee; the canonical default
@@ -274,7 +275,7 @@ zero.
 
 ### `/v1/health?verbose=1` polled every minute
 
-> **Sally-operator finding So-3 (Part 119): you must enable verbose
+> **Sally-operator finding So-3: you must enable verbose
 > mode in your env first.**  The `diagnostics` block (containing
 > `operator_balances`, `price`, `explorers`, `sse_subscribers`,
 > `last_error`, `started_at`) only renders when
@@ -302,7 +303,7 @@ done
 ```
 
 (Field paths re-verified against `apps/indexer/src/api/health.ts`
-in the Part 119 audit — the canonical fields are `status`
+in the audit — the canonical fields are `status`
 (values: `ok` / `degraded`), `lag_blocks`, `stale`, and the
 verbose-only `diagnostics.{operator_balances,price,explorers,
 sse_subscribers,last_error,started_at}`.  Earlier doc drafts
@@ -441,10 +442,10 @@ anchor (`MORPHIT_OFFICIAL_POSTING_PUBKEY`, hardcoded).
 
 ---
 
-## Memory rule
+## Standing rule
 
-**Per Memory #5: this file must be updated in the same
-turn as any change that adds or removes a day-zero
+**Per the keep-docs-current rule: this file must be updated in the same
+change as any change that adds or removes a day-zero
 operator action.**  If a future Part adds a new
 operator-facing concern that affects launch-day
 behavior, this file is one of the docs that must be

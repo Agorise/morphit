@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, S9 — a legacy `https://` hidden-service origin.
+ * a legacy `https://` hidden-service origin.
  *
  * The hidden transports tunnel plain HTTP (the network authenticates the host
  * and encrypts end to end); they never spoke TLS. So `https://<onion>` was

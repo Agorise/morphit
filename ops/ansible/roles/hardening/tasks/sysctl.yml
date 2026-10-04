@@ -9,7 +9,11 @@
     content: |
       # Managed by Ansible — see OPERATIONS.md §37.3 for rationale.
       # Network
-      net.ipv4.ip_forward = 0
+      # net.ipv4.ip_forward is deliberately NOT set here: Docker turns it on
+      # when it starts, and the public ports it publishes (BunkerWeb's 80/443)
+      # are DNAT'd to the container and then FORWARDED — with forwarding off
+      # every clearnet visitor's connection is dropped while loopback, Tor and
+      # I2P keep working.  A box without Docker keeps the kernel default (off).
       net.ipv4.conf.all.send_redirects = 0
       net.ipv4.conf.default.send_redirects = 0
       net.ipv4.conf.all.accept_redirects = 0

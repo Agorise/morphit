@@ -3,7 +3,7 @@
  *
  * Single source of truth for the project's phase status,
  * surfaced as a badge on /plan.  Replaces the hardcoded
- * "in progress" chip removed in Part 68 (Sally finding L11).
+ * "in progress" chip removed (Sally finding L11).
  *
  * Source-of-truth-discipline rule: when a phase ships, the
  * maintainer flips it here in the same commit that tags the
@@ -29,7 +29,7 @@
  * If you're updating this file, also update:
  *   - The corresponding `i18n.plan.phase_N_*` strings if the
  *     scope of a phase changed
- *   - `docs/PLAN.md` for the textual canonical
+ *   - the ADRs in `docs/adr/` if a phase decision changed
  *   - The brag-list if a "Phase X shipped" claim moves
  */
 
@@ -47,7 +47,7 @@ export interface Phase {
 /**
  * Current phase manifest.  Order matches /plan rendering order.
  *
- * Last reviewed: 2026-06-05 (cp200).  Phases 1–5 are
+ * Last reviewed: 2026-06-05.  Phases 1–5 are
  * code-complete (shipped); phase 6 (API integrations &
  * marketing) is the current campaign and is in progress.
  *

@@ -17,10 +17,12 @@
 import type { Database } from '$db/pool';
 import type { Config } from '$config/index';
 import { DEFAULT_BRAND_NAME } from '@morphit/operator-config';
-import { cryptoFacingSideWhere, isAccountName, escapeLike } from '$api/shared';
+import { isAccountName } from '$api/shared';
+import { buildWhereClauses, type OrderbookStreamQuery } from '$api/orderbookStreamHelpers';
+import { tradeCountJoin } from '$api/reputationJoin';
 
 import { ASSET_TICKERS, type AssetTicker } from '@morphit/asset-registry';
-import { FEEDBACK_EXCLUSIONS_SQL } from '$api/reputationJoin';
+import { isOrderLang } from '@morphit/operator-config';
 
 const FEED_LIMIT = 50;
 const CACHE_TTL_SECONDS = 60;
@@ -46,13 +48,20 @@ interface OrderRow {
 	updated_at: Date;
 }
 
+/** Everything that is not an XML 1.0 `Char` (C0 controls other than
+ *  tab/LF/CR, lone surrogates, U+FFFE, U+FFFF). No escape can represent
+ *  these in XML 1.0, and one of them anywhere makes the whole document
+ *  ill-formed, so a reader rejects every order in the feed. */
+const NON_XML_CHARS = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu;
+
 /**
- * Escape for XML text content. Five characters: `<`, `>`,
- * `&`, `"`, `'`. `&` first — doing it last would
- * double-escape the others.
+ * Escape for XML text content: drop non-XML characters, then the five
+ * markup characters `<`, `>`, `&`, `"`, `'`. `&` first — doing it last
+ * would double-escape the others.
  */
-function xmlEscape(s: string): string {
+export function xmlEscape(s: string): string {
 	return s
+		.replace(NON_XML_CHARS, '')
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
@@ -317,34 +326,11 @@ export async function globalFeedHandler(
 	const frontendOrigin = frontendOriginFrom(config);
 	const filters = parseFeedFilters(rawFilters);
 
-	// Dynamic param binder (mirrors perAssetFeedHandler / orderbook.ts).
-	// No asset predicate — this is the cross-asset feed; the optional
-	// order-property filters splice in after the fixed predicates and
-	// FEED_LIMIT binds last. The bare URL (no query) is unchanged; the
-	// filters are opt-in so a filtered URL reveals more than the bare one
-	// (same privacy posture as the per-asset feed).
-	const params: unknown[] = [];
-	const p = (v: unknown): string => {
-		params.push(v);
-		return `$${params.length}`;
-	};
-	const where: string[] = [
-		`o.status = 'live'`,
-		`o.fee_status IN ('verified', 'verified_by_attestation')`,
-		`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(config.operatorAccountName)} AND ob.blocked = o.account AND ob.state = 'blocked')`
-	];
-	appendFilterClauses(filters, where, p);
-
-	// min_trades rides the SAME sock-puppet-filtered feedback-count
-	// aggregate as the orderbook + per-asset feed, joined ONLY when the
-	// filter is active so the bare feed never pays for it.
-	let joinSql = '';
-	if (filters.minTrades !== undefined) {
-		joinSql = `
-		  LEFT JOIN (${FEEDBACK_COUNT_SUBQUERY}
-		  ) f ON f.subject = o.account`;
-		where.push(`COALESCE(f.c, 0) >= ${p(filters.minTrades)}`);
-	}
+	// No asset predicate — this is the cross-asset feed. The bare URL (no
+	// query) shows every orderbook order; the filters are opt-in so a
+	// filtered URL reveals more than the bare one (same privacy posture as
+	// the per-asset feed).
+	const { sql: whereSql, joinSql, params, p } = feedWhere(filters, config, {});
 
 	const sql = `
 		SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
@@ -352,7 +338,7 @@ export async function globalFeedHandler(
 		       o.location_region, o.payment_methods, o.fee_method,
 		       o.created_at, o.updated_at
 		  FROM orders o${joinSql}
-		 WHERE ${where.join(' AND ')}
+		 WHERE ${whereSql}
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
 		 LIMIT ${p(FEED_LIMIT)}`;
 
@@ -386,18 +372,12 @@ export async function globalFeedHandler(
 	return { status: 200, headers: headersFor(format), body };
 }
 
-/** Order-intrinsic + reputation filters a per-asset feed can carry as
- *  query params, mirroring the live orderbook's filter surface
- *  (apps/indexer/src/api/orderbook.ts) so a feed of "my current
- *  search" returns the same rows the orderbook page shows: side,
- *  fiat_currency, location_region, payment_methods, and min_trades.
- *
- *  min_trades rides the SAME sock-puppet-filtered, trade-bound
- *  feedback COUNT the orderbook uses (FEEDBACK_COUNT_SUBQUERY below,
- *  pinned table-for-table against orderbook.ts by
- *  rss-orderbook-filters-smoke), so a trader the orderbook hides under
- *  a min_trades threshold is hidden from the feed too — the two never
- *  disagree.
+/** Filters a feed can carry as query params, the orderbook's own filter
+ *  surface: side, fiat_currency, location_region, payment_methods, langs
+ *  and min_trades. They are handed to the orderbook's WHERE builder
+ *  (orderbookStreamHelpers.buildWhereClauses), so a feed of "my current
+ *  search" selects exactly the orders the orderbook page shows, expiry,
+ *  substring region match and completed-trade count included.
  *
  *  ONE orderbook control is intentionally NOT honored:
  *    - sort: a feed is inherently reverse-chronological (every
@@ -412,6 +392,7 @@ interface FeedFilters {
 	readonly fiatCurrencies?: readonly string[];
 	readonly locationRegion?: string;
 	readonly paymentMethods?: readonly string[];
+	readonly langs?: readonly string[];
 	readonly minTrades?: number;
 }
 
@@ -425,6 +406,7 @@ function parseFeedFilters(raw: Readonly<Record<string, string | undefined>>): Fe
 		fiatCurrencies?: string[];
 		locationRegion?: string;
 		paymentMethods?: string[];
+		langs?: string[];
 		minTrades?: number;
 	} = {};
 
@@ -463,6 +445,19 @@ function parseFeedFilters(raw: Readonly<Record<string, string | undefined>>): Fe
 		if (methods.length) out.paymentMethods = methods;
 	}
 
+	const langsRaw = (raw.langs ?? '').trim();
+	if (langsRaw) {
+		const langs = [
+			...new Set(
+				langsRaw
+					.split(',')
+					.map((s) => s.trim())
+					.filter((s) => isOrderLang(s))
+			)
+		];
+		if (langs.length) out.langs = langs;
+	}
+
 	// min_trades: integer 1..100 (matches orderbook.ts's
 	// z.coerce.number().int().nonnegative().max(100); 0 = "Any" = no
 	// filter, so only a positive value narrows the feed).
@@ -483,31 +478,36 @@ function hasAnyFilter(f: FeedFilters): boolean {
 		f.fiatCurrencies !== undefined ||
 		f.locationRegion !== undefined ||
 		f.paymentMethods !== undefined ||
+		f.langs !== undefined ||
 		f.minTrades !== undefined
 	);
 }
 
-/** Append the filter WHERE-clause fragments, binding params via `p`.
- *  Clause shapes are kept byte-identical to orderbook.ts so the feed
- *  matches the orderbook exactly; rss-orderbook-filters-smoke pins
- *  the parity. The side clause comes from the SHARED
- *  `cryptoFacingSideWhere` (which flips BARTER's goods-direction to
- *  the crypto direction), so the feed and orderbook agree on barter by
- *  construction — pinned by orderbook-side-barter-flip-smoke. */
-function appendFilterClauses(f: FeedFilters, where: string[], p: (v: unknown) => string): void {
-	// Crypto-facing side filter — BARTER's o.side is the goods direction and
-	// flips (see cryptoFacingSideWhere). Shared with the orderbook so the feed
-	// matches it exactly. t.txt v1.8.16 #3.
-	if (f.side) where.push(cryptoFacingSideWhere(f.side, p));
-	if (f.fiatCurrencies) where.push(`o.fiat_currency = ANY(${p(f.fiatCurrencies)}::text[])`);
-	if (f.locationRegion) {
-		where.push(`o.location_region ILIKE ${p(escapeLike(f.locationRegion) + '%')} ESCAPE '\\'`);
-	}
-	if (f.paymentMethods) {
-		where.push(
-			`EXISTS (SELECT 1 FROM unnest(o.payment_methods) pm WHERE lower(pm) = ANY(${p(f.paymentMethods)}::text[]))`
-		);
-	}
+/** The feed's WHERE clause, its bind params and binder, built by the
+ *  orderbook's own builder. The trade-count join is added only when
+ *  min_trades is set, so the bare feed never pays for it. */
+function feedWhere(
+	f: FeedFilters,
+	config: Config,
+	scope: { readonly asset?: Asset; readonly account?: string }
+): { sql: string; joinSql: string; params: unknown[]; p: (v: unknown) => string } {
+	const q: OrderbookStreamQuery = {
+		...(scope.asset ? { asset: scope.asset } : {}),
+		...(scope.account ? { account: scope.account } : {}),
+		...(f.side ? { side: f.side } : {}),
+		...(f.fiatCurrencies ? { fiat_currency: f.fiatCurrencies.join(',') } : {}),
+		...(f.locationRegion ? { location_region: f.locationRegion } : {}),
+		...(f.paymentMethods ? { payment_methods: f.paymentMethods.join(',') } : {}),
+		...(f.langs ? { langs: f.langs.join(',') } : {}),
+		...(f.minTrades !== undefined ? { min_trades: f.minTrades } : {})
+	};
+	const { where, params } = buildWhereClauses(q, 0, config.operatorAccountName);
+	const p = (v: unknown): string => {
+		params.push(v);
+		return `$${params.length}`;
+	};
+	const joinSql = f.minTrades !== undefined ? `\n${tradeCountJoin('o')}` : '';
+	return { sql: where.join(' AND '), joinSql, params, p };
 }
 
 /** The `?…` suffix reproducing the active filters for the feed's self
@@ -520,49 +520,26 @@ function filterQueryString(f: FeedFilters): string {
 	if (f.locationRegion) parts.push(`location_region=${encodeURIComponent(f.locationRegion)}`);
 	if (f.paymentMethods)
 		parts.push(`payment_methods=${encodeURIComponent(f.paymentMethods.join(','))}`);
+	if (f.langs) parts.push(`langs=${encodeURIComponent(f.langs.join(','))}`);
 	if (f.minTrades !== undefined) parts.push(`min_trades=${f.minTrades}`);
 	return parts.length ? `?${parts.join('&')}` : '';
 }
 
-/** Sock-puppet-filtered, trade-bound feedback COUNT per subject — the
- *  SAME row-eligibility predicate the live orderbook uses for its
- *  min_trades filter (apps/indexer/src/api/orderbook.ts, the `f` join),
- *  so a feed's min_trades and the orderbook's never disagree about who
- *  clears a threshold.  COUNT-only: the feed never sorts by rating, so
- *  the decay-weighted rating the orderbook also computes is omitted.
- *
- *  CANONICAL exclusion set lives in orderbook.ts; this is a deliberate
- *  count-only mirror (the codebase already keeps per-consumer copies of
- *  this aggregate — orders.ts, orderbookStream.ts, reputationReceipt.ts,
- *  the feedback API — rather than one shared CTE).
- *
- *  cp442 — the EXCLUSION CLAUSES themselves are no longer mirrored: they come
- *  from `FEEDBACK_EXCLUSIONS_SQL` in `$api/reputationJoin`, the single place
- *  they are written. Only the count-only SELECT/GROUP BY shape is local, which
- *  is the part that legitimately differs (no time-decayed rating here).
- *  rss-orderbook-filters-smoke still extracts the exclusion TABLES from both
- *  this constant and the shared aggregate and fails if they ever differ. */
-const FEEDBACK_COUNT_SUBQUERY = `
-		SELECT subject, COUNT(*)::int AS c
-		  FROM feedback fb
-${FEEDBACK_EXCLUSIONS_SQL}
-		 GROUP BY subject`;
-
 /** /rss/orderbook/by-asset/<asset>.xml — `rawSegment` is the
  *  URL path parameter (e.g., "btc.xml"). Validates the asset
- *  is one of the canonical ASSET_TICKERS supported (16 at
- *  cp49); rejects others with 400 to keep the URL space small
+ *  is one of the canonical ASSET_TICKERS supported;
+ *  rejects others with 400 to keep the URL space small
  *  and enumerable.
  *
- *  Cp50 deep-deep D-1 HIGH fix: the regex used to be hardcoded
+ *  HIGH fix: the regex used to be hardcoded
  *  `/^(btc|xmr|blurt)\.xml$/` and silently stayed frozen at 3
- *  assets across 13 subsequent asset additions (cp21 BCH, cp24
- *  LTC, cp27 DASH, cp30 USDC, cp30 USDT, cp31 DAI, cp33 DOGE,
- *  cp39 ZEC, cp41 ARRR, cp43 DCR, cp45 SOL, cp47 ETH, cp49 XRP)
+ *  assets across 13 subsequent asset additions (BCH
+ *  LTC, DASH, USDC, USDT, DAI, DOGE,
+ *  ZEC, ARRR, DCR, SOL, ETH, XRP)
  *  — every per-asset RSS feed except BTC/XMR/BLURT 400'd silently
  *  for ~14 checkpoints.  Fix derives the allow-set from
  *  ASSET_TICKERS so future asset additions cannot drift this
- *  again.  Cp50 NEW per-asset-rss-feed-smoke pins the derivation. */
+ *  again.  NEW per-asset-rss-feed-smoke pins the derivation. */
 export async function perAssetFeedHandler(
 	rawSegment: string,
 	db: Database,
@@ -588,35 +565,10 @@ export async function perAssetFeedHandler(
 
 	const filters = parseFeedFilters(rawFilters);
 
-	// Dynamic param binder (mirrors orderbook.ts).  Asset binds FIRST
-	// so params[0] is always the asset (rss-orderbook-smoke relies on
-	// that); optional order-property filters splice in after the fixed
-	// predicates and FEED_LIMIT binds last.
-	const params: unknown[] = [];
-	const p = (v: unknown): string => {
-		params.push(v);
-		return `$${params.length}`;
-	};
-	const where: string[] = [
-		`o.status = 'live'`,
-		`o.fee_status IN ('verified', 'verified_by_attestation')`,
-		`o.asset = ${p(asset)}`,
-		`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${p(config.operatorAccountName)} AND ob.blocked = o.account AND ob.state = 'blocked')`
-	];
-	appendFilterClauses(filters, where, p);
-
-	// min_trades rides the feedback-count aggregate (same sock-puppet
-	// exclusion set as the orderbook) — joined ONLY when the filter is
-	// active so the bare / order-property feed never pays for it.  A
-	// LEFT JOIN never drops rows on its own; the COALESCE clause is what
-	// enforces the threshold.
-	let joinSql = '';
-	if (filters.minTrades !== undefined) {
-		joinSql = `
-		  LEFT JOIN (${FEEDBACK_COUNT_SUBQUERY}
-		  ) f ON f.subject = o.account`;
-		where.push(`COALESCE(f.c, 0) >= ${p(filters.minTrades)}`);
-	}
+	// The asset predicate is the orderbook's own: every order INVOLVING the
+	// asset (traded, paid in, or accepted in barter), as the orderbook page
+	// this feed is subscribed from shows.
+	const { sql: whereSql, joinSql, params, p } = feedWhere(filters, config, { asset });
 
 	const sql = `
 		SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
@@ -624,7 +576,7 @@ export async function perAssetFeedHandler(
 		       o.location_region, o.payment_methods, o.fee_method,
 		       o.created_at, o.updated_at
 		  FROM orders o${joinSql}
-		 WHERE ${where.join(' AND ')}
+		 WHERE ${whereSql}
 		 ORDER BY o.updated_at DESC, o.account ASC, o.permlink ASC
 		 LIMIT ${p(FEED_LIMIT)}`;
 
@@ -691,20 +643,18 @@ export async function perAccountFeedHandler(
 	}
 	const frontendOrigin = frontendOriginFrom(config);
 
+	const { sql: whereSql, params, p } = feedWhere({}, config, { account });
 	const sql = `
 		SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
 		       o.amount_min::text, o.amount_max::text,
 		       o.location_region, o.payment_methods, o.fee_method,
 		       o.created_at, o.updated_at
 		  FROM orders o
-		 WHERE o.status = 'live'
-		   AND o.fee_status IN ('verified', 'verified_by_attestation')
-		   AND o.account = $1
-		   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = $3 AND ob.blocked = o.account AND ob.state = 'blocked')
+		 WHERE ${whereSql}
 		 ORDER BY o.updated_at DESC, o.permlink ASC
-		 LIMIT $2`;
+		 LIMIT ${p(FEED_LIMIT)}`;
 
-	const result = await db.query<OrderRow>(sql, [account, FEED_LIMIT, config.operatorAccountName]);
+	const result = await db.query<OrderRow>(sql, params);
 
 	const body = serializeFeed(
 		result.rows,

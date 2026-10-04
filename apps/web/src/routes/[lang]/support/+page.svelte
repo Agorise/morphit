@@ -3,7 +3,7 @@
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	/**
-	 * Sally finding H7 (Part 68): /support was a one-card stub
+	 * Sally finding H7: /support was a one-card stub
 	 * that bounced to /faq.  A user clicking "Help & Support"
 	 * from the avatar menu deserves more than a redirect.  This
 	 * page now surfaces:
@@ -25,7 +25,7 @@
 
 	const safeContact = $derived(safeContactUrl($instance.contact_url));
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);

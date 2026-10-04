@@ -2,9 +2,9 @@
 /**
  * apps/web/scripts/order-settled-elsewhere-payload-smoke.ts
  *
- * Structural Defense (cp496, t.txt #5) — the "order settled with someone
+ * Structural Defense — the "order settled with someone
  * else" auto-reply is a SYSTEM chat payload: it carries only the order
- * permlink on the wire, and each recipient renders the the maintainer-approved warm
+ * permlink on the wire, and each recipient renders the approved warm
  * copy in the RECIPIENT's OWN locale (from chat.system.order_settled_elsewhere).
  *
  * This smoke pins the receiver half of the feature so a refactor can't

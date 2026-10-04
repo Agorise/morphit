@@ -2,7 +2,7 @@
 	/**
 	 * Root +layout.svelte — minimal wrapper for the redirect shell.
 	 *
-	 * Part 121 cp7.  This file deliberately does NOT include the
+	 * This file deliberately does NOT include the
 	 * full app chrome (header, banners, language switcher, avatar
 	 * menu, footer) because the root route is the bare `/` redirect
 	 * shell that the user is on for ~one frame before being

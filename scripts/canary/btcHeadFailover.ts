@@ -7,9 +7,9 @@
  * — the smoke injects a `fetchOne` that fails the first N sources, and feeds
  * canned response bodies to `parseBtcSourceBody`.
  *
- * cp613 — why this exists: the canary used to `curl` blockstream.info alone
+ * why this exists: the canary used to `curl` blockstream.info alone
  * for its Bitcoin freshness proof, with no fallback and a fatal `set -e`
- * abort. A single timeout there stopped the ENTIRE canary refresh. cp614 —
+ * abort. A single timeout there stopped the ENTIRE canary refresh.
  * widened to hop across FIVE independent providers (Blockstream, mempool.space,
  * Blockchain.com, Blockchair, BlockCypher), each with its own HTTP shape, so a
  * provider outage / region block / Cloudflare 403 can't stall the refresh.

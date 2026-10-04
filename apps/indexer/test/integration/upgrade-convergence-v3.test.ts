@@ -22,7 +22,10 @@ import { xmrFeePaymentId } from '@morphit/release-schema';
 import { INTEGRATION_ENABLED, setupWithMigrations, type IntegrationFixture } from './harness';
 import { fakeConfig, mockBlurt } from '../testutils/context';
 
-const OFFICIAL_PUBKEY = 'BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9';
+const { PrivateKey, cryptoUtils } = await import('@beblurt/dblurt');
+const CHAIN_ID = 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f';
+const OFFICIAL_KEY = PrivateKey.fromSeed('upgrade-convergence-official');
+const OFFICIAL_PUBKEY = OFFICIAL_KEY.createPublic().toString();
 const acct = {
 	name: 'morphit',
 	posting: { weight_threshold: 1, account_auths: [], key_auths: [[OFFICIAL_PUBKEY, 1]] },
@@ -99,8 +102,27 @@ const btc: FeeVerifier = {
 };
 const config = fakeConfig({
 	officialPostingPubkey: OFFICIAL_PUBKEY,
-	officialAccountName: 'morphit'
+	officialAccountName: 'morphit',
+	chainId: CHAIN_ID
 });
+
+/** The transaction as the chain carries it: official ops are signed with the
+ *  pinned key (release and rpc-directory ops are trusted by their signature). */
+function trxOf(op: [string, unknown], blockTime: number): unknown {
+	const body = op[1] as { required_posting_auths?: string[] };
+	if (body.required_posting_auths?.[0] !== 'morphit') return { operations: [op] };
+	return cryptoUtils.signTransaction(
+		{
+			ref_block_num: 1,
+			ref_block_prefix: 2,
+			expiration: new Date(blockTime + 60_000).toISOString().slice(0, 19),
+			operations: [op],
+			extensions: []
+		} as never,
+		[OFFICIAL_KEY],
+		Buffer.from(CHAIN_ID, 'hex')
+	);
+}
 const blurt = mockBlurt({ getAccount: async () => acct as never });
 const amounts = { btcSatoshis: 1000, xmrPiconero: 781_250_000n };
 
@@ -128,7 +150,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('upgrade from v1.19 converges (V3-1)', () 
 				{
 					timestamp: new Date(T0 + n * 3000).toISOString().slice(0, 19),
 					transaction_ids: ops.map((_, i) => `trx-${n}-${i}`),
-					transactions: ops.map((op) => ({ operations: [op] }))
+					transactions: ops.map((op) => trxOf(op, T0 + n * 3000))
 				} as never,
 				blurt,
 				config,

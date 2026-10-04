@@ -61,13 +61,21 @@ directly. Verify the checkout first (`git verify-tag <tag>`, see
 
 ## Configuration
 
-Single env var:
+For a local agent (the default `stdio` transport) one variable matters:
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `MORPHIT_MCP_INSTANCE_URL` | `https://morphit.io` | The Morphit instance the server queries. Switch this to use a different operator's instance (e.g. a Tor onion, a regional one, your self-hosted one). |
+| `MORPHIT_MCP_INSTANCE_URL` | `https://morphit.io` | The Morphit instance the server queries. Switch this to use a different operator's instance (a regional one, your self-hosted one). |
+| `MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE` | unset | Set to `1` if that instance's host resolves to a private address (your own LAN instance, a dev setup). Otherwise such a URL is refused, as a guard against the server being pointed at internal addresses. |
 
-That's it. No API keys. No credentials. No accounts.
+No API keys. No credentials. No accounts.
+
+The network transport (`MORPHIT_MCP_TRANSPORT=http`, what the
+`morphit-mcp` service on a node runs) has more settings:
+`MORPHIT_MCP_HTTP_HOST` / `_HTTP_PORT` (default `127.0.0.1:8124`),
+`_ALLOWED_HOSTS`, `_ALLOWED_ORIGINS`, `_RATE_LIMIT_PER_MIN` (120),
+`_MAX_BODY_BYTES`, `_MAX_CONNECTIONS` (64) and `_ALLOW_PUBLIC_BIND`.
+They are described in `docs/OPERATIONS.md` §45.
 
 ## Wiring into your AI agent
 
@@ -76,30 +84,12 @@ That's it. No API keys. No credentials. No accounts.
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
-**From source (beta):**
-
 ```json
 {
   "mcpServers": {
     "morphit": {
       "command": "node",
       "args": ["/absolute/path/to/morphit/apps/mcp-server/dist/main.js"],
-      "env": {
-        "MORPHIT_MCP_INSTANCE_URL": "https://morphit.io"
-      }
-    }
-  }
-}
-```
-
-**From npm (v1.0.0 stable, when published):**
-
-```json
-{
-  "mcpServers": {
-    "morphit": {
-      "command": "npx",
-      "args": ["-y", "morphit-mcp"],
       "env": {
         "MORPHIT_MCP_INSTANCE_URL": "https://morphit.io"
       }
@@ -125,7 +115,9 @@ In Cline's MCP settings, add:
 }
 ```
 
-Replace `command`/`args` with the npm form (`"command": "npx", "args": ["-y", "morphit-mcp"]`) when the v1.0.0 npm package ships.
+Always use this `node` form with the path to your own verified checkout:
+there is no official npm package, so an `npx` form would run whatever
+someone else publishes under that name.
 
 ### Cursor / Continue / Windsurf / Zed
 
@@ -159,13 +151,13 @@ step.
 ## Privacy notes for the user
 
 - **The Morphit instance sees the MCP server's IP.** If you're on a
-  residential connection, that's your IP. Route the MCP server's
-  traffic through Tor if you want IP-level unlinkability — the
-  Morphit instance directory includes Tor onions for this reason.
+  residential connection, that's your IP. The server has no built-in
+  Tor route; to hide your address, run it on a machine whose traffic
+  already goes through Tor or a VPN you trust.
 - **Your AI provider sees the prompts you type and the tool results.**
-  The MCP server doesn't change that calculus. If you don't want
-  OpenAI / Anthropic / Google / xAI to see "I want to buy XMR with
-  cash", consider a local LLM stack.
+  The MCP server doesn't change that calculus. If you don't want a
+  hosted AI provider to see "I want to buy XMR with cash", consider a
+  local LLM stack.
 - **The Morphit orderbook is public on-chain.** Tool results are
   things anyone can see by visiting morphit.io. No new disclosure
   is created by querying through an AI agent — only the query
@@ -178,14 +170,16 @@ AGPL-3.0-or-later, same as Morphit itself.
 ## Bugs + feature requests
 
 [git.agorise.net/agorise/morphit](https://git.agorise.net/agorise/morphit/issues).
-Tag with `mcp-server`.
+Tag with `mcp-server`. Issues there are public: report a security
+problem only as described in `SECURITY.md` (a private Matrix message to
+`@agorise:matrix.org`), never in an issue.
 
 ## Why MCP?
 
 [Model Context Protocol](https://modelcontextprotocol.io) is the
 emerging open standard for letting AI agents call external systems.
-Announced by Anthropic in late 2024, adopted by OpenAI, Google,
-and the broader open-source AI stack through 2025. Shipping `morphit-mcp`
+Published in late 2024 and adopted across commercial and open-source
+AI agents through 2025. Shipping `morphit-mcp`
 as MCP rather than a proprietary plugin format means every
 MCP-compatible agent — present and future, commercial and self-hosted —
 can access Morphit without per-agent integration work.

@@ -1,10 +1,10 @@
 /**
- * ops-cli install-invariants smoke (cp161 verification).
+ * ops-cli install-invariants smoke (verification).
  *
  * Locks the install contract that an operator depends on for
  * `npx morphit-ops init` / `register` / `edit` / `upgrade` to
  * work on a freshly-provisioned host.  An operator hit
- * "command not found" (cp161); the root cause was a combination
+ * "command not found"; the root cause was a combination
  * of workspace-bin fragility + tsx being a devDependency.  This
  * smoke pins every invariant whose regression would reproduce
  * that failure, so a future package.json / Ansible / shebang
@@ -84,7 +84,7 @@ if (deps.tsx !== undefined && devDeps.tsx === undefined) {
 
 /* ---------------- invariant 2: bin launcher shim exists with a node shebang ---------------- */
 
-// cp162: the published bin is a launcher shim (bin/morphit-ops.mjs)
+// the published bin is a launcher shim (bin/morphit-ops.mjs)
 // that runs the compiled dist/main.js under plain node when present,
 // and falls back to the tsx source otherwise.  The shim itself is
 // plain JS with a node shebang so it always runs under node.
@@ -168,7 +168,7 @@ if (esbuildDep) {
 
 const cloneBuild = readText('ops/ansible/roles/morphit/tasks/clone_and_build.yml');
 
-// cp162: ops-cli now HAS a build script, so `--if-present` builds
+// ops-cli now HAS a build script, so `--if-present` builds
 // it.  The build task must run AFTER the full npm install (dev deps
 // incl. esbuild present).  Verify the build command is present and
 // uses --if-present (which now picks up ops-cli).

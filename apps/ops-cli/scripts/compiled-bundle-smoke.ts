@@ -1,7 +1,7 @@
 /**
- * ops-cli compiled-bundle smoke (cp162).
+ * ops-cli compiled-bundle smoke.
  *
- * Proves the executable guarantee that cp162 exists to provide:
+ * Proves the executable guarantee that exists to provide:
  * the esbuild bundle builds and runs under PLAIN `node` with no
  * tsx, and the launcher shim selects the compiled path when the
  * bundle is present.  This is the runtime counterpart to
@@ -10,7 +10,7 @@
  * Scenarios:
  *   1. `npm run build` produces dist/main.js.
  *   2. dist/main.js has EXACTLY ONE shebang, and it is the node
- *      shebang (the cp162 double-shebang bug regression guard).
+ *      shebang (the double-shebang bug regression guard).
  *   3. dist/main.js runs under plain `node --help` (exit 0, prints
  *      the usage banner) — no tsx involved.
  *   4. `pg` is left external (imported, not inlined) — bundling
@@ -80,7 +80,7 @@ try {
 const lines = distSrc.split('\n');
 const shebangCount = lines.filter((l) => l.startsWith('#!')).length;
 const firstLine = lines[0] ?? '';
-// The cp162 double-shebang bug: esbuild preserved the source's
+// The double-shebang bug: esbuild preserved the source's
 // `#!/usr/bin/env -S npx tsx` AND a banner added a node shebang,
 // yielding two shebangs and a SyntaxError.  Guard against it.
 if (shebangCount === 1 && firstLine === '#!/usr/bin/env node') {
@@ -157,9 +157,9 @@ if (shimPrefersDist && shimRun.status === 0 && /morphit-ops/.test(shimRun.stdout
 	);
 }
 
-/* ------ scenario 7: bundle can EVALUATE the dblurt broadcast dep (cp178) ------ */
+/* ------ scenario 7: bundle can EVALUATE the dblurt broadcast dep ------ */
 
-// cp178 regression guard.  The bundle is ESM but @beblurt/dblurt (via
+// regression guard.  The bundle is ESM but @beblurt/dblurt (via
 // cross-fetch → node-fetch) does CommonJS `require('stream')` at
 // module-eval time.  Without the createRequire banner in build.mjs,
 // esbuild's `__require` shim throws "Dynamic require of 'stream' is

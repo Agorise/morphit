@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, H2 (mitigation) — a reused BTC/XMR fee txid must be
+ * (mitigation) — a reused BTC/XMR fee txid must be
  * RECORDED, visibly, as `reused`.
  *
  * rv6 A2: when a second order claimed a txid already claimed by an earlier
@@ -18,6 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import orderHandler from '../../src/indexer/handlers/order';
 import { BitcoinExplorerFeeVerifier } from '../../src/indexer/fee/bitcoinExplorerVerifier';
+import { recheckExternalFees } from '../../src/indexer/fee/externalFeeRecheck';
 import {
 	INTEGRATION_ENABLED,
 	setupWithMigrations,
@@ -103,6 +104,13 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			// Must not throw (it used to: orders_external_tx_id_uniq).
 			expect(await post('victim', 'sell-btc-mine', new Date(NOW.getTime() + 60_000))).toEqual({
 				ok: true
+			});
+			// The fee is verified by the re-check job, outside the block.
+			await recheckExternalFees({
+				db: fx.db,
+				verifiers: { btc: verifier() },
+				amounts: { btcSatoshis: 416 },
+				now: new Date(NOW.getTime() + 120_000)
 			});
 			const rows = await fx.db.query<{ account: string; fee_status: string; status: string }>(
 				`SELECT account, fee_status, status FROM orders ORDER BY account`

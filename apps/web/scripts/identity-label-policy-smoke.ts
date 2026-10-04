@@ -10,8 +10,8 @@
  * identicons cannot.
  *
  * Tier 2.6 of the grandma-friendly investigation closed three
- * drift call sites in `apps/web/src/routes/[lang]/settings/+page.svelte`
- * (Part 97).  This smoke runs a regex sweep over the route +
+ * drift call sites in `apps/web/src/routes/[lang]/settings/+page.svelte`.
+ * This smoke runs a regex sweep over the route +
  * component source to flag any new `@{account}` / `@{author}` /
  * `@{seller}` / `@{buyer}` raw renders that don't live in an
  * accepted-exception file.

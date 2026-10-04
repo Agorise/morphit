@@ -6,17 +6,17 @@
  * Morphit supports (subject to per-component exclusions defined
  * inline).
  *
- * WHY THIS SMOKE EXISTS (Part 122 cp36 Bob-1 + Bob-2 finding):
+ * WHY THIS SMOKE EXISTS:
  *
  * AddressShareModal.svelte and FundsSentModal.svelte each shipped
  * with a 16-tab tablist (BTC/XMR/BLURT/USDT/USDC/DAI/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR/SOL/ETH/XRP)
- * that silently omitted the DAI tab when cp31 added DAI as the 9th
+ * that silently omitted the DAI tab when a later change added DAI as the 9th
  * tradable asset. Every OTHER DAI hook (validator, placeholder,
  * invalid-msg dispatch, picker block, payload field) was wired
  * correctly in both modals — only the user-facing tab button was
  * missing, making DAI unreachable through the modal UI.
  *
- * cp32-cp35 audits used static asset-coverage maps that saw these
+ * A later change audits used static asset-coverage maps that saw these
  * modals as "covered" because they imported the right symbols and
  * referenced 'dai' in dispatcher logic — but the tablist rendered
  * 9 buttons instead of 10. The persona walk (Bob, chat surface)
@@ -81,7 +81,7 @@ const COMPONENTS: readonly ComponentSpec[] = [
 		// receive-address surface, which applies to all assets
 		// uniformly (the user shares a receive address for
 		// whatever they're being paid in).
-		// cp425: EXCEPT goods (BARTER) — a barter listing has no receive
+		// EXCEPT goods (BARTER) — a barter listing has no receive
 		// address (wares change hands off-platform); a barter trade settles
 		// in whichever crypto the buyer picks from `accepted_assets`, and
 		// THAT crypto's tab is the one shown. So no 'barter' tab here.
@@ -94,7 +94,7 @@ const COMPONENTS: readonly ComponentSpec[] = [
 		// broadcast path with explicit memo handling), not the
 		// generic mark-sent dispatch. So BLURT is not expected
 		// as a tab in this modal. Every other asset IS.
-		// cp425: goods (BARTER) also excluded — a barter trade's payment is
+		// goods (BARTER) also excluded — a barter trade's payment is
 		// the buyer's chosen crypto, marked sent under THAT crypto's tab; no
 		// 'barter' funds-sent tab.
 		excludeAssets: ['BLURT', 'BARTER']
@@ -119,13 +119,13 @@ for (const comp of COMPONENTS) {
 		.filter((t) => !comp.excludeAssets.includes(t))
 		.map((t) => t.toLowerCase());
 
-	// cp425 — the 16 hardcoded per-coin tab buttons in these modals were
+	// the 16 hardcoded per-coin tab buttons in these modals were
 	// refactored to a single {#each visibleMethods as m} template backed by an
 	// ALL_METHODS array (so an `allowedMethods` prop can filter the set for a
 	// barter order). We now verify (a) the templated tab wiring is present, and
 	// (b) each expected coin is listed in ALL_METHODS (what the template
 	// iterates) — equivalent coverage to the old per-coin aria-selected check.
-	// v1.5.0 (tt.txt B): the 16-button tablist became a coin SELECT
+	// v1.5.0: the 16-button tablist became a coin SELECT
 	// (AssetChoiceSelect) — 16 `flex-1` tabs wrapped into a wall of blocks that
 	// pushed the modal off a phone screen. The INVARIANT this smoke exists for
 	// is unchanged and still enforced: the picker must be driven by a template
@@ -153,7 +153,7 @@ for (const comp of COMPONENTS) {
 			run: () => {
 				if (!existsSync(absPath)) return null;
 				const src = readFileSync(absPath, 'utf8');
-				// cp471 — THIS CHECK WAS TOOTHLESS AND IS NOW REAL.
+				// THIS CHECK WAS TOOTHLESS AND IS NOW REAL.
 				//
 				// It used to be `src.includes("'dai'")` — "does this ticker appear
 				// ANYWHERE in the file" — with a comment claiming that was

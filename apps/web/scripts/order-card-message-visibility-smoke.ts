@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * order-card-message-visibility — v1.8.12 (the maintainer).
+ * order-card-message-visibility — v1.8.12.
  *
  * THE BUG. The Message button was hidden whenever `viewerAccount` was null —
  * i.e. from every SIGNED-OUT visitor. Someone browsing the orderbook saw a wall
  * of orders and no way to begin, which is the one action the page exists to
- * produce. the maintainer reported it missing; his screenshots show the header "Start"
+ * produce. The maintainer reported it missing; his screenshots show the header "Start"
  * button, confirming a signed-out session.
  *
  * Hiding it was never necessary. `/chat/:peer` is already guarded: an anonymous

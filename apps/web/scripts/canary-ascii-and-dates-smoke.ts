@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the warrant canary is byte-portable and human-readable. Anchor
- * 2026-07-08 (the maintainer).
+ * 2026-07-08.
  *
  * Two reported problems, both guarded here:
  *
@@ -22,7 +22,7 @@
  * canary currently signed + deployed on morphit.io would stop verifying.
  */
 
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -39,10 +39,14 @@ function runVerify(body: string): { code: number; out: string } {
 	const dir = mkdtempSync(join(tmpdir(), 'morphit-canary-'));
 	const f = join(dir, 'canary.txt');
 	writeFileSync(f, body, 'utf8');
-	const r = spawnSync('npx', ['tsx', join(REPO, 'scripts', 'canary', 'verify.ts'), f], {
-		encoding: 'utf8',
-		timeout: 60_000
-	});
+	// The fixtures are unsigned, so the structure-only mode: it checks layout
+	// and freshness and exits 3 ("structure OK — the signature was NOT
+	// checked"). The signature path is scripts/canary-verify-smoke.ts.
+	const r = spawnSync(
+		join(REPO, 'node_modules', '.bin', 'tsx'),
+		[join(REPO, 'scripts', 'canary', 'verify.ts'), f, '--structure-only'],
+		{ encoding: 'utf8', timeout: 60_000 }
+	);
 	return { code: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 
@@ -79,8 +83,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB = join(__dirname, '..');
 const REPO = join(WEB, '..', '..');
 
-const template = readFileSync(join(WEB, 'static', 'canary.txt.template'), 'utf8');
-const templateBytes = readFileSync(join(WEB, 'static', 'canary.txt.template'));
+// The template is a build input, not a served file: it lives next to the
+// generator (scripts/canary/); older trees kept it in apps/web/static/.
+const TEMPLATE_PATH = [
+	join(REPO, 'scripts', 'canary', 'canary.txt.template'),
+	join(WEB, 'static', 'canary.txt.template')
+].find((p) => existsSync(p))!;
+const template = readFileSync(TEMPLATE_PATH, 'utf8');
+const templateBytes = readFileSync(TEMPLATE_PATH);
 const generate = readFileSync(join(REPO, 'scripts', 'canary', 'generate.sh'), 'utf8');
 const verify = readFileSync(join(REPO, 'scripts', 'canary', 'verify.ts'), 'utf8');
 
@@ -114,10 +124,10 @@ check('Generated: capture takes the whole line (not the first token)', /\^Genera
 
 // Behavioural: run the REAL verifier CLI over real fixtures.
 const fresh = runVerify(canaryWith(nowStamp()));
-check('verifier accepts the new human stamp', fresh.code === 0 && /canary-verify: OK/.test(fresh.out));
+check('verifier accepts the new human stamp', fresh.code === 3 && /structure OK/.test(fresh.out));
 
 const legacy = runVerify(canaryWith(nowIso()));
-check('verifier still accepts the LEGACY Zulu ISO stamp (deployed canary)', legacy.code === 0 && /canary-verify: OK/.test(legacy.out));
+check('verifier still accepts the LEGACY Zulu ISO stamp (deployed canary)', legacy.code === 3 && /structure OK/.test(legacy.out));
 
 const stale = runVerify(canaryWith(nowStamp(-30)));
 check('a stale canary still FAILS (freshness guard not weakened)', stale.code !== 0 && /stale/.test(stale.out));

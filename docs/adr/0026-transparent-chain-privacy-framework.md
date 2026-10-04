@@ -1,6 +1,6 @@
 # ADR-0026 — Transparent-chain privacy framework
 
-**Status:** Accepted (Part 122 cp26)
+**Status:** Accepted
 **Date:** 2026-05-17
 **Deciders:** project maintainer
 **Supersedes:** none
@@ -11,10 +11,10 @@ the asset-registry pattern this ADR extends.
 
 ## Context
 
-After cp24 shipped Litecoin, the maintainer raised a strategic question:
+Later shipped Litecoin, the maintainer raised a strategic question:
 since BLURT, BTC, BCH, and LTC transactions are not private at
 all, can we make them more private — and can that pattern apply
-to future coins? the maintainer explicitly excluded two directions: (a)
+to future coins? The maintainer explicitly excluded two directions: (a)
 wallet recommendations (even reputable wallets have been
 compromised; the liability isn't worth the small UX win), and
 (b) Lightning Network for BTC (Morphit will not support LN).
@@ -29,7 +29,7 @@ We can't make transparent chains private at the protocol level
 3. **Educate users** with registry-driven per-asset privacy
    guides
 
-The cp23-DD-class lesson applies here too: whatever framework
+The lesson applies here too: whatever framework
 we build must be registry-driven, so future asset additions
 (Dash, DOGE, ZEC, ARRR, DCR, SOL, ETH, XRP, etc.) get privacy infrastructure automatically
 rather than per-asset bolt-ons.
@@ -53,7 +53,7 @@ Three fields:
   technology (XMR has it built in; BLURT and USDT don't have
   any), or an array of protocol-standard identifiers from a
   fixed enum: `'mweb'`, `'cashfusion'`, `'coinjoin'`, `'payjoin'`,
-  `'privatesend'` (cp27 extension; see ADR-0027).
+  `'privatesend'` (extension; see ADR-0027).
   These are **protocol names, not wallet names** — naming a
   protocol like CashFusion is an information item, not a wallet
   endorsement.
@@ -74,14 +74,14 @@ Per-asset values:
 | LTC   | hd-derived         | [mweb]                 | ltc             |
 | DASH  | hd-derived         | [privatesend]          | dash            |
 
-> **Note (Part 122 cp27):** DASH row + `'privatesend'` enum value
+> **Note:** DASH row + `'privatesend'` enum value
 > added in ADR-0027 (Dash trade-only addition) as a registry-driven
 > extension of this framework.  No other framework changes needed —
 > DASH lit up automatically.
 
 ### 2. Generalized amount-jitter across transparent chains
 
-cp3 shipped `jitterMoneroAmount` for XMR. cp26 generalizes to
+A later change shipped `jitterMoneroAmount` for XMR. A later change generalizes to
 `jitterUtxoAmount` (BTC/BCH/LTC, 8-decimal precision, 0-999 sat
 jitter) and `jitterBlurtAmount` (3-decimal, 0-99 milliblurt
 jitter). A dispatcher `jitterAmountForAsset(method, amount)`
@@ -127,7 +127,7 @@ the payload carries an endpoint.
 
 `/[lang]/privacy` (index) lists all tradable assets with one-line
 summaries (registry-driven — the page reads `ASSETS.filter(canBeTraded)`,
-so additions like DASH (cp27) light up automatically).
+so additions like DASH light up automatically).
 `/[lang]/privacy/{asset}` (detail) renders an
 asset-specific guide pulling copy from registry + shared i18n:
 
@@ -145,7 +145,7 @@ Registry-driven. Adding Dash to Morphit later: populate the
 `privacyFeatures` field, write `privacy.guides.dash.{intro, one_line, caveats?, meta_description}`
 strings, done.
 
-## Cp26 inline-fix: pre-existing latent bug
+## inline-fix: pre-existing latent bug
 
 While auditing the encoder/decoder paths for PayJoin, we
 discovered the `network` field on `AddressPayload` and
@@ -153,15 +153,15 @@ discovered the `network` field on `AddressPayload` and
 dropped** by `encodeAddressPayload` / `encodeFundsSentPayload`.
 The decoder never read it either.
 
-This is a cp3-era latent bug that has been undetected through
-cp21, cp23, cp24, cp25. Symptom: USDT cross-network display in
+This is a latent bug that has been undetected through
+Symptom: USDT cross-network display in
 ChatMessage shows `p.network` as `undefined`, breaking the
 per-network header badge and the per-network explorer-link
 selection.
 
 Fixed inline because the wire-shape pattern was the same as the
 PayJoin work. New smoke `payjoin-uri-wire-shape-smoke` covers
-both: the cp26 PayJoin additions and the cp3-bug-fix roundtrips.
+both: the PayJoin additions and the bug-fix roundtrips.
 
 ## Consequences
 
@@ -170,7 +170,7 @@ both: the cp26 PayJoin additions and the cp3-bug-fix roundtrips.
 - **Privacy framework is registry-driven.** Future asset
   additions get the privacy guide + jitter + reuse warning for
   free by populating one struct field.
-- **No wallet recommendations.** the maintainer's call avoids liability;
+- **No wallet recommendations.** The maintainer's call avoids liability;
   protocol-standard names are descriptive, not endorsements.
 - **Address-reuse detection is purely client-side.** Server-side
   history would have been a privacy regression; localStorage-only
@@ -178,15 +178,15 @@ both: the cp26 PayJoin additions and the cp3-bug-fix roundtrips.
 - **PayJoin support without hosting the endpoint.** Morphit
   stays a coordination layer; sellers bring their own PayJoin
   infrastructure.
-- **Latent cp3 USDT network-field bug fixed** as a side effect
+- **Latent USDT network-field bug fixed** as a side effect
   of the PayJoin wire-shape work.
 
 ### Trade-offs accepted
 
 - **Native translations only in en/es/fr/de.** Other 6 locales
-  (it/pl/ru/fa/zh-CN/zh-HK) ship cp26's new keys as English-
+  (it/pl/ru/fa/zh-CN/zh-HK) ship the new keys as English-
   fallback to maintain locale parity at the file-shape level.
-  REVISIT entry filed for a translation pass; users in those
+  backlog entry filed for a translation pass; users in those
   locales see English privacy-guide copy until then. Trade-off:
   ship the privacy framework now versus block on translations.
 - **Address-history per-device.** A user who uses Morphit on
@@ -215,7 +215,7 @@ both: the cp26 PayJoin additions and the cp3-bug-fix roundtrips.
 
 ## Subsequent additions (CP35 status update — 2026-05-19)
 
-The per-asset table in §2 was current at cp26 ship and listed
+The per-asset table in §2 was current ship and listed
 the six trade assets supported then (XMR, BTC, BLURT, USDT, BCH,
 LTC).  Subsequent checkpoints added
 more assets that plug into this framework without changing the
@@ -242,30 +242,30 @@ is:
 | XRP   | hd-derived         | null                   | xrp             |
 
 Added after this ADR's ship date:
-- **DASH** (Part 122 cp27) — opt-in PrivateSend mixing via
+- **DASH** — opt-in PrivateSend mixing via
   masternodes; otherwise transparent at base layer.
-- **USDC** (Part 122 cp30) — second stablecoin; `usdc_centralized`
+- **USDC** — second stablecoin; `usdc_centralized`
   privacy-warning class (Circle has freeze power).
-- **DAI** (Part 122 cp31) — third stablecoin; distinct
+- **DAI** — third stablecoin; distinct
   `dai_partly_centralized` class (MakerDAO has no freeze, but
   Peg Stability Module USDC backing transitively affects).
-- **DOGE** (Part 122 cp33) — fair-launched, merge-mined with
+- **DOGE** — fair-launched, merge-mined with
   LTC, no native privacy upgrade.
-- **ZEC** (Part 122) — Zcash; transparent (`t1`/`t3`) and shielded
+- **ZEC** — Zcash; transparent (`t1`/`t3`) and shielded
   (`zs1` Sapling, `u1` Unified Address) addresses coexist on the
   same chain.  Per-trade privacy posture is the user's choice.
-- **ARRR** (Part 122) — Pirate Chain; shielded-by-construction
+- **ARRR** — Pirate Chain; shielded-by-construction
   (Sapling only; no transparent option at the chain layer).
-- **DCR** (Part 122) — Decred; hybrid PoW/PoS chain with opt-in
+- **DCR** — Decred; hybrid PoW/PoS chain with opt-in
   CoinShuffle++ mixing.
-- **SOL** (Part 122) — Solana; high-throughput PoS, transparent.
-- **ETH** (Part 122) — Ethereum; post-Merge PoS, transparent,
+- **SOL** — Solana; high-throughput PoS, transparent.
+- **ETH** — Ethereum; post-Merge PoS, transparent,
   EIP-55 mixed-case-checksum address validation.
-- **XRP** (Part 122) — XRP Ledger; Federated Byzantine Agreement,
+- **XRP** — XRP Ledger; Federated Byzantine Agreement,
   transparent, destination-tag-aware.
 
-> **Forward-note (Part 122 cp84, 2026-05-21):** asset count grew
-> from the cp35 snapshot's 10 to the current 16 (ZEC, ARRR, DCR,
+> **Forward-note:** asset count grew
+> from the snapshot's 10 to the current 16 (ZEC, ARRR, DCR,
 > SOL, ETH, XRP added).  Privacy framework decision is unchanged;
 > all six additions plug in via the registry-driven
 > `privacyFeatures` struct without modifying framework code.

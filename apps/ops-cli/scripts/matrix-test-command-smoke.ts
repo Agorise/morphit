@@ -149,7 +149,7 @@ async function main(): Promise<void> {
 			}
 		});
 		check('happy: exit 0', code === 0, `code=${code}`);
-		// cp474 — `posted` is set inside the selfTest callback, which TS's flow
+		// `posted` is set inside the selfTest callback, which TS's flow
 		// analysis can't see, so it stayed narrowed to the literal `false` and
 		// `=== true` looked impossible. Pass the boolean straight through.
 		check('happy: POSTed the self-test', posted);
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
 	);
 
 	// ─── healthcheck-port READER: never throws on a file it can't read ──
-	// Regression for the cp277 CI failure: readMatrixBotHealthcheckPort used an
+	// Regression for the CI failure: readMatrixBotHealthcheckPort used an
 	// existsSync pre-check, which a present-but-unreadable file passes — so the
 	// subsequent readFileSync threw EACCES (matrix-bot.env is root-owned 0600 and
 	// the forgejo runner is non-root), crashing the whole smoke. Both a missing

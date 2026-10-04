@@ -13,19 +13,21 @@
 	state. The subline lets traders SEE when a peg is off, not assume it's
 	always $1.00.
 
-	cp417: generalised from the old USDT-only UsdtPriceSubline. USDC and DAI
+	generalised from the old USDT-only UsdtPriceSubline. USDC and DAI
 	already had their `assets.<t>.price_subline.*` strings (with translation
 	coverage in i18n-translation-completeness-smoke) but no render path — this
 	wires all three stablecoins, keyed off the `asset` prop.
 
-	Pulls from the existing $lib/prices store (Coingecko on the live path,
-	fallback static-1.00 when offline). Render-only — no state of its own;
-	subscribes to priceStore and re-renders when the quote's fetchedAt changes.
+	Pulls from $lib/prices (live prices from this instance's indexer). With
+	no live price for the coin the line is not drawn: a "$1.00" that is not a
+	measured price would hide the very depeg this exists to show.
+	Render-only — no state of its own; subscribes to priceStore and
+	re-renders when the quote's fetchedAt changes.
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { getPrice, priceStore } from '$lib/prices';
+	import { getPrice, liveUsd, priceStore } from '$lib/prices';
 	import type { StablecoinSublineTicker } from '$lib/assets/stablecoinSubline';
 
 	interface Props {
@@ -35,16 +37,12 @@
 	}
 	let { asset, compact = true }: Props = $props();
 
-	let fetchFailed = $state(false);
 	onMount(() => {
-		getPrice(asset).catch(() => {
-			fetchFailed = true;
-		});
+		void getPrice(asset);
 	});
 
 	const quote = $derived($priceStore[asset]);
-	const STALE_THRESHOLD_MS = 5 * 60 * 1000;
-	const isStale = $derived(quote === null || Date.now() - quote.fetchedAt > STALE_THRESHOLD_MS);
+	const isStale = $derived(liveUsd(quote) === null);
 	const stalenessString = $derived.by(() => {
 		if (quote === null) return '?';
 		const ageSeconds = Math.floor((Date.now() - quote.fetchedAt) / 1000);
@@ -70,7 +68,7 @@
 			values: { price: formatPrice(quote.usd) }
 		})}
 	</span>
-{:else if fetchFailed || quote !== null}
+{:else if quote !== null}
 	<span
 		class={compact
 			? 'text-xs italic text-ink-500'

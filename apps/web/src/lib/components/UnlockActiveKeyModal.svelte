@@ -7,8 +7,8 @@
 	 * listing fee in BLURT. It never navigates away. On success it hands the
 	 * caller a raw active scalar and the caller resumes exactly what it was
 	 * doing — the amount stays typed, the order stays half-posted, nothing is
-	 * retyped. That is the whole point (the maintainer: "SEAMLESSLY continue ... without
-	 * losing their place").
+	 * retyped. That is the whole point (Requirement: the user continues seamlessly, without
+	 * losing their place).
 	 *
 	 * ─── What we ask for, and why ─────────────────────────────────────────
 	 *
@@ -30,7 +30,7 @@
 	 * signature exists — it is never written to the keystore, never held past
 	 * the signing window. Persisting it ("keep on this device, encrypted") needs
 	 * the identity model to stop equating `origin === 'morphit-seed'` with
-	 * "has an active key"; see REVISIT-LIST. Until then the modal is honest
+	 * "has an active key"; see the backlog. Until then the modal is honest
 	 * about what it does rather than offering a switch that lies.
 	 */
 	import { _ } from 'svelte-i18n';
@@ -58,8 +58,8 @@
 	let busy = $state(false);
 	let errorKey = $state('');
 
-	/** the maintainer: "A posting-only user chose that deliberately; some of them will be
-	 *  furious if we quietly promote them." So we ASK — and the safe answer,
+	/** Requirement: a posting-only user chose that deliberately and must never be promoted
+	 *  silently. So we ASK — and the safe answer,
 	 *  'once', is the default. */
 	let retention = $state<'once' | 'keep'>('once');
 	/** Only needed for 'keep': the Morphit password that encrypts the keystore. */
@@ -141,7 +141,7 @@
 
 	<label class="block">
 		<span class="text-sm font-semibold">{$_('unlock_active.field_label')}</span>
-		<!-- Mobile (v1.8.14, the maintainer): two deliberate choices here.
+		<!-- Mobile (v1.8.14): two deliberate choices here.
 		     • `text-base` (16px), not text-sm. iOS auto-ZOOMS the page whenever a
 		       focused input is under 16px, which on a key field means the modal
 		       jumps and half of it slides off screen the moment you tap it.

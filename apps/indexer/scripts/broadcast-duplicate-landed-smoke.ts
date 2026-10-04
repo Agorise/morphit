@@ -18,9 +18,7 @@ const TRANSFER_TX = {
 		ref_block_num: 1,
 		ref_block_prefix: 1,
 		expiration: '2026-01-01T00:00:00',
-		operations: [
-			['transfer', { from: 'tester2', to: 'tester3', amount: '1.000 BLURT', memo: '' }]
-		],
+		operations: [['transfer', { from: 'tester2', to: 'tester3', amount: '1.000 BLURT', memo: '' }]],
 		extensions: [],
 		signatures: ['deadbeef']
 	}

@@ -310,7 +310,7 @@ export function relayUnitIsFailing(since: RelayUnitState | null, now: RelayUnitS
 export interface RelayHealRuntime {
 	/** Is morphit-relay running? */
 	isActive(): boolean;
-	/** systemd's view of the unit (v1.18.0 deep-deep, ops-4). */
+	/** systemd's view of the unit. */
 	unitState(): RelayUnitState;
 	/** Restart it. True when systemctl accepted the restart. */
 	restart(): boolean;
@@ -349,7 +349,7 @@ export type RelayHealOutcome =
  *     it — the upgrade must never leave a relay down over a self-heal;
  *   - relay running but not answering yet: KEPT, and said so calmly.
  *
- * v1.18.0 deep-deep (ops-4). "Not answering within 60 s" used to mean "revert".
+ * "Not answering within 60 s" used to mean "revert".
  * But the relay does not listen until its first chain read succeeds, and over
  * Tor that read tries each hidden endpoint with a 60 s timeout — a healthy
  * tor-only relay can take minutes. Every upgrade put such a relay back on

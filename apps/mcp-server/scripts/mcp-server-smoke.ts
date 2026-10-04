@@ -37,7 +37,7 @@ const ANSI_RESET = '\x1b[0m';
  * `actions/checkout` then `npm ci` — `dist/main.js` does NOT
  * exist until something runs `npm run build`.
  *
- * Pre-cp142 this smoke spawned `node dist/main.js` directly.  On
+ * Previously, this smoke spawned `node dist/main.js` directly.  On
  * a fresh checkout that child exits immediately with
  * ERR_MODULE_NOT_FOUND, the smoke's stdin.write fires EPIPE
  * (swallowed), the 5-second response-deadline loop times out
@@ -46,7 +46,7 @@ const ANSI_RESET = '\x1b[0m';
  *     plenty of memory / no concurrent smoke pressure), OR
  *   - hangs past the runner's per-smoke wall-clock and gets
  *     OOM-killed / signal-killed (in CI with concurrent jobs
- *     or in constrained sandboxes).
+ *     or on constrained hosts).
  *
  * Either way the smoke was a CI-time bomb whose only saving
  * grace was that dev machines tend to keep dist/ on disk after
@@ -116,7 +116,7 @@ async function runMcpDialog(
 		env: {
 			...process.env,
 			MORPHIT_MCP_INSTANCE_URL: instanceUrl,
-			// cp154 F-mcp-1 — opt into the private-address denylist
+			// opt into the private-address denylist
 			// override because this smoke runs a local HTTP server
 			// on 127.0.0.1 to stub the indexer.  Real users running
 			// against morphit.io don't need this env var; it's
@@ -184,7 +184,7 @@ async function main() {
 
 	// Ensure dist/main.js exists before any runMcpDialog() call
 	// tries to spawn it.  See the ensureBuilt() docblock above
-	// for the failure-mode this guards against (cp142 LL #1).
+	// for the failure-mode this guards against.
 	const serverCwd = new URL('..', import.meta.url).pathname;
 	ensureBuilt(serverCwd);
 
@@ -193,24 +193,27 @@ async function main() {
 		if (req.url === '/v1/instance') {
 			res.setHeader('Content-Type', 'application/json');
 			res.end(
+				// /v1/instance's real field names (apps/indexer/src/api/instance.ts).
 				JSON.stringify({
-					display_name: 'smoke-test instance',
-					contact_url: 'mailto:smoke@example.org',
-					declared_region: 'us-east'
+					name: 'smoke-test instance',
+					tagline: 'smoke',
+					contact_url: 'mailto:smoke@example.org'
 				})
 			);
 		} else if (req.url?.startsWith('/v1/orderbook')) {
 			res.setHeader('Content-Type', 'application/json');
 			res.end(
+				// /v1/orderbook answers `items` (apps/indexer/src/api/orderbook.ts);
+				// mcp-real-shapes-smoke checks the tools against the real route.
 				JSON.stringify({
-					rows: [
+					items: [
 						{
 							account: 'alice',
 							permlink: 'sell-xmr-cash-001',
 							asset: 'XMR',
 							side: 'sell',
 							fiat_currency: 'USD',
-							price: '152.40',
+							price_model: { kind: 'fixed', price: '152.40' },
 							amount_min: '0.5',
 							amount_max: '5.0',
 							location_region: 'US-CA',
@@ -268,6 +271,26 @@ async function main() {
 		pass('every tool inputSchema is type=object');
 	} else {
 		fail('every tool inputSchema is type=object', 'one or more missing');
+	}
+
+	// Scenario 2b: the advertised schemas carry the constraints the tools
+	// enforce (an agent reads these to build valid calls).
+	const advertised = (listResp[0]?.result as {
+		tools?: Array<{ name: string; inputSchema?: { properties?: Record<string, Record<string, unknown>> } }>;
+	})?.tools;
+	const acct = advertised?.find((t) => t.name === 'morphit_get_listing')?.inputSchema?.properties?.['account'];
+	const lim = advertised?.find((t) => t.name === 'morphit_search_orders')?.inputSchema?.properties?.['limit'];
+	if (
+		typeof acct?.['pattern'] === 'string' &&
+		acct['maxLength'] === 16 &&
+		acct['minLength'] === 3 &&
+		lim?.['type'] === 'integer' &&
+		lim['minimum'] === 1 &&
+		lim['maximum'] === 100
+	) {
+		pass('advertised schemas carry pattern / length / integer bounds');
+	} else {
+		fail('advertised schemas carry pattern / length / integer bounds', JSON.stringify({ acct, lim }));
 	}
 
 	// Scenario 3: bogus tool name → isError=true.
@@ -396,18 +419,17 @@ async function main() {
 		fail('invalid asset enum rejected with isError', JSON.stringify(badInput[0]));
 	}
 
-	// Scenario 8: deeplink is well-formed URL routed through the
-	// cp156 `?then=` locale-detection shell with filter preserved.
-	// Inner path-with-query gets URI-encoded inside the `then`
-	// value: `?then=%2Forderbook%3Fasset%3DXMR`.
+	// Scenario 8: deeplink is a well-formed URL routed through the
+	// `?then=` locale-detection shell to the orderbook. The orderbook page
+	// reads no filters from the URL, so none are put in it.
 	if (
 		searchText &&
-		/"deeplink":\s*"http:\/\/127\.0\.0\.1:\d+\/\?then=%2Forderbook%3Fasset%3DXMR"/.test(searchText)
+		/"deeplink":\s*"http:\/\/127\.0\.0\.1:\d+\/\?then=%2Forderbook"/.test(searchText)
 	) {
-		pass('deeplink is well-formed ?then= URL with filter preserved');
+		pass('deeplink is a well-formed ?then= URL to the orderbook');
 	} else {
 		fail(
-			'deeplink is well-formed ?then= URL with filter preserved',
+			'deeplink is a well-formed ?then= URL to the orderbook',
 			searchText?.match(/"deeplink":\s*"[^"]+"/)?.[0] || 'no deeplink'
 		);
 	}

@@ -2,7 +2,7 @@
 	/**
 	 * Root +page.svelte — detection-redirect shell.
 	 *
-	 * Part 121 cp7 (per-locale prerendering, ADR-0024, design doc
+	 * (per-locale prerendering, ADR-0024, design doc
 	 * docs/PER-LOCALE-PRERENDERING-DESIGN.md Option C §4).
 	 *
 	 * First visit (no locale prefix in URL) lands here.  The shell
@@ -25,16 +25,16 @@
 	 * doing before Morphit, not bounce through the redirect shell
 	 * every time.
 	 *
-	 * cp156 F-mcp-7 — `?then=/path` query-parameter support.
+	 * `?then=/path` query-parameter support.
 	 *
-	 * The MCP server (cp140) needs to hand AI agents URLs they can
+	 * The MCP server needs to hand AI agents URLs they can
 	 * pass to users, but the agent doesn't know the user's locale.
-	 * Before cp156, the only options were (a) hardcode `/en/` and
+	 * The only options were (a) hardcode `/en/` and
 	 * accept that non-English users get the English page, or (b)
 	 * make every tool call accept a locale parameter (places the
 	 * burden on every AI agent integrator).  Neither was good.
 	 *
-	 * With cp156, the MCP server can hand out `${base}/?then=/path`
+	 * The MCP server can hand out `${base}/?then=/path`
 	 * deeplinks.  The user clicks → this shell detects their
 	 * locale → redirects to `/{detected-lang}{then-value}`.  One
 	 * extra hop, but the user's actual locale is preserved.
@@ -71,7 +71,7 @@
 				: [];
 		const preferred = pickLocaleFromAcceptLanguages(prefs);
 
-		// cp156 F-mcp-7 — extract `?then=/path` if present.
+		// extract `?then=/path` if present.
 		//
 		// Safety constraints:
 		//   - MUST start with `/` (absolute path only)

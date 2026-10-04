@@ -35,7 +35,7 @@
  *   treasury btc [--addresses]          BTC treasury: per-order fee addresses + wallet gap limit (read-only)
  *   flags [--type=reciprocity|related]  Moderation flags raised
  *
- * Sally-operator finding So-2 (Part 119): pre-fix this JSDoc was
+ * Sally-operator finding So-2: pre-fix this JSDoc was
  * partial — listed only 8 of 14 subcommands.  Operators reading
  * the source to confirm the help is canonical found a drift
  * between source-level docs and the runtime printHelp() output.
@@ -59,7 +59,13 @@ import { loadConfig, readColorMode } from './config.ts';
 import { createDatabase } from './db.ts';
 import { loadInstanceEnv } from './lib/instanceEnv.ts';
 import { defaultRepoRoot } from './lib/repoRoot.ts';
-import { initColor, initColorMode, error as printError, info, sanitizeForTerm } from './render/term.ts';
+import {
+	initColor,
+	initColorMode,
+	error as printError,
+	info,
+	sanitizeForTerm
+} from './render/term.ts';
 import { runStatus } from './commands/status.ts';
 import { runDrainQueue } from './commands/drainQueue.ts';
 import { runSignups } from './commands/signups.ts';
@@ -174,7 +180,7 @@ const VALUE_FLAGS = new Set([
 	'description',
 	'category',
 	// Value flags that used to be missing here, so `--reason "spam"` stored
-	// "true" (block, ADR-0018), and likewise these (v1.19.0 deep-deep):
+	// "true" (block, ADR-0018), and likewise these:
 	'reason',
 	'network',
 	'in',
@@ -263,6 +269,9 @@ function printHelp(): void {
 		'                                  by default; set MORPHIT_AUTO_UPGRADE=1 to skip the prompt).',
 		'                                  --from-file=PATH upgrades OFFLINE from a local, signed',
 		'                                  morphit-<ver>-offline.tar.gz (cable unplugged; no network).',
+		'                                  --questions asks what the upgrade did not stop for',
+		'                                  (it never waits for an answer); --heals runs this',
+		"                                  release's heals again (nothing is downloaded).",
 		'  harden                          Server-hardening wizard: generate a personalized checklist and',
 		'                                  walk Ubuntu/SSH/UFW/fail2ban/TLS + BunkerWeb + backups setup',
 		'  ssl [status|setup] [domain]     SSL/TLS certificate (HTTPS): check cert expiry + auto-renewal,',
@@ -365,7 +374,7 @@ async function main(): Promise<number> {
 	}
 
 	if (args.subcommand === null) {
-		// cp186 — bare `morphit-ops` on an interactive terminal opens a
+		// bare `morphit-ops` on an interactive terminal opens a
 		// menu so the operator can pick an action by intent instead of
 		// memorizing subcommand names.  Non-interactive (piped stdin,
 		// CI, or explicit --no-menu) keeps the old help-dump + exit 1
@@ -379,7 +388,7 @@ async function main(): Promise<number> {
 		// (and its initColor call) doesn't load until after the menu
 		// picks a subcommand, so without this the menu drew with color
 		// disabled — the "update available" marker and relay-balance
-		// warnings rendered as plain text. (cp307 fix.)
+		// warnings rendered as plain text.
 		initColorMode(readColorMode());
 		// Best-effort annotations (live version on Upgrade, attention marker
 		// on Moderation). Never throws or hangs — bounded by short timeouts.
@@ -409,9 +418,21 @@ async function main(): Promise<number> {
 		try {
 			// Each heal isolated, the relay's first — see runSelfHeals.
 			const { runSelfHeals } = await import('./commands/upgrade.ts');
-			await runSelfHeals();
+			await runSelfHeals({ child: true });
 		} catch {
 			/* best-effort — the upgrade falls back to its in-process heals */
+		}
+		return 0;
+	}
+
+	// Hidden subcommand: the short-lived unit morphit-after-upgrade-heal the
+	// self-heal phase starts (lib/afterRestartHeal.ts). Not listed in help.
+	if (args.subcommand === '__post-upgrade-after-restart') {
+		try {
+			const { runAfterRestartHeals } = await import('./commands/upgrade.ts');
+			await runAfterRestartHeals(Number(args.positional[0] ?? '0'));
+		} catch (e) {
+			console.error(`after-restart heals: ${e instanceof Error ? e.message : String(e)}`);
 		}
 		return 0;
 	}
@@ -446,7 +467,7 @@ async function main(): Promise<number> {
 		}
 	}
 
-	// `install` (cp192) — guided first-time install orchestrator.
+	// `install` — guided first-time install orchestrator.
 	// Runs before loadConfig like init (it produces/consumes config
 	// rather than needing a live DB).
 	if (args.subcommand === 'install') {
@@ -567,7 +588,7 @@ async function main(): Promise<number> {
 	}
 
 	// `edit-active-key` rotates ONLY the relay account's active
-	// key.  cp167 — recovery path for operators who pasted the
+	// key.  recovery path for operators who pasted the
 	// wrong key (e.g. posting instead of active) during the
 	// initial wizard, or for routine key rotation after an
 	// on-chain account_update.  Atomic rename + .bak backup +
@@ -618,9 +639,9 @@ async function main(): Promise<number> {
 
 	// `upgrade` — check for + apply releases from Forgejo.
 	// No DB needed; talks to the release HTTP API and the local
-	// filesystem.  Manual-only by default per Memory #29; set
+	// filesystem.  Manual-only by default; set
 	// MORPHIT_AUTO_UPGRADE=1 to skip the confirmation prompt for
-	// cron/automation use.  Part 122 cp8.
+	// cron/automation use..
 	if (args.subcommand === 'upgrade') {
 		try {
 			return await runUpgrade({
@@ -633,7 +654,7 @@ async function main(): Promise<number> {
 		}
 	}
 
-	// `harden` (cp187) — the focused, re-runnable hardening wizard.
+	// `harden` — the focused, re-runnable hardening wizard.
 	// Reads only a few values from morphit.config.env for the
 	// checklist; needs no DB, so it dispatches alongside init/upgrade
 	// before loadConfig.
@@ -856,7 +877,7 @@ main()
 	.catch((err: unknown) => {
 		// Last-resort handler — main()'s try/finally should have
 		// caught everything, but if a Promise rejection escapes
-		// we still want to surface it cleanly.  cp139-C-18: the
+		// we still want to surface it cleanly.  the
 		// err.message can carry filesystem/RPC/library text that
 		// has attacker-influenced bytes; sanitizeForTerm strips
 		// terminal-control escapes before writing to stderr so a

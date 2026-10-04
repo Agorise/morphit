@@ -2,13 +2,13 @@
  * Integration tests — /v1/accounts/:account/feedback +
  * /v1/accounts/:account/feedback-given suppression flag.
  *
- * Part 118 closure of the gap caught after Part 117 sealed:
+ * of the gap caught later sealed:
  * the per-row `suppressed: boolean` flag on both endpoints
  * previously only checked Signal A (related_accounts) and
  * Signal B (suspicious_reciprocity).  The summary aggregate
  * at the top of the /feedback handler already correctly
  * excluded Signal C (one_way_pile_on.attacking_reviewers) per
- * Part 113's design — but the per-row flag did not, so a
+ * the design — but the per-row flag did not, so a
  * Signal C-flagged reviewer's row appeared on the subject
  * profile WITHOUT the suppression chip while still being
  * excluded from the headline rating.  That's exactly the
@@ -64,8 +64,8 @@ async function insertFeedback(
 	trxId: string
 ): Promise<void> {
 	const permlink = `order-${trxId}`;
-	// The /feedback summary INNER JOINs orders on (subject, order_permlink)
-	// — cp124 H5, relying on the intake-time guarantee that the cited order
+	// The /feedback summary INNER JOINs orders on (subject, order_permlink),
+	// relying on the intake-time guarantee that the cited order
 	// exists, belongs to the subject, and is fee-verified. Seed that order so
 	// the feedback row survives the join and is counted (or, when a signal
 	// flags it, correctly EXCLUDED by suppression rather than silently dropped

@@ -81,7 +81,7 @@ describe('firstOrderMinInFiat — $1-equivalent, rounded UP so it never seeds be
 });
 
 /**
- * v1.20.0 fix wave, G5. The pre-filled minimum used to sit EXACTLY on the $1
+ * The pre-filled minimum used to sit EXACTLY on the $1
  * floor at the browser's rate (JPY 150 → "150"), so any node whose rate was a
  * hair higher — FX refreshes hourly and every federated node averages its own
  * sources, within FX_OUTLIER_TOLERANCE (2%) of each other — rejected the free

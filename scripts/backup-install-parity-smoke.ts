@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * backup-install-parity — cp514 (post-v1.8.7 operator-install audit).
+ * backup-install-parity — (post-v1.8.7 operator-install audit).
  *
  * FOUR FILES INDEPENDENTLY NAME THE SAME TWO FACTS, and when any of them drifts
  * an operator ends up with a backup that never runs — silently, nightly:

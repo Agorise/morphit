@@ -3,9 +3,9 @@
  * scripts/sidecar-shell-quoting-smoke.ts
  *
  * Structural Defense #33 — sidecar shell-quoting static scanner
- * (cp83-O29 candidate, shipped cp84).
+ * (candidate, shipped).
  *
- * Catches the class of bug that produced cp83-D23a (fail2ban
+ * Catches the class of bug that produced (fail2ban
  * monitor emitting malformed JSON envelopes):
  *
  *   - A function-call command line ending in `\` (continuation)
@@ -32,12 +32,12 @@
  * skips it.
  *
  * Scope: every shell script under `ops/scripts/*.sh` (sidecar
- * monitor scripts) AND `ops/backup/*.sh` (the cp131-rewritten
+ * monitor scripts) AND `ops/backup/*.sh` (the rewritten
  * backup script, plus any future ops shell scripts).  Each file
  * is one scenario; the file passes iff zero unsafe patterns are
- * found.  cp131 widened scope from `ops/scripts/` only — the
+ * found.  A later change widened scope from `ops/scripts/` only — the
  * narrow scope was a HIGH-002-class scope-too-narrow risk:
- * `morphit-backup.sh` (cp131 HIGH-001 rewrite) is also a
+ * `morphit-backup.sh` (rewrite) is also a
  * function-call-heavy shell script and belongs in the gate.
  */
 
@@ -48,7 +48,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 
-/** Directories to scan for *.sh files.  cp131 added ops/backup
+/** Directories to scan for *.sh files.  A later change added ops/backup
  *  to cover the new morphit-backup.sh.  When adding a new ops
  *  shell-script directory, ADD IT HERE — leaving the smoke
  *  unaware of a new script directory is the HIGH-002 class. */
@@ -60,7 +60,7 @@ const SHELL_SCRIPT_DIRS = [
 const SHELL_FILES: string[] = [];
 for (const dir of SHELL_SCRIPT_DIRS) {
 	if (!existsSync(dir)) {
-		// cp131 fail-loudly: stale scan dir is silent drift.
+		// fail-loudly: stale scan dir is silent drift.
 		console.error(`✗ stale SHELL_SCRIPT_DIR: '${dir}' does not exist`);
 		process.exit(1);
 	}
@@ -200,8 +200,8 @@ if (findings.length > 0) {
 	}
 	console.log(
 		`\n  Fix: wrap the entire payload literal in double quotes so the\n` +
-			`  command substitution stays in quoted context.  See cp83-D23a\n` +
-			`  in TARBALL.md for the canonical repair pattern.`
+			`  command substitution stays in quoted context, as the files that\n` +
+			`  pass this check already do.`
 	);
 	console.log('\n──────────────────────────────────────────────────────');
 	console.log(`✗ ${findings.length}/${SHELL_FILES.length} scenarios failed`);

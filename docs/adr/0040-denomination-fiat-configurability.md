@@ -1,9 +1,9 @@
-# ADR-0040 — Operator-configurable price denomination fiat + denomination-agnostic API field rename (cp128)
+# ADR-0040 — Operator-configurable price denomination fiat + denomination-agnostic API field rename
 
 **Status:** Accepted (shipped 2026-05; pre-launch hardening campaign)
 
 **Date:** 2026-05-23
-**Deciders:** project maintainer (the maintainer)
+**Deciders:** project maintainer
 **Related:** ADR-0039 (self-sovereign pricing — established the `denominationFiat` parameter at the factory level; this ADR exposes it as operator config).
 
 ## Context
@@ -23,7 +23,7 @@ Two related limitations:
    these are realistic, immediate use cases — not hypothetical
    future scenarios.
 
-2. **USD-collapse / petrodollar-erosion hedge.**  the maintainer's framing
+2. **USD-collapse / petrodollar-erosion hedge.**  The maintainer's framing
    was forward-looking: if USD eventually loses its role as the
    global unit of account (replaced by a BRICS arrangement, an
    XDR-like basket, gold-anchored pricing, or any other emerging
@@ -43,7 +43,7 @@ beyond the in-repo frontend and tests.
 ### Backend
 
 - **New env var** `MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT`.
-  Default `'USD'` (preserves cp127 behavior).  Validated against
+  Default `'USD'` (preserves behavior).  Validated against
   `/^[A-Z]{3,8}$/` — 3-8 uppercase letters, broad enough to
   accommodate ISO 4217 codes (USD, EUR, JPY, ...), IMF
   Special Drawing Rights (XDR), precious metals (XAU, XAG), and
@@ -57,7 +57,7 @@ beyond the in-repo frontend and tests.
 
 - **Listing-fee API field rename:**
 
-  | Pre-cp128 | Post-cp128 |
+  | Previously, | newer |
   |---|---|
   | `base_fee_usd` | `base_fee_fiat` |
   | `blurt_price_usd` | `blurt_price_fiat` |
@@ -150,7 +150,7 @@ stablecoins (USDT, USDC, DAI), which means:
   wired).
 
 This is documented honestly in the env example and ADR.  Future
-work (cp129+) can add EUR-pegged stablecoins to the registry.
+work (later) can add EUR-pegged stablecoins to the registry.
 
 ### What this design DOESN'T solve (honest limitations)
 
@@ -195,15 +195,15 @@ Per priorities #1 and #2:
 ## Future work
 
 - **EUR-pegged / non-USD-pegged stablecoins in the asset
-  registry** (cp129+).  Enables Tier 2 anchoring for non-USD
+  registry** (later).  Enables Tier 2 anchoring for non-USD
   denominations.
 
-- **Per-asset denomination configurability** (cp130+).  Today
+- **Per-asset denomination configurability** (later).  Today
   the env var applies to BLURT pricing only.  When morphit_native
   gets wired for BTC/USD, XMR/USD, etc. (future ADR), each
   asset's denomination might want independent config — e.g. an
   operator could denominate BLURT pricing in EUR but BTC pricing
-  in USD if that makes sense for their market.  Cp128 doesn't
+  in USD if that makes sense for their market.  doesn't
   block this; the factory already accepts per-instance
   denominationFiat.
 
@@ -218,7 +218,7 @@ Per priorities #1 and #2:
 - `apps/indexer/src/config/index.ts` — env var + Config field
 - `apps/indexer/src/indexer/price/factory.ts` — reads config
 - `apps/indexer/src/indexer/price/morphitNativeFetcher.ts` —
-  generic factory was already parameterized (cp127)
+  generic factory was already parameterized
 - `apps/indexer/src/api/priceReceipt.ts` — reads config
 - `apps/indexer/src/api/listingFeeBody.ts` — field rename
 - `apps/indexer/src/api/listingFee.ts` — doc-comment update

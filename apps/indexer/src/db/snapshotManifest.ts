@@ -1,5 +1,5 @@
 /**
- * apps/indexer/src/db/snapshotManifest.ts  (cp764)
+ * apps/indexer/src/db/snapshotManifest.ts
  *
  * Indexer-DB snapshot bootstrap — the SAFETY CORE.
  *

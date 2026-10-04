@@ -17,8 +17,8 @@
  */
 
 import type { ReleasePayloadV1 } from './release.js';
-import { parseAccountXpub } from './btcXpub.js';
-import { parseXmrPrimaryAddress } from './xmrAddress.js';
+import { isBtcMainnetAddress, parseAccountXpub } from './btcXpub.js';
+import { parseXmrAddress, parseXmrPrimaryAddress } from './xmrAddress.js';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 
@@ -28,7 +28,7 @@ const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
  *  asset paths at the upper end.  Each entry is roughly
  *  `"path/...": "sha256-..."` ~ 80–120 bytes.
  *
- *  cp430: this was 64 KB, but the indexer stores each field in a
+ *  this was 64 KB, but the indexer stores each field in a
  *  JSONB column capped at MAX_JSONB_BYTES = 4096 (apps/indexer/src/
  *  indexer/payloadSize.ts), so the HANDLER rejects any manifest over
  *  4096 as `hash_manifest_too_large` — regardless of what the builder
@@ -58,24 +58,25 @@ export type ReleaseValidateError =
 	| 'endpoints_entry_invalid'
 	| 'signature_not_string'
 	| 'signature_too_long'
-	// Part 106 — treasury chain-pin validation reasons.  Mirror
+	// treasury chain-pin validation reasons.  Mirror
 	// the indexer's `validateTreasury()` reasons in
 	// apps/indexer/src/indexer/handlers/release.ts.
 	//
-	// Part 107 (privacy correction): the XMR private view key
+	// (privacy correction): the XMR private view key
 	// is no longer chain-pinned.  Validation reasons related
 	// to the viewkey (treasury_xmr_viewkey_missing,
 	// treasury_xmr_viewkey_not_hex64) were removed because the
 	// validator no longer accepts a `viewkey` field — any
 	// `viewkey` value present in the input is silently ignored
 	// (forward-compat for any historical release op that
-	// included one before Part 107).
+	// included one previously).
 	| 'treasury_not_object'
 	| 'treasury_too_large'
 	| 'treasury_btc_not_object'
 	| 'treasury_btc_address_missing'
 	| 'treasury_btc_address_too_long'
 	| 'treasury_btc_address_not_mainnet'
+	| 'treasury_btc_address_bad_checksum'
 	| 'treasury_btc_satoshis_invalid'
 	| 'treasury_btc_satoshis_too_large'
 	// v1.20.0 (MK-H2) — the optional treasury account xpub is not a valid
@@ -85,6 +86,7 @@ export type ReleaseValidateError =
 	| 'treasury_xmr_not_object'
 	| 'treasury_xmr_address_missing'
 	| 'treasury_xmr_address_not_mainnet'
+	| 'treasury_xmr_address_bad_checksum'
 	| 'treasury_xmr_piconero_invalid'
 	| 'treasury_xmr_piconero_too_large'
 	// v1.20.0 (MK-H2) — the optional treasury PRIMARY address for bound XMR
@@ -94,7 +96,7 @@ export type ReleaseValidateError =
 	| 'treasury_blurt_not_object'
 	| 'treasury_blurt_base_invalid'
 	| 'treasury_blurt_base_too_large'
-	// cp556 — decentralized-distribution anchor validation reasons.
+	// decentralized-distribution anchor validation reasons.
 	// Mirror the indexer's `validateDistribution()` reasons in
 	// apps/indexer/src/indexer/handlers/release.ts exactly.
 	| 'distribution_not_object'
@@ -118,6 +120,18 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 /** Subresource-Integrity-style hash format check. */
 const SHA256_RE = /^sha256-[A-Za-z0-9+/]{43}=$/;
 
+/** A hash-manifest KEY: a plain path on the instance's own site, with or
+ *  without its leading slash (the build writes `index.html`,
+ *  `_app/immutable/…`). The browser fetches each key to hash it, so a key such
+ *  as `//evil.example/x` or `https://…` would turn every page load into a
+ *  request to another host (WP-2). Same rule as the web client's
+ *  manifestKeyToSameOriginPath. */
+const MANIFEST_KEY_RE = /^\/(?!\/)[A-Za-z0-9._~/-]{1,200}$/;
+
+export function isManifestKey(key: string): boolean {
+	return MANIFEST_KEY_RE.test(key.startsWith('/') ? key : `/${key}`);
+}
+
 /** Mainnet-only Bitcoin address shape.  bech32 (`bc1...`),
  *  legacy (`1...`), P2SH (`3...`).  Testnet `tb1`, `m`, `n`
  *  rejected.  Length-bounded. */
@@ -138,7 +152,7 @@ const XMR_PICONERO_RE = /^\d+$/;
  *  piconero (16 digits), far above any reasonable listing fee. */
 const XMR_PICONERO_MAX_LEN = 16;
 
-/** cp372 — sanity ceiling on the chain-pinned BLURT base.  The
+/** sanity ceiling on the chain-pinned BLURT base.  The
  *  canonical fee is ~12.5¢ (≈62.5 BLURT at $0.002).  Even an
  *  extreme BLURT crash to $0.000001 would only need ~125,000
  *  BLURT to hold ~12.5¢; 10,000,000 leaves generous headroom
@@ -149,7 +163,7 @@ const BLURT_BASE_MAX = 10_000_000;
  *  URL() because that's expensive and accepts a much wider grammar
  *  than we want here.  Endpoints must be `https://...` strings,
  *  no whitespace, reasonable length.
- *  v1.8.16 (the maintainer) — `+` allowed in the path (kept in sync with the
+ *  v1.8.16 — `+` allowed in the path (kept in sync with the
  *  indexer's handlers/release.ts): Launchpad personal-repo git URLs are
  *  `git.launchpad.net/~agorise/+git/morphit`. `+` is a valid RFC-3986
  *  path sub-delimiter and the charset is otherwise unchanged, so no
@@ -157,7 +171,7 @@ const BLURT_BASE_MAX = 10_000_000;
 const ORIGIN_RE = /^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~+/-]*)?$/;
 const MAX_ORIGIN_LEN = 256;
 
-/** cp556 — distribution-anchor shape checks. Deliberately strict +
+/** distribution-anchor shape checks. Deliberately strict +
  *  bounded, same philosophy as the treasury regexes above. */
 /** Lowercase-hex SHA-256, exactly 64 chars — as `sha256sum` prints. */
 const SOURCE_SHA256_RE = /^[0-9a-f]{64}$/;
@@ -185,7 +199,7 @@ const IPNS_RECORD_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 const IPNS_RECORD_MIN_LEN = 64;
 const IPNS_RECORD_MAX_LEN = 1200;
 /** Count cap on the on-chain mirror breadcrumb. Raised 8→10 at v1.9.6 and
- *  10→32 at v1.11.1 (the maintainer added 9 new push-mirrors — gitgud.io, forge.chapril.org,
+ *  10→32 at v1.11.1 (9 new push-mirrors added — gitgud.io, forge.chapril.org,
  *  git.disroot.org, git.kaki87.net, codefloe.com, git.gay, bolha.dev,
  *  opencommit.eu, sij.ai — bringing the live set to 18, with Savannah + 0xacab
  *  still pending). 32 leaves durable headroom past the ~20-mirror goal so
@@ -226,16 +240,17 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 	if (hashSerLen > MANIFEST_MAX_SERIALIZED_BYTES) {
 		return { ok: false, reason: 'hash_manifest_too_large' };
 	}
-	// Each hash-manifest entry must be a valid SRI-format hash
-	// string.  This stops a hostile signer from stuffing arbitrary
-	// data into manifest values.
-	for (const [, v] of Object.entries(hashManifest)) {
-		if (typeof v !== 'string' || !SHA256_RE.test(v)) {
+	// Each hash-manifest entry must be a plain same-site path mapped to a
+	// valid SRI-format hash string. This stops a hostile signer from
+	// stuffing arbitrary data into manifest values, or pointing the
+	// browser's hash check at another host through a key.
+	for (const [k, v] of Object.entries(hashManifest)) {
+		if (!isManifestKey(k) || typeof v !== 'string' || !SHA256_RE.test(v)) {
 			return { ok: false, reason: 'hash_manifest_entry_invalid' };
 		}
 	}
 
-	// cp436 — endpoints is now OPTIONAL. the maintainer's rule: stop pinning the
+	// endpoints is now OPTIONAL. Project rule: stop pinning the
 	// blurt_rpc list on-chain — it's redundant with the frontend's baked-in
 	// DEFAULT_BLURT_RPC_ENDPOINTS and only bloats the chain. Validate it only
 	// when present; a payload with NO endpoints is valid (and preferred).
@@ -278,17 +293,17 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 		signature = payload.signature;
 	}
 
-	// Part 106 — optional treasury pin.  Validation is structural
-	// only.  Part 108++ removed view-key-based verification
-	// entirely (per-payment proofs replaced it); Part 109 removed
-	// the view-key env var; Part 110 retired the diagnostic
+	// optional treasury pin.  Validation is structural
+	// only.  later+ removed view-key-based verification
+	// entirely (per-payment proofs replaced it); a later change removed
+	// the view-key env var; a later change retired the diagnostic
 	// helper.  No view-key concept reaches this validator.
 	const treasuryResult = validateTreasury(payload.treasury);
 	if (!treasuryResult.ok) {
 		return { ok: false, reason: treasuryResult.reason };
 	}
 
-	// cp556 — optional decentralized-distribution anchor.  Structural
+	// optional decentralized-distribution anchor.  Structural
 	// validation only (parity with the indexer handler).
 	const distributionResult = validateDistribution(payload.distribution);
 	if (!distributionResult.ok) {
@@ -309,8 +324,8 @@ export function validateReleasePayload(payload: unknown): ReleaseValidateResult 
 }
 
 /**
- * Validate the optional `distribution` field of a release payload
- * (cp556).  Mirrors the indexer-side `validateDistribution()` in
+ * Validate the optional `distribution` field of a release payload.
+ * Mirrors the indexer-side `validateDistribution()` in
  * `apps/indexer/src/indexer/handlers/release.ts` — same regexes,
  * same ceilings, same reason names — so a release the indexer stores
  * `valid=true` always passes here, and vice versa.
@@ -439,6 +454,10 @@ export function validateTreasury(t: unknown):
 		if (!BTC_MAINNET_ADDRESS_RE.test(addr)) {
 			return { ok: false, reason: 'treasury_btc_address_not_mainnet' };
 		}
+		// The shape above admits a typo; the checksum does not.
+		if (!isBtcMainnetAddress(addr)) {
+			return { ok: false, reason: 'treasury_btc_address_bad_checksum' };
+		}
 		const sat = t.btc.satoshis;
 		if (typeof sat !== 'number' || !Number.isInteger(sat) || sat <= 0) {
 			return { ok: false, reason: 'treasury_btc_satoshis_invalid' };
@@ -469,12 +488,19 @@ export function validateTreasury(t: unknown):
 		if (!XMR_MAINNET_ADDRESS_RE.test(addr)) {
 			return { ok: false, reason: 'treasury_xmr_address_not_mainnet' };
 		}
-		// Part 107 — viewkey field deliberately NOT read.  If the
+		// Shape alone admits a typo: decode it, checksum and network included.
+		{
+			const parsed = parseXmrAddress(addr);
+			if (!parsed.ok || parsed.value.net !== 'mainnet' || parsed.value.kind === 'integrated') {
+				return { ok: false, reason: 'treasury_xmr_address_bad_checksum' };
+			}
+		}
+		// viewkey field deliberately NOT read.  If the
 		// payload contains a `viewkey` field (e.g. from a release
-		// op broadcast before Part 107), it's silently ignored.
+		// op broadcast previously), it's silently ignored.
 		// Publishing the view key is a privacy regression for the
-		// treasury wallet; chain-pinning it was a Part 106 design
-		// error corrected in Part 107.  See ADR-0011 amendment.
+		// treasury wallet; chain-pinning it was a design
+		// error corrected.  See ADR-0011 amendment.
 		const pn = t.xmr.piconero;
 		if (typeof pn !== 'string' || !XMR_PICONERO_RE.test(pn) || pn === '0') {
 			return { ok: false, reason: 'treasury_xmr_piconero_invalid' };
@@ -494,7 +520,7 @@ export function validateTreasury(t: unknown):
 		}
 	}
 
-	// cp372 — optional chain-pinned BLURT fee base.  No address
+	// optional chain-pinned BLURT fee base.  No address
 	// (BLURT fees are transfers to the operator's fee recipient);
 	// only the tier-1 base amount is pinned.
 	let blurt: { base: number } | null = null;
@@ -517,7 +543,7 @@ export function validateTreasury(t: unknown):
 	// hostile inputs that pad the object with unknown fields.
 	//
 	// Only attach `blurt` when present so a release with no BLURT
-	// pin serializes byte-identically to the pre-cp372 shape
+	// pin serializes byte-identically to the older shape
 	// (backward compatibility for older consumers + existing
 	// release-op fixtures).
 	const value: import('./release.js').ReleaseTreasuryBlock =

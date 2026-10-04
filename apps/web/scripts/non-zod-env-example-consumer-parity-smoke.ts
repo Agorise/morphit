@@ -2,9 +2,9 @@
 /**
  * non-zod-env-example-consumer-parity-smoke.
  *
- * Part 122 cp61 STRUCTURAL DEFENSE (LL #65 / O-15) — sibling of cp61-O14.
+ * STRUCTURAL DEFENSE — sibling.
  *
- * Closes the cp57-O11 generalization gap: cp57-O11 covers env-
+ * Closes the generalization gap: covers env-
  * example files backed by a Zod schema (indexer, relay, matrix-
  * bot — all three with `loadConfig()` Zod parsers).  Two
  * remaining env-example files in the repo aren't Zod-backed:
@@ -32,7 +32,7 @@
  *   wouldn't be in the env-example (e.g. BACKUP_ENV is sourced
  *   FROM as part of the script setup, not a configurable knob).
  *
- * Bug history at cp61: both files are CURRENTLY clean — this is
+ * Bug history: both files are CURRENTLY clean — this is
  * a preventive smoke.  Without the gate, the next checkpoint that
  * adds a phantom var to bunkerweb.env.example (forgetting to
  * delete the corresponding feature wiring) or that removes a
@@ -40,16 +40,16 @@
  * accumulates drift silently.
  *
  * Recurring class scope progression (14 defenses across 14 checkpoints):
- *   cp48-O1 through cp60-O13 (as listed in REVISIT)
- *   cp61-O14: bunkerweb CIDR cross-reference
- *   cp61-O15: non-Zod env-example consumer parity (THIS)
+ *   through a later fix (as listed in the backlog)
+ *   bunkerweb CIDR cross-reference
+ *   non-Zod env-example consumer parity (THIS)
  *
  * Mutation tests:
- *   M-128: remove `env_file: ./bunkerweb.env` line from docker-
+ *   remove `env_file: ./bunkerweb.env` line from docker-
  *          compose.yml.  Smoke fires:
  *          "bunkerweb: env_file: ./bunkerweb.env directive missing
  *           from ops/bunkerweb/docker-compose.yml."
- *   M-129: add `PHANTOM_VAR=test` to backup.env.example.  Smoke
+ *   add `PHANTOM_VAR=test` to backup.env.example.  Smoke
  *          fires: "backup: example var PHANTOM_VAR is not
  *          referenced in any consumer script."
  */
@@ -113,7 +113,7 @@ const SERVICES: NonZodService[] = [
 ];
 
 function parseEnvVars(content: string): Set<string> {
-	// Same regex as cp57-O11: match `MORPHIT_X=` or `# MORPHIT_X=` or
+	// Same regex as an earlier fix: match `MORPHIT_X=` or `# MORPHIT_X=` or
 	// `# X=` for bunkerweb-style non-MORPHIT-prefixed vars.  Allow
 	// trailing whitespace between the var name and `=`.
 	const vars = new Set<string>();

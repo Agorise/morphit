@@ -34,9 +34,26 @@ function ok(name: string, cond: boolean, why = ''): void {
 	failures.push(`✗ ${name}${why ? ': ' + why : ''}`);
 }
 
+/** The verifiers read a real Response (headers and a size-capped body stream,
+ *  fee/explorerHttp.ts); the fakes below describe one by status + json/text. */
+type FakeResponse = {
+	status: number;
+	json?: () => Promise<unknown>;
+	text?: () => Promise<string>;
+};
+function realResponses(
+	fake: (input: RequestInfo | URL, init?: RequestInit) => Promise<unknown>
+): typeof fetch {
+	return (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const f = (await fake(input, init)) as FakeResponse;
+		const body = f.json ? JSON.stringify(await f.json()) : await f.text!();
+		return new Response(body, { status: f.status });
+	}) as typeof fetch;
+}
+
 function makeFetch(txBody: unknown, tipBody?: string, tipFails?: boolean): typeof fetch {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return (async (input: RequestInfo | URL) => {
+	return realResponses(async (input: RequestInfo | URL) => {
 		const url = typeof input === 'string' ? input : input.toString();
 		if (url.includes('/blocks/tip/height')) {
 			if (tipFails) {
@@ -60,7 +77,7 @@ function makeFetch(txBody: unknown, tipBody?: string, tipFails?: boolean): typeo
 			} as unknown as Response;
 		}
 		throw new Error(`smoke: unmocked URL ${url}`);
-	}) as unknown as typeof fetch;
+	});
 }
 
 function baseClaim(): FeeClaim {
@@ -68,7 +85,7 @@ function baseClaim(): FeeClaim {
 		feeMethod: 'btc',
 		expectedAmount: 2_500,
 		externalTxId: VALID_TXID,
-		// cp474 — REQUIRED by FeeClaim. Omitted here the field was `undefined`,
+		// REQUIRED by FeeClaim. Omitted here the field was `undefined`,
 		// not `null`; moneroProofVerifier gates on `txProof === null` and would
 		// fall through to `.length` on undefined. BTC claims carry no proof.
 		txProof: null,
@@ -91,7 +108,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 1,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody)
@@ -113,7 +130,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			// tip = 800_002 → depth = 800_002 + 1 - 800_000 = 3
@@ -136,7 +153,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			// tip = 800_000 → depth = 1
@@ -159,7 +176,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody, '800002')
@@ -185,7 +202,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody, undefined, true)
@@ -211,7 +228,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 3,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			makeFetch(txBody, 'NOT-AN-INTEGER')
@@ -237,7 +254,7 @@ async function run(): Promise<void> {
 				explorerUrls: ['https://blockstream.info/api'],
 				minConfirmations: 6,
 				requestTimeoutMs: 5_000,
-				// cp474 — Part 109 quorum gate; required by the config type.
+				// quorum gate; required by the config type.
 				minSuccessfulResponses: 1
 			},
 			// tip = 800_005 → depth = 6

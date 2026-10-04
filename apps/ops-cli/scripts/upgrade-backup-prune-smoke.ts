@@ -7,7 +7,7 @@
  * delete any backup that had a process with its cwd parked under it — which on
  * a real box meant a leftover login shell or a `less`/pager from
  * `systemctl status` blocked the prune forever, and the operator got a [WARN]
- * on every upgrade telling them to go hunt PIDs (cp260: the maintainer hit exactly this,
+ * on every upgrade telling them to go hunt PIDs (the maintainer hit exactly this,
  * with the same stuck shell + status pagers two upgrades running).
  *
  * The fix (beta18): the prune only refuses when a process is actually RUNNING

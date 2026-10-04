@@ -25,7 +25,7 @@ export interface ChatStreamRow {
 	 *  proof that `sender` authored this message at `created_at` — used
 	 *  by the chat PDF export as courtroom-grade evidence. */
 	source_trx_id: string;
-	/** cp446 — the order this message is about, or null. Threads the inbox
+	/** the order this message is about, or null. Threads the inbox
 	 *  (one card per peer+order) and scopes the transcript, so a live message
 	 *  about order A never appears in the discussion about order B. */
 	order_permlink: string | null;
@@ -40,9 +40,9 @@ export interface ChatStreamFilter {
 
 /** Convert a raw DB row to the wire shape the frontend expects.
  *
- * cp470 — `order_permlink` MUST be included. The client threads a chat by
+ * `order_permlink` MUST be included. The client threads a chat by
  * (peer, order) and drops any live message whose `order_permlink` doesn't
- * match the open thread (the cp446 order-thread filter in chatService.ts).
+ * match the open thread (the order-thread filter in chatService.ts).
  * Omitting it here shipped every SSE event (snapshot, fast-path provisional,
  * and durable bus push) with an implicit `null` tag, so live messages in an
  * ORDER thread were filtered out and only surfaced ~one main-indexer lag

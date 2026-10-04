@@ -66,6 +66,13 @@ export interface CompositePriceSourceConfig {
 		readonly name: string;
 		readonly fetch: PriceFetch;
 	}>;
+	/** When this says true and no primary had a value, the EXTERNAL tier is
+	 *  not asked this cycle (the cached / static value stays). The onion
+	 *  pricenodes use it while their first round is still out, so a node that
+	 *  may use clearnet does not ask the clearnet aggregators at every boot
+	 *  just because Tor is slower; once the round lands it refreshes this
+	 *  source, and the clearnet tier serves only if that round made no price. */
+	readonly deferExternal?: () => boolean;
 	/** Relative band for outlier rejection in the external average,
 	 *  e.g. 0.05 = keep readings within ±5% of the median.  Crypto
 	 *  spreads across exchanges are wider than FX; default 0.05. */
@@ -97,7 +104,7 @@ export interface CompositePriceSourceConfig {
 	readonly setInterval?: typeof globalThis.setInterval;
 	/** clearInterval injection. */
 	readonly clearInterval?: typeof globalThis.clearInterval;
-	/** cp233 — Defense B (slow-drift) wiring.  When db, asset, and
+	/** Defense B (slow-drift) wiring.  When db, asset, and
 	 *  denominationFiat are ALL provided, every successful refresh
 	 *  updates the persisted drift baseline (price_drift_baseline)
 	 *  via updateAndCheckDrift() and fires a logged + /v1/health-
@@ -156,7 +163,7 @@ interface CachedEntry {
 export class CompositeCachedPriceSource implements BlurtPriceSource {
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private cached: CachedEntry | null = null;
-	/** cp233 — last Defense B drift-check result; null until the
+	/** last Defense B drift-check result; null until the
 	 *  first successful refresh runs the check (or when drift
 	 *  monitoring is unwired). Exposed read-only via driftStatus(). */
 	private lastDrift: DriftCheckResult | null = null;
@@ -227,7 +234,7 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		};
 	}
 
-	/** cp233 — Defense B: the last drift-check result, or null if
+	/** Defense B: the last drift-check result, or null if
 	 *  drift monitoring is unwired (no db/asset/fiat) or no refresh
 	 *  has committed yet.  Read by /v1/health for the drift surface. */
 	driftStatus(): DriftCheckResult | null {
@@ -308,6 +315,10 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 		}
 
 		// ── External tier: fetch all concurrently, robust-average ──
+		if (this.config.upstreams.length > 0 && this.config.deferExternal?.() === true) {
+			log.info('external_tier_deferred', { reason: 'primary_pending' });
+			return;
+		}
 		const results = await Promise.allSettled(this.config.upstreams.map((u) => u.fetch()));
 		const values: number[] = [];
 		results.forEach((res, i) => {
@@ -410,7 +421,7 @@ export class CompositeCachedPriceSource implements BlurtPriceSource {
 	private async commit(value: number, source: string, now: number): Promise<void> {
 		this.cached = { price: value, source, updatedAt: now };
 
-		// cp233 — Defense B (slow-drift / "frog in boiling water"):
+		// Defense B (slow-drift / "frog in boiling water"):
 		// update the persisted drift baseline and check for a
 		// sustained divergence from it.  Observational ONLY — the
 		// value is already committed above, and a baseline-store

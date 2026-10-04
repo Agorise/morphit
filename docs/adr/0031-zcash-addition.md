@@ -1,10 +1,10 @@
 # ADR-0031: Zcash (ZEC) Addition — Trade-Only with Per-Address Privacy Choice
 
-**Status:** Accepted (Part 122 cp39, 2026-05-19)
+**Status:** Accepted
 
 **Context:**
 
-Following Dogecoin (ADR-0030), Dash (ADR-0027), Litecoin (cp24), Bitcoin Cash (cp21), DAI (ADR-0029), USDC (ADR-0028), USDT (Part 121), BLURT/BTC/XMR (founders' tradeable set), Morphit adds Zcash (ZEC) as the eleventh tradable asset. ZEC is a proof-of-work cryptocurrency launched in 2016 as the first practical deployment of zero-knowledge proofs (zk-SNARKs) in a cryptocurrency. The protocol supports two address families that coexist on the same chain:
+Following Dogecoin (ADR-0030), Dash (ADR-0027), Litecoin, Bitcoin Cash, DAI (ADR-0029), USDC (ADR-0028), USDT, BLURT/BTC/XMR (founders' tradeable set), Morphit adds Zcash (ZEC) as the eleventh tradable asset. ZEC is a proof-of-work cryptocurrency launched in 2016 as the first practical deployment of zero-knowledge proofs (zk-SNARKs) in a cryptocurrency. The protocol supports two address families that coexist on the same chain:
 
 - **Transparent addresses** (t1 / t3, base58, ~35 chars) — publicly visible amounts and parties, similar in shape to Bitcoin's legacy addresses.
 - **Shielded addresses** (zs1 Sapling, u1 Unified Address bundling Orchard receivers) — sender, recipient, and amount hidden on chain via zero-knowledge proofs.
@@ -15,7 +15,7 @@ Per-trade, each participant picks the address type that matches their preferred 
 
 ### 1. ZEC is a Category-B trade-only asset
 
-Per Memory #23 the `fee_method` enum stays frozen at `{blurt, btc, xmr, waived_first_buy}`. ZEC therefore ships with `canBeTraded: true` and `canPayListingFee: false`, matching the BCH/LTC/DASH/DOGE/USDT/USDC/DAI pattern.
+Per the frozen fee_method rule the `fee_method` enum stays frozen at `{blurt, btc, xmr, waived_first_buy}`. ZEC therefore ships with `canBeTraded: true` and `canPayListingFee: false`, matching the BCH/LTC/DASH/DOGE/USDT/USDC/DAI pattern.
 
 ### 2. Single-network mainnet
 
@@ -57,7 +57,7 @@ Adopted as a same-checkpoint design principle for all privacy-relevant assets on
 
 > Morphit never ranks privacy approaches across assets or implies one privacy coin is "the most private." Each privacy-focused chain gets respectful framing describing what it *is* (its privacy technology, address types, and trade-offs) without comparative claims that one is stronger than another. This avoids tribal in-fighting between privacy-coin communities and respects each user's free choice of which chain matches their priorities.
 
-This is universal — it applies to ZEC, XMR, DASH, DOGE, BTC, BCH, LTC, BLURT, and any future privacy-relevant addition. The principle replaces previously-shipped language like "For Morphit's strongest privacy posture, use XMR" with neutral descriptions of each chain's privacy properties. Cleaned at cp39 across:
+This is universal — it applies to ZEC, XMR, DASH, DOGE, BTC, BCH, LTC, BLURT, and any future privacy-relevant addition. The principle replaces previously-shipped language like "For Morphit's strongest privacy posture, use XMR" with neutral descriptions of each chain's privacy properties. Cleaned across:
 
 - Canonical asset-registry comments (DASH and DOGE entries).
 - Frontend asset-registry comments (LTC, DASH, and DOGE entries).
@@ -88,7 +88,7 @@ Distinct from DOGE's `text-yellow-500` and USDT's `text-amber-400` and the other
 - ZEC is enabled by default on every fresh Morphit instance. Operators preferring not to support ZEC can disable via `MORPHIT_INDEXER_DISABLED_ASSETS="ZEC"` (or any longer list including `ZEC`).
 - The frozen `fee_method` enum is unaffected. Listing fees stay BLURT/BTC/XMR.
 - Per-address privacy choice means Morphit users will sometimes receive ZEC at transparent addresses and sometimes at shielded addresses. The chat-link explorer renders txids the same for both — the txid is canonical even when sender/recipient/amount are hidden inside the shielded payload.
-- No favoritism re-introduction guard: future asset additions must follow the §5 principle. The DOGE smoke docblock (cleaned at cp39) is the template for how registry-comments and smoke source should describe each privacy chain — factually, without comparative ranking.
+- No favoritism re-introduction guard: future asset additions must follow the §5 principle. The DOGE smoke docblock (cleaned) is the template for how registry-comments and smoke source should describe each privacy chain — factually, without comparative ranking.
 
 ## References
 
@@ -97,7 +97,7 @@ Distinct from DOGE's `text-yellow-500` and USDT's `text-amber-400` and the other
 - ADR-0030 (Dogecoin addition — single-network template that ZEC mirrors).
 - ZIP-321 (Payment Request URI specification) — https://zips.z.cash/zip-0321
 - Zcash protocol specification — https://zips.z.cash/protocol/protocol.pdf
-- Memory #23 (fee_method enum frozen at BLURT/BTC/XMR).
-- Memory #29 (NEW-asset i18n native-en/es/fr/de + EN-fallback for it/pl/ru/fa/zh-CN/zh-HK).
-- Cp32 LL #36 (payment-rail axis same-turn discipline).
-- Cp33 CODE-3 (atomically widen all 4 wire-format gates).
+- The frozen fee_method rule (fee_method enum frozen at BLURT/BTC/XMR).
+- The native-locale policy (NEW-asset i18n native-en/es/fr/de + EN-fallback for it/pl/ru/fa/zh-CN/zh-HK).
+- (payment-rail axis same-turn discipline).
+- (atomically widen all 4 wire-format gates).

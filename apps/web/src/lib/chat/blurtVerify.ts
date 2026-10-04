@@ -2,14 +2,18 @@
  * Morphit chat — BLURT transfer verification (Phase F.4).
  *
  * After a buyer marks "funds sent" with a txid and a claimed
- * memo, the seller's chat UI fetches the transaction from the
- * Blurt chain and verifies it matches what was actually
- * agreed to in the chat:
+ * memo, the seller's chat UI fetches the transaction and checks
+ * it against `VerifyExpect`:
  *
- *   - Recipient ("to") matches the seller's account
- *   - Sender ("from") matches the buyer's chat identity
- *   - Amount matches the address payload's amount
- *   - Memo matches the address payload's memo
+ *   - Recipient ("to") is the seller's account
+ *   - Sender ("from") is the buyer
+ *   - Amount equals `amountBlurt`
+ *   - Memo equals `memo` (when one was requested)
+ *
+ * WHAT the expectation is, is the caller's job: for an order,
+ * $lib/trades/tradeVerify passes the amount and memo the SELLER
+ * asked for in their address payload, and only for the buyer the
+ * seller is trading with — never the claimant's own figures.
  *
  * Result is a discriminated tag the UI renders distinctly:
  * green check, yellow warning with field detail, gray
@@ -34,7 +38,14 @@ import { isValidMemo } from './payload';
 /** Result of verifying a BLURT funds-sent claim against chain. */
 export type VerifyResult =
 	| { kind: 'verified' }
-	| { kind: 'mismatch'; field: 'to' | 'from' | 'amount' | 'memo' }
+	| {
+			kind: 'mismatch';
+			field: 'to' | 'from' | 'amount' | 'memo';
+			/** For an amount mismatch: the amount the closest transfer
+			 *  actually carried ("1.000"), so the UI can say "received X of
+			 *  Y". */
+			received?: string;
+	  }
 	| { kind: 'not_found' }
 	| { kind: 'wrong_op' /* tx exists but contains no transfer op matching */ }
 	| { kind: 'rpc_error'; message: string };
@@ -107,7 +118,7 @@ async function verifyBlurtTransferUncached(
 		return { kind: 'mismatch', field: 'memo' };
 	}
 
-	// cp410 — the browser no longer queries Blurt nodes directly (privacy #1).
+	// the browser no longer queries Blurt nodes directly (privacy #1).
 	// The transaction is fetched ONCE through the operator's indexer relay
 	// (POST /v1/chain/condenser), which reads from its own canonical node pool.
 	// This collapses the old browser-side multi-node quorum onto the indexer: a
@@ -237,7 +248,11 @@ export function verifyBlurtTransferAgainstTx(
 	// Evaluate each candidate.  First full-match wins → verified.
 	// Otherwise track the candidate with the fewest mismatches
 	// for diagnostic reporting.
-	let bestMismatch: { field: 'to' | 'from' | 'amount' | 'memo'; count: number } | null = null;
+	let bestMismatch: {
+		field: 'to' | 'from' | 'amount' | 'memo';
+		count: number;
+		amount: string;
+	} | null = null;
 	for (const candidate of candidates) {
 		const failures = compareTransferToExpect(candidate, expect);
 		if (failures.length === 0) {
@@ -245,14 +260,19 @@ export function verifyBlurtTransferAgainstTx(
 		}
 		const firstField = failures[0] as 'to' | 'from' | 'amount' | 'memo';
 		if (bestMismatch === null || failures.length < bestMismatch.count) {
-			bestMismatch = { field: firstField, count: failures.length };
+			bestMismatch = { field: firstField, count: failures.length, amount: candidate.amount };
 		}
 	}
 
 	// Fallthrough: no candidate matched all fields.  Report the
 	// closest-match's first-failed field.  bestMismatch is non-null
 	// because candidates.length > 0.
-	return { kind: 'mismatch', field: bestMismatch!.field };
+	const received = /^(\d+\.\d{3})\s+BLURT$/.exec(bestMismatch!.amount)?.[1];
+	return {
+		kind: 'mismatch',
+		field: bestMismatch!.field,
+		...(bestMismatch!.field === 'amount' && received !== undefined ? { received } : {})
+	};
 }
 
 /** Compare a single transfer op against the seller's expectations.

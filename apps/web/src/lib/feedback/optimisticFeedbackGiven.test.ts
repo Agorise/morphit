@@ -1,5 +1,5 @@
 /**
- * cp514 (t.txt D) — the chat inbox card's 3rd line must flip from the green
+ * the chat inbox card's 3rd line must flip from the green
  * "Leave feedback" prompt to the ★ rating the instant feedback is broadcast,
  * without waiting for the durable /feedback-given poll ("show the truth
  * immediately … no matter how fast I decide to click back to the chat inbox").
@@ -33,7 +33,7 @@ function rec(subject: string, order: string, rating: 1 | 2 | 3 | 4 | 5): Feedbac
 	};
 }
 
-describe('cp514 (t.txt D) — optimistic feedback-given store', () => {
+describe('cp514 — optimistic feedback-given store', () => {
 	it('round-trips a just-left feedback under the inbox key (peer\\u0000order)', () => {
 		const subject = 'tester2';
 		const order = 'im-selling-200-mxn-of-blurt';

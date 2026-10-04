@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * json-str-injection-smoke — regression test for AUDIT-1 (cp17
- * deep-deep): json_str() in ops/scripts/lib/emit.sh must encode
+ * json-str-injection-smoke — regression test for AUDIT-1: json_str in ops/scripts/lib/emit.sh must encode
  * all C0 control characters so an attacker can't forge journal
  * entries via newline injection through untrusted-input paths.
  *

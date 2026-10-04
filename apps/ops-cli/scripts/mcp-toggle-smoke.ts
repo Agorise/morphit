@@ -2,7 +2,7 @@
 /**
  * mcp-toggle-smoke — locks down `morphit-ops mcp`, the on/off switch
  * for the morphit-mcp.service unit (the read-only AI-agent orderbook
- * surface).  the maintainer's requirement: MCP is on by default, but an operator
+ * surface).  The maintainer's requirement: MCP is on by default, but an operator
  * must be able to stop + disable it from the morphit-ops menu.
  *
  * What this guards:

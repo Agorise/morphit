@@ -742,6 +742,7 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 				warnings: result.warnings,
 				notes: result.notes,
 				rasterizer_missing: result.rasterizerMissing,
+				og_image_sha256: result.ogImageSha256,
 				theme:
 					result.theme === null
 						? null
@@ -757,6 +758,9 @@ export async function runBranding(ctx: BrandingCtx): Promise<number> {
 	info('');
 	if (sub === 'status') {
 		const pending = result.touched.filter((t) => !/\.(gz|br)$/.test(t)).length;
+		info(
+			`  Link preview:   ${result.ogImageSha256 !== null ? 'og-image.png is your own' : 'og-image.png is the shipped Morphit image'}`
+		);
 		for (const w of result.warnings) warn(sanitizeForTerm(w));
 		info(
 			pending === 0

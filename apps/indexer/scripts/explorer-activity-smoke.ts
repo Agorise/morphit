@@ -104,7 +104,7 @@ scenario('decorates transfer', () => {
 });
 
 scenario('decorates comment', () => {
-	// cp397: comment decoration interpolates the author, so the op must
+	// comment decoration interpolates the author, so the op must
 	// carry one (real `comment` ops always do — it's a required field).
 	const d = decorateOp('comment', { author: 'alice', permlink: 'hello-world' });
 	if (d.kind !== 'comment') throw new Error(d.kind);
@@ -123,7 +123,7 @@ scenario('comment without author → native_unknown (cannot label it)', () => {
 });
 
 scenario('decorates vote', () => {
-	// cp397: vote decoration interpolates voter + author (both required
+	// vote decoration interpolates voter + author (both required
 	// fields on a real `vote` op); weight sign picks up/down.
 	const d = decorateOp('vote', { voter: 'alice', author: 'bob', weight: 10000 });
 	if (d.kind !== 'vote') throw new Error(d.kind);

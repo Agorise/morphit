@@ -78,7 +78,7 @@ const FORBIDDEN_REASON_CODEPOINTS = new Set<number>([
  *  legitimate in multi-line reasons; strips everything else in
  *  the C0/C1 control ranges.  Returns the cleaned string.
  *
- *  cp138 A-5: NFC-normalize before stripping so the codepoint
+ *  NFC-normalize before stripping so the codepoint
  *  iteration sees canonical sequences.  Without NFC, an NFD-
  *  decomposed input could carry visually-equivalent characters
  *  with different codepoint values, and the strip loop would

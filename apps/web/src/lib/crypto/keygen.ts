@@ -15,21 +15,20 @@
  *       encrypted keystore (see `keystore.ts`).
  *    4. SHOULD be zeroed after use where the JS engine permits.
  *
- *  ─── POSTING / MEMO ONLY IN LIVE MEMORY ────────────────────────────────
+ *  ─── ONLY THE POSTING KEY IN LIVE MEMORY ───────────────────────────────
  *
  *  Blurt has four key roles: owner, active, posting, memo. Morphit runs
- *  with a strict tier policy — sessions hold posting + memo private keys
- *  only; owner and active live exclusively in the encrypted keystore and
- *  are reached via `useActiveKey` / `useOwnerKey` JIT-unlock callbacks in
- *  keystore.ts. The LiveIdentity type enforces this structurally.
+ *  with a strict tier policy — sessions hold the posting private key only
+ *  (memo, owner and active as public keys); the active key is reached via
+ *  the `useActiveKey` JIT-unlock callback in keystore.ts, and nothing hands
+ *  out the owner key. The LiveIdentity type enforces this structurally.
  *
- *  ─── BIP-39 (Phase 2) ──────────────────────────────────────────────────
+ *  ─── BIP-39 words, Morphit-specific keys ──────────────────────────────
  *
- *  Phase 1 shipped a placeholder 64-word wordlist. Phase 2 uses the
- *  canonical BIP-39 English wordlist via @scure/bip39 — so a Morphit
- *  seed phrase is a real BIP-39 mnemonic that any wallet/tool can
- *  understand. A user can back up their Morphit identity with hardware
- *  wallets or other BIP-39 tooling.
+ *  The seed phrase uses the canonical BIP-39 English wordlist via
+ *  @scure/bip39, so it is a valid BIP-39 mnemonic and its words and
+ *  checksum can be stored with any BIP-39 tooling (a metal backup, a
+ *  hardware wallet's word list).
  *
  *  The derivation pipeline:
  *    BIP-39 mnemonic  →  BIP-39 seed (PBKDF2-HMAC-SHA-512, 2048 rounds)
@@ -37,12 +36,13 @@
  *                     →  per-role key (BLAKE2b, domain "morphit-v1/<role>")
  *                     →  secp256k1 keypair (@noble/secp256k1)
  *
- *  The per-role BLAKE2b expansion is Morphit-specific, but the SEED is
- *  interoperable: the same 12 words in any BIP-39 tool will produce the
- *  same master seed bytes. Phase 5 will add an option to export the
- *  identity as a BIP-32 xprv for interoperability with hardware wallets.
+ *  Only the first step is standard. The BLAKE2b expansion is Morphit's
+ *  own, so another BIP-39 wallet given the same 12 words derives the same
+ *  seed bytes but NOT these Blurt keys: only Morphit (or another
+ *  implementation of this open-source derivation) regenerates them. For
+ *  other Blurt wallets, back up the WIF keys (backup page).
  *
- *  Note: Phase 2 originally used Ed25519 here, which was incompatible
+ *  Note: this pipeline originally ended in Ed25519, which was incompatible
  *  with Blurt's secp256k1 consensus. ADR-0007 records the migration.
  *  The only operational impact was on the final step (material → keypair);
  *  the upstream BIP-39 + BLAKE2b pipeline is unchanged.
@@ -54,7 +54,7 @@ import { sodium, ensureSodium } from './sodium';
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import * as secp256k1 from '@noble/secp256k1';
-// Note (cp165 byte budget): we DELIBERATELY do NOT statically import
+// Note (byte budget): we DELIBERATELY do NOT statically import
 // `PublicKey` from `@beblurt/dblurt` here.  `keygen.ts` is reached
 // transitively from `$lib/stores/identity.ts`, which is loaded on
 // essentially every authenticated page; a static dblurt import here
@@ -63,7 +63,7 @@ import * as secp256k1 from '@noble/secp256k1';
 // not signing anything.  The single dblurt-using function
 // (`formatPublicKeyBLT`) is action-triggered (account-name verify,
 // onboarding register), so it dynamically imports dblurt on first
-// call.  See cp165 audit + REVISIT-LIST.
+// call.
 
 // Identity types, role constants, and the two sync LiveIdentity helpers
 // (toLiveIdentity/wipeLiveIdentity) now live in ./identity-core — a
@@ -74,7 +74,7 @@ import * as secp256k1 from '@noble/secp256k1';
 // page's modulepreload closure. Those baseline call sites now import from
 // ./identity-core directly; keygen imports what it needs internally and
 // re-exports the full set so its non-baseline importers (onboarding, import,
-// chat, settings, blurt/ops) are unchanged. (cp271 byte budget.)
+// chat, settings, blurt/ops) are unchanged. (byte budget.)
 import {
 	type KeyRole,
 	KEY_ROLES,
@@ -216,15 +216,26 @@ export async function generateFullIdentity(): Promise<FullIdentity> {
 	};
 }
 
+/** Why a seed phrase was refused — typed, so the import page does not have to
+ *  classify English messages. */
+export class SeedPhraseError extends Error {
+	readonly kind: 'word_count' | 'invalid';
+	constructor(kind: 'word_count' | 'invalid', message: string) {
+		super(message);
+		this.name = 'SeedPhraseError';
+		this.kind = kind;
+	}
+}
+
 export async function importFullIdentityFromSeed(seed: string): Promise<FullIdentity> {
 	await ensureSodium();
 	const normalized = seed.trim().toLowerCase().split(/\s+/).join(' ');
 	const words = normalized.split(' ');
 	if (words.length !== 12) {
-		throw new Error('Seed must be 12 words');
+		throw new SeedPhraseError('word_count', 'Seed must be 12 words');
 	}
 	if (!validateMnemonic(normalized)) {
-		throw new Error('Invalid seed phrase (bad word or checksum)');
+		throw new SeedPhraseError('invalid', 'Invalid seed phrase (bad word or checksum)');
 	}
 	const seedBytes = bip39.mnemonicToEntropy(normalized, wordlist);
 	const bip39Seed = await mnemonicToBip39Seed(normalized);
@@ -408,7 +419,7 @@ export function formatPublicKey(pk: Uint8Array): string {
  * Wraps dblurt's PublicKey class rather than re-implementing
  * base58check — one less thing to get wrong.
  *
- * **Async + dynamic dblurt import** (cp165 byte-budget fix).  All
+ * **Async + dynamic dblurt import** (byte-budget fix).  All
  * callers are user-action handlers (settings account verify,
  * onboarding register-name); none need this at first paint.  The
  * dynamic import keeps the 2 MB dblurt chunk out of the identity-

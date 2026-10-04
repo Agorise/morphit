@@ -7,6 +7,20 @@ generalisation) — both stand in full; this adds a second, faster route to the
 same emit point and does not remove the first.
 **Depends on:** ADR-0008 (indexer architecture), ADR-0048, ADR-0051
 
+> **2026-10 audit note — the transport changed.** Pushes no longer use
+> pooled, kept-warm connections, and never go over I2P, Lokinet or direct
+> clearnet. Each push goes over Tor on a FRESH circuit (random SOCKS
+> credentials, `IsolateSOCKSAuth`) — to the peer's onion, or to its https
+> origin through a Tor exit — carries one sender's messages only, and goes
+> only to peers a probe has verified (`good`, `quiet`, `syncing`). A node
+> without Tor does not fan out. A verified peer still learns the signed
+> message (public on chain seconds later) a few seconds early and when it
+> arrived; it can no longer tell which instance sent it. The old
+> transport described below did leak something the chain does not record:
+> a push's source address, or many accounts' pushes on one pooled
+> connection, revealed which instance a chatting account uses. Source of
+> truth: the header of `apps/indexer/src/indexer/chatFastFederation.ts`.
+
 ## Context
 
 ADR-0048 and ADR-0051 got the *indexer* out of the irreversibility wait: the head

@@ -2,7 +2,7 @@
 /**
  * usdt-network-picker-required-smoke.
  *
- * Part 121 sentinel: the three USDT-touching forms (/post,
+ * the three USDT-touching forms (/post,
  * AddressShareModal, FundsSentModal) MUST gate their submit
  * button on `usdtNetwork !== null` whenever the asset/method
  * is USDT.  This smoke is a sentinel-grep against the
@@ -12,7 +12,7 @@
  * Why this matters: cross-network sends lose funds.  A form
  * that lets a user submit a USDT trade with no network picked
  * would either default to one (we don't — defaultNetwork is
- * null per memory #25's no-default design) or fall through
+ * null per the no-default design) or fall through
  * with the network unset, leaving the seller to interpret
  * what chain the buyer means.  Both fail the priority-#1
  * privacy / priority-#3 grandma-friendly tests.
@@ -124,13 +124,13 @@ if (ADDR_PICKED_RE.test(addrBody)) {
 	);
 }
 
-// USDT tab present in tablist. cp425 — the method tabs are now rendered
+// USDT tab present in tablist. the method tabs are now rendered
 // dynamically from the ALL_METHODS array via `{#each visibleMethods as m}`
 // with a templated i18n label `chat.address.method_${m}`, so there is no
 // literal `method_usdt` string anymore. Verify 'usdt' is one of the tab
 // methods AND the templated label render is present (both are needed for a
 // selectable USDT tab — which is what makes the network-required gate reachable).
-// v1.5.0 (tt.txt B): the 16-button tablist became a coin SELECT
+// v1.5.0: the 16-button tablist became a coin SELECT
 // (AssetChoiceSelect), whose labels come from the asset registry — the old
 // `chat.address.method_${m}` i18n labels are gone (pruned as dead keys). The
 // INVARIANT is unchanged: USDT must be SELECTABLE, because that is what makes
@@ -141,7 +141,7 @@ if (ADDR_PICKED_RE.test(addrBody)) {
 // `/ALL_METHODS[\s\S]*?'usdt'[\s\S]*?\]/` scanned the ENTIRE file, so it kept
 // matching the `method === 'usdt'` / usdtNetwork code further down even after
 // USDT was deleted from ALL_METHODS — i.e. it could not detect the very
-// omission it guards against (proven by tamper test, cp471).
+// omission it guards against (proven by tamper test).
 const addrMethods = /const ALL_METHODS: readonly ChatAssetTicker\[\] = \[([\s\S]*?)\];/.exec(
 	addrBody
 );

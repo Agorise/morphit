@@ -1,7 +1,7 @@
 #!/bin/sh
 # morphit-ipfs-privacy.sh — the ONE list of Kubo settings that keep this box's
 # IPFS node private, and the one place that applies or checks them.
-# (v1.18.0 deep-deep, H3)
+#
 #
 # WHAT WAS WRONG. Every Morphit install, tor-only ones included, ran a stock
 # Kubo: public DHT, the default bootstrap peers, swarm listeners on every
@@ -20,8 +20,8 @@
 # Modes (run as the ipfs service user, with IPFS_PATH set):
 #   check-hidden  exit 0 when every hidden-only setting is in place, else 1
 #   apply-hidden  set them all (idempotent)
-#   check-base    exit 0 when the every-node settings are in place, else 1
-#   apply-base    set them (every node: telemetry off)
+#   check-base    exit 0 when the clearnet settings are in place, else 1
+#   apply-base    set them (a clearnet node: DHT seeding, nothing else)
 # Kubo reads its config at start, so a caller that applies must restart ipfs.
 # POSIX sh. Every value was checked against Kubo v0.42.0's config reference and
 # a real v0.42.0 daemon (starts, serves /ipfs/<cid> from its gateway, opens no
@@ -29,17 +29,43 @@
 set -u
 
 # key<TAB>JSON value. Every node:
-BASE_SETTINGS='Plugins.Plugins.telemetry.Config.Mode	"off"'
+#   telemetry off                no POSTs to telemetry.ipshipyard.dev
+#   AutoTLS.Enabled false        no registration with libp2p.direct (it would
+#                                publish this node's address in a public
+#                                certificate log); the gateway is served by the
+#                                frontend over https anyway.
+#   AutoConf.Enabled false       no fetch of conf.ipfs-mainnet.org (Kubo's network
+#                                settings, by default fetched at every start).
+#                                Off requires every "auto" placeholder replaced:
+#   Routing.DelegatedRouters []  no HTTP routers (cid.contact, delegated-ipfs.dev):
+#                                content is found and announced on the DHT only.
+#   Ipns.DelegatedPublishers []  IPNS records go to the DHT only.
+COMMON_SETTINGS='Plugins.Plugins.telemetry.Config.Mode	"off"
+AutoTLS.Enabled	false
+AutoConf.Enabled	false
+Routing.DelegatedRouters	[]
+Ipns.DelegatedPublishers	[]'
 
-# Hidden-only nodes, in addition:
+# A clearnet node seeds the release on the public IPFS network, so it keeps
+# the DHT, with the values AutoConf would have supplied written out:
+#   Routing.Type dht             the public DHT only (client, or server when
+#                                this node is reachable)
+#   Bootstrap                    the IPFS mainnet bootstrap peers (the list
+#                                Kubo 0.42 itself falls back to, boxo
+#                                autoconf/fallbacks.go); a node only needs them
+#                                to join the DHT
+#   DNS.Resolvers {}             this server's own resolver for every name (the
+#                                "auto" default adds DoH resolvers)
+BASE_SETTINGS="$COMMON_SETTINGS
+Routing.Type	\"dht\"
+Bootstrap	[\"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN\",\"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa\",\"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb\",\"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt\",\"/dnsaddr/va1.bootstrap.libp2p.io/p2p/12D3KooWKnDdG3iXw9eTFijk3EWSunZcFi54Zka4wmtqtt6rPxc8\",\"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ\",\"/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ\"]
+DNS.Resolvers	{}"
+
+# Hidden-only nodes, instead of the clearnet list:
 #   Routing.Type none            no DHT, no delegated routing: nothing announced
 #   Bootstrap / Addresses.Swarm  no peers dialled, nothing listening
 #   Swarm.DisableNatPortMap      never ask the home router to open a port (UPnP)
 #   Discovery.MDNS.Enabled       no multicast announcements on the LAN
-#   AutoConf / AutoTLS           no fetch from conf.ipfs-mainnet.org, no
-#                                registration with libp2p.direct. AutoConf off
-#                                requires every "auto" placeholder replaced, hence
-#                                the explicit empty router/publisher lists.
 #   Provide.Enabled              no provider records at all
 #   AutoNAT / relay              no reachability service, no relaying
 #   DNS.Resolvers                a DoH resolver on a closed loopback port: a
@@ -49,16 +75,12 @@ BASE_SETTINGS='Plugins.Plugins.telemetry.Config.Mode	"off"'
 #                                requester chose. This way the lookup fails
 #                                locally and nothing leaves the box.
 #   Gateway.NoDNSLink            no DNSLink lookup for the Host header either
-HIDDEN_SETTINGS="$BASE_SETTINGS
+HIDDEN_SETTINGS="$COMMON_SETTINGS
 Routing.Type	\"none\"
 Bootstrap	[]
 Addresses.Swarm	[]
 Swarm.DisableNatPortMap	true
 Discovery.MDNS.Enabled	false
-AutoConf.Enabled	false
-AutoTLS.Enabled	false
-Routing.DelegatedRouters	[]
-Ipns.DelegatedPublishers	[]
 Provide.Enabled	false
 AutoNAT.ServiceMode	\"disabled\"
 Swarm.RelayClient.Enabled	false

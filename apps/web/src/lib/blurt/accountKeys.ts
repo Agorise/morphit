@@ -1,5 +1,5 @@
 /**
- * Morphit frontend — account public-key fetcher (cp298).
+ * Morphit frontend — account public-key fetcher.
  *
  * Fetches an account's PUBLIC key authorities (owner / active / posting +
  * memo public key) FROM THE INDEXER, same-origin, instead of calling
@@ -38,7 +38,7 @@ export async function fetchAccountKeys(
 	// Compose with `new URL` (NOT string concatenation) per $net/config:
 	// a root-absolute path replaces any path/trailing slash on the base, so
 	// the request can never double-slash regardless of how `indexerOrigin`
-	// is shaped. (cp305 — the old `${indexerOrigin}/v1/…` form produced
+	// is shaped. (the old `${indexerOrigin}/v1/…` form produced
 	// `//v1/…` when indexerOrigin carried a trailing slash, which a
 	// merge_slashes-off proxy 404s, making a valid account read "invalid".)
 	const url = new URL(`/v1/account/${encodeURIComponent(account)}/keys`, indexerOrigin);

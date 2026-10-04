@@ -1,8 +1,8 @@
 /**
- * endpoint-list-throttle-smoke — cp453 (t.txt #1)
+ * endpoint-list-throttle-smoke
  *
  * The settings "RPC endpoints" card re-pings the indexer on the refresh button.
- * the maintainer clicked it ~15× over a day and it "only worked once": the button worked
+ * The maintainer clicked it ~15× over a day and it "only worked once": the button worked
  * fine (it refetched), but the health snapshot is stable so nothing visibly
  * changed AND there was no click feedback. Requirements now:
  *   - never re-ping the indexer faster than once per 5s (protect the pool),
@@ -58,7 +58,7 @@ check(
 
 check('a rate-limited click still gets a quick ack (justThrottled pulse)', /justThrottled = true/.test(src));
 
-// cp453 (t.txt #1) — the refresh button asks the indexer for a FRESH active
+// the refresh button asks the indexer for a FRESH active
 // probe. The initial mount does the cheap passive snapshot FIRST (instant
 // render), then ONE quiet active probe (v1.12.1) so per-node latency — incl. the
 // Tor/I2P hidden nodes the pool rarely calls — fills in without a refresh click.

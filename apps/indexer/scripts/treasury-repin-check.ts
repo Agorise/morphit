@@ -1,5 +1,5 @@
 /**
- * Morphit — treasury auto-re-pin DRIFT CHECK (cp372).
+ * Morphit — treasury auto-re-pin DRIFT CHECK.
  *
  * The automatable, READ-ONLY half of the auto-re-pin system: it
  * fetches the current chain-pinned treasury + live USD prices,
@@ -26,10 +26,12 @@
  * non-zero "due" code lets a wrapper alert without treating it as a
  * failure.
  *
- * Failsafes live in the pure core (treasuryRepin.ts): a down/zero
- * price skips that asset (never re-pinned from a bad feed); a
- * computed amount over the validator's sanity ceiling is rejected;
- * one bad feed never blocks a healthy asset.  This wrapper adds:
+ * Failsafes live in the pure core (treasuryRepin.ts): an asset is
+ * priced only when two independent sources agree (CoinGecko,
+ * CoinPaprika, Kraken — treasury-repin-prices.ts), else it is skipped;
+ * a computed amount above a realistic ceiling is rejected; an existing
+ * pin moves by at most ×2 / ÷2 per re-pin; one bad feed never blocks a
+ * healthy asset.  This wrapper adds:
  * if EITHER fetch fails, it exits 1 WITHOUT recommending anything —
  * a network blip can never trigger a spurious re-pin.
  */
@@ -41,6 +43,7 @@ import {
 	DEFAULT_REPIN_DRIFT_THRESHOLD,
 	type RepinPrices
 } from '../src/lib/treasuryRepin.ts';
+import { describeQuotes, fetchAgreedPrices } from './treasury-repin-prices.ts';
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
@@ -82,22 +85,6 @@ async function fetchJson(url: string): Promise<unknown> {
 	}
 }
 
-/** Live BTC/XMR/BLURT USD prices from Coingecko.  A failed or
- *  malformed fetch yields nulls for the affected assets — the pure
- *  core then skips them (never re-pins from a bad price). */
-async function fetchPrices(): Promise<RepinPrices> {
-	const url =
-		'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,monero,blurt&vs_currencies=usd';
-	const body = (await fetchJson(url)) as Record<string, { usd?: unknown }>;
-	const num = (v: unknown): number | null =>
-		typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
-	return {
-		btcUsd: num(body.bitcoin?.usd),
-		xmrUsd: num(body.monero?.usd),
-		blurtUsd: num(body.blurt?.usd)
-	};
-}
-
 async function main(): Promise<void> {
 	// Fetch the current release + prices.  If EITHER fails we abort
 	// without recommending anything — a network blip must never move
@@ -110,10 +97,11 @@ async function main(): Promise<void> {
 		out(`✗ could not fetch ${node}/v1/release: ${errMsg(e)} — aborting (no recommendation).`);
 		process.exit(1);
 	}
-	try {
-		prices = await fetchPrices();
-	} catch (e) {
-		out(`✗ could not fetch prices: ${errMsg(e)} — aborting (no recommendation).`);
+	const fetched = await fetchAgreedPrices();
+	prices = fetched.prices;
+	if (prices.btcUsd === null && prices.xmrUsd === null && prices.blurtUsd === null) {
+		out('✗ no asset has a price two sources agree on — aborting (no recommendation).');
+		for (const l of describeQuotes(fetched.quotes, prices)) out(`  ${l}`);
 		process.exit(1);
 	}
 
@@ -122,7 +110,7 @@ async function main(): Promise<void> {
 	const decision = decideRepin(parsed.pinned, prices, threshold);
 
 	out('Treasury re-pin drift check');
-	out(`  prices  : BTC=${prices.btcUsd ?? 'n/a'}  XMR=${prices.xmrUsd ?? 'n/a'}  BLURT=${prices.blurtUsd ?? 'n/a'}`);
+	for (const l of describeQuotes(fetched.quotes, prices)) out(`  ${l}`);
 	out(`  threshold: ${(threshold * 100).toFixed(0)}%  (verifier band is 15%)`);
 	out(`  ${decision.btc.note}`);
 	out(`  ${decision.xmr.note}`);

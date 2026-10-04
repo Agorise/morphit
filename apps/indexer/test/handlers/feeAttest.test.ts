@@ -120,10 +120,12 @@ describe('feeAttest handler — insertion + promotion', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT fa.attestor)',
-				rows: [{ n: '1' }],
-				rowCount: 1
-			}
+				match: 'SELECT DISTINCT fa.attestor',
+				// The non-poster, non-related attestors; each is then checked for the
+				// reciprocity pattern with the poster (none here).
+				rows: [{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') }]
+			},
+			{ match: 'WITH moments AS', rows: [{ held: false }] }
 		]);
 		const r = await handler(
 			makeCtx({
@@ -133,12 +135,13 @@ describe('feeAttest handler — insertion + promotion', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		// Four queries: order lookup, eligibility, INSERT, count. No UPDATE.
-		expect(mock.queries).toHaveLength(4);
-		expect(mock.queries[3]!.text).toContain('COUNT(DISTINCT fa.attestor)');
+		// Order lookup, eligibility, INSERT, attestors, one reciprocity check.
+		// No UPDATE.
+		expect(mock.queries).toHaveLength(5);
+		expect(mock.queries[3]!.text).toContain('SELECT DISTINCT fa.attestor');
 	});
 
-	// (v1.18.0 deep-deep, H1) The poster can never attest their own order: the
+	// The poster can never attest their own order: the
 	// op is rejected before eligibility or any INSERT (it used to be recorded
 	// and count as one of the two required attestors).
 	it('self-attestation is rejected outright (attestor_is_poster)', async () => {
@@ -179,12 +182,16 @@ describe('feeAttest handler — insertion + promotion', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT fa.attestor)',
-				// 2 independent attestors (the query itself excludes the
-				// poster and pairs flagged by the anti-ring signals).
-				rows: [{ n: '2' }],
-				rowCount: 1
+				match: 'SELECT DISTINCT fa.attestor',
+				// The non-poster, non-related attestors; each is then checked for the
+				// reciprocity pattern with the poster (none here).
+				rows: [
+					{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') },
+					{ attestor: 'att1', as_of: new Date('2026-04-19T12:00:00Z') }
+				]
 			},
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'UPDATE orders', rowCount: 1 }
 		]);
 		const r = await handler(
@@ -195,19 +202,19 @@ describe('feeAttest handler — insertion + promotion', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(5);
+		expect(mock.queries).toHaveLength(7);
 		// The UPDATE should scope to pending_external to avoid
-		// accidentally overwriting other states.  Index 4: order
+		// accidentally overwriting other states.  Index 6: order
 		// SELECT (0), eligibility (1), attestation INSERT (2),
-		// count (3), UPDATE (4).
-		const update = mock.queries[4]!;
+		// attestors (3), two reciprocity checks (4, 5), UPDATE (6).
+		const update = mock.queries[6]!;
 		expect(update.text).toContain('verified_by_attestation');
 		expect(update.text).toContain('pending_external');
 	});
 
 	it('two distinct attestors but both non-posters → also promotes', async () => {
 		// Two unrelated parties both attest without the poster — the
-		// only shape that can promote since (v1.18.0 deep-deep, H1).
+		// only shape that can promote since.
 		const mock = makeMockClient([
 			{
 				match: 'SELECT fee_status, account FROM orders',
@@ -225,10 +232,16 @@ describe('feeAttest handler — insertion + promotion', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT fa.attestor)',
-				rows: [{ n: '2' }],
-				rowCount: 1
+				match: 'SELECT DISTINCT fa.attestor',
+				// The non-poster, non-related attestors; each is then checked for the
+				// reciprocity pattern with the poster (none here).
+				rows: [
+					{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') },
+					{ attestor: 'att1', as_of: new Date('2026-04-19T12:00:00Z') }
+				]
 			},
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: 'UPDATE orders', rowCount: 1 }
 		]);
 		const r = await handler(
@@ -239,7 +252,8 @@ describe('feeAttest handler — insertion + promotion', () => {
 			mock.client
 		);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(5);
+		// ... attestors (3), two reciprocity checks (4, 5), UPDATE (6).
+		expect(mock.queries).toHaveLength(7);
 	});
 
 	it('does NOT promote when order is already verified', async () => {
@@ -448,10 +462,12 @@ describe('feeAttest handler — Finding I eligibility gate', () => {
 			},
 			{ match: 'INSERT INTO fee_attestations', rowCount: 1 },
 			{
-				match: 'COUNT(DISTINCT fa.attestor)',
-				rows: [{ n: '1' }],
-				rowCount: 1
-			}
+				match: 'SELECT DISTINCT fa.attestor',
+				// The non-poster, non-related attestors; each is then checked for the
+				// reciprocity pattern with the poster (none here).
+				rows: [{ attestor: 'att0', as_of: new Date('2026-04-19T12:00:00Z') }]
+			},
+			{ match: 'WITH moments AS', rows: [{ held: false }] }
 		]);
 		const r = await handler(
 			makeCtx({

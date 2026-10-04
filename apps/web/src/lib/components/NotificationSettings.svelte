@@ -4,7 +4,7 @@
 	 *
 	 * Renders all toggles across phases 1–4 — all shipped. Phase 1
 	 * (ambient), Phase 2 (Notification API), Phase 3 (Web Push —
-	 * Part 122 cp13: subscribe/unsubscribe through the relay with
+	 * subscribe/unsubscribe through the relay with
 	 * capability detection + error surfacing), and Phase 4 (audio +
 	 * vibrate). The push privacy preference is persisted so the
 	 * user's choice is recorded across (re)subscribes.
@@ -38,6 +38,7 @@
 		subscribe as subscribeToPush,
 		unsubscribe as unsubscribeFromPush,
 		resyncPushCategories,
+		setPushPrivacyLevel,
 		type SubscribeError,
 		type PushPrivacyMode
 	} from '$lib/notifications/push';
@@ -45,7 +46,11 @@
 	import { getUserBlurtAccount } from '$lib/blurt/ops/profile';
 	import StatusLine from './StatusLine.svelte';
 	import { onMount } from 'svelte';
-	import { loadAddressHistory, clearAddressHistory } from '$lib/privacy/addressHistory';
+	import {
+		addressHistoryCount as countAddressHistory,
+		clearAddressHistory,
+		migrateLegacyAddressHistory
+	} from '$lib/privacy/addressHistory';
 
 	// Feature detection — render "unsupported" hints in-place for
 	// channels the current platform can't deliver.
@@ -57,7 +62,7 @@
 		browser && typeof navigator !== 'undefined' && 'vibrate' in navigator
 	);
 
-	// ─── Push subscription state (Part 122 cp13) ────────────────
+	// ─── Push subscription state ────────────────
 	// `supportsPush` is the structural feature-detect (SW + push +
 	// Notification APIs all present).  `pushAvailable` additionally
 	// requires that the operator's relay has VAPID configured — we
@@ -69,14 +74,18 @@
 	let pushBusy = $state(false);
 	let pushError = $state<SubscribeError | null>(null);
 
-	// cp242 — shared-address-history "forget" control (wired into the
-	// Privacy section below). The data lives device-local in
-	// localStorage ($lib/privacy/addressHistory.ts); the count loads on
-	// mount and clearing is purely client-side.
+	// Shared-address-history "forget" control (wired into the Privacy
+	// section below). The data lives device-local, hashed, in localStorage
+	// ($lib/privacy/addressHistory.ts); the count loads on mount (after an
+	// older build's plaintext record is converted) and clearing is purely
+	// client-side.
 	let addressHistoryCount = $state(0);
 	let confirmingForgetAddresses = $state(false);
 	onMount(() => {
-		addressHistoryCount = loadAddressHistory().length;
+		addressHistoryCount = countAddressHistory();
+		void migrateLegacyAddressHistory().then(() => {
+			addressHistoryCount = countAddressHistory();
+		});
 	});
 	function forgetAddressHistory(): void {
 		clearAddressHistory();
@@ -121,20 +130,17 @@
 		})();
 	});
 
-	// cp450 GAP A — toggling a category updates the client prefs AND,
+	// toggling a category updates the client prefs AND,
 	// if this device already has a Web Push subscription, re-syncs the
 	// muted list to the relay so tab-closed pushes obey the toggle too.
 	// Best-effort (a locked session just defers the sync to the next
 	// subscribe) — the visual toggle state never depends on the relay.
-	function handleCategoryToggle(
-		category: 'order' | 'chat' | 'feedback',
-		value: boolean
-	): void {
+	function handleCategoryToggle(category: 'order' | 'chat' | 'feedback', value: boolean): void {
 		setCategory(category, value);
 		if (!pushSubscribed) return;
 		const account = getUserBlurtAccount();
 		if (!account) return;
-		// v1.7.7 (t.txt #6) — always 'standard'. The wire/relay still ACCEPT
+		// v1.7.7 — always 'standard'. The wire/relay still ACCEPT
 		// 'self_hosted' so a browser running pre-1.7.7 cached JS keeps working,
 		// but this client no longer produces it: it selected a mode nothing
 		// downstream ever read.
@@ -149,11 +155,13 @@
 			pushError = 'subscribe_failed';
 			return;
 		}
-		// v1.7.7 (t.txt #6) — always 'standard'; see the note at the other call site.
+		// v1.7.7 — always 'standard'; see the note at the other call site.
 		const mode: PushPrivacyMode = 'standard';
 		pushBusy = true;
 		pushError = null;
 		try {
+			// Subscribing is choosing push: leave "Off".
+			if ($notificationPrefs.pushPrivacy === 'off') setPushPrivacy('standard');
 			await subscribeToPush(account, mode);
 			pushSubscribed = true;
 			setChannel('push', true);
@@ -163,6 +171,13 @@
 		} finally {
 			pushBusy = false;
 		}
+	}
+
+	/** The privacy radio. 'Off' cancels this browser's push subscription
+	 *  (browser and relay), so the toggle above must say so too. */
+	async function applyPushPrivacy(level: PushPrivacy): Promise<void> {
+		await setPushPrivacyLevel(level, getUserBlurtAccount());
+		if (level === 'off') pushSubscribed = false;
 	}
 
 	async function handlePushUnsubscribe(): Promise<void> {
@@ -226,7 +241,8 @@
 					<input
 						type="checkbox"
 						checked={$notificationPrefs.categories.order}
-						onchange={(e) => handleCategoryToggle('order', (e.currentTarget as HTMLInputElement).checked)}
+						onchange={(e) =>
+							handleCategoryToggle('order', (e.currentTarget as HTMLInputElement).checked)}
 						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
 					/>
 				</label>
@@ -244,7 +260,8 @@
 					<input
 						type="checkbox"
 						checked={$notificationPrefs.categories.chat}
-						onchange={(e) => handleCategoryToggle('chat', (e.currentTarget as HTMLInputElement).checked)}
+						onchange={(e) =>
+							handleCategoryToggle('chat', (e.currentTarget as HTMLInputElement).checked)}
 						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
 					/>
 				</label>
@@ -262,7 +279,8 @@
 					<input
 						type="checkbox"
 						checked={$notificationPrefs.categories.feedback}
-						onchange={(e) => handleCategoryToggle('feedback', (e.currentTarget as HTMLInputElement).checked)}
+						onchange={(e) =>
+							handleCategoryToggle('feedback', (e.currentTarget as HTMLInputElement).checked)}
 						class="mt-1 h-5 w-5 flex-none accent-morphit-emerald"
 					/>
 				</label>
@@ -328,7 +346,7 @@
 				</label>
 			</li>
 
-			<!-- Push: phase 3 (Part 122 cp13 — shipped). Subscribe
+			<!-- Push: phase 3 (shipped). Subscribe
 			     button asks browser permission at the point of
 			     relevance, then registers with the relay. Privacy
 			     selector remains so users see their choice; the
@@ -336,47 +354,45 @@
 			     surfaced on each device's row in the operator
 			     summary. -->
 			<li>
-				<label
-					class="block rounded-xl border border-ink-200 p-4 dark:border-ink-700"
-				>
+				<label class="block rounded-xl border border-ink-200 p-4 dark:border-ink-700">
 					<div class="flex items-start justify-between gap-4">
 						<p class="min-w-0 font-semibold">{$_('settings.notifications.channel_push_label')}</p>
-					<div class="flex flex-none flex-col items-end gap-2">
-						{#if !supportsPush}
-							<span
-								class="rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-bold text-ink-600 dark:bg-ink-800 dark:text-ink-300"
-							>
-								{$_('settings.notifications.push_unsupported')}
-							</span>
-						{:else if pushSubscribed}
-							<span
-								class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-							>
-								{$_('settings.notifications.push_subscribed')}
-							</span>
-							<button
-								type="button"
-								onclick={handlePushUnsubscribe}
-								disabled={pushBusy}
-								class="rounded-md border border-ink-300 bg-white px-3 py-1 text-sm font-semibold text-ink-800 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
-							>
-								{pushBusy
-									? $_('settings.notifications.push_unsubscribing')
-									: $_('settings.notifications.push_unsubscribe')}
-							</button>
-						{:else}
-							<button
-								type="button"
-								onclick={handlePushSubscribe}
-								disabled={pushBusy}
-								class="rounded-md bg-morphit-btn px-3 py-1 text-sm font-semibold text-morphit-btn-text transition hover:brightness-110 disabled:opacity-50"
-							>
-								{pushBusy
-									? $_('settings.notifications.push_subscribing')
-									: $_('settings.notifications.push_subscribe')}
-							</button>
-						{/if}
-					</div>
+						<div class="flex flex-none flex-col items-end gap-2">
+							{#if !supportsPush}
+								<span
+									class="rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-bold text-ink-600 dark:bg-ink-800 dark:text-ink-300"
+								>
+									{$_('settings.notifications.push_unsupported')}
+								</span>
+							{:else if pushSubscribed}
+								<span
+									class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+								>
+									{$_('settings.notifications.push_subscribed')}
+								</span>
+								<button
+									type="button"
+									onclick={handlePushUnsubscribe}
+									disabled={pushBusy}
+									class="rounded-md border border-ink-300 bg-white px-3 py-1 text-sm font-semibold text-ink-800 hover:bg-ink-50 disabled:opacity-50 dark:border-ink-600 dark:bg-ink-800 dark:text-ink-100 dark:hover:bg-ink-700"
+								>
+									{pushBusy
+										? $_('settings.notifications.push_unsubscribing')
+										: $_('settings.notifications.push_unsubscribe')}
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={handlePushSubscribe}
+									disabled={pushBusy}
+									class="rounded-md bg-morphit-btn px-3 py-1 text-sm font-semibold text-morphit-btn-text transition hover:brightness-110 disabled:opacity-50"
+								>
+									{pushBusy
+										? $_('settings.notifications.push_subscribing')
+										: $_('settings.notifications.push_subscribe')}
+								</button>
+							{/if}
+						</div>
 					</div>
 					<p class="mt-2 text-sm text-ink-500 dark:text-ink-400">
 						{$_('settings.notifications.channel_push_help')}
@@ -401,7 +417,7 @@
 						{$_('settings.notifications.channel_push_privacy_label')}
 					</legend>
 					<div class="mt-2 space-y-2">
-						<!-- v1.7.7 (t.txt #6) — "Self-hosted only" REMOVED.
+						<!-- v1.7.7 — "Self-hosted only" REMOVED.
 						     It never did anything. `privacy_mode` was validated by the
 						     relay (api/push.ts), written to the DB (pushSubscriptions.ts)
 						     — and read by nothing. `pushSender.ts` never looked at it. So
@@ -425,7 +441,7 @@
 									name="push-privacy"
 									{value}
 									checked={$notificationPrefs.pushPrivacy === value}
-									onchange={() => setPushPrivacy(value as PushPrivacy)}
+									onchange={() => void applyPushPrivacy(value as PushPrivacy)}
 									class="h-4 w-4 accent-morphit-emerald"
 								/>
 								<span class="text-sm">{$_(`settings.notifications.${key}`)}</span>
@@ -547,7 +563,7 @@
 			<button
 				type="button"
 				onclick={unmute}
-				class="mt-3 rounded-xl border border-ink-300 bg-white px-4 py-2 font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+				class="mt-3 rounded-xl border border-ink-300 bg-white px-4 py-2 font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-morphit-emerald/10"
 			>
 				{$_('settings.notifications.mute_unmute')}
 			</button>
@@ -556,21 +572,21 @@
 				<button
 					type="button"
 					onclick={() => muteFor(HOUR_MS)}
-					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-morphit-emerald/10"
 				>
 					{$_('settings.notifications.mute_1h')}
 				</button>
 				<button
 					type="button"
 					onclick={() => muteFor(4 * HOUR_MS)}
-					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-morphit-emerald/10"
 				>
 					{$_('settings.notifications.mute_4h')}
 				</button>
 				<button
 					type="button"
 					onclick={() => muteFor(NINETY_NINE_YEARS)}
-					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald dark:hover:bg-morphit-emerald/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200"
+					class="rounded-xl border border-ink-300 bg-white px-4 py-2 text-sm font-semibold text-ink-700 transition-colors hover:border-morphit-emerald hover:bg-morphit-emerald/5 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:border-ink-600 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-morphit-emerald/10"
 				>
 					{$_('settings.notifications.mute_until_unmute')}
 				</button>
@@ -618,7 +634,7 @@
 		</button>
 	</div>
 
-	<!-- cp242 — Shared-address history (Part 122 cp26, $lib/privacy/addressHistory.ts).
+	<!-- Shared-address history ($lib/privacy/addressHistory.ts).
 	     Wires the "forget my history" control the module was written for.
 	     The data is device-local localStorage; clearing is client-side only. -->
 	<div class="mt-4 border-t border-ink-200 pt-4 dark:border-ink-700">

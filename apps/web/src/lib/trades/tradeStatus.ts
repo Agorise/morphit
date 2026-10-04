@@ -65,6 +65,8 @@ export function recordFundsSent(args: {
 export function recordVerification(args: {
 	orderPermlink: string;
 	verifyResult: VerifyResult;
+	counterparty: string;
+	amountConfirmed: boolean;
 }): void {
 	_states.update((current) => recordVerificationPure(current, args));
 }

@@ -93,7 +93,7 @@ describe('profile handler', () => {
 		const r = await handler(
 			makeCtx({
 				signer: 'tester3',
-				payload: { display_name: 'the maintainer', json_metadata: { short_bio: 'hello' } }
+				payload: { display_name: 'Alice', json_metadata: { short_bio: 'hello' } }
 			}),
 			mock.client
 		);
@@ -113,7 +113,7 @@ describe('profile handler', () => {
 		]);
 		const r = await handler(
 			makeCtx({
-				payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '' } }
+				payload: { display_name: 'Alice', json_metadata: { avatar_svg: '' } }
 			}),
 			mock.client
 		);
@@ -133,7 +133,7 @@ describe('profile handler', () => {
 		const r = await handler(
 			makeCtx({
 				signer: 'tester',
-				payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
+				payload: { display_name: 'Alice', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
 			}),
 			mock.client
 		);
@@ -153,7 +153,7 @@ describe('profile handler', () => {
 		const r = await handler(
 			makeCtx({
 				signer: 'tester',
-				payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
+				payload: { display_name: 'Alice', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
 			}),
 			mock.client
 		);
@@ -171,7 +171,7 @@ describe('profile handler', () => {
 		const r = await handler(
 			makeCtx({
 				signer: 'tester',
-				payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '<svg>mine</svg>' } }
+				payload: { display_name: 'Alice', json_metadata: { avatar_svg: '<svg>mine</svg>' } }
 			}),
 			mock.client
 		);
@@ -322,7 +322,7 @@ describe('profile handler', () => {
 		expect(r).toEqual({ ok: false, reason: 'display_name_forbidden_char' });
 	});
 
-	// cp671 — ZWNJ (U+200C) / ZWJ (U+200D) are cursive joiners for Persian/Indic
+	// ZWNJ (U+200C) / ZWJ (U+200D) are cursive joiners for Persian/Indic
 	// scripts and must NOT be rejected as forbidden characters.
 	it('accepts display_name with ZWNJ (Persian half-space)', async () => {
 		const mock = makeMockClient();

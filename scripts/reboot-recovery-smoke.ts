@@ -1,7 +1,7 @@
 /**
- * reboot-recovery-smoke.ts (cp597) — enforces UNATTENDED recovery.
+ * reboot-recovery-smoke.ts — enforces UNATTENDED recovery.
  *
- * the maintainer's hard requirement: after a power cut and/or an ISP IP change, grandma's
+ * The maintainer's hard requirement: after a power cut and/or an ISP IP change, grandma's
  * node must come back online AND be reachable again with ZERO intervention —
  * she only turns the PC back on.  Home or VPS, no exceptions.
  *

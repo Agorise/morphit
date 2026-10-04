@@ -72,7 +72,7 @@ case "$TARGET_MS" in ''|*[!0-9]*) echo "--target-ms must be a number" >&2; exit 
 [ "$SAMPLES" -ge 2 ] || { echo "--samples must be at least 2" >&2; exit 2; }
 
 # ── Which network: from the HOST, parsed, never from how the string ends ──
-# (v1.18.0 deep-deep, L2) This used to strip a scheme, cut at the first '/' and
+# This used to strip a scheme, cut at the first '/' and
 # the first ':', and then look at the suffix — so 'http://evil.example?.loki'
 # (a query string) or '...#.onion' (a fragment) was classified as a hidden
 # network, given no proxy (Lokinet) or the Tor one, and slipped past the
@@ -109,7 +109,7 @@ fi
 # ── Proxy settings, read the way the indexer reads them ─────────────────
 # The indexer's own variable names first (the environment, then its config
 # files), so this measures the path the indexer will actually take.
-# (v1.18.0 deep-deep, L2) A setting that is PRESENT BUT BLANK means that
+# A setting that is PRESENT BUT BLANK means that
 # network is switched off — exactly as the indexer reads it
 # (`MORPHIT_INDEXER_TOR_SOCKS ?? '127.0.0.1:9050'`, then trimmed). The old
 # `${VAR:-…}` treated blank as unset and fell back to the standard port, so the

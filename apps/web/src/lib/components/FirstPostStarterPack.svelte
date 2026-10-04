@@ -41,7 +41,7 @@
 	 * Dismissible per VIEW (in-memory only — NOT persisted).
 	 * Closing the card hides it for the current /post visit, but
 	 * it re-appears on a later visit so long as the user still
-	 * hasn't placed their first order.  the maintainer's call (cp364): a
+	 * hasn't placed their first order.  The maintainer's call: a
 	 * first-timer who closes the card and comes back later should
 	 * be reminded again until they've actually posted once.  The
 	 * orders-on-record check below is the real "stop showing this"
@@ -57,7 +57,7 @@
 	import { _ } from 'svelte-i18n';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { sessionAccountName } from '$stores/sessionAccount';
 	import { getOrdersByAccount } from '$indexer/client';
 
 	interface Props {
@@ -89,7 +89,9 @@
 			loaded = true;
 			return;
 		}
-		const acct = getUserBlurtAccount();
+		// Only with a session: a remembered name on a locked visit does
+		// not read the account's orders.
+		const acct = sessionAccountName();
 		if (!acct) {
 			loaded = true;
 			return;
@@ -119,7 +121,7 @@
 		})();
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>

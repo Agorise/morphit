@@ -1,13 +1,14 @@
 /**
  * apps/indexer/src/indexer/chatGates.ts
  *
- * cp471 — shared chat admission checks, so the DURABLE handler (chat.ts) and
+ * shared chat admission checks, so the DURABLE handler (chat.ts) and
  * the FAST head-block tailer (headTailer.ts) evaluate order-tag validity
  * and prior-exchange IDENTICALLY and can never drift apart. Divergence here
  * would be a security bug (the stranger-fee bypass and the fast-notify gate
  * both hang off these), so there is exactly ONE implementation.
  */
 import type pg from 'pg';
+import { reciprocityEverHeld } from '$indexer/signals';
 
 /** The minimal db surface both `Database` (pool.ts) and `pg.PoolClient`
  *  satisfy. */
@@ -37,7 +38,7 @@ export interface ChatOrderCheck {
  * tailer. Mirrors the durable query exactly: an order at `permlink` owned by
  * either party, with a computed `live` flag.
  *
- * The stranger-fee bypass AND the cp471 fast-notify "order signal" are
+ * The stranger-fee bypass AND the fast-notify "order signal" are
  * `found && ownedByRecipient && live` — computed by the caller from this.
  */
 export async function checkChatOrder(
@@ -50,6 +51,11 @@ export async function checkChatOrder(
 		   FROM orders
 		  WHERE permlink = $1
 		    AND account IN ($2, $4)
+		  -- When BOTH hold an order under this permlink, the recipient's is the
+		  -- one that matters (the bypass is for orders the recipient owns). A
+		  -- bare LIMIT 1 returned whichever row the scan met first, so the
+		  -- verdict could differ between nodes.
+		  ORDER BY (account = $2) DESC
 		  LIMIT 1`,
 		[args.permlink, args.recipient, args.blockTime, args.signer]
 	);
@@ -65,7 +71,7 @@ export async function checkChatOrder(
 /**
  * True iff the RECIPIENT has previously sent the SENDER a message — i.e. a
  * genuine TWO-WAY conversation (the recipient replied to, or first reached out
- * to, this sender). cp471 uses this as the SAFE fast-notify gate.
+ * to, this sender). A later change uses this as the SAFE fast-notify gate.
  *
  * DIRECTIONAL on purpose. An earlier bidirectional "any prior message between
  * the pair" check was unsafe: a one-way spammer's OWN prior messages counted,
@@ -102,13 +108,13 @@ export async function recipientHasReplied(
 }
 
 /**
- * cp472 — the PROVABLE-COUNTERPARTY bar, i.e. the `has_verified_chat` badge:
+ * the PROVABLE-COUNTERPARTY bar, i.e. the `has_verified_chat` badge:
  * a substantiated two-way on-chain conversation between two accounts —
- * ≥2 morphit_chat_v1 EACH WAY, ≥15-minute span, and the sockpuppet detector
- * has NOT flagged the pair (suspicious_reciprocity).
+ * ≥2 morphit_chat_v1 EACH WAY, ≥15-minute span, and the pair has never shown
+ * the suspicious-reciprocity pattern (Signal B) up to `asOf`.
  *
- * EXTRACTED (cp472) from handlers/feedback.ts, which has enforced exactly this
- * since cp420/cp421, so there is now ONE implementation. It gates:
+ * EXTRACTED from handlers/feedback.ts, which has enforced exactly this
+ * since an earlier release, so there is now ONE implementation. It gates:
  *
  *   • a REVIEW (feedback.ts) — you cannot review a ghost, and
  *   • the `counterparty` named in morphit_order_complete_v1 (orderComplete.ts).
@@ -122,12 +128,19 @@ export async function recipientHasReplied(
  * Requiring this bar means the named party must have provably held a sustained
  * two-way conversation with the owner first.
  *
- * the maintainer chose the STRICT bar (cp421) over a looser bidirectional-only check: it
+ * The project chose the STRICT bar over a looser bidirectional-only check: it
  * costs some legitimate ultra-fast trades, but a sockpuppeteer has to fabricate
  * a sustained conversation rather than two throwaway messages.
  *
  * `asOf` bounds the evidence to the op's own block time, so a handler replaying
  * history can never see messages from that op's future.
+ *
+ * The reciprocity part is computed from the chain-derived feedback rows up to
+ * `asOf` (signals.reciprocityEverHeld). It used to read the
+ * `suspicious_reciprocity` table, which an hourly wall-clock detector filled:
+ * whether a review was admitted then depended on whether this node's detector
+ * had happened to run, so identical chains gave different reviews and trade
+ * credits on different nodes.
  */
 export async function hasVerifiedChat(
 	db: ChatGateDb,
@@ -138,17 +151,11 @@ export async function hasVerifiedChat(
 		from_a: string;
 		from_b: string;
 		span_seconds: string | null;
-		has_recip_flag: boolean;
 	}>(
 		`SELECT
 		   COUNT(*) FILTER (WHERE sender = $1 AND recipient = $2) AS from_a,
 		   COUNT(*) FILTER (WHERE sender = $2 AND recipient = $1) AS from_b,
-		   EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))::text AS span_seconds,
-		   EXISTS (
-		     SELECT 1 FROM suspicious_reciprocity sr
-		      WHERE sr.account_a = LEAST($1::text, $2::text)
-		        AND sr.account_b = GREATEST($1::text, $2::text)
-		   ) AS has_recip_flag
+		   EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at)))::text AS span_seconds
 		 FROM chat_messages
 		 WHERE (
 		         (sender = $1 AND recipient = $2)
@@ -160,11 +167,11 @@ export async function hasVerifiedChat(
 	const r = res.rows[0];
 	if (r === undefined) return false;
 	const spanSec = r.span_seconds === null ? 0 : Number(r.span_seconds);
-	return (
+	const conversation =
 		Number(r.from_a) >= 2 &&
 		Number(r.from_b) >= 2 &&
 		Number.isFinite(spanSec) &&
-		spanSec >= 15 * 60 &&
-		r.has_recip_flag !== true
-	);
+		spanSec >= 15 * 60;
+	if (!conversation) return false;
+	return !(await reciprocityEverHeld(db, { a: args.a, b: args.b, asOf: args.asOf }));
 }

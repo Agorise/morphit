@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * render-alert-hardening-smoke — regression test for cp18 AUDIT-2,
+ * render-alert-hardening-smoke — regression test,
  * AUDIT-3, AUDIT-4: matrix-bot's renderAlertBody must defend
  * against attacker-influenced payload content reaching Matrix.
  *
  * Threat model: an attacker who can write attacker-controlled
- * strings into a sidecar's structured-log payload (the cp18
+ * strings into a sidecar's structured-log payload (the
  * AUDIT-1 fix blocks newline-injection forging, but doesn't
  * sanitize the CONTENT of legitimate raw_line fields).  Possible
  * via:
@@ -14,7 +14,7 @@
  *   - apt package names from third-party PPAs
  *   - mount paths from FUSE filesystems
  *
- * The cp18 defenses:
+ * The defenses:
  *   AUDIT-2 — strip C0 control chars (terminal escape sequences
  *             could clear the operator's terminal when viewing
  *             journalctl directly)

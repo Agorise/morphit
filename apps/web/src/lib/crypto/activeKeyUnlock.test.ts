@@ -57,7 +57,7 @@ describe('resolveActiveKey — the gate in front of the money', () => {
 		if (r.ok) expect(r.source).toBe('wif');
 	});
 
-	// SECURITY (the maintainer): Morphit NEVER accepts an account-wide secret that could
+	// SECURITY: Morphit NEVER accepts an account-wide secret that could
 	// derive every role's key (owner included). A non-WIF string is refused
 	// outright as invalid — it is never tried as anything else.
 	it('REFUSES a non-WIF secret outright (invalid_wif) — never derives keys from a password', async () => {

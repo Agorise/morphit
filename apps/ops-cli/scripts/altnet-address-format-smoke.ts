@@ -1,5 +1,5 @@
 /**
- * altnet-address-format-smoke.ts (cp600) — pins looksLikeAddress, the light
+ * altnet-address-format-smoke.ts — pins looksLikeAddress, the light
  * paste-format check the wizard now runs on the OPTIONAL Lokinet/I2P/Nostr/ENS
  * addresses. A valid address of each kind must pass; a wrong-network or
  * missing-suffix paste must be rejected (so a typo can't slip into the config).

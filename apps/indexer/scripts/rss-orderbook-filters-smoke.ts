@@ -6,8 +6,9 @@
  * mirror an orderbook search.  This smoke pins:
  *
  *   - each supported filter (side, fiat_currency, location_region,
- *     payment_methods) splices the EXPECTED WHERE clause + binds the
- *     EXPECTED params, byte-matching the live orderbook (orderbook.ts);
+ *     payment_methods, langs, min_trades) splices the EXPECTED WHERE
+ *     clause + binds the EXPECTED params, and the whole WHERE is the one
+ *     the orderbook's own builder (buildWhereClauses) produces;
  *   - the asset still binds as params[0] (rss-orderbook-smoke relies
  *     on it) and FEED_LIMIT still binds;
  *   - the BARE feed (no query) emits NONE of the filter clauses
@@ -16,7 +17,10 @@
  *   - a filtered feed is self-describing (self URL carries the query
  *     string; description names the filter + uses the filtered
  *     privacy note); the bare feed does neither;
- *   - min_trades + sort are NOT honored (deliberately omitted).
+ *   - sort is NOT honored (a feed is recency-ordered).
+ *
+ * Row-level parity with the orderbook on real Postgres:
+ * test/integration/rss-orderbook-parity.test.ts.
  *
  * Usage (from apps/indexer):
  *   tsx scripts/rss-orderbook-filters-smoke.ts
@@ -30,29 +34,12 @@ import { join } from 'node:path';
 import { perAssetFeedHandler, globalFeedHandler } from '../src/api/rssOrderbookHandlers.ts';
 import type { Database } from '../src/db/pool.ts';
 import type { Config } from '../src/config/index.ts';
-import { feedbackAggregateJoin } from '$api/reputationJoin';
+import { tradeCountJoin } from '$api/reputationJoin';
+import { buildWhereClauses } from '$api/orderbookStreamHelpers';
 
-/** Sock-puppet NOT-EXISTS table set referenced in a feedback aggregate.
- *  Used to assert the feed's min_trades count and the orderbook's use
- *  the identical exclusion set. */
-function exclusionTables(sql: string): string[] {
-	const re = /NOT EXISTS\s*\(\s*SELECT 1 FROM (\w+)/g;
-	const out: string[] = [];
-	let m: RegExpExecArray | null;
-	while ((m = re.exec(sql)) !== null) out.push(m[1]!);
-	return [...new Set(out)].sort();
-}
-
-/** Isolate just the feedback-aggregate body (`FROM feedback fb` …
- *  `GROUP BY subject`) so the table extraction sees ONLY the
- *  reputation exclusions, not unrelated NOT-EXISTS clauses elsewhere in
- *  the query (e.g. the operator_blocks guard in the outer WHERE). */
-function feedbackBlock(sql: string): string {
-	const s = sql.indexOf('FROM feedback fb');
-	const e = sql.indexOf('GROUP BY subject', s);
-	if (s < 0 || e < 0) throw new Error('could not locate feedback aggregate body');
-	return sql.slice(s, e);
-}
+/** The payment-method FILTER clause (the asset clause also unnests
+ *  payment_methods, to match pay_<ticker>, so look for the filter's ANY). */
+const PAYMENT_FILTER = 'lower(pm) = ANY(';
 
 let failures = 0;
 let scenarios = 0;
@@ -135,7 +122,7 @@ await scenario('fiat_currency filter → ANY(...) clause + uppercased array para
 	assertContains(JSON.stringify(q.params), '["USD","EUR"]', 'fiat array uppercased + bound');
 });
 
-await scenario('location_region filter → ILIKE prefix + ESCAPE clause', async () => {
+await scenario('location_region filter → ILIKE substring + ESCAPE clause (as the orderbook)', async () => {
 	const mock = makeMockDb([]);
 	const r = await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, {
 		location_region: 'Querétaro'
@@ -144,16 +131,16 @@ await scenario('location_region filter → ILIKE prefix + ESCAPE clause', async 
 	const q = mock.queries[0]!;
 	assertContains(q.text, 'o.location_region ILIKE', 'region clause present');
 	assertContains(q.text, 'ESCAPE', 'ESCAPE clause present');
-	// NFC-normalized + prefix '%' appended (escapeLike leaves plain text intact).
-	assertContains(JSON.stringify(q.params), 'Querétaro%', 'region param prefixed');
+	// NFC-normalized, '%' on both sides (escapeLike leaves plain text intact).
+	assertContains(JSON.stringify(q.params), '"%Querétaro%"', 'region param is a substring match');
 });
 
 await scenario('region LIKE metacharacters are escaped (100% stays literal)', async () => {
 	const mock = makeMockDb([]);
 	await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { location_region: '100%' });
 	const q = mock.queries[0]!;
-	// escapeLike turns "100%" into "100\%"; param becomes "100\%%".
-	assertContains(JSON.stringify(q.params), '100\\\\%%', 'percent escaped before prefix');
+	// escapeLike turns "100%" into "100\%"; param becomes "%100\%%".
+	assertContains(JSON.stringify(q.params), '"%100\\\\%%"', 'percent escaped inside the wildcards');
 });
 
 await scenario('payment_methods filter → unnest EXISTS clause + lowercased tokens', async () => {
@@ -163,7 +150,7 @@ await scenario('payment_methods filter → unnest EXISTS clause + lowercased tok
 	});
 	assertEqual(r.status, 200, 'status');
 	const q = mock.queries[0]!;
-	assertContains(q.text, 'unnest(o.payment_methods)', 'payment clause present');
+	assertContains(q.text, PAYMENT_FILTER, 'payment clause present');
 	assertContains(JSON.stringify(q.params), '["paypal","wise"]', 'payment tokens lowercased');
 });
 
@@ -180,7 +167,7 @@ await scenario('combined filters all splice together', async () => {
 	assertContains(q.text, 'o.side =', 'side');
 	assertContains(q.text, 'o.fiat_currency = ANY(', 'fiat');
 	assertContains(q.text, 'o.location_region ILIKE', 'region');
-	assertContains(q.text, 'unnest(o.payment_methods)', 'payment');
+	assertContains(q.text, PAYMENT_FILTER, 'payment');
 });
 
 // ─── Bare feed (no filters): backward compatible ────────────────────
@@ -194,7 +181,7 @@ await scenario('bare feed emits NONE of the filter clauses', async () => {
 	assertNotContains(q.text, 'o.side =', 'no side clause');
 	assertNotContains(q.text, 'o.fiat_currency = ANY(', 'no fiat clause');
 	assertNotContains(q.text, 'o.location_region ILIKE', 'no region clause');
-	assertNotContains(q.text, 'unnest(o.payment_methods)', 'no payment clause');
+	assertNotContains(q.text, PAYMENT_FILTER, 'no payment clause');
 });
 
 // ─── Fail-open on malformed values (never 400) ──────────────────────
@@ -220,7 +207,7 @@ await scenario('over-long payment token is dropped; valid sibling kept', async (
 await scenario('empty payment_methods value adds no clause', async () => {
 	const mock = makeMockDb([]);
 	await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { payment_methods: '   ' });
-	assertNotContains(mock.queries[0]!.text, 'unnest(o.payment_methods)', 'whitespace → no clause');
+	assertNotContains(mock.queries[0]!.text, PAYMENT_FILTER, 'whitespace → no clause');
 });
 
 await scenario('duplicate fiat codes are deduped', async () => {
@@ -229,76 +216,63 @@ await scenario('duplicate fiat codes are deduped', async () => {
 	assertContains(JSON.stringify(mock.queries[0]!.params), '["USD"]', 'deduped to single USD');
 });
 
-// ─── min_trades honored (feedback-count aggregate); sort not ────────
+// ─── min_trades honored (completed-trade count, as the orderbook); sort not ─
 
-await scenario('min_trades → feedback-count join + COALESCE clause + bound param', async () => {
+await scenario('min_trades → the orderbook trade-count join + COALESCE(tc.c) clause + bound param', async () => {
 	const mock = makeMockDb([]);
 	const r = await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { min_trades: '5' });
 	assertEqual(r.status, 200, 'status');
 	const q = mock.queries[0]!;
-	assertContains(q.text, 'LEFT JOIN', 'feedback-count join present');
-	assertContains(q.text, 'COUNT(*)::int AS c', 'count aggregate present');
-	assertContains(q.text, 'COALESCE(f.c, 0) >= ', 'min-trades clause present');
+	assertContains(q.text, tradeCountJoin('o'), 'the orderbook trade-count join, verbatim');
+	assertContains(q.text, 'COALESCE(tc.c, 0) >= ', 'min-trades clause present');
 	assertContains(JSON.stringify(q.params), '5', 'threshold bound');
 	assertEqual(q.params[0], 'BTC', 'asset still params[0]');
 });
 
-await scenario('min_trades OMITTED → no feedback join (no cost, backward compat)', async () => {
+await scenario('min_trades OMITTED → no trade-count join (no cost, backward compat)', async () => {
 	const mock = makeMockDb([]);
 	await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { side: 'buy' });
 	const q = mock.queries[0]!;
-	assertNotContains(q.text, 'LEFT JOIN', 'no feedback join when min_trades absent');
-	assertNotContains(q.text, 'COALESCE(f.c', 'no min-trades clause');
+	assertNotContains(q.text, 'LEFT JOIN', 'no trade-count join when min_trades absent');
+	assertNotContains(q.text, 'COALESCE(tc.c', 'no min-trades clause');
 });
 
 await scenario('min_trades fail-open (0 / negative / >100 / non-numeric → no clause)', async () => {
 	for (const bad of ['0', '-3', '101', 'lots', '3.5']) {
 		const mock = makeMockDb([]);
 		await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { min_trades: bad });
-		assertNotContains(mock.queries[0]!.text, 'COALESCE(f.c', `min_trades="${bad}" → no clause`);
+		assertNotContains(mock.queries[0]!.text, 'COALESCE(tc.c', `min_trades="${bad}" → no clause`);
 	}
 });
 
-await scenario('PARITY: feed min_trades uses the SAME exclusion tables as orderbook.ts', async () => {
-	// Extract the sock-puppet NOT-EXISTS table set the ORDERBOOK applies, and
-	// the set the feed's generated min_trades SQL applies; they MUST match, or
-	// the feed's reputation count would disagree with the orderbook's (a trader
-	// hidden by one could leak into the other).
-	//
-	// cp442 — compare the GENERATED SQL on both sides, not the source text. The
-	// clauses now come from `FEEDBACK_EXCLUSIONS_SQL` in `$api/reputationJoin`
-	// (one definition, spliced into the orderbook/featured aggregate AND the
-	// feed's count-only subquery), so scraping either file's literal text would
-	// find a `${...}` placeholder rather than tables. What actually reaches
-	// Postgres is what matters.
-	//
-	// Also assert orderbook.ts genuinely CONSUMES the shared join — otherwise
-	// this parity check could pass against a module nobody uses.
-	const obSrc = readFileSync(
-		join(import.meta.dirname, '..', 'src', 'api', 'orderbook.ts'),
-		'utf-8'
-	);
-	if (!/feedbackAggregateJoin\('o'\)/.test(obSrc)) {
-		throw new Error('orderbook.ts no longer consumes the shared feedbackAggregateJoin');
-	}
-	const obTables = exclusionTables(feedbackBlock(feedbackAggregateJoin('o')));
-	if (obTables.length === 0) throw new Error('extracted no exclusion tables from the shared aggregate');
-
-	// ABSOLUTE guard, not just relative. Since cp442 both sides splice the SAME
-	// constant, so "they agree" is now true by construction — parity alone can no
-	// longer notice someone deleting an exclusion from that one definition. Pin
-	// the actual table set.
-	assertEqual(
-		obTables,
-		['one_way_pile_on', 'related_accounts', 'review_concentration', 'suspicious_reciprocity'],
-		'the shared aggregate still applies ALL FOUR sock-puppet exclusions'
-	);
-
+await scenario('PARITY: the feed WHERE is the orderbook builder output for the same filters', async () => {
+	const cfg = { ...FAKE_CONFIG, operatorAccountName: 'op' } as Config;
 	const mock = makeMockDb([]);
-	await perAssetFeedHandler('btc.xml', mock.db, FAKE_CONFIG, { min_trades: '5' });
-	const feedTables = exclusionTables(feedbackBlock(mock.queries[0]!.text));
-
-	assertEqual(feedTables, obTables, 'feed exclusion tables == orderbook exclusion tables');
+	await perAssetFeedHandler('btc.xml', mock.db, cfg, {
+		side: 'buy',
+		fiat_currency: 'usd',
+		location_region: 'Pokhara',
+		payment_methods: 'Cash',
+		langs: 'es,xx',
+		min_trades: '3'
+	});
+	const want = buildWhereClauses(
+		{
+			asset: 'BTC',
+			side: 'buy',
+			fiat_currency: 'USD',
+			location_region: 'Pokhara',
+			payment_methods: 'cash',
+			langs: 'es',
+			min_trades: 3
+		},
+		0,
+		'op'
+	);
+	const q = mock.queries[0]!;
+	assertContains(q.text, `WHERE ${want.where.join(' AND ')}`, 'same WHERE text');
+	assertEqual(q.params.slice(0, want.params.length), want.params, 'same bound params');
+	assertContains(q.text, "o.expires_at > NOW()", 'expired orders excluded, as on the orderbook');
 });
 
 await scenario('sort is ignored — feed stays recency-ordered', async () => {
@@ -361,7 +335,7 @@ await scenario('global bare feed → no filter clauses, no asset clause, no quer
 	// that exact shape rather than the bare `o.asset =` substring, because the
 	// crypto-facing side clause now legitimately contains the LITERAL
 	// `o.asset = 'BARTER'` (the barter-flip branch), which is not an asset filter
-	// (t.txt v1.8.16 #3 / cryptoFacingSideWhere).
+	// (cryptoFacingSideWhere).
 	assertNotContains(q.text, 'o.asset = $', 'global feed has NO asset filter clause');
 	assertNotContains(r.body, 'orderbook.xml?', 'no query in self URL');
 	assertNotContains(r.body, 'matching your selected filters', 'no filter phrase');
@@ -394,20 +368,13 @@ await scenario('global fiat+region filters → clauses + filtered self URL + fil
 	assertContains(r.body, 'matching your selected filters', 'filtered phrase present');
 });
 
-await scenario('global min_trades → feedback aggregate join, SAME exclusion set as orderbook', async () => {
+await scenario('global min_trades → the orderbook trade-count join', async () => {
 	const mock = makeMockDb([]);
 	const r = await globalFeedHandler(mock.db, FAKE_CONFIG, 'rss', { min_trades: '5' });
 	assertEqual(r.status, 200, 'status');
 	const q = mock.queries[0]!;
-	assertContains(q.text, 'FROM feedback fb', 'feedback aggregate joined');
-	assertContains(q.text, 'COALESCE(f.c, 0) >=', 'min_trades threshold clause');
-	const perAssetMock = makeMockDb([]);
-	await perAssetFeedHandler('btc.xml', perAssetMock.db, FAKE_CONFIG, { min_trades: '5' });
-	assertEqual(
-		exclusionTables(feedbackBlock(q.text)),
-		exclusionTables(feedbackBlock(perAssetMock.queries[0]!.text)),
-		'global + per-asset feedback exclusion sets identical'
-	);
+	assertContains(q.text, tradeCountJoin('o'), 'trade-count join present');
+	assertContains(q.text, 'COALESCE(tc.c, 0) >=', 'min_trades threshold clause');
 });
 
 await scenario('global sort param ignored (recency order, not a feed filter)', async () => {

@@ -12,7 +12,7 @@
  *
  * All toggles default to sensible values:
  *   - order category: on (highest signal)
- *   - chat category: on (cp450/cp453 — chat pings are the primary reason for
+ *   - chat category: on (chat pings are the primary reason for
  *     notifications in a chat app; native alerts are still gated on the push
  *     channel + OS permission, so an on-by-default category never fires for a
  *     user who hasn't opted into push. migrateEnableChatByDefault carries the
@@ -29,10 +29,11 @@
 
 import { writable, type Readable } from 'svelte/store';
 import { safeLocal } from '../utils/safeStorage';
+import { isSilencedAt, writeSilenceState } from './silenceState';
 
 const STORAGE_KEY = 'morphit.notifications.prefs.v1';
 
-/** v1.7.7 (t.txt #6) — `self_hosted` REMOVED. It was never wired to anything:
+/** v1.7.7 — `self_hosted` REMOVED. It was never wired to anything:
  *  the relay validated it and stored it, and `pushSender.ts` never read it, so
  *  the "private" choice delivered via Google FCM exactly like the default while
  *  the FAQ promised the opposite. It cannot be made real under Web Push either —
@@ -59,9 +60,9 @@ export interface NotificationPrefs {
 	/** Push service architecture choice. Only consulted when
 	 *  `channels.push` is true. */
 	pushPrivacy: PushPrivacy;
-	/** Quiet hours — when enabled, push + audio suppress between
-	 *  `from` and `to` (HH:MM in the user's local time; visual
-	 *  channels keep updating). */
+	/** Quiet hours — when enabled, in-page alerts and audio are suppressed,
+	 *  and Web Push notifications arrive silent, between `from` and `to`
+	 *  (HH:MM in the user's local time; visual channels keep updating). */
 	quietHours: {
 		enabled: boolean;
 		from: string; // "22:00"
@@ -90,7 +91,7 @@ function hydrate(): NotificationPrefs {
 		return {
 			categories: { ...DEFAULTS.categories, ...(parsed.categories ?? {}) },
 			channels: { ...DEFAULTS.channels, ...(parsed.channels ?? {}) },
-			// v1.7.7 (t.txt #6) — MIGRATE anyone already pinned to 'self_hosted'.
+			// v1.7.7 — MIGRATE anyone already pinned to 'self_hosted'.
 			//
 			// The option is gone from the UI because it never did anything:
 			// privacy_mode was stored and never read (pushSender.ts ignores it), so
@@ -135,9 +136,9 @@ function migrateLegacyTradeNotifications(prefs: NotificationPrefs): Notification
 	return prefs;
 }
 
-/** cp453 (t.txt) — chat notifications are ON for everyone by default now. The
+/** chat notifications are ON for everyone by default now. The
  *  DEFAULTS above already ship `chat:true` for new users, but anyone who
- *  persisted prefs BEFORE the chat default flipped false→true (cp450) carries a
+ *  persisted prefs BEFORE the chat default flipped false→true carries a
  *  stale `chat:false` that overrides it. Flip that to on ONCE. A done-flag guards
  *  it so it runs a single time per browser and never re-enables against a LATER
  *  explicit opt-out (same discipline as the legacy trade-notification migration
@@ -157,6 +158,12 @@ function migrateEnableChatByDefault(prefs: NotificationPrefs): NotificationPrefs
 const internal = writable<NotificationPrefs>(
 	migrateEnableChatByDefault(migrateLegacyTradeNotifications(hydrate()))
 );
+// The quiet-hours / mute fields are copied where the service worker can read
+// them ($lib/notifications/silenceState), so Web Push obeys them: on load (the
+// stored prefs may come from a build that kept no copy) and on every change.
+internal.subscribe((p) => {
+	void writeSilenceState({ mutedUntil: p.mutedUntil, quietHours: p.quietHours });
+});
 
 /** Subscribe-only view for consumers (Settings binds via set(), via
  *  the mutator functions below). */
@@ -165,8 +172,8 @@ export const notificationPrefs: Readable<NotificationPrefs> = {
 };
 
 /** The categories the user has turned OFF, in the shape the relay
- *  stores on a push subscription as its `muted_categories` blocklist
- *  (cp450 GAP A). Empty = nothing muted = every category on. Order is
+ *  stores on a push subscription as its `muted_categories` blocklist.
+ * Empty = nothing muted = every category on. Order is
  *  stable so an unchanged pref set produces an unchanged payload. */
 /** Reset every notification preference to its factory default.
  *
@@ -253,35 +260,5 @@ export function unmute(): void {
  *  quiet hours window. The notify() entry point consults this
  *  before firing alert-class channels. */
 export function isCurrentlySilenced(p: NotificationPrefs): boolean {
-	// Mute-until wins — user explicitly asked for silence.
-	if (p.mutedUntil > Date.now()) return true;
-	if (!p.quietHours.enabled) return false;
-
-	// Quiet-hours window comparison. Both values are "HH:MM" strings
-	// in the user's local time. Handles the overnight case (22:00 →
-	// 07:00) by recognising `from > to` as a wraparound.
-	const now = new Date();
-	const nowMinutes = now.getHours() * 60 + now.getMinutes();
-	const fromMinutes = parseHM(p.quietHours.from);
-	const toMinutes = parseHM(p.quietHours.to);
-	if (fromMinutes === null || toMinutes === null) return false;
-
-	if (fromMinutes <= toMinutes) {
-		// Non-wrapping range: 09:00 → 17:00
-		return nowMinutes >= fromMinutes && nowMinutes < toMinutes;
-	}
-	// Wrapping range: 22:00 → 07:00
-	return nowMinutes >= fromMinutes || nowMinutes < toMinutes;
-}
-
-function parseHM(s: string): number | null {
-	const m = /^(\d{1,2}):(\d{2})$/.exec(s);
-	if (!m) return null;
-	// m[1] and m[2] are guaranteed defined when m matches
-	// (mandatory captures), but TS's noUncheckedIndexedAccess
-	// can't infer that.
-	const h = parseInt(m[1] ?? '', 10);
-	const mm = parseInt(m[2] ?? '', 10);
-	if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
-	return h * 60 + mm;
+	return isSilencedAt({ mutedUntil: p.mutedUntil, quietHours: p.quietHours }, new Date());
 }

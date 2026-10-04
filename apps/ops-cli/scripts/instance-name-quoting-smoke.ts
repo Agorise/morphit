@@ -1,5 +1,5 @@
 /**
- * instance-name-quoting-smoke (cp664) — guards still-open(b): a multi-word
+ * instance-name-quoting-smoke — guards still-open(b): a multi-word
  * marketplace NAME / TAGLINE / CONTACT must be DOUBLE-QUOTED in the env
  * templates so it survives the indexer & relay unit's `. "$f"` shell-source.
  *

@@ -1,6 +1,6 @@
 /**
- * upgrade-notify-smoke.ts (cp598) — guards the desktop "an upgrade is available"
- * notification (ops/desktop/*.sh).  the maintainer: when a new release lands, a system
+ * upgrade-notify-smoke.ts — guards the desktop "an upgrade is available"
+ * notification (ops/desktop/*.sh).  Requirement: when a new release lands, a system
  * notification should pop up on grandma's screen telling her to run
  * `sudo morphit-ops` and upgrade.
  *

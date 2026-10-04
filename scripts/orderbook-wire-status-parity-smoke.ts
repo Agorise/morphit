@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * orderbook-wire-status-parity — cp513 (t.txt O8, v1.8.6).
+ * orderbook-wire-status-parity (v1.8.6).
  *
  * THE BUG THIS EXISTS TO CATCH.
  *
@@ -17,7 +17,7 @@
  * rendered list — the page shows "No orders match your filters" even though the
  * row is present in `items`.
  *
- * cp510 [11d] added `status: 'live' as const` to the REST mapping. Its SSE twin
+ * A later change added `status: 'live' as const` to the REST mapping. Its SSE twin
  * was MISSED, so every streamed snapshot/upsert row was filtered out. Because a
  * later refactor made the SSE snapshot authoritative, the status-less snapshot
  * won and the live orderbook rendered permanently empty (and before that, the
@@ -53,7 +53,7 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 	}
 };
 
-console.log('\n── orderbook-wire-status-parity (cp513 / t.txt O8) ───\n');
+console.log('\n── orderbook-wire-status-parity ───────────────────\n');
 
 const rest = read('apps/indexer/src/api/orderbook.ts');
 const sse = read('apps/indexer/src/api/orderbookStreamHelpers.ts');
@@ -62,13 +62,18 @@ const page = read('apps/web/src/routes/[lang]/orderbook/+page.svelte');
 
 // A wire mapping emits a literal live status. Match the exact `status: 'live'`
 // literal both mappings use (guaranteed by their `WHERE o.status = 'live'`).
-const emitsLiveStatus = (src: string): boolean =>
-	/\bstatus:\s*'live'\s+as\s+const\b/.test(src);
+const emitsLiveStatus = (src: string): boolean => /\bstatus:\s*'live'\s+as\s+const\b/.test(src);
 
+// REST either has its own mapping that emits the status, or maps its rows with
+// the SSE helper's rowToWire (one mapping for both channels).
+const restUsesSseMapping =
+	/import\s*\{[^}]*\browToWire\b[^}]*\}\s*from\s*'\$api\/orderbookStreamHelpers'/.test(rest) &&
+	/rows\.map\(rowToWire\)/.test(rest);
+const restEmitsLive = emitsLiveStatus(rest) || restUsesSseMapping;
 check(
-	'REST orderbook rowToWire emits status: \u2018live\u2019',
-	emitsLiveStatus(rest),
-	'api/orderbook.ts — cp510 [11d]'
+	'REST orderbook rows carry status: \u2018live\u2019 (own mapping, or the SSE rowToWire)',
+	restEmitsLive,
+	'api/orderbook.ts'
 );
 check(
 	'SSE orderbook rowToWire emits status: \u2018live\u2019 (the twin cp510 missed)',
@@ -77,7 +82,7 @@ check(
 );
 check(
 	'both channels agree — neither can ship an order without status',
-	emitsLiveStatus(rest) && emitsLiveStatus(sse)
+	restEmitsLive && emitsLiveStatus(sse)
 );
 
 // The frontend contract that MAKES status load-bearing: isOrderLive gates on it,

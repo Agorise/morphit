@@ -134,7 +134,7 @@ async function setFaviconBadge(count: number): Promise<void> {
 
 		// Draw the original favicon — CONTAIN-fitted, never stretched.
 		//
-		// tt.txt #2 — this used to be `drawImage(img, 0, 0, SIZE, SIZE)`. The
+		// this used to be `drawImage(img, 0, 0, SIZE, SIZE)`. The
 		// Morphit mark is wide (viewBox 10.889 × 7.049), so forcing it into a
 		// square stretched it vertically. The browser renders the plain SVG
 		// correctly, which is why the logo only ever looked squashed at the exact

@@ -35,8 +35,16 @@ import {
 	type AccountInfo
 } from './chainCheck.ts';
 import { withSpinner } from './spinner.ts';
-import { isReservedTag, impersonatesReservedName } from '../../../indexer/src/indexer/confusables.ts';
+import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
+import {
+	isReservedTag,
+	impersonatesReservedName
+} from '../../../indexer/src/indexer/confusables.ts';
 import { DEFAULT_XMR_EXPLORERS as INDEXER_DEFAULT_XMR_EXPLORERS } from '../../../indexer/src/config/xmrExplorers.ts';
+import {
+	DEFAULT_BTC_FEE_EXPLORERS as OPERATOR_DEFAULT_BTC_FEE_EXPLORERS,
+	isHiddenSourceUrl
+} from '@morphit/operator-config/fee-sources';
 import { classifyChainError } from '../commands/chainErrors.ts';
 import { encryptEnvelope, checkPassphraseStrength, type KeyEnvelope } from './encrypt.ts';
 import { sanitizeForTerm } from '../render/term.ts';
@@ -53,7 +61,12 @@ import {
 } from '../../../indexer/src/lib/feeAmountCalc.ts';
 import { LISTING_FEE_USD } from '@morphit/asset-registry';
 import type { ListingFeeResult } from './render.ts';
-import { detectDbContainer, dbIdentityFromUrl, BACKUP_DB_NAME, BACKUP_DB_USER } from '../lib/dbContainer.ts';
+import {
+	detectDbContainer,
+	dbIdentityFromUrl,
+	BACKUP_DB_NAME,
+	BACKUP_DB_USER
+} from '../lib/dbContainer.ts';
 
 export const TOTAL_STEPS = 23;
 
@@ -62,7 +75,7 @@ export const TOTAL_STEPS = 23;
 export async function stepInstanceName(): Promise<string> {
 	step(1, TOTAL_STEPS, 'Instance name');
 	explain(
-		'This is your instance\'s public display name. It is shown:\n' +
+		"This is your instance's public display name. It is shown:\n" +
 			'  • in the browser tab/title bar and the site header\n' +
 			'  • on your homepage\n' +
 			'  • on the federated /instances directory — the public list\n' +
@@ -94,7 +107,7 @@ export async function stepInstanceName(): Promise<string> {
 			console.log('  ✗ Use letters, numbers, spaces, dashes, dots, or underscores only.\n');
 			continue;
 		}
-		// cp179: catch reserved-name impersonation HERE, the same check
+		// catch reserved-name impersonation HERE, the same check
 		// the on-chain operator-register handler applies to display_name
 		// (reason `display_name_impersonates_reserved`).  Without this,
 		// a name like "Morphit Official" passes the wizard but fails the
@@ -135,8 +148,8 @@ export async function stepTagline(): Promise<string> {
 		'Run by alice, for fellow Morphit traders.'
 	]);
 	// No default: an empty answer means "no tagline", and render.ts
-	// omits MORPHIT_INSTANCE_TAGLINE entirely in that case.  (cp231:
-	// the old 'A Morphit instance' default was written verbatim into
+	// omits MORPHIT_INSTANCE_TAGLINE entirely in that case.  (The
+	// old 'A Morphit instance' default was written verbatim into
 	// the env and then surfaced as a meaningless placeholder in the
 	// federated directory + SEO for every operator who pressed Enter.)
 	const v = await ask('Tagline (optional)');
@@ -157,7 +170,10 @@ export async function stepTagline(): Promise<string> {
  * has to know. PURE + tested. Leaves every other host (real IPs, remote hosts,
  * peer-auth 127.0.0.1) untouched.
  */
-export function normalizeDbHostToIpv4(url: string): { readonly url: string; readonly changed: boolean } {
+export function normalizeDbHostToIpv4(url: string): {
+	readonly url: string;
+	readonly changed: boolean;
+} {
 	try {
 		const u = new URL(url);
 		if (u.hostname.toLowerCase() === 'localhost') {
@@ -230,7 +246,7 @@ export interface RelayAccountResult {
 }
 
 /** Given a raw account-lookup failure message, decide how the wizard
- *  should present it.  PURE — unit-testable.  cp709: a connectivity
+ *  should present it.  PURE — unit-testable.  a connectivity
  *  failure during a deliberately-offline / air-gapped install is
  *  EXPECTED (the wizard needs no internet; the node self-verifies when
  *  it first comes online), so it gets a calm ℹ message rather than an
@@ -319,7 +335,9 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 		// Look it up on chain.
 		console.log(`  Looking up @${name} on Blurt...`);
 		try {
-			const account = await withSpinner(`Checking @${name} on the chain…`, () => lookupBlurtAccount(name));
+			const account = await withSpinner(`Checking @${name} on the chain…`, () =>
+				lookupBlurtAccount(name)
+			);
 			if (account === null) {
 				console.log(
 					`  ⚠ @${name} doesn't exist on Blurt.  Either you typed it wrong, or you need to register it first at https://blurtplugin.online/account/.\n`
@@ -330,7 +348,9 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 				}
 				continue;
 			}
-			console.log(`  ✓ @${name} exists on Blurt.  Current balance: ${sanitizeForTerm(account.balance)}`);
+			console.log(
+				`  ✓ @${name} exists on Blurt.  Current balance: ${sanitizeForTerm(account.balance)}`
+			);
 			// Estimate runway at ~100 BLURT/signup.
 			const runway = Math.floor(account.balanceBlurt / 100);
 			if (runway < 20) {
@@ -348,10 +368,10 @@ export async function stepRelayAccount(instanceName?: string): Promise<RelayAcco
 			console.log('');
 			return { name, account, chainLookupSucceeded: true };
 		} catch (err) {
-			// cp139-C-12: err.message can carry chain-RPC response
+			// err.message can carry chain-RPC response
 			// text (HTTP server's error body) which is attacker-
 			// influenceable.  describeAccountLookupFailure sanitizes it
-			// and (cp709) softens the message for the expected
+			// and softens the message for the expected
 			// no-connectivity / air-gapped case.
 			const rawMsg = err instanceof Error ? err.message : 'unknown error';
 			for (const line of describeAccountLookupFailure(name, rawMsg).lines) {
@@ -375,7 +395,7 @@ export interface ActiveKeyResult {
 	readonly plaintextWif: string | undefined;
 	readonly envelope: KeyEnvelope | undefined;
 	readonly passphraseHint: string | undefined;
-	/** cp663 #3 — the unlock passphrase (encrypted mode only).  Held only
+	/** the unlock passphrase (encrypted mode only).  Held only
 	 *  long enough for the installer to seal it into the systemd encrypted
 	 *  credential (/etc/morphit/relay_passphrase.cred) that the relay unit's
 	 *  LoadCredentialEncrypted= consumes.  NEVER written anywhere in the
@@ -384,7 +404,11 @@ export interface ActiveKeyResult {
 }
 
 export async function stepActiveKey(relayAccountName: string): Promise<ActiveKeyResult> {
-	step(5, TOTAL_STEPS, `The ACTIVE key for @${relayAccountName} (the relay account you just entered)`);
+	step(
+		5,
+		TOTAL_STEPS,
+		`The ACTIVE key for @${relayAccountName} (the relay account you just entered)`
+	);
 	explain(
 		`This is the ACTIVE key for the @${relayAccountName} account you\n` +
 			'just named — NOT the posting key.  Blurt has four key\n' +
@@ -415,9 +439,9 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 			"   the VPS can't touch your personal Blurt holdings.\n" +
 			'\n' +
 			'Background: the @morphit project account (separate from the\n' +
-			"relay) signs release ops with its POSTING key, but those are\n" +
-			"always signed offline on a personal laptop — the production\n" +
-			"server only ever sees an active key for the relay account."
+			'relay) signs release ops with its POSTING key, but those are\n' +
+			'always signed offline on a personal laptop — the production\n' +
+			'server only ever sees an active key for the relay account.'
 	);
 
 	// The active key is ALWAYS stored encrypted.  At runtime it costs nothing — the
@@ -497,14 +521,17 @@ export async function stepActiveKey(relayAccountName: string): Promise<ActiveKey
 		plaintextWif: undefined,
 		envelope,
 		passphraseHint: undefined,
-		// cp663 #3 — carried to the installer to seal into the .cred, then dropped.
+		// carried to the installer to seal into the .cred, then dropped.
 		passphrase
 	};
 }
 
 // ─── Step 6: Fees account ────────────────────────────────────────
 
-export async function stepFeesAccount(defaultAccount: string | undefined, instanceName?: string): Promise<string> {
+export async function stepFeesAccount(
+	defaultAccount: string | undefined,
+	instanceName?: string
+): Promise<string> {
 	step(6, TOTAL_STEPS, 'Fees account');
 	const base = instanceName ? suggestAccountBase(instanceName) : '';
 	const feesSuggestion = base ? `@${base}-fees` : '@your-instance-fees';
@@ -563,7 +590,7 @@ export async function stepDailyCeiling(relayAccount: AccountInfo | null): Promis
 		const safeCeiling = Math.max(1, Math.floor(balance / 100 / 2));
 		// Aim for "balance funds at least 2 days at ceiling rate".
 		suggestedDefault = Math.min(50, safeCeiling);
-		// cp139-C-20: relayAccount.balance comes from Blurt RPC
+		// relayAccount.balance comes from Blurt RPC
 		// response; sanitize before display.  relayAccount.name
 		// passed validateBlurtAccountName (regex a-z0-9._-) so
 		// can't carry escapes, but pass through sanitize anyway
@@ -744,7 +771,9 @@ async function askOptionalAddress(
 		const v = (await ask(question, '')).trim();
 		if (v.length === 0) return null;
 		if (looksLikeAddress(kind, v)) return v;
-		console.log(`  ⚠ That doesn't look like a ${label}.  Paste it again, or press Enter to skip.\n`);
+		console.log(
+			`  ⚠ That doesn't look like a ${label}.  Paste it again, or press Enter to skip.\n`
+		);
 	}
 }
 
@@ -777,13 +806,21 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsLokinet = await askYesNo('Add a Lokinet (.loki) address?', false);
 	let lokinet: string | null = null;
 	if (wantsLokinet) {
-		lokinet = await askOptionalAddress('Lokinet .loki address (paste, or Enter to skip)', 'loki', 'Lokinet .loki address');
+		lokinet = await askOptionalAddress(
+			'Lokinet .loki address (paste, or Enter to skip)',
+			'loki',
+			'Lokinet .loki address'
+		);
 	}
 
 	const wantsI2p = await askYesNo('Add an I2P (.b32.i2p) address?', false);
 	let i2pB32: string | null = null;
 	if (wantsI2p) {
-		i2pB32 = await askOptionalAddress('I2P .b32.i2p address (paste, or Enter to skip)', 'i2p-b32', 'I2P .b32.i2p address');
+		i2pB32 = await askOptionalAddress(
+			'I2P .b32.i2p address (paste, or Enter to skip)',
+			'i2p-b32',
+			'I2P .b32.i2p address'
+		);
 	}
 
 	// Optional human-readable vanity name (DOMAIN.i2p), independent of the
@@ -791,13 +828,21 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsI2pName = await askYesNo('Add an I2P vanity name (DOMAIN.i2p)?', false);
 	let i2pName: string | null = null;
 	if (wantsI2pName) {
-		i2pName = await askOptionalAddress('I2P vanity name, e.g. yourbrand.i2p (paste, or Enter to skip)', 'i2p-name', 'DOMAIN.i2p name');
+		i2pName = await askOptionalAddress(
+			'I2P vanity name, e.g. yourbrand.i2p (paste, or Enter to skip)',
+			'i2p-name',
+			'DOMAIN.i2p name'
+		);
 	}
 
 	const wantsNostr = await askYesNo('Add a Nostr pubkey?', false);
 	let nostr: string | null = null;
 	if (wantsNostr) {
-		nostr = await askOptionalAddress('Nostr npub (paste, or Enter to skip)', 'npub', 'Nostr npub (npub1...)');
+		nostr = await askOptionalAddress(
+			'Nostr npub (paste, or Enter to skip)',
+			'npub',
+			'Nostr npub (npub1...)'
+		);
 	}
 
 	// Optional ENS .eth name (DOMAIN.eth) — a registered Ethereum name
@@ -807,7 +852,11 @@ export async function stepAltNetworks(): Promise<AltNetworkResult> {
 	const wantsEns = await askYesNo('Add an ENS .eth name?', false);
 	let ens: string | null = null;
 	if (wantsEns) {
-		ens = await askOptionalAddress('ENS name, e.g. yourbrand.eth (paste, or Enter to skip)', 'ens', 'ENS .eth name');
+		ens = await askOptionalAddress(
+			'ENS name, e.g. yourbrand.eth (paste, or Enter to skip)',
+			'ens',
+			'ENS .eth name'
+		);
 	}
 
 	return { tor, lokinet, i2pB32, i2pName, nostr, ens };
@@ -823,7 +872,7 @@ export async function stepSeo(): Promise<SeoResult> {
 	step(16, TOTAL_STEPS, 'Homepage SEO meta tags (optional)');
 	explain(
 		'Out of the box, your homepage advertises itself with generic\n' +
-			"Morphit copy in the <title>, <meta description>, and\n" +
+			'Morphit copy in the <title>, <meta description>, and\n' +
 			'<meta keywords> tags — the same text every Morphit instance\n' +
 			'ships with.  Search engines like Google + Bing index those\n' +
 			'tags; social-media platforms like Matrix, Mastodon, Twitter,\n' +
@@ -833,7 +882,7 @@ export async function stepSeo(): Promise<SeoResult> {
 			'If you want your instance to stand out (its own brand name\n' +
 			'in search results, your own tagline in link previews), this\n' +
 			"is where you set that copy.  If you skip this, you'll show\n" +
-			"up alongside every other Morphit instance — fine for a\n" +
+			'up alongside every other Morphit instance — fine for a\n' +
 			"community node; suboptimal if you're trying to build a\n" +
 			'recognizable brand.\n' +
 			'\n' +
@@ -855,10 +904,7 @@ export async function stepSeo(): Promise<SeoResult> {
 		'Homepage <meta description> — one sentence, ~150 chars (Enter to skip)',
 		''
 	);
-	const keywords = await ask(
-		'Homepage <meta keywords>, comma-separated (Enter to skip)',
-		''
-	);
+	const keywords = await ask('Homepage <meta keywords>, comma-separated (Enter to skip)', '');
 	return {
 		title: title.length > 0 ? title : null,
 		description: description.length > 0 ? description : null,
@@ -898,13 +944,13 @@ export interface BackupResult {
 	readonly retainDays: number | null;
 	/** Auto-detected Docker container running the morphit Postgres, or null for
 	 *  a host Postgres / when detection couldn't run. Drives the backup script's
-	 *  Docker-aware `docker exec … pg_dump` path (cp509 / v1.8.4 B). */
+	 *  Docker-aware `docker exec … pg_dump` path (v1.8.4 B). */
 	readonly dbContainer: string | null;
 	/** Database name + authenticating user the backup targets, resolved from the
 	 *  operator's connection URL (falling back to the init.sql defaults). Written
 	 *  into backup.env so a non-standard box — e.g. a BunkerWeb DB on
 	 *  `morphit_user`/`morphit_db` — is backed up correctly without hand-editing
-	 *  (cp509 / v1.8.4). */
+	 *  (v1.8.4). */
 	readonly dbName: string;
 	readonly dbUser: string;
 }
@@ -924,11 +970,14 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	);
 
 	// Resolve the REAL database name + user from the connection URL the operator
-	// just entered (cp509 / v1.8.4) — so a non-standard DB (e.g. a BunkerWeb box
+	// just entered (v1.8.4) — so a non-standard DB (e.g. a BunkerWeb box
 	// on morphit_user/morphit_db) is backed up correctly and its container is
 	// probed under the right identity. Falls back to the init.sql defaults if
 	// the URL can't be parsed.
-	const identity = dbIdentityFromUrl(databaseUrl) ?? { dbName: BACKUP_DB_NAME, dbUser: BACKUP_DB_USER };
+	const identity = dbIdentityFromUrl(databaseUrl) ?? {
+		dbName: BACKUP_DB_NAME,
+		dbUser: BACKUP_DB_USER
+	};
 
 	const enabled = await askYesNo('Enable daily DB backup automation?', true);
 	if (!enabled) {
@@ -951,7 +1000,9 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 	while (true) {
 		backupDir = (await ask('Backup directory', '/home/morphit/backups')).trim();
 		if (backupDir.startsWith('/')) break;
-		console.log('  ✗ Use an absolute path (starting with /), e.g. /home/morphit/backups.  Try again.\n');
+		console.log(
+			'  ✗ Use an absolute path (starting with /), e.g. /home/morphit/backups.  Try again.\n'
+		);
 	}
 	const retainDays = await askInt('Days of backups to keep', {
 		min: 1,
@@ -959,7 +1010,7 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 		default: 30
 	});
 
-	// Docker-aware detection (cp509 / v1.8.4 B): if the Postgres runs in a
+	// Docker-aware detection (v1.8.4 B): if the Postgres runs in a
 	// container (BunkerWeb / docker-compose Postgres), find its name so the
 	// backup dumps THROUGH `docker exec … pg_dump` instead of a host pg_dump
 	// that finds nothing. Best-effort + silent: null on a host Postgres, a
@@ -1025,7 +1076,7 @@ export function parseRpcEndpoints(raw: string): readonly string[] | string {
 		return 'At least one RPC endpoint is required.';
 	}
 	for (const u of list) {
-		// cp139-C-15: same defense as parseExplorerUrlList — the
+		// same defense as parseExplorerUrlList — the
 		// error string is interpolated into a console.log by the
 		// caller (stepRpcEndpoints).
 		const safeU = sanitizeForTerm(u);
@@ -1057,9 +1108,37 @@ export function parseRpcEndpoints(raw: string): readonly string[] | string {
 }
 
 export async function stepRpcEndpoints(
-	current: readonly string[] | null
+	current: readonly string[] | null,
+	opts: { readonly hiddenOnly?: boolean } = {}
 ): Promise<readonly string[]> {
 	step(20, TOTAL_STEPS, 'Blurt RPC endpoints (defaults are fine for most operators)');
+	// A hidden-only node reads the chain only over Tor/I2P: its clearnet list
+	// is empty on purpose. Never offer the clearnet defaults there and never
+	// probe from this box (each probe would show the box's address to a
+	// clearnet RPC operator).
+	if (opts.hiddenOnly ?? isHiddenOnlyNode()) {
+		explain(
+			'This node is hidden-only: its indexer reads the chain only over\n' +
+				'Tor/I2P, so its clearnet RPC list is empty on purpose. Adding a\n' +
+				'clearnet endpoint ends that, and connects this server to it\n' +
+				'directly. Nothing is checked from here.'
+		);
+		const raw = await ask(
+			'Blurt RPC endpoints (comma-separated; Enter keeps none)',
+			(current ?? []).join(',')
+		);
+		if (raw.trim() === '') return [];
+		const result = parseRpcEndpoints(raw);
+		if (typeof result === 'string') {
+			console.log(`  ✗ ${result}  Nothing changed.\n`);
+			return current ?? [];
+		}
+		const ok = await askYesNo(
+			`Connect this hidden-only node to ${result.length} clearnet endpoint(s)? It is then no longer hidden-only.`,
+			false
+		);
+		return ok ? result : (current ?? []);
+	}
 	const defaultDisplay =
 		current !== null && current.length > 0
 			? current.join(',')
@@ -1134,22 +1213,18 @@ export async function stepRpcEndpoints(
 
 // ─── Defaults for the explorer-config steps ──────────────────────
 
-/** Default BTC fee-verifier explorers — Esplora-API-compatible
- *  public instances.  Matches the indexer's config-default. */
-export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = [
-	'https://blockstream.info/api',
-	'https://mempool.space/api'
-];
+/** Default BTC fee-verifier explorers — Esplora API bases: four onion
+ *  explorers (asked first, over Tor), then blockstream.info and
+ *  mempool.space as the clearnet fallback. One list for the wizard and the
+ *  indexer's config default (@morphit/operator-config, feeSources.ts). */
+export const DEFAULT_BTC_FEE_EXPLORERS: readonly string[] = OPERATOR_DEFAULT_BTC_FEE_EXPLORERS;
 
-/** Default XMR fee-verifier explorers — matches the indexer's
- *  config default (apps/indexer/src/config/xmrExplorers.ts), checked
- *  live 2026-09-28: two onion-monero-blockchain-explorer instances
- *  (txprove) and moneroblocks.info, whose raw transactions the indexer
- *  verifies itself (`raw-tx+`). localmonero.co/blocks (now a redirect),
- *  monerohash.com/explorer (JSON API off) and exploremonero.com (a JS
- *  front end, no API) were dropped. */
-// v1.20.2: the indexer's own list (three explorers + three public Monero
-// nodes, `node+`, checked live 2026-10-01) — one source of truth.
+/** Default XMR fee-verifier explorers — the indexer's own list
+ *  (apps/indexer/src/config/xmrExplorers.ts, from @morphit/operator-config):
+ *  two onion-monero-blockchain-explorer instances on Tor (asked first),
+ *  then the clearnet fallback — xmrchain.net and moneroexplorer.org
+ *  (txprove), moneroblocks.info (`raw-tx+`, checked by the indexer itself)
+ *  and three public Monero nodes (`node+`). One source of truth. */
 export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = INDEXER_DEFAULT_XMR_EXPLORERS;
 
 /** Default chat-link URL templates — for the frontend's
@@ -1158,15 +1233,14 @@ export const DEFAULT_XMR_FEE_EXPLORERS: readonly string[] = INDEXER_DEFAULT_XMR_
  *  the frontend substitutes the txid at render time. */
 export const DEFAULT_BTC_CHAT_LINK_URL = 'https://mempool.space/tx/{txid}';
 export const DEFAULT_XMR_CHAT_LINK_URL = 'https://xmrchain.net/tx/{txid}';
-// Part 122 cp21 — BCH chat-link explorer URL default.  Operator
-// can override; alternatives surveyed at Part 122 cp21 addition
+// BCH chat-link explorer URL default.  Operator
+// can override; alternatives surveyed addition
 // time include blockchain.com/explorer, bitinfocharts.com,
 // bchexplorer.info, oklink.com/bch, bch.tokenview.io,
 // blockexplorer.one, explorer.cloverpool.com.
-export const DEFAULT_BCH_CHAT_LINK_URL =
-	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
+export const DEFAULT_BCH_CHAT_LINK_URL = 'https://blockchair.com/bitcoin-cash/transaction/{txid}';
 
-// Part 122 cp24 — LTC chat-link explorer URL bundled default.
+// LTC chat-link explorer URL bundled default.
 // litecoinspace.org is the LTC-equivalent of mempool.space:
 // community-led, no JS tracking, open-source, privacy-aligned
 // (Morphit priority #1).  Other candidates the maintainer surveyed at
@@ -1177,7 +1251,7 @@ export const DEFAULT_BCH_CHAT_LINK_URL =
 // override via MORPHIT_FRONTEND_LTC_CHAT_LINK_URL.
 export const DEFAULT_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 
-// Part 122 cp27 — DASH chat-link explorer URL bundled default.
+// DASH chat-link explorer URL bundled default.
 // insight.dash.org is the official Dash project's Insight
 // instance — community-led, open-source backend, no third-party
 // ad/tracking layer.  Same posture as litecoinspace.org for LTC,
@@ -1191,7 +1265,7 @@ export const DEFAULT_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 // MORPHIT_FRONTEND_DASH_CHAT_LINK_URL.
 export const DEFAULT_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
 
-// Part 122 cp33 — DOGE chat-link explorer URL bundled default.
+// DOGE chat-link explorer URL bundled default.
 // blockchair.com/dogecoin chosen from the maintainer's 9-explorer survey
 // (2026-05-19) for predictable URL format, multi-chain support
 // (already used as BCH default — operator gets one origin in
@@ -1208,7 +1282,7 @@ export const DEFAULT_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{
 // MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL.
 export const DEFAULT_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/transaction/{txid}';
 
-// Part 122 cp39 — ZEC chat-link explorer URL bundled default.
+// ZEC chat-link explorer URL bundled default.
 // mainnet.zcashexplorer.app chosen from the maintainer's 7-explorer survey
 // (2026-05-19) as the community-run, project-aligned default with
 // no third-party tracking, supports both transparent (t1/t3) and
@@ -1226,8 +1300,8 @@ export const DEFAULT_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/trans
 // default override via MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL.
 export const DEFAULT_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/transactions/{txid}';
 
-// Part 122 cp41 — Pirate Chain (ARRR) chat-link explorer URL
-// bundled default.  Operator's 3-explorer survey at cp41:
+// Pirate Chain (ARRR) chat-link explorer URL
+// bundled default.  Operator's 3-explorer survey:
 // explorer.piratechain.com (chosen as bundled default — official
 // project explorer, project-aligned, no third-party tracking),
 // pirate.explorer.dexstats.info (community-run, Komodo-ecosystem
@@ -1236,8 +1310,8 @@ export const DEFAULT_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/tran
 // via MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL.
 export const DEFAULT_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{txid}';
 
-// Part 122 cp43 — Decred (DCR) chat-link explorer URL bundled
-// default.  Operator's 4-explorer survey at cp43:
+// Decred (DCR) chat-link explorer URL bundled
+// default.  Operator's 4-explorer survey:
 // dcrdata.decred.org (chosen as bundled default — official project
 // explorer, project-aligned, no third-party tracking),
 // blockchain.com/explorer/assets/dcr (third-party aggregator),
@@ -1247,8 +1321,8 @@ export const DEFAULT_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{
 // MORPHIT_FRONTEND_DCR_CHAT_LINK_URL.
 export const DEFAULT_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
 
-// Part 122 cp45 — Solana (SOL) chat-link explorer URL bundled
-// default.  Operator's 5-explorer survey at cp45:
+// Solana (SOL) chat-link explorer URL bundled
+// default.  Operator's 5-explorer survey:
 // explorer.solana.com (chosen as bundled default — official
 // project explorer), solscan.io (third-party aggregator, most
 // popular), solanabeach.io (validator-focused),
@@ -1257,8 +1331,8 @@ export const DEFAULT_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
 // different default override via MORPHIT_FRONTEND_SOL_CHAT_LINK_URL.
 export const DEFAULT_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}';
 
-// Part 122 cp47 — Ethereum (ETH) chat-link explorer URL bundled
-// default.  Operator's 9-explorer survey at cp47:
+// Ethereum (ETH) chat-link explorer URL bundled
+// default.  Operator's 9-explorer survey:
 // eth.blockscout.com (chosen as bundled default — open-source
 // Blockscout instance, project-aligned with Ethereum's transparency
 // ethos), etherscan.io (most popular but third-party closed-source),
@@ -1270,8 +1344,8 @@ export const DEFAULT_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}'
 // MORPHIT_FRONTEND_ETH_CHAT_LINK_URL.
 export const DEFAULT_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
 
-// Part 122 cp49 — Ripple (XRP) chat-link explorer URL bundled
-// default.  Operator's 5-explorer survey at cp49: livenet.xrpl.org
+// Ripple (XRP) chat-link explorer URL bundled
+// default.  Operator's 5-explorer survey: livenet.xrpl.org
 // (chosen as bundled default — XRP Ledger Foundation non-profit,
 // project-aligned), xrpscan.com (XRPL-focused third-party),
 // bithomp.com (third-party with token/NFT support),
@@ -1281,12 +1355,12 @@ export const DEFAULT_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
 // MORPHIT_FRONTEND_XRP_CHAT_LINK_URL.
 export const DEFAULT_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/{txid}';
 
-// Part 122 cp30-DD-11 — USDT per-network chat-link explorer URL
+// USDT per-network chat-link explorer URL
 // bundled defaults.  USDT is multi-network so the operator
 // override is per-network (each chain has its own explorer
 // ecosystem).  Closure of DD-11 (the per-network USDT explorer
 // override was declared in indexer-client + frontend store but
-// never populated by the indexer body since Part 121 cp3; cp30-DD
+// never populated by the indexer body since an earlier release
 // finally landed both the indexer-side wiring AND these wizard
 // defaults so operators get sane out-of-box URLs).
 export const DEFAULT_USDT_ERC20_CHAT_LINK_URL = 'https://etherscan.io/tx/{txid}';
@@ -1294,7 +1368,7 @@ export const DEFAULT_USDT_TRC20_CHAT_LINK_URL = 'https://tronscan.org/#/transact
 export const DEFAULT_USDT_SPL_CHAT_LINK_URL = 'https://solscan.io/tx/{txid}';
 export const DEFAULT_USDT_BEP20_CHAT_LINK_URL = 'https://bscscan.com/tx/{txid}';
 
-// Part 122 cp30 — USDC per-network chat-link explorer URL bundled
+// USDC per-network chat-link explorer URL bundled
 // defaults.  4 networks (ERC-20, SPL, Base, Polygon); BEP-20
 // intentionally not supported per ADR-0028 §1 (Binance-Peg + 18-
 // decimal divergence).
@@ -1303,7 +1377,7 @@ export const DEFAULT_USDC_SPL_CHAT_LINK_URL = 'https://solscan.io/tx/{txid}';
 export const DEFAULT_USDC_BASE_CHAT_LINK_URL = 'https://basescan.org/tx/{txid}';
 export const DEFAULT_USDC_POLYGON_CHAT_LINK_URL = 'https://polygonscan.com/tx/{txid}';
 
-// Part 122 cp31 — DAI per-network chat-link explorer URL bundled
+// DAI per-network chat-link explorer URL bundled
 // defaults.  4 EVM networks (ERC-20, Polygon, Base, Arbitrum).
 // SPL/TRC-20/BEP-20 intentionally not supported per ADR-0029 §1
 // (no canonical Maker-issued DAI on those chains).
@@ -1319,8 +1393,8 @@ export interface FeeExplorersResult {
 	readonly xmr: readonly string[];
 }
 
-/** Parse a comma-separated URL list with the same rules as
- *  parseRpcEndpoints (HTTPS-only, no user:pass, de-duped).
+/** Parse a comma-separated URL list: https://, or http:// to a .onion /
+ *  .i2p service (Tor and I2P encrypt end to end); no user:pass; de-duped.
  *  Returns the list on success, an error message on failure. */
 export function parseExplorerUrlList(
 	raw: string,
@@ -1334,7 +1408,7 @@ export function parseExplorerUrlList(
 		return 'At least one explorer URL is required.';
 	}
 	for (const u of list) {
-		// cp139-C-15: sanitize the operator's raw URL in the error
+		// sanitize the operator's raw URL in the error
 		// path.  Error strings are interpolated into editExplorerList's
 		// `console.log('  ✗ ${result}')` line which writes directly
 		// to the operator's terminal.  A paste with embedded ANSI
@@ -1351,12 +1425,13 @@ export function parseExplorerUrlList(
 				: opts.allowRawTx === true && u.startsWith('node+')
 					? u.slice('node+'.length)
 					: u;
-		if (!url.startsWith('https://')) {
-			return `Explorer URL must start with https:// — got "${safeU}"`;
+		const hidden = url.startsWith('http://') && isHiddenSourceUrl(url);
+		if (!url.startsWith('https://') && !hidden) {
+			return `Explorer URL must start with https:// (or http:// for a .onion / .i2p service) — got "${safeU}"`;
 		}
 		try {
 			const parsed = new URL(url);
-			if (parsed.protocol !== 'https:') {
+			if (parsed.protocol !== 'https:' && !hidden) {
 				return `Explorer URL must be https — got "${safeU}"`;
 			}
 			if (parsed.username !== '' || parsed.password !== '') {
@@ -1394,7 +1469,7 @@ async function renderHealthChecks(
 		const r = results[i];
 		const status =
 			r === null || r === undefined ? '✗ couldn\u2019t reach it' : renderProbeStatus(r);
-		// cp139-C-13: defense-in-depth — operator-typed URLs are
+		// defense-in-depth — operator-typed URLs are
 		// sanitized at display.  renderProbeStatus already
 		// sanitizes the reason inside the status string.
 		console.log(`  ${i + 1}. ${sanitizeForTerm(urls[i]!)}\n     ${status}`);
@@ -1411,26 +1486,30 @@ export async function stepFeeExplorers(): Promise<FeeExplorersResult> {
 			'manipulation: if one explorer lies about the amount or\n' +
 			'recipient, the other explorers catch it.\n' +
 			'\n' +
-			'Defaults:\n' +
-			'  • BTC: blockstream.info + mempool.space\n' +
-			'    (Esplora-API-compatible, independent operators)\n' +
-			'  • XMR: xmrchain.net + moneroexplorer.org\n' +
-			'    (onion-monero-blockchain-explorer API),\n' +
-			'    moneroblocks.info (raw transactions, checked by your\n' +
-			'    indexer itself: write it as raw-tx+https://…) and\n' +
-			'    three public Monero nodes (also checked by your\n' +
-			'    indexer itself: node+https://…)\n' +
+			'Defaults — onion explorers first, asked over Tor (no\n' +
+			'third-party clearnet needed); the clearnet ones only as a\n' +
+			'fallback, and never on a zero-clearnet node:\n' +
+			'  • BTC: four onion Esplora explorers (mempool.space,\n' +
+			'    mempool emzy, mempool runbtc, Blockstream), then\n' +
+			'    blockstream.info + mempool.space\n' +
+			'  • XMR: two onion xmrblocks explorers (runbtc,\n' +
+			'    suddenwhipvapor), then xmrchain.net +\n' +
+			'    moneroexplorer.org, moneroblocks.info (raw\n' +
+			'    transactions, checked by your indexer itself:\n' +
+			'    raw-tx+https://…) and three public Monero nodes\n' +
+			'    (also checked by your indexer itself: node+https://…)\n' +
 			'\n' +
 			'You can keep the defaults (recommended for new\n' +
 			'operators), or customize the list now.  For maximum\n' +
 			'independence, self-host the explorers — see\n' +
 			'docs/OPERATIONS.md §40.4 for a docker-compose recipe.\n' +
 			'\n' +
-			'Format: comma-separated https:// URLs, no spaces.\n' +
+			'Format: comma-separated URLs, no spaces: https://, or\n' +
+			'http:// for a .onion / .i2p service.\n' +
 			'\n' +
-			'The wizard will run a quick health check on each URL\n' +
-			'before continuing, so you see which ones are reachable\n' +
-			'right now.'
+			'The wizard will run a quick health check on each clearnet\n' +
+			'URL before continuing, so you see which ones are reachable\n' +
+			'right now (onion ones are checked by the indexer over Tor).'
 	);
 
 	// ─── BTC ──
@@ -1466,10 +1545,11 @@ async function editExplorerList(
 	while (true) {
 		console.log(`  Current ${label}:`);
 		await renderHealthChecks(current, probe);
-		const choice = await askChoice(
-			'What would you like to do?',
-			['Keep this list', 'Edit (comma-separated)', 'Reset to defaults']
-		);
+		const choice = await askChoice('What would you like to do?', [
+			'Keep this list',
+			'Edit (comma-separated)',
+			'Reset to defaults'
+		]);
 		if (choice === 0) {
 			return current;
 		}
@@ -1480,10 +1560,7 @@ async function editExplorerList(
 		}
 		// Edit
 		const defaultDisplay = current.join(',');
-		const raw = await ask(
-			`${label} (comma-separated)`,
-			defaultDisplay
-		);
+		const raw = await ask(`${label} (comma-separated)`, defaultDisplay);
 		const result = parseExplorerUrlList(raw, opts);
 		if (typeof result === 'string') {
 			console.log(`  ✗ ${result}  Try again.\n`);
@@ -1499,23 +1576,23 @@ async function editExplorerList(
 export interface ChatLinkExplorersResult {
 	readonly btc: string;
 	readonly xmr: string;
-	/** Part 122 cp21 — BCH chat-link explorer URL.  Same shape
+	/** BCH chat-link explorer URL.  Same shape
 	 *  as btc/xmr.  Operator-tunable via the wizard or by setting
 	 *  MORPHIT_FRONTEND_BCH_CHAT_LINK_URL directly. */
 	readonly bch: string;
-	/** Part 122 cp24 — LTC chat-link explorer URL.  Same shape
+	/** LTC chat-link explorer URL.  Same shape
 	 *  as btc/xmr/bch.  Operator-tunable via the wizard or by
 	 *  setting MORPHIT_FRONTEND_LTC_CHAT_LINK_URL directly. */
 	readonly ltc: string;
-	/** Part 122 cp27 — DASH chat-link explorer URL.  Same shape
+	/** DASH chat-link explorer URL.  Same shape
 	 *  as btc/xmr/bch/ltc.  Operator-tunable via the wizard or
 	 *  by setting MORPHIT_FRONTEND_DASH_CHAT_LINK_URL directly. */
 	readonly dash: string;
-	/** Part 122 cp33 — DOGE chat-link explorer URL.  Same shape
+	/** DOGE chat-link explorer URL.  Same shape
 	 *  as btc/xmr/bch/ltc/dash.  Operator-tunable via the wizard
 	 *  or by setting MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL directly. */
 	readonly doge: string;
-	/** Part 122 cp39 — ZEC chat-link explorer URL.  Same shape
+	/** ZEC chat-link explorer URL.  Same shape
 	 *  as btc/xmr/bch/ltc/dash/doge (single-network mainnet).
 	 *  Operator-tunable via the wizard or by setting
 	 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL directly. */
@@ -1525,12 +1602,12 @@ export interface ChatLinkExplorersResult {
 	readonly sol: string;
 	readonly eth: string;
 	readonly xrp: string;
-	/** Part 122 cp30-DD — multi-network USDT per-network chat-link
+	/** multi-network USDT per-network chat-link
 	 *  URLs.  4 networks (erc20/trc20/spl/bep20).  Operator-tunable
 	 *  via wizard step 12b or by setting MORPHIT_FRONTEND_USDT_<NET>
 	 *  _CHAT_LINK_URL.  The override has historically existed on the
-	 *  client wire-format mirror since Part 121 cp3 but never actually
-	 *  worked end-to-end on the public API until cp30-DD-11 closed
+	 *  client wire-format mirror since an earlier release but never actually
+	 *  worked end-to-end on the public API until a later fix closed
 	 *  the indexer-side gap. */
 	readonly usdt: {
 		readonly erc20: string;
@@ -1538,7 +1615,7 @@ export interface ChatLinkExplorersResult {
 		readonly spl: string;
 		readonly bep20: string;
 	};
-	/** Part 122 cp30 — multi-network USDC per-network chat-link
+	/** multi-network USDC per-network chat-link
 	 *  URLs.  4 networks (erc20/spl/base/polygon).  BEP-20
 	 *  intentionally absent per ADR-0028 §1. */
 	readonly usdc: {
@@ -1547,7 +1624,7 @@ export interface ChatLinkExplorersResult {
 		readonly base: string;
 		readonly polygon: string;
 	};
-	/** Part 122 cp31 — multi-network DAI per-network chat-link
+	/** multi-network DAI per-network chat-link
 	 *  URLs.  4 EVM networks (erc20/polygon/base/arbitrum).
 	 *  SPL/TRC-20/BEP-20 intentionally absent per ADR-0029 §1.
 	 *  All four explorers are -scan-style (etherscan, polygonscan,
@@ -1575,8 +1652,7 @@ export function parseChatLinkTemplate(raw: string): string | string {
 	if (!trimmed.includes('{txid}')) {
 		return "Template must contain the placeholder '{txid}'.";
 	}
-	const sampleTxid =
-		'0000000000000000000000000000000000000000000000000000000000000000';
+	const sampleTxid = '0000000000000000000000000000000000000000000000000000000000000000';
 	const filled = trimmed.replace(/\{txid\}/g, sampleTxid);
 	try {
 		const parsed = new URL(filled);
@@ -1598,7 +1674,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 		'These are the BLOCK EXPLORER URLs Morphit uses to turn a\n' +
 			'transaction ID into a clickable link. When a counterparty\n' +
 			'pastes a txid in chat for any asset, the frontend renders it\n' +
-			'as a link that opens that asset\'s block explorer in a new\n' +
+			"as a link that opens that asset's block explorer in a new\n" +
 			'tab so your user can confirm the transaction.\n' +
 			'\n' +
 			'("Chat-link" is just the internal name for this — they are\n' +
@@ -1615,7 +1691,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'a different explorer (including one you self-host), or reset\n' +
 			'it back to the default. A URL is required for every asset\n' +
 			'(so TxID links always work); you cannot leave one blank.\n' +
-			'Privacy note: each click sends the user\'s IP and browser\n' +
+			"Privacy note: each click sends the user's IP and browser\n" +
 			'fingerprint to that third-party explorer, so the defaults are\n' +
 			'well-known privacy-respecting explorers.\n' +
 			'\n' +
@@ -1646,47 +1722,47 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 	console.log('\n  ── XMR block explorer URL ──\n');
 	const xmr = await editChatLinkUrl('XMR block explorer URL', DEFAULT_XMR_CHAT_LINK_URL);
 
-	// ─── BCH (Part 122 cp21) ──
+	// ─── BCH ──
 	console.log('\n  ── BCH block explorer URL ──\n');
 	const bch = await editChatLinkUrl('BCH block explorer URL', DEFAULT_BCH_CHAT_LINK_URL);
 
-	// ─── LTC (Part 122 cp24) ──
+	// ─── LTC ──
 	console.log('\n  ── LTC block explorer URL ──\n');
 	const ltc = await editChatLinkUrl('LTC block explorer URL', DEFAULT_LTC_CHAT_LINK_URL);
 
-	// ─── DASH (Part 122 cp27) ──
+	// ─── DASH ──
 	console.log('\n  ── DASH block explorer URL ──\n');
 	const dash = await editChatLinkUrl('DASH block explorer URL', DEFAULT_DASH_CHAT_LINK_URL);
 
-	// ─── DOGE (Part 122 cp33) ──
+	// ─── DOGE ──
 	console.log('\n  ── DOGE block explorer URL ──\n');
 	const doge = await editChatLinkUrl('DOGE block explorer URL', DEFAULT_DOGE_CHAT_LINK_URL);
 
-	// ─── ZEC (Part 122 cp39) ──
+	// ─── ZEC ──
 	console.log('\n  ── ZEC block explorer URL ──\n');
 	const zec = await editChatLinkUrl('ZEC block explorer URL', DEFAULT_ZEC_CHAT_LINK_URL);
 
-	// ─── ARRR (Part 122 cp41) ──
+	// ─── ARRR ──
 	console.log('\n  ── ARRR block explorer URL ──\n');
 	const arrr = await editChatLinkUrl('ARRR block explorer URL', DEFAULT_ARRR_CHAT_LINK_URL);
 
-	// ─── DCR (Part 122 cp43) ──
+	// ─── DCR ──
 	console.log('\n  ── DCR block explorer URL ──\n');
 	const dcr = await editChatLinkUrl('DCR block explorer URL', DEFAULT_DCR_CHAT_LINK_URL);
 
-	// ─── SOL (Part 122 cp45) ──
+	// ─── SOL ──
 	console.log('\n  ── SOL block explorer URL ──\n');
 	const sol = await editChatLinkUrl('SOL block explorer URL', DEFAULT_SOL_CHAT_LINK_URL);
 
-	// ─── ETH (Part 122 cp47) ──
+	// ─── ETH ──
 	console.log('\n  ── ETH block explorer URL ──\n');
 	const eth = await editChatLinkUrl('ETH block explorer URL', DEFAULT_ETH_CHAT_LINK_URL);
 
-	// ─── XRP (Part 122 cp49) ──
+	// ─── XRP ──
 	console.log('\n  ── XRP block explorer URL ──\n');
 	const xrp = await editChatLinkUrl('XRP block explorer URL', DEFAULT_XRP_CHAT_LINK_URL);
 
-	// ─── USDT multi-network (Part 122 cp30-DD-11) ──
+	// ─── USDT multi-network ──
 	// USDT trades happen on 4 distinct chains (Ethereum / Tron /
 	// Solana / BNB Smart Chain); each chain has its own explorer
 	// ecosystem so the override is per-network.  Most operators
@@ -1703,30 +1779,47 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'or customize per-network.\n' +
 			'\n' +
 			'Defaults:\n' +
-			'  • ERC-20: ' + DEFAULT_USDT_ERC20_CHAT_LINK_URL + '\n' +
-			'  • TRC-20: ' + DEFAULT_USDT_TRC20_CHAT_LINK_URL + '\n' +
-			'  • SPL:    ' + DEFAULT_USDT_SPL_CHAT_LINK_URL + '\n' +
-			'  • BEP-20: ' + DEFAULT_USDT_BEP20_CHAT_LINK_URL
+			'  • ERC-20: ' +
+			DEFAULT_USDT_ERC20_CHAT_LINK_URL +
+			'\n' +
+			'  • TRC-20: ' +
+			DEFAULT_USDT_TRC20_CHAT_LINK_URL +
+			'\n' +
+			'  • SPL:    ' +
+			DEFAULT_USDT_SPL_CHAT_LINK_URL +
+			'\n' +
+			'  • BEP-20: ' +
+			DEFAULT_USDT_BEP20_CHAT_LINK_URL
 	);
-	const usdtChoice = await askChoice(
-		'How would you like to handle USDT per-network URLs?',
-		['Accept all 4 defaults', 'Customize each one']
-	);
-	const usdt = usdtChoice === 0
-		? {
-			erc20: DEFAULT_USDT_ERC20_CHAT_LINK_URL,
-			trc20: DEFAULT_USDT_TRC20_CHAT_LINK_URL,
-			spl: DEFAULT_USDT_SPL_CHAT_LINK_URL,
-			bep20: DEFAULT_USDT_BEP20_CHAT_LINK_URL
-		}
-		: {
-			erc20: await editChatLinkUrl('USDT ERC-20 block explorer URL', DEFAULT_USDT_ERC20_CHAT_LINK_URL),
-			trc20: await editChatLinkUrl('USDT TRC-20 block explorer URL', DEFAULT_USDT_TRC20_CHAT_LINK_URL),
-			spl: await editChatLinkUrl('USDT SPL block explorer URL', DEFAULT_USDT_SPL_CHAT_LINK_URL),
-			bep20: await editChatLinkUrl('USDT BEP-20 block explorer URL', DEFAULT_USDT_BEP20_CHAT_LINK_URL)
-		};
+	const usdtChoice = await askChoice('How would you like to handle USDT per-network URLs?', [
+		'Accept all 4 defaults',
+		'Customize each one'
+	]);
+	const usdt =
+		usdtChoice === 0
+			? {
+					erc20: DEFAULT_USDT_ERC20_CHAT_LINK_URL,
+					trc20: DEFAULT_USDT_TRC20_CHAT_LINK_URL,
+					spl: DEFAULT_USDT_SPL_CHAT_LINK_URL,
+					bep20: DEFAULT_USDT_BEP20_CHAT_LINK_URL
+				}
+			: {
+					erc20: await editChatLinkUrl(
+						'USDT ERC-20 block explorer URL',
+						DEFAULT_USDT_ERC20_CHAT_LINK_URL
+					),
+					trc20: await editChatLinkUrl(
+						'USDT TRC-20 block explorer URL',
+						DEFAULT_USDT_TRC20_CHAT_LINK_URL
+					),
+					spl: await editChatLinkUrl('USDT SPL block explorer URL', DEFAULT_USDT_SPL_CHAT_LINK_URL),
+					bep20: await editChatLinkUrl(
+						'USDT BEP-20 block explorer URL',
+						DEFAULT_USDT_BEP20_CHAT_LINK_URL
+					)
+				};
 
-	// ─── USDC multi-network (Part 122 cp30) ──
+	// ─── USDC multi-network ──
 	// Same shape as USDT but 4 different networks (Ethereum,
 	// Solana, Base, Polygon).  BEP-20 intentionally not supported
 	// (ADR-0028 §1: Binance-Peg is a 2-custodian wrapper + 18-
@@ -1738,30 +1831,47 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'Binance-Peg, not Circle-native, per ADR-0028.\n' +
 			'\n' +
 			'Defaults:\n' +
-			'  • ERC-20:  ' + DEFAULT_USDC_ERC20_CHAT_LINK_URL + '\n' +
-			'  • SPL:     ' + DEFAULT_USDC_SPL_CHAT_LINK_URL + '\n' +
-			'  • Base:    ' + DEFAULT_USDC_BASE_CHAT_LINK_URL + '\n' +
-			'  • Polygon: ' + DEFAULT_USDC_POLYGON_CHAT_LINK_URL
+			'  • ERC-20:  ' +
+			DEFAULT_USDC_ERC20_CHAT_LINK_URL +
+			'\n' +
+			'  • SPL:     ' +
+			DEFAULT_USDC_SPL_CHAT_LINK_URL +
+			'\n' +
+			'  • Base:    ' +
+			DEFAULT_USDC_BASE_CHAT_LINK_URL +
+			'\n' +
+			'  • Polygon: ' +
+			DEFAULT_USDC_POLYGON_CHAT_LINK_URL
 	);
-	const usdcChoice = await askChoice(
-		'How would you like to handle USDC per-network URLs?',
-		['Accept all 4 defaults', 'Customize each one']
-	);
-	const usdc = usdcChoice === 0
-		? {
-			erc20: DEFAULT_USDC_ERC20_CHAT_LINK_URL,
-			spl: DEFAULT_USDC_SPL_CHAT_LINK_URL,
-			base: DEFAULT_USDC_BASE_CHAT_LINK_URL,
-			polygon: DEFAULT_USDC_POLYGON_CHAT_LINK_URL
-		}
-		: {
-			erc20: await editChatLinkUrl('USDC ERC-20 block explorer URL', DEFAULT_USDC_ERC20_CHAT_LINK_URL),
-			spl: await editChatLinkUrl('USDC SPL block explorer URL', DEFAULT_USDC_SPL_CHAT_LINK_URL),
-			base: await editChatLinkUrl('USDC Base block explorer URL', DEFAULT_USDC_BASE_CHAT_LINK_URL),
-			polygon: await editChatLinkUrl('USDC Polygon block explorer URL', DEFAULT_USDC_POLYGON_CHAT_LINK_URL)
-		};
+	const usdcChoice = await askChoice('How would you like to handle USDC per-network URLs?', [
+		'Accept all 4 defaults',
+		'Customize each one'
+	]);
+	const usdc =
+		usdcChoice === 0
+			? {
+					erc20: DEFAULT_USDC_ERC20_CHAT_LINK_URL,
+					spl: DEFAULT_USDC_SPL_CHAT_LINK_URL,
+					base: DEFAULT_USDC_BASE_CHAT_LINK_URL,
+					polygon: DEFAULT_USDC_POLYGON_CHAT_LINK_URL
+				}
+			: {
+					erc20: await editChatLinkUrl(
+						'USDC ERC-20 block explorer URL',
+						DEFAULT_USDC_ERC20_CHAT_LINK_URL
+					),
+					spl: await editChatLinkUrl('USDC SPL block explorer URL', DEFAULT_USDC_SPL_CHAT_LINK_URL),
+					base: await editChatLinkUrl(
+						'USDC Base block explorer URL',
+						DEFAULT_USDC_BASE_CHAT_LINK_URL
+					),
+					polygon: await editChatLinkUrl(
+						'USDC Polygon block explorer URL',
+						DEFAULT_USDC_POLYGON_CHAT_LINK_URL
+					)
+				};
 
-	// ─── DAI multi-network (Part 122 cp31) ──
+	// ─── DAI multi-network ──
 	// Same shape as USDC but 4 EVM networks (Ethereum, Polygon,
 	// Base, Arbitrum).  No SPL/TRC-20/BEP-20 — per ADR-0029 §1,
 	// MakerDAO does not issue canonical native DAI on those
@@ -1776,28 +1886,48 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 			'on those chains.\n' +
 			'\n' +
 			'Defaults:\n' +
-			'  • ERC-20:   ' + DEFAULT_DAI_ERC20_CHAT_LINK_URL + '\n' +
-			'  • Polygon:  ' + DEFAULT_DAI_POLYGON_CHAT_LINK_URL + '\n' +
-			'  • Base:     ' + DEFAULT_DAI_BASE_CHAT_LINK_URL + '\n' +
-			'  • Arbitrum: ' + DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
+			'  • ERC-20:   ' +
+			DEFAULT_DAI_ERC20_CHAT_LINK_URL +
+			'\n' +
+			'  • Polygon:  ' +
+			DEFAULT_DAI_POLYGON_CHAT_LINK_URL +
+			'\n' +
+			'  • Base:     ' +
+			DEFAULT_DAI_BASE_CHAT_LINK_URL +
+			'\n' +
+			'  • Arbitrum: ' +
+			DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
 	);
-	const daiChoice = await askChoice(
-		'How would you like to handle DAI per-network URLs?',
-		['Accept all 4 defaults', 'Customize each one']
-	);
-	const dai = daiChoice === 0
-		? {
-			erc20: DEFAULT_DAI_ERC20_CHAT_LINK_URL,
-			polygon: DEFAULT_DAI_POLYGON_CHAT_LINK_URL,
-			base: DEFAULT_DAI_BASE_CHAT_LINK_URL,
-			arbitrum: DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
-		}
-		: {
-			erc20: await editChatLinkUrl('DAI ERC-20 block explorer URL', DEFAULT_DAI_ERC20_CHAT_LINK_URL),
-			polygon: await editChatLinkUrl('DAI Polygon block explorer URL', DEFAULT_DAI_POLYGON_CHAT_LINK_URL),
-			base: await editChatLinkUrl('DAI Base block explorer URL', DEFAULT_DAI_BASE_CHAT_LINK_URL),
-			arbitrum: await editChatLinkUrl('DAI Arbitrum block explorer URL', DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL)
-		};
+	const daiChoice = await askChoice('How would you like to handle DAI per-network URLs?', [
+		'Accept all 4 defaults',
+		'Customize each one'
+	]);
+	const dai =
+		daiChoice === 0
+			? {
+					erc20: DEFAULT_DAI_ERC20_CHAT_LINK_URL,
+					polygon: DEFAULT_DAI_POLYGON_CHAT_LINK_URL,
+					base: DEFAULT_DAI_BASE_CHAT_LINK_URL,
+					arbitrum: DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
+				}
+			: {
+					erc20: await editChatLinkUrl(
+						'DAI ERC-20 block explorer URL',
+						DEFAULT_DAI_ERC20_CHAT_LINK_URL
+					),
+					polygon: await editChatLinkUrl(
+						'DAI Polygon block explorer URL',
+						DEFAULT_DAI_POLYGON_CHAT_LINK_URL
+					),
+					base: await editChatLinkUrl(
+						'DAI Base block explorer URL',
+						DEFAULT_DAI_BASE_CHAT_LINK_URL
+					),
+					arbitrum: await editChatLinkUrl(
+						'DAI Arbitrum block explorer URL',
+						DEFAULT_DAI_ARBITRUM_CHAT_LINK_URL
+					)
+				};
 
 	return { btc, xmr, bch, ltc, dash, doge, zec, arrr, dcr, sol, eth, xrp, usdt, usdc, dai };
 }
@@ -1805,7 +1935,7 @@ export async function stepChatLinkExplorers(): Promise<ChatLinkExplorersResult> 
 async function editChatLinkUrl(label: string, defaultUrl: string): Promise<string> {
 	let current = defaultUrl;
 	while (true) {
-		// cp139-C-13: sanitize operator-typed URL before display
+		// sanitize operator-typed URL before display
 		// (defense-in-depth — askForUrl validates shape but we
 		// also strip terminal-control escapes here).
 		console.log(`  Current ${label}: ${sanitizeForTerm(current)}`);
@@ -1813,10 +1943,11 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
 			(): ProbeStatus => ({ kind: 'unreachable', reason: 'probe threw' })
 		);
 		console.log(`     ${renderProbeStatus(probe)}\n`);
-		const choice = await askChoice(
-			'What would you like to do?',
-			['Keep this URL', 'Change it', 'Reset to default']
-		);
+		const choice = await askChoice('What would you like to do?', [
+			'Keep this URL',
+			'Change it',
+			'Reset to default'
+		]);
 		if (choice === 0) {
 			return current;
 		}
@@ -1836,13 +1967,13 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
 	}
 }
 
-// ─── Step 13: Trade-only asset policy (Part 122 cp22) ────────────
+// ─── Step 13: Trade-only asset policy ────────────
 
 /**
- * Part 122 cp22 — interactive disable-asset wizard step.
+ * interactive disable-asset wizard step.
  *
  * Morphit ships every Category-B (trade-only) asset enabled by
- * default on a new instance per Memory #25.  This step lets the
+ * default on a new instance per the default-on rule for new assets.  This step lets the
  * operator opt out per-asset WITHOUT having to edit the rendered
  * env file by hand afterward.  The result feeds
  * `MORPHIT_INDEXER_DISABLED_ASSETS` in morphit.config.env.
@@ -1856,7 +1987,7 @@ async function editChatLinkUrl(label: string, defaultUrl: string): Promise<strin
  *
  * Category-A (fee-payable) assets — BTC, XMR, BLURT — do NOT
  * appear in this step.  They are load-bearing for the listing
- * fee mechanism (fee_method enum-frozen per Memory #23) and
+ * fee mechanism (the frozen fee_method enum) and
  * cannot be disabled instance-wide without breaking trading
  * altogether.  An operator who genuinely wants to disable them
  * is running a different product.
@@ -1899,7 +2030,8 @@ const CATEGORY_B_DESCRIPTIONS: Readonly<Record<string, string>> = Object.freeze(
 	XRP: 'Ripple — single-network XRPL mainnet.  Launched 2012 with Federated\n    Byzantine Agreement (FBA) consensus — validators on a Unique Node\n    List (UNL) reach agreement on transaction ordering.  The default UNL\n    is published by the XRP Ledger Foundation (non-profit) with the for-\n    profit Ripple Labs Inc. historically influencing validator selection.\n    Native XRP cannot be frozen by any central authority — the freeze\n    flag on XRPL applies only to ISSUED tokens (IOUs).  Addresses are\n    base58 starting with `r`, 24-34 chars total.  Two XRPL-specific UX\n    gotchas: (1) destination tags (32-bit integers) required when sending\n    to exchange-hosted addresses; without the tag funds practically lose\n    (recoverable only via exchange support); (2) account reserve (≥1 XRP)\n    required to fund a never-funded address.  Transparent base layer\n    with no native protocol-level mixing; wallet-side address rotation\n    is the privacy lever.',
 	ETH: 'Ethereum — single-network mainnet.  Launched 2015 with Proof-of-Work,\n    transitioned to Proof-of-Stake in September 2022 ("The Merge").  Validators\n    stake ETH and process blocks in rotation; no central freeze authority.\n    Addresses are 20-byte hex with 0x prefix (42 chars total) — SAME shape as\n    every EVM token-account address on Base, Polygon, Arbitrum, BSC.  Asset\n    field (and network field for multi-network assets) disambiguates.  ENS\n    names are NOT resolved by Morphit (avoids centralized RPC dependency).\n    Smart-contract destinations may revert if the contract lacks a payable\n    receive() or fallback() function — wallet UX warns before sending.\n    Transparent base layer with no native protocol-level mixing; wallet-side\n    address rotation is the privacy lever.  No central issuer.',
 	SOL: 'Solana — single-network mainnet-beta.  Launched 2020.  Delegated\n    Proof-of-Stake consensus with Proof-of-History sequencing for high\n    transaction throughput.  Validators stake SOL and process blocks in\n    rotation; no central freeze authority.  Addresses are 32-byte public\n    keys base58-encoded (32-44 chars, most are 44).  Same address format\n    as USDT-Solana and USDC-Solana SPL token-accounts — asset field on\n    the order disambiguates.  Transparent base layer with no native\n    protocol-level mixing; wallet-side address rotation is the privacy\n    lever.  No central issuer.',
-	BARTER: 'Barter — goods & services traded directly, NOT a coin.  Priced in\n    fiat; a seller lists wares and the buyer settles in whichever accepted\n    crypto the two agree on, so BARTER has no receive address, price feed,\n    or chain of its own (isGoodsAsset gates it out of every crypto surface).\n    Disable this if you do not want your instance to carry goods/services\n    listings alongside crypto trades — it is the one most operators consider\n    turning off first.'
+	BARTER:
+		'Barter — goods & services traded directly, NOT a coin.  Priced in\n    fiat; a seller lists wares and the buyer settles in whichever accepted\n    crypto the two agree on, so BARTER has no receive address, price feed,\n    or chain of its own (isGoodsAsset gates it out of every crypto surface).\n    Disable this if you do not want your instance to carry goods/services\n    listings alongside crypto trades — it is the one most operators consider\n    turning off first.'
 });
 
 export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
@@ -1910,8 +2042,7 @@ export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
 		// Category-B asset.  Skip the step cleanly rather than
 		// presenting an empty prompt.
 		console.log(
-			'  This Morphit build ships no trade-only assets; nothing to\n' +
-				'  disable.  Skipping.\n'
+			'  This Morphit build ships no trade-only assets; nothing to\n' + '  disable.  Skipping.\n'
 		);
 		return { disabledTickers: [] };
 	}
@@ -1942,7 +2073,7 @@ export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
 			'  • Any — operator wants to specialize their instance.\n' +
 			'\n' +
 			'Skipping any answer keeps that asset ENABLED (the default).\n' +
-			"You can change your mind later by editing the\n" +
+			'You can change your mind later by editing the\n' +
 			'MORPHIT_INDEXER_DISABLED_ASSETS env var or re-running this\n' +
 			'wizard.'
 	);
@@ -1950,13 +2081,9 @@ export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
 	const disabled: string[] = [];
 	for (const ticker of categoryBTickers) {
 		const description =
-			CATEGORY_B_DESCRIPTIONS[ticker] ??
-			'Trade-only asset (cannot pay listing fees).';
+			CATEGORY_B_DESCRIPTIONS[ticker] ?? 'Trade-only asset (cannot pay listing fees).';
 		console.log(`\n  ${ticker}\n    ${description}\n`);
-		const keepEnabled = await askYesNo(
-			`  Enable ${ticker} trading on this instance?`,
-			true
-		);
+		const keepEnabled = await askYesNo(`  Enable ${ticker} trading on this instance?`, true);
 		if (!keepEnabled) {
 			disabled.push(ticker);
 			console.log(
@@ -1976,7 +2103,9 @@ export async function stepDisabledAssets(): Promise<DisabledAssetsResult> {
 	} else {
 		const list = disabled.slice().sort().join(', ');
 		console.log(`  ✓ Disabling ${disabled.length} asset(s): ${list}`);
-		console.log(`    These will be written to MORPHIT_INDEXER_DISABLED_ASSETS\n    in morphit.config.env.`);
+		console.log(
+			`    These will be written to MORPHIT_INDEXER_DISABLED_ASSETS\n    in morphit.config.env.`
+		);
 	}
 
 	return {
@@ -2071,7 +2200,7 @@ export async function stepDisabledPaymentMethods(): Promise<DisabledPaymentMetho
 // ─── Step 15: Listing fee + fallback BLURT price ─────────────────
 
 /**
- * Part 110 — operator-configurable listing fee USD target and
+ * operator-configurable listing fee USD target and
  * fallback BLURT/USD price.
  *
  * Two editable knobs in one step:
@@ -2172,7 +2301,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 			`  ⚠ Coingecko unreachable: ${sanitizeForTerm(err instanceof Error ? err.message : String(err))}\n`
 		);
 		console.log('  You can enter BTC sat + XMR piconero amounts by hand,');
-		console.log("  or keep the hardcoded defaults (calibrated for $0.25 at");
+		console.log('  or keep the hardcoded defaults (calibrated for $0.25 at');
 		console.log('  ~$60K BTC / ~$320 XMR — likely stale by now).');
 		console.log('');
 		const choice = await askChoice('What would you like to do?', [
@@ -2208,24 +2337,24 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 		}
 	);
 
-	// ─── cp128: Denomination fiat ──
+	// ─── Denomination fiat ──
 	//
 	// The unit the indexer expresses BLURT prices in for its
 	// display surfaces (listing-fee fiat echo, receipt endpoint,
-	// drift baseline, etc.).  Default 'USD' matches pre-cp128
+	// drift baseline, etc.).  Default 'USD' matches older
 	// behavior.  See ADR-0040.
 	console.log('\n  ── Denomination fiat (display unit) ──\n');
 	explain(
 		'The unit the indexer displays BLURT prices in.\n' +
 			'\n' +
 			'Default USD.  Set to a different ticker if your market is\n' +
-			"non-USD or you want to hedge against USD erosion.  This\n" +
+			'non-USD or you want to hedge against USD erosion.  This\n' +
 			"doesn't affect what currencies traders can post orders in\n" +
 			'(orders carry their own fiat_currency); it only affects the\n' +
 			'small "~$0.12" subtext next to listing-fee BLURT amounts on\n' +
 			'this instance.\n' +
 			'\n' +
-			"You can change this later by editing the env var\n" +
+			'You can change this later by editing the env var\n' +
 			'MORPHIT_INDEXER_PRICE_FEED_DENOMINATION_FIAT and restarting.'
 	);
 	const COMMON_FIATS: ReadonlyArray<{ ticker: string; label: string }> = [
@@ -2280,7 +2409,7 @@ export async function stepListingFee(): Promise<ListingFeeResult> {
 	};
 }
 
-// ─── Step 18: Operator tag (Part 111) ────────────────────────────
+// ─── Step 18: Operator tag ────────────────────────────
 
 /** Result of step 18 — the operator tag for this instance. */
 export interface OperatorTagResult {
@@ -2292,7 +2421,7 @@ export interface OperatorTagResult {
 	readonly tag: string;
 }
 
-// cp178: the wizard no longer defaults the tag to the reserved
+// the wizard no longer defaults the tag to the reserved
 // canonical `morphit` (community operators can't register it — the
 // on-chain handler rejects it as tag_reserved).  When a public
 // origin is set we default to its domain; otherwise this neutral
@@ -2302,7 +2431,7 @@ const OPERATOR_TAG_PATTERN = /^[a-z0-9._-]+$/;
 const OPERATOR_TAG_MAX = 64;
 
 /**
- * Part 111 — operator tag for federation-scoped payout
+ * operator tag for federation-scoped payout
  * attribution.
  *
  * Each Morphit instance writes its operator tag onto every
@@ -2336,7 +2465,7 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 		domainTag !== null && domainTag.length > 0 ? domainTag : DEFAULT_FALLBACK_TAG;
 
 	explain(
-		'Your operator tag is your instance\'s unique, PERMANENT\n' +
+		"Your operator tag is your instance's unique, PERMANENT\n" +
 			'identity in the federation.  Two things use it:\n' +
 			'\n' +
 			'  • EARNINGS: every order placed through your site carries\n' +
@@ -2346,10 +2475,12 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 			'    wrong or unregistered, your relay pays out NOTHING and\n' +
 			'    the treasury keeps 100%.\n' +
 			'  • PUBLIC IDENTITY: after you register it on chain, your\n' +
-			'    tag is shown publicly — it appears as your instance\'s\n' +
+			"    tag is shown publicly — it appears as your instance's\n" +
 			'    entry in the federated /instances directory that every\n' +
 			'    other node displays, and on your own /about-this-\n' +
-			'    instance page (e.g. "Operator: ' + suggestedDefault + '").\n' +
+			'    instance page (e.g. "Operator: ' +
+			suggestedDefault +
+			'").\n' +
 			'    It is NOT secret, but it IS permanent: once registered\n' +
 			'    on chain the TAG cannot be changed (your display name,\n' +
 			'    origin and contact you can update anytime by running\n' +
@@ -2385,9 +2516,7 @@ export async function stepOperatorTag(origin: string | null): Promise<OperatorTa
 			continue;
 		}
 		if (!OPERATOR_TAG_PATTERN.test(trimmed)) {
-			console.log(
-				'  ✗ Invalid character.  Allowed: a-z 0-9 . _ -\n'
-			);
+			console.log('  ✗ Invalid character.  Allowed: a-z 0-9 . _ -\n');
 			continue;
 		}
 		// Block the reserved canonical name(s) at wizard time — the
@@ -2442,10 +2571,12 @@ import {
 	parseRoomAlias,
 	MATRIX_EXAMPLE_MXID,
 	MATRIX_EXAMPLE_ROOM_ALIAS,
-	DEFAULT_BLURT_RPC_ENDPOINTS, isAllowedContactUrl } from '@morphit/operator-config';
+	DEFAULT_BLURT_RPC_ENDPOINTS,
+	isAllowedContactUrl
+} from '@morphit/operator-config';
 import type { MatrixSurfacesResult } from './render.ts';
 
-/** Part 121 cp9 — collect both Matrix surfaces (operator alert
+/** collect both Matrix surfaces (operator alert
  *  MXID + public group chat room alias).  Either or both may be
  *  skipped.  Validates shape via the shared
  *  @morphit/operator-config parsers so the @-vs-# distinction
@@ -2556,7 +2687,7 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 				`    alerts to ${alertMxid} (private), and the frontend\n` +
 				`    will link to ${groupRoomAlias} (public) on /support,\n` +
 				'    /about-this-instance, and footer.  These two NEVER\n' +
-				'    cross — that\'s enforced by typed validators + smokes.\n'
+				"    cross — that's enforced by typed validators + smokes.\n"
 		);
 	} else if (alertMxid !== null) {
 		console.log(
@@ -2609,8 +2740,8 @@ export async function stepMatrixSurfaces(): Promise<MatrixSurfacesResult> {
 // ─── Step 21: MCP (Model Context Protocol) server ────────────────
 //
 // Default = enabled.  The morphit-mcp server exposes Morphit's
-// federated orderbook to any MCP-compatible AI agent (Claude
-// Desktop, Cursor, Cline, Continue, Windsurf, Zed, plus local
+// federated orderbook to any MCP-compatible AI agent (Claude Desktop,
+// Cursor, Cline, Continue, Windsurf, Zed, plus local
 // LLM stacks built on @modelcontextprotocol/sdk).  Five read-only
 // tools: search orders, list federation instances, list accepted
 // payment methods, fetch listing detail, describe the instance.
@@ -2676,7 +2807,7 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 			'\n' +
 			'  • Federation-wide effect.  Every Morphit instance running\n' +
 			'    MCP enlarges the shared AI-discoverable surface for the\n' +
-			"    project.  Opting out shrinks it.\n" +
+			'    project.  Opting out shrinks it.\n' +
 			'\n' +
 			'  • ~30 MB RAM, negligible CPU.  Binds to 127.0.0.1:8124\n' +
 			'    by default (loopback only); operators who want public\n' +
@@ -2684,13 +2815,17 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 	);
 	const enabled = await askYesNo('Install the MCP server alongside the relay + indexer?', true);
 	if (enabled) {
-		console.log('  ✓ MCP will be installed.  The systemd unit + nginx config will land\n' +
-			'    in the rendered ops artifacts.  After setup, run `morphit-ops status`\n' +
-			'    to confirm it is healthy; the public MCP URL (once you reverse-proxy\n' +
-			'    /mcp/*) is what you share with AI-agent users.\n');
+		console.log(
+			'  ✓ MCP will be installed.  The systemd unit + nginx config will land\n' +
+				'    in the rendered ops artifacts.  After setup, run `morphit-ops status`\n' +
+				'    to confirm it is healthy; the public MCP URL (once you reverse-proxy\n' +
+				'    /mcp/*) is what you share with AI-agent users.\n'
+		);
 	} else {
-		console.log('  ⓘ Skipped.  Re-run `morphit-ops init` to enable later, or hand-install\n' +
-			'    by enabling the `morphit-mcp.service` unit.\n');
+		console.log(
+			'  ⓘ Skipped.  Re-run `morphit-ops init` to enable later, or hand-install\n' +
+				'    by enabling the `morphit-mcp.service` unit.\n'
+		);
 	}
 	return { enabled };
 }
@@ -2738,10 +2873,7 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 			'pins, so the relay honours the real client IP that BunkerWeb\n' +
 			'forwards.  Full reference: docs/OPERATIONS.md §32.'
 	);
-	const enabled = await askYesNo(
-		'Put BunkerWeb in front of this instance? (recommended)',
-		true
-	);
+	const enabled = await askYesNo('Put BunkerWeb in front of this instance? (recommended)', true);
 	if (enabled) {
 		console.log(
 			'  ✓ BunkerWeb selected.  morphit.config.env will set\n' +
@@ -2768,7 +2900,7 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 				'    Caddy at apps/web/build and reverse-proxy /v1/* to the relay\n' +
 				'    + indexer.  MORPHIT_RELAY_TRUSTED_PROXY_IPS stays empty: the\n' +
 				'    relay then trusts forwarded client IPs from this server\n' +
-				'    (loopback) and Docker\'s default networks (172.16.0.0/12).\n' +
+				"    (loopback) and Docker's default networks (172.16.0.0/12).\n" +
 				'    Set it by hand only for a proxy/CDN outside those — see\n' +
 				'    docs/RUN-A-MORPHIT-NODE.md §6.\n'
 		);
@@ -2796,9 +2928,9 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 // understands them even if they never open the file.
 export interface HardeningResult {
 	readonly generateChecklist: boolean;
-	// cp378 — wizard hand-holding: the operator's Yes/No on each major
+	// wizard hand-holding: the operator's Yes/No on each major
 	// hardening pillar (all default Yes).  Recorded so the personalized
-	// checklist reflects what they confirmed.  Optional so pre-cp378
+	// checklist reflects what they confirmed.  Optional so older
 	// fixtures stay valid.  IMPORTANT: the Ansible playbook applies EVERY
 	// pillar unconditionally, so a "no" here never weakens the automated
 	// path — it only annotates the by-hand checklist.
@@ -2842,7 +2974,7 @@ export async function stepHardening(bunkerWebEnabled: boolean): Promise<Hardenin
 					'host section on SSH + UFW + fail2ban + unattended-upgrades.\n'
 				: 'Because you are serving directly (no BunkerWeb), the checklist\n' +
 					'includes placing the shipped nginx configs (ops/nginx/) and\n' +
-					'issuing a Let\'s Encrypt cert with certbot for your domain.\n')
+					"issuing a Let's Encrypt cert with certbot for your domain.\n")
 	);
 	// Hand-hold through the major hardening pillars — a guided run of
 	// recommended-Yes confirmations (the maintainer's "a bunch of Yes's").  These
@@ -2853,11 +2985,23 @@ export async function stepHardening(bunkerWebEnabled: boolean): Promise<Hardenin
 	console.log('  Let\u2019s lock this server down.  Each of these is strongly');
 	console.log('  recommended for a public instance — press Enter to say yes:');
 	console.log('');
-	const sshLockdown = await askYesNo('  Lock down SSH (key-only login, no root, no passwords)?', true);
-	const firewall = await askYesNo('  Turn on the firewall (UFW) + fail2ban (auto-ban brute-forcers)?', true);
+	const sshLockdown = await askYesNo(
+		'  Lock down SSH (key-only login, no root, no passwords)?',
+		true
+	);
+	const firewall = await askYesNo(
+		'  Turn on the firewall (UFW) + fail2ban (auto-ban brute-forcers)?',
+		true
+	);
 	const autoUpdates = await askYesNo('  Install automatic security updates?', true);
-	const kernelHardening = await askYesNo('  Apply kernel + system hardening (sysctl, auditd, AppArmor)?', true);
-	const intrusionDetection = await askYesNo('  Enable intrusion detection (AIDE + rkhunter)?', true);
+	const kernelHardening = await askYesNo(
+		'  Apply kernel + system hardening (sysctl, auditd, AppArmor)?',
+		true
+	);
+	const intrusionDetection = await askYesNo(
+		'  Enable intrusion detection (AIDE + rkhunter)?',
+		true
+	);
 	console.log('');
 	console.log('  The Ansible playbook at ops/ansible/ applies ALL of these for');
 	console.log('  you (and more) in one idempotent run — the lowest-error path.');
@@ -2878,5 +3022,12 @@ export async function stepHardening(bunkerWebEnabled: boolean): Promise<Hardenin
 				'    §34/§35/§37, or run the Ansible playbook in ops/ansible/.\n'
 		);
 	}
-	return { generateChecklist, sshLockdown, firewall, autoUpdates, kernelHardening, intrusionDetection };
+	return {
+		generateChecklist,
+		sshLockdown,
+		firewall,
+		autoUpdates,
+		kernelHardening,
+		intrusionDetection
+	};
 }

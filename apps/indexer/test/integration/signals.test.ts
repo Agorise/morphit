@@ -176,7 +176,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('Signal B — suspicious reciprocity — i
 			await insertFeedback(fx, 'bob', 'alice', 5, now, `t-b-${i}`, `ord-b-${i}`);
 		}
 
-		const flagged = await fx.db.withTx((client) => detectSuspiciousReciprocityInTx(client));
+		const flagged = await fx.db.withTx((client) =>
+			detectSuspiciousReciprocityInTx(client, { asOf: new Date() })
+		);
 		expect(flagged).toBe(1);
 
 		const row = await fx.db.query<{
@@ -199,7 +201,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('Signal B — suspicious reciprocity — i
 		}
 		await insertFeedback(fx, 'alice', 'carol', 5, now, 't-c', 'ord-c');
 
-		const flagged = await fx.db.withTx((client) => detectSuspiciousReciprocityInTx(client));
+		const flagged = await fx.db.withTx((client) =>
+			detectSuspiciousReciprocityInTx(client, { asOf: new Date() })
+		);
 		expect(flagged).toBe(0);
 	});
 
@@ -209,7 +213,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('Signal B — suspicious reciprocity — i
 			await insertFeedback(fx, 'alice', 'bob', 5, now, `t-a-${i}`, `ord-a-${i}`);
 			await insertFeedback(fx, 'bob', 'alice', 5, now, `t-b-${i}`, `ord-b-${i}`);
 		}
-		const flagged = await fx.db.withTx((client) => detectSuspiciousReciprocityInTx(client));
+		const flagged = await fx.db.withTx((client) =>
+			detectSuspiciousReciprocityInTx(client, { asOf: new Date() })
+		);
 		expect(flagged).toBe(0);
 	});
 
@@ -221,7 +227,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('Signal B — suspicious reciprocity — i
 			await insertFeedback(fx, 'alice', 'bob', 4, now, `t-a-${i}`, `ord-a-${i}`);
 			await insertFeedback(fx, 'bob', 'alice', 4, now, `t-b-${i}`, `ord-b-${i}`);
 		}
-		const flagged = await fx.db.withTx((client) => detectSuspiciousReciprocityInTx(client));
+		const flagged = await fx.db.withTx((client) =>
+			detectSuspiciousReciprocityInTx(client, { asOf: new Date() })
+		);
 		expect(flagged).toBe(0);
 	});
 
@@ -231,7 +239,9 @@ describe.skipIf(!INTEGRATION_ENABLED)('Signal B — suspicious reciprocity — i
 			await insertFeedback(fx, 'alice', 'bob', 5, old, `t-a-${i}`, `ord-a-${i}`);
 			await insertFeedback(fx, 'bob', 'alice', 5, old, `t-b-${i}`, `ord-b-${i}`);
 		}
-		const flagged = await fx.db.withTx((client) => detectSuspiciousReciprocityInTx(client));
+		const flagged = await fx.db.withTx((client) =>
+			detectSuspiciousReciprocityInTx(client, { asOf: new Date() })
+		);
 		expect(flagged).toBe(0);
 	});
 });

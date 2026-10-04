@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * vitest-must-pass smoke — Part 122 cp71 (LL #71 / O-19).
+ * vitest-must-pass smoke.
  *
- * The smoke battery is heavy on static-analysis (3900 scenarios at
- * cp70) but doesn't run vitest unit tests.  cp70 caught 17
- * unit-test failures that had been silently broken across cp61→cp69
+ * The smoke battery is heavy on static-analysis (3900 scenarios)
+ * but doesn't run vitest unit tests.  An audit caught 17
+ * unit-test failures that had been silently broken across
  * because nobody ran `npm test` between handler edits.  Test-rot
  * means handler-vs-test drift goes undetected: the static smoke
  * passes, the team ships, the regression isn't caught until much
@@ -14,7 +14,7 @@
  * and asserts the pass count meets a baseline.  A test-rot incident
  * surfaces immediately as a smoke failure on the next checkpoint.
  *
- * Per-workspace baselines (locked at cp70 ship):
+ * Per-workspace baselines (locked ship):
  *   apps/indexer  481 passed, 1 skipped (482 total)
  *   apps/relay    (no vitest yet — TBD)
  *   apps/web      (no vitest yet — TBD)
@@ -31,7 +31,7 @@
  * To run vitest fast in CI, this smoke uses `--run` to avoid watch
  * mode and `--reporter=basic` for parseable output.
  *
- * Mutation test M-142:  add a deliberately failing assertion to any
+ * Mutation test:  add a deliberately failing assertion to any
  * test file → smoke fires with the workspace + failure count.
  */
 
@@ -53,13 +53,13 @@ interface WorkspaceBaseline {
 const WORKSPACES: WorkspaceBaseline[] = [
 	{
 		path: 'apps/indexer',
-		// cp70 ship state: 481 passed + 1 skipped.  cp78-D20 added 5
-		// tip-height depth-check tests.  cp83-D24 LOWERED this baseline
+		// ship state: 481 passed + 1 skipped.  A later change added 5
+		// tip-height depth-check tests.  LOWERED this baseline
 		// to 456 to accommodate an unexplained "stable -30" gap where
 		// Forgejo CI reported 456 passing vs 486 locally, and left a
-		// cp84+ TODO to chase down which tests were missing in CI.
+		// later TODO to chase down which tests were missing in CI.
 		//
-		// cp170 ROOT-CAUSED and FIXED it: the -30 was release.test.ts
+		// ROOT-CAUSED and FIXED it: the -30 was release.test.ts
 		// (exactly 30 tests) failing to collect in CI.  That file
 		// imported apps/web/src/lib/net/releaseValidate.ts for the
 		// frontend↔indexer parity invariant; transforming that web
@@ -70,7 +70,7 @@ const WORKSPACES: WorkspaceBaseline[] = [
 		//
 		// The fix was architectural: releaseValidate.ts + its
 		// ReleasePayloadV1 schema were extracted into the standalone
-		// @morphit/release-schema package (cp170).  release.test.ts
+		// @morphit/release-schema package.  release.test.ts
 		// now imports the validator from that package — which has its
 		// own plain tsconfig, no SvelteKit extends — so it collects in
 		// every environment with no sync step.  The cross-app reach is
@@ -82,12 +82,13 @@ const WORKSPACES: WorkspaceBaseline[] = [
 		// means a real removal — which is the smoke's load-bearing
 		// purpose.
 		minPassing: 475,
-		notes: 'indexer handler + API tests; tight floor restored at cp170 after extracting the release validator into @morphit/release-schema (fixed the release.test.ts CI collection gap)'
+		notes:
+			'indexer handler + API tests; tight floor restored at cp170 after extracting the release validator into @morphit/release-schema (fixed the release.test.ts CI collection gap)'
 	},
 	{
 		path: 'apps/relay',
-		// cp73 ship state: 244 passed.  Lifted from "no vitest yet"
-		// to a real baseline after cp73-D10 fixed the 'xrp' test
+		// ship state: 244 passed.  Lifted from "no vitest yet"
+		// to a real baseline later fixed the 'xrp' test
 		// expectation in highValueName.test.ts (test was wrong;
 		// 'xrp' is length 3 so short_name fires before
 		// dictionary_brand check).
@@ -96,45 +97,66 @@ const WORKSPACES: WorkspaceBaseline[] = [
 	},
 	{
 		path: 'apps/web',
-		// cp73 ship state: 619 passed + 5 skipped.  Lifted from "no
-		// vitest yet" to a real baseline after cp73-D11 added the
+		// ship state: 619 passed + 5 skipped.  Lifted from "no
+		// vitest yet" to a real baseline later added the
 		// missing seo.privacy_index.{title,description} keys to all
 		// 10 locales (the /privacy route's SEO i18n coverage test
 		// was failing because the keys didn't exist).
 		minPassing: 619,
-		notes: 'web store + i18n + indexer-client tests; baseline locked at cp73 ship after cp73-D11 fix'
+		notes:
+			'web store + i18n + indexer-client tests; baseline locked at cp73 ship after cp73-D11 fix'
 	},
 	{
 		path: 'apps/ops-cli',
-		// beta.41 prep: lifted from "no vitest gate" to a real
-		// baseline.  ops-cli's only suite is test/time.test.ts — 24
-		// pure unit tests of the duration / relative-time helpers
-		// (parseDurationSpec, formatDuration, relativeTime,
-		// ageSeconds, utcMidnightToday).  No fs/network/env or
-		// cross-app imports, so there is zero risk of the indexer-
-		// style CI-vs-local collection gap (cp170, release.test.ts):
-		// the count is identical in every environment.  This closes
-		// the last vitest-bearing workspace that run-smokes did not
-		// gate (relay + web + indexer were already covered).
-		minPassing: 24,
-		notes: 'ops-cli time-helper unit tests; baseline locked at beta.41 prep (pure functions, no cross-app reach)'
+		// 81 files / 724 tests at the end of the
+		// (the floor had stayed at the 24
+		// tests of the one suite ops-cli once had). 721 passed in a tree
+		// whose node_modules predate the lockfile (deployMcp.test.ts's 3
+		// need `npm ci`), so the floor is 721.
+		minPassing: 721,
+		notes: 'ops-cli unit + behaviour tests (floor raised after the 2026-10 fixes)'
+	},
+	{
+		path: 'apps/mcp-server',
+		// Its unit tests (client keys, the listing-fee gate, the instance
+		// DNS guard, order search) ran nowhere: no CI job and no floor here.
+		// 22 passing after the 2026-10 fixes.
+		minPassing: 22,
+		notes: 'mcp-server unit tests; gated since the 2026-10 fixes'
 	}
 ];
 
 let failed = 0;
 let passed = 0;
-function pass(name: string): void { console.log(`  ✓ ${name}`); passed++; }
+function pass(name: string): void {
+	console.log(`  ✓ ${name}`);
+	passed++;
+}
 function fail(name: string, detail: string): void {
-	console.error(`  ✗ ${name}`); console.error(`      ${detail}`); failed++;
+	console.error(`  ✗ ${name}`);
+	console.error(`      ${detail}`);
+	failed++;
 }
 
 console.log('\n── vitest-must-pass smoke (cp71 LL #71 / O-19) ──\n');
 
-function runVitest(workspacePath: string): { passing: number; failing: number; skipped: number; output: string } {
+function runVitest(workspacePath: string): {
+	passing: number;
+	failing: number;
+	skipped: number;
+	output: string;
+} {
 	const fullPath = join(REPO_ROOT, workspacePath);
 	if (!existsSync(join(fullPath, 'package.json'))) {
 		throw new Error(`workspace missing: ${workspacePath}`);
 	}
+	// This smoke runs under tsx, which hands its --tsconfig to child processes
+	// as TSX_TSCONFIG_PATH — a path RELATIVE to the smoke's directory. Tests
+	// that spawn tsx themselves (the self-heal subcommand, the relay drain
+	// guard, CLI tests) then look for that file in their own workspace and
+	// exit 1 at once. Each workspace's vitest uses its own config.
+	const childEnv: NodeJS.ProcessEnv = { ...process.env, CI: '1' };
+	delete childEnv.TSX_TSCONFIG_PATH;
 	let output: string;
 	try {
 		output = execSync('npx vitest run --reporter=basic', {
@@ -144,13 +166,9 @@ function runVitest(workspacePath: string): { passing: number; failing: number; s
 			// 5 minutes max; the full indexer suite is ~10s on commodity
 			// hardware, but cold-start + transform compilation needs slack.
 			timeout: 5 * 60_000,
-			env: {
-				...process.env,
-				// Force basic reporter (defensive — `--reporter=basic` on the
-				// CLI takes precedence but VITEST_REPORTERS in env could
-				// override it).
-				CI: '1'
-			}
+			// CI=1 forces the basic reporter (defensive — `--reporter=basic` on
+			// the CLI takes precedence but VITEST_REPORTERS in env could override it).
+			env: childEnv
 		});
 	} catch (e) {
 		// vitest exits non-zero when tests fail.  We still want to parse
@@ -166,7 +184,9 @@ function runVitest(workspacePath: string): { passing: number; failing: number; s
 	// them before matching.
 	// eslint-disable-next-line no-control-regex
 	const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
-	const summaryMatch = stripped.match(/Tests\s+(?:(\d+)\s+failed\s*\|)?\s*(\d+)\s+passed(?:\s*\|\s*(\d+)\s+skipped)?/);
+	const summaryMatch = stripped.match(
+		/Tests\s+(?:(\d+)\s+failed\s*\|)?\s*(\d+)\s+passed(?:\s*\|\s*(\d+)\s+skipped)?/
+	);
 	if (!summaryMatch) {
 		throw new Error(`could not parse vitest output for ${workspacePath}:\n${stripped.slice(-500)}`);
 	}
@@ -187,7 +207,7 @@ for (const ws of WORKSPACES) {
 	}
 	console.log(`  passing=${result.passing}  failing=${result.failing}  skipped=${result.skipped}`);
 	if (result.failing > 0) {
-		// cp78-D18: when a workspace reports failures, extract the
+		// when a workspace reports failures, extract the
 		// failing test names from vitest output so the harness's
 		// `tail -30` shows enough context to root-cause the flake.
 		// Previously the smoke just emitted the count, and the

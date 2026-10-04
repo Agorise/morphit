@@ -2,7 +2,7 @@
 /**
  * disabled-assets-parse-smoke.
  *
- * Part 121 follow-up: pin the behavior of the env-var parser
+ * pin the behavior of the env-var parser
  * for MORPHIT_INDEXER_DISABLED_ASSETS so multi-coin disabling
  * works whether the operator writes:
  *
@@ -14,7 +14,7 @@
  *   MORPHIT_INDEXER_DISABLED_ASSETS=""              (empty / unset)
  *
  * All should parse to a normalized uppercase array, no empty
- * tokens, no whitespace.  This is a real the maintainer-asked question:
+ * tokens, no whitespace.  This is a real asked question:
  * "how do we handle that if the operator wants to disable 2
  * or 3 coins, not just one?"
  *

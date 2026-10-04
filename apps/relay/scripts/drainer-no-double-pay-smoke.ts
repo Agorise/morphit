@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Queue drainer — never pay twice (v1.20.0 fix wave, D1). REAL Postgres.
+ * Queue drainer — never pay twice. REAL Postgres.
  *
  * The drainer used to stamp `broadcast_attempt_at` INSIDE a per-row savepoint,
  * so a failed attempt rolled the stamp back: a transfer that LANDED on chain but

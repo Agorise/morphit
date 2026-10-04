@@ -7,7 +7,7 @@
  * shared `[lang]` layout reaches `$crypto/keystore` + `$crypto/keygen`
  * via `$stores/identity`, a static import there put the whole 1 MB on
  * EVERY page's first load (home, orderbook, …), even pages that never
- * touch crypto. (cp267: measured 1040 KB in the per-page baseline.)
+ * touch crypto. (measured 1040 KB in the per-page baseline.)
  *
  * Instead we keep a single module-level `sodium` binding that is
  * populated by a DYNAMIC `import()` the first time `ensureSodium()` is
@@ -30,13 +30,25 @@
  * actually used (sign-in unlock, onboarding "Create", chat, import, …).
  */
 
-type SodiumApi = typeof import('libsodium-wrappers-sumo')['default'];
+type SodiumApi = (typeof import('libsodium-wrappers-sumo'))['default'];
 
 /**
  * The libsodium API. `undefined` until the first `ensureSodium()`
  * resolves; populated thereafter (live binding — importers see it).
  */
 export let sodium: SodiumApi = undefined as unknown as SodiumApi;
+
+/** Functions of libsodium-wrappers-sumo this app uses that the local
+ *  declaration file (src/libsodium-wrappers-sumo.d.ts) does not list. */
+export interface SodiumSumoExtras {
+	crypto_auth_hmacsha256(message: Uint8Array, key: Uint8Array): Uint8Array;
+	crypto_hash_sha512(message: Uint8Array): Uint8Array;
+}
+
+/** `sodium`, typed with those extras. Call after `ensureSodium()`. */
+export function sodiumSumo(): SodiumSumoExtras {
+	return sodium as unknown as SodiumSumoExtras;
+}
 
 /** Cached so concurrent/repeat callers share one load + ready await. */
 let readyPromise: Promise<void> | null = null;

@@ -1,5 +1,5 @@
 /**
- * chat-order-tag-storage-smoke — v1.4.9 (t.txt #4 root cause, server side)
+ * chat-order-tag-storage-smoke — v1.4.9 (root cause, server side)
  *
  * The indexer's chat handler validates a message's `order_permlink` against
  * `orders WHERE account IN (recipient, signer)` — i.e. the tag is legitimate
@@ -29,7 +29,7 @@ const code = src
 	})
 	.join('\n');
 
-// cp471 — the order-validation lookup moved to the shared chatGates module.
+// the order-validation lookup moved to the shared chatGates module.
 const gates = readFileSync(join(repo, 'apps/indexer/src/indexer/chatGates.ts'), 'utf8')
 	.split('\n')
 	.map((l) => {

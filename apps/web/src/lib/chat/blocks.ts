@@ -127,6 +127,15 @@ export function markUnblocked(account: string): void {
 	});
 }
 
+/** Explicit Sign Out: forget the signed-out account's block list (in memory
+ *  only; it is never stored). The next account loads its own. */
+export function resetBlocks(): void {
+	mutationGen++;
+	loaded = false;
+	inflight = null;
+	blockedSet.set(new Set());
+}
+
 /** Synchronous check. For components that already have a
  *  subscription, prefer reading through the store. For one-off
  *  checks (e.g. "is this peer blocked right now?"), this

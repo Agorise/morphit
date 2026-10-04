@@ -40,7 +40,6 @@ export function operatorRegistrationRoute(db: Pick<Database, 'query'>): Hono {
 		);
 		const row = r.rows[0];
 		if (row === undefined) return c.json(errorBody('not_found', 'no applied registration'), 404);
-		c.header('Cache-Control', 'no-cache');
 		return c.json({
 			account,
 			tag: typeof row.payload.tag === 'string' ? row.payload.tag : null,

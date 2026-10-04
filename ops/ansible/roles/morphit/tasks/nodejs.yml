@@ -1,13 +1,13 @@
 # Install Node.js from NodeSource apt repo.
 #
-# AUDIT-ANSIBLE-1 (cp18 deep-deep): pre-cp18 this role downloaded
+# AUDIT-ANSIBLE-1: older this role downloaded
 # `setup_X.x` from deb.nodesource.com and executed it as root via
 # bash.  That recipe is the NodeSource-official one but it runs
 # arbitrary shell as root with no signature verification — any
 # NodeSource compromise or MITM would install attacker-controlled
 # software on every Morphit node.
 #
-# Post-cp18 we replicate what the setup script DOES (add the
+# newer we replicate what the setup script DOES (add the
 # NodeSource GPG key + apt repo, then install nodejs) without
 # running the script.  Same install outcome, smaller attack surface.
 # Matches the pattern used in roles/bunkerweb (docker) and
@@ -40,6 +40,33 @@
         owner: root
         group: root
         mode: '0644'
+        force: true
+
+    - name: Check the NodeSource key is the pinned one (one key, this fingerprint)
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          gpg --show-keys --with-colons /etc/apt/keyrings/nodesource.asc 2>/dev/null
+          | awk -F: '/^pub:/ {n++} /^fpr:/ && f == "" {f = $10} END {print n " " f}'
+        executable: /bin/bash
+      register: morphit_nodesource_fpr
+      changed_when: false
+      failed_when: false
+
+    - name: Stop when it is not (the key file is removed; nothing from NodeSource is trusted)
+      when: (morphit_nodesource_fpr.stdout | trim) != ('1 ' ~ nodesource_key_fingerprint)
+      block:
+        - name: Remove the unexpected key
+          ansible.builtin.file:
+            path: /etc/apt/keyrings/nodesource.asc
+            state: absent
+        - name: Explain
+          ansible.builtin.fail:
+            msg: >-
+              NodeSource's signing key is not the one Morphit expects
+              (got: {{ morphit_nodesource_fpr.stdout | trim }}), so nothing from NodeSource
+              was trusted. Use the offline bundle (it carries Node.js), or install Node.js
+              {{ morphit_node_version }} on this server yourself and re-run.
 
     - name: Add NodeSource apt repo
       # The repo path uses `nodistro` because NodeSource publishes a

@@ -46,6 +46,10 @@
   ansible.builtin.import_tasks: outbound.yml
   tags: [hardening_outbound, '37.13']
 
+- name: Quiet OS (no OS fetches a server does not need)
+  ansible.builtin.import_tasks: quiet-os.yml
+  tags: [hardening_quiet_os]
+
 - name: §37.14 Operator alerting (Postfix smarthost config)
   ansible.builtin.import_tasks: alerting.yml
   tags: [hardening_alerting, '37.14']

@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, M1 — the post page must never quote a listing fee below
+ * the post page must never quote a listing fee below
  * the chain-pinned floor the indexer enforces (pinned × (1 − FEE_PRICE_TOLERANCE)),
  * whatever /v1/listing-fee says. rv6 A6: a sybil-steered federated price made a
  * hidden-only node quote ~1.25 BLURT against a floor of ~106.
@@ -65,7 +65,7 @@ describe('boundedSatoshis / boundedPiconero', () => {
 });
 
 /**
- * v1.20.0 fix wave, G10 — with no indexer figure AND no chain pin, the page
+ * with no indexer figure AND no chain pin, the page
  * quoted the bundled 60-BLURT fallback while an unpinned indexer enforces its
  * env default 125 × 0.85 = 106.25: every such listing landed `underpaid`.
  */

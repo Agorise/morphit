@@ -65,7 +65,7 @@ export interface BlurtPriceSource {
 	/** Stop background refresh. Idempotent. */
 	stop(): void;
 
-	/** cp233 — Defense B: the most recent drift-check result, or
+	/** Defense B: the most recent drift-check result, or
 	 *  null when drift monitoring isn't wired (no db/asset/fiat
 	 *  configured) or no refresh has committed yet.  Surfaced on
 	 *  /v1/health so an operator can see whether the published
@@ -74,7 +74,7 @@ export interface BlurtPriceSource {
 	 *  computes it; other implementations may omit it. */
 	driftStatus?(): DriftCheckResult | null;
 
-	/** cp372 — per-external-source health for the morphit-ops
+	/** per-external-source health for the morphit-ops
 	 *  node-health view: which crypto providers answered, when each
 	 *  last succeeded, and their last reading.  Optional — only the
 	 *  composite implements it. */
@@ -86,7 +86,7 @@ export interface BlurtPriceSource {
 		lastValue: number | null;
 	}>;
 
-	/** cp372 — true iff the last committed external average dropped
+	/** true iff the last committed external average dropped
 	 *  at least one source as an outlier (provider disagreement).
 	 *  Optional — only the composite implements it. */
 	outlierRejected?(): boolean;

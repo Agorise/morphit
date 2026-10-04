@@ -111,8 +111,8 @@ check(
 	'under ~25h a normal jittered run reads as stale and operators learn to ignore the signal'
 );
 
-// ─── a dump too small to BE a dump (cp526) ───────────────────────
-// Freshness alone is not enough. The pre-cp526 backup script renamed a FAILED
+// ─── a dump too small to BE a dump ───────────────────────
+// Freshness alone is not enough. The older backup script renamed a FAILED
 // pg_dump's ~20-byte gzip member to a real backup name, so the useless
 // artefact was also the NEWEST one — every timing rule passes and only size
 // betrays it. Without this floor the health line greenlights a directory of
@@ -151,7 +151,7 @@ check(
 	/\*\*Backups\*\* line/.test(runNode)
 );
 
-// ─── IPFS / IPNS release seeding (cp667) ─────────────────────────
+// ─── IPFS / IPNS release seeding ─────────────────────────
 // Same blind-spot class as backups: the node silently stops doing its share of
 // hosting the release / keeping IPNS alive and nothing tells the operator.
 check(

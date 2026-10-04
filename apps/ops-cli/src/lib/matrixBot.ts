@@ -29,7 +29,12 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, statSync, chmodSync, chownSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { matrixBotPostureText } from './unitPrivilegeHeal.ts';
+import { envFlagOn, homeserverRoute } from './matrixRoute.ts';
+
+export { envFlagOn, homeserverRoute };
 
 import { parseMxid, type MatrixMxid } from '@morphit/operator-config';
 
@@ -43,6 +48,11 @@ export const MATRIX_BOT_UNIT = 'morphit-matrix-bot.service';
 /** The env keys we read. */
 const KEY_MXID = 'MORPHIT_MATRIX_BOT_ALERT_MXID';
 const KEY_TOKEN = 'MORPHIT_MATRIX_BOT_ACCESS_TOKEN';
+export const KEY_HOMESERVER = 'MORPHIT_MATRIX_BOT_HOMESERVER';
+/** 1 on a tor-only node: the bot (apps/matrix-bot/src/config.ts) refuses any
+ *  homeserver that is not loopback or a .onion reached through KEY_SOCKS. */
+export const KEY_TOR_ONLY = 'MORPHIT_MATRIX_BOT_TOR_ONLY';
+export const KEY_SOCKS = 'MORPHIT_MATRIX_BOT_SOCKS_PROXY';
 
 /** The literal placeholder token shipped in matrix-bot.env.example — an
  *  operator who copied the example but never pasted a real token still
@@ -58,6 +68,10 @@ export interface MatrixBotEnv {
 	readonly mxidRaw: string;
 	/** Raw value of MORPHIT_MATRIX_BOT_ACCESS_TOKEN, or '' if absent. */
 	readonly tokenRaw: string;
+	/** Raw values of the homeserver, tor-only and SOCKS keys ('' if absent). */
+	readonly homeserverRaw?: string;
+	readonly torOnlyRaw?: string;
+	readonly socksRaw?: string;
 }
 
 /** Readiness decision: should the matrix-bot run, and if not, why. */
@@ -71,7 +85,8 @@ export type MatrixBotReadiness =
 				| 'mxid-is-room'
 				| 'invalid-mxid'
 				| 'no-token'
-				| 'placeholder-token';
+				| 'placeholder-token'
+				| 'clearnet-on-tor-only';
 			/** The offending raw value, when relevant (for messaging). */
 			readonly detail?: string;
 	  };
@@ -84,9 +99,14 @@ export type MatrixBotReadiness =
  * are returned verbatim except surrounding whitespace and one optional
  * layer of matching quotes are stripped (systemd strips quotes too).
  */
-export function parseMatrixBotEnvText(text: string): { mxidRaw: string; tokenRaw: string } {
-	let mxidRaw = '';
-	let tokenRaw = '';
+export function parseMatrixBotEnvText(text: string): {
+	mxidRaw: string;
+	tokenRaw: string;
+	homeserverRaw: string;
+	torOnlyRaw: string;
+	socksRaw: string;
+} {
+	const v: Record<string, string> = {};
 	for (const lineRaw of text.split(/\r?\n/)) {
 		const line = lineRaw.trim();
 		if (line === '' || line.startsWith('#')) continue;
@@ -101,17 +121,21 @@ export function parseMatrixBotEnvText(text: string): { mxidRaw: string; tokenRaw
 		) {
 			val = val.slice(1, -1);
 		}
-		if (key === KEY_MXID) mxidRaw = val;
-		else if (key === KEY_TOKEN) tokenRaw = val;
+		v[key] = val;
 	}
-	return { mxidRaw, tokenRaw };
+	return {
+		mxidRaw: v[KEY_MXID] ?? '',
+		tokenRaw: v[KEY_TOKEN] ?? '',
+		homeserverRaw: v[KEY_HOMESERVER] ?? '',
+		torOnlyRaw: v[KEY_TOR_ONLY] ?? '',
+		socksRaw: v[KEY_SOCKS] ?? ''
+	};
 }
 
 /** Read + parse the matrix-bot env file. Missing file → exists:false. */
 export function readMatrixBotEnv(path: string = MATRIX_BOT_ENV_PATH): MatrixBotEnv {
 	if (!existsSync(path)) return { exists: false, mxidRaw: '', tokenRaw: '' };
-	const { mxidRaw, tokenRaw } = parseMatrixBotEnvText(readFileSync(path, 'utf-8'));
-	return { exists: true, mxidRaw, tokenRaw };
+	return { exists: true, ...parseMatrixBotEnvText(readFileSync(path, 'utf-8')) };
 }
 
 /** The healthcheck-port env key + its default (mirrors the bot's own
@@ -207,6 +231,21 @@ export function matrixBotReadiness(env: MatrixBotEnv): MatrixBotReadiness {
 		};
 	}
 
+	if (envFlagOn(env.torOnlyRaw ?? '')) {
+		const route = homeserverRoute(env.homeserverRaw ?? '');
+		if (
+			route === 'clearnet' ||
+			route === 'invalid' ||
+			(route === 'onion' && (env.socksRaw ?? '').trim() === '')
+		) {
+			return {
+				run: false,
+				reason: 'clearnet-on-tor-only',
+				detail: (env.homeserverRaw ?? '').trim()
+			};
+		}
+	}
+
 	return { run: true, mxids };
 }
 
@@ -244,6 +283,29 @@ export function clearEnvKey(text: string, key: string): string {
 	return upsertEnvKey(text, key, '');
 }
 
+/**
+ * Write the bot's secret-free posture next to its env file: whether it runs and
+ * which homeserver it talks to (`matrixBotPostureText`). The indexer, which
+ * cannot read matrix-bot.env (it holds the token), reads this for its clearnet
+ * check. root:morphit 0640 when that group exists, else 0640 as is. Best
+ * effort; never throws.
+ */
+export function writeMatrixBotPosture(
+	envText: string,
+	envPath: string = MATRIX_BOT_ENV_PATH
+): void {
+	try {
+		const p = join(dirname(envPath), 'matrix-bot.posture');
+		writeFileSync(p, matrixBotPostureText(envText), { mode: 0o640 });
+		chmodSync(p, 0o640);
+		const gid = spawnSync('getent', ['group', 'morphit'], { encoding: 'utf8' });
+		const g = Number((gid.stdout ?? '').split(':')[2]);
+		if (gid.status === 0 && Number.isInteger(g)) chownSync(p, 0, g);
+	} catch {
+		/* the indexer then treats the bot as unknown, as before */
+	}
+}
+
 /** Persist a new alert-MXID value into the env file (read-modify-write),
  *  preserving the token + comments. The file must already exist (it
  *  carries the secret token; we never create a token-bearing file from
@@ -252,6 +314,7 @@ export function writeAlertMxid(value: string, path: string = MATRIX_BOT_ENV_PATH
 	if (!existsSync(path)) return false;
 	const next = upsertEnvKey(readFileSync(path, 'utf-8'), KEY_MXID, value);
 	writeFileSync(path, next, { mode: 0o600 });
+	writeMatrixBotPosture(next, path);
 	return true;
 }
 
@@ -265,13 +328,16 @@ export function writeAlertMxid(value: string, path: string = MATRIX_BOT_ENV_PATH
 export function writeMatrixCreds(
 	mxid: string,
 	token: string,
-	path: string = MATRIX_BOT_ENV_PATH
+	path: string = MATRIX_BOT_ENV_PATH,
+	extra: Readonly<Record<string, string>> = {}
 ): boolean {
 	try {
 		const base = existsSync(path) ? readFileSync(path, 'utf-8') : '';
 		let next = upsertEnvKey(base, KEY_MXID, mxid);
 		next = upsertEnvKey(next, KEY_TOKEN, token);
+		for (const [k, v] of Object.entries(extra)) next = upsertEnvKey(next, k, v);
 		writeFileSync(path, next, { mode: 0o600 });
+		writeMatrixBotPosture(next, path);
 		return true;
 	} catch {
 		return false;

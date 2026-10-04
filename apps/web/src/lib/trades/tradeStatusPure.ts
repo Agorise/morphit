@@ -64,6 +64,13 @@ export interface TradeState {
 
 	readonly verifyResult?: VerifyResult | 'pending';
 	readonly mismatchField?: MismatchField;
+	/** True when a 'paid_verified' result was checked against the amount the
+	 *  seller ASKED for in their address payload (expectedAmount). False when
+	 *  no amount was asked, so the transfer was checked against the buyer's
+	 *  own figure only: "a payment arrived", not "paid in full". Anything that
+	 *  acts on a verification (e.g. auto-completing the order) must require
+	 *  true. */
+	readonly amountConfirmed?: boolean;
 
 	readonly updatedAt: Date;
 }
@@ -71,8 +78,9 @@ export interface TradeState {
 /** Phase rank for monotonic comparison.  Sibling terminal
  *  states share a rank — once any one of paid_verified /
  *  paid_mismatch / paid_unverifiable is reached, others at the
- *  same rank don't replace it (first-wins).  Same for
- *  released/disputed.  Only `completed` strictly succeeds them. */
+ *  same rank don't replace it (first-wins) — except that
+ *  paid_verified replaces paid_mismatch / paid_unverifiable.  Same
+ *  for released/disputed.  Only `completed` strictly succeeds them. */
 const PHASE_RANK: Record<TradePhase, number> = {
 	address_shared: 0,
 	paid: 1,
@@ -111,6 +119,16 @@ export function advancePhase(current: TradePhase | undefined, candidate: TradePh
 		(candidate === 'paid_mismatch' || candidate === 'paid_unverifiable')
 	) {
 		return current;
+	}
+	// …and it CORRECTS them: a transfer found on chain for the engaged
+	// counterparty outweighs an earlier mismatch or failed check (a stale RPC
+	// error, or a claim that was not the real payment). Callers record a
+	// verification only for the engaged peer.
+	if (
+		candidate === 'paid_verified' &&
+		(current === 'paid_mismatch' || current === 'paid_unverifiable')
+	) {
+		return candidate;
 	}
 
 	// Same rank → first-wins (don't flicker).
@@ -236,29 +254,27 @@ export function recordFundsSentPure(
 	return next;
 }
 
+/** Record a chain verification of `counterparty`'s payment on an order.
+ *  Refused (state unchanged) unless the order is ENGAGED with exactly that
+ *  counterparty: a verification of anyone else's transfer — a stranger who
+ *  sent a token amount and claimed it — must never mark the order paid. */
 export function recordVerificationPure(
 	current: ReadonlyMap<string, TradeState>,
 	args: {
 		orderPermlink: string;
 		verifyResult: VerifyResult;
+		/** The other party of this payment (the buyer on the seller's side,
+		 *  the seller on the buyer's). */
+		counterparty: string;
+		/** See TradeState.amountConfirmed. */
+		amountConfirmed: boolean;
 		now?: Date;
 	}
 ): ReadonlyMap<string, TradeState> {
-	const next = new Map(current);
 	const existing = current.get(args.orderPermlink);
+	if (existing === undefined || existing.engagedPeer !== args.counterparty) return current;
+	const next = new Map(current);
 	const now = args.now ?? new Date();
-	if (existing === undefined) {
-		next.set(args.orderPermlink, {
-			orderPermlink: args.orderPermlink,
-			peer: '',
-			method: 'blurt',
-			phase: phaseForVerify(args.verifyResult),
-			verifyResult: args.verifyResult,
-			mismatchField: args.verifyResult.kind === 'mismatch' ? args.verifyResult.field : undefined,
-			updatedAt: now
-		});
-		return next;
-	}
 
 	const newPhase = advancePhase(existing.phase, phaseForVerify(args.verifyResult));
 	// If phase didn't actually change (first-wins or stickiness),
@@ -278,6 +294,7 @@ export function recordVerificationPure(
 		phase: newPhase,
 		verifyResult: args.verifyResult,
 		mismatchField: args.verifyResult.kind === 'mismatch' ? args.verifyResult.field : undefined,
+		amountConfirmed: args.verifyResult.kind === 'verified' && args.amountConfirmed,
 		updatedAt: now
 	});
 	return next;

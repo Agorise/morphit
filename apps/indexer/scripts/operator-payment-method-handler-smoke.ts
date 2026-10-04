@@ -166,7 +166,7 @@ await scenario('rejects reserved canonical key (zelle)', async () => {
 });
 
 await scenario('rejects reserved canonical key (cash_in_person)', async () => {
-	// cp120: 'cash' was split into 'cash_in_person' + 'cash_by_mail'.
+	// 'cash' was split into 'cash_in_person' + 'cash_by_mail'.
 	const mock = makeMockClient();
 	const r = await handler(
 		makeCtx({ signer: 'morphit', payload: { ...validAdd, key: 'cash_in_person' } }),

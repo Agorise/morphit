@@ -16,7 +16,7 @@
  *       // cites no order — that thread gets no subline at all.
  *   }
  *
- * cp446 — one item per DISCUSSION, not per person. The same peer appears once
+ * one item per DISCUSSION, not per person. The same peer appears once
  * per order they have talked to you about, plus once more for any order-less
  * thread, exactly like an email inbox. `peer` alone is therefore NOT a unique
  * key for an item; `(peer, order?.permlink ?? null)` is.
@@ -39,7 +39,7 @@ import type { Database } from '$db/pool';
 import { errorBody, isAccountName } from '$api/shared';
 
 /**
- * Cap on rows returned. cp446 changed what a row IS: it used to be one per PEER,
+ * Cap on rows returned. A later change changed what a row IS: it used to be one per PEER,
  * it is now one per DISCUSSION (peer + order). A trader with many threads against
  * the same counterparty therefore consumes more of this budget than before.
  *
@@ -68,7 +68,7 @@ interface ConversationRow {
 	order_fiat_currency: string | null;
 	order_amount_min: string | null; // NUMERIC::text
 	order_amount_max: string | null; // NUMERIC::text
-	/** 'live' | 'cancelled' | 'expired' — orders.status (schema.sql:87). the maintainer:
+	/** 'live' | 'cancelled' | 'expired' — orders.status (schema.sql:87). Requirement:
 	 *  the inbox card shows it beside "RE: <title>" so an old thread declares
 	 *  up-front whether the order still exists. */
 	order_status: string | null;
@@ -78,7 +78,7 @@ interface ConversationRow {
  * The conversations SELECT — exported as the SINGLE SOURCE OF TRUTH so the
  * Postgres integration test (`test/integration/conversations.test.ts`) exercises
  * the EXACT production query instead of a hand-copied duplicate that has to be
- * "kept in sync" (cp447 flagged the drift risk after cp446's owner-join fix had
+ * "kept in sync" (flagged the drift risk later's owner-join fix had
  * to be applied in two places).  Static — parameterised by `$1` (the account)
  * and `$2` (the row cap) only, no interpolation — so it is safe at module scope.
  *
@@ -92,10 +92,10 @@ interface ConversationRow {
  * to the thread, so `orders` joins on `permlink AND account IN ($1, g.peer)`,
  * preferring the peer's own order; it tolerates a since-cancelled/expired order
  * (those rows persist) and yields all-null only when the thread cites no order
- * or the row is truly gone.  cp446 — the inbox is an email inbox: ONE CARD PER
+ * or the row is truly gone.  the inbox is an email inbox: ONE CARD PER
  * DISCUSSION, so we GROUP BY (peer, order_permlink) rather than by peer, and a
  * NULL permlink is a group in its own right (Postgres GROUP BY treats NULLs as
- * equal).  cp446 owner-join fix — the owner is whichever party actually owns an
+ * equal).  owner-join fix — the owner is whichever party actually owns an
  * order with that permlink; the previous query assumed `m.recipient` was the
  * owner, true for a thread's first message but not its replies.
  */
@@ -119,9 +119,9 @@ export const CONVERSATIONS_SQL = `
 					order_permlink,
 					MAX(created_at) AS last_message_at,
 					COUNT(*)::text AS message_count,
-					-- v1.7.5 (t.txt #2) — was the LAST message in this thread mine?
+					-- v1.7.5 — was the LAST message in this thread mine?
 					--
-					-- the maintainer: signed in on a PC and a phone; he sends a message from the
+					-- Requirement: signed in on a PC and a phone; he sends a message from the
 					-- PC and his PHONE lights up "unread". It was his own message. The
 					-- client could not know that: isUnread compares last_message_at
 					-- against the local read cursor and has no idea WHO sent it, so a

@@ -17,7 +17,7 @@
  *      fee_status='verified_by_attestation'.
  *
  * Rationale: ADR-0011 §3 originally let the poster be one of the two
- * attestors. (v1.18.0 deep-deep, H1) that let the poster plus one sock
+ * attestors. that let the poster plus one sock
  * self-verify an unpaid order forever; the poster is now rejected
  * (`attestor_is_poster`) and the quorum lives in
  * $indexer/fee/attestationQuorum, shared with the external-fee re-check
@@ -49,7 +49,7 @@ import { validateOrderPermlink } from '$indexer/permlink';
 
 // Per Blurt's is_valid_account_name, account names are
 // dot-separated multi-segment.  Canonicalized to match
-// $api/shared.ts isAccountName — see REVISIT-LIST.md
+// $api/shared.ts isAccountName — see the project backlog
 // "C-19 follow-on consistency pass" for context.
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
@@ -110,7 +110,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'order_not_found' };
 	}
 
-	// (v1.18.0 deep-deep, H1) The poster can never attest their own order.
+	// The poster can never attest their own order.
 	// Before, the poster counted as one of the two required attestors, so the
 	// poster plus ONE aged sock could flip an unpaid BTC order to
 	// verified_by_attestation — for free, as often as they liked. Rejected
@@ -130,6 +130,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		ctx.signer,
 		ctx.config.attestationPhase,
 		client,
+		ctx.blockTime,
 		ctx.blockTime
 	);
 	if (!eligibility.eligible) {
@@ -174,7 +175,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: true };
 	}
 
-	// (v1.18.0 deep-deep, H1) Quorum = ≥2 attestors that are neither the
+	// Quorum = ≥2 attestors that are neither the
 	// poster nor flagged as a related/reciprocal pair with the poster by the
 	// anti-review-ring signals. One shared implementation with the external-fee
 	// re-check job ($indexer/fee/attestationQuorum), so intake and re-derivation

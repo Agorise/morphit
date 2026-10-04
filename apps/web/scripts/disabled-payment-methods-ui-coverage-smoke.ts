@@ -3,7 +3,7 @@
  * Smoke: the disabled_payment_methods operator feature is wired into
  * EVERY web surface, end-to-end.
  *
- * cp208 added `disabled_payment_methods` (the payment-method analogue
+ * A later change added `disabled_payment_methods` (the payment-method analogue
  * of `disabled_assets`): an operator turns off canonical payment
  * methods via MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS; the indexer
  * gate (covered by order-handler-smoke + disabled-payment-methods-

@@ -50,7 +50,7 @@ describe('GlobalDailyCeiling', () => {
 	});
 
 	it('UTC midnight rollover resets count and re-arms the alert', () => {
-		// Item 6 / Audit Part 27: ManualClock replaces
+		// Item 6: ManualClock replaces
 		// vi.useFakeTimers + vi.setSystemTime.  The ceiling's
 		// view of time is faked explicitly via the injected
 		// clock; the global system clock is left alone.
@@ -136,7 +136,7 @@ describe('GlobalDailyCeiling', () => {
 		}).not.toThrow();
 	});
 
-	// Audit fix (this turn): tryReserve()/releaseReservation()
+	// Audit fix: tryReserve()/releaseReservation()
 	// close the TOCTOU race where concurrent /v1/account/create
 	// requests could overshoot the daily ceiling.
 

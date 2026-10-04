@@ -35,7 +35,15 @@
  * is unit-testable without a live systemd, a real sudo, or touching /etc.
  */
 
-import { askYesNo, ask, askPassword, askChoice } from '../init/prompt.ts';
+import {
+	askYesNo,
+	ask as realAsk,
+	askPassword as realAskPassword,
+	askChoice as realAskChoice
+} from '../init/prompt.ts';
+import { isHiddenOnlyNode } from '../lib/hiddenOnly.ts';
+import { torSocksFromEnv } from '../lib/torOnlyOsHeal.ts';
+import { torSocksUrl } from '../lib/matrixRoute.ts';
 import { checkService, type ServiceState } from './health.ts';
 import { rmSync } from 'node:fs';
 import {
@@ -48,6 +56,10 @@ import {
 	writeMatrixCreds,
 	writeConfigMxid,
 	mintMatrixToken,
+	homeserverRoute,
+	KEY_HOMESERVER,
+	KEY_TOR_ONLY,
+	KEY_SOCKS,
 	type MatrixBotEnv,
 	type MatrixBotReadiness,
 	type MatrixBotSyncResult
@@ -72,6 +84,17 @@ export interface MatrixDeps {
 	readonly readHealthcheckPort?: (path?: string) => number;
 	/** The guided setup flow (injectable so the lifecycle smoke can stub it). */
 	readonly configure?: (colorEnabled: boolean, deps: MatrixDeps) => Promise<number>;
+	/** Whether this is a tor-only (hidden-only) node; Tor's SocksPort host:port. */
+	readonly torOnly?: () => boolean;
+	readonly torSocks?: () => string;
+	/** Prompts and token minting (tests). */
+	readonly ask?: (q: string) => Promise<string>;
+	readonly askChoice?: (q: string, options: readonly string[]) => Promise<number>;
+	readonly askPassword?: (q: string) => Promise<string>;
+	readonly mint?: typeof mintMatrixToken;
+	readonly writeCreds?: typeof writeMatrixCreds;
+	readonly writeConfig?: typeof writeConfigMxid;
+	readonly isTTY?: boolean;
 }
 
 /** Where morphit-ops persists operator config (source of truth that survives an
@@ -88,7 +111,7 @@ const MATRIX_CRYPTO_STORE = '/var/lib/morphit-matrix-bot/state.db.matrix-storage
  * MXID and token to the live env AND the operator config, clear the stale E2EE
  * store, enable + start the bot, and send a test. Used by option 16, the install
  * wizard, and harden — so entering a Matrix address wires everything automatically
- * (the maintainer: "NO hand editing of any files or string variables").
+ * ("NO hand editing of any files or string variables").
  */
 export async function configureMatrixAlerts(
 	colorEnabled: boolean,
@@ -98,11 +121,16 @@ export async function configureMatrixAlerts(
 	const green = (s: string): string => (c ? `\u001b[32m${s}\u001b[0m` : s);
 	const yellow = (s: string): string => (c ? `\u001b[33m${s}\u001b[0m` : s);
 	const dim = (s: string): string => (c ? `\u001b[2m${s}\u001b[0m` : s);
-	const sync = deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
+	const sync =
+		deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
 
 	// Never block on stdin in a non-interactive context (a piped/CI invocation, or
 	// a smoke driving the status flow) — this whole flow is interactive by nature.
-	if (!process.stdin.isTTY) {
+	const ask = deps.ask ?? realAsk;
+	const askChoice = deps.askChoice ?? realAskChoice;
+	const askPassword = deps.askPassword ?? realAskPassword;
+	const torOnly = (deps.torOnly ?? (() => isHiddenOnlyNode()))();
+	if (!(deps.isTTY ?? process.stdin.isTTY)) {
 		console.log('  Run `morphit-ops matrix setup` in an interactive terminal to set up alerts.');
 		return 1;
 	}
@@ -115,13 +143,17 @@ export async function configureMatrixAlerts(
 	// 1. Recipient MXID (yours), validated — never a #room.
 	let mxid = '';
 	for (;;) {
-		const raw = (await ask('Your personal Matrix address to receive alerts (e.g. @you:matrix.org)')).trim();
+		const raw = (
+			await ask('Your personal Matrix address to receive alerts (e.g. @you:matrix.org)')
+		).trim();
 		if (raw === '') {
 			console.log('  Nothing entered — aborted, no changes made.');
 			return 1;
 		}
 		if (raw.startsWith('#') || parseMxid(raw) === null) {
-			console.log(yellow('  That is not a personal MXID (want @user:server, not a #room). Try again.'));
+			console.log(
+				yellow('  That is not a personal MXID (want @user:server, not a #room). Try again.')
+			);
 			continue;
 		}
 		mxid = raw;
@@ -129,17 +161,45 @@ export async function configureMatrixAlerts(
 	}
 
 	// 2. Bot homeserver (where the bot account lives — usually the MXID's server).
-	const defHome = `https://${mxid.slice(mxid.indexOf(':') + 1)}`;
-	const homeserver = ((await ask(`Bot account's Matrix homeserver [${defHome}]`)).trim() || defHome).replace(
-		/\/+$/,
-		''
-	);
+	//    On a tor-only node: only one on this machine or a .onion one, reached
+	//    through Tor (the bot refuses anything else there, and so does this).
+	const defHome = torOnly ? '' : `https://${mxid.slice(mxid.indexOf(':') + 1)}`;
+	if (torOnly) {
+		console.log(
+			dim('  This is a tor-only node: the bot can only use a homeserver on this machine')
+		);
+		console.log(dim('  or a .onion homeserver (reached through Tor). A clearnet homeserver would'));
+		console.log(dim('  end this node’s zero-clearnet setup.'));
+	}
+	const homeserver = (
+		(
+			await ask(
+				torOnly
+					? "Bot account's Matrix homeserver (http://….onion or http://127.0.0.1:…)"
+					: `Bot account's Matrix homeserver [${defHome}]`
+			)
+		).trim() || defHome
+	).replace(/\/+$/, '');
+	const route = homeserverRoute(homeserver);
+	if (torOnly && route !== 'loopback' && route !== 'onion') {
+		console.log(
+			yellow(
+				`  ✗ ${homeserver || '(none)'} is not on this machine or a .onion homeserver — aborted, no changes made.`
+			)
+		);
+		return 1;
+	}
 
 	// 3. Credentials — mint from username+password (recommended), or paste a token.
-	const method = await askChoice('How should the bot sign in?', [
-		"Enter the bot account's username + password (I'll mint a fresh token — recommended)",
-		'Paste an existing access token'
-	]);
+	//    Minting logs in from this machine; over Tor that is not possible here,
+	//    so a .onion homeserver takes a pasted token.
+	const canMint = !torOnly || route === 'loopback';
+	const method = canMint
+		? await askChoice('How should the bot sign in?', [
+				"Enter the bot account's username + password (I'll mint a fresh token — recommended)",
+				'Paste an existing access token'
+			])
+		: 1;
 	let token = '';
 	if (method === 0) {
 		const user = (await ask('Bot account username (just the local part, no @ or :server)')).trim();
@@ -149,9 +209,11 @@ export async function configureMatrixAlerts(
 			return 1;
 		}
 		console.log(dim('  Minting a fresh access token (a new device — avoids E2EE key collisions)…'));
-		const minted = await mintMatrixToken(homeserver, user, password);
+		const minted = await (deps.mint ?? mintMatrixToken)(homeserver, user, password);
 		if (minted === null) {
-			console.log(yellow('  ✗ Login failed. Check the username, password, and homeserver, then retry.'));
+			console.log(
+				yellow('  ✗ Login failed. Check the username, password, and homeserver, then retry.')
+			);
 			console.log(dim('    (Nothing was changed.)'));
 			return 1;
 		}
@@ -168,8 +230,13 @@ export async function configureMatrixAlerts(
 	// 4. Persist. The SECRET token goes ONLY to the 0600 matrix-bot.env; the config
 	//    gets the non-secret MXID (mode preserved) so it survives an Ansible
 	//    re-render without ever exposing the token in the group-readable config.
-	const liveOk = writeMatrixCreds(mxid, token, MATRIX_BOT_ENV_PATH);
-	const cfgOk = writeConfigMxid(mxid, OPERATOR_CONFIG_PATH);
+	const extra: Record<string, string> = { [KEY_HOMESERVER]: homeserver };
+	if (torOnly) {
+		extra[KEY_TOR_ONLY] = '1';
+		extra[KEY_SOCKS] = torSocksUrl((deps.torSocks ?? (() => torSocksFromEnv()))());
+	}
+	const liveOk = (deps.writeCreds ?? writeMatrixCreds)(mxid, token, MATRIX_BOT_ENV_PATH, extra);
+	const cfgOk = (deps.writeConfig ?? writeConfigMxid)(mxid, OPERATOR_CONFIG_PATH);
 	if (!liveOk) {
 		console.log(yellow(`  ✗ Could not write ${MATRIX_BOT_ENV_PATH}. Are you running with sudo?`));
 		return 1;
@@ -178,7 +245,9 @@ export async function configureMatrixAlerts(
 		console.log(
 			yellow(`  ⚠ Wrote the live env but not the operator config — alerts work now, but the`)
 		);
-		console.log(yellow('    recipient may not persist across a re-install/harden. Re-run with sudo.'));
+		console.log(
+			yellow('    recipient may not persist across a re-install/harden. Re-run with sudo.')
+		);
 	} else {
 		console.log(green('  ✓ Saved (token 0600 in the bot env; recipient in the operator config).'));
 	}
@@ -277,6 +346,8 @@ function describeNotReady(r: Extract<MatrixBotReadiness, { run: false }>): strin
 			return 'a username is set but MORPHIT_MATRIX_BOT_ACCESS_TOKEN is missing';
 		case 'placeholder-token':
 			return 'a username is set but MORPHIT_MATRIX_BOT_ACCESS_TOKEN is still the example placeholder';
+		case 'clearnet-on-tor-only':
+			return `this is a tor-only node and the homeserver ${JSON.stringify(r.detail ?? '')} is not on this machine or a .onion reached through Tor`;
 	}
 }
 
@@ -284,12 +355,14 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	const readEnv = deps.readEnv ?? readMatrixBotEnv;
 	const readState = deps.readState ?? checkService;
 	const writeMxid = deps.writeMxid ?? writeAlertMxid;
-	const sync = deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
+	const sync =
+		deps.sync ?? ((run: boolean, restart: boolean) => syncMatrixBotService(run, { restart }));
 	const confirm = deps.confirm ?? askYesNo;
 	const selfTest = deps.selfTest ?? postSelfTest;
 	const readHealthcheckPort = deps.readHealthcheckPort ?? readMatrixBotHealthcheckPort;
 
-	const paint = (open: string, s: string): string => (ctx.colorEnabled ? `${open}${s}\u001b[0m` : s);
+	const paint = (open: string, s: string): string =>
+		ctx.colorEnabled ? `${open}${s}\u001b[0m` : s;
 	const bold = (s: string): string => paint('\u001b[1m', s);
 	const dim = (s: string): string => paint('\u001b[2m', s);
 	const green = (s: string): string => paint('\u001b[32m', s);
@@ -305,7 +378,9 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	) {
 		console.log(yellow(`  Unknown action: ${action}`));
 		console.log('  Usage:');
-		console.log('    morphit-ops matrix setup                 guided setup — mints the token for you');
+		console.log(
+			'    morphit-ops matrix setup                 guided setup — mints the token for you'
+		);
 		console.log('    morphit-ops matrix set @you:matrix.org   set / edit the alert username');
 		console.log('    morphit-ops matrix clear                 remove it (stops the bot)');
 		console.log('    morphit-ops matrix test                  send yourself a test alert');
@@ -332,9 +407,13 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 		if (!readiness.run) {
 			console.log(yellow(`  Can't send a test — ${describeNotReady(readiness)}.`));
 			if (readiness.reason === 'no-mxid' || readiness.reason === 'no-env-file') {
-				console.log(`  Set your alert username first:  ${bold('morphit-ops matrix set @you:matrix.org')}`);
+				console.log(
+					`  Set your alert username first:  ${bold('morphit-ops matrix set @you:matrix.org')}`
+				);
 			} else if (readiness.reason === 'no-token' || readiness.reason === 'placeholder-token') {
-				console.log(`  Add ${bold('MORPHIT_MATRIX_BOT_ACCESS_TOKEN')} to ${MATRIX_BOT_ENV_PATH}, then restart the bot.`);
+				console.log(
+					`  Add ${bold('MORPHIT_MATRIX_BOT_ACCESS_TOKEN')} to ${MATRIX_BOT_ENV_PATH}, then restart the bot.`
+				);
 			}
 			return 1;
 		}
@@ -343,35 +422,53 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 		if (state !== 'active') {
 			console.log(yellow(`  The matrix-bot isn't running (${describeState(state)}).`));
 			console.log('  The test asks the running bot to message you, so it has to be up first.');
-			console.log(`  ${bold('morphit-ops matrix')} shows its state; setting a valid username starts it.`);
+			console.log(
+				`  ${bold('morphit-ops matrix')} shows its state; setting a valid username starts it.`
+			);
 			return 1;
 		}
 
 		const port = readHealthcheckPort(MATRIX_BOT_ENV_PATH);
-		console.log(dim(`  Asking the bot to send a self-test alert to ${readiness.mxids.length} recipient(s)…`));
+		console.log(
+			dim(`  Asking the bot to send a self-test alert to ${readiness.mxids.length} recipient(s)…`)
+		);
 
 		let result: MatrixSelfTestResult;
 		try {
 			result = await selfTest(port);
 		} catch (err) {
 			console.log(yellow(`  Couldn't reach the bot's healthcheck endpoint on 127.0.0.1:${port}.`));
-			console.log(`  It reports active but isn't answering — check ${bold('journalctl -u morphit-matrix-bot')}.`);
+			console.log(
+				`  It reports active but isn't answering — check ${bold('journalctl -u morphit-matrix-bot')}.`
+			);
 			console.log(dim(`  (${err instanceof Error ? err.message : String(err)})`));
 			return 1;
 		}
 
 		if (result.dryRun) {
 			console.log(yellow('  Dry-run mode is ON (MORPHIT_MATRIX_BOT_DRY_RUN=true).'));
-			console.log(`  The bot logged what it WOULD send to ${result.recipients} recipient(s) but did not deliver.`);
+			console.log(
+				`  The bot logged what it WOULD send to ${result.recipients} recipient(s) but did not deliver.`
+			);
 			console.log('  Unset dry-run + restart the bot to run a real delivery test.');
 			return 0;
 		}
 
 		if (result.ok) {
-			console.log(green(`  ✓ Sent a test alert to ${result.sent.length} recipient(s): ${result.sent.join(', ')}`));
-			console.log('  Check your Matrix client now.  The FIRST message from the bot account arrives');
+			console.log(
+				green(
+					`  ✓ Sent a test alert to ${result.sent.length} recipient(s): ${result.sent.join(', ')}`
+				)
+			);
+			console.log(
+				'  Check your Matrix client now.  The FIRST message from the bot account arrives'
+			);
 			console.log('  as an invite / message request — accept it, and future alerts land directly.');
-			console.log(dim('  Nothing arrived?  The bot logs the reason:  journalctl -u morphit-matrix-bot --since "2 minutes ago"'));
+			console.log(
+				dim(
+					'  Nothing arrived?  The bot logs the reason:  journalctl -u morphit-matrix-bot --since "2 minutes ago"'
+				)
+			);
 			return 0;
 		}
 
@@ -383,7 +480,11 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 		if (result.sent.length > 0) {
 			console.log(green(`  (${result.sent.length} succeeded: ${result.sent.join(', ')})`));
 		}
-		console.log(dim('  A token error usually means the access token is wrong or expired — re-mint it (OPERATIONS.md §16).'));
+		console.log(
+			dim(
+				'  A token error usually means the access token is wrong or expired — re-mint it (OPERATIONS.md §16).'
+			)
+		);
 		return 1;
 	}
 
@@ -396,7 +497,9 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 		}
 		// Validate BEFORE writing — never persist a #room alias or junk.
 		if (raw.startsWith('#')) {
-			console.log(yellow(`  ${JSON.stringify(raw)} is a Matrix room alias (#room:server), not an MXID.`));
+			console.log(
+				yellow(`  ${JSON.stringify(raw)} is a Matrix room alias (#room:server), not an MXID.`)
+			);
 			console.log(
 				'  The bot DMs PRIVATE operator alerts to a personal MXID (@user:server).\n' +
 					'  Sending them to a public room would leak security telemetry to everyone\n' +
@@ -430,7 +533,10 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 
 		// Comma-separated multi-recipient is allowed; validate each so a
 		// later "@you,#room" can't slip a room alias in via the set path.
-		for (const part of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+		for (const part of raw
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean)) {
 			if (part.startsWith('#') || parseMxid(part) === null) {
 				console.log(yellow(`  ${JSON.stringify(part)} is not a valid MXID.  Nothing written.`));
 				return 1;
@@ -453,7 +559,9 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 				return 0;
 			}
 			console.log(yellow('  ✗ Username saved, but the bot did not start cleanly.'));
-			console.log('    Try:  sudo systemctl restart morphit-matrix-bot   then  journalctl -u morphit-matrix-bot');
+			console.log(
+				'    Try:  sudo systemctl restart morphit-matrix-bot   then  journalctl -u morphit-matrix-bot'
+			);
 			return 1;
 		}
 
@@ -514,7 +622,9 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 	console.log(
 		`  Username: ${env.mxidRaw.trim() !== '' ? env.mxidRaw.trim() : dim('(not set — alerting off)')}`
 	);
-	console.log(`  Status:   ${state === 'active' ? green(describeState(state)) : describeState(state)}`);
+	console.log(
+		`  Status:   ${state === 'active' ? green(describeState(state)) : describeState(state)}`
+	);
 	if (!readiness.run) console.log(`  Note:     ${describeNotReady(readiness)}`);
 	console.log('');
 
@@ -537,7 +647,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 
 	// Nothing validly configured yet → offer the guided setup (mints the token,
 	// wires it to config + live env, starts + tests) instead of leaving the operator
-	// to hand-edit an env file (the maintainer: no hand-editing).
+	// to hand-edit an env file (no hand-editing).
 	if (!readiness.run && !running) {
 		const ok = await confirm('Set up Matrix alerts now (I mint the bot token for you)?', true);
 		if (ok) return (deps.configure ?? configureMatrixAlerts)(ctx.colorEnabled, deps);
@@ -558,7 +668,9 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 			console.log(green('  ✓ matrix-bot enabled and started.'));
 			return 0;
 		}
-		console.log(yellow('  ✗ Could not start the unit.  Try: sudo systemctl restart morphit-matrix-bot'));
+		console.log(
+			yellow('  ✗ Could not start the unit.  Try: sudo systemctl restart morphit-matrix-bot')
+		);
 		return 1;
 	}
 	if (!readiness.run && running) {
@@ -573,7 +685,9 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 			console.log(green('  ✓ matrix-bot stopped and disabled.'));
 			return 0;
 		}
-		console.log(yellow('  ✗ Could not stop the unit.  Try: sudo systemctl disable --now morphit-matrix-bot'));
+		console.log(
+			yellow('  ✗ Could not stop the unit.  Try: sudo systemctl disable --now morphit-matrix-bot')
+		);
 		return 1;
 	}
 
@@ -582,9 +696,7 @@ export async function runMatrix(ctx: MatrixCtx, deps: MatrixDeps = {}): Promise<
 		console.log(dim('  Configured and running.  Verify delivery: morphit-ops matrix test'));
 		console.log(dim('  Clear with: morphit-ops matrix clear'));
 	} else {
-		console.log(
-			dim('  Set a username to enable alerts:  morphit-ops matrix set @you:matrix.org')
-		);
+		console.log(dim('  Set a username to enable alerts:  morphit-ops matrix set @you:matrix.org'));
 	}
 	return 0;
 }

@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — /v1/chain explorer proxies. Anchor cp296.
+ * Morphit indexer — /v1/chain explorer proxies. Anchor.
  *
  *   GET  /v1/chain/block/:num     → { block: <condenser get_block result> }
  *   GET  /v1/chain/tx/:id         → { tx:    <condenser get_transaction result> }
@@ -13,7 +13,7 @@
  * transaction pages used to call Blurt `get_block` / `get_transaction`
  * DIRECTLY from the browser, leaking the user's IP and exactly which
  * block/tx they inspected to third-party RPC operators. These are the
- * block/tx siblings of the cp295 balance proxy and the cp296 account
+ * block/tx siblings of the balance proxy and the account
  * history/account proxies: the read is relayed SERVER-side across the
  * full canonical pool (rpc-pool latency-aware best-node + cooldown
  * failover), so third parties only ever see the indexer's request and the
@@ -139,7 +139,7 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 	});
 
 	// GET /v1/chain/properties → { properties: <get_dynamic_global_properties> }
-	// cp344. The WRITE side of the privacy/reliability story: building any
+	// The WRITE side of the privacy/reliability story: building any
 	// broadcast needs the chain head (ref_block_num / ref_block_prefix /
 	// expiration), which the browser used to read by calling
 	// get_dynamic_global_properties on a third-party RPC node directly — the
@@ -176,8 +176,8 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 	// third-party RPC node directly, leaking the importing user's IP + the
 	// exact moment they're restoring their account (a high-value
 	// deanonymization point: it ties an IP to a specific account at login
-	// time). Relayed here it's the read sibling of the cp298 account-keys
-	// proxy and the cp344 broadcast proxy: the lookup goes server-side across
+	// time). Relayed here it's the read sibling of the account-keys
+	// proxy and the broadcast proxy: the lookup goes server-side across
 	// the rpc-pool, third parties see only the indexer's request, and the
 	// browser opens no cross-origin RPC connection. Public keys are already
 	// on-chain, so this reveals nothing the chain doesn't already expose — it
@@ -217,7 +217,7 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 		//
 		//   (1) The chain's condenser_api.get_key_references — authoritative for
 		//       any key the node's account_by_key plugin has indexed.
-		//   (2) The indexer's own accounts.posting_pubkey (cp404) — catches
+		//   (2) The indexer's own accounts.posting_pubkey — catches
 		//       accounts whose key the chain plugin DOESN'T index. In practice
 		//       that's PRE-FORK / genesis accounts: account_by_key only indexes
 		//       keys set by a post-fork operation, so a Steem-era account that
@@ -286,7 +286,7 @@ export function chainExplorerRoute(blurt: BlurtClient, db: Database): Hono {
 	// POST /v1/chain/condenser → { result: <verbatim condenser_api result> }
 	//   body: { method: string, params: unknown[] }
 	//
-	// PRIVACY (priority #1) — the general chain-read relay. cp409/cp410: the
+	// PRIVACY (priority #1) — the general chain-read relay. the
 	// browser must NEVER contact a Blurt RPC node directly (it would leak the
 	// user's IP + exactly what they're reading to third-party node operators).
 	// Every remaining browser chain read — account lookups, account history,

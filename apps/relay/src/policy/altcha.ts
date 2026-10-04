@@ -13,9 +13,10 @@
  *   1. Client requests a challenge. Server returns:
  *        {
  *          algorithm:   "SHA-256"
- *          salt:        <random hex + `?expires=` + epoch-ms>
+ *          salt:        <32 random hex + `?expires=` + epoch-ms>
  *          challenge:   SHA-256(salt + target_number)
- *          signature:   HMAC-SHA256(server_secret, challenge)
+ *          signature:   HMAC-SHA256(server_secret,
+ *                         salt + ':' + challenge + ':' + maxnumber)
  *          maxnumber:   <difficulty ceiling>
  *        }
  *
@@ -25,15 +26,22 @@
  *
  *   3. Client submits the solution payload (same fields plus
  *      `number: N`). Server verifies:
- *      - The signature on challenge matches — proves the
- *        challenge was issued by us and not a replay from a
- *        third party.
+ *      - The salt has the exact shape we issue and the number
+ *        is an integer in [0, maxnumber].
+ *      - The signature over salt, challenge and maxnumber
+ *        matches — proves we issued this exact challenge. The
+ *        salt MUST be covered: challenge = SHA-256(salt + N),
+ *        so with a signature over the challenge alone, digits
+ *        could be moved between `number` and the end of `salt`
+ *        without changing the challenge — several "different"
+ *        solutions from one solve, and an expiry (parsed from
+ *        the salt) the client could push out at will.
  *      - The submitted number actually hashes to the challenge
  *        — proves the client did the work.
- *      - The salt hasn't been seen before — prevents
+ *      - The challenge hasn't been solved before — prevents
  *        submitting the same solution twice.
- *      - The salt's `expires=` timestamp is still in the
- *        future — prevents using very-old challenges.
+ *      - The salt's (signed) `expires=` timestamp is still in
+ *        the future — prevents using very-old challenges.
  *
  * We deliberately do NOT use the `@altcha/lib` NPM package.
  * The protocol is simple enough that a 150-line
@@ -89,7 +97,7 @@ export class AltchaService {
 	private readonly maxnumber: number;
 	private readonly ttlMs: number;
 	private readonly clock: Clock;
-	/** Recently-verified salts + their expiry. Single-use
+	/** Recently-verified challenges + their expiry. Single-use
 	 *  semantics — no solution can be replayed. Pruned lazily
 	 *  when expired.
 	 *
@@ -98,12 +106,12 @@ export class AltchaService {
 	 *  faster than the janitor sweeps could grow this map
 	 *  arbitrarily.  The janitor runs every ttlMs/4 (75s default);
 	 *  in that window an attacker doing ~1k verified solutions/s
-	 *  could deposit 75k salts.  Cap at 100k — well above
+	 *  could deposit 75k entries.  Cap at 100k — well above
 	 *  legitimate steady-state, well below memory pressure.
 	 *  When the cap is reached, the oldest entry (Map iteration
 	 *  is insertion order in JS) is evicted before insertion. */
-	private readonly usedSalts = new Map<string, number>();
-	private static readonly MAX_USED_SALTS = 100_000;
+	private readonly usedChallenges = new Map<string, number>();
+	private static readonly MAX_USED_CHALLENGES = 100_000;
 	private janitor: NodeJS.Timeout | null = null;
 
 	constructor(
@@ -158,7 +166,7 @@ export class AltchaService {
 		const saltNonce = randomBytes(16).toString('hex');
 		const salt = `${saltNonce}?expires=${expiresAt}`;
 		const challenge = sha256Hex(salt + targetNumber.toString());
-		const signature = createHmac('sha256', this.secret).update(challenge).digest('hex');
+		const signature = this.sign(salt, challenge).toString('hex');
 		return {
 			algorithm: 'SHA-256',
 			challenge,
@@ -179,36 +187,35 @@ export class AltchaService {
 			typeof solution.salt !== 'string' ||
 			typeof solution.signature !== 'string' ||
 			typeof solution.number !== 'number' ||
-			!Number.isFinite(solution.number)
+			!Number.isSafeInteger(solution.number) ||
+			solution.number < 0 ||
+			solution.number > this.maxnumber
 		) {
 			return { ok: false, code: 'altcha_malformed' };
 		}
 
-		// Signature check: proves this challenge was minted by
-		// us, not forged.
-		const expected = createHmac('sha256', this.secret).update(solution.challenge).digest();
-		let actual: Buffer;
-		try {
-			actual = Buffer.from(solution.signature, 'hex');
-		} catch {
+		// Shape check: exactly what issue() mints, nothing appended.
+		const shape = SALT_SHAPE.exec(solution.salt);
+		if (!shape || !/^[0-9a-f]{64}$/.test(solution.signature)) {
 			return { ok: false, code: 'altcha_malformed' };
 		}
+
+		// Signature check over salt, challenge and maxnumber: proves
+		// this exact challenge — expiry included — was minted by us.
+		const expected = this.sign(solution.salt, solution.challenge);
+		const actual = Buffer.from(solution.signature, 'hex');
 		if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
 			return { ok: false, code: 'altcha_bad_signature' };
 		}
 
-		// Expiry check: parse `?expires=<ms>` out of the salt.
-		const expMatch = solution.salt.match(/\?expires=(\d+)/);
-		if (!expMatch) {
-			return { ok: false, code: 'altcha_malformed' };
-		}
-		const exp = Number.parseInt(expMatch[1]!, 10);
+		// Expiry check: the signed `?expires=<ms>` in the salt.
+		const exp = Number.parseInt(shape[1]!, 10);
 		if (!Number.isFinite(exp) || exp <= this.clock.now()) {
 			return { ok: false, code: 'altcha_expired' };
 		}
 
-		// Replay check: each salt is single-use.
-		if (this.usedSalts.has(solution.salt)) {
+		// Replay check: each challenge is single-use.
+		if (this.usedChallenges.has(solution.challenge)) {
 			return { ok: false, code: 'altcha_replayed' };
 		}
 
@@ -220,10 +227,11 @@ export class AltchaService {
 			return { ok: false, code: 'altcha_bad_solution' };
 		}
 
-		// All good. Record the salt as used so it can't be
+		// All good. Record the challenge as used so it can't be
 		// replayed.  Enforce the size cap before insert: if we're
-		// at MAX_USED_SALTS and this is a new salt (not already
-		// present — checked above via .has()), drop the oldest entry.
+		// at MAX_USED_CHALLENGES and this is a new challenge (not
+		// already present — checked above via .has()), drop the
+		// oldest entry.
 		//
 		// Security trade-off: evicting an entry whose `exp` is
 		// still in the future grants a replay window for that
@@ -231,19 +239,27 @@ export class AltchaService {
 		// wants to exploit this would need: (1) a signed solution
 		// in hand they've already used once; (2) the ability to
 		// burn ~100k other legitimate solutions to force their
-		// own eviction; (3) to time the replay before their salt
-		// expires (5 min default ttl).  Cost-prohibitive for the
+		// own eviction; (3) to time the replay before their
+		// challenge expires (5 min default ttl).  Cost-prohibitive for the
 		// gain of a single extra signup attempt; acceptable.
 		// Janitor evicts on expiry, keeping steady-state below
 		// the cap under any honest load.
-		if (this.usedSalts.size >= AltchaService.MAX_USED_SALTS) {
-			const oldestKey = this.usedSalts.keys().next().value;
+		if (this.usedChallenges.size >= AltchaService.MAX_USED_CHALLENGES) {
+			const oldestKey = this.usedChallenges.keys().next().value;
 			if (oldestKey !== undefined) {
-				this.usedSalts.delete(oldestKey);
+				this.usedChallenges.delete(oldestKey);
 			}
 		}
-		this.usedSalts.set(solution.salt, exp);
+		this.usedChallenges.set(solution.challenge, exp);
 		return { ok: true };
+	}
+
+	/** HMAC over everything the client must not change: the salt (which
+	 *  carries the expiry), the challenge, and the difficulty. */
+	private sign(salt: string, challenge: string): Buffer {
+		return createHmac('sha256', this.secret)
+			.update(`${salt}:${challenge}:${this.maxnumber}`)
+			.digest();
 	}
 
 	close(): void {
@@ -255,11 +271,16 @@ export class AltchaService {
 
 	private sweep(): void {
 		const now = this.clock.now();
-		for (const [salt, exp] of this.usedSalts) {
-			if (exp <= now) this.usedSalts.delete(salt);
+		for (const [challenge, exp] of this.usedChallenges) {
+			if (exp <= now) this.usedChallenges.delete(challenge);
 		}
 	}
 }
+
+/** The only salt shape issue() mints: 16 random bytes as hex, then the
+ *  expiry in epoch-ms. Anything else — digits appended, a second
+ *  `?expires=`, whitespace — is refused before the signature is checked. */
+const SALT_SHAPE = /^[0-9a-f]{32}\?expires=(\d{1,15})$/;
 
 function sha256Hex(s: string): string {
 	return createHash('sha256').update(s).digest('hex');

@@ -1,9 +1,9 @@
 /**
- * Part 111 — federation-scope gating tests.
+ * federation-scope gating tests.
  *
  * Verifies that each operator's indexer queues payouts ONLY for
  * ops attributed to their own MORPHIT_INSTANCE_OPERATOR_TAG.
- * Closes a pre-Part-111 federation-cost gap where every operator
+ * Closes a older federation-cost gap where every operator
  * queued every op's payouts on every relay in the federation —
  * multiplying treasury spend by the federation count.
  *
@@ -115,7 +115,7 @@ describe('Part 111 — operator-payout federation gate', () => {
 		});
 		expect(result.kind).toBe('no_tag');
 		// Missing tag aborts BEFORE the federation gate — same as
-		// pre-Part-111 behavior.  No DB writes.
+		// older behavior.  No DB writes.
 		expect(mock.queries).toHaveLength(0);
 	});
 });
@@ -140,7 +140,8 @@ describe('Part 111 — loyalty BP federation gate', () => {
 			12_345,
 			new Date('2026-05-10T12:00:00Z'),
 			'example-community', // op attributed to another operator
-			'morphit' // we are morphit
+			'morphit', // we are morphit
+			75
 		);
 		const rptInsert = mock.queries.find((q) =>
 			q.text.includes('INSERT INTO relay_pending_transfers')
@@ -158,7 +159,7 @@ describe('Part 111 — loyalty BP federation gate', () => {
 			{ match: 'SAVEPOINT first_fee_welcome_sp' },
 			{ match: 'INSERT INTO account_loyalty_milestones' },
 			{ match: 'RELEASE SAVEPOINT first_fee_welcome_sp' },
-			{ match: 'SELECT COALESCE(SUM(bp_rewarded)', rows: [{ cumulative_bp: '1' }] },
+			{ match: 'SELECT COALESCE(SUM(m.bp_rewarded)', rows: [{ bp: '1' }] },
 			{ match: 'INSERT INTO relay_pending_transfers' }
 		]);
 		await trackVerifiedBlurtFee(
@@ -168,7 +169,8 @@ describe('Part 111 — loyalty BP federation gate', () => {
 			12_345,
 			new Date('2026-05-10T12:00:00Z'),
 			'morphit',
-			'morphit'
+			'morphit',
+			75
 		);
 		const rptInsert = mock.queries.find((q) =>
 			q.text.includes('INSERT INTO relay_pending_transfers')
@@ -202,7 +204,8 @@ describe('Part 111 — loyalty BP federation gate', () => {
 			12_345,
 			new Date('2026-05-10T12:00:00Z'),
 			'example-community',
-			'morphit'
+			'morphit',
+			75
 		);
 		// Global state was updated.
 		expect(
@@ -226,21 +229,33 @@ describe('Part 111 — welcome bonus federation gate (feedback handler)', () => 
 			// cited-order operator-tag lookup; both query FROM
 			// orders).
 			{ match: 'FROM orders', rowCount: 1 },
-			// Trade-completion gate via chat-messages. cp421: the
+			// Trade-completion gate via chat-messages. the
 			// feedback handler now requires a verified counterparty
-			// conversation (≥2 msgs each way, ≥15min span, unflagged)
+			// conversation (≥2 msgs each way, ≥15min span, no reciprocity)
 			// before it will record feedback — so this fixture must
 			// clear that bar for the welcome-bonus path underneath to
 			// run at all.
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history never showed the reciprocity pattern.
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			// Feedback row insert.
 			{ match: 'INSERT INTO feedback' },
+			// Push enqueue in its own savepoint (no subscription).
+			{ match: 'SAVEPOINT feedback_push_enqueue' },
+			{ match: 'FROM push_subscriptions', rowCount: 0 },
+			{ match: 'RELEASE SAVEPOINT feedback_push_enqueue' },
+			// Review signals at the review's block time, in their own savepoint.
+			{ match: 'SAVEPOINT feedback_signals' },
+			{ match: 'INSERT INTO suspicious_reciprocity' },
+			{ match: 'INSERT INTO one_way_pile_on' },
+			{ match: 'INSERT INTO review_concentration' },
+			{ match: 'RELEASE SAVEPOINT feedback_signals' },
 			// Welcome-bonus savepoint.
 			{ match: 'SAVEPOINT welcome_bonus_sp' },
-			// Part 111 cited-order operator_tag lookup.
+			// A later change cited-order operator_tag lookup.
 			{
 				match: 'FROM orders\n\t\t\t  WHERE account',
 				rows: [{ operator_tag: opts.citedOrderOperatorTag }],

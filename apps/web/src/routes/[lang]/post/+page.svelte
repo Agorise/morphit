@@ -43,7 +43,7 @@
 	import MarkdownGuideModal from '$components/MarkdownGuideModal.svelte';
 	import type { FaqKey } from '$utils/faqIndex';
 	import Term from '$components/Term.svelte';
-	// cp165 byte-budget: ListingFeeAddressPanel renders only when
+	// byte-budget: ListingFeeAddressPanel renders only when
 	// the user picks btc/xmr fee method (alt path; default is
 	// BLURT-paid).  PrivateKeyWarningModal renders only on
 	// detected key leak in user input (rare).  Both deferred.
@@ -51,9 +51,9 @@
 	import FirstPostStarterPack from '$components/FirstPostStarterPack.svelte';
 	import { formatFiat } from '$lib/i18n/formatters';
 	import ProtectedTextarea from '$components/ProtectedTextarea.svelte';
-	// cp165: lazy below (showTermsKeyWarning guard)
+	// lazy below (showTermsKeyWarning guard)
 	// import PrivateKeyWarningModal from '$components/PrivateKeyWarningModal.svelte';
-	// cp376 byte-budget: these five render only after step 1 (or only
+	// byte-budget: these five render only after step 1 (or only
 	// when a stablecoin asset is chosen), so their JS is deferred out of
 	// the initial post-page bundle and loaded the moment the step that
 	// needs them appears (lazy-loaders defined below; in Svelte 5 the
@@ -77,9 +77,9 @@
 	} from '$lib/assets/networks';
 	import { instanceAdditions } from '$lib/stores/instanceAdditions';
 	import { displayNamesForMethods } from '$lib/payments/display';
-	import { getInstanceSnapshot } from '$lib/stores/instance';
+	import { getInstanceSnapshot, instance } from '$lib/stores/instance';
 
-	import { identity, isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import { identity, isUnlocked, isPairedReadOnly, hasAnySession } from '$stores/identity';
 	import { getPreferencesSnapshot, setPreference } from '$stores/userPreferences';
 	import { useActiveKey, KeystoreError } from '$crypto/keystore';
 	import UnlockActiveKeyModal from '$components/UnlockActiveKeyModal.svelte';
@@ -93,7 +93,6 @@
 		computeFee,
 		BASE_FEE_BLURT,
 		resolveFeeRecipient,
-		sybilTierCount,
 		type FeeQuote
 	} from '$lib/orders/fee';
 	import { resolveQuoteBase, boundedPiconero, boundedSatoshis } from '$lib/orders/feeQuoteFloor';
@@ -101,7 +100,7 @@
 	import { checkXmrTxKey, xmrBoundPrimary } from '$lib/orders/xmrFeeMode';
 	import { btcFeeAddressMode } from '$lib/orders/btcFeeMode';
 	import { onDestroy } from 'svelte';
-	import { getOrdersByAccount } from '$lib/indexer/client';
+	import { getSybilTier } from '$lib/indexer/client';
 	import {
 		ASSET_TICKERS,
 		FIRST_ORDER_MIN_USD,
@@ -165,7 +164,7 @@
 	let side = $state<Side | null>(null);
 	let asset = $state<Asset | null>(null);
 
-	// cp165 lazy-loaders
+	// lazy-loaders
 	const loadListingFeeAddressPanel = () =>
 		import('$components/ListingFeeAddressPanel.svelte').then((m) => m.default);
 	// v1.20.0 (MK-H2) — the "pay your order's own BTC address" card.
@@ -173,9 +172,9 @@
 		import('$components/BtcFeePayPanel.svelte').then((m) => m.default);
 	const loadPrivateKeyWarningModal = () =>
 		import('$components/PrivateKeyWarningModal.svelte').then((m) => m.default);
-	// cp376 step lazy-loaders — defer step-2 / step-3 / stablecoin-branch
+	// step lazy-loaders — defer step-2 / step-3 / stablecoin-branch
 	// component JS out of the initial post-page bundle.  Same shape as the
-	// cp165 loaders above; in Svelte 5 the {#await loadX() then C} block
+	// A later change loaders above; in Svelte 5 the {#await loadX() then C} block
 	// evaluates the loader once when the step's enclosing {#if} first
 	// renders it, so the control mounts once and inner reactive updates
 	// (the user typing in that step) never remount it.
@@ -189,30 +188,30 @@
 		import('$components/UsdcNetworkPicker.svelte').then((m) => m.default);
 	const loadDaiNetworkPicker = () =>
 		import('$components/DaiNetworkPicker.svelte').then((m) => m.default);
-	// Part 121 — when asset=USDT, the user MUST pick a network
+	// when asset=USDT, the user MUST pick a network
 	// (ERC-20/TRC-20/SPL/BEP-20).  Null when asset is not USDT
 	// OR when USDT is picked but the user hasn't chosen yet.
 	// canSubmit gates on this being non-null when asset==='USDT'.
 	let usdtNetwork = $state<UsdtNetwork | null>(null);
-	// Part 122 cp30 — same shape for USDC.  When asset=USDC the
+	// same shape for USDC.  When asset=USDC the
 	// user MUST pick a network (ERC-20/SPL/Base/Polygon) before
 	// the form can submit.  Especially critical because three of
 	// the four supported USDC networks share the EVM 0x[40 hex]
 	// address shape — the picker is the only thing telling the
 	// sender's wallet which chain to broadcast on.
 	let usdcNetwork = $state<UsdcNetwork | null>(null);
-	// Part 122 cp31 — DAI network discriminator.  When asset=DAI
+	// DAI network discriminator.  When asset=DAI
 	// the user MUST pick a network (ERC-20/Polygon/Base/Arbitrum)
 	// before the form can submit.  All four DAI networks share
 	// the EVM 0x[40 hex] address shape, so the picker is the only
 	// thing telling the sender's wallet which chain to broadcast
 	// on.  CP34 closure: this state + the gate + the reset + the
 	// dispatch + the picker render block were all MISSING since
-	// cp31 ship; DAI order posting was silently broken cp31→cp34.
+	// ship; DAI order posting was silently broken.
 	let daiNetwork = $state<DaiNetwork | null>(null);
 
 	// ─── Form state (step 2) ───────────────────────────────────────
-	// O (cp295): the fiat denomination is chosen via a single-select
+	// O: the fiat denomination is chosen via a single-select
 	// FiatCurrencySelect (was a free-text field). `fiatArr` is the
 	// component's 1-element binding; `fiat` stays a plain string derived
 	// from it, so every existing read (validation, draft, broadcast,
@@ -222,7 +221,7 @@
 	const fiat = $derived(typeof fiatArr[0] === 'string' ? fiatArr[0] : '');
 	let amountMin: string = $state(''); // kept as string so empty distinguishes from 0
 	let amountMax: string = $state('');
-	// cp368: error styling on the amount + fixed-price fields is gated on the
+	// error styling on the amount + fixed-price fields is gated on the
 	// user having actually typed in them, so a pristine form (and a just-revealed
 	// flat-price field) never shows a scary red border before any input. The
 	// validators still drive step gating; these only gate the red border + the
@@ -237,26 +236,25 @@
 	// ─── Form state (step 3) ───────────────────────────────────────
 	let paymentMethods: string[] = $state([]);
 	let pmDraft = $state('');
-	// cp425 — for a BARTER (goods/services) listing, step 3 is a different
+	// for a BARTER (goods/services) listing, step 3 is a different
 	// surface: the seller ticks which cryptos they'll accept as settlement
 	// (the on-chain `accepted_assets` set) instead of picking fiat/in-person
 	// payment methods. Crypto assets leave this empty.
 	let acceptedAssets: AssetTicker[] = $state([]);
 	let region = $state('');
 	let terms = $state('');
-	// v1.9.0 (the maintainer) — for a BARTER listing, the user's inline "what am I offering"
+	// v1.9.0 — for a BARTER listing, the user's inline "what am I offering"
 	// label typed where the summary reads "goods/services" (e.g. "bananas"). It
 	// flows into the order title + Blurt announcement. Letters-only, ≤24 chars —
 	// enforced on input via sanitizeBarterTitle; the builder + indexer re-check.
 	let specificBarterTitle = $state('');
-	// t.txt (v1.4.9 #2) — the markdown-guide modal for the Terms field.
+	// the markdown-guide modal for the Terms field.
 	let mdGuideOpen = $state(false);
 
-	/** cp474 (t.txt #11) — whether the markdown-icon's hover tooltip is showing.
+	/** whether the markdown-icon's hover tooltip is showing.
 	 *
-	 *  THE BUG. the maintainer: "when i am typing in the Terms/details textarea, and I
-	 *  accidentally mouseover the markdown icon, the tooltip won't disappear when
-	 *  I stop mousing over the markdown icon."
+	 *  THE BUG. Reported: while typing in the terms textarea, an accidental hover over the
+	 *  markdown icon left its tooltip on screen after the pointer moved away.
 	 *
 	 *  It was a pure-CSS `group-hover:block` tooltip, so the ONLY thing that could
 	 *  dismiss it was the pointer physically moving off the icon. That is a bad
@@ -280,7 +278,7 @@
 		mdTipOpen = false;
 	});
 
-	// cp372 — animated "typewriter" placeholder for the Terms field.
+	// animated "typewriter" placeholder for the Terms field.
 	// A deliberately MULTI-LINGUAL, UNTRANSLATED set of example terms:
 	// seeing real-world notes in several languages cycle through tells
 	// grandma at a glance that this free-text field accepts whatever
@@ -360,7 +358,7 @@
 	 *  broadcast succeeds — see syndicate/publish.ts. */
 	let syndicateToBlog = $state(isOrderBlogDefaultEnabled());
 
-	// O (cp295): animated example regions cycle through the placeholder,
+	// O: animated example regions cycle through the placeholder,
 	// mirroring the onboarding import account field. Runs only while the
 	// field is empty; pauses the instant there's text and resumes when it
 	// goes empty again. prefers-reduced-motion shows a single static
@@ -473,7 +471,7 @@
 		spreadPercent: string;
 		fixedPrice: string;
 		paymentMethods: string[];
-		/** cp425 — accepted-crypto set for a barter draft. */
+		/** accepted-crypto set for a barter draft. */
 		acceptedAssets?: AssetTicker[];
 		pmDraft: string;
 		region: string;
@@ -490,6 +488,12 @@
 		 *  about to be) paid for. Persisted: the fee address depends on it,
 		 *  so a tab closed after paying must post under the same one. */
 		xmrPermlink?: string;
+		/** The stablecoin network picked in step 1 (USDT / USDC / DAI). */
+		usdtNetwork?: UsdtNetwork | null;
+		usdcNetwork?: UsdcNetwork | null;
+		daiNetwork?: DaiNetwork | null;
+		/** The language the post is written in. */
+		postLang?: string;
 	}
 
 	function snapshotDraft(): ComposeDraft {
@@ -529,12 +533,16 @@
 			feeMethodChoice,
 			externalTxId,
 			txKey,
-			xmrPermlink
+			xmrPermlink,
+			usdtNetwork,
+			usdcNetwork,
+			daiNetwork,
+			postLang
 		};
 	}
 
 	function applyDraft(d: ComposeDraft): void {
-		// Defensive coercion (cp364) — a draft persisted by an OLDER build's
+		// Defensive coercion — a draft persisted by an OLDER build's
 		// schema, or a hand-edited / corrupted localStorage slot, can carry a
 		// field whose RUNTIME type no longer matches its declared type (e.g.
 		// `fiat` saved as an array, or an amount saved as a number). The form
@@ -557,7 +565,7 @@
 		priceModelKind = d.priceModelKind === 'fixed' ? 'fixed' : 'spread';
 		spreadPercent = str(d.spreadPercent);
 		fixedPrice = str(d.fixedPrice);
-		// cp368: a loaded draft carries real values, so treat the
+		// a loaded draft carries real values, so treat the
 		// amount / fixed-price fields as touched when non-empty —
 		// an invalid saved value should show its error on resume
 		// rather than hide behind the pristine-form gate.
@@ -566,7 +574,7 @@
 		paymentMethods = Array.isArray(d.paymentMethods)
 			? d.paymentMethods.filter((m): m is string => typeof m === 'string')
 			: [];
-		// cp425 — restore the barter accepted-crypto set (only valid tickers).
+		// restore the barter accepted-crypto set (only valid tickers).
 		acceptedAssets = Array.isArray(d.acceptedAssets)
 			? d.acceptedAssets.filter((t): t is AssetTicker => isAssetTicker(t))
 			: [];
@@ -590,6 +598,11 @@
 		txKey = str(d.txKey);
 		// Only a well-formed name is restored (it becomes the on-chain permlink).
 		xmrPermlink = /^order-[a-z0-9]{12}$/.test(str(d.xmrPermlink)) ? str(d.xmrPermlink) : '';
+		usdtNetwork = isUsdtNetwork(d.usdtNetwork) ? d.usdtNetwork : null;
+		usdcNetwork = isUsdcNetwork(d.usdcNetwork) ? d.usdcNetwork : null;
+		daiNetwork = isDaiNetwork(d.daiNetwork) ? d.daiNetwork : null;
+		// A language tag, or keep the seeded default.
+		if (/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(str(d.postLang))) postLang = str(d.postLang);
 	}
 
 	/** Heuristic: does the draft actually contain anything worth
@@ -674,7 +687,7 @@
 	type Phase = 'editing' | 'reviewing' | 'awaiting_password' | 'broadcasting' | 'success' | 'error';
 	let phase = $state<Phase>('editing');
 
-	// Mid-broadcast navigation guard (cp308 F-005). Order permlinks are
+	// Mid-broadcast navigation guard. Order permlinks are
 	// random per attempt, so a user who navigates away mid-broadcast —
 	// unsure whether it landed — and re-posts creates a DUPLICATE on-chain
 	// order. Cancel navigation while the chain op is in flight, exactly as
@@ -689,7 +702,7 @@
 	let password = $state('');
 	let passwordError = $state('');
 
-	/** cp470 — focus a field the moment it mounts.  Applied to the
+	/** focus a field the moment it mounts.  Applied to the
 	 *  unlock-password input so entering the awaiting_password step (via
 	 *  "Pay and Post this order") drops the cursor straight in: type the
 	 *  password, press Enter (handled below), done — no click required.
@@ -701,7 +714,7 @@
 	let broadcastError = $state('');
 	let successPermlink: string | null = $state(null);
 
-	/** #20 (the maintainer) — the success page used to show "View my order" the instant the
+	/** the success page used to show "View my order" the instant the
 	 *  broadcast returned. The order isn't queryable yet at that moment, so the
 	 *  button led straight to a not-found page: "I just paid, and my order
 	 *  doesn't exist." Terrifying, and entirely our fault.
@@ -743,7 +756,7 @@
 	 *  BTC fees go to a per-order address shown AFTER posting, so no txid is
 	 *  asked for and the shared address is not offered. */
 	const btcPerOrderAddress = $derived(btcFeeAddressMode($chainPinnedTreasury));
-	/** Sally finding M1/M8 (Part 68): timestamp the moment we
+	/** Sally finding M1/M8: timestamp the moment we
 	 *  flipped phase to 'success' so the success card can show
 	 *  a live edit-window countdown.  Otherwise the user sees an
 	 *  "Edit" button with no warning that the window is 15 minutes
@@ -789,11 +802,11 @@
 	/** Optional fiat-per-BLURT for ambient subtext on the fee
 	 *  display.  Populated from /v1/listing-fee when the operator
 	 *  has the price feed enabled.  Null = no fiat echo shown.
-	 *  cp128: previously `usdPerBlurt`; renamed because the operator
+	 *  previously `usdPerBlurt`; renamed because the operator
 	 *  configures the denomination (USD/EUR/XDR/XAU/…). */
 	let fiatPerBlurt: number | null = $state(null);
 	let denominationFiat: string = $state('USD');
-	// cp372: the indexer's USD→fiat table (/v1/fx).  Powers the
+	// the indexer's USD→fiat table (/v1/fx).  Powers the
 	// FX-aware first-order floor (so the client's pre-submit check
 	// matches the indexer's authoritative one for ANY currency, not
 	// just USD) and the live "$1-equivalent" Min-value default in the
@@ -802,7 +815,7 @@
 	// like the indexer), and no default is seeded.
 	let fxTable: FxResponse | null = $state(null);
 
-	/** cp470 — the listing fee's fiat equivalent, shown parenthesized
+	/** the listing fee's fiat equivalent, shown parenthesized
 	 *  under the BLURT amount.  The fee is USD-equivalent; when the user
 	 *  has a fiat set (their order `fiat`, seeded from the saved
 	 *  preference) and the FX table can convert to it, echo the fee in
@@ -826,13 +839,13 @@
 	// the seed re-syncs when the user switches currency (while the
 	// field is still untouched) but never fights a user-typed value.
 	let lastSeededFiat = $state('');
-	// cp397: when arriving via the profile "Top up BLURT" CTA, the Min
+	// when arriving via the profile "Top up BLURT" CTA, the Min
 	// field is seeded with this USD amount expressed in the user's fiat
 	// (the conversion needs fx + a chosen fiat, which aren't ready at
 	// prefill-read time, so a dedicated seed effect fills it once both
 	// are). null = not a top-up arrival.
 	let topupUsdMin = $state<number | null>(null);
-	// cp372 Model A: live BTC/XMR fee amounts + USD echoes from
+	// Model A: live BTC/XMR fee amounts + USD echoes from
 	// /v1/listing-fee, fed to ListingFeeAddressPanel so the BTC/XMR
 	// quote tracks the operator's USD-equivalent fee instead of a fixed
 	// crypto constant.  Undefined → panel quotes the chain-pinned amount.
@@ -860,7 +873,7 @@
 			(waiverEligibility.kind === 'eligible' ||
 				waiverEligibility.kind === 'eligible_unknown_account')
 	);
-	/** O#1/#9 (cp295): a brand-new account — no prior orders on record,
+	/** O#1/#9: a brand-new account — no prior orders on record,
 	 *  or not yet visible in the index — is locked to its FUNDING trade:
 	 *  a BUY of BLURT. BLURT is what pays listing fees, so until the
 	 *  account holds some it can't list anything; making the first trade
@@ -910,12 +923,12 @@
 		XRP: 'what_is_xrp',
 		BARTER: 'what_is_barter'
 	};
-	/** cp396 — the Step-1 asset blocks, ALPHABETIZED by ticker. Each block
+	/** the Step-1 asset blocks, ALPHABETIZED by ticker. Each block
 	 *  carries its own coin icon (left of the ticker) and triggers a themed
 	 *  explainer tooltip on hover (desktop) / focus-on-tap (mobile); the
 	 *  separate ⓘ bubbles are gone. Tickers are uppercase ASCII so the
 	 *  default lexicographic sort IS alphabetical.
-	 *  cp425 — EXCEPT goods assets (BARTER): they aren't coins, so they sort
+	 *  EXCEPT goods assets (BARTER): they aren't coins, so they sort
 	 *  to the END of the picker, after the alphabetized cryptos. */
 	const assetPickerItems = $derived(
 		[...assetTickersForPicker]
@@ -940,18 +953,28 @@
 	 *  Non-BLURT methods require an external txid, captured in
 	 *  externalTxId. */
 	let feeMethodChoice = $state<'blurt' | 'waived_first_buy' | 'btc' | 'xmr'>('blurt');
-	/** Whether the unlocked session actually holds the ACTIVE key.  Only a
-	 *  'morphit-seed' session does; a 'posting-only' login (imported a single
-	 *  posting WIF, or a posting-only keyfile) CANNOT sign a BLURT transfer,
-	 *  so the BLURT listing-fee path is unavailable to it — LiveIdentity's
-	 *  contract is that active-key features must guard with
-	 *  an active key on this device (CAPABILITY, not provenance — a
-	 *  'posting-active' session has one).  Such a user can still use the free
-	 *  first-listing waiver or pay the fee in BTC/XMR (all posting-key only).
-	 *  Without this guard, a posting-only user picking BLURT was prompted for
-	 *  their password and then hit a generic "the chain didn't accept your
-	 *  broadcast" — a *local* pre-broadcast failure mislabeled as a chain
-	 *  rejection (the active key simply isn't on this device). */
+
+	/** BTC / XMR fees are offered only where this instance takes them: its
+	 *  /v1/instance treasury entry is null when the operator turned the method
+	 *  off, no explorer is configured, or the node is hidden-only, and the
+	 *  indexer then refuses such an order (`fee_method_not_configured_*`) —
+	 *  after the fee was paid. Unknown (older indexer) keeps them offered. */
+	const btcFeeOffered = $derived($instance.fee_methods.btc !== false);
+	const xmrFeeOffered = $derived($instance.fee_methods.xmr !== false);
+	const someFeeMethodOff = $derived(!btcFeeOffered || !xmrFeeOffered);
+	$effect(() => {
+		if (
+			(feeMethodChoice === 'btc' && !btcFeeOffered) ||
+			(feeMethodChoice === 'xmr' && !xmrFeeOffered)
+		) {
+			feeMethodChoice = 'blurt';
+		}
+	});
+	/** Whether the unlocked session holds the ACTIVE key on this device (a
+	 *  seed or posting+active session does; a posting-only login does not —
+	 *  capability, not provenance). Without it the BLURT fee still works: on
+	 *  posting, UnlockActiveKeyModal asks for the Active key for that one
+	 *  transaction. The waiver and BTC/XMR fees need only the posting key. */
 	const hasActiveKey = $derived(
 		$identity.state === 'unlocked' ? $identity.live.activePublicKey !== null : false
 	);
@@ -1020,15 +1043,15 @@
 	});
 
 	// Latch so the first-buy waiver auto-selects ONCE when it first becomes
-	// available — NOT on every effect run. (cp384 #8 added it so an explicit
-	// BLURT choice wouldn't get reverted; cp386 #3 then hid the BLURT fee on
+	// available — NOT on every effect run. (a later change added it so an explicit
+	// BLURT choice wouldn't get reverted; a later change then hid the BLURT fee on
 	// the waiver card entirely, so the waiver is simply the first-buy default
 	// now.) Plain (non-reactive) let — a latch, deliberately not $state.
 	// Re-armed when the waiver goes away.
 	let waiverAutoSelectDone = false;
 
 	$effect(() => {
-		// cp386 (#3): on the FIRST-trade waiver card we don't offer paying the
+		// on the FIRST-trade waiver card we don't offer paying the
 		// fee in the asset being acquired ("buy BLURT with BLURT") — those
 		// radios are hidden there and the reconciliation at the end of this
 		// effect keeps feeMethodChoice off them. Scope is the waiver card only,
@@ -1036,7 +1059,7 @@
 		// every fee option (pay the ~$1 fee in what you already hold).
 
 		// Auto-select the waiver ONCE when it first becomes available. On the
-		// waiver card the BLURT fee is hidden (cp386 #3), so the free waiver is
+		// waiver card the BLURT fee is hidden, so the free waiver is
 		// the natural first-buy default; an explicit BTC/XMR choice still
 		// sticks. Only blurt → waiver (never override an explicit BTC/XMR).
 		if (waiverOffered && !waiverAutoSelectDone) {
@@ -1069,7 +1092,7 @@
 			}
 		}
 
-		// cp386 (#3): on the FIRST-trade waiver card we hide the fee option
+		// on the FIRST-trade waiver card we hide the fee option
 		// whose asset matches the trade (you're acquiring that asset and hold
 		// none yet — e.g. "buy BLURT with BLURT" — and the free waiver is right
 		// there). Scope is the waiver card ONLY: on later trades the user holds
@@ -1104,7 +1127,7 @@
 	 *  new user with room to be active.  This is the *floor* — also
 	 *  enforced on the indexer; orders below it are rejected.
 	 *
-	 *  cp369: reverses the §F.11 "BLURT-denomination" regression
+	 *  reverses the §F.11 "BLURT-denomination" regression
 	 *  that compared this fiat-valued amount against a flat 500-BLURT
 	 *  constant (so "$1" was read as "1 BLURT < 500" and rejected).
 	 *  NOTE: $1-USD-equivalent is exact when the order's fiat is USD
@@ -1132,7 +1155,7 @@
 	 *  $1 is at the bottom because it's the indexer's floor — orders
 	 *  below it are rejected; $1+ lights at least this row.
 	 *
-	 *  cp369: the breakpoints are now fiat (USD-equivalent), not raw
+	 *  the breakpoints are now fiat (USD-equivalent), not raw
 	 *  BLURT quantities — the §F.11 BLURT-denomination regression had
 	 *  them at 500/2000/10000/50000 BLURT, which never lit up against
 	 *  a fiat-valued `amountMin` like $1.  The USD-equivalents at
@@ -1154,7 +1177,7 @@
 	 *  for the constant. */
 	let operatorBaseBlurt: number = $state(BASE_FEE_BLURT);
 
-	/** Tier 3.2 (Part 99) — persist the user's fiat / region
+	/** Tier 3.2 — persist the user's fiat / region
 	 *  choice after a successful broadcast.  Best-effort; if
 	 *  localStorage is unavailable or quota-exceeded, the form
 	 *  still works, the user just won't see pre-fill on next
@@ -1178,10 +1201,11 @@
 		feeLoading = true;
 		feeError = '';
 		try {
-			// Get current tier: count of orders in the user's 24h
-			// window. The indexer returns all the user's orders;
-			// we filter.
-			const ordersPromise = getOrdersByAccount(blurtAccount, { limit: 100 });
+			// Current Sybil tier, counted by the indexer with the query its
+			// order handler charges by (live orders + orders created in the
+			// last 24 h). Counting a page of /v1/orders here missed live
+			// orders older than the newest 100 and under-quoted the fee.
+			const tierPromise = getSybilTier(blurtAccount);
 			// Fetch the operator's configured base fee in parallel.
 			// This is the authoritative number the indexer will
 			// verify against; the bundled BASE_FEE_BLURT is only a
@@ -1190,26 +1214,25 @@
 			// the price feed enabled.
 			const lfPromise = fetchListingFee(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 
-			// cp372: fetch the USD→fiat table in parallel.  Best-effort —
+			// fetch the USD→fiat table in parallel.  Best-effort —
 			// a disabled feed / failure just leaves fxTable null and the
 			// floor falls back to the USD-assumption (the indexer remains
 			// authoritative either way).
 			const fxPromise = fetchFxRates(resolveOrigin(MORPHIT_INDEXER_ORIGIN));
 
-			const result = await ordersPromise;
-			if (!result.ok) {
-				throw new Error(result.message);
+			const tier = await tierPromise;
+			if (!tier.ok) {
+				// No count → no quote (never guess low: an under-quoted fee
+				// lands the order `underpaid` and the transfer is final).
+				throw new Error(tier.message);
 			}
-			// Order counts toward tier if it's currently live (stored 'live'
-			// AND not past expires_at — v1.20.0 G2) OR was created in the
-			// last 24h (even if cancelled). Same rule as the indexer.
-			const activeCount = sybilTierCount(result.data.items, Date.now());
+			const activeCount = tier.data.count;
 
 			// Read operator's base from the listing-fee fetch.  On a flaky
 			// indexer the bundled default is used ONLY inside a known
 			// chain-pinned band (v1.20.0, G10 — see resolveQuoteBase).
 			const lf = await lfPromise;
-			// (v1.18.0 deep-deep, M1) never quote outside the chain-pinned band.
+			// never quote outside the chain-pinned band.
 			// The indexer's /v1/listing-fee figure (on a hidden-only node, a
 			// federated peer median) was used verbatim, so a sybil-steered price
 			// could quote far below the floor the indexer enforces (order lands
@@ -1220,7 +1243,7 @@
 				if (typeof lf.quote.base_fee_blurt === 'number' && lf.quote.base_fee_blurt > 0) {
 					operatorBaseBlurt = lf.quote.base_fee_blurt;
 				}
-				// cp128: renamed from blurt_price_usd + companion
+				// renamed from blurt_price_usd + companion
 				// denomination_fiat field.
 				if (typeof lf.quote.blurt_price_fiat === 'number') {
 					fiatPerBlurt = lf.quote.blurt_price_fiat;
@@ -1228,7 +1251,7 @@
 				if (typeof lf.quote.denomination_fiat === 'string') {
 					denominationFiat = lf.quote.denomination_fiat;
 				}
-				// cp372 Model A: live BTC/XMR fee amounts + USD echoes.
+				// Model A: live BTC/XMR fee amounts + USD echoes.
 				btcFeeSatoshisLive = boundedSatoshis(
 					typeof lf.quote.btc_fee_satoshis === 'number' ? lf.quote.btc_fee_satoshis : undefined,
 					pinned?.btc?.satoshis
@@ -1260,7 +1283,7 @@
 				feeQuote = computeFee(activeCount + 1, operatorBaseBlurt);
 			}
 
-			// cp372: settle the FX table (best-effort).
+			// settle the FX table (best-effort).
 			const fx = await fxPromise;
 			if (fx.kind === 'ok') fxTable = fx.table;
 		} catch (err) {
@@ -1271,14 +1294,24 @@
 		}
 	}
 
-	onMount(() => {
+	// Account reads wait for a session: a remembered name on a locked visit
+	// does not name the account to the operator (the form is behind the
+	// unlock gate then anyway). They start once, when a session exists.
+	let accountReadsStarted = false;
+	$effect(() => {
+		if (!blurtAccount || !$hasAnySession || accountReadsStarted) return;
+		accountReadsStarted = true;
+		startAccountReads(blurtAccount);
+	});
+
+	function startAccountReads(account: string): void {
 		// Pre-fetch the fee quote so grandma doesn't wait when she hits Post.
-		if (blurtAccount) void recomputeFee();
+		void recomputeFee();
 		// Check waiver eligibility. A failure here just means we
 		// don't offer the waiver; no error surface. The indexer
 		// validates on submission regardless.
-		if (blurtAccount) {
-			void checkWaiverEligibility(resolveOrigin(MORPHIT_INDEXER_ORIGIN), blurtAccount)
+		{
+			void checkWaiverEligibility(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account)
 				.then((r) => {
 					waiverEligibility = r;
 					// First-trade lock — force the funding-buy shape (buy BLURT,
@@ -1304,7 +1337,10 @@
 					waiverEligibility = { kind: 'error', message: '' };
 				});
 		}
-		// Sally finding M1/M8 (Part 68): tick once a second to drive
+	}
+
+	onMount(() => {
+		// Sally finding M1/M8: tick once a second to drive
 		// the post-broadcast edit-window countdown.  Idle (does
 		// nothing visible) until phase === 'success'.  Cleared on
 		// component unmount.
@@ -1353,13 +1389,13 @@
 				if (isAssetTicker(p.asset)) {
 					asset = p.asset;
 				}
-				// cp36 Bob-4 fix — hydrate the matching multi-network
+				// hydrate the matching multi-network
 				// picker from the prefill payload's assetNetwork.
 				// Defensive typeguards: an unknown value lands the
 				// picker on null so the canSubmit gate forces the
 				// user to re-pick rather than silently broadcasting
 				// a stale value (same posture as the /post/edit
-				// load hydration added in cp36).
+				// load hydration added).
 				if (
 					asset === 'USDT' &&
 					typeof p.assetNetwork === 'string' &&
@@ -1436,7 +1472,7 @@
 			// Window/searchParams shouldn't throw, but defense in depth.
 		}
 
-		// Tier 3.2 (Part 99) — third-tier preferences pre-fill.
+		// Tier 3.2 — third-tier preferences pre-fill.
 		// Only fills empty fields, AFTER draft-restore and
 		// session-prefill have had their chances.  A user with a
 		// half-composed draft sees their draft values; a user
@@ -1489,13 +1525,21 @@
 		void spreadPercent;
 		void fixedPrice;
 		void paymentMethods;
+		void acceptedAssets;
 		void pmDraft;
 		void region;
 		void terms;
+		void specificBarterTitle;
 		void expiresDays;
 		void syndicateToBlog;
 		void feeMethodChoice;
 		void externalTxId;
+		void txKey;
+		void xmrPermlink;
+		void usdtNetwork;
+		void usdcNetwork;
+		void daiNetwork;
+		void postLang;
 		void phase;
 
 		// Don't save while broadcasting/success — those states
@@ -1532,7 +1576,7 @@
 			(asset !== 'DAI' || daiNetwork !== null)
 	);
 
-	/** v1.20.0 fix wave, G6 — amount fields keep what the user TYPED (any digit
+	/** amount fields keep what the user TYPED (any digit
 	 *  script, either decimal mark, thousands grouping) and are parsed with the
 	 *  active locale's conventions by `parseAmountInput` ($lib/orders/amountInput).
 	 *  The old keepDecimal() dropped every "," as it was typed, so a German
@@ -1573,7 +1617,7 @@
 
 	const amountMinNum = $derived(parsedOrNull(amountMin, amountMinParse));
 
-	/** cp372 — the entered minimum converted to USD for the
+	/** the entered minimum converted to USD for the
 	 *  first-order ($1) floor.  amount_min is denominated in the
 	 *  selected `fiat`, so "1.20" on an AUD order is 1.20 AUD ≈
 	 *  $0.79 — below the floor.  Null when nothing is entered or the
@@ -1586,11 +1630,11 @@
 				? amountMinNum
 				: fiatToUsd(fxTable, amountMinNum, fiat)
 	);
-	/** The waiver floor verdict — MUST mirror the indexer (order.ts).
-	 *  (v1.20.0 fix wave, G5) An unconvertible fiat is no longer treated as
-	 *  already-USD: the indexer rejects it (`waiver_fiat_unconvertible`), so
-	 *  the form says so instead of broadcasting a free first buy that no
-	 *  node will list. */
+	/** The waiver floor verdict. This client check is the $1 rule's only
+	 *  enforcement (advisory): the indexer accepts any waived first buy
+	 *  that states an amount_min, since FX rates differ per node. An
+	 *  unconvertible fiat is not treated as already-USD: the form says so
+	 *  instead of offering a free first buy it cannot value. */
 	const waiverFloor = $derived(
 		waiverFloorStatus(fxTable, amountMinNum, fiat, WAIVER_MIN_FIAT_USD)
 	);
@@ -1626,20 +1670,18 @@
 		if (amountMinNum !== null && amountMaxNum !== null && amountMinNum > amountMaxNum) {
 			return $_('post_order.errors.amount_min_exceeds_max');
 		}
-		// Phase 3 / cp369: waiver-path orders must have amount_min set
-		// AND ≥ $1 USD-equivalent (a fiat value). Mirrors the indexer's
-		// `waiver_requires_min_usd` rejection so the user fails the
-		// client-side gate before broadcast.
+		// Phase 3: waiver-path orders must have amount_min set
+		// AND ≥ $1 USD-equivalent (a fiat value). The indexer checks only
+		// that amount_min is stated (`waiver_requires_min_usd`); the $1
+		// floor is enforced here alone (advisory).
 		//
-		// cp129/cp369: the user-facing key is `waiver_min_required`.
+		// the user-facing key is `waiver_min_required`.
 		// The floor is "$1 USD-equivalent" in the order's fiat — a
 		// fiat-to-fiat check (amount_min is a fiat value), no price
-		// feed needed.  (cp369 reverses the §F.11 regression that
-		// compared this fiat amount to a 500-BLURT constant.)  The
-		// on-chain indexer rejection code (`waiver_requires_min_usd`)
-		// stays as-is — a protocol constant not worth churning.
+		// feed needed.  (reverses the §F.11 regression that
+		// compared this fiat amount to a 500-BLURT constant.)
 		if (feeMethodChoice === 'waived_first_buy') {
-			// cp377 (E10): name the actual floor + fiat in the message
+			// name the actual floor + fiat in the message
 			// ("...at least 18 MXN") instead of the vague "floor shown
 			// above".  The floor is $1-USD-equivalent in the order's fiat,
 			// from the same `firstOrderMinInFiat` the hint above uses.  On a
@@ -1689,12 +1731,12 @@
 		return false;
 	});
 
-	/** cp372 — live "$1-equivalent" Min-value default.  Grandma thinks
+	/** live "$1-equivalent" Min-value default.  Grandma thinks
 	 *  in HER local currency, not BLURT and not USD, so on a first
 	 *  (waiver) trade we pre-fill the Minimum-value field with $1-worth
 	 *  of her selected fiat (rounded UP to a clean, friendly step so it
 	 *  always clears the floor).  Safe-by-construction against the
-	 *  cp364-class bugs: it touches NOTHING that gates a step, never
+	 *  bugs: it touches NOTHING that gates a step, never
 	 *  reads `amountMin` (so it can't loop), stops the instant the user
 	 *  types (`amountTouched`), and re-seeds only when the user SWITCHES
 	 *  currency while still untouched (tracked via `lastSeededFiat`).  A
@@ -1708,7 +1750,7 @@
 		lastSeededFiat = fiat;
 	});
 
-	/** cp397 — "Top up BLURT" (profile balance card) seeds the Min field
+	/** "Top up BLURT" (profile balance card) seeds the Min field
 	 *  with a $5-equivalent in the user's fiat.  Same safe-by-construction
 	 *  posture as the first-trade seed above: never reads amountMin, stops
 	 *  once the user types (amountTouched), re-seeds only on a currency
@@ -1724,7 +1766,7 @@
 		lastSeededFiat = fiat;
 	});
 
-	/** cp372 — grandma-facing explanation of the first-order minimum,
+	/** grandma-facing explanation of the first-order minimum,
 	 *  in HER currency.  Shown only on a first (waiver) trade once a
 	 *  fiat is chosen.  With FX we show the converted "$1-equivalent"
 	 *  (e.g. "about 18 MXN"); without FX (USD instance / feed off) we
@@ -1733,7 +1775,7 @@
 		if (!isFirstTrade || fiat === '') return '';
 		const eq = firstOrderMinInFiat(fxTable, fiat);
 		const isUsd = fiat.trim().toUpperCase() === 'USD';
-		// cp377 (E12): once she enters an amount ABOVE the floor, the hint
+		// once she enters an amount ABOVE the floor, the hint
 		// reflects HER value and what it's worth in USD (grandma sees her
 		// own number, not a static restatement of the floor).  USD orders
 		// skip this — the amount already IS USD, so there's no conversion
@@ -1761,7 +1803,7 @@
 		});
 	});
 
-	/** cp397 — for a RETURNING buyer (already completed a first buy, so
+	/** for a RETURNING buyer (already completed a first buy, so
 	 *  the waiver/first-order path no longer applies), the Min-field
 	 *  helper restates their entered minimum in their own fiat plus its
 	 *  USD-equivalent ("At least 100 MXN worth (≈ $5.00)"), replacing the
@@ -1790,7 +1832,7 @@
 	 *  empty field both yield ''), Svelte sees no state change and
 	 *  skips re-rendering the input — leaving the letters on screen
 	 *  while the bound value stays empty, so validation never fired.
-	 *  Forcing `currentTarget.value` keeps the box numeric. (cp368) */
+	 *  Forcing `currentTarget.value` keeps the box numeric. */
 	function syncCleaned(el: HTMLInputElement, clean: string): void {
 		if (el.value !== clean) el.value = clean;
 	}
@@ -1838,13 +1880,13 @@
 	 *  spread mode — empty spread defaults to 0, which IS
 	 *  valid).
 	 */
-	// cp425 — is the selected asset a goods asset (BARTER)? Barter is valued
+	// is the selected asset a goods asset (BARTER)? Barter is valued
 	// directly in local currency and settled in crypto; several deriveds below
 	// branch on it (price model, step 3, terms), so it's declared up here.
 	const isBarter = $derived(asset !== null && isGoodsAsset(asset));
 
 	const priceModelError = $derived.by(() => {
-		// cp425 — a BARTER listing is valued directly in fiat (the amount range
+		// a BARTER listing is valued directly in fiat (the amount range
 		// above), not priced against a crypto, so there's no price model to
 		// validate; the price-model UI is hidden and an inert model is shipped.
 		if (isBarter) return '';
@@ -1881,7 +1923,7 @@
 	 *  Populated only when the waiver is offered (the surrounding
 	 *  UI gates the render).  Computed once per amountMin change.
 	 *
-	 *  cp369: the ladder is now FIAT-FIRST.  `amountMin` and the tier
+	 *  the ladder is now FIAT-FIRST.  `amountMin` and the tier
 	 *  breakpoints (`WAIVER_BENEFIT_TIERS`) are both fiat values, so
 	 *  each row shows the threshold in the order's fiat — e.g. "$1 —
 	 *  ~8 future listings covered" — which is what grandma reads on
@@ -1900,7 +1942,7 @@
 			readonly text: string;
 			readonly unlocked: boolean;
 		}> => {
-			// cp377: the tier breakpoints (`WAIVER_BENEFIT_TIERS`) are USD
+			// the tier breakpoints (`WAIVER_BENEFIT_TIERS`) are USD
 			// values ($1/$4/$20/$100), but `amountMin` is denominated in the
 			// order's selected fiat.  Comparing the raw fiat amount to the USD
 			// tiers was wrong (e.g. 30 MXN ≈ $1.67 was lighting up the $4 and
@@ -1934,10 +1976,10 @@
 		return '';
 	});
 
-	// cp425 — is the selected asset a goods asset (BARTER)? Barter's step 3
+	// is the selected asset a goods asset (BARTER)? Barter's step 3
 	// is the accepted-crypto picker (tick which cryptos to accept), not the
 	// fiat/in-person payment methods, and it requires Terms.
-	// cp425 — the cryptos a barter listing can accept as settlement: every
+	// the cryptos a barter listing can accept as settlement: every
 	// tradable asset EXCEPT goods themselves (no barter-for-barter). Stable
 	// alphabetized list; the on-chain set is re-deduped/sorted by the indexer.
 	const cryptoTickers: readonly AssetTicker[] = [...ASSET_TICKERS]
@@ -1956,7 +1998,7 @@
 			: paymentMethods.length > 0 && paymentMethodsError === ''
 	);
 
-	// cp384 (#4) + cp425: Terms are REQUIRED when the deal is a barter — either
+	// (#4) +: Terms are REQUIRED when the deal is a barter — either
 	// the legacy `barter_goods` PAYMENT METHOD on a crypto listing, OR a
 	// first-class BARTER ASSET listing. A bare barter order with no terms is
 	// useless to a counterparty: nobody knows what wares are on offer or wanted.
@@ -1984,7 +2026,7 @@
 		barterWasSelected = now;
 	});
 
-	// cp377 (F17): order terms soft cap.  TERMS_MAX mirrors the indexer's
+	// order terms soft cap.  TERMS_MAX mirrors the indexer's
 	// authoritative `terms_too_long` rejection (>2048 in order.ts /
 	// orderReplace.ts).  The textarea's hard `maxlength` is set higher
 	// (TERMS_HARD_MAX) so the user CAN type past the soft cap and SEE the
@@ -1994,7 +2036,7 @@
 	const TERMS_MAX = 2048;
 	const TERMS_HARD_MAX = TERMS_MAX * 2;
 	const termsOverLimit = $derived(terms.length > TERMS_MAX);
-	// cp422: block submit if the terms contain a character the indexer
+	// block submit if the terms contain a character the indexer
 	// rejects (control / bidi / zero-width). Terms is multi-line markdown,
 	// so TAB/LF/CR are permitted — see termsForbiddenChars.ts. Without this
 	// gate the order broadcasts, pays its listing fee, and is then silently
@@ -2030,7 +2072,7 @@
 		}
 		// BLURT fee = a chain TRANSFER, which needs the active key.
 		//
-		// v1.8.14 (the maintainer) — this used to bail out with an error here, on the
+		// v1.8.14 — this used to bail out with an error here, on the
 		// reasoning "don't prompt for a password that can't succeed". That was
 		// true when it was written and became false when `UnlockActiveKeyModal`
 		// was added: a posting-only session CAN supply an Active key on the spot,
@@ -2048,7 +2090,7 @@
 		passwordError = '';
 	}
 
-	/** tt.txt #11 — paying the listing fee in BLURT is signed with the ACTIVE key.
+	/** paying the listing fee in BLURT is signed with the ACTIVE key.
 	 *  A posting-only session has none on this device, so the radio used to carry
 	 *  a red "you can't do this" note and nothing else. Now we unlock in place and
 	 *  RESUME the broadcast: every field the user filled in stays exactly as it is.
@@ -2116,7 +2158,7 @@
 		// Build the form input. We've already validated; this just
 		// funnels values into the typed shape.
 		const priceModel: Record<string, unknown> = isBarter
-			? // cp425 — barter has no crypto-vs-fiat rate; the value is the
+			? // barter has no crypto-vs-fiat rate; the value is the
 				// fiat amount range. Ship an inert, VALID model — spread 0%
 				// (a 'fixed' price of 0 would fail the indexer's positive-price
 				// check). The orderbook renders barter by its {min,max} value +
@@ -2133,7 +2175,7 @@
 			amountMin: amountMinNum,
 			amountMax: amountMaxNum,
 			priceModel,
-			// Sally finding L8 (Part 68): defense-in-depth — apply
+			// Sally finding L8: defense-in-depth — apply
 			// redactPrivateKeys to region AND every payment-method
 			// entry, the same hook that already runs on `terms`.
 			// A user pasting from a clipboard that still has a WIF
@@ -2142,7 +2184,7 @@
 			// it on-chain.  No UX cost on the clean path: redact is
 			// a no-op when there's no key to find.
 			locationRegion: region.trim() ? redactPrivateKeys(region.trim()) : null,
-			// cp425 — a BARTER (goods/services) listing settles in crypto: its
+			// a BARTER (goods/services) listing settles in crypto: its
 			// payment_methods are the `pay_<crypto>` rails for the accepted
 			// cryptos (so the orderbook's payment filter naturally shows which
 			// coins it accepts), and the on-chain `acceptedAssets` set carries
@@ -2151,7 +2193,7 @@
 				? acceptedAssets.map((a) => `pay_${a.toLowerCase()}`)
 				: paymentMethods.map((pm) => redactPrivateKeys(pm)),
 			acceptedAssets: isBarter && acceptedAssets.length > 0 ? acceptedAssets : undefined,
-			// v1.9.0 (the maintainer) — the inline BARTER goods label. Only meaningful for a
+			// v1.9.0 — the inline BARTER goods label. Only meaningful for a
 			// barter listing; the builder + indexer re-sanitize (letters-only, ≤24)
 			// and omit it when blank, so a crypto listing never carries it.
 			specificBarterTitle: isBarter ? specificBarterTitle : undefined,
@@ -2173,17 +2215,17 @@
 			...(feeMethodChoice === 'xmr' && xmrPayFor !== null
 				? { permlink: xmrPayFor.permlink, xmrBoundAccount: xmrPayFor.account }
 				: {}),
-			// Part 121 / cp30 / cp31 — sub-network for multi-network
+			// sub-network for multi-network
 			// assets.  USDT, USDC, and DAI all carry a network
 			// discriminator; single-network assets (BTC/XMR/BLURT/BCH/
 			// LTC/DASH/DOGE) pass undefined and the payload builder
-			// omits the field.  CP34 closure: cp31 added DAI to the
+			// omits the field.  CP34 closure: a later change added DAI to the
 			// registry + payment_method + chat surfaces but MISSED
 			// this assetNetwork dispatch — meaning DAI orders posted
 			// via the form went out without an asset_network field
 			// and the indexer's order handler rejected them with
 			// 'asset_network_required_for_dai'.  DAI order posting
-			// was silently broken cp31→cp34 (~1 day).
+			// was silently broken (~1 day).
 			assetNetwork:
 				asset === 'USDT' && usdtNetwork !== null
 					? usdtNetwork
@@ -2192,7 +2234,7 @@
 						: asset === 'DAI' && daiNetwork !== null
 							? daiNetwork
 							: undefined,
-			// REVISIT-LIST item 5 — pull the configured operator
+			// Backlog item 5 — pull the configured operator
 			// tag from the instance store (synchronous accessor;
 			// store hydrates on +layout mount, by the time the
 			// user reaches the post form it's settled).  When
@@ -2402,7 +2444,7 @@
 					// rejected" (nothing was broadcast).
 					broadcastError = $_('post_order.broadcast_error.body_posting_only');
 				} else if (
-					// cp407 — the fee transfer's RECIPIENT (the treasury account)
+					// the fee transfer's RECIPIENT (the treasury account)
 					// isn't on-chain. This is the single most likely cause of a
 					// well-funded BLURT-fee order failing (BTC/XMR fees pay the
 					// treasury externally, so ONLY the BLURT path transfers to it,
@@ -2439,7 +2481,7 @@
 				) {
 					broadcastError = $_('post_order.broadcast_error.body_insufficient_rc');
 				} else if (
-					// cp407 — signature/authority mismatch: the Active key used
+					// signature/authority mismatch: the Active key used
 					// doesn't satisfy the account's on-chain active authority.
 					/missing.*authority/i.test(msg) ||
 					/required.*authority/i.test(msg) ||
@@ -2500,7 +2542,7 @@
 			// never 0, which would read as a real bound of zero.
 			amountMin: amountMinNum,
 			amountMax: amountMaxNum,
-			// v1.9.0 (the maintainer) — the fields the redesigned announcement body mirrors from
+			// v1.9.0 — the fields the redesigned announcement body mirrors from
 			// the order detail page. Canonical method display names (no instance
 			// lookup needed for the blog), the just-broadcast created time + derived
 			// expiry, and the location/terms redacted with the SAME hook the on-chain
@@ -2510,13 +2552,14 @@
 			expiresAtIso: makeExpiryFlooredUtcDay(expiresDays).toISOString(),
 			locationRegion: region.trim() ? redactPrivateKeys(region.trim()) : null,
 			terms: terms.trim().length > 0 ? redactPrivateKeys(terms) : '',
-			// v1.9.0 (the maintainer) — the barter goods label so the announcement headline reads
+			// v1.9.0 — the barter goods label so the announcement headline reads
 			// "…of bananas" like the order card/detail; null for crypto listings.
 			specificBarterTitle: isBarter ? sanitizeBarterTitle(specificBarterTitle) : null,
-			// t.txt #5 — the accepted crypto set, so a value-free barter blog title
+			// the accepted crypto set, so a value-free barter blog title
 			// reads "I want to sell {goods} for {cryptos}" — the SAME title the order
 			// card and create-flow summary render. Null for crypto listings.
-			acceptedAssets: isBarter && acceptedAssets.length > 0 ? [...acceptedAssets] : null
+			acceptedAssets: isBarter && acceptedAssets.length > 0 ? [...acceptedAssets] : null,
+			feeMethod: feeMethodChoice
 		});
 		if (result.ok) {
 			syndicationStatus = 'ok';
@@ -2557,7 +2600,7 @@
 		void recomputeFee();
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -2578,7 +2621,7 @@
 	 *  method is picked yet the list shows a neutral "…" placeholder
 	 *  that fills in as the user selects.  Empty until an asset exists
 	 *  (the card only renders in step 3, where asset is already set). */
-	// t.txt #5 (the maintainer) — build the BARTER summary sentence for a GIVEN goods label
+	// build the BARTER summary sentence for a GIVEN goods label
 	// via the SHARED orderTitleParts builder, so the create-flow summary is
 	// word-for-word the order title (and the Blurt blog title, which just appends
 	// "Want to trade?"). A valued barter reads "I want to sell 30–50 MXN of
@@ -2632,11 +2675,11 @@
 		if (!asset) return '';
 		const fiatCode = fiat.trim().toUpperCase();
 
-		// cp425 — barter gets its own summary: goods/services valued in local
+		// barter gets its own summary: goods/services valued in local
 		// currency, settled in the accepted cryptos. No price-model or
 		// payment-method language (both are crypto-trade concepts).
 		if (isBarter) {
-			// v1.9.0 (the maintainer) — the {goods} slot: the user's inline barter title if
+			// v1.9.0 — the {goods} slot: the user's inline barter title if
 			// they typed one, else the generic "goods/services" label. This STATIC
 			// render (review + broadcast confirmation) uses the resolved text; the
 			// editable step-3 preview swaps in a live inline input at this slot via
@@ -2646,7 +2689,7 @@
 			return barterTitleFor(goodsText);
 		}
 
-		// v1.9.5 (the maintainer) — non-barter now uses the SAME sentence as the order title
+		// v1.9.5 — non-barter now uses the SAME sentence as the order title
 		// and the Blurt blog (order_title.*): "I'm buying at least 50 MXN of ARRR
 		// with BTC". Settlement is the accepted payment methods (resolved labels).
 		// The price model (fixed/market) lives in its own form control, not this
@@ -2680,7 +2723,7 @@
 <div class="mx-auto max-w-3xl px-4 py-10 md:py-14">
 	<RequireLiveSession />
 
-	<!-- cp407 — shared extras rendered inside every order-SUMMARY card (step 4
+	<!-- shared extras rendered inside every order-SUMMARY card (step 4
 	     review + the awaiting-password / broadcasting / error cards): a live
 	     preview of the markdown-rendered terms exactly as they'll appear on the
 	     posted order, plus the chosen listing-expiry. Terms block only when the
@@ -2731,7 +2774,7 @@
 		</div>
 	{/if}
 
-	<!-- Tier 2.5 (Part 93): green-tinted starter-pack helper for
+	<!-- Tier 2.5: green-tinted starter-pack helper for
 	     first-time posters.  Detects (no orders on record →
 	     plausibly first post), surfaces three safe-defaults
 	     tips, and pre-flips the expiry default from 90 days to
@@ -2833,7 +2876,7 @@
 				</span>
 			</div>
 			{#if isFirstTrade}
-				<!-- O#1 (cp295): first-trade lock. The only useful thing a
+				<!-- O#1: first-trade lock. The only useful thing a
 				     brand-new account can do is BUY BLURT to fund itself
 				     (BLURT pays listing fees), so the buy/sell + asset picker
 				     is replaced by a fixed, explained "Buy BLURT" card and the
@@ -2874,7 +2917,7 @@
 			<p class="mb-2 mt-6 flex items-center gap-2 text-sm font-semibold">
 				{$_('post_order.form.asset_label')}
 			</p>
-			<!-- Sally finding M3 (Part 68): when the waiver is
+			<!-- Sally finding M3: when the waiver is
 			     selected, BTC and XMR chips are disabled with a
 			     `title` tooltip — invisible on mobile/touch.
 			     Surface the explanation as a visible inline note
@@ -2905,7 +2948,7 @@
 									: ''}
 								onclick={() => {
 									asset = a as Asset;
-									// Part 121 / cp30 / cp31: reset network when
+									// reset network when
 									// leaving a multi-network asset, so a re-pick
 									// later forces a fresh explicit choice (no
 									// stale network value).
@@ -2937,7 +2980,7 @@
 				{/each}
 			</div>
 
-			<!-- Part 121 / cp30 — privacy/decentralization warning chip.
+			<!-- privacy/decentralization warning chip.
 			     Renders only when the chosen asset has a non-null
 			     privacyWarningKey in the canonical registry.  USDT,
 			     USDC, and DAI are the three stablecoin assets that
@@ -2975,14 +3018,14 @@
 			{/if}
 			{#if asset === 'DAI'}
 				<PrivacyWarningChip privacyWarningKey="dai_partly_centralized" />
-				<!-- Part 122 cp31 — DAI 4 EVM networks (ERC-20 /
+				<!-- DAI 4 EVM networks (ERC-20 /
 				     Polygon / Base / Arbitrum).  ALL FOUR share the
 				     EVM 0x[40 hex] address format — DAI is the
 				     highest cross-network address-confusion surface
 				     on Morphit; picker is the only thing telling
 				     the sender's wallet which chain to broadcast
 				     on.  CP34 closure: this render block was
-				     MISSING since cp31 ship — DaiNetworkPicker
+				     MISSING since an earlier release ship — DaiNetworkPicker
 				     existed in the components dir but was never
 				     mounted from the post page.  canSubmit gates
 				     on daiNetwork !== null above. -->
@@ -3097,7 +3140,7 @@
 					</label>
 				</div>
 
-				<!-- cp396: amount min/max validation surfaces HERE, directly
+				<!-- amount min/max validation surfaces HERE, directly
 				     under the amount fields and ABOVE the Price section, in
 				     themed red (kind="error"). The min>max swap prompt belongs
 				     next to the fields it's about, not buried below Price. -->
@@ -3120,7 +3163,7 @@
 				       spread → { kind: 'spread', percent: <number> }
 				       fixed  → { kind: 'fixed',  price:   <number> } -->
 				{#if !isBarter}
-				<!-- cp425 — the spread/fixed price-model controls price a CRYPTO
+				<!-- the spread/fixed price-model controls price a CRYPTO
 				     against fiat; a BARTER (goods/services) listing is valued
 				     directly in local currency (the amount above), so hide them. -->
 				<fieldset class="mt-4 rounded-xl border border-ink-200 p-3 dark:border-ink-700">
@@ -3332,7 +3375,7 @@
 				</label>
 
 				{#if isBarter && barterSentenceParts}
-					<!-- v1.9.0 (the maintainer) — the editable BARTER preview: "goods/services" is a
+					<!-- v1.9.0 — the editable BARTER preview: "goods/services" is a
 					     live inline fill-in-the-blank. The user types WHAT they're offering
 					     (letters-only, ≤24) and it flows into the order title + the Blurt
 					     announcement. `size` (in ch) grows the field with its content so the
@@ -3384,10 +3427,10 @@
 				<label class="mb-4 block">
 					<span class="mb-1 flex items-center justify-between gap-2 text-sm font-semibold">
 					<span>{$_('post_order.form.terms_label')}</span>
-					<!-- t.txt #2 — subdued markdown-guide icon over the field's top-right
+					<!-- subdued markdown-guide icon over the field's top-right
 					     corner. preventDefault stops the wrapping <label> from stealing
 					     focus to the textarea.
-					     cp474 (t.txt #11) — the tooltip is state-driven, not
+					     the tooltip is state-driven, not
 					     `group-hover:block`. CSS hover could only be undone by moving the
 					     pointer, and this tooltip covers the textarea it sits above, so
 					     while you typed it just sat there over your text (browsers hide
@@ -3516,7 +3559,7 @@
 				     Signed by the user's posting key. Free (Mana
 				     only). Distinct from the automatic first-trade
 				     post to the @morphit community.
-				     Sally finding H9 (Part 68): copy upgraded to a
+				     Sally finding H9: copy upgraded to a
 				     selling-point pitch — same voice as the
 				     first-trade disclosure on LeaveFeedbackForm —
 				     so the user understands syndication = more eyes
@@ -3587,7 +3630,7 @@
 			</div>
 		{/if}
 
-		<!-- cp368: when step 1 is complete but step 2 isn't yet valid,
+		<!-- when step 1 is complete but step 2 isn't yet valid,
 		     Step 3 + the Continue button are intentionally hidden
 		     (progressive disclosure). Without a cue that's a silent
 		     dead-end — the user can't see that finishing the fields
@@ -3656,13 +3699,14 @@
 								</span>
 							</label>
 							{#if asset !== 'BLURT'}
-								<label class="flex items-start gap-2 py-1" class:opacity-60={!hasActiveKey}>
+								<label class="flex items-start gap-2 py-1">
+									<!-- Selectable without an Active key on this device: posting asks
+									     for it (UnlockActiveKeyModal), as the note below says. -->
 									<input
 										type="radio"
 										name="fee-method"
 										value="blurt"
 										bind:group={feeMethodChoice}
-										disabled={!hasActiveKey}
 										class="mt-0.5 accent-morphit-emerald"
 									/>
 									<span class="text-sm">
@@ -3678,7 +3722,7 @@
 									</span>
 								</label>
 							{/if}
-							{#if asset !== 'BTC'}
+							{#if asset !== 'BTC' && btcFeeOffered}
 								<label class="flex items-start gap-2 py-1">
 									<input
 										type="radio"
@@ -3699,7 +3743,7 @@
 									</span>
 								</label>
 							{/if}
-							{#if asset !== 'XMR'}
+							{#if asset !== 'XMR' && xmrFeeOffered}
 								<label class="flex items-start gap-2 py-1">
 									<input
 										type="radio"
@@ -3715,6 +3759,17 @@
 										</span>
 									</span>
 								</label>
+							{/if}
+							{#if someFeeMethodOff}
+								<p class="mt-1 text-xs text-ink-500">
+									{$_(
+										!btcFeeOffered && !xmrFeeOffered
+											? 'post_order.fee_method.btc_xmr_not_taken'
+											: !btcFeeOffered
+												? 'post_order.fee_method.btc_not_taken'
+												: 'post_order.fee_method.xmr_not_taken'
+									)}
+								</p>
 							{/if}
 						</fieldset>
 					</div>
@@ -3734,13 +3789,14 @@
 				</div>
 				<fieldset>
 					<legend class="sr-only">{$_('post_order.fee_method.legend')}</legend>
-					<label class="flex items-start gap-2 py-1" class:opacity-60={!hasActiveKey}>
+					<label class="flex items-start gap-2 py-1">
+						<!-- Selectable without an Active key on this device: posting asks
+						     for it (UnlockActiveKeyModal), as the note below says. -->
 						<input
 							type="radio"
 							name="fee-method"
 							value="blurt"
 							bind:group={feeMethodChoice}
-							disabled={!hasActiveKey}
 							class="mt-0.5 accent-morphit-emerald"
 						/>
 						<span class="text-sm">
@@ -3755,6 +3811,7 @@
 							{/if}
 						</span>
 					</label>
+					{#if btcFeeOffered}
 					<label class="flex items-start gap-2 py-1">
 						<input
 							type="radio"
@@ -3774,6 +3831,8 @@
 							</span>
 						</span>
 					</label>
+					{/if}
+					{#if xmrFeeOffered}
 					<label class="flex items-start gap-2 py-1">
 						<input
 							type="radio"
@@ -3789,12 +3848,24 @@
 							</span>
 						</span>
 					</label>
+					{/if}
+					{#if someFeeMethodOff}
+						<p class="mt-1 text-xs text-ink-500">
+							{$_(
+								!btcFeeOffered && !xmrFeeOffered
+									? 'post_order.fee_method.btc_xmr_not_taken'
+									: !btcFeeOffered
+										? 'post_order.fee_method.btc_not_taken'
+										: 'post_order.fee_method.xmr_not_taken'
+							)}
+						</p>
+					{/if}
 				</fieldset>
 			</section>
 		{/if}
 
 		{#if feeMethodChoice === 'btc' || feeMethodChoice === 'xmr'}
-			<!-- Part 106 — render the canonical fee address with
+			<!-- render the canonical fee address with
 			     copy + QR + chain-pinned badge.  Closes the pre-
 			     Part-106 fork-attack vector where the operator
 			     could social-engineer a hostile address into the
@@ -4164,7 +4235,7 @@
 
 			<div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
 				{#if successPermlink && blurtAccount}
-					<!-- #20 (the maintainer) — this used to be gated on the indexer having SEEN the
+					<!-- this used to be gated on the indexer having SEEN the
 					     order, because offering it immediately sent the user to a
 					     not-found page seconds after they'd paid a listing fee.
 					     v1.7.0: the gate is gone because the destination is now safe —
@@ -4196,7 +4267,7 @@
 						>
 							{$_('post_order.success.edit_cta')}
 						</BusyButton>
-						<!-- Sally finding M1/M8 (Part 68): live countdown
+						<!-- Sally finding M1/M8: live countdown
 						     so the user knows the edit window is short
 						     (15 minutes total) and ticking.  Pre-Part-68
 						     this was an unlabeled Edit button and users
@@ -4290,7 +4361,7 @@
 {/if}
 
 {#if showUnlockForFee}
-	<!-- tt.txt #11 — Active-key unlock for the BLURT listing fee. Raised OVER the
+	<!-- Active-key unlock for the BLURT listing fee. Raised OVER the
 	     form, never replacing it: cancel and every field is still there. -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm"
@@ -4312,11 +4383,11 @@
 	</div>
 {/if}
 
-<!-- t.txt (v1.4.9 #2) — markdown reference for the order Terms field. -->
+<!-- markdown reference for the order Terms field. -->
 <MarkdownGuideModal open={mdGuideOpen} onClose={() => (mdGuideOpen = false)} />
 
 <style>
-	/* v1.9.0 (the maintainer) — the inline BARTER "goods/services" fill-in-the-blank.
+	/* v1.9.0 — the inline BARTER "goods/services" fill-in-the-blank.
 	   Underline-ONLY (no box), same colour as the sentence text via currentColor,
 	   at reduced opacity; very faint until the user touches it, ~50% once they do.
 	   `size` (set inline, in ch) grows the field with its content so the sentence
@@ -4337,7 +4408,7 @@
 		font: inherit;
 		text-align: center;
 		/* baseline-align the field's text with the surrounding sentence (no
-		   vertical nudge — a transform pushed it visibly too low, t.txt #5) */
+		   vertical nudge — a transform pushed it visibly too low, ) */
 		vertical-align: baseline;
 		cursor: text;
 		transition: border-color 120ms ease;
@@ -4354,7 +4425,7 @@
 	.barter-goods-field.filled {
 		border-color: color-mix(in srgb, currentColor 50%, transparent);
 	}
-	/* t.txt #5 — focus does NOT turn the border green; it stays a 1px underline
+	/* focus does NOT turn the border green; it stays a 1px underline
 	   the exact colour of the resting border-bottom (just made visible), so the
 	   field reads as a fill-in-the-blank, not a boxed input. */
 	.barter-goods-field:focus {

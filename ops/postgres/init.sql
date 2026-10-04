@@ -80,15 +80,22 @@ CREATE DATABASE morphit_indexer
          LC_CTYPE = 'en_US.UTF-8'
          TEMPLATE = template0;
 
--- The indexer uses text[] array-overlap queries (&&) for
--- payment-method filtering. This is GIN-index-backed in the
--- schema, no extension needed. If future work adds full-text
--- search we'll turn on pg_trgm here.
+-- The schema needs no extension.
 
 -- Grant only what the indexer needs. The role owns the database
 -- so it can create tables via migrations; it does NOT have
 -- superuser or role-creation rights.
 ALTER ROLE morphit_indexer NOSUPERUSER NOCREATEDB NOCREATEROLE;
+
+-- Session defaults for every login as this role (the indexer, the
+-- relay, scripts). JIT off: Postgres compiled the featured-strip
+-- query on an inflated row estimate, ~2 s of CPU per request for a
+-- query that runs in under a millisecond. A connection left inside an
+-- open transaction is closed after 5 minutes instead of holding its
+-- locks and a pool slot. (The indexer also asks for both, and tighter
+-- limits for its API, on its own connections.)
+ALTER ROLE morphit_indexer SET jit = 'off';
+ALTER ROLE morphit_indexer SET idle_in_transaction_session_timeout = '300s';
 
 -- Reset the GUC so the password doesn't linger in the session.
 RESET morphit.init_password;

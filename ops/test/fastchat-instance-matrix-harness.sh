@@ -65,7 +65,7 @@ ln -s "$REPO/node_modules" "$WORK/node_modules"
 SMOKE="$WORK/apps/indexer/scripts/fastchat-instance-matrix-smoke.ts"
 BCAST="$WORK/apps/indexer/src/api/broadcast.ts"
 ROUTE="$WORK/apps/indexer/src/api/federationChatFast.ts"
-# The notify gate moved into one shared module in the v1.18.0 deep-deep (FC-2).
+# The notify gate moved into one shared module in the (FC-2).
 GATE="$WORK/apps/indexer/src/indexer/fastNotifyGate.ts"
 FED="$WORK/apps/indexer/src/indexer/chatFastFederation.ts"
 ACTIVITY="$WORK/apps/indexer/src/api/chatActivityStream.ts"
@@ -203,7 +203,7 @@ fi
 # now wires local delivery only for the same-instance rows, so the cross-instance
 # rows have no route to the recipient except this call.
 snapshot "$BCAST"
-# Since the deep-deep (FC-1) the call returns a handle the send path uses once
+# Since the (FC-1) the call returns a handle the send path uses once
 # the node has accepted; deleting the fan-out means no handle at all.
 printf '%s\n' '		const fast = fastDispatch?.dispatchIfChat(trx);' > "$WORK/.needle"
 printf '%s\n' '		const fast = undefined as any; void fastDispatch;' > "$WORK/.repl"

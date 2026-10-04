@@ -2,10 +2,13 @@ import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
 import { processBuild } from '../../scripts/build-brand-slots.mjs';
+import { externalizeInlineScripts } from './scripts/csp-externalize-scripts.mjs';
 
 /**
- * Per-instance branding (docs/BRANDING.md). adapter-static, then — in the same
- * step, so EVERY `vite build` emits a clean build — scripts/build-brand-slots.mjs:
+ * adapter-static, then — in the same step, so EVERY `vite build` emits a clean
+ * build — apps/web/scripts/csp-externalize-scripts.mjs (no inline script left:
+ * see the Content-Security-Policy note in the config below) and, for
+ * per-instance branding (docs/BRANDING.md), scripts/build-brand-slots.mjs:
  * record each prerendered site-name slot into build/.brand-slots.json, strip the
  * invisible slot markers, stamp the canonical <html data-brand-*> attributes and
  * re-compress the pages it changed. `morphit-ops branding apply` rewrites exactly
@@ -19,7 +22,25 @@ function withBrandSlots(base, pages) {
 		...base,
 		async adapt(builder) {
 			await base.adapt(builder);
-			processBuild(fileURLToPath(new URL(pages, import.meta.url)), (m) => builder.log.minor(m));
+			const dir = fileURLToPath(new URL(pages, import.meta.url));
+			// First move every inline script into its own file (the strict
+			// Content-Security-Policy below), THEN record the brand slots, whose
+			// byte offsets must describe the final pages.
+			externalizeInlineScripts(dir, (m) => builder.log.minor(m));
+			processBuild(dir, (m) => builder.log.minor(m));
+			// Last: record the site-origin slots (scripts/origin-slots.mjs) and
+			// strip their markers, shifting the brand-slot offsets just written —
+			// so a bare `vite build` emits clean pages too. Idempotent; the
+			// `npm run build` guard's own run is then a no-op.
+			// (Loaded by URL: origin-slots.mjs carries no type declarations.)
+			const { recordOriginSlots } = await import(
+				new URL('./scripts/origin-slots.mjs', import.meta.url).href
+			);
+			recordOriginSlots(
+				dir,
+				process.env.MORPHIT_SITE_ORIGIN || 'https://morphit.io',
+				(/** @type {string} */ m) => builder.log.minor(m)
+			);
 		}
 	};
 }
@@ -33,7 +54,7 @@ function withBrandSlots(base, pages) {
 // The overwrite is INTENTIONAL here — the fallback shell is exactly what every
 // unmatched route (including `/`) should boot — so the line is noise an
 // operator can't act on and, mid-upgrade, reads like something went wrong. Same
-// gate + rationale as the chunk-size (cp687) and npm-deprecation (cp686)
+// gate + rationale as the chunk-size and npm-deprecation
 // quieting: suppressed ONLY when morphit-ops sets MORPHIT_QUIET_BUILD=1. A
 // developer's or CI build (no MORPHIT_QUIET_BUILD) still sees it in full.
 if (process.env.MORPHIT_QUIET_BUILD === '1') {
@@ -69,31 +90,26 @@ const config = {
 		// the current prerendered page — so from `/en/` they resolved to
 		// `/en/canary.txt` and 404'd.  `relative: false` keeps them absolute
 		// (`/canary.txt`) on every locale page, which is what a root-hosted
-		// static site wants.  (cp431 — footer canary link 404.)
+		// static site wants.  (footer canary link 404.)
 		paths: { relative: false },
 
-		// Content Security Policy is NOT emitted here.
+		// Content Security Policy: one HEADER, sent by nginx / BunkerWeb for
+		// every page — `script-src 'self' 'wasm-unsafe-eval'`, with no
+		// 'unsafe-inline' and no 'unsafe-eval' (ops/bunkerweb/frontend/nginx.conf,
+		// ops/nginx/web.conf, the BunkerWeb env's CONTENT_SECURITY_POLICY;
+		// scripts/csp-header-consistency-smoke.ts keeps them in step).
 		//
-		// This is a fully static (adapter-static) build served by nginx, so
-		// there is no SvelteKit runtime to set a response header — a
-		// SvelteKit-managed CSP can only be injected as a <meta http-equiv>
-		// tag, and that is strictly worse here:
-		//   1. `frame-ancestors` (our clickjacking defense) is IGNORED by
-		//      browsers when delivered via <meta>; it only works as a
-		//      header.  X-Frame-Options + a header CSP cover it instead.
-		//   2. The app runs WebAssembly in the browser (argon2 KDF for the
-		//      keystore, signing) which needs `wasm-unsafe-eval`, and ships
-		//      inline bootstrap scripts which need `'unsafe-inline'` once
-		//      per-page hashes aren't being computed — a hash-mode meta tag
-		//      fought both and silently broke crypto + hydration.
-		//   3. A meta CSP and the nginx header CSP are INTERSECTED by the
-		//      browser, so the stricter meta clobbered the working header,
-		//      and operators had to `sed` the meta out of the build by hand.
-		//
-		// The canonical CSP is therefore a single nginx `add_header
-		// Content-Security-Policy` (see docs/RUN-A-MORPHIT-NODE.md §10 and
-		// docs/OPERATIONS.md §15).  One source of truth, no meta tag, no
-		// manual stripping.  If you change the client's Blurt RPC list
+		// No `kit.csp` here, on purpose: in a static build SvelteKit can only
+		// add per-page hashes as a <meta> tag, and a header sent unchanged for
+		// every page would still have to allow inline script for those pages to
+		// run (the browser enforces both policies). Instead the build leaves no
+		// inline script at all: the ?lang= hint is static/lang-hint.js, and
+		// SvelteKit's per-page bootstrap is moved into content-addressed files
+		// by csp-externalize-scripts.mjs (wrapped around the adapter above),
+		// which FAILS the build if anything inline is left. 'wasm-unsafe-eval'
+		// stays: libsodium (keystore KDF, chat crypto) runs as WebAssembly.
+		// `frame-ancestors` only works as a header, which is another reason the
+		// policy lives there. If you change the client's Blurt RPC lists
 		// (src/lib/net/config.ts) update that header's connect-src to match.
 
 		// No server-side state; prerender everything possible.
@@ -107,7 +123,7 @@ const config = {
 		// (`fallback: 'index.html'` above), which SvelteKit's
 		// client router then resolves to the correct dynamic page.
 		// Without `handleUnseenRoutes: 'ignore'` the build errors
-		// out per Part 121 cp7's restructure attempt.  Static
+		// out the restructure attempt.  Static
 		// indexable routes (17 routes × 10 locales = 170 HTMLs)
 		// prerender as expected.
 		prerender: {

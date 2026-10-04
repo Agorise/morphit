@@ -1,7 +1,7 @@
 /**
  * morphit-ops upgrade — check for and apply Morphit releases.
  *
- * Part 122 cp8 — initial implementation.  Manual-only by default
+ * initial implementation.  Manual-only by default
  * per the maintainer's preference; opt-in `MORPHIT_AUTO_UPGRADE=1` to skip
  * the confirmation prompt (for cron/automation use).
  *
@@ -33,9 +33,9 @@
  *                                  morphit-<ver>-offline.tar.gz. When set
  *                                  (or --from-file=PATH), the upgrade runs
  *                                  FULLY OFFLINE: no network discovery, no
- *                                  download; the tarball's sibling `.asc` is
- *                                  verified against the local signer keys and
- *                                  an UNSIGNED tarball is refused. Its prebuilt
+ *                                  download; the tarball must match @morphit's
+ *                                  signed on-chain release record or carry a
+ *                                  pinned signature (see below). Its prebuilt
  *                                  node_modules (the .morphit-bundle-complete
  *                                  marker) skips npm ci, so the rebuild needs
  *                                  no registry either — cable-unplugged upgrade.
@@ -62,25 +62,23 @@
  *                                  on disk with a warning to publish it by hand.
  *   MORPHIT_BACKUP_KEEP           (default: 3) — backups to retain
  *
- * Mirror + integrity model (beta5):
+ * Integrity model. A tarball is installed only when one of these holds:
  *
- *   - GPG detached signature.  If the release carries a
- *     `*.tar.gz.asc`, it is verified against the release-signer PUBLIC
- *     keys that ship in the install at `.forgejo/release-signers/*.asc`
- *     (a LOCAL, code-reviewed trust anchor — not fetched from the
- *     download source).  A tarball that passes is trusted no matter
- *     which mirror served the bytes — this is what makes a fully
- *     standalone mirror safe (Morphit priority #2, unstoppable).
- *     Publishing the signature requires a CI signing key — see
- *     `.forgejo/workflows/release.yml` + docs/UPGRADING.md.
+ *   - Its SHA-256 equals the hash in @morphit's `morphit_release_v1` record
+ *     for that exact version, read from the chain through this node's own
+ *     indexer and checked by recovering the transaction signature to the
+ *     posting key pinned in @morphit/operator-config (lib/releaseAnchor.ts).
+ *     This works on every path: clearnet, offline and hidden-only.
  *
- *   - Anchored SHA-256.  When there's no signature, the `.tar.gz.sha256`
- *     is always taken from the TRUSTED PRIMARY over HTTPS; the tarball
- *     bytes may be mirrored; the bytes are verified against the
- *     primary's hash.  A hostile mirror can't forge this.  If the
- *     primary is fully unreachable AND the release is unsigned, the
- *     upgrade REFUSES — checking a mirror's tarball against that same
- *     mirror's checksum proves nothing.
+ *   - It carries a detached signature (`*.tar.gz.asc`) that gpg reports good
+ *     AND that was made by a fingerprint pinned in @morphit/operator-config.
+ *     The key material comes from the running install's
+ *     `.forgejo/release-signers/`, but a key a release adds there is not
+ *     trusted unless its fingerprint is pinned.
+ *
+ *   The Forgejo primary's `.tar.gz.sha256` is only a transit check: when it is
+ *   there it must match the bytes and agree with the chain, but it never makes
+ *   a tarball installable on its own. Mirrors carry bytes; they decide nothing.
  *
  * What `morphit-ops upgrade` does NOT do (intentionally):
  *   - Schema migrations.  This release tooling is pre-launch;
@@ -106,6 +104,7 @@
 import {
 	tryResolveHiddenUpgrade,
 	readHiddenReleaseTarget,
+	isHiddenOnly,
 	type HiddenUpgradeResolution,
 	RELEASE_VERSION_RE
 } from '../init/hiddenUpgradeResolve.js';
@@ -116,11 +115,78 @@ import {
 	type ListenerVerifier,
 	type LocalIndexerOptions
 } from '../init/hiddenUpgradeLocalIndexer.ts';
-import { normalizeContactUrl, INSTANCE_ENV } from '@morphit/operator-config';
+import {
+	normalizeContactUrl,
+	INSTANCE_ENV,
+	MORPHIT_RELEASE_ACCOUNT,
+	MORPHIT_OFFICIAL_POSTING_PUBKEY,
+	RELEASE_SIGNER_FINGERPRINTS,
+	BLURT_MAINNET_CHAIN_ID,
+	normalizeFingerprint
+} from '@morphit/operator-config';
+import {
+	readSignedReleaseAnchor,
+	type CondenserRead,
+	type ReleaseAnchor
+} from '../lib/releaseAnchor.ts';
+import { chainRead } from '../lib/chainAccess.ts';
+import {
+	installDepsForHiddenNode,
+	lockedTreeProblems,
+	carryNativeAddons,
+	withoutProxyEnv
+} from '../lib/depsInstall.ts';
 import { withSpinner, startDotsSpinner } from '../init/spinner.ts';
 import { healIpfsPrivacy } from '../lib/ipfsPrivacyHeal.ts';
 import { healIpfsGc } from '../lib/ipfsGcHeal.ts';
 import { healTorOnlyOs } from '../lib/torOnlyOsHeal.ts';
+import { heal as healServicePrivileges } from '../lib/unitPrivilegeHeal.ts';
+import { heal as healForwarding } from '../lib/sysctlForwardHeal.ts';
+import { heal as healTlsRenewalHeal } from '../lib/tlsRenewHeal.ts';
+import type { HealResult } from '../lib/healTypes.ts';
+import {
+	healMatrixBotTorOnly,
+	realMatrixTorOnlyRuntime,
+	recheckStoppedMatrixBot
+} from '../lib/matrixTorOnlyHeal.ts';
+import { heal as healBridgeCidr } from '../lib/bridgeCidrHeal.ts';
+import { healNodeRuntime } from '../lib/nodeRuntimeHeal.ts';
+import { heal as healNginxVhosts } from '../lib/nginxVhostHeal.ts';
+import { heal as healHiddenRpcEnv } from '../lib/hiddenRpcEnvHeal.ts';
+import { heal as healRelayHealthEnv } from '../lib/relayHealthEnvHeal.ts';
+import { heal as healPgRoles } from '../lib/pgRoleHeal.ts';
+import { heal as healIndexerEnvShadow } from '../lib/indexerEnvShadowHeal.ts';
+import { heal as healTorPow } from '../lib/torPowHeal.ts';
+import { heal as healEtcPerms } from '../lib/etcPermHeal.ts';
+import { heal as healMailRelay } from '../lib/mailRelayHeal.ts';
+import { heal as healVapid } from '../lib/vapidHeal.ts';
+import { heal as healLogLevel } from '../lib/logLevelHeal.ts';
+import { heal as healTorOnlyEgress } from '../lib/torOnlyEgressHeal.ts';
+import { heal as healIndexerMemory } from '../lib/indexerMemoryHeal.ts';
+import { heal as healOsQuiet } from '../lib/osQuietHeal.ts';
+import { heal as healBunkerwebJobs } from '../lib/bunkerwebJobsHeal.ts';
+import { healBackupEncryption, realBackupRuntime } from '../lib/backupEncryptHeal.ts';
+import { resolveInstanceOrigin, syncInstanceOrigin } from '../lib/instanceOrigin.ts';
+import {
+	healEmptyFeeAddressLines,
+	realFeeAddressRuntime,
+	verifyFeeAddressHeal
+} from '../lib/feeAddressEmptyHeal.ts';
+import {
+	AFTER_RESTART_UNIT,
+	afterRestartLogPath,
+	launchAfterRestartHeals,
+	waitForRestarts,
+	waitForUnitIdle
+} from '../lib/afterRestartHeal.ts';
+import { removeStaleRegPassFiles } from './register.ts';
+import { UPSTREAM_CANARY_KEY_FPR, armoredKeyFingerprints } from '../init/installSummary.ts';
+import {
+	relayJournalNotice,
+	JOURNAL_NOTICE_MARKER,
+	noticeMarkerExists,
+	writeNoticeMarker
+} from '../lib/journalNotice.ts';
 import {
 	healProxyConfig,
 	SELF_HEAL_CHILD_TIMEOUT_MS,
@@ -153,18 +219,43 @@ import {
 	describeWebHeal,
 	followWebHeal,
 	launchWebHeal,
+	WEB_HEAL_UNIT,
 	writeWebHealState
 } from '../lib/webHeal.ts';
-import { isHiddenOnlyNode, readLocalRelease } from '../lib/hiddenOnly.ts';
+import { isHiddenOnlyNode, localIndexerBases, readLocalRelease } from '../lib/hiddenOnly.ts';
 import { healNpmUpdateNotice as healNpmNoticeGlobal } from '../lib/npmNotice.ts';
 import {
 	applyBranding,
 	brandingConfigured,
+	checkServedOgImage,
 	readBrandingSettings,
 	syncTouchedToWebRoot,
 	BRAND_SLOTS_FILE
 } from '../lib/branding.ts';
-import { readFileSync, writeFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, readdirSync, statSync, copyFileSync, cpSync, readlinkSync, chmodSync, openSync, readSync, writeSync, closeSync, fstatSync, constants as fsConstants } from 'node:fs';
+import {
+	readFileSync,
+	writeFileSync,
+	createWriteStream,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	renameSync,
+	rmSync,
+	readdirSync,
+	statSync,
+	copyFileSync,
+	cpSync,
+	readlinkSync,
+	chmodSync,
+	openSync,
+	readSync,
+	writeSync,
+	closeSync,
+	fstatSync,
+	realpathSync,
+	constants as fsConstants
+} from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join, dirname, basename, resolve } from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -172,7 +263,11 @@ import { tmpdir } from 'node:os';
 
 import { error as printError, info, warn, sanitizeForTerm } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
-import { refreshHelperScripts, DEFAULT_HELPER_DIR, HELPER_SCRIPTS } from '../lib/refreshHelperScripts.ts';
+import {
+	refreshHelperScripts,
+	DEFAULT_HELPER_DIR,
+	HELPER_SCRIPTS
+} from '../lib/refreshHelperScripts.ts';
 import {
 	applyAndVerifyRelayHeal,
 	relayHealBackupPath,
@@ -183,6 +278,7 @@ import {
 } from '../lib/relayHiddenHeal.ts';
 import { daemonReload } from '../lib/restartServices.ts';
 import { healXmrExplorerList } from '../lib/feeExplorerListHeal.ts';
+import { healBtcExplorerList } from '../lib/btcFeeExplorerListHeal.ts';
 import { chooseCanaryDirOwner, parsePasswdRefreshTarget } from '../lib/canaryDirOwner.ts';
 import {
 	detectDbContainer,
@@ -196,15 +292,17 @@ import {
 } from '../lib/dbContainer.ts';
 import {
 	MATRIX_BOT_UNIT,
+	MATRIX_BOT_ENV_PATH,
 	matrixBotReadiness,
 	readMatrixBotEnv,
-	syncMatrixBotService
+	syncMatrixBotService,
+	writeMatrixBotPosture
 } from '../lib/matrixBot.ts';
 
 interface UpgradeFlags {
 	readonly 'check-only'?: string;
-	readonly 'yes'?: string;
-	readonly 'json'?: string;
+	readonly yes?: string;
+	readonly json?: string;
 	readonly [key: string]: string | undefined;
 }
 
@@ -215,9 +313,19 @@ interface RunUpgradeOptions {
 	 *  loopback + docker-bridge list the hidden resolver already uses. */
 	readonly localIndexerBases?: readonly string[];
 	/** How the local indexer's listener is authenticated. Tests only; the
-	 *  default proves from /proc that it is morphit-indexer.service
-	 *  (v1.18.0 deep-deep, ops-1). */
+	 *  default proves from /proc that it is morphit-indexer.service.
+	 * */
 	readonly verifyLocalIndexer?: ListenerVerifier;
+	/** The release trust anchors. Tests only; the default is the pinned set in
+	 *  @morphit/operator-config and chain reads through lib/chainAccess.ts. */
+	readonly trust?: {
+		readonly postingPubkey?: string;
+		readonly signerFingerprints?: readonly string[];
+		readonly chainRead?: CondenserRead;
+	};
+	/** What an up-to-date box runs instead of an upgrade. Tests only; the
+	 *  default is this release's heals (runHealsAgain). */
+	readonly healsWhenUpToDate?: () => Promise<number>;
 }
 
 interface ReleaseInfo {
@@ -258,29 +366,12 @@ const DEFAULT_BACKUP_KEEP = 3;
 // disable+stops it otherwise, per the operator's `morphit-ops matrix`
 // setting.  Restarting it unconditionally would needlessly bounce a unit
 // that is meant to stay cleanly inert on instances not using Matrix.
-const SERVICES_TO_RESTART = [
-	'morphit-indexer.service',
-	'morphit-relay.service'
-];
+const SERVICES_TO_RESTART = ['morphit-indexer.service', 'morphit-relay.service'];
 
 // ─── Mirror fallback + source-independent integrity (beta5) ─────────
 //
-// Two layers, in trust order:
-//
-//   1. GPG detached signature (`*.tar.gz.asc`) verified against the
-//      release-signer PUBLIC keys that ship IN the install at
-//      `.forgejo/release-signers/*.asc`. Because the trust anchor is
-//      local (already-running, code-reviewed) and not fetched from the
-//      download source, a tarball that passes this check is trusted no
-//      matter which mirror served the bytes — true unstoppable upgrades.
-//
-//   2. Anchored SHA-256: the tiny `.tar.gz.sha256` is always taken from
-//      the TRUSTED PRIMARY over HTTPS; the big tarball bytes may come
-//      from a mirror; we verify the bytes against the primary's hash.
-//      A hostile mirror can't forge this (it doesn't control the hash).
-//      If the primary is fully unreachable AND there's no valid
-//      signature, we REFUSE — verifying a mirror's tarball against that
-//      same mirror's checksum proves nothing.
+// Which source the bytes come from does not matter for trust: see the
+// integrity model in the header and integrityGate().
 
 interface ReleaseSource {
 	readonly host: string;
@@ -323,7 +414,10 @@ export function parseReleaseSources(
 	}
 	// Then any operator-added mirrors from the env.
 	for (const raw of (mirrorsEnv ?? '').split(',')) {
-		const spec = raw.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+		const spec = raw
+			.trim()
+			.replace(/^https?:\/\//, '')
+			.replace(/\/+$/, '');
 		if (spec === '') continue;
 		const slash = spec.indexOf('/');
 		const host = slash === -1 ? spec : spec.slice(0, slash);
@@ -357,10 +451,10 @@ export function parseTagFromTarballName(name: string): string | null {
  *  + the version parsed from the filename, or null when no offline source was
  *  requested (the normal network path). Throws on a bad/missing path.
  *
- *  Trust is unchanged: with no reachable primary there is no anchored hash, so
- *  decideTrust() will REQUIRE a valid GPG signature (verified against the local
- *  code-reviewed signer keys) — an UNSIGNED offline tarball is refused, exactly
- *  as an unsigned release is refused online when the trusted primary is down. */
+ *  Trust is the same as online: the tarball must match the hash in @morphit's
+ *  signed on-chain release record (read through this node's own indexer), or
+ *  carry a good signature from a pinned release-signer key. Otherwise it is
+ *  refused. */
 export function resolveOfflineTarball(
 	flags: UpgradeFlags
 ): { tarballPath: string; sigPath: string | null; tag: string } | null {
@@ -371,7 +465,9 @@ export function resolveOfflineTarball(
 		throw new Error(`--from-file: no such file: ${tarballPath}`);
 	}
 	if (!tarballPath.endsWith('.tar.gz')) {
-		throw new Error(`--from-file: expected a .tar.gz release tarball, got ${basename(tarballPath)}`);
+		throw new Error(
+			`--from-file: expected a .tar.gz release tarball, got ${basename(tarballPath)}`
+		);
 	}
 	if (!SAFE_ASSET_NAME.test(basename(tarballPath))) {
 		throw new Error(
@@ -404,7 +500,7 @@ export function offlineReleaseDir(installDir: string): string {
  * Tor first starts, so on some boxes the install-time config write loses the
  * race and leaves MORPHIT_INSTANCE_TOR_ADDRESS empty — the node then advertises
  * `tor: null` in /v1/instance and the federation can't reach it over Tor (fatal
- * for a censored/Iran node whose clearnet is blocked). On every upgrade, if the
+ * for a node whose clearnet is filtered upstream). On every upgrade, if the
  * onion now exists on disk but the config value is empty, populate it. Idempotent
  * (a non-empty value is left alone), root-only (the onion file is 0700
  * debian-tor). PURE core via applyOnionHeal for testing.
@@ -470,7 +566,7 @@ export function compareTags(a: string, b: string): number {
 
 /** Is `latest` a strictly newer release than the installed `current`? When
  *  both are version numbers this is compareTags() > 0 — an OLDER or equal tag
- *  is never an upgrade (v1.18.0 deep-deep, ops-2). When the installed version
+ *  is never an upgrade. When the installed version
  *  cannot be read, any different tag counts, as before. PURE. */
 export function isNewerRelease(latest: string, current: string): boolean {
 	const isVer = (t: string): boolean => /^v?\d+\.\d+\.\d+(?:-.+)?$/.test(t.trim());
@@ -479,7 +575,7 @@ export function isNewerRelease(latest: string, current: string): boolean {
 }
 
 /** Does this box serve /canary.txt for its own origin? Asked on loopback.
- *  v1.18.0 deep-deep (ops-8): this was an `sh -c` string built from the
+ *  this was an `sh -c` string built from the
  *  configured origin's host with no quoting, so a value like `x;cmd` ran `cmd`
  *  as root. It is now curl with an argument list, and a host that is not a
  *  host name is not probed at all. */
@@ -510,12 +606,15 @@ export function sameReleaseTag(a: string, b: string): boolean {
 	return a.trim().replace(/^v/, '') === b.trim().replace(/^v/, '');
 }
 
-/** Scan the offline drop-dir for the newest signed release tarball an operator
- *  has left there. A tarball with NO sibling `.asc` is ignored — offline installs
- *  require a signature (an unsigned tarball can't be trusted with no primary to
- *  anchor a hash). Returns the newest {tarballPath, sigPath, tag} or null. Never
- *  throws. */
-export function findLocalOfflineRelease(installDir: string): { tarballPath: string; sigPath: string; tag: string } | null {
+/** Scan the offline drop-dir for the newest release tarball an operator has
+ *  left there, with its sibling `.asc` when there is one. A release publishes
+ *  the offline bundle without an `.asc`; step 6 then checks it against the
+ *  `offline_sha256` in @morphit's signed release record, and refuses it when
+ *  neither that nor a pinned signature is available. Returns the newest
+ *  {tarballPath, sigPath, tag} or null. Never throws. */
+export function findLocalOfflineRelease(
+	installDir: string
+): { tarballPath: string; sigPath: string | null; tag: string } | null {
 	const dir = offlineReleaseDir(installDir);
 	let names: string[];
 	try {
@@ -523,14 +622,14 @@ export function findLocalOfflineRelease(installDir: string): { tarballPath: stri
 	} catch {
 		return null; // dir absent / unreadable — nothing dropped
 	}
-	let best: { tarballPath: string; sigPath: string; tag: string } | null = null;
+	let best: { tarballPath: string; sigPath: string | null; tag: string } | null = null;
 	for (const name of names) {
 		if (!name.endsWith('.tar.gz') || name.endsWith('.sha256.tar.gz')) continue;
+		if (!SAFE_ASSET_NAME.test(name)) continue;
 		const tag = parseTagFromTarballName(name);
 		if (tag === null) continue;
 		const tarballPath = join(dir, name);
-		const sigPath = `${tarballPath}.asc`;
-		if (!existsSync(sigPath)) continue; // unsigned → not trustable offline
+		const sigPath = existsSync(`${tarballPath}.asc`) ? `${tarballPath}.asc` : null;
 		if (best === null || compareTags(tag, best.tag) > 0) {
 			best = { tarballPath, sigPath, tag };
 		}
@@ -551,7 +650,7 @@ function synthOfflineRelease(
 	const assets: ForgejoReleaseAsset[] = [
 		{ name, browser_download_url: tarballPath, size: 0 },
 		// A synthetic .sha256 asset keeps selectReleaseAssets() happy; it is never
-		// downloaded or trusted offline (expectedHash stays null → GPG-sig required).
+		// read. Offline, step 6 needs the signed on-chain record or a pinned signature.
 		{ name: `${name}.sha256`, browser_download_url: `${tarballPath}.sha256`, size: 0 }
 	];
 	if (sigPath !== null) {
@@ -576,7 +675,7 @@ export const SAFE_ASSET_NAME = /^[A-Za-z0-9._-]+$/;
 export function selectReleaseAssets(
 	allAssets: readonly ForgejoReleaseAsset[]
 ): SelectedAssets | null {
-	// v1.18.0 deep-deep (ops-7). Asset names come from the release source — a
+	// Asset names come from the release source — a
 	// mirror when the primary is down — and name files in the temp dir:
 	// join(tmpDir, '../../etc/x.tar.gz') is /etc/x.tar.gz, written as root. An
 	// asset whose name is not a plain file name is ignored.
@@ -588,7 +687,7 @@ export function selectReleaseAssets(
 	// it's the artifact the SHA-256 anchor + verify-download are built around, and
 	// it's small (deps are restored by `npm ci`). The self-contained
 	// morphit-<ver>-offline.tar.gz is a SEPARATE, far larger artifact with its OWN
-	// hash, meant only for --from-file / drop-dir installs. cp669: this function
+	// hash, meant only for --from-file / drop-dir installs. this function
 	// used to grab the FIRST `.tar.gz` and the FIRST `.tar.gz.sha256` — so once
 	// 1.10.1 added the -offline asset a release had TWO of each, and an online
 	// upgrade could download the huge -offline bundle (timing out on a home
@@ -608,134 +707,109 @@ export function selectReleaseAssets(
 
 type IntegrityProof =
 	| 'gpg-signature'
-	| 'primary-https-hash'
-	| 'primary-anchored-hash'
-	| 'onchain-anchored-sha256';
-
-interface TrustDecision {
-	readonly allowed: boolean;
-	readonly proof: IntegrityProof | null;
-	readonly reason: string;
-}
-
-/** Decide whether a downloaded tarball may be installed. PURE.
- *  - A verified GPG signature trusts ANY byte source.
- *  - Otherwise the SHA-256 must match a hash that came from the trusted
- *    primary (bytes may still have been mirrored).
- *  - Otherwise REFUSE. */
-export function decideTrust(args: {
-	bytesFromPrimary: boolean;
-	sigVerified: boolean;
-	hashMatched: boolean;
-	hashFromPrimary: boolean;
-	hashFromChain?: boolean;
-}): TrustDecision {
-	if (args.sigVerified) {
-		return {
-			allowed: true,
-			proof: 'gpg-signature',
-			reason: 'GPG signature verified against the release-signer keys shipped in the install.'
-		};
-	}
-	// v1.16.9 — a SHA-256 anchored ON-CHAIN by @morphit's signed release broadcast
-	// (read from the LOCAL indexer, no clearnet) is a valid trust anchor too — it
-	// lets a hidden / air-gapped node apply an offline tarball with no hand-signing.
-	if (args.hashMatched && args.hashFromChain) {
-		return {
-			allowed: true,
-			proof: 'onchain-anchored-sha256',
-			reason:
-				'SHA-256 matched the release hash @morphit published on-chain (read from your local indexer — no clearnet).'
-		};
-	}
-	if (args.hashMatched && args.hashFromPrimary) {
-		return {
-			allowed: true,
-			proof: args.bytesFromPrimary ? 'primary-https-hash' : 'primary-anchored-hash',
-			reason: args.bytesFromPrimary
-				? 'SHA-256 verified against the trusted primary over HTTPS.'
-				: 'SHA-256 verified against the trusted primary (tarball bytes came from a mirror).'
-		};
-	}
-	return {
-		allowed: false,
-		proof: null,
-		reason:
-			'No trusted integrity proof: the release is unsigned and neither the trusted primary nor the ' +
-			'on-chain anchor could provide the expected hash. Refusing to install a mirror-supplied tarball ' +
-			'that can only be checked against the mirror\u2019s own checksum.'
-	};
-}
+	| 'onchain-anchored-sha256'
+	| 'hidden-federation-onchain-sha256';
 
 /** What checking a release's detached signature found. */
 export type SignatureCheck =
 	/** No .asc came with the release. */
 	| 'absent'
-	/** gpg reported a good signature from a shipped release-signer key. */
+	/** gpg reported a good signature from a PINNED release-signer fingerprint. */
 	| 'valid'
-	/** A signature was there and gpg ran, and it did NOT verify. */
+	/** A signature was there and gpg ran, and it did NOT verify, or it was made
+	 *  by a key that is not pinned. */
 	| 'invalid'
 	/** It could not be checked here at all (no gpg, no signer keys). */
 	| 'unverifiable';
 
 /**
  * The whole step-6 decision, as run by runUpgrade. PURE.
- * (v1.18.0 deep-deep, ops-2 + ops-3)
  *
- * WHAT WAS WRONG.
- *   - A present but INVALID .asc just meant "not signed": with the primary's
- *     hash matching, the upgrade went ahead with no word, so the signature
- *     added nothing against a compromised primary or CI run (ops-3).
- *   - A verified signature OVERRODE a known mismatch against the primary's
- *     hash. The signature is not tied to a version, so a mirror serving an
- *     older, genuinely signed tarball under the new name was installed (ops-2).
- * NOW. An invalid signature refuses; a hash the primary (or the chain) gave
- * must match, signature or not; then decideTrust as before.
+ * Two things can make a tarball installable, and nothing else:
+ *   - its SHA-256 equals the hash in the `morphit_release_v1` op whose
+ *     signature recovers to @morphit's pinned posting key (`chainHash`, read by
+ *     lib/releaseAnchor.ts), or
+ *   - a detached signature from a PINNED release-signer fingerprint.
+ * The Forgejo primary's `.sha256` (`primaryHash`) is a transit check only: it
+ * must match the bytes when present, and it must agree with the chain, but it
+ * is never enough on its own. Before this, an unsigned tarball whose hash the
+ * primary vouched for was installed as root on every clearnet node, and the
+ * offline and hidden paths took the hash from the local indexer's
+ * `/v1/release`, which repeats what one RPC node served.
+ *
+ * Kept from v1.18.0 (ops-2, ops-3): a present signature that does not verify
+ * refuses, and a valid signature never overrides a known hash mismatch (a
+ * signature is not bound to a version; the chain record is).
  */
 export function integrityGate(args: {
 	signature: SignatureCheck;
-	expectedHash: string | null;
+	/** The hash the signed on-chain record names for THIS tarball variant, or
+	 *  null when there is no such record (or it names no hash for the variant). */
+	chainHash: string | null;
+	/** The `.sha256` the trusted primary served, or null (offline, primary down). */
+	primaryHash: string | null;
 	actualHash: string;
-	expectedHashFromChain: boolean;
-	bytesFromPrimary: boolean;
+	/** Fetched over Tor/I2P from a federation peer (hidden-only node). */
 	hidden: { servedBy: string; tag: string } | null;
-}): { allowed: boolean; proof: string | null; reason: string } {
+}): { allowed: boolean; proof: IntegrityProof | null; reason: string } {
+	const refuse = (reason: string) => ({ allowed: false, proof: null, reason });
 	if (args.signature === 'invalid') {
-		return {
-			allowed: false,
-			proof: null,
-			reason:
-				'The release came with a signature (.asc), but it does not verify against the release-signer ' +
-				'keys shipped with this install. Nothing was changed. Try again later; if it keeps happening, ' +
-				'the release source is serving files that were altered.'
-		};
+		return refuse(
+			'The release came with a signature (.asc), but it is not a good signature from a pinned ' +
+				'release-signer key. Nothing was changed. Try again later; if it keeps happening, the ' +
+				'release source is serving files that were altered.'
+		);
 	}
-	if (args.expectedHash !== null && args.expectedHash !== args.actualHash) {
-		return {
-			allowed: false,
-			proof: null,
-			reason:
+	if (args.chainHash !== null && args.primaryHash !== null && args.chainHash !== args.primaryHash) {
+		return refuse(
+			`The release hash @morphit signed on chain and the hash the release host serves disagree.\n` +
+				`  On chain: ${args.chainHash}\n` +
+				`  Host:     ${args.primaryHash}\n` +
+				'  Nothing was changed. The release host is serving a different file than the one @morphit published.'
+		);
+	}
+	for (const [from, want] of [
+		['the signed on-chain record', args.chainHash],
+		['the release host', args.primaryHash]
+	] as const) {
+		if (want !== null && want !== args.actualHash) {
+			return refuse(
 				`SHA-256 mismatch on the downloaded tarball.\n` +
-				`  Expected (from ${args.expectedHashFromChain ? 'the chain' : 'the primary'}): ${args.expectedHash}\n` +
-				`  Actual:                  ${args.actualHash}\n` +
-				'  Nothing was changed. The tarball was altered in transit, or the SHA file is stale.'
-		};
+					`  Expected (from ${from}): ${want}\n` +
+					`  Actual:  ${args.actualHash}\n` +
+					'  Nothing was changed. The tarball was altered in transit, or the SHA file is stale.'
+			);
+		}
 	}
-	const hashMatched = args.expectedHash !== null;
-	if (args.hidden !== null) {
+	if (args.chainHash !== null) {
+		return args.hidden !== null
+			? {
+					allowed: true,
+					proof: 'hidden-federation-onchain-sha256',
+					reason: `Fetched over Tor/I2P from ${args.hidden.servedBy} and matched the SHA-256 in @morphit's signed release record for ${args.hidden.tag}.`
+				}
+			: {
+					allowed: true,
+					proof: 'onchain-anchored-sha256',
+					reason:
+						"SHA-256 matched the hash in @morphit's release record on chain (signature checked against the pinned posting key)."
+				};
+	}
+	if (args.signature === 'valid') {
 		return {
 			allowed: true,
-			proof: 'hidden-federation-onchain-sha256',
-			reason: `Fetched over Tor/I2P from ${args.hidden.servedBy} and verified against the on-chain SHA-256 for ${args.hidden.tag}.`
+			proof: 'gpg-signature',
+			reason: 'Good signature from a pinned release-signer key.'
 		};
 	}
-	return decideTrust({
-		bytesFromPrimary: args.bytesFromPrimary,
-		sigVerified: args.signature === 'valid',
-		hashMatched,
-		hashFromPrimary: args.expectedHash !== null && !args.expectedHashFromChain,
-		hashFromChain: args.expectedHashFromChain && hashMatched
-	});
+	return refuse(
+		args.signature === 'unverifiable'
+			? 'The release signature could not be checked on this box (gpg or the signer keys are missing), and ' +
+					"no signed on-chain release record names this tarball's hash. Nothing was changed."
+			: 'The release is not signed, and no signed on-chain release record names its hash. Nothing was ' +
+					'changed. If the release was published moments ago, its on-chain record may not be broadcast yet: ' +
+					'try again later.'
+	);
 }
 
 /** True iff `gpg` is on PATH. */
@@ -743,36 +817,55 @@ function gpgAvailable(): boolean {
 	return spawnSync('which', ['gpg'], { stdio: 'pipe', timeout: 3000 }).status === 0;
 }
 
-/** Verify a detached signature against the release-signer pubkeys shipped
- *  at <installDir>/.forgejo/release-signers/*.asc, using a throwaway
- *  keyring (never touches the operator's ~/.gnupg). Returns true only if
- *  gpg reports a GOOD signature from one of the shipped keys. */
+/** The fingerprints a VALIDSIG status line names: the signing key and, when a
+ *  subkey signed, its primary key. PURE. */
+export function validSigFingerprints(statusOutput: string): string[] {
+	const out: string[] = [];
+	for (const line of statusOutput.split('\n')) {
+		const m = /^\[GNUPG:\] VALIDSIG (.*)$/.exec(line.trim());
+		if (!m) continue;
+		const f = (m[1] ?? '').trim().split(/\s+/);
+		if (f[0]) out.push(normalizeFingerprint(f[0]));
+		const primary = f[9];
+		if (f.length >= 10 && primary) out.push(normalizeFingerprint(primary));
+	}
+	return out;
+}
+
+/** Verify a detached signature; true only for a good signature from a pinned
+ *  release-signer fingerprint. */
 export function verifyDetachedSignature(
 	installDir: string,
 	tarballPath: string,
-	sigPath: string
+	sigPath: string,
+	pinned: readonly string[] = RELEASE_SIGNER_FINGERPRINTS
 ): boolean {
-	return checkDetachedSignature(installDir, tarballPath, sigPath) === 'valid';
+	return checkDetachedSignature(installDir, tarballPath, sigPath, pinned) === 'valid';
 }
 
-/** Check a detached signature against the release-signer pubkeys shipped at
- *  <installDir>/.forgejo/release-signers/*.asc, in a throwaway keyring (never
- *  the operator's ~/.gnupg). 'invalid' means gpg ran with at least one signer
- *  key loaded and did not report a good signature — including a signature by
- *  an unknown key (v1.18.0 deep-deep, ops-3). */
+/** Check a detached signature in a throwaway keyring (never the operator's
+ *  ~/.gnupg). The key MATERIAL comes from the running install's
+ *  `.forgejo/release-signers/*.asc`; whether a signature counts is decided by
+ *  `pinned`, the fingerprints in @morphit/operator-config. A good signature from
+ *  any other key — one a release added to its own signer directory, say — is
+ *  'invalid', exactly like a bad one. */
 export function checkDetachedSignature(
 	installDir: string,
 	tarballPath: string,
-	sigPath: string
+	sigPath: string,
+	pinned: readonly string[] = RELEASE_SIGNER_FINGERPRINTS
 ): SignatureCheck {
 	if (!gpgAvailable()) {
-		warn('gpg not found on PATH — cannot verify the release signature (will fall back to hash anchoring).');
+		info(
+			'gpg is not installed on this box, so the release signature cannot be checked here; the signed on-chain record is used instead.'
+		);
 		return 'unverifiable';
 	}
 	const signersDir = join(installDir, '.forgejo', 'release-signers');
 	if (!existsSync(signersDir)) return 'unverifiable';
 	const keyFiles = readdirSync(signersDir).filter((f) => f.endsWith('.asc'));
 	if (keyFiles.length === 0) return 'unverifiable';
+	const allowed = new Set(pinned.map(normalizeFingerprint));
 
 	const gnupgHome = mkdtempSync(join(tmpdir(), 'morphit-gpg-'));
 	try {
@@ -780,10 +873,14 @@ export function checkDetachedSignature(
 		spawnSync('chmod', ['700', gnupgHome], { stdio: 'ignore' });
 		let imported = 0;
 		for (const kf of keyFiles) {
-			const imp = spawnSync('gpg', ['--homedir', gnupgHome, '--batch', '--import', join(signersDir, kf)], {
-				stdio: 'pipe',
-				timeout: 15000
-			});
+			const imp = spawnSync(
+				'gpg',
+				['--homedir', gnupgHome, '--batch', '--import', join(signersDir, kf)],
+				{
+					stdio: 'pipe',
+					timeout: 15000
+				}
+			);
 			if (imp.status !== 0) {
 				warn(`Could not import release-signer key ${kf}.`);
 			} else {
@@ -797,13 +894,13 @@ export function checkDetachedSignature(
 			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }
 		);
 		const status = typeof res.stdout === 'string' ? res.stdout : '';
-		// A trustworthy result = a GOODSIG/VALIDSIG line AND a zero exit.
-		return res.status === 0 && /\bVALIDSIG\b/.test(status) ? 'valid' : 'invalid';
+		// A trustworthy result = a zero exit AND a VALIDSIG line naming a pinned key.
+		if (res.status !== 0) return 'invalid';
+		return validSigFingerprints(status).some((f) => allowed.has(f)) ? 'valid' : 'invalid';
 	} finally {
 		rmSync(gnupgHome, { recursive: true, force: true });
 	}
 }
-
 
 /** Resolve the directory nginx serves the static frontend from.
  *  `MORPHIT_WEB_ROOT` overrides; default matches docs/RUN-A-MORPHIT-NODE.md
@@ -812,8 +909,6 @@ export function resolveWebRoot(env: { MORPHIT_WEB_ROOT?: string }): string {
 	const v = (env.MORPHIT_WEB_ROOT ?? '').trim();
 	return v === '' ? DEFAULT_WEB_ROOT : v;
 }
-
-
 
 /** Path to the MCP server's optional env file. systemd reads it as
  *  `EnvironmentFile=-/etc/morphit/mcp.env`, which OVERRIDES the unit's
@@ -869,7 +964,10 @@ export function buildMcpHealthUrl(host: string, port: number): string {
 /** Classify a `/health` response. The MCP HTTP transport answers
  *  `GET /health` → `200 { status: 'ok', transport: 'http' }` (liveness only —
  *  no auth, not rate-limited; `apps/mcp-server/src/main.ts`). PURE. */
-export function classifyMcpHealth(status: number, bodyText: string): 'ok' | 'bad_status' | 'bad_body' {
+export function classifyMcpHealth(
+	status: number,
+	bodyText: string
+): 'ok' | 'bad_status' | 'bad_body' {
 	if (status !== 200) return 'bad_status';
 	try {
 		const j = JSON.parse(bodyText) as { status?: unknown };
@@ -899,7 +997,8 @@ async function probeMcpHealth(
 			const text = (await res.text()).slice(0, 4096);
 			const verdict = classifyMcpHealth(res.status, text);
 			if (verdict === 'ok') return { reachable: true, detail: `HTTP ${res.status}` };
-			lastDetail = verdict === 'bad_status' ? `HTTP ${res.status}` : `HTTP ${res.status}, unexpected body`;
+			lastDetail =
+				verdict === 'bad_status' ? `HTTP ${res.status}` : `HTTP ${res.status}, unexpected body`;
 		} catch (e) {
 			lastDetail = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -929,7 +1028,7 @@ function resolveDbIdentity(installDir: string): DbIdentity {
 	return { dbName: BACKUP_DB_NAME, dbUser: BACKUP_DB_USER };
 }
 
-/** Every-upgrade Docker-aware assurance (cp509 / v1.8.4 B): if the operator has
+/** Every-upgrade Docker-aware assurance (v1.8.4 B): if the operator has
  *  a backup configured but its DB_CONTAINER is empty WHILE their Postgres is
  *  actually containerized, the daily backup is dumping the host (= nothing).
  *  Detect that drift and WARN with the exact one-line fix. Best-effort + never
@@ -999,7 +1098,7 @@ export function splitSchemaSections(sql: string): Map<number, string> {
 /**
  * Does an EXISTING database need operator attention after this upgrade?
  *
- * cp447 — this used to be a raw byte-diff of schema.sql, and it lied on every
+ * this used to be a raw byte-diff of schema.sql, and it lied on every
  * release. Since v37 the convention is that a schema change ships as a NEW
  * `-- ─── v<N>` section plus a numbered entry in `MIGRATIONS[]`, which the
  * indexer applies to an existing DB automatically at start-up. A byte-diff
@@ -1038,13 +1137,13 @@ export function highestMigrationVersion(installDir: string): number {
 /** Did this upgrade edit schema.sql WITHOUT shipping a migration to carry the
  *  change to existing databases?
  *
- *  v1.8.12 (the maintainer) — `schemaBaselineChanged()` alone is not that question. It
+ *  v1.8.12 — `schemaBaselineChanged()` alone is not that question. It
  *  diffs schema.sql and nothing else, so ANY schema edit triggered the
  *  "changed IN PLACE — not via a numbered migration" warning, even when a
  *  numbered migration existed and had already been applied automatically at
  *  indexer start-up.
  *
- *  the maintainer hit exactly that upgrading to v1.8.12, which ships MIGRATION 51: his
+ *  The maintainer hit exactly that upgrading to v1.8.12, which ships MIGRATION 51: his
  *  database was correctly updated, and the upgrade told him it was not and
  *  pointed him at a reset + re-sync procedure. A false alarm that recommends
  *  rebuilding a database is worse than no alarm — it spends the operator's
@@ -1117,14 +1216,12 @@ export function deployFrontendBuild(buildDir: string, webRoot: string): void {
 	// not webRoot/build/index.html); force:true overwrites existing files.
 	cpSync(buildDir, webRoot, { recursive: true, force: true });
 	if (!existsSync(join(webRoot, 'index.html'))) {
-		throw new Error(
-			`Frontend deploy did not produce ${join(webRoot, 'index.html')}.`
-		);
+		throw new Error(`Frontend deploy did not produce ${join(webRoot, 'index.html')}.`);
 	}
 }
 
 /** How to PUBLISH a freshly-built frontend after the (always-run) build.
- *  beta11 (supersedes cp236). */
+ *  beta11 (supersedes). */
 export interface FrontendDeployPlan {
 	/** Copy build/ into <webRoot> — the bare-metal nginx model. */
 	readonly copyToWebRoot: boolean;
@@ -1144,8 +1241,8 @@ export interface FrontendDeployPlan {
  *  runs before this — this only covers post-build publishing.  PURE (so the
  *  smoke can exhaust the four cases).
  *
- *  beta11 — `frontendContainer` REPLACES cp236's container-present boolean.
- *  cp236 assumed the container was named "morphit-frontend" and
+ *  beta11 — `frontendContainer` REPLACES the container-present boolean.
+ *  A later change assumed the container was named "morphit-frontend" and
  *  recreated it via the repo's example compose file — both wrong on real
  *  deployments (a `docker compose` project names it `<project>-frontend-1`,
  *  e.g. `bunkerweb-frontend-1`, and recreating it with the repo's example
@@ -1207,7 +1304,7 @@ export function containerMountsBuildDir(sources: readonly string[], buildDir: st
 
 /** Find the RUNNING container that bind-mounts the freshly-built
  *  apps/web/build — identified by the mount, NOT by a container name or a
- *  compose file (cp236's two wrong assumptions).  Returns the container
+ *  compose file (the two wrong assumptions).  Returns the container
  *  name, or null if docker is absent / no running container mounts the
  *  build dir.  IMPURE. */
 function findFrontendContainer(buildDir: string): string | null {
@@ -1245,7 +1342,7 @@ function findFrontendContainer(buildDir: string): string | null {
  *  Exported for its test.  IMPURE. */
 export function restartFrontendContainer(name: string, installDir: string): void {
 	// The frontend nginx.conf is BAKED into the image at build time, so a plain
-	// restart keeps a STALE config (the maintainer/timeapp: the `/v1/` 4 KB body cap that
+	// restart keeps a STALE config (timeapp: the `/v1/` 4 KB body cap that
 	// 413'd every avatar upload survived every restart + every backend upgrade).
 	// When the container is compose-managed, REBUILD it after refreshing its
 	// build-context nginx.conf from the upgraded repo, so config fixes actually
@@ -1257,7 +1354,11 @@ export function restartFrontendContainer(name: string, installDir: string): void
 	// the rebuild never brings up or recreates anything else in the stack.
 	let ref: ComposeRef | null = null;
 	try {
-		const insp = spawnSync('docker', ['inspect', name], { encoding: 'utf8', timeout: 10_000, maxBuffer: 16 * 1024 * 1024 });
+		const insp = spawnSync('docker', ['inspect', name], {
+			encoding: 'utf8',
+			timeout: 10_000,
+			maxBuffer: 16 * 1024 * 1024
+		});
 		const c = insp.status === 0 ? parseDockerInspect(insp.stdout ?? '[]')[0] : undefined;
 		ref = c ? composeRefOf(c) : null;
 	} catch {
@@ -1269,7 +1370,11 @@ export function restartFrontendContainer(name: string, installDir: string): void
 			// Build context is <workdir>/frontend; refresh its nginx.conf from the
 			// upgraded repo so the rebuild bakes the CURRENT config.
 			const srcConf = join(installDir, 'ops', 'bunkerweb', 'frontend', 'nginx.conf');
-			const dstConf = join(ref.workDir !== '' ? ref.workDir : dirname(ref.files[0]!), 'frontend', 'nginx.conf');
+			const dstConf = join(
+				ref.workDir !== '' ? ref.workDir : dirname(ref.files[0]!),
+				'frontend',
+				'nginx.conf'
+			);
 			if (existsSync(srcConf) && existsSync(dirname(dstConf))) {
 				copyFileSync(srcConf, dstConf);
 				info('Refreshed the frontend nginx.conf from the upgraded release.');
@@ -1282,10 +1387,17 @@ export function restartFrontendContainer(name: string, installDir: string): void
 		// usually byte-identical (same nginx.conf), so a plain `up --build` sees no
 		// change and leaves the RUNNING container in place — still bind-mounted to
 		// the pre-upgrade apps/web/build inode (step 7 renamed the install to .bak),
-		// so it serves the STALE build (the maintainer/morphitir v1.17.0: upgrade reported
+		// so it serves the STALE build (seen on an instance at v1.17.0: upgrade reported
 		// success while /verify.json stayed 1.16.13). Forcing the recreate re-binds
 		// the mount to the freshly-extracted build, fixing config AND content.
-		const up = composeArgs(ref, ['up', '-d', '--no-deps', '--build', '--force-recreate', ref.service]);
+		const up = composeArgs(ref, [
+			'up',
+			'-d',
+			'--no-deps',
+			'--build',
+			'--force-recreate',
+			ref.service
+		]);
 		const rebuilt =
 			spawnSync('docker', up, { stdio: 'inherit', timeout: 300_000 }).status === 0 ||
 			spawnSync('docker-compose', up.slice(1), { stdio: 'inherit', timeout: 300_000 }).status === 0;
@@ -1433,9 +1545,21 @@ async function resolveServedVersion(
 	return null;
 }
 
-
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
+	// Neither downloads nor installs anything: the questions the heal phase
+	// left for later, and this release's heals run again.
+	if (opts.flags['questions'] === 'true') return runQuestions();
+	if (opts.flags['heals'] === 'true') return runHealsAgain();
 	const checkOnly = opts.flags['check-only'] === 'true';
+	// Self-heal is the rule: a box already on the newest release still gets this
+	// release's heals, so "the next `sudo morphit-ops upgrade` tries again" holds.
+	const healsWhenUpToDate =
+		opts.healsWhenUpToDate ??
+		(() =>
+			runHealsAgain({
+				upToDate: true,
+				installDir: process.env.MORPHIT_INSTALL_DIR ?? DEFAULT_INSTALL_DIR
+			}));
 	const forceYes = opts.flags['yes'] === 'true' || process.env.MORPHIT_AUTO_UPGRADE === '1';
 	const jsonOutput = opts.flags['json'] === 'true';
 
@@ -1445,86 +1569,87 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// anyway — an operator saw it after a clean upgrade, advising an npm upgrade
 	// they must not perform, since the release vendors a pinned npm/node.
 
-/**
- * Run a child process while the braille spinner turns, then replay its output.
- *
- * WHY NOT spawnSync: spawnSync BLOCKS the event loop, so no setInterval can
- * fire and a spinner wrapped around it would sit frozen — worse than none. The
- * async spawn keeps the loop turning so the spinner actually animates.
- *
- * Output is captured rather than inherited, because a spinner and a child both
- * writing to the same TTY corrupt each other's lines. It is replayed verbatim
- * once the step finishes, so nothing is lost — the operator just sees it as a
- * block after the step instead of dribbling out during it.
- *
- * the maintainer's standing rule: NO STEP RUNS SILENT. Every pause long enough to look
- * like a hang gets a spinner, so an admin always knows work is happening.
- */
-async function runStepWithSpinner(
-	label: string,
-	cmd: string,
-	args: readonly string[],
-	opts: { cwd?: string; timeoutMs?: number } = {}
-): Promise<number> {
-	const stop = startDotsSpinner(label);
-	try {
-		return await new Promise<number>((resolveStep) => {
-			const child = spawn(cmd, [...args], {
-				cwd: opts.cwd,
-				stdio: ['ignore', 'pipe', 'pipe']
+	/**
+	 * Run a child process while the braille spinner turns, then replay its output.
+	 *
+	 * WHY NOT spawnSync: spawnSync BLOCKS the event loop, so no setInterval can
+	 * fire and a spinner wrapped around it would sit frozen — worse than none. The
+	 * async spawn keeps the loop turning so the spinner actually animates.
+	 *
+	 * Output is captured rather than inherited, because a spinner and a child both
+	 * writing to the same TTY corrupt each other's lines. It is replayed verbatim
+	 * once the step finishes, so nothing is lost — the operator just sees it as a
+	 * block after the step instead of dribbling out during it.
+	 *
+	 * Standing rule: NO STEP RUNS SILENT. Every pause long enough to look
+	 * like a hang gets a spinner, so an admin always knows work is happening.
+	 */
+	async function runStepWithSpinner(
+		label: string,
+		cmd: string,
+		args: readonly string[],
+		opts: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}
+	): Promise<number> {
+		const stop = startDotsSpinner(label);
+		try {
+			return await new Promise<number>((resolveStep) => {
+				const child = spawn(cmd, [...args], {
+					cwd: opts.cwd,
+					stdio: ['ignore', 'pipe', 'pipe'],
+					...(opts.env !== undefined ? { env: opts.env } : {})
+				});
+				let buf = '';
+				child.stdout?.on('data', (d: Buffer) => {
+					buf += d.toString();
+				});
+				child.stderr?.on('data', (d: Buffer) => {
+					buf += d.toString();
+				});
+				let timer: NodeJS.Timeout | null = null;
+				if (opts.timeoutMs !== undefined) {
+					timer = setTimeout(() => {
+						try {
+							child.kill('SIGKILL');
+						} catch {
+							/* already gone */
+						}
+					}, opts.timeoutMs);
+				}
+				const finish = (code: number): void => {
+					if (timer !== null) clearTimeout(timer);
+					stop();
+					if (buf.trim() !== '') process.stdout.write(buf.endsWith('\n') ? buf : buf + '\n');
+					resolveStep(code);
+				};
+				child.on('error', () => finish(1));
+				child.on('close', (code) => finish(code ?? 1));
 			});
-			let buf = '';
-			child.stdout?.on('data', (d: Buffer) => {
-				buf += d.toString();
-			});
-			child.stderr?.on('data', (d: Buffer) => {
-				buf += d.toString();
-			});
-			let timer: NodeJS.Timeout | null = null;
-			if (opts.timeoutMs !== undefined) {
-				timer = setTimeout(() => {
-					try {
-						child.kill('SIGKILL');
-					} catch {
-						/* already gone */
-					}
-				}, opts.timeoutMs);
-			}
-			const finish = (code: number): void => {
-				if (timer !== null) clearTimeout(timer);
-				stop();
-				if (buf.trim() !== '') process.stdout.write(buf.endsWith('\n') ? buf : buf + '\n');
-				resolveStep(code);
-			};
-			child.on('error', () => finish(1));
-			child.on('close', (code) => finish(code ?? 1));
-		});
-	} finally {
-		stop();
+		} finally {
+			stop();
+		}
 	}
-}
 
-	// cp674 — before we spawn any child npm, strip an inherited offline flag.
-	// The ansible launcher runs us via `npm exec --offline`; that flag would
-	// otherwise force the upgrade's `npm ci` (and the MCP redeploy's
-	// `npm install`) cache-only and fail on any dependency not already cached.
-	// Safe for air-gapped upgrades too — those skip npm ci / pass --offline
-	// explicitly themselves (see stripInheritedNpmOffline docs).
+	// Before we spawn any child npm, strip an inherited offline flag. The ansible
+	// launcher runs us via `npm exec --offline`; that flag would otherwise force
+	// a clearnet node's `npm ci` cache-only and fail on any dependency not
+	// already cached. A hidden-only node's npm never sees the inherited
+	// environment: step 9 and the local builds set npm's network settings
+	// explicitly (lib/depsInstall.ts).
 	const clearedOfflineFlags = stripInheritedNpmOffline(process.env);
 	if (clearedOfflineFlags.length > 0 && !checkOnly) {
 		info(
-			`Cleared inherited npm offline flag(s) so dependency install can reach the registry when needed: ${clearedOfflineFlags.join(', ')}.`
+			`Cleared inherited npm offline flag(s); each step sets its own: ${clearedOfflineFlags.join(', ')}.`
 		);
 	}
 
-	// cp686 — quiet npm's warn-level chatter for the child installs we run during
+	// quiet npm's warn-level chatter for the child installs we run during
 	// an upgrade. `npm ci` prints "npm warn deprecated …" for transitive packages
 	// we don't control (matrix-bot-sdk still pulls the old `request` library,
 	// better-sqlite3 pulls prebuild-install), which is noise an operator can't act
 	// on and — mid-upgrade — reads like something is wrong. Errors still surface.
 	// Only set for upgrades; a developer's own build keeps full output.
 	if (!checkOnly) process.env.npm_config_loglevel = 'error';
-	// cp687 — raise the frontend build's chunk-size warning limit for upgrades so
+	// raise the frontend build's chunk-size warning limit for upgrades so
 	// operators don't see a "(!) some chunks are larger than 500 kB" hint they
 	// can't act on. Dev/CI builds keep the warning (they don't set this).
 	if (!checkOnly) process.env.MORPHIT_QUIET_BUILD = '1';
@@ -1565,7 +1690,7 @@ async function runStepWithSpinner(
 	// tarball is then handed to the SAME offline apply path below — only the trust
 	// gate is overridden (its anchor is the on-chain SHA, not a GPG sig/primary).
 	let hiddenResolution: HiddenUpgradeResolution | null = null;
-	// v1.18.0 deep-deep (ops-1). /etc/morphit is relocatable for tests, as for
+	// /etc/morphit is relocatable for tests, as for
 	// mcpEnvFile(); unset on a real box.
 	const etcDir = process.env.MORPHIT_ETC_DIR ?? '/etc/morphit';
 	const hiddenConfigEnvPaths = [
@@ -1574,7 +1699,7 @@ async function runStepWithSpinner(
 		join(etcDir, 'morphit.config.env'),
 		join(installDir, 'morphit.config.env')
 	];
-	// v1.18.0 deep-deep (ops-1, H2). Hidden-only is decided from this ROOT-OWNED
+	// Hidden-only is decided from this ROOT-OWNED
 	// config, never from whatever answers on port 8081; the indexer is asked
 	// only at its configured address, only after its listener is proven to be
 	// morphit-indexer.service, and never the next address after one answers.
@@ -1590,7 +1715,7 @@ async function runStepWithSpinner(
 	// own indexer already holds. It used to download the whole release over
 	// Tor/I2P to learn that, which the release monitor's 30-second limit never
 	// allowed, so no tor-only operator was ever told a release was out.
-	// v1.18.0 deep-deep (ops-2): a real upgrade reads the same record FIRST, so
+	// a real upgrade reads the same record FIRST, so
 	// an on-chain release that is not newer is never downloaded at all.
 	let hiddenCheckTag: string | null = null;
 	if (offline === null) {
@@ -1612,7 +1737,7 @@ async function runStepWithSpinner(
 						? '✓ The on-chain release is older than this install, so nothing was changed.'
 						: '✓ Already on the latest release.'
 				);
-				return 0;
+				return healsWhenUpToDate();
 			}
 		}
 	}
@@ -1620,7 +1745,11 @@ async function runStepWithSpinner(
 		try {
 			hiddenResolution = await tryResolveHiddenUpgrade({
 				...hiddenOpts,
-				onProgress: (m) => info(m)
+				onProgress: (m) => info(m),
+				...(opts.trust?.postingPubkey !== undefined
+					? { postingPubkey: opts.trust.postingPubkey }
+					: {}),
+				...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {})
 			});
 		} catch (err) {
 			printError(
@@ -1631,11 +1760,17 @@ async function runStepWithSpinner(
 		}
 		if (hiddenResolution === null) {
 			// The node was hidden-only a moment ago; never fall back to clearnet.
-			printError('Hidden-only upgrade could not be completed privately (staying on the current version).');
+			printError(
+				'Hidden-only upgrade could not be completed privately (staying on the current version).'
+			);
 			return 5;
 		}
 		hiddenCheckTag = null;
-		offline = { tarballPath: hiddenResolution.tarballPath, sigPath: null, tag: `v${hiddenResolution.version}` };
+		offline = {
+			tarballPath: hiddenResolution.tarballPath,
+			sigPath: null,
+			tag: `v${hiddenResolution.version}`
+		};
 	}
 
 	// The PRIMARY is the trusted hash anchor. We fetch each source's
@@ -1657,39 +1792,29 @@ async function runStepWithSpinner(
 	} else if (offline !== null) {
 		latest = synthOfflineRelease(offline.tag, offline.tarballPath, offline.sigPath);
 		info(`Offline upgrade — using local tarball: ${offline.tarballPath}`);
-		// A HIDDEN-federation fetch carries no sibling .asc by design: its trust
-		// anchor is the SHA-256 @morphit published ON-CHAIN, read from this node's
-		// own indexer (hidden-federation-onchain-sha256) — strictly stronger than a
-		// local-keyring signature check, and it needs no clearnet. Warning about a
-		// missing .asc there is FALSE and alarming: it says the tarball "will be
-		// refused" moments before the upgrade verifies and proceeds (the maintainer/morphitlat
-		// v1.17.1). Only warn for a hand-supplied --from-file tarball, which really
-		// does require the signature.
+		// A tarball the hidden path fetched carries no .asc by design (its record
+		// was verified before the fetch), so saying anything about a missing .asc
+		// there would be noise. For a hand-supplied tarball, say which check step 6
+		// will use instead — calmly: an unsigned offline bundle is normal.
 		if (offline.sigPath === null && hiddenResolution === null) {
-			// Accurate wording matters here: an unsigned --from-file tarball is NOT
-			// automatically refused. Below, a missing .asc falls back to the release
-			// SHA-256 @morphit published ON-CHAIN (read from this node's own
-			// indexer), and the upgrade proceeds if the bytes match. Claiming it
-			// "will be refused" and then succeeding is the same class of false
-			// alarm as the hidden-path warning this release just removed.
-			warn(
-				'No sibling .asc signature next to the tarball. This upgrade will fall back to the ' +
-					'release SHA-256 published on-chain; it is refused only if neither a valid signature ' +
-					'nor a matching on-chain hash can be established.'
+			info(
+				"No sibling .asc signature next to the tarball; it will be checked against @morphit's signed " +
+					'release record on chain instead, and refused if that record does not name its hash.'
 			);
 		}
 	} else {
 		const fetchErrors: string[] = [];
 		for (const src of sources) {
 			try {
-				const rel = await withSpinner(
-					`Checking ${src.host} for the latest release…`,
-					() => fetchLatestRelease(src.host, src.repo)
+				const rel = await withSpinner(`Checking ${src.host} for the latest release…`, () =>
+					fetchLatestRelease(src.host, src.repo)
 				);
 				releasesBySource.push({ src, rel });
 				if (src.isPrimary) primaryRelease = rel;
 			} catch (err) {
-				fetchErrors.push(`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`);
+				fetchErrors.push(
+					`${src.host}/${src.repo}: ${err instanceof Error ? err.message : String(err)}`
+				);
 			}
 		}
 		latest = primaryRelease ?? releasesBySource[0]?.rel ?? null;
@@ -1705,20 +1830,24 @@ async function runStepWithSpinner(
 				info(`No network — falling back to the local offline release: ${dropped.tarballPath}`);
 			} else {
 				printError(
-					`Could not reach any release source, and no signed offline tarball was found in ` +
-						`${offlineReleaseDir(installDir)} (drop a morphit-<ver>-offline.tar.gz + its .asc there, ` +
-						`or use --from-file=PATH).\n  ` + fetchErrors.join('\n  ')
+					`Could not reach any release source, and no offline release tarball was found in ` +
+						`${offlineReleaseDir(installDir)} (drop a morphit-<ver>-offline.tar.gz there, with its .asc if it has one, ` +
+						`or use --from-file=PATH).\n  ` +
+						fetchErrors.join('\n  ')
 				);
 				return 5;
 			}
 		} else if (primaryRelease === null) {
-			warn(`Primary (${host}/${repo}) unreachable; using mirror for discovery. A valid release signature will be REQUIRED to install.`);
+			info(
+				`The primary (${host}/${repo}) did not answer, so a mirror is used to find the release. ` +
+					"It installs only if it matches @morphit's signed on-chain release record or carries a pinned signature."
+			);
 		}
 	}
 
 	const currentTag = localInfo?.tag ?? '(unknown)';
 	const latestTag = latest.tag_name;
-	// v1.18.0 deep-deep (ops-7). The tag comes from a release source (a mirror
+	// The tag comes from a release source (a mirror
 	// when the primary is down) and reaches file names and the confirmation
 	// prompt. Only a version number is accepted.
 	if (!RELEASE_VERSION_RE.test(latestTag)) {
@@ -1728,7 +1857,7 @@ async function runStepWithSpinner(
 		);
 		return 5;
 	}
-	// v1.18.0 deep-deep (ops-2). "Up to date" was plain string equality, so ANY
+	// "Up to date" was plain string equality, so ANY
 	// other tag — an older signed release a mirror served under the new name, or
 	// an older on-chain re-broadcast — was installed as an "upgrade". Only a
 	// strictly newer release is; --allow-downgrade is the explicit escape.
@@ -1761,11 +1890,15 @@ async function runStepWithSpinner(
 		} else {
 			info('✓ Already on the latest release.');
 		}
-		return 0;
+		return checkOnly ? 0 : healsWhenUpToDate();
 	}
 
 	console.log('');
-	info(downgrading ? `Downgrade requested (--allow-downgrade): ${latestTag}` : `Newer release available: ${latestTag}`);
+	info(
+		downgrading
+			? `Downgrade requested (--allow-downgrade): ${latestTag}`
+			: `Newer release available: ${latestTag}`
+	);
 	console.log('');
 	// A hidden-only node fetches the tarball over Tor/I2P, so `latest.body` (the
 	// Forgejo release body) is empty — morphitlat's operator saw a blank "Release
@@ -1788,7 +1921,7 @@ async function runStepWithSpinner(
 	if (notesBody === '') notesBody = '(no release notes available for this source)';
 	info('Release notes:');
 	for (const line of notesBody.split('\n')) {
-		// cp139-C-19: defense-in-depth.  latest.body is the release
+		// defense-in-depth.  latest.body is the release
 		// body fetched from Forgejo — upstream-trusted content but
 		// not source-controlled review-gated (a compromised release-
 		// publishing account could plant terminal escapes here).
@@ -1818,7 +1951,7 @@ async function runStepWithSpinner(
 	// ─── 4. Confirmation prompt ─────────────────────────────────
 	if (!forceYes) {
 		const ok = await promptYes(
-			// v1.18.0 deep-deep (ops-7): rl.question() is not sanitized, so a tag
+			// rl.question() is not sanitized, so a tag
 			// carrying terminal escapes could repaint this question.
 			`Apply ${downgrading ? 'DOWNGRADE' : 'upgrade'} from ${sanitizeForTerm(currentTag)} to ${sanitizeForTerm(latestTag)}?\n` +
 				`This will: backup ${installDir}, extract new tarball, run npm ci, rebuild + redeploy the web frontend (and verify it's actually being served), restart services.\n` +
@@ -1830,21 +1963,19 @@ async function runStepWithSpinner(
 		}
 	}
 
-	// ─── 5. Obtain the tarball + verify (mirror-aware, integrity-anchored) ─
+	// ─── 5. Obtain the tarball ──────────────────────────────────
 	const tmpDir = mkTempDir();
-	let expectedHash: string | null = null;
-	let expectedHashFromChain = false;
+	let primaryHash: string | null = null;
 	const tarballPath = join(tmpDir, chosenAssets.tarball.name);
-	let bytesFromPrimary = false;
 	let bytesSource: ReleaseSource | null = null;
 	let sigPath: string | null = null;
 
 	if (offline !== null) {
-		// OFFLINE: copy the local tarball (+ its sibling .asc, if present) into the
-		// scratch dir so verify/extract/cleanup are byte-identical to the online
-		// path. No network is touched: expectedHash stays null, so decideTrust()
-		// below REQUIRES a verified GPG signature — an unsigned offline tarball is
-		// refused, exactly like an unsigned release when the primary is unreachable.
+		// OFFLINE (a --from-file / drop-dir tarball, or the one the hidden path
+		// just fetched over Tor/I2P): copy it (+ its sibling .asc, if present) into
+		// the scratch dir so verify/extract/cleanup are the same as online. There
+		// is no primary here: step 6 needs the signed on-chain record or a pinned
+		// signature.
 		try {
 			copyFileSync(offline.tarballPath, tarballPath);
 			if (offline.sigPath !== null) {
@@ -1852,41 +1983,30 @@ async function runStepWithSpinner(
 				copyFileSync(offline.sigPath, sigPath);
 			}
 		} catch (err) {
-			printError(`Could not read the local tarball: ${err instanceof Error ? err.message : String(err)}`);
+			printError(
+				`Could not read the local tarball: ${err instanceof Error ? err.message : String(err)}`
+			);
 			cleanupTmp(tmpDir);
 			return 5;
 		}
 		// A non-null bytesSource just satisfies the "did we get bytes?" guard below;
 		// it is never used as a network source offline.
 		bytesSource = { host: 'local-file', repo: offline.tarballPath, isPrimary: false };
-		info(`Using local offline tarball (${chosenAssets.tarball.name}); no network required.`);
-		// v1.16.9 — a hidden / air-gapped node has a TRUSTED anchor even with NO
-		// .asc: the release SHA-256 that @morphit published ON-CHAIN via its signed
-		// release broadcast, which the LOCAL indexer serves at /v1/release over the
-		// node's own (possibly hidden) RPC — zero clearnet. If the offline tarball's
-		// hash matches that, we trust it with no hand-signing. `offline_sha256`
-		// anchors the self-contained `-offline` bundle; `source_sha256` the standard
-		// tarball. (A valid .asc, if present, still wins in decideTrust below.)
-		if (offline.sigPath === null) {
-			const wantOffline = /-offline\.tar\.gz$/.test(offline.tarballPath);
-			const onchainSha = await readOnchainReleaseSha(latestTag, wantOffline, localIndexer);
-			if (onchainSha) {
-				expectedHash = onchainSha;
-				expectedHashFromChain = true;
-				info('  Verifying against the release SHA-256 published on-chain (read from your local indexer).');
-			}
-		}
+		info(`Using local tarball (${chosenAssets.tarball.name}).`);
 	} else {
-		// 5a. Trust anchor: the SHA-256 always comes from the PRIMARY.
+		// 5a. The primary's .sha256: a transit check, and a cross-check against the
+		// chain in step 6. On its own it no longer makes a tarball installable.
 		if (primaryRelease) {
 			const primaryAssets = selectReleaseAssets(primaryRelease.assets);
 			if (primaryAssets) {
 				const primaryShaPath = join(tmpDir, 'primary.tar.gz.sha256');
 				try {
 					await downloadTo(primaryAssets.sha.browser_download_url, primaryShaPath);
-					expectedHash = parseShaFile(primaryShaPath);
+					primaryHash = parseShaFile(primaryShaPath);
 				} catch (err) {
-					warn(`Could not fetch the SHA-256 from the primary: ${err instanceof Error ? err.message : String(err)}`);
+					warn(
+						`Could not fetch the SHA-256 from the primary: ${err instanceof Error ? err.message : String(err)}`
+					);
 				}
 			}
 		}
@@ -1897,12 +2017,12 @@ async function runStepWithSpinner(
 			const a = selectReleaseAssets(rel.assets);
 			if (!a) continue;
 			try {
-				info(`Downloading ${a.tarball.name} from ${src.host}${src.isPrimary ? ' (primary)' : ' (mirror)'}...`);
-				await withSpinner(
-					`Downloading the release from ${src.host}…`,
-					() => downloadTo(a.tarball.browser_download_url, tarballPath)
+				info(
+					`Downloading ${a.tarball.name} from ${src.host}${src.isPrimary ? ' (primary)' : ' (mirror)'}...`
 				);
-				bytesFromPrimary = src.isPrimary;
+				await withSpinner(`Downloading the release from ${src.host}…`, () =>
+					downloadTo(a.tarball.browser_download_url, tarballPath)
+				);
 				bytesSource = src;
 				// Pull the detached signature from the SAME source, if present.
 				if (a.sig) {
@@ -1910,7 +2030,7 @@ async function runStepWithSpinner(
 					try {
 						await downloadTo(a.sig.browser_download_url, sigPath);
 					} catch {
-						sigPath = null; // signature optional; trust logic handles absence
+						sigPath = null; // signature optional; the gate handles absence
 					}
 				}
 				break;
@@ -1919,26 +2039,85 @@ async function runStepWithSpinner(
 			}
 		}
 		if (bytesSource === null) {
-			printError(`Could not download the release tarball from any source.\n  ${dlErrors.join('\n  ')}`);
+			printError(
+				`Could not download the release tarball from any source.\n  ${dlErrors.join('\n  ')}`
+			);
 			cleanupTmp(tmpDir);
 			return 5;
 		}
 	}
 
 	// ─── 6. Verify integrity + decide trust ─────────────────────
-	// v1.18.0 deep-deep (ops-2, ops-3): see integrityGate — a signature that is
-	// present but does not verify refuses, and a known primary hash must match
-	// even when a signature verifies.
+	// The anchor is @morphit's signed release record for this exact version
+	// (lib/releaseAnchor.ts), read through this node's own indexer first and, on
+	// a hidden-only node, through nothing else. The hidden path already read and
+	// verified it to know what to fetch, so it is reused.
+	const wantOfflineHash = /-offline\.tar\.gz$/.test(chosenAssets.tarball.name);
+	// Hidden-only decides where the record may be read from: this node's own
+	// indexer, and nothing else. When it cannot be told, assume hidden-only.
+	const nodeHiddenOnly =
+		hiddenResolution !== null ||
+		isHiddenOnlyNode() ||
+		(await isHiddenOnly(hiddenOpts).catch(() => true));
+	// The frontend and dist builds below are local (vite / esbuild / tsc). On a
+	// hidden-only node npm is also told to stay offline and given no proxy, so
+	// nothing it runs can leave the box.
+	const localBuildEnv = nodeHiddenOnly
+		? { ...withoutProxyEnv(process.env), npm_config_offline: 'true' }
+		: undefined;
+	let anchor: ReleaseAnchor | null = hiddenResolution?.anchor ?? null;
+	if (anchor === null) {
+		const read: CondenserRead =
+			opts.trust?.chainRead ??
+			((method, params) =>
+				chainRead(method, params, {
+					hiddenOnly: () => nodeHiddenOnly,
+					...(opts.localIndexerBases !== undefined ? { indexerBases: opts.localIndexerBases } : {})
+				}));
+		const found = await withSpinner(
+			`Reading @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for ${latestTag} from the chain…`,
+			() =>
+				readSignedReleaseAnchor(read, {
+					tag: latestTag,
+					signer: MORPHIT_RELEASE_ACCOUNT,
+					pinnedPubkey: opts.trust?.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
+					chainId: BLURT_MAINNET_CHAIN_ID
+				})
+		);
+		if (found.ok) {
+			anchor = found.anchor;
+		} else {
+			info(
+				`  No signed on-chain release record to check against: ${sanitizeForTerm(found.reason)}.`
+			);
+		}
+	}
+	const chainHash =
+		anchor === null ? null : wantOfflineHash ? anchor.offlineSha256 : anchor.sourceSha256;
+	if (anchor !== null) {
+		info(
+			chainHash !== null
+				? `  Found @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for ${latestTag} (block ${anchor.blockNum}).`
+				: `  @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for ${latestTag} names no hash for the offline bundle; a pinned signature is needed for it.`
+		);
+	}
 	const signature: SignatureCheck =
-		sigPath === null ? 'absent' : checkDetachedSignature(installDir, tarballPath, sigPath);
+		sigPath === null
+			? 'absent'
+			: checkDetachedSignature(
+					installDir,
+					tarballPath,
+					sigPath,
+					opts.trust?.signerFingerprints ?? RELEASE_SIGNER_FINGERPRINTS
+				);
 	const actualHash = computeSha256(tarballPath);
 	const trust = integrityGate({
 		signature,
-		expectedHash,
+		chainHash,
+		primaryHash,
 		actualHash,
-		expectedHashFromChain,
-		bytesFromPrimary,
-		hidden: hiddenResolution !== null ? { servedBy: hiddenResolution.servedBy, tag: latestTag } : null
+		hidden:
+			hiddenResolution !== null ? { servedBy: hiddenResolution.servedBy, tag: latestTag } : null
 	});
 	if (!trust.allowed) {
 		printError(`Cannot verify the integrity of release ${latestTag}.\n  ${trust.reason}`);
@@ -1947,9 +2126,8 @@ async function runStepWithSpinner(
 	}
 	info(`\u2713 Integrity verified (${trust.proof}). ${trust.reason}`);
 
-
 	// ─── 7. Backup current install ──────────────────────────────
-	// cp685 — before we rename installDir out from under ourselves, move THIS
+	// before we rename installDir out from under ourselves, move THIS
 	// process to a stable directory. The morphit-ops launcher runs us with the
 	// cwd inside the install dir; once we rename it to the backup, that cwd path
 	// no longer exists, and every shell we spawn afterward (npm lifecycle
@@ -1964,7 +2142,7 @@ async function runStepWithSpinner(
 		/* '/' is always accessible; ignore the impossible failure */
 	}
 	const backupDir = `${installDir}.bak-${Date.now()}`;
-	// v1.18.0 deep-deep (ops-5): files changed outside the install dir from here
+	// files changed outside the install dir from here
 	// on (refreshed units, self-heal edits), for rollback() to put back.
 	const restoreOnRollback: RollbackRestore[] = [];
 	info(`Backing up ${installDir} → ${backupDir}`);
@@ -1983,7 +2161,7 @@ async function runStepWithSpinner(
 	try {
 		mkdirSync(installDir, { recursive: true });
 		info(`Extracting ${chosenAssets.tarball.name} to ${installDir}...`);
-		// cp131 LOW-010 — defense-in-depth tar flags.
+		// defense-in-depth tar flags.
 		//
 		// GNU tar's documented defaults already refuse two of
 		// the three classical tarball-extract escapes:
@@ -1991,7 +2169,7 @@ async function runStepWithSpinner(
 		//     stripped to relative with a warning, then
 		//     extracted inside -C target;
 		//   - `..` traversal entries are refused outright.
-		// Empirically verified at cp131 audit time.
+		// Empirically verified audit time.
 		//
 		// What the defaults DO permit:
 		//   - the archive may set ownership on extracted files
@@ -2039,7 +2217,7 @@ async function runStepWithSpinner(
 	}
 
 	// ─── 8a. The tarball must BE the release we chose ──────────────
-	// v1.18.0 deep-deep (ops-2). Nothing checked that the extracted tree was the
+	// Nothing checked that the extracted tree was the
 	// version the source named: a mirror could serve an older signed tarball
 	// under the new release's name and the banner would still say the new
 	// version. The tarball's own release-info.json must name the chosen tag.
@@ -2061,7 +2239,7 @@ async function runStepWithSpinner(
 
 	// ─── 8b. Carry the operator's config + keys forward ────────────
 	//
-	// CRITICAL (cp189): the wizard writes the operator's config and
+	// CRITICAL: the wizard writes the operator's config and
 	// signing key INSIDE the install tree —
 	//   - morphit.config.env            (operator-tunable knobs)
 	//   - morphit.env                   (critical infra: DB URL,
@@ -2122,7 +2300,7 @@ async function runStepWithSpinner(
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 
-	// cp217 — detect whether this upgrade crossed an indexer schema.sql
+	// detect whether this upgrade crossed an indexer schema.sql
 	// change. Both the old tree (now backupDir) and the new tree are on disk
 	// at this point. If the baseline changed, an existing DB won't pick up
 	// the in-place schema edits on its own, so we remind the operator at the
@@ -2153,30 +2331,83 @@ async function runStepWithSpinner(
 	}
 
 	// ─── 9. Install workspace dependencies ─────────────────────
+	// Lifecycle scripts never run (--ignore-scripts): this runs as root, and a
+	// dependency's install script is code from whoever published it. The only
+	// packages that need one build native add-ons for the Matrix bot; those are
+	// reused from the previous install when their version did not change (see
+	// lib/depsInstall.ts) and otherwise rebuilt only where the bot runs.
 	try {
 		// A self-contained OFFLINE tarball ships a prebuilt node_modules carrying
 		// the .morphit-bundle-complete marker — the same marker the Ansible install
-		// checks. When present, npm ci (the one step that would reach the registry)
-		// is SKIPPED so an offline `morphit-ops upgrade` completes cable-unplugged.
-		// An ordinary online tarball has no marker → npm ci runs as before.
+		// checks. When present, nothing is installed.
 		const bundleMarker = join(installDir, 'node_modules', '.morphit-bundle-complete');
 		if (existsSync(bundleMarker)) {
-			info('Offline bundle detected (prebuilt node_modules) — skipping npm ci; no registry needed.');
+			info('Offline bundle detected (prebuilt node_modules) — nothing to download.');
+		} else if (nodeHiddenOnly) {
+			// Zero-clearnet: reuse, or the registry through Tor only, or refuse.
+			const socks = parseHostPortOr(
+				readConfigValue(hiddenConfigEnvPaths, 'MORPHIT_INDEXER_TOR_SOCKS'),
+				'127.0.0.1',
+				9050
+			);
+			const outcome = await installDepsForHiddenNode({
+				installDir,
+				previousDir: backupDir,
+				socks,
+				runNpm: (args, env) =>
+					runStepWithSpinner(
+						'Installing dependencies through Tor — this can take several minutes…',
+						'npm',
+						args,
+						{
+							cwd: installDir,
+							env
+						}
+					),
+				copyTree: (from, to) =>
+					runStepWithSpinner('Reusing the installed dependencies…', 'cp', [
+						'-a',
+						'--',
+						from,
+						to
+					]).then((c) => c === 0),
+				info
+			});
+			if (!outcome.ok) {
+				throw new Error(
+					`${outcome.reason}. To finish privately, bring the offline bundle to this box ` +
+						`(morphit-${latestTag}-offline.tar.gz, from any mirror, on a USB stick if need be) and run on this box: ` +
+						`sudo morphit-ops upgrade --from-file=/path/to/morphit-${latestTag}-offline.tar.gz ` +
+						"(it is checked against @morphit's signed release record)"
+				);
+			}
+			info(`\u2713 Dependencies ready (${outcome.strategy}: ${outcome.detail}).`);
 		} else {
 			const ciCode = await runStepWithSpinner(
 				'Installing dependencies (npm ci) — this can take a minute…',
 				'npm',
-				['ci', '--no-audit', '--no-fund'],
+				['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
 				{ cwd: installDir }
 			);
 			if (ciCode !== 0) throw new Error(`npm ci exited ${ciCode}`);
+			const lockText = readFileSync(join(installDir, 'package-lock.json'), 'utf8');
+			const problems = lockedTreeProblems(installDir, lockText);
+			if (problems.length > 0) {
+				throw new Error(
+					`the installed dependencies do not match the lockfile (${problems.slice(0, 3).join('; ')})`
+				);
+			}
+			const natives = carryNativeAddons(backupDir, installDir, lockText);
+			if (natives.length > 0)
+				info(`Reused the native add-ons of ${natives.join(', ')} from the previous install.`);
 		}
+		ensureMatrixBotNatives(installDir, nodeHiddenOnly);
 	} catch (err) {
-		warn('npm ci failed; rolling back.');
+		warn('Installing dependencies did not complete; rolling back.');
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 
-	// ─── 9b. Rebuild the static web frontend (ALWAYS, cp236) ───
+	// ─── 9b. Rebuild the static web frontend (ALWAYS) ───
 	//
 	// The Node services (indexer/relay/matrix-bot) run from TS source via
 	// tsx — no build step — so `npm ci` above is all they need. The WEB app
@@ -2187,14 +2418,14 @@ async function runStepWithSpinner(
 	// custom stack) bind-mounts it from <install>/apps/web/build. So the
 	// build must ALWAYS run — regardless of whether <webRoot> exists.
 	//
-	// (Before cp236 the build lived inside an `if (webRoot exists)` branch,
+	// (Previously the build lived inside an `if (webRoot exists)` branch,
 	// so on a container-served host — where the site is NOT served from
 	// /var/www/morphit-frontend — the upgrade silently skipped the frontend
 	// rebuild, reported success, and the container kept serving the OLD
 	// build. That regression is what this unconditional build + the
 	// publish plan below fix.)
 	//
-	// cp619 (the maintainer — canary) / cp624 fix — capture who should own apps/web/build so
+	// (canary) / — capture who should own apps/web/build so
 	// we can restore it AFTER the rebuild. `npm run build` runs as root (sudo
 	// morphit-ops) and vite RECREATES this dir root-owned — but it is ALSO the dir
 	// the operator's (non-root) warrant-canary refresh uploads canary.txt +
@@ -2202,7 +2433,7 @@ async function runStepWithSpinner(
 	// from it. Without restoring the owner afterward, every upgrade re-roots the
 	// served dir and the next weekly canary upload fails with EACCES.
 	//
-	// cp624: read the owner from the OLD install (backupDir), NOT the fresh tree.
+	// read the owner from the OLD install (backupDir), NOT the fresh tree.
 	// Step 7 renamed the operator's install — with their chowned, non-root build/ —
 	// to backupDir, and step 8 extracted a FRESH root-owned tree that has NO build/
 	// yet. Reading installDir here therefore always saw root (or an absent build/)
@@ -2239,7 +2470,10 @@ async function runStepWithSpinner(
 			info('Using the prebuilt web frontend shipped in the release (no rebuild).');
 		} else {
 			info('No prebuilt frontend in this release — building the web frontend (apps/web)...');
-			runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', 'web') });
+			runOrThrow('npm', ['run', 'build'], {
+				cwd: join(installDir, 'apps', 'web'),
+				env: localBuildEnv
+			});
 		}
 	} catch (err) {
 		// Nothing served has been touched yet (the build writes to
@@ -2249,7 +2483,7 @@ async function runStepWithSpinner(
 		return rollback(installDir, backupDir, tmpDir, err);
 	}
 
-	// ─── 9b1. Restore served-dir ownership + auto-restore the canary (cp619/cp622) ──
+	// ─── 9b1. Restore served-dir ownership + auto-restore the canary ──
 	//
 	// The rebuild re-rooted apps/web/build (and static/) and WIPED build/canary.txt
 	// (it's written in AFTER the vite build, so a rebuild always drops it). Two
@@ -2259,7 +2493,7 @@ async function runStepWithSpinner(
 	//      writes static/canary.txt (generate.sh) then copies it into build/, so it
 	//      needs BOTH writable; without this every upgrade re-roots them and the
 	//      next canary upload/refresh fails with EACCES ("Permission denied").
-	//   2. cp622: if this is a SAME-BOX operator (they sign HERE — their
+	//   2. if this is a SAME-BOX operator (they sign HERE — their
 	//      ~/.morphit/update-canary.sh exists), run that refresh AS them right now to
 	//      put the canary straight back, no manual step. Placed BEFORE step 9c so the
 	//      restored canary.txt is included when 9c copies build/ into a web root.
@@ -2274,7 +2508,10 @@ async function runStepWithSpinner(
 		// Run BOTH chowns (no short-circuit) so static/ is fixed even if build/ fails.
 		let chownOk = true;
 		for (const dir of [webBuild, webStatic]) {
-			if (spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`, dir], { stdio: 'ignore' }).status !== 0) {
+			if (
+				spawnSync('chown', ['-R', `${canaryDirUid}:${canaryDirGid}`, dir], { stdio: 'ignore' })
+					.status !== 0
+			) {
 				chownOk = false;
 			}
 		}
@@ -2291,7 +2528,7 @@ async function runStepWithSpinner(
 			);
 		}
 
-		// cp622 / cp754 — same-box auto-restore. Two mechanisms, tried in order:
+		// same-box auto-restore. Two mechanisms, tried in order:
 		//   1. Trigger the canary's OWN systemd service (morphit-canary.service) —
 		//      the exact unit the weekly morphit-canary.timer fires. Path-agnostic:
 		//      it re-lays the canary via whatever refresh the install configured,
@@ -2303,7 +2540,7 @@ async function runStepWithSpinner(
 		//      the refresh finishes (or the 180s timeout trips — the refresh fetches
 		//      chain-head + a price + a headline, possibly over Tor, then signs).
 		//   2. Fall back to the interactive-setup home-dir refresh script, run AS the
-		//      non-root owner (the original cp622 path — an operator who ran
+		//      non-root owner (the original path — an operator who ran
 		//      scripts/canary/setup.sh by hand as themselves, so their refresh lives
 		//      in their own ~/.morphit and no system unit exists).
 		// Either restores the canary immediately with no manual step; if BOTH miss,
@@ -2312,13 +2549,16 @@ async function runStepWithSpinner(
 		// Auto-restore the canary if one is SET UP on this box — not merely if the
 		// backup still held canary.txt. A prior upgrade can wipe the served file
 		// before the weekly timer re-publishes, so gating on the backup file skipped
-		// same-machine operators whose canary was mid-cycle (the maintainer: timeapp — the
+		// same-machine operators whose canary was mid-cycle (timeapp — the
 		// upgrade broke his same-machine canary and didn't renew it). Detect the
 		// setup two independent ways: the systemd unit, or the owner's refresh
 		// script — and if EITHER exists, restore now regardless of the backup file.
 		const hadCanaryFile = existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'));
 		const haveCanaryUnit =
-			spawnSync('systemctl', ['cat', 'morphit-canary.service'], { stdio: 'ignore', timeout: 10_000 }).status === 0;
+			spawnSync('systemctl', ['cat', 'morphit-canary.service'], {
+				stdio: 'ignore',
+				timeout: 10_000
+			}).status === 0;
 		const pw = spawnSync('getent', ['passwd', String(canaryDirUid)], { encoding: 'utf8' });
 		const refreshTarget =
 			pw.status === 0 && typeof pw.stdout === 'string' ? parsePasswdRefreshTarget(pw.stdout) : null;
@@ -2340,12 +2580,18 @@ async function runStepWithSpinner(
 			}
 			if (!canaryAutoRefreshed && refreshTarget && haveRefreshScript) {
 				info('');
-				info(`Restoring your warrant canary automatically (running your refresh as ${refreshTarget.user})...`);
-				const refresh = spawnSync('sudo', ['-n', '-u', refreshTarget.user, '-H', 'bash', refreshTarget.refreshScript], {
-					stdio: 'ignore',
-					timeout: 90_000,
-					env: { ...process.env, GPG_TTY: '' }
-				});
+				info(
+					`Restoring your warrant canary automatically (running your refresh as ${refreshTarget.user})...`
+				);
+				const refresh = spawnSync(
+					'sudo',
+					['-n', '-u', refreshTarget.user, '-H', 'bash', refreshTarget.refreshScript],
+					{
+						stdio: 'ignore',
+						timeout: 90_000,
+						env: { ...process.env, GPG_TTY: '' }
+					}
+				);
 				if (refresh.status === 0) {
 					canaryAutoRefreshed = true;
 					info('\u2713 Warrant canary restored automatically — nothing to do.');
@@ -2356,7 +2602,7 @@ async function runStepWithSpinner(
 		}
 	}
 
-	// ─── 9b2. Rebuild the dist-shipping workspaces (cp296) ─────
+	// ─── 9b2. Rebuild the dist-shipping workspaces ─────
 	//
 	// Unlike the indexer/relay/matrix-bot (pure tsx-from-source), TWO
 	// workspaces EXECUTE from a compiled `dist/` bundle, and `dist/` is
@@ -2374,7 +2620,10 @@ async function runStepWithSpinner(
 	for (const wsDir of ['ops-cli', 'mcp-server'] as const) {
 		try {
 			info(`Rebuilding the ${wsDir} dist bundle...`);
-			runOrThrow('npm', ['run', 'build'], { cwd: join(installDir, 'apps', wsDir) });
+			runOrThrow('npm', ['run', 'build'], {
+				cwd: join(installDir, 'apps', wsDir),
+				env: localBuildEnv
+			});
 		} catch {
 			warn(
 				wsDir === 'ops-cli'
@@ -2395,7 +2644,7 @@ async function runStepWithSpinner(
 	//     `docker restart` it so it re-binds the new build (a running
 	//     container keeps serving the pre-upgrade inode after the install
 	//     dir was renamed above).  beta11: the container is identified by
-	//     its apps/web/build mount, NOT by a name or compose file — cp236's
+	//     its apps/web/build mount, NOT by a name or compose file — the older
 	//     `morphit-frontend`-name + repo-example-compose assumptions broke on
 	//     real deployments (a compose project names it `<proj>-frontend-1`,
 	//     and recreating it from the repo's example compose crash-looped on a
@@ -2417,7 +2666,7 @@ async function runStepWithSpinner(
 	// and the containerized frontend bind-mounts buildDir directly. Previously the
 	// stamp lived ONLY inside the copyToWebRoot branch, so every CONTAINERIZED
 	// instance (BunkerWeb/custom bind-mount) served operator_tag=null despite a
-	// correct config + on-chain registration (the maintainer/morphitir v1.17.0). operator_tag
+	// correct config + on-chain registration (seen on an instance at v1.17.0). operator_tag
 	// here is INFORMATIONAL (matches /v1/instance + the directory); fee attribution
 	// comes from the runtime indexer config and is unaffected either way.
 	try {
@@ -2437,6 +2686,26 @@ async function runStepWithSpinner(
 	// files the on-chain build-integrity check does not cover are touched.
 	// NEVER fatal: a bad logo file must not roll back a good upgrade — on any
 	// failure the build is left (or put back) plain Morphit, and we say how to fix.
+	//
+	// First: this instance's own origin in the pages, sitemap and
+	// robots.txt, on the still-unbranded fresh build (brand slots are offsets
+	// into the same pages). A hidden-only node never gets a clearnet origin.
+	// Non-fatal, like the branding; the self-heal phase repeats it on the
+	// served build.
+	try {
+		const o = resolveInstanceOrigin(installDir, nodeHiddenOnly);
+		const r = syncInstanceOrigin(
+			{ info, warn, spinner: (l) => startDotsSpinner(l) },
+			{ installDir, buildDir, origin: o, webRoot: null }
+		);
+		if (r.detail !== '') (r.verified ? info : warn)(sanitizeForTerm(r.detail));
+		if (r.strategy !== 'no-map') info(`Instance origin: ${r.origin} (${o.why}) — ${r.strategy}.`);
+	} catch (err) {
+		warn(
+			`Your instance origin could not be applied (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}); ` +
+				"pages name the build's origin until fixed. Run: sudo morphit-ops upgrade"
+		);
+	}
 	try {
 		const brandingSettings = readBrandingSettings(installDir);
 		if (brandingConfigured(brandingSettings)) info('Applying your branding to the new frontend…');
@@ -2500,7 +2769,7 @@ async function runStepWithSpinner(
 	if (plan.copyToWebRoot || plan.restartContainer) {
 		try {
 			const builtVersion = readBuiltVersion(buildDir);
-			// cp688 — the container was JUST restarted; give it a moment to come
+			// the container was JUST restarted; give it a moment to come
 			// back up before deciding we can't verify. Without this, the check
 			// almost always runs before the web server is serving again and prints
 			// "Could not auto-verify the served frontend", which looks like a
@@ -2578,7 +2847,7 @@ async function runStepWithSpinner(
 	//
 	// The site footer UNCONDITIONALLY links /canary.txt. If this box serves no
 	// canary AND has no way to make one, that link is a permanent 404 — bad for
-	// visitors and terrible for SEO (the maintainer/morphitir: registered, upgraded, but the
+	// visitors and terrible for SEO (seen on an instance: registered, upgraded, but the
 	// footer canary link was dead). Offer a turnkey SAME-BOX setup: it generates a
 	// signing key, signs the first canary, and schedules the weekly refresh — the
 	// admin says "yes" once and accepts a couple of pre-filled defaults, nothing
@@ -2621,10 +2890,7 @@ async function runStepWithSpinner(
 			// Both config files are checked — settings live in either, depending on
 			// how the instance was installed.
 			const readCfgKey = (key: string): string => {
-				for (const f of [
-					join(installDir, 'morphit.config.env'),
-					join(installDir, 'morphit.env')
-				]) {
+				for (const f of [join(installDir, 'morphit.config.env'), join(installDir, 'morphit.env')]) {
 					if (!existsSync(f)) continue;
 					const m = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(.+)$`, 'm').exec(
 						readFileSync(f, 'utf8')
@@ -2679,9 +2945,7 @@ async function runStepWithSpinner(
 				if (res.status === 0) {
 					info('\u2713 Warrant canary set up and scheduled — the footer link now resolves.');
 				} else {
-					warn(
-						`Canary setup didn't finish; you can run it anytime: sudo bash ${setupScript}`
-					);
+					warn(`Canary setup didn't finish; you can run it anytime: sudo bash ${setupScript}`);
 				}
 			} else {
 				info(
@@ -2715,7 +2979,7 @@ async function runStepWithSpinner(
 		const refreshed = results.filter((r) => r.action === 'refreshed');
 		if (refreshed.length > 0) {
 			for (const r of refreshed) {
-				// v1.18.0 deep-deep (ops-5): a rollback puts the previous unit back.
+				// a rollback puts the previous unit back.
 				if (r.backupPath) {
 					restoreOnRollback.push({
 						target: join(process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system', r.unit),
@@ -2796,7 +3060,9 @@ async function runStepWithSpinner(
 			const fixed = normalizeContactUrl(rawVal);
 			if (rawVal !== '' && fixed && fixed !== rawVal) {
 				writeFileSync(cfg, txt.replace(m[0], `${m[1] ?? ''}${fixed}`), 'utf8');
-				info(`Repaired an invalid contact URL in ${cfg}: "${sanitizeForTerm(rawVal)}" → "${sanitizeForTerm(fixed)}"`);
+				info(
+					`Repaired an invalid contact URL in ${cfg}: "${sanitizeForTerm(rawVal)}" → "${sanitizeForTerm(fixed)}"`
+				);
 			}
 		} catch {
 			/* non-fatal — the indexer tolerates a bad contact URL at runtime now */
@@ -2813,7 +3079,7 @@ async function runStepWithSpinner(
 	//   (413/403 on /v1/ + /relay/); healIpfsGatewayExposure() — expose the Kubo
 	//   gateway over Tor/I2P (NoFetch-safe) so every instance is a seeder.
 	let selfHealReexeced = false;
-	// v1.18.0 deep-deep (ops-5): note the heal backups before the phase, so a
+	// note the heal backups before the phase, so a
 	// rollback restores exactly the files THIS run's heals changed.
 	const envRoot = process.env.MORPHIT_ENV_ROOT ?? '';
 	const healSnapshot = snapshotSelfHealBackups(RELAY_ENV_TARGETS.map((f) => `${envRoot}${f}`));
@@ -2850,7 +3116,9 @@ async function runStepWithSpinner(
 			// v1.20.1: an ENABLED service that is not running is meant to run
 			// (morphitir's relay had exited with status 0 and been left down);
 			// start it on the new version below. Disabled / absent: skip.
-			const enabled = (spawnSync('systemctl', ['is-enabled', svc], { encoding: 'utf8' }).stdout ?? '').trim();
+			const enabled = (
+				spawnSync('systemctl', ['is-enabled', svc], { encoding: 'utf8' }).stdout ?? ''
+			).trim();
 			if (enabled !== 'enabled') {
 				info(`Skipping ${svc} (not active on this host).`);
 				continue;
@@ -2865,7 +3133,9 @@ async function runStepWithSpinner(
 			// It was down before this upgrade: the upgrade did not break it, so it
 			// does not undo the upgrade — say so and carry on.
 			if (!isActive) {
-				warn(`${svc} was not running before this upgrade and could not be started now. See: sudo journalctl -u ${svc} -n 50`);
+				warn(
+					`${svc} was not running before this upgrade and could not be started now. See: sudo journalctl -u ${svc} -n 50`
+				);
 				continue;
 			}
 			warn(`Service restart failed for ${svc}; rolling back.`);
@@ -2887,7 +3157,9 @@ async function runStepWithSpinner(
 		// half-upgraded box is never left running the new code down.
 		const outcome = await verifyUnitStayedUp(svc, restartsBefore);
 		if (outcome === 'down' && !isActive) {
-			warn(`${svc} was not running before this upgrade and did not stay up when started now. See: sudo journalctl -u ${svc} -n 50`);
+			warn(
+				`${svc} was not running before this upgrade and did not stay up when started now. See: sudo journalctl -u ${svc} -n 50`
+			);
 			continue;
 		}
 		if (outcome === 'down') {
@@ -2903,11 +3175,12 @@ async function runStepWithSpinner(
 		}
 	}
 
-	// ─── 10b. Redeploy + restart the MCP (its own vendored tree) ──
+	// ─── 10b. Redeploy + restart the MCP (its own isolated tree) ──
 	// The MCP runs from a SELF-CONTAINED tree at /opt/morphit-mcp, separate
 	// from the /opt/morphit install dir swapped above, so it does NOT pick
-	// up new code from the swap — its vendored deps + source must be
-	// re-deployed and the service then restarted, or morphit-mcp keeps
+	// up new code from the swap — its source and the runtime packages it copies
+	// out of this install's locked node_modules (no registry, no install
+	// scripts) must be re-deployed and the service then restarted, or morphit-mcp keeps
 	// running the OLD version forever (manually running deploy-mcp.sh +
 	// restart after every upgrade was the previous rough edge).  Gated on
 	// the unit being installed, so boxes without the MCP are untouched.  The
@@ -2923,12 +3196,13 @@ async function runStepWithSpinner(
 		const deployScript = join(installDir, 'ops', 'scripts', 'deploy-mcp.sh');
 		const mcpWasActive =
 			spawnSync('systemctl', ['is-active', '--quiet', 'morphit-mcp.service']).status === 0;
-		info('Redeploying the MCP server (vendored tree) for the new version...');
-		const depCode = await runStepWithSpinner(
-			'Redeploying the MCP server…',
-			'bash',
-			[deployScript, installDir, mcpDest, mcpUser]
-		);
+		info('Redeploying the MCP server from the locked packages of this install...');
+		const depCode = await runStepWithSpinner('Redeploying the MCP server…', 'bash', [
+			deployScript,
+			installDir,
+			mcpDest,
+			mcpUser
+		]);
 		const dep = { status: depCode };
 		if (dep.status !== 0) {
 			warn(
@@ -3064,7 +3338,7 @@ async function runStepWithSpinner(
 		}
 	}
 
-	// ─── 10e. Keep the DB backup Docker-aware (cp509 / v1.8.4 B) ──
+	// ─── 10e. Keep the DB backup Docker-aware (v1.8.4 B) ──
 	// If the operator's Postgres is containerized but their backup.env still
 	// points a host pg_dump at it (DB_CONTAINER empty), the daily backup
 	// silently captures nothing. Detect + warn with the one-line fix. No-op for
@@ -3097,13 +3371,13 @@ async function runStepWithSpinner(
 		info('   start-up and do NOT print this.)');
 	}
 
-	// cp431 — a warrant canary lives in the served build/ dir (operators sign
+	// a warrant canary lives in the served build/ dir (operators sign
 	// it OFF-server and upload it). build/ is rebuilt on every upgrade, so the
 	// canary is now gone. If the previous install had one, remind the operator
 	// to re-upload it — otherwise it silently goes stale and users get a FALSE
 	// tamper warning after 14 days, through no fault of the operator.
 	try {
-		// cp622: skip the reminder when we already restored it automatically above.
+		// skip the reminder when we already restored it automatically above.
 		if (!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt'))) {
 			// Tell the operator the truth for THEIR setup.
 			//
@@ -3208,7 +3482,9 @@ async function runStepWithSpinner(
 				readKey(altCfg, 'MORPHIT_INSTANCE_ORIGIN') ||
 				readKey(idxEnv, 'MORPHIT_INDEXER_PUBLIC_ORIGIN') ||
 				readKey(altCfg, 'MORPHIT_INDEXER_PUBLIC_ORIGIN') ||
-				readKey(join(installDir, 'ops', 'bunkerweb', 'bunkerweb.env'), 'SERVER_NAME').split(/\s+/)[0] ||
+				readKey(join(installDir, 'ops', 'bunkerweb', 'bunkerweb.env'), 'SERVER_NAME').split(
+					/\s+/
+				)[0] ||
 				'';
 			if (origin) seedAddrArgs.push(`MORPHIT_SEED_ORIGIN=${origin}`);
 
@@ -3227,12 +3503,16 @@ async function runStepWithSpinner(
 			// people's Blurt RPC onions, and probing one would report a stranger's
 			// node as our working seeder.
 			const cfgOnion =
-				readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS') || readKey(altCfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
+				readKey(cfg, 'MORPHIT_INSTANCE_TOR_ADDRESS') ||
+				readKey(altCfg, 'MORPHIT_INSTANCE_TOR_ADDRESS');
 			// What Tor actually hosts. HiddenServiceDir/hostname is the authority.
 			const routerOnion = (
 				spawnSync(
 					'sh',
-					['-c', "cat /var/lib/tor/*/hostname 2>/dev/null | grep -oE '[a-z2-7]{56}\\.onion' | head -1"],
+					[
+						'-c',
+						"cat /var/lib/tor/*/hostname 2>/dev/null | grep -oE '[a-z2-7]{56}\\.onion' | head -1"
+					],
 					{ encoding: 'utf8', timeout: 10_000 }
 				).stdout ?? ''
 			).trim();
@@ -3280,7 +3560,7 @@ async function runStepWithSpinner(
 		} catch {
 			/* detection is a nicety; the seed still runs and says what it could not find */
 		}
-		// v1.18.0 deep-deep, H3: this passed only the tag, so the seed script
+		// this passed only the tag, so the seed script
 		// curled git.agorise.net for the tag's CID after EVERY upgrade, hidden and
 		// offline ones included, from the box's home IP. Hand it the on-chain CID
 		// this node's own indexer holds (only when that record IS this tag; a newer
@@ -3289,7 +3569,9 @@ async function runStepWithSpinner(
 		// indexer.env: then it never fetches, downloads or announces anything.
 		const seedHiddenOnly = isHiddenOnlyNode();
 		if (seedHiddenOnly) seedAddrArgs.push('MORPHIT_SEED_HIDDEN_ONLY=1');
-		const onchainRelease = await readLocalRelease();
+		const onchainRelease = await readLocalRelease(
+			opts.localIndexerBases !== undefined ? { bases: opts.localIndexerBases } : {}
+		);
 		const seedCidArg =
 			onchainRelease !== null && onchainRelease.cid !== null && onchainRelease.tag === latestTag
 				? [onchainRelease.cid]
@@ -3304,7 +3586,7 @@ async function runStepWithSpinner(
 			/* older tree without the seed script — skip silently */
 		} else if (/-offline\.tar\.gz$/.test(tarballPath)) {
 			// v1.16.10 — a hidden-only node that upgrades offline should ALSO become
-			// a Tor/I2P seeder, not just a consumer (the maintainer: every instance a seeder).
+			// a Tor/I2P seeder, not just a consumer (every instance a seeder).
 			// The offline bundle now ships the CANONICAL standard tarball under
 			// .canonical-release/; if it's there, seed THAT — its CID matches the
 			// on-chain anchor. Only skip when it's absent (an older bundle), where
@@ -3312,7 +3594,9 @@ async function runStepWithSpinner(
 			const canonical = join(installDir, '.canonical-release', `morphit-${latestTag}.tar.gz`);
 			if (ipfsHostingUp && existsSync(canonical)) {
 				info('');
-				info(`Seeding ${latestTag} to IPFS from the bundled canonical tarball (this box becomes a Tor/I2P origin host) …`);
+				info(
+					`Seeding ${latestTag} to IPFS from the bundled canonical tarball (this box becomes a Tor/I2P origin host) …`
+				);
 				const seedEnv = ['env', 'IPFS_PATH=/var/lib/ipfs/.ipfs', ...seedAddrArgs];
 				try {
 					chmodSync(dirname(canonical), 0o755);
@@ -3330,7 +3614,9 @@ async function runStepWithSpinner(
 			} else {
 				info('');
 				info('Skipping the IPFS self-seed: this offline bundle does not carry the canonical');
-				info('tarball, so its bytes can\u2019t match the on-chain CID. (Newer bundles seed automatically.)');
+				info(
+					'tarball, so its bytes can\u2019t match the on-chain CID. (Newer bundles seed automatically.)'
+				);
 			}
 		} else if (!ipfsHostingUp) {
 			info('');
@@ -3501,14 +3787,143 @@ async function runStepWithSpinner(
  * ran at all; and the heals shared one try, so any one throwing skipped every
  * heal after it, silently. Each is now isolated and a failure is said out loud.
  */
-export async function runSelfHeals(): Promise<void> {
-	for (const [name, heal] of selfHealSteps()) {
-		try {
-			await heal();
-		} catch (err) {
-			warn(`Skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
+export async function runSelfHeals(opts: { child?: boolean } = {}): Promise<void> {
+	await runHealSteps(selfHealSteps(), opts);
+}
+
+/**
+ * Run heal steps in order, each isolated. As the re-exec'd child (`child`) the
+ * process is stopped with SIGTERM by the upgrader that started it once
+ * SELF_HEAL_CHILD_TIMEOUT_MS is up — an older upgrader then says nothing and
+ * runs its own, older heals — so the child says which step it was in, which
+ * did not run, and the command that runs them.
+ */
+export async function runHealSteps(
+	steps: Array<[string, () => unknown]>,
+	opts: { child?: boolean } = {}
+): Promise<void> {
+	let at = -1;
+	const onTerm = (): void => {
+		const left = steps.slice(Math.max(at, 0)).map(([n]) => n);
+		warn(
+			`The upgrade stopped its heal step at the time limit${at >= 0 ? `, during ${steps[at]![0]}` : ''}. ` +
+				`Not done this time: ${left.join(', ')}. ` +
+				(afterRestartLaunched
+					? 'The checks that need the restarted services still run in the background. '
+					: '') +
+				`Once the upgrade has finished, run: ${HEALS_COMMAND}`
+		);
+		process.exit(143);
+	};
+	if (opts.child) process.once('SIGTERM', onTerm);
+	try {
+		for (let i = 0; i < steps.length; i++) {
+			at = i;
+			const [name, heal] = steps[i]!;
+			try {
+				await heal();
+			} catch (err) {
+				warn(`Skipped ${name}: ${err instanceof Error ? err.message : String(err)}`);
+			}
 		}
+	} finally {
+		if (opts.child) process.removeListener('SIGTERM', onTerm);
 	}
+}
+
+/** The install this morphit-ops runs from (its dist bundle or its source), or null. */
+function thisCliInstallDir(): string | null {
+	let here: string;
+	try {
+		here = fileURLToPath(import.meta.url);
+	} catch {
+		return null;
+	}
+	return /^(.*)\/apps\/ops-cli\/(?:dist|src)\//.exec(here)?.[1] ?? null;
+}
+
+function sameDir(a: string | null, b: string): boolean {
+	if (a === null) return false;
+	try {
+		return realpathSync(a) === realpathSync(b);
+	} catch {
+		return false;
+	}
+}
+
+/** Re-runs this release's heals (`upgrade --heals`). */
+const HEALS_COMMAND = 'sudo morphit-ops upgrade --heals';
+/** Asks what the heal phase did not stop for (`upgrade --questions`). */
+const QUESTIONS_COMMAND = 'sudo morphit-ops upgrade --questions';
+/** What the heal phase left for `upgrade --questions`, in order. */
+const deferredQuestions: string[] = [];
+/** True only while `upgrade --questions` runs: then the heals ask. */
+let askingQuestions = false;
+/** The after-restart unit was started by this process. */
+let afterRestartLaunched = false;
+
+/** The heal phase never waits for an answer (an older upgrader stops it at
+ *  300 s, and `--yes` / MORPHIT_AUTO_UPGRADE=1 runs have no one to answer):
+ *  the heal takes its safe default and the question is left for later. */
+function deferQuestion(what: string): null {
+	if (!deferredQuestions.includes(what)) deferredQuestions.push(what);
+	return null;
+}
+
+/** The heal phase's last word on the questions it did not stop for. */
+export function printDeferredQuestions(): void {
+	if (deferredQuestions.length === 0) return;
+	info(
+		`Not asked during the upgrade, so it did not wait: ${deferredQuestions.join('; ')}. ` +
+			`Answer when you like: ${QUESTIONS_COMMAND}`
+	);
+}
+
+/** `upgrade --questions`: the questions the heal phase leaves for later, at a terminal. */
+async function runQuestions(): Promise<number> {
+	if (process.stdin.isTTY !== true) {
+		printError(
+			`This asks the questions the upgrade did not stop for, so run it from a terminal: ${QUESTIONS_COMMAND}`
+		);
+		return 2;
+	}
+	askingQuestions = true;
+	try {
+		await runHealSteps([
+			['the relay log notice', () => healRelayJournalNotice()],
+			['the Matrix bot tor-only heal', () => healMatrixBotTorOnlyNow()],
+			['the backup encryption offer', () => healBackupOfferNow()]
+		]);
+	} finally {
+		askingQuestions = false;
+	}
+	info('✓ No other question is waiting.');
+	return 0;
+}
+
+/** `upgrade --heals`: this release's heals again, then the checks that need
+ *  the services running it (they already are), all in this process. */
+async function runHealsAgain(o: { upToDate?: boolean; installDir?: string } = {}): Promise<number> {
+	if (o.upToDate && process.getuid?.() !== 0) {
+		info("Run it with sudo to also check this release's repairs on this server.");
+		return 0;
+	}
+	// The heals are this morphit-ops's own release's: run them only for the
+	// install it belongs to (never, say, from a checkout pointed at another).
+	if (o.upToDate && o.installDir !== undefined && !sameDir(thisCliInstallDir(), o.installDir)) {
+		info(
+			`This morphit-ops is not the one installed in ${o.installDir}, so its repairs were not run there.`
+		);
+		return 0;
+	}
+	info(
+		o.upToDate
+			? "Checking this release's repairs on this server (nothing is downloaded or installed)…"
+			: 'Running the heals of this release again (nothing is downloaded or installed)…'
+	);
+	await runHealSteps(selfHealSteps().filter(([n]) => n !== 'the after-restart heals'));
+	await runAfterRestartHeals(0);
+	return 0;
 }
 
 /** The self-heal steps, in order (exported so the ORDER and each step's effect
@@ -3531,23 +3946,99 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// in the re-exec'd child it stops itself in time (never leaving apt
 		// switched but unchecked), and morphit-tor-only-recover.timer finishes or
 		// undoes any switch a kill still interrupts.
-		['the tor-only OS heal', () => healTorOnlyOs({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		[
+			'the tor-only OS heal',
+			() => healTorOnlyOs({ info, warn, spinner: (l) => startDotsSpinner(l) })
+		],
+		// (lib/unitPrivilegeHeal.ts): the indexer and relay run as their
+		// own unprivileged users and the install tree goes back to root; verified
+		// per service (uid in /proc, an HTTP answer, no restart loop), else a
+		// run-as-root drop-in is written and verified. Early (after the tor-only OS
+		// heal, which stays first): before the network heals and the service
+		// restarts of step 10.
+		[
+			'the service-user heal',
+			() => reportHeal(healServicePrivileges({ info, warn, spinner: (l) => startDotsSpinner(l) }))
+		],
+		// lib/indexerMemoryHeal.ts: the indexer gets its memory cap (MemoryMax) on
+		// the running service too. The upgrade refreshes the units (and reloads
+		// systemd) before this phase; `upgrade --heals` runs it as well. It never
+		// restarts the indexer.
+		['the indexer memory cap heal', () => reportHeal(healIndexerMemory(healCtx()))],
+		// (lib/torPowHeal.ts): the onion services get Tor's proof-of-work
+		// defence; Tor reloads only when the option was added and
+		// `tor --verify-config` accepts it. After the tor-only OS heal.
+		['the onion PoW heal', () => reportHeal(healTorPow(healCtx()))],
+		// (lib/etcPermHeal.ts): /etc/morphit back to root:morphit 0750.
+		['the /etc/morphit permission heal', () => reportHeal(healEtcPerms(healCtx()))],
+		// (lib/mailRelayHeal.ts): no mail relay to the example placeholder
+		// (none at all on a tor-only node) and fail2ban bans without mailing
+		// whois reports; postfix / fail2ban reload only when changed.
+		['the alert mail heal', () => reportHeal(healMailRelay(healCtx()))],
+		// (lib/nodeRuntimeHeal.ts): an offline install's /usr/local Node is
+		// updated from a newer bundled vendor/node (no network), before the
+		// upgrade restarts the services on it.
+		[
+			'the Node runtime update',
+			() => reportHeal(healNodeRuntime(healCtx(), { installDir: selfHealInstallDir() }))
+		],
+		// Round 2, item 6 (lib/osQuietHeal.ts): every node turns off the OS fetches
+		// a server does not need (motd/Pro news, fwupd refresh, pollinate); each
+		// part is read back, a part that does not check out is reverted and named.
+		['the quiet OS heal', () => reportHeal(healOsQuiet(healCtx()))],
 		// v1.20.2 (lib/feeExplorerListHeal.ts): a node set up before v1.20.0 still
 		// lists three dead XMR explorers in morphit.env and none of the newer
-		// sources, so its XMR fees hang on two websites. Quick, no network;
-		// before the restarts below, so the indexer starts on the new list.
+		// sources (since v1.21.0 also the onion explorers, asked first over Tor).
+		// Quick, no network; before the restarts below, so the indexer starts on
+		// the new list.
+		// (lib/feeAddressEmptyHeal.ts): an empty fee-address line
+		// now turns that fee method off; commented once per box, before the
+		// upgrade restarts the indexer on the new meaning.
+		[
+			'the empty fee-address line heal',
+			() => reportHeal(healEmptyFeeAddressLines(healCtx(), realFeeAddressRuntime()))
+		],
 		[
 			'the Monero fee-source heal',
 			() => healXmrExplorerList(process.env.MORPHIT_ENV_ROOT ?? '', info, warn)
 		],
-		// v1.18.0 deep-deep, H3: existing nodes get the Kubo privacy settings a
+		// v1.21.0 (lib/btcFeeExplorerListHeal.ts): a wizard-written BTC list has
+		// only the two clearnet explorers; add the onion ones (asked first, over
+		// Tor), once, keeping the operator's own entries. Quick, no network.
+		[
+			'the Bitcoin fee-source heal',
+			() => healBtcExplorerList(process.env.MORPHIT_ENV_ROOT ?? '', info, warn)
+		],
+		// (lib/sysctlForwardHeal.ts): Docker hosts need IPv4 forwarding for
+		// their published ports; hardening had switched it off. Before the
+		// web-proxy heals (its fallback may restart Docker).
+		[
+			'the IPv4 forwarding heal',
+			() => reportHeal(healForwarding({ info, warn, spinner: (l) => startDotsSpinner(l) }))
+		],
+		// existing nodes get the Kubo privacy settings a
 		// fresh install now gets (tor-only: off the public IPFS network).
-		['the IPFS privacy heal', () => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })],
+		[
+			'the IPFS privacy heal',
+			() => healIpfsPrivacy({ info, warn, spinner: (l) => startDotsSpinner(l) })
+		],
 		// A template fix is not a fix for INSTALLED nodes (upgrade does not re-run
 		// Ansible), so open the IPFS swarm port here too (review B7).
 		['the IPFS swarm firewall heal', () => healIpfsSwarmFirewall()],
 		['the IPFS gateway heal', () => healIpfsGatewayExposure()],
 		['the frontend config heal', () => healFrontendConfig()],
+		// A certificate set up to renew with port 80 of its own cannot renew while
+		// BunkerWeb holds port 80. After the frontend config heal: the webroot probe
+		// goes through the frontend. Never on a hidden-only node (it asks
+		// Let's Encrypt, which is clearnet).
+		['the TLS renewal heal', () => healTlsRenewalUnlessHidden()],
+		// (lib/bridgeCidrHeal.ts): the indexer trusts its frontend's Docker
+		// bridge as a proxy; written before the upgrade restarts the indexer (it
+		// restarts it itself only when it changed something).
+		['the proxy-bridge heal', () => reportHeal(healBridgeCidr(healCtx()))],
+		// (lib/nginxVhostHeal.ts): missing
+		// settings in a bare-metal nginx box's Morphit vhosts; Docker boxes skip it.
+		['the nginx vhost heal', () => reportHeal(healNginxVhosts(healCtx()))],
 		// v1.20.0 (C1/C2/B11, owned by lib/proxyConfigHeal.ts): the web containers'
 		// Docker logs stop keeping visitor addresses, BunkerWeb gets Morphit's
 		// headers, host.docker.internal → the real bridge gateway. After the
@@ -3587,13 +4078,345 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// v1.20.1: an enabled relay that is not running (morphitir: exited with
 		// status 0 and was never restarted) is started and checked. The upgrade
 		// restarting it afterwards is harmless.
-		[
-			'the stopped-relay heal',
-			() => startIfEnabledButStopped('morphit-relay.service', info, warn)
-		],
+		['the stopped-relay heal', () => startIfEnabledButStopped('morphit-relay.service', info, warn)],
+		// The heals that need the services restarted on THIS release run in a
+		// background unit once they are (lib/afterRestartHeal.ts). Started here:
+		// after the last heal that restarts the indexer or the relay itself (the
+		// unit waits for the restarts that come after its start), and before
+		// the steps that have a question for the operator.
+		['the after-restart heals', () => startAfterRestartHeals()],
+		// (lib/journalNotice.ts): once per box, say whether older relay
+		// logs still hold signup network prefixes and offer to drop the journal.
+		['the relay log notice', () => healRelayJournalNotice()],
+		// The Matrix bot's secret-free posture (lib/matrixBot.ts), for the
+		// indexer's clearnet check; written from the env file so boxes set up
+		// before it existed get it on this upgrade. No network.
+		// on a tor-only node the bot reaches its homeserver only
+		// through Tor; a clearnet one is stopped unless the operator types
+		// KEEP-CLEARNET. Before the posture, which then records the outcome.
+		['the Matrix bot tor-only heal', () => healMatrixBotTorOnlyNow()],
+		// older `register` / fee-recipient runs decrypted the relay's
+		// sealed passphrase into a world-readable /run file; one a killed run
+		// left behind is removed here (a reboot clears /run too). No network.
+		['the stale passphrase file clean-up', () => healStaleRegPassFiles()],
+		// (lib/backupEncryptHeal.ts): plain-text database backups
+		// already on the box are encrypted to an age key, or deleted, only on
+		// the operator's answer; without a terminal it only says so.
+		['the backup encryption offer', () => healBackupOfferNow()],
+		// say so when this instance still serves morphit.io's canary key
+		// as its own /pgp_keys.asc. No network.
+		['the canary key check', () => warnUpstreamCanaryKey()],
+		['the Matrix bot posture', () => healMatrixBotPosture()],
+		['the questions left for later', () => printDeferredQuestions()],
 		// v1.20.1: last, with whatever time this child has left.
 		['the web-proxy result', () => showWebProxyResult()]
 	];
+}
+
+/** The Matrix bot loads two native add-ons that `npm ci --ignore-scripts`
+ *  does not put in place. Where the bot is configured, put them in place from
+ *  pinned SHA-256s (scripts/fetch-matrix-bot-natives.mjs of the NEW tree) — or,
+ *  on a hidden-only node, only check them (no download over the clearnet). Never
+ *  fails the upgrade: without them the bot alone stays down, and this says how to
+ *  fix it. */
+function ensureMatrixBotNatives(installDir: string, hiddenOnly: boolean): void {
+	try {
+		if (!matrixBotReadiness(readMatrixBotEnv()).run) return;
+		const script = join(installDir, 'scripts', 'fetch-matrix-bot-natives.mjs');
+		if (!existsSync(script)) return;
+		info(
+			hiddenOnly
+				? "Checking the Matrix bot's native add-ons…"
+				: "Putting the Matrix bot's native add-ons in place (pinned SHA-256)…"
+		);
+		const r = spawnSync(
+			process.execPath,
+			[script, installDir, ...(hiddenOnly ? ['--verify-only'] : [])],
+			{
+				stdio: 'inherit',
+				timeout: 300_000
+			}
+		);
+		if (r.status !== 0) {
+			warn(
+				hiddenOnly
+					? 'The Matrix bot changed native add-ons in this release and this zero-clearnet node cannot download them, so the bot stays down. ' +
+							'Bring the offline bundle of this release (it carries them) and run on this box: sudo morphit-ops upgrade --from-file=<path>'
+					: `The Matrix bot's native add-ons could not be put in place, so the bot stays down; the rest of the node is unaffected. To retry, run on this box: sudo node ${script} ${installDir}`
+			);
+		}
+	} catch {
+		/* never fail an upgrade over the bot's add-ons */
+	}
+}
+
+/** Write matrix-bot.posture from matrix-bot.env when the bot is configured
+ *  here. MORPHIT_ENV_ROOT relocates the file for tests. */
+export function healMatrixBotPosture(): void {
+	const env = `${process.env.MORPHIT_ENV_ROOT ?? ''}${MATRIX_BOT_ENV_PATH}`;
+	if (!existsSync(env)) return;
+	writeMatrixBotPosture(readFileSync(env, 'utf8'), env);
+}
+
+/** The relay-log notice with the box's journalctl and terminal. */
+export async function healRelayJournalNotice(): Promise<void> {
+	const marker = process.env.MORPHIT_JOURNAL_NOTICE_MARKER ?? JOURNAL_NOTICE_MARKER;
+	// In the heal phase a long journal must not eat the time the heals after
+	// this one need; `upgrade --questions` can afford a full scan.
+	const limitMs = askingQuestions ? 300_000 : 60_000;
+	let timedOut = false;
+	const count = (): number | null => {
+		if (spawnSync('sh', ['-c', 'command -v journalctl'], { stdio: 'ignore' }).status !== 0)
+			return null;
+		const r = spawnSync(
+			'sh',
+			[
+				'-c',
+				`journalctl -u morphit-relay.service --no-pager -o cat 2>/dev/null | grep -c '"sequential_pattern_rejected".*bucketKey'`
+			],
+			{ encoding: 'utf8', timeout: limitMs, maxBuffer: 1024 * 1024 }
+		);
+		if (r.signal !== null || r.error !== undefined) {
+			timedOut = true;
+			return null;
+		}
+		const n = Number((r.stdout ?? '').trim());
+		return Number.isInteger(n) && n >= 0 ? n : null;
+	};
+	const outcome = await relayJournalNotice({
+		count,
+		vacuum: () =>
+			spawnSync('journalctl', ['--rotate'], { stdio: 'ignore', timeout: 120_000 }).status === 0 &&
+			spawnSync('journalctl', ['--vacuum-time=1s'], { stdio: 'ignore', timeout: 300_000 })
+				.status === 0,
+		ask: async (q) =>
+			askingQuestions
+				? process.stdin.isTTY === true
+					? promptYes(q)
+					: null
+				: deferQuestion('whether to drop the journal history that holds old relay log lines'),
+		later: QUESTIONS_COMMAND,
+		markerExists: () => noticeMarkerExists(marker),
+		writeMarker: (t) => writeNoticeMarker(marker, t),
+		info,
+		warn,
+		spinner: (l) => startDotsSpinner(l)
+	});
+	if (outcome === 'unknown' && timedOut)
+		info(
+			`The relay's older log lines could not be counted within ${limitMs / 1000} s, so nothing was asked or changed. To check them: ${QUESTIONS_COMMAND}`
+		);
+}
+
+/** The TLS renewal heal, skipped without a word on a hidden-only node. */
+export async function healTlsRenewalUnlessHidden(
+	hiddenOnly: () => boolean = () => isHiddenOnlyNode()
+): Promise<void> {
+	if (hiddenOnly()) return;
+	await reportHeal(healTlsRenewalHeal({ info, warn, spinner: (l) => startDotsSpinner(l) }));
+}
+
+/** The install the self-heal phase belongs to (the new CLI runs from it). */
+function selfHealInstallDir(): string {
+	return (
+		/^(.*)\/apps\/ops-cli\/(?:dist|src)\//.exec(process.argv[1] ?? '')?.[1] ??
+		((process.env.MORPHIT_INSTALL_DIR ?? '').trim() || '/opt/morphit')
+	);
+}
+
+function healCtx(): { info: typeof info; warn: typeof warn; spinner: (l: string) => () => void } {
+	return { info, warn, spinner: (l) => startDotsSpinner(l) };
+}
+
+/**
+ * Heals that need the indexer / relay already running this release (each
+ * restarts what it changes, then verifies against the running service):
+ * hidden RPC list, relay health gate, database roles,
+ * indexer.env shadows, Web Push keys, log level; and the
+ * tor-only egress rule, which needs more time than the self-heal phase
+ * has. Run by the background unit after the restarts.
+ */
+export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
+	return [
+		['the hidden RPC list heal', () => reportHeal(healHiddenRpcEnv(healCtx()))],
+		['the relay health heal', () => reportHeal(healRelayHealthEnv(healCtx()))],
+		['the database role heal', () => reportHeal(healPgRoles(healCtx()))],
+		['the indexer.env heal', () => reportHeal(healIndexerEnvShadow(healCtx()))],
+		// an empty relay-vapid.env is generated again; checked against
+		// the restarted relay's local health.
+		['the Web Push key heal', () => reportHeal(healVapid(healCtx()))],
+		// an unknown MORPHIT_LOG_LEVEL → info, checked in the restarted indexer.
+		['the log level heal', () => reportHeal(healLogLevel(healCtx()))],
+		// the running indexer shows the fee addresses again.
+		['the fee address check', () => checkFeeAddressHeal()],
+		// last — up to about four minutes of Tor checks, which the
+		// self-heal child (killed at 300 s) cannot always afford after the
+		// tor-only OS heal, and it may restart Docker, so it waits for the
+		// background web-proxy heal first.
+		['the tor-only egress heal', () => healTorOnlyEgressAfterWebHeal()],
+		// The upgrader of v1.20.2 and older enables a bot the Matrix tor-only heal
+		// stopped once the services are back; disable it again.
+		[
+			'the Matrix bot stop check',
+			() =>
+				reportHeal(
+					recheckStoppedMatrixBot(
+						healCtx(),
+						realMatrixTorOnlyRuntime(async () => null)
+					)
+				)
+		]
+	];
+}
+
+/** after the restart, the methods whose empty line was commented have
+ *  an address in the running indexer's /v1/instance. */
+async function checkFeeAddressHeal(): Promise<void> {
+	await reportHeal(
+		verifyFeeAddressHeal(healCtx(), {
+			markerText: () => realFeeAddressRuntime().markerText(),
+			hiddenOnly: () => isHiddenOnlyNode(),
+			bases: () => localIndexerBases(),
+			instance: async () => {
+				for (const base of localIndexerBases()) {
+					try {
+						return await getLocalIndexerJson<{
+							treasury?: { btc?: string | null; xmr?: string | null };
+						}>(base, '/v1/instance');
+					} catch {
+						/* next base */
+					}
+				}
+				return null;
+			}
+		})
+	);
+}
+
+/** The tor-only egress heal (lib/torOnlyEgressHeal.ts), once no web-proxy heal
+ *  is running: it may restart Docker, which would cut that heal short. */
+export async function healTorOnlyEgressAfterWebHeal(
+	deps: { readonly waitIdle?: (unit: string) => Promise<'idle' | 'timed-out'> } = {}
+): Promise<void> {
+	const waitIdle = deps.waitIdle ?? ((u: string) => waitForUnitIdle(u));
+	if ((await waitIdle(WEB_HEAL_UNIT)) === 'timed-out') {
+		warn(
+			`Tor-only egress rule: not checked this time — the web-proxy heal (${WEB_HEAL_UNIT}) was still running after 10 minutes, ` +
+				'and this check may restart Docker. It runs again at the next upgrade.'
+		);
+		return;
+	}
+	await reportHeal(healTorOnlyEgress(healCtx()));
+}
+
+/** The background unit's body: wait for the restarts, then run the heals. */
+export async function runAfterRestartHeals(sinceUs: number): Promise<void> {
+	const services = ['morphit-indexer.service', 'morphit-relay.service'];
+	info(`Waiting for ${services.join(' and ')} to restart on the new version…`);
+	const w = await waitForRestarts(sinceUs, services);
+	if (w === 'timed-out')
+		warn('They did not restart within 15 minutes; running the checks against what is running now.');
+	for (const [name, step] of afterRestartHealSteps()) {
+		try {
+			await step();
+		} catch (e) {
+			warn(`${name} failed: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+	info('Done.');
+}
+
+/** Start the background unit and tell the operator where its results go. */
+export function startAfterRestartHeals(): void {
+	const r = launchAfterRestartHeals();
+	afterRestartLaunched = r !== 'unavailable';
+	if (r === 'unavailable') {
+		warn(
+			'Could not start the checks that run after the services restart (systemd-run did not start ' +
+				`${AFTER_RESTART_UNIT}); they run again at the next upgrade.`
+		);
+		return;
+	}
+	info(
+		`The checks that need the restarted services run in the background (${AFTER_RESTART_UNIT}) once they are back; ` +
+			`results: sudo cat ${afterRestartLogPath()}`
+	);
+}
+
+/** Warn when the served /pgp_keys.asc is morphit.io's canary key. */
+export function warnUpstreamCanaryKey(
+	buildDir = join(selfHealInstallDir(), 'apps', 'web', 'build')
+): void {
+	const key = join(buildDir, 'pgp_keys.asc');
+	if (!existsSync(key)) return;
+	if (armoredKeyFingerprints(key)?.includes(UPSTREAM_CANARY_KEY_FPR)) {
+		warn(
+			`This instance serves morphit.io's canary key as its own /pgp_keys.asc (${UPSTREAM_CANARY_KEY_FPR.slice(-16)}). ` +
+				'Visitors would check your canary against a key that is not yours. Add yours: sudo morphit-ops harden'
+		);
+	}
+}
+
+/** Remove /run/morphit-reg-*.pass leftovers and say so. */
+export function healStaleRegPassFiles(dir = '/run'): void {
+	const r = removeStaleRegPassFiles(dir);
+	if (r.found === 0) return;
+	if (r.left === 0) info(`Removed ${r.found} leftover relay passphrase file(s) from ${dir}.`);
+	else
+		warn(
+			`${r.left} relay passphrase file(s) could not be removed; on this server run: sudo rm -f ${dir}/morphit-reg-*.pass`
+		);
+}
+
+/** Ask the operator at the terminal; null when there is none, or no answer
+ *  within 2 minutes (the self-heal child is stopped at 300 s, and the heals
+ *  after this one must still run). */
+async function askOnTerminal(q: string): Promise<string | null> {
+	if (process.stdin.isTTY !== true) return null;
+	const readline = await import('node:readline/promises');
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+	try {
+		return (await rl.question(`${q}\n> `, { signal: AbortSignal.timeout(120_000) })).trim();
+	} catch {
+		return null;
+	} finally {
+		rl.close();
+	}
+}
+
+/** The Matrix bot tor-only heal (lib/matrixTorOnlyHeal.ts) on this box. */
+export async function healMatrixBotTorOnlyNow(): Promise<void> {
+	await reportHeal(
+		healMatrixBotTorOnly(
+			healCtx(),
+			realMatrixTorOnlyRuntime(
+				askingQuestions
+					? askOnTerminal
+					: async () => deferQuestion('whether to keep the Matrix bot on its clearnet homeserver')
+			)
+		)
+	);
+}
+
+/** The backup encryption offer (lib/backupEncryptHeal.ts) on this box. */
+export async function healBackupOfferNow(): Promise<void> {
+	await reportHeal(
+		healBackupEncryption(
+			healCtx(),
+			realBackupRuntime(
+				askingQuestions
+					? askOnTerminal
+					: async () => deferQuestion('what to do with the plain-text database backups')
+			)
+		)
+	);
+}
+
+/** Print a heal's result: info when its end state was observed, warn otherwise. */
+async function reportHeal(r: Promise<HealResult>): Promise<void> {
+	const res = await r;
+	if (res.detail === '') return;
+	(res.verified ? info : warn)(res.detail);
 }
 
 /** When the background web heal was started by this process (ms), or null. */
@@ -3629,6 +4452,14 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 		});
 		result = out.kind;
 		detail = 'reason' in out ? out.reason : undefined;
+		// Round 2, item 6 (lib/bunkerwebJobsHeal.ts): BunkerWeb's scheduler runs
+		// Morphit's job lists, so it fetches nothing from the internet. After the
+		// proxy-config heal (both edit the compose file; this one only the
+		// scheduler's volumes), and here because its scheduler recreate and log
+		// check can take minutes — this job runs in the background unit on a
+		// BunkerWeb box, never under the self-heal child's 300 s limit. A box
+		// without a running BunkerWeb scheduler is skipped in one line.
+		await reportHeal(healBunkerwebJobs({ info, warn, spinner: (l) => startDotsSpinner(l) }));
 	} catch (err) {
 		detail = err instanceof Error ? err.message : String(err);
 		throw err;
@@ -3680,7 +4511,7 @@ async function showWebProxyResult(): Promise<void> {
 	});
 	if (s === null) {
 		info(
-			"BunkerWeb is still applying the new settings in the background (it checks them and puts the previous ones back by itself if a check fails). See the result any time with: sudo morphit-ops status"
+			'BunkerWeb is still applying the new settings in the background (it checks them and puts the previous ones back by itself if a check fails). See the result any time with: sudo morphit-ops status'
 		);
 		return;
 	}
@@ -3713,10 +4544,16 @@ export async function healRelayClearnet(): Promise<void> {
 	// unit reads it. A wildcard bind is reached on loopback.
 	const listen = (() => {
 		try {
-			const v = readEffectiveEnv(relayFiles, ['MORPHIT_RELAY_LISTEN_HOST', 'MORPHIT_RELAY_LISTEN_PORT']);
+			const v = readEffectiveEnv(relayFiles, [
+				'MORPHIT_RELAY_LISTEN_HOST',
+				'MORPHIT_RELAY_LISTEN_PORT'
+			]);
 			const host = (v.get('MORPHIT_RELAY_LISTEN_HOST') ?? '').trim();
 			const port = Number((v.get('MORPHIT_RELAY_LISTEN_PORT') ?? '').trim()) || 8080;
-			return { host: host === '' || host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host, port };
+			return {
+				host: host === '' || host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host,
+				port
+			};
 		} catch {
 			return { host: '127.0.0.1', port: 8080 };
 		}
@@ -3735,17 +4572,29 @@ export async function healRelayClearnet(): Promise<void> {
 				!noSystemd &&
 				spawnSync('systemctl', ['is-active', '--quiet', 'morphit-relay.service']).status === 0,
 			restart: () =>
-				spawnSync('systemctl', ['restart', 'morphit-relay.service'], { timeout: 60_000 }).status === 0,
-			// v1.18.0 deep-deep (ops-4): only a relay systemd reports as failing is
+				spawnSync('systemctl', ['restart', 'morphit-relay.service'], { timeout: 60_000 }).status ===
+				0,
+			// only a relay systemd reports as failing is
 			// reverted; a slow first chain read over Tor is not a failure.
 			unitState: () => {
 				const r = spawnSync(
 					'systemctl',
-					['show', '-p', 'ActiveState', '-p', 'SubState', '-p', 'NRestarts', 'morphit-relay.service'],
+					[
+						'show',
+						'-p',
+						'ActiveState',
+						'-p',
+						'SubState',
+						'-p',
+						'NRestarts',
+						'morphit-relay.service'
+					],
 					{ encoding: 'utf8', timeout: 10_000 }
 				);
-				if (r.status !== 0 || typeof r.stdout !== 'string') throw new Error('systemctl show failed');
-				const v = (k: string): string => new RegExp(`^${k}=(.*)$`, 'm').exec(r.stdout)?.[1]?.trim() ?? '';
+				if (r.status !== 0 || typeof r.stdout !== 'string')
+					throw new Error('systemctl show failed');
+				const v = (k: string): string =>
+					new RegExp(`^${k}=(.*)$`, 'm').exec(r.stdout)?.[1]?.trim() ?? '';
 				const n = Number(v('NRestarts'));
 				return {
 					activeState: v('ActiveState'),
@@ -3758,7 +4607,9 @@ export async function healRelayClearnet(): Promise<void> {
 				const t = setTimeout(() => ctrl.abort(), 3_000);
 				try {
 					const host = listen.host.includes(':') ? `[${listen.host}]` : listen.host;
-					const res = await fetch(`http://${host}:${listen.port}/v1/health`, { signal: ctrl.signal });
+					const res = await fetch(`http://${host}:${listen.port}/v1/health`, {
+						signal: ctrl.signal
+					});
 					// Capped before parsing, like every body this file reads (the
 					// hardening rule: no bare res.json()). The relay's health report
 					// is a few hundred bytes; anything past 64 KB is not one.
@@ -3801,17 +4652,53 @@ export function healBranding(): void {
 	const m = /^(.*)\/apps\/ops-cli\/(?:dist|src)\//.exec(process.argv[1] ?? '');
 	if (m && m[1] && existsSync(join(m[1], 'apps', 'web'))) installDir = m[1];
 	const buildDir = join(installDir, 'apps', 'web', 'build');
+	const webRoot = resolveWebRoot(process.env);
+	// the served build names this instance's origin (resets and
+	// re-applies the branding around it when it has to).
+	try {
+		const r = syncInstanceOrigin(healCtx(), {
+			installDir,
+			buildDir,
+			webRoot: existsSync(webRoot) ? webRoot : null
+		});
+		if (r.detail !== '') (r.verified ? info : warn)(sanitizeForTerm(r.detail));
+		if (r.strategy !== 'no-map' && r.strategy !== 'already')
+			info(`Instance origin: ${r.origin} — ${r.strategy}.`);
+	} catch (err) {
+		warn(
+			`Your instance origin could not be applied (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}). Run: sudo morphit-ops upgrade`
+		);
+	}
 	if (!existsSync(join(buildDir, BRAND_SLOTS_FILE))) return; // pre-branding build
 	const br = applyBranding({ buildDir, settings: readBrandingSettings(installDir) });
 	for (const w of br.warnings) warn(sanitizeForTerm(w));
-	if (br.touched.length === 0) return;
-	const webRoot = resolveWebRoot(process.env);
-	if (existsSync(webRoot)) syncTouchedToWebRoot(buildDir, webRoot, br.touched);
-	info(
-		br.active
-			? `\u2713 Applied your branding${br.brandName ? ` ("${sanitizeForTerm(br.brandName)}")` : ''} to the live frontend.`
-			: '\u2713 Frontend branding reset to the plain Morphit look (no branding configured).'
-	);
+	if (br.touched.length > 0) {
+		if (existsSync(webRoot)) syncTouchedToWebRoot(buildDir, webRoot, br.touched);
+		info(
+			br.active
+				? `\u2713 Applied your branding${br.brandName ? ` ("${sanitizeForTerm(br.brandName)}")` : ''} to the live frontend.`
+				: '\u2713 Frontend branding reset to the plain Morphit look (no branding configured).'
+		);
+	}
+	// The link-preview image (og-image.png): OBSERVE what is served \u2014 this
+	// branding's own picture when it draws one, else the one verify.json lists.
+	// A bare-metal web root that missed an earlier copy gets it now.
+	const servedDir = existsSync(webRoot) ? webRoot : buildDir;
+	let og = checkServedOgImage(servedDir, br.ogImageSha256);
+	if (!og.ok && servedDir === webRoot) {
+		syncTouchedToWebRoot(buildDir, webRoot, ['og-image.png']);
+		og = checkServedOgImage(webRoot, br.ogImageSha256);
+		if (og.ok) info(`✓ Link-preview image (og-image.png) re-published to ${webRoot}.`);
+	}
+	if (!og.ok) {
+		warn(
+			`The link-preview image is not up to date: ${sanitizeForTerm(og.detail)}. Run: sudo morphit-ops branding apply`
+		);
+	} else if (br.ogImageSha256 !== null && br.touched.includes('og-image.png')) {
+		info(
+			`\u2713 Link-preview image (og-image.png) is your own (served sha256 ${og.sha256?.slice(0, 12)}\u2026).`
+		);
+	}
 }
 
 /** v1.16.13 — SELF-HEAL: rebuild the compose-managed frontend so a shipped
@@ -3820,7 +4707,7 @@ export function healBranding(): void {
  *  upgrade flow's restart alone keeps a stale config — and because this runs from
  *  the NEW binary in the re-exec self-heal phase (like the WAF/IPFS heals), a
  *  config fix applies on the release that ships it, not one upgrade later
- *  (the maintainer/morphitir: the nginx fix sat undeployed because the driving orchestrator
+ *  (seen on an instance: the nginx fix sat undeployed because the driving orchestrator
  *  only restarted the frontend). Self-contained + best-effort; no-ops if there's
  *  no compose-managed frontend. Docker layer-caching makes a no-change rebuild
  *  cheap, so running it every upgrade is fine. */
@@ -3905,7 +4792,9 @@ export function ufwAllows4001Both(ufwStatus: string): boolean {
 	const allowed = (port: string): boolean =>
 		ufwStatus
 			.split('\n')
-			.some((l) => new RegExp(`^\\s*${port.replace('/', '\\/')}(?:\\s+\\(v6\\))?\\s+ALLOW\\b`, 'i').test(l));
+			.some((l) =>
+				new RegExp(`^\\s*${port.replace('/', '\\/')}(?:\\s+\\(v6\\))?\\s+ALLOW\\b`, 'i').test(l)
+			);
 	if (allowed('4001')) return true;
 	return allowed('4001/tcp') && allowed('4001/udp');
 }
@@ -3950,7 +4839,9 @@ export function healIpfsSwarmFirewall(deps: IpfsSwarmFirewallDeps = {}): void {
 		// ufw installed but switched OFF: it blocks nothing, so there is no rule to
 		// open — say so once, calmly, instead of "could not confirm" every upgrade.
 		if (!ufwIsActive(status)) {
-			say('IPFS: ufw is not active on this box, so nothing blocks the swarm port 4001 — no firewall rule to add.');
+			say(
+				'IPFS: ufw is not active on this box, so nothing blocks the swarm port 4001 — no firewall rule to add.'
+			);
 			return;
 		}
 		const already = ufwAllows4001Both(status);
@@ -3962,7 +4853,9 @@ export function healIpfsSwarmFirewall(deps: IpfsSwarmFirewallDeps = {}): void {
 
 		// VERIFY by observing ufw's own state, not the exit codes.
 		if (ufwAllows4001Both(run('ufw', ['status']).stdout)) {
-			say('IPFS: opened the swarm port 4001 (tcp+udp) so public gateways + QUIC peers can fetch your seeded releases.');
+			say(
+				'IPFS: opened the swarm port 4001 (tcp+udp) so public gateways + QUIC peers can fetch your seeded releases.'
+			);
 		} else {
 			warnFn(
 				'IPFS: could not confirm the swarm port 4001 is open on BOTH tcp and udp. If public ' +
@@ -4027,17 +4920,24 @@ export function healIpfsGatewayExposure(): void {
 	if (!alreadyNoFetch && ipfs(['config', '--json', 'Gateway.NoFetch', 'true']).ok) changed = true;
 	if (!alreadyExposed && ipfs(['config', 'Addresses.Gateway', EXPOSE_ADDR]).ok) changed = true;
 	if (!changed) {
-		info('IPFS: gateway exposure could not be set (config unavailable) — will apply on the next installer run.');
+		info(
+			'IPFS: gateway exposure could not be set (config unavailable) — will apply on the next installer run.'
+		);
 		return;
 	}
-	info('IPFS: exposing the release gateway over this box\u2019s .onion/.i2p (NoFetch: serves only pinned releases).');
+	info(
+		'IPFS: exposing the release gateway over this box\u2019s .onion/.i2p (NoFetch: serves only pinned releases).'
+	);
 
 	// Restart Kubo so the new bind takes effect, and make sure the IPNS
 	// rebroadcaster (anti-stale) is running — fallback across unit names.
 	const restarted = ['ipfs.service', 'kubo.service', 'ipfs'].some(
 		(u) => spawnSync('systemctl', ['restart', u], { encoding: 'utf8', timeout: 40000 }).status === 0
 	);
-	spawnSync('systemctl', ['enable', '--now', 'morphit-ipns-rebroadcast.service'], { encoding: 'utf8', timeout: 20000 });
+	spawnSync('systemctl', ['enable', '--now', 'morphit-ipns-rebroadcast.service'], {
+		encoding: 'utf8',
+		timeout: 20000
+	});
 	if (!restarted) {
 		info('IPFS: gateway configured; restart the ipfs service to apply (systemctl restart ipfs).');
 		return;
@@ -4119,12 +5019,19 @@ export interface BunkerWebStack {
 	readonly scheduler: ContainerInfo | null;
 }
 
-export function findBunkerWebStack(
-	buildDir: string
-): { stack: BunkerWebStack | null; note: string | null } {
-	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], { encoding: 'utf8', timeout: 8000 });
+export function findBunkerWebStack(buildDir: string): {
+	stack: BunkerWebStack | null;
+	note: string | null;
+} {
+	const ps = spawnSync('docker', ['ps', '--format', '{{.Names}}'], {
+		encoding: 'utf8',
+		timeout: 8000
+	});
 	if (ps.error || ps.status !== 0) return { stack: null, note: null };
-	const names = (ps.stdout ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
+	const names = (ps.stdout ?? '')
+		.split('\n')
+		.map((x) => x.trim())
+		.filter(Boolean);
 	if (names.length === 0) return { stack: null, note: null };
 	const insp = spawnSync('docker', ['inspect', ...names], {
 		encoding: 'utf8',
@@ -4147,14 +5054,23 @@ export function findBunkerWebStack(
 	const ref = composeRefOf(edge);
 	const sameProject = (c: ContainerInfo): ComposeRef | null => {
 		const r = composeRefOf(c);
-		return r !== null && ref !== null && r.project === ref.project && r.files.join(',') === ref.files.join(',') ? r : null;
+		return r !== null &&
+			ref !== null &&
+			r.project === ref.project &&
+			r.files.join(',') === ref.files.join(',')
+			? r
+			: null;
 	};
-	const schedulers = ref !== null ? id.schedulers.filter((s) => sameProject(s) !== null) : id.schedulers;
+	const schedulers =
+		ref !== null ? id.schedulers.filter((s) => sameProject(s) !== null) : id.schedulers;
 	return {
 		stack: {
 			edge,
 			ref,
-			services: ref !== null ? [...new Set([ref.service, ...schedulers.map((s) => sameProject(s)!.service)])] : [],
+			services:
+				ref !== null
+					? [...new Set([ref.service, ...schedulers.map((s) => sameProject(s)!.service)])]
+					: [],
 			scheduler: schedulers.length === 1 ? schedulers[0]! : null
 		},
 		note: null
@@ -4165,17 +5081,27 @@ export function findBunkerWebStack(
  *  (`env_file`). When this Compose is too old to show it, `fallback` counts only
  *  if it sits in the edge's own Compose directory. null (with a calm note) when
  *  it cannot be told — then the WAF settings are left alone. */
-function bunkerWebEnvFile(stack: BunkerWebStack, fallback: string): { path: string | null; note: string | null } {
+function bunkerWebEnvFile(
+	stack: BunkerWebStack,
+	fallback: string
+): { path: string | null; note: string | null } {
 	const ref = stack.ref;
 	if (ref === null)
 		return existsSync(fallback)
 			? { path: fallback, note: null }
-			: { path: null, note: `WAF: ${stack.edge.name} was not started by Docker Compose and ${fallback} does not exist, so the WAF settings were left alone.` };
-	const r = spawnSync('docker', composeArgs(ref, ['config', '--format', 'json', '--no-env-resolution']), {
-		encoding: 'utf8',
-		timeout: 30000,
-		maxBuffer: 64 * 1024 * 1024
-	});
+			: {
+					path: null,
+					note: `WAF: ${stack.edge.name} was not started by Docker Compose and ${fallback} does not exist, so the WAF settings were left alone.`
+				};
+	const r = spawnSync(
+		'docker',
+		composeArgs(ref, ['config', '--format', 'json', '--no-env-resolution']),
+		{
+			encoding: 'utf8',
+			timeout: 30000,
+			maxBuffer: 64 * 1024 * 1024
+		}
+	);
 	const model = r.status === 0 && (r.stdout ?? '') !== '' ? parseComposeModel(r.stdout) : null;
 	const ef = model?.get(ref.service)?.envFiles ?? null;
 	if (ef !== null && ef.length > 0) {
@@ -4183,7 +5109,10 @@ function bunkerWebEnvFile(stack: BunkerWebStack, fallback: string): { path: stri
 		const path = named.length === 1 ? named[0]! : ef.length === 1 ? ef[0]! : null;
 		return path !== null
 			? { path, note: null }
-			: { path: null, note: `WAF: BunkerWeb reads several settings files (${ef.join(', ')}), so the WAF settings were left alone.` };
+			: {
+					path: null,
+					note: `WAF: BunkerWeb reads several settings files (${ef.join(', ')}), so the WAF settings were left alone.`
+				};
 	}
 	const dirs = new Set([ref.workDir, ...ref.files.map((f) => dirname(f))].filter(Boolean));
 	if (existsSync(fallback) && dirs.has(dirname(fallback))) return { path: fallback, note: null };
@@ -4200,7 +5129,10 @@ function bunkerWebEnvFile(stack: BunkerWebStack, fallback: string): { path: stri
  *  `docker-compose` binary with the same arguments. true on the first success. */
 function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): boolean {
 	const a = composeArgs(ref, args);
-	for (const [cmd, argv] of [['docker', a], ['docker-compose', a.slice(1)]] as Array<[string, string[]]>) {
+	for (const [cmd, argv] of [
+		['docker', a],
+		['docker-compose', a.slice(1)]
+	] as Array<[string, string[]]>) {
 		try {
 			if (spawnSync(cmd, argv, { encoding: 'utf8', timeout }).status === 0) return true;
 		} catch {
@@ -4211,7 +5143,7 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
 }
 
 /** v1.16.9 — SELF-HEAL the BunkerWeb WAF so the /v1/ + /relay/ JSON APIs work.
- *  the maintainer's mandate: trap every condition, try each fix more than one way, VERIFY it
+ *  The maintainer's mandate: trap every condition, try each fix more than one way, VERIFY it
  *  took against the RUNNING container, fall through, never throw. Fixes three
  *  live-box-confirmed failure modes that 4xx a legitimate avatar/order broadcast:
  *    A. MAX_CLIENT_SIZE too small  → 413 on the ~8 KB avatar broadcast.
@@ -4220,7 +5152,7 @@ function composeRun(ref: ComposeRef, args: readonly string[], timeout: number): 
  *  Best-effort + idempotent: a non-BunkerWeb deploy just no-ops; a steady-state
  *  box where everything is already applied skips the reload.
  *
- *  D. (v1.18.0 deep-deep, H1) USE_REAL_IP=yes + REAL_IP_FROM=0.0.0.0/0 made the
+ *  D. USE_REAL_IP=yes + REAL_IP_FROM=0.0.0.0/0 made the
  *     public edge believe every visitor's X-Forwarded-For, so anyone could pick
  *     their own address per request (past BunkerWeb's bans and the relay's per-IP
  *     signup limits). Templates aren't re-rendered on upgrade, so turn it off here.
@@ -4248,7 +5180,9 @@ export function healBunkerWebWaf(
 	if (stack === null) {
 		// Not a BunkerWeb deployment, or BunkerWeb isn't running right now.
 		if (found.note === null && existsSync(bwEnv))
-			info('WAF: BunkerWeb is not running on this server, so its settings were left as they are; the next `morphit-ops upgrade` checks them again.');
+			info(
+				'WAF: BunkerWeb is not running on this server, so its settings were left as they are; the next `morphit-ops upgrade` checks them again.'
+			);
 		return;
 	}
 	const envFile = bunkerWebEnvFile(stack, bwEnv);
@@ -4260,8 +5194,7 @@ export function healBunkerWebWaf(
 	const sched = stack.scheduler?.name ?? null;
 	const ref = stack.ref;
 	const RULE_ID = '1990001';
-	const MODSEC_RULE =
-		`SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"`;
+	const MODSEC_RULE = `SecRule REQUEST_URI "@rx ^/(v1|relay)/" "id:${RULE_ID},phase:1,t:none,nolog,pass,ctl:ruleEngine=Off"`;
 	const RELAY_BODY_FLOOR = 64 * 1024; // the relay's own body cap; BunkerWeb must allow ≥ this
 	let changed = false;
 
@@ -4299,11 +5232,16 @@ export function healBunkerWebWaf(
 	// ── Fix B: bad-behavior must NOT ban on routine API 400s. ──
 	try {
 		const cur = getVal('BAD_BEHAVIOR_STATUS_CODES');
-		const codes = (cur ?? '400 401 403 404 405 429 444').trim().split(/\s+/).filter((c) => c !== '400');
+		const codes = (cur ?? '400 401 403 404 405 429 444')
+			.trim()
+			.split(/\s+/)
+			.filter((c) => c !== '400');
 		const joined = codes.join(' ');
 		if (cur === null || cur.trim() !== joined) {
 			setVal('BAD_BEHAVIOR_STATUS_CODES', joined);
-			info('WAF: removed 400 from bad-behavior triggers (a JSON API returns 400 routinely; it must not ban traders).');
+			info(
+				'WAF: removed 400 from bad-behavior triggers (a JSON API returns 400 routinely; it must not ban traders).'
+			);
 		}
 	} catch {
 		/* keep going */
@@ -4328,15 +5266,23 @@ export function healBunkerWebWaf(
 	//    everyone (a /0 entry) or from BunkerWeb's default private ranges (unset
 	//    REAL_IP_FROM), which include the Docker bridge IPv6 visitors arrive from.
 	//    A deliberate CDN setup (REAL_IP_FROM listing that CDN's ranges) is left
-	//    alone. (v1.18.0 deep-deep, H1) ──
-	const unq = (v: string | null): string => (v ?? '').trim().replace(/^["']|["']$/g, '').trim();
+	//    alone. ──
+	const unq = (v: string | null): string =>
+		(v ?? '')
+			.trim()
+			.replace(/^["']|["']$/g, '')
+			.trim();
 	try {
 		if (unq(getVal('USE_REAL_IP')).toLowerCase() === 'yes') {
 			const from = unq(getVal('REAL_IP_FROM'));
-			const wide = from === '' || from.split(/\s+/).some((e) => /\/0$/.test(e) || e === '0.0.0.0' || e === '::');
+			const wide =
+				from === '' ||
+				from.split(/\s+/).some((e) => /\/0$/.test(e) || e === '0.0.0.0' || e === '::');
 			if (wide) {
 				setVal('USE_REAL_IP', 'no');
-				info("WAF: set USE_REAL_IP=no. BunkerWeb is the public edge, so it now uses each visitor's real address instead of one they could type in.");
+				info(
+					"WAF: set USE_REAL_IP=no. BunkerWeb is the public edge, so it now uses each visitor's real address instead of one they could type in."
+				);
 			}
 		}
 	} catch {
@@ -4365,7 +5311,9 @@ export function healBunkerWebWaf(
 				);
 			} else {
 				removed = null;
-				info("WAF: found Morphit's API firewall exception more than once but could not remove the extra copy; BunkerWeb may keep refusing new settings until it is removed.");
+				info(
+					"WAF: found Morphit's API firewall exception more than once but could not remove the extra copy; BunkerWeb may keep refusing new settings until it is removed."
+				);
 			}
 		}
 	}
@@ -4381,12 +5329,23 @@ export function healBunkerWebWaf(
 		const since = new Date(Date.now() - 2_000).toISOString();
 		const strategies: Array<() => boolean> = recreate
 			? [
-					() => ref !== null && composeRun(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services], 180000),
-					() => spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0
+					() =>
+						ref !== null &&
+						composeRun(
+							ref,
+							['up', '-d', '--no-deps', '--force-recreate', ...stack.services],
+							180000
+						),
+					() =>
+						spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status ===
+						0
 				]
 			: [
-					() => spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status === 0,
-					() => ref !== null && composeRun(ref, ['up', '-d', '--no-deps', ...stack.services], 180000)
+					() =>
+						spawnSync('docker', ['restart', sched], { encoding: 'utf8', timeout: 60000 }).status ===
+						0,
+					() =>
+						ref !== null && composeRun(ref, ['up', '-d', '--no-deps', ...stack.services], 180000)
 				];
 		let started = false;
 		for (const strat of strategies) {
@@ -4412,10 +5371,23 @@ export function healBunkerWebWaf(
 				? `WAF: ${why}; BunkerWeb is rebuilding its settings (about ${Math.round(measured / 60_000)} min here, its downloads are slow on this network)…`
 				: `WAF: ${why}; BunkerWeb is rebuilding its settings…`
 		);
-		const c = waitForSchedulerCycle({ scheduler: sched, edge: bw, sinceIso: since, budgetMs: reloadBudgetMs, note: (m) => info(`WAF: ${m}`) });
-		if (c.kind === 'loaded') info(`WAF: BunkerWeb built, tested and loaded its new settings (${Math.round(c.waitedMs / 1000)} s).`);
-		else if (c.kind === 'refused') warn(`WAF: ${c.reason}. Nothing is broken: the site runs as before.`);
-		else info(`WAF: BunkerWeb had not finished rebuilding its settings after ${Math.round(c.waitedMs / 60_000)} min; it loads them by itself when it is done.`);
+		const c = waitForSchedulerCycle({
+			scheduler: sched,
+			edge: bw,
+			sinceIso: since,
+			budgetMs: reloadBudgetMs,
+			note: (m) => info(`WAF: ${m}`)
+		});
+		if (c.kind === 'loaded')
+			info(
+				`WAF: BunkerWeb built, tested and loaded its new settings (${Math.round(c.waitedMs / 1000)} s).`
+			);
+		else if (c.kind === 'refused')
+			warn(`WAF: ${c.reason}. Nothing is broken: the site runs as before.`);
+		else
+			info(
+				`WAF: BunkerWeb had not finished rebuilding its settings after ${Math.round(c.waitedMs / 60_000)} min; it loads them by itself when it is done.`
+			);
 		return c;
 	};
 
@@ -4435,7 +5407,18 @@ export function healBunkerWebWaf(
 		const q = '?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E';
 		const r = spawnSync(
 			'curl',
-			['-sk', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '15', '--resolve', `${site}:443:127.0.0.1`, `https://${site}${path}${q}`],
+			[
+				'-sk',
+				'-o',
+				'/dev/null',
+				'-w',
+				'%{http_code}',
+				'--max-time',
+				'15',
+				'--resolve',
+				`${site}:443:127.0.0.1`,
+				`https://${site}${path}${q}`
+			],
 			{ encoding: 'utf8', timeout: 25000 }
 		);
 		return (r.stdout ?? '').trim();
@@ -4445,10 +5428,14 @@ export function healBunkerWebWaf(
 		const home = liveProbe('/');
 		if (api === '403' && home === '403') {
 			if (removed !== null && sched !== null && restoreRuleCopies(sched, removed)) {
-				warn("WAF: the API was blocked by ModSecurity after the extra exception copy was removed, so it was put back.");
+				warn(
+					'WAF: the API was blocked by ModSecurity after the extra exception copy was removed, so it was put back.'
+				);
 				applyAndWait('the previous exception copies restored', false);
 			} else {
-				warn(`WAF: ModSecurity blocks Morphit's API (/v1/) on ${site}. Its exception is not loaded; broadcasts from this site may fail.`);
+				warn(
+					`WAF: ModSecurity blocks Morphit's API (/v1/) on ${site}. Its exception is not loaded; broadcasts from this site may fail.`
+				);
 			}
 		} else if (home === '403' && /^[0-9]{3}$/.test(api) && api !== '000') {
 			const n = sched !== null ? listRuleCopies(sched) : null;
@@ -4465,7 +5452,7 @@ export function healBunkerWebWaf(
 	// (2) BODY SIZE — prove a real-sized broadcast is NOT rejected 413, and if it
 	//     is, ESCALATE: the MAX_CLIENT_SIZE env sometimes never renders into nginx,
 	//     so drop a raw `client_max_body_size` directive as a config FILE (the
-	//     mechanism BunkerWeb reliably honors) and reload. Figure it out, per the maintainer.
+	//     mechanism BunkerWeb reliably honors) and reload. Figure it out, as requested.
 	try {
 		const origin = readInstanceEnvValue(INSTANCE_ENV.ORIGIN);
 		if (origin) {
@@ -4475,34 +5462,75 @@ export function healBunkerWebWaf(
 				const blob = 'A'.repeat(50 * 1024);
 				const r = spawnSync(
 					'curl',
-					['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '12', '-X', 'POST', target, '-H', 'content-type: application/json', '--data', `{"probe":"${blob}"}`],
+					[
+						'-s',
+						'-o',
+						'/dev/null',
+						'-w',
+						'%{http_code}',
+						'--max-time',
+						'12',
+						'-X',
+						'POST',
+						target,
+						'-H',
+						'content-type: application/json',
+						'--data',
+						`{"probe":"${blob}"}`
+					],
 					{ encoding: 'utf8', timeout: 20000 }
 				);
 				return (r.stdout ?? '').trim();
 			};
 			let code = probe();
 			if (code === '413' && sched !== null) {
-				info('WAF: a real-sized broadcast is still 413 — the MAX_CLIENT_SIZE env did not render; escalating via a config file.');
+				info(
+					'WAF: a real-sized broadcast is still 413 — the MAX_CLIENT_SIZE env did not render; escalating via a config file.'
+				);
 				const root =
-					(spawnSync('docker', ['exec', sched, 'sh', '-c', 'for d in /data/configs /etc/bunkerweb/configs; do [ -d "$d" ] && { echo "$d"; break; }; done'], {
-						encoding: 'utf8',
-						timeout: 8000
-					}).stdout ?? '').trim() || '/data/configs';
+					(
+						spawnSync(
+							'docker',
+							[
+								'exec',
+								sched,
+								'sh',
+								'-c',
+								'for d in /data/configs /etc/bunkerweb/configs; do [ -d "$d" ] && { echo "$d"; break; }; done'
+							],
+							{
+								encoding: 'utf8',
+								timeout: 8000
+							}
+						).stdout ?? ''
+					).trim() || '/data/configs';
 				// (a) nginx client_max_body_size (server context) — harmless if already large.
 				spawnSync(
 					'docker',
-					['exec', sched, 'sh', '-c', `mkdir -p '${root}/server-http' && printf '%s\\n' 'client_max_body_size 1m;' > '${root}/server-http/morphit-body-size.conf'`],
+					[
+						'exec',
+						sched,
+						'sh',
+						'-c',
+						`mkdir -p '${root}/server-http' && printf '%s\\n' 'client_max_body_size 1m;' > '${root}/server-http/morphit-body-size.conf'`
+					],
 					{ encoding: 'utf8', timeout: 8000 }
 				);
 				// (b) THE actual 413 source when client_max_body_size is already generous:
 				//     ModSecurity's request-body limit. `ruleEngine=Off` for /v1/ does NOT
 				//     lift it (it's enforced during body-reading, before rules), so raise
 				//     the no-files limit and set ProcessPartial so ModSec never rejects a
-				//     legitimate avatar/order broadcast on size (the maintainer/timeapp: the recurring
+				//     legitimate avatar/order broadcast on size (timeapp: the recurring
 				//     413 was ModSec, not nginx — client_max_body_size was 1G/10m).
 				spawnSync(
 					'docker',
-					['exec', sched, 'sh', '-c', `mkdir -p '${root}/modsec' && printf '%s\\n' 'SecRequestBodyLimit 13107200' 'SecRequestBodyNoFilesLimit 1048576' 'SecRequestBodyLimitAction ProcessPartial' > '${root}/modsec/morphit-body-limit.conf'`],
+					[
+						'exec',
+						sched,
+						'sh',
+						'-c',
+						`mkdir -p '${root}/modsec' && printf '%s\\n' 'SecRequestBodyLimit 13107200' 'SecRequestBodyNoFilesLimit 1048576' 'SecRequestBodyLimitAction ProcessPartial' > '${root}/modsec/morphit-body-limit.conf'`
+					],
 					{ encoding: 'utf8', timeout: 8000 }
 				);
 				applyAndWait('body-size limits written', false);
@@ -4527,7 +5555,7 @@ export function healBunkerWebWaf(
 	// (3) REAL IP (Fix D) — when the env now says USE_REAL_IP=no, prove the RUNNING
 	//     nginx has no `set_real_ip_from` left. If it still has, BunkerWeb either
 	//     kept its old environment or refused the rebuilt config — recreate its own
-	//     services once and wait for its verdict. (v1.18.0 deep-deep, H1; wave 5)
+	//     services once and wait for its verdict. (wave 5)
 	try {
 		if (unq(getVal('USE_REAL_IP')).toLowerCase() !== 'yes') {
 			const liveTrustsXff = (): boolean | null => {
@@ -4545,7 +5573,8 @@ export function healBunkerWebWaf(
 				const c = applyAndWait('recreating BunkerWeb so it reads USE_REAL_IP=no', true);
 				if (c !== null) live = liveTrustsXff();
 			}
-			if (live === false) info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
+			if (live === false)
+				info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
 			else if (live === true)
 				info(
 					ref !== null
@@ -4558,45 +5587,37 @@ export function healBunkerWebWaf(
 	}
 }
 
-/** Read the release's on-chain SHA-256 anchor from the LOCAL indexer's
- *  /v1/release (served over the node's OWN RPC — no clearnet). Returns the
- *  `-offline` bundle hash when `wantOffline`, else the standard-tarball hash,
- *  and ONLY when the served release version matches `tag` (never trust a stale
- *  or different release's hash). Best-effort: null if unreachable / absent /
- *  version-mismatch. v1.16.9 — lets a hidden/air-gapped node apply an offline
- *  tarball with no hand-signed .asc. */
-export async function readOnchainReleaseSha(
-	tag: string,
-	wantOffline: boolean,
-	where: LocalIndexerOptions = {}
-): Promise<string | null> {
-	// v1.18.0 deep-deep (ops-1). This asked 127.0.0.1, 172.18.0.1 and 172.17.0.1
-	// in turn, trusting whichever answered, and on a version MISMATCH moved on to
-	// the next address — so a lagging real indexer handed the decision to
-	// whoever listened on the next one. Now: ONE authenticated listener (the
-	// configured address, proven to be morphit-indexer.service), and its answer
-	// is final — a mismatch is "no anchor", never "ask someone else".
-	const want = tag.replace(/^v/, '');
-	let base: string;
-	try {
-		base = locateLocalIndexer(where);
-	} catch (err) {
-		info(`  No on-chain hash available: ${err instanceof Error ? err.message : String(err)}`);
-		return null;
-	}
-	try {
-		const body = await getLocalIndexerJson<{
-			version?: string;
-			distribution?: { source_sha256?: string; offline_sha256?: string } | null;
-		}>(base, '/v1/release');
-		if ((body.version ?? '').replace(/^v/, '') !== want) return null; // stale/other release
-		const d = body.distribution ?? {};
-		const sha = wantOffline ? d.offline_sha256 : d.source_sha256;
-		if (typeof sha === 'string' && /^[0-9a-f]{64}$/i.test(sha)) return sha.toLowerCase();
-	} catch {
-		/* no anchor — decideTrust then requires a signature */
+/** The last non-empty value of `key` in the first of `files` that sets it. */
+function readConfigValue(files: readonly string[], key: string): string | null {
+	for (const f of files) {
+		try {
+			if (!existsSync(f)) continue;
+			const m = readFileSync(f, 'utf8').match(
+				new RegExp(`^[ \\t]*${key}[ \\t]*=[ \\t]*(.*)$`, 'm')
+			);
+			if (!m) continue;
+			const v = (m[1] ?? '')
+				.trim()
+				.replace(/^["']|["']$/g, '')
+				.trim();
+			if (v !== '') return v;
+		} catch {
+			/* unreadable — try the next */
+		}
 	}
 	return null;
+}
+
+/** `host:port` → parts, or the defaults when absent or malformed. PURE. */
+export function parseHostPortOr(
+	v: string | null,
+	host: string,
+	port: number
+): { host: string; port: number } {
+	const m = /^\[?([0-9A-Za-z.:-]+?)\]?:(\d{1,5})$/.exec((v ?? '').trim());
+	if (!m) return { host, port };
+	const p = Number(m[2]);
+	return p > 0 && p < 65536 ? { host: m[1]!, port: p } : { host, port };
 }
 
 /** Read this operator's tag from the on-disk config (the authoritative,
@@ -4614,9 +5635,14 @@ function readInstanceEnvValue(key: string): string | null {
 	for (const f of files) {
 		try {
 			if (!existsSync(f)) continue;
-			const m = readFileSync(f, 'utf8').match(new RegExp(`^[ \\t]*${key}[ \\t]*=[ \\t]*(.*)$`, 'm'));
+			const m = readFileSync(f, 'utf8').match(
+				new RegExp(`^[ \\t]*${key}[ \\t]*=[ \\t]*(.*)$`, 'm')
+			);
 			if (!m) continue;
-			const v = (m[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
+			const v = (m[1] ?? '')
+				.trim()
+				.replace(/^["']|["']$/g, '')
+				.trim();
 			if (v !== '') found = v;
 		} catch {
 			/* unreadable — skip */
@@ -4629,7 +5655,7 @@ function readInstanceEnvValue(key: string): string | null {
  *  ON-CHAIN registration the local indexer serves in /v1/instances (matched to
  *  this instance's own origin). The on-chain fallback fixes the case where the
  *  tag was registered on-chain but never written to the local config — which
- *  otherwise left verify.json's operator_tag null forever (the maintainer: still null). */
+ *  otherwise left verify.json's operator_tag null forever (still null). */
 function readOperatorTagFromConfig(): string | null {
 	const fromConfig = readInstanceEnvValue(INSTANCE_ENV.OPERATOR_TAG);
 	if (fromConfig) return fromConfig;
@@ -4638,7 +5664,11 @@ function readOperatorTagFromConfig(): string | null {
 		const origin = readInstanceEnvValue(INSTANCE_ENV.ORIGIN);
 		if (!origin) return null;
 		const norm = (s: string): string => s.replace(/\/+$/, '').toLowerCase();
-		for (const base of ['http://127.0.0.1:8081', 'http://172.18.0.1:8081', 'http://172.17.0.1:8081']) {
+		for (const base of [
+			'http://127.0.0.1:8081',
+			'http://172.18.0.1:8081',
+			'http://172.17.0.1:8081'
+		]) {
 			const r = spawnSync('curl', ['-s', '--max-time', '6', `${base}/v1/instances`], {
 				encoding: 'utf8',
 				timeout: 10_000
@@ -4652,8 +5682,11 @@ function readOperatorTagFromConfig(): string | null {
 			}
 			const list: Array<{ origin?: string; operator_tag?: string }> = Array.isArray(body)
 				? (body as Array<{ origin?: string; operator_tag?: string }>)
-				: ((body as { instances?: Array<{ origin?: string; operator_tag?: string }> }).instances ?? []);
-			const self = list.find((e) => typeof e.origin === 'string' && norm(e.origin) === norm(origin));
+				: ((body as { instances?: Array<{ origin?: string; operator_tag?: string }> }).instances ??
+					[]);
+			const self = list.find(
+				(e) => typeof e.origin === 'string' && norm(e.origin) === norm(origin)
+			);
 			const tag = self?.operator_tag;
 			if (typeof tag === 'string' && tag.trim() !== '') return tag.trim();
 		}
@@ -4672,7 +5705,11 @@ function readOperatorTagFromConfig(): string | null {
  *  fail with ELOOP on a link; O_CREAT|O_TRUNC create-or-replace the real file.
  *  Throws on a link or any other open failure. */
 function writeNoFollow(path: string, data: string): void {
-	const fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW, 0o644);
+	const fd = openSync(
+		path,
+		fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
+		0o644
+	);
 	try {
 		const buf = Buffer.from(data, 'utf8');
 		let off = 0;
@@ -4722,12 +5759,14 @@ export function patchVerifyJsonOperatorTag(buildDir: string, tag: string): boole
 	const p = join(buildDir, 'verify.json');
 	const txt = readNoFollow(p);
 	if (txt === null) return false;
-	const patched = txt.replace(/("operator_tag"[ \t]*:[ \t]*)(null|"[^"]*")/, `$1${JSON.stringify(tag)}`);
+	const patched = txt.replace(
+		/("operator_tag"[ \t]*:[ \t]*)(null|"[^"]*")/,
+		`$1${JSON.stringify(tag)}`
+	);
 	if (patched === txt) return false;
 	writeNoFollow(p, patched);
 	return true;
 }
-
 
 function readLocalReleaseInfo(installDir: string): ReleaseInfo | null {
 	const p = join(installDir, 'release-info.json');
@@ -4750,11 +5789,11 @@ function readLocalReleaseInfo(installDir: string): ReleaseInfo | null {
  *  few hundred KB and complete in under a second. */
 const UPGRADE_FETCH_TIMEOUT_MS = 30_000;
 // Idle (no-bytes) timeout for streaming the release tarball — abort only if the
-// transfer STALLS this long, so a slow-but-steady link (the maintainer/morphitir, a filtered network)
+// transfer STALLS this long, so a slow-but-steady link (a throttled, filtered one)
 // can finish a large download instead of hitting a fixed total deadline.
 const UPGRADE_STALL_TIMEOUT_MS = 90_000;
 
-// cp191 — fetch a release-metadata URL with all the safety the
+// fetch a release-metadata URL with all the safety the
 // upgrade path needs: a hard timeout, manual redirect handling
 // (a 30x to an unexpected host on the metadata call must be
 // operator-visible), and a 1 MiB body cap before parse (the host
@@ -4762,7 +5801,9 @@ const UPGRADE_STALL_TIMEOUT_MS = 90_000;
 // compromised release API returning multi-GB JSON would OOM the
 // upgrade run; Forgejo release payloads are <8 KB, so 1 MiB is
 // 100x+ headroom).  Returns the raw text; the caller parses.
-async function fetchReleaseJson(url: string): Promise<{ ok: boolean; status: number; text: string }> {
+async function fetchReleaseJson(
+	url: string
+): Promise<{ ok: boolean; status: number; text: string }> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), UPGRADE_FETCH_TIMEOUT_MS);
 	try {
@@ -4775,8 +5816,8 @@ async function fetchReleaseJson(url: string): Promise<{ ok: boolean; status: num
 			return { ok: false, status: res.status, text: '' };
 		}
 		const RELEASE_JSON_MAX_BYTES = 1024 * 1024;
-		// cp160 F-opscli-1 — bound the response body before parse (cap
-		// retained through the cp191 refactor of this fetch into a helper).
+		// bound the response body before parse (cap
+		// retained through the refactor of this fetch into a helper).
 		const cl = res.headers.get('content-length');
 		if (cl !== null) {
 			const n = Number(cl);
@@ -4800,7 +5841,7 @@ async function fetchReleaseJson(url: string): Promise<{ ok: boolean; status: num
 }
 
 async function fetchLatestRelease(host: string, repo: string): Promise<ForgejoRelease> {
-	// cp191 — `/releases/latest` returns the most recent
+	// `/releases/latest` returns the most recent
 	// NON-prerelease, non-draft release (Forgejo API semantics,
 	// confirmed in their API source).  That's the right default for
 	// an auto-upgrader: it protects operators on a stable release
@@ -4852,7 +5893,7 @@ async function downloadTo(url: string, dest: string): Promise<void> {
 	const controller = new AbortController();
 	// IDLE timeout, not a total deadline: abort only if NO bytes arrive for
 	// UPGRADE_STALL_TIMEOUT_MS. A slow-but-progressing download (a 13 MB tarball
-	// over a throttled/filtered link — the maintainer/morphitir in a filtered network) must COMPLETE; the
+	// over a throttled, filtered link) must COMPLETE; the
 	// old fixed 30 s cap guillotined healthy slow downloads mid-transfer. We also
 	// STREAM to disk instead of buffering the whole file in memory.
 	let timer!: ReturnType<typeof setTimeout>;
@@ -4928,22 +5969,18 @@ function cleanupTmp(dir: string): void {
 }
 
 /**
- * cp674 — remove an inherited npm "offline" flag from an environment.
+ * remove an inherited npm "offline" flag from an environment.
  *
  * The Ansible `morphit-ops` launcher runs the CLI via `npm exec --offline`,
  * which exports `npm_config_offline=true` into our process environment. That
- * flag is inherited by EVERY child npm we spawn during an upgrade — the
- * workspace `npm ci` and the MCP redeploy's `npm install` — and forces them
- * cache-only. Any dependency not already in the local npm cache (after a big
- * version jump, or a newly-added dep) then fails with `ENOTCACHED` and the whole
- * upgrade rolls back. The manual install's launcher is a plain symlink with no
- * `--offline`, which is why it was never hit there.
+ * flag is inherited by every child npm we spawn during an upgrade and forces a
+ * clearnet node's `npm ci` cache-only: any dependency not already in the local
+ * npm cache then fails with `ENOTCACHED` and the whole upgrade rolls back.
  *
- * The online upgrade REQUIRES the registry. The genuinely air-gapped paths never
- * rely on this inherited flag: the prebuilt-bundle path skips `npm ci` entirely,
- * and `deploy-mcp.sh` passes `--offline` explicitly on its own npm invocation
- * against a vendored cache. So stripping the inherited flag here is safe for both
- * online and offline upgrades.
+ * No other path relies on the inherited flag: the prebuilt-bundle path installs
+ * nothing, a hidden-only node's npm gets its settings explicitly
+ * (lib/depsInstall.ts), and the MCP redeploy (deploy-mcp.sh) runs no npm install
+ * at all — it copies from the locked install. So stripping it is safe.
  *
  * Mutates `env` in place; returns the names of the keys it cleared (for logging
  * and tests).
@@ -4965,10 +6002,15 @@ export function stripInheritedNpmOffline(env: NodeJS.ProcessEnv): string[] {
 	return cleared;
 }
 
-function runOrThrow(cmd: string, args: readonly string[], opts: { cwd?: string } = {}): void {
+function runOrThrow(
+	cmd: string,
+	args: readonly string[],
+	opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}
+): void {
 	const result = spawnSync(cmd, args, {
 		stdio: 'inherit',
-		cwd: opts.cwd
+		cwd: opts.cwd,
+		...(opts.env !== undefined ? { env: opts.env } : {})
 	});
 	if (result.status !== 0) {
 		throw new Error(`${cmd} ${args.join(' ')} exited ${result.status}`);
@@ -4985,7 +6027,7 @@ export interface RollbackRestore {
 
 /** The self-heal backups' state before the self-heal phase: a backup whose
  *  mtime changes (or that appears) during the phase was written by THIS run.
- *  (v1.18.0 deep-deep, ops-5) */
+ *  */
 export function snapshotSelfHealBackups(
 	targets: readonly string[],
 	backupOf: (target: string) => string = relayHealBackupPath
@@ -5129,7 +6171,8 @@ export function rollback(
 	deps: RollbackDeps = {}
 ): number {
 	const restartContainer = deps.restartContainer ?? restartFrontendContainer;
-	const systemctl = deps.systemctl ?? ((args: readonly string[]) => spawnSync('systemctl', [...args]));
+	const systemctl =
+		deps.systemctl ?? ((args: readonly string[]) => spawnSync('systemctl', [...args]));
 	printError(`Upgrade failed: ${err instanceof Error ? err.message : String(err)}`);
 	info(`Rolling back: removing partial extract at ${installDir}`);
 	try {
@@ -5138,7 +6181,9 @@ export function rollback(
 		printError(
 			`Rollback failed at rm step: ${rmErr instanceof Error ? rmErr.message : String(rmErr)}`
 		);
-		printError(`Manual intervention needed: ${installDir} is in a partial state; ${backupDir} contains the prior install.`);
+		printError(
+			`Manual intervention needed: ${installDir} is in a partial state; ${backupDir} contains the prior install.`
+		);
 		cleanupTmp(tmpDir);
 		return 4;
 	}
@@ -5148,7 +6193,9 @@ export function rollback(
 		printError(
 			`Rollback failed at rename step: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`
 		);
-		printError(`Manual intervention needed: ${backupDir} contains the prior install; manually move it back to ${installDir}.`);
+		printError(
+			`Manual intervention needed: ${backupDir} contains the prior install; manually move it back to ${installDir}.`
+		);
 		cleanupTmp(tmpDir);
 		return 4;
 	}
@@ -5167,7 +6214,7 @@ export function rollback(
 			);
 		}
 	}
-	// v1.19.0 deep-deep: a container frontend bind-mounts <install>/apps/web/
+	// a container frontend bind-mounts <install>/apps/web/
 	// build. Step 9c re-created the container on the NEW install; after the
 	// delete + rename above, that mount points at a directory that no longer
 	// exists (the kernel keeps the deleted inode: the site serves an empty tree
@@ -5184,7 +6231,7 @@ export function rollback(
 			);
 		}
 	}
-	// v1.18.0 deep-deep (ops-5). The self-heal phase edits files OUTSIDE the
+	// The self-heal phase edits files OUTSIDE the
 	// install dir (the relay heal appends to /etc/morphit/relay.env) and the
 	// upgrade refreshes systemd units. Rolling back only /opt/morphit left the
 	// previous version to start on the NEW version's relay settings and units.
@@ -5204,7 +6251,9 @@ export function rollback(
 		}
 	}
 	if (unitsRestored && !daemonReload()) {
-		warn('Could not run `systemctl daemon-reload`; run it by hand so the restored units take effect.');
+		warn(
+			'Could not run `systemctl daemon-reload`; run it by hand so the restored units take effect.'
+		);
 	}
 	// Best-effort: restart services after rollback so the old version is running.
 	// Restart every INSTALLED unit, not only the ones reporting is-active: a unit
@@ -5248,7 +6297,10 @@ export function selfAndAncestorPids(): Set<number> {
 			// "pid (comm) state ppid …" — comm may contain spaces/parens, so parse
 			// after the LAST ')': fields are then [state, ppid, …].
 			const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-			const fields = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/);
+			const fields = stat
+				.slice(stat.lastIndexOf(')') + 1)
+				.trim()
+				.split(/\s+/);
 			ppid = Number(fields[1]);
 		} catch {
 			break;
@@ -5392,7 +6444,7 @@ async function promptYes(message: string): Promise<boolean> {
 	// attached, where readline waits for input that can never arrive and the
 	// upgrade hangs silently after printing a question nobody sees. (With
 	// /dev/null stdin — plain cron — readline gets EOF and returns, so that case
-	// was already safe; I checked before assuming.)
+	// was already safe.)
 	//
 	// So: a human at a terminal gets unlimited time to answer, while a
 	// non-terminal stdin gets a bounded wait — long enough for piped input, which

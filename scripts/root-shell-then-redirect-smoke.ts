@@ -1,5 +1,5 @@
 /**
- * Root-shell `?then=` redirect behavior smoke (cp156 F-mcp-7).
+ * Root-shell `?then=` redirect behavior smoke.
  *
  * The root `apps/web/src/routes/+page.svelte` shell honors a
  * `?then=/path` query parameter: when present, the shell
@@ -7,7 +7,7 @@
  * redirects to `/{detected-lang}{then-value}` rather than the
  * bare `/{detected-lang}/`.
  *
- * This is the load-bearing piece behind cp156's MCP-server
+ * This is the load-bearing piece behind the MCP-server
  * deeplink fix.  AI agents hand users URLs of the form
  * `${base}/?then=/orderbook?asset=BTC`; the shell preserves
  * the user's locale instead of forcing English on them.
@@ -204,8 +204,8 @@ if (fallbackFailed === 0) {
 /* ---------------- scenario 4: source-sentinel ---------------- */
 
 // If a future refactor removes any safety guard from the shell,
-// catch it here.  This is the same pattern as cp149's
-// mcp-server-read-only-invariant-smoke and cp152's marketing-
+// catch it here.  This is the same pattern as an earlier fix's
+// mcp-server-read-only-invariant-smoke and the marketing-
 // prose smoke — pin the load-bearing source text.
 
 const shellSrc = readFileSync(SHELL_PATH, 'utf8');
@@ -237,10 +237,6 @@ const sentinels: Array<{ name: string; mustHave: string }> = [
 	{
 		name: 'falls back to localePath when then malformed',
 		mustHave: 'localePath(window.location.pathname, preferred)'
-	},
-	{
-		name: 'cp156 F-mcp-7 attribution in docblock',
-		mustHave: 'cp156 F-mcp-7'
 	}
 ];
 

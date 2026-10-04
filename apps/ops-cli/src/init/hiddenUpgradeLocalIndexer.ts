@@ -1,6 +1,6 @@
 /**
  * hiddenUpgradeLocalIndexer — which local address is THIS node's indexer, and
- * is the process answering there really it? (v1.18.0 deep-deep, ops-1 / H2)
+ * is the process answering there really it?
  *
  * WHAT WAS WRONG. `morphit-ops upgrade` runs as root, and before every upgrade
  * it asked plain HTTP on 127.0.0.1, then 172.18.0.1, then 172.17.0.1, port 8081,
@@ -453,7 +453,13 @@ export async function getLocalIndexerJson<T>(
 	const ctrl = new AbortController();
 	const t = setTimeout(() => ctrl.abort(), timeoutMs);
 	try {
-		const res = await fetch(`${base}${path}`, { signal: ctrl.signal, redirect: 'manual' });
+		// This box's own indexer only: ask for the loopback-only fields
+		// (e.g. /v1/instance clearnet_eliminated_missing); public edges strip it.
+		const res = await fetch(`${base}${path}`, {
+			signal: ctrl.signal,
+			redirect: 'manual',
+			headers: { 'x-morphit-local-health': '1' }
+		});
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const txt = await res.text();
 		if (txt.length > 4 * 1024 * 1024) throw new Error('response too large');

@@ -35,7 +35,7 @@
  *                                   //   ADR-0039.
  *   }
  *
- * cp128 rename: pre-cp128, the optional fields were `base_fee_usd`
+ * rename: previously, the optional fields were `base_fee_usd`
  * and `blurt_price_usd` — names that hardcoded USD as the
  * denomination.  Renamed to `*_fiat` + companion `denomination_fiat`
  * field for operator sovereignty over the display unit.  See

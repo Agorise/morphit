@@ -168,3 +168,16 @@ export function isPasswordAcceptable(password: string): boolean {
 	const s = scorePassword(password);
 	return s !== 'too_short' && s !== 'too_simple';
 }
+
+/** Why a NEW password (and its confirmation) cannot be used, or null. One
+ *  rule for every place a password is set — Remember-me, posting-key import,
+ *  "also unlock with a password" (YubiKey), a backup password — so none of
+ *  them accepts what the keystore would then refuse. */
+export function newPasswordProblem(
+	password: string,
+	confirm: string
+): 'too_weak' | 'mismatch' | null {
+	if (!isPasswordAcceptable(password)) return 'too_weak';
+	if (password !== confirm) return 'mismatch';
+	return null;
+}

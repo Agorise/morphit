@@ -498,7 +498,7 @@ constructor's address-prefix arg.  Pointing the indexer at
 on every chain op it tries to apply.
 
 Making Morphit testnet-aware is a tracked item in
-`docs/REVISIT-LIST.md` Section D — estimated ~2-3 hours of
+the project backlog Section D — estimated ~2-3 hours of
 careful work plus smoke regression — but **no operator
 currently needs it before launch**, so it's deferred.
 

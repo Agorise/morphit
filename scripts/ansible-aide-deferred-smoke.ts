@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * ansible-aide-deferred — cp680.
+ * ansible-aide-deferred.
  *
  * The AIDE filesystem-integrity baseline hashes the whole disk (20-45+ min on a
  * low-power CPU). It used to run synchronously inside the wizard, blowing the
@@ -48,7 +48,7 @@ check(
 );
 
 // 2. deferred service is installed by hardening, but STARTED only in post_tasks
-//    (after every role has written the files AIDE watches — cp681).
+//    (after every role has written the files AIDE watches).
 check('a morphit-aide-init.service unit is installed', /morphit-aide-init\.service/.test(aide));
 check(
 	'the hardening role does NOT start the build inline (would hash files mid-write)',
@@ -110,7 +110,7 @@ check(
 	/\[ -f \/var\/lib\/aide\/aide\.db \] \|\| exit 0/.test(aide)
 );
 
-// 7. FAILURE VISIBILITY (cp682) — a background failure must never be silent.
+// 7. FAILURE VISIBILITY — a background failure must never be silent.
 check(
 	'the builder traps failure and logs a high-priority error',
 	/trap on_exit EXIT/.test(aide) && /logger -p daemon\.err -t morphit-aide-init/.test(aide),

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * upgrade-rebuilds-dist-workspaces smoke — cp296.
+ * upgrade-rebuilds-dist-workspaces smoke.
  *
  * THE GAP THIS GUARDS. `morphit-ops upgrade` always rebuilds the static
  * web frontend, but it used to leave the TWO compiled workspaces stale:
@@ -9,7 +9,7 @@
  * `dist/` is gitignored and not in the tarball, and `npm ci` doesn't
  * build it, so an upgrade left the OLD-version dist on disk — the MCP
  * server ran stale code and `morphit-ops` preferred its own stale bundle
- * over the freshly-extracted source. cp296 adds a rebuild step after
+ * over the freshly-extracted source. A later change adds a rebuild step after
  * `npm ci` for both workspaces.
  *
  * Invariants (over apps/ops-cli/src/commands/upgrade.ts):
@@ -48,12 +48,12 @@ const bad = (m: string): void => {
 function rebuildsBothWorkspaces(src: string): boolean {
 	return (
 		/for \(const wsDir of \[['"]ops-cli['"], ['"]mcp-server['"]\]/.test(src) &&
-		/runOrThrow\('npm', \['run', 'build'\], \{ cwd: join\(installDir, 'apps', wsDir\) \}\)/.test(src)
+		/runOrThrow\('npm', \['run', 'build'\], \{\s*cwd: join\(installDir, 'apps', wsDir\)/.test(src)
 	);
 }
 
 /** The exact npm-ci invocation both invariant 2 and its tamper check anchor on. */
-const NPM_CI_CALL = "['ci', '--no-audit', '--no-fund']";
+const NPM_CI_CALL = "['ci', '--ignore-scripts', '--no-audit', '--no-fund']";
 
 /** Invariant 2: the rebuild loop is positioned AFTER the npm ci call. */
 function rebuildAfterNpmCi(src: string): boolean {
@@ -70,9 +70,7 @@ function rebuildAfterNpmCi(src: string): boolean {
 function rebuildNonFatal(src: string): boolean {
 	// Grab the loop body and confirm its catch warns and does NOT return
 	// rollback (which is what the FATAL frontend-build catch does).
-	const m = src.match(
-		/for \(const wsDir of \['ops-cli', 'mcp-server'\][\s\S]*?\n\t\}\n/
-	);
+	const m = src.match(/for \(const wsDir of \['ops-cli', 'mcp-server'\][\s\S]*?\n\t\}\n/);
 	if (!m) return false;
 	const body = m[0];
 	return /warn\(/.test(body) && !/rollback\(/.test(body);
@@ -80,7 +78,8 @@ function rebuildNonFatal(src: string): boolean {
 
 const src = readFileSync(UPGRADE, 'utf8');
 
-if (rebuildsBothWorkspaces(src)) ok('upgrade rebuilds both dist-shipping workspaces (ops-cli + mcp-server)');
+if (rebuildsBothWorkspaces(src))
+	ok('upgrade rebuilds both dist-shipping workspaces (ops-cli + mcp-server)');
 else bad('upgrade does NOT rebuild both dist-shipping workspaces');
 
 if (rebuildAfterNpmCi(src)) ok('the dist rebuild runs AFTER npm ci (deps installed first)');
@@ -93,7 +92,8 @@ else bad('a dist rebuild failure is not handled non-fatally');
 {
 	const mutated = src.replace("['ops-cli', 'mcp-server']", "['ops-cli']");
 	if (mutated === src) bad('tamper wiring error: could not drop mcp-server from the loop');
-	else if (rebuildsBothWorkspaces(mutated)) bad('tamper NOT caught: dropping mcp-server still passes (toothless)');
+	else if (rebuildsBothWorkspaces(mutated))
+		bad('tamper NOT caught: dropping mcp-server still passes (toothless)');
 	else ok('tamper caught: dropping mcp-server from the rebuild loop turns invariant 1 red');
 }
 {
@@ -101,7 +101,8 @@ else bad('a dist rebuild failure is not handled non-fatally');
 	// that precedes it — invariant 2 must then fail.
 	const mutated = src.replace(NPM_CI_CALL, '');
 	if (mutated === src) bad('tamper wiring error: could not remove the npm ci call');
-	else if (rebuildAfterNpmCi(mutated)) bad('tamper NOT caught: removing npm ci still passes invariant 2 (toothless)');
+	else if (rebuildAfterNpmCi(mutated))
+		bad('tamper NOT caught: removing npm ci still passes invariant 2 (toothless)');
 	else ok('tamper caught: removing the npm ci step turns invariant 2 red');
 }
 

@@ -1,14 +1,20 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/snapshot-oplog-verify-smoke.ts (cp767)
+ * apps/indexer/scripts/snapshot-oplog-verify-smoke.ts
  *
- * Locks the PURE Tier-2 op-log verification core: the position-based match
- * against a chain block, and the spread sampler. Fails CLOSED — an ambiguous
- * match is a MISMATCH. No DB/network.
+ * Locks the PURE Tier-2 snapshot verification core: the position-based match
+ * against a chain block, the account-creation match, the CSPRNG-driven
+ * sampling helpers and the verdict. Fails CLOSED — an ambiguous match is a
+ * MISMATCH. No DB/network.
  */
+import { randomInt } from 'node:crypto';
 import {
 	verifyStoredOpAgainstBlock,
-	pickVerificationSample,
+	verifyAccountCreatedInBlock,
+	randomDistinctIndices,
+	pickBlockTargets,
+	newestShare,
+	oplogVerdict,
 	type StoredOpRef,
 	type BlockLike
 } from '../src/db/snapshotOplogVerify.ts';
@@ -82,24 +88,42 @@ check('permlink mismatch (points at a REAL op of a different order) → mismatch
 	check('unparseable on-chain json when permlink expected → mismatch', !verifyStoredOpAgainstBlock(ref, b).ok);
 }
 
-// ── sampler: spread, bounds, determinism, permlink preference ─────
+// ── sampling: unpredictable, whole-range, bounded ─────
 {
-	const rows: StoredOpRef[] = Array.from({ length: 1000 }, (_, i) => ({
-		blockNum: 60_000_000 + i,
-		trxInBlock: 0,
-		opInTrx: 0,
-		signer: 'a',
-		opId: 'morphit_order',
-		permlink: i % 2 === 0 ? `p${i}` : null
-	}));
-	const s = pickVerificationSample(rows, 40);
-	check('sample size is capped at k', s.length <= 40 && s.length > 0);
-	check('sample is sorted ascending by block', s.every((r, i) => i === 0 || r.blockNum >= s[i - 1]!.blockNum));
-	check('sample includes the newest block (live-order tail)', s.some((r) => r.blockNum === 60_000_999));
-	check('sample spans a wide range (not clustered)', s[s.length - 1]!.blockNum - s[0]!.blockNum > 900);
-	const s2 = pickVerificationSample(rows, 40);
-	check('sampler is deterministic', JSON.stringify(s) === JSON.stringify(s2));
+	const idx = randomDistinctIndices(1000, 40, randomInt);
+	check('random indices: k distinct, in range, ascending', idx.length === 40 && new Set(idx).size === 40 && idx.every((v, i) => v >= 0 && v < 1000 && (i === 0 || v > idx[i - 1]!)));
+	check('random indices: k > n gives all n', randomDistinctIndices(5, 40, randomInt).join() === '0,1,2,3,4');
+	check('random indices: n = 0 or k = 0 gives none', randomDistinctIndices(0, 5, randomInt).length === 0 && randomDistinctIndices(5, 0, randomInt).length === 0);
+	const a = randomDistinctIndices(100_000, 40, randomInt);
+	const b2 = randomDistinctIndices(100_000, 40, randomInt);
+	check('two runs draw different samples (a forger cannot know where it looks)', a.join() !== b2.join());
+	// With a scripted source, any index can be drawn — including the last one.
+	check('the newest index is reachable', randomDistinctIndices(10, 1, (m) => m - 1).join() === '9');
+	const t = pickBlockTargets(1_000_001, 1_010_000, 200, randomInt);
+	check('block targets stay in range', t.length === 200 && t.every((x) => x >= 1_000_001 && x <= 1_010_000));
+	check('block targets cover the top of the range', t.some((x) => x > 1_008_000));
+	check('block targets: empty range gives none', pickBlockTargets(10, 9, 5, randomInt).length === 0);
+	check('newest share is a quarter, at least one', newestShare(40) === 10 && newestShare(1) === 1);
 }
+// ── account creation match ─────
+{
+	const blk = {
+		transaction_ids: ['t0', 't1'],
+		transactions: [
+			{ operations: [['transfer', { from: 'x', to: 'y' }]] },
+			{ operations: [['account_create', { new_account_name: 'carol', creator: 'morphit-relay' }]] }
+		]
+	} as never;
+	check('account created in its recorded trx → ok', verifyAccountCreatedInBlock('carol', 't1', blk).ok);
+	check('account recorded in another trx → mismatch', !verifyAccountCreatedInBlock('carol', 't0', blk).ok);
+	check('account not created in the block → mismatch', !verifyAccountCreatedInBlock('mallory', 't1', blk).ok);
+	check('no block → mismatch', !verifyAccountCreatedInBlock('carol', 't1', null).ok);
+}
+// ── verdict ─────
+check('any failure quarantines', oplogVerdict({ sampled: 40, verified: 39, failures: 1 }) === 'quarantine');
+check('too little checked is inconclusive', oplogVerdict({ sampled: 40, verified: 31, failures: 0 }) === 'inconclusive');
+check('enough checked, no failure → verified', oplogVerdict({ sampled: 40, verified: 32, failures: 0 }) === 'verified');
+check('nothing sampled is inconclusive', oplogVerdict({ sampled: 0, verified: 0, failures: 0 }) === 'inconclusive');
 // ── v1.20.0 (V3-7): the authority the DISPATCHER accepted, per op ──
 // BLURT-paid orders, feature bids and stranger fees are signed with ACTIVE
 // authority (their fee transfer sits in the same tx, and Blurt forbids mixing
@@ -155,9 +179,6 @@ check('permlink mismatch (points at a REAL op of a different order) → mismatch
 	);
 }
 
-check('sample of 0 rows is empty', pickVerificationSample([], 40).length === 0);
-check('k >= pool returns all rows', pickVerificationSample([ref], 40).length === 1);
-check('k <= 0 returns empty', pickVerificationSample([ref], 0).length === 0);
 
 const total = pass + fails.length;
 console.log('\n──────────────────────────────────────────────────────');

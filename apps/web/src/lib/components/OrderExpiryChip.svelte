@@ -154,7 +154,7 @@
 		const minutes = Math.floor((totalSec % 3_600) / 60);
 		const seconds = totalSec % 60;
 		if (days >= 1) {
-			// t.txt #2 — the on-chain expiry is day-floored to UTC midnight (cp175
+			// the on-chain expiry is day-floored to UTC midnight (for
 			// privacy), so it carries NO meaningful time-of-day. The old "Nd Mh"
 			// tacked a spurious hours count onto a day-granular deadline — the "Mh"
 			// was really just "now → next UTC midnight", so it was IDENTICAL on every
@@ -191,7 +191,7 @@
 
 	/** Full, friendly deadline for the hover tooltip + screen readers.
 	 *  DATE ONLY — on-chain `expires_at` is deliberately floored to UTC
-	 *  midnight (cp175 privacy: a precise expiry would leak the exact submit
+	 *  midnight (privacy: a precise expiry would leak the exact submit
 	 *  moment), so it carries no meaningful time-of-day. Showing "@ 00:00:00
 	 *  UTC" was misleading; the expiry is genuinely day-granular ("expires in
 	 *  N days"), so the tooltip shows just the localized day-first date. */
@@ -245,8 +245,8 @@
 	/** Title/aria shown on hover: the expiry deadline, plus the "Posted {ago} ago"
 	 *  suffix when a posted time is supplied.
 	 *
-	 *  v1.7.5 (t.txt #5) — this read "Updated {ago}" and was fed `order.updated_at`.
-	 *  the maintainer asked for "Posted {ago} ago" and added "assuming that is correct". It
+	 *  v1.7.5 — this read "Updated {ago}" and was fed `order.updated_at`.
+	 *  The maintainer asked for "Posted {ago} ago" and added "assuming that is correct". It
 	 *  wasn't, quite — so the FIELD changed too, not just the wording.
 	 *  `orders.updated_at` starts equal to `created_at`, but `feeAttest` moves it
 	 *  when a BTC/XMR listing fee is verified, which happens to a LIVE order and

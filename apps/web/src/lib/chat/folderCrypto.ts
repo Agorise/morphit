@@ -1,5 +1,5 @@
 /**
- * Chat folder-state crypto (t.txt v1.4.9 #5).
+ * Chat folder-state crypto.
  *
  * The user's chat folder organization (which threads are kept in Inbox /
  * Starred) is stored on chain so it syncs across devices — but the chat GRAPH

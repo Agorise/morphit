@@ -1,10 +1,16 @@
 /**
  * Client IP extraction.
  *
- * Used ONLY for rate-limit bucket keying. The returned string is
- * never logged, never persisted to disk, never transmitted anywhere.
- * If logging is ever added (it should not be), that's a regression
- * requiring SECURITY.md update and an ADR.
+ * Used ONLY for rate-limit bucket keying. The returned string — and the
+ * /24 (IPv4) or /64 (IPv6) bucket derived from it — is never logged,
+ * never persisted to disk, never transmitted anywhere
+ * (test/signupLogPrivacy.test.ts). It IS held in process memory for as
+ * long as a limiter window lasts: up to 24 h for the daily signup
+ * limiter and the per-day invite counter (until UTC midnight), 1 h or
+ * less for the others. The sequential-pattern detector
+ * keeps only a per-boot keyed hash of the bucket. If logging is ever
+ * added (it should not be), that's a regression requiring SECURITY.md
+ * update and an ADR.
  *
  * Security contract: forwarded-address headers (X-Forwarded-For,
  * X-Real-IP) are ONLY honored when the immediate socket peer is a
@@ -15,7 +21,7 @@
  * rate-limit bucket per request, because we ignore their headers
  * and use their real socket address instead.
  *
- * This is Finding E from docs/REVISIT-LIST.md §F. The equivalent
+ * This is Finding E from the project backlog §F. The equivalent
  * fix on the indexer side is Finding B.
  */
 
@@ -222,7 +228,7 @@ function looksLikeIp(s: string): boolean {
 
 /** Pick the client out of a trusted proxy's forwarded headers.
  *
- *  (v1.18.0 deep-deep, H1) This used to take the LEFTMOST X-Forwarded-For
+ *  This used to take the LEFTMOST X-Forwarded-For
  *  entry. But nginx's `$proxy_add_x_forwarded_for` means "whatever the client
  *  sent, then $remote_addr", so the leftmost entry is whatever the client typed:
  *  a request with `X-Forwarded-For: 10.N.0.1` got a fresh rate-limit bucket per

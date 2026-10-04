@@ -55,7 +55,7 @@
 	}
 	/** The origin the browser is currently on — i.e. the instance the user is
 	 *  literally viewing. This is how "the current instance" is identified in the
-	 *  directory. The pre-cp461 check compared a directory entry's
+	 *  directory. The older check compared a directory entry's
 	 *  `operator_account` to `$instance.relay_account`, which is ALWAYS false on
 	 *  any instance that runs separate operator/relay accounts (e.g. the
 	 *  canonical morphit.io with @morphit / @morphit-relay / @morphit-fees) — so
@@ -204,7 +204,7 @@
 		streaming = false;
 	}
 
-	/** t.txt (v1.4.8) — the footer "Contact" link lands here with
+	/** the footer "Contact" link lands here with
 	 *  ?highlight=current; flash the current instance's card border so the eye
 	 *  finds "the instance you're actually on". The directory loads ASYNC over a
 	 *  stream, so a blind onMount timer used to reset the flag before the card even
@@ -220,7 +220,7 @@
 		// (buffered by a WAF/proxy despite X-Accel-Buffering), and because a
 		// buffered-but-connected stream never fires `error`, the old stream-first
 		// path left the page stuck on "Loading directory…" for minutes on some
-		// instances (the maintainer/timeapp). REST-first makes the cards appear at once;
+		// instances (timeapp). REST-first makes the cards appear at once;
 		// applySnapshot is idempotent, so the stream simply layers live updates
 		// over the initial paint without flicker.
 		void fallbackLoad();
@@ -257,7 +257,7 @@
 	const filtered = $derived.by(() => {
 		const arr = Array.from(entries.values());
 		const after = statusFilter === '' ? arr : arr.filter((e) => e.status === statusFilter);
-		// Sally finding M12 (Part 68): pin the current instance to
+		// Sally finding M12: pin the current instance to
 		// the top of the list so the user always sees "you are
 		// here" without scrolling.  Pre-Part-68 the emerald ring +
 		// "this instance" badge were only visible if you scrolled
@@ -668,13 +668,13 @@
 </section>
 
 <style>
-	/* t.txt (v1.4.9 #1) — flash the current instance's card border when the
+	/* flash the current instance's card border when the
 	   footer "Contact" link lands here with ?highlight=current, so the eye finds
 	   the instance you're actually on. The current instance is matched by ORIGIN
 	   (see isCurrentInstance) — the old account-field match was always false on
 	   multi-account instances, so this flash never actually fired on the canonical
-	   instance until cp461.
-	   v1.8.0 (the maintainer): recoloured the warm amber-yellow to the brand emerald
+	   instance until a later fix.
+	   v1.8.0: recoloured the warm amber-yellow to the brand emerald
 	   (#00da69) so the highlight matches the rest of the palette, and slowed it
 	   to a calmer cadence — 3 pulses at 2s each (one flash every ~2 seconds)
 	   instead of 5 quick 0.45s blinks. */

@@ -1,13 +1,13 @@
 /**
- * Morphit indexer — reputation time-decay (cp123, H1 closes Part 113 D3).
+ * Morphit indexer — reputation time-decay (H1 closes D3).
  *
- * Background: pre-cp123, the visible `weighted_rating` was a flat
+ * Background: previously, the visible `weighted_rating` was a flat
  * AVG(rating) over all non-suppressed feedback rows.  A 5-star from
  * 3 years ago counted equally to a 5-star from this week.  A trader
  * who turned bad after years of good reputation had their bad
  * behavior diluted by stale wins.
  *
- * From cp123 onward, each feedback row's contribution to the
+ * From onward, each feedback row's contribution to the
  * weighted_rating is scaled by an exponential time-decay function
  * with a configurable half-life (default 365 days):
  *
@@ -104,7 +104,7 @@ export const REPUTATION_DECAY_HALF_LIFE_DAYS = 365;
  *      by minutes/hours.
  *   2. For older reviews (>30 days), the decay weight is barely
  *      sensitive to clock skew.
- *   3. The verifiable-receipt endpoint (cp124, H4) will accept a
+ *   3. The verifiable-receipt endpoint will accept a
  *      `as_of` parameter so callers can pin the wall-clock for
  *      deterministic comparison.
  */
@@ -113,7 +113,7 @@ export const REPUTATION_DECAY_HALF_LIFE_DAYS = 365;
  * created-at column name (must be a trusted literal column name, never user
  * input — callers pass 'created_at' / 'f.created_at').
  *
- * cp175 F-011 NOTE: the live API queries (api/feedback.ts, api/orderbook.ts,
+ * NOTE: the live API queries (api/feedback.ts, api/orderbook.ts,
  * api/orderbookStream.ts) currently INLINE this formula by hand rather than
  * calling this helper (10 occurrences total), because they embed it inside
  * multi-line aggregate CASE expressions where a string-concat call site reads
@@ -129,7 +129,7 @@ export function reputationDecayWeightSql(createdAtCol: string): string {
 
 /**
  * JavaScript implementation of the same formula — used by tests and
- * by the verifiable-receipt endpoint (cp124, H4) to compute scores
+ * by the verifiable-receipt endpoint to compute scores
  * independently of the SQL aggregator.
  *
  * @param ageMs — age of the review in milliseconds (≥ 0).

@@ -4,10 +4,10 @@
 #
 # WHY THIS FILE EXISTS
 # --------------------
-# On 2026-07-09 (cp445) the release blocks were reconstructed from memory
+# On 2026-07-09 the release blocks were reconstructed from memory
 # instead of reproduced from the record. The result invented a `<your-vps>`
 # placeholder, a `morphit-ops canary-repair` command that does not exist, and
-# wrong script paths. the maintainer had to catch it. The blocks were RIGHT in the record
+# wrong script paths, and it had to be caught by hand. The blocks were RIGHT in the record
 # the whole time.
 #
 # A rule that says "remember to copy it exactly" is a rule that depends on
@@ -21,7 +21,7 @@
 # reads, and that no placeholder ever creeps back in. If you change a command
 # here, that smoke tells you whether the command is real.
 #
-# HOW TO PRESENT THE OUTPUT (the maintainer's repeated request — do NOT miss this)
+# HOW TO PRESENT THE OUTPUT (a repeated request — do NOT miss this)
 # ---------------------------------------------------------------------
 # Relay the blocks below as SEPARATE fenced code blocks, each containing ONLY
 # the raw shell commands the maintainer runs. Nothing else goes inside a code block: no
@@ -36,25 +36,29 @@
 #   • BLOCK 1 pushes main; WAIT for ci.yml green before the tag.
 #   • BLOCK 2 pushes the signed tag; release.yml then builds, hashes, signs,
 #     PUBLISHES the Forgejo release, and attaches every asset (tarball,
-#     .sha256, distribution-anchor.env). WAIT for release.yml green — you
+#     .sha256, .asc, distribution-anchor.env, and the signed offline bundle a
+#     zero-clearnet node upgrades from). WAIT for release.yml green — you
 #     download + upload nothing.
-#   • BLOCK 4 derives the manifest from the VPS's SERVED /verify.json, never a
-#     laptop build: cross-machine Vite/Rollup output is not reproducible, and a
-#     laptop-built manifest puts a red "Build integrity check failed" banner on
-#     the live site (learned 2026-07-08, v1.1.5). It also fetches the anchor
-#     release.yml attached, so the on-chain source_sha256 is the PUBLISHED
-#     tarball's hash — not a local git-archive (that mismatch was the old
-#     release-sign.sh footgun).
-#   • BLOCK 4 starts with `npm ci`: the laptop's repo is refreshed by unpacking
-#     the release tarball over it, which updates the code but NOT node_modules.
-#     v1.20.0's payload builder imports a library whose installed copy on the
-#     laptop was older than the lockfile's, and the builder died before writing
-#     release.json (2026-09-30). `npm ci` installs exactly the lockfile.
-#   • BLOCK 4 then unsets every MORPHIT_BUILD_* value: \`source\` only sets what
-#     the anchor names, so when v1.20.2's anchor had no CID, the CID and IPNS
-#     record v1.20.1's ceremony had sourced into the same terminal went into the
-#     payload (2026-10-01; the builder now also refuses a record that points at
-#     another CID).
+#   • BLOCK 4 computes the manifest from the PUBLISHED tarball's prebuilt
+#     apps/web/build, after checking that tarball against the SHA-256 the
+#     release job anchored, and requires the canonical instance's SERVED
+#     /verify.json to match it file for file. Never a laptop build:
+#     cross-machine Vite/Rollup output is not reproducible, and a laptop-built
+#     manifest puts a red "Build integrity check failed" banner on the live site
+#     (learned 2026-07-08, v1.1.5). Never the served copy alone either: whatever
+#     that box serves would be anchored for every instance.
+#   • BLOCK 4 starts with `npm ci --ignore-scripts`: the laptop's repo is
+#     refreshed by unpacking the release tarball over it, which updates the code
+#     but NOT node_modules (v1.20.0's payload builder died on an older installed
+#     library, 2026-09-30). No dependency install script runs on the machine
+#     that holds the @morphit WIF.
+#   • BLOCK 4 never sources the downloaded anchor: the payload builder PARSES it
+#     (MORPHIT_BUILD_ANCHOR_FILE: known keys, exact value shapes, a pinned
+#     signing key) and refuses any MORPHIT_BUILD_* value an earlier ceremony left
+#     in the terminal (v1.20.2 carried v1.20.1's CID and IPNS record that way).
+#     The anchor names the signed tag object release.yml built; it must be the
+#     tag this repository made in BLOCK 2, so a tag moved after the push (back
+#     to an older signed object of the same name) is refused. No extra command.
 #   • Broadcasting (BLOCK 5) is a laptop step ONLY: the @morphit spending WIF
 #     must never live in CI.
 #   • BLOCK 6 is not optional: `morphit-ops upgrade` wipes build/canary.txt.
@@ -86,7 +90,7 @@ git push origin main
 
 ---
 
-**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs (if a signing secret is set), **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\`** — you download and upload nothing:
+**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs (a release is never published unsigned), **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\` + the signed offline bundle** — you download and upload nothing:
 \`\`\`
 git tag -s v${VERSION} -m "Morphit v${VERSION}"
 git push origin v${VERSION}
@@ -106,18 +110,18 @@ Then choose **option 2**. (The upgrade also self-seeds this release to IPFS if t
 
 ---
 
-**BLOCK 4** — build the on-chain payload from the VPS's served verify.json **plus** the published distribution anchor, and dry-run it (laptop, repo root). The first line installs exactly this release's packages (unpacking a tarball updates the code, not \`node_modules\`); the second clears values an earlier ceremony left in this terminal; the third fetches the anchor \`release.yml\` attached to the release; \`source\` loads the SHA-256 + fingerprint (the mirror list and the IPNS name are baked into the payload builder):
+**BLOCK 4** — build the on-chain payload from the published release and dry-run it (laptop, repo root). The first line installs exactly this release's packages, running no install script; the second clears values an earlier ceremony left in this terminal; then fetch the anchor and the tarball \`release.yml\` published and the canonical instance's served verify.json. The manifest is computed from the tarball (checked against the anchored SHA-256) and must match what the site serves; the payload builder reads the anchor itself (it is never sourced):
 \`\`\`
-npm ci --no-audit --no-fund
+npm ci --ignore-scripts --no-audit --no-fund
 unset \$(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/distribution-anchor.env -o /tmp/morphit-anchor.env
-source /tmp/morphit-anchor.env
-curl -fsSL https://morphit.io/verify.json -o ~/verify.json
-node apps/web/scripts/verify-json-to-release-manifest.mjs ~/verify.json > apps/web/build-manifest.release.json
-MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
-npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz -o /tmp/morphit-v${VERSION}.tar.gz
+curl -fsSL https://morphit.io/verify.json -o /tmp/morphit-verify.json
+node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env --tarball /tmp/morphit-v${VERSION}.tar.gz --served /tmp/morphit-verify.json > apps/web/build-manifest.release.json
+MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
+./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
 \`\`\`
-The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the auto-baked GitHub + Codeberg mirror list). If it does not, the anchor env was not sourced.
+The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the auto-baked GitHub + Codeberg mirror list). If the manifest line stops with "does not match the release tarball", the canonical instance is not serving this release yet: finish Block 3 and fetch verify.json again.
 
 There is deliberately **no public-gateway check here**. Block 3 already asserted that the CID your box produced equals the one in the anchor, and verified it serves over this instance's clearnet origin, its \`.onion\` and its \`.b32.i2p\` — the paths instances actually fetch from. A public gateway seeing it adds nothing to that, arrives minutes later, and depends on a third party we do not rely on. It used to gate this block and could stall a healthy release for half an hour. To confirm outside reachability by choice, it is a manual command that never blocks the ceremony: \`sh scripts/verify-cid-public.sh <cid> ${VERSION} https://morphit.io\`.
 
@@ -125,7 +129,7 @@ There is deliberately **no public-gateway check here**. Block 3 already asserted
 
 **BLOCK 5** — the real broadcast (laptop, repo root; masked \`@morphit\` WIF prompt; your key starts with \`5\`):
 \`\`\`
-npx tsx apps/indexer/scripts/release-broadcast.ts release.json
+./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json
 \`\`\`
 Afterwards anyone can verify a download against the chain by re-fetching the canonical tarball from the release page: \`curl -fsSLO https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz && node scripts/verify-download.mjs morphit-v${VERSION}.tar.gz\`, or clone any mirror and \`git verify-tag v${VERSION}\` (see docs/VERIFY-YOUR-DOWNLOAD.md).
 

@@ -6,7 +6,7 @@ the integration suite lives at `apps/indexer/test/integration/`
 The decisions + sketch below are the design record for it.
 
 This document records the four operator decisions made during
-the REVISIT §A walkthrough on 2026-04-23 and sketches the
+the backlog §A walkthrough on 2026-04-23 and sketches the
 implementation shape for the next session that builds it. The
 decisions below are ratified; the sketch is a starting point
 that the implementation session can refine without re-asking
@@ -258,5 +258,5 @@ now — the person writing the code can make reasonable calls.
   fronts local services with nginx).
 - `docs/PHASE-5-BACKLOG.md` item 7 — original scope request
   that this design resolves.
-- REVISIT-LIST.md §A entry "Integration test harness" — cross-
+- the project backlog §A entry "Integration test harness" — cross-
   reference.

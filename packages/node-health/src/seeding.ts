@@ -4,7 +4,7 @@
  * The single source of truth for "is this node successfully seeding
  * the signed release on IPFS and rebroadcasting its ipns:// record?"
  *
- * WHY THIS EXISTS (cp707).  The seeding *decision* previously lived in
+ * WHY THIS EXISTS.  The seeding *decision* previously lived in
  * two places that had to be kept in lockstep by hand:
  *
  *   - `checkIpfsSeeding` in apps/ops-cli/src/commands/health.ts
@@ -98,7 +98,7 @@ export function classifySeeding(f: SeedingFacts): SeedingClassification {
 	}
 	// 2. The daemon's state could not be read → unknown, never "down": nobody
 	//    observed it down, and "releases are NOT being seeded" would be alarm
-	//    language for an unverified condition (v1.20.0 fix wave, D14 — this
+	//    language for an unverified condition (this
 	//    used to require ALL THREE units unreadable, so one failed read of the
 	//    daemon alone fell through to 'down').
 	if (f.daemon === 'unknown') {

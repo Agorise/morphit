@@ -2,7 +2,7 @@
 /**
  * Smoke: my/orders card cluster (#8, #9, #10). Anchor 2026-07-08.
  *
- *   #8  edit-window countdown MERGED into the Edit button (cp508 tt.txt #5):
+ *   #8  edit-window countdown MERGED into the Edit button:
  *       the ✏️ glyph + inline "· mm:ss" countdown live inside a compact
  *       (size="sm"), full-width Edit button — the old separate amber pill above
  *       an oversized button is gone. The confusing "No trade partner to review
@@ -34,7 +34,7 @@ function check(name: string, ok: boolean): void {
 	}
 }
 
-// ── #8 edit-window countdown MERGED into the Edit button (cp508 tt.txt #5) ───
+// ── #8 edit-window countdown MERGED into the Edit button ───
 const editBlock = /\{#if withinEditWindow\(o\)\}[\s\S]*?\{:else if withinEditClosedNotice/.exec(page)?.[0] ?? '';
 check('#8 the Edit button carries the ✏️ glyph + action_edit', /my_orders\.order\.action_edit'\)/.test(editBlock) && editBlock.includes('✏️'));
 check('#8 the countdown is INLINE in the Edit button (formatRemainingMmSs), not a separate pill', /formatRemainingMmSs/.test(editBlock) && /\{#if remaining !== null\}/.test(editBlock));
@@ -42,9 +42,9 @@ check('#8 the old separate amber edit-window pill is GONE (merged away)', !/edit
 check('#8 the merged Edit button is compact (size="sm") + full-width', /size="sm"/.test(editBlock) && /fullWidth/.test(editBlock));
 check(
 	'#8 the 0-counterparty branch explains itself, and still withholds the review button',
-	// SUPERSEDED, v1.5.0 (t.txt line 1). The original ask was to delete the
+	// SUPERSEDED, v1.5.0. The original ask was to delete the
 	// confusing "No trade partner to review yet" line, leaving `{void 0}` — so
-	// this asserted the key was ABSENT. the maintainer then revised it: an empty gap left
+	// this asserted the key was ABSENT. The maintainer then revised it: an empty gap left
 	// users wondering why no review button appeared, so the branch now renders a
 	// green box ("No chats with a counterparty have happened yet").
 	// The SAFETY property is unchanged and still checked: with zero reviewable

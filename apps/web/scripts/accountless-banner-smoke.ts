@@ -1,5 +1,5 @@
 /**
- * accountless-banner-smoke (cp355)
+ * accountless-banner-smoke
  *
  * Pins the "signed in but no Blurt account name yet" state so it can never
  * silently revert to feeling like a bug:

@@ -39,7 +39,7 @@
 	import { decodePayload, type ChatAssetTicker } from '$lib/chat/payload';
 	import { CARRIERS, buildTrackingUrl } from '$lib/shipping/carriers';
 
-	// cp121: O(1) carrier lookup for shipment-pill rendering.
+	// O(1) carrier lookup for shipment-pill rendering.
 	// Built once at module init (CARRIERS is a frozen const array).
 	const CARRIERS_LOOKUP = new Map(CARRIERS.map((c) => [c.key, c]));
 	import {
@@ -58,12 +58,11 @@
 	import { verifyBlurtTransfer, type VerifyResult } from '$lib/chat/blurtVerify';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
-	import {
-		VERIFY_RETRY_WINDOW_MS,
-		VERIFY_RETRY_INTERVAL_MS
-	} from '$lib/trades/tradeVerify';
+	import { VERIFY_RETRY_WINDOW_MS, VERIFY_RETRY_INTERVAL_MS } from '$lib/trades/tradeVerify';
 	import { isPairedReadOnly } from '$lib/stores/identity';
+	import { acceptKeyChange } from '$lib/chat/pubPin';
 	import QrPanel from '$components/QrPanel.svelte';
+	import ConfirmModal from '$components/ConfirmModal.svelte';
 
 	interface Props {
 		message: LocalMessage;
@@ -130,23 +129,23 @@
 			orderPermlink?: string;
 			network?: string;
 		}) => void;
-		/** cp402 [4] — whoami line. When true, a tiny "@sender (BLT…)"
+		/** whoami line. When true, a tiny "@sender (BLT…)"
 		 *  identity line renders above this bubble. The parent sets this
 		 *  only for the FIRST message of a same-sender run, so a burst of
 		 *  messages from one party shows the line once. The sender is
 		 *  derived from direction (isOutgoing ⇒ `me`, else `peer`), so the
 		 *  parent supplies only that sender's avatar + posting key. */
 		showWhoami?: boolean;
-		/** cp402 [4] — the sender's sanitized avatar SVG (if they set one).
+		/** the sender's sanitized avatar SVG (if they set one).
 		 *  Passed to IdentityLabel, which shows it as an <img> (data: URI) —
 		 *  NEVER inline it with {@html}: an inlined SVG's own style/class can
-		 *  escape its frame and cover the page (v1.18.0 deep-deep, M1).
+		 *  escape its frame and cover the page.
 		 *  Sanitized upstream in profileProps/selfProfile. */
 		senderAvatarSvg?: string | null;
-		/** cp402 [4] — the sender's raster avatar data URI (mutually
+		/** the sender's raster avatar data URI (mutually
 		 *  exclusive with senderAvatarSvg). */
 		senderAvatarDataUri?: string | null;
-		/** cp402 [4] — the sender's canonical BLT posting key (full base58
+		/** the sender's canonical BLT posting key (full base58
 		 *  string). Truncated head(9)…tail(4) for the whoami — the SAME
 		 *  shape IdentityLabel shows in the header, so the same peer's key
 		 *  reads identically in both places. Null ⇒ the "(BLT…)" part is
@@ -169,12 +168,12 @@
 
 	const isOutgoing = $derived(message.sender === me);
 
-	/** cp402 [4] — the sender account for the whoami line. message.sender
+	/** the sender account for the whoami line. message.sender
 	 *  is authoritative; the me/peer fallback guarantees it's never empty
 	 *  (which would make IdentityLabel seed a blank identicon). */
 	const whoamiAccount = $derived(message.sender || (isOutgoing ? me : (peer ?? '')));
 
-	/** v1.4.8 (t.txt) — the broadcast is fast (~3s) but `confirmed` waits on the
+	/** v1.4.8 — the broadcast is fast (~3s) but `confirmed` waits on the
 	 *  indexer reading the message back, which lags ~45s behind head. So "sending…"
 	 *  is shown ONLY while `pending`; the moment the broadcast succeeds the bubble
 	 *  goes clean (no tick, no "Sent" — the maintainer found that annoying). Perceived send
@@ -193,7 +192,7 @@
 		message.decryptFailed || message.text === CHAT_CONSTANTS.ENCRYPTED_PLACEHOLDER
 	);
 
-	// Part 122 cp29 — closes Part 119 finding B-3 (paired-readonly
+	// closes B-3 (paired-readonly
 	// Bob saw "(encrypted)" with no actionable guidance about why
 	// decryption isn't happening on this device).  Three distinct
 	// failure modes were previously collapsed into a single
@@ -344,7 +343,7 @@
 			return null;
 		}
 		if (method === 'usdc') {
-			// Part 122 cp30 — per-network USDC explorer URL.  Same
+			// per-network USDC explorer URL.  Same
 			// shape as USDT: requires the wire-format `network`
 			// field to disambiguate among erc20/spl/base/polygon.
 			// Especially important here because ERC-20, Base, and
@@ -356,7 +355,7 @@
 			return null;
 		}
 		if (method === 'dai') {
-			// Part 122 cp31 — per-network DAI explorer URL.  Same
+			// per-network DAI explorer URL.  Same
 			// shape as USDC.  MOST important here because ALL FOUR
 			// DAI networks (ERC-20, Polygon, Base, Arbitrum) share
 			// the same EVM 0x[64 hex] txid format — no SPL branch to
@@ -371,7 +370,7 @@
 		return null;
 	}
 
-	/** cp167 — plural counterpart of explorerLinkForTxid.  Returns
+	/** plural counterpart of explorerLinkForTxid.  Returns
 	 *  the ordered list of all available explorer URLs for the
 	 *  given txid (best→worst).  For BLURT and the per-network
 	 *  stablecoin paths there's only one explorer; for the
@@ -398,7 +397,7 @@
 		if (method === 'sol') return externalExplorerUrls('SOL', txid);
 		if (method === 'eth') return externalExplorerUrls('ETH', txid);
 		if (method === 'xrp') return externalExplorerUrls('XRP', txid);
-		// cp174 — multi-network tokens now get the same "+N more
+		// multi-network tokens now get the same "+N more
 		// explorers" dropdown as native-chain assets.  Require the
 		// wire-format `network` field to disambiguate (same contract
 		// as the singular path); fall through to [] if it's absent or
@@ -452,9 +451,16 @@
 	 *  allocating a per-permlink derived store. */
 	const tradeStateValue = $derived.by(() => {
 		if (decoded?.kind !== 'funds_sent') return null;
+		// An unproved sender's claim gets no badge from the order's state.
+		if (message.senderUnverified === true) return null;
 		const permlink = decoded.payload.orderPermlink;
 		if (!permlink) return null;
-		return $tradeStates.get(permlink) ?? null;
+		const st = $tradeStates.get(permlink) ?? null;
+		// The store speaks for the order's ENGAGED counterparty only: a
+		// funds-sent pill from anyone else must not show that trade's badge.
+		const counterparty = isOutgoing ? peer : message.sender;
+		if (st === null || st.engagedPeer !== counterparty) return null;
+		return st;
 	});
 
 	/** Effective verify result — store takes precedence over
@@ -478,6 +484,10 @@
 		//   incoming → local user is seller, peer is buyer
 		//   outgoing → local user is buyer, peer is seller
 		if (decoded?.kind !== 'funds_sent') return;
+		// A message whose sender is not proved (v1 envelope, a key not yet
+		// accepted, or a replaced key) never drives a trade: its claim could
+		// have been written by anyone holding only public keys.
+		if (message.senderUnverified === true) return;
 		const p = decoded.payload;
 		if (p.method !== 'blurt') return; // only BLURT path verifies
 		if (!p.amount) return; // can't verify amount-less
@@ -509,8 +519,12 @@
 				amountBlurt: amountNum,
 				echoedMemo: p.memo ?? '',
 				orderPermlink: p.orderPermlink,
-				txid: p.txid
+				txid: p.txid,
+				direction: isOutgoing ? 'outgoing' : 'incoming'
 			});
+			// A claim from someone the order is not engaged with records
+			// nothing in the store and gets no badge: a "verified" mark on a
+			// stranger's claim about this order would read as payment for it.
 			return;
 		}
 
@@ -521,8 +535,8 @@
 		const myGen = ++verifyGen;
 		verifyResultLocal = 'pending';
 
-		// cp509 (v1.8.4 A1) — same transient-retry as the centralized path
-		// (cp508 Task 10): a freshly-broadcast transfer isn't queryable for a few
+		// (v1.8.4 A1) — same transient-retry as the centralized path
+		// (Task 10): a freshly-broadcast transfer isn't queryable for a few
 		// seconds (it has to land in a block and be indexed), so the FIRST verify
 		// comes back not_found/rpc_error. Retry within the window, leaving the
 		// receipt on 'pending' ("Verifying…"), so this legacy no-orderPermlink
@@ -552,14 +566,14 @@
 		attemptLegacyVerify();
 	});
 
-	/** cp402 [5] — full date + time for a confirmed bubble (the persistent
+	/** full date + time for a confirmed bubble (the persistent
 	 *  below-bubble timestamp was removed per the maintainer's chat batch). Uses the
 	 *  canonical Morphit formatter → "14 May, 2026 @ 05:03:22 UTC": day-number,
 	 *  translated full month, comma, 4-digit year, @ 24-hour UTC with seconds.
 	 *  Empty for pending / broadcast / failed messages (no on-chain createdAt
 	 *  yet).
 	 *
-	 *  cp474 — the example above used to read "@ 8:52:42 PM (localized time)".
+	 *  the example above used to read "@ 8:52:42 PM (localized time)".
 	 *  `formatDayMonthTime` emits 24-hour UTC and has for a while; the comment
 	 *  had simply drifted. Ordinary bubbles reveal this on tap; a Payment
 	 *  Receipt prints it on its face instead (see `timestampRevealable`). */
@@ -568,13 +582,12 @@
 		return formatDayMonthTime(message.createdAt);
 	});
 
-	/** cp474 (t.txt #8) — a Payment Receipt PRINTS its timestamp on the
+	/** a Payment Receipt PRINTS its timestamp on the
 	 *  SENT/RECEIVED line, so it opts out of the tap-to-reveal popover the other
 	 *  bubbles use.
 	 *
-	 *  the maintainer: "when you mouseover anywhere on the payment receipt, that date/time
-	 *  alt text appears and it's annoying", and "the entire Payment Receipt
-	 *  bubble seems to be hyperlinked to nothing". Both are this one mechanism:
+	 *  Reported: hovering anywhere on the payment receipt popped up the date/time tooltip, and
+	 *  the whole receipt bubble looked like a link that went nowhere. Both are this one mechanism:
 	 *  the bubble carried `title={fullTimestamp}` (the native tooltip, which
 	 *  fires anywhere on the card and cannot be styled or dismissed) plus
 	 *  `cursor-pointer` + an onclick (which is what makes it LOOK like a link
@@ -587,13 +600,13 @@
 	 *  the affordance here rather than keep a control whose only output is
 	 *  already visible.
 	 *
-	 *  Ordinary message bubbles keep the popover (cp402 [5]): their timestamp
+	 *  Ordinary message bubbles keep the popover: their timestamp
 	 *  ISN'T printed anywhere, so tap-to-reveal is the only way to get it. */
 	const isReceipt = $derived(decoded?.kind === 'funds_sent');
 	/** The timestamp affordance applies only to bubbles that don't print it. */
 	const timestampRevealable = $derived(fullTimestamp !== '' && !isReceipt);
 
-	/** cp402 [5] — whether the tap-to-reveal timestamp popover is
+	/** whether the tap-to-reveal timestamp popover is
 	 *  showing for this bubble. Toggled by tapping the bubble;
 	 *  dismissed by tapping again or pressing Escape. */
 	let showTimestamp = $state(false);
@@ -602,18 +615,18 @@
 	 *  interactive elements (address-pill Pay-now / Mark-sent
 	 *  buttons, the retry button, links) don't also toggle it. */
 	function onBubbleActivate(e: MouseEvent | KeyboardEvent): void {
-		// cp474 — a receipt prints its own time; nothing to reveal.
+		// a receipt prints its own time; nothing to reveal.
 		if (!timestampRevealable) return;
 		const target = e.target as HTMLElement | null;
 		if (target?.closest('button, a, input, textarea, [role="button"]')) return;
 		showTimestamp = !showTimestamp;
 	}
 
-	/** cp402 [5] — ref to this message row; the popover's dismissal
+	/** ref to this message row; the popover's dismissal
 	 *  effect uses it to tell an outside tap from a re-tap on the bubble. */
 	let bubbleRowEl = $state<HTMLElement | null>(null);
 
-	/** cp402 [5] — while the timestamp popover is open, dismiss it on an
+	/** while the timestamp popover is open, dismiss it on an
 	 *  outside tap or Escape. Listeners attach only while open, so they
 	 *  don't accumulate across the (potentially many) messages in a
 	 *  conversation. The opening tap can't self-close because this effect
@@ -635,15 +648,50 @@
 		};
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// Per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
+
+	// A link in a message (or a custom tracking URL) was written by the peer:
+	// it opens only after the same "Leaving Morphit — visit <host>?" check the
+	// order terms use, so a look-alike link can't send the reader off-site in
+	// one tap. null = no confirmation open.
+	let pendingUrl = $state<string | null>(null);
+	const leaveHost = $derived.by(() => {
+		if (pendingUrl === null) return '';
+		try {
+			const u = new URL(pendingUrl);
+			return u.hostname || u.pathname || pendingUrl;
+		} catch {
+			return pendingUrl;
+		}
+	});
+
+	function onPeerLinkClick(e: MouseEvent, href: string | null): void {
+		// Keep the real <a href> (screen readers, hover preview, "open in new
+		// tab"); only the plain click goes through the confirmation.
+		e.preventDefault();
+		if (href) pendingUrl = href;
+	}
+
+	function confirmLeave(): void {
+		const url = pendingUrl;
+		pendingUrl = null;
+		if (!url || typeof document === 'undefined') return;
+		// An anchor click inside this user gesture opens a new tab with
+		// noopener/noreferrer: no window.opener, no referrer.
+		const a = document.createElement('a');
+		a.href = url;
+		a.target = '_blank';
+		a.rel = 'noopener noreferrer';
+		a.click();
+	}
 </script>
 
 <li class="chat-message flex" class:justify-end={isOutgoing} class:justify-start={!isOutgoing}>
 	<div class="relative flex max-w-[85%] flex-col gap-1 sm:max-w-[70%]" bind:this={bubbleRowEl}>
 		{#if showWhoami}
-			<!-- cp402 [4] — whoami identity line. Rendered once above the
+			<!-- whoami identity line. Rendered once above the
 			     FIRST bubble of a same-sender run (the parent gates this),
 			     so a burst of messages from one party is labelled once. This
 			     is a SAFETY affordance: it shows the sender's avatar, @handle,
@@ -658,10 +706,10 @@
 			     For the local user's own runs, IdentityLabel falls back to
 			     the selfProfile avatar automatically (isSelf).
 
-			     v1.7.5 (t.txt #9) — the avatar was 18px against a TWO-line stack
+			     v1.7.5 — the avatar was 18px against a TWO-line stack
 			     (@handle over the truncated BLT key), so it covered barely half of
-			     what it was labelling. the maintainer: "make it span the full height of the
-			     username/postingkey lines."
+			     what it was labelling. Requirement: it spans the full height of the username
+			     and posting-key lines.
 			     34px is measured, not eyeballed: this row inherits the 16px page
 			     base, and IdentityLabel's keyed path stacks the two lines with
 			     `leading-tight` (1.25) where the key is text-[0.7em] —
@@ -683,7 +731,7 @@
 			between outgoing (emerald tint) and incoming (ink-surface).
 			The failed state adds a red ring that overrides the border.
 		-->
-		<!-- cp402 [5] — tap/click the bubble to reveal its full send
+		<!-- tap/click the bubble to reveal its full send
 		     time (fullTimestamp popover below). Pointer/touch reveal;
 		     the message text stays fully accessible, and the timestamp
 		     is also exposed to assistive tech via the sr-only <time>
@@ -691,12 +739,12 @@
 		     the a11y suppressions — the div is intentionally not a
 		     button so it never hijacks the message text as its name). -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<!-- t155 (the maintainer): "all of the green bubbles (the Payment Receipts too) are a
+		<!-- t155: "all of the green bubbles (the Payment Receipts too) are a
 		     bit too bright and it makes the thin black text hard for me to see.
 		     maybe dim that green just a bit and make the text on the bubble a bit
 		     bolder."
 		
-		     v1.8.0 (the maintainer): "the text is still hard to read, make it more bold." Lifted
+		     v1.8.0: "the text is still hard to read, make it more bold." Lifted
 		     font-medium (500) → font-semibold (600) — the next real step up, which
 		     thickens the strokes noticeably. Paired with the further-dimmed bubble
 		     green (#009e51) so the two readability levers move together. It applies to
@@ -737,7 +785,7 @@
 				: ($_('chat.message.aria.incoming') as string)}
 		>
 			{#if isPlaceholder}
-				<!-- Part 122 cp29: closes Part 119 finding B-3 — the
+				<!-- closes B-3 — the
 				     three placeholder cases (decrypt-failed / paired-
 				     readonly / default) get distinct copy via the
 				     derived placeholderI18nKey above.  Failed
@@ -757,9 +805,9 @@
 					</span>
 				{/if}
 			{:else if decoded?.kind === 'order_settled_elsewhere'}
-				<!-- cp496 (t.txt #5) — system auto-reply: the order owner completed
+				<!-- system auto-reply: the order owner completed
 				     the trade with a different trader. NO text travels on the wire;
-				     we render the (the maintainer-approved) warm copy in THIS reader's OWN
+				     we render the (approved) warm copy in THIS reader's OWN
 				     locale, so 15 losing inquirers each read it in their language. -->
 				<div class="flex items-start gap-2 text-sm">
 					<span aria-hidden="true">🤝</span>
@@ -776,6 +824,7 @@
 					($tradeStates.get(p.orderPermlink)?.phase ?? 'address_shared') !== 'address_shared'}
 				{@const canPayNow =
 					onPayNow !== undefined &&
+					message.senderUnverified !== true &&
 					p.method === 'blurt' &&
 					isIncoming &&
 					!Number.isNaN(parsedAmount) &&
@@ -783,6 +832,7 @@
 					!alreadyPaid}
 				{@const canMarkSent =
 					onMarkSent !== undefined &&
+					message.senderUnverified !== true &&
 					(p.method === 'btc' ||
 						p.method === 'xmr' ||
 						p.method === 'usdt' ||
@@ -807,9 +857,9 @@
 				{@const daiNetworkValid =
 					p.method === 'dai' && p.network !== undefined && isDaiNetwork(p.network)}
 				<div class="flex flex-col gap-2">
-					<!-- cp474 (t.txt #8) — the maintainer: 'change that text to say "BLURT
-					     SENT|RECEIVED on 14 May, 2026 @ 05:03:22 UTC" and remove that
-					     date/time from everywhere else on the Payment Receipt.'
+					<!-- Requirement: the line reads "BLURT
+					     SENT|RECEIVED on 14 May, 2026 @ 05:03:22 UTC", and that
+					     date/time appears nowhere else on the Payment Receipt.
 					     `formatDayMonthTime` already emits exactly that shape (the
 					     sitewide day-first / full-month / 24h-UTC-with-seconds standard),
 					     so this prints the canonical formatter's output rather than
@@ -845,7 +895,7 @@
 						{:else if p.method === 'xrp'}
 							{$_('chat.address.pill_method_xrp')}
 						{:else if p.method === 'usdt'}
-							<!-- Part 121 — USDT pill header carries the
+							<!-- USDT pill header carries the
 							     network as a BOLD prefix so the buyer
 							     can't miss which chain to send on. -->
 							{#if usdtNetworkValid}
@@ -855,7 +905,7 @@
 							{/if}
 							{$_('chat.address.pill_method_usdt')}
 						{:else if p.method === 'usdc'}
-							<!-- Part 122 cp30 — USDC pill header parallel
+							<!-- USDC pill header parallel
 							     to USDT.  Circle-blue chip instead of
 							     amber so the two stablecoins are
 							     visually distinguishable.  Especially
@@ -869,7 +919,7 @@
 							{/if}
 							{$_('chat.address.pill_method_usdc')}
 						{:else if p.method === 'dai'}
-							<!-- Part 122 cp31 — DAI pill header parallel
+							<!-- DAI pill header parallel
 							     to USDC.  MakerDAO orange chip to
 							     visually distinguish from USDT amber +
 							     USDC Circle-blue.  MOST important here
@@ -888,7 +938,7 @@
 						{#if p.amount}
 							<span class="font-mono">· {p.amount}</span>
 						{/if}
-						<!-- cp26 — PayJoin badge.  Renders when the
+						<!-- PayJoin badge.  Renders when the
 						     seller's payload carries a PayJoin (BIP-78)
 						     endpoint and the asset is BTC.  Tells the
 						     buyer "this seller's wallet supports
@@ -918,7 +968,7 @@
 							class="flex-none rounded-md border px-2 py-1 text-xs font-semibold {copiedKind ===
 							'address'
 								? 'border-green-600 bg-green-600 text-white opacity-100'
-							: 'border-current opacity-70 hover:bg-current/10 hover:opacity-100'}"
+								: 'hover:bg-current/10 border-current opacity-70 hover:opacity-100'}"
 							onclick={() => copyText(p.address, 'address')}
 							aria-label={$_('common.copy') as string}
 						>
@@ -927,7 +977,7 @@
 						</button>
 					</div>
 					{#if p.method === 'usdt' && usdtNetworkValid}
-						<!-- Part 121 — per-message USDT cross-network
+						<!-- per-message USDT cross-network
 						     warning.  Stays on the chat record
 						     permanently so a buyer who re-checks an old
 						     message before paying still sees the
@@ -942,7 +992,7 @@
 						</aside>
 					{/if}
 					{#if p.method === 'usdc' && usdcNetworkValid}
-						<!-- Part 122 cp30 — per-message USDC cross-network
+						<!-- per-message USDC cross-network
 						     warning.  Same shape as the USDT case but with
 						     Circle-blue trim to keep the two stablecoins
 						     visually distinct.  Critical here because
@@ -958,7 +1008,7 @@
 						</aside>
 					{/if}
 					{#if p.method === 'dai' && daiNetworkValid}
-						<!-- Part 122 cp31 — per-message DAI cross-network
+						<!-- per-message DAI cross-network
 						     warning.  Same shape as USDC but with
 						     MakerDAO-orange trim.  MOST critical here
 						     because ALL FOUR DAI networks share the EVM
@@ -1073,7 +1123,7 @@
 											| 'xrp',
 										amount: p.amount,
 										orderPermlink: p.orderPermlink,
-										// cp26 DD-7 fix + cp30 — propagate the network
+										// propagate the network
 										// from the address payload to FundsSentModal so
 										// the receiver doesn't have to re-pick a network
 										// they already saw on the seller's pill.  Both
@@ -1153,7 +1203,7 @@
 							{/if}
 							{$_('chat.funds_sent.pill_title_usdt')}
 						{:else if p.method === 'usdc'}
-							<!-- Part 122 cp30 — USDC funds-sent pill.
+							<!-- USDC funds-sent pill.
 							     Mirrors USDT shape but with Circle-blue
 							     trim.  Network chip prefixes the title
 							     so a glance at the chat tells the seller
@@ -1165,7 +1215,7 @@
 							{/if}
 							{$_('chat.funds_sent.pill_title_usdc')}
 						{:else if p.method === 'dai'}
-							<!-- Part 122 cp31 — DAI funds-sent pill.
+							<!-- DAI funds-sent pill.
 							     MakerDAO-orange chip to distinguish from
 							     USDT amber + USDC Circle-blue.  Visually
 							     consistent with the address-pill side. -->
@@ -1211,6 +1261,17 @@
 									? $_('chat.funds_sent.self_verify_pending')
 									: $_('chat.funds_sent.verify_pending')}
 							</div>
+						{:else if verifyResult.kind === 'verified' && !isOutgoing && tradeStateValue?.amountConfirmed === false}
+							<!-- No amount was asked, so the transfer was checked against the
+							     buyer's own figure: a payment arrived, not "paid in full". -->
+							<div
+								class="rounded-md bg-ink-100 px-2 py-1.5 text-xs text-ink-700 dark:bg-ink-800 dark:text-ink-200"
+								role="status"
+							>
+								{$_('chat.funds_sent.verify_received_unasked', {
+									values: { received: p.amount ?? '' }
+								})}
+							</div>
 						{:else if verifyResult.kind === 'verified'}
 							<div
 								class="flex items-center gap-2 rounded-md bg-green-100 px-2 py-1.5 text-xs font-semibold text-green-900 dark:bg-green-900/40 dark:text-green-200"
@@ -1244,6 +1305,16 @@
 										{isOutgoing
 											? $_('chat.funds_sent.self_verify_mismatch_amount')
 											: $_('chat.funds_sent.verify_mismatch_amount')}
+										{#if verifyResult.received !== undefined && tradeStateValue?.expectedAmount !== undefined}
+											<span class="mt-1 block font-semibold">
+												{$_('chat.funds_sent.verify_received_of', {
+													values: {
+														received: verifyResult.received,
+														asked: String(tradeStateValue.expectedAmount)
+													}
+												})}
+											</span>
+										{/if}
 									{:else}
 										{isOutgoing
 											? $_('chat.funds_sent.self_verify_mismatch_memo')
@@ -1279,7 +1350,7 @@
 						<span class="text-xs opacity-70">
 							{$_('chat.funds_sent.pill_txid_label')}
 						</span>
-						<!-- cp508 (tt.txt #12) — Copy rides ON the txid row, vertically centered
+						<!-- Copy rides ON the txid row, vertically centered
 						     with the field, so it lines up perfectly with the Transaction ID no
 						     matter how many verify/explorer links follow below. (The old
 						     `self-center` sat level with the middle of a 2-3 line column, not the
@@ -1293,9 +1364,9 @@
 							<button
 								type="button"
 								class="flex-none rounded-md border px-2 py-1 text-xs font-semibold transition-all {copiedKind ===
-							'txid'
-								? 'border-green-600 bg-green-600 text-white opacity-100'
-							: 'border-current opacity-70 hover:bg-current/10 hover:opacity-100'}"
+								'txid'
+									? 'border-green-600 bg-green-600 text-white opacity-100'
+									: 'hover:bg-current/10 border-current opacity-70 hover:opacity-100'}"
 								onclick={() => copyText(p.txid, 'txid')}
 								aria-label={$_('common.copy') as string}
 							>
@@ -1303,51 +1374,51 @@
 									{$_('chat.address.pill_copied')}{:else}{$_('common.copy')}{/if}
 							</button>
 						</div>
-							{#if p.method !== 'blurt' && explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
-								<!-- v1.5.0 — external-chain (BTC/XMR/etc) receipts keep their
+						{#if p.method !== 'blurt' && explorerLinksForTxid(p.method, p.txid, p.network).length > 0}
+							<!-- v1.5.0 — external-chain (BTC/XMR/etc) receipts keep their
 								     block-explorer link; there is no local explorer for those
 								     assets. Blurt uses the local verify link below. -->
-								<ExplorerLink urls={explorerLinksForTxid(p.method, p.txid, p.network)} />
-							{/if}
-							{#if p.method === 'blurt' && verifyResult !== null && verifyResult !== 'pending' && verifyResult.kind === 'verified'}
-								<!-- t155 (the maintainer): "when i click on that text/hyperlink, it takes me
+							<ExplorerLink urls={explorerLinksForTxid(p.method, p.txid, p.network)} />
+						{/if}
+						{#if p.method === 'blurt' && verifyResult !== null && verifyResult !== 'pending' && verifyResult.kind === 'verified'}
+							<!-- t155: "when i click on that text/hyperlink, it takes me
 								     to a 404 Not Found page." morphitExplorerTxUrl returns a
 								     LOCALE-LESS path (`/explorer/tx/…`); every other caller wraps
 								     it in lp() — this one didn't, so the URL had no [lang] segment
-								     and matched no route. Same class of bug as the cp470 push
+								     and matched no route. Same class of bug as the push
 								     click_path 404. -->
-								{@const verifyPath = morphitExplorerTxUrl(p.txid)}
-								{#if verifyPath}
-									<!-- v1.5.0 — THIS instance's explorer only (no off-site
+							{@const verifyPath = morphitExplorerTxUrl(p.txid)}
+							{#if verifyPath}
+								<!-- v1.5.0 — THIS instance's explorer only (no off-site
 									     explorer; privacy #1 — no IP leak to a third party).
 									     Shown only once the transfer is chain-verified. -->
-										<!-- t155 (the maintainer): "I cannot see the text/link that is next to the
+								<!-- t155: "I cannot see the text/link that is next to the
 										     magnifying glass emoji/icon." It was text-morphit-emerald ON
 										     the emerald receipt bubble — emerald on emerald. Now inherits
 										     the bubble's own foreground (currentColor) — the convention
 										     the Copy button beside it already uses — so it stays legible
 										     on every bubble variant instead of being pinned to one
 										     background. Underlined so it reads as a link without relying
-										     on colour, with a stronger hover per the maintainer.
+										     on colour, with a stronger hover as requested.
 
-										     cp474 (t.txt #8) — the maintainer: "get rid of the underline that appears
-										     under the magnifying glass and its text ... only show that
-										     underline (as dots) when i mouseover". So: no underline at
+										     Requirement: no underline under the
+										     magnifying glass and its text, except a dotted one
+										     on hover. So: no underline at
 										     rest, a DOTTED one on hover/focus. The link is still
 										     discoverable without it — it's a magnifying glass next to the
 										     words "Verify on block explorer", inside a receipt, and it
 										     keeps its hover background + focus ring. Focus-visible gets the
 										     same dots as hover: a keyboard user has no pointer to reveal
 										     them with, and the ring alone shouldn't be the only signal. -->
-									<a
-										href={lp(verifyPath)}
-										class="-mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-current no-underline decoration-current decoration-dotted underline-offset-2 opacity-90 transition-all hover:bg-current/10 hover:underline hover:opacity-100 focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-current"
-									>
-										<span aria-hidden="true">🔎</span>
-										{$_('chat.funds_sent.verify_independently')}
-									</a>
-								{/if}
+								<a
+									href={lp(verifyPath)}
+									class="hover:bg-current/10 -mx-1 inline-flex w-fit items-center gap-1 rounded px-1 py-0.5 text-xs font-semibold text-current no-underline decoration-current decoration-dotted underline-offset-2 opacity-90 transition-all hover:underline hover:opacity-100 focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-current"
+								>
+									<span aria-hidden="true">🔎</span>
+									{$_('chat.funds_sent.verify_independently')}
+								</a>
 							{/if}
+						{/if}
 					</div>
 					{#if p.note}
 						<p class="text-xs italic opacity-80">{p.note}</p>
@@ -1360,7 +1431,7 @@
 					{/if}
 				</div>
 			{:else if decoded?.kind === 'mailing_address'}
-				<!-- cp121: mailing-address pill.  Renders the full
+				<!-- mailing-address pill.  Renders the full
 				     address (recipient may need it to ship).  Copy
 				     button copies the formatted multi-line address.
 				     PRIVACY: address stays in E2E chat only. -->
@@ -1414,7 +1485,7 @@
 					{/if}
 				</div>
 			{:else if decoded?.kind === 'shipment'}
-				<!-- cp121: shipment pill.  Carrier + tracking + optional
+				<!-- shipment pill.  Carrier + tracking + optional
 				     clickable "Track package" link.  Recipient's click
 				     goes to carrier's tracking page in a new tab
 				     (rel=noopener so referrer is suppressed). -->
@@ -1454,6 +1525,7 @@
 								href={trackingUrl}
 								target="_blank"
 								rel="noopener noreferrer"
+								onclick={(e) => onPeerLinkClick(e, trackingUrl)}
 								class="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline dark:text-blue-300"
 							>
 								<span aria-hidden="true">🔗</span>
@@ -1485,20 +1557,21 @@
 								href={safeContactUrl(seg.value)}
 								target="_blank"
 								rel="noopener noreferrer nofollow"
+								onclick={(e) => onPeerLinkClick(e, safeContactUrl(seg.value))}
 								class="break-all underline">{seg.value}</a
 							>{:else}{seg.value}{/if}{/each}</span
 				>
 			{/if}
 		</div>
 
-		<!-- cp402 [5] — screen-reader-only send time, always present for
+		<!-- screen-reader-only send time, always present for
 		     confirmed messages so assistive tech has the timestamp without
 		     needing the pointer/touch reveal below. -->
 		{#if fullTimestamp}
 			<time class="sr-only" datetime={message.createdAt?.toISOString()}>{fullTimestamp}</time>
 		{/if}
 
-		<!-- cp402 [5] — tap-to-reveal timestamp popover. Appears when the
+		<!-- tap-to-reveal timestamp popover. Appears when the
 		     user taps/clicks the bubble; dismissed by tapping again, tapping
 		     outside, or Escape. Anchored just below the bubble, on the
 		     sender's side. pointer-events-none so it never eats the
@@ -1516,7 +1589,7 @@
 		{/if}
 
 		<!-- Meta line: sending indicator for in-flight, error + retry for
-		     failed. cp402 [5] removed the persistent confirmed-message
+		     failed. A later change removed the persistent confirmed-message
 		     timestamp (now tap-to-reveal above), so this line renders only
 		     when there's in-flight or failed status to show — a confirmed
 		     bubble carries no meta line at all. -->
@@ -1532,7 +1605,7 @@
 					<span class="text-red-700 dark:text-red-300">
 						{$_('chat.message.failed_label')}
 					</span>
-					<!-- (v1.18.0 deep-deep, L1) No Retry when the chain has it and the
+					<!-- No Retry when the chain has it and the
 					     indexers refused it: a resend would be refused the same way. -->
 					{#if message.error !== ON_CHAIN_NOT_ACCEPTED_SENTINEL}
 						<button
@@ -1546,6 +1619,16 @@
 					{/if}
 				{/if}
 			</div>
+		{/if}
+
+		<!-- An incoming message whose sender is not proved (older v1 envelope, or
+		     a key change not accepted yet): readable, but anyone who knows our
+		     public chat key could have written it. Said plainly, and loudest on
+		     a payment request. -->
+		{#if !isOutgoing && message.senderUnverified === true && !message.decryptFailed}
+			<p class="max-w-prose self-start text-xs text-amber-800 dark:text-amber-300" role="note">
+				{$_('chat.message.sender_unverified')}
+			</p>
 		{/if}
 
 		<!-- A copy the chain never recorded. Not an error the reader can act on,
@@ -1588,6 +1671,8 @@
 					{$_('chat.security.pub_pin_chain_older_than_pin')}
 				{:else if message.error === 'pub_pin_malformed_indexer_response'}
 					{$_('chat.security.pub_pin_malformed_indexer_response')}
+				{:else if message.error === 'pub_pin_key_changed'}
+					{$_('chat.security.pub_pin_key_changed')}
 				{:else if message.error === NOT_CONFIRMED_SENTINEL}
 					{$_('chat.message.not_confirmed_on_chain')}
 				{:else if message.error === ON_CHAIN_NOT_ACCEPTED_SENTINEL}
@@ -1608,6 +1693,19 @@
 			     The four security codes share one FAQ entry
 			     (chat_key_changed) so a single link works for all of
 			     them. -->
+			{#if message.error === 'pub_pin_key_changed' && peer !== undefined && onRetry !== undefined}
+				<!-- The changed key is used only after this explicit choice
+				     (pubPin.acceptKeyChange); never silently. -->
+				<button
+					type="button"
+					class="mr-2 text-xs font-semibold text-red-700 underline hover:no-underline dark:text-red-300"
+					onclick={() => {
+						if (peer !== undefined && acceptKeyChange(peer)) onRetry?.(message.localSeq);
+					}}
+				>
+					{$_('chat.security.accept_new_key')}
+				</button>
+			{/if}
 			{#if typeof message.error === 'string' && message.error.startsWith('pub_pin_')}
 				<a
 					href={lp('/faq#chat_key_changed')}
@@ -1618,4 +1716,16 @@
 			{/if}
 		{/if}
 	</div>
+	{#if pendingUrl !== null}
+		<ConfirmModal
+			open={true}
+			variant="neutral"
+			title={$_('terms.leave_site.title') as string}
+			body={$_('terms.leave_site.body', { values: { site: leaveHost } }) as string}
+			confirmLabel={$_('terms.leave_site.confirm') as string}
+			cancelLabel={$_('terms.leave_site.cancel') as string}
+			onConfirm={confirmLeave}
+			onCancel={() => (pendingUrl = null)}
+		/>
+	{/if}
 </li>

@@ -1,8 +1,8 @@
 /**
  * spawn-dist-prebuild-coverage smoke
  *
- * cp142 LL #1.  This smoke is the meta-guard that catches the
- * class of bug found in cp141→cp142 audit: a workspace shipped a
+ * This smoke is the meta-guard that catches the
+ * class of bug an audit found: a workspace shipped a
  * `bin` field pointing into `dist/`, but the corresponding smoke
  * spawned `node dist/main.js` without any guard for the case
  * where dist/ hadn't been built yet.  Because `dist/` is
@@ -26,7 +26,7 @@
  *      ['dist/...'])` with no existence guard is the bug we
  *      just fixed; this smoke prevents regression.
  *
- * The cp141 audit grep found only ONE matching smoke in the
+ * The audit grep found only ONE matching smoke in the
  * tree (`apps/mcp-server/scripts/mcp-server-smoke.ts`) and ONE
  * matching bin (`apps/mcp-server/package.json:bin.morphit-mcp`).
  * The smoke runs both lists in parallel so we'll notice any
@@ -147,7 +147,7 @@ interface SmokeFinding {
 // expressions).
 const SPAWN_DIST_PATTERN = /\bspawn(?:Sync)?\s*\(\s*['"]node['"]\s*,\s*\[\s*['"][^'"]*dist\//;
 
-// Either a self-build helper invocation (the cp142 pattern) or
+// Either a self-build helper invocation (the pattern) or
 // an explicit fs existence check is acceptable.  We test this
 // against a COMMENT-STRIPPED copy of the source; otherwise a
 // stale "// See ensureBuilt() above" comment that survived a

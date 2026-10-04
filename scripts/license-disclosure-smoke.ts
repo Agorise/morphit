@@ -15,6 +15,12 @@
  *     fails, forcing a review + a disclosure update (so the AGPL-3.0 license
  *     posture can't silently drift).
  *
+ *  3. THE SERVED BUNDLE: the browser bundle
+ *     redistributes third-party code (dblurt BSD-3, libsodium ISC, jspdf
+ *     with pako and rgbcolor, …), whose licences require their notices to
+ *     travel with it. When apps/web/build exists, build/licenses.txt must
+ *     exist and name every runtime package the web app bundles.
+ *
  * Deliberately a denylist of genuinely-concerning patterns, NOT an allowlist
  * of permissive licenses — that stays robust as benign MIT/ISC/Apache/BSD
  * transitive deps come and go without churning this smoke.
@@ -60,7 +66,9 @@ function licenseString(pkg: Record<string, unknown>): string {
 	const l = pkg.license ?? pkg.licenses;
 	if (typeof l === 'string') return l;
 	if (Array.isArray(l)) {
-		return l.map((x) => (typeof x === 'string' ? x : ((x as { type?: string }).type ?? ''))).join('/');
+		return l
+			.map((x) => (typeof x === 'string' ? x : ((x as { type?: string }).type ?? '')))
+			.join('/');
 	}
 	if (l && typeof l === 'object') return (l as { type?: string }).type ?? JSON.stringify(l);
 	return '';
@@ -159,6 +167,31 @@ function main(): void {
 		offenders.length === 0,
 		offenders.length ? `review + disclose: ${offenders.slice(0, 8).join('; ')}` : ''
 	);
+
+	// ─── The served bundle carries its third-party notices ──────
+	const WEB = join(REPO_ROOT, 'apps', 'web');
+	const BUILD = join(WEB, 'build');
+	if (existsSync(join(BUILD, 'index.html'))) {
+		const lic = join(BUILD, 'licenses.txt');
+		check('the built frontend ships licenses.txt (third-party notices)', existsSync(lic));
+		const text = existsSync(lic) ? readFileSync(lic, 'utf8') : '';
+		const webDeps = Object.keys(
+			(
+				JSON.parse(readFileSync(join(WEB, 'package.json'), 'utf8')) as {
+					dependencies?: Record<string, string>;
+				}
+			).dependencies ?? {}
+		).filter((d) => !d.startsWith('@morphit/'));
+		// Bundled through jspdf: named by the dependency review.
+		const missing = [...webDeps, 'pako', 'rgbcolor'].filter((d) => !text.includes(d));
+		check(
+			'licenses.txt names every runtime package of the web app (+ pako, rgbcolor via jspdf)',
+			text !== '' && missing.length === 0,
+			missing.length ? `missing: ${missing.join(', ')}` : ''
+		);
+	} else {
+		check('apps/web/build not built here (served-bundle notice check skipped)', true);
+	}
 
 	if (failures > 0) {
 		console.error(`\nlicense-disclosure-smoke: ${failures} failure(s) across ${n} checks`);

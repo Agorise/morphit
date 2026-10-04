@@ -1,10 +1,10 @@
 /**
- * chat-notif-default-on-smoke — cp453 (t.txt)
+ * chat-notif-default-on-smoke
  *
  * Chat-message notifications must be ON for EVERY user by default. Two parts:
  *   - new users: DEFAULTS.categories.chat === true;
  *   - existing users who persisted prefs before the chat default flipped
- *     false→true (cp450) carry a stale chat:false that overrides the default — a
+ *     false→true carry a stale chat:false that overrides the default — a
  *     one-time migration flips it on, guarded by a done-flag so it runs once and
  *     never re-enables against a LATER explicit opt-out.
  * Source-level invariants, tamper-tested.

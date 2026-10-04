@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Signup / relay-spend integrity smoke (v1.20.0 fix wave — findings D2, D4, D5,
+ * Signup / relay-spend integrity smoke (findings D2, D4, D5,
  * D6, D10). Every scenario exercises BEHAVIOUR through the real entry points
  * (the relay's BlurtClient against local mock Blurt RPC nodes, the real
  * CreateEndpoint mounted on Hono, the real HealthService) — no source regexes.

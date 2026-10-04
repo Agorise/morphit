@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /*
- * no-bare-path-goto — cp200 guard.
+ * no-bare-path-goto — guard.
  *
  * Every Morphit route lives under `[lang]`, so an imperative navigation
  * MUST carry a locale prefix. A bare `goto('/orderbook')` resolves
  * `[lang]` = 'orderbook' and 404s with "Unknown locale" — the exact bug
  * a sysadmin hit on /post's "Create an account" link, and which a sweep
- * (cp200) found in ~30 call sites across the frontend. The fix is the
+ * found in ~30 call sites across the frontend. The fix is the
  * shared `gotoLocale()` helper (`$i18n/navigate`), which prefixes the
  * current locale via `localePath`, mirroring how the `lp()`-wrapped
  * `<a href>` links work.

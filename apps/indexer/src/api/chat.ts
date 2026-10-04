@@ -49,7 +49,7 @@ interface MsgRow {
 	ciphertext: string;
 	header: unknown;
 	created_at: Date;
-	/** cp446 — the order this message is about, or null. The inbox threads
+	/** the order this message is about, or null. The inbox threads
 	 *  conversations by it (one card per peer+order, like an email inbox), and
 	 *  the transcript filters on it, so a reply about order A never lands in the
 	 *  discussion about order B. */

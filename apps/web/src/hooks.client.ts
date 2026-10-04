@@ -15,6 +15,19 @@ import '$lib/pwa/installPrompt';
 initI18n();
 
 if (browser) {
+	// An older build kept shared crypto addresses in plaintext, with dates
+	// and order ids. Convert that record to the hashed form and delete it as
+	// soon as the app starts, not only when chat or settings is opened.
+	try {
+		if (localStorage.getItem('morphit.address-history.v1') !== null) {
+			void import('$lib/privacy/addressHistory')
+				.then((m) => m.migrateLegacyAddressHistory())
+				.catch(() => {});
+		}
+	} catch {
+		// storage unavailable: nothing to convert
+	}
+
 	currentLocale.subscribe((code) => {
 		document.documentElement.lang = code;
 		const meta = SUPPORTED_LOCALES.find((l) => l.code === code);

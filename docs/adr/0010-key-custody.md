@@ -402,7 +402,7 @@ it implies land over multiple Phase 4 turns:
 
 ### Code
 
-1. **Relay: ACT pre-minting script** (`scripts/mint-acts.ts`)
+1. **Relay: ACT pre-minting script** (`scripts/mint-acts.ts` (since removed))
    — standalone tool; prompts for active-key passphrase;
    mints N tickets; logs operation.
 2. **Relay: passphrase-at-boot flow.** Replace env-var active

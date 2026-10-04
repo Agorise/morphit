@@ -2,9 +2,9 @@
 /**
  * category-b-descriptions-parity-smoke.
  *
- * Part 122 cp51 STRUCTURAL DEFENSE (LL #55 / O-4).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp51-D1 hardcoded-table-without-parity-smoke class:
+ * Closes the hardcoded-table-without-parity-smoke class:
  * the ops-cli `CATEGORY_B_DESCRIPTIONS` table at
  * `apps/ops-cli/src/init/steps.ts:1484` is a per-ticker
  * `Record<string, string>` that must stay in lockstep with the
@@ -17,17 +17,17 @@
  * fees)." placeholder for that ticker — silently degrading
  * operator UX without breaking any other smoke.
  *
- * cp50-O3 closed the HTTP route handler scope of the recurring
- * "hardcoded ticker subset" class.  cp51-O4 closes a NEW scope:
+ * A later change closed the HTTP route handler scope of the recurring
+ * "hardcoded ticker subset" class.  A later change closes a NEW scope:
  * **ops-cli per-ticker description tables**.
  *
  * Same recurring class pattern that the prior O-defenses closed:
- *   cp48-O1: standalone smoke scripts (stand-in becomes valid)
- *   cp49-O2: vitest unit tests (asset_invalid stand-in)
- *   cp50-O3: HTTP route handler regex (per-asset RSS feed)
- *   cp51-O4: ops-cli per-ticker hardcoded description tables
+ *   standalone smoke scripts (stand-in becomes valid)
+ *   vitest unit tests (asset_invalid stand-in)
+ *   HTTP route handler regex (per-asset RSS feed)
+ *   ops-cli per-ticker hardcoded description tables
  *
- * Mutation test verification: M-118 — deleting any one ticker
+ * Mutation test verification: — deleting any one ticker
  * entry from CATEGORY_B_DESCRIPTIONS fires:
  *   "category-b-descriptions-parity FAILED:
  *    canonical Category-B has [..., XRP, ...] but

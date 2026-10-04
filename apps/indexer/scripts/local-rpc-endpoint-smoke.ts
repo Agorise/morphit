@@ -50,7 +50,7 @@ check('guard REJECTS a private-LAN host (SSRF)', !acceptsLocal('http://192.168.1
 check('guard REJECTS a 127.x-lookalike hostname', !acceptsLocal('http://127.0.0.1.evil.com:8091'));
 check('guard REJECTS a .onion (belongs in the hidden knob)', !acceptsLocal('http://abc.onion:8091'));
 
-// ── cp755: tor-only reads the chain over an EMPTY clearnet pool ──────
+// ── tor-only reads the chain over an EMPTY clearnet pool ──────
 // A tor-only node empties MORPHIT_INDEXER_RPC_ENDPOINTS so chain reads never
 // touch clearnet (no IP leak). BlurtClient must construct on hidden-only, and
 // must still reject a node with NO source at all.

@@ -47,7 +47,7 @@ export function withinEditWindow(createdAt: string, nowMs: number): boolean {
  *
  * Deliberately NOT zero-padded: this reproduces `/my/orders`' existing pill
  * byte-for-byte. Padding would look tidier, but changing a rendering nobody
- * asked me to change is how a "shared helper" quietly becomes a regression.
+ * asked to change is how a "shared helper" quietly becomes a regression.
  */
 export function formatRemainingMmSs(totalSeconds: number): string {
 	const s = Math.max(0, Math.floor(totalSeconds));

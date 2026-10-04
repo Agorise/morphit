@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * scripts/ipfs-selfseed-smoke.ts  (v1.9.3, the maintainer)
+ * scripts/ipfs-selfseed-smoke.ts  (v1.9.3)
  *
  * v1.9.3 hosts releases on our OWN nodes — no commercial pinning service. This
  * pins the whole self-seed chain so no layer silently regresses:
@@ -147,7 +147,7 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		['polls independent public gateways', /MORPHIT_GUARD_GATEWAYS/.test(guard) && /ipfs\.io/.test(guard) && /dweb\.link/.test(guard)],
 		['fetches the CID metadata.json', /metadata\.json/.test(guard)],
 		['confirms the expected version (not just any 200)', /WANT_VER/.test(guard) && /grep -q/.test(guard)],
-		// cp591 asked the guard to fetch morphit-latest.tar.gz IN FULL before
+		// A later change asked the guard to fetch morphit-latest.tar.gz IN FULL before
 		// anchoring. That intent was right — a resolvable metadata.json does not
 		// prove the tarball serves — but the cost was wrong: the tarball reached
 		// ~33 MB and the guard pulled it through a PUBLIC gateway on every poll

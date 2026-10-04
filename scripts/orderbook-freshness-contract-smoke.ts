@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * orderbook-freshness-contract — cp512 (t.txt O8).
+ * orderbook-freshness-contract.
  *
  * THE BUG THIS EXISTS TO CATCH.
  *
- * the maintainer posted two orders and paid for both. On the orderbook page each order
+ * The maintainer posted two orders and paid for both. On the orderbook page each order
  * flashed for a split second and then VANISHED; a manual refresh showed them
  * on desktop but NOT on his phone, while my/orders showed them Live the whole
  * time. Two independent defects conspired, and fixing only one leaves the bug:
@@ -58,7 +58,7 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 	}
 };
 
-console.log('\n── orderbook-freshness-contract (cp512 / t.txt O8) ───\n');
+console.log('\n── orderbook-freshness-contract ──────────────────\n');
 
 const orderbook = read('apps/indexer/src/api/orderbook.ts');
 const security = read('apps/indexer/src/api/middleware/security.ts');
@@ -73,7 +73,9 @@ check(
 	'without it the security-middleware default (public, max-age=3) makes the live orderbook cacheable'
 );
 const noStoreIdx = orderbook.search(noStoreRe);
-const successJsonIdx = orderbook.search(/return c\.json\(\{[\s\S]*?items:\s*rows\.map\(rowToWire\)/);
+const successJsonIdx = orderbook.search(
+	/return c\.json\(\{[\s\S]*?items:\s*rows\.map\(rowToWire\)/
+);
 check(
 	'the no-store header sits on the success path, before the items c.json',
 	noStoreIdx >= 0 && successJsonIdx >= 0 && noStoreIdx < successJsonIdx,
@@ -92,7 +94,10 @@ check(
 );
 
 // ─── B. a late REST prefetch never clobbers the SSE snapshot ──────
-check('the page tracks currentStreamHadSnapshot', /let currentStreamHadSnapshot = false;/.test(page));
+check(
+	'the page tracks currentStreamHadSnapshot',
+	/let currentStreamHadSnapshot = false;/.test(page)
+);
 check(
 	'buildStream() resets the flag (a fresh stream has no snapshot yet)',
 	/function buildStream\(\)[\s\S]*?currentStreamHadSnapshot = false;/.test(page),
@@ -109,7 +114,9 @@ check(
 );
 check(
 	'a failed REST prefetch does not error-card over an existing snapshot',
-	/if \(currentStreamHadSnapshot\) \{\s*phase = 'ready';\s*\} else \{[\s\S]*?phase = 'error';/.test(page)
+	/if \(currentStreamHadSnapshot\) \{\s*phase = 'ready';\s*\} else \{[\s\S]*?phase = 'error';/.test(
+		page
+	)
 );
 
 console.log(`\n${'─'.repeat(54)}`);

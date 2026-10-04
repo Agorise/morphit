@@ -139,10 +139,14 @@ describe.skipIf(!INTEGRATION_ENABLED)('the fast path never writes the database',
 		// signature verification reads. Seeded before the snapshot so it is part
 		// of the "before" picture rather than a write the push appears to make.
 		await fx.db.query(
+			// A CONFIRMED key: an unconfirmed one never authenticates a fast
+			// delivery on its own (VT1-4).
 			`INSERT INTO accounts
-			     (name, creator, created_block_num, created_block_time, created_trx_id, posting_pubkey)
-			   VALUES ($1, 'genesis', 1, now(), 'seed', $2)
-			   ON CONFLICT (name) DO UPDATE SET posting_pubkey = EXCLUDED.posting_pubkey`,
+			     (name, creator, created_block_num, created_block_time, created_trx_id, posting_pubkey,
+			      posting_key_reconciled)
+			   VALUES ($1, 'genesis', 1, now(), 'seed', $2, TRUE)
+			   ON CONFLICT (name) DO UPDATE SET posting_pubkey = EXCLUDED.posting_pubkey,
+			                                    posting_key_reconciled = TRUE`,
 			[SENDER, senderPub]
 		);
 		intake = federationChatFastRoute(fx.db);

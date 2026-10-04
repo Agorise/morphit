@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * term-sanitize-smoke — regression for cp139-C* terminal-escape
+ * term-sanitize-smoke — regression for the terminal-escape
  * hardening in ops-cli.
  *
  * Bug class: external content (DB rows, RPC responses, file
@@ -54,7 +54,7 @@ initColor({
 	databaseUrl: '',
 	relayAccount: '',
 	feesAccount: '',
-	// cp474 — both REQUIRED by Config and absent until now. `initColor` only
+	// both REQUIRED by Config and absent until now. `initColor` only
 	// reads `.color`, so nothing broke, but the literal stopped being a Config.
 	officialAccount: '',
 	operatorAccount: '',

@@ -262,8 +262,8 @@ and no ORM involved.
 
 ## References
 
-- `docs/PHASE-3a-DESIGN.md` — the design doc this ADR extends
-- `docs/PHASE-3a-STATUS.md` — what shipped in 3a
+- the original Phase 3a design note (an internal record) — the design doc this ADR extends
+- `docs/PHASE-3a-STATUS.md` (since removed) — what shipped in 3a
 - ADR-0001: custom_json immutability
 - ADR-0005: Phase 3 subphase split
 - `apps/web/src/lib/net/config.ts` — OP_IDS the indexer must

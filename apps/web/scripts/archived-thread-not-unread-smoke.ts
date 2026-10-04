@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/archived-thread-not-unread-smoke.ts  (v1.9.0, the maintainer tester3)
+ * apps/web/scripts/archived-thread-not-unread-smoke.ts  (v1.9.0, tester3)
  *
  * A thread archived+read on ANOTHER device arrived here archived (folder state syncs
  * on chain) but cursorless (the read cursor is per-device localStorage), so the inbox

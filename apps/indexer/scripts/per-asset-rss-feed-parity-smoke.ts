@@ -2,9 +2,9 @@
 /**
  * per-asset-rss-feed-parity-smoke.
  *
- * Part 122 cp50 STRUCTURAL DEFENSE (LL #54 / O-3).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp50-D1 drift class: the per-asset RSS feed allow-
+ * Closes the drift class: the per-asset RSS feed allow-
  * set must NEVER hardcode a subset of asset tickers; it must
  * derive from canonical ASSET_TICKERS so adding a new asset
  * automatically unlocks its feed.
@@ -12,14 +12,14 @@
  * Bug history that motivated this defense:
  *   - Pre-cp50: regex hardcoded as `/^(btc|xmr|blurt)\.xml$/`
  *     in apps/indexer/src/api/rssOrderbookHandlers.ts:213.
- *     This regex was correct when written (~Part 95 with only
+ *     This regex was correct when written (with only
  *     3 tradable assets) but STAYED FROZEN through 13 subsequent
- *     additions (cp21/24/27/30/30/31/33/39/41/43/45/47/49), so
+ *     additions, so
  *     /rss/orderbook/by-asset/{usdt,usdc,dai,bch,ltc,dash,doge,
  *     zec,arrr,dcr,sol,eth,xrp}.xml ALL silently 400'd for ~14
  *     checkpoints.  The docblock said "the three the site
  *     supports" — also stale.
- *   - Cp50 fix derives allow-set from ASSET_TICKERS at runtime
+ *   - A later change derives allow-set from ASSET_TICKERS at runtime
  *     (apps/indexer/src/api/rssOrderbookHandlers.ts:228) so any
  *     future addition unlocks its feed automatically.  No further
  *     code changes needed in this handler.
@@ -29,17 +29,17 @@
  * smoke walks the indexer API source for `(btc|xmr|...)` regex
  * patterns that could be drifting subsets.
  *
- * Recurring-class siblings the cp48-O1 / cp49-O2 defenses
+ * Recurring-class siblings the defenses
  * already cover:
- *   - cp48-O1: indexer smoke scripts using a real ticker as
+ *   - indexer smoke scripts using a real ticker as
  *     "unknown" stand-in.
- *   - cp49-O2: vitest unit tests using a real ticker as
+ *   - vitest unit tests using a real ticker as
  *     "asset_invalid" stand-in.
  *
- * Cp50-O3 adds: HTTP route handlers using a hardcoded ticker
+ * A later change adds: HTTP route handlers using a hardcoded ticker
  * subset as an allow-set.
  *
- * Mutation-test verification: M-116.  Reverting the cp50-D1 fix
+ * Mutation-test verification:.  Reverting the fix
  * (hardcoding `(btc|xmr|blurt)`) fires:
  *   "per-asset-rss-feed-parity FAILED: regex allow-set
  *    [btc,xmr,blurt] is a strict subset of ASSET_TICKERS
@@ -92,7 +92,7 @@ if (handlerIdx === -1) {
 
 	// CHECK 2 — handler must NOT have a hardcoded ticker-list regex
 	// like `/^(btc|xmr|blurt)\.xml$/`.  This is the failure mode
-	// cp50-D1 fixed.  Detect by looking for the pattern
+	// A later change fixed.  Detect by looking for the pattern
 	// `(<tickerset>)\.xml` where tickerset is a subset.
 	const hardcodedSubsetRe = /\/\^?\(([a-z]+(\|[a-z]+){1,})\)\\?\.xml\$?\/?/;
 	const hardcodedMatch = hardcodedSubsetRe.exec(handlerBody);
@@ -119,7 +119,7 @@ if (handlerIdx === -1) {
 //   `[a-z]{3,5}\|[a-z]{3,5}` patterns that look like ticker
 //   enumerations.  Strips multi-line `/* */` and line `//`
 //   comments first so historical regex references inside
-//   docblocks (like the cp50 fix-rationale comment) don't
+//   docblocks (like the fix-rationale comment) don't
 //   produce false positives. ──
 let apiSrc = readFileSync(
 	join(__dirname, '..', '..', '..', 'apps', 'indexer', 'src', 'api', 'rssOrderbookHandlers.ts'),

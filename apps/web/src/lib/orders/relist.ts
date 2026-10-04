@@ -10,12 +10,14 @@
  * permlink and expiration; the old order stays as-is. No silent re-sign of an
  * old listing.
  *
- * This builder was extracted from /my/orders (cp438) so the order-detail page
+ * This builder was extracted from /my/orders so the order-detail page
  * (`[permlink]`) re-lists with byte-identical behaviour — the two must not
  * drift. It's pure (no navigation, no storage) so it unit-tests without a DOM;
  * callers do the `safeSession.set(RELIST_PREFILL_KEY, …)` + navigate to /post.
  */
 import type { OrderRecord } from '@morphit/indexer-client';
+
+import { formatAmountForInput } from './amountInput';
 
 /** sessionStorage key the /post page reads its prefill from (mirrors
  *  `/post`'s own `PREFILL_KEY` and MyBalanceCard's welcome-CTA writer). */
@@ -49,8 +51,11 @@ export interface RelistPrefill {
  * pattern-match the two known shapes (`{kind:'spread',percent}` /
  * `{kind:'fixed',price}`) and fall back to `spread=0` on anything else so the
  * user can fix it manually rather than losing the draft.
+ *
+ * Numbers are written in `locale`'s decimal form (the locale /post parses
+ * them with), so "95000.125" is not read back as ambiguous in a comma locale.
  */
-export function buildRelistPrefill(o: OrderRecord): RelistPrefill {
+export function buildRelistPrefill(o: OrderRecord, locale: string): RelistPrefill {
 	let priceModelKind: 'spread' | 'fixed' = 'spread';
 	let spreadPercent = '0';
 	let fixedPrice = '';
@@ -59,10 +64,10 @@ export function buildRelistPrefill(o: OrderRecord): RelistPrefill {
 		const obj = pm as Record<string, unknown>;
 		if (obj.kind === 'spread' && typeof obj.percent === 'number') {
 			priceModelKind = 'spread';
-			spreadPercent = String(obj.percent);
+			spreadPercent = formatAmountForInput(obj.percent, locale);
 		} else if (obj.kind === 'fixed' && typeof obj.price === 'number') {
 			priceModelKind = 'fixed';
-			fixedPrice = String(obj.price);
+			fixedPrice = formatAmountForInput(obj.price, locale);
 		}
 	}
 
@@ -74,8 +79,8 @@ export function buildRelistPrefill(o: OrderRecord): RelistPrefill {
 		// lands on /post with an empty picker).
 		assetNetwork: o.asset_network ?? null,
 		fiat: o.fiat_currency,
-		amountMin: o.amount_min !== null ? String(o.amount_min) : '',
-		amountMax: o.amount_max !== null ? String(o.amount_max) : '',
+		amountMin: o.amount_min !== null ? formatAmountForInput(o.amount_min, locale) : '',
+		amountMax: o.amount_max !== null ? formatAmountForInput(o.amount_max, locale) : '',
 		priceModelKind,
 		spreadPercent,
 		fixedPrice,

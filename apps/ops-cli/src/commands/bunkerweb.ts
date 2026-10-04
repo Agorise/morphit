@@ -14,7 +14,7 @@
  *   - GUIDED INSTALLER (interactive default when NOT already running):
  *     plain-English, confirmation-gated steps that
  *       1. ensure Docker + the compose v2 plugin are present (guide the
- *          install — official apt route, or an explicit-opt-in get.docker.com),
+ *          install — the distribution's apt packages only),
  *       2. copy ops/bunkerweb → /etc/bunkerweb (never clobbering an existing
  *          /etc/bunkerweb — reuse + say so instead),
  *       3. set SERVER_NAME to the operator's real domain,
@@ -32,9 +32,15 @@
  */
 
 import { ask, askYesNo, explain } from '../init/prompt.ts';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { composeCommand, composeRefOf, parseDockerInspect, type ComposeRef } from '../lib/proxyConfigHeal.ts';
+import {
+	composeCommand,
+	composeRefOf,
+	parseDockerInspect,
+	type ComposeRef
+} from '../lib/proxyConfigHeal.ts';
 
 export interface BunkerWebCtx {
 	readonly flags: Readonly<Record<string, string>>;
@@ -64,8 +70,16 @@ export function parsePsRows(out: string): PsRow[] {
 		.split('\n')
 		.filter((l) => l.trim() !== '')
 		.map((l) => {
-			const [name = '', image = '', ports = '', status = '', project = '', service = ''] = l.split('\t');
-			return { name: name.trim(), image: image.trim(), ports, up: /^up\b/i.test(status.trim()), project: project.trim(), service: service.trim() };
+			const [name = '', image = '', ports = '', status = '', project = '', service = ''] =
+				l.split('\t');
+			return {
+				name: name.trim(),
+				image: image.trim(),
+				ports,
+				up: /^up\b/i.test(status.trim()),
+				project: project.trim(),
+				service: service.trim()
+			};
 		});
 }
 
@@ -100,7 +114,9 @@ export function locateBunkerWeb(rows: readonly PsRow[]): BunkerWebLocation {
 	}
 	const edge = edges[0]!;
 	let scheds = rows.filter(
-		(r) => imageIs(r.image, 'bunkerity/bunkerweb-scheduler') && (edge.project === '' || r.project === edge.project)
+		(r) =>
+			imageIs(r.image, 'bunkerity/bunkerweb-scheduler') &&
+			(edge.project === '' || r.project === edge.project)
 	);
 	if (scheds.some((r) => r.up)) scheds = scheds.filter((r) => r.up);
 	if (scheds.length > 1) scheds = scheds.filter((r) => !/init/.test(`${r.service} ${r.name}`));
@@ -109,7 +125,10 @@ export function locateBunkerWeb(rows: readonly PsRow[]): BunkerWebLocation {
 		names: sched ? [edge.name, sched.name] : [edge.name],
 		edge: edge.name,
 		ambiguous: false,
-		services: edge.service !== '' ? [edge.service, ...(sched && sched.service !== '' ? [sched.service] : [])] : []
+		services:
+			edge.service !== ''
+				? [edge.service, ...(sched && sched.service !== '' ? [sched.service] : [])]
+				: []
 	};
 }
 
@@ -138,12 +157,7 @@ export function parseContainerState(name: string, inspectOut: string): Container
 	};
 }
 
-export type BunkerWebKind =
-	| 'docker-missing'
-	| 'not-running'
-	| 'partial'
-	| 'unhealthy'
-	| 'running';
+export type BunkerWebKind = 'docker-missing' | 'not-running' | 'partial' | 'unhealthy' | 'running';
 
 export interface BunkerWebVerdict {
 	readonly kind: BunkerWebKind;
@@ -168,7 +182,8 @@ export function bunkerwebVerdict(
 	if (present.length === 0) {
 		return {
 			kind: 'not-running',
-			message: 'BunkerWeb is not running (no bunkerweb containers found). Bring it up with the commands below.'
+			message:
+				'BunkerWeb is not running (no bunkerweb containers found). Bring it up with the commands below.'
 		};
 	}
 	if (present.length < states.length) {
@@ -226,6 +241,7 @@ export function bunkerwebCommands(): BunkerWebCommands {
 		bringUp: [
 			'sudo cp -r ops/bunkerweb /etc/bunkerweb',
 			'# edit /etc/bunkerweb/bunkerweb.env — set SERVER_NAME to your domain',
+			'echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee -a /etc/bunkerweb/.env',
 			'cd /etc/bunkerweb && docker compose up -d'
 		],
 		status: 'cd /etc/bunkerweb && docker compose ps',
@@ -272,11 +288,18 @@ export function validateServerName(domain: string): { ok: boolean; reason?: stri
 	const d = domain.trim();
 	if (d === '') return { ok: false, reason: 'empty' };
 	if (/\s/.test(d)) return { ok: false, reason: 'contains whitespace (enter a single hostname)' };
-	if (/^https?:\/\//i.test(d)) return { ok: false, reason: 'looks like a URL — enter just the hostname (no https://)' };
+	if (/^https?:\/\//i.test(d))
+		return { ok: false, reason: 'looks like a URL — enter just the hostname (no https://)' };
 	if (d.includes('/')) return { ok: false, reason: 'contains "/" — enter just the hostname' };
-	if (!d.includes('.')) return { ok: false, reason: 'not a fully-qualified domain (needs a dot, e.g. trade.example.org)' };
-	if (!/^[a-z0-9.-]+$/i.test(d)) return { ok: false, reason: 'has characters not valid in a hostname' };
-	if (isPlaceholderServerName(d)) return { ok: false, reason: 'still the example placeholder — use your real domain' };
+	if (!d.includes('.'))
+		return {
+			ok: false,
+			reason: 'not a fully-qualified domain (needs a dot, e.g. trade.example.org)'
+		};
+	if (!/^[a-z0-9.-]+$/i.test(d))
+		return { ok: false, reason: 'has characters not valid in a hostname' };
+	if (isPlaceholderServerName(d))
+		return { ok: false, reason: 'still the example placeholder — use your real domain' };
 	return { ok: true };
 }
 
@@ -320,17 +343,23 @@ export function setFrontendBuildPath(
 ): { text: string; changed: boolean } {
 	if (installDir === DEFAULT_INSTALL_DIR) return { text: composeText, changed: false };
 	const canonical = `${DEFAULT_INSTALL_DIR}/apps/web/build:/usr/share/nginx/html`;
-	if (!composeText.includes(canonical)) return { text: composeText, changed: false };
 	const replacement = `${installDir}/apps/web/build:/usr/share/nginx/html`;
-	return { text: composeText.split(canonical).join(replacement), changed: true };
+	// Also every file the compose mounts from the release's ops/bunkerweb/ (the
+	// frontend's nginx.conf, the scheduler's job lists): a bind source that does
+	// not exist is created by Docker as an empty DIRECTORY, and a directory over
+	// a file target stops the container.
+	const text = composeText
+		.split(canonical)
+		.join(replacement)
+		.split(`${DEFAULT_INSTALL_DIR}/ops/bunkerweb/`)
+		.join(`${installDir}/ops/bunkerweb/`);
+	return { text, changed: text !== composeText };
 }
 
 export interface DockerInstallGuidance {
 	/** The official, distro-package route (preferred — gets security updates). */
 	readonly official: readonly string[];
-	/** The upstream convenience script (one command, but pipes a remote
-	 *  script to root — offered only behind an explicit default-NO prompt). */
-	readonly convenience: string;
+
 	/** Where to read more. */
 	readonly docs: string;
 }
@@ -343,7 +372,6 @@ export function dockerInstallGuidance(): DockerInstallGuidance {
 			'sudo apt-get install -y docker.io docker-compose-v2',
 			'sudo systemctl enable --now docker'
 		],
-		convenience: 'curl -fsSL https://get.docker.com | sudo sh',
 		docs: 'https://docs.docker.com/engine/install/'
 	};
 }
@@ -446,9 +474,7 @@ async function findBunkerWeb(): Promise<{ loc: BunkerWebLocation; ref: ComposeRe
 /** Best-effort: is the `docker compose` v2 plugin usable? IMPURE. */
 async function dockerComposePresent(): Promise<boolean> {
 	const { spawnSync } = await import('node:child_process');
-	return (
-		spawnSync('docker', ['compose', 'version'], { stdio: 'pipe', timeout: 5000 }).status === 0
-	);
+	return spawnSync('docker', ['compose', 'version'], { stdio: 'pipe', timeout: 5000 }).status === 0;
 }
 
 /** Are we root (euid 0)? Determines whether host-mutating steps need a
@@ -505,11 +531,67 @@ async function writeMaybeSudo(path: string, text: string): Promise<boolean> {
 	return (await runHostCmd('cp', [staged, path])) === 0;
 }
 
+/** Add `DOCKER_GID=<gid>` to a Compose `.env` text unless it already sets one.
+ *  PURE. `null` text = no file yet. */
+export function withDockerGid(
+	text: string | null,
+	gid: string
+): { text: string; changed: boolean } {
+	const t = text ?? '';
+	if (/^[ \t]*DOCKER_GID[ \t]*=[ \t]*\S/m.test(t)) return { text: t, changed: false };
+	const sep = t === '' || t.endsWith('\n') ? '' : '\n';
+	return { text: `${t}${sep}DOCKER_GID=${gid}\n`, changed: true };
+}
+
+/** The host's `docker` group id, or null. IMPURE. */
+function dockerGroupGid(): string | null {
+	const r = spawnSync('getent', ['group', 'docker'], { encoding: 'utf8', timeout: 5000 });
+	const gid = (r.stdout ?? '').split(':')[2]?.trim() ?? '';
+	return r.status === 0 && /^\d+$/.test(gid) ? gid : null;
+}
+
+/**
+ * The shipped compose gives BunkerWeb's scheduler the host's docker group (it
+ * finds the BunkerWeb instance only through the Docker API) and refuses to
+ * start without `DOCKER_GID` in `<dir>/.env`, which Compose reads. Write it
+ * (root, 0640) when missing; keep a value the operator set. IMPURE.
+ */
+export async function ensureDockerGidEnv(
+	dir: string,
+	gidOf: () => string | null = dockerGroupGid
+): Promise<{ ok: boolean; detail: string }> {
+	const path = join(dir, '.env');
+	const gid = gidOf();
+	const current = existsSync(path) ? await readMaybeSudo(path) : null;
+	if (existsSync(path) && current === null) return { ok: false, detail: `could not read ${path}` };
+	if (gid === null) {
+		return withDockerGid(current, '0').changed
+			? {
+					ok: false,
+					detail: `this server has no docker group, so DOCKER_GID could not be set in ${path}`
+				}
+			: { ok: true, detail: `${path} already sets DOCKER_GID` };
+	}
+	const next = withDockerGid(current, gid);
+	if (!next.changed) return { ok: true, detail: `${path} already sets DOCKER_GID` };
+	if (!(await writeMaybeSudo(path, next.text)))
+		return { ok: false, detail: `could not write ${path}` };
+	await runHostCmd('chown', ['root:root', path]);
+	await runHostCmd('chmod', ['0640', path]);
+	return { ok: true, detail: `DOCKER_GID=${gid} written to ${path}` };
+}
+
 // ─── Command ────────────────────────────────────────────────────────
 
 function color(enabled: boolean) {
 	const wrap = (code: string) => (s: string) => (enabled ? `\x1b[${code}m${s}\x1b[0m` : s);
-	return { green: wrap('32'), yellow: wrap('33'), red: wrap('31'), dim: wrap('2'), bold: wrap('1') };
+	return {
+		green: wrap('32'),
+		yellow: wrap('33'),
+		red: wrap('31'),
+		dim: wrap('2'),
+		bold: wrap('1')
+	};
 }
 
 export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
@@ -517,9 +599,7 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 	const json = ctx.flags.json === 'true';
 
 	const hasDocker = await dockerPresent();
-	const found = hasDocker
-		? await findBunkerWeb()
-		: { loc: locateBunkerWeb([]), ref: null };
+	const found = hasDocker ? await findBunkerWeb() : { loc: locateBunkerWeb([]), ref: null };
 	const { loc, ref } = found;
 	const states = hasDocker
 		? await Promise.all(loc.names.map((n) => inspectContainer(n)))
@@ -592,8 +672,12 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 		console.log(`  ${c.dim('  (Ctrl-C detaches; the container keeps running.)')}`);
 		if (own) {
 			const names = loc.names.join(' ');
-			console.log(`  ${c.dim('Restart (on this server):')} ${ownCmd(['restart'], `sudo docker restart ${names}`)}`);
-			console.log(`  ${c.dim('Stop (on this server):')}    ${ownCmd(['stop'], `sudo docker stop ${names}`)}`);
+			console.log(
+				`  ${c.dim('Restart (on this server):')} ${ownCmd(['restart'], `sudo docker restart ${names}`)}`
+			);
+			console.log(
+				`  ${c.dim('Stop (on this server):')}    ${ownCmd(['stop'], `sudo docker stop ${names}`)}`
+			);
 		} else {
 			console.log(`  ${c.dim('Restart:')} cd /etc/bunkerweb && docker compose restart`);
 			console.log(`  ${c.dim('Stop:')}    ${cmds.down}`);
@@ -616,7 +700,9 @@ export async function runBunkerWeb(ctx: BunkerWebCtx): Promise<number> {
 		);
 		if (!loc.ambiguous) {
 			console.log(`  ${c.bold('Start it, on this server:')}`);
-			console.log(`        ${ownCmd(['up', '-d', '--no-deps'], `sudo docker start ${loc.names.join(' ')}`)}`);
+			console.log(
+				`        ${ownCmd(['up', '-d', '--no-deps'], `sudo docker start ${loc.names.join(' ')}`)}`
+			);
 			console.log(`  ${c.dim('Watch it live (on this server; nothing is stored):')} ${liveView}`);
 		}
 		console.log('');
@@ -685,7 +771,7 @@ async function runBunkerwebInstaller(
 			'proxies everything to your Morphit frontend. I can install and start\n' +
 			`it for you now using the bundled config (image ${BUNKERWEB_IMAGE}).\n` +
 			'\n' +
-			'I\'ll explain each step and ask before doing anything that changes\n' +
+			"I'll explain each step and ask before doing anything that changes\n" +
 			'your system. Steps that need admin rights will use sudo (you may be\n' +
 			'asked for your password).'
 	);
@@ -694,15 +780,9 @@ async function runBunkerwebInstaller(
 	// ── Preconditions → plan ────────────────────────────────────────
 	if (!existsSync(srcDir)) {
 		console.log('');
-		console.log(
-			`  ${c.red('✗')} Could not find the bundled BunkerWeb config at ${srcDir}.`
-		);
-		console.log(
-			'      That directory ships inside the Morphit repo. If you installed'
-		);
-		console.log(
-			'      Morphit somewhere other than /opt/morphit, set MORPHIT_INSTALL_DIR'
-		);
+		console.log(`  ${c.red('✗')} Could not find the bundled BunkerWeb config at ${srcDir}.`);
+		console.log('      That directory ships inside the Morphit repo. If you installed');
+		console.log('      Morphit somewhere other than /opt/morphit, set MORPHIT_INSTALL_DIR');
 		console.log('      to your install path and re-run.');
 		console.log('');
 		return 1;
@@ -721,8 +801,8 @@ async function runBunkerwebInstaller(
 		const g = dockerInstallGuidance();
 		explain(
 			'BunkerWeb runs as Docker containers, but Docker (or the\n' +
-				'`docker compose` plugin) isn\'t available yet. The recommended way\n' +
-				'to install it is from your distro\'s packages:\n' +
+				"`docker compose` plugin) isn't available yet. The recommended way\n" +
+				"to install it is from your distro's packages:\n" +
 				'\n' +
 				g.official.map((l) => `  ${l}`).join('\n')
 		);
@@ -739,22 +819,8 @@ async function runBunkerwebInstaller(
 			}
 		}
 		if (!dockerReady) {
-			explain(
-				'Alternatively, Docker\'s official convenience script installs the\n' +
-					'latest Docker in one command. It pipes a remote script to a root\n' +
-					`shell, so only use it if you trust it:\n\n  ${g.convenience}`
-			);
-			if (await askYesNo('Run the get.docker.com convenience script instead?', false)) {
-				// curl … | sudo sh — run via a shell so the pipe works.
-				await runHostCmd('sh', ['-c', 'curl -fsSL https://get.docker.com | sudo sh']);
-				dockerReady = (await dockerPresent()) && (await dockerComposePresent());
-			}
-		}
-		if (!dockerReady) {
 			console.log('');
-			console.log(
-				`  ${c.red('✗')} Docker isn\'t ready, so I can\'t bring BunkerWeb up. Install`
-			);
+			console.log(`  ${c.red('✗')} Docker isn\'t ready, so I can\'t bring BunkerWeb up. Install`);
 			console.log(`      Docker (see ${g.docs}) and re-run \`morphit-ops bunkerweb\`.`);
 			console.log('');
 			return 1;
@@ -788,18 +854,21 @@ async function runBunkerwebInstaller(
 				const fixed = setFrontendBuildPath(composeText, installDir);
 				if (fixed.changed) {
 					explain(
-						`Your install is at ${installDir}, not /opt/morphit, so the\n` +
-							'frontend build path in the compose file needs to match or the\n' +
-							'site would serve empty. I can update that one line for you.'
+						`Your install is at ${installDir}, not /opt/morphit, so the paths the\n` +
+							'compose file mounts from Morphit (the site build, its nginx config and\n' +
+							"the scheduler's job lists) need to match, or the site would serve empty\n" +
+							'and the scheduler would not start. I can update them for you.'
 					);
-					if (await askYesNo('Fix the frontend build path in docker-compose.yml?', true)) {
+					if (await askYesNo('Fix the Morphit paths in docker-compose.yml?', true)) {
 						if (await writeMaybeSudo(composePath, fixed.text)) {
-							console.log(`  ${c.green('✓')} Updated the frontend build path.`);
+							console.log(`  ${c.green('✓')} Updated the Morphit paths to ${installDir}.`);
 						} else {
 							console.log(
 								`  ${c.yellow('⚠')} Couldn\'t update it automatically — edit ${composePath}`
 							);
-							console.log(`      and set the frontend bind-mount to ${installDir}/apps/web/build.`);
+							console.log(
+								`      and replace /opt/morphit/ with ${installDir}/ in its bind-mounts.`
+							);
 						}
 					}
 				}
@@ -808,9 +877,7 @@ async function runBunkerwebInstaller(
 		console.log(`  ${c.green('✓')} Config installed at ${dstDir}.`);
 	} else if (plan.reuseExistingConfig) {
 		console.log('');
-		console.log(
-			`  ${c.dim(`Reusing your existing ${dstDir} (I won\'t overwrite your edits).`)}`
-		);
+		console.log(`  ${c.dim(`Reusing your existing ${dstDir} (I won\'t overwrite your edits).`)}`);
 	}
 
 	// ── 3. SERVER_NAME ──────────────────────────────────────────────
@@ -864,8 +931,8 @@ async function runBunkerwebInstaller(
 		console.log('');
 		console.log(`  ${c.yellow('⚠')} No HTTPS certificate found at ${certs.fullchain}.`);
 		explain(
-			'\nBunkerWeb is configured to use a Let\'s Encrypt certificate for that\n' +
-				'domain, and it will CRASH-LOOP on startup if the certificate isn\'t\n' +
+			"\nBunkerWeb is configured to use a Let's Encrypt certificate for that\n" +
+				"domain, and it will CRASH-LOOP on startup if the certificate isn't\n" +
 				'there yet. The fix is to obtain the certificate first:\n' +
 				'\n' +
 				'  • run `morphit-ops ssl` for guided certificate setup, then\n' +
@@ -880,8 +947,17 @@ async function runBunkerwebInstaller(
 	}
 
 	// ── 5. Pull + up ────────────────────────────────────────────────
+	const gidEnv = await ensureDockerGidEnv(dstDir);
+	if (!gidEnv.ok) {
+		console.log(`  ${c.red('✗')} ${gidEnv.detail}.`);
+		console.log(
+			`      On this server run:  echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee -a ${dstDir}/.env`
+		);
+		return 1;
+	}
+	console.log(`  ${c.dim(gidEnv.detail)}`);
 	explain(
-		'Now I\'ll download the BunkerWeb images and start the stack. The\n' +
+		"Now I'll download the BunkerWeb images and start the stack. The\n" +
 			'first pull can take a few minutes depending on your connection.'
 	);
 	if (await askYesNo('Download the images now (docker compose pull)?', true)) {
@@ -894,8 +970,12 @@ async function runBunkerwebInstaller(
 	if (upStatus !== 0) {
 		console.log('');
 		console.log(`  ${c.red('✗')} \`docker compose up -d\` failed (exit ${upStatus}).`);
-		console.log(`      On this server, check the scheduler + frontend logs:  cd ${dstDir} && docker compose logs -f bunkerweb-scheduler frontend`);
-		console.log(`      BunkerWeb itself stores no logs; watch it live:  ${BUNKERWEB_LIVE_VIEW}  (Ctrl-C detaches)`);
+		console.log(
+			`      On this server, check the scheduler + frontend logs:  cd ${dstDir} && docker compose logs -f bunkerweb-scheduler frontend`
+		);
+		console.log(
+			`      BunkerWeb itself stores no logs; watch it live:  ${BUNKERWEB_LIVE_VIEW}  (Ctrl-C detaches)`
+		);
 		console.log('');
 		return 1;
 	}
@@ -908,7 +988,9 @@ async function runBunkerwebInstaller(
 	if (verdict2.kind === 'running') {
 		console.log(`  ${c.green('✓')} ${verdict2.message} BunkerWeb is up.`);
 		console.log('');
-		console.log(`  ${c.dim('Live view (on this server; nothing is stored):')} ${BUNKERWEB_LIVE_VIEW}`);
+		console.log(
+			`  ${c.dim('Live view (on this server; nothing is stored):')} ${BUNKERWEB_LIVE_VIEW}`
+		);
 		console.log(`  ${c.dim('  (Ctrl-C detaches; the container keeps running.)')}`);
 		console.log(`  ${c.dim('Restart:')} cd ${dstDir} && docker compose restart`);
 		console.log('');
@@ -921,9 +1003,13 @@ async function runBunkerwebInstaller(
 	console.log(`  ${c.yellow('⚠')} ${verdict2.message}`);
 	console.log('');
 	console.log(`      Containers are still settling. Check health in a moment with`);
-	console.log(`      \`morphit-ops bunkerweb\`, or on this server watch BunkerWeb live (Ctrl-C detaches):`);
+	console.log(
+		`      \`morphit-ops bunkerweb\`, or on this server watch BunkerWeb live (Ctrl-C detaches):`
+	);
 	console.log(`      ${BUNKERWEB_LIVE_VIEW}`);
-	console.log(`      (scheduler + frontend logs still work: cd ${dstDir} && docker compose logs -f bunkerweb-scheduler frontend)`);
+	console.log(
+		`      (scheduler + frontend logs still work: cd ${dstDir} && docker compose logs -f bunkerweb-scheduler frontend)`
+	);
 	console.log('━'.repeat(60));
 	console.log('');
 	return 1;

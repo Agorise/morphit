@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, M1 — Sybil peers must not control the federated price a
+ * Sybil peers must not control the federated price a
  * hidden-only node quotes fees from.
  *
  * rv6 A6: the federated median was taken over every OBSERVATION ROW, not one

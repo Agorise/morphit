@@ -1,7 +1,6 @@
 /**
- * v1.20.0 (MK-H2, V3-3 / V3-5) — the pay panel's two questions to its own
- * indexer about an order's BTC fee address (same origin; the page's CSP
- * allows nothing else).
+ * The pay panel's two questions to its own indexer about an order's BTC fee
+ * address (same origin; the page's CSP allows nothing else).
  *
  *   crossCheckFeeAddress — did the other instances this indexer can reach
  *     number the order the same way? 'disagree' means this indexer's view of
@@ -57,7 +56,8 @@ export async function checkFeeNow(account: string, permlink: string): Promise<Fe
 			orderPath(account, permlink, 'check-fee'),
 			{
 				method: 'POST',
-				headers: { accept: 'application/json' }
+				headers: { accept: 'application/json', 'content-type': 'application/json' },
+				body: '{}'
 			},
 			60_000
 		);

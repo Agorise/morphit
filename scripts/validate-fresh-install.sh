@@ -5,7 +5,7 @@
 #
 # PURPOSE
 #   We cannot certify "fresh box -> live node, no hiccups" from a dev
-#   sandbox — it needs a real machine. Run this on a disposable VM
+#   checkout — it needs a real machine. Run this on a disposable VM
 #   (a $5 droplet you delete after, or a local multipass/lxd/VM) to
 #   find the real-world gaps before an operator does. It is
 #   deliberately NOISY and NON-DESTRUCTIVE-ish: it installs packages
@@ -15,11 +15,11 @@
 #   0. Confirms it's on Ubuntu 24.04 and you really meant to run it.
 #   1. Prerequisites the installer expects (node>=22, npm, psql, git).
 #   2. That `npx morphit-ops install` exists and its preflight runs.
-#   3. The systemd unit installation path (the cp192 gap: units must
+#   3. The systemd unit installation path (the gap: units must
 #      be copied to /etc/systemd/system and enabled — verifies the
 #      shipped units load and the service names match the docs).
 #   4. That `npx morphit-ops upgrade` can discover the latest release
-#      (the cp191 pre-release-discovery fix, against the live API).
+#      (the pre-release-discovery fix, against the live API).
 #
 # It does NOT fully configure a node (that needs Postgres creds, a
 # Blurt account, keys). It validates the SCAFFOLDING and SEQUENCING —
@@ -85,7 +85,7 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 # ── 2. morphit-ops install exists + preflight runs ───────────────
-hdr "2. morphit-ops install (the cp192 guided installer)"
+hdr "2. morphit-ops install (the guided installer)"
 cd "$REPO_DIR" || { bad "cannot cd to repo dir $REPO_DIR"; }
 if [ ! -d node_modules ]; then
   note "node_modules absent — running npm ci (one-time, needed for the CLI)"
@@ -94,7 +94,7 @@ if [ ! -d node_modules ]; then
     || bad "npm ci FAILED (see /tmp/morphit-npmci.log)"
 fi
 # Does the install subcommand exist in THIS tree's CLI? (it won't in
-# pre-cp192 releases — that's the sysadmin's "Unknown subcommand".)
+# older releases — that's the sysadmin's "Unknown subcommand".)
 if npx --no-install morphit-ops --help 2>&1 | grep -q "install"; then
   ok "morphit-ops has an 'install' subcommand"
   # Run its preflight non-interactively (answer 'no' to proceeding).
@@ -104,7 +104,7 @@ if npx --no-install morphit-ops --help 2>&1 | grep -q "install"; then
     bad "morphit-ops install preflight did not run as expected"
   fi
 else
-  bad "morphit-ops has NO 'install' subcommand — this tree predates cp192 (release built from cp192+ needed)"
+  bad "morphit-ops has NO 'install' subcommand — this tree predates the guided installer (a newer release is needed)"
 fi
 
 # ── 3. systemd unit installation (the gap the sysadmin hit) ──────
@@ -131,9 +131,9 @@ for unit in morphit-indexer.service morphit-relay.service; do
 done
 note "NOTE: the relay unit expects WorkingDirectory=/opt/morphit-relay and"
 note "EnvironmentFile=/etc/morphit/relay.env — confirm these match your actual"
-note "deployment layout (this is a known doc/unit seam flagged in cp192)."
+note "deployment layout (this is a known doc/unit seam)."
 
-# ── 4. release discovery (cp191 fix) ─────────────────────────────
+# ── 4. release discovery ─────────────────────────────
 hdr "4. Release discovery (morphit-ops upgrade --check-only)"
 if npx --no-install morphit-ops upgrade --check-only 2>&1 | tee /tmp/morphit-upgrade-check.log | grep -qiE "latest version|already on|new release"; then
   ok "upgrade --check-only reached the release API and reported a version"

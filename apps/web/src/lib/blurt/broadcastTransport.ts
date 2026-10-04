@@ -1,5 +1,5 @@
 /**
- * Morphit frontend — broadcast transport (cp344).
+ * Morphit frontend — broadcast transport.
  *
  * Routes the two RPC touchpoints of a broadcast — the ref-block read that
  * builds the transaction, and the broadcast that submits it — through the
@@ -9,18 +9,18 @@
  * WHY (priority #1 privacy + reliability). A direct browser→RPC broadcast
  * leaked the user's IP + their exact on-chain action (every order, chat
  * message, profile edit, feedback, block) to RPC operators Morphit doesn't
- * control — the WRITE-side twin of the deanonymizing read leak the cp298
+ * control — the WRITE-side twin of the deanonymizing read leak the
  * account-keys proxy closed — and it depended on whichever public node the
  * browser reached returning a browser-valid CORS header and staying up, so
  * one node flipping its CORS config or going down silently broke every
- * broadcast. Relayed through the same-origin indexer (the cp295/296/298 read
+ * broadcast. Relayed through the same-origin indexer (the read
  * proxies' write sibling), third parties see only the indexer's request and
  * the browser opens no cross-origin RPC connection.
  *
  * NON-CUSTODIAL IS UNTOUCHED. Signing is pure client-side crypto; only the
  * already-signed transaction bytes (never a private key) leave the browser.
  *
- * NO DIRECT-RPC FALLBACK (cp410). Privacy is priority #1: the browser must
+ * NO DIRECT-RPC FALLBACK. Privacy is priority #1: the browser must
  * NEVER contact a Blurt RPC node directly, so there is no fallback path. If the
  * indexer is unreachable, the broadcast (or ref-block read) FAILS with a clear
  * error and the user retries — it does not silently leak to a third-party node.

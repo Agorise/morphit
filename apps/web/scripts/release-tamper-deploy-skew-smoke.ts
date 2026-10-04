@@ -1,104 +1,174 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — tamper-banner deploy-skew guard (v1.8.1).
+ * Morphit — the build-integrity check: when it runs, and what can stop it.
  *
- * THE BUG (v1.8.1): the scary red "Build integrity check failed" banner flashed
- * on routine server upgrades. The release store's asset-hash check re-fetches
- * the SERVED bytes and compares them to the chain-pinned manifest. During a
- * deploy the served build runs ahead of the chain-pin (the operator broadcasts
- * the matching manifest moments later), so every served asset mismatched the
- * still-OLD manifest — and when the running (cached) version still equalled the
- * chain-pin version, the existing `staleBuild` suppression didn't fire, so the
- * banner showed. Morphit builds are not byte-reproducible across machines, so a
- * version match is the ONLY precondition under which the byte comparison means
- * anything.
+ * Runs the real check (checkRunningBuild in apps/web/src/lib/stores/release.ts
+ * → checkManifestAgainstRunningBundle) against a simulated site.
  *
- * THE FIX: gate the asset check on the served /verify.json version. Only run the
- * byte comparison (and thus only ever alarm) when the served version equals the
- * announced version. A genuine tamper is a SAME-version byte change, which still
- * trips the check. This guard pins the gate so it can't be removed by accident.
+ *   - A routine upgrade never raises the alarm: a tab running another version
+ *     than the signed release is 'not_checked' (neutral) and fetches nothing.
+ *     (TamperAlertBanner also holds the banner back while a new service worker
+ *     is landing.)
+ *   - Nothing the operator serves switches the check off: with /verify.json
+ *     missing, or naming another version, a changed file of the announced
+ *     version is still reported.
+ *   - A manifest entry that is not a plain path on this site is refused with
+ *     no request at all.
  *
- * cp508 (tt.txt #3) — MOBILE persistence follow-up. checkManifestAgainstRunning-
- * Bundle re-fetches each asset, and those fetches hit the browser/service-worker
- * cache (the running bundle's own bytes), not the network. Right after a deploy
- * — most visibly on mobile, where the SW keeps serving the previous bundle until
- * it swaps — the RUNNING version is still OLD while served + announced are NEW,
- * so served===announced passed the v1.8.1 gate and every OLD cached asset then
- * mismatched the NEW manifest → the scary banner, which only cleared on a SECOND
- * refresh. The gate now ALSO requires RUNNING_VERSION === announcedVersion: a
- * stale running bundle is a deploy-skew (the staleBuild snackbar handles the
- * reload), not tampering. This guard pins that second clause too.
+ * Usage: tsx --tsconfig apps/web/tsconfig.smoke.json apps/web/scripts/release-tamper-deploy-skew-smoke.ts
  */
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
-const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const STORE = join(REPO, 'apps/web/src/lib/stores/release.ts');
-const src = readFileSync(STORE, 'utf-8');
+import { checkRunningBuild } from '../src/lib/stores/release.ts';
 
-let failed = 0;
+const ORIGIN = 'https://morphit.example';
+const FILES: Record<string, string> = {
+	'/index.html': '<!doctype html><title>Morphit</title>',
+	'/service-worker.js': 'self.addEventListener("fetch",()=>{})',
+	'/_app/immutable/entry/start.js': 'export const start = 1;'
+};
+const sri = (body: string): string =>
+	`sha256-${createHash('sha256').update(body).digest('base64')}`;
+const MANIFEST: Record<string, string> = Object.fromEntries(
+	Object.entries(FILES).map(([p, b]) => [p, sri(b)])
+);
+
+let served: Record<string, string> = {};
+let verifyJson: { status: number; version?: string } = { status: 404 };
+let requested: string[] = [];
+
+Object.defineProperty(globalThis, 'location', {
+	configurable: true,
+	value: {
+		origin: ORIGIN,
+		href: `${ORIGIN}/en`,
+		protocol: 'https:',
+		hostname: 'morphit.example',
+		host: 'morphit.example'
+	}
+});
+globalThis.fetch = (async (input: string | URL | Request) => {
+	const url = new URL(
+		typeof input === 'string' || input instanceof URL ? input : input.url,
+		ORIGIN
+	);
+	requested.push(url.href);
+	if (url.origin !== ORIGIN) return new Response('beacon', { status: 200 });
+	if (url.pathname === '/verify.json') {
+		return verifyJson.status === 200
+			? new Response(JSON.stringify({ morphit_version: verifyJson.version }), { status: 200 })
+			: new Response('not found', { status: verifyJson.status });
+	}
+	const body = served[url.pathname];
+	return body === undefined
+		? new Response('', { status: 404 })
+		: new Response(body, { status: 200 });
+}) as typeof fetch;
+
 let passed = 0;
-function check(name: string, ok: boolean): void {
-	console.log(`  ${ok ? '✓' : '✗'} ${name}`);
-	if (ok) passed++;
-	else failed++;
+let failed = 0;
+function check(name: string, ok: boolean, detail = ''): void {
+	if (ok) {
+		passed++;
+		console.log(`  ✓ ${name}`);
+	} else {
+		failed++;
+		console.error(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`);
+	}
 }
 
-// 1 — the store reads the SERVED version from /verify.json.
-check(
-	'release store fetches the served version from verify.json',
-	// v1.20.3: through the shared reader (one download with the update check),
-	// which builds the cache-busted verify.json URL itself.
-	/fetchServedVersion/.test(src) &&
-		/readServedVersion\s*\(/.test(src) &&
-		/verifyJsonPollUrl\s*\(/.test(
-			readFileSync(join(REPO, 'apps/web/src/lib/updates/servedVersion.ts'), 'utf-8')
-		)
-);
+async function scenario(
+	opts: { running: string; announced: string; verify: typeof verifyJson; change?: string },
+	manifest: Record<string, string> = MANIFEST
+) {
+	served = { ...FILES };
+	if (opts.change !== undefined) served[opts.change] = 'changed bytes';
+	verifyJson = opts.verify;
+	requested = [];
+	return checkRunningBuild({ version: opts.announced, hash_manifest: manifest }, opts.running);
+}
 
-// 2 — the asset check is GATED: a served-vs-announced version mismatch skips
-//     to a benign deploy_skew state instead of running the byte comparison.
-const skewIdx = src.search(/servedVersion\s*!==\s*announcedVersion/);
-const checkIdx = src.indexOf('checkManifestAgainstRunningBundle', src.indexOf('await import'));
-check('a served≠announced version skew short-circuits before the byte check', skewIdx !== -1);
-check(
-	"the skew branch sets the benign 'deploy_skew' state (no alarm)",
-	/kind:\s*'deploy_skew'/.test(src)
-);
-check(
-	'the gate runs BEFORE the manifest byte check',
-	skewIdx !== -1 && checkIdx !== -1 && skewIdx < checkIdx
-);
+async function main(): Promise<void> {
+	{
+		const r = await scenario({
+			running: '1.20.3',
+			announced: '1.20.4',
+			verify: { status: 200, version: '1.20.4' },
+			change: '/index.html'
+		});
+		check(
+			'a tab running an older build than the signed release: not checked, no alarm, nothing fetched',
+			r.kind === 'not_checked' && requested.length === 0,
+			`${r.kind}, ${requested.length} request(s)`
+		);
+	}
+	{
+		const r = await scenario({
+			running: '1.20.4',
+			announced: '1.20.3',
+			verify: { status: 200, version: '1.20.4' }
+		});
+		check(
+			'a tab running a newer build than the signed release: not checked either',
+			r.kind === 'not_checked',
+			r.kind
+		);
+	}
+	{
+		const r = await scenario({
+			running: '1.20.3',
+			announced: '1.20.3',
+			verify: { status: 404 },
+			change: '/_app/immutable/entry/start.js'
+		});
+		check(
+			'verify.json missing (404): a changed file is still reported',
+			r.kind === 'mismatch' &&
+				r.mismatches.map((m) => m.path).join() === '/_app/immutable/entry/start.js',
+			r.kind
+		);
+	}
+	{
+		const r = await scenario({
+			running: '1.20.3',
+			announced: '1.20.3',
+			verify: { status: 200, version: '9.9.9' },
+			change: '/service-worker.js'
+		});
+		check(
+			'verify.json naming another version: a changed file is still reported',
+			r.kind === 'mismatch',
+			r.kind
+		);
+	}
+	{
+		const r = await scenario({ running: '1.20.3', announced: '1.20.3', verify: { status: 404 } });
+		check('the untouched announced build checks out', r.kind === 'ok', r.kind);
+		check(
+			'the check never reads /verify.json',
+			!requested.some((u) => u.endsWith('/verify.json')),
+			requested.join(', ')
+		);
+	}
+	{
+		const r = await scenario(
+			{ running: '1.20.3', announced: '1.20.3', verify: { status: 404 } },
+			{ ...MANIFEST, '//evil.example/beacon': sri('x') }
+		);
+		check(
+			'a manifest entry naming another host: refused, no request made',
+			r.kind === 'refused' && requested.length === 0,
+			`${r.kind}, ${requested.join(', ')}`
+		);
+	}
 
-// 4b (cp508) — the deploy_skew gate ALSO short-circuits when the RUNNING bundle
-//     is not the announced version (the mobile stale-SW case). Without this the
-//     OLD cached bundle's bytes mismatch the NEW manifest and flash the banner
-//     until a 2nd refresh swaps the SW.
-const gateMatch = src.match(
-	/if\s*\(\s*(servedVersion[^)]*)\)\s*\{\s*assetCheckStore\.set\(\{\s*kind:\s*'deploy_skew'\s*\}\);\s*return;/
-);
-check(
-	'the deploy_skew gate short-circuits on running≠announced too (cp508 mobile fix)',
-	!!gateMatch && /RUNNING_VERSION\s*!==\s*announcedVersion/.test(gateMatch[1])
-);
-
-// 3 — the skew branch RETURNS, so a mismatch state is never set during a deploy.
-const afterSkew = src.slice(skewIdx, skewIdx + 200);
-check('the skew branch returns before any mismatch can be set', /deploy_skew'\s*\}\);\s*return;/.test(afterSkew));
-
-// 4 — genuine tamper still reachable: the 'mismatch' state is still set after
-//     the gate (same-version byte change alarms as before).
-check(
-	"genuine same-version tamper still sets the 'mismatch' state",
-	/kind:\s*'mismatch'/.test(src.slice(checkIdx))
-);
-
-console.log('');
-if (failed === 0) {
-	console.log(`✓ all ${passed} release-tamper-deploy-skew scenarios passed (upgrades no longer flash the banner)`);
-	process.exit(0);
-} else {
-	console.error(`✗ ${failed} release-tamper-deploy-skew check(s) failed`);
+	console.log('');
+	if (failed === 0) {
+		console.log(`✓ all ${passed} build-integrity check scenarios passed`);
+		process.exit(0);
+	}
+	console.error(`✗ ${failed} build-integrity check scenario(s) failed`);
 	process.exit(1);
 }
+
+void main();

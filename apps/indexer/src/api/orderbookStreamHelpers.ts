@@ -18,6 +18,8 @@
 import { cryptoFacingSideWhere, escapeLike } from '$api/shared';
 import { computeReputationScore } from '$indexer/reputation/score';
 import type { AssetTicker } from '@morphit/asset-registry';
+import { isOrderLang } from '@morphit/operator-config';
+import { sanitizeStoredProfileMetadata } from '$indexer/handlers/profile';
 
 /** Filter shape accepted by the orderbook-stream WHERE-clause
  *  builder.  Mirrors the zod schema in orderbookStream.ts but
@@ -36,11 +38,32 @@ export interface OrderbookStreamQuery {
 	account?: string;
 	permlink?: string;
 	asset?: AssetTicker;
+	/** The traded asset's network (multi-network assets only store one). */
+	asset_network?: string;
 	side?: 'buy' | 'sell';
 	fiat_currency?: string;
 	location_region?: string;
 	payment_methods?: string;
+	/** Comma-separated order language codes. Untagged orders always match. */
+	langs?: string;
+	/** Needs the caller to join reputationJoin's tradeCountJoin as `tc`. */
 	min_trades?: number;
+	/** Display order (REST and the stream's snapshot); not a filter. */
+	sort?: 'recent' | 'rating' | 'trades';
+}
+
+/** ORDER BY for an orderbook sort. Tiebreakers are always updated_at DESC,
+ *  account ASC, permlink ASC (what makes cursor seeks deterministic). The
+ *  rating sort reads the feedback aggregate (`f`), trades the trade count
+ *  (`tc`); the REST cursor seek must compare the same expressions. */
+export function orderbookOrderBy(sort: 'recent' | 'rating' | 'trades' = 'recent'): string {
+	if (sort === 'rating') {
+		return 'f.r DESC NULLS LAST, COALESCE(f.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
+	}
+	if (sort === 'trades') {
+		return 'COALESCE(tc.c, 0) DESC, o.updated_at DESC, o.account ASC, o.permlink ASC';
+	}
+	return 'o.updated_at DESC, o.account ASC, o.permlink ASC';
 }
 
 export interface OrderbookStreamRow {
@@ -48,19 +71,22 @@ export interface OrderbookStreamRow {
 	permlink: string;
 	side: 'buy' | 'sell';
 	asset: AssetTicker;
+	/** Null for single-network assets. */
+	asset_network: string | null;
 	fiat_currency: string;
 	amount_min: string | null;
 	amount_max: string | null;
-	price_model: string | null;
+	price_model: unknown;
 	location_region: string | null;
 	payment_methods: string[];
-	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
+	/** accepted crypto set for a BARTER order; null for crypto assets. */
 	accepted_assets: string[] | null;
 	specific_barter_title: string | null;
 	terms: string | null;
+	lang: string | null;
 	fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr' | null;
 	feedback_count: number;
-	/** cp473 — REAL completed trades (both sides credited), sock-puppet
+	/** REAL completed trades (both sides credited), sock-puppet
 	 *  filtered. A DIFFERENT number from feedback_count: a trade nobody
 	 *  reviewed counts here and not there. The order card reads this; an
 	 *  endpoint that omits it silently renders "no trades". */
@@ -77,12 +103,18 @@ export interface OrderbookStreamRow {
 	/** Primary posting public key for the display-only card identity
 	 *  anchor. NULL when not captured yet. */
 	posting_pubkey: string | null;
+	display_name: string | null;
+	profile_json_metadata: unknown;
 	created_at: Date;
 	updated_at: Date;
 	expires_at: Date | null;
 }
 
-/** Convert a DB row to the wire shape the frontend expects.
+/** Convert a DB row to the wire shape the frontend expects — THE orderbook
+ *  card mapper: the REST page (orderbook.ts) and the stream both use it, so a
+ *  streamed snapshot, which replaces the REST rows on the page, carries every
+ *  field they did (it used to drop asset_network, lang and the inline
+ *  identity, so cards lost their name and avatar a moment after load).
  *  Numerics arrive from pg as strings (NUMERIC type guards
  *  precision); we coerce to JS number here because the wire
  *  format is JSON.  Loss of precision past ~15 digits is
@@ -92,7 +124,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 	return {
 		account: r.account,
 		permlink: r.permlink,
-		// cp513 [O8] — the SSE twin of the REST cp510 [11d] fix. buildWhereClauses
+		// the SSE twin of the REST fix. buildWhereClauses
 		// guarantees o.status = 'live', so this is always 'live', BUT the mapping
 		// omitted it — so every streamed order arrived with status=undefined. The
 		// frontend guard isOrderLive(o) = (o.status === 'live' && !expired) then
@@ -103,6 +135,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		status: 'live' as const,
 		side: r.side,
 		asset: r.asset,
+		asset_network: r.asset_network ?? null,
 		fiat_currency: r.fiat_currency,
 		amount_min: r.amount_min === null ? null : Number(r.amount_min),
 		amount_max: r.amount_max === null ? null : Number(r.amount_max),
@@ -112,6 +145,7 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		accepted_assets: r.accepted_assets ?? null,
 		specific_barter_title: r.specific_barter_title ?? null,
 		terms: r.terms,
+		lang: r.lang ?? null,
 		fee_method: r.fee_method,
 		feedback_count: r.feedback_count,
 		trade_count: r.trade_count,
@@ -126,18 +160,27 @@ export function rowToWire(r: OrderbookStreamRow): Record<string, unknown> {
 		first_trade_at:
 			r.first_trade_complete_at === null ? null : r.first_trade_complete_at.toISOString(),
 		posting_pubkey: r.posting_pubkey ?? null,
+		display_name: r.display_name ?? null,
+		// Stored before the profile rules tightened? Served without failing fields.
+		profile_json_metadata:
+			r.profile_json_metadata == null
+				? null
+				: sanitizeStoredProfileMetadata(r.profile_json_metadata),
 		created_at: r.created_at.toISOString(),
 		updated_at: r.updated_at.toISOString(),
 		expires_at: r.expires_at === null ? null : r.expires_at.toISOString()
 	};
 }
 
-/** SQL WHERE-clause builder.  Mirrors the REST orderbook
- *  endpoint's filter rules; produces a list of clauses to be
- *  AND-joined plus the parameter list to bind.  startIndex is
- *  for callers that have already bound earlier params (e.g.,
+/** THE orderbook WHERE-clause builder: the REST page
+ *  (orderbook.ts), the live stream and the RSS/Atom/JSON feeds
+ *  (rssOrderbookHandlers.ts) all call it, so the same filters
+ *  select the same orders everywhere. Produces a list of clauses
+ *  to be AND-joined plus the parameter list to bind. startIndex
+ *  is for callers that have already bound earlier params (e.g.,
  *  the per-row lookup binds account+permlink as $1,$2 then
- *  passes startIndex=2). */
+ *  passes startIndex=2). Invalid payment_methods / langs tokens
+ *  are dropped here; the REST route rejects them first. */
 export function buildWhereClauses(
 	q: OrderbookStreamQuery,
 	startIndex = 0,
@@ -148,7 +191,7 @@ export function buildWhereClauses(
 		`o.fee_status IN ('verified', 'verified_by_attestation')`,
 		// BATCH19A-orderbook-1 (2026-05-02 audit): exclude
 		// past-expires_at orders.  See orderbook.ts and audit
-		// Part 17 finding BATCH19A-orderbook-1 for full
+		// BATCH19A-orderbook-1 for full
 		// rationale.  Note: SSE clients re-evaluate this
 		// predicate on every snapshot and on every per-row
 		// lookup, so an order silently fades when its
@@ -168,7 +211,7 @@ export function buildWhereClauses(
 	// paths, so the live stream can't leak a blocked account's new order.
 	// The `operatorAccount` param is config.operatorAccountName — the
 	// per-instance operator that operatorBlock.ts keys blocks under (NOT
-	// officialAccountName, the federation-wide release-signer; cp257
+	// officialAccountName, the federation-wide release-signer
 	// renamed this param from the misleading `officialAccount`). Skipped
 	// only when no account is supplied (direct unit calls).
 	if (operatorAccount !== '') {
@@ -194,9 +237,10 @@ export function buildWhereClauses(
 				`OR ${assetParam} = ANY(o.accepted_assets))`
 		);
 	}
+	if (q.asset_network) where.push(`o.asset_network = ${p(q.asset_network)}`);
 	// Crypto-facing side filter — BARTER's o.side is the goods direction and
 	// flips (see cryptoFacingSideWhere). Must match the snapshot query, or a
-	// live-streamed barter order would filter differently. t.txt v1.8.16 #3.
+	// live-streamed barter order would filter differently..
 	if (q.side) where.push(cryptoFacingSideWhere(q.side, p));
 	if (q.fiat_currency) {
 		const fiats = q.fiat_currency.split(',').map((s) => s.toUpperCase());
@@ -205,7 +249,7 @@ export function buildWhereClauses(
 	if (q.location_region) {
 		const normalizedRegion = q.location_region.normalize('NFC');
 		// v1.8.15 — case-insensitive SUBSTRING (contains) match (was prefix
-		// region%), so "zrh" finds "a city a city zrh México Mexico".
+		// region%), so "zrh" finds "Zürich Zurich ZRH Schweiz Switzerland".
 		where.push(
 			`o.location_region ILIKE ${p('%' + escapeLike(normalizedRegion) + '%')} ESCAPE '\\'`
 		);
@@ -222,12 +266,18 @@ export function buildWhereClauses(
 			);
 		}
 	}
+	if (q.langs) {
+		// Untagged orders (lang IS NULL) always match: the filter only hides
+		// orders that declared a DIFFERENT language.
+		const langs = q.langs
+			.split(',')
+			.map((s) => s.trim())
+			.filter((s) => isOrderLang(s));
+		if (langs.length > 0) where.push(`(o.lang IS NULL OR o.lang = ANY(${p(langs)}::text[]))`);
+	}
 	if (typeof q.min_trades === 'number' && q.min_trades > 0) {
-		// cp473 — filters REAL completed trades (tc.c), matching the REST
-		// endpoint. This read `f.c` (the FEEDBACK count) while calling itself
-		// min_trades, so the same filter value selected a DIFFERENT set of
-		// traders depending on whether a row arrived over REST or the stream —
-		// and the stream's snapshot is the one that wins.
+		// REAL completed trades (tc.c), not the feedback count: one filter
+		// value must select the same traders on every surface.
 		where.push(`COALESCE(tc.c, 0) >= ${p(q.min_trades)}`);
 	}
 	return { where, params };

@@ -2,7 +2,7 @@
  * Pure builder for the `price_feeds` block on /v1/health (verbose).
  *
  * Surfaces, at a glance, the health of the multi-source FX (USD→fiat)
- * and crypto (→USD) feeds added in cp372: for each feed, which
+ * and crypto (→USD) feeds added: for each feed, which
  * providers answered this cycle, how long since each last succeeded,
  * whether the committed value is stale, and whether sources are
  * disagreeing (an outlier was dropped from the average).  This is
@@ -11,7 +11,7 @@
  * down / out of line.
  *
  * Extracted from the Hono route so it can be unit-tested without
- * loading `hono` (not installed in the smoke sandbox).  Pure: no I/O,
+ * loading `hono`.  Pure: no I/O,
  * no Date.now() except via the injectable `now`.
  */
 

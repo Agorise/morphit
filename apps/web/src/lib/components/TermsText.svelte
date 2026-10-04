@@ -1,15 +1,15 @@
 <script lang="ts">
 	/**
 	 * TermsText — renders user-authored order `terms` with a small, safe
-	 * markdown subset (cp406): headings, bold, italics, unordered/ordered
+	 * markdown subset: headings, bold, italics, unordered/ordered
 	 * lists, blockquotes, links, horizontal rules, and line feeds. The
 	 * Blurt-image-link carve-out (an https link to img.blurt.blog opens in a
-	 * fresh tab) is preserved. cp413 (the maintainer): added blockquotes + heavier
-	 * heading/bold weights. cp414 (the maintainer): added `[text](url)` hyperlinks
-	 * (scheme-validated in termsMarkdown.ts). cp415 (the maintainer): inline bold → 800;
+	 * fresh tab) is preserved. added blockquotes + heavier
+	 * heading/bold weights. added `[text](url)` hyperlinks
+	 * (scheme-validated in termsMarkdown.ts). inline bold → 800;
 	 * links render in the brand emerald (visible on the dark terms panel) and,
 	 * on click/tap, open a "Leaving Morphit" confirmation before opening the
-	 * destination in a new tab. cp416 (the maintainer): the confirmation body names the
+	 * destination in a new tab. the confirmation body names the
 	 * destination host ("Are you sure you want to visit example.com?") for
 	 * anti-phishing.
 	 *
@@ -112,7 +112,7 @@
 			<p class="mt-2 text-sm font-bold first:mt-0">{@render inline(block.runs)}</p>
 		{/if}
 	{:else if block.type === 'hr'}
-		<!-- cp595 (t.txt) — the maintainer: use the SAME green as the order-terms blockquote
+		<!-- Requirement: use the SAME green as the order-terms blockquote
 		     (border-morphit-emerald/40) on the horizontal rule and the list
 		     markers below, so a user's markdown `---`, `- ` and `1.` all render
 		     in the brand emerald they like. `/40` matches the blockquote border
@@ -129,8 +129,7 @@
 			{#each block.items as item}<li>{@render inline(item)}</li>{/each}
 		</ol>
 	{:else if block.type === 'blockquote'}
-		<!-- cp474 (t.txt #12) — the maintainer: "whenever i use a blockquote (markdown) in
-		     the terms textarea, please indent that rendered blockquote on the ui."
+		<!-- Requirement: a markdown blockquote in the terms renders indented.
 		     It had a quote BAR (border + pl-3 inside it) but no margin, so the bar
 		     sat flush against the same edge as every paragraph and the quote never
 		     read as set apart — the one thing a blockquote is for. `ms-4` indents

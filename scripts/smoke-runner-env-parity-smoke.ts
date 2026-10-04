@@ -97,7 +97,7 @@ else
 	);
 
 // The per-smoke wall-clock guard must exist in both too: a runner without it
-// turns one hung smoke into a stalled battery (cp142/cp143).
+// turns one hung smoke into a stalled battery.
 for (const [label, path] of [
 	['run-smokes.sh', join(REPO, 'scripts', 'run-smokes.sh')],
 	['run-smokes-chunk.sh', join(REPO, 'scripts', 'run-smokes-chunk.sh')]

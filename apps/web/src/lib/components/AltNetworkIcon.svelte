@@ -26,8 +26,8 @@
 	 *    transition to near-instant for users who've asked for
 	 *    reduced animation.
 	 *
-	 * 5. LOADING IS DEFERRED UNTIL THE ICON IS ACTUALLY VISIBLE
-	 *    (cp388). These icons live in the footer / below-the-fold
+	 * 5. LOADING IS DEFERRED UNTIL THE ICON IS ACTUALLY VISIBLE.
+	 * These icons live in the footer / below-the-fold
 	 *    panels; the native `loading="lazy"` hint has a generous
 	 *    fetch distance on fast connections, so on a short page the
 	 *    browser pulls them down on first paint anyway — wasting

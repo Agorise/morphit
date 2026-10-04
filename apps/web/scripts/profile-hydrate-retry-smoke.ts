@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * profile-hydrate-retry — v1.8.12 (the maintainer).
+ * profile-hydrate-retry — v1.8.12.
  *
  * THE BUG. Display names and avatars were absent "every once in a while" and
- * appeared after a manual refresh. the maintainer's standard for it was right: "i should
- * never have to refresh the page to see the truth."
+ * appeared after a manual refresh. Requirement: the page never needs a refresh
+ * to show the truth.
  *
  * `profileCache` has always separated a TRANSIENT fetch failure (soft-cached
  * 5s) from an authoritative "no profile" (90s), on the stated reasoning that

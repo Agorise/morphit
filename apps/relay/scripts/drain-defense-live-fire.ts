@@ -24,18 +24,18 @@
  * do NOT hit a real relay or database — this is about
  * validating the module-level logic, not I/O paths.
  *
- * KNOWN TIMING RACE (Audit Part 25, RESOLVED Part 26): the
+ * KNOWN TIMING RACE (RESOLVED): the
  * composition scenario originally constructed a fresh
  * `GlobalDailyCeiling` with no clock injection and ran 10
  * `recordSuccess()` calls in sequence.  When the run straddled
  * UTC midnight, `maybeRollover()` reset the count to zero
  * mid-loop and the assertion `currentCount() === 10` failed
- * (the chain of timestamps in the Part 24 failure log
+ * (the chain of timestamps in the failure log
  * pinpointed this — the alert fired at exactly
  * `2026-05-04T00:00:00.000Z`, a midnight rollover).
  *
- * Part 25 worked around this by skipping the composition
- * scenario when within ±90 seconds of UTC midnight.  Part 26
+ * A later change worked around this by skipping the composition
+ * scenario when within ±90 seconds of UTC midnight.
  * adds a real fix: `GlobalDailyCeiling` and `Limiter` both
  * accept an optional `Clock` parameter, and the smoke now
  * passes a `ManualClock` pinned to a known mid-day UTC time.
@@ -416,7 +416,7 @@ section('Composition — realistic attack pattern');
 // and refactoring the module to accept an injected clock would
 // be a wider change than this audit warrants.  We skip
 // deterministically instead.
-// Item 6 (Audit Part 26) — the composition scenario is now
+// Item 6 — the composition scenario is now
 // deterministic via injected clocks.  GlobalDailyCeiling and
 // Limiter both accept an optional `Clock`; we pass a
 // `ManualClock` pinned to a known mid-day UTC time so the
@@ -424,8 +424,8 @@ section('Composition — realistic attack pattern');
 // regardless of when this smoke runs (CI runner schedule,
 // developer's local clock, etc.).
 //
-// This replaces the 90-second-each-side midnight skip from
-// Part 25, which was a workaround for the clock dependency
+// This replaces the 90-second-each-side midnight skip,
+// which was a workaround for the clock dependency
 // that we've now actually fixed.  The skip code is gone; the
 // scenario runs every time, deterministically.
 await scenario('drain attempt: limiter + ceiling compose', () => {

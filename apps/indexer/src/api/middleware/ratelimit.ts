@@ -27,29 +27,35 @@
  * attacker could forge the header per request and get a fresh bucket
  * every time, bypassing the limiter.
  *
- * TRUSTED means loopback (bare-metal nginx on the same host) AND, by
- * default, 172.16.0.0/12 — Docker's default bridge pool (172.16–172.31),
- * where the BunkerWeb frontend container sits. Loopback-only was the rule
- * until v1.20.0, and on every BunkerWeb box the frontend container is
- * the socket peer of EVERY request (clearnet, Tor and I2P), so every
- * visitor shared ONE bucket: 120 list requests a minute for the whole
- * instance, and ten requests a second from anyone 429'd every write.
- * The first v1.20.0 cut trusted only 172.20.0.0/16, the subnet the ansible
- * role pins — but morphit.io's bridge is 172.18.0.0/24, so there the whole
- * site was still one client (verifier P1). Every Docker bridge the daemon
- * creates by default lands in 172.16/12, so the default covers them all.
- * Operators on another range (a 10.x Docker pool, a LAN proxy) set
- * MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS (it replaces the default).
+ * TRUSTED means loopback (bare-metal nginx on the same host) AND the Docker
+ * bridge the BunkerWeb frontend container sits on. On a BunkerWeb box that
+ * container is the socket peer of EVERY request (clearnet, Tor and I2P);
+ * left untrusted, every visitor shares ONE bucket. The default trusts the
+ * subnet the ansible role pins for that bridge, 172.20.0.0/16. A box whose
+ * bridge is elsewhere (morphit.io's is 172.18.0.0/24) sets
+ * MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS to its bridge — `morphit-ops upgrade`
+ * writes the detected bridge CIDR there — and that setting replaces the
+ * default. The default used to be all of 172.16.0.0/12, which also trusted
+ * every OTHER container network on the host: any of them could rotate
+ * X-Forwarded-For per request and get a fresh bucket each time.
  *
- * WHY 172.16/12 IS SAFE TO TRUST. Trust changes one thing: which header
- * names the client for the rate-limit and stream-cap KEYS. No route
- * authorises anything on it, and nothing logs it. A peer in 172.16/12 is,
- * by construction, inside the operator's own network — the public internet
- * cannot complete a TCP connection from an RFC 1918 address — and the
- * indexer binds 127.0.0.1 unless the operator widens it; the ansible
- * install binds 0.0.0.0 behind UFW default-deny, allowing :8081 only from
- * the bunkerweb_net CIDR. The worst such a host can do is choose its own
- * bucket (it could already exhaust the instance-wide stream cap either way).
+ * Trust changes one thing: which header names the client for the rate-limit
+ * and stream-cap KEYS. No route authorises anything on it, and nothing logs
+ * it. The indexer's port (:8081) must never be reachable except from that
+ * bridge and loopback: it binds 127.0.0.1 unless the operator widens it, and
+ * the ansible install binds 0.0.0.0 behind UFW default-deny, allowing :8081
+ * only from the bunkerweb_net CIDR.
+ *
+ * IPv6 clients are keyed by their /64: one host is routinely given a whole
+ * /64, so keying on the full address gave it 2^64 buckets.
+ *
+ * THE SHARED KEY. Every Tor/I2P visitor arrives with the same key
+ * (our own proxy's address). A per-client limit on that key is a limit on the
+ * whole hidden-service audience — one Tor client spending 120 list requests
+ * locked every other hidden visitor out for a minute. So a shared key gets
+ * SHARED_KEY_MULTIPLIER times the tier's ceiling: still a bound on the
+ * instance, no longer one any single visitor reaches by ordinary use. Open
+ * streams have their own shared ceiling (streamCaps.ts).
  *
  * FAIL SAFE (verifier P1). A PRIVATE peer outside the trusted set that
  * sends a forwarded client address is a proxy nobody told us about. Its
@@ -81,7 +87,7 @@
  */
 
 import type { Context, MiddlewareHandler } from 'hono';
-import { BlockList, isIP } from 'node:net';
+import { BlockList, SocketAddress, isIP } from 'node:net';
 import { isPrivateIp } from '@morphit/net-defense';
 import { logger } from '$log';
 
@@ -102,8 +108,31 @@ const WINDOW_MS = 60_000;
 export const DEFAULT_TRUSTED_PROXY_CIDRS: readonly string[] = [
 	'127.0.0.0/8',
 	'::1/128',
-	'172.16.0.0/12'
+	'172.20.0.0/16'
 ];
+
+/** How many times a tier's per-minute ceiling a SHARED key gets: the
+ *  key that stands for every Tor/I2P visitor at once. */
+export const SHARED_KEY_MULTIPLIER = 25;
+
+/** The bucket key for a client address: IPv4 as is, IPv6 by its /64. */
+export function bucketKeyFor(ip: string): string {
+	const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+	if (mapped) return mapped[1]!;
+	if (isIP(ip) !== 6) return ip;
+	const sl = new SocketAddress({ address: ip, family: 'ipv6' });
+	// Expand to eight groups, keep four.
+	const [head = '', tail = ''] = sl.address.split('::');
+	const h = head === '' ? [] : head.split(':');
+	const t = tail === '' ? [] : tail.split(':');
+	const groups = sl.address.includes('::')
+		? [...h, ...Array(8 - h.length - t.length).fill('0'), ...t]
+		: h;
+	return `${groups
+		.slice(0, 4)
+		.map((g) => (parseInt(g, 16) || 0).toString(16))
+		.join(':')}::/64`;
+}
 
 function isLoopback(ip: string): boolean {
 	const v4 = ip.replace(/^::ffff:/i, '');
@@ -267,10 +296,10 @@ function isUntrustedPrivateProxy(c: Context, peer: string): boolean {
  * everybody.
  */
 export function requestClient(c: Context): { readonly key: string; readonly shared: boolean } {
-	const key = clientIp(c);
-	if (key === 'unknown' || isTrusted(key)) return { key, shared: true };
+	const ip = clientIp(c);
+	if (ip === 'unknown' || isTrusted(ip)) return { key: ip, shared: true };
 	const peer = socketPeer(c);
-	return { key, shared: peer === key && isUntrustedPrivateProxy(c, peer) };
+	return { key: bucketKeyFor(ip), shared: peer === ip && isUntrustedPrivateProxy(c, peer) };
 }
 
 /** Test seam — forget every bucket. */
@@ -280,8 +309,9 @@ export function _resetRateLimitForTest(): void {
 
 export function rateLimit(tier: Tier, perMin: number): MiddlewareHandler {
 	return async (c, next) => {
-		const ip = clientIp(c);
-		const key = `${tier}:${ip}`;
+		const client = requestClient(c);
+		const key = `${tier}:${client.key}`;
+		const limit = client.shared ? perMin * SHARED_KEY_MULTIPLIER : perMin;
 		const now = Date.now();
 		const cutoff = now - WINDOW_MS;
 
@@ -302,7 +332,7 @@ export function rateLimit(tier: Tier, perMin: number): MiddlewareHandler {
 		}
 		if (expired > 0) bucket.timestamps.splice(0, expired);
 
-		if (bucket.timestamps.length >= perMin) {
+		if (bucket.timestamps.length >= limit) {
 			// Compute retry-after from the oldest timestamp in the window.
 			const oldest = bucket.timestamps[0] ?? now;
 			const retryAfterSec = Math.max(1, Math.ceil((oldest + WINDOW_MS - now) / 1000));

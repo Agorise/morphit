@@ -1,18 +1,18 @@
 #!/bin/sh
 # morphit-ipfs-seed.sh — make THIS node the origin IPFS host for a release.
-# (v1.9.3, the maintainer)
+# (v1.9.3)
 #
 # Sibling to morphit-ipfs-pin.sh, but for the ORIGIN. The pin script FETCHES an
 # already-network-available CID (`ipfs pin add`); this script HOSTS a release the
 # network may not have yet, by reconstructing the exact release directory and
-# `ipfs add`ing it. Naturally run on the maintainer's release box (the first node to hold the
+# `ipfs add`ing it. Naturally run on the release box (the first node to hold the
 # files); every other instance then pins from it via morphit-ipfs-pin.sh.
 #
 # Determinism: the directory is built by ops/ipfs/stage-release-dir.sh — the SAME
 # script CI uses for its `--only-hash` CID — so the CID produced here EQUALS the
 # canonical `ipfs_cid` CI anchored on-chain. This script asserts that equality and
 # fails loud on mismatch (belt-and-suspenders against a Kubo default change or a
-# staging drift). Proven end-to-end in the cp573 spike: a VPS `ipfs add` resolved
+# staging drift). Proven end-to-end in the spike: a VPS `ipfs add` resolved
 # on ipfs.io + dweb.link.
 #
 # Usage:  morphit-ipfs-seed.sh <tag> [expected_cid]
@@ -31,7 +31,7 @@
 #   MORPHIT_SEED_HIDDEN_ONLY  =1 on a hidden-only node (morphit-ops upgrade sets it
 #                             from indexer.env). Also inferred from Kubo's own
 #                             Routing.Type=none. Then: no clearnet anchor fetch, no
-#                             download, no DHT announce (v1.18.0 deep-deep, H3).
+#                             download, no DHT announce.
 #   MORPHIT_RELEASE_DOWNLOAD_BASE   base URL for release assets (fetch the tag's anchor when expected_cid omitted)
 #   IPFS_ADD_TIMEOUT          seconds for the add (default 900)
 # Run as the ipfs service user (the systemd unit / morphit-ops handle that):
@@ -87,7 +87,7 @@ if ! ipfs --timeout=10s id >/dev/null 2>&1; then
 	exit 1
 fi
 
-# 1b. HIDDEN-ONLY? (v1.18.0 deep-deep, H3)
+# 1b. HIDDEN-ONLY?
 # A hidden-only node must not touch clearnet or the public IPFS network from its
 # home IP. This script used to, three ways: it curled git.agorise.net for the
 # tag's anchor whenever no CID was passed (and `morphit-ops upgrade` never passed
@@ -161,7 +161,7 @@ if [ -n "$EXPECTED" ]; then
 fi
 
 # 5. Announce it promptly so gateways + other instances can find it (best-effort).
-# Not on a hidden-only node (v1.18.0 deep-deep, H3): a provider record on the
+# Not on a hidden-only node: a provider record on the
 # public DHT names this box's home IP as a Morphit host. Its peers fetch the
 # release by CID from its .onion/.b32.i2p gateway instead, which needs no DHT.
 if [ "$HIDDEN_ONLY" = yes ]; then
@@ -417,7 +417,7 @@ if [ -n "${_i2p:-}" ]; then
 			log "  See the CONFIG/ROUTER MISMATCH above — that is almost certainly the cause."
 		else
 			log "  Check that $_i2p is the destination i2pd actually hosts:"
-			log "    curl -s 'http://127.0.0.1:7070/?page=i2p_tunnels' | grep -o '"'"'[a-z2-7]\{52\}\.b32\.i2p'"'"'"
+			log "    curl -s 'http://127.0.0.1:7070/?page=i2p_tunnels' | grep -o '[a-z2-7]\{52\}\.b32\.i2p'"
 		fi
 	fi
 fi

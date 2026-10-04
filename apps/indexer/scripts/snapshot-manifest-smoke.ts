@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/snapshot-manifest-smoke.ts (cp764)
+ * apps/indexer/scripts/snapshot-manifest-smoke.ts
  *
  * Locks the SAFETY core of the indexer-DB snapshot bootstrap: the pure rules
  * that decide whether a snapshot may be restored onto a box. A wrong "compatible"

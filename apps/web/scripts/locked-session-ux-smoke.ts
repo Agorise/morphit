@@ -1,10 +1,10 @@
 /**
- * locked-session-ux-smoke — the locked-but-remembered UX (cp340, cp341 icons).
+ * locked-session-ux-smoke — the locked-but-remembered UX (icons).
  *
  * WHY: a keyfile + password + "Remember me" user who refreshes is correctly
  * locked (decrypted keys never persist across a reload — the security
- * posture), and their encrypted keystore SURVIVES (cp334). The envelope is
- * intact; they only need to re-enter their password. cp340 makes that obvious
+ * posture), and their encrypted keystore SURVIVES. The envelope is
+ * intact; they only need to re-enter their password. A later change makes that obvious
  * instead of looking like a full logout:
  *
  *   1. The header CTA reads "Unlock" (common.unlock), not "Start", when this
@@ -17,7 +17,7 @@
  *   3. The "sign in with your keys" buttons (welcome-back use_seed_instead AND
  *      the import-needed login.import_existing) carry the yellow 🔐 lock
  *      emoji, while the "use phone instead" buttons use the monochrome QR
- *      svg glyph. cp35x reverted cp341's monochrome lock svg back to the
+ *      svg glyph. A later change reverted the monochrome lock svg back to the
  *      🔐 emoji: the colourful padlock is the more recognizable "this
  *      unlocks your account" affordance, which the operator prefers over a
  *      strictly-monochrome icon set.
@@ -86,7 +86,7 @@ check(
 
 // ── 2. Locked visitors on session-required pages go to the welcome-back ──────
 //      unlock screen, carrying the page they wanted as ?next= so they land
-//      there after unlocking (cp356) instead of on the homepage.
+//      there after unlocking instead of on the homepage.
 check(
 	'Settings delegates the locked-redirect to <RequireLiveSession />',
 	/<RequireLiveSession\s*\/>/.test(settings)
@@ -104,7 +104,7 @@ check(
 );
 
 // ── 3. Key buttons show the yellow 🔐 lock emoji; phone buttons the QR svg ───
-//      (cp35x: reverted the monochrome-svg lock back to the 🔐 emoji per
+//      (reverted the monochrome-svg lock back to the 🔐 emoji per
 //      operator preference — the colourful padlock is the recognizable
 //      "this unlocks your account" affordance.)
 check(
@@ -140,7 +140,7 @@ check(
 		(en.common as { unlock: string }).unlock.length > 0
 );
 
-// ── 5. Welcome-back autofocuses the password field (cp343) ───────────────────
+// ── 5. Welcome-back autofocuses the password field ───────────────────
 check(
 	'the welcome-back password field autofocuses on mount (use:focusOnMount)',
 	/id="unlock-password"[\s\S]*?use:focusOnMount/.test(login) && /function focusOnMount\(/.test(login)

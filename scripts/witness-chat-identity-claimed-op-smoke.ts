@@ -2,9 +2,9 @@
 /**
  * scripts/witness-chat-identity-claimed-op-smoke.ts
  *
- * v1.8.15 (cp555) — witness chat-identity verification structural guard.
+ * v1.8.15 — witness chat-identity verification structural guard.
  *
- * THE BUG THIS LOCKS IN THE FIX FOR. the maintainer and @exampleuser could not open a
+ * THE BUG THIS LOCKS IN THE FIX FOR. Two users could not open a
  * chat with the Blurt witness @khrom: every send died with a red "tamper
  * detected — the blockchain reports none" banner (pub_pin_chain_reports_none),
  * while the two of them chatted with each other fine. Root cause: the chain

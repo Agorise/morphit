@@ -215,7 +215,7 @@
 	function onKeydown(event: KeyboardEvent): void {
 		// Enter (plain) → send. Shift+Enter falls through to default
 		// behavior (newline).
-		// Part 73 fix: this function existed pre-Part-73 but was
+		// this function existed older but was
 		// never wired into the textarea; the documented "Enter
 		// sends" keyboard contract from CHAT-UI-DESIGN.md was not
 		// enforced.  The textarea was getting native newline
@@ -275,7 +275,7 @@
 		</div>
 	{/if}
 
-	<!-- cp407 — textarea + Send on ONE row, Send vertically CENTRED against the
+	<!-- textarea + Send on ONE row, Send vertically CENTRED against the
 	     2-row textarea (was items-end, which sank the 1-row button to the bottom
 	     and read as misaligned/too low). Still one row, so the compact composer
 	     stays visible on mobile without a textarea+button stack pushing it below
@@ -299,7 +299,7 @@
 			ariaLabel={$_('chat.composer.input_aria') as string}
 		/>
 
-		<!-- cp508 (tt.txt #9) — the maintainer: the chat Send button should look like the
+		<!-- Requirement: the chat Send button should look like the
 		     "Submit feedback" button, which is variant="secondary". -->
 		<BusyButton
 			variant="secondary"
@@ -312,7 +312,7 @@
 		</BusyButton>
 	</div>
 
-	<!-- cp512 [C6] — E2E reassurance sits a couple px under the textarea,
+	<!-- E2E reassurance sits a couple px under the textarea,
 	     inside the composer's own padding, so there's no wasted row below. -->
 	<p class="mt-1 text-center text-xs text-ink-400 dark:text-ink-500">
 		{$_('chat.composer_e2e_note', { values: { peer } })}

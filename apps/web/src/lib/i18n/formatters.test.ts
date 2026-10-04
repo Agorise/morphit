@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G12 — ratings are shown in the reader's number format.
+ * ratings are shown in the reader's number format.
  * The chips used `rating.toFixed(2)` ("4.50" in every locale).
  */
 import { afterAll, describe, expect, it } from 'vitest';

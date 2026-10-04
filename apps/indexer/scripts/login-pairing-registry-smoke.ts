@@ -6,14 +6,13 @@
  * /v1/login-pairing/:pid/deliver and /:pid/wait endpoints.
  * Validates state-machine semantics:
  *
- *   - Deliver-then-wait round-trip
+ *   - Deliver with nobody waiting → no_waiter, nothing parked
  *   - Wait-then-deliver round-trip (callback hand-off)
  *   - Race between setWaiter and deliver (fired_immediately)
  *   - Single-shot: deliver-then-deliver same pid → already_delivered
  *   - Single-subscription: wait-then-wait same pid → over_capacity
- *   - Cancellation: cancelWait clears entry without bundle
- *   - Cancellation preserves entry that has bundle parked
- *   - Hard-cap: 10001th entry → over_capacity
+ *   - Cancellation: cancelWait clears the entry, bundle parked or not
+ *   - Hard-cap: 10001th wait → over_capacity
  *   - TTL: sweep evicts expired entries
  *   - TTL: sweep notifies waiters with empty bundle
  */
@@ -45,19 +44,19 @@ function expect(actual: unknown, expected: unknown, label = ''): void {
 
 console.log('login-pairing-registry-smoke (ADR-0022):\n');
 
-// ─── Deliver-then-wait (deliver first) ────────────────────
+// ─── Deliver with nobody waiting ──────────────────
+// A phone delivers only after the desktop showed the code and started
+// waiting, so a bundle for a pid nobody waits on parks nothing: parking
+// let one client fill the registry with junk pids and lock everyone out.
 
-scenario('deliver-then-wait: register returns immediate', () => {
+scenario('deliver with nobody waiting → no_waiter; nothing parked', () => {
 	const r = new PairingRegistry();
 	try {
 		const now = 1_000_000;
 		const pid = 'a'.repeat(64);
-		expect(r.deliver(pid, '{"hello":"world"}', now), 'ok');
-		const reg = r.register(pid, now);
-		if (reg.kind !== 'immediate') throw new Error(`expected immediate, got ${reg.kind}`);
-		expect(reg.bundleJson, '{"hello":"world"}');
-		// Entry should be cleaned up after immediate hand-off.
+		expect(r.deliver(pid, '{"hello":"world"}', now), 'no_waiter');
 		expect(r.size(), 0);
+		expect(r.register(pid, now).kind, 'waiting');
 	} finally {
 		r.close();
 	}
@@ -118,12 +117,18 @@ scenario('deliver-then-deliver-same-pid → already_delivered', () => {
 	try {
 		const now = 1_000_000;
 		const pid = 'd'.repeat(64);
+		expect(r.register(pid, now).kind, 'waiting');
 		expect(r.deliver(pid, '{"first":"bundle"}', now), 'ok');
 		expect(r.deliver(pid, '{"second":"bundle"}', now), 'already_delivered');
-		// Original bundle still parked.
-		const reg = r.register(pid, now);
-		if (reg.kind !== 'immediate') throw new Error(`expected immediate`);
-		expect(reg.bundleJson, '{"first":"bundle"}');
+		// The first bundle is the one the waiter gets.
+		let received: string | null = null;
+		expect(
+			r.setWaiter(pid, (b) => {
+				received = b;
+			}),
+			'fired_immediately'
+		);
+		expect(received, '{"first":"bundle"}');
 	} finally {
 		r.close();
 	}
@@ -163,17 +168,15 @@ scenario('cancelWait removes a no-bundle entry', () => {
 	}
 });
 
-scenario('cancelWait preserves an entry with parked bundle', () => {
+scenario('cancelWait drops the entry even with a bundle parked (its client has gone)', () => {
 	const r = new PairingRegistry();
 	try {
 		const now = 1_000_000;
 		const pid = '0'.repeat(64);
+		r.register(pid, now);
 		expect(r.deliver(pid, '{"parked":"bundle"}', now), 'ok');
-		r.cancelWait(pid); // No effect when bundle is parked.
-		expect(r.size(), 1);
-		// Bundle still retrievable.
-		const reg = r.register(pid, now);
-		if (reg.kind !== 'immediate') throw new Error('bundle was lost');
+		r.cancelWait(pid);
+		expect(r.size(), 0);
 	} finally {
 		r.close();
 	}
@@ -185,15 +188,16 @@ scenario('over-capacity: 10001st entry → over_capacity', () => {
 	const r = new PairingRegistry();
 	try {
 		const now = 1_000_000;
-		// Fill to capacity (10000).
+		// Fill to capacity (10000) with waiting desktops.
 		for (let i = 0; i < 10000; i++) {
 			const pid = i.toString(16).padStart(64, '0');
-			expect(r.deliver(pid, '{"i":' + i + '}', now), 'ok');
+			expect(r.register(pid, now).kind, 'waiting');
 		}
 		expect(r.size(), 10000);
-		// 10001st must reject.
-		expect(r.deliver('f'.repeat(64), '{}', now), 'over_capacity');
+		// 10001st must reject; a delivery for an unknown pid parks nothing.
 		expect(r.register('e'.repeat(64), now).kind, 'over_capacity');
+		expect(r.deliver('f'.repeat(64), '{}', now), 'no_waiter');
+		expect(r.size(), 10000);
 	} finally {
 		r.close();
 	}
@@ -206,7 +210,7 @@ scenario('sweep evicts expired entries', () => {
 	try {
 		const now = 1_000_000;
 		const pid = '1'.repeat(64);
-		r.deliver(pid, '{}', now);
+		r.register(pid, now);
 		expect(r.size(), 1);
 		// Advance time past TTL (5 min).
 		r.sweep(now + 5 * 60_000 + 1);
@@ -236,17 +240,17 @@ scenario('sweep notifies waiter with empty string when expiring', () => {
 
 // ─── Multiple pids, independent state ─────────────────────
 
-scenario('independent pids: deliver one, register another', () => {
+scenario('independent pids: two waits, each gets only its own bundle', () => {
 	const r = new PairingRegistry();
 	try {
 		const now = 1_000_000;
 		const pidA = '3'.repeat(64);
 		const pidB = '4'.repeat(64);
-		r.deliver(pidA, '{"for":"A"}', now);
-		const regB = r.register(pidB, now);
-		expect(regB.kind, 'waiting');
-		// Pid A still parked, pid B waiting.
+		expect(r.register(pidA, now).kind, 'waiting');
+		expect(r.register(pidB, now).kind, 'waiting');
 		expect(r.size(), 2);
+		// A's bundle arrives before A's waiter is wired: parked for A.
+		expect(r.deliver(pidA, '{"for":"A"}', now), 'ok');
 		// Deliver B; only B fires.
 		let bGot: string | null = null;
 		r.setWaiter(pidB, (b) => {
@@ -254,11 +258,15 @@ scenario('independent pids: deliver one, register another', () => {
 		});
 		r.deliver(pidB, '{"for":"B"}', now);
 		expect(bGot, '{"for":"B"}');
-		// Pid A still has parked bundle.
 		expect(r.size(), 1);
-		const regA = r.register(pidA, now);
-		if (regA.kind !== 'immediate') throw new Error('A bundle missing');
-		expect(regA.bundleJson, '{"for":"A"}');
+		let aGot: string | null = null;
+		expect(
+			r.setWaiter(pidA, (b) => {
+				aGot = b;
+			}),
+			'fired_immediately'
+		);
+		expect(aGot, '{"for":"A"}');
 	} finally {
 		r.close();
 	}

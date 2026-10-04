@@ -75,7 +75,7 @@ for (const [name, body] of [
 
 // ── B. The seeder's probes can't kill the script or cry wolf ─────────
 ok(
-	'seed: the curl helper swallows curl\'s exit status (a refused probe is the thing being diagnosed, not a reason to abort under set -e)',
+	"seed: the curl helper swallows curl's exit status (a refused probe is the thing being diagnosed, not a reason to abort under set -e)",
 	/_code\(\)[\s\S]{0,400}?\|\|\s*true/.test(seed)
 );
 ok(
@@ -95,21 +95,39 @@ ok('seed: still checks I2P end to end', /4444/.test(seed));
 
 // ── C. Firewall self-heal: exists, multi-strategy, verifies, never fails ──
 ok('heal script is shipped', heal.length > 0);
-ok('heal: observes from INSIDE the frontend container (the only honest vantage point)', /docker exec/.test(heal));
+ok(
+	'heal: observes from INSIDE the frontend container (the only honest vantage point)',
+	/docker exec/.test(heal)
+);
 ok('heal: strategy A is ufw', /ufw allow from/.test(heal));
 ok('heal: strategy B falls through to iptables', /iptables -I INPUT/.test(heal));
 ok('heal: strategy C restarts the frontend', /docker restart/.test(heal));
-ok('heal: re-probes to VERIFY rather than trusting an exit code', (heal.match(/probe\b/g) ?? []).length >= 4);
-ok('heal: reads the CIDR from the real docker network instead of hardcoding', /docker network inspect/.test(heal));
-ok('heal: reads the gateway port from kubo instead of assuming 8082', /ipfs config Addresses\.Gateway/.test(heal));
-ok('heal: distinguishes "gateway not listening" from "firewall dropping"', /not LISTENING/.test(heal));
+ok(
+	'heal: re-probes to VERIFY rather than trusting an exit code',
+	(heal.match(/probe\b/g) ?? []).length >= 4
+);
+ok(
+	'heal: reads the CIDR from the real docker network instead of hardcoding',
+	/docker network inspect/.test(heal)
+);
+ok(
+	'heal: reads the gateway port from kubo instead of assuming 8082',
+	/ipfs config Addresses\.Gateway/.test(heal)
+);
+ok(
+	'heal: distinguishes "gateway not listening" from "firewall dropping"',
+	/not LISTENING/.test(heal)
+);
 ok('heal: says which strategy worked', /healed via/.test(heal));
 ok('heal: always exits 0 — can never fail an upgrade', !/exit 1/.test(heal));
 ok(
 	'heal: VALIDATES the discovered subnet is RFC1918 before opening a port to it (a bogus or over-wide answer must never become a firewall rule)',
 	/192\.168\.\*\/\*/.test(heal) && /ignoring non-private subnet/.test(heal)
 );
-ok('heal: the fallback on an invalid subnet is the pinned CIDR, never a wider one', /CIDR="\$FALLBACK_CIDR"/.test(heal));
+ok(
+	'heal: the fallback on an invalid subnet is the pinned CIDR, never a wider one',
+	/CIDR="\$FALLBACK_CIDR"/.test(heal)
+);
 ok(
 	'upgrade runs the heal BEFORE seeding, so the seed verifies an already-healed path',
 	upgrade.indexOf('morphit-gateway-firewall-heal.sh') > 0 &&
@@ -121,41 +139,77 @@ ok('mirror shell wrapper is shipped', mirrorSh.length > 0);
 ok('mirror TS job is shipped', mirrorTs.length > 0);
 ok('mirror systemd service is shipped', mirrorSvc.length > 0);
 ok('mirror systemd timer is shipped', mirrorTimer.length > 0);
-ok('mirror service ExecStart points at the shipped wrapper', /ExecStart=.*snapshot-mirror\.sh/.test(mirrorSvc));
-ok('mirror timer runs the mirror service', /Unit=morphit-snapshot-mirror\.service/.test(mirrorTimer));
+ok(
+	'mirror service ExecStart points at the shipped wrapper',
+	/ExecStart=.*snapshot-mirror\.sh/.test(mirrorSvc)
+);
+ok(
+	'mirror timer runs the mirror service',
+	/Unit=morphit-snapshot-mirror\.service/.test(mirrorTimer)
+);
 ok(
 	'mirror timer fires periodically so a box that never upgrades again stays current',
 	/OnUnitActiveSec=/.test(mirrorTimer) && /Persistent=true/.test(mirrorTimer)
 );
-ok('mirror timer spreads the federation out (no thundering herd on the DHT)', /RandomizedDelaySec=/.test(mirrorTimer));
+ok(
+	'mirror timer spreads the federation out (no thundering herd on the DHT)',
+	/RandomizedDelaySec=/.test(mirrorTimer)
+);
 
 ok('ANSIBLE installs the mirror service', /morphit-snapshot-mirror\.service/.test(ipfsRole));
 ok('ANSIBLE installs the mirror timer', /morphit-snapshot-mirror\.timer/.test(ipfsRole));
-ok('ANSIBLE enables + starts the mirror timer', /name: morphit-snapshot-mirror\.timer[\s\S]{0,200}enabled: true/.test(ipfsRole));
-ok('ANSIBLE installs the publish units too (they were orphaned in the tree)', /morphit-snapshot-publish\.service/.test(ipfsRole));
+ok(
+	'ANSIBLE enables + starts the mirror timer',
+	/name: morphit-snapshot-mirror\.timer[\s\S]{0,200}enabled: true/.test(ipfsRole)
+);
+ok(
+	'ANSIBLE installs the publish units too (they were orphaned in the tree)',
+	/morphit-snapshot-publish\.service/.test(ipfsRole)
+);
 ok(
 	'publishing is OFF by default — an ordinary instance must never start signing snapshots under its own account',
 	/morphit_snapshot_publisher: false/.test(ipfsDefaults) &&
 		/morphit_snapshot_publisher \| default\(false\)/.test(ipfsRole)
 );
 ok('UPGRADE refreshes the mirror on every upgrade', /snapshot-mirror\.sh/.test(upgrade));
-ok('upgrade only mirrors when this box actually runs IPFS', /systemctl is-active --quiet ipfs/.test(upgrade));
+ok(
+	'upgrade only mirrors when this box actually runs IPFS',
+	/systemctl is-active --quiet ipfs/.test(upgrade)
+);
 
 // ── E. The mirror job verifies before it serves ──────────────────────
-// v1.18.0 deep-deep (rv2-1): the op now comes through the trusted resolver
+// the op now comes through the trusted resolver
 // (two RPC operators agree + signature against the pinned key).
-ok('mirror: reads the newest SIGNED op, not an arbitrary CID', /resolveTrustedSnapshotOp/.test(mirrorTs));
+ok(
+	'mirror: reads the newest SIGNED op, not an arbitrary CID',
+	/resolveTrustedSnapshotOp/.test(mirrorTs)
+);
 ok('mirror: gates on chain_id', /chain_id/.test(mirrorTs));
-ok('mirror: verifies the pinned bytes against the on-chain sha256', /createHash\('sha256'\)/.test(mirrorTs));
+ok(
+	'mirror: verifies the pinned bytes against the on-chain sha256',
+	/createHash\('sha256'\)/.test(mirrorTs)
+);
 ok('mirror: unpins rather than serving bytes it could not verify', /pin', 'rm'/.test(mirrorTs));
 ok('mirror: replaces the superseded snapshot (never accumulates)', /superseded/.test(mirrorTs));
-ok('mirror: re-asserts the pin when kubo no longer holds it (state file alone is not proof)', /pin', 'ls'/.test(mirrorTs));
+ok(
+	'mirror: re-asserts the pin when kubo no longer holds it (state file alone is not proof)',
+	/pin', 'ls'/.test(mirrorTs)
+);
 ok('mirror: never fails the caller', /process\.exit\(0\)/.test(mirrorTs));
 
 // ── F. Fast-sync reaches zero-clearnet nodes ─────────────────────────
-ok('bootstrap builds its sources through the mirror resolver', /buildSnapshotSources/.test(bootstrap));
-ok('bootstrap discovers peers from the chain history it already fetched', /extractPeerAddressesFromHistory/.test(bootstrap));
-ok('bootstrap routes .onion fetches through Tor SOCKS with in-Tor DNS', /--socks5-hostname/.test(bootstrap));
+ok(
+	'bootstrap builds its sources through the mirror resolver',
+	/buildSnapshotSources/.test(bootstrap)
+);
+ok(
+	'bootstrap discovers peers from the chain history it already fetched',
+	/extractPeerAddressesFromHistory/.test(bootstrap)
+);
+ok(
+	'bootstrap routes .onion fetches through Tor SOCKS with in-Tor DNS',
+	/--socks5-hostname/.test(bootstrap)
+);
 ok('bootstrap routes .b32.i2p fetches through the i2pd proxy', /I2P_HTTP_PROXY/.test(bootstrap));
 ok(
 	'bootstrap fails CLOSED on a hidden-only node with no private source (never silently reaches for clearnet)',
@@ -163,14 +217,23 @@ ok(
 );
 
 // ── G. The firewall rule still exists on the Ansible path ────────────
-ok('ansible still opens the gateway port to the bunkerweb CIDR', /IPFS gateway \(hidden release seeding\)/.test(bunkerRole));
-ok('…gated on this box actually hosting IPFS', /enable_ipfs \| default\(true\) \| bool/.test(bunkerRole));
+ok(
+	'ansible still opens the gateway port to the bunkerweb CIDR',
+	/IPFS gateway \(hidden release seeding\)/.test(bunkerRole)
+);
+ok(
+	'…gated on this box actually hosting IPFS',
+	/enable_ipfs \| default\(true\) \| bool/.test(bunkerRole)
+);
 
 // ── H. Publisher stays single-signer ────────────────────────────────
 ok('publish timer exists for the canonical box', publishTimer.length > 0 && publishSvc.length > 0);
 const autopub = read('ops/snapshot-autopublish.sh');
 const pinScript = read('ops/pin-indexer-snapshot.sh');
-ok('publish job still guards on being caught up before anchoring anything', /sync\.behind/.test(autopub));
+ok(
+	'publish job still guards on being caught up before anchoring anything',
+	/sync\.behind/.test(autopub)
+);
 ok(
 	'publish job reads the payload path the pin script TELLS it, instead of scanning the filesystem for it',
 	/MORPHIT_SNAPSHOT_PAYLOAD=/.test(pinScript) && /MORPHIT_SNAPSHOT_PAYLOAD=/.test(autopub)
@@ -213,28 +276,57 @@ for (const [name, body] of [
 		risky.map((l) => l.trim().slice(0, 80)).join(' | ')
 	);
 }
-ok('canary setup falls back to more than one source for the instance origin', /MORPHIT_INSTANCE_ORIGIN/.test(canarySetup));
-ok('canary setup offers a Tor-only box its .onion as the origin default', /var\/lib\/tor/.test(canarySetup));
+ok(
+	'canary setup falls back to more than one source for the instance origin',
+	/MORPHIT_INSTANCE_ORIGIN/.test(canarySetup)
+);
+ok(
+	'canary setup offers a Tor-only box its .onion as the origin default',
+	/var\/lib\/tor/.test(canarySetup)
+);
 
 // The seeder runs as the unprivileged `ipfs` user and cannot read Tor's hostname
 // file, so every instance reported "no hidden address configured".
-ok('upgrade resolves the box\u2019s own addresses as root and passes them down', /seedAddrArgs/.test(upgrade));
-ok('seeder accepts the caller-resolved addresses', /MORPHIT_SEED_ONION/.test(seed) && /MORPHIT_SEED_ORIGIN/.test(seed));
-ok('seeder tries more than one source for the public origin', /MORPHIT_INDEXER_PUBLIC_ORIGIN/.test(seed));
+ok(
+	'upgrade resolves the box\u2019s own addresses as root and passes them down',
+	/seedAddrArgs/.test(upgrade)
+);
+ok(
+	'seeder accepts the caller-resolved addresses',
+	/MORPHIT_SEED_ONION/.test(seed) && /MORPHIT_SEED_ORIGIN/.test(seed)
+);
+ok(
+	'seeder tries more than one source for the public origin',
+	/MORPHIT_INDEXER_PUBLIC_ORIGIN/.test(seed)
+);
 ok(
 	'seeder NEVER reads a hidden address from indexer.env (that file lists OTHER operators\u2019 Blurt RPC onions \u2014 probing one would report a stranger\u2019s node as our seeder)',
 	/deliberately NOT \/etc\/morphit\/indexer\.env/.test(seed) &&
 		!/_onion=\$\(grep[^\n]*indexer\.env/.test(seed)
 );
-ok('seeder names where it looked when it finds no origin', /looked in MORPHIT_SEED_ORIGIN/.test(seed));
+ok(
+	'seeder names where it looked when it finds no origin',
+	/looked in MORPHIT_SEED_ORIGIN/.test(seed)
+);
 
 // Ansible never runs on a hand-built install, so the upgrade must install the
 // timer itself or the whole feature is inert on the canonical box.
-ok('upgrade installs + enables the mirror timer itself (Ansible never runs on a manual install)',
-	/enable', '--now', 'morphit-snapshot-mirror\.timer/.test(upgrade));
-ok('timer install is idempotent (skips an identical unit already in place)', /=== incoming\) continue/.test(upgrade));
+ok(
+	'upgrade installs + enables the mirror timer itself (Ansible never runs on a manual install)',
+	/enable', '--now', 'morphit-snapshot-mirror\.timer/.test(upgrade)
+);
+ok(
+	'timer install is idempotent (skips an identical unit already in place)',
+	/=== incoming\) continue/.test(upgrade)
+);
 
-ok('npm update-notifier is silenced at the last step that can emit it', /npm_config_update_notifier=false/.test(deployMcp));
+// deploy-mcp.sh runs no npm any more; the only npm in the deployed
+// tree is the unit's `npm start`, which reads the tree's own .npmrc.
+ok(
+	'npm update-notifier is silenced at the last step that can emit it',
+	/npm_config_update_notifier=false/.test(deployMcp) ||
+		/'update-notifier=false'[^\n]*> "\$DEST\/\.npmrc"/.test(deployMcp)
+);
 
 // The first heal probe asked for /api/v0/version — kubo's RPC API (port 5001),
 // not a gateway path — and took wget's exit code as the verdict. The gateway
@@ -273,7 +365,10 @@ for (const step of ['npm ci', 'MCP server', 'IPFS', 'snapshot mirror']) {
 
 // All three instances reported "no public origin"/"no hidden address" while
 // plainly having both: the settings live in morphit.env, which nothing read.
-ok('seeder reads morphit.env, not just morphit.config.env', /ALTCFG=\/opt\/morphit\/morphit\.env/.test(seed));
+ok(
+	'seeder reads morphit.env, not just morphit.config.env',
+	/ALTCFG=\/opt\/morphit\/morphit\.env/.test(seed)
+);
 ok('seeder looks for hidden addresses in morphit.env too', /"\$CFG" "\$ALTCFG"/.test(seed));
 ok('upgrade reads morphit.env root-side too', /morphit\.env'\)/.test(upgrade));
 ok(
@@ -302,19 +397,31 @@ const poller = read('apps/indexer/src/indexer/poller.ts');
 const gate = read('apps/indexer/src/indexer/clearnetGate.ts');
 const instApi = read('apps/indexer/src/api/instance.ts');
 
-ok('the clearnet legs have ONE definition, shared by /v1/instance and the probe',
+ok(
+	'the clearnet legs have ONE definition, shared by /v1/instance and the probe',
 	// v1.18.0 (F32): with the relay's reported posture as the second input —
 	// and BOTH callers must pass the same one, or the self row and /v1/instance
 	// disagree about the node again.
 	/export function clearnetLegsFromConfig/.test(gate) &&
 		/clearnetLegsFromConfig\(config, relayReportsHiddenOnly\(\)\)/.test(instApi) &&
-		/clearnetLegsFromConfig\(config, relayReportsHiddenOnly\(\)\)/.test(poller));
-ok('the self row writes its own cached_clearnet_eliminated', /cached_clearnet_eliminated = COALESCE/.test(probe));
-ok('…from the locally computed gate', /localClearnetEliminated/.test(probe) && /localClearnetEliminated/.test(poller));
-ok('COALESCE keeps a peer-observed value when we have none (never clobbers with null)',
-	/COALESCE\(\$7, cached_clearnet_eliminated\)/.test(probe));
-ok('the self row applies the same orderbook-activity rule peers apply to it',
-	/selfStatus = 'quiet'/.test(probe) && /ORDERBOOK_ACTIVITY_GRACE_DAYS/.test(probe));
+		/clearnetLegsFromConfig\(config, relayReportsHiddenOnly\(\)\)/.test(poller)
+);
+ok(
+	'the self row writes its own cached_clearnet_eliminated',
+	/cached_clearnet_eliminated = COALESCE/.test(probe)
+);
+ok(
+	'…from the locally computed gate',
+	/localClearnetEliminated/.test(probe) && /localClearnetEliminated/.test(poller)
+);
+ok(
+	'COALESCE keeps a peer-observed value when we have none (never clobbers with null)',
+	/COALESCE\(\$7, cached_clearnet_eliminated\)/.test(probe)
+);
+ok(
+	'the self row applies the same orderbook-activity rule peers apply to it',
+	/selfStatus = 'quiet'/.test(probe) && /ORDERBOOK_ACTIVITY_GRACE_DAYS/.test(probe)
+);
 ok('the self activity lookup can never break the self tick', /label refinement only/.test(probe));
 ok(
 	'self status is relabelled only on POSITIVE evidence — an unanswered lookup never marks a busy instance quiet',
@@ -330,18 +437,24 @@ ok(
 );
 // Anchor on the EXIT itself, not on the first `has('verify-only')` — there is now
 // an earlier one that defaults unused config, and indexOf would find that instead.
-ok('the dry run still proves the bytes (it exits after the sha256/manifest gates)',
-	boot.indexOf('refusing.') < boot.indexOf('DRY RUN PASSED'));
+ok(
+	'the dry run still proves the bytes (it exits after the sha256/manifest gates)',
+	boot.indexOf('refusing.') < boot.indexOf('DRY RUN PASSED')
+);
 ok('the dry run says plainly that nothing was written', /nothing was written/.test(boot));
 ok(
 	'the dry run defaults the config it never uses, so a rehearsal needs no invented env vars',
-	/MORPHIT_INDEXER_DATABASE_URL \?\?=/.test(boot) && /MORPHIT_INDEXER_PUBLIC_ORIGIN \?\?=/.test(boot)
+	/MORPHIT_INDEXER_DATABASE_URL \?\?=/.test(boot) &&
+		/MORPHIT_INDEXER_PUBLIC_ORIGIN \?\?=/.test(boot)
 );
 ok(
 	'…but NEVER defaults the chain id — that is the gate against restoring another chain\u2019s state',
 	!/MORPHIT_INDEXER_CHAIN_ID \?\?=/.test(boot) && /still needs MORPHIT_INDEXER_CHAIN_ID/.test(boot)
 );
-ok('the pin script reports snapshot size in kB, not a floored 0 MB', /SIZE_BYTES\/1024\)\) kB/.test(pinScript));
+ok(
+	'the pin script reports snapshot size in kB, not a floored 0 MB',
+	/SIZE_BYTES\/1024\)\) kB/.test(pinScript)
+);
 
 // The publish timer failed on a box where a hand-run publish always worked:
 // PrivateTmp=true puts /tmp on its own tmpfs, and rename() cannot cross devices.
@@ -370,15 +483,24 @@ ok(
 // The mirror ran bare `ipfs` as root, so kubo looked in /root/.ipfs — an empty
 // repo with no daemon — and refused to fetch a CID the box was already serving.
 const mirrorTs2 = read('apps/indexer/scripts/snapshot-mirror.ts');
-ok('mirror runs kubo as the repo owner, not as root', /IPFS_USER/.test(mirrorTs2) && /IPFS_PATH=\$\{IPFS_REPO\}/.test(mirrorTs2));
-ok('mirror pipes ipfs cat through the same privilege drop', /DROP_PRIV\.join\(' '\)/.test(mirrorTs2));
+ok(
+	'mirror runs kubo as the repo owner, not as root',
+	/IPFS_USER/.test(mirrorTs2) && /IPFS_PATH=\$\{IPFS_REPO\}/.test(mirrorTs2)
+);
+ok(
+	'mirror pipes ipfs cat through the same privilege drop',
+	/DROP_PRIV\.join\(' '\)/.test(mirrorTs2)
+);
 // sudo is setuid-root and REFUSES to run under NoNewPrivileges=true, which both
 // snapshot units set. runuser is not setuid, so dropping privileges still works.
 for (const [name, body] of [
 	['mirror', mirrorTs2],
 	['pin script', pinScript]
 ] as const) {
-	ok(`${name}: prefers runuser over sudo (sudo cannot run under NoNewPrivileges)`, /runuser/.test(body));
+	ok(
+		`${name}: prefers runuser over sudo (sudo cannot run under NoNewPrivileges)`,
+		/runuser/.test(body)
+	);
 	// Never rely on an inherited HOME to find a daemon's repo: `sudo -u` sets it,
 	// `runuser -u X --` does not, so the same code works by hand and fails on a timer.
 	ok(`${name}: passes IPFS_PATH explicitly instead of trusting HOME`, /IPFS_PATH=/.test(body));
@@ -392,12 +514,21 @@ ok(
 // and the kubo CLI only reads $IPFS_PATH/api then speaks HTTP, so no user switch
 // is needed at all. Probe and adapt rather than assume which tool a host allows.
 ok('pin script PROBES how to reach kubo instead of assuming', /_try_strategy/.test(pinScript));
-ok('…and can talk to kubo directly as root, needing no privilege drop at all', /direct\)\s+env IPFS_PATH=/.test(pinScript));
-ok('…trying direct first, then runuser, then sudo', /for _s in direct runuser sudo/.test(pinScript));
+ok(
+	'…and can talk to kubo directly as root, needing no privilege drop at all',
+	/direct\)\s+env IPFS_PATH=/.test(pinScript)
+);
+ok(
+	'…trying direct first, then runuser, then sudo',
+	/for _s in direct runuser sudo/.test(pinScript)
+);
 ok('…and reporting which strategy it chose', /strategy: \$IPFS_STRATEGY/.test(pinScript));
 // The script restarts ipfs.service itself (step 3), so its own probe must
 // tolerate a daemon that is briefly absent instead of declaring it unreachable.
-ok('pin script waits for the kubo API instead of failing on the first miss', /_i" -lt 15/.test(pinScript));
+ok(
+	'pin script waits for the kubo API instead of failing on the first miss',
+	/_i" -lt 15/.test(pinScript)
+);
 ok('…and reports what ipfs actually said when it finally gives up', /ipfs said/.test(pinScript));
 // Third time tonight a swallowed child error cost a debugging round trip.
 for (const [name, body] of [
@@ -415,8 +546,11 @@ ok(
 	/ipfs\(\['id'/.test(mirrorTs2) && !/ipfs\(\['--version'\]/.test(mirrorTs2)
 );
 
-ok('upgrade installs the PUBLISH units too (Ansible never runs on a manual install)',
-	/morphit-snapshot-publish\.service/.test(upgrade) && /morphit-snapshot-publish\.timer/.test(upgrade));
+ok(
+	'upgrade installs the PUBLISH units too (Ansible never runs on a manual install)',
+	/morphit-snapshot-publish\.service/.test(upgrade) &&
+		/morphit-snapshot-publish\.timer/.test(upgrade)
+);
 ok(
 	'publishing is enabled ONLY on explicit opt-in — an upgrade must never make a box start signing snapshots by surprise',
 	/snapshot-publish\.env/.test(upgrade)
@@ -434,8 +568,8 @@ ok(
 );
 ok(
 	'no shipped script pipes data into `python3 -` while also heredoc-ing the program',
-	![pinScript, autopub, read('ops/snapshot-mirror.sh'), read('ops/ipfs/morphit-ipfs-seed.sh')].some((b) =>
-		/\|\s*python3\s+-\s*<</.test(b)
+	![pinScript, autopub, read('ops/snapshot-mirror.sh'), read('ops/ipfs/morphit-ipfs-seed.sh')].some(
+		(b) => /\|\s*python3\s+-\s*<</.test(b)
 	)
 );
 
@@ -451,10 +585,14 @@ ok('the guard checks THIS instance\u2019s own origin first', /SELF_ORIGIN/.test(
 // runs on a LAPTOP where no /opt/morphit config exists — so it fell through to
 // polling public gateways and a release stalled for 50+ rounds. A capability
 // nobody can reach is not a feature.
-ok('…and accepts that origin as an ARGUMENT, so the ceremony cannot forget it',
-	/\[ -n "\$\{3:-\}" \] && MORPHIT_GUARD_SELF_ORIGIN="\$3"/.test(guard));
-ok('…and says so plainly when no origin is known, instead of silently grinding',
-	/no instance origin known here/.test(guard));
+ok(
+	'…and accepts that origin as an ARGUMENT, so the ceremony cannot forget it',
+	/\[ -n "\$\{3:-\}" \] && MORPHIT_GUARD_SELF_ORIGIN="\$3"/.test(guard)
+);
+ok(
+	'…and says so plainly when no origin is known, instead of silently grinding',
+	/no instance origin known here/.test(guard)
+);
 // The generated ceremony must PASS it. Block 4 runs on a laptop, so without an
 // explicit origin the guard has no fast path — which is exactly how this shipped.
 // The ceremony no longer runs the gateway check AT ALL. Block 3 already asserts
@@ -486,12 +624,18 @@ ok(
 // A third party we do not depend on must never be able to stall a release.
 // Polling public gateways did exactly that — for 50+ rounds on a healthy
 // release. It is now OPT-IN; the default takes one look and decides.
-ok('public-gateway POLLING is opt-in, so a slow third party cannot stall a release',
-	/MORPHIT_GUARD_POLL_PUBLIC:-0/.test(guard));
-ok('…the default path takes a single look at each gateway, with no sleep',
-	/else\n\tfor gw in \$GATEWAYS; do/.test(guard));
-ok('…and a failure names the one-second re-run instead of suggesting a wait',
-	/passes in about a second/.test(guard));
+ok(
+	'public-gateway POLLING is opt-in, so a slow third party cannot stall a release',
+	/MORPHIT_GUARD_POLL_PUBLIC:-0/.test(guard)
+);
+ok(
+	'…the default path takes a single look at each gateway, with no sleep',
+	/else\n\tfor gw in \$GATEWAYS; do/.test(guard)
+);
+ok(
+	'…and a failure names the one-second re-run instead of suggesting a wait',
+	/passes in about a second/.test(guard)
+);
 ok(
 	'…and passes on that alone, without waiting on any public gateway',
 	/That is the path the federation uses/.test(guard)
@@ -517,25 +661,36 @@ ok(
 // same request straight at a .b32.i2p hostname with no proxy and got
 // "fetch failed". That is what stopped morphitlat — a zero-clearnet box — from
 // mirroring, and it would have stopped fast-sync there too.
+// Both scripts now take the router from one place, bootChainClient.ts (the
+// same helper sync-profile and snapshot-verify-oplog use). Its behaviour —
+// .b32.i2p through the proxy, no system DNS for a hidden name — is proven by
+// apps/indexer/test/integration/snapshot-scripts-chain.test.ts, which runs the
+// real scripts; here only the wiring is pinned.
+{
+	const boot = read('apps/indexer/src/indexer/bootChainClient.ts');
+	ok(
+		'bootChainClient.ts installs the hidden-service dispatcher with the service policy',
+		/installHiddenServiceDispatcher\(/.test(boot) && /indexerRouterPolicy\(config\)/.test(boot)
+	);
+	const policy = read('apps/indexer/src/indexer/hiddenServiceDispatcher.ts');
+	ok(
+		'…and that policy fails CLOSED on a hidden-only node rather than reaching for clearnet',
+		/blurtRpcEndpoints\.length === 0 \? 'refuse' : 'allow'/.test(policy)
+	);
+}
 for (const rel of [
 	'apps/indexer/scripts/snapshot-mirror.ts',
 	'apps/indexer/scripts/snapshot-bootstrap.ts'
 ]) {
 	const src = read(rel);
-	ok(`${rel}: installs the hidden-service dispatcher`, /installHiddenServiceDispatcher/.test(src));
+	// Anchor on the config load, NOT on where `callCondenser` appears in the
+	// file: in snapshot-bootstrap that call lives in a helper defined near the
+	// top but invoked much later. Only comment lines may sit between the two.
 	ok(
-		`${rel}: …and fails CLOSED on a hidden-only node rather than reaching for clearnet`,
-		/blurtRpcEndpoints\.length === 0 \? 'refuse' : 'allow'/.test(src)
+		`${rel}: installs the router immediately after the config is loaded, before any chain read`,
+		/const config = loadConfig\(\);\n(?:\t\/\/[^\n]*\n)*\tinstallChainRouting\(config\);/.test(src)
 	);
-	// Anchor on the line immediately after config load, NOT on where
-	// `callCondenser` appears in the file: in snapshot-bootstrap that call lives
-	// in a helper defined near the top but invoked much later, so comparing
-	// textual positions reports a false failure. Textual order is not execution
-	// order — the third guard I have written tonight that confused the two.
-	ok(
-		`${rel}: …installed immediately after the config is loaded, before any chain read`,
-		/const config = loadConfig\(\);\n\tinstallHiddenRouting\(config\);/.test(src)
-	);
+	ok(`${rel}: builds its chain client through bootChainClient`, !/new BlurtClient\(/.test(src));
 }
 
 // ── P. the kubo Host header (v1.17.8) ───────────────────────────────
@@ -558,7 +713,10 @@ ok(
 	'…and NOT `localhost` (kubo ships localhost as a SUBDOMAIN gateway — it would redirect /ipfs/<cid>)',
 	!/proxy_set_header Host localhost;/.test(ngx)
 );
-ok('the heal probe sends the same Host so it stops lying', /--header='Host: 127\.0\.0\.1'/.test(heal));
+ok(
+	'the heal probe sends the same Host so it stops lying',
+	/--header='Host: 127\.0\.0\.1'/.test(heal)
+);
 
 // ── Q. the mirror must wait for PEERS, not just a live API ──────────
 // morphitir's swarm was 0 when the mirror ran right after an upgrade restart;
@@ -571,16 +729,28 @@ ok('…and defers cleanly rather than stalling', /no swarm peers after/.test(mir
 // had been regenerated and the config never reconciled. Peers' I2P fetches to
 // it failed for an unknown period, hidden by its .onion still working, and the
 // seeder blamed "slow tunnels". Both routers publish the truth locally.
-ok('upgrade reads what TOR actually hosts, separately from the config', /MORPHIT_ROUTER_ONION/.test(upgrade));
-ok('upgrade reads what I2PD actually hosts, from its console', /MORPHIT_ROUTER_I2P/.test(upgrade) && /i2p_tunnels/.test(upgrade));
+ok(
+	'upgrade reads what TOR actually hosts, separately from the config',
+	/MORPHIT_ROUTER_ONION/.test(upgrade)
+);
+ok(
+	'upgrade reads what I2PD actually hosts, from its console',
+	/MORPHIT_ROUTER_I2P/.test(upgrade) && /i2p_tunnels/.test(upgrade)
+);
 // …SCOPED to Morphit's own tunnel. Taking the first b32 on the page is only
 // correct on a router hosting one destination; a box with several tunnels got a
 // stranger's address compared against its own and was told its CORRECT config
 // was "advertised wrong" — while the next line confirmed that address served
 // fine. A check that cries wolf is worse than no check.
-ok('…scoped to the morphit tunnel, not just the first b32 on the page',
-	/grep -i 'morphit'/.test(upgrade) && !/\| grep -oE '\[a-z2-7\]\{52\}\\\\\.b32\\\\\.i2p' \| head -1/.test(upgrade));
-ok('…and stays SILENT when no morphit tunnel is identifiable', /cannot tell which destination is ours/.test(upgrade));
+ok(
+	'…scoped to the morphit tunnel, not just the first b32 on the page',
+	/grep -i 'morphit'/.test(upgrade) &&
+		!/\| grep -oE '\[a-z2-7\]\{52\}\\\\\.b32\\\\\.i2p' \| head -1/.test(upgrade)
+);
+ok(
+	'…and stays SILENT when no morphit tunnel is identifiable',
+	/cannot tell which destination is ours/.test(upgrade)
+);
 // The clearnet frontend probe dials 127.0.0.1:443. A zero-clearnet box has no
 // 443 listener — it serves through its Tor/I2P tunnels on another local port —
 // so the probe ALWAYS failed there and reported "the FRONTEND does not serve
@@ -590,8 +760,10 @@ ok(
 	'the clearnet frontend probe is skipped when the origin is a HIDDEN address',
 	/\*\.onion\|\*\.b32\.i2p\|\*\.i2p\|\*\.loki\)/.test(seed) && /skip-hidden/.test(seed)
 );
-ok('…and says why, rather than reporting a working box as broken',
-	/not reachable over the clearnet edge/.test(seed));
+ok(
+	'…and says why, rather than reporting a working box as broken',
+	/not reachable over the clearnet edge/.test(seed)
+);
 
 // ── U. RPC timeout must follow the transport (v1.17.11) ─────────────
 // A flat 10s RPC timeout aborted EVERY standalone chain read on a zero-clearnet
@@ -600,33 +772,55 @@ ok('…and says why, rather than reporting a working box as broken',
 // long-lived indexer service survived on warm tunnels and continuous retries,
 // which is precisely why this looked like a script bug instead of a timeout.
 const rpcClient = read('apps/indexer/src/blurt/client.ts');
-ok('the RPC timeout depends on the transport, not a flat value',
-	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(rpcClient));
+ok(
+	'the RPC timeout depends on the transport, not a flat value',
+	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(rpcClient)
+);
 ok('…clearnet keeps its short timeout', /hiddenNet === null \? 10_000/.test(rpcClient));
-ok('…hidden transports get far longer, and it is tunable',
-	/MORPHIT_HIDDEN_RPC_TIMEOUT_MS \?\? 60_000/.test(rpcClient));
+ok(
+	'…hidden transports get far longer, and it is tunable',
+	/MORPHIT_HIDDEN_RPC_TIMEOUT_MS \?\? 60_000/.test(rpcClient)
+);
 
 // FIVE layers of the same flat-timeout mistake were found in one session. Each
 // fix was real and each hid the next, so guard EVERY layer — when one is fixed,
 // check the next one down.
-ok('layer 4: the RELAY client is transport-aware too (it may hold .onion RPC endpoints)',
-	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(read('apps/relay/src/blurt/client.ts')));
+ok(
+	'layer 4: the RELAY client is transport-aware too (it may hold .onion RPC endpoints)',
+	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(read('apps/relay/src/blurt/client.ts'))
+);
 ok(
 	'layer 5: peer PRICE fetches get the hidden floor — a zero-clearnet node otherwise silently collects NO peer observations and loses its price cross-check',
-	/hiddenOnly\n\t\t\? Math\.max\(fetchTimeoutMsRaw/.test(read('apps/indexer/src/indexer/price/peerPriceMonitor.ts'))
+	/hiddenOnly\n\t\t\? Math\.max\(fetchTimeoutMsRaw/.test(
+		read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')
+	)
 );
-ok('…and a clearnet node keeps the short peer timeout',
-	/: fetchTimeoutMsRaw;/.test(read('apps/indexer/src/indexer/price/peerPriceMonitor.ts')));
-// FOURTH layer of the same mistake, found by the v1.17.11 deep-deep: the RELAY's
+ok(
+	'…and a clearnet node keeps the short peer timeout',
+	/: fetchTimeoutMsRaw;/.test(read('apps/indexer/src/indexer/price/peerPriceMonitor.ts'))
+);
+// FOURTH layer of the same mistake, found by the v1.17.11 deep audit: the RELAY's
 // client had the identical flat 10s, and relay config explicitly ALLOWS
 // .onion/.i2p endpoints. When one layer is fixed, check the next one down.
 const relayClient = read('apps/relay/src/blurt/client.ts');
-ok('the RELAY client is transport-aware too (its config allows hidden endpoints)',
-	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(relayClient));
+ok(
+	'the RELAY client is transport-aware too (its config allows hidden endpoints)',
+	/hiddenHostNetworkOf\(new URL\(url\)\.hostname\)/.test(relayClient)
+);
 ok('…and keeps the short budget for clearnet', /hiddenNet === null \? 10_000/.test(relayClient));
-ok('seeder COMPARES config against router and names the mismatch', /CONFIG\/ROUTER MISMATCH/.test(seed));
-ok('…and prints the exact key to change plus the re-publish step', /MORPHIT_INSTANCE_I2P_B32_ADDRESS=\$MORPHIT_ROUTER_I2P/.test(seed) && /Re-publish my registration/.test(seed));
-ok('…and reports an address the router hosts but the config never advertises', /peers never learn it/.test(seed));
+ok(
+	'seeder COMPARES config against router and names the mismatch',
+	/CONFIG\/ROUTER MISMATCH/.test(seed)
+);
+ok(
+	'…and prints the exact key to change plus the re-publish step',
+	/MORPHIT_INSTANCE_I2P_B32_ADDRESS=\$MORPHIT_ROUTER_I2P/.test(seed) &&
+		/Re-publish my registration/.test(seed)
+);
+ok(
+	'…and reports an address the router hosts but the config never advertises',
+	/peers never learn it/.test(seed)
+);
 
 // A check must not explain away its own finding. The old wording ("tunnels are
 // slow to warm up") talked an operator out of investigating a real fault.
@@ -634,12 +828,18 @@ ok(
 	'an HTTP status back through i2pd is NOT called a warm-up delay',
 	/the proxy works, so this is NOT a warm-up delay/.test(seed)
 );
-ok('…while a genuine no-reply still gets the patience it deserves', /tunnels take a few minutes to build/.test(seed));
+ok(
+	'…while a genuine no-reply still gets the patience it deserves',
+	/tunnels take a few minutes to build/.test(seed)
+);
 
 // ── S. generic alert repeat-suppression (v1.17.9) ───────────────────
 const emitLib = read('ops/scripts/lib/emit.sh');
 ok('emit() suppresses an identical repeat', /MORPHIT_EMIT_DEDUP/.test(emitLib));
-ok('…but re-announces on a cadence so nothing is forgotten', /MORPHIT_EMIT_REPEAT_SEC/.test(emitLib));
+ok(
+	'…but re-announces on a cadence so nothing is forgotten',
+	/MORPHIT_EMIT_REPEAT_SEC/.test(emitLib)
+);
 ok(
 	'…and FAILS OPEN when state cannot be written (losing an alert beats repeating one)',
 	/if mkdir -p "\$_emit_state_dir" 2>\/dev\/null; then/.test(emitLib)
@@ -668,9 +868,14 @@ ok(
 
 // ── T. rehearsing fast-sync needs no incantation ────────────────────
 const fs2 = read('apps/ops-cli/src/commands/fastSync.ts');
-ok('fast-sync has a rehearse mode', /ctx\.flags\.rehearse/.test(fs2) && /verifyOnly: true/.test(fs2));
-ok('…that runs BEFORE the restore guards (nothing is written, so they do not apply)',
-	fs2.indexOf('REHEARSAL') < fs2.indexOf('never restore under a LIVE indexer'));
+ok(
+	'fast-sync has a rehearse mode',
+	/ctx\.flags\.rehearse/.test(fs2) && /verifyOnly: true/.test(fs2)
+);
+ok(
+	'…that runs BEFORE the restore guards (nothing is written, so they do not apply)',
+	fs2.indexOf('REHEARSAL') < fs2.indexOf('never restore under a LIVE indexer')
+);
 
 // ── V. every RPC consumer must use the WHOLE node list ──────────────
 // 20 nodes exist so that any one going down is a non-event. The indexer merged
@@ -680,12 +885,14 @@ ok('…that runs BEFORE the restore guards (nothing is written, so they do not a
 // outage it is the one that most needs the hidden-service nodes to fall back on.
 const indexerMain = read('apps/indexer/src/main.ts');
 
-// v1.18.0 deep-deep (rv2-4): the boot merge now goes through the chain-verified
+// the boot merge now goes through the chain-verified
 // reload (rpcDirectoryReload.ts), which merges only what the signed op holds.
 ok(
 	'the indexer merges the on-chain RPC directory',
 	/keepReloadingRpcDirectory\(/.test(indexerMain) &&
-		/mergeRpcEndpoints\(\s*directoryEndpointUrls\(/.test(read('apps/indexer/src/indexer/rpcDirectoryReload.ts'))
+		/mergeRpcEndpoints\(\s*directoryEndpointUrls\(/.test(
+			read('apps/indexer/src/indexer/rpcDirectoryReload.ts')
+		)
 );
 // The RELAY's merge of the on-chain RPC directory is no longer checked here by
 // source regex: D12 replaced the boot-only read with a LIVE sync
@@ -713,12 +920,17 @@ ok(
 	(poolSrc.match(/this\.maybeSaveHealthState\(\);/g) ?? []).length >= 2 &&
 		/HEALTH_STATE_SAVE_INTERVAL_MS/.test(poolSrc)
 );
-ok('…restoring failure history but NEVER a cooldown (a node down a minute ago may be up now)',
-	/Only LATENCY and FAILURE history are restored/.test(poolSrc));
+ok(
+	'…restoring failure history but NEVER a cooldown (a node down a minute ago may be up now)',
+	/Only LATENCY and FAILURE history are restored/.test(poolSrc)
+);
 ok('…and ignoring stale state entirely', /HEALTH_STATE_MAX_AGE_MS/.test(poolSrc));
-ok('both the indexer and the relay share that state file',
-	/healthStatePath: process\.env\.MORPHIT_RPC_HEALTH_STATE/.test(read('apps/indexer/src/blurt/client.ts')) &&
-		/healthStatePath: process\.env\.MORPHIT_RPC_HEALTH_STATE/.test(relayClient));
+ok(
+	'both the indexer and the relay share that state file',
+	/healthStatePath: process\.env\.MORPHIT_RPC_HEALTH_STATE/.test(
+		read('apps/indexer/src/blurt/client.ts')
+	) && /healthStatePath: process\.env\.MORPHIT_RPC_HEALTH_STATE/.test(relayClient)
+);
 ok(
 	'ordering distinguishes never-tried from never-succeeded, so a dead node is not bootstrapped first',
 	/e\.consecutiveFailures > 0 \? 2 : 0/.test(poolSrc)

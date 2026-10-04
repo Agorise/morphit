@@ -7,7 +7,7 @@
 
 	  - Options come from the frontend asset registry (ASSETS), so the
 	    coin NAME + ticker + logo all stay in one source of truth.
-	  - Coins are alphabetized BY NAME (not ticker) per the maintainer's ask —
+	  - Coins are alphabetized BY NAME (not ticker) as requested —
 	    "Bitcoin (BTC)", "Bitcoin Cash (BCH)", "Blurt (BLURT)", …,
 	    "Pirate Chain (ARRR)", … "Zcash (ZEC)".
 	  - Operator-disabled assets are filtered out (same rule as the
@@ -17,10 +17,8 @@
 	    the menu pays zero bytes for the coin icons (priorities #1/#4).
 
 	"Barter (goods/services)" is appended last with the bundled
-	gold-bars icon.  Barter is a PAYMENT METHOD (`barter_goods`), not a
-	tradable asset, so selecting it sets the sentinel value 'barter';
-	the orderbook page maps that to `payment_methods ⊇ barter_goods`
-	rather than `q.asset` (the indexer has no "asset=barter").
+	gold-bars icon.  Selecting it sets the sentinel value 'barter', which
+	the orderbook page maps to the goods/services asset (`asset=BARTER`).
 -->
 <script lang="ts">
 	import { _ } from 'svelte-i18n';
@@ -29,7 +27,7 @@
 	import { isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 
 	/** '' = Any · an uppercase crypto ticker · 'barter' = the goods/services
-	 *  ASSET (cp425). The 'barter' sentinel keeps the goods entry visually
+	 *  ASSET. The 'barter' sentinel keeps the goods entry visually
 	 *  distinct (its own icon + "goods/services" label) rather than mixed into
 	 *  the coin list; the orderbook page maps it to `o.asset = 'BARTER'`. */
 	type AssetFilterValue = '' | AssetTicker | 'barter';
@@ -46,7 +44,7 @@
 	);
 
 	// Tradable coins, operator-disabled filtered, alphabetized by name.
-	// cp425 — goods assets (BARTER) are excluded here; barter has its own
+	// goods assets (BARTER) are excluded here; barter has its own
 	// distinct "goods/services" entry below (the 'barter' sentinel), so it
 	// isn't mixed into the coin list.
 	const coins = $derived(

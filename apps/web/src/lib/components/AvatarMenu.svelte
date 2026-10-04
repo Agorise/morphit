@@ -29,7 +29,8 @@
 	 *   - Click or Enter/Space on the button toggles the menu
 	 *   - Escape closes
 	 *   - Click outside closes
-	 *   - Focus trapped inside menu while open (tab cycles)
+	 *   - Focus is NOT trapped: Tab moves on past the menu (it stays open
+	 *     until Escape or an outside click)
 	 */
 	import { _ } from 'svelte-i18n';
 	import { gotoLocale } from '$i18n/navigate';
@@ -49,7 +50,7 @@
 	import { portal } from '$lib/ui/portal';
 	import { backupMaterialPending } from '$stores/backupPending';
 	import { backupVisited } from '$utils/backupVisited';
-	// runExplicitLockExtras is dynamically imported in confirmLock() (cp271 byte
+	// runExplicitLockExtras is dynamically imported in confirmLock() (byte
 	// budget): it pulls sign-out-only chat/trade cleanup (pubPin/tradeStatus/
 	// blurtVerify), and importing it statically dragged a chat-verify chunk
 	// (condenser_api.get_transaction) onto every page's baseline. It only runs
@@ -95,7 +96,7 @@
 	 *  (not a fresh import), so the button reads "Unlock" instead of
 	 *  "Start".
 	 *
-	 *  v1.8.11 (the maintainer) — this used to call `hasPersistedKeystore()` directly and
+	 *  v1.8.11 — this used to call `hasPersistedKeystore()` directly and
 	 *  rely on $hasAnySession to retrigger. That covers LOCK (session flips
 	 *  true→false) but NOT signing out while ALREADY locked: $hasAnySession is
 	 *  false on both sides, so the derived never re-ran and the button stayed
@@ -107,7 +108,7 @@
 	);
 
 	/** Whether to show the View profile menu item.  Sally finding
-	 *  H8 (Part 68).  Hidden when the user hasn't completed
+	 *  H8.  Hidden when the user hasn't completed
 	 *  account-name registration yet, since /@<null> would 404.
 	 *  Reads the reactive `blurtAccountName` store so it re-evaluates
 	 *  the instant registration writes the name (and on sign-out),
@@ -175,7 +176,7 @@
 		triggerEl?.focus();
 	}
 
-	/** tt.txt #1 follow-up (the maintainer) — the menu and its scrim are PORTALED to <body>,
+	/** the menu and its scrim are PORTALED to <body>,
 	 *  so the panel can no longer position itself `absolute` against the trigger.
 	 *  Anchor it to the trigger's viewport rect instead, and keep that rect fresh
 	 *  while the menu is open. */
@@ -215,7 +216,7 @@
 	}
 
 	function goToMyProfile(): void {
-		// Sally finding H8 (Part 68): without this entry the user
+		// Sally finding H8: without this entry the user
 		// has no in-UI route from the avatar menu to her own
 		// profile page (the public /@account view).  We resolve
 		// the account name lazily inside the click handler so
@@ -301,7 +302,7 @@
 		showLockConfirm = false;
 	}
 
-	/** tt.txt #3 — the notification categories showed correct counts but were
+	/** the notification categories showed correct counts but were
 	 *  inert `<div>`s. A count that tells you something is waiting, and then
 	 *  refuses to take you to it, is worse than no count. Each row is now a real
 	 *  button that closes the menu and lands on the page that holds the thing.
@@ -318,8 +319,8 @@
 		// Clears the event-based order + feedback counts…
 		markRead();
 		// …and acknowledges every unread chat discussion, which markRead()
-		// deliberately skips (chat is state-based). Before cp452 this button
-		// could never clear a chat badge (t.txt item I).
+		// deliberately skips (chat is state-based). Previously this button
+		// could never clear a chat badge.
 		markAllChatRead();
 	}
 
@@ -344,7 +345,7 @@
 		};
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
@@ -369,7 +370,7 @@
 				<!-- User's uploaded SVG avatar (sanitized on read by
 				     profileProps → sanitizeSvg), shown as an <img> like
 				     everywhere else: inlined, its own style/class could escape
-				     this frame (v1.18.0 deep-deep, M1). -->
+				     this frame. -->
 				<img
 					src={svgAvatarImgSrc(selfAvatar.svg)}
 					alt=""
@@ -415,7 +416,7 @@
 			{/if}
 
 			{#if $backupMaterialPending}
-				<!-- tt.txt #11 (the maintainer) — RED dot: this account holds key material that
+				<!-- RED dot: this account holds key material that
 				     exists nowhere else yet. Deliberately not the emerald unread
 				     colour: "you have unread messages" and "you could permanently
 				     lose your keys" must never look the same. Bottom-left, so it
@@ -450,7 +451,7 @@
 			{/if}
 		</button>
 
-		<!-- tt.txt #1 — the scrim and the menu both live at <body> level.
+		<!-- the scrim and the menu both live at <body> level.
 		     WHY THE CONTAINER IS ALWAYS RENDERED, and `{#if open}` sits INSIDE it:
 		     a Svelte block tracks its own first and last nodes. When the scrim was
 		     the block's first node and `use:portal` moved it to <body>, the block
@@ -459,7 +460,7 @@
 		     landed on a dead overlay. Portal a STABLE node, never a block boundary.
 
 		     z-[60] puts the container above the sticky header (z-40), so the header
-		     blurs along with the rest of the page (the maintainer). The header carries
+		     blurs along with the rest of the page. The header carries
 		     `backdrop-blur-md`, which makes it the containing block for any
 		     `position: fixed` descendant — which is precisely why neither of these
 		     can be left inside it. -->
@@ -731,7 +732,7 @@
 							</button>
 						</li>
 
-						<!-- Sally finding H8 (Part 68): View my profile.
+						<!-- Sally finding H8: View my profile.
 						     Hidden when the user hasn't completed
 						     account-name registration (registration is
 						     prereq for /@<account> to resolve).  Drops

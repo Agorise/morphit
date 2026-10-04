@@ -24,7 +24,12 @@ import { parseConfig } from './config.ts';
 import { openState } from './state.ts';
 import { createRateLimiter } from './rateLimit.ts';
 import { classify, renderAlertBody, renderTestAlertBody } from './classifier.ts';
-import { createDryRunSender, createMatrixSender, type MatrixSender } from './matrix.ts';
+import {
+	createDryRunSender,
+	createMatrixSender,
+	installMatrixProxy,
+	type MatrixSender
+} from './matrix.ts';
 import { createHealthServer } from './health.ts';
 import { tailJournalctl } from './journalctl.ts';
 import { startDigestScheduler } from './digest.ts';
@@ -55,9 +60,25 @@ async function main(): Promise<void> {
 		process.exit(0);
 	}
 
-	const config = parseConfig();
+	let config: ReturnType<typeof parseConfig>;
+	try {
+		config = parseConfig();
+	} catch (err) {
+		// A configuration the bot refuses (e.g. a clearnet homeserver on a
+		// tor-only node) needs the operator, not a restart loop: say why, exit 0.
+		console.error(
+			`morphit-matrix-bot: not starting — ${err instanceof Error ? err.message : String(err)}`
+		);
+		console.error(
+			'Alerts are OFF until the configuration is fixed; the rest of the node is unaffected.'
+		);
+		process.exit(0);
+	}
+	// Before any Matrix request: route them through Tor when configured.
+	installMatrixProxy(config.socksProxy);
 	console.log(
 		`morphit-matrix-bot starting.  homeserver=${config.homeserver} ` +
+			`via=${config.socksProxy === '' ? 'direct' : 'socks'} ` +
 			`recipients=${config.alertMxids.length} dryRun=${config.dryRun}`
 	);
 
@@ -78,7 +99,7 @@ async function main(): Promise<void> {
 			// (common after a reinstall, or reusing the SAME access token on a new box).
 			// A stale store can never reconcile with the server's keys, so clear it and
 			// tell the operator to mint a fresh token — instead of crash-looping on an
-			// opaque stack trace (the maintainer/morphit.io reinstall).
+			// opaque stack trace (seen after a reinstall).
 			if (/already exists/i.test(msg) && /one[- ]?time key|signed_curve25519/i.test(msg)) {
 				try {
 					// Remove ONLY the crypto store. This used to delete the whole storage
@@ -110,14 +131,19 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// Healthcheck endpoint — systemd readiness probe + the `/self-test`
-	// route that `morphit-ops matrix test` POSTs to (DMs a labelled test
-	// alert to the configured recipients via this same client).
+	// The tailer is assigned below; the health probe reads it lazily.
+	let tailer: ReturnType<typeof tailJournalctl> | null = null;
+
+	// Healthcheck endpoint — liveness probe (down while the journal tailer is
+	// down) + the `/self-test` route that `morphit-ops matrix test` POSTs to
+	// (DMs a labelled test alert to the configured recipients via this same
+	// client).
 	const health = createHealthServer({
 		alertMxids: config.alertMxids,
 		dryRun: config.dryRun,
 		sender,
-		renderTestBody: renderTestAlertBody
+		renderTestBody: renderTestAlertBody,
+		tailerAlive: () => tailer?.isAlive() ?? false
 	});
 	health.listen(config.healthcheckPort, '127.0.0.1');
 
@@ -137,8 +163,9 @@ async function main(): Promise<void> {
 		}
 	});
 
-	// Journalctl tail — main event loop.
-	const tailer = tailJournalctl(config.journalctlUnits, async (alert) => {
+	// Journalctl tail — main event loop. Respawned with backoff if journalctl
+	// exits (see journalctl.ts).
+	tailer = tailJournalctl(config.journalctlUnits, async (alert) => {
 		const classified = classify(alert);
 
 		if (classified.tier === 'CRITICAL') {
@@ -179,7 +206,7 @@ async function main(): Promise<void> {
 	// Graceful shutdown.
 	function shutdown(signal: string): void {
 		console.log(`received ${signal}; shutting down`);
-		tailer.stop();
+		tailer?.stop();
 		digestStop();
 		health.close();
 		void sender.stop().finally(() => {

@@ -50,4 +50,16 @@ describe('highlightJsonToHtml — numeric string values (cp439)', () => {
 		expect(html).not.toContain('<b>');
 		expect(html).toContain('&lt;b&gt;');
 	});
+
+	it('a memo cannot draw a fake field', () => {
+		const op = { from: 'alice', to: 'bob', amount: '0.001 BLURT', memo: 'thanks",\n  "amount": "500.000 BLURT' };
+		const html = highlightJsonToHtml(JSON.stringify(op, null, 2));
+		const text = html.replace(/<[^>]+>/g, '');
+		const lines = text.split('\n');
+		// Exactly one line starts like the amount field: the real one.
+		expect(lines.filter((l) => /^\s*"amount": /.test(l))).toEqual(['  "amount": "0.001 BLURT",']);
+		// The memo's continuation is marked and its quotes stay escaped.
+		expect(text).toContain('│   \\"amount\\": \\"500.000 BLURT"');
+		expect(text).toContain('"memo": "thanks\\",');
+	});
 });

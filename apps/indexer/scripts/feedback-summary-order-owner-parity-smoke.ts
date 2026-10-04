@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 /*
- * feedback-summary-order-owner-parity — cp471 (t.txt F/H) guard.
+ * feedback-summary-order-owner-parity — guard.
  *
  * The feedback INTAKE (indexer/handlers/feedback.ts) accepts a cited
  * order posted by EITHER party to the trade — `account IN (subject,
- * reviewer)` (cp420) — because a MAKER reviewing the TAKER cites the
+ * reviewer)` — because a MAKER reviewing the TAKER cites the
  * maker's OWN order, so the order belongs to the reviewer, not the
  * subject.
  *
@@ -20,8 +20,9 @@
  *   1. intake still accepts EITHER party (`account IN ($1, $3)`);
  *   2. the summary JOIN matches EITHER party (`o.account IN (f.subject,
  *      f.reviewer)`), NOT the old subject-only `ON o.account = f.subject`;
- *   3. the summary uses a LEFT JOIN (a since-removed order can't zero the
- *      count either);
+ *   3. the summary uses a LEFT JOIN LATERAL … LIMIT 1 (a since-removed order
+ *      can't zero the count, and an order under the same permlink owned by
+ *      the other party can't double it);
  *   4. the summary flips the subject's side when the reviewer owns the
  *      order (`WHEN o.account = f.reviewer`), so the by_side breakdown
  *      stays correct.
@@ -49,7 +50,7 @@ function bad(scope: string, msg: string): void {
 }
 
 // The intake's cited-order query lives in the shared predicate the handler and
-// the head tailer both call (v1.18.0 deep-deep, rv6-L1), so the rule is read
+// the head tailer both call, so the rule is read
 // from there — and the handler must still be the one calling it.
 const handlerSrc = readFileSync(resolve(SRC, 'indexer/handlers/feedback.ts'), 'utf8');
 if (!/reviewCitesFeePaidOrder\(/.test(handlerSrc)) {
@@ -82,7 +83,7 @@ if (/o\.account IN \(f\.subject, f\.reviewer\)/.test(flatSummary)) {
 } else {
 	bad(
 		'summary',
-		'the reputation summary JOIN no longer matches BOTH parties. A subject-only join silently drops every maker→taker review — the exact "No feedback yet" bug (cp471, t.txt F/H).'
+		'the reputation summary JOIN no longer matches BOTH parties. A subject-only join silently drops every maker→taker review — the exact "No feedback yet" bug.'
 	);
 }
 
@@ -92,15 +93,22 @@ if (/o\.account IN \(f\.subject, f\.reviewer\)/.test(flatSummary)) {
 if (/ON o\.account = f\.subject/.test(flatSummary)) {
 	bad(
 		'summary',
-		'the old subject-only JOIN condition `ON o.account = f.subject` is back — this re-breaks maker→taker reputation (cp471, t.txt F/H).'
+		'the old subject-only JOIN condition `ON o.account = f.subject` is back — this re-breaks maker→taker reputation.'
 	);
 } else {
 	ok('summary: the old subject-only JOIN condition (ON o.account = f.subject) is absent');
 }
 
-// 4. Summary uses a LEFT JOIN so a since-removed order cannot zero the count.
-if (/LEFT JOIN orders o/.test(flatSummary)) {
-	ok('summary: orders JOIN is LEFT (a since-removed order cannot drop the count)');
+// 4. Summary uses a LEFT JOIN so a since-removed order cannot zero the count,
+//    and a LATERAL … LIMIT 1 so a review is ONE row even when both parties own an
+//    order under the cited permlink (behavioural guard:
+//    test/integration/feedback-count-once.test.ts).
+if (
+	/LEFT JOIN LATERAL \( SELECT o\.account, o\.side FROM orders o [\s\S]{0,400}?LIMIT 1 \) o ON TRUE/.test(
+		flatSummary
+	)
+) {
+	ok('summary: orders JOIN is LEFT LATERAL … LIMIT 1 (never drops, never doubles a review)');
 } else {
 	bad(
 		'summary',

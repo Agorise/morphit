@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: t.txt tasks #24, #25, #26 — the chat "Pay now" money path (the maintainer).
+ * Smoke: the chat "Pay now" money path.
  *
  *  #25 A BLURT transfer is signed with the ACTIVE key. An account imported
  *      posting-only has no active key on this device, so the transfer can never
@@ -58,14 +58,14 @@ function check(name: string, ok: boolean): void {
 }
 
 // ─── #25 active-key gate ─────────────────────────────────────────────
-// tt.txt #11 — capability, not provenance. A 'posting-active' session HAS an
+// capability, not provenance. A 'posting-active' session HAS an
 // active key and must be allowed to spend; `origin === 'morphit-seed'` would
 // wrongly deny it. Pinned in both places so they can't drift apart again.
 check('PayBlurtModal derives hasActiveKey from the KEY, not the origin', /activePublicKey \?\? null\) !== null/.test(pay));
 check('it uses the SAME rule the wallet Send button uses', /activePublicKey \?\? null\) !== null/.test(wallet));
 check('canPay requires an active key', /canPay = \$derived\([\s\S]{0,220}hasActiveKey/.test(code(pay)));
 check('a posting-only session never sees the password field', /\{:else if !hasActiveKey\}/.test(pay));
-// tt.txt #11 — the dead-end panel became an in-place unlock that RESUMES the
+// the dead-end panel became an in-place unlock that RESUMES the
 // payment: an existing Blurt user has no seed and no Keyfile, only an Active key
 // (WIF), which they paste here and we sign with once.
 check('…and is offered an in-place unlock instead of a dead end', /<UnlockActiveKeyModal/.test(pay));

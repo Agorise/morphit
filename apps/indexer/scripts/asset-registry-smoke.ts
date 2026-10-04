@@ -53,9 +53,9 @@ scenario('XMR is first in display order (audience priority)', () => {
 	}
 });
 
-// CP48 STRUCTURAL DEFENSE — the maintainer's cp47-A1 finding flagged this as
+// CP48 STRUCTURAL DEFENSE — the maintainer's flagged this as
 // a recurring bug class.  3 of 8 asset additions hit the same trap:
-// cp33 'doge' became valid, cp39 'zec' became valid, cp47 'eth'
+// 'doge' became valid, 'zec' became valid, 'eth'
 // became valid.  Each required a manual stand-in swap.
 //
 // The structural fix: assert at runtime that the chosen stand-in
@@ -85,7 +85,7 @@ scenario('getAsset throws on unknown ticker', () => {
 		// CP48 structural fix: use a synthetic non-ticker that
 		// cannot become a real asset.  Underscores are not allowed
 		// in ticker symbols (canonical regex enforces uppercase
-		// letters only).  Replaces the previous cp47-A1 swap to
+		// letters only).  Replaces the previous swap to
 		// 'trx' which was still at risk of becoming valid if
 		// Morphit ever ships native Tron support.
 		// @ts-expect-error -- testing runtime behavior with synthetic non-ticker
@@ -128,15 +128,15 @@ scenario('logo paths are stable + distinct + exist on disk', () => {
 	if (set.size !== paths.length) {
 		throw new Error('duplicate logo path');
 	}
-	// cp115 — All 16 tradable assets now consistently use the
+	// All 16 tradable assets now consistently use the
 	// /icons/icon-<lower-ticker>.svg path convention.  An earlier
 	// /coins/<ticker>.svg path was vestigial (files never shipped to
 	// disk under that path) and has been folded into the canonical
-	// form.  The CoinCarousel component (cp115) is the first real
+	// form.  The CoinCarousel component is the first real
 	// consumer of `logoSvgPath` outside this smoke, so this assertion
 	// is now load-bearing: a broken path means a broken homepage.
 	//
-	// Defense beyond cp30-CODE-A: also verify each path actually
+	// Defense beyond: also verify each path actually
 	// resolves to a file in apps/web/static.  Catches accidental
 	// rename of an icon file without registry update, and vice versa.
 	for (const p of paths) {
@@ -164,11 +164,11 @@ scenario('display tickers are uppercase', () => {
 });
 
 scenario('lower-case tickers match payload union', () => {
-	// cp30-DD-DD CODE-B — pre-existing broken assertion: this set
-	// was last updated at cp3 (USDT addition) and never extended for
-	// BCH (cp21), LTC (cp24), DASH (cp27), or USDC (cp30) so the
+	// CODE-B — pre-existing broken assertion: this set
+	// was last updated (USDT addition) and never extended for
+	// BCH, LTC, DASH, or USDC so the
 	// scenario has been throwing on first non-baseline asset since
-	// cp21.  Source of truth is the ChatAssetTicker union in
+	// Source of truth is the ChatAssetTicker union in
 	// `lib/chat/payload.ts`; keep this list in lockstep with that
 	// union (or, better: import the union's values dynamically —
 	// follow-up).
@@ -200,7 +200,7 @@ scenario('lower-case tickers match payload union', () => {
 
 scenario('decimals are positive integers (crypto assets; goods have 0)', () => {
 	for (const a of ASSETS) {
-		// cp425 — goods assets (BARTER) are valued directly in fiat, not a
+		// goods assets (BARTER) are valued directly in fiat, not a
 		// crypto amount, so decimals=0 is correct for them; skip the >0 check.
 		if (isGoodsAsset(a.ticker.toUpperCase() as AssetTicker)) continue;
 		if (!Number.isInteger(a.decimals) || a.decimals <= 0) {
@@ -295,7 +295,7 @@ scenario('memoCapableAssets includes BLURT, excludes BTC + XMR', () => {
 });
 
 scenario('registry is frozen at runtime (immutable shape contract)', () => {
-	// cp474 — this scenario used to read `original` and then compare
+	// this scenario used to read `original` and then compare
 	// `ASSETS[0].ticker !== original`: a value against itself, which is true by
 	// construction and can never fail.  The mutation it describes had gone
 	// missing, leaving an orphaned `@ts-expect-error` on the harmless read (that

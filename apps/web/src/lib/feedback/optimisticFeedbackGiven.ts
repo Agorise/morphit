@@ -1,12 +1,12 @@
 /**
- * Morphit — optimistic "feedback given" store (cp514 / t.txt D, v1.8.7).
+ * Morphit — optimistic "feedback given" store (v1.8.7).
  *
  * THE PROBLEM. After leaving feedback for a peer in the chatroom, returning to
  * the chat inbox still showed the settled-trade card's 3rd line as the green
  * "Leave feedback" prompt — the truth (★★★★★ stars) only appeared once the
- * durable /feedback-given fetch caught up (a poll later). the maintainer (t.txt D): the
- * line "needs to be accurate and fast, dynamic too so that a page refresh is
- * not needed … show the truth immediately."
+ * durable /feedback-given fetch caught up (a poll later). Requirement: the
+ * line must be accurate and fast, and update without a page refresh,
+ * showing the truth immediately.
  *
  * THE FIX. The chatroom's LeaveFeedbackForm records the just-broadcast feedback
  * here the instant the op lands on-chain; the inbox consults this store — keyed

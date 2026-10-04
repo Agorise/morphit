@@ -21,20 +21,32 @@
  *     op — so a single throwing op can NOT wedge the block. The
  *     only path that rolls back the whole block + retries is a
  *     failure that ALSO breaks the dispatcher's own rollback /
- *     event-log queries (a lost DB connection, or an
- *     already-aborted transaction); that propagates out and the
- *     poller retries the block on the next iteration.
+ *     event-log queries (a lost DB connection); that propagates
+ *     out and the poller retries the block on the next iteration.
+ *   - MUST run any statement they expect may fail (an idempotent
+ *     insert that can hit a unique violation, a best-effort
+ *     notification) inside `inSavepoint` ($indexer/savepoint):
+ *     a failed statement aborts the whole block transaction, and
+ *     catching the JavaScript error does not undo that. A handler
+ *     that returns `{ ok: true }` on an aborted transaction is
+ *     rejected `handler_aborted_tx` and its writes are discarded.
+ *   - MUST NOT throw to mean "retry this block later": the throw is
+ *     caught and the op is committed as rejected. A chain read that
+ *     must succeed before the block can be applied belongs before
+ *     the block transaction (see release.ts / rpcDirectory.ts).
  *   - Receive the transaction-scoped client. All queries inside
  *     the handler MUST use that client (not the pool) so they
  *     partake in the block's atomicity.
- *   - MAY read from the chain via `ctx.blurt` — rare; only the
- *     release handler currently does. Keep chain reads minimal;
- *     they block the poller.
+ *   - SHOULD NOT read from the chain via `ctx.blurt`: the answer
+ *     comes from one RPC endpoint at apply time, so two nodes (or a
+ *     replay) can disagree, and a failed read can only reject the
+ *     op. Prove what the block itself carries instead (see
+ *     `ctx.transaction`).
  */
 
 import type pg from 'pg';
 
-import type { BlurtClient, ChainOperation } from '$blurt/client';
+import type { BlockTransaction, BlurtClient, ChainOperation } from '$blurt/client';
 import type { Config } from '$config';
 import type { FeeVerifier } from '$indexer/fee/verifier';
 
@@ -61,9 +73,17 @@ export interface OpContext {
 	 *  that fragile. It's here for correlating with non-morphit
 	 *  Blurt ops like `transfer`. */
 	readonly siblingOps: readonly ChainOperation[];
-	/** Blurt read-only client for handlers that need to verify
-	 *  chain state (e.g. release handler checking the pinned
-	 *  account's current posting pubkey). */
+	/** The whole transaction this op rode in, exactly as the block holding it
+	 *  was served (signatures included, before any text canonicalisation). The
+	 *  release and rpc-directory handlers recover its signing keys to prove the
+	 *  op was signed by the pinned official key: no chain read, so the verdict
+	 *  is the same on every node and never depends on an RPC answer at apply
+	 *  time. Absent when an op is replayed from the event log, which keeps no
+	 *  signatures — a handler that needs it treats its absence as unsigned. */
+	readonly transaction?: BlockTransaction;
+	/** Blurt read-only client. Handlers should not need it: a chain read
+	 *  inside the block transaction makes the verdict depend on one RPC
+	 *  answer at apply time (see the handler contract above). */
 	readonly blurt: BlurtClient;
 	/** The indexer's configuration. Handlers read trust-anchor
 	 *  values from here. */
@@ -79,7 +99,7 @@ export interface OpContext {
 		readonly xmr?: FeeVerifier;
 	};
 
-	/** Part 106 — canonical expected fee amounts for BTC/XMR
+	/** canonical expected fee amounts for BTC/XMR
 	 *  orders.  Sourced via the same chain-pin > env precedence
 	 *  as feeVerifiers above (TreasurySource).  When chain-pinned,
 	 *  these are authoritative across the federation; when only
@@ -95,9 +115,9 @@ export interface OpContext {
 	 *  `fee_amount_not_configured_<method>`.
 	 *
 	 *  Why this is on OpContext rather than the order handler
-	 *  reaching into config directly: pre-Part-106 the handler
+	 *  reaching into config directly: older the handler
 	 *  used `ctx.config.btcFeeSatoshis` / `ctx.config.xmrFeePiconero`
-	 *  unconditionally.  Part 106 turned the addresses into a
+	 *  unconditionally.  A later change turned the addresses into a
 	 *  chain-pinned value but left the amounts on env until the
 	 *  audit-deep pass caught the gap.  Routing both through
 	 *  OpContext makes "expected amount" inherit the same
@@ -107,7 +127,7 @@ export interface OpContext {
 	readonly feeAmounts: {
 		readonly btcSatoshis?: number;
 		readonly xmrPiconero?: bigint;
-		/** cp372 — chain-pinned BLURT fee base (tier-1, pre-multiplier),
+		/** chain-pinned BLURT fee base (tier-1, pre-multiplier),
 		 *  resolved chain-pin > env.  The order handler multiplies by the
 		 *  Sybil tier and accepts ± FEE_PRICE_TOLERANCE.  Routing it here
 		 *  (rather than reading config.feeBaseBlurt directly) gives the

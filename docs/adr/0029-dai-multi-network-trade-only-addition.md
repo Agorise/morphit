@@ -2,13 +2,13 @@
 
 **Status:** Accepted
 **Date:** 2026-05-18
-**Deciders:** (@the maintainer, claude)
+**Deciders:** project maintainer
 **Supersedes:** N/A
 **Superseded by:** N/A
 
 ## Context
 
-Part 122 cp31 adds **DAI (Dai stablecoin)** as the 9th tradable asset, the
+A later change adds **DAI (Dai stablecoin)** as the 9th tradable asset, the
 3rd Category-B (trade-only) stablecoin, and the 3rd multi-network asset
 on Morphit.
 
@@ -43,7 +43,7 @@ Per the canonical MakerDAO deployments verified at addition time:
 | Arbitrum   | `0xda10009cbd5d07dd0cecc66161fc93d7c9000da1`            | arbiscan.io               |
 
 All four are EVM-format addresses (0x[40 hex]) — same cross-network-mis-send
-foot-gun as USDC's three EVM networks (cp30 ADR-0028).  Network discriminator
+foot-gun as USDC's three EVM networks (ADR-0028).  Network discriminator
 is the only way to tell them apart.
 
 **Networks intentionally NOT supported:**
@@ -57,7 +57,7 @@ is the only way to tell them apart.
   BEP-20.
 - **Tron (TRC-20):** No canonical Maker-issued DAI on Tron.
 - **Arbitrum One vs Arbitrum Nova:** Only Arbitrum One (the main rollup)
-  ships in cp31.  Nova is a separate chain with different security
+  ships.  Nova is a separate chain with different security
   assumptions; adding it would be a separate decision.
 
 If MakerDAO ships canonical native DAI on a new chain in the future, that's
@@ -107,7 +107,7 @@ Circle-blue).
 
 ### 4. Fee category: trade-only (Category B), `fee_method` enum FROZEN
 
-Per Memory #23 + ADR-0014 + cp30 ADR-0028 §5: listing fees can ONLY be
+Per the frozen fee_method rule + ADR-0014 + ADR-0028 §5: listing fees can ONLY be
 paid in BLURT, BTC, or XMR.  DAI joins USDT/USDC/BCH/LTC/DASH as a
 trade-only asset.  `canPayListingFee: false`.
 
@@ -118,7 +118,7 @@ disabled-assets-wizard-smoke, dai-trade-only-smoke).
 ### 5. Amount-jitter: ENABLED, same as USDT + USDC
 
 DAI gets 6-decimal-precision microunit jitter via the same
-`jitterStablecoinAmount` dispatcher cp30 added.  Same rationale as ADR-0028
+`jitterStablecoinAmount` dispatcher a later change added.  Same rationale as ADR-0028
 Decision 2: the centralization-vs-amount-correlation orthogonality applies
 here too.  Amount-jitter doesn't address the PSM/USDC-backing dependency
 or governance upgradeability, but it does address the amount-correlation
@@ -132,7 +132,7 @@ stablecoins can disable DAI alongside USDT and USDC.
 
 ### 7. Brand presentation: respectful, factual, no marketing hype
 
-Per the maintainer's standing instruction (Memory #29: "Marketing copy about any
+Per the maintainer's standing instruction ("Marketing copy about any
 asset must be respectful to that coin's community — factual trade-offs,
 no value-judgments"), DAI's presentation:
 
@@ -147,18 +147,18 @@ no value-judgments"), DAI's presentation:
 
 ### 8. Wire-format: identical pattern to USDC
 
-DAI follows the cp30 USDC wire-format playbook exactly:
+DAI follows the USDC wire-format playbook exactly:
 - `network` field REQUIRED for DAI in chat AddressPayload + FundsSentPayload
 - `asset_network` field REQUIRED for DAI orders + orderReplace
 - Cross-validation: per-network address shape against decoded network
-  (cp30-DD-DD SEC-3 pattern)
+  (pattern)
 - Defense-in-depth template validation for the 4 new per-network chat-link
-  URLs (cp30-DD-DD SEC-1 pattern)
-- Symmetric encoder validation (cp30-DD-DD SEC-6 pattern)
-- 0x-prefix normalization for all 4 EVM networks (cp30-DD-DD SEC-4 pattern)
-- Replace handler locks asset_network as substance (cp30-DD-DD CODE-3 pattern)
+  URLs (pattern)
+- Symmetric encoder validation (pattern)
+- 0x-prefix normalization for all 4 EVM networks (pattern)
+- Replace handler locks asset_network as substance (pattern)
 
-The 4 canonical wire-format surfaces (cp30-DD LL #23) all extended in the
+The 4 canonical wire-format surfaces all extended in the
 same checkpoint:
 1. Frontend store interface + defensive fallback + fetch normalization
 2. Indexer-side InstanceResponse interface + body construction
@@ -170,7 +170,7 @@ same checkpoint:
 ### Smoke count
 
 - New: `dai-trade-only-smoke.ts` (~14 scenarios mirroring usdc-trade-only-smoke)
-- Updated: every smoke that grep's asset-ticker enumeration (cp30-DD-DD LL #25)
+- Updated: every smoke that grep's asset-ticker enumeration
 - Wiring-completeness CHECK rows added for DAI inclusion
 
 ### Asset count
@@ -184,7 +184,7 @@ same checkpoint:
 
 3 new FAQ entries × 10 locales + DAI per-network metadata + privacy
 warning copy + post-order tooltip + per-asset guide copy ≈ +150-200 keys
-per locale.  Exact final parity confirmed at end of cp31.
+per locale.  Exact final parity confirmed at end.
 
 ### Mediakit + brag list
 
@@ -218,10 +218,10 @@ disclosure.  Rejected.
 
 ## References
 
-- ADR-0023 (USDT multi-network, cp3)
-- ADR-0028 (USDC multi-network, cp30) — the playbook this ADR follows
-- Memory #19 (privacy is priority #1)
-- Memory #23 (fee_method enum frozen)
-- Memory #29 (asset marketing respect)
-- cp30-DD-DD LL #23 (4 canonical wire-format surfaces)
-- cp30-DD-DD LL #27 (16 changes per 4-network asset addition)
+- ADR-0023 (USDT multi-network)
+- ADR-0028 (USDC multi-network) — the playbook this ADR follows
+- The privacy-first rule (privacy is priority #1)
+- The frozen fee_method rule (fee_method enum frozen)
+- The respectful-marketing rule (asset marketing respect)
+- (4 canonical wire-format surfaces)
+- (16 changes per 4-network asset addition)

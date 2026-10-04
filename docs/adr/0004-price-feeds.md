@@ -1,16 +1,16 @@
 # ADR-0004: Price feed architecture
 
 **Status:** Accepted (implemented in `apps/indexer/src/indexer/price/`)
-**Date:** 2026-04-17 (proposed); 2026-05-06 (status updated — Phase 3 indexer-side shipped); 2026-05-25 (cp138 — frontend wiring partially complete; live prices on indexer at `/v1/price/...`, frontend still fallback-only pending an `ApiRelayProvider` + Settings opt-in)
+**Date:** 2026-04-17 (proposed); 2026-05-06 (status updated — Phase 3 indexer-side shipped); 2026-05-25 (frontend wiring partially complete; live prices on indexer at `/v1/price/...`, frontend still fallback-only pending an `ApiRelayProvider` + Settings opt-in)
 **Deciders:** project maintainer
 
-> **2026 forward note (cp367 — Klingex removed; cp376 — multi-source
+> **2026 forward note (Klingex removed; multi-source
 > median):** This ADR was
 > written when Klingex (the Blurt-community-run CEX) was BLURT's
 > primary external upstream. Klingex went out of business in 2026.
 > The Klingex fetcher, its `MORPHIT_INDEXER_KLINGEX_BASE_URL`
 > config, and its slot in the chain were removed. Initially CoinGecko
-> became the sole external source; cp376 then replaced that
+> became the sole external source; a later change then replaced that
 > single-upstream risk with an **outlier-rejected median across many
 > independent external feeds** (Coingecko, CoinPaprika, CryptoCompare
 > for every asset; plus Kraken/Binance/Coinbase/OKX/Bybit where the
@@ -216,7 +216,7 @@ one-line change in `$lib/prices/index.ts`.
 
 ## Amendments
 
-### 2026-05-09 (Part 90, Category I ADR-fidelity audit) — reconcile with shipped state
+### 2026-05-09 (Category I ADR-fidelity audit) — reconcile with shipped state
 
 The status header says "implemented in `apps/indexer/src/indexer/price/`"
 but the body's "Phase 3 plan (NOT YET DECIDED; candidate)" section
@@ -229,7 +229,7 @@ amendment reconciles the two without rewriting history.
   `CompositeCachedPriceSource` aggregates results from a list of
   fetcher providers and serves cached, time-stamped quotes.
 - `apps/indexer/src/indexer/price/coingeckoFetcher.ts` and
-  `apps/indexer/src/indexer/price/klingexFetcher.ts` — concrete
+  `apps/indexer/src/indexer/price/klingexFetcher.ts` (since removed) — concrete
   upstream fetchers, each implementing the same minimal
   fetcher interface; the operator picks which to enable via
   config flags.
@@ -248,7 +248,7 @@ proved unnecessary for Phase 3 launch.
 
 - `apps/web/src/lib/prices/index.ts` — provider registry +
   `setProvider()` / `getQuote()` API.
-- `apps/web/src/lib/prices/providers/fallback.ts` — the
+- `apps/web/src/lib/prices/providers/fallback.ts` (since removed) — the
   hardcoded fallback the original ADR specified for Phase 2.
   **This is the only provider actually wired into the live
   UI today.**  The reactive `priceStore` + `getPrice()` API
@@ -276,7 +276,7 @@ boundary, frontend never speaks to CoinGecko directly) is
 trivially upheld because the frontend doesn't fetch prices
 at all.
 
-### 2026-05-25 (cp138 audit) — accuracy correction to the 2026-05-09 amendment
+### 2026-05-25 — accuracy correction to the 2026-05-09 amendment
 
 The 2026-05-09 amendment overstated the frontend wiring.  It said
 "frontend defaults to fallback prices unless the user explicitly
@@ -290,12 +290,24 @@ reality:
 - `composite.ts` and `coingecko.ts` are unimported (and so unused).
 - The frontend serves fallback quotes only.
 
-That overstatement was caught by the cp138 deep audit's orphan-file
+That overstatement was caught by the deep audit's orphan-file
 sweep.  The amendment text above has been corrected to describe the
 actual state — RFC code parked for a future Settings opt-in, with
 no semantic regression vs. the original Phase 2 promise (which was
 "fallback only at Phase 2 launch").
 
-The follow-up work is tracked in `REVISIT-LIST.md` as
-"Ship `ApiRelayProvider` + Settings toggle (drift-resolved
-in cp138; future Phase-3-completion work)."
+The follow-up work is tracked in the project backlog as
+"Ship `ApiRelayProvider` + Settings toggle (drift-resolved;
+future Phase-3-completion work)."
+
+### 2026-10 — frontend reads the indexer; dead providers removed
+
+The frontend now takes live prices from its own instance's indexer
+(`apps/web/src/lib/prices/providers/indexer.ts`, same-origin
+`GET /v1/listing-fee`: BLURT, BTC and XMR while the indexer's feed is
+fresh). Where there is no live price the answer is "unknown" and no
+price is shown; no bundled constant is presented as a price. The
+unimported `providers/coingecko.ts` and `providers/composite.ts`, the
+`fallback.ts` constants, `setProvider()` and the `PriceProvider`
+interface were deleted, so the browser has no code path to a price
+API. The amendments above describe the state before this change.

@@ -1,74 +1,30 @@
 /**
- * Morphit chat — chain-RPC verification of chat-identity ops.
+ * Morphit chat — checks of a peer's chat-identity op, read through the
+ * operator's chain relay.
  *
- * Companion to pubPin.ts: the "verify" half of Option 5.  When
- * the indexer reports a chat_pub the local user hasn't seen
- * before (a newer (block_num, trx_id) reference than the pinned
- * one), we don't take the indexer's word for it.  Instead we
- * ask a Blurt RPC node what the chain itself says.
+ * Companion to pubPin.ts. When the indexer reports a chat key for a peer, the
+ * client checks the on-chain `morphit_chat_identity_v1` op it points at: the
+ * transaction must carry that op, authored by the peer's posting authority,
+ * and its signature must recover to a key in that authority (local secp256k1
+ * verification, chainOpVerifyCore.ts). The chat key returned is the one in
+ * the transaction, never the one in the indexer's row.
  *
+ * What this does and does NOT defend against — stated plainly:
  *
- * Why "ask the chain" defends against a compromised indexer
- * ──────────────────────────────────────────────────────────
- *
- * The `morphit_chat_identity_v1` op is a `custom_json` with
- * `required_posting_auths = [<account>]`.  Blurt nodes verify
- * the signature when accepting blocks; any custom_json op that
- * lands in a finalized block was, by the chain's rules, signed
- * by the named account's posting authority.
- *
- * So when a Blurt RPC tells us "the latest
- * morphit_chat_identity_v1 from @alice is at block N,
- * payload {chat_pub: P}", we know:
- *
- *   1. @alice (or someone with her posting key) authored that op.
- *   2. The chain accepted it.
- *   3. P is the pub @alice (currently) wants others to encrypt to.
- *
- * An attacker who controls the indexer can swap the pub @alice
- * publishes only by inducing the indexer to LIE about
- * chat_identities.  This module catches that lie by going
- * straight to the chain.
- *
- *
- * Trust assumptions
- * ─────────────────
- *
- * We are now trusting the Blurt RPC layer instead of the
- * indexer.  This is a strict improvement because:
- *
- *   - The Blurt RPC set is more decentralized than Morphit's
- *     operator set.  Anyone can run a node.
- *   - The frontend's existing endpoint rotator queries multiple
- *     RPCs and surfaces failures; a single malicious node
- *     produces a noisy failure rather than silent MITM.
- *   - A Blurt RPC that returns a forged op would have to
- *     produce a signature that wouldn't validate against the
- *     account's on-chain posting key — and the user could
- *     verify that themselves, which raises the bar from "lie
- *     about a JSON field" to "forge an EC signature against a
- *     known pubkey."
- *
- *
- * What this module does NOT do
- * ────────────────────────────
- *
- *   - It does not re-verify EC signatures locally.  We trust
- *     the RPC node returned the op only because the chain
- *     accepted it, which means a witness verified the
- *     signature.  Verifying again locally would be defense in
- *     depth but would require pulling secp256k1 + dblurt
- *     signature parsing into this module.  Left for a future
- *     hardening pass.
- *   - It does not chase a specific (block_num, trx_id) the
- *     indexer claimed.  It just asks "what's the latest"
- *     directly from the chain.  The chain's "latest" is the
- *     authority; whatever the indexer claimed is irrelevant
- *     once we hit the chain.
+ *   - Every read here (`get_transaction`, `get_accounts`,
+ *     `get_account_history`) goes through the SAME operator's
+ *     `/v1/chain/condenser` relay (privacy #1: the browser does not contact
+ *     Blurt nodes for chat). It therefore catches an indexer whose stored
+ *     chat-identity data is wrong or stale, and a careless forgery. It does
+ *     NOT stop a hostile operator, who can answer with a transaction signed by
+ *     its own key and an authority that lists that key.
+ *   - That is why pubPin.ts never moves an existing pin to a DIFFERENT key on
+ *     the strength of this check: a changed key waits for the user to compare
+ *     the new safety number and accept it. First contact is
+ *     trust-on-first-use; the Verify-peer safety number is the defense there.
  */
 
 import type { AuthorityType, SignedTransaction } from '@beblurt/dblurt';
-import { getBlurtClient } from '$blurt/client';
 import { chainRelay, ChainRelayError } from '$net/chainRelay';
 import { OP_IDS } from '$net/config';
 import { verifyChainOpSignature, verifyTransactionSignatures } from './chainOpVerify';
@@ -107,83 +63,17 @@ function isChatIdentityPayload(v: unknown): v is ChatIdentityPayloadShape {
 }
 
 /**
- * Fetch the chain-authoritative chat-identity for an account.
+ * The newest chat-identity op in `account`'s history, read through the
+ * operator's chain relay (ONE source — see the file header). The fallback
+ * when the indexer's claimed op cannot be checked directly.
  *
- * Returns the (chat_pub, block_num, trx_id) triple from the
- * latest `morphit_chat_identity_v1` op signed by the named
- * account's posting authority on the Blurt chain, or null if
- * the account has never published.
+ * `quorumN` / `agreeAtLeast` are kept for call-site compatibility and have no
+ * effect: the browser no longer asks several Blurt nodes for chat (privacy
+ * #1), so there is nothing to agree.
  *
- * Throws if the RPC layer fails entirely (all endpoints down,
- * network error).  The caller MUST treat a thrown error as
- * verification-failed and refuse to use the indexer's claimed
- * pub: that's the whole point of going to the chain.  Falling
- * back to the indexer would defeat the defense.
- *
- * Caching: this function does NOT cache.  The caller (chatService
- * fetchPeerChatPub) only calls this on a pin-mismatch path,
- * which is rare in practice (legitimate posting-key rotations
- * are rare events).  Caching would risk serving stale data on
- * a real rotation; not worth it.
- */
-export async function fetchLatestChatIdentityFromChain(
-	account: string
-): Promise<ChainChatIdentity | null> {
-	const client = getBlurtClient();
-	// Walk a large history window (10000 = Blurt's per-call cap)
-	// to avoid false-positive 'chain_reports_none' for active
-	// accounts whose chat-identity op may be buried deep in
-	// history.  The default limit (500) is too small for accounts
-	// with several months of activity since their last identity
-	// publication.
-	const found = await client.getLatestCustomJson<unknown>(account, OP_IDS.chatIdentity, 10000);
-	if (found === null) return null;
-
-	if (!isChatIdentityPayload(found.payload)) {
-		// The op exists on chain but its payload isn't shaped
-		// the way we expect.  Could be a future protocol version
-		// (v: 2 etc.) the user's client doesn't understand yet.
-		// Refuse to use it rather than guessing.
-		return null;
-	}
-
-	// We have a verified op.  getLatestCustomJson already
-	// confirmed required_posting_auths includes `account`, which
-	// (because the chain accepted the op) means the account's
-	// posting key signed it.  block, trx_id come straight from
-	// the RPC's view of the canonical chain.
-	return {
-		chatPubB64: found.payload.chat_pub,
-		blockNum: found.blockNumber,
-		trxId: found.trxId
-	};
-}
-
-/**
- * Audit 2026-05 finding 2-7: quorum verifier.
- *
- * fetchLatestChatIdentityFromChain trusts the single endpoint
- * the rotator picked.  A hostile node in the user's endpoint
- * set returning a forged op body wins.  This function queries
- * up to `quorumN` endpoints in parallel and demands that at
- * least `agreeAtLeast` of the successful responses agree on
- * the (chatPubB64, blockNum, trxId) triple.
- *
- * Disagreement (any non-trivial fork between endpoints on what
- * "the latest chat-identity op" is) returns null and surfaces
- * a console warning.  The caller must treat null as
- * verification-failed.
- *
- * Defaults: quorumN=3, agreeAtLeast=2.  Tunable via parameters
- * for tests and future tightening.  3-of-3 agreement is even
- * stronger but tolerates no transient endpoint failures.
- *
- * S14 (Audit Part 26): when `verifySignature` is true, after
- * the quorum agrees the function also performs a local
- * secp256k1 verification of the chain op's signature against
- * the account's on-chain posting authority.  Default off
- * because it adds two RPC roundtrips (get_transaction +
- * get_accounts).  Pin-mismatch callers opt in.
+ * When `verifySignature` is true, the op's transaction signature is also
+ * verified locally against the account's posting authority (both read
+ * through the same relay).
  */
 export async function fetchLatestChatIdentityFromChainQuorum(
 	account: string,
@@ -204,13 +94,7 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 			];
 		}
 	];
-	// cp410 — the browser no longer queries Blurt nodes directly (privacy #1).
-	// History is fetched ONCE through the operator's indexer relay (which reads
-	// its own canonical pool). The old browser-side multi-node quorum collapses
-	// onto the indexer; `quorumN` / `agreeAtLeast` are retained for API
-	// compatibility. `verifySignature` still checks the winning op's signature
-	// locally (below), and the cautious can use the chat UI's block-explorer
-	// "verify" link.
+	// History is fetched ONCE through the operator's indexer relay (privacy #1).
 	let history: HistoryEntry[] | null;
 	try {
 		history = await chainRelay<HistoryEntry[] | null>('get_account_history', [account, -1, limit]);
@@ -258,34 +142,25 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 	}
 	if (triple === null) return null;
 
-	// S14 — local secp256k1 verification (Audit Part 26).
-	// When verifySignature is true, after the quorum agrees on
-	// (chatPubB64, blockNum, trxId), we fetch the full signed
-	// transaction and verify the signature locally against the
-	// account's posting authority.  This raises the bar for an
-	// adversary controlling a quorum of RPC endpoints from
-	// "lie about a JSON field" to "produce a valid secp256k1
-	// signature against a key we don't possess."
-	//
-	// Default off because it costs an extra get_transaction +
-	// get_accounts RPC.  Callers on the pin-mismatch hot path
-	// (chatService) opt in.
+	// Local secp256k1 verification of the op's transaction against the
+	// account's posting authority (both via the relay). Catches a wrong or
+	// careless indexer answer; not an operator that forges both.
 	if (verifySignature && triple !== null) {
 		try {
 			const verdict = await verifyChainOpSignature(triple.trxId, account);
 			if (!verdict.ok) {
 				// eslint-disable-next-line no-console
 				console.warn(
-					`[chainVerify] S14 signature verification failed for ${account} (trx ${triple.trxId}): ${verdict.code} — ${verdict.message}`
+					`[chainVerify] signature verification failed for ${account} (trx ${triple.trxId}): ${verdict.code} — ${verdict.message}`
 				);
 				return null;
 			}
 		} catch (err) {
-			// RPC failure during signature verify.  Per S14 contract,
+			// RPC failure during signature verify.  Per the contract,
 			// the caller MUST treat verify-failed as no-result.
 			// eslint-disable-next-line no-console
 			console.warn(
-				`[chainVerify] S14 signature verification threw for ${account}: ${err instanceof Error ? err.message : String(err)}`
+				`[chainVerify] signature verification threw for ${account}: ${err instanceof Error ? err.message : String(err)}`
 			);
 			// ...but "the relay was unreachable" is not a verification result at
 			// all, and must not become a tamper accusation. Same reasoning as
@@ -300,7 +175,7 @@ export async function fetchLatestChatIdentityFromChainQuorum(
 /**
  * Verify the indexer's CLAIMED chat-identity op directly, by transaction id.
  *
- * cp554/v1.8.15 — the witness-history fix.  fetchLatestChatIdentityFromChain*
+ * the witness-history fix.  fetchLatestChatIdentityFromChain*
  * (above) find a peer's chat-identity op by WALKING account history.  For a
  * Blurt block producer that op is buried under hundreds of thousands of
  * `producer_reward` virtual ops — far beyond the 10000-entry per-call cap
@@ -316,15 +191,15 @@ export async function fetchLatestChatIdentityFromChainQuorum(
  * apps/indexer/.../handlers/chatIdentity.ts).  We fetch THAT transaction,
  * confirm it carries a `morphit_chat_identity_v1` custom_json authored by
  * `peer`'s posting authority, verify the transaction's signature locally
- * against peer's on-chain posting key (S14), and return the CHAIN's chat_pub.
+ * against peer's posting key, and return the transaction's chat_pub.
  *
- * Security is preserved, not weakened.  A hostile indexer still cannot
- * substitute a pub: any real on-chain op authored by peer carries peer's real
- * chat_pub (the operator lacks peer's posting key to forge one); a fabricated
- * trx_id fails `get_transaction`; a real transaction that isn't a
- * chat-identity by peer fails the op/author checks.  The returned pub is the
- * chain's, never the indexer's — the indexer's claimed pub is only a hint used
- * upstream (comparePin) to choose the state-machine branch.
+ * What it proves, and what it does not: the transaction and the authority are
+ * both read through the operator's relay, so this catches an indexer whose
+ * stored row is wrong (a stale or corrupt chat_identities entry, a trx id that
+ * is not a chat-identity op by peer) — but an operator that forges BOTH the
+ * transaction and the authority passes it. pubPin.ts therefore never lets
+ * this check alone move a pin to a different key. The returned pub is the
+ * transaction's, never the indexer row's.
  *
  * Returns the chain-authoritative triple, or null if the claimed transaction
  * isn't a valid chat-identity op authored by peer.  Throws on an RPC-layer
@@ -381,9 +256,8 @@ export async function verifyClaimedChatIdentityOnChain(
 	}
 	if (chatPubB64 === null) return null;
 
-	// 3. Fetch peer's posting authority and verify the transaction signature
-	//    locally (S14 anti-fabrication).  Reuses the same pure core as the
-	//    history-walk path's verifySignature leg; costs one get_accounts RPC.
+	// 3. Fetch peer's posting authority (via the relay) and verify the
+	//    transaction signature locally against it.
 	const accounts = await chainRelay<Array<{ posting?: AuthorityType }>>('get_accounts', [[peer]]);
 	if (!Array.isArray(accounts) || accounts.length === 0 || !accounts[0]?.posting) {
 		// eslint-disable-next-line no-console
@@ -412,7 +286,7 @@ export async function verifyClaimedChatIdentityOnChain(
 
 	// 4. Chain-authoritative block_num from the annotated tx; if a
 	//    non-conformant node omits it, fall back to the claimed block for the
-	//    (already chain-verified) trx so pin monotonicity still has a value.
+	//    (already checked) trx so pin monotonicity still has a value.
 	const chainBlock = (tx as { block_num?: unknown }).block_num;
 	const blockNum =
 		typeof chainBlock === 'number' && Number.isFinite(chainBlock) && chainBlock > 0

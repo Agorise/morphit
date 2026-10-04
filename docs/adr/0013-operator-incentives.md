@@ -1,14 +1,14 @@
 # ADR-0013 — Third-party node operator incentives
 
 **Status:** Accepted (implemented; pipeline shipped 2026-05-02).
-**Amended 2026-07-04 (cp408):** payout mechanism changed from
+**Amended 2026-07-04:** payout mechanism changed from
 relay-forwarded to a **payment-time split** — see the amendment
 note directly below.
 **Date:** 2026-04-19 (proposed); 2026-05-06 (status updated, Q1-Q6 resolved)
 **Deciders:** project maintainer, Agorise leadership
 **Related:** ADR-0011 (dynamic fee model), ADR-0010 (key custody)
 
-> **Amendment (2026-07-04, cp408) — payment-time split supersedes
+> **Amendment (2026-07-04) — payment-time split supersedes
 > the relay-forwarded payout.** The *decision* recorded here stands
 > unchanged: BLURT listing fees are 90% to the instance owner / 10%
 > to the canonical treasury; BTC/XMR fees 100% to the canonical

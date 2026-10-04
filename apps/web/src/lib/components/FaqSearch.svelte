@@ -24,7 +24,7 @@
 	let activeIndex = $state(0);
 	let inputEl: HTMLInputElement;
 
-	// Search ergonomics (cp314, the maintainer):
+	// Search ergonomics:
 	//  - Don't search until at least 3 chars are typed (1–2 chars match
 	//    almost everything and just flicker a useless dropdown).
 	//  - Cap the field at 24 chars (a real FAQ query is a couple of words;
@@ -78,7 +78,7 @@
 	 * Handle deep links in three forms:
 	 *   1. /faq#<key>             — legacy hash-based deep link (matches an entry key)
 	 *   2. /faq?q=<key>&lang=<c>  — admin-share format (locale-aware)
-	 *   3. /faq?q=<query>         — Google sitelinks-search-box format (cp119-A2)
+	 *   3. /faq?q=<query>         — Google sitelinks-search-box format
 	 *                                — when ?q= is NOT an entry key, treat as a
 	 *                                free-text search query and populate the search
 	 *                                box.  This makes the WebSite.SearchAction
@@ -106,7 +106,7 @@
 		// the page to the top right after we scroll — the bug that made the
 		// footer AGPL link land at the top instead of the article), and an
 		// effect would re-fire on a locale switch and re-yank an already-open
-		// entry back into view. cp338.
+		// entry back into view..
 		const found = $faqEntries.find((e) => e.key === target);
 		if (found) {
 			expanded.add(found.key);
@@ -114,7 +114,7 @@
 			return;
 		}
 
-		// Form 3 (cp119-A2): target is NOT an entry key.  When it
+		// Form 3: target is NOT an entry key.  When it
 		// came from ?q= (not from #hash), treat it as a search
 		// query and populate the search box.  This is the Google
 		// sitelinks-search-box workflow — a user types "monero
@@ -135,7 +135,7 @@
 	 *  at its final height; a double rAF then lets layout settle. When
 	 *  called from afterNavigate (the ?q= deep link) this also lands after
 	 *  SvelteKit's post-navigation scroll reset. Shared by the deep-link
-	 *  handler, the related-entry chips, and search-result clicks. cp338. */
+	 *  handler, the related-entry chips, and search-result clicks.. */
 	async function scrollToEntry(key: FaqKey): Promise<void> {
 		await tick();
 		const align = (): void => {
@@ -339,7 +339,7 @@
 		return () => cancelAnimationFrame(raf);
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.
+	// per-locale internal-link wrapper.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 </script>
@@ -685,7 +685,7 @@
 
 <style>
 	/*
-		Very subtle search highlight (cp314). Painted via the CSS Custom
+		Very subtle search highlight. Painted via the CSS Custom
 		Highlight API — ::highlight() is document-global (it can't be scoped
 		to a component or under the app's class-based .dark), and it only
 		accepts a tiny set of properties (color, background-color, text-

@@ -1,20 +1,20 @@
 # ADR-0023 — USDT (Tether) multi-network support
 
-**Status:** Accepted (Part 121)
+**Status:** Accepted
 **Date:** 2026-05-13
 **Deciders:** project maintainer
 **Supersedes:** none
 **Superseded by:** none
-**Related:** ADR-0011 (fee model, including the Part 121
+**Related:** ADR-0011 (fee model, including the
 fee_method enum-freeze forward-note), ADR-0021 (payment-method
 registry — fiat rails, intentionally separate from
 trade-asset registry).
 
 ---
 
-**2026-05-17 (Part 122 cp22) forward-note — operator-stance UX
+**2026-05-17 forward-note — operator-stance UX
 closure.**  This ADR established `MORPHIT_INDEXER_DISABLED_ASSETS`
-as the operator-stance knob for USDT.  Part 122 cp22 shipped an
+as the operator-stance knob for USDT.  A later change shipped an
 interactive `morphit-ops init` wizard step ("Trade-only asset
 policy", step 13) that walks through every Category-B asset and
 asks per-ticker whether to enable it, then emits the right
@@ -31,11 +31,11 @@ unchanged.
 
 Morphit's pre-launch asset registry shipped with three trade-asset
 tickers: BTC, XMR, and BLURT.  Each is a single-network asset.  In
-the post-cp2 audit the maintainer asked whether adding new coins, specifically
+the newer audit the maintainer asked whether adding new coins, specifically
 USDT (Tether), would be easy — and committed to add USDT as the
 fourth tradable asset.
 
-The investigation findings (Part 121 AUDIT entry) confirmed the
+The investigation findings (AUDIT entry) confirmed the
 asset registry already carried the right discriminator flags
 (`canBeTraded` and `canPayListingFee` with a literal "reserved
 for future fee-only/stable-only tickers" comment), but three
@@ -51,7 +51,7 @@ real gaps existed:
    L2s.  The order-row had no way to express "USDT on Tron."
 3. No privacy-warning surface.  USDT is centrally controlled
    (Tether Inc. can freeze any address) and has no on-chain
-   privacy.  Per Memory #19 (privacy is priority #1), users
+   privacy.  Per the privacy-first rule (privacy is priority #1), users
    considering USDT must be told this clearly — not buried in
    docs.
 
@@ -63,7 +63,7 @@ trade-only asset.
 
 ### 1. USDT is **trade-only** (cannot pay listing fees)
 
-Memory #23 invariant: listing fees can ONLY be paid in BLURT,
+The frozen fee_method invariant: listing fees can ONLY be paid in BLURT,
 XMR, or BTC.  USDT (and any future trade-only asset) is
 peer-to-peer trading only.  Users can buy/sell USDT, the
 listing fee for those orders is paid in BLURT/BTC/XMR.
@@ -136,7 +136,7 @@ actively winding down.  Omitted at launch.
 
 ### 6. **Information chip** on every USDT surface
 
-Per Memory #19 (privacy is priority #1) and Memory #27 (respectful
+Per the privacy-first rule (privacy is priority #1) and the respectful-marketing rule (respectful
 copy about every listed asset), users considering an asset whose
 technical properties differ from Morphit's defaults should be told
 about those properties so they can make an informed choice.  For
@@ -169,7 +169,7 @@ the body copy is neutral.
 
 ### 7. **Operator opt-out** — default-ON with `MORPHIT_INDEXER_DISABLED_ASSETS`
 
-Memory #25: every new tradable asset ships **default=ON
+The default-on rule for new assets: every new tradable asset ships **default=ON
 instance-wide**, with an operator-config override to disable.
 Pattern: `MORPHIT_INDEXER_DISABLED_ASSETS` env var
 (comma-separated tickers).  Operators with philosophical or
@@ -224,7 +224,7 @@ unavailable — last seen 12m ago.` when stale (5+ minutes old).
   links — all driven by single registry entries with no
   hardcoded branches per network.
 - The wire-format-frozen `fee_method` enum invariant
-  (memory #23) is preserved.  Three sentinel smokes guard
+  (the trade-only rule) is preserved.  Three sentinel smokes guard
   against future drift.
 - Operators with philosophical objections to USDT can disable
   it instance-wide with one env-var flip.  The canonical
@@ -239,7 +239,7 @@ unavailable — last seen 12m ago.` when stale (5+ minutes old).
 - USDT traders on Morphit see the information chip every
   time they post or share an address.  This is a small
   friction in service of an informed-choice user model —
-  Memory #19 keeps the chip in place, Memory #27 keeps
+  The privacy-first rule keeps the chip in place, the respectful-marketing rule keeps
   its tone factual.
 - The network picker is required on every USDT trade with no
   default.  Slightly more friction than a default-and-edit
@@ -281,7 +281,7 @@ Code:
 - `apps/web/src/lib/assets/networks.ts` — per-network metadata
 - `apps/web/src/lib/components/PrivacyWarningChip.svelte`
 - `apps/web/src/lib/components/UsdtNetworkPicker.svelte`
-- `apps/web/src/lib/components/UsdtPriceSubline.svelte`
+- `apps/web/src/lib/components/UsdtPriceSubline.svelte` (since removed)
 - `apps/web/src/lib/components/AddressShareModal.svelte`
 - `apps/web/src/lib/components/FundsSentModal.svelte`
 - `apps/web/src/lib/components/ChatMessage.svelte`
@@ -299,7 +299,7 @@ Smokes:
 - `packages/asset-registry/scripts/usdt-trade-only-smoke.ts`
 - `packages/asset-registry/scripts/usdt-network-picker-required-smoke.ts`
 - `packages/asset-registry/scripts/fee-method-enum-frozen-smoke.ts`
-  (Part 121 cp1 — still relevant; pins USDT out of the
+  (still relevant; pins USDT out of the
   fee-method enum)
 
 i18n: 25+ new keys × 10 locales documenting USDT-specific
@@ -316,5 +316,5 @@ Docs:
   `MORPHIT_INDEXER_DISABLED_ASSETS` and per-network explorer
   overrides.
 - `docs/RUN-A-MORPHIT-NODE.md` — USDT support setup section.
-- `docs/PRE-LAUNCH-CHECKLIST.md` — operator stance on USDT
+- the pre-launch checklist (an internal record) — operator stance on USDT
   checklist item.

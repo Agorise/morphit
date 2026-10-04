@@ -79,14 +79,14 @@ describe('profileCache', () => {
 
 	// ─── Basic behaviors ────────────────────────────────────────
 
-	// ─── isSoftMiss (v1.8.12, the maintainer) ──────────────────────────────
+	// ─── isSoftMiss (v1.8.12) ──────────────────────────────
 	// The cache has always distinguished a TRANSIENT fetch failure (soft-cached
 	// 5s) from an authoritative "no profile" (90s), on the reasoning that the
 	// short entry would expire and "the next render re-fetches". Nothing ever
 	// did: hydrateProfiles runs once per page load and once per loadMore, so on
 	// a settled orderbook the soft entry expired into silence and the row kept
-	// its identicon until the user navigated or refreshed. the maintainer: "i should never
-	// have to refresh the page to see the truth."
+	// its identicon until the user navigated or refreshed. Requirement: the page never needs a
+	// refresh to show the truth.
 	// Reporting the distinction is what lets the orderbook re-ask for the first
 	// case and settle quietly on the second.
 
@@ -236,7 +236,7 @@ describe('profileCache', () => {
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
-	// ─── cp428: fetch-failure nulls self-heal fast (soft TTL) ────
+	// ─── fetch-failure nulls self-heal fast (soft TTL) ────
 	// A transient blip during a profile batch must NOT hide a real display
 	// name for the full 90s — it used to, so a card fell back to "@account"
 	// for a minute and a half even though the profile was well indexed.
@@ -448,10 +448,10 @@ describe('profileCache', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	// ─── cp452: primeProfile optimistic write + prime-hold window ──
+	// ─── primeProfile optimistic write + prime-hold window ──
 	// After the user broadcasts their OWN profile edit, the new value must show
 	// INSTANTLY (not after the 90s TTL), and a stale server read during indexer
-	// catch-up must not clobber it (t.txt items 2 + 3).
+	// catch-up must not clobber it.
 
 	it('primeProfile makes the edit readable immediately with no fetch, round-tripping through extractLabelPropsFromProfile', async () => {
 		primeProfile('alice', {

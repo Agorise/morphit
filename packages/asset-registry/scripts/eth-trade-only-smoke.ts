@@ -2,11 +2,11 @@
 /**
  * eth-trade-only-smoke.
  *
- * Part 122 cp47 sentinel: ETH (Ethereum) must be
+ * ETH (Ethereum) must be
  * `canPayListingFee: false` AND `canBeTraded: true` in BOTH the
  * canonical and frontend asset registries.
  *
- * Memory #23 invariant pinned from two directions: canonical
+ * The frozen fee_method invariant pinned from two directions: canonical
  * registry's `canPayListingFee: true → ticker ∈ {BLURT, BTC,
  * XMR}` rule means a future contributor flipping ETH's flag to
  * true would fail asset-registry-smoke first.  This smoke is the
@@ -28,7 +28,7 @@
  * hex regardless of whether they hold native ETH or an ERC-20
  * token on any EVM chain.  The asset field (plus network field
  * for multi-network assets) disambiguates at the order layer;
- * cp42 address-shape-overlap-smoke documents the intentional
+ * a later change address-shape-overlap-smoke documents the intentional
  * cross-asset overlaps.
  */
 
@@ -58,8 +58,8 @@ if (!canonEth) {
 	pass('canonical registry contains ETH entry');
 	if (canonEth.canBeTraded === true) pass('canonical ETH.canBeTraded === true');
 	else fail('canonical ETH.canBeTraded === true', `actual: ${canonEth.canBeTraded}`);
-	if (canonEth.canPayListingFee === false) pass('canonical ETH.canPayListingFee === false (memory #23)');
-	else fail('canonical ETH.canPayListingFee === false (memory #23)', `actual: ${canonEth.canPayListingFee}`);
+	if (canonEth.canPayListingFee === false) pass('canonical ETH.canPayListingFee === false (trade-only rule)');
+	else fail('canonical ETH.canPayListingFee === false (trade-only rule)', `actual: ${canonEth.canPayListingFee}`);
 	if (canonEth.decimals === 18) pass('canonical ETH.decimals === 18 (wei)');
 	else fail('canonical ETH.decimals === 18 (wei)', `actual: ${canonEth.decimals}`);
 	if (Array.isArray(canonEth.supportedNetworks) && canonEth.supportedNetworks.length === 1 && canonEth.supportedNetworks[0] === 'mainnet') {
@@ -91,7 +91,7 @@ if (!feEth) {
 	pass('frontend registry contains eth entry');
 	if (feEth.canBeTraded === true) pass('frontend eth.canBeTraded === true');
 	else fail('frontend eth.canBeTraded === true', `actual: ${feEth.canBeTraded}`);
-	if (feEth.canBeUsedForListingFee === false) pass('frontend eth.canBeUsedForListingFee === false (memory #23)');
+	if (feEth.canBeUsedForListingFee === false) pass('frontend eth.canBeUsedForListingFee === false (trade-only rule)');
 	else fail('frontend eth.canBeUsedForListingFee === false', `actual: ${feEth.canBeUsedForListingFee}`);
 	if (feEth.decimals === 18) pass('frontend eth.decimals === 18');
 	else fail('frontend eth.decimals === 18', `actual: ${feEth.decimals}`);

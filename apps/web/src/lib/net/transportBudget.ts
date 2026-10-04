@@ -21,9 +21,10 @@
  * Two hops can be hidden and either is enough to need the longer budget:
  *   • the page's OWN origin — a visitor reading morphitlat over I2P crosses a
  *     tunnel for every same-origin API call;
- *   • the TARGET origin — the compare page fetching a peer instance's
- *     orderbook from `morphitir.b32.i2p` crosses one even when the page itself
- *     is on clearnet.
+ *   • the TARGET origin — a request aimed at a hidden host (a hidden RPC node,
+ *     a peer instance) crosses one whatever the page's own origin. (The
+ *     orderbook comparison is same-origin: the indexer fetches the peer,
+ *     /v1/compare/orderbook.)
  *
  * These budgets are CEILINGS, not delays. A healthy clearnet instance answers
  * in milliseconds and nothing waits longer than it used to.

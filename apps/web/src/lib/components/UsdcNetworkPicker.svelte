@@ -20,13 +20,13 @@
 	    broadcast on.  The cross-network warning copy mentions
 	    this explicitly.
 
-	Per memory #23 + Part 122 cp30 design (mirror of Part 121
-	USDT design): single USDC entry, network picked at trade
+	Per the trade-only rule and the USDT picker design it
+	mirrors: single USDC entry, network picked at trade
 	time, no default.  The `network` prop binds two-way and
 	starts as null; parent components check for null before
 	allowing submit.
 
-	Per Memory #19 (privacy is priority #1): we surface the
+	Per the privacy-first rule (privacy is priority #1): we surface the
 	cross-network warning ABOVE the picker, not below — users
 	read top-down, the warning has to land before the choice.
 -->

@@ -38,7 +38,7 @@ morphit_ipfs_api_addr: "/ip4/127.0.0.1/tcp/5001"
 morphit_ipfs_gateway_addr: "/ip4/127.0.0.1/tcp/8082"
 
 # ── Serve the pinned release over THIS instance's .onion / .i2p ──────────────
-# A clearnet-censored node (e.g. an Iran-hosted instance) cannot pull a release
+# A clearnet-censored node (one behind a national firewall) cannot pull a release
 # over the public IPFS gateways or GitHub mirrors. When THIS instance exposes
 # its Kubo gateway on the frontend, that node can fetch the signed release over
 # our hidden addresses at /ipfs/<cid> — no clearnet, no third-party pinning.

@@ -1,6 +1,6 @@
 /**
- * Morphit indexer — the address a hidden-service origin is DIALLED at
- * (v1.20.0 fix wave, S9).
+ * Morphit indexer — the address a hidden-service origin is DIALLED at.
+ *
  *
  * Tor, I2P and Lokinet authenticate the host and encrypt end to end, and this
  * indexer's hidden transports tunnel plain HTTP; they have never spoken TLS.

@@ -1,5 +1,5 @@
 /**
- * operationalHealth — cp667.
+ * operationalHealth.
  *
  * A small, CACHED snapshot of host-operational facts the indexer folds into the
  * PUBLIC /v1/health body so an operator (or a peer) can poll one URL and see, at
@@ -31,11 +31,11 @@
  * lying or throwing.
  *
  * The pure seeding decision here MIRRORS ops-cli's checkIpfsSeeding; the two
- * should be unified into a shared package (see docs/REVISIT-LIST.md).
+ * should be unified into a shared package (see the project backlog).
  */
 
 import { cpus, totalmem, freemem, networkInterfaces } from 'node:os';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { get as httpGet, type IncomingMessage } from 'node:http';
@@ -52,7 +52,7 @@ import {
 } from '@morphit/node-health';
 
 // Re-export the shared type under the local name so the rest of the
-// indexer keeps importing `SeedingState` from here unchanged (cp707).
+// indexer keeps importing `SeedingState` from here unchanged.
 export type SeedingState = SharedSeedingState;
 
 export interface SystemBlock {
@@ -119,7 +119,7 @@ function idxProblemText(p: SeedingProblem, f: SeedingFacts): string {
 
 /** Decide whether this node is successfully seeding releases to IPFS/IPNS. PURE.
  *  The STATE decision is the shared classifier (@morphit/node-health) so the
- *  CLI health view and the public endpoint can never drift (cp707); only the
+ *  CLI health view and the public endpoint can never drift; only the
  *  terse public-endpoint DETAIL wording lives here. */
 export function decideSeeding(f: SeedingFacts): { state: SeedingState; detail: string } {
 	const cls = classifySeeding(f);
@@ -209,7 +209,7 @@ function sampleMem(): { pct: number | null; usedGB: number | null; totalGB: numb
 
 /** statfs the configured health disk path, falling back to `/` if that
  *  path can't be stat'd — a stray MORPHIT_HEALTH_DISK_PATH must never
- *  blank the disk figure (cp708). */
+ *  blank the disk figure. */
 async function statfsHealthPath(): Promise<Awaited<ReturnType<typeof statfs>>> {
 	const path = resolveHealthDiskPath(process.env);
 	try {
@@ -306,11 +306,11 @@ function serviceFailed(unit: string): Promise<boolean> {
  *  reads over Tor/I2P (setGlobalDispatcher), and in Node's runtime that global
  *  also governs the built-in `fetch` — so a fetch-based relay probe was being
  *  routed through the Tor/I2P layer and failed to reach the LOCAL relay, reading
- *  a healthy relay as down. (cp772's per-request undici dispatcher didn't help: a
+ *  a healthy relay as down. (the per-request undici dispatcher didn't help: a
  *  built-in fetch silently ignores a dispatcher from the standalone undici
  *  package.) node:http bypasses undici entirely, so the probe always connects
  *  directly to the local relay regardless of the global dispatcher. PROVEN with a
- *  broken-global-dispatcher test: built-in fetch fails, node:http succeeds. cp773. */
+ *  broken-global-dispatcher test: built-in fetch fails, node:http succeeds.. */
 function probeRelay(url: string, timeoutMs: number): Promise<RelayProbe> {
 	if (url.length === 0) return Promise.resolve(RELAY_DOWN);
 	return new Promise((resolve) => {
@@ -403,10 +403,13 @@ export function parseDefaultGatewayV4(routeText: string): string | null {
  *  the very address the relay binds to (e.g. 172.18.0.1) so bridge peers can
  *  reach it. `networkInterfaces()` only yields the container's OWN addresses,
  *  never the gateway, so without this the containerized indexer never probes
- *  where the relay actually is and reports it falsely down — even though
- *  `morphit-ops health`, running on the HOST (where the gateway IS a local
- *  interface), sees it up. This closes that gap. */
+ *  where the relay actually is and reports it falsely down.
+ *
+ *  ONLY in a container. On a host the default gateway is the LAN or provider
+ *  router — another machine — and the probe used to send it an HTTP request
+ *  every refresh. */
 function defaultGatewayV4(): string | null {
+	if (!runningInContainer()) return null;
 	try {
 		return parseDefaultGatewayV4(readFileSync('/proc/net/route', 'utf8'));
 	} catch {
@@ -414,13 +417,29 @@ function defaultGatewayV4(): string | null {
 	}
 }
 
-/** Build the candidate relay-health URLs. The relay's up/down is measured with
- *  ZERO configuration: we always auto-probe the relay across every local address
- *  it could bind — loopback, each host IPv4 (which INCLUDES the docker bridge
- *  address like 172.18.0.1 that a container-fronted relay listens on), and the
- *  default gateway — at the relay's canonical health path. A configured
- *  MORPHIT_INDEXER_RELAY_HEALTH_URL is honoured verbatim in addition, but is not
- *  required. Pure — exported for the regression smoke. cp771. */
+let inContainerOverride: boolean | null = null;
+/** Docker (/.dockerenv), Podman (/run/.containerenv) or a `container=` env
+ *  (systemd-nspawn, Podman). */
+function runningInContainer(): boolean {
+	if (inContainerOverride !== null) return inContainerOverride;
+	return (
+		existsSync('/.dockerenv') ||
+		existsSync('/run/.containerenv') ||
+		(process.env.container ?? '') !== ''
+	);
+}
+/** Test seam: force the container verdict (null = detect). */
+export function __setInContainerForTest(v: boolean | null): void {
+	inContainerOverride = v;
+}
+
+/** Build the candidate relay-health URLs, in trust order: the configured
+ *  MORPHIT_INDEXER_RELAY_HEALTH_URL (verbatim), loopback, each host IPv4 (which
+ *  INCLUDES the docker bridge address like 172.18.0.1 that a container-fronted
+ *  relay listens on), then the default gateway (passed only in a container) —
+ *  at the relay's canonical health path. The relay's up/down needs no
+ *  configuration; its hidden_only posture is read only from the first two (see
+ *  relayPostureFrom). Pure — exported for the regression smoke. */
 export function buildRelayCandidates(
 	configured: string,
 	ipv4Addrs: readonly string[],
@@ -444,26 +463,40 @@ export function buildRelayCandidates(
 			/* configured isn't a URL (e.g. empty) — auto-probe below still runs */
 		}
 	}
-	// cp771 — ALWAYS auto-probe every local address, regardless of `configured`.
+	// ALWAYS auto-probe every local address, regardless of `configured`.
 	// This is what makes relay up/down "just work": on a container-fronted host the
 	// relay binds the docker bridge (172.18.0.1), which appears in ipv4Addrs; on a
 	// bare-metal host it binds loopback. Both are covered with no config.
+	urls.push(`http://127.0.0.1:${localPort}/v1/health`);
 	for (const a of ipv4Addrs) urls.push(`http://${a}:${localPort}/v1/health`);
 	if (gateway) urls.push(`http://${gateway}:${localPort}/v1/health`);
-	urls.push(`http://127.0.0.1:${localPort}/v1/health`);
 	return [...new Set(urls)];
 }
 
-/** Candidate relay-health URLs to try: the configured one first, then the same
- *  path on each of the host's own (non-loopback) IPv4 addresses, then the default
- *  gateway. On a CONTAINERIZED deploy the relay binds to the Docker bridge
+/** True for the candidates whose answer may set the relay's hidden_only
+ *  posture: the configured URL and loopback. Anything else answering on the
+ *  relay port — another container on the bridge, a service on another
+ *  interface, the gateway — is not known to be our relay, and its word would
+ *  feed the clearnet gate. PURE. */
+export function relayPostureTrusted(url: string, configured: string): boolean {
+	if (configured !== '' && url === configured) return true;
+	try {
+		const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+		return host === 'localhost' || host === '::1' || /^127\./.test(host);
+	} catch {
+		return false;
+	}
+}
+
+/** Candidate relay-health URLs to try (see buildRelayCandidates for the
+ *  order). On a CONTAINERIZED deploy the relay binds to the Docker bridge
  *  gateway (e.g. 172.18.0.1) so peers can reach it — NOT to 127.0.0.1 — so a
  *  loopback-only probe reports the relay down even though it's up. This mirrors
  *  the fallback `morphit-ops health` uses so /v1/health's relay.up agrees with
- *  the CLI instead of falsely reading down. */
-function relayProbeCandidates(configured: string): string[] {
+ *  the CLI instead of falsely reading down. Exported for the regression test. */
+export function relayProbeCandidates(configured: string): string[] {
 	const addrs: string[] = [];
-	// cp774 — os.networkInterfaces() (libuv uv_interface_addresses) can THROW
+	// os.networkInterfaces() (libuv uv_interface_addresses) can THROW
 	// EAFNOSUPPORT ("Unknown system error 97") under a systemd sandbox whose
 	// RestrictAddressFamilies omits AF_NETLINK. If this throws inside probeRelayAny
 	// it rejects, refresh() keeps the previous relay value, and /v1/health is stuck
@@ -477,7 +510,7 @@ function relayProbeCandidates(configured: string): string[] {
 			}
 		}
 	} catch {
-		/* interface enumeration blocked by the sandbox — configured URL + loopback still probed */
+		/* interface enumeration not permitted here — configured URL + loopback still probed */
 	}
 	// A hidden-only node does not look a public name up, even its own relay's —
 	// the lookup names the host to the resolver. The configured URL is the only
@@ -503,17 +536,18 @@ export function needsPublicLookup(url: string): boolean {
 
 /** True if the relay answers on ANY candidate address. Probes run in parallel;
  *  the first success wins. Kept off the hot request path (background refresh).
- *  cp769 — no longer bails on an empty configured URL: loopback is always probed
+ *  no longer bails on an empty configured URL: loopback is always probed
  *  (relayProbeCandidates guarantees it), so an unset/empty RELAY_HEALTH_URL can't
  *  make a healthy local relay read down. */
 async function probeRelayAny(configured: string, timeoutMs: number): Promise<RelayProbe> {
-	const results = await Promise.all(
-		relayProbeCandidates(configured).map((u) => probeRelay(u, timeoutMs))
-	);
+	const candidates = relayProbeCandidates(configured);
+	const results = await Promise.all(candidates.map((u) => probeRelay(u, timeoutMs)));
 	const answered = results.filter((r) => r.up);
-	// Every candidate is the same relay reached by a different address, so the
-	// first that says anything speaks for it.
-	const said = answered.find((r) => r.hiddenOnly !== null);
+	// Any answer means the relay port is served; only the configured URL or
+	// loopback — first in candidate order — may say how it reaches the chain.
+	const said = results.find(
+		(r, i) => r.up && r.hiddenOnly !== null && relayPostureTrusted(candidates[i]!, configured)
+	);
 	return { up: answered.length > 0, hiddenOnly: said?.hiddenOnly ?? null };
 }
 
@@ -522,7 +556,7 @@ async function probeRelayAny(configured: string, timeoutMs: number): Promise<Rel
 let cached: OperationalSnapshot = DEFAULT_SNAPSHOT;
 let lastRefreshMs = 0;
 let refreshing = false;
-// cp766 — a wedge guard: if a refresh somehow never settles (e.g. a probe hangs
+// a wedge guard: if a refresh somehow never settles (e.g. a probe hangs
 // past its own timeout), don't let `refreshing` block every future refresh
 // forever — which would freeze /v1/health at its initial null/false/"not sampled
 // yet" defaults. After this long an in-flight refresh is treated as abandoned.
@@ -574,7 +608,7 @@ async function sampleSystem(): Promise<SystemBlock> {
 }
 
 /**
- * cp766 — merge a fresh (possibly PARTIAL) sample over the previous snapshot.
+ * merge a fresh (possibly PARTIAL) sample over the previous snapshot.
  * A block that failed this pass (null) keeps its PREVIOUS value rather than
  * reverting to the null/false default: one timed-out systemctl or relay probe
  * must never blank a health card that was populated a moment ago, and it must

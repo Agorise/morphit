@@ -212,7 +212,7 @@ FED="$WORK/apps/indexer/src/indexer/chatFastFederation.ts"
 POOL="$WORK/apps/indexer/src/indexer/hiddenServicePool.ts"
 ROUTE="$WORK/apps/indexer/src/api/federationChatFast.ts"
 BUDGET="$WORK/apps/indexer/src/indexer/fastNotifyBudget.ts"
-# The notify gate moved into one shared module in the v1.18.0 deep-deep (FC-2);
+# The notify gate moved into one shared module in the (FC-2);
 # the first-contact budget is spent there now, not in the intake route.
 GATE="$WORK/apps/indexer/src/indexer/fastNotifyGate.ts"
 
@@ -301,7 +301,7 @@ else
 fi
 
 # ── M1. Signature verification accepts anything ──────────────────────
-# Re-aimed after the v1.18.0 deep-deep (rv1-3): recovery is lazy now, behind a
+# Re-aimed after an audit: recovery is lazy now, behind a
 # `signedBy(key)` helper, so "accepts any signature" is its verdict forced true.
 snapshot "$FED"
 printf '%s\n' '	let signedByPostingKey = signedBy(postingKey);' > "$WORK/.needle"
@@ -322,7 +322,7 @@ snapshot "$FED"
 printf '%s' '	if (postingKey === null || postingKey.length === 0) {' > "$WORK/.needle"
 printf '%s' '	if (false) {' > "$WORK/.repl"
 if mutate "$FED" "$WORK/.needle" "$WORK/.repl"; then
-	# Second half re-aimed after the v1.18.0 deep-deep (rv1-3, lazy recovery):
+	# Second half re-aimed after the (rv1-3, lazy recovery):
 	# the absent key is what makes the signature check pass.
 	printf '%s\n' '	let signedByPostingKey = signedBy(postingKey);' > "$WORK/.needle"
 	printf '%s\n' '	let signedByPostingKey = postingKey === null || signedBy(postingKey);' > "$WORK/.repl"
@@ -364,7 +364,7 @@ fi
 # federation module's use of the gate: the result is ignored and a push is
 # always enqueued, which is precisely the spam door.
 snapshot "$FED"
-# The gate is judged at ARRIVAL time since the v1.18.0 deep-deep (FC-6), so the
+# The gate is judged at ARRIVAL time since the (FC-6), so the
 # call reads `gateAt`; the mutation is unchanged in kind.
 printf '%s\n' '	const fastAllowed = await gates.fastNotifyAllowed(located, gateAt).catch(() => false);' > "$WORK/.needle"
 printf '%s\n' '	const fastAllowed = true;' > "$WORK/.repl"
@@ -628,7 +628,7 @@ fi
 # captured push stays valid, and a FASTER box turns over sooner. Refusing to
 # evict a protected entry is the fix; this mutation takes it back out.
 snapshot "$FED"
-# The entry records its signer since the v1.18.0 deep-deep (FC-4, per-signer
+# The entry records its signer since the (FC-4, per-signer
 # quota), so the eviction rule reads `oldest.at`.
 printf '%s\n' '		if (now - oldest.at < REPLAY_PROTECTED_MS) {' > "$WORK/.needle"
 printf '%s\n' '		if (false) {' > "$WORK/.repl"
@@ -822,7 +822,7 @@ fi
 # buyer gets no push, no badge and no replay — a targeted denial aimed at the
 # victim, built out of a control meant to protect them.
 #
-# Re-aimed after the v1.18.0 deep-deep (FC-2): the budget is spent inside the
+# Re-aimed after an audit finding: the budget is spent inside the
 # one shared gate, fastNotifyGate.ts, which the intake route now calls with
 # `meterFirstContact: true`. The smoke drives that real gate.
 snapshot "$GATE"
@@ -927,7 +927,7 @@ fi
 # hostile RPC node only at first observation, while a persisted re-read can be
 # poisoned on demand, for any account, by answering one query.
 snapshot "$FED"
-# The store moved into `readFromChain` (v1.18.0 deep-deep, rv1-5: one read in
+# The store moved into `readFromChain` (one read in
 # flight per account), one indent shallower; `db` is still in scope there.
 printf '%s\n' '		rememberFreshKey(account, fresh, Date.now());' > "$WORK/.needle"
 cat > "$WORK/.repl" <<'REPL'
@@ -966,7 +966,7 @@ fi
 # the chain is unhelpful and every junk signature buys a fresh RPC call — a
 # reflected amplifier pointed at whichever node this instance is using.
 snapshot "$FED"
-# Same branch, now in `readFromChain` (v1.18.0 deep-deep, rv1-5), one indent
+# Same branch, now in `readFromChain`, one indent
 # shallower.
 cat > "$WORK/.needle" <<'NEEDLE'
 		if (fresh === null || fresh.length === 0) {
@@ -989,7 +989,7 @@ fi
 # chat completely dead, silently, forever.
 snapshot "$FED"
 #
-# Re-aimed after the v1.18.0 deep-deep (TP-C1): the origin is now added under a
+# Re-aimed after an audit finding: the origin is now added under a
 # hidden-only condition, so the mutation adds the old "only if nothing hidden
 # was found" guard to that condition. Re-aimed again in v1.20.0: a hidden
 # origin is now dialled as http (S9, hiddenOriginForDial) and the call wraps.

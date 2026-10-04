@@ -19,12 +19,12 @@
 <script lang="ts">
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { svgAvatarImgSrc } from '$lib/avatar/imgSrc';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import { fetchAccountBalance } from '$blurt/accountBalance';
-	import { fetchAccountHistory } from '$blurt/accountHistory';
+	import { fetchAccountHistoryPage } from '$lib/indexer/accountHistoryPage';
 	import { fetchAccountKeys } from '$blurt/accountKeys';
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import {
@@ -70,14 +70,14 @@
 	 *  this value IS the account's voting power. */
 	let voting = $state(NaN);
 
-	// cp401 — custom avatar (parity with the profile hero): if the account
+	// custom avatar (parity with the profile hero): if the account
 	// has uploaded a custom avatar (sanitized SVG or WebP data-URI in its
 	// profile json_metadata) show that; otherwise fall back to the
 	// name-seeded identicon. Best-effort — a fetch failure keeps the identicon.
 	let avatarSvg = $state<string | null>(null);
 	let avatarDataUri = $state<string | null>(null);
 
-	// cp401 — mobile exact-amount popovers (parity with MyBalanceCard). On
+	// mobile exact-amount popovers (parity with MyBalanceCard). On
 	// phones the balances render as floored integers to fit the 3-column card;
 	// tapping one reveals its exact value in a small popover. Desktop already
 	// shows full precision, so this is wired only on the sm:hidden tap targets.
@@ -132,7 +132,7 @@
 	}
 	let ops = $state<OpRow[]>([]);
 	let oldestSeqLoaded = $state<number | null>(null);
-	/** t.txt item 1 — history streams into the ops list AFTER the account is
+	/** history streams into the ops list AFTER the account is
 	 *  already on screen (the page reveals on `balance`, not on the heaviest
 	 *  fetch). `historyLoading` drives the "Loading operations…" placeholder;
 	 *  `historyError` drives an inline notice if the first page threw. Both are
@@ -146,7 +146,7 @@
 	let refreshing = $state(false);
 
 	const POLL_MS_BASE = 5_000;
-	/** Sally finding M9 (Part 68): backoff cap.  Five seconds is
+	/** Sally finding M9: backoff cap.  Five seconds is
 	 *  fine when activity is happening, but a Sally watching her
 	 *  own account that's been idle for an hour shouldn't be
 	 *  hitting the indexer 720 times per hour for nothing.  Cap
@@ -197,24 +197,46 @@
 		return typeof first === 'string' ? first : null;
 	}
 
-	async function loadInitial(): Promise<void> {
+	/** Set when the page is left: no fetch result is applied and no poll is
+	 *  armed after that. */
+	let destroyed = false;
+	/** Bumped by every loadInitial; an older load's results are dropped (the
+	 *  route param changed while it was in flight). */
+	let loadGen = 0;
+
+	/** Load `account` from scratch. Resolves true when this load is still the
+	 *  current one (the page was not left and the account did not change). */
+	async function loadInitial(): Promise<boolean> {
+		const g = ++loadGen;
+		const acct = account;
+		const current = (): boolean => !destroyed && g === loadGen;
 		status = 'loading';
+		errorMsg = '';
 		historyLoading = true;
 		historyError = false;
-		// t.txt item 1 — speed. All four fetches are INDEPENDENT, so fire them
+		ops = [];
+		oldestSeqLoaded = null;
+		keys = null;
+		avatarSvg = null;
+		avatarDataUri = null;
+		blurt = NaN;
+		bp = NaN;
+		voting = NaN;
+		vestingApr = NaN;
+		// speed. All four fetches are INDEPENDENT, so fire them
 		// concurrently AND reveal the account the moment `balance` resolves
 		// (~one round-trip) rather than after the slowest of the four. The
 		// heaviest fetch — history — streams into the ops list on its own; keys
 		// and avatar likewise fill in as they arrive. None of them gates the
 		// page appearing; only `balance` does (it decides not-found / error).
-		const balanceP = fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account);
-		const keysP = fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch).catch(
+		const balanceP = fetchAccountBalance(resolveOrigin(MORPHIT_INDEXER_ORIGIN), acct);
+		const keysP = fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), acct, fetch).catch(
 			(err) => {
 				console.warn('[explorer/account] keys load failed:', err);
 				return null;
 			}
 		);
-		const avatarP = getProfilesBatch([account]).catch((err) => {
+		const avatarP = getProfilesBatch([acct]).catch((err) => {
 			console.warn('[explorer/account] avatar load failed:', err);
 			return null;
 		});
@@ -222,7 +244,7 @@
 		// Keys + avatar stream in and update their own state; they never block
 		// the page. (fire-and-forget — reactive $state re-renders on arrival.)
 		void keysP.then((k) => {
-			if (k !== null) {
+			if (k !== null && current()) {
 				keys = {
 					owner: firstAuthKey(k.owner),
 					active: firstAuthKey(k.active),
@@ -232,8 +254,8 @@
 			}
 		});
 		void avatarP.then((map) => {
-			if (map !== null) {
-				const props = extractLabelPropsFromProfile(map.get(account) ?? null);
+			if (map !== null && current()) {
+				const props = extractLabelPropsFromProfile(map.get(acct) ?? null);
 				avatarSvg = props.avatarSvg;
 				avatarDataUri = props.avatarDataUri;
 			}
@@ -244,10 +266,10 @@
 		void fetchHistory(-1)
 			.catch((err) => {
 				console.warn('[explorer/account] history load failed:', err);
-				historyError = true;
+				if (current()) historyError = true;
 			})
 			.finally(() => {
-				historyLoading = false;
+				if (current()) historyLoading = false;
 			});
 
 		try {
@@ -255,40 +277,49 @@
 			// browser). The balance proxy returns balance / vesting / manabar /
 			// dgp / posting_pub — everything the page header renders.
 			const r = await balanceP;
+			if (!current()) return false;
 			if (r.kind === 'not_found') {
 				status = 'not_found';
-				return;
+				return true;
 			}
 			if (r.kind !== 'ok') {
 				throw new Error(r.message);
 			}
-			const { account: acct } = r.data;
-			if (acct.name !== account) {
-				throw new Error(`indexer returned ${acct.name} but ${account} was requested`);
+			const { account: got } = r.data;
+			if (got.name !== acct) {
+				throw new Error(`indexer returned ${got.name} but ${acct} was requested`);
 			}
 			applyBalanceData(r.data);
 			// Reveal the page NOW — keys, avatar, and history fill in around it.
 			status = 'ok';
 		} catch (err) {
+			if (!current()) return false;
 			console.warn('[explorer/account] account load failed:', err);
 			errorMsg = $_('explorer.account.error.load_failed');
 			status = 'error';
 		}
+		return true;
 	}
 
 	async function fetchHistory(from: number, noCache = false, limit = PAGE_SIZE): Promise<void> {
 		// One page via the indexer (privacy: no direct RPC from the
 		// browser). get_account_history shape per entry:
 		//   [seq, { block, trx_id, timestamp, op: [name, body] }]
-		const r = await fetchAccountHistory(
+		const acct = account;
+		// A page too large for one reply is read again with fewer entries
+		// ($lib/indexer/accountHistoryPage); a failed read throws — it is not
+		// "no more history".
+		const r = await fetchAccountHistoryPage(
 			resolveOrigin(MORPHIT_INDEXER_ORIGIN),
-			account,
+			acct,
 			from,
 			limit,
 			fetch,
 			noCache
 		);
-		if (r.kind !== 'ok') return;
+		// Left the page, or moved to another account, while this was in flight.
+		if (destroyed || acct !== account) return;
+		if (r.kind !== 'ok') throw new Error(r.message);
 		const history = r.entries;
 
 		const newOps: OpRow[] = [];
@@ -359,8 +390,8 @@
 	}
 
 	function schedulePoll(): void {
-		if (pollTimer) return;
-		// Sally finding M9 (Part 68): recursive setTimeout instead
+		if (pollTimer || destroyed) return;
+		// Sally finding M9: recursive setTimeout instead
 		// of setInterval so we can vary the interval based on
 		// activity.  Pre-Part-68 this hammered every 5s forever
 		// regardless of whether anything was happening.  When the
@@ -370,12 +401,19 @@
 		// fetch but still re-arm the timer at the current interval.
 		pollTimer = setTimeout(async () => {
 			pollTimer = null;
+			if (destroyed) return;
 			if (typeof document !== 'undefined' && document.hidden) {
 				schedulePoll();
 				return;
 			}
 			const opCountBefore = ops.length;
-			await fetchHistory(-1);
+			try {
+				await fetchHistory(-1);
+			} catch (err) {
+				// A failed poll keeps the list; the next poll tries again.
+				console.warn('[explorer/account] history poll failed:', err);
+			}
+			if (destroyed) return;
 			if (ops.length > opCountBefore) {
 				// Activity — snap back to base interval.
 				currentPollMs = POLL_MS_BASE;
@@ -430,15 +468,24 @@
 		}
 	}
 
-	onMount(() => {
-		void loadInitial().then(() => {
-			if (status === 'ok') startPolling();
+	// (Re)load whenever the route's account changes — the page component is
+	// reused when navigating from one account to another.
+	$effect(() => {
+		void account;
+		untrack(() => {
+			stopPolling();
+			void loadInitial().then((stillCurrent) => {
+				if (stillCurrent && status === 'ok') startPolling();
+			});
 		});
 	});
 
-	onDestroy(stopPolling);
+	onDestroy(() => {
+		destroyed = true;
+		stopPolling();
+	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -488,7 +535,7 @@
 			{#if avatarSvg}
 				<!-- Custom avatar SVG (sanitized), shown as an <img>: inlined,
 				     its own style/class could escape this frame and cover the
-				     page (v1.18.0 deep-deep, M1). -->
+				     page. -->
 				<img
 					src={svgAvatarImgSrc(avatarSvg)}
 					alt=""
@@ -515,8 +562,8 @@
 				     instead of matching it.  The deeper inconsistency is
 				     between IdentityLabel (pubkey-seeded for bytes-when-known)
 				     and the public surfaces (always name-seeded) — that's a
-				     systemic ratification for a future pass, not a Part 68 fix.
-				     Documented in REVISIT-LIST.md. -->
+				     systemic ratification for a future pass, not a fix.
+				     Documented in the project backlog. -->
 				<img
 					src={identiconDataUri(new TextEncoder().encode(account))}
 					alt=""
@@ -702,7 +749,7 @@
 						{@const txUrl = morphitExplorerTxUrl(op.trxId)}
 						{@const blockUrl = morphitExplorerBlockUrl(op.block)}
 						{@const iso = op.timestamp.endsWith('Z') ? op.timestamp : `${op.timestamp}Z`}
-						<!-- t.txt item 3 — hovering a row tints it the same dim emerald the
+						<!-- hovering a row tints it the same dim emerald the
 						     FAQ articles use (`card-hover-emerald` = bg-emerald-50/30 / dark
 						     morphit-emerald/[0.05]). `-mx-2 px-2 rounded-lg` gives the tint
 						     rounded edges with breathing room without shifting the content;

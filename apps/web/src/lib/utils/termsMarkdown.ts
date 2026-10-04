@@ -1,12 +1,12 @@
 /**
  * Morphit — restricted markdown parser for user-authored order `terms`.
  *
- * cp406 (the maintainer): the Terms field supports a DELIBERATELY SMALL markdown subset —
+ * the Terms field supports a DELIBERATELY SMALL markdown subset —
  * headings, bold, italics, unordered/ordered lists, blockquotes, links,
  * horizontal rules, and line feeds. Nothing else (no raw HTML, no images
  * beyond the existing Blurt-image link carve-out, no tables, no code fences).
- * cp413 (the maintainer): added blockquotes (`> quoted`).
- * cp414 (the maintainer): added inline `[text](url)` hyperlinks — the URL is scheme-
+ * added blockquotes (`> quoted`).
+ * added inline `[text](url)` hyperlinks — the URL is scheme-
  * validated through `safeContactUrl` (https/http/mailto/matrix/xmpp/nostr only;
  * javascript:/data:/vbscript:/file: are REFUSED and left as inert literal
  * text), and TermsText renders it hardened (target=_blank + noopener/noreferrer/
@@ -51,7 +51,7 @@ const HR_RE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const UL_RE = /^\s*[-*]\s+(.*)$/;
 const OL_RE = /^\s*\d+\.\s+(.*)$/;
 /** A blockquote line: `>` (up to 3 leading spaces), an optional single space,
- *  then the quoted content.  cp413. */
+ *  then the quoted content.. */
 const BLOCKQUOTE_RE = /^\s{0,3}>\s?(.*)$/;
 
 /** Split a run of text into bold / italic / plain runs.  `**x**` → bold,
@@ -75,7 +75,7 @@ function parseEmphasis(text: string): TermsInline[] {
 
 /** Regex for an inline `[text](url)` markdown link. `text` is any run of
  *  non-`]` chars; `url` is a run of non-`)`, non-whitespace chars (a trailing
- *  `)` or space ends the URL — standard markdown). cp414. */
+ *  `)` or space ends the URL — standard markdown).. */
 const MD_LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g;
 
 /** Blurt-image auto-links + bold/italic on a plain text run.  Explicit

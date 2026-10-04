@@ -95,7 +95,11 @@ check(
 // morphit_order_v1 evaporates — and so does this file's reasoning. Pin it.
 check(
 	'the public orderbook still gates on verified fees (premise of the exclusion)',
-	/fee_status IN \('verified', 'verified_by_attestation'\)/.test(orderbook),
+	// orderbook.ts takes its WHERE from orderbookStreamHelpers.buildWhereClauses.
+	/buildWhereClauses\(/.test(orderbook) &&
+		/fee_status IN \('verified', 'verified_by_attestation'\)/.test(
+			read('apps/indexer/src/api/orderbookStreamHelpers.ts')
+		),
 	'if this gate is gone, the whole fee-bypass argument needs re-opening, not patching'
 );
 

@@ -142,9 +142,9 @@ check(
 	/Clear a flag \(restore an account\)/.test(cmd),
 	'the mechanism is worthless if no menu path reaches it'
 );
-// v1.8.13 (the maintainer) — the option is now "ALL signals", not "Both". It said "Both"
+// v1.8.13 — the option is now "ALL signals", not "Both". It said "Both"
 // while FOUR signals can suppress a reputation, and only cleared two of them:
-// the maintainer picked it for a concentration-flagged pair, the command reported success,
+// The maintainer picked it for a concentration-flagged pair, the command reported success,
 // and the flags stayed. Clearing a subset while reporting success is worse than
 // refusing, because it looks resolved. The requirement is that the all-signals
 // option LEADS (a pair that trips one usually trips others) and genuinely

@@ -24,7 +24,7 @@
 
 	interface Props {
 		orderPermlink: string;
-		/** cp508 (tt.txt #13) — for a COMPLETED order with no client trade-state
+		/** for a COMPLETED order with no client trade-state
 		 *  (e.g. a cash-in-person trade with no verifiable on-chain payment, or a
 		 *  trade completed on another device), the on-chain counterparty the owner
 		 *  named in morphit_order_complete_v1. Renders a "Paid by @peer" pill so
@@ -95,7 +95,7 @@
 		</span>
 	{/if}
 {:else if completedCounterparty}
-	<!-- cp508 (tt.txt #13) — no client trade-state, but the order was
+	<!-- no client trade-state, but the order was
 	     completed naming this on-chain counterparty (e.g. a cash-in-person
 	     trade). Show "Paid by @peer" so the owner sees WHO paid. -->
 	<span

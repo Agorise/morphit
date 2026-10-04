@@ -2,9 +2,9 @@
 /**
  * scripts/canary-btc-failover-smoke.ts
  *
- * cp613 — the canary hit blockstream.info alone for its Bitcoin freshness
+ * the canary hit blockstream.info alone for its Bitcoin freshness
  * proof, no fallback + fatal abort; a single timeout killed the whole refresh.
- * cp614 — widened to FIVE independent providers (Blockstream, mempool.space,
+ * widened to FIVE independent providers (Blockstream, mempool.space,
  * Blockchain.com, Blockchair, BlockCypher), each with its own HTTP shape, plus
  * six independent news feeds. This smoke locks that in:
  *
@@ -116,7 +116,7 @@ async function run(): Promise<void> {
 			parseBtcTip('840123', 'g'.repeat(64)) === null
 	);
 
-	// ─── parseBtcSourceBody: EVERY provider shape (the cp614 core) ────
+	// ─── parseBtcSourceBody: EVERY provider shape (the core) ────
 	check('parseBtcSourceBody(esplora) parses two-body height+hash', parseBtcSourceBody('esplora', '840123', H) !== null);
 	check(
 		'parseBtcSourceBody(blockchain_info) parses { height, hash }',

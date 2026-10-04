@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — posting-key backfill (cp404, option A).
+ * Morphit indexer — posting-key backfill (option A).
  *
  * Order cards show a trader's truncated posting public key ("(BLT5vw…7Bjw)")
  * as an identity anchor. Resolving that per-card from the chain for a whole
@@ -32,7 +32,7 @@
  * contract validator can't yet accept a separate additive version (that's a
  * launch-time un-collapse). So the column is delivered onto an already-migrated
  * beta DB by an idempotent ADD COLUMN IF NOT EXISTS, exported as
- * ensurePostingPubkeyColumn(). cp405: main.ts AWAITS that on the boot path,
+ * ensurePostingPubkeyColumn(). main.ts AWAITS that on the boot path,
  * right after runMigrations() and BEFORE the HTTP server binds — so the column
  * is guaranteed present before the orderbook query (which selects it) can ever
  * be served. Previously the ensure ran ONLY inside this fire-and-forget
@@ -83,7 +83,7 @@ export interface AccountKeySource {
 		options?: { userFacing?: boolean }
 	): Promise<ReadonlyMap<string, Parameters<typeof primaryPostingKey>[0]>>;
 	/**
-	 * The same read, answered only when two independent endpoints AGREE on
+	 * The same read, answered only when two operators (counted by node name) AGREE on
 	 * what `agreeOn` extracts; null when they did not. BlurtClient provides
 	 * it, and the reconcile and NULL fill use it whenever it is there: their
 	 * answers become CONFIRMED keys the fast path trusts without asking again,
@@ -289,7 +289,7 @@ export async function backfillPostingKeys(
 	await ensurePostingPubkeyColumn(db);
 
 	const max = opts.maxAccounts ?? DEFAULT_MAX;
-	// v1.18.0 deep-deep (rv2-11): only rows never CONFIRMED. A row that is NULL
+	// only rows never CONFIRMED. A row that is NULL
 	// and confirmed is an owner who disowned their key (authority moved to
 	// another account, or no single key): the reconcile wrote that NULL on
 	// purpose. Selecting it here refilled it with whatever key two lagging
@@ -338,7 +338,7 @@ export async function backfillPostingKeys(
 			const key = primaryPostingKey(map.get(name) ?? {});
 			if (key === null) continue;
 			// Read from the chain just now, so confirmed as well as filled (F37).
-			// Guarded on the flag too (rv2-11): a confirmed NULL stays NULL, and a
+			// Guarded on the flag too: a confirmed NULL stays NULL, and a
 			// rotation the dispatcher confirmed meanwhile is never overwritten.
 			const res = await db.query(
 				`UPDATE accounts SET posting_pubkey = $2, posting_key_reconciled = TRUE

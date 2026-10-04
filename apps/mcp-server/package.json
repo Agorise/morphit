@@ -1,6 +1,7 @@
 {
 	"name": "morphit-mcp",
-	"version": "1.20.3",
+	"version": "1.21.0",
+	"private": true,
 	"description": "Morphit MCP server — read-only orderbook + federation directory exposed to AI agents (Claude / ChatGPT / Grok / Perplexity / Cursor / Cline / local LLMs) via the Model Context Protocol.  Lets an agent answer 'where can I buy XMR no-KYC near me' by calling into Morphit's federated orderbook directly.  Never holds keys.  Never signs trades.  Hands the user off to the Morphit web UI for the actual key-signing step, preserving Morphit's zero-KYC + non-custodial pitch.",
 	"type": "module",
 	"license": "AGPL-3.0-or-later",
@@ -19,7 +20,7 @@
 	"scripts": {
 		"dev": "tsx src/main.ts",
 		"format": "prettier --write .",
-		"lint": "prettier --check .",
+		"lint": "tsx ../../scripts/lint-gate-smoke.ts",
 		"start": "tsx src/main.ts",
 		"build": "tsc -p tsconfig.build.json",
 		"test": "vitest run --passWithNoTests",

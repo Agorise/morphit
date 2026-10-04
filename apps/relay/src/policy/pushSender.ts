@@ -21,8 +21,14 @@
  * Privacy invariants:
  *   - The web-push library encrypts the payload (E2E vs. the push
  *     service per RFC 8291).  We never log payload content.
- *   - We never log subscription endpoints in full — only the prefix
- *     (e.g. "fcm.googleapis.com").
+ *   - We never log subscription endpoints, and no account names.
+ *
+ * Where it sends: only to an endpoint that passes isAllowedPushEndpoint
+ * (https, a browser push service or an operator-added host), and only to
+ * a public address — the https agent resolves the name, refuses any
+ * non-public answer and connects to the address it checked
+ * (policy/pushEndpoint.ts). A stored row that fails the policy (one
+ * taken before it existed) is deleted without being contacted.
  *   - We never log IPs.  This module makes outbound HTTPS calls to
  *     the push service; from the push service's perspective, the
  *     relay's egress IP is the "user" — the user's IP is never
@@ -39,6 +45,7 @@ import type { Database } from '$db/pool';
 import type { PushSubscriptionStore, PushSubscription } from './pushSubscriptions.ts';
 import { logger } from '$log';
 import { PUSH_PRUNE_INTERVAL_MS, prunePushTombstones } from './pushQueueJanitor.ts';
+import { isAllowedPushEndpoint, pushAgent } from './pushEndpoint.ts';
 
 const log = logger('relay-push-sender');
 
@@ -55,7 +62,7 @@ interface PendingRow {
 	click_path: string | null;
 	event_at: Date;
 	enqueued_at: Date;
-	notification_id: string | null; // cp450 — shared dedup tag id (or null)
+	notification_id: string | null; // shared dedup tag id (or null)
 }
 
 export interface PushSendTickResult {
@@ -178,8 +185,8 @@ export class PushSender {
 			}
 
 			// Fetch the account's devices that HAVEN'T opted out of this
-			// category — the per-category Settings toggle is applied here
-			// (cp450 GAP A). A device that muted `row.category` is skipped.
+			// category — the per-category Settings toggle is applied here.
+			// A device that muted `row.category` is skipped.
 			const devices = await this.subs.listByAccount(row.account, row.category);
 			if (devices.length === 0) {
 				// No subscribed devices for this category — nothing to deliver.
@@ -200,7 +207,7 @@ export class PushSender {
 				// shared `notification_id` (an order signal, matching the
 				// in-page notificationTag), use it so the two notifications
 				// collapse to one; otherwise fall back to the queue-row id
-				// (per-event dedup for pushes with no in-page twin). cp450.
+				// (per-event dedup for pushes with no in-page twin)..
 				eventId: row.notification_id ?? row.id,
 				eventAt: row.event_at.toISOString()
 			});
@@ -237,7 +244,7 @@ export class PushSender {
 			await this.markSent(row.id);
 
 			if (anySubDeleted) {
-				log.info('subscriptions_pruned', { account: row.account });
+				log.info('subscriptions_pruned', {});
 			}
 		}
 
@@ -284,6 +291,11 @@ export class PushSender {
 		dev: PushSubscription,
 		payload: string
 	): Promise<'delivered' | 'gone' | 'transient_failure'> {
+		// Never contact an endpoint outside the policy; drop the row instead.
+		if (!isAllowedPushEndpoint(dev.endpoint, this.config.pushExtraHosts ?? [])) {
+			log.warn('push_endpoint_not_allowed_dropped', {});
+			return 'gone';
+		}
 		try {
 			await webpush.sendNotification(
 				{
@@ -302,7 +314,13 @@ export class PushSender {
 					// Use 'normal' urgency for everything; trade
 					// events aren't life-safety, so we don't want
 					// to wake sleeping phones via 'high'.
-					urgency: 'normal'
+					urgency: 'normal',
+					// Public addresses only, connection pinned to the
+					// address that was checked (pushEndpoint.ts).
+					agent: pushAgent(),
+					// A push service answers in well under this; a
+					// stalled one must not hold the queue.
+					timeout: 15_000
 				}
 			);
 			return 'delivered';
@@ -313,12 +331,14 @@ export class PushSender {
 				// Subscription is gone — delete it.
 				return 'gone';
 			}
+			// The name resolves to a non-public address: never deliverable.
+			if ((err as { code?: string })?.code === 'EPUSHPRIVATE') {
+				log.warn('push_endpoint_private_dropped', {});
+				return 'gone';
+			}
 			// Don't log the full err object — it may contain
 			// endpoint URL + payload preview.  Just the status.
-			log.warn('push_failed', {
-				account: dev.account,
-				status: status ?? 'no_status'
-			});
+			log.warn('push_failed', { status: status ?? 'no_status' });
 			return 'transient_failure';
 		}
 	}

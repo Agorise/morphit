@@ -31,7 +31,7 @@
 	 * specific conversation at /chat/[peer].
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { slide } from 'svelte/transition';
@@ -54,7 +54,7 @@
 		getConversations,
 		getChatReadState,
 		getFeedbackGiven,
-		getOrdersByAccount
+		getOrder
 	} from '$lib/indexer/client';
 	import {
 		getOptimisticFeedbackGiven,
@@ -74,7 +74,7 @@
 		syncChatFoldersFromChain,
 		resurrectArchivedOnNewActivity
 	} from '$lib/chat/chatFolders';
-	import { isUnlocked, isPairedReadOnly } from '$stores/identity';
+	import { isUnlocked, isPairedReadOnly, hasAnySession } from '$stores/identity';
 	import { tradeStates } from '$lib/trades/tradeStatus';
 	import { blockedAccounts, loadBlocks } from '$lib/chat/blocks';
 	import { subscribeChatActivity } from '$lib/chat/globalChatActivityStream';
@@ -91,15 +91,19 @@
 	let conversations: readonly ConversationSummary[] = $state([]);
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
 	/** False until this surface's profile hydrate has completed once.
-	 *  v1.8.13 (the maintainer) — while false, identity labels render a neutral placeholder
+	 *  v1.8.13 — while false, identity labels render a neutral placeholder
 	 *  instead of asserting @account + identicon and then rewriting themselves.
 	 *  An identity that visibly changes is indistinguishable from a swap attack. */
 	let profilesHydrated = $state(false);
 	let fallbackPeers: readonly string[] = $state([]);
 	let loadError: boolean = $state(false);
+	/** True once the first read finished (from the indexer or, failing that,
+	 *  this device's recent peers): before it, an empty list means "loading",
+	 *  not "no conversations". */
+	let inboxLoaded = $state(false);
 
 	// ─── Folder partitioning ──────────────────────────────────────
-	// The inbox is an email inbox (the maintainer, t.txt). Every discussion lives in
+	// The inbox is an email inbox. Every discussion lives in
 	// exactly one of three folders — Inbox (default), ★ Starred, Archived —
 	// tracked per-discussion in the `chatFolders` store. Reading the store
 	// inside the $derived below makes the lists (and the star/archive controls)
@@ -111,7 +115,7 @@
 	let activeTab = $state<InboxTab>('inbox');
 	/** True for the single update in which the user switched tabs.
 	 *
-	 *  t.txt #4 asks for a slide when a card "appears or disappears ... from
+	 *   asks for a slide when a card "appears or disappears ... from
 	 *  Inbox, Starred, or Archived" — i.e. when the user FILES something and the
 	 *  card leaves the list it is in. Switching tabs replaces the entire list, so
 	 *  a naive `transition:slide` also fires there: twenty cards collapsing while
@@ -129,9 +133,9 @@
 	 *
 	 *  The list arrives from a fetch, not from the server-rendered page, so every
 	 *  card is CREATED after mount — and a Svelte intro transition plays on
-	 *  creation. Without this, the maintainer's first visit to /chat shows twenty cards
+	 *  creation. Without this, a first visit to /chat shows twenty cards
 	 *  sliding in at once, every single load. That is a page-load flash, not the
-	 *  thing he asked for: t.txt #4 wants the eye to follow a card when it is
+	 *  requirement, which is for the eye to follow a card when it is
 	 *  FILED, and an animation that fires on arrival trains the eye to ignore the
 	 *  one that matters.
 	 *
@@ -149,18 +153,18 @@
 	}
 
 	/** All visible conversations, each tagged with its folder + unread flag,
-	 *  sorted by date newest-first (t.txt item 6 — the star/archive folders all
+	 *  sorted by date newest-first (the star/archive folders all
 	 *  sort by date, not unread-first). Filters out peers the user has hidden
 	 *  (orderbook "hide") or blocked — those never appear in any folder. */
-	// cp515 (t.txt) — RESOLVE THE ORDER BEHIND AN OPTIMISTIC CARD.
+	// RESOLVE THE ORDER BEHIND AN OPTIMISTIC CARD.
 	//
 	// The fast push carries only (peer, orderPermlink), so the injected card had
 	// no order DETAILS and its "RE:" line rendered a placeholder — the maintainer watched
 	// "RE: …" sit there for about a minute before the durable row arrived with
-	// the real subject. The card itself is instant now (cp514 fixed the
-	// separator bug); this makes its SUBJECT instant too, which is what he asked
-	// for: "please make the subject line show up immediately as well if it has
-	// an order id permlink attached to it".
+	// the real subject. The card itself is instant now (a later change fixed the
+	// separator bug); this makes its SUBJECT instant too (requirement: the
+	// subject line shows immediately as well when the message carries an order
+	// permlink).
 	//
 	// The order is public data and always belongs to one of the two
 	// participants — the peer (they listed it, you messaged them) or you (you
@@ -178,10 +182,11 @@
 		try {
 			for (const owner of [peer, me]) {
 				if (!owner) continue;
-				const r = await getOrdersByAccount(owner, { limit: 100 });
+				// The order itself (a search of the owner's newest page missed
+				// older live orders).
+				const r = await getOrder(owner, permlink);
 				if (!r.ok) continue;
-				const rec = r.data.items.find((o) => o.permlink === permlink);
-				if (!rec) continue;
+				const rec = r.data.item;
 				// Reassign (not mutate) so the derived actually re-runs.
 				const next = new Map(pendingOrders);
 				next.set(permlink, {
@@ -225,8 +230,8 @@
 			const folder = folderOf(c.peer, order);
 			return {
 				...c,
-				// v1.7.5 (t.txt #2) — identical rule to the badge channel's, so the cards
-				// and the count stay in lockstep (the cp452 property).
+				// v1.7.5 — identical rule to the badge channel's, so the cards
+				// and the count stay in lockstep (the property).
 				//
 				// v1.7.7 — and now literally the same FUNCTION, not the same rule
 				// re-typed. This called `isUnread` against the durable
@@ -235,7 +240,7 @@
 				// thread resurrected into his Inbox, and the card still showed it
 				// READ — no green border. `threadIsUnread` folds in the pending push.
 				//
-				// v1.9.0 (the maintainer, tester3) — an ARCHIVED thread is never "unread". Archiving
+				// v1.9.0 (tester3) — an ARCHIVED thread is never "unread". Archiving
 				// is a deliberate "I'm done with this" that outranks the per-device read
 				// cursor: folder state syncs on-chain across devices, but the read cursor
 				// is per-device localStorage, so a thread archived+read on ANOTHER device
@@ -251,14 +256,14 @@
 					folder !== 'archived' &&
 					threadIsUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true),
 				folder,
-				// cp508 (tt.txt #7) — durable rows are never "pending"; the flag marks
+				// durable rows are never "pending"; the flag marks
 				// the optimistic placeholder cards below so the template can render a
 				// neutral subline until the full order details land.
 				pending: false
 			};
 		});
 
-		// cp508 (tt.txt #7) — inject an optimistic card for any fast-push thread
+		// inject an optimistic card for any fast-push thread
 		// the durable list doesn't carry yet, so a BRAND-NEW conversation appears
 		// as fast as the badge lights (~5s) instead of on the ~60s durable poll
 		// ("tester3 goes to the inbox and there is nothing there ... shows up
@@ -275,7 +280,7 @@
 			const peerLc = p.peer.toLowerCase();
 			if (hidden.has(peerLc) || blocked.has(peerLc)) continue;
 			if (durableKeys.has(`${peerLc}\\u0000${p.orderPermlink}`)) continue;
-			// cp515 — real order details when we've resolved them, so the "RE:" line
+			// real order details when we've resolved them, so the "RE:" line
 			// carries the true subject on first paint.
 			const resolved = p.orderPermlink ? pendingOrders.get(p.orderPermlink) : undefined;
 			withFlags.push({
@@ -329,7 +334,7 @@
 	/** Reuses `order_detail.status_*` — already translated in all ten locales, and
 	 *  identical to what the chat thread and the order page show. */
 	function orderStatusLabel(order: { status: string; permlink: string }): string {
-		// cp509 (v1.8.4 A2) — match the ConversationView header's fast (Paid):
+		// (v1.8.4 A2) — match the ConversationView header's fast (Paid):
 		// flip to "Paid" the instant THIS thread's local trade phase reaches
 		// paid_verified/released/completed, not only once the durable order status
 		// becomes 'completed' (the indexer lags ~1min). Checked FIRST so it
@@ -360,7 +365,7 @@
 		}
 	}
 
-	/** Hover tooltip for a card's last-message time (t.txt #10). The visible
+	/** Hover tooltip for a card's last-message time. The visible
 	 *  "2h ago" is gone from the card body — it was eating ~40px of a ~360px
 	 *  phone card, squeezing the name/subject/feedback — so the timing now lives
 	 *  in the card's `title`: the project's canonical "14 July, 2026 @ 14:03:21
@@ -411,7 +416,7 @@
 		activeTab === 'starred' ? starredList : activeTab === 'archived' ? archivedList : inboxList
 	);
 
-	/** t.txt (v1.4.8) — "Mark all as read" belongs only where there's a MARKABLE
+	/** "Mark all as read" belongs only where there's a MARKABLE
 	 *  unread: the Inbox or Starred tab with unread cards. Archived items don't
 	 *  count toward unread (and the action skips them), so the button never shows
 	 *  on Archived — nor on any tab with nothing unread to clear. */
@@ -443,7 +448,7 @@
 		if (local.length > 0) await fetchProfilesForNewPeers(local);
 	}
 
-	/** Duration for the inbox card slide (t.txt item G — a newly-arrived
+	/** Duration for the inbox card slide (a newly-arrived
 	 *  message re-sorts to the top and slides into place instead of jumping).
 	 *  Returns 0 under prefers-reduced-motion so the card snaps without motion.
 	 *  Evaluated per-animation, so it tracks the OS setting live. Mirrors the
@@ -452,11 +457,10 @@
 		if (typeof window === 'undefined') return 0;
 		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
 	}
-	/** Duration for a card sliding IN or OUT of the visible tab (t.txt #4).
+	/** Duration for a card sliding IN or OUT of the visible tab.
 	 *
-	 *  [the maintainer]: "whenever a message appears or disappears (manually or dynamically/
-	 *  automatically) from Inbox, Starred, or Archived, please use a smooth
-	 *  slide-in or slide-out effect so the eye can see easier what is happening."
+	 *  Requirement: a message entering or leaving Inbox, Starred or Archived (by hand or
+	 *  automatically) slides in or out smoothly, so the eye can follow it.
 	 *
 	 *  `animate:flip` above handles a card MOVING within a list. It cannot help
 	 *  when a card leaves the list entirely — archiving one made it vanish between
@@ -531,13 +535,13 @@
 	let onVisible: (() => void) | null = null;
 	let unsubActivity: (() => void) | null = null;
 
-	/** v1.7.7 (t.txt #5) — how often to re-read the on-chain folder state.
+	/** v1.7.7 — how often to re-read the on-chain folder state.
 	 *
-	 *  15s is chosen against what it is FIXING, not against a round number: the maintainer
-	 *  archived on his PC and his phone still showed the thread "even after a few
+	 *  15s is chosen against what it is FIXING, not against a round number: a
+	 *  thread archived on a PC still showed on the phone "even after a few
 	 *  minutes". Anything under ~20s reads as "it just moved" to someone holding
-	 *  both devices, which is the bar he set — "i would like for messages to
-	 *  automatically move themselves dynamically".
+	 *  both devices, which is the bar (requirement: messages move between
+	 *  folders on their own).
 	 *
 	 *  It is not faster because folder moves are a HUMAN action, not a message
 	 *  feed: nobody archives twice a second, and every poll that finds no change
@@ -546,19 +550,19 @@
 	 *  5s conversation poll and never waits on this at all. */
 	const FOLDER_SYNC_MS = 15_000;
 
-	// t.txt (v1.4.9 #5) — pull the on-chain chat folder organization once the
+	// pull the on-chain chat folder organization once the
 	// identity is unlocked (it's encrypted with the posting key, so it can only
 	// be decrypted while unlocked). No-op when locked: the local mirror renders
 	// meanwhile. Also performs the one-time migration (local stars → chain) the
 	// first time an account with no on-chain state syncs.
 	//
-	// v1.7.7 (t.txt #5) — RE-SYNC, don't sync once.
+	// v1.7.7 — RE-SYNC, don't sync once.
 	//
 	// This effect fires when `$isUnlocked` flips true, i.e. once per page load.
 	// So a device read the chain on mount and never again: the maintainer archived a thread
 	// on his PC and his PHONE kept it in the Inbox until he manually refreshed.
 	//
-	// the maintainer also spotted the asymmetry that explains it — un-archiving DID move
+	// The maintainer also spotted the asymmetry that explains it — un-archiving DID move
 	// across devices without a refresh. That was never syncing. Un-archive is
 	// RE-DERIVED locally by resurrectArchivedOnNewActivity on every conversation
 	// poll, from data each device already has. Archiving cannot be re-derived: it
@@ -568,7 +572,7 @@
 	// `enc` blob against the last one it adopted and returns before decrypting
 	// when nothing changed — so the steady-state cost is one small GET, and the
 	// posting key is only used when there is genuinely a new decision to adopt.
-	// Adoption is already last-write-wins (cp474), so a device with a pending
+	// Adoption is already last-write-wins, so a device with a pending
 	// local change is not stomped by an older chain state.
 	$effect(() => {
 		if (!$isUnlocked) return;
@@ -596,7 +600,7 @@
 	//  that opens the thread, where the form lives) or "Feedback left: ★★★★★".
 	//  Uses ONE /feedback-given fetch for the whole list (keyed by
 	//  subject+order), same directional-safe check as the chat thread.
-	// cp515 (t.txt) — kick off the order lookup for any optimistic card still
+	// kick off the order lookup for any optimistic card still
 	// showing a placeholder subject. Deliberately an EFFECT, not a call inside
 	// `sortedConversations`: a $derived must stay pure, and firing a fetch from
 	// inside one would re-enter on its own result. Re-runs when the list or the
@@ -637,7 +641,7 @@
 	} {
 		const permlink = convo.order?.permlink;
 		if (!permlink) return { canLeave: false, record: null };
-		// cp514 (t.txt D) — prefer the durable indexer record, but fall back to an
+		// prefer the durable indexer record, but fall back to an
 		// optimistic one the chatroom recorded the instant feedback was broadcast,
 		// so this card shows the ★ stars immediately instead of a stale "Leave
 		// feedback" until the next /feedback-given poll. Reading the tick re-runs
@@ -651,7 +655,18 @@
 		return { canLeave, record };
 	}
 
-	onMount(() => {
+	// The inbox reads (conversations, blocks, feedback, the 5 s poll) start
+	// once a session exists: a remembered account name on a locked visit does
+	// not name the account to the operator (RequireLiveSession then sends the
+	// visitor to unlock). A session restored a moment later still starts them.
+	let inboxStarted = false;
+	$effect(() => {
+		if (!$hasAnySession || inboxStarted) return;
+		inboxStarted = true;
+		startInbox();
+	});
+
+	function startInbox(): void {
 		try {
 			me = getUserBlurtAccount();
 		} catch (err) {
@@ -666,7 +681,7 @@
 		// /chat/[peer] (opening a specific conversation). Unchanged by the
 		// real-time refactor.
 		void loadBlocks(me);
-		void refresh(true);
+		void refresh(true).finally(() => (inboxLoaded = true));
 		void loadFeedbackGiven();
 
 		// Real-time inbox: re-poll on the fastchat cadence (≤6 s target).
@@ -690,7 +705,7 @@
 		unsubActivity = subscribeChatActivity(() => {
 			if (!document.hidden) void refresh(false);
 		});
-	});
+	}
 
 	onDestroy(() => {
 		if (pollTimer !== null) clearInterval(pollTimer);
@@ -704,7 +719,7 @@
 	 *  user navigates back before [peer] fully loads, the unread
 	 *  badge is still correct. */
 	function handleOpen(peer: string, orderPermlink: string, lastMessageAt?: string): void {
-		// cp446 — mark THIS discussion read, not everything from this person.
+		// mark THIS discussion read, not everything from this person.
 		//
 		// v1.7.7 — CLAMP the cursor, don't stamp the local clock.
 		//
@@ -728,7 +743,7 @@
 
 	/** Mark every discussion that still nags (Inbox + Starred) as read, so the
 	 *  header pill and the favicon / avatar-menu badge all drop to zero at once
-	 *  (t.txt item 10 — "once all messages are read … the green dots disappear").
+	 *  ("once all messages are read … the green dots disappear").
 	 *  Archived threads are already triaged and don't feed the badge. */
 	function handleMarkAllRead(): void {
 		const now = new Date();
@@ -764,12 +779,12 @@
 		toggleStar(row.peer, row.order?.permlink ?? '', row.last_message_at);
 	}
 
-	// Last-message timing lives in each card's hover `title` (t.txt #10) via
+	// Last-message timing lives in each card's hover `title` via
 	// whenTooltip() above — the canonical "14 July, 2026 @ 14:03:21 UTC · 2h
 	// ago". The visible inline timestamp was removed to give the name/subject/
 	// feedback lines the full card width on a phone.
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -813,8 +828,11 @@
 				{$_('chat.inbox.get_started')}
 			</a>
 		</div>
-	{:else if conversations.length === 0 && fallbackPeers.length === 0}
-		<!-- No conversations yet. Guide them to discovery surfaces. -->
+	{:else if !inboxLoaded && sortedConversations.length === 0}
+		<p class="text-ink-500 dark:text-ink-400" aria-live="polite">{$_('common.loading')}</p>
+	{:else if sortedConversations.length === 0 && fallbackPeers.length === 0}
+		<!-- No conversations yet (a just-arrived message's optimistic card counts
+		     as one). Guide them to discovery surfaces. -->
 		<div
 			class="rounded-2xl border-2 border-dashed border-ink-300 p-8 text-center dark:border-ink-700"
 		>
@@ -840,7 +858,7 @@
 		<!-- Tabs: Inbox (everything, until you star or archive it), ★ Starred
 		     (gold-starred discussions), and Archived. All three always show —
 		     an email inbox doesn't hide its folders. -->
-		{#if !loadError && conversations.length > 0}
+		{#if !loadError && sortedConversations.length > 0}
 			<div
 				role="tablist"
 				aria-label={$_('chat.inbox.tabs_aria') as string}
@@ -876,7 +894,7 @@
 						? 'border-morphit-emerald text-morphit-emerald'
 						: 'border-transparent text-ink-600 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100'}"
 				>
-					<!-- Literal gold star in the tab label (the maintainer: "★ Starred"). -->
+					<!-- Literal gold star in the tab label ("★ Starred"). -->
 					<span class="text-amber-400" aria-hidden="true">★</span>
 					{$_('chat.inbox.tab_starred')}
 					{#if starredUnread > 0}
@@ -903,7 +921,7 @@
 			</div>
 		{/if}
 
-		{#if activeTabHasUnread && conversations.length > 0}
+		{#if activeTabHasUnread && sortedConversations.length > 0}
 			<div class="mb-3 flex justify-end">
 				<button
 					type="button"
@@ -917,7 +935,7 @@
 
 		<ul class="space-y-2" aria-label={$_('chat.inbox.list_aria') as string}>
 			{#if activeList.length > 0}
-				<!-- cp446 (the maintainer) — an inbox of DISCUSSIONS, not people. The same peer
+				<!-- an inbox of DISCUSSIONS, not people. The same peer
 				     appears once per order they have talked to you about, plus once
 				     more for any order-less thread, exactly like email. `peer` alone
 				     is therefore not a unique key: two cards would collide and Svelte
@@ -929,8 +947,8 @@
 					{@const fb = feedbackStateFor(convo)}
 					<!-- One card per DISCUSSION (peer + order), like an email inbox.
 					     The whole card is one click target → the conversation; only the
-					     star and the action box on the right are their own controls
-					     (t.txt item 16). `relative` anchors the stretched hit-area and
+					     star and the action box on the right are their own controls.
+					     `relative` anchors the stretched hit-area and
 					     the z-10 controls; `items-stretch` lets the action box run the
 					     full card height. -->
 					<li
@@ -942,12 +960,12 @@
 					>
 						<!-- Card content: the avatar is a SIBLING of the two-line text block
 						     (name + RE:), so items-center vertically centres the 40px avatar
-						     against BOTH lines instead of just the name (t.txt alignment pass).
+						     against BOTH lines instead of just the name (alignment pass).
 						     The anchor's ::after stretches over the WHOLE card so a click
 						     anywhere opens the chat; the timestamp shows through the transparent
 						     overlay and the star sits above it (relative z-10) as its own
 						     control. -->
-						<!-- v1.7.5 (t.txt #3) — tighter on mobile, unchanged from `sm` up.
+						<!-- v1.7.5 — tighter on mobile, unchanged from `sm` up.
 						     On a ~360px phone the card's fixed furniture (40px avatar,
 						     timestamp, star, the full-height Archive box, padding, gaps) left
 						     the text block ~100px, which is what squeezed the name into four
@@ -968,7 +986,7 @@
 							>
 								<!-- Avatar only (hideHandle) — same IdentityLabel component, so the
 								     identity-label policy holds; 40px on every card so the shape never
-								     varies (t.txt item 8). -->
+								     varies. -->
 								<IdentityLabel
 									pending={!profilesHydrated}
 									account={convo.peer}
@@ -983,7 +1001,7 @@
 								<div class="flex min-w-0 flex-1 flex-col gap-0.5">
 									<!-- @name / display name. pr-7 so the name clears the star now pinned
 									     at the card's top-right; lines 2/3 below have no such padding and
-									     use the full width (cp510 [5]). -->
+									     use the full width. -->
 									<div class="min-w-0 pr-7">
 										<IdentityLabel
 									pending={!profilesHydrated}
@@ -996,13 +1014,13 @@
 											showCopy={false}
 										/>
 									</div>
-									<!-- "RE:" line (t.txt item 12) — ALWAYS present. Bound to the order
+									<!-- "RE:" line — ALWAYS present. Bound to the order
 									     ("RE: <title> (Live|Cancelled|Expired)") or "RE: -". Inside the
 									     text block, so it lines up under the name with no manual indent. -->
 									<div class="flex min-w-0 items-baseline gap-1 text-xs text-ink-500 dark:text-ink-400">
 										<span class="flex-none font-medium">{$_('chat.inbox.re_prefix')}</span>
 										{#if convo.pending}
-										<!-- cp508 (tt.txt #7) — optimistic placeholder card: the message just
+										<!-- optimistic placeholder card: the message just
 										     arrived via the fast push, so the thread exists but the order's
 										     details aren't known yet (they land with the durable row). Show a
 										     neutral loading dash, not a half-filled "RE:" line; the real title +
@@ -1031,7 +1049,7 @@
 											<span aria-hidden="true">→</span>
 										</div>
 									{:else if fb.record !== null}
-										<!-- v1.7.7 (t.txt #9) — "I rated @tester2:" REMOVED, and that one
+										<!-- v1.7.7 — "I rated @tester2:" REMOVED, and that one
 									     deletion fixes three things the maintainer flagged as separate bugs.
 									     On a phone the label wrapped to a second line ("I rated" /
 									     "@tester3:"), which pushed the stars down onto their own
@@ -1046,9 +1064,9 @@
 									     pixel; `items-center` (not baseline) so the stars sit level
 									     with the "37m ago" text to their right, as the maintainer asked. -->
 									<div class="flex items-center gap-2 text-xs text-ink-500 dark:text-ink-400">
-											<!-- t155: stars are EMERALD, not amber. the maintainer: "i love the
-											     green stars that i see for a user review/feedback.
-											     lets standardize on that." This row was the last
+											<!-- t155: stars are EMERALD, not amber. Requirement:
+											     standardise on the green stars used for
+											     reviews. This row was the last
 											     amber ★★★★★ outside the emerald convention. -->
 											<span class="flex-none text-morphit-emerald" aria-hidden="true"
 												>{'★'.repeat(fb.record.rating)}{'☆'.repeat(5 - fb.record.rating)}</span
@@ -1069,7 +1087,7 @@
 									{/if}
 								</div>
 							</a>
-							<!-- Star (cp510 [5]) — pinned at the card's top-right (line-1 row)
+							<!-- Star — pinned at the card's top-right (line-1 row)
 							     instead of a full-height centred column, so lines 2/3 extend the
 							     full width. Absolute + z-10 so it sits above the card-wide link
 							     and steals no flow width; anchored to the now-relative content
@@ -1088,7 +1106,7 @@
 									{starred ? '★' : '☆'}
 								</button>
 						</div>
-						<!-- Action box (t.txt item 7) — EVERY card has one, on the far
+						<!-- Action box — EVERY card has one, on the far
 						     right, full height. "Archive" moves the discussion to the
 						     Archived tab; on an already-archived card it reads "Restore"
 						     and moves it back to the Inbox. z-10 to sit above the
@@ -1114,6 +1132,15 @@
 						{/if}
 					</li>
 				{/each}
+			{:else if !loadError && sortedConversations.length > 0}
+				<!-- This folder is empty (the others are not). -->
+				<li class="rounded-xl border border-dashed border-ink-200 p-6 text-center text-ink-500 dark:border-ink-800 dark:text-ink-400">
+					{activeTab === 'starred'
+						? $_('chat.inbox.tab_empty_starred')
+						: activeTab === 'archived'
+							? $_('chat.inbox.tab_empty_archived')
+							: $_('chat.inbox.tab_empty_inbox')}
+				</li>
 			{:else}
 				<!-- Fallback path — indexer was unavailable, list is from localStorage.
 				     We don't have timestamps for fallback peers, so no unread flag. -->

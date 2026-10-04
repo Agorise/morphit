@@ -5,8 +5,8 @@
  * client.  Mirrors the vitest scenarios in
  * apps/indexer/test/handlers/profile.test.ts but runs in any
  * environment with tsx (no vitest required).  The vitest file
- * is canonical; this exists so audit verification can run in
- * sandboxes that lack vitest.
+ * is canonical; this exists so audit verification can run where
+ * vitest is not installed.
  *
  * Usage (from apps/indexer):
  *   tsx scripts/profile-handler-smoke.ts
@@ -170,7 +170,7 @@ await scenario('rejects zero-width space (ZWSP still blocked)', async () => {
 	assertEqual(r, { ok: false, reason: 'display_name_forbidden_char' }, 'result');
 });
 
-// cp671 — ZWNJ (U+200C) and ZWJ (U+200D) are NO LONGER forbidden: essential
+// ZWNJ (U+200C) and ZWJ (U+200D) are NO LONGER forbidden: essential
 // cursive joiners for Persian/Arabic-script + Indic text. A ZWNJ name must not
 // be rejected as a forbidden char.
 await scenario('accepts ZWNJ (Persian half-space) - not a forbidden char', async () => {
@@ -273,7 +273,7 @@ await scenario('avatar uniqueness: duplicate of another account reverts to prior
 	const r = await handler(
 		makeCtx({
 			signer: 'tester',
-			payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
+			payload: { display_name: 'Alice', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
 		}),
 		mock.client
 	);
@@ -291,7 +291,7 @@ await scenario('avatar uniqueness: duplicate with no prior avatar is dropped', a
 	const r = await handler(
 		makeCtx({
 			signer: 'tester',
-			payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
+			payload: { display_name: 'Alice', json_metadata: { avatar_svg: '<svg>stolen</svg>' } }
 		}),
 		mock.client
 	);
@@ -311,7 +311,7 @@ await scenario('avatar uniqueness: re-uploading your own image is allowed', asyn
 	const r = await handler(
 		makeCtx({
 			signer: 'tester',
-			payload: { display_name: 'the maintainer', json_metadata: { avatar_svg: '<svg>mine</svg>' } }
+			payload: { display_name: 'Alice', json_metadata: { avatar_svg: '<svg>mine</svg>' } }
 		}),
 		mock.client
 	);

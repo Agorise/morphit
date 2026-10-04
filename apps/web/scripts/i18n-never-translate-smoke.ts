@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * i18n-never-translate-smoke (v1.20.0 fix wave, G11).
+ * i18n-never-translate-smoke.
  *
- * Standing translation rule (REVISIT-LIST "memory #7"): some words are
+ * Standing translation rule: some words are
  * NEVER translated, transliterated or inflected in any locale:
  *
  *   - agorist / agorists / agorism — translate the rest of the phrase, keep

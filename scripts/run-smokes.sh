@@ -254,7 +254,6 @@ SMOKES=(
 	"apps/web:price-model-picker-parity-smoke"
 	"apps/web:post-form-grandma-regression-smoke"
 	"apps/web:economics-canonical-smoke"
-	"apps/web:composite-price-provider-smoke"
 	"apps/web:desktop-pairing-crypto-smoke"
 	"apps/web:paired-readonly-lifecycle-smoke"
 	"apps/web:paired-readonly-affordance-surfaces-smoke"
@@ -600,7 +599,10 @@ SMOKES=(
 	"apps/web:featured-order-copy-smoke"
 	"apps/web:featured-card-reputation-smoke"
 	"apps/web:ui-polish-batch-smoke"
-	"apps/web:ui-batch-2-smoke"
+	"apps/web:profile-display-retry-smoke"
+	"apps/web:fee-status-banner-copy-smoke"
+	"apps/web:order-visibility-staging-smoke"
+	"apps/web:order-edit-window-countdown-smoke"
 	"apps/web:pay-now-active-key-smoke"
 	"apps/web:chat-notification-wiring-smoke"
 	"apps/web:posting-active-upgrade-smoke"
@@ -726,7 +728,6 @@ SMOKES=(
 	".:ddns-setup-smoke"
 	".:reboot-recovery-smoke"
 	".:upgrade-notify-smoke"
-	".:matrix-login-smoke"
 	".:setup-bootstrap-smoke"
 	".:ddns-role-smoke"
 	".:ansible-vars-smoke"
@@ -740,7 +741,6 @@ SMOKES=(
 	".:audit-allowlist-smoke"
 	".:smoke-runner-env-parity-smoke"
 	"apps/web:profile-persistent-cache-smoke"
-	# v1.20.0 fix wave
 	"apps/ops-cli:install-operator-tag-smoke"
 	"apps/ops-cli:waf-broadcast-probe-smoke"
 	"apps/ops-cli:version-report-smoke"
@@ -774,18 +774,63 @@ SMOKES=(
 	# v1.20.2
 	".:static-soft-404-smoke"
 	"apps/web:i18n-lazy-sections-smoke"
+	"packages/asset-registry:review-text-policy-smoke"
+	"apps/relay:rpc-reply-bomb-smoke"
+	"apps/relay:push-subscription-store-smoke"
+	"apps/relay:rpc-reply-budget-smoke"
+	"apps/mcp-server:mcp-real-shapes-smoke"
+	"apps/matrix-bot:tor-socks-route-smoke"
+	"apps/matrix-bot:classifier-emitter-coverage-smoke"
+	"apps/matrix-bot:journal-tailer-respawn-smoke"
+	"apps/web:vite-licenses-smoke"
+	"apps/ops-cli:apt-key-pin-smoke"
+	"apps/ops-cli:backup-push-exclusion-smoke"
+	"apps/ops-cli:bunkerweb-privacy-settings-smoke"
+	"apps/ops-cli:ddns-config-parse-smoke"
+	"apps/ops-cli:first-online-tls-smoke"
+	"apps/ops-cli:gateway-firewall-frontend-smoke"
+	"apps/ops-cli:hardening-forwarding-smoke"
+	"apps/ops-cli:hidden-rpc-template-canon-smoke"
+	"apps/ops-cli:host-alert-mail-smoke"
+	"apps/ops-cli:indexer-env-shadow-smoke"
+	"apps/ops-cli:ipfs-base-privacy-smoke"
+	"apps/ops-cli:postgres-role-defaults-smoke"
+	"apps/ops-cli:reachability-check-tor-smoke"
+	"apps/ops-cli:service-perms-helper-smoke"
+	"apps/ops-cli:service-privilege-smoke"
+	"apps/ops-cli:tor-egress-smoke"
+	".:nginx-served-hardening-smoke"
+	".:release-signer-pin-smoke"
+	".:box-identity-statement-smoke"
+	"apps/ops-cli:hidden-npm-tor-route-smoke"
+	".:canary-verify-smoke"
+	"apps/ops-cli:npm-ignore-scripts-smoke"
+	".:offline-bundle-provenance-smoke"
+	".:undeclared-dependency-smoke"
+	"apps/ops-cli:no-curl-pipe-shell-smoke"
+	".:internal-notes-deny-smoke"
+	".:personal-name-deny-smoke"
+	".:private-term-encoding-deny-smoke"
+	".:public-claims-truth-smoke"
+	".:gitignore-coverage-smoke"
+	".:file-mode-consistency-smoke"
+	".:release-packers-exclude-private-smoke"
+	"apps/ops-cli:bunkerweb-no-phone-home-smoke"
+	"apps/ops-cli:kubo-no-phone-home-smoke"
 )
 
 # Slow-solo smokes each run a whole toolchain — every workspace's vitest, the
 # typecheck sweep, a cold vite build — and vitest-must-pass alone took 236 s on
-# a 2-CPU host (2026-09-29, ~3,300 unit tests): right at the 240 s default. They
+# a 2-CPU host (2026-09-29, ~3,300 unit tests): right at the 240 s default. The
+# two no-phone-home smokes run a real BunkerWeb scheduler / Kubo daemon in a
+# network namespace when their prerequisites are present (2-4 min). They
 # get at least MORPHIT_SLOW_SMOKE_TIMEOUT (600 s); every other smoke keeps
 # SMOKE_TIMEOUT. smoke-runner-env-parity-smoke runs this function from both
 # runners, so run-smokes.sh and run-smokes-chunk.sh cannot drift apart.
 SLOW_SMOKE_TIMEOUT="${MORPHIT_SLOW_SMOKE_TIMEOUT:-600}"
 smoke_timeout_for() {
 	case "$1" in
-	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke)
+	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke | bunkerweb-no-phone-home-smoke | kubo-no-phone-home-smoke)
 		if [ "$SLOW_SMOKE_TIMEOUT" -gt "$SMOKE_TIMEOUT" ]; then echo "$SLOW_SMOKE_TIMEOUT"; else echo "$SMOKE_TIMEOUT"; fi
 		;;
 	*) echo "$SMOKE_TIMEOUT" ;;
@@ -806,7 +851,7 @@ for entry in "${SMOKES[@]}"; do
 		failed=$((failed + 1))
 		continue
 	fi
-	# Smoke tsconfig selection (cp63 LL #66; per-workspace override cp448).
+	# Smoke tsconfig selection (per-workspace override).
 	# The repo-root `tsconfig.smoke.json` is the unified default — it merges
 	# path aliases from apps/web ($lib, $components, ...) and apps/indexer
 	# ($api, $config, ...) so cross-workspace smoke imports resolve, and a
@@ -830,10 +875,10 @@ for entry in "${SMOKES[@]}"; do
 	else
 		TSX_ARGS=()
 	fi
-	# Per-smoke wall-clock timeout (cp143).  cp142 closed a CI-bomb
+	# Per-smoke wall-clock timeout.  A later change closed a CI-bomb
 	# where `apps/mcp-server/scripts/mcp-server-smoke.ts` hung
 	# indefinitely on fresh checkouts (no built dist/main.js → child
-	# never produced stdout → smoke waited forever).  The cp142 fix
+	# never produced stdout → smoke waited forever).  The fix
 	# was static (lazy-build + meta-smoke), this is the runtime
 	# complement: any future smoke that hangs gets converted into a
 	# legible "killed after N seconds" failure instead of stalling
@@ -860,7 +905,7 @@ for entry in "${SMOKES[@]}"; do
 		# a runner failure rather than silently counted as 0 — see J-1
 		# (silent zero counting from empty arithmetic) and J-2 (sally
 		# emitted a custom format and was undercounted by 22 for ~20
-		# Parts) findings, Part 87.
+		# Parts) findings.
 		# Anchor the count extraction at the line start (^✓ all N) — NOT
 		# `.*all `: a greedy `.*all ` matches the "all " inside a smoke NAME
 		# like assemble-INSTALL / local-INSTALL and captures an empty count,
@@ -880,7 +925,7 @@ for entry in "${SMOKES[@]}"; do
 		failed=$((failed + 1))
 		# Distinguish timeout (124/137) from smoke-emitted non-zero.
 		if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 137 ]; then
-			echo "  ✗ $name (HUNG — killed after ${this_timeout}s; this is the cp142 bug class — see scripts/spawn-dist-prebuild-coverage-smoke.ts)"
+			echo "  ✗ $name (HUNG — killed after ${this_timeout}s; the bug class scripts/spawn-dist-prebuild-coverage-smoke.ts guards)"
 		else
 			echo "  ✗ $name (exit $exit_code)"
 		fi

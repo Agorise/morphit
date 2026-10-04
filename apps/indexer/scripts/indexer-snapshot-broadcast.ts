@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/indexer-snapshot-broadcast.ts (cp766)
+ * apps/indexer/scripts/indexer-snapshot-broadcast.ts
  *
  * Sign + broadcast an indexer_snapshot_v1 op from @morphit — the on-chain pointer
  * to a published indexer-DB snapshot (see indexerSnapshotOp.ts). Mirrors
  * chain-snapshot-broadcast.ts / release-broadcast.ts: laptop-only (the @morphit
  * posting WIF never goes in CI), validates the payload before asking for the key,
- * and dry-runs by default.
+ * and dry-runs by default (--broadcast to sign + send).
  *
  * Build the payload after you've exported + pinned + mirrored the snapshot
  * (pin-indexer-snapshot.sh emits it):
@@ -23,13 +23,13 @@
  *   }
  *
  *   node_modules/.bin/tsx --tsconfig tsconfig.smoke.json \
- *     apps/indexer/scripts/indexer-snapshot-broadcast.ts snapshot.json --dry-run
- *   # then, for real, drop --dry-run (prompts for the @morphit posting WIF)
+ *     apps/indexer/scripts/indexer-snapshot-broadcast.ts snapshot.json
+ *   # then, for real, add --broadcast (asks for the @morphit posting WIF; not echoed)
  */
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
-import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import { askHidden, broadcastCustomJsonOnce, readWifFile } from './lib/signOnceBroadcast.ts';
 import {
 	buildIndexerSnapshotOp,
 	INDEXER_SNAPSHOT_OP_ID,
@@ -43,7 +43,12 @@ function die(msg: string): never {
 }
 function ask(q: string): Promise<string> {
 	const rl = createInterface({ input: process.stdin, output: process.stderr });
-	return new Promise((res) => rl.question(q, (a) => { rl.close(); res(a.trim()); }));
+	return new Promise((res) =>
+		rl.question(q, (a) => {
+			rl.close();
+			res(a.trim());
+		})
+	);
 }
 const has = (n: string): boolean => process.argv.includes(`--${n}`);
 function flag(n: string): string | undefined {
@@ -53,7 +58,10 @@ function flag(n: string): string | undefined {
 
 async function main(): Promise<void> {
 	const file = process.argv[2];
-	if (!file || file.startsWith('--')) die('usage: indexer-snapshot-broadcast.ts <payload.json> [--dry-run] [--signer morphit] [--node <url>] [--include-hidden]');
+	if (!file || file.startsWith('--'))
+		die(
+			'usage: indexer-snapshot-broadcast.ts <payload.json> [--broadcast [--yes --key-file <wif-file>]] [--signer morphit] [--node <url>] [--include-hidden]'
+		);
 	const signer = flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT;
 
 	let payloadJson: string;
@@ -67,23 +75,32 @@ async function main(): Promise<void> {
 	const op = buildIndexerSnapshotOp(payloadJson, signer);
 	process.stderr.write(`\n${INDEXER_SNAPSHOT_OP_ID} — signed by @${signer}\n\n${op.json}\n\n`);
 
-	if (has('dry-run')) {
-		process.stderr.write('DRY RUN — not broadcast. Re-run without --dry-run to sign + send.\n');
+	// Dry run unless --broadcast is given: the op is printed, no key is asked
+	// for and nothing is sent. (--dry-run is accepted and changes nothing.)
+	if (!has('broadcast')) {
+		process.stderr.write('DRY RUN — not broadcast. Re-run with --broadcast to sign + send.\n');
 		console.log(op.json);
 		return;
 	}
 
 	// Non-interactive path for the auto-publish timer: a DEDICATED snapshot-signing
-	// posting key in MORPHIT_SNAPSHOT_SIGNING_WIF + --yes. Opt-in only — the
-	// interactive path (prompt for the WIF) stays the default so the main @morphit
-	// key is never required to sit on a server.
+	// posting key in a root-only key file (--key-file, mode 0600) + --yes. Opt-in
+	// only — the interactive path (a hidden prompt) stays the default so the main
+	// @morphit key is never required to sit on a server. (An environment variable
+	// is not accepted: it shows in /proc/<pid>/environ.)
 	let wif: string;
-	const envWif = process.env.MORPHIT_SNAPSHOT_SIGNING_WIF;
-	if (has('yes') && envWif) {
-		wif = envWif.trim();
-		process.stderr.write('Non-interactive: signing with MORPHIT_SNAPSHOT_SIGNING_WIF.\n');
+	const keyFile = flag('key-file');
+	if (has('yes') && keyFile !== undefined) {
+		try {
+			wif = readWifFile(keyFile);
+		} catch (e) {
+			die(errMsg(e));
+		}
+		process.stderr.write(`Non-interactive: signing with the key in ${keyFile}.\n`);
 	} else {
-		wif = await ask('Paste the @' + signer + ' POSTING WIF (starts with 5), or blank to abort: ');
+		wif = await askHidden(
+			`Paste the @${signer} POSTING WIF (starts with 5; nothing shows as you paste), or blank to abort: `
+		);
 	}
 	if (!wif) die('aborted (no key).');
 	let priv: PrivateKey;
@@ -97,7 +114,10 @@ async function main(): Promise<void> {
 	} catch {
 		/* non-fatal — the broadcast fails loudly if the key is wrong */
 	}
-	if (!has('yes') && (await ask(`\nBroadcast ${INDEXER_SNAPSHOT_OP_ID} as @${signer} now? (type "yes"): `)) !== 'yes') {
+	if (
+		!has('yes') &&
+		(await ask(`\nBroadcast ${INDEXER_SNAPSHOT_OP_ID} as @${signer} now? (type "yes"): `)) !== 'yes'
+	) {
 		die('aborted.');
 	}
 
@@ -123,7 +143,9 @@ async function main(): Promise<void> {
 			`  block_num : ${res.blockNum ?? '(pending)'}\n` +
 			`  via       : ${res.via}\n` +
 			`  op id     : ${INDEXER_SNAPSHOT_OP_ID}\n\n` +
-			'New nodes reading the latest indexer_snapshot_v1 from @' + signer + ' will fast-sync from it.\n'
+			'New nodes reading the latest indexer_snapshot_v1 from @' +
+			signer +
+			' will fast-sync from it.\n'
 	);
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: copy buttons show a GREEN "✓ Copied" state everywhere (the maintainer #6).
+ * Smoke: copy buttons show a GREEN "✓ Copied" state everywhere.
  * Anchor 2026-07-08.
  *
  * Guards the shared <CopyButton> + the copied-state treatment across the
@@ -43,7 +43,7 @@ check('CopyButton copied state is green', /copied \?\s*'text-green-600 dark:text
 check('CopyButton copied state shows a ✓', /aria-hidden="true">\s*✓/.test(cb));
 check('CopyButton reverts the flash on a timer', /setTimeout\([\s\S]*copied = false/.test(cb));
 
-// ── Fee address migrated (the maintainer's example) ────────────────────────────────────
+// ── Fee address migrated ────────────────────────────────────
 const fee = comp('ListingFeeAddressPanel');
 check('fee-address panel uses <CopyButton>', /<CopyButton/.test(fee) && /value=\{resolved\.address\}/.test(fee));
 check('fee-address panel dropped its old copyAddress/copyAddrFlash', !/copyAddrFlash/.test(fee) && !/async function copyAddress/.test(fee));

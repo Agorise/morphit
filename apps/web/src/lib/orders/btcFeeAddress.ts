@@ -54,8 +54,8 @@ export type FeeAddressCheck =
 	| {
 			readonly ok: false;
 			/** 'unverified_key': the order was numbered under a treasury key that
-			 *  is not the current pin and has not (yet) been found among the keys
-			 *  @morphit pinned on chain — load them (btcFeeKeyHistory) and ask again. */
+			 *  is not the current pin and has not (yet) been proved to have been
+			 *  pinned by @morphit — prove it (btcFeeKeyHistory) and ask again. */
 			readonly reason: 'no_pin' | 'mismatch' | 'bad_data' | 'unverified_key';
 	  };
 
@@ -84,8 +84,9 @@ function isCount(n: unknown): n is number {
 /** Cross-check the indexer's fee address against our own derivation.
  *
  *  Key (V3-10): the order's own key when the indexer names one AND it is the
- *  current chain-verified pin or among `verifiedXpubs` (keys found in
- *  @morphit's release history on chain); otherwise the current pin.
+ *  current chain-verified pin or among `verifiedXpubs` (older keys proved on
+ *  chain to have been pinned by @morphit — btcFeeKeyHistory); otherwise the
+ *  current pin.
  *
  *  Amount (V3-5): never more than the chain-verified pin — the indexers
  *  accept the lower of the amount quoted at posting and today's pin, so a

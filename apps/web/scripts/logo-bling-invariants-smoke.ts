@@ -2,16 +2,16 @@
 /**
  * logo-bling-invariants-smoke.ts
  *
- * MorphitLogoBling was reworked in cp228: the old <canvas> 3-body
+ * MorphitLogoBling was reworked: the old <canvas> 3-body
  * particle animation was removed entirely.  The component is now a PURE
  * presentational wrapper — a static wordmark <img> plus an OPTIONAL
  * letterform-tracing "shine" (a masked CSS sweep) that only the small
  * header wordmark opts into.  The homepage hero uses the same component
  * WITHOUT the shine, so it is fully static.
  *
- * These invariants pin that new design (rewritten from the cp115
+ * These invariants pin that new design (rewritten from the
  * canvas-era invariants, the same way asset-select-coverage was
- * rewritten for the cp208 listbox):
+ * rewritten for the listbox):
  *
  *   I-1  The retired animation is GONE — no canvas element, no
  *        requestAnimationFrame loop, no IntersectionObserver, no

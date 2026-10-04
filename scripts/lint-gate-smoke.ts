@@ -18,7 +18,7 @@
  *     change in a release, and it would move the exact source lines the mutation
  *     harnesses use as needles. Instead the files that were unformatted when the
  *     gate arrived are GRANDFATHERED in `scripts/prettier-ratchet-baseline.txt`,
- *     and the gate is a RATCHET:
+ *     and the list can only shrink:
  *       · every governed file NOT on that list must be formatted — so nothing
  *         new arrives unformatted and nothing clean regresses;
  *       · every file ON the list must still exist and still be unformatted —
@@ -163,7 +163,7 @@ else
 		`${governed.size} files; an empty or short list would make every check below pass vacuously`
 	);
 
-// ── THE RATCHET ─────────────────────────────────────────────────────────────
+// ── THE SHRINK-ONLY RULE ────────────────────────────────────────────────────
 {
 	const offenders = [...unformatted].filter((f) => !baseline.has(f)).sort();
 	if (offenders.length === 0) ok('every governed file outside the grandfather list is formatted');

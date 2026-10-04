@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * cp475 (v1.7.0, "fastrepliestofeedbacks", ADR-0051).
+ * (v1.7.0, "fastrepliestofeedbacks", ADR-0051).
  *
  * THE BUG. `morphit_feedback_response_v1` lands on chain immediately, but the
  * indexer applies only irreversible blocks (ADR-0008), so the reply is invisible

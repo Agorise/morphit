@@ -89,7 +89,7 @@ is auditable.
 
 ## Amendments
 
-### 2026-05-07 (Part 70) — window extended from 3 → 15 minutes
+### 2026-05-07 — window extended from 3 → 15 minutes
 
 The original 3-minute figure proved too short in practice during
 the pre-launch Sally walkthrough audits. A user who notices a

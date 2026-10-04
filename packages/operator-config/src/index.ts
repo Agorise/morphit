@@ -34,8 +34,9 @@
  *   upstream the proposal, not local-patch their instance.
  *
  *   Critical infrastructure — DATABASE_URL, RPC_ENDPOINTS,
- *   CHAIN_ID, OFFICIAL_POSTING_PUBKEY, FEE_RECIPIENT account
- *   names, log destinations. Wrong values cause data
+ *   CHAIN_ID, OFFICIAL_POSTING_PUBKEY, log destinations
+ *   (the operator's FEE_RECIPIENT account IS allowlisted below:
+ *   the wizard writes it here). Wrong values cause data
  *   corruption or full outages; these stay in the
  *   environment so deployment automation (which gets these
  *   right) is the only path that sets them.
@@ -48,6 +49,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
+import { DEFAULT_BTC_CLEARNET_EXPLORERS } from './feeSources.js';
 
 /**
  * Morphit genesis block — the Blurt block in which the network's
@@ -150,7 +152,7 @@ export const DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[] = [
 ] as const;
 
 /**
- * Who runs each default hidden endpoint (v1.18.0 deep-deep, rv2-2).
+ * Who runs each default hidden endpoint.
  *
  * The list above names every node twice — its `.onion` and its `.b32.i2p` —
  * and the RPC quorum used to count those as two independent witnesses. One
@@ -161,16 +163,27 @@ export const DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS: readonly string[] = [
  * every default hidden endpoint is named and every name has one address per
  * transport.
  */
-const DEFAULT_HIDDEN_NODE_NAMES: readonly string[] = ['Star', 'Jade', 'kc', 'oldpc', 'mama', 'j2', 's2'];
+const DEFAULT_HIDDEN_NODE_NAMES: readonly string[] = [
+	'Star',
+	'Jade',
+	'kc',
+	'oldpc',
+	'mama',
+	'j2',
+	's2'
+];
 export const DEFAULT_HIDDEN_BLURT_RPC_OPERATORS: Readonly<Record<string, string>> = Object.freeze(
 	Object.fromEntries(
-		DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.map((url, i) => [url, DEFAULT_HIDDEN_NODE_NAMES[Math.floor(i / 2)] ?? url])
+		DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.map((url, i) => [
+			url,
+			DEFAULT_HIDDEN_NODE_NAMES[Math.floor(i / 2)] ?? url
+		])
 	)
 );
 
 /**
  * The operator identity an RPC endpoint's answers are counted under in a
- * quorum (rv2-2). A default hidden node's name when it is one; otherwise the
+ * quorum. A default hidden node's name when it is one; otherwise the
  * URL's hostname, so two ports on one host are one operator. `extra` (for
  * example the on-chain directory's node names) wins over both.
  */
@@ -185,17 +198,14 @@ export function rpcEndpointOperator(url: string, extra?: Readonly<Record<string,
 }
 
 /**
- * Public Bitcoin block-explorer Esplora API bases. These speak the Esplora
- * HTTP API (`/blocks/tip/height` → tip height as text, `/blocks/tip/hash` →
- * 64-hex hash; `/tx/{txid}` for the fee verifier's quorum). Kept as its own
- * list because the indexer's BTC fee verifier needs the Esplora `/tx/` shape
- * specifically — the canary's broader freshness-proof list below reuses these
- * and adds heterogeneous providers that only need the tip.
+ * Public clearnet Bitcoin Esplora API bases (`/blocks/tip/height` → tip
+ * height as text, `/blocks/tip/hash` → 64-hex hash). The warrant canary's
+ * freshness proof below starts with these and adds providers that only serve
+ * the tip. The same list is the clearnet fallback of the indexer's BTC fee
+ * verifier (./feeSources.ts, DEFAULT_BTC_CLEARNET_EXPLORERS), which asks the
+ * onion explorers first.
  */
-export const DEFAULT_BTC_EXPLORER_APIS: readonly string[] = [
-	'https://blockstream.info/api',
-	'https://mempool.space/api'
-] as const;
+export const DEFAULT_BTC_EXPLORER_APIS: readonly string[] = DEFAULT_BTC_CLEARNET_EXPLORERS;
 
 /**
  * Which HTTP shape a Bitcoin tip source speaks. The canary's fetch adapter
@@ -230,10 +240,10 @@ export interface CanaryBtcSource {
  * bitcoind/Esplora) and skips the rest. To change the set, edit THIS list —
  * add any additional reliable public source with its shape.
  *
- * cp613 — before this, the canary hit blockstream.info alone with a fatal
- * abort; a single timeout there stalled the whole weekly refresh. cp614 —
- * widened from 2 Esplora bases to 5 independent providers (the maintainer: "the internet
- * is under attack — 4 or 5 fallbacks").
+ * before this, the canary hit blockstream.info alone with a fatal
+ * abort; a single timeout there stalled the whole weekly refresh.
+ * widened from 2 Esplora bases to 5 independent providers (Requirement: 4 or 5 independent
+ * fallbacks, so one provider under attack cannot stall it).
  */
 export const DEFAULT_CANARY_BTC_SOURCES: readonly CanaryBtcSource[] = [
 	...DEFAULT_BTC_EXPLORER_APIS.map(
@@ -252,7 +262,7 @@ export const DEFAULT_CANARY_BTC_SOURCES: readonly CanaryBtcSource[] = [
  *  render module (operator-config is loaded by indexer + relay
  *  at boot, BEFORE any other module imports).
  *
- *  cp139-D-2: defends against a hostile morphit.config.env file
+ *  defends against a hostile morphit.config.env file
  *  (operator wrote escape sequences into a key name, OR
  *  MORPHIT_OPERATOR_CONFIG_FILE points at a file with hostile
  *  path bytes) from clearing the operator's screen or setting
@@ -323,12 +333,19 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// Existing users are unaffected.
 	'MORPHIT_RELAY_SIGNUP_ENABLED',
 
+	// ─── Assets and payment methods this instance refuses ─────
+	// Comma-separated tickers / lowercase method keys (indexer).
+	// The wizard writes them here; an empty value accepts all.
+	'MORPHIT_INDEXER_DISABLED_ASSETS',
+	'MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS',
+
 	// ─── Listing fee — BLURT ──────────────────────────────────
-	// Base BLURT fee per listing.  Default 60.  Sybil-tier
+	// Base BLURT fee per listing.  Default 125.  Sybil-tier
 	// escalation kicks in past the 3rd order in any 24-hour
 	// window.  Fees are denominated directly in BLURT, no live-
-	// USD conversion at verification time — so this number is
-	// what the indexer actually checks against.
+	// USD conversion at verification time.  A base pinned on
+	// chain by a release op takes precedence; this value is the
+	// fallback until one is pinned (indexer treasurySource.ts).
 	'MORPHIT_INDEXER_FEE_BASE_BLURT',
 	// ─── Listing fee — recipient account ──────────────────────
 	// The Blurt account that receives listing fees on THIS
@@ -341,14 +358,14 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 
 	// ─── Listing fee — BTC ────────────────────────────────────
 	// Operator-set satoshi amount targeting roughly the same
-	// USD value as the BLURT fee.  Default 416 satoshis (~$0.25
-	// at $60K BTC).  Run apps/indexer/scripts/recommend-fee-
-	// amounts.ts to recompute against current prices.
+	// USD value as the BLURT fee.  Default 416 satoshis.  Only a
+	// fallback: an amount pinned on chain by a release op takes
+	// precedence (apps/indexer/scripts/treasury-repin-*.ts).
 	'MORPHIT_INDEXER_BTC_FEE_SATOSHIS',
 
 	// ─── Listing fee — XMR ────────────────────────────────────
 	// Operator-set piconero amount (1 XMR = 1e12 piconero).
-	// Default 781,250,000 piconero (~$0.25 at $320 XMR).
+	// Default 781,250,000 piconero.  Only a fallback, like BTC's.
 	'MORPHIT_INDEXER_XMR_FEE_PICONERO',
 
 	// ─── Featured-slot bid floor ──────────────────────────────
@@ -356,10 +373,10 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// featured slots exclusive; lower to encourage more bidding.
 	'MORPHIT_INDEXER_FEATURE_FEE_BLURT_PER_HOUR',
 
-	// ─── Optional BLURT/USD price feed ────────────────────────
-	// Off by default.  Enable to surface optional USD echoes on
-	// /v1/listing-fee for frontend display.  Fee verification
-	// itself doesn't depend on the feed.
+	// ─── Price feed (BLURT, BTC, XMR in the instance's fiat) ──
+	// On by default.  Powers the fiat echoes on /v1/listing-fee
+	// for frontend display; set false for no price fetches at
+	// all.  Fee verification itself doesn't depend on the feed.
 	'MORPHIT_INDEXER_PRICE_FEED_ENABLED',
 	// Emergency BLURT/USD price floor — the value the indexer
 	// falls back to at cold-start before any live feed has
@@ -381,7 +398,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_INDEXER_OPERATOR_BALANCE_RELAY_THRESHOLD_BLURT',
 	'MORPHIT_INDEXER_OPERATOR_BALANCE_FEES_THRESHOLD_BLURT',
 
-	// ─── Matrix surfaces (Part 121 cp9) ───────────────────────
+	// ─── Matrix surfaces ───────────────────────
 	// Two distinct, never-interchangeable Matrix addresses:
 	//
 	//   alertMxid (@user:server)  — PRIVATE E2E DM destination
@@ -401,7 +418,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	'MORPHIT_MATRIX_BOT_ALERT_MXID',
 	'MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM',
 
-	// ─── MCP server advertisement (cp167) ─────────────────────
+	// ─── MCP server advertisement ─────────────────────
 	// When true, /v1/instance reports an mcp_url field so AI
 	// agent operators can configure their clients to query this
 	// instance.  The MCP service runs (or not) regardless of
@@ -514,7 +531,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
 	// included in `operator_tag` on every order op posted from
 	// this instance.  When set, this instance attributes orders
 	// to the named operator, who earns 90% of BLURT-paid listing
-	// fees (REVISIT-LIST item 5 — operator earnings).  When
+	// fees (backlog item 5 — operator earnings).  When
 	// unset (e.g. a new instance still in setup), orders go
 	// out without an operator_tag and the treasury keeps 100%.
 	'MORPHIT_INSTANCE_OPERATOR_TAG',
@@ -542,7 +559,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
  * v1.16.12 — SINGLE SOURCE OF TRUTH for the per-instance config env-var NAMES.
  * The same literal strings were hardcoded across the indexer, ops-cli, register,
  * edit, and the upgrade self-heal; import + reference these constants instead so
- * a rename happens in one place (the maintainer: centralize the constants). NOTE the VALUES
+ * a rename happens in one place (centralize the constants). NOTE the VALUES
  * are per-instance config, not global constants — `OPERATOR_TAG` is `time.relay`
  * on one box and `morphit.io` on another — so it's the NAMES that centralize here.
  */
@@ -593,9 +610,7 @@ export interface LoadResult {
  *  No-op (and returns `applied: 0`, `file: null`) if no file
  *  is found in the search paths AND the override env var is
  *  unset. Pure env-var deployments are fully supported. */
-export function loadOperatorConfig(
-	opts: { searchPaths?: readonly string[] } = {}
-): LoadResult {
+export function loadOperatorConfig(opts: { searchPaths?: readonly string[] } = {}): LoadResult {
 	const overridePath = process.env.MORPHIT_OPERATOR_CONFIG_FILE;
 	let path: string | null = null;
 
@@ -622,9 +637,7 @@ export function loadOperatorConfig(
 	if (path === null) {
 		// Genuinely optional. Operators who only use env vars
 		// see no behavior change.
-		console.log(
-			`[operator-config] no morphit.config.env found — using OS environment only`
-		);
+		console.log(`[operator-config] no morphit.config.env found — using OS environment only`);
 		return { file: null, applied: 0, skipped: [] };
 	}
 
@@ -653,11 +666,9 @@ export function loadOperatorConfig(
 	// (a) operator typos that would silently no-op, and
 	// (b) operator pastes a wrong file that would otherwise
 	// re-key infrastructure under their feet.
-	const offenders = Object.keys(parsed).filter(
-		(k) => !ALLOWLIST.has(k)
-	);
+	const offenders = Object.keys(parsed).filter((k) => !ALLOWLIST.has(k));
 	if (offenders.length > 0) {
-		// cp139-D-2: sanitize each offender key name before
+		// sanitize each offender key name before
 		// embedding in the error message.  A hostile file could
 		// have a key like "\x1b[2JFAKE_KEY" that would clear the
 		// screen on boot when this error surfaces.
@@ -706,7 +717,7 @@ export function getAllowlist(): ReadonlySet<string> {
 	return ALLOWLIST;
 }
 
-// ─── Part 121 cp9 — Matrix address validators (re-export) ─────
+// ─── Matrix address validators (re-export) ─────
 //
 // Single source of truth for parsing @user:server (MXID) and
 // #room:server (room alias).  Used by the ops-cli wizard step
@@ -766,3 +777,13 @@ export * from './brand.js';
 // ── Per-instance colour theme (docs/BRANDING.md) ─────────────────────────────
 // Browser-safe (`@morphit/operator-config/theme`). Re-exported for Node consumers.
 export * from './theme.js';
+
+// ── Release trust anchors (pinned in code, never read from a release) ────────
+// Browser-safe (`@morphit/operator-config/trust-anchors`). Re-exported for Node
+// consumers.
+export * from './trustAnchors.js';
+
+// ── BTC / XMR fee explorers and price sources (onion first) ─────────────────
+// Browser-safe (`@morphit/operator-config/fee-sources`). Re-exported for Node
+// consumers (indexer, ops-cli).
+export * from './feeSources.js';

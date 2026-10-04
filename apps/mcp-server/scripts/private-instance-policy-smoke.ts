@@ -1,5 +1,5 @@
 /**
- * mcp-server private-instance policy smoke (cp154 F-mcp-1).
+ * mcp-server private-instance policy smoke.
  *
  * Verifies the env-var-gated private-address denylist in
  * `getInstanceUrl()`.  Three policies tested:
@@ -14,7 +14,7 @@
  * dist/main.js spawn) so it can manipulate `process.env` per
  * scenario.
  *
- * cp154 net-defense package supplies the underlying
+ * net-defense package supplies the underlying
  * `isPrivateHostname` predicate; this smoke verifies the
  * mcp-server's POLICY around it (where to draw the line, where
  * to provide an escape hatch).

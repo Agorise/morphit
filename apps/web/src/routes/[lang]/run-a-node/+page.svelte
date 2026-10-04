@@ -58,8 +58,8 @@
 				contact_url: contactUrl.trim() || undefined
 			});
 			result = { kind: 'ok', trxId: res.trx_id };
-			// Clear form on success — user can't re-register with
-			// the same account anyway.
+			// Clear the form on success. (Registering again from the same
+			// account updates its entry: the op is an upsert.)
 			tag = '';
 			displayName = '';
 			contactUrl = '';
@@ -79,7 +79,7 @@
 		}
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -101,7 +101,7 @@
 		</p>
 	</header>
 
-	<!-- Tier 1.4 follow-up (Part 90): inline glossary cues for the
+	<!-- Tier 1.4 follow-up: inline glossary cues for the
 	     handful of jargon words this page leans on heavily.  The
 	     <Term> component renders each as dotted-underline +
 	     hover/tap tooltip, with the underline cue suppressed on
@@ -134,7 +134,7 @@
 			<p class="mt-2 text-ink-700 dark:text-ink-300">{$_('run_a_node.register.explain')}</p>
 
 			{#if !$hasAnySession}
-				<!-- Part 116: only "no session at all" sees the sign-in
+				<!-- only "no session at all" sees the sign-in
 				     CTA.  Paired-readonly users have a session but no
 				     local signing key, so they need an affordance, not
 				     a misleading "please sign in" prompt. -->
@@ -147,7 +147,7 @@
 					</a>
 				</div>
 			{:else if $isPairedReadOnly}
-				<!-- Part 116: paired-readonly users get an affordance
+				<!-- paired-readonly users get an affordance
 				     pointing them at /run-a-node on their phone where
 				     they can complete the registration with their
 				     locally-held posting key. -->
@@ -329,10 +329,10 @@
 		<p class="mt-6 text-base text-ink-800 dark:text-ink-200">
 			<strong>{$_('run_a_node.beginner_label')}</strong>
 			{$_('run_a_node.beginner_pointer')}
-			<!-- Sally finding RAN2 (Part 69): the project's git server
+			<!-- Sally finding RAN2: the project's git server
 			     is Forgejo (git.agorise.net), which uses /src/branch/
 			     URL syntax — NOT GitLab's /-/blob/.  These two doc
-			     links 404'd until Part 69.  See also docs/PLAN.md
+			     links 404'd until a later fix.  See also the docs/adr/
 			     and docs/SECURITY.md links elsewhere in the app
 			     which already use the correct Forgejo form. -->
 			<a
@@ -345,10 +345,10 @@
 		</p>
 	</section>
 
-	<!-- Item 3 / Part 121 cp6 — operator-stance surfacing.
+	<!-- Item 3 / — operator-stance surfacing.
 	     A prospective operator reading this page should know that
 	     asset-policy specialization is a degree of freedom they
-	     have (Memory #25 + REVISIT §A): every new tradable asset
+	     have (the default-on rule for new assets + backlog §A): every new tradable asset
 	     ships default-ON instance-wide; operators opt OUT via
 	     MORPHIT_INDEXER_DISABLED_ASSETS.  Federation note: peer
 	     instances' orders still appear regardless — the gate is

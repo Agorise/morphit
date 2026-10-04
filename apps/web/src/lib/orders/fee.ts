@@ -2,8 +2,9 @@
  * Morphit — listing fee calculator.
  *
  * Pure function. No network, no side effects. Given:
- *   - the user's current Sybil-tier (how many orders they've
- *     posted in the last 24h, 1-indexed)
+ *   - the position of the next order in the user's Sybil tier
+ *     (1-indexed: the indexer's GET /v1/orders/:account/sybil_tier
+ *     count of live orders plus orders created in the last 24h, + 1)
  * the fee calculator returns:
  *   - the multiplier applied to the base fee
  *   - the BLURT amount as a Graphene-conforming string
@@ -13,14 +14,14 @@
  * — the indexer checks the paid BLURT against `feeBaseBlurt × mult`
  * with no price read, so there's no TOCTOU window between quote and
  * broadcast.  What the UI QUOTES, though, tracks the live USD value
- * (Model A, cp372): `/v1/listing-fee.base_fee_blurt` is the operator's
+ * (Model A): `/v1/listing-fee.base_fee_blurt` is the operator's
  * USD-equivalent fee re-priced at the live BLURT/USD rate, so the
  * fee's dollar value stays put instead of drifting as a fixed BLURT
  * constant.  The verifier grants a FEE_PRICE_TOLERANCE band so a user
  * paying the live-quoted amount isn't rejected as that quote drifts
  * from the operator's pinned base between re-tunes.
  *
- * NB (cp370 → cp372): the canonical USD target (~12.5¢) lives in
+ * NB: the canonical USD target (~12.5¢) lives in
  * `@morphit/asset-registry` (`LISTING_FEE_USD.blurt`).  `BASE_FEE_BLURT`
  * below is a fixed fallback approximating it at the reference price,
  * used only when the `/v1/listing-fee` fetch fails; the live amount
@@ -47,7 +48,7 @@ import { splitListingFeeBlurt } from '@morphit/asset-registry';
 export const BASE_FEE_BLURT = 60;
 
 /** Display-side reference for the indexer's fee-acceptance band.
- *  Pre-cp372 this was the tight FP-rounding tolerance (0.1%).  Under
+ *  Previously, this was the tight FP-rounding tolerance (0.1%).  Under
  *  Model A the indexer accepts a payment within FEE_PRICE_TOLERANCE
  *  (15%, in @morphit/asset-registry) below the pinned base, to absorb
  *  the drift between the live-quoted amount and the operator's pinned
@@ -62,13 +63,13 @@ export const FEE_TOLERANCE = 0.001;
  *  cold-stored by the Morphit maintainer. */
 export const FEE_RECIPIENT = 'morphit-fees';
 
-/** Blurt account-name shape — the project-canonical regex (cp175 F-007):
+/** Blurt account-name shape — the project-canonical regex:
  *  3–16 chars, lowercase, leading letter, `[a-z0-9.-]` interior, ending
  *  alphanumeric. Byte-identical to every other account-name regex in the
  *  tree (blurt-account-regex-parity sentinel). */
 const FEE_RECIPIENT_ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
-/** cp407 — resolve which Blurt account a listing/feature/stranger fee is paid
+/** resolve which Blurt account a listing/feature/stranger fee is paid
  *  to. Federated operators earn 90% of BLURT fees and set their own account,
  *  advertised by their indexer at `/v1/instance.fee_recipient` (which the
  *  indexer has ALREADY validated + fallback-resolved). This just guards the
@@ -98,7 +99,7 @@ function exactBlurtString(amount: number): string {
 	return `${amount.toFixed(3)} BLURT`;
 }
 
-/** cp408 — build the BLURT transfer(s) for a listing/feature/stranger fee,
+/** build the BLURT transfer(s) for a listing/feature/stranger fee,
  *  applying the federation revenue split AT PAYMENT TIME.
  *
  *  On a FEDERATION instance (the owner's recipient differs from the canonical
@@ -120,7 +121,7 @@ export function feeTransfersFor(
 	totalBlurt: number,
 	ownerRecipient: string,
 	canonicalTreasury: string = FEE_RECIPIENT,
-	/** cp425 — the tx signer. When the owner recipient IS the signer (an
+	/** the tx signer. When the owner recipient IS the signer (an
 	 *  operator paying a BLURT fee on their OWN instance — e.g. featuring
 	 *  their own order), the 90% owner leg would be a transfer to
 	 *  themselves, which Blurt (Graphene) REJECTS at consensus
@@ -240,43 +241,6 @@ export function computeFee(nth: number, baseBlurt: number): FeeQuote {
 		multiplier,
 		nth
 	};
-}
-
-/** The minimal order shape the Sybil-tier count needs (an OrderRecord fits). */
-export interface SybilTierOrderFields {
-	/** Optional because the indexer client's OrderRecord types it optional;
-	 *  a record without a status is not live. */
-	readonly status?: string;
-	readonly created_at: string;
-	readonly expires_at?: string | null;
-}
-
-/**
- * v1.20.0 (G2) — does this existing order count toward the poster's Sybil fee
- * tier? ADR-0009 §4: currently LIVE, or created in the last 24h (even if since
- * cancelled/expired). "Live" means stored status 'live' AND not past
- * `expires_at` — the indexer never writes status='expired', so an order that
- * simply ran out keeps status 'live' forever. Counting those compounded the
- * fee 1.5× per expired order. MUST match the indexer's `countForSybilTier`
- * (apps/indexer/src/indexer/handlers/order.ts), which evaluates the same rule
- * at the op's block time. A malformed timestamp fails toward counting the
- * order (quote high → never underpaid).
- */
-export function countsTowardSybilTier(o: SybilTierOrderFields, nowMs: number): boolean {
-	const created = Date.parse(o.created_at);
-	if (Number.isFinite(created) && created >= nowMs - 24 * 3600 * 1000) return true;
-	if (o.status !== 'live') return false;
-	if (o.expires_at === null || o.expires_at === undefined) return true;
-	const exp = Date.parse(o.expires_at);
-	return !Number.isFinite(exp) || exp > nowMs;
-}
-
-/** Number of existing orders counting toward the tier; the next order is
- *  this + 1. */
-export function sybilTierCount(orders: readonly SybilTierOrderFields[], nowMs: number): number {
-	let n = 0;
-	for (const o of orders) if (countsTowardSybilTier(o, nowMs)) n++;
-	return n;
 }
 
 /** Format a permlink-bound memo for the fee transfer. Matches the

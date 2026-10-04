@@ -1,5 +1,5 @@
 /**
- * conversation-order-ref — cp423.
+ * conversation-order-ref.
  *
  * Pins the cross-stack wiring for the chat-inbox "RE: <order title>" subline
  * (the small linked order title shown under a peer's handle when the
@@ -48,7 +48,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 // ─── 1. Indexer conversations query + mapping ──────────────────────────
 const conv = read('apps/indexer/src/api/conversations.ts');
 
-// cp446 — the owner is whichever PARTY owns an order with that permlink. The old
+// the owner is whichever PARTY owns an order with that permlink. The old
 // query took `m.recipient` from the newest citing message: correct for the FIRST
 // message of a thread, wrong for every reply, because once the owner answers the
 // recipient is the other person. Integration-tested against a reply.
@@ -59,7 +59,7 @@ check(
 	'indexer query selects the latest order permlink (AS order_permlink)',
 	/AS\s+order_permlink/.test(conv)
 );
-// cp446 — REPINNED. These pinned `o.account = lm.order_owner` and
+// REPINNED. These pinned `o.account = lm.order_owner` and
 // `m.recipient AS order_owner`, i.e. "the recipient of the newest citing message
 // owns the order". True for the FIRST message of a thread, false for every
 // reply. The query now resolves the owner as whichever PARTY owns an order with
@@ -103,9 +103,9 @@ check(
 // ─── 3. Frontend render ────────────────────────────────────────────────
 const page = read('apps/web/src/routes/[lang]/chat/+page.svelte');
 check("chat page imports orderTitleParts", /import\s*\{\s*orderTitleParts\s*\}/.test(page));
-// cp450 (t.txt 12) — the RE: line is ALWAYS shown; the order title/status is
+// the RE: line is ALWAYS shown; the order title/status is
 // still gated on convo.order, with a "RE: -" fallback when there is no order.
-// cp508 (tt.txt #7) — an optimistic placeholder branch (`{#if convo.pending}`,
+// an optimistic placeholder branch (`{#if convo.pending}`,
 // a neutral loading dash) now precedes it, so the order title branches on
 // `{:else if convo.order}` rather than a leading `{#if convo.order}`.
 check(
@@ -113,7 +113,7 @@ check(
 	/\{:else if\s+convo\.order\}/.test(page) && /\{#if\s+convo\.pending\}/.test(page)
 );
 check('…with a "RE: -" fallback when the thread cites no order', /\{:else\}[\s\S]{0,140}truncate">-<\/span>/.test(page));
-// cp450 (t.txt 16) — the RE: line is PLAIN TEXT now: it no longer links to the
+// the RE: line is PLAIN TEXT now: it no longer links to the
 // order page; the whole card is the click target for the conversation.
 check(
 	'RE: subline no longer links to the order detail route (whole card → chat)',
@@ -123,7 +123,7 @@ check(
 check('RE: subline uses the chat.inbox.re_prefix key', /chat\.inbox\.re_prefix/.test(page));
 check(
 	'RE: subline builds its title from orderTitleParts(convo.order, …)',
-	// cp425 — orderTitleParts takes an optional goodsLabel 3rd arg; cp450 — the
+	// orderTitleParts takes an optional goodsLabel 3rd arg; the
 	// call may wrap across lines, so tolerate whitespace after the paren.
 	/orderTitleParts\(\s*convo\.order[,)\s]/.test(page)
 );

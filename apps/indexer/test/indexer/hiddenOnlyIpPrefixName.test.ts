@@ -1,6 +1,6 @@
 /**
- * A NAME that starts like a private address is still a public name
- * (v1.18.0 deep-deep, C1).
+ * A NAME that starts like a private address is still a public name.
+ *
  *
  * THE BUG. The router decided "is this origin local?" by matching the TEXT of
  * the host against `10.`, `127.`, `192.168.`, `172.16-31.` and `169.254.`. So
@@ -13,8 +13,8 @@
  *
  * WHAT IS ASSERTED is behaviour: DNS lookups and TCP connections are counted at
  * the real `dns.lookup` and a real listener, through the real registration
- * validator, the real router, the real directory read and peer sender, and
- * main.ts's own `postClearnet` shape. A control proves the counters work.
+ * validator, the real router, the real fan-out read and peer sender, and a
+ * direct fetch. A control proves the counters work.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -30,7 +30,7 @@ import {
 } from '$indexer/hiddenServiceDispatcher';
 import {
 	fastPeerFromRow,
-	fastPeersFromDirectory,
+	fastPeerDirectory,
 	addressesOf,
 	PeerSender
 } from '$indexer/chatFastFederation';
@@ -83,7 +83,7 @@ afterEach(async () => {
 	await new Promise<void>((r) => listener.close(() => r()));
 });
 
-/** main.ts's `postClearnet`, verbatim in shape. */
+/** A direct clearnet POST, in the shape the chat fan-out used previously. */
 async function postClearnet(url: string, body: unknown, timeoutMs: number) {
 	const ctrl = new AbortController();
 	const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -102,19 +102,20 @@ async function postClearnet(url: string, body: unknown, timeoutMs: number) {
 }
 
 /**
- * Push one chat transaction to a directory holding one peer, through the real
- * directory read (`fastPeersFromDirectory` → `fastPeerFromRow`) and the real
- * sender (`PeerSender` → `sendBatchToAddress` → `postClearnet`). Below the
- * dispatcher's signature gate, which is not what this is about.
+ * Push one chat transaction to a directory holding one probe-verified peer,
+ * through the real fan-out read (`fastPeerDirectory` → `fanOutPeerFromRow`) and
+ * the real sender (`PeerSender` → `sendBatchToAddress` → the isolated Tor
+ * push), with a dead Tor. Below the dispatcher's signature gate, which is not
+ * what this is about. Returns how many peers the read produced.
  */
-async function pushOneChatTo(origin: string): Promise<void> {
+async function pushOneChatTo(origin: string): Promise<number> {
 	const db = {
 		query: async () => ({
 			rows: [
 				{
 					origin,
 					reg_alt_networks: null,
-					last_probe_status: 'never',
+					last_probe_status: 'good',
 					last_probed_at: null,
 					registered_at_time: null,
 					last_probe_error: null
@@ -122,9 +123,9 @@ async function pushOneChatTo(origin: string): Promise<void> {
 			]
 		})
 	};
-	const peers = await fastPeersFromDirectory(db as never, `http://${ONION}`, PROXIES);
-	expect(peers.length).toBe(1);
-	const sender = new PeerSender({ proxies: PROXIES, timeoutMs: 4_000, postClearnet });
+	const { peers } = await fastPeerDirectory(db as never, `http://${ONION}`, PROXIES);
+	if (peers.length === 0) return 0;
+	const sender = new PeerSender({ proxies: PROXIES, timeoutMs: 4_000 });
 	sender.enqueue({ operations: [] }, peers);
 	// Wait on the outcome, not on the clock.
 	for (let i = 0; i < 2000; i++) {
@@ -133,6 +134,7 @@ async function pushOneChatTo(origin: string): Promise<void> {
 		await new Promise((r) => setTimeout(r, 5));
 	}
 	await sender.drain(5_000);
+	return peers.length;
 }
 
 const attackerOrigin = (): string => `https://10.attacker.example:${port}`;
@@ -212,16 +214,27 @@ describe('C1 — registration refuses a name dressed as a private address', () =
 });
 
 describe('C1 — end to end: a registered 10.<name> origin on a hidden-only node', () => {
-	it('control: on a clearnet node the same push does resolve and connect', async () => {
-		await pushOneChatTo(attackerOrigin());
+	it('control: on a clearnet node a direct fetch of the name does resolve and connect', async () => {
+		await postClearnet(`${attackerOrigin()}/x`, {}, 2_000).catch(() => undefined);
 		expect(lookups).toContain('10.attacker.example');
 		expect(tcp).toBeGreaterThan(0);
 	});
 
-	it('hidden-only: no DNS lookup of the name and no connection to it', async () => {
+	/**
+	 * a chat push is never a direct connection, on any node. A peer's
+	 * https origin is handed to Tor BY NAME (the exit resolves it), so neither
+	 * the name nor the node's own address reaches the attacker's DNS or host.
+	 */
+	it('clearnet node: the chat push neither resolves the name nor connects to it', async () => {
+		expect(await pushOneChatTo(attackerOrigin())).toBe(1);
+		expect(lookups, 'the name reached the system resolver').not.toContain('10.attacker.example');
+		expect(tcp, 'the push connected to the peer directly').toBe(0);
+	});
+
+	it('hidden-only: the peer has no fan-out route; no DNS lookup and no connection', async () => {
 		handle = installHiddenServiceDispatcher(PROXIES, 'refuse');
 		expect(clearnetRefused()).toBe(true);
-		await pushOneChatTo(attackerOrigin());
+		expect(await pushOneChatTo(attackerOrigin())).toBe(0);
 		expect(lookups, 'the name reached the system resolver').not.toContain('10.attacker.example');
 		expect(tcp, 'a hidden-only node connected to a clearnet peer').toBe(0);
 	});

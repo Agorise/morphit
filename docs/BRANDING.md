@@ -16,6 +16,7 @@ icons, your name. This guide shows how to brand an instance so that:
 | Footer logo | Footer (with the sheen) | `logo-footer.svg` (optional; defaults to `logo.svg`) |
 | Icon | Browser-tab favicon, "add to home screen" app icons | `icon.svg` |
 | Launch screens | The iPhone/iPad screen shown while the app opens | made from `logo.svg` |
+| Link preview | The picture shown when a link to your site is shared (`/og-image.png`, 1200 × 630) | drawn from `icon.svg` (or `logo.svg`) and the site name |
 | Site name | Every place the UI names the **site**: "Sign in to …", "Your … password", page titles, RSS feed titles, and — on the pages Morphit prerenders (homepage, sign-in, FAQ, guides) — link previews and the home-screen label (see [Limits](#limits)) | `MORPHIT_INSTANCE_BRAND_NAME` |
 | BETA marker | The small red "BETA" over the logo | `MORPHIT_INSTANCE_BETA_BADGE` (automatic) |
 | Colours | The whole colour scheme: the hero heading gradient, accents, links, buttons, focus rings, chat bubbles, the homepage cards, the page background and its corner glows, the grey text/surface scale, the browser's theme colour and the Android app colours | two or three colours: `--theme-from`, `--theme-to` (optional `--theme-mid`, `--theme-background`), or a preset `--theme champagne-gold` |
@@ -125,6 +126,19 @@ someone opens one directly.
   own images instead, put PNGs of those exact names and sizes in `/etc/morphit/branding/`, and
   launch screens under `/etc/morphit/branding/static/splash/`. Your own files always win.
 
+- **The link preview** (`/og-image.png`, the picture chat apps and social sites show for a link to
+  your site) is drawn on the server, in the layout of Morphit's own: your `icon.svg` with your site
+  name beside it, the tagline, and your web address in a pill. Without `icon.svg` it uses
+  `app-icon-512.png` or `logo.svg`; a wide `logo.svg` (a wordmark) is shown on its own. The name is
+  set in Comfortaa, the site's font, which `morphit-ops` carries with it (Persian and Arabic names
+  in Vazirmatn), so it looks the same on every server; it is made smaller, or split over two lines,
+  to fit. A name in a script neither font has (Chinese, Hebrew, …) uses a font installed on the
+  server (`sudo apt install fonts-noto-cjk` for Chinese, Japanese and Korean); without one the
+  picture shows your logo alone and `branding apply` says so. The web address appears only when
+  your instance's clearnet address is set (`MORPHIT_INSTANCE_ORIGIN`); a Tor/I2P-only instance gets
+  none. An instance with only its own colours keeps Morphit's picture. Your own 1200 × 630
+  `static/og-image.png` replaces it (see below).
+
 **Other images** can be replaced by putting them under `/etc/morphit/branding/static/` at the same
 path they have on the site. For example, `static/splash/splash-iphone-12.png` replaces the iOS
 launch image at `/splash/splash-iphone-12.png`. Only images are accepted (`.png`, `.jpg`, `.webp`,
@@ -233,8 +247,9 @@ warning. Branding therefore never rebuilds. `morphit-ops branding apply` edits t
 **in place**, and only touches files outside that manifest:
 
 - `/brand/site-logo.svg`, `/brand/site-logo-footer.svg`, `/favicon.svg`, `/app-icon.svg`,
-  `/app-icon-maskable.svg`, the PNG app icons, the launch screens under `/splash/`,
-  `/manifest.webmanifest`, and any images you put under `static/` are replaced.
+  `/app-icon-maskable.svg`, the PNG app icons, the launch screens under `/splash/`, the link-preview
+  picture `/og-image.png`, `/manifest.webmanifest`, and any images you put under `static/` are
+  replaced.
 - **Prerendered pages** get your name in exactly the places that name the site. At build time every
   such place is recorded in `build/.brand-slots.json`; software mentions are not in that list and
   are never touched. Because the page itself carries your name, it is right on first paint, for
@@ -280,9 +295,8 @@ site: for that, visitors look at the address bar and *About this instance*.
   link previews, the text shown to visitors without JavaScript, and the iPhone "Add to Home Screen"
   label taken from one of those pages say "Morphit". Once the page has loaded, everything a visitor
   reads uses your name.
-- Link-preview images (`og:image`) and canonical URLs point at `https://morphit.io` in the
-  canonical build. Replacing `og-image.png` via `static/` changes the file on your server, not what
-  previews fetch.
+- The link-preview picture's tagline ("Anonymously trade crypto, fiat, goods and services") is in
+  English, as on Morphit's own.
 - In Persian (right-to-left) text, punctuation right after a Latin-script name can display on the
   wrong side of it ("Swap!" as "!Swap"). A name that ends in a letter or digit avoids it.
 - A Chinese-script name is set with spaces around it in the Chinese translations, which were

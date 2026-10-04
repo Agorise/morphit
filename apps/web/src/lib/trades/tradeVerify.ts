@@ -25,14 +25,23 @@
  * Multiple callers firing the same trigger for the same
  * funds-sent event is therefore safe.
  *
- * ─── F-40 engagement gate ────────────────────────────────────
+ * ─── What is verified, and for whom ──────────────────────────
  *
- * The expected memo passed to verifyBlurtTransfer comes from
- * the trade-status store IFF the entry's `engagedPeer ===
- * sender`.  Otherwise, fall back to the echoedMemo (the value
- * the buyer claimed in their funds-sent payload).  This
- * prevents a third-party-poisoned tentative entry from driving
- * a false-mismatch verification.
+ * A result is RECORDED on an order only when the payment's
+ * counterparty (the buyer on the seller's side, the seller on the
+ * buyer's) is the peer the order is ENGAGED with — the one the
+ * address was shared with. A claim from anyone else changes
+ * nothing (recordVerificationPure refuses it): before, a stranger
+ * who sent 0.001 BLURT and claimed "0.001" marked the order
+ * "paid ✓ verified".
+ *
+ * The transfer is checked against what the SELLER asked for in
+ * the address payload — `expectedAmount` and `expectedMemo` —
+ * never the claimant's own figures, so paying 1 of 500 is an
+ * amount mismatch. Only when the seller asked no amount is the
+ * claimed figure used, and the result is then recorded with
+ * `amountConfirmed: false` ("a payment arrived", not "paid in
+ * full").
  */
 
 import { browser } from '$app/environment';
@@ -58,9 +67,13 @@ export interface VerifyTriggerArgs {
 	readonly orderPermlink: string;
 	/** Chain transaction id from the funds-sent payload. */
 	readonly txid: string;
+	/** 'incoming': the local user is the payee (seller) and `sender` is the
+	 *  counterparty. 'outgoing': the local user paid (buyer's self-check) and
+	 *  `recipient` is the counterparty. */
+	readonly direction: 'incoming' | 'outgoing';
 }
 
-/** cp508 (tt.txt #10) — a freshly-broadcast transfer isn't queryable for a few
+/** a freshly-broadcast transfer isn't queryable for a few
  *  seconds: it has to land in a block and be indexed by the RPC. So the FIRST
  *  verify — especially the SENDER's own immediate self-check — comes back
  *  `not_found` or `rpc_error`. That is transient, not a failure. Recording it
@@ -90,15 +103,16 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 	if (!browser) return;
 	if (!Number.isFinite(args.amountBlurt) || args.amountBlurt <= 0) return;
 
-	// F-40 engagement gate: consult store's expectedMemo only when
-	// the trade is engaged with this sender.  Tentative entries
-	// (no engagement) or entries engaged with a different peer
-	// fall back to the buyer's echo.
-	let expectedMemo = args.echoedMemo;
+	// Only the counterparty the order is engaged with counts (see the file
+	// header). Anyone else: nothing to record, so nothing to verify here.
+	const counterparty = args.direction === 'incoming' ? args.sender : args.recipient;
 	const trade = getTradeState(args.orderPermlink);
-	if (trade?.expectedMemo !== undefined && trade.engagedPeer === args.sender) {
-		expectedMemo = trade.expectedMemo;
-	}
+	if (trade === null || trade.engagedPeer !== counterparty) return;
+	// The seller's ask, not the claim.
+	const expectedMemo = trade.expectedMemo ?? args.echoedMemo;
+	const asked = trade.expectedAmount;
+	const amountConfirmed = typeof asked === 'number' && Number.isFinite(asked) && asked > 0;
+	const expectedAmount = amountConfirmed ? asked : args.amountBlurt;
 
 	const key = `${args.orderPermlink}\u0000${args.txid}`;
 	if (verifyInFlight.has(key)) return; // a retry chain is already running
@@ -109,7 +123,7 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 		void verifyBlurtTransfer(args.txid, {
 			recipient: args.recipient,
 			sender: args.sender,
-			amountBlurt: args.amountBlurt,
+			amountBlurt: expectedAmount,
 			memo: expectedMemo
 		})
 			.then((r) => {
@@ -126,7 +140,9 @@ export function triggerBlurtVerification(args: VerifyTriggerArgs): void {
 				verifyInFlight.delete(key);
 				recordVerification({
 					orderPermlink: args.orderPermlink,
-					verifyResult: r
+					verifyResult: r,
+					counterparty,
+					amountConfirmed
 				});
 				// When the chain confirms the transfer landed, the recipient's
 				// BLURT balance has just changed. Nudge any visible balance card to

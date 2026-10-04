@@ -1,6 +1,5 @@
 /**
- * Hardened fetch helper for price-feed upstreams (cp159
- * F-indexer-1/2/3).
+ * Hardened fetch helper for price-feed upstreams.
  *
  * The price fetcher (coingeckoFetcher.ts) fetches from the
  * operator-configured upstream HTTP API (Coingecko).  The URL is trusted (operator picks it; defaults to
@@ -31,8 +30,8 @@
  *      needed.
  *
  * The shape mirrors `apps/mcp-server/src/indexerClient.ts`
- * `readBodyCapped` (cp151 F-mcp-5) and federationProbe's
- * `fetchJson` (cp154 net-defense lift): pre-check
+ * `readBodyCapped` and federationProbe's
+ * `fetchJson` (net-defense lift): pre-check
  * Content-Length, stream the response, abort on cap-exceed.
  */
 

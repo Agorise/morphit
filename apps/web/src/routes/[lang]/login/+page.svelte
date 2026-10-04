@@ -37,11 +37,8 @@
 	 *   - 'import-needed': no persisted keystore (fresh device, seed-only
 	 *     user, or post-sign-out). Show choice between import + new account.
 	 *   - 'checking': initial state until onMount resolves. */
-	let formMode:
-		| 'paired-readonly-welcome'
-		| 'welcome-back'
-		| 'import-needed'
-		| 'checking' = $state('checking');
+	let formMode: 'paired-readonly-welcome' | 'welcome-back' | 'import-needed' | 'checking' =
+		$state('checking');
 
 	let password = $state('');
 	let busy = $state(false);
@@ -54,12 +51,15 @@
 	let ykPhase: 'idle' | 'requesting' | 'tap' | 'finalizing' = $state('idle');
 
 	/** 2FA gate state.  When the persisted envelope has TOTP enrolled,
-	 *  decryptIdentity succeeds with the password BUT bootFromEnvelope
-	 *  throws KeystoreError 'totp_required'.  The login form then
-	 *  transitions to showing a TOTP entry field, keeping the password
-	 *  in memory for the re-call.  Failed TOTP attempts are
-	 *  rate-limited via `totpFailCount` to thwart brute force. */
+	 *  the password (or the YubiKey) opens it BUT bootFromEnvelope /
+	 *  bootFromEnvelopeWithYubikey throw KeystoreError 'totp_required'.
+	 *  The login form then shows a TOTP entry field; the next submit
+	 *  repeats the same unlock path (`totpVia`) with the code — the
+	 *  password is kept in memory for that re-call, the YubiKey is
+	 *  touched again. Failed TOTP attempts are rate-limited via
+	 *  `totpFailCount` to thwart brute force. */
 	let needTotp = $state(false);
+	let totpVia = $state<'password' | 'yubikey'>('password');
 	let totpCode = $state('');
 	let totpFailCount = $state(0);
 	/** Lock-out timestamp: Date.now() when locked out until.  0 if
@@ -126,7 +126,7 @@
 		void gotoLocale('/orderbook');
 	}
 
-	// ─── Sign-out-before-switch guard (cp305) ──────────────────────────
+	// ─── Sign-out-before-switch guard ──────────────────────────
 	// If the user already has a session, clicking "Sign in with…",
 	// "Create a new account", or the QR card would start a DIFFERENT
 	// identity on top of the current one — exactly the mix-up where
@@ -170,7 +170,7 @@
 	 *  explicit sign-out, so it must propagate to every open tab AND clear
 	 *  the persisted account-name cache that getUserBlurtAccount() (the
 	 *  gate below) reads — otherwise the gate still saw @account and this
-	 *  modal re-fired, looking like the sign-out never happened (cp312). */
+	 *  modal re-fired, looking like the sign-out never happened. */
 	async function confirmSwitch(): Promise<void> {
 		showSwitchConfirm = false;
 		broadcastSignOut();
@@ -230,22 +230,20 @@
 		return '/';
 	}
 
-	async function handleUnlock(): Promise<void> {
-		if (busy) return;
-		errorMsg = '';
-		// Lock-out check: if the user has burned through 5 invalid
-		// TOTP attempts, refuse further submissions for 30s.  This
-		// is a SESSION-local rate limit (lives in component state),
-		// not a server-side one — bots can sidestep it by reloading
-		// the page.  That's fine; the threat model here is humans
-		// at the keyboard, not automated cracking (which would have
-		// to also break the keystore encryption).
+	/** Lock-out check: if the user has burned through 5 invalid TOTP
+	 *  attempts, refuse further submissions for 30s. This is a
+	 *  SESSION-local rate limit (lives in component state), not a
+	 *  server-side one — bots can sidestep it by reloading the page.
+	 *  That's fine; the threat model here is humans at the keyboard, not
+	 *  automated cracking (which would have to also break the keystore
+	 *  encryption). True (with the message set) while locked out. */
+	function totpLockedOut(): boolean {
 		if (totpLockedUntil > Date.now()) {
 			const secondsLeft = Math.ceil((totpLockedUntil - Date.now()) / 1000);
 			errorMsg = $_('settings.totp.unlock_prompt.err_locked_out', {
 				values: { seconds: secondsLeft }
 			});
-			return;
+			return true;
 		}
 		if (totpLockedUntil > 0 && totpLockedUntil <= Date.now()) {
 			// Lock-out elapsed.  Reset the counter and allow a fresh
@@ -253,6 +251,59 @@
 			totpLockedUntil = 0;
 			totpFailCount = 0;
 		}
+		return false;
+	}
+
+	/** The 2FA outcomes, shared by the password and the YubiKey unlock.
+	 *  Returns true when `err` was one of them (and the UI is updated). */
+	function applyTotpError(err: unknown, via: 'password' | 'yubikey'): boolean {
+		if (!(err instanceof KeystoreError)) return false;
+		switch (err.kind) {
+			case 'totp_required':
+				// The keystore opened; switch the UI to TOTP entry. On the
+				// password path the password is kept for the re-call (the
+				// KDF re-derives each time, so no plaintext keys hang around
+				// between submissions).
+				needTotp = true;
+				totpVia = via;
+				errorMsg = '';
+				return true;
+			case 'totp_unavailable':
+				// v1.20.0 (F-9): plain-HTTP I2P has no WebCrypto, so an
+				// authenticator code cannot be checked here. Not a wrong
+				// code — no fail count; a backup code still works.
+				totpCode = '';
+				errorMsg = $_('settings.totp.unlock_prompt.err_unavailable_insecure');
+				return true;
+			case 'totp_invalid':
+				// Wrong (or already used) TOTP code, or wrong backup code.
+				// Lock out after 5 consecutive failures for 30 seconds.
+				totpFailCount += 1;
+				totpCode = '';
+				if (totpFailCount >= 5) {
+					totpLockedUntil = Date.now() + 30_000;
+					errorMsg = $_('settings.totp.unlock_prompt.err_locked_out', {
+						values: { seconds: 30 }
+					});
+				} else {
+					errorMsg = $_('settings.totp.unlock_prompt.err_invalid_code');
+				}
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/** The form's submit: the 2FA step repeats the path that asked for it. */
+	function submitUnlock(): void {
+		if (needTotp && totpVia === 'yubikey') void handleUnlockYubikey();
+		else void handleUnlock();
+	}
+
+	async function handleUnlock(): Promise<void> {
+		if (busy) return;
+		errorMsg = '';
+		if (totpLockedOut()) return;
 		if (password.length < 1) {
 			errorMsg = $_('login.unlock.password_required');
 			return;
@@ -289,7 +340,9 @@
 			// was fragile to wording changes and a non-classified
 			// path echoed `err.message` verbatim into the UI — could
 			// surface internal detail.
-			if (err instanceof KeystoreError) {
+			if (applyTotpError(err, 'password')) {
+				// handled
+			} else if (err instanceof KeystoreError) {
 				switch (err.kind) {
 					case 'bad_password':
 						errorMsg = $_('login.unlock.wrong_password');
@@ -311,39 +364,6 @@
 						errorMsg = $_('login.unlock.unsupported_envelope');
 						password = '';
 						break;
-					case 'totp_required':
-						// Password worked; switch UI to TOTP entry.
-						// Do NOT clear the password — we'll re-submit
-						// with both password and totpCode in the next
-						// call.  Per Argon2id KDF the password
-						// re-derives each time; that's intentional —
-						// no plaintext keys hang around between
-						// submissions.
-						needTotp = true;
-						errorMsg = '';
-						break;
-					case 'totp_unavailable':
-						// v1.20.0 (F-9): plain-HTTP I2P has no WebCrypto, so an
-						// authenticator code cannot be checked here. Not a wrong
-						// code — no fail count; a backup code still works.
-						totpCode = '';
-						errorMsg = $_('settings.totp.unlock_prompt.err_unavailable_insecure');
-						break;
-					case 'totp_invalid':
-						// Wrong TOTP code (or wrong backup code).
-						// Increment fail count; lock out after 5
-						// consecutive failures for 30 seconds.
-						totpFailCount += 1;
-						totpCode = '';
-						if (totpFailCount >= 5) {
-							totpLockedUntil = Date.now() + 30_000;
-							errorMsg = $_('settings.totp.unlock_prompt.err_locked_out', {
-								values: { seconds: 30 }
-							});
-						} else {
-							errorMsg = $_('settings.totp.unlock_prompt.err_invalid_code');
-						}
-						break;
 				}
 			} else {
 				// Non-keystore error (e.g. store-update bug).  Don't
@@ -363,6 +383,7 @@
 	async function handleUnlockYubikey(): Promise<void> {
 		if (busy) return;
 		errorMsg = '';
+		if (needTotp && totpVia === 'yubikey' && totpLockedOut()) return;
 		busy = true;
 		let device: YubikeyDevice | null = null;
 		try {
@@ -383,11 +404,19 @@
 					: DEFAULT_YUBIKEY_SLOT;
 			device = await requestYubikey(slot);
 			ykPhase = 'tap';
-			await bootFromEnvelopeWithYubikey(env, device.hmac);
+			await bootFromEnvelopeWithYubikey(
+				env,
+				device.hmac,
+				needTotp && totpVia === 'yubikey' ? totpCode.replace(/\s/g, '') : undefined
+			);
 			ykPhase = 'finalizing';
+			totpCode = '';
+			needTotp = false;
+			totpFailCount = 0;
 			await gotoLocale(postUnlockDestination());
 		} catch (err) {
-			// REVISIT-LIST item 3 — classifier-driven branching.
+			if (applyTotpError(err, 'yubikey')) return;
+			// Backlog item 3 — classifier-driven branching.
 			// Covers transport errors (webhid_unsupported, no_device,
 			// open_failed, timeout, protocol_violation) and wrap
 			// errors (unsafe_kdf_params, wrap_schema_unsupported,
@@ -426,7 +455,7 @@
 		}
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -440,7 +469,6 @@
 		requestAnimationFrame(() => node.focus());
 	}
 </script>
-
 
 <Head routeKey="login" />
 
@@ -493,6 +521,34 @@
 			</p>
 		</header>
 
+		{#snippet totpField()}
+			<div class="text-left">
+				<label for="unlock-totp" class="mb-1 block text-sm font-semibold">
+					{$_('settings.totp.unlock_prompt.code_label')}
+				</label>
+				<p class="mb-2 text-xs text-ink-700 dark:text-ink-300">
+					{$_('settings.totp.unlock_prompt.body')}
+				</p>
+				<input
+					id="unlock-totp"
+					type="text"
+					inputmode="numeric"
+					bind:value={totpCode}
+					maxlength="16"
+					autocomplete="one-time-code"
+					use:focusOnMount
+					placeholder={$_('settings.totp.unlock_prompt.code_placeholder')}
+					class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 font-mono tracking-wide focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+					required
+				/>
+				{#if totpVia === 'yubikey'}
+					<p class="mt-2 text-xs text-ink-700 dark:text-ink-300">
+						{$_('login.unlock.yubikey.totp_then_tap')}
+					</p>
+				{/if}
+			</div>
+		{/snippet}
+
 		{#if envelopeIsYubikeyOnly}
 			<!-- State B: hardened to YubiKey-only.  No password form;
 			     YubiKey unlock is the only path. -->
@@ -508,6 +564,12 @@
 				<p class="mt-4 text-ink-600 dark:text-ink-300">
 					{$_('login.welcome_back.yubikey_only_body')}
 				</p>
+
+				{#if needTotp}
+					<div class="mt-4">
+						{@render totpField()}
+					</div>
+				{/if}
 
 				{#if ykPhase !== 'idle'}
 					<p
@@ -576,7 +638,7 @@
 				class="card mt-8 space-y-4"
 				onsubmit={(e) => {
 					e.preventDefault();
-					void handleUnlock();
+					submitUnlock();
 				}}
 			>
 				<div>
@@ -597,26 +659,7 @@
 				</div>
 
 				{#if needTotp}
-					<div>
-						<label for="unlock-totp" class="mb-1 block text-sm font-semibold">
-							{$_('settings.totp.unlock_prompt.code_label')}
-						</label>
-						<p class="mb-2 text-xs text-ink-700 dark:text-ink-300">
-							{$_('settings.totp.unlock_prompt.body')}
-						</p>
-						<input
-							id="unlock-totp"
-							type="text"
-							inputmode="numeric"
-							bind:value={totpCode}
-							maxlength="16"
-							autocomplete="one-time-code"
-							use:focusOnMount
-							placeholder={$_('settings.totp.unlock_prompt.code_placeholder')}
-							class="block w-full rounded-xl border border-ink-200 bg-white px-4 py-3 font-mono tracking-wide focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-							required
-						/>
-					</div>
+					{@render totpField()}
 				{/if}
 
 				{#if ykPhase !== 'idle'}
@@ -638,7 +681,7 @@
 						variant="primary"
 						{busy}
 						busyLabel={$_('login.welcome_back.unlocking')}
-						onclick={handleUnlock}
+						onclick={submitUnlock}
 					>
 						{$_('common.unlock')}
 					</BusyButton>
@@ -719,7 +762,9 @@
 						aria-hidden="true"
 						class="h-5 w-5 flex-none"
 					>
-						<path d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z" />
+						<path
+							d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z"
+						/>
 					</svg>
 					{$_('login.welcome_back.use_phone_instead')}
 				</a>
@@ -742,7 +787,8 @@
 			>
 				<span
 					class="inline-flex w-6 flex-none items-center justify-center text-lg leading-none"
-					aria-hidden="true">🔐</span>
+					aria-hidden="true">🔐</span
+				>
 				{$_('login.import_existing')}
 			</a>
 			<a
@@ -752,16 +798,17 @@
 			>
 				<span
 					class="inline-flex w-6 flex-none items-center justify-center text-lg leading-none"
-					aria-hidden="true">🌱</span>
+					aria-hidden="true">🌱</span
+				>
 				{$_('login.register_cta')}
 			</a>
 		</div>
 
 		<!-- ADR-0022: QR-pairing offered as a third sign-in path for
-		     users who already have Morphit on their phone.  cp233:
+		     users who already have Morphit on their phone.
 		     promoted from a tertiary text link to a full btn-secondary
 		     button (matching "Create a new account") with the QR glyph,
-		     per the maintainer — easier to spot + tap.  The .btn base already
+		     as requested — easier to spot + tap.  The .btn base already
 		     centers (inline-flex items-center justify-center gap-2);
 		     `flex w-full` makes it a full-width block button.  Icon is
 		     the uploaded icon-qr.svg artwork, fill=currentColor so it
@@ -780,7 +827,9 @@
 						aria-hidden="true"
 						class="h-5 w-5"
 					>
-						<path d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z" />
+						<path
+							d="M-.5-.5h99l447 3-1 174c-38.714-1.665-77.381-.498-116 3.5l-248 .5v366H-.5zm1537 0h463v547a7898.18 7898.18 0 0 1-177.5-1l-3.5-365h-366a5937.07 5937.07 0 0 1 2-174c27.52-1.904 54.85-4.237 82-7zm-628 365h3l-4 543-525 4-18-1 1-545zm-360 181h178v181h-181c-1.41-60.358-.41-120.691 3-181zm1087-181h3v547l-547-4 1-542zm-360 180c17.43-.287 34.77.88 52 3.5l126 .5v178h-178a2664.78 2664.78 0 0 1-4-181c1.6.268 2.93-.066 4-1zm-618 547h254v547c-182.334.17-364.667 0-547-.5l1-545.5zm-106 180c58.374-.33 116.708 1 175 4v178a3605.12 3605.12 0 0 1-178-2 1179.93 1179.93 0 0 1-4-84l1-95c2.235.29 4.235-.04 6-1zm540-180l180 1v180h-179zm185 185h357v357l-147 .5c-8.04-.28-16.04-.94-24-2l-7-4.5c-2.51-57.97-3.51-115.97-3-174h-176zm-1277 176h181v366l365 8c1.334 57.67.334 115.34-3 173H-.5zm1092 0l180 .5 1 180.5h-180zm908 185v362h-543v-177l362-4 4-365a2210.86 2210.86 0 0 1 175 3z"
+						/>
 					</svg>
 				</span>
 				{$_('login.qr_pair_cta')}
@@ -793,7 +842,7 @@
 		</aside>
 	{/if}
 
-	<!-- Sign-out-before-switch confirmation (cp305). Lives at the section
+	<!-- Sign-out-before-switch confirmation. Lives at the section
 	     level so it's available whatever formMode is showing; only opens
 	     when guardSwitch() found a current account. Destructive variant —
 	     confirming wipes the in-memory session for the current account. The

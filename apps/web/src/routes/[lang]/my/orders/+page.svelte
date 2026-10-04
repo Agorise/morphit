@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { formatDayMonth } from '$lib/i18n/formatters';
+	import { formatDayMonth, formatDayMonthTime } from '$lib/i18n/formatters';
+	import type { BidVerdict } from '$lib/orders/featureBidCheck';
 	import LazyLoadError from '$components/LazyLoadError.svelte';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
@@ -30,7 +31,7 @@
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	// cp165 byte-budget: 3 disclosure/modal components below are
+	// byte-budget: 3 disclosure/modal components below are
 	// lazy-imported.  None render on first paint; all are gated by
 	// state that toggles only after a user action.  Combined the
 	// three are ~37 KB of component source plus transitive helpers
@@ -47,9 +48,20 @@
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { broadcastOrderCancel, broadcastOrderComplete, BroadcastError } from '$blurt/ops/order';
 	import { KeystoreError } from '$crypto/keystore';
-	import { getOrdersByAccount, getOrderCounterparties } from '$lib/indexer/client';
+	import {
+		getAccountOrderPages,
+		getOrdersByAccount,
+		getOrderCounterpartyLists,
+		COUNTERPARTY_LISTS_BATCH
+	} from '$lib/indexer/client';
 	import { fetchListingFee } from '$lib/orders/listingFee';
-	import { fetchOrderViews } from '$lib/orders/views';
+	import { fetchOrderViewCounts } from '$lib/orders/views';
+	import {
+		autoCompleteCounterparty,
+		mergeNewestPage,
+		paidPermlinksOf,
+		parseMyOrdersHash
+	} from '$lib/orders/myOrdersActions';
 	import { formatOrderPriceModel } from '$lib/orders/priceModelDisplay';
 	import { isOrderExpired, isOrderLive } from '$lib/orders/orderExpiry';
 	import { buildRelistPrefill, RELIST_PREFILL_KEY } from '$lib/orders/relist';
@@ -98,7 +110,7 @@
 		safeLocal.set(FEE_BANNER_DISMISS_KEY, '1');
 	}
 
-	// cp165 lazy-loaders for below-the-fold / behind-disclosure components
+	// lazy-loaders for below-the-fold / behind-disclosure components
 	// v1.20.0 (MK-H2) — "pay your order's own BTC fee address" card.
 	const loadBtcFeePayPanel = () =>
 		import('$components/BtcFeePayPanel.svelte').then((m) => m.default);
@@ -109,61 +121,52 @@
 	const loadPendingFeedbackReminderBanner = () =>
 		import('$components/PendingFeedbackReminderBanner.svelte').then((m) => m.default);
 
-	// Task #14 — per-permlink viewcount.  Fetched lazily after
-	// items load.  Display only — never used for routing or
-	// gating.  See lib/orders/views.ts for the privacy-design
-	// notes.
+	// Task #14 — per-permlink viewcount.  Fetched after the items
+	// load, one batch request per 100 orders.  Display only — never
+	// used for routing or gating.  See lib/orders/views.ts.
 	const viewCounts: Record<string, number> = $state({});
 
 	// ─── Filter state ──────────────────────────────────────────────
 	type FilterKind = 'all' | 'live' | 'paid' | 'cancelled' | 'expired';
-	// t.txt (v1.4.9 #3) — default to the Live pill/orders. Most people
+	// default to the Live pill/orders. Most people
 	// arriving here want to see what they currently have posted; All /
 	// Cancelled / Expired are a click away.
 	let filter = $state<FilterKind>('live');
 
 	// ─── Counts per state (derived) ────────────────────────────────
-	// v1.5.0 — a trade whose payment is verified (or beyond) counts as "Paid".
-	//  Read from the shared trade-status store; drives the Paid filter + hides
-	//  the Feature/Cancel buttons + the "Visible in orderbook" pill.
-	const PAID_PHASES = new Set(['paid_verified', 'released', 'completed']);
-	const paidPermlinks = $derived(
-		new Set(
-			[...$tradeStates.entries()]
-				.filter(([, st]) => PAID_PHASES.has(st.phase))
-				.map(([permlink]) => permlink)
-		)
-	);
+	// "Paid" (the Paid filter; Feature / Cancel and the "Visible in orderbook"
+	//  pill hidden): released / completed, or a payment verified against the
+	//  amount asked — not one merely received with no amount asked
+	//  (paidPermlinksOf).
+	const paidPermlinks = $derived(paidPermlinksOf($tradeStates));
 
-	// v1.5.0 — AUTO-COMPLETE. Once the seller's client has VERIFIED the
-	//  payment on one of their own live orders (paid_verified), the trade
-	//  is settled, so post morphit_order_complete_v1 to drop the order from
-	//  the public orderbook. /my/orders shows ONLY the current user's own
-	//  orders, so the handler's owner-only guard is always satisfied here
-	//  (unlike the app-wide verify listener, whose payee isn't always the
-	//  order owner). Fire-once per order per session, unlocked-only (needs
-	//  the posting key), best-effort — the manual "Mark as complete" button
-	//  is the fallback for off-chain trades and for locked/paired sessions.
+	// v1.5.0 — AUTO-COMPLETE. Once the seller's client has verified that the
+	//  counterparty the seller is trading with paid the amount the seller
+	//  asked for (autoCompleteCounterparty: paid_verified + amountConfirmed +
+	//  sender === engagedPeer), post morphit_order_complete_v1 to drop the
+	//  order from the public orderbook. Anything less (a payment checked only
+	//  against the buyer's own figure, a stranger's transfer, an underpayment)
+	//  leaves the manual "Mark as complete" button as the path. /my/orders
+	//  shows ONLY the current user's own orders, so the handler's owner-only
+	//  guard is satisfied here. Fire-once per order per session, unlocked-only
+	//  (needs the posting key), best-effort.
 	const autoCompletedPermlinks = new Set<string>();
 	$effect(() => {
 		const st = $identity;
 		if (st.state !== 'unlocked') return;
 		for (const o of items) {
-			if (
-				o.status === 'live' &&
-				paidPermlinks.has(o.permlink) &&
-				!autoCompletedPermlinks.has(o.permlink)
-			) {
+			if (autoCompletedPermlinks.has(o.permlink)) continue;
+			// v1.20.0 (G7) — name the verified payer as the counterparty. Without
+			// it the order completed anonymously and the later review's
+			// completion (which names them) was rejected as already-completed,
+			// so the buyer never got the trade credit. The indexer still
+			// requires a provable conversation before it records the name.
+			const peer = autoCompleteCounterparty(o, $tradeStates.get(o.permlink));
+			if (peer !== null) {
 				autoCompletedPermlinks.add(o.permlink); // mark BEFORE await — fire once
-				// v1.20.0 (G7) — name the verified payer as the counterparty. Without
-				// it the order completed anonymously and the later review's
-				// completion (which names them) was rejected as already-completed,
-				// so the buyer never got the trade credit. The indexer still
-				// requires a provable conversation before it records the name.
-				const peer = $tradeStates.get(o.permlink)?.peer;
 				void (async () => {
 					try {
-						await broadcastOrderComplete(st.live, o.permlink, peer || undefined);
+						await broadcastOrderComplete(st.live, o.permlink, peer);
 						recordComplete(o.permlink);
 						items = applyRecentCompletes(items);
 					} catch (err) {
@@ -205,12 +208,16 @@
 	let pendingFeaturePermlink: string | null = $state(null);
 	let featureSuccessPermlink: string | null = $state(null);
 	let featureSuccessBlurt: number | null = $state(null);
+	/** What the indexer recorded for the bid just sent (FeatureBidForm waits
+	 *  for it): shown now, starts later, waits for a free slot, or not yet
+	 *  recorded. */
+	let featureSuccessVerdict: BidVerdict | null = $state(null);
 
 	// Feedback disclosure — parallels feature-bid. One row's form
 	// open at a time; LeaveFeedbackForm manages its own submit state.
 	let pendingFeedbackPermlink: string | null = $state(null);
 	let feedbackSuccessPermlink: string | null = $state(null);
-	// cp421 — reviewable trade partners per order (permlink → peer names
+	// reviewable trade partners per order (permlink → peer names
 	// the owner MAY review, i.e. the counterparties endpoint's
 	// reviewable=true set). `undefined` = not loaded yet OR the lookup
 	// failed → fall back to the legacy free-type form (the indexer gate
@@ -275,11 +282,11 @@
 		// the form opening on a network round-trip.
 	}
 
-	/** cp425 — smooth-scroll to the just-opened Feature form. The form is
+	/** smooth-scroll to the just-opened Feature form. The form is
 	 *  lazy-loaded, so its element may not exist for a frame or two after
 	 *  the click; retry across a few rAFs until it mounts. The target div
 	 *  carries `scroll-mt-24` (6rem ≈ an inch) so it lands an inch below the
-	 *  viewport top, per the maintainer's request — a breath of space above the
+	 *  viewport top, as requested — a breath of space above the
 	 *  "🚀 Feature this order!" heading rather than flush against the top. */
 	function scrollToFeatureForm(permlink: string): void {
 		void scrollToLazySection(`feature-form-${permlink}`, loadFeatureBidForm);
@@ -294,6 +301,11 @@
 		await scrollToLazySection(`feedback-form-${permlink}`, loadLeaveFeedbackForm);
 	}
 
+	/** Pages of the account's orders to read on load (100 each, newest
+	 *  updated first). An account with more orders than this sees the newest
+	 *  ones; every order stays reachable from its own page. */
+	const MAX_ORDER_PAGES = 5;
+
 	async function load(): Promise<void> {
 		if (!blurtAccount) {
 			phase = 'error';
@@ -301,96 +313,138 @@
 			return;
 		}
 		phase = 'loading';
-		const result = await getOrdersByAccount(blurtAccount, { limit: 100 });
-		if (!result.ok) {
-			console.warn('[my/orders] load failed:', result.message);
+		const read = await getAccountOrderPages(blurtAccount, { maxPages: MAX_ORDER_PAGES });
+		const all = read?.items ?? null;
+		if (all === null) {
+			console.warn('[my/orders] load failed');
 			errorMessage = $_('my_orders.error.load_failed');
 			phase = 'error';
 			return;
 		}
-		// t.txt #7 — reflect a just-cancelled order even if the indexer hasn't
+		// reflect a just-cancelled order even if the indexer hasn't
 		// caught up yet (e.g. arriving here right after cancelling from the
 		// order page). Chain is truth; this only bridges the ~1min lag.
-		items = applyRecentCompletes(applyRecentCancels(result.data.items));
+		items = applyRecentCompletes(applyRecentCancels(all));
 		phase = 'ready';
-		// Task #14 — kick off viewcount fetches in parallel.
-		// Each one independently updates viewCounts as it
-		// resolves, so badges appear progressively rather than
-		// blocking on the slowest network round-trip.
-		void loadViewCounts();
-		void loadCounterparties();
+		// Task #14 — view counts and review candidates, in batch reads (one
+		// request per 100 / 50 orders), so a page of orders costs a handful of
+		// requests instead of two per order.
+		void loadViewCounts(items.map((o) => o.permlink));
+		void loadCounterparties(items.map((o) => o.permlink));
 
-		// cp17 — if the URL hash names a specific order (set by
-		// the outbid-push deep link `/my/orders#order-<permlink>`),
-		// scroll it into view after the rows have rendered.  Done
-		// after `phase = 'ready'` so the {#each} has produced the
-		// target element.  requestAnimationFrame gives the DOM one
-		// commit cycle before we query.
-		if (typeof window !== 'undefined' && window.location.hash.startsWith('#order-')) {
-			const id = window.location.hash.slice(1); // 'order-<permlink>'
-			// Validate to defend against a malicious hash
-			// containing CSS selector special chars.
-			if (/^order-[A-Za-z0-9-]+$/.test(id)) {
-				requestAnimationFrame(() => {
-					const el = document.getElementById(id);
-					el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-				});
-			}
-		}
+		// Deep links: `#order-<permlink>` (the outbid push) scrolls to the
+		// order; `#feature=<permlink>` / `#cancel=<permlink>` (the hand-off
+		// from a paired desktop) open that order's feature form or cancel
+		// confirmation. Done after `phase = 'ready'` so the {#each} has
+		// produced the target element; requestAnimationFrame gives the DOM
+		// one commit cycle before we query.
+		if (typeof window !== 'undefined') applyHashAction(window.location.hash);
 	}
 
-	// cp510 [11c] — SILENT re-fetch: same query as load() but without the
-	// phase='loading' flip (no spinner flicker) and without the hash-scroll.
+	/** Act on a /my/orders deep-link hash once the rows are loaded. The
+	 *  permlink must be one of this account's orders. */
+	function applyHashAction(hash: string): void {
+		const action = parseMyOrdersHash(hash);
+		if (action === null || action.kind === 'feedback') return;
+		const o = items.find((x) => x.permlink === action.permlink);
+		if (o === undefined) return;
+		if (action.kind === 'feature') {
+			if (
+				isLive(o) &&
+				!paidPermlinks.has(o.permlink) &&
+				(o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation')
+			) {
+				pendingFeaturePermlink = o.permlink;
+				void ensureFeatureRateFetched();
+				scrollToFeatureForm(o.permlink);
+			}
+			return;
+		}
+		if (action.kind === 'cancel') {
+			if (isLive(o) && !paidPermlinks.has(o.permlink)) requestCancel(o.permlink);
+			return;
+		}
+		requestAnimationFrame(() => {
+			document.getElementById(`order-${o.permlink}`)?.scrollIntoView({
+				behavior: 'smooth',
+				block: 'start'
+			});
+		});
+	}
+
+	// SILENT re-fetch of the NEWEST page only, without the
+	// phase='loading' flip (no spinner flicker) and without the hash action.
 	// Polled (below) while an order is still provisional so the indexer's
-	// confirmed row REPLACES the "Posting…" placeholder the moment it lands.
-	// Before this, load() ran once on mount and nothing re-fetched, so the
-	// placeholder aged out at PENDING_TTL_MS and the card VANISHED until a
-	// manual refresh (the maintainer: "after about a minute the card suddenly disappeared
-	// … i refresh the page and the ordercard appeared"). On a transient fetch
-	// error we keep the current view (and the placeholder) rather than blanking.
+	// confirmed row REPLACES the "Posting…" placeholder the moment it lands
+	// (a just-posted order is always on the newest page). Older pages stay as
+	// loaded, and the view-count / counterparty reads run only for orders
+	// that were not shown before, so the 10 s poll costs one request, not a
+	// fan-out over every order. On a transient fetch error we keep the
+	// current view (and the placeholder) rather than blanking.
 	async function silentRefetch(): Promise<void> {
 		if (!blurtAccount) return;
 		const result = await getOrdersByAccount(blurtAccount, { limit: 100 });
 		if (!result.ok) return;
-		items = applyRecentCompletes(applyRecentCancels(result.data.items));
-		void loadViewCounts();
-		void loadCounterparties();
+		const known = new Set(items.map((o) => o.permlink));
+		items = applyRecentCompletes(applyRecentCancels(mergeNewestPage(items, result.data.items)));
+		const fresh = items.map((o) => o.permlink).filter((p) => !known.has(p));
+		if (fresh.length > 0) {
+			void loadViewCounts(fresh);
+			void loadCounterparties(fresh);
+		}
 	}
 
-	async function loadViewCounts(): Promise<void> {
-		if (!blurtAccount) return;
-		const account = blurtAccount;
-		const fetchOne = async (permlink: string): Promise<void> => {
-			const r = await fetchOrderViews(account, permlink);
-			if (r !== null) {
-				viewCounts[permlink] = r.count;
-			}
-		};
-		await Promise.all(items.map((o) => fetchOne(o.permlink)));
+	async function loadViewCounts(permlinks: readonly string[]): Promise<void> {
+		if (!blurtAccount || permlinks.length === 0) return;
+		const counts = await fetchOrderViewCounts(blurtAccount, permlinks);
+		if (counts === null) return;
+		for (const [permlink, n] of counts) viewCounts[permlink] = n;
 	}
 
-	/** cp421 — for each order, load the set of trade partners the owner
-	 *  may review (counterparties endpoint, reviewable=true). Runs in
-	 *  parallel with the view-count batch so the button is already gated
-	 *  by the time the rows render. A failed lookup leaves the entry
-	 *  `undefined` → the row falls back to the legacy free-type form
-	 *  (the indexer's provable-counterparty gate still enforces). */
-	async function loadCounterparties(): Promise<void> {
-		if (!blurtAccount) return;
+	/** At most this many counterparty_lists requests in flight at once. */
+	const COUNTERPARTY_CONCURRENCY = 4;
+
+	/** for each order, load the set of trade partners the owner
+	 *  may review (reviewable=true), COUNTERPARTY_LISTS_BATCH orders per
+	 *  request and at most COUNTERPARTY_CONCURRENCY requests at once. A
+	 *  failed lookup leaves the entry `undefined` → the row falls back to
+	 *  the legacy free-type form (the indexer's provable-counterparty gate
+	 *  still enforces). */
+	async function loadCounterparties(permlinks: readonly string[]): Promise<void> {
+		if (!blurtAccount || permlinks.length === 0) return;
 		const account = blurtAccount;
-		const fetchOne = async (permlink: string): Promise<void> => {
-			const r = await getOrderCounterparties(account, permlink);
-			if (r.ok) {
-				reviewableCounterparties[permlink] = r.data.items
-					.filter((it) => it.reviewable)
-					.map((it) => it.peer);
+		const chunks: string[][] = [];
+		for (let i = 0; i < permlinks.length; i += COUNTERPARTY_LISTS_BATCH) {
+			chunks.push(permlinks.slice(i, i + COUNTERPARTY_LISTS_BATCH));
+		}
+		const worker = async (): Promise<void> => {
+			for (let chunk = chunks.shift(); chunk; chunk = chunks.shift()) {
+				const r = await getOrderCounterpartyLists(account, chunk);
+				if (!r.ok) continue;
+				for (const p of chunk) {
+					const list = r.data.lists[p];
+					if (list === undefined) continue;
+					reviewableCounterparties[p] = list.filter((it) => it.reviewable).map((it) => it.peer);
+				}
 			}
 		};
-		await Promise.all(items.map((o) => fetchOne(o.permlink)));
+		await Promise.all(
+			Array.from({ length: Math.min(COUNTERPARTY_CONCURRENCY, chunks.length) }, worker)
+		);
 	}
+
+	// A remembered account name alone (a locked visit) does not read the
+	// account's orders: the page asks to unlock first, so a locked visit does
+	// not announce the account to the operator. The read starts once a session
+	// exists (on arrival, or when the user unlocks in place).
+	let loadStarted = false;
+	$effect(() => {
+		if (!blurtAccount || !$hasAnySession || loadStarted) return;
+		loadStarted = true;
+		void load();
+	});
 
 	onMount(() => {
-		if (blurtAccount) void load();
 		// Deep-link support: if URL is /my/orders#feedback=<permlink>,
 		// auto-open that order's LeaveFeedbackForm.  The reminder
 		// banner uses this to land users directly on the form they
@@ -398,12 +452,12 @@
 		// unlocked — locked users see the form's "unlock to leave
 		// feedback" prompt instead, which is correct.
 		if (typeof window !== 'undefined' && window.location.hash) {
-			const m = /^#feedback=([A-Za-z0-9-]+)/.exec(window.location.hash);
-			if (m && m[1]) {
-				pendingFeedbackPermlink = m[1];
+			const action = parseMyOrdersHash(window.location.hash);
+			if (action?.kind === 'feedback') {
+				pendingFeedbackPermlink = action.permlink;
 			}
 		}
-		// Sally finding M1/M8 (Part 68): tick once a second so the
+		// Sally finding M1/M8: tick once a second so the
 		// per-order edit-window countdown updates live.  Cleared on
 		// component unmount.  1s granularity is fine — the window
 		// is 15 minutes total.
@@ -439,7 +493,7 @@
 		return isOrderLive(o, nowMs);
 	}
 
-	// cp508 (tt.txt #4) — merge THIS browser's just-posted orders (staged in
+	// merge THIS browser's just-posted orders (staged in
 	// `pendingOrders` by the post flow) so a freshly-posted order shows on
 	// my/orders IMMEDIATELY as a data-bearing placeholder, ~50-90s before the
 	// durable indexer surfaces it (the fast head-tailer is chat-only by design,
@@ -458,7 +512,7 @@
 	function isProvisional(o: OrderRecord): boolean {
 		return provisionalKeys.has(orderEchoKey(o));
 	}
-	// cp510 [11c] — poll the indexer while ANY order is still provisional, so
+	// poll the indexer while ANY order is still provisional, so
 	// its confirmed row lands (and drops the placeholder) on its own. Depends on
 	// the BOOLEAN, not on `nowMs`, so it doesn't tear down + re-arm every tick —
 	// it (re)arms only when provisional-ness flips, and self-stops the instant
@@ -471,7 +525,7 @@
 		}, 10_000);
 		return () => clearInterval(iv);
 	});
-	// cp510 [11b] — a ~1-minute countdown for the "Posting…" pill so the user
+	// a ~1-minute countdown for the "Posting…" pill so the user
 	// has a sense of how long until the order is durable (and the Feature button
 	// un-arms). Basis is the order's own created_at (broadcast time, set at
 	// addPendingOrder); clamped to [0,60] and reads `nowMs` so it ticks. Returns
@@ -487,7 +541,7 @@
 		const s = postingCountdownSeconds(o);
 		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 	}
-	// cp508 (tt.txt #4) — the post-confirmation "set up a featured bid" link deep-
+	// the post-confirmation "set up a featured bid" link deep-
 	// links here as /my/orders?featuring=<permlink>; we ring + scroll that card so
 	// the user lands right on the order they want to feature.
 	const featuringPermlink = $derived($page.url.searchParams.get('featuring'));
@@ -517,7 +571,7 @@
 		return nowMs - createdMs < EDIT_WINDOW_MS;
 	}
 
-	/** Sally finding M1/M8 (Part 68): live remaining-seconds helper
+	/** Sally finding M1/M8: live remaining-seconds helper
 	 *  for the edit-window countdown chip.  Returns null when the
 	 *  window has expired, so the template can fall back to the
 	 *  "edit window expired" copy. */
@@ -621,7 +675,7 @@
 	 *  a brand new order with a fresh permlink and expiration; the
 	 *  original stays expired/cancelled.  No silent re-sign of an old listing.
 	 *
-	 *  Cancelled orders qualify for the same reason expired ones do (the maintainer):
+	 *  Cancelled orders qualify for the same reason expired ones do:
 	 *  you cancelled because the terms went stale or the trade fell through,
 	 *  and retyping the whole listing to try again is busywork. The cancelled
 	 *  order is immutable on-chain and stays cancelled — re-listing only
@@ -634,7 +688,7 @@
 	 *  spread=0 so the user can fix manually.
 	 */
 	function relistOrder(o: OrderRecord): void {
-		safeSession.set(RELIST_PREFILL_KEY, JSON.stringify(buildRelistPrefill(o)));
+		safeSession.set(RELIST_PREFILL_KEY, JSON.stringify(buildRelistPrefill(o, currentLang)));
 		void gotoLocale('/post');
 	}
 
@@ -665,7 +719,7 @@
 			await broadcastOrderCancel(state.live, permlink);
 			// Success — the cancel is on chain. The indexer lags ~1min, so do
 			// NOT block on a refetch (it would still report 'live' and leave the
-			// modal sitting open). Instead give INSTANT feedback (t.txt #6):
+			// modal sitting open). Instead give INSTANT feedback:
 			// record the cancel + optimistically flip this order to 'cancelled'
 			// right here, so the card AND the Live/Cancelled pill counts update
 			// immediately (counts derive from `items`), then close the modal.
@@ -674,7 +728,7 @@
 			pendingCancelPermlink = null;
 			// Background reconcile (non-blocking) — picks up anything else that
 			// changed; applyRecentCancels inside load() keeps THIS order shown as
-			// cancelled until the indexer catches up (t.txt #7).
+			// cancelled until the indexer catches up.
 			void (async () => {
 				await new Promise((r) => setTimeout(r, 1_500));
 				await load();
@@ -724,7 +778,7 @@
 			// the trade; the indexer records it only with a provable conversation.
 			const peers = reviewableCounterparties[permlink];
 			const counterparty =
-				peers && peers.length === 1 ? peers[0] : get(tradeStates).get(permlink)?.peer;
+				peers && peers.length === 1 ? peers[0] : get(tradeStates).get(permlink)?.engagedPeer;
 			await broadcastOrderComplete(state.live, permlink, counterparty || undefined);
 			// Optimistic (same bridge as cancel): flip to 'completed' so the card
 			// + Live/Paid pill counts update instantly; the indexer lags ~1min.
@@ -752,7 +806,7 @@
 		}
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -789,7 +843,7 @@
 	     where the counterparty has reviewed > 48h ago and the
 	     user hasn't reciprocated.  Embeds LeaveFeedbackForm
 	     inline so the user doesn't have to scroll-and-find. -->
-	{#if blurtAccount}
+	{#if blurtAccount && $hasAnySession}
 		{#await loadPendingFeedbackReminderBanner() then PendingFeedbackReminderBanner}
 			<PendingFeedbackReminderBanner />
 		{/await}
@@ -813,7 +867,7 @@
 			</div>
 		</section>
 	{:else if !$isUnlocked && !$isPairedReadOnly}
-		<!-- Part 116: only block on "locked" when there is no
+		<!-- only block on "locked" when there is no
 		     paired-readonly session either.  Paired sessions fall
 		     through to the normal render path; the per-row write
 		     affordances swap to WriteBlockedReadOnly inline cards
@@ -845,7 +899,7 @@
 				</BusyButton>
 			</div>
 		</section>
-	{:else if items.length === 0}
+	{:else if mergedItems.length === 0}
 		<section class="card text-center">
 			<h2 class="font-display text-lg font-bold">{$_('my_orders.empty_title')}</h2>
 			<p class="mt-2 text-ink-600 dark:text-ink-300">{$_('my_orders.empty_body')}</p>
@@ -986,7 +1040,7 @@
 							</div>
 							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
 								{#if isProvisional(o)}
-									<!-- cp508 (tt.txt #4) — just-posted, not yet durable: a "Posting…" pill
+									<!-- just-posted, not yet durable: a "Posting…" pill
 									     (animated dot) says so at a glance; drops to the normal pills the
 									     instant the indexer confirms the order. -->
 									<span
@@ -1016,7 +1070,7 @@
 									completedCounterparty={o.completed_counterparty ?? null}
 								/>
 								{#if !isLive(o)}
-									<!-- cp429/cp440 — an order that is no longer live (EXPIRED or
+									<!-- an order that is no longer live (EXPIRED or
 									     CANCELLED) is not on the orderbook anymore. This is NOT a
 									     fee problem, so it gets a neutral "Not visible" pill and NO
 									     "Learn more → order_fee_rejected" link. Previously a
@@ -1113,7 +1167,7 @@
 						</div>
 
 						<!-- Action column -->
-						<!-- t155 (the maintainer): "look at the green buttons that say 'Re-list this order'.
+						<!-- t155: "look at the green buttons that say 'Re-list this order'.
 						     THAT is the size of the buttons that i want." Re-list is already
 						     `size="sm"` — and so were these. The size prop was never the
 						     problem: this column was `flex-col` (children STRETCH to the
@@ -1123,11 +1177,11 @@
 						     difference the maintainer is pointing at. `items-end` lets each button size to
 						     its own label and keeps the column right-aligned against the card
 						     edge. -->
-						<!-- cp508 (tt.txt #5) — fixed-width action column with items-stretch so
+						<!-- fixed-width action column with items-stretch so
 						     Edit / Feature / "No chats" / Cancel all render the SAME width. -->
 						<div class="flex w-44 flex-none flex-col items-stretch gap-2">
 							{#if isProvisional(o)}
-								<!-- cp508 (tt.txt #4) — the just-posted order is not on-chain-confirmed
+								<!-- the just-posted order is not on-chain-confirmed
 								     yet, so featuring it is IMPOSSIBLE (a feature bid needs a live
 								     order). Show an ARMING, disabled Feature button — presentational
 								     ONLY, never a real feature action — that lights up the moment the
@@ -1141,7 +1195,7 @@
 							{:else if isLive(o)}
 								{#if withinEditWindow(o)}
 									{@const remaining = editWindowRemainingSeconds(o)}
-									<!-- cp508 (tt.txt #5) — edit-window countdown MERGED INTO the Edit
+									<!-- edit-window countdown MERGED INTO the Edit
 									     button (was an amber pill above an oversized button); now compact
 									     (size="sm"), full-width, with the ✏️ glyph to match 🚀 on Feature. -->
 									<BusyButton
@@ -1168,19 +1222,42 @@
 									<!-- Feature form renders full-width below the card
 									     body so it doesn't squeeze the action column. -->
 								{:else if featureSuccessPermlink === o.permlink}
-									<StatusLine kind="ok">
-										{$_('feature_bid.success', {
-											values: { blurt: featureSuccessBlurt ?? 0 }
-										})}
-									</StatusLine>
+									{#if featureSuccessVerdict?.kind === 'queued'}
+										<StatusLine kind="ok">
+											{$_('feature_bid.result_queued', {
+												values: {
+													blurt: featureSuccessBlurt ?? 0,
+													when: formatDayMonthTime(featureSuccessVerdict.startsAt)
+												}
+											})}
+										</StatusLine>
+									{:else if featureSuccessVerdict?.kind === 'waiting'}
+										<StatusLine kind="ok">
+											{$_('feature_bid.result_waiting', {
+												values: { blurt: featureSuccessBlurt ?? 0 }
+											})}
+										</StatusLine>
+									{:else if featureSuccessVerdict?.kind === 'pending'}
+										<StatusLine kind="warn">
+											{$_('feature_bid.result_unconfirmed', {
+												values: { blurt: featureSuccessBlurt ?? 0 }
+											})}
+										</StatusLine>
+									{:else}
+										<StatusLine kind="ok">
+											{$_('feature_bid.success', {
+												values: { blurt: featureSuccessBlurt ?? 0 }
+											})}
+										</StatusLine>
+									{/if}
 								{:else if o.fee_status === 'verified' || o.fee_status === 'verified_by_attestation'}
 									{#if $isPairedReadOnly}
-										<!-- Part 116: paired-readonly users see an inline
+										<!-- paired-readonly users see an inline
 										     affordance pointing them at their phone instead
 										     of a button that opens a form they can't sign.
 										     Permlink is preserved in the deep link
-										     (#feature=<permlink>) so the phone lands on
-										     the right order. -->
+										     (#feature=<permlink>) so the phone opens
+										     that order's feature form. -->
 										<WriteBlockedReadOnly
 											variant="feature_order"
 											orderPermlink={o.permlink}
@@ -1198,7 +1275,7 @@
 												// form opens with the bundled default and
 												// re-renders once the real value lands.
 												void ensureFeatureRateFetched();
-												// cp425 — smooth-scroll down to the form.
+												// smooth-scroll down to the form.
 												scrollToFeatureForm(o.permlink);
 											}}
 										>
@@ -1219,7 +1296,7 @@
 										{$_('feedback.success_line')}
 									</StatusLine>
 								{:else if $isPairedReadOnly}
-									<!-- Part 116: paired-readonly affordance.  The
+									<!-- paired-readonly affordance.  The
 									     `feedback` variant deep-link expects `peer`
 									     (the counterparty); orderPermlink here points
 									     at the *order* so the phone can resolve the
@@ -1233,7 +1310,7 @@
 										density="inline"
 									/>
 								{:else if feedbackPickerPermlink === o.permlink}
-									<!-- cp421: >1 reviewable trade partner — ask which
+									<!-- >1 reviewable trade partner — ask which
 									     one before opening the (subject-locked) form. -->
 									<div class="flex flex-col gap-2">
 										<p class="text-xs text-ink-500 dark:text-ink-400">
@@ -1264,9 +1341,9 @@
 										</button>
 									</div>
 								{:else if reviewableCounterparties[o.permlink]?.length === 0}
-									<!-- v1.5.0 (t.txt line 1): loaded, but nobody has provably
+									<!-- v1.5.0: loaded, but nobody has provably
 									     traded on this order yet (no two-way conversation), so
-									     there's no one to review. the maintainer now wants an explicit
+									     there's no one to review. The maintainer now wants an explicit
 									     empty-state here (superseding the earlier #8 "render
 									     nothing"), worded clearly so it doesn't read as a
 									     broken review prompt. -->
@@ -1282,9 +1359,9 @@
 								{/if}
 
 								{#if $isPairedReadOnly}
-									<!-- Part 116: paired-readonly users see an inline
-									     affordance.  Permlink preserved in the
-									     #cancel=<permlink> deep link. -->
+									<!-- paired-readonly users see an inline
+									     affordance.  The #cancel=<permlink> deep link
+									     opens that order's cancel confirmation. -->
 									<WriteBlockedReadOnly
 										variant="cancel_order"
 										orderPermlink={o.permlink}
@@ -1313,7 +1390,7 @@
 								>
 									{$_('my_orders.order.action_cancelled')}
 								</span>
-								<!-- the maintainer — a cancelled order can be re-listed, exactly like an expired
+								<!-- a cancelled order can be re-listed, exactly like an expired
 								     one: same pre-filled form, fresh permlink, fresh listing fee. The
 								     cancelled order itself is immutable on-chain and stays cancelled. -->
 								<BusyButton size="sm" variant="secondary" onclick={() => relistOrder(o)}>
@@ -1323,7 +1400,7 @@
 									{$_('my_orders.order.action_relist_hint')}
 								</span>
 							{:else if o.status === 'completed' || paidPermlinks.has(o.permlink)}
-								<!-- the maintainer — a Paid order can be re-listed too (you sold, and want to
+								<!-- a Paid order can be re-listed too (you sold, and want to
 								     offer the same again): same pre-filled form, fresh permlink,
 								     fresh listing fee.  The paid order itself is immutable on-chain
 								     and stays as it is.  Matches the 'paid' filter's own test
@@ -1366,12 +1443,14 @@
 										pendingFeaturePermlink = null;
 										featureSuccessPermlink = o.permlink;
 										featureSuccessBlurt = r.blurtPaid;
-										// cp431 — optimistically mark it featured and jump to the
-										// orderbook so the user watches their order appear within the
-										// 6s window. The durable indexer confirms it ~a minute later
-										// and transparently takes over (or it fades if the bid lost).
-										addPendingFeatured(o, r.blurtPaid);
-										void gotoLocale('/orderbook');
+										featureSuccessVerdict = r.verdict;
+										// Only a bid the indexer shows in a slot is "featured": then
+										// jump to the orderbook to see it. A queued, waiting or
+										// not-yet-recorded bid stays here with what it is.
+										if (r.verdict.kind === 'visible') {
+											addPendingFeatured(o, r.blurtPaid);
+											void gotoLocale('/orderbook');
+										}
 									}}
 									onCancel={() => (pendingFeaturePermlink = null)}
 								/>
@@ -1421,7 +1500,7 @@
 				</li>
 			{/each}
 		</ul>
-			<!-- t.txt (v1.4.9 #8) — the user HAS orders (so the "no orders at
+			<!-- the user HAS orders (so the "no orders at
 			     all" state above did not fire), but the selected pill yields
 			     none. A centered, quiet note beats a bare gap. -->
 			{#if visibleItems.length === 0}

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/price-primary-fallback-smoke.ts (cp604)
+ * apps/indexer/scripts/price-primary-fallback-smoke.ts
  *
  * Pins the BLURT/USD "source of truth" precedence: Blurt's own
  * `api.blurt.blog/price_info` feed is the PRIMARY source — tried FIRST

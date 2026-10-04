@@ -12,7 +12,7 @@
  *
  * Non-requirement mentions are deliberately NOT checked (BunkerWeb's footprint
  * on a <1 GB VPS, the alert-tuning vCPU range in OPERATIONS.md, the recommended
- * higher tier in PLAN.md, the REVISIT changelog).
+ * the backlog changelog).
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';

@@ -18,7 +18,7 @@
  * ("operated by @alice"); having them in the same payload
  * saves a /v1/operators round trip on cold-load.
  *
- * Includes operator_tag (REVISIT-LIST item 5) so the frontend
+ * Includes operator_tag (backlog item 5) so the frontend
  * can include it in every order op posted from this instance,
  * which credits 90% of BLURT-paid listing fees to the operator.
  *
@@ -78,7 +78,7 @@ export interface InstanceResponse {
 	 *  null: could not be read right now (never report as false). */
 	fee_recipient_registered: boolean | null;
 	relay_account: string;
-	/** REVISIT-LIST item 5 — operator earnings.  When non-null,
+	/** Backlog item 5 — operator earnings.  When non-null,
 	 *  the frontend includes this on every order op as
 	 *  `operator_tag`, and the indexer credits 90% of BLURT-paid
 	 *  listing fees to the operator who registered this tag.
@@ -101,13 +101,15 @@ export interface InstanceResponse {
 	 * local-only frontend — with clearnet fetches fail-closed (never a direct
 	 * fallback). FALSE until every leg is enforced. The frontend/brag/security
 	 * pages MUST gate the strong claim on this flag so the content can never
-	 * outrun the code. Currently false everywhere — the hidden-only enforcement
-	 * is being built (v1.15.x).
+	 * outrun the code.
 	 */
 	clearnet_eliminated: boolean;
-	/** Legs still preventing elimination (empty ⇔ eliminated) — operator diagnostic. */
-	clearnet_eliminated_missing: string[];
-	/** cp316 — the RESOLVED treasury fee addresses this instance
+	/** Legs still preventing elimination (empty ⇔ eliminated) — an operator
+	 *  diagnostic, served only to a LOCAL caller (X-Morphit-Local-Health: 1,
+	 *  stripped at every public edge): which private legs a node still lacks
+	 *  is a map of where it still touches clearnet. */
+	clearnet_eliminated_missing?: string[];
+	/** the RESOLVED treasury fee addresses this instance
 	 *  verifies fee payments against (chain-pin > env > canonical
 	 *  default).  PUBLIC receiving addresses — safe to expose.  Lets
 	 *  peers' federation probes audit that this instance routes fees
@@ -122,13 +124,13 @@ export interface InstanceResponse {
 		title: string | null;
 		description: string | null;
 		keywords: string | null;
-		/** cp119-A4: optional Twitter/X handle for twitter:site
+		/** optional Twitter/X handle for twitter:site
 		 *  card attribution.  Null = no card attribution (the
 		 *  card still renders without it).  Non-null = full
 		 *  `@handle` form per Twitter spec. */
 		twitter_site: string | null;
 	};
-	/** Frontend chat-link URL templates (Part 109).  Per-instance
+	/** Frontend chat-link URL templates.  Per-instance
 	 *  operator-configurable override for the "click a txid in
 	 *  chat, open in external explorer" feature.  Null = frontend
 	 *  uses its bundled default (mempool.space for BTC,
@@ -141,34 +143,34 @@ export interface InstanceResponse {
 	chat_link_urls: {
 		btc: string | null;
 		xmr: string | null;
-		/** Part 122 cp21 — BCH chat-link explorer URL override.
+		/** BCH chat-link explorer URL override.
 		 *  Same pattern as BTC/XMR (single-network, single field).
 		 *  Operator sets via MORPHIT_FRONTEND_BCH_CHAT_LINK_URL;
 		 *  frontend falls back to the bundled blockchair.com/
 		 *  bitcoin-cash default when null. */
 		bch: string | null;
-		/** Part 122 cp24 — LTC chat-link explorer URL override.
+		/** LTC chat-link explorer URL override.
 		 *  Same pattern as BTC/XMR/BCH (single-network, single
 		 *  field).  Operator sets via
 		 *  MORPHIT_FRONTEND_LTC_CHAT_LINK_URL; frontend falls
 		 *  back to the bundled litecoinspace.org default when
 		 *  null. */
 		ltc: string | null;
-		/** Part 122 cp27 — DASH chat-link explorer URL override.
+		/** DASH chat-link explorer URL override.
 		 *  Same pattern as BTC/XMR/BCH/LTC (single-network,
 		 *  single field).  Operator sets via
 		 *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL; frontend falls
 		 *  back to the bundled insight.dash.org default when
 		 *  null. */
 		dash: string | null;
-		/** Part 122 cp33 — DOGE chat-link explorer URL override.
+		/** DOGE chat-link explorer URL override.
 		 *  Same pattern as BTC/XMR/BCH/LTC/DASH (single-network,
 		 *  single field).  Operator sets via
 		 *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL; frontend falls
 		 *  back to the bundled blockchair.com/dogecoin default
 		 *  when null. */
 		doge: string | null;
-		/** Part 122 cp39 — ZEC chat-link explorer URL override.
+		/** ZEC chat-link explorer URL override.
 		 *  Same pattern as BTC/XMR/BCH/LTC/DASH/DOGE (single-network,
 		 *  single field).  Operator sets via
 		 *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL; frontend falls
@@ -180,9 +182,9 @@ export interface InstanceResponse {
 		sol: string | null;
 		eth: string | null;
 		xrp: string | null;
-		/** Part 122 cp30 (DD-11) — USDT per-network explorer URL
+		/** USDT per-network explorer URL
 		 *  overrides.  Optional sub-map; older indexer builds
-		 *  (pre-cp30 — yes, this includes every prior build of
+		 *  (older — yes, this includes every prior build of
 		 *  USDT support which had the per-network override
 		 *  declared in the indexer-client mirror but never landed
 		 *  in the InstanceResponse body itself) omit the field,
@@ -196,7 +198,7 @@ export interface InstanceResponse {
 			spl: string | null;
 			bep20: string | null;
 		};
-		/** Part 122 cp30 (DD-10) — USDC per-network explorer URL
+		/** USDC per-network explorer URL
 		 *  overrides.  Same shape as USDT above with USDC's
 		 *  4-network set.  BEP-20 intentionally absent per
 		 *  ADR-0028 §1. */
@@ -206,7 +208,7 @@ export interface InstanceResponse {
 			base: string | null;
 			polygon: string | null;
 		};
-		/** Part 122 cp31 — DAI per-network explorer URL overrides.
+		/** DAI per-network explorer URL overrides.
 		 *  4 networks (all EVM-family): ERC-20 (Ethereum native),
 		 *  Polygon, Base, Arbitrum.  No SPL/TRC-20/BEP-20 per
 		 *  ADR-0029 §1 (no canonical Maker-issued DAI on those
@@ -220,10 +222,10 @@ export interface InstanceResponse {
 		};
 	};
 	/** Trade-only assets this instance has DISABLED via the
-	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (Memory #25 —
+	 *  `MORPHIT_INDEXER_DISABLED_ASSETS` env var (the default-on rule for new assets —
 	 *  every new asset ships default-ON instance-wide with
 	 *  operator override).  Wire format: array of uppercase
-	 *  asset tickers (e.g. `['USDT']` or `['USDT', 'ARRR']` or `['USDT', 'DCR']`).  Cp41:
+	 *  asset tickers (e.g. `['USDT']` or `['USDT', 'ARRR']` or `['USDT', 'DCR']`).
 	 *  ARRR is now a real tradable ticker, so the example is
 	 *  live working syntax.
 	 *  Empty array = this instance accepts every asset in the
@@ -234,7 +236,7 @@ export interface InstanceResponse {
 	 *  policy" badge so users can self-select an instance that
 	 *  matches their preference (privacy-pure operators may
 	 *  disable USDT; pragmatic operators leave it on).  ADR-0023
-	 *  USDT context + REVISIT-LIST §A recommendation.
+	 *  USDT context + backlog §A recommendation.
 	 *
 	 *  Note: federation peers still see this instance's USERS
 	 *  trade USDT (chain history is shared); the gate is only
@@ -248,7 +250,7 @@ export interface InstanceResponse {
 	 *  for orders whose methods are ALL disabled.  Cross-instance
 	 *  read-only visibility is preserved. */
 	disabled_payment_methods: readonly string[];
-	/** Part 121 cp9 — PUBLIC Matrix room alias for user→operator
+	/** PUBLIC Matrix room alias for user→operator
 	 *  contact.  Rendered on /support, /about-this-instance, and
 	 *  the site footer as a "Contact via Matrix" link.  Format:
 	 *  `#room:server`, validated at config load by parseRoomAlias
@@ -266,12 +268,11 @@ export interface InstanceResponse {
 	 *  return-type which only constructs valid #-prefixed
 	 *  values. */
 	operator_matrix_room: string | null;
-	/** cp167 — Public MCP endpoint URL if the operator opted in
+	/** Public MCP endpoint URL if the operator opted in
 	 *  to MCP advertisement at wizard time (or flipped
 	 *  MORPHIT_MCP_ADVERTISE=true later).  Null when the operator
-	 *  did not opt in.  AI agent operators (Claude Desktop,
-	 *  Cursor, etc.) discover this field via /v1/instance and
-	 *  configure their clients accordingly. */
+	 *  did not opt in.  MCP clients discover this field via
+	 *  /v1/instance and configure themselves accordingly. */
 	mcp_url: string | null;
 }
 
@@ -302,6 +303,8 @@ export function instanceRoute(
 		// most every 15 s, never on the request path).
 		getOperationalSnapshot(config.relayHealthUrl);
 		const clearnetLegs = clearnetLegsFromConfig(config, relayReportsHiddenOnly());
+		// `morphit-ops` on the box itself; every public edge strips the header.
+		const localCaller = c.req.header('x-morphit-local-health') === '1';
 		const body: InstanceResponse = {
 			name: config.instanceName ?? null,
 			tagline: config.instanceTagline ?? null,
@@ -328,13 +331,13 @@ export function instanceRoute(
 			relay_account: config.relayAccount,
 			operator_tag: config.instanceOperatorTag ?? null,
 			// Keystone gate — an HONEST strict-AND of every private-transport leg
-			// (clearnetGate.ts). As of v1.16.1 all legs are real on a hidden-only
-			// node: chain over onion/i2p, dual Tor+I2P transports, federation price,
-			// local frontend, the fail-closed hidden IPFS upgrade, and matrixClean
-			// derived from the configured homeserver. So this flips TRUE the moment a
-			// node satisfies them all, and `clearnet_eliminated_missing` lists any gap.
+			// (clearnetGate.ts): chain over onion/i2p, dual Tor+I2P transports, a
+			// live federated price, local frontend, the fail-closed hidden IPFS
+			// upgrade, the matrix bot's posture and the relay's own report. It flips
+			// TRUE the moment a node satisfies them all; `clearnet_eliminated_missing`
+			// (local callers only) lists any gap.
 			clearnet_eliminated: computeClearnetEliminated(clearnetLegs),
-			clearnet_eliminated_missing: clearnetEliminationMissing(clearnetLegs),
+			...(localCaller ? { clearnet_eliminated_missing: clearnetEliminationMissing(clearnetLegs) } : {}),
 			treasury: getTreasuryAddresses(),
 			seo: {
 				title: config.instanceSeoTitle ?? null,
@@ -391,7 +394,8 @@ export function instanceRoute(
 		// until a cold reload.) The frontend additionally fetches this
 		// with cache:'no-cache'. The federation directory (/v1/instances)
 		// keeps its short max-age=60 since probe data is not operator-set.
-		c.header('Cache-Control', 'no-cache');
+		// A local caller's body carries the diagnostic: never stored anywhere.
+		c.header('Cache-Control', localCaller ? 'no-store' : 'no-cache');
 		return c.json(body);
 	});
 

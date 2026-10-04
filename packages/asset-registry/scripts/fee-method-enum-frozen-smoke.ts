@@ -2,7 +2,7 @@
 /**
  * fee-method-enum-frozen-smoke.
  *
- * Memory #23 (2026-05-13) declared a hard invariant:
+ * The frozen fee_method rule (2026-05-13) declared a hard invariant:
  *
  *   Listing fees can ONLY be paid in BLURT, XMR, or BTC.
  *   New tradable assets (USDT, ARRR, etc.) are peer-to-peer
@@ -22,27 +22,19 @@
  * want — the invariant is documented in three places and any
  * of them being inconsistent triggers a CI failure.
  *
- * Sentinel-grep against `apps/indexer/src/indexer/handlers/order.ts`:
- *  - The `fee_method` type union must appear exactly as the
- *    frozen 4-member set.
- *  - No string-literal `'usdt'`, `'ltc'`, `'doge'`, `'zec'`, `'arrr'`, `'dcr'`, `'sol'`, `'eth'`, `'xrp'` (the 'arrr' sentinel was a forward guard in cp30; it stays now that ARRR is a real asset at cp41 — both invariants (ARRR is a valid tradable; ARRR is NOT a valid fee_method) coexist on different axes),
- *    etc. on a `fee_method` line.
+ * BEHAVIOURAL: the real indexer order handler is given an order paying its
+ * fee in each method — the four frozen ones and every other registered
+ * ticker — and must refuse exactly the others with `fee_method_unknown`.
+ * The registry side: the fee-payable assets are exactly BLURT, BTC, XMR.
+ * (It used to grep order.ts for the type union, which a rename or a
+ * reformat broke while the behaviour stayed right, and the reverse.)
  *
  * Usage:
  *   tsx packages/asset-registry/scripts/fee-method-enum-frozen-smoke.ts
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const REPO_ROOT = join(__dirname, '..', '..', '..');
-const ORDER_HANDLER = join(
-	REPO_ROOT,
-	'apps/indexer/src/indexer/handlers/order.ts'
-);
+import { ASSET_TICKERS, feePayable } from '../src/index.ts';
+import handle from '../../../apps/indexer/src/indexer/handlers/order.ts';
 
 let failed = 0;
 let passed = 0;
@@ -59,76 +51,52 @@ function fail(name: string, detail: string): void {
 
 console.log('\n── fee-method-enum-frozen smoke ────────────────────────\n');
 
-let body: string;
-try {
-	body = readFileSync(ORDER_HANDLER, 'utf8');
-} catch (err) {
-	fail(
-		'order.ts readable',
-		`could not read ${ORDER_HANDLER}: ${err}`
-	);
-	console.log(`\n${passed} passed, ${failed} failed`);
-	process.exit(1);
-}
+const FROZEN = ['blurt', 'waived_first_buy', 'btc', 'xmr'];
 
-// ── Scenario 1 — frozen union appears in the field type ──────────
-const FROZEN_UNION = /readonly fee_method:\s*'blurt'\s*\|\s*'waived_first_buy'\s*\|\s*'btc'\s*\|\s*'xmr'/;
-if (FROZEN_UNION.test(body)) {
-	pass(`fee_method field type union is frozen at BLURT/waived/BTC/XMR`);
-} else {
-	fail(
-		`fee_method field type union is frozen at BLURT/waived/BTC/XMR`,
-		`expected 'readonly fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr'' in order.ts; not found.  Did someone add a new fee_method value?`
-	);
-}
-
-// ── Scenario 2 — initializer line uses the frozen union ──────────
-const INITIALIZER_UNION = /let fee_method:\s*'blurt'\s*\|\s*'waived_first_buy'\s*\|\s*'btc'\s*\|\s*'xmr'/;
-if (INITIALIZER_UNION.test(body)) {
-	pass(`fee_method initializer uses frozen union`);
-} else {
-	fail(
-		`fee_method initializer uses frozen union`,
-		`expected 'let fee_method: 'blurt' | 'waived_first_buy' | 'btc' | 'xmr'' in order.ts; not found`
-	);
-}
-
-// ── Scenario 3 — no expansion tickers leaked in on fee_method ────
-// If anyone added 'usdt', 'ltc', 'doge', 'arrr', 'eth', 'sol' as
-// a fee_method value, the wire-format enum is no longer frozen.
-const FORBIDDEN_TICKERS = ['usdt', 'ltc', 'doge', 'zec', 'arrr', 'eth', 'sol', 'bch', 'xlm', 'dash'];
-let expansionFound = false;
-for (const line of body.split('\n')) {
-	if (!line.includes('fee_method')) continue;
-	for (const tkr of FORBIDDEN_TICKERS) {
-		const re = new RegExp(`['"]${tkr}['"]`, 'i');
-		if (re.test(line)) {
-			fail(
-				`no expansion tickers in fee_method enum`,
-				`line contains '${tkr}' string literal next to fee_method: ${line.trim().slice(0, 120)}`
-			);
-			expansionFound = true;
-		}
+/** The handler's verdict on an otherwise valid order paying by `method`.
+ *  Validation runs before the handler touches the database or the config,
+ *  so a throw after it means the method passed validation. */
+async function verdict(method: string): Promise<string> {
+	const ctx = {
+		payload: {
+			permlink: 'sell-btc-eur-2026-04',
+			side: 'sell',
+			asset: 'BTC',
+			fiat_currency: 'EUR',
+			amount_min: 50,
+			amount_max: 5000,
+			price_model: { kind: 'spread', percent: 1 },
+			payment_methods: ['sepa'],
+			fee_method: method
+		},
+		blockTime: new Date('2026-10-01T00:00:00Z')
+	};
+	try {
+		const r = (await handle(ctx as never, {} as never)) as { ok: boolean; reason?: string };
+		return r.ok ? 'ok' : (r.reason ?? 'refused');
+	} catch {
+		return 'passed_validation';
 	}
 }
-if (!expansionFound) {
-	pass(`no expansion tickers (USDT/LTC/DOGE/ZEC/etc.) in fee_method enum`);
-}
 
-// ── Scenario 4 — the four required values are individually present ─
-// Belt-on-the-belt: each member must appear on its own as a
-// string literal in the file so future refactors don't silently
-// drop one of them.
-const REQUIRED_LITERALS = ["'blurt'", "'waived_first_buy'", "'btc'", "'xmr'"];
-for (const lit of REQUIRED_LITERALS) {
-	if (body.includes(lit)) {
-		pass(`fee_method literal ${lit} present in order.ts`);
-	} else {
-		fail(
-			`fee_method literal ${lit} present in order.ts`,
-			`required literal ${lit} not found anywhere in order.ts`
-		);
-	}
+const others = ASSET_TICKERS.map((t) => t.toLowerCase()).filter((t) => !FROZEN.includes(t));
+for (const method of [...others, 'usdt-erc20', 'BLURT', '']) {
+	const v = await verdict(method);
+	if (v === 'fee_method_unknown') pass(`refuses fee_method '${method}'`);
+	else fail(`refuses fee_method '${method}'`, `handler answered ${v}`);
+}
+for (const method of FROZEN) {
+	const v = await verdict(method);
+	if (v !== 'fee_method_unknown') pass(`accepts the method '${method}' (verdict: ${v})`);
+	else fail(`accepts the method '${method}'`, 'refused as unknown');
+}
+const payable = feePayable()
+	.map((a) => a.ticker)
+	.sort();
+if (JSON.stringify(payable) === JSON.stringify(['BLURT', 'BTC', 'XMR'])) {
+	pass('the registry says only BLURT, BTC and XMR pay listing fees');
+} else {
+	fail('the registry says only BLURT, BTC and XMR pay listing fees', `feePayable() = ${payable.join(',')}`);
 }
 
 const total = passed + failed;

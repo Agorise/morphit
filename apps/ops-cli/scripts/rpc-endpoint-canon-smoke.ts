@@ -4,7 +4,7 @@
  * Pins the canonical Blurt RPC endpoint set (the single source of truth
  * in @morphit/operator-config) against the copies that CANNOT import it:
  *   - the frontend's DEFAULT_RPC_ENDPOINTS (browser bundle — can't pull
- *     in a node package). cp268: this is now the browser-CORS-clean
+ *     in a node package). this is now the browser-CORS-clean
  *     SUBSET of canon (a browser can only use nodes that return a valid
  *     single Access-Control-Allow-Origin), so it is checked as a non-empty
  *     SUBSET with no stray node, NOT set-equal.
@@ -60,7 +60,7 @@ if (!canon.has('https://rpc.blurt.world')) ok('canonical set does not contain th
 else bad('rpc.blurt.world is back in the canonical set — confirm it is a real, attributed node first');
 
 // ── frontend literal (browser-CORS-clean SUBSET of canon) ───────────
-// cp268: the browser list is the CORS-clean SUBSET of the canonical
+// the browser list is the CORS-clean SUBSET of the canonical
 // pool — a browser can only use a node that returns a single valid
 // Access-Control-Allow-Origin, and three canonical nodes fail browser
 // CORS (beblurt double-value; blurt.one + dagobert missing header). So
@@ -155,7 +155,7 @@ for (const [path, varName] of [
 	}
 }
 
-// ── Ansible deploy defaults (cp328) ─────────────────────────────────
+// ── Ansible deploy defaults ─────────────────────────────────
 // The env examples above were guarded, but the Ansible group_vars copy
 // was NOT — and that is exactly where the dead rpc.blurt.world node
 // survived (group_vars/all.yml pinned the indexer to it as "primary",
@@ -205,7 +205,7 @@ function yamlScalarList(path: string, key: string): Set<string> | null {
 	}
 }
 
-// ── verify-download.mjs (cp560: this copy rotted — it still pinned the
+// ── verify-download.mjs (this copy rotted — it still pinned the
 //    dead rpc.blurt.world and a downloader hit "could not reach the
 //    chain" during the v1.8.15 ceremony). It's a standalone Node script
 //    (no browser CORS), so its DEFAULT_RPCS must equal the WHOLE 6-node

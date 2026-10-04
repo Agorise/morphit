@@ -1,5 +1,5 @@
 /**
- * Morphit — prebuilt-frontend shipping smoke (cp750).
+ * Morphit — prebuilt-frontend shipping smoke.
  *
  * THE BUG THIS EXISTS TO CATCH. A federated operator who REBUILDS the frontend
  * locally cannot match @morphit's on-chain build-integrity hashes (Morphit builds

@@ -1,6 +1,6 @@
 /**
- * The "no clearnet Matrix" leg reads the alert bot's REAL config
- * (v1.18.0 deep-deep, M3).
+ * The "no clearnet Matrix" leg reads the alert bot's REAL config.
+ *
  *
  * The leg used to read `MORPHIT_INSTANCE_MATRIX_HOMESERVER`, which no installer,
  * playbook or ops-cli command sets. The bot's real settings are in
@@ -78,7 +78,11 @@ describe('M3 — matrixClean follows the bot, not an unset variable', () => {
 	it('no bot env file at all is clean', () => {
 		botEnv(null);
 		expect(clean()).toBe(true);
-		expect(computeClearnetEliminated(clearnetLegsFromConfig(HIDDEN_ONLY, true))).toBe(true);
+		// The price leg also needs a live federated median; this test isolates
+		// the matrix leg, so that one is given as live.
+		expect(
+			computeClearnetEliminated(clearnetLegsFromConfig(HIDDEN_ONLY, true, undefined, true))
+		).toBe(true);
 	});
 
 	it('an env file that cannot be read is NOT clean (unknown is not clean)', () => {

@@ -1,5 +1,5 @@
 /**
- * Morphit ops CLI — Blurt broadcast error diagnostics (cp178).
+ * Morphit ops CLI — Blurt broadcast error diagnostics.
  *
  * BACKGROUND — why this module exists.
  * The `register` and `payment-method` subcommands broadcast a
@@ -13,7 +13,7 @@
  *     try/catch) was reported as "@beblurt/dblurt is not
  *     installed.  Run `npm install`" — even though dblurt WAS
  *     installed and reinstalling couldn't fix it.  (The build is
- *     fixed in cp178; this module makes the residual error legible
+ *     fixed; this module makes the residual error legible
  *     if anything like it recurs.)
  *   - The on-chain `tag_reserved` rejection (the operator chose an
  *     instance name that slugs to a project-reserved tag like
@@ -151,7 +151,7 @@ export function classifyChainError(message: string): ChainErrorKind {
 
 	// Bundler / module-eval failures.  These are NOT "package missing"
 	// — the dependency is present but the runtime couldn't evaluate it
-	// (the cp178 esbuild ESM `require` shim class).  Reinstalling does
+	// (the esbuild ESM `require` shim class).  Reinstalling does
 	// nothing; a rebuild / report is the fix.
 	if (
 		m.includes('dynamic require of') ||
@@ -290,7 +290,7 @@ export function printChainErrorHelp(
 			log('');
 			log('What to do:');
 			log('  1. Rebuild the CLI from a clean tree:');
-			log('       git pull && npm install && npm run build');
+			log('       git pull && npm ci --ignore-scripts && npm run build');
 			log('  2. Re-run this command.');
 			log('  3. If it still fails with a "Dynamic require" or module-load');
 			log('     error, this is a packaging bug — please report it with the');
@@ -380,13 +380,13 @@ export function printChainErrorHelp(
 			log('alt addresses (the tag stays fixed) — nothing further is needed.');
 			log('');
 			log('What to do:');
-			log('  - Check any node\'s /instances page to confirm');
+			log("  - Check any node's /instances page to confirm");
 			log(`    @${sanitizeForTerm(ctx.account)} is listed with the details you expect.`);
 			break;
 
 		case 'key_mismatch':
 			log(`The signing key did not satisfy @${sanitizeForTerm(ctx.account)}'s posting`);
-			log('authority on chain.  This op is signed with that account\'s');
+			log("authority on chain.  This op is signed with that account's");
 			log('ACTIVE key; the usual cause is that the key on disk is the wrong');
 			log('key (e.g. a posting key was saved instead of the active key, or');
 			log('the key belongs to a different account / network).');
@@ -411,14 +411,16 @@ export function printChainErrorHelp(
 			log('');
 			log('To fix it:');
 			log(`  - Keep a little LIQUID BLURT on @${sanitizeForTerm(ctx.account)} — a few`);
-			log(`    BLURT (≈${SUGGESTED_LIQUID_BLURT_BUFFER}) is ample headroom for occasional operator ops.`);
+			log(
+				`    BLURT (≈${SUGGESTED_LIQUID_BLURT_BUFFER}) is ample headroom for occasional operator ops.`
+			);
 			log('    Transfer some liquid BLURT to the account (do NOT power it up),');
 			log('    then re-run.  If the balance already looks fine, the shortfall');
 			log('    may be transient chain state — re-run in a moment.');
 			break;
 
 		case 'rpc_unreachable':
-			// v1.18.0 deep-deep, H1: on a hidden-only node the broadcast goes through
+			// on a hidden-only node the broadcast goes through
 			// this node's own indexer over Tor/I2P, so "curl a clearnet RPC" is the
 			// wrong advice: following it would be the very leak the node avoids.
 			if (isHiddenOnlyNode()) {
@@ -441,7 +443,7 @@ export function printChainErrorHelp(
 			log('What to do (on this server):');
 			log('  - Check the indexer is running — broadcasts go through it first,');
 			log('    and it uses the full Blurt node pool:  sudo systemctl status morphit-indexer');
-			log('  - Check this server\'s outbound HTTPS / DNS: `sudo morphit-ops doctor`');
+			log("  - Check this server's outbound HTTPS / DNS: `sudo morphit-ops doctor`");
 			log('    probes the configured Blurt RPC nodes. Then re-run.');
 			log('  - If your firewall restricts egress, allow HTTPS to the Blurt');
 			log('    RPC hosts.');

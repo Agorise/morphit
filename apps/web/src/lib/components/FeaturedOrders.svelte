@@ -3,23 +3,22 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { page } from '$app/stores';
 
-	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// per-locale internal-link wrapper (design: every
 	// internal link is locale-prefixed; bare 2-segment paths 404).
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 	/**
 	 * FeaturedOrders — renders the live featured slots (up to max_slots, cap 3).
 	 *
-	 * cp428 — each slot now renders through the SHARED OrderCard (with its
+	 * each slot now renders through the SHARED OrderCard (with its
 	 * `featured` frame), so a featured order reads exactly like every other
 	 * orderbook card (same layout on PC + mobile) — title, poster identity,
 	 * pay/accept line, terms preview, expiry pill, price model — plus the
 	 * emerald border + "🎉 Featured" badge. Previously it was a bespoke 4-line
 	 * card that looked nothing like the orderbook.
 	 *
-	 * Self-fetches /v1/orderbook/featured on mount and on a 30s interval (matches
-	 * the backend cache TTL — asking more often is wasted, less often lets
-	 * expired slots linger). If the fetch fails the component renders nothing —
+	 * Self-fetches /v1/orderbook/featured on mount and every 10 s (so a slot that
+	 * expires or changes hands is replaced promptly). If the fetch fails the component renders nothing —
 	 * featured slots are advertising, not primary navigation, and a broken
 	 * request shouldn't leave an error state on the page.
 	 *
@@ -57,7 +56,7 @@
 		/** Embedded inside the unified "🎉 Featured" card: render only the card
 		 *  list, no heading/section chrome, and nothing at all when empty. */
 		embedded?: boolean;
-		/** cp429 — reports the number of LIVE featured orders whenever it
+		/** reports the number of LIVE featured orders whenever it
 		 *  changes. FeaturedAuctionHistory uses it to suppress a misleading
 		 *  "no bids yet — be the first" prompt while a featured order is live
 		 *  (the clearing-price *history* endpoint can be empty even when a
@@ -86,7 +85,7 @@
 	let nowMs = $state(Date.now());
 	let tickTimer: ReturnType<typeof setInterval> | null = null;
 
-	// cp431 — the featured view is the indexer's confirmed slots PLUS any
+	// the featured view is the indexer's confirmed slots PLUS any
 	// order the current user just paid to feature (optimistic, display-only).
 	// `confirmedKeys` lets us drop an optimistic entry the instant the indexer
 	// serves the real slot, so there's no flicker or duplicate — the durable
@@ -100,7 +99,7 @@
 		)
 	]);
 
-	// cp429 — surface the live count to a parent (FeaturedAuctionHistory) so it
+	// surface the live count to a parent (FeaturedAuctionHistory) so it
 	// can tell "no featured order at all" apart from "a featured order is live
 	// but there's no settled clearing-price history yet".
 	$effect(() => {
@@ -110,18 +109,17 @@
 	/** Profile data for featured slots' posters. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
 	/** False until this surface's profile hydrate has completed once.
-	 *  v1.8.13 (the maintainer) — while false, identity labels render a neutral placeholder
+	 *  v1.8.13 — while false, identity labels render a neutral placeholder
 	 *  instead of asserting @account + identicon and then rewriting themselves.
 	 *  An identity that visibly changes is indistinguishable from a swap attack. */
 
 	/** False until this surface's profile hydrate has completed once.
 	 *
-	 *  v1.8.13 (the maintainer) — while false, identity labels render a neutral placeholder
+	 *  v1.8.13 — while false, identity labels render a neutral placeholder
 	 *  instead of asserting `@account` + identicon and then rewriting themselves
-	 *  once the fetch lands. the maintainer on chat: "imagine chatting with someone in the
-	 *  chatroom and then all of a sudden their avatar and/or display name changes
-	 *  on you like that. would you do a trade with that user? hell no." An
-	 *  identity that visibly mutates is indistinguishable from a swap attack. */
+	 *  once the fetch lands. Nobody trades with a counterparty whose avatar or
+	 *  display name suddenly changes: an identity that visibly mutates is
+	 *  indistinguishable from a swap attack. */
 	let profilesHydrated = $state(false);
 
 	async function hydrateProfiles(
@@ -140,7 +138,7 @@
 		profilesHydrated = true;
 	}
 
-	// cp431 — refresh() only hydrates the indexer's slots; an optimistic
+	// refresh() only hydrates the indexer's slots; an optimistic
 	// pending order (the user's own, not yet in the indexer) needs its poster
 	// profile fetched too, else the card falls back to a bare @handle. Guarded
 	// by the missing-set + profileCache, so it fires once per new account.
@@ -149,7 +147,7 @@
 		if (missing.length > 0) void hydrateProfiles(missing);
 	});
 
-	/** v1.8.16 (the maintainer) — build a ProfileResponse from the identity fields the
+	/** v1.8.16 — build a ProfileResponse from the identity fields the
 	 *  featured endpoint now serves inline, or null when absent (an older
 	 *  instance, or an optimistic pending order from the client store — the
 	 *  latter is the user's OWN order, so IdentityLabel's isSelf → selfProfile
@@ -174,7 +172,7 @@
 		const result = await getFeaturedOrderbook(abortController.signal);
 		if (result.ok) {
 			slots = result.data.featured;
-			// cp428 — surface the real cap from the API (fixes a hardcoded "/5"
+			// surface the real cap from the API (fixes a hardcoded "/5"
 			// that drifted from the backend's MAX_SLOTS=3).
 			maxSlots = result.data.max_slots;
 			void hydrateProfiles(result.data.featured, abortController.signal);
@@ -207,7 +205,7 @@
 		return n % 1 === 0 ? String(n) : n.toFixed(2);
 	}
 	function cardTitle(o: FeaturedSlot['order']): string {
-		// v1.9.0 (the maintainer) — a barter order with an inline title reads "…of bananas";
+		// v1.9.0 — a barter order with an inline title reads "…of bananas";
 		// fall back to the generic "goods/services" label when none was set.
 		const goodsLabel = o.specific_barter_title || ($_('order_title.goods_services') as string);
 		const tp = orderTitleParts(o, formatAmount, goodsLabel, { locale: currentLang });
@@ -223,7 +221,7 @@
 	>
 		{#each visibleSlots as slot (slot.order.account + '/' + slot.order.permlink)}
 			{@const o = slot.order}
-			<!-- v1.8.16 (the maintainer) — prefer the INLINE profile the featured endpoint now
+			<!-- v1.8.16 — prefer the INLINE profile the featured endpoint now
 			     returns (like the orderbook), so the card is correct on FIRST paint.
 			     The hydrated map still wins when present (fresher). `pending` is kept
 			     but is harmless when inline identity is present: IdentityLabel renders
@@ -232,7 +230,7 @@
 			{@const labelProps = extractLabelPropsFromProfile(
 				profileMap[o.account] ?? inlineProfileOf(o)
 			)}
-			<!-- the maintainer — featured cards must name the network for multi-network assets
+			<!-- featured cards must name the network for multi-network assets
 			     (USDT/USDC/DAI). Sending TRC20 to an ERC20 address loses the money;
 			     the chip is not decoration. Same helper the orderbook rows use. -->
 			{@const networkChip = networkChipFor(o, $_)}
@@ -266,7 +264,7 @@
 		</div>
 	{/if}
 {:else if loaded && visibleSlots.length > 0}
-	<!-- the maintainer — the "FEATURED RIGHT NOW" eyebrow is gone from the homepage: the
+	<!-- the "FEATURED RIGHT NOW" eyebrow is gone from the homepage: the
 	     🚀 cards announce themselves, and the label was just noise above them.
 	     The heading string is retained as the section's accessible NAME, so
 	     screen-reader users still get told what this group of cards is —

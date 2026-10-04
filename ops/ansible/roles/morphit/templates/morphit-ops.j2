@@ -26,7 +26,7 @@ cd "{{ morphit_repo_path }}" || {
 # (the systemd unit's EnvironmentFile).  Read it INERTLY with sed and export it —
 # NEVER `.`-source that file: an unquoted value with spaces (a marketplace name /
 # tagline is valid there for systemd) would execute under `set -e` and abort the
-# launcher (cp661).  OS env already set wins; we only fill a missing value.
+# launcher.  OS env already set wins; we only fill a missing value.
 _indexer_env="/etc/morphit/indexer.env"
 if [ -z "${MORPHIT_INDEXER_DATABASE_URL:-}" ] && [ -r "$_indexer_env" ]; then
 	_dburl=$(sed -n 's/^MORPHIT_INDEXER_DATABASE_URL=//p' "$_indexer_env" | tail -1) || _dburl=""

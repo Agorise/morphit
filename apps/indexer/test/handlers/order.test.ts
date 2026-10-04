@@ -71,25 +71,25 @@ describe('order handler', () => {
 
 	it('rejects unknown asset', async () => {
 		const mock = makeMockClient();
-		// Part 122 cp49 deep-deep A-2: this test previously used
+		// this test previously used
 		// 'ETH' as the unknown-asset stand-in.  ETH became a real
-		// tradable asset at cp47, silently breaking this test
+		// tradable asset, silently breaking this test
 		// (handler returned ok:true instead of asset_invalid; the
 		// vitest unit test path was not part of the standalone
 		// smoke battery so the breakage went undetected for 2
-		// checkpoints).  Cp49 fixes inline and pins the structural
-		// defense in cp49 LL #53 (handler-test-stand-in-meta-
+		// checkpoints).  A later change fixes inline and pins the structural
+		// defense (handler-test-stand-in-meta-
 		// assertion-smoke): synthetic non-ticker '__UNKNOWN__'
 		// with underscores rejects from the canonical ticker
 		// regex which enforces uppercase letters only —
 		// mathematically cannot become a real ticker.  Same
-		// pattern as cp48-O1's UNKNOWN_STANDIN closure but
+		// pattern as an earlier fix's UNKNOWN_STANDIN closure but
 		// extended in scope to vitest unit tests.
 		const r = await handler(makeCtx({ payload: { ...validPayload(), asset: '__UNKNOWN__' } }), mock.client);
 		expect(r).toEqual({ ok: false, reason: 'asset_invalid' });
 	});
 
-	// ─── cp425: barter (accepted_assets) validation ─────────────────
+	// ─── barter (accepted_assets) validation ─────────────────
 	// A BARTER (goods/services) order settles in one of a SET of cryptos
 	// the seller accepts. accepted_assets is REQUIRED (non-empty crypto set)
 	// for BARTER and FORBIDDEN for every crypto asset (they settle in
@@ -381,7 +381,7 @@ describe('order handler — fee verification', () => {
 			{ match: 'INSERT INTO orders' }
 		]);
 		const payload = validPayload();
-		// Model A (cp372): the BLURT acceptance floor is the chain-pinned
+		// Model A: the BLURT acceptance floor is the chain-pinned
 		// base widened by FEE_PRICE_TOLERANCE (15%), so a user paying the
 		// live-DISPLAYED canonical amount isn't rejected when BLURT has
 		// appreciated up to 15% since the last chain-pin re-pin.  Expected
@@ -518,7 +518,7 @@ describe('order handler — fee verification', () => {
 
 describe('order handler — waived_first_buy (ADR-0011)', () => {
 	function waivedPayload() {
-		// Phase-3 / cp369 update: the waiver is BLURT-only, and the
+		// Phase-3 / update: the waiver is BLURT-only, and the
 		// first-buy floor is a $1 USD-equivalent VALUE (amount_min is
 		// a fiat value, not a BLURT quantity). Override the BTC default
 		// from validPayload() and set an amount above the $1 floor.
@@ -742,7 +742,7 @@ describe('order handler — waived_first_buy (ADR-0011)', () => {
 			mock.client
 		);
 		// Whatever the rejection reason is, it must NOT be one of the
-		// new Part 108++ tx_proof_* validator codes.
+		// new later+ tx_proof_* validator codes.
 		if (!r.ok) {
 			expect(r.reason).not.toMatch(/^tx_proof/);
 		}
@@ -781,7 +781,7 @@ describe('order handler — waived_first_buy (ADR-0011)', () => {
 		expect(mock.queries).toHaveLength(1);
 	});
 
-	// v1.20.0 fix wave, G8 — a fee paid EXACTLY at the floor must verify.
+	// a fee paid EXACTLY at the floor must verify.
 	// The frontend clamps its quote to the pinned base × (1 − 15%) when BLURT
 	// rose past the band, splits it 90/10 in milliBLURT, and the indexer used
 	// to add the two legs as floats and compare with a float product:

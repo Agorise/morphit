@@ -9,7 +9,7 @@
 # the recovery form's UI copy could look like phishing bait if a user
 # lands on it from a SERP.
 #
-# cp119-A3: locale-prefixed forms (/{lang}/onboarding/import,
+# Locale-prefixed forms (/{lang}/onboarding/import,
 # /{lang}/settings) are the real URLs; the bare /onboarding/import
 # and /settings forms 404.  Both patterns listed (`/path` and `/*path`)
 # for defense-in-depth.  Major crawlers (Googlebot, Bingbot,

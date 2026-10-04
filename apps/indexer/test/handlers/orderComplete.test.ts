@@ -69,11 +69,13 @@ describe('orderComplete handler (morphit_order_complete_v1)', () => {
 
 	it('stores a PROVEN counterparty so both sides get trade credit', async () => {
 		const mock = makeMockClient([
-			// hasVerifiedChat: 2 each way, 15-min span, pair not flagged.
+			// hasVerifiedChat: 2 each way, 15-min span, then the reciprocity check.
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '2', from_b: '2', span_seconds: '900', has_recip_flag: false }]
+				rows: [{ from_a: '2', from_b: '2', span_seconds: '900' }]
 			},
+			// The pair's review history never showed the reciprocity pattern.
+			{ match: 'WITH moments AS', rows: [{ held: false }] },
 			{ match: "UPDATE orders SET status = 'completed'", rowCount: 1 }
 		]);
 		const r = await handler(
@@ -118,7 +120,7 @@ describe('orderComplete handler (morphit_order_complete_v1)', () => {
 			// Never chatted → gate denies.
 			{
 				match: 'FROM chat_messages',
-				rows: [{ from_a: '0', from_b: '0', span_seconds: null, has_recip_flag: false }]
+				rows: [{ from_a: '0', from_b: '0', span_seconds: null }]
 			},
 			{ match: "UPDATE orders SET status = 'completed'", rowCount: 1 }
 		]);

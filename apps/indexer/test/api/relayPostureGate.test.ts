@@ -48,13 +48,21 @@ const HIDDEN_ONLY_INDEXER = {
 	instanceMatrixHomeserver: null
 };
 
+// The price leg also needs a live federated price; it is passed in as proven
+// here so the relay is the only leg left to decide.
+const PRICE_FEDERATED = true;
+
 describe('the gate requires the relay', () => {
 	it('everything else proven, relay hidden-only → zero clearnet', () => {
-		expect(computeClearnetEliminated(clearnetLegsFromConfig(HIDDEN_ONLY_INDEXER, true))).toBe(true);
+		expect(
+			computeClearnetEliminated(
+				clearnetLegsFromConfig(HIDDEN_ONLY_INDEXER, true, undefined, PRICE_FEDERATED)
+			)
+		).toBe(true);
 	});
 
 	it('everything else proven, relay NOT hidden-only → no claim', () => {
-		const legs = clearnetLegsFromConfig(HIDDEN_ONLY_INDEXER, false);
+		const legs = clearnetLegsFromConfig(HIDDEN_ONLY_INDEXER, false, undefined, PRICE_FEDERATED);
 		expect(
 			computeClearnetEliminated(legs),
 			'the node claimed zero clearnet while its relay used clearnet RPC'

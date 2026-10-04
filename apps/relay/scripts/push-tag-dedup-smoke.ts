@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * push-tag-dedup-smoke (cp450) — an order-signal chat message must produce
+ * push-tag-dedup-smoke — an order-signal chat message must produce
  * ONE notification, not two.
  *
  * The recipient of an order-signal message (one that cites an order permlink)
@@ -36,7 +36,7 @@ const sw = read('apps/web/src/service-worker.ts');
 const dispatch = read('apps/web/src/lib/trades/listenerDispatch.ts');
 const listener = read('apps/web/src/lib/trades/tradeEventListener.ts');
 const chat = read('apps/indexer/src/indexer/handlers/chat.ts');
-// cp471 — the chat push enqueue (incl. the dedup tag) moved to a shared module.
+// the chat push enqueue (incl. the dedup tag) moved to a shared module.
 const enqueue = read('apps/indexer/src/indexer/chatPushEnqueue.ts');
 const sender = read('apps/relay/src/policy/pushSender.ts');
 

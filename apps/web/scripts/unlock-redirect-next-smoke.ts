@@ -1,5 +1,5 @@
 /**
- * unlock-redirect-next-smoke (cp356)
+ * unlock-redirect-next-smoke
  *
  * Pins the "clicking Post now / Chat (or any session-required page) while
  * locked takes you to the welcome-back screen, and after you unlock with your

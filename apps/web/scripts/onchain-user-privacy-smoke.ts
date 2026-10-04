@@ -1,9 +1,8 @@
 #!/usr/bin/env tsx
 /*
- * onchain-user-privacy — v1.5.0 (tt.txt I) guard.
+ * onchain-user-privacy — v1.5.0 guard.
  *
- * the maintainer: "ALL of this stuff that we are posting to the chain now, please
- * remember to keep our users absolutely PRIVATE. please VERIFY that is so."
+ * Requirement: everything posted to the chain keeps users private, and that is verified.
  *
  * Blurt is a PUBLIC, PERMANENT chain: anything broadcast in the clear is
  * readable by anyone forever and can never be redacted. So every op that
@@ -125,7 +124,7 @@ if (/const outgoing = redactPrivateKeys\(comment\)/.test(reply) && /comment: out
 }
 
 // ── 6. The public RPC-health endpoint leaks no raw error text ───────
-// cp471 added failure reasons. A raw error message can carry internal
+// A later change added failure reasons. A raw error message can carry internal
 // paths/IPs/hostnames, and this endpoint is public + unauthenticated.
 const rpcHealth = read('apps/indexer/src/api/rpcHealth.ts');
 const rpcCode = rpcHealth.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');

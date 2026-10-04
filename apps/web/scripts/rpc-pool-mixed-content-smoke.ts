@@ -19,8 +19,14 @@
  * Dropping the hidden tier on https must not weaken the Tor/I2P privacy path,
  * which is the point of that tier existing. Scenarios 2 and 3 pin the two
  * origins where it genuinely applies: a hidden origin gets hidden nodes and
- * NOTHING ELSE (no clearnet fallback can be allowed to leak), and a plain-http
- * origin still gets the hidden tier first.
+ * NOTHING ELSE (no clearnet fallback can be allowed to leak).
+ *
+ * A pool is only as good as what the page's Content-Security-Policy lets it
+ * reach: scenario 6 intersects each origin's pool with the connect-src the
+ * frontend nginx serves for that host, and requires every node the release
+ * check may ask (the first MAX_NODES_PER_CHECK) to be allowed. A plain-http
+ * clearnet page used to get the .onion nodes first, which its CSP blocks, so
+ * the check reached no node at all and remembered the failure for 24 h.
  *
  * This EXECUTES `selectRpcPool` against each origin shape rather than reading
  * the source for a pattern.
@@ -28,10 +34,15 @@
 
 import {
 	DEFAULT_HIDDEN_RPC_ENDPOINTS,
+	DEFAULT_I2P_RPC_ENDPOINTS,
 	DEFAULT_RPC_ENDPOINTS,
 	SERVER_ONLY_CANONICAL_RPC_ENDPOINTS
 } from '../src/lib/net/config';
 import { selectRpcPool } from '../src/lib/net/endpoints';
+import { MAX_NODES_PER_CHECK } from '../src/lib/net/releaseVerifyCore';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0;
 let fail = 0;
@@ -46,7 +57,7 @@ const bad = (m: string, d = '') => {
 };
 
 const isHttp = (u: string) => u.toLowerCase().startsWith('http://');
-const hidden = new Set(DEFAULT_HIDDEN_RPC_ENDPOINTS);
+const hidden = new Set([...DEFAULT_HIDDEN_RPC_ENDPOINTS, ...DEFAULT_I2P_RPC_ENDPOINTS]);
 const clearnet = new Set(DEFAULT_RPC_ENDPOINTS);
 
 console.log('rpc-pool-mixed-content — an https page gets no http endpoints');
@@ -120,19 +131,41 @@ console.log('');
 	else bad('an uppercase .ONION hostname leaked a clearnet tier', upper.join(', '));
 }
 
-// ── 3. Plain-http clearnet origin: hidden tier survives ──────────────
-// Dropping it here too would be over-correction: an http page may fetch http.
+// ── 2b. Each hidden network gets ITS OWN nodes ───────────────────────
+// An I2P proxy cannot route .onion and Tor cannot route .b32.i2p, so an .i2p
+// page handed the onion list can never complete the release check (it used to
+// fail on every load). Each hidden origin gets the full node list of its own
+// network.
 {
-	const pool = selectRpcPool({ protocol: 'http:', hostname: 'morphit.io' });
-	if (DEFAULT_HIDDEN_RPC_ENDPOINTS.every((u) => pool.includes(u)))
-		ok('http:// clearnet origin still gets the hidden tier — no over-correction');
-	else bad('the hidden tier was dropped from an http origin, where it is perfectly fetchable');
+	const i2p = selectRpcPool({
+		protocol: 'http:',
+		hostname: 'x7abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqr.b32.i2p'
+	});
+	if (
+		i2p.length === DEFAULT_I2P_RPC_ENDPOINTS.length &&
+		i2p.every((u) => new URL(u).hostname.endsWith('.b32.i2p'))
+	)
+		ok(`.i2p origin — all ${i2p.length} .b32.i2p nodes and nothing else`);
+	else
+		bad('.i2p origin — pool is not exactly the .b32.i2p nodes', i2p.join(', ') || '(empty pool)');
+	const onion = selectRpcPool({ protocol: 'http:', hostname: 'x.onion' });
+	if (
+		onion.length === DEFAULT_HIDDEN_RPC_ENDPOINTS.length &&
+		onion.every((u) => new URL(u).hostname.endsWith('.onion'))
+	)
+		ok(`.onion origin — all ${onion.length} .onion nodes and nothing else`);
+	else
+		bad('.onion origin — pool is not exactly the .onion nodes', onion.join(', ') || '(empty pool)');
+}
 
-	const firstClearnet = pool.findIndex((u) => clearnet.has(u));
-	const lastHidden = pool.map((u) => hidden.has(u)).lastIndexOf(true);
-	if (firstClearnet === -1 || lastHidden < firstClearnet)
-		ok('http:// clearnet origin orders every hidden node ahead of every clearnet node');
-	else bad('a clearnet node is ordered ahead of a hidden node, defeating privacyFirst');
+// ── 3. Plain-http clearnet origin: the clearnet nodes, like https ────
+// Its CSP (the default host's) allows only those; a hidden node there would be
+// blocked before any connection.
+{
+	const pool = selectRpcPool({ protocol: 'http:', hostname: 'morphit.lan' });
+	if (pool.length > 0 && pool.every((u) => clearnet.has(u)))
+		ok('http:// clearnet origin gets the clearnet nodes only (what its CSP allows)');
+	else bad('http:// clearnet origin got nodes its CSP blocks', pool.join(', '));
 }
 
 // ── 4. No location at all (SSR / prerender) ──────────────────────────
@@ -151,11 +184,58 @@ console.log('');
 		selectRpcPool({ protocol: 'https:', hostname: 'morphit.io' }),
 		selectRpcPool({ protocol: 'http:', hostname: 'morphit.io' }),
 		selectRpcPool({ protocol: 'http:', hostname: 'x.onion' }),
+		selectRpcPool({ protocol: 'http:', hostname: 'x.b32.i2p' }),
 		selectRpcPool(null)
 	];
 	const leaked = everyPool.flat().filter((u) => SERVER_ONLY_CANONICAL_RPC_ENDPOINTS.includes(u));
 	if (leaked.length === 0) ok('no server-only (CORS-less) node appears in any browser pool');
 	else bad('a server-only node leaked into a browser pool', [...new Set(leaked)].join(', '));
+}
+
+// ── 6. Every node the release check may ask is allowed by that page's CSP ──
+// The connect-src of each `map $host $morphit_csp` value the frontend nginx
+// serves, intersected with the pool selectRpcPool gives that kind of host.
+{
+	const nginx = readFileSync(
+		join(
+			dirname(fileURLToPath(import.meta.url)),
+			'..',
+			'..',
+			'..',
+			'ops',
+			'bunkerweb',
+			'frontend',
+			'nginx.conf'
+		),
+		'utf8'
+	);
+	const map = /map \$host \$morphit_csp \{([\s\S]*?)\n\}/.exec(nginx)?.[1] ?? '';
+	const cspFor = (selector: string): string[] => {
+		const line = map.split('\n').find((l) => l.trim().startsWith(selector));
+		const csp = /"([^"]*)"/.exec(line ?? '')?.[1] ?? '';
+		const connect = csp.split(';').find((d) => d.trim().startsWith('connect-src')) ?? '';
+		return connect.trim().split(/\s+/).slice(1);
+	};
+	const cases: Array<[string, { protocol: string; hostname: string }, string]> = [
+		['https clearnet', { protocol: 'https:', hostname: 'morphit.io' }, 'default'],
+		['plain-http clearnet', { protocol: 'http:', hostname: 'morphit.lan' }, 'default'],
+		['.onion', { protocol: 'http:', hostname: 'x.onion' }, '~*\\.onion$'],
+		['.i2p', { protocol: 'http:', hostname: 'x.b32.i2p' }, '~*\\.i2p$']
+	];
+	for (const [label, origin, selector] of cases) {
+		const allowed = cspFor(selector);
+		const asked = selectRpcPool(origin).slice(0, MAX_NODES_PER_CHECK);
+		const blocked = asked.filter((u) => !allowed.includes(new URL(u).origin));
+		if (allowed.length > 1 && asked.length > 0 && blocked.length === 0)
+			ok(
+				`${label} — the ${asked.length} node(s) the release check may ask are all allowed by its CSP`
+			);
+		else
+			bad(
+				`${label} — the release check would ask node(s) its CSP blocks`,
+				blocked.join(', ') || `(no connect-src found for ${selector})`
+			);
+	}
 }
 
 console.log('');

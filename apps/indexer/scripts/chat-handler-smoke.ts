@@ -69,16 +69,20 @@ await scenario('block gate: passes when no block row exists', async () => {
 			rows: [{ unique_fan_in: '1', per_pair_count: null }]
 		},
 		{ match: 'INSERT INTO chat_messages' },
-		// Part 122 cp13 — successful chat insert is followed by a
-		// push_pending enqueue.  cp14 inserts a locale lookup
+		// successful chat insert is followed by a
+		// push_pending enqueue.  A later change inserts a locale lookup
 		// before the enqueue so the indexer can localize.
 		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		// has the recipient written back? (one push per 24 h until then)
+		{ match: 'AS quiet', rows: [{ quiet: false }] },
 		{ match: 'INSERT INTO push_pending' }
 	]);
 	const r = await handler(makeCtx({ signer: 'alice', payload: goodPayload() }), mock.client);
 	assertEqual(r, { ok: true }, 'result');
-	if (mock.queries.length !== 6) {
-		throw new Error(`expected 6 queries (4 chat + locale + push enqueue), got ${mock.queries.length}`);
+	if (mock.queries.length !== 7) {
+		throw new Error(
+			`expected 7 queries (4 chat + locale + no-reply check + push enqueue), got ${mock.queries.length}`
+		);
 	}
 });
 
@@ -319,7 +323,7 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 	// Insert.
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		// cp446 — the orders lookup now returns WHO owns it and WHETHER it is live,
+		// the orders lookup now returns WHO owns it and WHETHER it is live,
 		// so the handler can grant the thread tag and the fee bypass separately.
 		{ match: 'FROM orders', rows: [{ account: 'bob', live: true }] },
 		{
@@ -327,11 +331,13 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 			rows: [{ unique_fan_in: '1', per_pair_count: null }]
 		},
 		{ match: 'INSERT INTO chat_messages' },
-		// Part 122 cp14 — locale lookup before push enqueue so the
+		// locale lookup before push enqueue so the
 		// indexer can localize.  Order-permlink messages route
 		// under category='order' for fan-in to the right notify
 		// channel.
 		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		// has the recipient written back? (one push per 24 h until then)
+		{ match: 'AS quiet', rows: [{ quiet: false }] },
 		{ match: 'INSERT INTO push_pending' }
 	]);
 	const r = await handler(
@@ -342,12 +348,12 @@ await scenario('Q11: bypass works for valid recipient-owned order', async () => 
 		mock.client
 	);
 	assertEqual(r, { ok: true }, 'result');
-	if (mock.queries.length !== 6) {
+	if (mock.queries.length !== 7) {
 		throw new Error(
-			`expected 6 queries (block + orders + fan-in + chat insert + locale + push enqueue), got ${mock.queries.length}`
+			`expected 7 queries (block + orders + fan-in + chat insert + locale + no-reply check + push enqueue), got ${mock.queries.length}`
 		);
 	}
-	// cp446 — the orders query binds (permlink, recipient, blockTime, signer): it
+	// the orders query binds (permlink, recipient, blockTime, signer): it
 	// looks the order up among BOTH parties so the owner can tag their own thread,
 	// and it needs blockTime to decide liveness for the bypass.
 	const ordersQuery = mock.queries[1];
@@ -375,7 +381,7 @@ await scenario('BATCH19A-chat-1: cancelled-order permlink does NOT bypass gate',
 	// The bypass attack: eve cites a REAL order of bob's that has since been
 	// cancelled, hoping "a posted order is consent to be contacted" still applies.
 	//
-	// cp446 changed the SHAPE of this defence, not its strength. The permlink is
+	// A later change changed the SHAPE of this defence, not its strength. The permlink is
 	// now also a thread tag, so a cancelled order no longer rejects the message
 	// outright — it simply grants NO BYPASS. Eve therefore falls through to the
 	// stranger-fee gate she was always supposed to hit, and is stopped there.
@@ -422,6 +428,8 @@ await scenario('cp446: the ORDER OWNER may reply in their own thread', async () 
 		{ match: 'unique_fan_in', rows: [{ unique_fan_in: '1', per_pair_count: null }] },
 		{ match: 'INSERT INTO chat_messages' },
 		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		// has the recipient written back? (one push per 24 h until then)
+		{ match: 'AS quiet', rows: [{ quiet: false }] },
 		{ match: 'INSERT INTO push_pending' }
 	]);
 	const r = await handler(
@@ -447,6 +455,8 @@ await scenario('cp446: an ADMITTED pair may keep talking after the order is canc
 		{ match: 'unique_fan_in', rows: [{ unique_fan_in: '1', per_pair_count: null }] },
 		{ match: 'INSERT INTO chat_messages' },
 		{ match: 'SELECT locale FROM push_subscriptions', rows: [{ locale: 'en' }] },
+		// has the recipient written back? (one push per 24 h until then)
+		{ match: 'AS quiet', rows: [{ quiet: false }] },
 		{ match: 'INSERT INTO push_pending' }
 	]);
 	const r = await handler(
@@ -482,7 +492,7 @@ await scenario('cp446: a permlink owned by NEITHER party is still rejected', asy
 await scenario('Q11: order_permlink not found rejects the message', async () => {
 	const mock = makeMockClient([
 		{ match: 'FROM blocks', rows: [{ exists: false }] },
-		// cp446 — "not found" is now an EMPTY result set, not a row saying so.
+		// "not found" is now an EMPTY result set, not a row saying so.
 		{ match: 'FROM orders', rows: [] }
 	]);
 	const r = await handler(

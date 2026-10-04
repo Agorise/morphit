@@ -1,10 +1,20 @@
 /**
  * Morphit — SEO URL helpers.
  *
- * The production origin is fixed at build time. Development and preview
- * servers run on different origins, but the emitted SEO metadata always
- * points at the canonical production URL so that hreflang / canonical /
- * sitemap references remain stable.
+ * WHOSE ORIGIN. Every instance serves the same prebuilt frontend, so the
+ * absolute URLs in its SEO metadata (canonical, hreflang, og:url, og:image,
+ * JSON-LD, sitemap, robots, llms.txt) must name THAT instance — never
+ * morphit.io on someone else's site, and no clearnet URL at all on a
+ * hidden-only instance. So:
+ *   - in the browser, `siteOrigin()` is the page's own origin;
+ *   - in the prerendered HTML it is the BUILD origin (morphit.io for the
+ *     release build) wrapped in invisible U+2063 markers. The build records
+ *     each marked place (apps/web/scripts/origin-slots.mjs → build/.origin-
+ *     slots.json) and strips the markers; `morphit-ops` install/upgrade then
+ *     rewrites those places with the instance's own origin. The root
+ *     index.html (on the on-chain integrity manifest) carries none.
+ * The build origin exists only in server-side (prerender) code: the client
+ * bundle carries no fixed site origin.
  *
  * URL shape (post per-locale prerendering, ADR-0003 follow-up):
  *
@@ -14,23 +24,37 @@
  *   /zh-CN/      — Simplified Chinese prerendered
  *   ...etc for every SUPPORTED_LOCALE
  *
- * Older revisions of this file used `?lang=<code>` query-string form
- * for hreflang alternates, which conflicted with both the SvelteKit
- * routing (which is path-based at `/[lang]/...`) AND the sitemap
- * (which emits `/{locale}{path}` URLs).  Hreflang must always point
- * at the canonical URL of each language — `/es/faq`, not `/faq?lang=es`.
- * Fixed cp112.
+ * Hreflang always points at the canonical URL of each language — `/es/faq`,
+ * not `/faq?lang=es` — matching the path-based `/[lang]/...` routing and the
+ * `/{locale}{path}` URLs the sitemap emits.
  */
 
+import { building } from '$app/environment';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type LocaleCode } from '$i18n';
 
-/** The production origin used in canonical URLs + sitemap + OG tags. */
-export const CANONICAL_ORIGIN = 'https://morphit.io';
+/** Marks the build origin in prerendered output (U+2063 INVISIBLE SEPARATOR);
+ *  apps/web/scripts/origin-slots.mjs records and strips every marked place. */
+export const ORIGIN_SLOT_MARK = '\u2063';
+
+/** The site origin for absolute URLs: the page's own origin in the browser
+ *  (`runtimeOrigin`, e.g. `$page.url.origin`, else `window.location.origin`);
+ *  in prerender, the marked build origin (see the header); on the dev server,
+ *  the request's origin. */
+export function siteOrigin(runtimeOrigin?: string): string {
+	if (import.meta.env.SSR) {
+		// Prerender: `$page.url.origin` is SvelteKit's placeholder origin, never
+		// the site's.
+		if (building) return `${ORIGIN_SLOT_MARK}${__MORPHIT_SITE_ORIGIN__}${ORIGIN_SLOT_MARK}`;
+		return runtimeOrigin ?? __MORPHIT_SITE_ORIGIN__;
+	}
+	if (runtimeOrigin) return runtimeOrigin;
+	return typeof window !== 'undefined' ? window.location.origin : '';
+}
 
 /** Build a full canonical URL for a given path (no query/hash). */
-export function canonicalFor(path: string): string {
+export function canonicalFor(path: string, runtimeOrigin?: string): string {
 	const p = path.startsWith('/') ? path : `/${path}`;
-	return `${CANONICAL_ORIGIN}${p}`;
+	return `${siteOrigin(runtimeOrigin)}${p}`;
 }
 
 /**
@@ -62,10 +86,10 @@ export function stripLocalePrefix(path: string): {
  * paths get a trailing slash (`/en/`); deeper paths don't (`/en/faq`).
  * Exported for the consistency smoke.
  */
-export function localizedUrl(locale: LocaleCode, restPath: string): string {
+export function localizedUrl(locale: LocaleCode, restPath: string, runtimeOrigin?: string): string {
 	const p = restPath.startsWith('/') ? restPath : `/${restPath}`;
 	const suffix = p === '/' || p === '' ? `/${locale}/` : `/${locale}${p}`;
-	return `${CANONICAL_ORIGIN}${suffix}`;
+	return `${siteOrigin(runtimeOrigin)}${suffix}`;
 }
 
 /**
@@ -82,37 +106,28 @@ export function localizedUrl(locale: LocaleCode, restPath: string): string {
  * which mirrors the sitemap's x-default entries.  Google uses x-default
  * when no other hreflang matches the user's browser language.
  */
-export function hreflangAlternates(path: string): Array<{ hreflang: string; href: string }> {
+export function hreflangAlternates(
+	path: string,
+	runtimeOrigin?: string
+): Array<{ hreflang: string; href: string }> {
 	const { rest } = stripLocalePrefix(path);
 	const restPath = rest === '' ? '/' : rest;
+	const origin = siteOrigin(runtimeOrigin);
 	const out: Array<{ hreflang: string; href: string }> = [];
 	for (const loc of SUPPORTED_LOCALES) {
-		out.push({ hreflang: loc.code, href: localizedUrl(loc.code, restPath) });
+		out.push({ hreflang: loc.code, href: localizedUrl(loc.code, restPath, runtimeOrigin) });
 	}
 	// x-default — bare path, no locale prefix.  Mirrors sitemap.xml.
 	out.push({
 		hreflang: 'x-default',
-		href: restPath === '/' ? `${CANONICAL_ORIGIN}/` : `${CANONICAL_ORIGIN}${restPath}`
+		href: restPath === '/' ? `${origin}/` : `${origin}${restPath}`
 	});
 	return out;
 }
 
 /**
- * For JSON-LD — the base URL identity of the site. Google matches
- * `Organization` nodes by `url`, so this must stay stable.
- */
-export function siteUrl(): string {
-	return CANONICAL_ORIGIN;
-}
-
-/** Return the locale we should emit in `<html lang="…">` for a given code. */
-export function htmlLang(code: LocaleCode | string | null | undefined): string {
-	return (code as string | null | undefined) ?? DEFAULT_LOCALE;
-}
-
-/**
  * Map a Morphit locale code → an Open Graph–conformant `language_TERRITORY`
- * code (cp112 audit fix A10/A11).
+ * code (audit fix A10/A11).
  *
  * Facebook's OG spec requires `<meta property="og:locale">` to be in
  * `language_TERRITORY` form (e.g. `en_US`, `zh_CN`).  Emitting bare 2-letter

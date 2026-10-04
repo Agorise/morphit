@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * chat-asset-ticker-narrow-union-parity-smoke (Part 122 cp34).
+ * chat-asset-ticker-narrow-union-parity-smoke.
  *
- * Mechanically enforces the cp33 LL #38 lesson: every hand-written
+ * Mechanically enforces the lesson: every hand-written
  * narrow union of ChatAssetTicker values (`'btc' | 'xmr' | 'usdt'
  * | ...` in source files) MUST contain every value from the
- * canonical union.  Cp33's CODE-6 was a cluster of 4 such sites
+ * canonical union.  the CODE-6 was a cluster of 4 such sites
  * that fell out of sync when DAI and USDC were added (narrow
  * unions don't auto-extend when the canonical union does).
  *
@@ -19,7 +19,7 @@
  * found, every canonical ChatAssetTicker value must appear in the
  * union — or the union must be specifically allow-listed in
  * NARROW_BY_DESIGN below (e.g. fee_method which is BLURT/BTC/XMR
- * only by Memory #23, or the listing-fee panel which is BTC/XMR
+ * only by the frozen fee_method rule, or the listing-fee panel which is BTC/XMR
  * only).
  *
  * Run: `node --experimental-strip-types
@@ -47,11 +47,11 @@ const NARROW_BY_DESIGN: Array<{ pattern: string; reason: string }> = [
 	},
 	{
 		pattern: "'blurt' | 'waived_first_buy' | 'btc' | 'xmr'",
-		reason: 'fee_method — Memory #23 invariant (listing fees BLURT/BTC/XMR only)'
+		reason: 'fee_method — the frozen fee_method invariant (listing fees BLURT/BTC/XMR only)'
 	},
 	{
 		pattern: "'blurt' | 'btc' | 'xmr' | 'waived_first_buy'",
-		reason: 'fee_method reordered — Memory #23 invariant'
+		reason: 'fee_method reordered — the frozen fee_method invariant'
 	},
 	{
 		pattern: "method: 'btc' | 'xmr';",

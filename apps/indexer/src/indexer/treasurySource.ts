@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — TreasurySource (Part 106; refined through
+ * Morphit indexer — TreasurySource (refined through
  * Parts 107 / 108++ / 109).
  *
  * Single source of truth for "what BTC/XMR fee address should
@@ -19,7 +19,7 @@
  * signed by the @morphit posting key via the same trust
  * anchor that already gates `morphit_release_v1` ops.
  *
- * **Privacy invariant (Part 107)**: the chain-pinned treasury
+ * **Privacy invariant**: the chain-pinned treasury
  * carries ONLY the address (and amount) — public information
  * that's part of every payment anyway.  The Monero PRIVATE
  * view key is NEVER chain-pinned.  Publishing the view key
@@ -28,18 +28,20 @@
  * future inflows; that degrades privacy for the treasury and
  * for every fee-paying user.
  *
- * **Part 108++**: per-payment proof verification replaced
+ * **later+**: per-payment verification replaced
  * view-key-based decryption entirely.  No Morphit indexer
- * holds a view key, ever.  Every Morphit instance verifies
- * every XMR payment independently using user-submitted
- * tx_proof strings against public Monero block explorers.
+ * holds a view key, ever.  Every Morphit instance checks
+ * an XMR payment with the payer's transaction KEY (v1.20.0,
+ * M-X1; an OutProof string alone is not accepted) against
+ * public Monero sources — and, once the primary address is
+ * pinned, its order-bound payment ID (MK-H2).
  *
- * **Part 109**: the `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env
+ * **Removed**: the `MORPHIT_INDEXER_XMR_FEE_VIEWKEY` env
  * var was removed entirely; the `viewkey` field on the
  * XmrTreasury interface was removed; the
  * `TreasurySourceEnvFallback.xmrViewkey` field was removed.
  * Stale `viewkey` fields on historical chain-pin rows
- * (Part 106 transitional) are silently stripped at read
+ * (transitional) are silently stripped at read
  * time and never propagate anywhere.
  *
  * Resolution policy — addresses + amounts (BTC and XMR alike):
@@ -64,13 +66,14 @@
  *     federated indexer picks up the new address within one
  *     block.
  *
- * For community operators (Part 108++):
- *   - Encouraged to leave MORPHIT_INDEXER_XMR_FEE_ADDRESS
- *     empty so they automatically inherit the chain-pinned
- *     canonical address.
+ * For community operators (later+):
+ *   - Leave MORPHIT_INDEXER_{BTC,XMR}_FEE_ADDRESS UNSET to
+ *     inherit the chain-pinned canonical address. An explicitly
+ *     EMPTY value turns that fee method off on the node, even
+ *     when an address is pinned (externalFeeAvailability.ts) —
+ *     the poller, not this source, applies that.
  *   - No view key needed.  Every operator verifies XMR fees
- *     independently using user-submitted per-payment proofs.
- *     The previous three-options dilemma is obsolete.
+ *     independently with the payer's transaction key.
  *
  * Hot-rebuild semantics.  The poller asks the source for the
  * current treasury periodically (once per block-poll cycle is
@@ -101,14 +104,14 @@ export interface BtcTreasury {
 
 /** What the verifier needs to know about the XMR treasury.
  *
- *  Part 107: composite source.  The address and piconero come
+ *  composite source.  The address and piconero come
  *  from the chain-pinned treasury when available (canonical),
  *  with env-var fallback.
  *
- *  Part 108++ / 109: there is no view-key field.  Per-payment
- *  proofs eliminate the need for any indexer to hold a view
+ *  later+ / 109: there is no view-key field.  Per-payment
+ *  verification eliminates the need for any indexer to hold a view
  *  key; this interface reflects that.  Historical chain-pin
- *  rows (Part 106 transitional) that contained a `viewkey`
+ *  rows (transitional) that contained a `viewkey`
  *  field are silently stripped at parse time and never
  *  propagate here.
  *
@@ -122,7 +125,7 @@ export interface XmrTreasury {
 	readonly addressSource: 'chain' | 'env';
 }
 
-/** cp372 — what the order handler needs to know about the BLURT
+/** what the order handler needs to know about the BLURT
  *  listing-fee base.  Unlike BTC/XMR there is no address (BLURT
  *  fees are transfers to the fee-recipient account); only the
  *  tier-1 base amount is resolved.  Chain-pinning it makes the
@@ -140,7 +143,7 @@ export interface BlurtTreasury {
 export interface TreasurySnapshot {
 	readonly btc: BtcTreasury | null;
 	readonly xmr: XmrTreasury | null;
-	/** cp372 — resolved BLURT fee base (chain-pin > env).  Never
+	/** resolved BLURT fee base (chain-pin > env).  Never
 	 *  null in practice (the env fallback always provides a value),
 	 *  but typed nullable for symmetry + defensive callers. */
 	readonly blurt: BlurtTreasury | null;
@@ -158,7 +161,7 @@ export interface TreasurySourceEnvFallback {
 	readonly btcSatoshis: number;
 	readonly xmrAddress: string;
 	readonly xmrPiconero: string;
-	/** cp372 — MORPHIT_INDEXER_FEE_BASE_BLURT.  The BLURT floor base
+	/** MORPHIT_INDEXER_FEE_BASE_BLURT.  The BLURT floor base
 	 *  used when no release op has chain-pinned one (fresh node, or
 	 *  the operator's Plan-B manual override). */
 	readonly blurtBase: number;
@@ -168,16 +171,16 @@ export interface TreasurySourceEnvFallback {
  *  in the `releases.treasury` JSONB column.  Either chain may be
  *  null inside the object.
  *
- *  Part 107: XMR carries address+piconero only.  The view key
+ *  XMR carries address+piconero only.  The view key
  *  is NEVER chain-pinned (privacy invariant).
  *
- *  Part 109: the view key concept is gone from the indexer
+ *  the view key concept is gone from the indexer
  *  entirely.  If a historical row still contains a `viewkey`
- *  field (Part 106 transitional), the resolver silently
+ *  field (transitional), the resolver silently
  *  strips it — no path reads or stores it.
  *
- *  cp372: optional `blurt` block carries the chain-pinned BLURT
- *  base.  Absent on pre-cp372 rows → env fallback. */
+ *  optional `blurt` block carries the chain-pinned BLURT
+ *  base.  Absent on older rows → env fallback. */
 interface ChainTreasuryRow {
 	btc: { address: string; satoshis: number } | null;
 	xmr: { address: string; piconero: string } | null;
@@ -259,7 +262,7 @@ export class TreasurySource {
 		return snapshot;
 	}
 
-	/** cp372 — resolve the BLURT fee base: chain-pin > env fallback.
+	/** resolve the BLURT fee base: chain-pin > env fallback.
 	 *  Unlike BTC/XMR there's no "disabled" state — BLURT is always
 	 *  an accepted fee method, so the env fallback always yields a
 	 *  value (the config default if the operator set nothing). */
@@ -294,10 +297,10 @@ export class TreasurySource {
 
 	private resolveXmr(chain: ChainTreasuryRow | null): XmrTreasury | null {
 		// Address + piconero: prefer chain-pin, fall back to env.
-		// Part 109: no view key field — per-payment proofs eliminate
+		// no view key field — per-payment verification eliminates
 		// the need for any indexer to hold one.  Historical
 		// release-op rows that contain a stale `viewkey` field
-		// (Part 106 transitional) are simply ignored at parse time;
+		// (transitional) are simply ignored at parse time;
 		// the field never propagates anywhere.
 		let address: string;
 		let piconero: string;

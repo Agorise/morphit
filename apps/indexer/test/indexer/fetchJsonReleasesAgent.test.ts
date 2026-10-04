@@ -1,5 +1,5 @@
 /**
- * fetchJson releases its connection (v1.18.0 deep-deep, L4).
+ * fetchJson releases its connection.
  *
  * Each probe builds its own IP-pinned undici Agent (the DNS-rebinding defence)
  * and never closed it, and a non-2xx answer left its body unread. Either way

@@ -45,9 +45,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { loadConfig } from '../src/config/index.ts';
-import { installHiddenServiceDispatcher } from '../src/indexer/hiddenServiceDispatcher.ts';
-import { hiddenServiceProxyConfigFromEnv } from '../src/indexer/hiddenServiceFetch.ts';
-import { BlurtClient } from '../src/blurt/client.ts';
+import { bootChainClient, installChainRouting } from '../src/indexer/bootChainClient.ts';
 import { INDEXER_SNAPSHOT_SIGNER_DEFAULT } from '../src/blurt/indexerSnapshotOp.ts';
 import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
 
@@ -136,31 +134,6 @@ function writeState(s: MirrorState): void {
 }
 
 
-/**
- * Route .onion / .b32.i2p fetches through Tor and i2pd.
- *
- * WITHOUT THIS, a hidden-only node cannot read the chain from a standalone
- * script at all. `installHiddenServiceDispatcher` was only ever called from the
- * indexer SERVICE (main.ts), so the service reads the chain happily over I2P
- * while any script run beside it sends the same request straight at a
- * `.b32.i2p` hostname with no proxy and gets `fetch failed`. That is exactly
- * what stopped morphitlat — a zero-clearnet box — from mirroring, and it would
- * have stopped fast-sync there too.
- *
- * Same clearnet policy as the service: a node with no clearnet RPC endpoints
- * fails closed rather than quietly reaching for the open internet.
- */
-function installHiddenRouting(config: ReturnType<typeof loadConfig>): void {
-	try {
-		installHiddenServiceDispatcher(
-			hiddenServiceProxyConfigFromEnv(process.env),
-			config.blurtRpcEndpoints.length === 0 ? 'refuse' : 'allow'
-		);
-	} catch {
-		/* a clearnet box works fine without it; never block on this */
-	}
-}
-
 async function main(): Promise<void> {
 	// kubo is optional on a Morphit box. No kubo, nothing to mirror — and that is
 	// a normal configuration, not an error.
@@ -174,11 +147,14 @@ async function main(): Promise<void> {
 	}
 
 	const config = loadConfig();
-	installHiddenRouting(config);
+	// Route .onion / .b32.i2p through Tor and i2pd, and refuse clearnet on a
+	// hidden-only node, before any request (bootChainClient.ts). Throws if the
+	// router cannot be installed: never read the chain unrouted.
+	installChainRouting(config);
 	const signer = (flag('signer') ?? INDEXER_SNAPSHOT_SIGNER_DEFAULT).toLowerCase();
 	const limit = Math.max(1, Math.min(10_000, parseInt(flag('history-limit') ?? '1000', 10) || 1000));
 
-	// v1.18.0 deep-deep (rv2-1): the op was read from ONE RPC endpoint and
+	// the op was read from ONE RPC endpoint and
 	// accepted on the strength of naming @signer — so one hostile node could make
 	// every instance pin and re-serve a CID of its choosing. Now two independent
 	// RPC operators must agree on the op and its block, and its signature must
@@ -191,7 +167,7 @@ async function main(): Promise<void> {
 		return;
 	}
 	say(`reading @${signer}'s chain history for the newest indexer_snapshot_v1 …`);
-	const blurt = new BlurtClient(config);
+	const blurt = bootChainClient(config);
 	let resolved: Awaited<ReturnType<typeof resolveTrustedSnapshotOp>>;
 	try {
 		resolved = await resolveTrustedSnapshotOp(blurt, {
@@ -312,7 +288,7 @@ async function main(): Promise<void> {
 	say('  so a new node \u2014 including a zero-clearnet one \u2014 can fast-sync from you.');
 }
 
-// Exit as soon as the work is done (v1.18.0 deep-deep, rv2-1/rv2-9). The chain
+// Exit as soon as the work is done. The chain
 // reads are now quorum reads: once two operators agree, the others still in
 // flight are abandoned, but an abandoned RPC call keeps retrying in the
 // background until its own timeout (a minute for .onion/.i2p), holding the

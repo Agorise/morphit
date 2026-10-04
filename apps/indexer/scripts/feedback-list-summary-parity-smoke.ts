@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * feedback-list-summary-parity — v1.8.12 (the maintainer).
+ * feedback-list-summary-parity — v1.8.12.
  *
  * THE INVARIANT. A profile shows two things computed by two different queries:
  * the SCORE (a summary aggregate) and the LIST of reviews beneath it. They must
@@ -11,7 +11,7 @@
  * own docblock says so ("so the list reconciles with the summary, Finding R15").
  * It had drifted out of sync on TWO counts:
  *
- *   • Signal D (review_concentration) was added to the summary CTE in cp123 but
+ *   • Signal D (review_concentration) was added to the summary CTE but
  *     never to the row flag, so a concentration-flagged review displayed
  *     normally and counted for nothing. Same 3-of-4 signal gap this release
  *     found in the moderation CLI.
@@ -35,6 +35,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { feedbackPairCountsSql } from '../src/api/reputationJoin.ts';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API = join(HERE, '..', 'src/api/feedback.ts');
 const src = readFileSync(API, 'utf8');
@@ -53,39 +55,38 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 
 console.log('\n── feedback-list-summary-parity (v1.8.12) ────────────\n');
 
-/** The summary aggregate: everything up to `FROM non_suppressed`. */
+// The four signals are ONE predicate, feedbackPairCountsSql in reputationJoin.ts;
+// the summary keeps the rows it accepts and both row flags mark the rows it
+// rejects, so they agree by construction as long as all three call it.
+// (Behavioural guard: test/integration/feedback-count-once.test.ts.)
 const summaryEnd = src.indexOf('FROM non_suppressed');
 const summary = src.slice(0, summaryEnd);
-/** The per-row flag query that decides `suppressed`. */
-const flagStart = src.indexOf('const flaggedReviewers');
-const flagEnd = src.indexOf('for (const r of flagResult.rows)');
-const flagQuery = src.slice(flagStart, flagEnd);
+const received = src.slice(src.indexOf('const flaggedReviewers'), src.indexOf('for (const r of flagResult.rows) flaggedReviewers'));
+const givenFlag = src.slice(src.indexOf('const flaggedSubjects'), src.indexOf('for (const r of flagResult.rows) flaggedSubjects'));
 
 check('the summary aggregate is present', summaryEnd > 0);
-check('the per-row flag query is present', flagStart > 0 && flagEnd > flagStart);
+check(
+	'the summary keeps reviews by the shared predicate',
+	/AND \$\{feedbackPairCountsSql\('f\.reviewer', 'f\.subject'\)\}/.test(summary)
+);
+check(
+	'the received list flags by NOT the shared predicate',
+	/WHERE NOT \(\$\{feedbackPairCountsSql\(/.test(received)
+);
+check(
+	'the given list flags by NOT the shared predicate',
+	/WHERE NOT \(\$\{feedbackPairCountsSql\(/.test(givenFlag)
+);
 
-/** Every signal table the SCORE excludes on must also be in the ROW flag —
- *  otherwise a review is silently uncounted while looking ordinary. */
 const SIGNAL_TABLES = [
 	'suspicious_reciprocity',
 	'related_accounts',
 	'one_way_pile_on',
 	'review_concentration'
 ] as const;
-
+const predicate = feedbackPairCountsSql('r', 's');
 for (const table of SIGNAL_TABLES) {
-	const inSummary = new RegExp(`FROM ${table}\\b`).test(summary);
-	const inFlag = new RegExp(`FROM ${table}\\b`).test(flagQuery);
-	check(
-		`${table}: excluded from the score`,
-		inSummary,
-		'this smoke guards parity; a table absent from BOTH is a different question'
-	);
-	check(
-		`${table}: and marked on the row, so the list agrees`,
-		!inSummary || inFlag,
-		'a review excluded from the score but unmarked in the list is a silent lie about the score'
-	);
+	check(`${table}: in the shared predicate`, new RegExp(`FROM ${table}\\b`).test(predicate));
 }
 
 // The permlink rule is enforced in SQL on the summary side and in TypeScript on
@@ -96,17 +97,9 @@ check(
 	'without this, anyone could inflate a reputation with reviews tied to no trade'
 );
 check(
-	'…and a review without one is marked in the list',
-	/suppressed:[\s\S]{0,400}?r\.order_permlink === null/.test(src),
+	'…and a review without one is marked in BOTH lists',
+	(src.match(/suppressed:[\s\S]{0,400}?r\.order_permlink === null/g) ?? []).length === 2,
 	'it would otherwise render as an ordinary review while counting for nothing'
-);
-
-// Guard against the inverse drift: a row marked suppressed for a reason the
-// score does NOT act on would under-report someone's reputation.
-check(
-	'the row flag introduces no exclusion the score does not apply',
-	SIGNAL_TABLES.every((t) => !new RegExp(`FROM ${t}\\b`).test(flagQuery) || new RegExp(`FROM ${t}\\b`).test(summary)),
-	'marking a review as uncounted when it IS counted understates a reputation'
 );
 
 console.log(

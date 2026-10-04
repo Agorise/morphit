@@ -3,7 +3,7 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { page } from '$app/stores';
 
-	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// per-locale internal-link wrapper (design: every
 	// internal link is locale-prefixed; bare 2-segment paths 404).
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
@@ -54,9 +54,9 @@
 	import { safeInstanceOrigin } from '$lib/utils/safeContactUrl';
 	import { compareOrderbooks, type CompareVerdict } from '$lib/utils/compareOrderbooks';
 	import { formatDayMonthTime } from '$i18n/formatters';
-	import type { OrderRecord } from '@morphit/indexer-client';
+	import type { OrderKey } from '$lib/utils/compareOrderbooks';
 
-	function keyOf(o: OrderRecord): string {
+	function keyOf(o: OrderKey): string {
 		return `${o.account}/${o.permlink}`;
 	}
 
@@ -71,9 +71,11 @@
 	let otherIndexedBlock = $state<number | null>(null);
 
 	// Diff output: three sets derived from the two fetched orderbooks.
-	let onlyHere = $state<readonly OrderRecord[]>([]);
-	let inBoth = $state<readonly OrderRecord[]>([]);
-	let onlyThere = $state<readonly OrderRecord[]>([]);
+	let onlyHere = $state<readonly OrderKey[]>([]);
+	let inBoth = $state<readonly OrderKey[]>([]);
+	let onlyThere = $state<readonly OrderKey[]>([]);
+	/** Which side sent an impossible page (verdict 'malformed'). */
+	let malformedSide = $state<'here' | 'there' | null>(null);
 
 	// How much of the two orderbooks the comparison could honestly cover.
 	let verdict = $state<CompareVerdict>('inconclusive');
@@ -159,6 +161,7 @@
 			inBoth = cmp.inBoth;
 			onlyThere = cmp.onlyThere;
 			verdict = cmp.verdict;
+			malformedSide = cmp.malformedSide;
 			truncated = cmp.truncated;
 			windowStart = cmp.windowStart;
 			// The module computes the DISTINCT count; the two per-side numbers
@@ -274,7 +277,7 @@
 		<section
 			class="card mb-6 border-l-4 {verdict === 'agree'
 				? 'border-l-morphit-emerald'
-				: verdict === 'differ'
+				: verdict === 'differ' || verdict === 'malformed'
 					? 'border-l-amber-500'
 					: 'border-l-ink-400'}"
 		>
@@ -283,6 +286,8 @@
 					<span class="text-morphit-emerald">{$_('compare.verdict.agree_heading')}</span>
 				{:else if verdict === 'differ'}
 					{$_('compare.verdict.differ_heading')}
+				{:else if verdict === 'malformed'}
+					{$_('compare.verdict.malformed_heading')}
 				{:else}
 					{$_('compare.verdict.inconclusive_heading')}
 				{/if}
@@ -294,6 +299,10 @@
 					})}
 				{:else if verdict === 'differ'}
 					{$_('compare.verdict.differ_body')}
+				{:else if verdict === 'malformed'}
+					{$_('compare.verdict.malformed_body', {
+						values: { host: malformedSide === 'here' ? thisOrigin : otherOrigin }
+					})}
 				{:else}
 					{$_('compare.verdict.inconclusive_body')}
 				{/if}
@@ -346,7 +355,7 @@
 			<p class="mt-4 text-xs text-ink-500">
 				{$_('compare.results.interpretation')}
 			</p>
-			<!-- Sally finding CMP1 (Part 69): re-run button.  A user
+			<!-- Sally finding CMP1: re-run button.  A user
 			     seeing a non-zero `onlyHere`/`onlyThere` diff needs
 			     to know whether it's persistent (Tier 2 censorship)
 			     or just block-gap timing.  Pre-Part-69 they had to
@@ -377,7 +386,7 @@
 						{$_('compare.pane.empty')}
 					</p>
 				{:else}
-					<!-- Sally finding CMP2 (Part 69): orders in the
+					<!-- Sally finding CMP2: orders in the
 					     "only here" pane were rendered as plain mono
 					     text — a user seeing a flagged order had no
 					     way to click through to investigate.  These
@@ -427,14 +436,14 @@
 						{$_('compare.pane.empty')}
 					</p>
 				{:else}
-					<!-- Sally finding CMP2 (Part 69): orders only on
+					<!-- Sally finding CMP2: orders only on
 					     the OTHER instance link out to that
 					     instance's profile/order URL — the order is
 					     not on this instance to view.  rel external
 					     + target=_blank because we're cross-origin.
 					     The fact the link goes off-site is the whole
 					     point of "only there."
-					     Part 70 hardening: wrap otherOrigin through
+					     wrap otherOrigin through
 					     safeInstanceOrigin() before splicing into
 					     the href, defense in depth even though
 					     validateInstanceUrl() already gated the user
@@ -452,7 +461,7 @@
 							<li>
 								{#if safeOther}
 									<a
-										href={`${safeOther}/@${o.account}/${o.permlink}`}
+										href={`${safeOther}${localePath(`/@${o.account}/${o.permlink}`, currentLang)}`}
 										target="_blank"
 										rel="noopener noreferrer external"
 										class="block break-all font-mono text-xs text-morphit-emerald hover:underline"

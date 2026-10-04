@@ -12,7 +12,7 @@ import type { FeeVerifier } from '$indexer/fee/verifier';
 import type { Database } from '$db/pool';
 
 /**
- * v1.20.0 fix wave, G9 — the re-check must accept a payment that was correct
+ * the re-check must accept a payment that was correct
  * for the treasury pin in force when the order was POSTED. It used to verify
  * against today's pin only: a payer who paid the exact quoted amount, whose
  * order was still pending when BTC fell ~18% and the maintainer re-pinned a

@@ -52,6 +52,18 @@
     morphit_tor_key_src | length == 0
     or not (morphit_tor_key_stat.stat.exists | default(false))
 
+- name: Does this Tor have the proof-of-work defence (Tor 0.4.8+, "pow" module)?
+  ansible.builtin.shell:
+    cmd: "tor --list-modules 2>/dev/null | grep -qx 'pow: yes'"
+  register: morphit_tor_pow
+  changed_when: false
+  failed_when: false
+
+# Proof-of-work defence for the onion service: under an introduction flood,
+# Tor asks clients to solve a small puzzle before it builds a circuit for
+# them, so a flood costs the attacker instead of starving real visitors
+# (it costs nothing while there is no flood). Only written when this Tor has
+# the module: an unknown option would stop Tor from starting.
 - name: Configure the hidden service in torrc
   ansible.builtin.blockinfile:
     path: /etc/tor/torrc
@@ -59,6 +71,9 @@
     block: |
       HiddenServiceDir {{ morphit_tor_hs_dir }}
       HiddenServicePort 80 {{ morphit_tor_local_host }}:{{ morphit_tor_local_port }}
+      {% if morphit_tor_pow.rc | default(1) == 0 %}
+      HiddenServicePoWDefensesEnabled 1
+      {% endif %}
     create: false
   notify: Restart tor
 

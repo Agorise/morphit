@@ -118,7 +118,14 @@ import type { ChatMessageRecord } from '@morphit/indexer-client';
 import { decodePayload } from '$lib/chat/payload';
 import { recordAddressShared, recordFundsSent } from '$lib/trades/tradeStatus';
 import { triggerBlurtVerification } from '$lib/trades/tradeVerify';
-import { resolveChatPubFromIndexer, PubPinError, type ChatPubPin } from '$lib/chat/pubPin';
+import {
+	resolveChatPubFromIndexer,
+	PubPinError,
+	pinnedPubsFor,
+	replacedPubsFor,
+	pendingKeyChange,
+	type ChatPubPin
+} from '$lib/chat/pubPin';
 import { ChainRelayError } from '$net/chainRelay';
 
 /** LocalMessage.error sentinel for "the chain relay could not be reached".
@@ -126,14 +133,19 @@ import { ChainRelayError } from '$net/chainRelay';
  *  as the PubPinError codes are. */
 export const CHAIN_UNREACHABLE_SENTINEL = 'chain_unreachable';
 import { verifyPeerChatIdentityOnChain } from '$lib/chat/chainVerify';
-import { readChatSecurityMode, shouldAttachSelfCopy, type ChatSecurityMode } from '$stores/chatSecurity';
+import {
+	readChatSecurityMode,
+	shouldAttachSelfCopy,
+	type ChatSecurityMode
+} from '$stores/chatSecurity';
 import {
 	deriveChatIdentity,
 	encryptToRecipient,
 	decryptFromSender,
 	decryptSelfCopy,
 	decodeChatPub,
-	DecryptError
+	DecryptError,
+	type ChatEnvelopeWire
 } from '$lib/chat/crypto';
 
 /** A message as the UI sees it. Synthesis of local optimistic
@@ -163,11 +175,11 @@ export interface LocalMessage {
 	 *  pending/broadcast/failed. Rendering uses it to decide
 	 *  whether to show the time line. */
 	createdAt: Date | null;
-	/** cp446 — the order this message is about, or null. The inbox threads by it
+	/** the order this message is about, or null. The inbox threads by it
 	 *  (one card per peer+order) and this view is scoped to one thread, so a
 	 *  message about another order must not appear here. */
 	orderPermlink: string | null;
-	/** cp404 — Blurt transaction id anchoring this message on-chain,
+	/** Blurt transaction id anchoring this message on-chain,
 	 *  once known. Null while pending/broadcast/failed, and for
 	 *  not-yet-irreversible provisional copies. Populated on durable
 	 *  confirmation (own messages) or straight from the record
@@ -193,7 +205,7 @@ export interface LocalMessage {
 	 *  failed has in fact landed (v1.18.0 review, W3). */
 	sentTrxId?: string;
 	/** When the chain first said this send IS on it while our indexer still had
-	 *  no durable copy (v1.18.0 deep-deep, L1). The sweep re-arms the window
+	 *  no durable copy. The sweep re-arms the window
 	 *  once; a second "on chain, still not recorded" is final. */
 	onChainAtMs?: number;
 	/** When a PROVISIONAL copy (id 0 on the wire) of this message first reached
@@ -211,6 +223,11 @@ export interface LocalMessage {
 	 *  UI renders with muted styling and an explanatory tooltip
 	 *  rather than silently showing the raw ciphertext. */
 	decryptFailed: boolean;
+	/** True for a message from the PEER that arrived in the older v1 envelope:
+	 *  it decrypted, but anyone who knows our public chat key could have
+	 *  written it, so its sender is not proved. The UI says so, and a payment
+	 *  request in it is shown as unverified. */
+	senderUnverified?: boolean;
 	/** Monotonically-increasing local sequence number used for
 	 *  stable `{#each}` keying in the template. Always unique
 	 *  within a controller's lifetime. Does NOT correspond to
@@ -314,41 +331,46 @@ export interface ChatControllerDeps {
 		live: LiveIdentity,
 		account: string
 	): Promise<{ priv: Uint8Array; pub: Uint8Array }>;
-	/** Encrypt plaintext to a recipient. Injected (rather than
-	 *  called from crypto.ts directly) so tests can assert
-	 *  "encrypt was called with these args" without exercising
-	 *  libsodium. */
+	/** Encrypt plaintext to a recipient in the v2 (sender-authenticated)
+	 *  envelope; `sender` is our own chat identity. Injected (rather than
+	 *  called from crypto.ts directly) so tests can assert "encrypt was
+	 *  called with these args" without exercising libsodium. */
 	encrypt(
 		plaintext: string,
 		recipientPub: Uint8Array,
 		senderAccount: string,
 		recipientAccount: string,
-		senderChatPub: Uint8Array,
+		sender: { priv: Uint8Array; pub: Uint8Array },
 		includeSelfCopy: boolean
 	): Promise<{
+		v?: 2;
 		ciphertext: string;
 		ephemeralPub: string;
 		nonce: string;
 		selfCiphertext?: string;
 		selfNonce?: string;
 	}>;
-	/** Decrypt an envelope. Returns the plaintext, or null if
-	 *  decryption fails (the UI shows the placeholder in that
-	 *  case rather than crashing the conversation). */
+	/** Decrypt an envelope. `senderPubs` are the sender's pinned chat keys
+	 *  (current first), which a v2 envelope must open with. Returns the
+	 *  plaintext and whether the sender is proved (a bare string counts as
+	 *  NOT proved), or null if decryption fails (the UI shows the placeholder
+	 *  in that case rather than crashing the conversation). */
 	decrypt(
-		envelope: { ciphertext: string; ephemeralPub: string; nonce: string },
+		envelope: { v?: number; ciphertext: string; ephemeralPub: string; nonce: string },
 		myPriv: Uint8Array,
 		myPub: Uint8Array,
 		senderAccount: string,
-		recipientAccount: string
-	): Promise<string | null>;
-	/** cp406 — decrypt the SENDER's own self-copy of a message they sent
+		recipientAccount: string,
+		senderPubs?: readonly Uint8Array[]
+	): Promise<string | { text: string; authenticated: boolean } | null>;
+	/** decrypt the SENDER's own self-copy of a message they sent
 	 *  (keep-history mode). Returns the plaintext, or null if there's no
 	 *  self-copy present or it fails. Optional so existing test fakes without
 	 *  it still type-check; the own-sent render path falls back to the
 	 *  in-memory cache / placeholder when it's absent. */
 	decryptSelfCopy?(
 		envelope: {
+			v?: number;
 			ciphertext: string;
 			ephemeralPub: string;
 			nonce: string;
@@ -358,9 +380,20 @@ export interface ChatControllerDeps {
 		myPriv: Uint8Array,
 		myPub: Uint8Array,
 		senderAccount: string,
-		recipientAccount: string
+		recipientAccount: string,
+		recipientPubs?: readonly Uint8Array[]
 	): Promise<string | null>;
-	/** cp406 — the account's chat-security mode ('keep' | 'destroy'), read
+	/** The chat key pinned for `peer` now (pubPin.pinnedPubsFor): the only
+	 *  key a v2 message from the peer is authenticated with. Optional: absent →
+	 *  the conversation's fetched key is used (tests). */
+	pinnedPeerPubs?(peer: string): readonly Uint8Array[];
+	/** Keys an accepted key change replaced (pubPin.replacedPubsFor): they
+	 *  open older messages for reading only — such a message is shown as
+	 *  "sender not verified" and never moves a trade. */
+	replacedPeerPubs?(peer: string): readonly Uint8Array[];
+	/** A changed key for `peer` the user has not accepted yet, if any. */
+	pendingPeerPub?(peer: string): Uint8Array | null;
+	/** the account's chat-security mode ('keep' | 'destroy'), read
 	 *  fresh at send time. Optional: absent → treated as 'keep' (the default,
 	 *  self-copy on), so existing tests keep their prior behavior. */
 	chatSecurityMode?(): ChatSecurityMode;
@@ -464,7 +497,7 @@ export const SESSION_LOCKED_SENTINEL = 'session_locked';
  * copy ever arrived — the indexers refused it (the recipient blocks us, the
  * stranger fee applies after all, the order it answered is gone). FINAL: no
  * Retry, because resending would be refused the same way. Localized as
- * `chat.message.on_chain_not_accepted`. (v1.18.0 deep-deep, L1: W3 used to
+ * `chat.message.on_chain_not_accepted`. (W3 used to
  * treat "on chain" as "will be recorded" and re-armed forever, so such a
  * message said "confirmed" for good while the recipient never got it.)
  */
@@ -472,7 +505,7 @@ export const ON_CHAIN_NOT_ACCEPTED_SENTINEL = 'on_chain_not_accepted';
 
 /**
  * Only unconfirmed own sends younger than this are put back when a thread is
- * reopened (v1.18.0 deep-deep, L2). Past it the sweep would already have
+ * reopened. Past it the sweep would already have
  * decided, and the durable copy may simply have landed while no view was open
  * — beyond the newest page of history, where the merge cannot see it. Putting
  * such a message back ended in a ghost "failed" bubble and, on Retry, a second
@@ -511,15 +544,13 @@ export function priorTagsFromHeader(header: unknown, ownTag: string | null): str
  *  UI can render appropriately. */
 const ENCRYPTED_PLACEHOLDER = '(encrypted)';
 
-// ─── cp402 [3] — own-sent plaintext cache (in-memory only) ─────────
+// ─── own-sent plaintext cache (in-memory only) ─────────
 //
-// The chat crypto (see crypto.ts) is ephemeral sender-PFS: the sender
-// generates a fresh ephemeral X25519 keypair per message and WIPES the
-// ephemeral private key immediately after encrypting. That is what gives
-// us forward secrecy — a later key/disk/chain compromise cannot recover
-// the plaintext of messages already sent. The unavoidable consequence is
-// that WE can never re-derive the shared secret for our OWN sent messages
-// from chain history either. During a live session that's invisible: the
+// The sender generates a fresh ephemeral X25519 keypair per message and
+// WIPES the ephemeral private key immediately after encrypting, so the
+// sender cannot re-derive the recipient copy of its OWN sent messages from
+// chain history (only the recipient's key opens it; the self-copy exists for
+// this, and is absent in 'destroy' mode). During a live session that's invisible: the
 // composer keeps the plaintext we typed as a local optimistic echo. But
 // when the user navigates away and back, the controller is destroyed and
 // that echo is gone; a fresh controller reloading history sees our own
@@ -528,10 +559,9 @@ const ENCRYPTED_PLACEHOLDER = '(encrypted)';
 // This cache closes that gap by remembering the plaintext of OUR sent
 // messages, keyed by account + client_tag, so a fresh controller can
 // restore them. Crucially it lives ONLY in memory — nothing is written
-// to disk — so the on-disk / on-chain forward-secrecy guarantee is
-// unchanged (the plaintext is already resident in memory while the
-// conversation is open; this merely lets it survive in-app navigation
-// within the same tab session). It is:
+// to disk — so it adds nothing to what disk or chain reveal (the plaintext
+// is already resident in memory while the conversation is open; this merely
+// lets it survive in-app navigation within the same tab session). It is:
 //   • gated on read by getLiveIdentity() — a LOCKED session shows the
 //     placeholder, consistent with incoming messages;
 //   • cleared on lock AND sign-out (identity.ts reset()/lockSession())
@@ -567,7 +597,7 @@ function rememberOwnSent(me: string, clientTag: string, plaintext: string): void
 export function clearOwnSentPlaintextCache(): void {
 	ownSentPlaintext.clear();
 	unconfirmedOwnSends.clear();
-	// (v1.18.0 deep-deep, M3) This is the lock hook — identity.ts calls it from
+	// This is the lock hook — identity.ts calls it from
 	// lockSession() and reset(). Clearing the maps was not enough: a controller
 	// still mounted kept the decrypted transcript on screen and its derived chat
 	// key, and its sweep or an in-flight send wrote plaintext straight back.
@@ -659,7 +689,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	let destroyed = false;
 	let started = false;
 	/** Bumped on every session lock. An async merge that started before the lock
-	 *  must not add what it decrypted after it (v1.18.0 deep-deep, M3). */
+	 *  must not add what it decrypted after it. */
 	let lockEpoch = 0;
 
 	/** Cached derivation of the current user's chat identity. Null
@@ -726,7 +756,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	function reconcileByClientTag(rec: ChatMessageRecord): boolean {
 		const tag = clientTagFromHeader(rec.header);
 		if (tag === null) return false;
-		// cp403 [1] — id 0 marks a PROVISIONAL head-block (fast-path)
+		// id 0 marks a PROVISIONAL head-block (fast-path)
 		// copy that isn't irreversible yet (ADR-0048). It must never
 		// overwrite a real, durable id.
 		const isDurable = rec.id !== 0;
@@ -858,21 +888,21 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 */
 	async function decryptOrPlaceholder(
 		rec: ChatMessageRecord
-	): Promise<{ text: string; decryptFailed: boolean }> {
+	): Promise<{ text: string; decryptFailed: boolean; senderUnverified: boolean }> {
 		// If the session is locked, we can't derive our chat
 		// identity. Show placeholder; once the user unlocks and
 		// re-enters the conversation, a fresh controller will
 		// decrypt the history.
 		const live = deps.getLiveIdentity();
 		if (!live) {
-			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: false };
+			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: false, senderUnverified: false };
 		}
 
 		// Extract envelope fields from the header. The on-chain
 		// header is JSONB and arbitrarily-shaped; we narrow defensively.
 		const header = rec.header;
 		if (typeof header !== 'object' || header === null) {
-			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true };
+			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
 		}
 		const h = header as Record<string, unknown>;
 		const ephemeralPub = h.ephemeral_pub;
@@ -882,36 +912,70 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			// days — those have no ephemeral_pub or nonce, only a
 			// client_tag. Render as placeholder without flagging as
 			// a "real" failure (it's a known boundary case).
-			return {
-				text: ENCRYPTED_PLACEHOLDER,
-				decryptFailed: false
-			};
+			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: false, senderUnverified: false };
 		}
+		const v = typeof h.v === 'number' ? h.v : undefined;
 
 		try {
 			const id = await ensureMyChatIdentity(live);
-			const plaintext = await deps.decrypt(
-				{ ciphertext: rec.ciphertext, ephemeralPub, nonce },
-				id.priv,
-				id.pub,
-				rec.sender,
-				rec.recipient
-			);
-			if (plaintext === null) {
-				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true };
+			const open = (pubs: readonly Uint8Array[]) =>
+				deps.decrypt(
+					{ ...(v !== undefined ? { v } : {}), ciphertext: rec.ciphertext, ephemeralPub, nonce },
+					id.priv,
+					id.pub,
+					rec.sender,
+					rec.recipient,
+					pubs
+				);
+			let opened = await open(await senderPubCandidates(rec.sender));
+			let viaPendingKey = false;
+			if (opened === null && v === 2) {
+				// The peer may have changed keys and the user has not accepted
+				// the new one yet: the message can be read, but its sender is
+				// not proved until they do.
+				const pending = deps.pendingPeerPub?.(rec.sender) ?? null;
+				if (pending !== null) {
+					opened = await open([pending]);
+					viaPendingKey = opened !== null;
+				}
 			}
-			return { text: plaintext, decryptFailed: false };
+			if (opened === null && v === 2) {
+				// A key the peer REPLACED: readable history, never proof of who
+				// sent it (the old key may be in someone else's hands now).
+				const replaced = deps.replacedPeerPubs?.(rec.sender) ?? [];
+				if (replaced.length > 0) {
+					opened = await open(replaced);
+					viaPendingKey = opened !== null;
+				}
+			}
+			if (opened === null) {
+				return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
+			}
+			const text = typeof opened === 'string' ? opened : opened.text;
+			const authenticated = typeof opened === 'string' ? false : opened.authenticated;
+			return { text, decryptFailed: false, senderUnverified: !authenticated || viaPendingKey };
 		} catch {
 			// Any unexpected error during decrypt (including
 			// crypto init failures, libsodium issues, etc.) falls
 			// back to placeholder. Conversation keeps rendering.
-			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true };
+			return { text: ENCRYPTED_PLACEHOLDER, decryptFailed: true, senderUnverified: false };
 		}
 	}
 
-	/** cp406 — decrypt OUR OWN sent message from chain via its self-copy
+	/** The chat keys a message from `sender` (always the peer here) may be
+	 *  opened with: the pinned key, then keys it replaced. When the peer is not
+	 *  pinned yet, their key is fetched and pinned once (trust on first use). */
+	async function senderPubCandidates(sender: string): Promise<Uint8Array[]> {
+		const pinned = deps.pinnedPeerPubs?.(sender) ?? [];
+		if (pinned.length > 0) return [...pinned];
+		if (sender !== deps.peer) return [];
+		const fetched = await ensurePeerChatPub().catch(() => null);
+		return fetched !== null ? [fetched] : [];
+	}
+
+	/** decrypt OUR OWN sent message from chain via its self-copy
 	 *  (keep-history mode, the default). Returns the plaintext, or null when
-	 *  there's no self-copy (PFS "destroy" mode / a pre-feature message), the
+	 *  there's no self-copy ("destroy" mode / a pre-feature message), the
 	 *  session is locked, deps.decryptSelfCopy isn't wired (older tests), or
 	 *  decrypt fails. This is what lets own sent history survive a reload
 	 *  without depending on the in-memory cache. Only called for records where
@@ -934,14 +998,28 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		) {
 			return null;
 		}
+		const v = typeof h.v === 'number' ? h.v : undefined;
 		try {
 			const id = await ensureMyChatIdentity(live);
 			return await deps.decryptSelfCopy(
-				{ ciphertext: rec.ciphertext, ephemeralPub, nonce, selfCiphertext, selfNonce },
+				{
+					...(v !== undefined ? { v } : {}),
+					ciphertext: rec.ciphertext,
+					ephemeralPub,
+					nonce,
+					selfCiphertext,
+					selfNonce
+				},
 				id.priv,
 				id.pub,
 				rec.sender,
-				rec.recipient
+				rec.recipient,
+				// Our self-copy was made with the key the peer had then: the
+				// replaced ones too (reading our own message proves nothing).
+				[
+					...(await senderPubCandidates(rec.recipient)),
+					...(deps.replacedPeerPubs?.(rec.recipient) ?? [])
+				]
 			);
 		} catch {
 			return null;
@@ -984,7 +1062,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		let added = false;
 
 		for (const rec of oldestFirst) {
-			// (v1.18.0 deep-deep, L2) A durable copy of our own send, in ANY thread
+			// A durable copy of our own send, in ANY thread
 			// with this peer (history spans them all): that send is recorded, so it
 			// must never be put back as "unconfirmed" — even if this view never
 			// shows the record. Checked before the thread filter for that reason.
@@ -996,7 +1074,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					);
 				}
 			}
-			// cp446 — ONE THREAD PER (peer, order). Every record enters here: the
+			// ONE THREAD PER (peer, order). Every record enters here: the
 			// initial page, "load older" pages, and live SSE appends. Filtering at
 			// this single seam is what keeps a reply about order A out of the
 			// discussion about order B, no matter which path delivered it.
@@ -1022,11 +1100,11 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				if (isDurable && seenIds.has(rec.id)) continue;
 				// No local tag matched — a message we sent, but not from
 				// this controller's live echo (we navigated away and back,
-				// or it was sent from another client/session). cp406: in
+				// or it was sent from another client/session). in
 				// keep-history mode we can now re-decrypt our own messages from
 				// chain via their self-copy — so try that FIRST (survives a full
 				// reload). Fall back to the in-memory own-sent cache (covers
-				// PFS-mode messages we typed this session), then the placeholder.
+				// destroy-mode messages we typed this session), then the placeholder.
 				// Everything is gated on getLiveIdentity() so a LOCKED session
 				// shows the placeholder, exactly like incoming messages.
 				const ownTag = clientTagFromHeader(rec.header);
@@ -1075,7 +1153,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				added = true;
 			} else {
 				// Incoming from the peer.
-				// cp403 [1] — id 0 marks a PROVISIONAL head-block copy
+				// id 0 marks a PROVISIONAL head-block copy
 				// (ADR-0048 fast path), not yet irreversible.
 				const incomingTag = clientTagFromHeader(rec.header);
 
@@ -1091,10 +1169,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					// alone is the sender's to choose. See wireOf.
 					const wire = wireOf(rec);
 					const twin = messages.find(
-						(m) =>
-							m.sender === rec.sender &&
-							m.clientTag === incomingTag &&
-							m.wire === wire
+						(m) => m.sender === rec.sender && m.clientTag === incomingTag && m.wire === wire
 					);
 					if (twin) {
 						if (isDurable && (twin.id === null || twin.id === 0)) {
@@ -1145,6 +1220,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 					trxId: isDurable ? rec.source_trx_id || null : null,
 					error: null,
 					decryptFailed: d.decryptFailed,
+					...(d.senderUnverified ? { senderUnverified: true } : {}),
 					localSeq: ++localSeqCounter,
 					wire: wireOf(rec),
 					// Kept so a copy of the attempt this one replaces, arriving
@@ -1160,7 +1236,10 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 				// plaintext is a recognized address/funds-sent
 				// payload with an orderPermlink, route it.  Plain
 				// chat messages decode to 'plaintext' and are no-ops.
-				if (!d.decryptFailed) {
+				// Only for a message whose sender is PROVED (v2): a v1 message
+				// could have been written by anyone who knows our public chat
+				// key, so it never moves a trade forward.
+				if (!d.decryptFailed && !d.senderUnverified) {
 					try {
 						const decoded = decodePayload(d.text);
 						if (decoded.kind === 'address' && decoded.payload.orderPermlink) {
@@ -1199,7 +1278,8 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 											amountBlurt: amountNum,
 											echoedMemo: decoded.payload.memo ?? '',
 											orderPermlink: decoded.payload.orderPermlink,
-											txid: decoded.payload.txid
+											txid: decoded.payload.txid,
+											direction: 'incoming'
 										});
 									}
 								}
@@ -1352,7 +1432,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 						rememberUnconfirmed(m);
 						return;
 					}
-					// (v1.18.0 deep-deep, L1) A whole further window on the chain and
+					// A whole further window on the chain and
 					// still no durable copy: the indexers will not record it. Say so,
 					// finally, with no Retry — not "confirmed" forever.
 					forgetUnconfirmed(m.clientTag);
@@ -1439,7 +1519,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		}
 
 		const clientTag = deps.generateClientTag();
-		// cp406 — keep-history mode (the DEFAULT) caches our own plaintext so it
+		// keep-history mode (the DEFAULT) caches our own plaintext so it
 		// survives navigating away and back, as a fast path (the durable source
 		// is the on-chain self-copy attached below). In DESTROY mode we
 		// deliberately do NOT cache: with no self-copy on chain and nothing left
@@ -1503,13 +1583,15 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		// Step 3: encrypt. deps.encrypt wraps crypto.encryptToRecipient. In
-		// keep-history mode (the default) we pass our own chat pubkey so the
-		// envelope also carries a sender self-copy — a second ciphertext only WE
-		// can open — letting us reread our own sent messages from chain. The
-		// opt-in PFS "destroy on leave" mode (keepHistory === false) omits it.
+		// Step 3: encrypt. deps.encrypt wraps crypto.encryptToRecipient (the v2,
+		// sender-authenticated envelope: our own chat identity takes part in
+		// the key). In keep-history mode (the default) the envelope also carries
+		// a sender self-copy — a second ciphertext only the two of us can have
+		// written, which we can reopen — letting us reread our own sent messages
+		// from chain. The opt-in "destroy on leave" mode omits it.
 		const includeSelfCopy = keepHistory;
 		let envelope: {
+			v?: 2;
 			ciphertext: string;
 			ephemeralPub: string;
 			nonce: string;
@@ -1517,14 +1599,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			selfNonce?: string;
 		};
 		try {
-			envelope = await deps.encrypt(
-				trimmed,
-				peerPub,
-				deps.me,
-				deps.peer,
-				myId.pub,
-				includeSelfCopy
-			);
+			envelope = await deps.encrypt(trimmed, peerPub, deps.me, deps.peer, myId, includeSelfCopy);
 		} catch (err) {
 			local.state = 'failed';
 			local.error = err instanceof Error ? err.message : String(err);
@@ -1552,8 +1627,8 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 * order context waives, and never reconciled with the bubble it was sent
 	 * from, which the sweep then failed again. Retrying could not succeed.
 	 *
-	 * Header: the envelope's public fields (ephemeral_pub + nonce) plus our
-	 * client_tag for reconciliation, the keep-history self-copy when there is
+	 * Header: the envelope version (`v: 2`), its public fields (ephemeral_pub +
+	 * nonce), our client_tag for reconciliation, the keep-history self-copy when there is
 	 * one, and on a retry the tags it replaces (`prior_tags`), so the recipient
 	 * can fold it into a first attempt the chain never recorded rather than show
 	 * both. All opaque to the indexer, which bounds the header's size and stores
@@ -1567,6 +1642,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	function wirePayload(
 		clientTag: string,
 		envelope: {
+			v?: 2;
 			ciphertext: string;
 			ephemeralPub: string;
 			nonce: string;
@@ -1579,10 +1655,12 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			recipient: deps.peer,
 			ciphertext: envelope.ciphertext,
 			header: {
+				// The envelope version: 2 = sender-authenticated (crypto.ts).
+				...(envelope.v === 2 ? { v: 2 } : {}),
 				client_tag: clientTag,
 				ephemeral_pub: envelope.ephemeralPub,
 				nonce: envelope.nonce,
-				// cp406 — sender self-copy (keep-history mode). Bounded + validated
+				// sender self-copy (keep-history mode). Bounded + validated
 				// by the indexer exactly like the main ciphertext.
 				...(envelope.selfCiphertext !== undefined && envelope.selfNonce !== undefined
 					? { self_ciphertext: envelope.selfCiphertext, self_nonce: envelope.selfNonce }
@@ -1616,7 +1694,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 
 	/** Keep an accepted, unconfirmed own send past this view (W2). */
 	function rememberUnconfirmed(m: LocalMessage): void {
-		// (v1.18.0 deep-deep, M3) Plaintext is kept only for a live session: after
+		// Plaintext is kept only for a live session: after
 		// a lock, a send completing in flight or a sweep's "found" must not put
 		// the words back into memory for a locked view to show.
 		if (deps.getLiveIdentity() === null) return;
@@ -1649,7 +1727,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 	 *  Run at start, BEFORE any record merges, so a copy the indexer still has
 	 *  reconciles against the restored message by tag instead of beside it. */
 	function restoreUnconfirmed(): void {
-		// (v1.18.0 deep-deep, M3) A locked or read-only view shows no plaintext —
+		// A locked or read-only view shows no plaintext —
 		// the same rule as the own-sent cache and incoming messages.
 		if (deps.getLiveIdentity() === null) return;
 		const prefix = unconfirmedThreadPrefix(deps.me, deps.peer, deps.orderPermlink ?? null);
@@ -1744,7 +1822,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 		// will come back with — otherwise a retried message reads as the
 		// placeholder after navigating away and back in keep-history mode.
 		// Only for a live session: a locked one fails just below, and must not
-		// leave the words in memory (v1.18.0 deep-deep, M3).
+		// leave the words in memory.
 		if (deps.getLiveIdentity() !== null && shouldAttachSelfCopy(deps.chatSecurityMode?.())) {
 			rememberOwnSent(deps.me, newTag, text);
 		}
@@ -1794,11 +1872,12 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			return;
 		}
 
-		// cp406 — attach a sender self-copy in keep-history mode (the default),
+		// attach a sender self-copy in keep-history mode (the default),
 		// so a retried message is also readable by us from chain; DESTROY mode
 		// omits it, exactly like the send path (shared helper, no drift).
 		const includeSelfCopy = shouldAttachSelfCopy(deps.chatSecurityMode?.());
 		let envelope: {
+			v?: 2;
 			ciphertext: string;
 			ephemeralPub: string;
 			nonce: string;
@@ -1806,14 +1885,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 			selfNonce?: string;
 		};
 		try {
-			envelope = await deps.encrypt(
-				text,
-				peerPub,
-				deps.me,
-				deps.peer,
-				myId.pub,
-				includeSelfCopy
-			);
+			envelope = await deps.encrypt(text, peerPub, deps.me, deps.peer, myId, includeSelfCopy);
 		} catch (err) {
 			target.state = 'failed';
 			target.error = err instanceof Error ? err.message : String(err);
@@ -1832,7 +1904,7 @@ export function createConversationController(deps: ChatControllerDeps): ChatCont
 
 	/**
 	 * The session was locked (idle auto-lock, Lock, sign-out) while this view is
-	 * open (v1.18.0 deep-deep, M3). Before, the view kept the whole decrypted
+	 * open. Before, the view kept the whole decrypted
 	 * transcript on screen and this controller kept the chat key derived from the
 	 * posting key the lock had just wiped. Now: drop every message (the next poll
 	 * brings the records back, shown the way a locked view shows them), wipe the
@@ -2031,8 +2103,7 @@ export function runtimeDeps(
 			}
 			return { ok: false, message: r.message };
 		},
-		broadcast: (live, payload, blurtAccount) =>
-			broadcastChatMessage(live, payload, blurtAccount),
+		broadcast: (live, payload, blurtAccount) => broadcastChatMessage(live, payload, blurtAccount),
 		transactionOnChain: async (trxId: string) => {
 			const r = await fetchChainTx(resolveOrigin(MORPHIT_INDEXER_ORIGIN), trxId);
 			return r.kind === 'ok' ? 'found' : r.kind === 'not_found' ? 'not_found' : 'unknown';
@@ -2082,18 +2153,19 @@ export function runtimeDeps(
 			recipientPub: Uint8Array,
 			senderAccount: string,
 			recipientAccount: string,
-			senderChatPub: Uint8Array,
+			sender: { priv: Uint8Array; pub: Uint8Array },
 			includeSelfCopy: boolean
 		) => {
 			const env = await encryptToRecipient(
 				plaintext,
 				recipientPub,
+				sender,
 				senderAccount,
 				recipientAccount,
-				senderChatPub,
 				includeSelfCopy
 			);
 			return {
+				...(env.v === 2 ? { v: 2 as const } : {}),
 				ciphertext: env.ciphertext,
 				ephemeralPub: env.ephemeralPub,
 				nonce: env.nonce,
@@ -2103,18 +2175,20 @@ export function runtimeDeps(
 			};
 		},
 		decrypt: async (
-			envelope: { ciphertext: string; ephemeralPub: string; nonce: string },
+			envelope: { v?: number; ciphertext: string; ephemeralPub: string; nonce: string },
 			myPriv: Uint8Array,
 			myPub: Uint8Array,
 			senderAccount: string,
-			recipientAccount: string
+			recipientAccount: string,
+			senderPubs?: readonly Uint8Array[]
 		) => {
 			try {
 				return await decryptFromSender(
-					envelope,
+					envelope as ChatEnvelopeWire,
 					{ priv: myPriv, pub: myPub },
 					senderAccount,
-					recipientAccount
+					recipientAccount,
+					senderPubs ?? []
 				);
 			} catch (err) {
 				if (err instanceof DecryptError) return null;
@@ -2124,6 +2198,7 @@ export function runtimeDeps(
 		},
 		decryptSelfCopy: async (
 			envelope: {
+				v?: number;
 				ciphertext: string;
 				ephemeralPub: string;
 				nonce: string;
@@ -2133,18 +2208,51 @@ export function runtimeDeps(
 			myPriv: Uint8Array,
 			myPub: Uint8Array,
 			senderAccount: string,
-			recipientAccount: string
+			recipientAccount: string,
+			recipientPubs?: readonly Uint8Array[]
 		) => {
 			try {
 				return await decryptSelfCopy(
-					envelope,
+					envelope as ChatEnvelopeWire,
 					{ priv: myPriv, pub: myPub },
 					senderAccount,
-					recipientAccount
+					recipientAccount,
+					recipientPubs ?? []
 				);
 			} catch (err) {
 				if (err instanceof DecryptError) return null;
 				throw err;
+			}
+		},
+		pinnedPeerPubs: (p: string) => {
+			const out: Uint8Array[] = [];
+			for (const b64 of pinnedPubsFor(p)) {
+				try {
+					out.push(decodeChatPub(b64));
+				} catch {
+					/* a malformed stored key opens nothing */
+				}
+			}
+			return out;
+		},
+		replacedPeerPubs: (p: string) => {
+			const out: Uint8Array[] = [];
+			for (const b64 of replacedPubsFor(p)) {
+				try {
+					out.push(decodeChatPub(b64));
+				} catch {
+					/* a malformed stored key opens nothing */
+				}
+			}
+			return out;
+		},
+		pendingPeerPub: (p: string) => {
+			const pending = pendingKeyChange(p);
+			if (pending === null) return null;
+			try {
+				return decodeChatPub(pending.pubB64);
+			} catch {
+				return null;
 			}
 		},
 		chatSecurityMode: () => readChatSecurityMode(me),

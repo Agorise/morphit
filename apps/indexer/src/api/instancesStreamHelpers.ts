@@ -193,7 +193,9 @@ export function rowSignature(e: InstanceDirectoryEntry): string {
 		e.alt_networks,
 		e.last_probed_at,
 		e.operator_display_name,
-		e.operator_tag
+		e.operator_tag,
+		// Without it, a badge that changed never reached an open directory.
+		e.clearnet_eliminated
 	]);
 }
 

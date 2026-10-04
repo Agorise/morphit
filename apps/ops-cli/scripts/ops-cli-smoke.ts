@@ -244,7 +244,7 @@ scenario('applyThreshold: higher_worse — value at or above error is error', ()
 	assertEqual(applyThreshold(100, t), 'error', '100');
 });
 
-// ─── cp186 — wizard-UX surface (edit reminder, init re-run guard, main menu) ───
+// ─── wizard-UX surface (edit reminder, init re-run guard, main menu) ───
 // Source-invariant checks: these pin the operator-facing UX so the
 // affordances (re-register reminder, Edit/Overwrite/Cancel guard,
 // the menu) can't silently regress.  Runtime behaviour is exercised

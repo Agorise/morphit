@@ -42,7 +42,7 @@ import { browser } from '$app/environment';
 import { createChatStream, type ChatStreamHandle } from '$lib/chat/stream';
 import { decodePayload, isValidBlurtAccount } from '$lib/chat/payload';
 // chat/crypto (which pulls libsodium ~1 MB) is imported DYNAMICALLY
-// inside tryDecrypt below — see cp267 byte budget. A static import here
+// inside tryDecrypt below — byte budget. A static import here
 // would drag libsodium into the shared [lang] layout closure (this
 // listener is started from +layout), i.e. onto EVERY page's first load.
 import { loadRecentPeers } from '$lib/chat/recentPeers';
@@ -95,16 +95,18 @@ const streams = new Map<string, PerPeerStream>();
 /** Decrypt a record using the locally-cached identity if
  *  available.  Returns the plaintext on success or null on any
  *  failure (decryption errors, missing identity, malformed
- *  envelope).  This is a defensive read — we surface nothing
- *  to the UI if we can't decrypt; the user will see the
- *  message normally when they open the chat. */
+ *  envelope, or a message whose sender is not PROVED — the older
+ *  v1 envelope, which anyone who knows our public chat key could
+ *  have written: it must never drive a trade).  This is a defensive
+ *  read — we surface nothing to the UI if we can't decrypt; the user
+ *  will see the message normally when they open the chat. */
 async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 	if (me === null) return null;
 	if (rec.sender === me) return null; // we don't toast our own outgoing
 	const live = get(liveIdentity);
 	if (!live) return null;
 
-	// cp267 byte budget: load chat message-crypto lazily so libsodium
+	// byte budget: load chat message-crypto lazily so libsodium
 	// (~1 MB) never sits in the every-page layout closure — it loads
 	// only when a chat-bearing trade event actually arrives. Best-effort:
 	// a failed chunk load just means no toast preview.
@@ -122,22 +124,36 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 			return null;
 		}
 		const envelope = {
+			...(header.v === 2 ? { v: 2 as const } : {}),
 			ephemeralPub: header.ephemeral_pub,
 			nonce: header.nonce,
 			ciphertext: rec.ciphertext
 		};
+		// The sender's CURRENT pinned chat key: a v2 message is proved only by
+		// it (a key the sender replaced reads history, never proves a sender). Not pinned yet → nothing is proved here; the chat
+		// view pins on first contact.
+		const { pinnedPubsFor } = await import('$lib/chat/pubPin');
+		const senderPubs: Uint8Array[] = [];
+		for (const b64 of pinnedPubsFor(rec.sender)) {
+			try {
+				senderPubs.push(chatCrypto.decodeChatPub(b64));
+			} catch {
+				/* a malformed stored key opens nothing */
+			}
+		}
 		// LiveIdentity carries posting + memo keys; chat keys are
 		// derived deterministically from the posting private key
 		// per ADR-0014.  Re-deriving on each decrypt is cheap
 		// (BLAKE2b once) and keeps chat keys out of session memory.
 		const chatKeys = await chatCrypto.deriveChatIdentity(live.posting.privateKey, me);
-		const plaintext = await chatCrypto.decryptFromSender(
+		const opened = await chatCrypto.decryptFromSender(
 			envelope,
 			chatKeys,
 			rec.sender,
-			rec.recipient
+			rec.recipient,
+			senderPubs
 		);
-		return plaintext;
+		return opened.authenticated ? opened.text : null;
 	} catch (err) {
 		if (err instanceof chatCrypto.DecryptError) return null;
 		// Phase F.5 audit fix (F-25) — surface unexpected errors
@@ -153,7 +169,6 @@ async function tryDecrypt(rec: ChatMessageRecord): Promise<string | null> {
 		return null;
 	}
 }
-
 
 async function handleAppend(peer: string, rec: ChatMessageRecord): Promise<void> {
 	const stream = streams.get(peer);

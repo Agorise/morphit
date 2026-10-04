@@ -1,14 +1,13 @@
 #!/usr/bin/env tsx
 /**
- * reserved-name-owner-parity — v1.8.10 (the maintainer, t.txt).
+ * reserved-name-owner-parity — v1.8.10.
  *
  * THE BUG THIS EXISTS TO CATCH. `agorise` and `kencode` are reserved names, and
  * the impersonation guard is SUBSTRING-based with only a byte-equality escape.
  * So the rightful owner of those accounts could set their display name to
  * exactly `agorise` — and nothing else. Not `Agorise` (merely capitalised), not
- * `@agorise`, not `the maintainer @ Agorise`. the maintainer hit this on his own two accounts:
- * "if i successfully sign in with my @testowner or @agorise accounts, then i want
- * to be able to ... use one or both of those terms anywhere on the site".
+ * `@agorise`, not `Something @ Agorise` — on the very accounts that hold those
+ * names.
  *
  * The fix exempts the SIGNER on their OWN reserved name. Impersonation means
  * claiming to be someone you are not, so the one account for which the claim is
@@ -23,9 +22,14 @@
  * blocks a legal name, or a form that accepts a name the chain will reject
  * after they hit broadcast. Both were the status quo before this fix.
  *
+ * The indexer side is checked by BEHAVIOUR: its real profile handler is run
+ * with the chain-authenticated signer, before and after
+ * CONSENSUS_V2_ACTIVATION_TIME (a block timestamp; from which the guard also matches confusable
+ * skeletons). The frontend side is still checked against its source.
+ *
  * Tamper tests (each must turn this red):
  *   - Drop `ownsReservedName` from either side → parity check fails.
- *   - Remove the exemption from the indexer's validate() → wiring check fails.
+ *   - Remove the exemption from the indexer's validate() → the owner checks fail.
  *   - Let the exemption ignore the signer (always true) → the narrowness
  *     checks fail.
  */
@@ -33,19 +37,20 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as idxConfusables from '../apps/indexer/src/indexer/confusables';
+import profileHandler from '../apps/indexer/src/indexer/handlers/profile';
+import { CONSENSUS_V2_ACTIVATION_TIME } from '../apps/indexer/src/indexer/consensusActivation';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
 const WEB_CONF = join(REPO, 'apps/web/src/lib/crypto/confusables.ts');
 const IDX_CONF = join(REPO, 'apps/indexer/src/indexer/confusables.ts');
-const IDX_PROFILE = join(REPO, 'apps/indexer/src/indexer/handlers/profile.ts');
 const WEB_PROFILE = join(REPO, 'apps/web/src/lib/crypto/profile.ts');
 const SETTINGS = join(REPO, 'apps/web/src/routes/[lang]/settings/+page.svelte');
 
 const read = (p: string): string => readFileSync(p, 'utf8');
 const webConf = read(WEB_CONF);
 const idxConf = read(IDX_CONF);
-const idxProfile = read(IDX_PROFILE);
 const webProfile = read(WEB_PROFILE);
 const settings = read(SETTINGS);
 
@@ -79,16 +84,13 @@ check(
 	`web=[${webNames.join(',')}] indexer=[${idxNames.join(',')}]`
 );
 check(
-	"the maintainer's two accounts are in the list (the case that prompted this)",
+	'the two accounts that prompted this are in the list',
 	idxNames.includes('agorise') && idxNames.includes('kencode'),
 	'if these ever leave the list the exemption is moot, but so is the guard'
 );
 
 // ─── both sides implement the exemption ──────────────────────────
-for (const [label, src] of [
-	['frontend', webConf],
-	['indexer', idxConf]
-] as const) {
+for (const [label, src] of [['frontend', webConf]] as const) {
 	check(
 		`the ${label} exports ownsReservedName`,
 		/export function ownsReservedName\(signer: string, input: string\): boolean/.test(src),
@@ -108,22 +110,79 @@ for (const [label, src] of [
 	);
 }
 
-// ─── the indexer actually USES it, against the chain-auth signer ─
+// ─── the indexer: its exemption, by behaviour ────────────────────
+const owns = (idxConfusables as { ownsReservedName?: unknown }).ownsReservedName;
 check(
-	'the indexer validator takes the signer',
-	/function validate\(payload: unknown, signer: string\)/.test(idxProfile),
-	'the check is worthless if the validator cannot see who signed'
+	'the indexer exports ownsReservedName',
+	typeof owns === 'function',
+	'without it the rightful owner is blocked from their own name'
 );
-check(
-	'the indexer passes the CHAIN-AUTHENTICATED signer, not a payload field',
-	/validate\(ctx\.payload, ctx\.signer\)/.test(idxProfile),
-	'ctx.signer comes from extractSigner; anything from the payload is attacker-controlled'
-);
-check(
-	'the indexer exempts the owner before rejecting for impersonation',
-	/!ownsReservedName\(signer, trimmed\) && impersonatesReservedName\(trimmed\)/.test(idxProfile),
-	'the guard must be skipped for the owner, not merely computed'
-);
+if (typeof owns === 'function') {
+	const o = owns as (signer: string, input: string, rule?: { strict?: boolean }) => boolean;
+	check(
+		'the indexer exemption is keyed on the SIGNER, not the input alone',
+		o('agorise', 'Agorise') && !o('mallory', 'Agorise'),
+		'an exemption that ignores who is asking would disable the guard for everyone'
+	);
+	check(
+		'the indexer exemption is scoped to the reserved name that signer holds',
+		!o('kencode', 'morphit-fees') && !o('kencode', 'morphit-fees', { strict: true }),
+		'@kencode must get no latitude on "morphit-fees"'
+	);
+}
+
+// ─── the indexer's profile handler, against the chain-auth signer ─
+const profileVerdict = async (
+	signer: string,
+	payload: Record<string, unknown>,
+	blockTime: Date
+): Promise<string> => {
+	const db = { query: async () => ({ rows: [], rowCount: 1 }) };
+	const r = await profileHandler(
+		{ signer, blockNum: 100, payload, blockTime } as never,
+		db as never
+	);
+	return r.ok ? 'ok' : (r as { reason: string }).reason;
+};
+async function indexerHandlerChecks(): Promise<void> {
+	for (const [era, block] of [
+		['before activation', new Date(Date.parse(CONSENSUS_V2_ACTIVATION_TIME) - 1000)],
+		['from activation', new Date(CONSENSUS_V2_ACTIVATION_TIME)]
+	] as const) {
+		const ownerOk = await Promise.all(
+			['agorise', 'Agorise', 'AGORISE', 'Trading @ Agorise'].map((n) =>
+				profileVerdict('agorise', { display_name: n }, block)
+			)
+		);
+		check(
+			`${era}: the owner may use their own reserved name in any form`,
+			ownerOk.every((v) => v === 'ok'),
+			ownerOk.join(',')
+		);
+		const stranger = await profileVerdict('mallory', { display_name: 'Agorise' }, block);
+		check(
+			`${era}: anyone else is still refused`,
+			stranger === 'display_name_impersonates_reserved',
+			stranger
+		);
+		const claimed = await profileVerdict(
+			'mallory',
+			{ display_name: 'Agorise', signer: 'agorise', account: 'agorise' },
+			block
+		);
+		check(
+			`${era}: the exemption follows the CHAIN-AUTHENTICATED signer, not a payload field`,
+			claimed === 'display_name_impersonates_reserved',
+			claimed
+		);
+		const other = await profileVerdict('kencode', { display_name: 'Morphit Fees' }, block);
+		check(
+			`${era}: holding one reserved name gives no latitude on another`,
+			other === 'display_name_impersonates_reserved',
+			other
+		);
+	}
+}
 
 // ─── the frontend mirrors it so the form agrees with the chain ───
 check(
@@ -147,7 +206,9 @@ check(
 	'without this the owner still sees the form reject their own name'
 );
 
-console.log(
-	`\n${passed} passed, ${failed} failed\n${failed === 0 ? `✓ all ${passed} reserved-name-owner-parity checks passed` : '✗ reserved-name-owner-parity FAILED'}`
-);
-process.exit(failed === 0 ? 0 : 1);
+void indexerHandlerChecks().then(() => {
+	console.log(
+		`\n${passed} passed, ${failed} failed\n${failed === 0 ? `✓ all ${passed} reserved-name-owner-parity checks passed` : '✗ reserved-name-owner-parity FAILED'}`
+	);
+	process.exit(failed === 0 ? 0 : 1);
+});

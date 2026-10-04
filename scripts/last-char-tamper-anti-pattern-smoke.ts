@@ -3,10 +3,10 @@
  * scripts/last-char-tamper-anti-pattern-smoke.ts
  *
  * Structural Defense #35 — last-char-tamper anti-pattern grep
- * smoke (cp84 Lesson #4 #2, promoted from cp85+ candidate to
- * cp84 ship after the cp84-F1 finding made the urgency clear).
+ * smoke (Lesson #4 #2, promoted from later candidate to
+ * ship after the finding made the urgency clear).
  *
- * Catches the Part 85 / cp84-F1 bug class at lint time, before
+ * Catches the bug class at lint time, before
  * any test ever runs.
  *
  * THE BUG CLASS:
@@ -125,7 +125,7 @@ for (const root of TEST_ROOTS) {
 			// Both halves on the same line — that's the canonical
 			// anti-pattern shape.  Future variants where the two
 			// halves are split across lines may slip through; we
-			// can extend if cp85+ surfaces such a variant.
+			// can extend if later surfaces such a variant.
 			if (line.includes('slice(0, -1)') && line.includes('at(-1)')) {
 				// Exemption: explicit comment marker on same line
 				if (line.includes(SAFE_MARKER)) continue;

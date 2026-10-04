@@ -41,7 +41,10 @@ const ASSET_REGISTRY_PATH = resolve(
 );
 const LOCALES_DIR = resolve(__dirname, '../apps/web/src/lib/i18n/locales');
 
-const ORIGIN = 'https://morphit.io';
+// The build origin: `morphit-ops` rewrites it to each instance's own
+// origin at install/upgrade (apps/web/scripts/origin-slots.mjs records every
+// occurrence). Same default and override as apps/web/vite.config.js.
+const ORIGIN = process.env.MORPHIT_SITE_ORIGIN || 'https://morphit.io';
 const DEFAULT_LOCALE = 'en';
 
 // Derived from the on-disk JSON files in apps/web/src/lib/i18n/locales/.
@@ -73,7 +76,7 @@ const ROUTES = [
 	{ path: '/glossary', priority: 0.6, changefreq: 'monthly' },
 	{ path: '/cheat-sheet', priority: 0.5, changefreq: 'monthly' },
 	{ path: '/privacy', priority: 0.6, changefreq: 'monthly' },
-	// cp117 A7: dynamic-path entry.  The `[asset]` segment expands to
+	// dynamic-path entry.  The `[asset]` segment expands to
 	// one URL per tradable ticker at sitemap build time (see expandRoutes).
 	// 16 current tradable tickers × 10 locales = 160 new sitemap URLs.
 	{ path: '/privacy/[asset]', priority: 0.5, changefreq: 'monthly' }
@@ -118,7 +121,7 @@ function readAssetTickers() {
  */
 function expandRoutes(routes) {
 	const tickers = readAssetTickers();
-	// cp425 — goods assets (BARTER) have no crypto address and no on-chain
+	// goods assets (BARTER) have no crypto address and no on-chain
 	// privacy guide (the wares change hands off-platform), so they get no
 	// /privacy/<ticker> page. Mirror of the registry's isGoodsAsset()
 	// predicate (this .mjs can't import the .ts helper) — keep in sync if a
@@ -228,8 +231,29 @@ function xmlEscape(s) {
 		.replace(/'/g, '&apos;');
 }
 
+/**
+ * The <lastmod> date: the release's, so an unchanged release rebuilds to the
+ * same sitemap — SOURCE_DATE_EPOCH (reproducible builds), else the build time
+ * the release pipeline bakes into release-info.json. Null (no <lastmod>) for a
+ * checkout with neither: a build-day date would claim every page changed.
+ */
+function releaseDate() {
+	const epoch = Number(process.env.SOURCE_DATE_EPOCH);
+	if (process.env.SOURCE_DATE_EPOCH && Number.isFinite(epoch)) {
+		return new Date(epoch * 1000).toISOString().slice(0, 10);
+	}
+	try {
+		const info = JSON.parse(readFileSync(resolve(__dirname, '../release-info.json'), 'utf8'));
+		const t = Date.parse(info.build_time);
+		if (Number.isFinite(t)) return new Date(t).toISOString().slice(0, 10);
+	} catch {
+		/* no release-info.json */
+	}
+	return null;
+}
+
 function buildSitemap() {
-	const today = new Date().toISOString().slice(0, 10);
+	const lastmod = releaseDate();
 	const lines = [];
 	lines.push('<?xml version="1.0" encoding="UTF-8"?>');
 	lines.push('<urlset');
@@ -249,7 +273,7 @@ function buildSitemap() {
 			const loc = localizedUrl(route.path, locale);
 			lines.push('\t<url>');
 			lines.push(`\t\t<loc>${xmlEscape(loc)}</loc>`);
-			lines.push(`\t\t<lastmod>${today}</lastmod>`);
+			if (lastmod !== null) lines.push(`\t\t<lastmod>${lastmod}</lastmod>`);
 			lines.push(`\t\t<changefreq>${route.changefreq}</changefreq>`);
 			lines.push(`\t\t<priority>${route.priority.toFixed(1)}</priority>`);
 			for (const other of LOCALES) {

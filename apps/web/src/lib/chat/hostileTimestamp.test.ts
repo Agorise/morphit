@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 /**
- * v1.7.7 adversarial pass — [the maintainer]: "when we do the walkthroughs and deep deep
- * before a release, this is exactly the type of thing that a black hat would try
- * to do. he wants to break things."
+ * v1.7.7 adversarial pass — Requirement: the pre-release walkthroughs try exactly what a
+ * hostile user would do to break things.
  *
  * Morphit is FEDERATED. `last_message_at` arrives from whichever operator's
  * indexer the user picked, and v1.7.7 made that value load-bearing in three

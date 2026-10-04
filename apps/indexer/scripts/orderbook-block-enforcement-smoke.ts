@@ -24,11 +24,22 @@ const apiDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'api')
 // Every public listing surface + how many times the exclusion must
 // appear (one per public listing query in that file).
 const SURFACES: Record<string, number> = {
-	'orderbook.ts': 1, // main public orderbook
 	'orders.ts': 1, // /v1/orders/:account
-	'featuredOrderbook.ts': 1, // featured slots
-	'rssOrderbookHandlers.ts': 3, // global + per-asset + per-account RSS
-	'orderbookStreamHelpers.ts': 1 // SSE snapshot + live-emit + fallback (shared buildWhereClauses)
+	'featuredVisibility.ts': 1, // eligibleFeaturedBidsSql: featured slots + /featured/bids visibility
+	'orderbookStreamHelpers.ts': 1 // buildWhereClauses: REST orderbook, SSE, RSS/Atom/JSON feeds
+};
+
+// Surfaces that take their WHERE from a shared builder (buildWhereClauses,
+// eligibleFeaturedBidsSql), and the call that must pass the operator account
+// (no account → no block filter).
+const DELEGATED: Record<string, { call: RegExp; expected: number }> = {
+	'orderbook.ts': { call: /buildWhereClauses\(q, 0, operatorAccount\)/g, expected: 1 },
+	'featuredOrderbook.ts': { call: /eligibleFeaturedBidsSql\('\$2'\)/g, expected: 1 },
+	'featuredBids.ts': { call: /eligibleFeaturedBidsSql\('\$4'\)/g, expected: 1 },
+	'rssOrderbookHandlers.ts': {
+		call: /buildWhereClauses\([^)]*config\.operatorAccountName\)/g,
+		expected: 1 // feedWhere: global + per-asset + per-account
+	}
 };
 
 // The distinctive fragment of the exclusion — order-account scoped.
@@ -70,7 +81,25 @@ for (const [file, expected] of Object.entries(SURFACES)) {
 	}
 }
 
-// ─── cp257: read/write KEY consistency ──────────────────────────────
+for (const [file, { call, expected }] of Object.entries(DELEGATED)) {
+	let src: string;
+	try {
+		src = readFileSync(join(apiDir, file), 'utf8');
+	} catch {
+		bad(`${file}: cannot read (listing surface moved/renamed?)`);
+		continue;
+	}
+	const count = (src.match(call) ?? []).length;
+	if (count >= expected) {
+		ok(`${file}: WHERE from the shared builder with the operator account (${count})`);
+	} else {
+		bad(
+			`${file}: no shared-builder call with the operator account — blocked accounts would LEAK from this surface`
+		);
+	}
+}
+
+// ─── read/write KEY consistency ──────────────────────────────
 // The exclusion only works if the account the READ surfaces filter by is
 // the SAME account operatorBlock.ts WRITES blocks under. Blocks are keyed
 // on operatorAccountName (operatorBlock gates `ctx.signer ===
@@ -106,6 +135,7 @@ for (const [file, expected] of Object.entries(SURFACES)) {
 			'orderbookRoute',
 			'orderbookStreamRoute',
 			'featuredRoute',
+			'featuredBidsRoute',
 			'ordersByAccountRoute'
 		]) {
 			const right = new RegExp(r + '\\([^)]*config\\.operatorAccountName');

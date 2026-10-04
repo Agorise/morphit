@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: no bare `href="/"` inside the [lang] route subtree. Anchor cp295.
+ * Smoke: no bare `href="/"` inside the [lang] route subtree. Anchor.
  *
  * THE BUG THIS GUARDS AGAINST. A logged-in user who clicked the top-left
  * logo got signed out. The logo's link was a bare `href="/"`. The bare `/`

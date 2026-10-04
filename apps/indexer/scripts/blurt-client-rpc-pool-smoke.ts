@@ -1,5 +1,5 @@
 /**
- * BlurtClient integration smoke — cp165.
+ * BlurtClient integration smoke.
  *
  * Verifies that the indexer's BlurtClient and the relay's BlurtClient,
  * both migrated to `@morphit/rpc-pool`, actually do what they say:
@@ -8,9 +8,9 @@
  *      warm-up the slow endpoint is NOT picked first.
  *   2. When the fast endpoint is killed mid-stream, the call
  *      transparently rotates to the slow endpoint instead of failing.
- *   3. dblurt's RPC errors (chain-level rejections, malformed
- *      responses) propagate to the caller without cooling down the
- *      endpoint or rotating off.
+ *   3. An RPC error on a READ from one node asks the next operator
+ *      (one node cannot decide a read by erroring); an error every node
+ *      gives is the answer, and nobody is parked for it.
  *   4. The pool's snapshot() is exposed via endpointSnapshot() on
  *      both clients (operator diagnostics).
  *
@@ -200,33 +200,55 @@ async function startFakeRPC(initialLatencyMs: number): Promise<{
 	await ep2.close();
 }
 
-/* ---------------- scenario 3: RPC errors propagate without rotation ---------------- */
+/* ---------------- scenario 3: an RPC error on a READ asks the next operator ---------------- */
+{
+	// One node answering every read with a plausible RPC error used to be the
+	// answer (no rotation), so it could freeze the indexer by itself. A read
+	// now asks the next operator, and the healthy answer wins.
+	const ep1 = await startFakeRPC(10);
+	const ep2 = await startFakeRPC(15);
+	const client = new IndexerBlurt({
+		blurtRpcEndpoints: [ep1.url, ep2.url] as readonly string[]
+	} as never);
+	ep1.setShouldError('rpc');
+	try {
+		const dgp = await client.getDynamicGlobalProperties();
+		if (dgp.head_block_number === 100_000_000) {
+			pass('indexer BlurtClient: one node erroring on a read does not decide the answer');
+		} else {
+			fail('read error rotates', `unexpected answer ${JSON.stringify(dgp).slice(0, 80)}`);
+		}
+	} catch (err) {
+		fail('read error rotates', `threw ${(err as Error).message.slice(0, 80)}`);
+	}
+	await ep1.close();
+	await ep2.close();
+}
+
+/* ---------------- scenario 3b: an error EVERY node gives on a read is the answer ---------------- */
 {
 	const ep1 = await startFakeRPC(10);
 	const ep2 = await startFakeRPC(15);
 	const client = new IndexerBlurt({
 		blurtRpcEndpoints: [ep1.url, ep2.url] as readonly string[]
 	} as never);
-	// Make BOTH endpoints return RPC errors.  An RPC error should
-	// propagate immediately from the first endpoint hit — NOT rotate
-	// to the other endpoint (the chain told us something).
+	// Both answer with the same application error: every operator was asked,
+	// and the error (the request's own fault) is thrown, nobody parked.
 	ep1.setShouldError('rpc');
 	ep2.setShouldError('rpc');
 	const callsBefore = ep1.callCount() + ep2.callCount();
 	try {
 		await client.getDynamicGlobalProperties();
-		fail('app errors propagate', 'expected throw, got success');
+		fail('read errors from every node propagate', 'expected throw, got success');
 	} catch (err) {
-		const callsAfter = ep1.callCount() + ep2.callCount();
-		const delta = callsAfter - callsBefore;
-		// Should be exactly 1 — the call hit one endpoint, got an RPC
-		// error, and did NOT retry on the other.
-		if (delta === 1 && (err as Error).message.includes('assert_exception')) {
-			pass('indexer BlurtClient: RPC errors propagate without rotating');
+		const delta = ep1.callCount() + ep2.callCount() - callsBefore;
+		const parked = client.endpointSnapshot().filter((e) => e.cooldownUntil > Date.now()).length;
+		if (delta === 2 && parked === 0 && (err as Error).message.includes('assert_exception')) {
+			pass('indexer BlurtClient: an error every node gives is thrown, nobody parked');
 		} else {
 			fail(
-				'app errors propagate',
-				`delta=${delta} (expected 1), err=${(err as Error).message.slice(0, 80)}`
+				'read errors from every node propagate',
+				`delta=${delta} (expected 2), parked=${parked}, err=${(err as Error).message.slice(0, 80)}`
 			);
 		}
 	}

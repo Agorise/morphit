@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * head-tailer-validation-parity-smoke (cp403 [1], ADR-0048).
+ * head-tailer-validation-parity-smoke (ADR-0048).
  *
  * The head-block fast-path tailer (headTailer.ts) deliberately
  * duplicates the durable chat handler's intake validation (account-name
@@ -166,7 +166,7 @@ function firstQuoted(src: string, anchor: string): string | null {
 	// The durable emit() must NOT be called from the tailer (that path is
 	// the poller's, and it requires a real DB messageId).
 	const usesDurableEmit = /chatEventBus\.emit\s*\(/.test(tailer);
-	// This was "CHAT ONLY: exactly one op id" (cp403), then +feedback (v1.5.5),
+	// This was "CHAT ONLY: exactly one op id", then +feedback (v1.5.5),
 	// now +order status (v1.7.0). Each widening must be argued, not assumed —
 	// that is the entire job of this allowlist.
 	//
@@ -267,7 +267,7 @@ function firstQuoted(src: string, anchor: string): string | null {
 // the DB). Renumbering the scenarios below would churn every label for nothing,
 // so the slot stays vacant and explains itself.
 
-// ── 10. cp406 self-copy bound parity ──
+// ── 10. self-copy bound parity ──
 {
 	// The optional sender self-copy (self_ciphertext/self_nonce) must be
 	// bounded identically in BOTH files, else the fast path could emit a

@@ -19,19 +19,12 @@
  *   - **Casual local malware.**  Stealers that grab keystore files
  *     and look for the standard "decrypt and use" path don't know
  *     to also extract and use the TOTP secret to compute codes.
- *   - **Borrowed-laptop / shared-device.**  The "I'll just check
- *     the orderbook on your phone for a sec" case is gated on the
- *     other party also having the user's authenticator.
  *
  * What TOTP does NOT protect against:
  *   - A determined attacker with the stolen encrypted-keystore file
  *     plus an offline password-cracking rig: post-crack, they have
  *     the keys directly.  TOTP doesn't slow them down here.
- *
- * For cryptographically-meaningful 2FA (where the second factor's
- * private material never lives on the protected device), Morphit's
- * roadmap is FIDO2/WebAuthn hardware keys.  Exploratory code lives
- * at `apps/web/src/routes/[lang]/dev/yubikey-probe/+page.svelte`.
+ *   - Anyone who can run code in this page: the gate is in the app.
  *
  * ─── Recommended authenticator apps (open-source only) ─────────────
  *
@@ -254,11 +247,9 @@ function constantTimeEqual(a: string, b: string): boolean {
 
 /** Verify a user-provided code against the secret, tolerating ±1
  *  time step of skew (90 seconds of total acceptance window).
- *  Returns the matching step offset (-1, 0, or +1) so the caller
- *  can detect codes used at a previous step (replay defense — the
- *  app should refuse to re-accept the same step's code for a short
- *  window, but the responsibility of remembering "last accepted
- *  step" belongs to the caller). */
+ *  Returns the matching time step so the caller can refuse a code
+ *  whose step was already accepted (the unlock gate in
+ *  $crypto/keystoreTotp does). */
 export async function verifyCode(
 	secret: Uint8Array,
 	userCode: string,

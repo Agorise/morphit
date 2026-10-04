@@ -14,6 +14,8 @@ import type { StructuredAlert } from './classifier.ts';
 
 export interface JournalctlTailer {
 	stop(): void;
+	/** True while a journalctl process is running and being read. */
+	isAlive(): boolean;
 }
 
 /** Best-effort parser: pulls the structured fields out of a
@@ -97,14 +99,14 @@ export function parseJournalLine(line: string): StructuredAlert | null {
 			? (ctx as Record<string, unknown>)
 			: undefined;
 
-	// cp139 B-2: cap envelope-field lengths defensively.
+	// cap envelope-field lengths defensively.
 	//
 	// Today Morphit's own loggers emit short module/event constants
 	// (typical names like "operator-balance" / "low_balance" — well
 	// under 64 bytes) and journald itself bounds line size to
 	// LineMax (default ~48 KiB).  Practical reach is ~zero.
 	//
-	// But cp18 AUDIT-4 capped the payload-details block at
+	// But capped the payload-details block at
 	// MAX_FIELD_BYTES=1024 + MAX_PAYLOAD_BYTES=8192 because a
 	// compromised SIDECAR (host-monitor / smartctl-monitor /
 	// dmesg-monitor) could emit a mega-payload.  The same threat
@@ -136,62 +138,145 @@ export function parseJournalLine(line: string): StructuredAlert | null {
 	};
 }
 
+export interface TailOptions {
+	/** First wait before respawning journalctl after it exits. Default 1 s. */
+	readonly initialBackoffMs?: number;
+	/** Longest wait between respawns. Default 60 s. */
+	readonly maxBackoffMs?: number;
+}
+
+/** The journald cursor of a raw `journalctl -o json` line, or null. */
+function cursorOf(line: string): string | null {
+	try {
+		const c = (JSON.parse(line) as Record<string, unknown>)['__CURSOR'];
+		return typeof c === 'string' && c !== '' ? c : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Follow the given units' journal and hand every Morphit structured line to
+ * `onAlert`.
+ *
+ * journalctl is RESPAWNED whenever it exits (journald restarted, the process
+ * was killed, a spawn failed), with a backoff that doubles from
+ * `initialBackoffMs` to `maxBackoffMs` and resets after a run that lasted a
+ * minute. A respawn resumes with `--after-cursor` at the last line seen, so
+ * nothing in between is lost and nothing already handled is sent again.
+ * Before this, an exit was only logged: the bot went deaf while its health
+ * endpoint still answered ok. `isAlive()` is what the health endpoint reports.
+ */
 export function tailJournalctl(
 	units: ReadonlyArray<string>,
 	onAlert: (alert: StructuredAlert) => void,
-	onError: (err: Error) => void = console.error
+	onError: (err: Error) => void = console.error,
+	options: TailOptions = {}
 ): JournalctlTailer {
-	const args = ['-o', 'json', '--follow', '--no-pager'];
-	for (const unit of units) {
-		args.push('-u', unit);
-	}
-	let child: ChildProcess;
-	try {
-		child = spawn('journalctl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-	} catch (err) {
-		onError(err instanceof Error ? err : new Error(String(err)));
-		return { stop: () => {} };
-	}
+	const initialBackoffMs = options.initialBackoffMs ?? 1_000;
+	const maxBackoffMs = options.maxBackoffMs ?? 60_000;
+	let child: ChildProcess | null = null;
+	let alive = false;
+	let stopped = false;
+	let cursor: string | null = null;
+	let backoffMs = initialBackoffMs;
+	let respawnTimer: NodeJS.Timeout | null = null;
 
-	const stdout = child.stdout as Readable | null;
-	const stderr = child.stderr as Readable | null;
-	if (stdout === null || stderr === null) {
-		onError(new Error('journalctl spawn produced no stdout/stderr streams'));
-		return { stop: () => child.kill('SIGTERM') };
-	}
+	const scheduleRespawn = (): void => {
+		alive = false;
+		child = null;
+		if (stopped) return;
+		const wait = backoffMs;
+		backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
+		onError(new Error(`journalctl is not running; restarting it in ${Math.round(wait / 1000)}s`));
+		respawnTimer = setTimeout(start, wait);
+	};
 
-	let stdoutBuffer = '';
-	stdout.setEncoding('utf-8');
-	stdout.on('data', (chunk: string) => {
-		stdoutBuffer += chunk;
-		let newlineIdx: number;
-		while ((newlineIdx = stdoutBuffer.indexOf('\n')) >= 0) {
-			const line = stdoutBuffer.slice(0, newlineIdx);
-			stdoutBuffer = stdoutBuffer.slice(newlineIdx + 1);
-			if (line.trim() === '') continue;
-			const alert = parseJournalLine(line);
-			if (alert !== null) {
-				try {
-					onAlert(alert);
-				} catch (err) {
-					onError(err instanceof Error ? err : new Error(String(err)));
+	function start(): void {
+		respawnTimer = null;
+		if (stopped) return;
+		const args = ['-o', 'json', '--follow', '--no-pager'];
+		if (cursor !== null) args.push(`--after-cursor=${cursor}`);
+		for (const unit of units) {
+			args.push('-u', unit);
+		}
+		let proc: ChildProcess;
+		try {
+			proc = spawn('journalctl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+		} catch (err) {
+			onError(err instanceof Error ? err : new Error(String(err)));
+			scheduleRespawn();
+			return;
+		}
+		child = proc;
+		const startedAt = Date.now();
+		let ended = false;
+		const onEnd = (): void => {
+			if (ended) return;
+			ended = true;
+			// A run that lasted a while was healthy: the next failure starts the
+			// backoff from the beginning again.
+			if (Date.now() - startedAt >= 60_000) backoffMs = initialBackoffMs;
+			scheduleRespawn();
+		};
+		proc.on('error', (err) => {
+			onError(err);
+			onEnd();
+		});
+
+		const stdout = proc.stdout as Readable | null;
+		const stderr = proc.stderr as Readable | null;
+		if (stdout === null || stderr === null) {
+			onError(new Error('journalctl spawn produced no stdout/stderr streams'));
+			proc.kill('SIGTERM');
+			onEnd();
+			return;
+		}
+		alive = true;
+
+		let stdoutBuffer = '';
+		stdout.setEncoding('utf-8');
+		stdout.on('data', (chunk: string) => {
+			stdoutBuffer += chunk;
+			let newlineIdx: number;
+			while ((newlineIdx = stdoutBuffer.indexOf('\n')) >= 0) {
+				const line = stdoutBuffer.slice(0, newlineIdx);
+				stdoutBuffer = stdoutBuffer.slice(newlineIdx + 1);
+				if (line.trim() === '') continue;
+				cursor = cursorOf(line) ?? cursor;
+				const alert = parseJournalLine(line);
+				if (alert !== null) {
+					try {
+						onAlert(alert);
+					} catch (err) {
+						onError(err instanceof Error ? err : new Error(String(err)));
+					}
 				}
 			}
-		}
-	});
+		});
 
-	stderr.setEncoding('utf-8');
-	stderr.on('data', (chunk: string) => {
-		onError(new Error(`journalctl stderr: ${chunk.trim()}`));
-	});
+		stderr.setEncoding('utf-8');
+		stderr.on('data', (chunk: string) => {
+			onError(new Error(`journalctl stderr: ${chunk.trim()}`));
+		});
 
-	child.on('exit', (code) => {
-		onError(new Error(`journalctl exited with code ${code}`));
-	});
+		proc.on('exit', (code) => {
+			onError(new Error(`journalctl exited with code ${code}`));
+			onEnd();
+		});
+	}
+
+	start();
 
 	return {
 		stop() {
-			child.kill('SIGTERM');
+			stopped = true;
+			alive = false;
+			if (respawnTimer !== null) clearTimeout(respawnTimer);
+			child?.kill('SIGTERM');
+		},
+		isAlive() {
+			return alive && !stopped;
 		}
 	};
 }

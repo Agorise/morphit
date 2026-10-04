@@ -1,6 +1,6 @@
 /**
- * nameMimicsNonPublicAddress — no false positives, no lost refusals
- * (v1.20.0 fix wave 2, D13 follow-up).
+ * nameMimicsNonPublicAddress — no false positives, no lost refusals.
+ *
  *
  * D13 moved the non-public address set into @morphit/net-defense and widened
  * it (192.0.0.0/24 among others). The mimicry check padded a name's leading

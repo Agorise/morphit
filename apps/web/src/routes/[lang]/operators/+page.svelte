@@ -32,7 +32,7 @@
 	 *  stricter-validated than a regular profile name. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
 	/** False until the operator-profile hydrate has completed once.
-	 *  v1.8.13 (the maintainer) — identity labels wait rather than asserting `@account` +
+	 *  v1.8.13 — identity labels wait rather than asserting `@account` +
 	 *  identicon and rewriting themselves seconds later. */
 	let profilesHydrated = $state(false);
 
@@ -91,13 +91,13 @@
 	// Matrix / XMPP / Discord-invite contact renders — not just https (the old
 	// https-only validator here silently dropped everything else, v1.16.9).
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
-	// t.txt #3 — the subtitle links the word "instances" to the instances page.
+	// the subtitle links the word "instances" to the instances page.
 	// Fill the {link} placeholder with a sentinel, split the localized string on
 	// it, and render an <a> between the parts, so the link sits at the
 	// grammatically-correct spot in every locale (word order varies).
@@ -154,12 +154,17 @@
 				</li>
 			{/each}
 		</ul>
+	{:else if error}
+		<!-- The directory could not be read: say so, not "no operators yet". -->
+		<div
+			class="mx-auto max-w-2xl rounded-2xl border border-dashed border-red-300 bg-red-50 p-10 text-center text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+			role="alert"
+		>
+			<p>{error}</p>
+		</div>
 	{:else if operators.length === 0}
-		<!-- Empty state. Phase 5b pre-ADR-0013 ships with this
-			 view. Copy is written assuming no operator has ever
-			 registered yet — once ADR-0013 lands and the first
-			 operator registers, this branch becomes unreachable
-			 and the populated branch takes over. -->
+		<!-- Empty state: the directory returned no registered operator
+			 (a fresh chain, or an indexer that has not caught up). -->
 		<div
 			class="mx-auto max-w-2xl rounded-2xl border border-dashed border-ink-200 bg-ink-50 p-10 text-center dark:border-ink-800 dark:bg-ink-950"
 		>
@@ -171,11 +176,6 @@
 			<a href={lp('/run-a-node')} class="btn-primary btn-shine mt-6 inline-flex">
 				{$_('operators.empty_cta')}
 			</a>
-			{#if error}
-				<p class="mt-6 text-xs text-ink-500">
-					{$_('operators.load_error')}: {error}
-				</p>
-			{/if}
 		</div>
 	{:else}
 		<ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

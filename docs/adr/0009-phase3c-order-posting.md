@@ -6,10 +6,10 @@
 **Supersedes:** none
 **Superseded by:** none
 
-> **2026-05-12 forward note (Part 120 audit):** the
+> **2026-05-12 forward note:** the
 > "3 minutes" replace-window references throughout this
 > ADR describe the value as originally specified.  Updated
-> to **15 minutes** in Part 70 per ADR-0001's 2026-05-07
+> to **15 minutes** per ADR-0001's 2026-05-07
 > Amendment.  This ADR is preserved with the original
 > 3-minute references for historical accuracy; ADR-0001
 > is authoritative for the current window.
@@ -59,7 +59,7 @@ Both ops go in **one** signed transaction. This gives atomicity:
 either both land on chain or neither does. A user cannot post an
 order without paying, nor pay without posting.
 
-**Why the order op is active-level here, not posting (cp407).** A
+**Why the order op is active-level here, not posting.** A
 transfer requires active authority, and Blurt (Graphene) rejects any
 transaction that mixes posting-level and active-level operations — it
 asserts `required_active.size() == 0` when a posting op is present.
@@ -305,10 +305,10 @@ Migration version bumps to 2 in `src/db/migrations.ts`.
   the UI shows the fee_status inline on the user's own orders
   page).
 
-## Amendment — 2026-05-07 (Part 70)
+## Amendment — 2026-05-07
 
 The replace-window referenced throughout this ADR ("3 minutes")
-was extended to **15 minutes** in Part 70. The full rationale,
+was extended to **15 minutes**. The full rationale,
 threat-model re-analysis, and complete list of updated call
 sites lives in `docs/adr/0001-custom-json-replacement.md`
 under "Amendments → 2026-05-07."
@@ -323,14 +323,14 @@ amendment."
 
 ---
 
-## Part 113 amendment (2026-05-10) — Signal C + cited-order fee_status gate
+## (2026-05-10) — Signal C + cited-order fee_status gate
 
 ### Reputation attack surface enumerated
 
 A from-scratch audit of every way someone's
 reputation score can be **faked** (inflation) or
 **hurt** (deflation) caught two real gaps in the
-pre-Part-113 defenses.
+older defenses.
 
 **Vector A5 — feedback citing an order whose
 `fee_status` is NOT 'verified'.**  The feedback
@@ -356,7 +356,7 @@ from different creators to leave 1-2 star reviews
 on a victim's orders, cratering their visible
 average rating.
 
-### Fixes shipped in Part 113
+### Fixes shipped
 
 **Fix #1 — fee_status='verified' on cited orders.**
 The feedback handler's order EXISTS check now

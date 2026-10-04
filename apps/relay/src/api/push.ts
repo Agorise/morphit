@@ -6,27 +6,27 @@
  *
  * Authentication evolution:
  *
- *   cp13 (historical): no cryptographic proof of account
+ *   (historical): no cryptographic proof of account
  *     ownership on either endpoint, only per-IP rate limit on
  *     subscribe.  Rationale leaned on (a) the push endpoint URL
  *     being unforwardable, (b) push payloads only summarizing
  *     PUBLIC chain events, (c) chat content never appearing in
  *     pushes (E2EE on chain).
  *
- *   cp14 (subscribe-side): posting-key signature added to
+ *   (subscribe-side): posting-key signature added to
  *     subscribe.  Closes "an attacker subscribes my account to
  *     their own device" (which would have leaked nothing
  *     non-public, but is still tidier closed than open).
  *     Signed canonical message:
  *       morphit:push:subscribe:<account>:<endpoint_sha256>:<timestamp>
  *
- *   cp131 MED-009 (unsubscribe-side, this checkpoint):
+ *   (unsubscribe-side, this checkpoint):
  *     symmetric posting-key signature added to unsubscribe.
  *     Closes the real risk that motivates the work — an
  *     attacker with a DB-leaked (account, endpoint) list
  *     could mass-fire unsubscribes and DoS notifications
  *     federation-wide.  Also adds a per-IP rate limit on
- *     unsubscribe; pre-cp131 unsubscribe was unlimited on the
+ *     unsubscribe; older unsubscribe was unlimited on the
  *     reasoning that users should always be able to remove a
  *     subscription, but a generous cap doesn't impede legit
  *     users while shutting down enumeration.
@@ -35,9 +35,15 @@
  *     prevents subscribe↔unsubscribe signature replay:
  *       morphit:push:unsubscribe:<account>:<endpoint_sha256>:<timestamp>
  *
- * Privacy: no IP logging on subscribe; user-agent capped at 200
- * chars at the storage layer; subscription endpoint never logged
- * in full (prefix only).
+ * Privacy: no IP and no account name in the log; the User-Agent and
+ * the raw browser language older clients send are not stored (the
+ * locale is mapped to one of the supported UI codes); the endpoint is
+ * never logged.
+ *
+ * Endpoint policy: only https URLs on a browser push service (or a host
+ * the operator added) are accepted — the relay POSTs to this URL from
+ * its own address, so an arbitrary URL was a blind SSRF / port probe
+ * against its loopback and LAN. See policy/pushEndpoint.ts.
  *
  * When VAPID env vars aren't set, both endpoints return 503
  * push_disabled — the client falls back to in-tab channels.
@@ -50,6 +56,7 @@ import type { Limiter } from '../middleware/ratelimit.ts';
 import type { PushSubscriptionStore, PushPrivacyMode } from '../policy/pushSubscriptions.ts';
 import type { BlurtClient } from '../blurt/client.ts';
 import { verifyPushSubscribeSignature, verifyPushUnsubscribeSignature } from '../policy/pushSubscribeSig.ts';
+import { isAllowedPushEndpoint } from '../policy/pushEndpoint.ts';
 import { clientIp, canonicalBucketKey } from '../middleware/ip.ts';
 import { logger } from '$log';
 
@@ -82,25 +89,28 @@ const subscribeBody = z
 					.strict()
 			})
 			.strict(),
+		// 'self_hosted' is still accepted from older cached clients; every
+		// row is stored as 'standard' (the mode was never wired to anything).
 		privacy_mode: z.enum(['standard', 'self_hosted']),
+		// Accepted so older clients still subscribe, and DISCARDED: nothing
+		// reads it, and next to the account it identified the device.
 		user_agent: z.string().max(400).optional(),
-		// Part 122 cp14 — posting-key signature over the canonical
+		// posting-key signature over the canonical
 		// message `morphit:push:subscribe:<account>:<endpoint_sha256>:<timestamp>`.
 		// Both fields are required when the relay was constructed
 		// with requireSignedSubscribe=true; ignored otherwise
 		// (kept on the wire for forward-compat).
 		signature: z.string().min(40).max(200).optional(),
 		timestamp: z.number().int().positive().optional(),
-		// Part 122 cp14 — client locale ('en', 'es', 'fr', ...).
-		// Stored on the subscription so the indexer can pick the
-		// right localized strings at push-pending enqueue time.
-		// Optional; defaults to 'en' when missing.
+		// Client locale. Stored as one of the supported UI codes (see
+		// normalizePushLocale) so the indexer can pick the right localized
+		// strings at push-pending enqueue time. Optional; 'en' when missing.
 		locale: z.string().min(2).max(10).optional(),
-		// cp450 GAP A — categories this device has OPTED OUT of
+		// categories this device has OPTED OUT of
 		// (blocklist). The push-sender skips a device whose list
 		// contains a push's category, so the per-category Settings
 		// toggle governs Web Push. Optional; absent = nothing muted
-		// = all on (the pre-cp450 behaviour). The store re-validates
+		// = all on (the older behaviour). The store re-validates
 		// against its known-category set, so the enum here is belt +
 		// braces, not the only guard.
 		muted_categories: z.array(z.enum(['order', 'chat', 'feedback'])).max(3).optional()
@@ -111,7 +121,7 @@ const unsubscribeBody = z
 	.object({
 		account: z.string().regex(ACCOUNT_NAME_RE, 'invalid account name'),
 		endpoint: z.string().url().max(MAX_ENDPOINT_LEN),
-		// cp131 MED-009 — posting-key signature over the
+		// posting-key signature over the
 		// canonical message
 		// `morphit:push:unsubscribe:<account>:<endpoint_sha256>:<timestamp>`.
 		// Both fields are required when the relay was
@@ -138,8 +148,8 @@ export class PushEndpoints {
 		 *  legitimate clients only subscribe once per device per
 		 *  session, but bounds DB-flood abuse. */
 		private readonly subscribeLimiter: Limiter,
-		/** cp131 MED-009 — per-IP rate limiter for unsubscribe.
-		 *  Pre-cp131 unsubscribe was unlimited on the rationale
+		/** per-IP rate limiter for unsubscribe.
+		 *  Previously, unsubscribe was unlimited on the rationale
 		 *  that "users should always be able to remove a
 		 *  subscription," but that left a DoS vector: anyone
 		 *  who knew or guessed (account, endpoint) pairs could
@@ -150,22 +160,25 @@ export class PushEndpoints {
 		private readonly unsubscribeLimiter: Limiter,
 		private readonly store: PushSubscriptionStore,
 		/** Used to fetch the subscribing account's posting public
-		 *  key for signature verification (cp14 / cp131). */
+		 *  key for signature verification. */
 		private readonly blurt: BlurtClient,
 		/** When true, every /v1/push/subscribe MUST carry a valid
 		 *  posting-key signature over the canonical message.
-		 *  When false (cp13-compat mode), rate-limited-only;
+		 *  When false (legacy-compat mode), rate-limited-only;
 		 *  signatures still verified when present but their
 		 *  absence isn't rejected.  Operators turn this off only
 		 *  to support legacy clients during a roll-forward. */
 		private readonly requireSignedSubscribe: boolean,
-		/** cp131 MED-009 — same posture for unsubscribe.  Same
+		/** same posture for unsubscribe.  Same
 		 *  toggle semantics as requireSignedSubscribe: when
 		 *  true, signature required; when false, signature is
 		 *  verified IF present but its absence is not a
 		 *  rejection.  Operators who set requireSignedSubscribe
 		 *  should also set this; the pair is symmetric. */
 		private readonly requireSignedUnsubscribe: boolean,
+		/** Push hosts the operator added (MORPHIT_RELAY_PUSH_EXTRA_HOSTS) on top
+		 *  of the browser push services. */
+		private readonly extraPushHosts: readonly string[] = [],
 		/** v1.18.0 — why push is off when it is off ON PURPOSE. A hidden-only
 		 *  relay turns push off because every browser push service is a clearnet
 		 *  host; saying so lets the browser tell its user the truth, instead of
@@ -232,7 +245,13 @@ export class PushEndpoints {
 		}
 		const input = parsed.data;
 
-		// Posting-key signature verification (cp14).  When the
+		// Only a browser push service (or an operator-added host): the relay
+		// will POST to this URL from its own address.
+		if (!isAllowedPushEndpoint(input.subscription.endpoint, this.extraPushHosts)) {
+			return c.json({ status: 'bad_request', code: 'push_endpoint_not_allowed' }, 400);
+		}
+
+		// Posting-key signature verification.  When the
 		// operator runs in require-signed mode, both fields must
 		// be present and valid.  When in legacy compat mode, we
 		// still verify when present (so early-adopter clients
@@ -254,10 +273,7 @@ export class PushEndpoints {
 				Math.floor(Date.now() / 1000)
 			);
 			if (!sigResult.ok) {
-				log.warn('subscribe_sig_rejected', {
-					account: input.account,
-					reason: sigResult.reason
-				});
+				log.warn('subscribe_sig_rejected', { reason: sigResult.reason });
 				return c.json({ status: 'signature_invalid', reason: sigResult.reason }, 401);
 			}
 		}
@@ -268,7 +284,6 @@ export class PushEndpoints {
 				endpoint: input.subscription.endpoint,
 				p256dh: input.subscription.keys.p256dh,
 				auth: input.subscription.keys.auth,
-				userAgent: input.user_agent ?? null,
 				privacyMode: input.privacy_mode as PushPrivacyMode,
 				locale: input.locale ?? 'en',
 				mutedCategories: input.muted_categories ?? []
@@ -279,7 +294,7 @@ export class PushEndpoints {
 				privacy_mode: row.privacyMode
 			});
 		} catch (err) {
-			log.error('subscribe_failed', { account: input.account }, err as Error);
+			log.error('subscribe_failed', {}, err as Error);
 			return c.json({ status: 'internal' }, 500);
 		}
 	}
@@ -294,8 +309,8 @@ export class PushEndpoints {
 		// and it would start delivering again, unannounced, if the operator ever
 		// turned push back on.
 
-		// cp131 MED-009 — per-IP rate limit on unsubscribe.
-		// Pre-cp131 this was deliberately UN-limited on the
+		// per-IP rate limit on unsubscribe.
+		// Previously, this was deliberately UN-limited on the
 		// "users should always be able to remove a
 		// subscription" reasoning, but that argument breaks
 		// down when the attacker isn't the legitimate user:
@@ -323,8 +338,8 @@ export class PushEndpoints {
 		}
 		const input = parsed.data;
 
-		// cp131 MED-009 — posting-key signature gate.  Same
-		// shape as subscribe's cp14 gate: when configured to
+		// posting-key signature gate.  Same
+		// shape as subscribe's gate: when configured to
 		// require signatures, reject unsigned requests with
 		// 401.  When configured permissive (signatures
 		// optional), still verify any provided signature so
@@ -347,10 +362,7 @@ export class PushEndpoints {
 				Math.floor(Date.now() / 1000)
 			);
 			if (!sigResult.ok) {
-				log.warn('unsubscribe_sig_rejected', {
-					account: input.account,
-					reason: sigResult.reason
-				});
+				log.warn('unsubscribe_sig_rejected', { reason: sigResult.reason });
 				return c.json(
 					{ status: 'signature_invalid', reason: sigResult.reason },
 					401
@@ -362,7 +374,7 @@ export class PushEndpoints {
 			await this.store.delete(input.account, input.endpoint);
 			return c.json({ status: 'unsubscribed' });
 		} catch (err) {
-			log.error('unsubscribe_failed', { account: input.account }, err as Error);
+			log.error('unsubscribe_failed', {}, err as Error);
 			return c.json({ status: 'internal' }, 500);
 		}
 	}

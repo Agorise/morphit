@@ -71,8 +71,12 @@ required MORPHIT_CANARY_OPERATOR_ACCOUNT
 NEWS_RSS="${MORPHIT_CANARY_NEWS_RSS:-https://cointelegraph.com/rss}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-TEMPLATE="$REPO_ROOT/apps/web/static/canary.txt.template"
-# cp763 — the signed canary is written to MORPHIT_CANARY_OUT when set, else the
+# The template is a build input, not a page: it lives next to this script.
+# (Its old place, apps/web/static/, served it publicly; still read from there
+# when a tree has not moved it yet.)
+TEMPLATE="$REPO_ROOT/scripts/canary/canary.txt.template"
+[ -f "$TEMPLATE" ] || TEMPLATE="$REPO_ROOT/apps/web/static/canary.txt.template"
+# the signed canary is written to MORPHIT_CANARY_OUT when set, else the
 # legacy in-tree static/ path.  setup.sh points this at a USER-WRITABLE staging
 # dir (~/.morphit/canary) so the refresh never needs to write the root-owned
 # source tree; the template above is only READ (readable even when root-owned).
@@ -104,11 +108,11 @@ if [ ! -x "$RUN_TSX" ]; then
 	exit 1
 fi
 
-# ─── Tor-only privacy: route freshness-proof fetches over Tor (cp761) ─────
+# ─── Tor-only privacy: route freshness-proof fetches over Tor ─────
 # On a tor-only node the outbound freshness-proof fetches (Blurt head, BTC head,
 # news) MUST go through the co-located Tor SOCKS proxy — a direct clearnet fetch
 # would reveal the node's real IP to those endpoints, the exact exposure tor-only
-# exists to avoid (cp755 closed the equivalent leak for the indexer). We reach the
+# exists to avoid (a later change closed the equivalent leak for the indexer). We reach the
 # SAME clearnet freshness sources via a Tor exit, so the IP is hidden and proof
 # diversity is preserved. Detection: explicit MORPHIT_CANARY_TOR_ONLY wins, else
 # auto-derive from a hidden-service instance origin (.onion / .b32.i2p). The Node
@@ -194,7 +198,7 @@ fi
 # Fetched through the shared explorer rotator (scripts/canary/fetch-btc-head.ts):
 # it hops across the canonical DEFAULT_BTC_EXPLORER_APIS list (Esplora bases)
 # until one answers, so a single dead or region-blocked explorer no longer
-# stalls the canary — the same fix the Blurt head got in cp451. Pin one base
+# stalls the canary — the same fix the Blurt head got. Pin one base
 # with MORPHIT_CANARY_BTC_EXPLORER (e.g. your own bitcoind/Esplora).
 #
 # The BTC head is a SECONDARY freshness proof — the Blurt head above already
@@ -202,7 +206,7 @@ fi
 # (record it as unavailable) instead of aborting. The trailing `|| true` keeps
 # a total explorer outage from tripping `set -e`. On success the helper prints
 # ONE tab-separated line: <height>\t<hash>.
-# cp613: before this, the canary pinned blockstream.info alone with a fatal
+# before this, the canary pinned blockstream.info alone with a fatal
 # abort, and a single timeout there killed the whole weekly refresh.
 BTC_HEAD_LINE="$("$RUN_TSX" "$REPO_ROOT/scripts/canary/fetch-btc-head.ts" || true)"
 if [ -n "$BTC_HEAD_LINE" ]; then
@@ -227,7 +231,7 @@ NEWS_UA='Mozilla/5.0 (X11; Linux x86_64) Morphit-Canary'
 NEWS_HEADLINE=''
 NEWS_WON_SRC=''
 # The operator's configured feed first, then five independent, high-frequency
-# public feeds across different organisations and countries (cp614): BBC, The
+# public feeds across different organisations and countries: BBC, The
 # Guardian, NPR, Al Jazeera, and the New York Times. Spread this wide so a
 # single provider outage or a Cloudflare 403 cannot drop the news line.
 for feed in "$NEWS_RSS" \
@@ -271,7 +275,7 @@ fi
 
 # ─── Compose ─────────────────────────────────────────────────────
 
-# the maintainer's sitewide date/time standard: day-first full month name, then a
+# The maintainer's sitewide date/time standard: day-first full month name, then a
 # 24-hour UTC clock with seconds — e.g. "8 July, 2026 @ 23:45:18 UTC".
 # A Zulu ISO stamp ("2026-07-08T23:45:18Z") is precise but reads as
 # machine output to a human trying to judge whether a warrant canary is

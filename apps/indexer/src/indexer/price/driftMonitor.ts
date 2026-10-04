@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — price drift monitor (cp127, defense B).
+ * Morphit indexer — price drift monitor (defense B).
  *
  * The black-hat scenario this defends against
  * ───────────────────────────────────────────

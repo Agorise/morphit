@@ -108,7 +108,7 @@ function getDateFormat(locale: string, options: Intl.DateTimeFormatOptions): Int
  *     to the safe-format path if not recognized.
  *   - XDR (IMF Special Drawing Rights) — same.
  *
- * cp128 design: do NOT hardcode formatting per-ticker here.  Rely
+ * design: do NOT hardcode formatting per-ticker here.  Rely
  * on Intl + the locale's own rules.  Trying to be clever about
  * which symbol goes where breaks i18n.
  */
@@ -157,7 +157,7 @@ const KNOWN_ISO_4217 = new Set([
  * fr-FR, etc.).  For non-ISO tickers (or when Intl rejects the
  * code), falls back to "{number} {TICKER}" format.
  *
- * cp128: the indexer's listing-fee response carries `denomination_fiat`
+ * the indexer's listing-fee response carries `denomination_fiat`
  * alongside the numeric value; UI callers pass both into this
  * helper so the rendered output matches the operator's chosen
  * unit.  Default ticker for back-compat = 'USD'.
@@ -195,7 +195,7 @@ export function formatFiat(amount: number, ticker: string = 'USD'): string {
 }
 
 /**
- * cp433 — like formatFiat, but with the currency symbol GLUED to the
+ * like formatFiat, but with the currency symbol GLUED to the
  * number (no separating space): "3,98€" instead of "3,98 €". Some
  * locales (e.g. de-DE) place a space between the amount and a
  * trailing symbol; this drops only the whitespace literal(s) Intl
@@ -254,9 +254,9 @@ function fractionDigitsForTicker(ticker: string): number {
 	}
 }
 
-// ─── (cp128 cleanup) ───────────────────────────────────────────
+// ─── (cleanup) ───────────────────────────────────────────
 //
-// Prior to cp128 this file exported `formatUsd(amount)`.  All call
+// Previously this file exported `formatUsd(amount)`.  All call
 // sites have been migrated to `formatFiat(amount, ticker)` with the
 // ticker provided from the listing-fee response's `denomination_fiat`
 // field.  Pre-launch, no external consumers depend on `formatUsd`,
@@ -301,7 +301,7 @@ export function formatPercent(value: number, fractionDigits = 2): string {
 // ─── Rating formatter ──────────────────────────────────────────
 
 /**
- * (v1.20.0 fix wave, G12) A star rating / reputation score at its stored
+ * A star rating / reputation score at its stored
  * NUMERIC(3,2) precision in the active locale: "4.50" en, "4,50" de,
  * "۴٫۵۰" fa. Rating chips and profile headlines used `toFixed(2)`, which
  * shows "4.50" to every locale — a German reads that as four-and-a-half
@@ -402,7 +402,7 @@ export function formatDayMonth(input: string | Date | null | undefined): string 
  * "26 Jun" — day + the first 3 characters of the localized month name, UTC.
  * The compact form for the mobile order-card message button ("Message @user
  * before 26 Jun"), where a full month name + a 16-char username would blow
- * past one line. Day-first (the maintainer's canonical order); month clipped to 3 chars
+ * past one line. Day-first; month clipped to 3 chars
  * after localization so it stays slim in every language (CJK months are
  * already ≤3 chars). UTC for the same unambiguity reason as the other date
  * formatters. Returns '' for an invalid/absent date so callers can drop the
@@ -419,7 +419,7 @@ export function formatDayMonthShort(input: string | Date | null | undefined): st
 }
 
 /**
- * Assemble "day full-month, year" (the maintainer's canonical order) with the month
+ * Assemble "day full-month, year" with the month
  * name + digits localized, in UTC. UTC so a displayed date is unambiguous
  * and identical for every viewer regardless of their timezone — the same
  * reason the time is UTC (see {@link formatDayMonthTime}); without it a
@@ -438,7 +438,7 @@ function dayMonthYearParts(d: Date): string {
 /**
  * The canonical format plus the time in 24-hour UTC, joined by " @ " —
  * "30 June, 2026 @ 16:45:18 UTC" in en, "30 Junio, 2026 @ 16:45:18 UTC"
- * in es. the maintainer's court-friendly standard: 24-hour time in UTC with an
+ * in es. The maintainer's court-friendly standard: 24-hour time in UTC with an
  * explicit "UTC" suffix, so a displayed timestamp is unambiguous about
  * the timezone it refers to (needed if a chat/order log is ever produced
  * as evidence). The DATE part is rendered in UTC too so it always agrees

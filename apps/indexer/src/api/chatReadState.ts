@@ -23,7 +23,7 @@
  *     account: string,
  *     items: [{ peer: string, order_permlink: string, last_read_at: string }]
  *
- * cp446 — `order_permlink` names the DISCUSSION the ack is for: the order's
+ * `order_permlink` names the DISCUSSION the ack is for: the order's
  * permlink, '' for the order-less thread, or '*' for a legacy peer-wide ack.
  * A client evaluates unread against MAX(this thread's ack, the '*' ack).
  *   }

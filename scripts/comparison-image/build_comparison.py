@@ -24,8 +24,8 @@ import hashlib
 import cairosvg
 
 
-# ─── Embedded Morphit wordmark (the maintainer's edit, preserved verbatim) ──
-# This SVG fragment was hand-placed into the column header by the maintainer
+# ─── Embedded Morphit wordmark (hand-edited, preserved verbatim) ──
+# This SVG fragment was hand-placed into the column header
 # in Inkscape and lives at x≈894, y≈282 in the 2400x9155 viewBox.
 # The wordmark is composed of three paths:
 #   - path3 ("fil0", filled with linearGradient id="id0"):
@@ -94,7 +94,7 @@ PLATFORMS = ['Morphit', 'Bisq', 'Haveno / RetoSwap', 'OpenMonero', 'BasicSwap']
 SECTIONS = [
     ('Privacy & anonymity', [
         ('No KYC, no email, no ID required',                                ['Y','Y','Y','Y','Y'], None),
-        ('Anonymous signup — free, no deposit',                             ['Y','Y','Y','Y','-'], None),
+        ('Pseudonymous signup — free, no deposit',                           ['Y','Y','Y','Y','-'], None),
         ('Tor (.onion) accessible',                                          ['Y','Y','Y','Y','Y'], None),
         ('I2P accessible',                                                   ['Y','-','-','Y','-'], None),
         ('Lokinet accessible',                                               ['Y','-','-','-','-'], None),
@@ -103,9 +103,9 @@ SECTIONS = [
         ('Real-time streaming chat (no polling)',                            ['Y','-','-','-','-'], None),
         ('Immutable on-chain chat history (operator cannot delete)',         ['Y','-','-','-','-'], None),
         ('Chain-analysis defenses (amount jitter, address-reuse warnings)',  ['Y','-','-','-','-'], None),
-        ('Privacy coins first-class (XMR/ZEC/ARRR/DASH/DCR; TxIDs off-chain)', ['Y','-','-','-','Y'], None),
-        ('Opaque order IDs — asset name never on the coordination chain',    ['Y','-','-','-','-'], None),
-        ('Solicitor / spammer-message protection (proof-of-work + caps)',    ['Y','-','-','-','-'], None),
+        ('Privacy coins first-class (XMR/ZEC/ARRR/DASH/DCR, settled off Blurt)', ['Y','-','-','-','Y'], None),
+        ('Opaque order IDs — asset name kept out of URLs and feeds',         ['Y','-','-','-','-'], None),
+        ('Stranger-message fee against chat spam',                           ['Y','-','-','-','-'], None),
         ('Per-message ephemeral key (X25519 + ChaCha20-Poly1305)',           ['Y','-','-','-','-'], None),
         ('Block explorer built in (no third-party tracking)',                ['Y','-','-','-','-'], None),
         ('No cookies, no cookie banner, nothing to consent to',              ['Y','-','-','-','-'], None),
@@ -113,50 +113,46 @@ SECTIONS = [
         ('No CDN — every asset served from the operator',                    ['Y','-','-','-','-'], None),
         ('No Google Fonts, no third-party font network',                     ['Y','-','-','-','-'], None),
         ('No reCAPTCHA — proof-of-work instead',                             ['Y','-','-','-','-'], None),
-        ('IPs never logged at any layer',                                    ['Y','-','-','-','-'], None),
-        ('First-visit chain check prefers a hidden node — no clearnet IP on Tor', ['Y','-','-','-','-'], None),
+        ('Visitor IPs held in memory only — no access logs',                 ['Y','-','-','-','-'], None),
+        ('Release check on .onion / .i2p pages uses hidden nodes only',      ['Y','-','-','-','-'], None),
         ('Publisher-signed on-chain directory of privacy RPC nodes (auto-adopted)', ['Y','-','-','-','-'], None),
-        ('Runs 100% over Tor/I2P — zero clearnet, verified (chain, price, upgrades)', ['Y','-','-','-','-'], None),
-        ('Chain reads cross-checked across independent nodes (forgery-resistant)', ['Y','-','-','-','-'], None),
+        ('Zero-clearnet mode: chain, fees, prices, upgrades over Tor/I2P',   ['Y','-','-','-','-'], None),
+        ('Releases proved by @morphit\'s signature, not a node\'s word',      ['Y','-','-','-','-'], None),
         ('No fingerprinting via canvas / WebGL / fonts',                     ['Y','-','-','-','-'], None),
         ('All env vars marked secret are validated and redacted in logs',    ['Y','-','-','-','-'], None),
-        ('Encrypted nightly backups (age + rsync)',                          ['Y','-','-','-','-'], None),
+        ('Nightly backups, age-encrypted when a key is set',                 ['Y','-','-','-','-'], None),
     ]),
     ('Custody & trade safety', [
         ('Fully non-custodial (no platform holdings)',                       ['Y','Y','Y','-','Y'], None),
-        ('Never been hacked — platform holds no funds to drain',             ['Y','-','-','-','-'], None),
         ('Multi-signature escrow deposit required',                          ['-','Y','Y','-','-'], None),
         ('Trustless cryptographic atomic swaps',                             ['-','-','-','-','Y'], None),
         ('Third-party arbitrators for dispute resolution',                   ['-','Y','Y','Y','-'], None),
         ('On-chain immutable reputation that survives operator shutdown',    ['Y','-','-','-','-'], None),
-        ('Immutable feedback (no operator can edit or remove)',              ['Y','-','-','-','-'], None),
+        ('Feedback on chain — no operator can edit or delete it',            ['Y','-','-','-','-'], None),
         ('Optional TOTP-based 2FA at login',                                 ['Y','-','-','Y','-'], 'lock'),
         ('Optional YubiKey / FIDO2 hardware-key unlock',                     ['Y','-','-','-','-'], 'key'),
         ('Warrant canary (cryptographically signed weekly)',                 ['Y','-','-','-','-'], None),
         ('Operator kill-switch (instance-wide compromise response)',         ['Y','-','-','-','-'], None),
-        ('Reproducible builds with on-chain release attestation',            ['Y','-','-','-','-'], None),
+        ('Signed on-chain release record with file hash manifest',           ['Y','-','-','-','-'], None),
         ('Per-IP rate limiting at API edge',                                 ['Y','-','-','-','-'], None),
         ('Argon2id key derivation for keystore unlock',                      ['Y','-','-','-','-'], None),
         ('BIP-39 12-word seed phrase backup',                                ['Y','Y','-','-','Y'], None),
         ('Constant-time HMAC comparison (no timing oracles)',                ['Y','-','-','-','-'], None),
-        ('Strict CSP (Content Security Policy) headers',                     ['Y','-','-','-','-'], None),
-        ('Subresource Integrity (SRI) on every script tag',                  ['Y','-','-','-','-'], None),
-        ('Public report of every fixed security finding',                    ['Y','-','-','-','-'], None),
+        ('Strict script CSP — no inline script, no eval()',                  ['Y','-','-','-','-'], None),
     ]),
     ('Audits & engineering rigor', [
-        ('Public audit log — every finding, every fix, every accepted risk', ['Y','-','-','-','-'], None),
+        ('Public audit reports — findings, fixes, accepted risks',           ['Y','-','-','-','-'], None),
         ('94-task static security audit campaign',                           ['Y','-','-','-','-'], None),
         ('Adversarial red-team narratives + STRIDE threat modeling',         ['Y','-','-','-','-'], None),
-        ('Thousands of self-checking smoke tests in the source tree',        ['Y','-','-','-','-'], None),
+        ('Hundreds of self-checking smoke tests in the source tree',         ['Y','-','-','-','-'], None),
         ('AGPL-3.0 — modified instances must publish source',                ['Y','-','-','-','-'], None),
         ('Open source under any OSI-approved license',                       ['Y','Y','Y','Y','Y'], None),
         ('Zero code obfuscation — every shipped byte is auditable',          ['Y','Y','Y','-','Y'], None),
         ('42+ public Architecture Decision Records (ADRs)',                  ['Y','-','-','-','-'], None),
         ('No PHP / WordPress / XML-RPC / OAuth attack surface',              ['Y','Y','Y','-','Y'], None),
-        ('Zero known unpatched CVEs in shipped dependencies',                ['Y','-','-','-','-'], None),
+        ('Dependency audit gate in CI and release',                          ['Y','-','-','-','-'], None),
         ('Dependency hygiene audit documented per release',                  ['Y','-','-','-','-'], None),
         ('Public post-incident retrospectives',                              ['Y','-','-','-','-'], None),
-        ('No eval(), no Function(), no dynamic code paths anywhere',         ['Y','-','-','-','-'], None),
         ('Zod-validated request bodies with bounded field lengths',          ['Y','-','-','-','-'], None),
         ('Parameterized SQL — no string concatenation queries',              ['Y','-','-','-','-'], None),
     ]),
@@ -246,7 +242,7 @@ SECTIONS = [
         ('All commits in a public Forgejo instance (no GitHub dependency)',  ['Y','-','-','-','-'], None),
         ('Public release-signing key with a verifiable provenance trail',    ['Y','-','-','-','-'], None),
         ('GPG-signed release tarballs + on-chain bundle hash manifest',      ['Y','-','-','-','-'], None),
-        ('Self-auditing brag list (CI verifies every claim)',                ['Y','-','-','-','-'], None),
+        ('Claims list with CI-checked claims',                               ['Y','-','-','-','-'], None),
         ('Documentation kept in lockstep with code (paired-update rule)',    ['Y','-','-','-','-'], None),
     ]),
 ]
@@ -295,7 +291,7 @@ def col_x(i):
     return PAD_LR + FEATURE_COL_W + PLATFORM_COL_W//2 + i*PLATFORM_COL_W
 
 
-# ─── Colors — zebra contrast pushed wider per the maintainer's request ─────
+# ─── Colors — zebra contrast pushed wider for readability ───────
 BG          = '#0a0d12'
 BG_HEADER   = '#161b22'
 BG_SECTION  = '#1a212c'
@@ -378,7 +374,7 @@ H = (PAD_TOP
 # ─── Render SVG ──────────────────────────────────────────────────
 out = []
 out.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">')
-# Inject the maintainer's linearGradient defs (the green→teal gradient used by the
+# Inject the wordmark's linearGradient defs (the green→teal gradient used by the
 # wordmark's linked-circle motif).  See WORDMARK_DEFS constant above.
 out.append(f'<defs>{WORDMARK_DEFS}</defs>')
 out.append(f'<rect width="{W}" height="{H}" fill="{BG}"/>')
@@ -417,7 +413,7 @@ out.append(f'<text x="{PAD_LR + 30}" y="{header_y}" '
 for i, name in enumerate(PLATFORMS):
     cx = col_x(i)
     if i == 0:
-        # Morphit column header: inject the maintainer's hand-placed wordmark
+        # Morphit column header: inject the hand-placed wordmark
         # (linked green circles + "morph" in white + "it!" in green)
         # instead of plain text.  WORDMARK_GROUP positions itself
         # via its own transform matrix (x≈894, y≈282 in the 2400x9155
@@ -501,11 +497,11 @@ counts_str = ' · '.join(
 out.append(f'<text x="{W//2}" y="{y_footer - 22}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="20" '
            f'font-weight="600" fill="{TEXT_DIM}">{escape(counts_str)}</text>')
-# cp137 G-6 — determinism: derive the footer date from the brag-list
+# Determinism: derive the footer date from the brag-list
 # trailer's "Last updated" date rather than `date.today()`, so a
 # rebuild produces byte-identical SVG output regardless of the
-# wall-clock day it ran on.  Pre-cp137 used `date.today()`, which
-# meant rebuilding on a new UTC day silently changed the SVG hash
+# wall-clock day it ran on.  With `date.today()`, rebuilding on a
+# new UTC day would silently change the SVG hash
 # (and therefore the .png.fingerprint sidecar).  Harmless for the
 # current CI pattern (smoke compares committed bytes, doesn't
 # regenerate) but a footgun if anyone ever wires
@@ -644,7 +640,7 @@ cairosvg.svg2png(
 )
 optimize_png(static_png)
 
-# Content fingerprint sidecar (F-5 / cp137).
+# Content fingerprint sidecar.
 #
 # Git checkout resets every file's mtime to checkout time in
 # filesystem-walk order, so an mtime-based "PNG newer than build
@@ -661,18 +657,10 @@ optimize_png(static_png)
 # script's inputs, so hashing it precisely captures "is the output
 # in-sync with the source."
 svg_hash = hashlib.sha256(svg_str.encode('utf-8')).hexdigest()
-fingerprint_path = static_png.with_suffix('.png.fingerprint')
+# A build input, not a served file: it lives next to this script, so it is
+# not copied into the public web root.
+fingerprint_path = script_dir / 'morphit-comparison.png.fingerprint'
 fingerprint_path.write_text(svg_hash + '\n')
-
-# 3. ALSO write to /mnt/user-data/outputs so the chat can preview it
-outputs_png = Path('/mnt/user-data/outputs/morphit-comparison.png')
-if outputs_png.parent.exists():
-    cairosvg.svg2png(
-        bytestring=svg_str.encode('utf-8'),
-        write_to=str(outputs_png),
-        output_width=PNG_RENDER_WIDTH,
-    )
-    optimize_png(outputs_png)
 
 # ─── Stats ───────────────────────────────────────────────────────
 print(f'Canvas:           {W} x {H} px')
@@ -680,7 +668,7 @@ print(f'Sections:         {total_sections}')
 print(f'Feature rows:     {total_features}')
 print(f'SVG:              {svg_path}')
 print(f'Static PNG:       {static_png}')
-print(f'Outputs PNG:      {outputs_png}')
+print(f'Fingerprint:      {fingerprint_path}')
 print('Per-platform heart counts:')
 for i, name in enumerate(['Morphit', 'Bisq', 'Haveno/RetoSwap', 'OpenMonero', 'BasicSwap']):
     print(f'  {name}: {counts[i]}/{total_features}')

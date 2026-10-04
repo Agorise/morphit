@@ -3,11 +3,11 @@
  * Smoke for fee_status label coverage in My Orders and on
  * the order-detail page.
  *
- * Background — Part 103 closure of a real production bug:
+ * Background — of a real production bug:
  * the May-6 Phase J FAQ audit concluded that `'missing'`,
  * `'underpaid'`, and `'unverified'` were "dead UI branches"
  * (indexer never writes them) and had the case arms removed
- * from `feeStatusLabel` plus the i18n keys deleted.  Part 70
+ * from `feeStatusLabel` plus the i18n keys deleted.
  * later re-extended `OrderRecord.fee_status` to include all
  * 7 states because `order_detail`'s rendering relies on
  * them and svelte-check was failing without the type
@@ -202,7 +202,7 @@ for (const k of labelI18nKeys) {
 	if (typeof v !== 'string' || v.trim() === '') missingI18n.push(k);
 }
 
-// ─── Step 5b: Finding #1 (cp391) — `unverified` is the DB column
+// ─── Step 5b: Finding #1 — `unverified` is the DB column
 // DEFAULT (order.ts always writes a definite status, so a row only
 // reaches 'unverified' via the column default — a migration artifact
 // or a future handler that forgets to set it). It is a NEUTRAL

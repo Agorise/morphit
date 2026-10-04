@@ -7,10 +7,13 @@ import {
 } from '$indexer/signals';
 import { makeMockClient } from '../testutils/mockClient';
 
+/** Detector windows end at the triggering op's block time. */
+const AS_OF = new Date('2026-10-01T12:00:00Z');
+
 describe('detectSuspiciousReciprocityInTx', () => {
 	it('calls the detector SQL with expected thresholds', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO suspicious_reciprocity', rowCount: 0 }]);
-		const inserted = await detectSuspiciousReciprocityInTx(mock.client);
+		const inserted = await detectSuspiciousReciprocityInTx(mock.client, { asOf: AS_OF });
 		expect(inserted).toBe(0);
 		expect(mock.queries).toHaveLength(1);
 		// Thresholds threaded via $1 = minCount, $2 = avgRating.
@@ -20,13 +23,13 @@ describe('detectSuspiciousReciprocityInTx', () => {
 
 	it('returns the rowCount of newly inserted pairs', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO suspicious_reciprocity', rowCount: 2 }]);
-		const inserted = await detectSuspiciousReciprocityInTx(mock.client);
+		const inserted = await detectSuspiciousReciprocityInTx(mock.client, { asOf: AS_OF });
 		expect(inserted).toBe(2);
 	});
 
 	it('uses a 7-day window in the CTE', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO suspicious_reciprocity', rowCount: 0 }]);
-		await detectSuspiciousReciprocityInTx(mock.client);
+		await detectSuspiciousReciprocityInTx(mock.client, { asOf: AS_OF });
 		// Spot-check that the SQL contains the 7-day interval
 		// literal. Changing the window is a product decision and
 		// should require an ADR edit plus test update.
@@ -35,7 +38,7 @@ describe('detectSuspiciousReciprocityInTx', () => {
 
 	it('canonical-orders pairs (account_a < account_b)', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO suspicious_reciprocity', rowCount: 0 }]);
-		await detectSuspiciousReciprocityInTx(mock.client);
+		await detectSuspiciousReciprocityInTx(mock.client, { asOf: AS_OF });
 		// Enforce the a < b canonical ordering in the WHERE clause
 		// so each pair inserts only once regardless of which direction
 		// matched first.
@@ -44,51 +47,56 @@ describe('detectSuspiciousReciprocityInTx', () => {
 
 	it('filters to single-subject reviewers (no third-party feedback)', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO suspicious_reciprocity', rowCount: 0 }]);
-		await detectSuspiciousReciprocityInTx(mock.client);
+		await detectSuspiciousReciprocityInTx(mock.client, { asOf: AS_OF });
 		// The "no third-party feedback" clause from ADR-0009 §5.
 		expect(mock.queries[0]!.text).toContain('distinct_subjects = 1');
 	});
 });
 
 describe('detectRelatedAccountsInTx', () => {
+	const TIMEOUT = { match: 'SET LOCAL statement_timeout', rowCount: 0 };
+
 	it('calls the detector SQL with the proximity-window parameter', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO related_accounts', rowCount: 0 }]);
+		const mock = makeMockClient([TIMEOUT, { match: 'INSERT INTO related_accounts', rowCount: 0 }]);
 		const inserted = await detectRelatedAccountsInTx(mock.client);
 		expect(inserted).toBe(0);
-		expect(mock.queries).toHaveLength(1);
-		// 5 minutes → 300 seconds as the proximity threshold.
-		expect(mock.queries[0]!.params[0]).toBe(300);
+		// A bounded statement first (the pass runs off the block loop), then
+		// the detector. 5 minutes → 300 seconds as the proximity threshold.
+		expect(mock.queries).toHaveLength(2);
+		expect(mock.queries[0]!.text).toContain('statement_timeout');
+		expect(mock.queries[1]!.params[0]).toBe(300);
 	});
 
 	it('returns the rowCount of newly flagged pairs', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO related_accounts', rowCount: 4 }]);
+		const mock = makeMockClient([TIMEOUT, { match: 'INSERT INTO related_accounts', rowCount: 4 }]);
 		expect(await detectRelatedAccountsInTx(mock.client)).toBe(4);
 	});
 
 	it('joins on shared creator', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO related_accounts', rowCount: 0 }]);
+		const mock = makeMockClient([TIMEOUT, { match: 'INSERT INTO related_accounts', rowCount: 0 }]);
 		await detectRelatedAccountsInTx(mock.client);
 		// The join predicate defines the signal: same creator = same
 		// purchaser of account-creation. Changing this breaks Signal A.
-		expect(mock.queries[0]!.text).toContain('a.creator = b.creator');
+		expect(mock.queries[1]!.text).toContain('b.creator = a.creator');
 	});
 
 	it('canonical-orders pairs with a.name < b.name', async () => {
-		const mock = makeMockClient([{ match: 'INSERT INTO related_accounts', rowCount: 0 }]);
+		const mock = makeMockClient([TIMEOUT, { match: 'INSERT INTO related_accounts', rowCount: 0 }]);
 		await detectRelatedAccountsInTx(mock.client);
 		// Dedupe guard — without this, (alice, bob) and (bob, alice)
 		// would both match and we'd violate the related_accounts PK.
-		expect(mock.queries[0]!.text).toContain('a.name < b.name');
+		expect(mock.queries[1]!.text).toContain('a.name < b.name');
 	});
 
 	it('requires both accounts to have first_activity_at set', async () => {
 		// An account whose first_activity_at is still NULL hasn't done
 		// anything Morphit-visible yet. Signal A shouldn't flag it
 		// until it acts.
-		const mock = makeMockClient([{ match: 'INSERT INTO related_accounts', rowCount: 0 }]);
+		const mock = makeMockClient([TIMEOUT, { match: 'INSERT INTO related_accounts', rowCount: 0 }]);
 		await detectRelatedAccountsInTx(mock.client);
-		expect(mock.queries[0]!.text).toContain('a.first_activity_at IS NOT NULL');
-		expect(mock.queries[0]!.text).toContain('b.first_activity_at IS NOT NULL');
+		// (b's side is the range join: BETWEEN is never true for NULL.)
+		expect(mock.queries[1]!.text).toContain('a.first_activity_at IS NOT NULL');
+		expect(mock.queries[1]!.text).toContain('b.first_activity_at BETWEEN');
 	});
 
 	it('emits evidence JSONB with creator + gap seconds', async () => {
@@ -96,27 +104,28 @@ describe('detectRelatedAccountsInTx', () => {
 		// flagged. The evidence field captures the decisive data
 		// (creator account, time gap in seconds) without forcing a
 		// second query back to `accounts`.
-		const mock = makeMockClient([{ match: 'INSERT INTO related_accounts', rowCount: 0 }]);
+		const mock = makeMockClient([TIMEOUT, { match: 'INSERT INTO related_accounts', rowCount: 0 }]);
 		await detectRelatedAccountsInTx(mock.client);
-		expect(mock.queries[0]!.text).toContain('first_activity_gap_seconds');
+		expect(mock.queries[1]!.text).toContain('first_activity_gap_seconds');
 	});
 });
 
 describe('detectOneWayPileOnInTx (Signal C)', () => {
 	it('calls the detector SQL with expected thresholds', async () => {
 		const mock = makeMockClient([{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain('INSERT INTO one_way_pile_on');
 		// Threshold params bound to literals so tests stay tied to
 		// the design constants in signals.ts.
-		expect(mock.queries[0]!.params).toEqual([2.0, 2, 3, 14, 7]);
+		// Thresholds, then the window end and the (absent) subject scope.
+		expect(mock.queries[0]!.params).toEqual([2.0, 2, 3, 14, 7, AS_OF, null]);
 	});
 
 	it('returns the rowCount of newly flagged subjects', async () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 4 }
 		]);
-		const flagged = await detectOneWayPileOnInTx(mock.client);
+		const flagged = await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(flagged).toBe(4);
 	});
 
@@ -126,7 +135,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain("INTERVAL '7 days'");
 	});
 
@@ -138,7 +147,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain("INTERVAL '30 days'");
 	});
 
@@ -152,7 +161,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain('first_activity_at IS NOT NULL');
 	});
 
@@ -164,7 +173,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain('avg_rating <= $1');
 	});
 
@@ -176,7 +185,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain('ON CONFLICT (subject, detection_date) DO NOTHING');
 	});
 
@@ -189,7 +198,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain('jsonb_agg');
 		expect(mock.queries[0]!.text).toContain("'reviewer'");
 		expect(mock.queries[0]!.text).toContain("'rating_avg'");
@@ -204,7 +213,7 @@ describe('detectOneWayPileOnInTx (Signal C)', () => {
 		const mock = makeMockClient([
 			{ match: 'INSERT INTO one_way_pile_on', rowCount: 0 }
 		]);
-		await detectOneWayPileOnInTx(mock.client);
+		await detectOneWayPileOnInTx(mock.client, { asOf: AS_OF });
 		expect(mock.queries[0]!.text).toContain('EXTRACT(EPOCH FROM');
 		expect(mock.queries[0]!.text).toContain('86400');
 	});

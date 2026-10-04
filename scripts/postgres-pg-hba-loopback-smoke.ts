@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * postgres-pg-hba-loopback — cp668.
+ * postgres-pg-hba-loopback.
  *
- * Encodes the invariant whose violation took latino.example.org's indexer down on its
+ * Encodes the invariant whose violation took a live node's indexer down on its
  * first post-install reboot: the indexer AND the relay connect to Postgres via
  * `localhost:PORT` (= loopback TCP), so pg_hba.conf MUST contain a `host` rule
  * that lets the morphit_indexer user in over 127.0.0.1. The postgres role used

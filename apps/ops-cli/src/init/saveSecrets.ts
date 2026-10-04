@@ -1,5 +1,5 @@
 /**
- * saveSecrets.ts (cp600) — show the operator the secrets Morphit GENERATED
+ * saveSecrets.ts — show the operator the secrets Morphit GENERATED
  * during install (the database passwords, and anything else minted for them)
  * and make them stop and save them somewhere safe + OFFLINE before continuing.
  *

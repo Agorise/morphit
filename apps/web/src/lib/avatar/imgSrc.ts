@@ -1,5 +1,5 @@
 /**
- * The `<img src>` for a sanitized SVG avatar. (v1.18.0 deep-deep, M1)
+ * The `<img src>` for a sanitized SVG avatar.
  *
  * SVG avatars used to be inlined with `{@html}`. The sanitizer keeps `style`
  * and `class` (gradients, fonts and fills need them), and an inlined SVG is

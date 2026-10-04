@@ -2,7 +2,7 @@
 /**
  * apps/indexer/scripts/reputation-receipt-shape-smoke.ts
  *
- * Structural Defense (cp124 H4) — invariants over the
+ * Structural Defense — invariants over the
  * /v1/accounts/:account/reputation-receipt response shape.
  *
  * The receipt is the "show your work" endpoint — any third party

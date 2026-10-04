@@ -66,7 +66,7 @@
 		 *  StatusLine usually).  Wired into the picker root's
 		 *  `aria-describedby` only when `invalid` is true and
 		 *  this prop is supplied — pointing at a missing id is
-		 *  itself an a11y bug per Memory fact #46. */
+		 *  itself an a11y bug per the a11y rules. */
 		describedById?: string;
 		/** True on the user's first trade (always a BLURT buy).  Only
 		 *  affects the `barter_goods` description, which then reads
@@ -94,7 +94,7 @@
 		query = '';
 		searchEl?.focus();
 	}
-	// O (cp295): the four standard category sections start COLLAPSED so
+	// O: the four standard category sections start COLLAPSED so
 	// the picker opens compact — the user expands only the category they
 	// pay with. (The operator's own "instance additions" section, if any,
 	// stays open since it's small and operator-curated.)

@@ -3,17 +3,18 @@ import { isAllowedContactUrl } from '@morphit/operator-config/contact';
  * Morphit — operator register op broadcaster.
  *
  * Builds a `morphit_operator_register_v1` custom_json payload,
- * signs it with the user's posting key, and broadcasts via the
- * endpoint rotator. Per ADR-0013 Q1.1 (ratified: a), this is an
- * explicit one-time registration: the operator claims a tag and
- * sets their display_name.
+ * signs it with the user's posting key, and broadcasts it same-origin
+ * through this instance's indexer. Per ADR-0013 Q1.1 (ratified: a), this
+ * is an explicit registration: the operator claims a tag and sets their
+ * display_name. Sending it again from the same account updates the
+ * entry (the indexer upserts on the signer); the tag itself cannot change.
  *
  * Tag format: lowercase alphanumeric + dash/underscore/dot,
  * 1-64 chars. First-come-first-served — the indexer's UNIQUE
  * constraint on operators.tag enforces this regardless of client.
  */
 
-// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// Byte budget: broadcastCustomJson is dynamically imported
 // at the call site below so dblurt (a 2 MB chunk) doesn't land in
 // the eager-load graph of routes that pull this ops file for its
 // types/helpers but don't immediately trigger a broadcast.

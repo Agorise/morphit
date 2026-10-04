@@ -25,10 +25,13 @@ export const DescribeInputSchema = z.object({});
 
 export type DescribeInput = z.infer<typeof DescribeInputSchema>;
 
+/** The fields of /v1/instance used here (apps/indexer/src/api/instance.ts).
+ *  It used to read `display_name` and `declared_region`, which the indexer
+ *  never sends. */
 interface InstanceInfoResponse {
-	display_name?: string;
-	contact_url?: string;
-	declared_region?: string;
+	name?: string | null;
+	tagline?: string | null;
+	contact_url?: string | null;
 	disabled_assets?: string[];
 }
 
@@ -42,8 +45,8 @@ export async function describeMorphit(_input: DescribeInput): Promise<{
 		supported_assets: string[];
 		instance_origin: string;
 		instance_display_name?: string;
+		instance_tagline?: string;
 		instance_contact?: string;
-		instance_region?: string;
 		instance_disabled_assets?: string[];
 		project_repo: string;
 		project_license: string;
@@ -51,7 +54,7 @@ export async function describeMorphit(_input: DescribeInput): Promise<{
 		documentation: string;
 	};
 }> {
-	// cp146 F-mcp-17 — same DRY/validation reasoning as the other
+	// same DRY/validation reasoning as the other
 	// two tools that had the same direct env read.
 	const base = getInstanceUrl();
 
@@ -86,18 +89,18 @@ export async function describeMorphit(_input: DescribeInput): Promise<{
 			on_chain: 'Blurt',
 			supported_assets: Array.from(ASSET_TICKERS),
 			instance_origin: base,
-			instance_display_name: instanceInfo.display_name,
-			instance_contact: instanceInfo.contact_url,
-			instance_region: instanceInfo.declared_region,
+			instance_display_name: instanceInfo.name ?? undefined,
+			instance_tagline: instanceInfo.tagline ?? undefined,
+			instance_contact: instanceInfo.contact_url ?? undefined,
 			instance_disabled_assets: instanceInfo.disabled_assets,
 			project_repo: 'https://git.agorise.net/agorise/morphit',
 			project_license: 'AGPL-3.0',
 			web_ui: base,
-			// cp156 F-mcp-7 — route documentation deeplink through
+			// route documentation deeplink through
 			// the root locale-detection shell.  AI agents hand the
 			// user a URL like `${base}/?then=/faq`; the shell at
 			// `/` detects navigator.languages and redirects to
-			// `/{detected}/faq`.  Before cp156, hardcoded `/en/`
+			// `/{detected}/faq`.  Hardcoded `/en/`
 			// gave non-English users the English FAQ page.
 			documentation: `${base}/?then=/faq`
 		}

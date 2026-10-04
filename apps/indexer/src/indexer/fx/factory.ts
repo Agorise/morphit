@@ -7,14 +7,18 @@
  * disable).  When disabled the caller holds a null source and the
  * order floor falls back to its USD-only behaviour.
  *
- * Failover chain (the node-hopping-rotator model):
- *   Frankfurter (ECB) → open.er-api.com → currency-api (jsDelivr)
- *   → hardcoded static table (inside the composite).
+ * Order:
+ *   1. the Haveno / Bisq pricenodes over Tor (their consensus table, each
+ *      fiat per USD derived from the fiat-per-BTC quotes;
+ *      price/pricenodes.ts) — the primary;
+ *   2. only when they give no table, and only where clearnet is allowed:
+ *      Frankfurter (ECB) + open.er-api.com + currency-api (jsDelivr),
+ *      averaged;
+ *   3. the hardcoded static table (inside the composite).
+ * A zero-clearnet node has no step 2.
  *
- * Every provider is free, no-key, and privacy-respecting; each
- * refresh pulls the WHOLE table (base=USD) so no provider learns
- * any individual user's currency.  Adding another provider is a
- * one-line push() here.
+ * Every provider is free and no-key; each refresh pulls the WHOLE table
+ * (base=USD) so no provider learns any individual user's currency.
  *
  * The factory returns a started-ready FxRateSource; the caller
  * invokes source.start()/stop() for lifecycle (same contract as
@@ -27,6 +31,7 @@ import { CompositeCachedFxSource } from '$indexer/fx/compositeFxSource';
 import { createFrankfurterFetcher } from '$indexer/fx/frankfurterFetcher';
 import { createErApiFetcher } from '$indexer/fx/erApiFetcher';
 import { createCurrencyApiFetcher } from '$indexer/fx/currencyApiFetcher';
+import { pricenodesFor, pricenodeFxFetch, tiePricenodeLifecycle } from '$indexer/price/pricenodes';
 
 /** Build the USD→fiat FX source, or null when the feed is disabled.
  *  Caller is responsible for start()/stop() lifecycle. */
@@ -34,7 +39,10 @@ export function createFxRateSource(config: Config): FxRateSource | null {
 	if (!config.fxFeedEnabled) return null;
 
 	const timeoutMs = config.fxFetchTimeoutMs;
-	const upstreams = [
+	const pricenodes = pricenodesFor(config);
+	// No clearnet RPC = a zero-clearnet node: no clearnet FX provider at all.
+	const clearnetAllowed = config.blurtRpcEndpoints.length > 0;
+	const clearnet = [
 		{
 			name: 'frankfurter',
 			fetch: createFrankfurterFetcher({ baseUrl: config.fxFrankfurterBaseUrl, timeoutMs })
@@ -49,8 +57,12 @@ export function createFxRateSource(config: Config): FxRateSource | null {
 		}
 	];
 
-	return new CompositeCachedFxSource({
-		upstreams,
+	const source = new CompositeCachedFxSource({
+		primaryUpstreams:
+			pricenodes !== null ? [{ name: 'pricenodes', fetch: pricenodeFxFetch(pricenodes) }] : [],
+		upstreams: clearnetAllowed ? clearnet : [],
+		...(pricenodes !== null ? { deferUpstreams: () => pricenodes.awaitingFirstRound() } : {}),
 		refreshIntervalMs: config.fxRefreshIntervalMs
 	});
+	return pricenodes !== null ? tiePricenodeLifecycle(source, pricenodes) : source;
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * tor-routed-probe — cp704 (Layer 6). Peer onion/I2P nodes must get a REAL
+ * tor-routed-probe — (Layer 6). Peer onion/I2P nodes must get a REAL
  * federation status, probed through the co-located Tor/I2P proxies — not a
  * blanket 'good'. A down LOCAL proxy must fall the peer back to listed (never
  * 'unreachable' for our daemon being offline).

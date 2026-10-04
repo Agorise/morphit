@@ -2,7 +2,7 @@
 /**
  * orderbook-terms-highlight-safety smoke — HIGH-SECURITY regression net.
  *
- * The orderbook's free-text "Order details" filter (cp411) highlights the
+ * The orderbook's free-text "Order details" filter highlights the
  * searched word(s) inside each card's terms preview by rendering
  * `highlightMatches(...)` output via `{@html}`. Order terms are user-authored
  * and attacker-controllable, so this smoke pins the security contract so a

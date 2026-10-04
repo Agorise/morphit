@@ -1,7 +1,7 @@
 <!--
 	PrioritiesSection — 7 cards bragging about Morphit's top design
-	properties.  Card order, titles, and bodies are the maintainer-specified
-	(cp115-cp5, 2026-05-22) and MUST NOT be paraphrased or reordered:
+	properties.  Card order, titles, and bodies are specified
+ and MUST NOT be paraphrased or reordered:
 
 	  1. Privacy first       → /faq#privacy_practices
 	  2. True P2P            → /faq#no_escrow_arbitration
@@ -211,7 +211,7 @@
 		grid-template-columns: 1fr;
 		/* All rows the SAME height (sized to the tallest row), so every
 		 * card matches the tallest card regardless of how much text a
-		 * given locale puts in it (the maintainer cp228 — multilingual-safe equal
+		 * given locale puts in it (the maintainer — multilingual-safe equal
 		 * heights without a brittle fixed min-height). */
 		grid-auto-rows: 1fr;
 		list-style: none;

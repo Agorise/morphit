@@ -50,18 +50,17 @@
  *      lazy-load chat to keep the inbox tiny, so doubling its
  *      chunk would walk back the Phase E.5 wins.
  *
- *   2. Defense in depth elsewhere.  When the recipient eventually
- *      sends actual funds to the address, their wallet does the
- *      checksum verify.  A typo'd address there is a wallet
- *      rejection, not a lost transaction.
+ *   2. The paying wallet checks most formats.  For checksummed
+ *      formats (Base58Check, bech32, Monero, mixed-case EIP-55) a
+ *      typo'd address is a wallet rejection, not a lost payment.
+ *      NOT for all: Solana addresses (and SPL tokens) carry no
+ *      checksum, and an all-lowercase EVM address skips EIP-55,
+ *      so a typo there that keeps the shape sends funds to a
+ *      wrong address.  Copy-paste, and the QR code, matter there.
  *
- *   3. Layer of protection still present.  The cheap shape check
- *      catches the most likely class of error (paste went wrong,
- *      truncated address, mistyped prefix) before the message
- *      leaves the sender's composer.  Catastrophic typos that
- *      pass our shape check would also pass any user's eyeball
- *      check — the regex is approximately as good as a human
- *      glance.
+ *   3. The cheap shape check still catches the most likely class
+ *      of error (paste went wrong, truncated address, mistyped
+ *      prefix) before the message leaves the sender's composer.
  *
  * ─── Versioning ───────────────────────────────────────────────
  *
@@ -73,7 +72,7 @@
  * can render appropriately.
  */
 
-/** cp30-DD-DD SEC-3 — per-network address/txid cross-validators
+/** per-network address/txid cross-validators
  *  imported from the canonical networks module.  Used by the
  *  decoder to defend against hostile peers sending a mismatched
  *  `network` + `address` combination (asset-wide shape passes
@@ -125,7 +124,7 @@ const XMR_TXID_RE = /^[0-9a-f]{64}$/;
  *  truncated SHA-256 of the serialized transaction). */
 const BLURT_TXID_RE = /^[0-9a-f]{40}$/;
 
-/** BCH mainnet address regexes (Part 122 cp21 BCH addition).
+/** BCH mainnet address regexes (BCH addition).
  *  Accept both CashAddr (modern BCH standard) and legacy P2PKH/
  *  P2SH (still emitted by some BCH wallets).  See the canonical
  *  registry's BCH addressShape doc-comment for full rationale. */
@@ -145,7 +144,7 @@ const BCH_LEGACY_P2SH_RE = /^3[1-9A-HJ-NP-Za-km-z]{25,34}$/;
  *  same hash function as BTC). */
 const BCH_TXID_RE = /^[0-9a-f]{64}$/;
 
-/** LTC address regexes (Part 122 cp24).
+/** LTC address regexes.
  *  LTC has three address-shape eras:
  *  (1) Legacy P2PKH starting with `L` (unambiguous with BTC's `1`).
  *  (2) Legacy P2SH — two variants: modern `M`-prefix (introduced
@@ -163,7 +162,7 @@ const LTC_BECH32_RE = /^ltc1[02-9ac-hj-np-z]{6,87}$/;
 /** LTC txid: 64 lowercase hex chars (sha256d, same as BTC/BCH). */
 const LTC_TXID_RE = /^[0-9a-f]{64}$/;
 
-/** DASH address regex (cp27).  Two formats coexist on the chain:
+/** DASH address regex.  Two formats coexist on the chain:
  *
  *  (1) P2PKH — starts with `X`, base58, 34 chars total.  Most
  *      DASH addresses in the wild use this form.
@@ -185,8 +184,7 @@ const DASH_P2SH_RE = /^7[1-9A-HJ-NP-Za-km-z]{33}$/;
 /** DASH txid: 64 lowercase hex chars (sha256d, same as BTC family). */
 const DASH_TXID_RE = /^[0-9a-f]{64}$/;
 
-
-/** DOGE address (cp33 — Part 122).  Two formats:
+/** DOGE address.  Two formats:
  *  - P2PKH (overwhelmingly common): `D` + 33 base58 chars
  *    (version byte 0x1E).
  *  - P2SH (multi-sig, rare on DOGE): `9` or `A` + 33 base58 chars
@@ -201,7 +199,7 @@ const DOGE_P2SH_RE = /^[9A][1-9A-HJ-NP-Za-km-z]{33}$/;
 /** DOGE txid: 64 lowercase hex chars (sha256d, same as BTC family). */
 const DOGE_TXID_RE = /^[0-9a-f]{64}$/;
 
-/** ZEC address (cp39 — Part 122).  Four formats coexist:
+/** ZEC address.  Four formats coexist:
  *
  *  - t1 (transparent P2PKH): base58, `t1` prefix + 33 base58 chars
  *    = 35 chars total.  Looks like a Bitcoin legacy address.
@@ -233,7 +231,7 @@ const ZEC_U_RE = /^u1[02-9ac-hj-np-z]{30,300}$/;
  *  txid itself is canonical and shareable. */
 const ZEC_TXID_RE = /^[0-9a-f]{64}$/;
 
-/** ARRR address (cp41 — Part 122).  Pirate Chain forked from
+/** ARRR address.  Pirate Chain forked from
  *  the Zcash codebase and ships chain-level default-shielded
  *  transactions via the Sapling zk-SNARK pool.  Only one
  *  address format exists:
@@ -263,7 +261,7 @@ const ARRR_ZS_RE = /^zs1[02-9ac-hj-np-z]{75}$/;
  *  the tx but the txid itself is canonical and shareable. */
 const ARRR_TXID_RE = /^[0-9a-f]{64}$/;
 
-/** DCR address (cp43 — Part 122).  Decred uses base58check
+/** DCR address.  Decred uses base58check
  *  with two address types for receiving payments:
  *
  *  - `Ds` P2PKH-Secp256k1: bech58check, `Ds` prefix + 33 base58
@@ -289,7 +287,7 @@ const DCR_RE = /^D[sc][1-9A-HJ-NP-Za-km-z]{33}$/;
  *  inherited the SHA-256 32-byte txid convention. */
 const DCR_TXID_RE = /^[0-9a-f]{64}$/;
 
-/** SOL address (cp45 — Part 122).  Solana public keys are 32
+/** SOL address.  Solana public keys are 32
  *  bytes encoded as base58, surfacing as 32-44 character strings
  *  (most addresses are exactly 44 chars but length varies based
  *  on leading-zero byte count of the key material).
@@ -297,7 +295,7 @@ const DCR_TXID_RE = /^[0-9a-f]{64}$/;
  *  Same character class as USDT and USDC SPL token-account
  *  addresses — context disambiguates at the order layer via the
  *  asset field (LL #50 same-format-different-chain pattern,
- *  covered by cp42 address-shape-overlap-smoke; cp45 adds SOL
+ *  covered by address-shape-overlap-smoke; a later change adds SOL
  *  specimens to that smoke's allowlist).
  *
  *  PROGRAM-DERIVED ADDRESSES (PDAs) match this regex but are
@@ -315,21 +313,21 @@ const DCR_TXID_RE = /^[0-9a-f]{64}$/;
  */
 const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-/** SOL txid (cp45 — Part 122).  Solana transaction signatures
+/** SOL txid.  Solana transaction signatures
  *  are 64 bytes encoded as base58, surfacing as 87-88 char
  *  strings.  Notably DIFFERENT from the BTC family's 64-hex
  *  format — Solana uses base58 throughout (addresses,
  *  signatures, mint addresses). */
 const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
 
-/** ETH address (cp47 — Part 122).  Ethereum addresses are
+/** ETH address.  Ethereum addresses are
  *  20-byte hex with 0x prefix — exactly 42 chars total.  Both
  *  lowercase and EIP-55 mixed-case checksum forms accepted.
  *
  *  SAME shape as USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
  *  USDC-Polygon, USDC-Arbitrum, DAI-Polygon, DAI-Arbitrum,
- *  DAI-Base — every EVM token-account address.  Cp42
- *  address-shape-overlap-smoke extended at cp47 with ETH
+ *  DAI-Base — every EVM token-account address.
+ *  address-shape-overlap-smoke extended with ETH
  *  specimens; the asset field (and network field for multi-
  *  network assets) disambiguates per LL #50.
  *
@@ -345,25 +343,26 @@ const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
  */
 const ETH_RE = /^0x[a-fA-F0-9]{40}$/;
 
-/** ETH txid (cp47 — Part 122).  Ethereum transaction hashes are
+/** ETH txid.  Ethereum transaction hashes are
  *  32 bytes hex with 0x prefix — exactly 66 chars (or 64 hex
  *  chars without prefix).  SAME shape as the EVM stablecoin
  *  txid forms (USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base,
  *  etc).  Asset field disambiguates at order layer. */
 const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
 
-/** XRP address (cp49 — Part 122).  XRPL addresses start with
+/** XRP address.  XRPL addresses start with
  *  'r' followed by 24-34 base58 chars.  XRPL's base58 alphabet
  *  is technically different from Bitcoin's (some chars are
  *  swapped) but the Bitcoin charset is a superset.
  *
- *  DESTINATION TAGS: XRPL has a unique feature — a 32-bit integer
- *  destination tag that exchanges use to route XRP to user
- *  accounts under their omnibus wallet.  Morphit's regex matches
- *  the ADDRESS PART ONLY; the destination tag rides in the URI
- *  query string `?dt=N`.  Sending to an exchange-hosted address
- *  WITHOUT the required tag practically loses funds (recoverable
- *  via exchange support).
+ *  DESTINATION TAGS: XRPL has a 32-bit integer destination tag that
+ *  exchanges use to route XRP to user accounts under their omnibus
+ *  wallet.  Morphit does NOT carry one: the address payload has no
+ *  tag field and the `ripple:` URI never includes `dt=`.  Sending to
+ *  an exchange-hosted address that requires a tag, without it,
+ *  practically loses the funds (recoverable via exchange support at
+ *  best) — so an XRP address shared here must be one that needs no
+ *  tag (a self-custody wallet).
  *
  *  RESERVE REQUIREMENT: XRPL accounts need ≥1 XRP base reserve
  *  to exist.  Sending less to a never-funded address fails.
@@ -373,12 +372,11 @@ const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
  */
 const XRP_RE = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/;
 
-/** XRP txid (cp49 — Part 122).  XRPL transaction hashes are 256-
+/** XRP txid.  XRPL transaction hashes are 256-
  *  bit (32 bytes) hex, conventionally uppercase but case-
  *  insensitive on the chain.  64 hex chars, NO 0x prefix.  Same
  *  shape as BTC family but XRPL convention is uppercase. */
 const XRP_TXID_RE = /^[a-fA-F0-9]{64}$/;
-
 
 /** BLURT "address" is actually a Blurt account name — the
  *  recipient field in a transfer op.  Uses the same canonical
@@ -496,7 +494,7 @@ export function jitterMoneroAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp30/cp31 — Amount-jitter for stablecoin chains
+/** Amount-jitter for stablecoin chains
  *  (USDT, USDC, DAI).  Same defense as jitterUtxoAmount +
  *  jitterMoneroAmount but calibrated to 6-decimal stablecoin
  *  precision.  DAI uses 18-decimal underlying token math; the
@@ -519,14 +517,14 @@ export function jitterMoneroAmount(base: string): string {
  *  threats are real and independent; jitter addresses one of
  *  them.
  *
- *  Pre-cp30 this function didn't exist and stablecoins fell
+ *  Previously, this function didn't exist and stablecoins fell
  *  through `jitterAmountForAsset` to a pass-through (`return
  *  base`).  That was the wrong call — the original rationale
  *  ("USDT's privacy issue is centralization not amount-
  *  correlation; jitter doesn't address Tether freezes") was an
  *  incomplete argument; the absence of jitter benefit on the
  *  freeze threat doesn't refute the jitter benefit on the
- *  correlation threat.  Cp30 fixed the gap.
+ *  correlation threat.  A later change fixed the gap.
  *
  *  Jitter range: up to 999 micro-units of the stablecoin (6
  *  decimals).  At a 1:1 USD peg that's $0.000001 to $0.000999 —
@@ -566,7 +564,7 @@ export function jitterStablecoinAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp26 — Amount-jitter for transparent UTXO chains
+/** Amount-jitter for transparent UTXO chains
  *  (BTC, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR — all 8 UTXO
  *  assets ride this same function; SOL/ETH/XRP have their own
  *  per-asset jitter functions because their unit precision and
@@ -582,7 +580,7 @@ export function jitterStablecoinAmount(base: string): string {
  *  sellers might otherwise have.  Adding small random jitter to
  *  the on-chain amount breaks that exact-match correlation.
  *
- *  Jitter range: up to 999 satoshis.  At cp26-era prices that's
+ *  Jitter range: up to 999 satoshis.  At prices that's
  *  ~$0.50 for BTC, ~$0.005 for BCH, ~$0.001 for LTC — small
  *  enough to be an implicit tip the seller absorbs, large enough
  *  to fully decorrelate against amount-matching heuristics.
@@ -617,14 +615,14 @@ export function jitterUtxoAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp26 — Amount-jitter for BLURT.  BLURT is 3-decimal
+/** Amount-jitter for BLURT.  BLURT is 3-decimal
  *  precision (milliblurt smallest unit), account-based not UTXO,
  *  and Morphit's coordination layer — every order, message, and
  *  fee is on the public Blurt chain.  Amount-correlation between
  *  the orderbook and the on-chain transfer is therefore the
  *  highest of any Morphit-supported asset.
  *
- *  Jitter range: up to 99 milliblurt.  At cp26 BLURT prices
+ *  Jitter range: up to 99 milliblurt.  At BLURT prices
  *  that's a fraction of a US cent — within ordinary chain-fee
  *  noise. */
 export function jitterBlurtAmount(base: string): string {
@@ -646,7 +644,7 @@ export function jitterBlurtAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp45 — Amount-jitter for Solana.  Solana uses 9
+/** Amount-jitter for Solana.  Solana uses 9
  *  decimals (1 SOL = 1,000,000,000 lamports) — unique smallest-
  *  unit precision among Morphit's tradable assets.  BTC family is 8
  *  decimals, USDT/USDC/DAI is 6, BLURT is 3, XMR is 12.  SOL
@@ -662,7 +660,7 @@ export function jitterBlurtAmount(base: string): string {
  *  on-chain payment.  Small random jitter breaks that
  *  exact-match correlation.
  *
- *  Jitter range: up to 999 lamports.  At cp45-era SOL price
+ *  Jitter range: up to 999 lamports.  At SOL price
  *  (~$150) that's about $0.00015 — tiny enough to be an
  *  implicit tip the seller absorbs, large enough to fully
  *  decorrelate against amount-matching heuristics.
@@ -695,21 +693,21 @@ export function jitterSolAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp47 — Amount-jitter for Ethereum.  ETH uses 18
+/** Amount-jitter for Ethereum.  ETH uses 18
  *  decimals on-chain (1 ETH = 10^18 wei) — the EVM-standard
  *  ERC-20 precision.  Same on-chain precision as DAI, but ETH
  *  is not a stablecoin so a separate function is provided for
  *  clarity (and future ETH-specific tuning — e.g. EIP-1559
  *  base-fee aware jitter).
  *
- *  Why a 6-decimal display clamp: the cp31 DAI design rationale
+ *  Why a 6-decimal display clamp: the DAI design rationale
  *  (ADR-0029) applies here too — clamp to a sensible user-visible
  *  precision rather than emit microscopic wei-level jitter.  At
- *  cp47-era ETH price (~$2500) a 0-999 microether jitter range
+ *  ETH price (~$2500) a 0-999 microether jitter range
  *  is ~$0.0025 max — the same $0.001-magnitude jitter effect
  *  the stablecoins use.  The wallet UX converts the 6-decimal
  *  display amount to 18-decimal wei when constructing the
- *  actual transaction.  Cp46 asset-payload-precision-parity-
+ *  actual transaction.  asset-payload-precision-parity-
  *  smoke captures `expectedJitterDecimals: 6` for ETH with
  *  comment-anchor matching this rationale.
  *
@@ -745,7 +743,7 @@ export function jitterEthAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp49 — Amount-jitter for Ripple (XRP).  XRP uses 6
+/** Amount-jitter for Ripple (XRP).  XRP uses 6
  *  decimals on the XRP Ledger (1 XRP = 1,000,000 drops).  Same
  *  smallest-unit precision as USDT/USDC/DAI/ETH-display, but XRP
  *  is the native token of XRPL, not an ERC-20 stablecoin and
@@ -753,24 +751,17 @@ export function jitterEthAmount(base: string): string {
  *  (rather than reusing jitterStablecoinAmount or jitterEthAmount)
  *  provides clarity and future XRP-specific tuning room.
  *
- *  Jitter range: 0..999 microXRP (drops).  At cp49-era XRP price
- *  (~$2.50) that's about $0.0000025 max per jitter event —
+ *  Jitter range: 0..999 drops (under 0.001 XRP).  At an XRP price of
+ *  a few dollars that's well under a cent per jitter event —
  *  effectively zero financially but full decorrelation against
  *  exact-amount-matching heuristics on the public XRPL.
  *
- *  DESTINATION TAG note: the destination tag is NOT part of the
- *  amount-jitter.  The destination tag rides separately in the
- *  URI builder (`ripple:<addr>?amount=N&dt=M`) and on-chain
- *  transaction header.  Jittering an amount that pairs with a
- *  required destination tag still works correctly — the exchange
- *  routing logic processes any amount + the tag.
+ *  No destination tag is involved (see XRP_RE: Morphit carries none).
  *
  *  RESERVE REQUIREMENT note: XRPL accounts need ≥1 XRP base
- *  reserve to exist.  Jitter can never push an order amount
- *  ABOVE the original — round-UP-only would, but jitterXrpAmount
- *  ADDS 0..999 drops (max +0.000999 XRP).  An order of "1.000000
- *  XRP" jitters to "1.000NNN XRP" which is still above the 1.0
- *  reserve; jitter does not threaten the reserve invariant.
+ *  reserve to exist.  Jitter only ever ADDS 0..999 drops (max
+ *  +0.000999 XRP), never subtracts, so an amount at or above the
+ *  reserve stays at or above it.
  *
  *  Same caveats as the other jitter functions: round-UP-only
  *  (never underpay — never crosses below reserve), CSPRNG-derived
@@ -799,21 +790,27 @@ export function jitterXrpAmount(base: string): string {
 	return `${wholeOut.toString()}.${fracStr}`;
 }
 
-/** Part 122 cp26 — Asset-aware amount-jitter dispatcher.  Returns
+/** Asset-aware amount-jitter dispatcher.  Returns
  *  a jittered amount appropriate for the asset's smallest-unit
- *  precision.  Every tradable asset is jitter-eligible as of cp30
- *  (cp26 had originally excluded USDT under a "centralization is
- *  the issue, not amount-correlation" rationale; cp30 ADR-0028
+ *  precision.  Every tradable asset is jitter-eligible
+ *  (a later change had originally excluded USDT under a "centralization is
+ *  the issue, not amount-correlation" rationale; ADR-0028
  *  Decision 2 reversed this on the grounds that those are
  *  SEPARATE threats and amount-jitter addresses one of them.
  *  See jitterStablecoinAmount for full rationale).  Unknown
  *  future assets return the input unchanged for forward-compat. */
-export function jitterAmountForAsset(
-	asset: ChatAssetTicker,
-	base: string
-): string {
+export function jitterAmountForAsset(asset: ChatAssetTicker, base: string): string {
 	if (asset === 'xmr') return jitterMoneroAmount(base);
-	if (asset === 'btc' || asset === 'bch' || asset === 'ltc' || asset === 'dash' || asset === 'doge' || asset === 'zec' || asset === 'arrr' || asset === 'dcr') {
+	if (
+		asset === 'btc' ||
+		asset === 'bch' ||
+		asset === 'ltc' ||
+		asset === 'dash' ||
+		asset === 'doge' ||
+		asset === 'zec' ||
+		asset === 'arrr' ||
+		asset === 'dcr'
+	) {
 		return jitterUtxoAmount(base);
 	}
 	if (asset === 'blurt') return jitterBlurtAmount(base);
@@ -821,7 +818,7 @@ export function jitterAmountForAsset(
 	if (asset === 'eth') return jitterEthAmount(base);
 	if (asset === 'xrp') return jitterXrpAmount(base);
 	if (asset === 'usdt' || asset === 'usdc' || asset === 'dai') {
-		// Part 122 cp30/cp31 — stablecoins get jitter too.  The
+		// stablecoins get jitter too.  The
 		// centralization threat (Circle/Tether freeze power for
 		// USDT/USDC; DAI's PSM/USDC backing dependency + MKR
 		// governance for DAI) is real and documented in
@@ -861,7 +858,7 @@ export function jitterAmountForAsset(
  *  in scripts like Devanagari and Arabic genuinely need ZWJ to
  *  form correct ligatures.  The narrower list was a deliberate
  *  Phase F.5 decision; do not "harmonize" the two without
- *  re-auditing what each field is for.  Part 75 over-broadened
+ *  re-auditing what each field is for.  over-broadened
  *  this list and got caught by `chat-payload-smoke.ts`'s
  *  "ZWJ allowed" scenario (smoke is enforcement of the audit
  *  decision; respect it).
@@ -884,24 +881,24 @@ function noteHasForbiddenChars(s: string): boolean {
  *  canonical asset registry (`@morphit/asset-registry`), but
  *  this is the spelling that appears on chat custom_json ops
  *  (`{kind: 'morphit_addr', method: 'btc', ...}`).  Renamed
- *  from `PaymentMethod` in Part 121 because the old name was
+ *  from `PaymentMethod` because the old name was
  *  misleading — it suggested a fiat payment rail (PayPal,
  *  Zelle, etc.) when it's actually the crypto asset for an
  *  address-share or funds-sent chat message.  The fiat
  *  payment-method registry lives in `lib/payments/registry.ts`
  *  and uses `PaymentMethodEntry`.
  *
- *  Part 121 USDT addition: 'usdt' is multi-network.  When
+ *  USDT addition: 'usdt' is multi-network.  When
  *  method === 'usdt', the `network` field on AddressPayload
  *  and FundsSentPayload is REQUIRED (one of 'erc20', 'trc20',
  *  'spl', 'bep20').  The decoder rejects USDT payloads
  *  without a network.
  *
- *  Part 122 cp21 BCH addition: 'bch' is single-network (mainnet
+ *  BCH addition: 'bch' is single-network (mainnet
  *  only).  No network field required.  Addresses come in CashAddr
  *  or legacy formats — see BCH_*_RE constants.
  *
- *  Part 122 cp30 USDC addition: 'usdc' is multi-network like
+ *  USDC addition: 'usdc' is multi-network like
  *  USDT.  When method === 'usdc', the `network` field is
  *  REQUIRED (one of 'erc20', 'spl', 'base', 'polygon').  Note
  *  ERC-20, Base, and Polygon all share the EVM 0x[40 hex]
@@ -909,7 +906,24 @@ function noteHasForbiddenChars(s: string): boolean {
  *  sender which chain to broadcast on.  No TRC-20 (Circle
  *  doesn't issue on Tron) and no BEP-20 in this initial set
  *  (see ADR-0028). */
-export type ChatAssetTicker = 'btc' | 'xmr' | 'blurt' | 'usdt' | 'usdc' | 'dai' | 'bch' | 'ltc' | 'dash' | 'doge' | 'zec' | 'arrr' | 'dcr' | 'sol' | 'eth' | 'xrp' | 'barter';
+export type ChatAssetTicker =
+	| 'btc'
+	| 'xmr'
+	| 'blurt'
+	| 'usdt'
+	| 'usdc'
+	| 'dai'
+	| 'bch'
+	| 'ltc'
+	| 'dash'
+	| 'doge'
+	| 'zec'
+	| 'arrr'
+	| 'dcr'
+	| 'sol'
+	| 'eth'
+	| 'xrp'
+	| 'barter';
 
 export interface AddressPayload {
 	readonly v: 1;
@@ -933,7 +947,7 @@ export interface AddressPayload {
 	 *  'erc20'|'polygon'|'base'|'arbitrum').  Undefined for
 	 *  single-network assets (btc, xmr, blurt, bch, ltc, dash,
 	 *  doge).
-	 *  Per Part 121/cp30/cp31: USDT, USDC, and DAI addresses on
+	 *  USDT, USDC, and DAI addresses on
 	 *  different network families have INCOMPATIBLE formats —
 	 *  sending USDT-ERC20 to a TRC-20 address loses funds; sending
 	 *  USDC-Solana to an EVM 0x address loses funds.  The network
@@ -947,7 +961,7 @@ export interface AddressPayload {
 	 *  EVM shape — DAI is the highest cross-network address-
 	 *  confusion surface on Morphit. */
 	readonly network?: string;
-	/** cp26 — Optional PayJoin (BIP-78) endpoint URL.  When set
+	/** Optional PayJoin (BIP-78) endpoint URL.  When set
 	 *  AND `method === 'btc'`, the generated bitcoin: URI gains
 	 *  a `pj=<encoded>` parameter pointing to the seller's
 	 *  PayJoin endpoint.  A PayJoin-capable buyer wallet POSTs a
@@ -986,7 +1000,7 @@ export interface FundsSentPayload {
 	 *  match what the seller originally requested in their
 	 *  AddressPayload.memo. */
 	readonly memo?: string;
-	/** Part 121 / cp30: sub-network for multi-network assets.
+	/** sub-network for multi-network assets.
 	 *  REQUIRED when method === 'usdt' or method === 'usdc'.
 	 *  Lets the receiving client pick the right per-network
 	 *  explorer URL when rendering the txid as a clickable
@@ -997,13 +1011,13 @@ export interface FundsSentPayload {
 export type StructuredPayload = AddressPayload | FundsSentPayload | OrderSettledElsewherePayload;
 
 /**
- * cp496 (t.txt #5) — "order settled with someone else" auto-reply.
+ * "order settled with someone else" auto-reply.
  *
  * When an order owner completes their order with a chosen trader, every OTHER
  * open thread on that order gets one of these, so the losing inquirers hear
  * back instead of being left hanging. It is a SYSTEM message: it carries NO
  * text of its own — only the order it refers to — and each recipient's client
- * renders the (the maintainer-approved, warm) copy in the RECIPIENT's own locale from
+ * renders the (approved, warm) copy in the RECIPIENT's own locale from
  * `chat.system.order_settled_elsewhere`. That is the whole point of making it
  * structured: 15 losing traders each read it in their own language, and the
  * sender never has to write (or translate) a word.
@@ -1040,7 +1054,7 @@ export type DecodeResult =
 	| { readonly kind: 'unknown_kind'; readonly name: string }
 	| { readonly kind: 'plaintext' };
 
-// ─── cp120: Mailing address + Shipment payloads ──────────────
+// ─── Mailing address + Shipment payloads ──────────────
 //
 // These payloads support cash-by-mail trades AND any trade where
 // a physical good is shipped (e.g. Barbie doll for Monero via
@@ -1151,7 +1165,7 @@ export interface ShipmentPayload {
 	readonly orderPermlink?: string;
 }
 
-/** Mailing-address field length bounds (cp120). */
+/** Mailing-address field length bounds. */
 export const MAILING_ADDRESS_LIMITS = {
 	streetMax: 200,
 	cityMax: 100,
@@ -1162,7 +1176,7 @@ export const MAILING_ADDRESS_LIMITS = {
 	noteMax: 500
 } as const;
 
-/** Shipment field length bounds (cp120). */
+/** Shipment field length bounds. */
 export const SHIPMENT_LIMITS = {
 	trackingMin: 5,
 	trackingMax: 50,
@@ -1255,7 +1269,7 @@ export function isValidUsdtTxid(s: string): boolean {
 }
 
 /** Validate a USDC address shape across all supported networks
- *  (ERC-20, SPL, Base, Polygon — Part 122 cp30).  Permissive
+ *  (ERC-20, SPL, Base, Polygon).  Permissive
  *  check used by the form-level "is this even plausibly an
  *  address" gate.  For per-network pinning (the address-share
  *  modal's network-aware check), use `validateUsdcAddress(network,
@@ -1286,7 +1300,7 @@ export function isValidUsdcTxid(s: string): boolean {
 }
 
 /** Validate a DAI address shape across all supported networks
- *  (ERC-20, Polygon, Base, Arbitrum — Part 122 cp31).  ALL FOUR
+ *  (ERC-20, Polygon, Base, Arbitrum).  ALL FOUR
  *  networks use the EVM 0x[40 hex] format, so this is just the
  *  EVM-address shape.  Per-network validation (which doesn't
  *  actually disambiguate the SHAPE here, but does pin which
@@ -1308,7 +1322,7 @@ export function isValidDaiTxid(s: string): boolean {
 	return /^(0x)?[a-fA-F0-9]{64}$/.test(s);
 }
 
-/** Validate a BCH address shape (Part 122 cp21).  Accepts both
+/** Validate a BCH address shape.  Accepts both
  *  CashAddr (with or without `bitcoincash:` prefix) and legacy
  *  P2PKH/P2SH formats — most modern BCH wallets emit CashAddr,
  *  but many still accept and display legacy.  Permissive shape
@@ -1330,7 +1344,7 @@ export function isValidBchTxid(s: string): boolean {
 	return BCH_TXID_RE.test(s);
 }
 
-/** Validate an LTC address shape (Part 122 cp24).  Accepts the
+/** Validate an LTC address shape.  Accepts the
  *  four current LTC formats: legacy P2PKH (`L...`), modern P2SH
  *  (`M...`), deprecated P2SH (`3...` — BTC-shape ambiguous per
  *  ADR-0025 §4), and bech32/bech32m (`ltc1...`).  Permissive
@@ -1353,7 +1367,7 @@ export function isValidLtcTxid(s: string): boolean {
 	return LTC_TXID_RE.test(s);
 }
 
-/** Validate a DASH address shape (cp27).  Accepts both
+/** Validate a DASH address shape.  Accepts both
  *  P2PKH (`X...`, 34 chars) and P2SH (`7...`, 34 chars).
  *  Permissive shape check; the receiving wallet does
  *  checksum and chain-binding validation.  Dash deliberately
@@ -1370,7 +1384,7 @@ export function isValidDashTxid(s: string): boolean {
 	return DASH_TXID_RE.test(s);
 }
 
-/** Validate a DOGE address shape (cp33 — Part 122).  Accepts both
+/** Validate a DOGE address shape.  Accepts both
  *  P2PKH (`D...`, 34 chars) and P2SH (`9.../A...`, 34 chars).
  *  Permissive shape check; the receiving wallet does checksum
  *  and chain-binding validation.  Dogecoin has no bech32/segwit
@@ -1387,7 +1401,7 @@ export function isValidDogeTxid(s: string): boolean {
 	return DOGE_TXID_RE.test(s);
 }
 
-/** Validate a ZEC address shape (cp39 — Part 122).  Accepts all
+/** Validate a ZEC address shape.  Accepts all
  *  four formats: t1/t3 transparent (base58), zs1 Sapling shielded
  *  (bech32, exactly 78 chars), u1 Unified Address (bech32m,
  *  variable length).  See ZEC_T_RE / ZEC_ZS_RE / ZEC_U_RE
@@ -1406,7 +1420,7 @@ export function isValidZecTxid(s: string): boolean {
 	return ZEC_TXID_RE.test(s);
 }
 
-/** Validate a ARRR address shape (cp41 — Part 122).  Pirate
+/** Validate a ARRR address shape.  Pirate
  *  Chain has only one address format: `zs1` Sapling shielded
  *  (bech32, exactly 78 chars).  No transparent (t1/t3) — all
  *  Pirate Chain transactions go through the Sapling shielded
@@ -1426,7 +1440,7 @@ export function isValidArrrTxid(s: string): boolean {
 	return ARRR_TXID_RE.test(s);
 }
 
-/** Validate a DCR address shape (cp43 — Part 122).  Decred has
+/** Validate a DCR address shape.  Decred has
  *  two receive-address formats: `Ds` P2PKH-Secp256k1 and `Dc`
  *  P2SH.  Other prefixes (extended pubkey/privkey, Edwards-curve)
  *  are NOT used for regular receive and are rejected. */
@@ -1443,7 +1457,7 @@ export function isValidDcrTxid(s: string): boolean {
 	return DCR_TXID_RE.test(s);
 }
 
-/** Validate a SOL address shape (cp45 — Part 122).  Solana
+/** Validate a SOL address shape.  Solana
  *  public keys are 32 bytes base58-encoded (32-44 chars).  Same
  *  shape as USDT/USDC SPL token-account addresses; context
  *  disambiguates at the order layer (LL #50 same-format-
@@ -1453,7 +1467,7 @@ export function isValidSolAddress(s: string): boolean {
 	return SOL_RE.test(s);
 }
 
-/** Validate a SOL txid shape (cp45 — Part 122).  Solana
+/** Validate a SOL txid shape.  Solana
  *  transaction signatures are 64 bytes base58-encoded (87-88
  *  chars).  Different format from the BTC family's 64-hex
  *  convention. */
@@ -1462,7 +1476,7 @@ export function isValidSolTxid(s: string): boolean {
 	return SOL_TXID_RE.test(s);
 }
 
-/** Validate an ETH address shape (cp47 — Part 122).  Ethereum
+/** Validate an ETH address shape.  Ethereum
  *  addresses are 20-byte hex with 0x prefix — exactly 42 chars.
  *  Both lowercase and EIP-55 mixed-case checksum accepted.
  *  Same shape as every EVM token-account address; context
@@ -1472,7 +1486,7 @@ export function isValidEthAddress(s: string): boolean {
 	return ETH_RE.test(s);
 }
 
-/** Validate an ETH txid shape (cp47 — Part 122).  Ethereum
+/** Validate an ETH txid shape.  Ethereum
  *  transaction hashes are 32 bytes hex with optional 0x prefix.
  *  Same shape as the EVM stablecoin txid forms. */
 export function isValidEthTxid(s: string): boolean {
@@ -1480,7 +1494,7 @@ export function isValidEthTxid(s: string): boolean {
 	return ETH_TXID_RE.test(s);
 }
 
-/** Validate an XRP address shape (cp49 — Part 122).  XRPL
+/** Validate an XRP address shape.  XRPL
  *  addresses start with 'r' followed by 24-34 base58 chars.
  *  Address-prefix 'r' is unique among Morphit assets — no
  *  cross-asset overlap is expected at this regex.  Destination
@@ -1490,7 +1504,7 @@ export function isValidXrpAddress(s: string): boolean {
 	return XRP_RE.test(s);
 }
 
-/** Validate an XRP txid shape (cp49 — Part 122).  XRPL
+/** Validate an XRP txid shape.  XRPL
  *  transaction hashes are 256-bit hex (64 chars, no prefix).
  *  Same shape as BTC family hex txids; XRPL convention is
  *  uppercase but we accept both cases. */
@@ -1638,16 +1652,16 @@ export function encodeAddressPayload(p: AddressPayload): string {
 		wire.order_permlink = p.orderPermlink;
 	if (p.note !== undefined && p.note !== '') wire.note = p.note;
 	if (p.memo !== undefined && p.memo !== '') wire.memo = p.memo;
-	// cp26 inline-fix — pre-existing cp3 latent bug: USDT
+	// inline-fix — pre-existing latent bug: USDT
 	// `network` field was on the AddressPayload interface but
 	// the encoder dropped it from the wire shape, breaking
 	// USDT cross-network display in ChatMessage on the receiving
 	// side.  Fixed here as it's the same pattern as the
 	// adjacent payjoin_endpoint addition.  Now USDT addresses
 	// shared via chat carry the network identifier through to
-	// the receiver, which is what cp3's design intended.
+	// the receiver, which is what the design intended.
 	//
-	// cp30-DD-DD SEC-6 — symmetric encoder-side defense-in-depth
+	// symmetric encoder-side defense-in-depth
 	// matching the decoder's SEC-3 fix.  Without these checks, a
 	// buggy caller could pass `{method:'usdc', network:'erc20',
 	// address:'<spl-base58>'}` and the encoder would emit a wire
@@ -1657,7 +1671,7 @@ export function encodeAddressPayload(p: AddressPayload): string {
 	// types enforce this at compile time but `as`-cast escape
 	// hatches in callers can bypass; encoder is the runtime gate.
 	//
-	// cp30-DD-DD CODE-1 — symmetric to decoder: refuse to emit a
+	// symmetric to decoder: refuse to emit a
 	// multi-network message without the network field.  Closes the
 	// missing-required-field hole at both encode and decode.
 	if (
@@ -1684,11 +1698,11 @@ export function encodeAddressPayload(p: AddressPayload): string {
 				throw new Error(`payload: address shape does not match USDC network '${p.network}'`);
 			}
 		} else if (p.method === 'dai') {
-			// Part 122 cp31 — DAI 4 networks per ADR-0029 §1.
+			// DAI 4 networks per ADR-0029 §1.
 			// All EVM-family; per-network address validation enforced
 			// by validateDaiAddress (each network has its own pinned
 			// regex even though they all share the EVM shape — this
-			// is the cross-network-mis-send hardening per cp30-DD-DD
+			// is the cross-network-mis-send hardening
 			// SEC-3 / SEC-6 pattern).
 			const validDaiNets = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
 			if (!validDaiNets.has(p.network)) {
@@ -1701,11 +1715,13 @@ export function encodeAddressPayload(p: AddressPayload): string {
 			// Single-network method shipping a `network` value is
 			// always a caller bug — refuse rather than silently
 			// emit a malformed wire-format message.
-			throw new Error(`payload: network field is only valid for multi-network methods (got method='${p.method}')`);
+			throw new Error(
+				`payload: network field is only valid for multi-network methods (got method='${p.method}')`
+			);
 		}
 		wire.network = p.network;
 	}
-	// cp26 — PayJoin (BIP-78) endpoint URL.  BTC-only; the
+	// PayJoin (BIP-78) endpoint URL.  BTC-only; the
 	// encoder enforces method='btc' as defense-in-depth (UI
 	// already gates the input field to BTC).  Wire-format field
 	// name uses snake_case `payjoin_endpoint` to match the
@@ -1807,19 +1823,19 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 		wire.order_permlink = p.orderPermlink;
 	if (p.note !== undefined && p.note !== '') wire.note = p.note;
 	if (p.memo !== undefined && p.memo !== '') wire.memo = p.memo;
-	// cp26 inline-fix — same cp3 latent bug as encodeAddressPayload:
+	// inline-fix — same latent bug as encodeAddressPayload:
 	// FundsSent USDT messages were dropping the network field on
 	// the wire, breaking the per-network explorer-link rendering
 	// in ChatMessage.  Fixed symmetrically here.
 	//
-	// cp30-DD-DD SEC-6 — symmetric encoder-side per-network txid
+	// symmetric encoder-side per-network txid
 	// validation matching the decoder's SEC-3 fix.  Same posture as
 	// encodeAddressPayload: a buggy caller passing mismatched
 	// method/network/txid produces a clear developer-time error
 	// rather than a silent wire-format message that the receiver
 	// then discards.
 	//
-	// cp30-DD-DD CODE-1 — symmetric to decoder: refuse to emit a
+	// symmetric to decoder: refuse to emit a
 	// multi-network funds_sent message without the network field.
 	if (
 		(p.method === 'usdt' || p.method === 'usdc' || p.method === 'dai') &&
@@ -1845,7 +1861,7 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 				throw new Error(`payload: txid shape does not match USDC network '${p.network}'`);
 			}
 		} else if (p.method === 'dai') {
-			// Part 122 cp31 — DAI 4 networks.
+			// DAI 4 networks.
 			const validDaiNets = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
 			if (!validDaiNets.has(p.network)) {
 				throw new Error(`payload: invalid network '${p.network}' for DAI funds_sent`);
@@ -1854,19 +1870,121 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 				throw new Error(`payload: txid shape does not match DAI network '${p.network}'`);
 			}
 		} else {
-			throw new Error(`payload: network field is only valid for multi-network methods (got method='${p.method}')`);
+			throw new Error(
+				`payload: network field is only valid for multi-network methods (got method='${p.method}')`
+			);
 		}
 		wire.network = p.network;
 	}
 	return JSON.stringify(wire);
 }
 
-// ─── cp120: Mailing address + Shipment encoders ──────────────
+// ─── Mailing address + Shipment: one validator, used by the encoders ──
+
+/** Why a mailing-address payload can't be sent. Stable codes: the modal
+ *  maps them to its own strings (never shows the encoder's message). */
+export type MailingAddressProblem =
+	| 'country_invalid'
+	| 'street_required'
+	| 'street_too_long'
+	| 'city_required'
+	| 'city_too_long'
+	| 'postal_code_length'
+	| 'street2_too_long'
+	| 'state_too_long'
+	| 'recipient_name_too_long'
+	| 'note_too_long'
+	| 'note_forbidden_chars'
+	| 'order_permlink_invalid';
+
+/** Why a shipment payload can't be sent. */
+export type ShipmentProblem =
+	| 'carrier_invalid'
+	| 'tracking_invalid'
+	| 'custom_carrier_name_too_long'
+	| 'custom_tracking_url_invalid'
+	| 'note_too_long'
+	| 'note_forbidden_chars'
+	| 'order_permlink_invalid';
+
+/** Thrown by the mailing-address and shipment encoders; `problem` is the
+ *  same code the matching validator returns. */
+export class PayloadValidationError extends Error {
+	constructor(readonly problem: MailingAddressProblem | ShipmentProblem) {
+		super(`payload: ${problem}`);
+		this.name = 'PayloadValidationError';
+	}
+}
+
+function noteProblem(
+	note: string | undefined,
+	max: number
+): 'note_too_long' | 'note_forbidden_chars' | null {
+	if (note === undefined || note === '') return null;
+	if (note.length > max) return 'note_too_long';
+	if (noteHasForbiddenChars(note)) return 'note_forbidden_chars';
+	return null;
+}
+
+function permlinkProblem(permlink: string | undefined): 'order_permlink_invalid' | null {
+	return permlink !== undefined && permlink !== '' && !ORDER_PERMLINK_RE.test(permlink)
+		? 'order_permlink_invalid'
+		: null;
+}
 
 /**
- * Encode a mailing-address payload.  Throws on invalid input —
- * caller should pre-validate fields and surface errors to the
- * user before reaching this encoder.
+ * The first reason `p` can't be encoded, or null. Exactly the encoder's rule,
+ * so a form that checks this with the values it will send never reaches an
+ * encoder error. PURE.
+ */
+export function mailingAddressProblem(p: MailingAddressPayload): MailingAddressProblem | null {
+	if (!isValidCountryCode(p.country)) return 'country_invalid';
+	if (typeof p.street !== 'string' || p.street.length === 0) return 'street_required';
+	if (p.street.length > MAILING_ADDRESS_LIMITS.streetMax) return 'street_too_long';
+	if (typeof p.city !== 'string' || p.city.length === 0) return 'city_required';
+	if (p.city.length > MAILING_ADDRESS_LIMITS.cityMax) return 'city_too_long';
+	if (
+		typeof p.postalCode !== 'string' ||
+		p.postalCode.length < MAILING_ADDRESS_LIMITS.postalCodeMin ||
+		p.postalCode.length > MAILING_ADDRESS_LIMITS.postalCodeMax
+	)
+		return 'postal_code_length';
+	if (p.street2 !== undefined && p.street2.length > MAILING_ADDRESS_LIMITS.streetMax)
+		return 'street2_too_long';
+	if (p.state !== undefined && p.state.length > MAILING_ADDRESS_LIMITS.stateMax)
+		return 'state_too_long';
+	if (
+		p.recipientName !== undefined &&
+		p.recipientName.length > MAILING_ADDRESS_LIMITS.recipientNameMax
+	)
+		return 'recipient_name_too_long';
+	return noteProblem(p.note, MAILING_ADDRESS_LIMITS.noteMax) ?? permlinkProblem(p.orderPermlink);
+}
+
+/**
+ * The first reason `p` can't be encoded, or null (the encoder's rule). The
+ * carrier must be a canonical carrier key or 'other'; the carrier registry
+ * itself is the form's business. PURE.
+ */
+export function shipmentProblem(p: ShipmentPayload): ShipmentProblem | null {
+	if (typeof p.carrier !== 'string' || !/^[a-z0-9_]{2,32}$/.test(p.carrier))
+		return 'carrier_invalid';
+	if (!isValidTrackingNumber(p.tracking)) return 'tracking_invalid';
+	if (p.carrier === 'other') {
+		if (
+			p.customCarrierName !== undefined &&
+			p.customCarrierName.length > SHIPMENT_LIMITS.customCarrierNameMax
+		)
+			return 'custom_carrier_name_too_long';
+		if (p.customTrackingUrl !== undefined && !isValidCustomTrackingUrl(p.customTrackingUrl))
+			return 'custom_tracking_url_invalid';
+	}
+	return noteProblem(p.note, SHIPMENT_LIMITS.noteMax) ?? permlinkProblem(p.orderPermlink);
+}
+
+/**
+ * Encode a mailing-address payload. Throws PayloadValidationError on input
+ * `mailingAddressProblem` refuses — callers check that first.
  *
  * PRIVACY NOTE: the encoded JSON ends up in chat plaintext
  * (which IS E2E-encrypted en route).  This function does not
@@ -1876,57 +1994,8 @@ export function encodeFundsSentPayload(p: FundsSentPayload): string {
 export function encodeMailingAddressPayload(p: MailingAddressPayload): string {
 	if (p.v !== 1) throw new Error('payload: unsupported version');
 	if (p.kind !== 'morphit_mailing_address') throw new Error('payload: wrong kind');
-	if (!isValidCountryCode(p.country)) {
-		throw new Error('payload: invalid country code (expect ISO 3166-1 alpha-2)');
-	}
-	if (typeof p.street !== 'string' || p.street.length === 0) {
-		throw new Error('payload: street required');
-	}
-	if (p.street.length > MAILING_ADDRESS_LIMITS.streetMax) {
-		throw new Error('payload: street too long');
-	}
-	if (typeof p.city !== 'string' || p.city.length === 0) {
-		throw new Error('payload: city required');
-	}
-	if (p.city.length > MAILING_ADDRESS_LIMITS.cityMax) {
-		throw new Error('payload: city too long');
-	}
-	if (typeof p.postalCode !== 'string') {
-		throw new Error('payload: postal_code required');
-	}
-	if (
-		p.postalCode.length < MAILING_ADDRESS_LIMITS.postalCodeMin ||
-		p.postalCode.length > MAILING_ADDRESS_LIMITS.postalCodeMax
-	) {
-		throw new Error('payload: postal_code length out of bounds');
-	}
-	if (p.street2 !== undefined && p.street2.length > MAILING_ADDRESS_LIMITS.streetMax) {
-		throw new Error('payload: street2 too long');
-	}
-	if (p.state !== undefined && p.state.length > MAILING_ADDRESS_LIMITS.stateMax) {
-		throw new Error('payload: state too long');
-	}
-	if (
-		p.recipientName !== undefined &&
-		p.recipientName.length > MAILING_ADDRESS_LIMITS.recipientNameMax
-	) {
-		throw new Error('payload: recipient_name too long');
-	}
-	if (p.note !== undefined && p.note !== '') {
-		if (p.note.length > MAILING_ADDRESS_LIMITS.noteMax) {
-			throw new Error('payload: note too long');
-		}
-		if (noteHasForbiddenChars(p.note)) {
-			throw new Error('payload: note has forbidden control chars');
-		}
-	}
-	if (
-		p.orderPermlink !== undefined &&
-		p.orderPermlink !== '' &&
-		!ORDER_PERMLINK_RE.test(p.orderPermlink)
-	) {
-		throw new Error('payload: invalid order_permlink');
-	}
+	const problem = mailingAddressProblem(p);
+	if (problem !== null) throw new PayloadValidationError(problem);
 
 	const wire: Record<string, unknown> = {
 		v: 1,
@@ -1947,50 +2016,14 @@ export function encodeMailingAddressPayload(p: MailingAddressPayload): string {
 }
 
 /**
- * Encode a shipment payload.  Throws on invalid input.  The
- * `carrier` value must be a canonical carrier key OR the
- * literal 'other'; the encoder does NOT validate against the
- * carrier registry to keep this module decoupled (the modal UI
- * validates the dropdown choice; future carrier additions
- * don't need to touch this file).
+ * Encode a shipment payload. Throws PayloadValidationError on input
+ * `shipmentProblem` refuses.
  */
 export function encodeShipmentPayload(p: ShipmentPayload): string {
 	if (p.v !== 1) throw new Error('payload: unsupported version');
 	if (p.kind !== 'morphit_shipment') throw new Error('payload: wrong kind');
-	if (typeof p.carrier !== 'string' || !/^[a-z0-9_]{2,32}$/.test(p.carrier)) {
-		throw new Error('payload: invalid carrier key');
-	}
-	if (!isValidTrackingNumber(p.tracking)) {
-		throw new Error('payload: invalid tracking number');
-	}
-	if (p.carrier === 'other') {
-		if (
-			p.customCarrierName !== undefined &&
-			p.customCarrierName.length > SHIPMENT_LIMITS.customCarrierNameMax
-		) {
-			throw new Error('payload: custom_carrier_name too long');
-		}
-		if (p.customTrackingUrl !== undefined) {
-			if (!isValidCustomTrackingUrl(p.customTrackingUrl)) {
-				throw new Error('payload: custom_tracking_url must be https:// and well-formed');
-			}
-		}
-	}
-	if (p.note !== undefined && p.note !== '') {
-		if (p.note.length > SHIPMENT_LIMITS.noteMax) {
-			throw new Error('payload: note too long');
-		}
-		if (noteHasForbiddenChars(p.note)) {
-			throw new Error('payload: note has forbidden control chars');
-		}
-	}
-	if (
-		p.orderPermlink !== undefined &&
-		p.orderPermlink !== '' &&
-		!ORDER_PERMLINK_RE.test(p.orderPermlink)
-	) {
-		throw new Error('payload: invalid order_permlink');
-	}
+	const problem = shipmentProblem(p);
+	if (problem !== null) throw new PayloadValidationError(problem);
 
 	const wire: Record<string, unknown> = {
 		v: 1,
@@ -2020,7 +2053,7 @@ export function encodeShipmentPayload(p: ShipmentPayload): string {
  *  "this message uses a newer protocol — please update" rather
  *  than the raw JSON. */
 /**
- * Encode an OrderSettledElsewherePayload to wire JSON (cp496, t.txt #5). The
+ * Encode an OrderSettledElsewherePayload to wire JSON. The
  * wire carries ONLY the order permlink — no text — because each recipient
  * renders the localized copy itself. See the interface for the full rationale.
  */
@@ -2139,7 +2172,7 @@ export function decodePayload(plaintext: string): DecodeResult {
 		};
 	}
 
-	// cp120: mailing-address decoder.  All required fields must
+	// mailing-address decoder.  All required fields must
 	// be present + shape-valid; optional fields are length-bounded.
 	if (o.kind === 'morphit_mailing_address') {
 		if (!isValidCountryCode(o.country)) return { kind: 'plaintext' };
@@ -2166,7 +2199,7 @@ export function decodePayload(plaintext: string): DecodeResult {
 		return { kind: 'mailing_address', payload: result };
 	}
 
-	// cp120: shipment decoder.
+	// shipment decoder.
 	if (o.kind === 'morphit_shipment') {
 		if (typeof o.carrier !== 'string' || !/^[a-z0-9_]{2,32}$/.test(o.carrier))
 			return { kind: 'plaintext' };
@@ -2229,13 +2262,13 @@ function optionalFieldsAddress(
 		if (base.method !== 'blurt') return null;
 		memo = o.memo;
 	}
-	// cp26 inline-fix — pre-existing cp3 latent bug: USDT
+	// inline-fix — pre-existing latent bug: USDT
 	// `network` field was being dropped on the wire.  Decoder
 	// now reads it back when present.  Multi-network assets
 	// (USDT + USDC) ride a `network` discriminator on the wire;
 	// other methods carrying a `network` field is malformed.
 	//
-	// cp30-DD-DD CODE-1 — multi-network methods now REQUIRE the
+	// multi-network methods now REQUIRE the
 	// network field (per ADR-0023 + ADR-0028).  Before this fix,
 	// a wire-format message `{method:'usdc', address:'0xabc'}`
 	// without `network` was accepted; downstream UI rendered the
@@ -2265,7 +2298,7 @@ function optionalFieldsAddress(
 			) {
 				return null;
 			}
-			// cp30-DD-DD SEC-3 — cross-check address shape against
+			// cross-check address shape against
 			// the decoded network.  Without this, a hostile peer
 			// could send `{method:'usdt', network:'spl', address:
 			// '0xevmformatstring...'}` and the asset-wide check
@@ -2274,13 +2307,13 @@ function optionalFieldsAddress(
 			// claimed network's label, potentially confusing the
 			// buyer into routing funds incorrectly.  Per-network
 			// validation closes the gap; same trust-gate
-			// posture as the cp30-DD-11 latent-since-cp3 lesson.
+			// posture as the latent-since-cp3 lesson.
 			if (!validateUsdtAddress(o.network as UsdtNetwork, base.address)) {
 				return null;
 			}
 			network = o.network;
 		} else if (base.method === 'usdc') {
-			// Part 122 cp30: USDC's four shipped networks.  No
+			// USDC's four shipped networks.  No
 			// TRC-20 (Circle doesn't issue on Tron); no BEP-20
 			// in this initial set.
 			if (
@@ -2291,7 +2324,7 @@ function optionalFieldsAddress(
 			) {
 				return null;
 			}
-			// cp30-DD-DD SEC-3 — cross-check USDC address shape
+			// cross-check USDC address shape
 			// against the decoded network.  Critical here because
 			// ERC-20, Base, and Polygon all share the EVM 0x[40
 			// hex] format; a hostile peer could mislabel an SPL
@@ -2304,7 +2337,7 @@ function optionalFieldsAddress(
 			}
 			network = o.network;
 		} else if (base.method === 'dai') {
-			// Part 122 cp31: DAI's four shipped networks.  All four
+			// DAI's four shipped networks.  All four
 			// are EVM-family (ERC-20, Polygon, Base, Arbitrum); no
 			// SPL/TRC-20/BEP-20 per ADR-0029 §1 (no canonical
 			// Maker-issued native DAI on those chains).
@@ -2316,7 +2349,7 @@ function optionalFieldsAddress(
 			) {
 				return null;
 			}
-			// cp30-DD-DD SEC-3 pattern — cross-check address shape
+			// pattern — cross-check address shape
 			// against the decoded network.  For DAI this is the
 			// HIGHEST-RISK class of mismatch because ALL FOUR
 			// networks share the EVM 0x[40 hex] format — a hostile
@@ -2337,7 +2370,7 @@ function optionalFieldsAddress(
 			return null;
 		}
 	}
-	// cp26 — PayJoin endpoint URL.  BTC-only.
+	// PayJoin endpoint URL.  BTC-only.
 	let payjoinEndpoint: string | undefined;
 	if (Object.hasOwn(o, 'payjoin_endpoint')) {
 		if (typeof o.payjoin_endpoint !== 'string' || o.payjoin_endpoint.length === 0) {
@@ -2385,12 +2418,12 @@ function optionalFieldsFundsSent(
 		if (base.method !== 'blurt') return null;
 		memo = o.memo;
 	}
-	// cp26 inline-fix — symmetric to optionalFieldsAddress.
+	// inline-fix — symmetric to optionalFieldsAddress.
 	// Multi-network assets (USDT + USDC) ride a `network`
 	// discriminator on the wire that needs to round-trip through
 	// FundsSent payloads too.
 	//
-	// cp30-DD-DD CODE-1 — multi-network methods REQUIRE network
+	// multi-network methods REQUIRE network
 	// field (same posture as optionalFieldsAddress).  A funds-sent
 	// message without network gives the seller no way to pick the
 	// right explorer.
@@ -2412,7 +2445,7 @@ function optionalFieldsFundsSent(
 			) {
 				return null;
 			}
-			// cp30-DD-DD SEC-3 — cross-check txid shape against the
+			// cross-check txid shape against the
 			// decoded network.  Same defense-in-depth as the
 			// AddressPayload path; without this, a hostile peer could
 			// send `{method:'usdt', network:'erc20', txid:'<spl-txid>'}`
@@ -2431,7 +2464,7 @@ function optionalFieldsFundsSent(
 			) {
 				return null;
 			}
-			// cp30-DD-DD SEC-3 — same cross-check on USDC.  Critical
+			// same cross-check on USDC.  Critical
 			// because ERC-20/Base/Polygon share the EVM 0x[64 hex]
 			// txid shape; only the network field disambiguates which
 			// explorer to link.
@@ -2440,7 +2473,7 @@ function optionalFieldsFundsSent(
 			}
 			network = o.network;
 		} else if (base.method === 'dai') {
-			// Part 122 cp31 — DAI four shipped networks.  All
+			// DAI four shipped networks.  All
 			// EVM-family (no SPL/TRC-20/BEP-20 per ADR-0029 §1).
 			if (
 				o.network !== 'erc20' &&
@@ -2450,7 +2483,7 @@ function optionalFieldsFundsSent(
 			) {
 				return null;
 			}
-			// cp30-DD-DD SEC-3 — same cross-check on DAI.  ALL FOUR
+			// same cross-check on DAI.  ALL FOUR
 			// networks share the EVM 0x[64 hex] txid shape; only
 			// the network field disambiguates which explorer to
 			// link.  Without this, a hostile peer could mislabel an
@@ -2467,7 +2500,7 @@ function optionalFieldsFundsSent(
 	return { ...base, amount, orderPermlink, note, memo, network };
 }
 
-// ─── cp120: optionalFields for new payloads ───────────────────
+// ─── optionalFields for new payloads ───────────────────
 
 function optionalFieldsMailingAddress(
 	base: MailingAddressPayload,
@@ -2573,16 +2606,13 @@ export function buildPaymentUri(p: AddressPayload): string {
 	const params = new URLSearchParams();
 	if (p.method === 'btc') {
 		if (p.amount !== undefined) params.set('amount', p.amount);
-		// cp26 — PayJoin (BIP-78) endpoint propagation.  BTC-only
+		// PayJoin (BIP-78) endpoint propagation.  BTC-only
 		// at present; the BIP doesn't apply to non-Bitcoin chains.
 		// Buyer wallets that support PayJoin will detect the pj=
 		// parameter and switch to the BIP-78 PSBT exchange flow;
 		// non-PayJoin wallets ignore the param and fall back to a
 		// normal payment.  Zero footgun.
-		if (
-			p.payjoinEndpoint !== undefined &&
-			p.payjoinEndpoint.trim().length > 0
-		) {
+		if (p.payjoinEndpoint !== undefined && p.payjoinEndpoint.trim().length > 0) {
 			params.set('pj', p.payjoinEndpoint.trim());
 		}
 		const qs = params.toString();
@@ -2604,9 +2634,7 @@ export function buildPaymentUri(p: AddressPayload): string {
 		// conventions (decimal BCH).
 		if (p.amount !== undefined) params.set('amount', p.amount);
 		const qs = params.toString();
-		const addr = p.address.startsWith('bitcoincash:')
-			? p.address
-			: `bitcoincash:${p.address}`;
+		const addr = p.address.startsWith('bitcoincash:') ? p.address : `bitcoincash:${p.address}`;
 		return `${addr}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'ltc') {
@@ -2622,8 +2650,8 @@ export function buildPaymentUri(p: AddressPayload): string {
 		return `litecoin:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'dash') {
-		// Dash uses the `dash:` URI scheme — BIP-21 conformant
-		// (cp27).  Same shape as BTC's `bitcoin:` scheme; Dash
+		// Dash uses the `dash:` URI scheme — BIP-21 conformant.
+		// Same shape as BTC's `bitcoin:` scheme; Dash
 		// inherited Bitcoin's URI conventions from the fork.
 		// `amount` parameter is decimal DASH, BIP-21 standard.
 		// DASH addresses are unambiguous within the URI scheme
@@ -2635,7 +2663,7 @@ export function buildPaymentUri(p: AddressPayload): string {
 	}
 	if (p.method === 'doge') {
 		// Dogecoin uses the `dogecoin:` URI scheme — BIP-21
-		// conformant (cp33 — Part 122).  Same shape as BTC's
+		// conformant.  Same shape as BTC's
 		// `bitcoin:` scheme; Dogecoin inherited Bitcoin's URI
 		// conventions from the 2013 Litecoin fork (which itself
 		// inherited from Bitcoin).  `amount` parameter is
@@ -2651,8 +2679,8 @@ export function buildPaymentUri(p: AddressPayload): string {
 		return `dogecoin:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'zec') {
-		// Zcash uses the `zcash:` URI scheme — ZIP-321 conformant
-		// (cp39 — Part 122).  Same BIP-21-style shape as BTC's
+		// Zcash uses the `zcash:` URI scheme — ZIP-321 conformant.
+		// Same BIP-21-style shape as BTC's
 		// `bitcoin:` scheme with `amount` as decimal ZEC.  ZEC
 		// addresses are unambiguous within the URI scheme: t1/t3
 		// prefixes are base58 (transparent), zs1 is bech32
@@ -2666,7 +2694,7 @@ export function buildPaymentUri(p: AddressPayload): string {
 	}
 	if (p.method === 'arrr') {
 		// Pirate Chain uses the `arrr:` URI scheme — BIP-21-style
-		// shape (cp41 — Part 122).  Same form as BTC's `bitcoin:`
+		// shape.  Same form as BTC's `bitcoin:`
 		// scheme with `amount` as decimal ARRR.  ARRR addresses
 		// are unambiguous within the URI scheme: only one format
 		// exists (zs1 Sapling shielded, bech32, 78 chars).
@@ -2680,7 +2708,7 @@ export function buildPaymentUri(p: AddressPayload): string {
 	}
 	if (p.method === 'dcr') {
 		// Decred uses the `decred:` URI scheme — BIP-21-style
-		// shape (cp43 — Part 122).  Same form as BTC's
+		// shape.  Same form as BTC's
 		// `bitcoin:` scheme with `amount` as decimal DCR.  Both
 		// receive-address formats (Ds P2PKH and Dc P2SH) are
 		// accepted under the same scheme.  Decred wallets
@@ -2692,7 +2720,7 @@ export function buildPaymentUri(p: AddressPayload): string {
 	}
 	if (p.method === 'sol') {
 		// Solana uses the `solana:` URI scheme — the Solana Pay
-		// specification (cp45 — Part 122).  Same BIP-21-style
+		// specification.  Same BIP-21-style
 		// shape as `bitcoin:` with `amount` as decimal SOL.
 		// Phantom, Solflare, Cake Wallet for SOL, and Trust
 		// Wallet all recognize `solana:` URIs.  Native SOL
@@ -2704,7 +2732,7 @@ export function buildPaymentUri(p: AddressPayload): string {
 		return `solana:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'eth') {
-		// Ethereum uses the `ethereum:` URI scheme (cp47 — Part
+		// Ethereum uses the `ethereum:` URI scheme (Part
 		// 122).  EIP-681 defines a richer form (with @chainId,
 		// /transfer for tokens, value in wei), but Morphit emits
 		// the simpler BIP-21-compatible shape `ethereum:<addr>
@@ -2719,22 +2747,17 @@ export function buildPaymentUri(p: AddressPayload): string {
 		return `ethereum:${p.address}${qs ? `?${qs}` : ''}`;
 	}
 	if (p.method === 'xrp') {
-		// Ripple uses the `ripple:` URI scheme (cp49 — Part 122).
-		// There is no Ethereum-style EIP-681 standardization for
-		// XRPL URIs, but `ripple:` is the de facto scheme that
-		// Xaman/Xumm, Crossmark, Bifrost, GemWallet, and Trust
-		// Wallet all parse for native XRP transfers.  Format:
-		// `ripple:<address>?amount=<decimal>&dt=<destination-tag>`.
+		// Ripple uses the `ripple:` URI scheme.  There is no
+		// Ethereum-style EIP-681 standardization for XRPL URIs, but
+		// `ripple:` is the de facto scheme that Xaman/Xumm,
+		// Crossmark, Bifrost, GemWallet, and Trust Wallet all parse
+		// for native XRP transfers.  Format built here:
+		// `ripple:<address>?amount=<decimal>`.
 		//
-		// DESTINATION TAG: a 32-bit integer that XRPL exchanges
-		// use to route XRP to user accounts under their omnibus
-		// wallet.  When the order's destination requires a tag,
-		// the URI includes `dt=N`; the wallet attaches it to the
-		// transaction header on signing.  Sending to an exchange-
-		// hosted address WITHOUT the required tag practically
-		// loses funds (recoverable via exchange support only) —
-		// users must check whether the recipient requires a tag.
-		// Privacy guide warns × 10 locales.
+		// DESTINATION TAG: not carried (no field in the payload, so
+		// no `dt=` here).  An address that requires a tag — most
+		// exchange deposit addresses — cannot be paid correctly
+		// through this link; see XRP_RE.
 		//
 		// Native XRP only — Morphit doesn't generate ripple: URIs
 		// for issued-token (IOU) transfers; those use different

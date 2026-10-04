@@ -904,7 +904,7 @@ recorded in the audit with the reasoning:
 - a cached key correction is dropped a few milliseconds before the database
   change that replaces it is committed.
 
-### Found by the v1.18.0 deep-deep
+### Found by the v1.18.0 deep audit
 
 This release was renumbered from 1.17.16 to 1.18.0 because of how much it
 changes. Before publishing it, six more reviewers went over the whole system,
@@ -930,7 +930,7 @@ unfixed code and seen to fail first. The most serious, first:
   the database tool, which also runs shell commands written into the file. One
   dishonest node among the twenty public ones could therefore run commands as
   root on any node being set up. Now:
-  - the snapshot record must be agreed by two independent node operators;
+  - the snapshot record must be agreed by two node operators (counted by node name);
   - it must be signed by @morphit's pinned key;
   - the file is refused if it contains any database command outside its data;
   - the restore runs as one transaction, so a failed restore leaves the
@@ -1309,7 +1309,7 @@ OPERATIONS.md §25b lists which.
   none of which had seen the code being written — and a good deal of what is
   under "Fixed" came out of them, including two defects in this release's own
   tests. The full record, including what those reviews checked and found sound,
-  is in `docs/AUDIT-v1.18.0-FASTCHAT-DEEP-DEEP.md`. The design decisions are in
+  is in an internal audit record. The design decisions are in
   `docs/adr/0052-federated-fast-chat-delivery.md`.
 
 - **The fixes were reviewed too.** The first review's remediation added a lot of
@@ -1319,7 +1319,7 @@ OPERATIONS.md §25b lists which.
   that would have cut the canonical instance out of every community instance's
   peer list, and an anti-spam cap keyed on the victim rather than the sender, so
   one hostile account could have denied a real buyer's first contact. Both are in
-  `docs/AUDIT-v1.18.0-FASTCHAT-DEEP-DEEP.md` under "Round two", along with one
+  an internal audit record under "Round two", along with one
   fix that was made and then deliberately reverted.
 
 - **The safety rule this whole feature rests on is now checked against a real
@@ -1388,7 +1388,7 @@ OPERATIONS.md §25b lists which.
 
   (At the cut these figures were 2,466 unit and 159 integration tests, 17
   harnesses, 325 checks and 197 mutations. The two reviews that followed added
-  the rest. The mutation count stayed at 216 through the deep-deep: its fixes
+  the rest. The mutation count stayed at 216 through the deep audit: its fixes
   moved 18 mutations' targets, and each was re-aimed at where its property now
   lives and seen caught again, rather than dropped.)
 

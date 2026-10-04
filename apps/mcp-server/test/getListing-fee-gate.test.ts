@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, L2 — morphit_get_listing must not hand an AI agent an
+ * morphit_get_listing must not hand an AI agent an
  * unpaid or non-live listing as if it were an ordinary live one.
  *
  * rv6 L2: the tool reads the owner-view `/v1/orders/:account`, which returns

@@ -179,7 +179,7 @@ describe('upgrade --check-only on a hidden-only node', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 /**
- * v1.18.0 deep-deep (ops-1, H2, ops-2, ops-7). Whatever answered first on
+ * Whatever answered first on
  * 127.0.0.1 / 172.18.0.1 / 172.17.0.1 port 8081 decided, for ROOT, whether the
  * node is hidden-only, the release it installs, its SHA-256 and its peers — no
  * check on who was listening. Hidden-only now comes from the root-owned config,

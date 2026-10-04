@@ -2,14 +2,14 @@
 /**
  * scripts/brag-list-claim-parity-smoke.ts
  *
- * Structural Defense #38 — brag-list claim parity (cp111).
+ * Structural Defense #38 — brag-list claim parity.
  *
  * MORPHIT-BRAG-LIST.md is public-facing marketing copy whose
- * load-bearing rule (memory #15) is "every claim is verifiable
+ * load-bearing rule is "every claim is verifiable
  * in code or honestly disclosed as backlog."  Without a smoke,
  * the brag list silently rots: code paths get renamed, env-vars
  * are removed, op IDs drift, and asset/locale/ADR counts go
- * stale without anyone noticing.  cp111 found three real drift
+ * stale without anyone noticing.  A later change found three real drift
  * cases that motivated this smoke:
  *
  *   1. `RELEASE-NOTES-v1.0.0-beta.1.md` claimed "3,924
@@ -17,16 +17,16 @@
  *      had moved to 4432.  Not in the brag list itself, but
  *      same class — stale specific number in a marketing-copy
  *      surface.
- *   2. `docs/AUDIT-2026-05-FINAL-REPORT.md` claimed CI runs
+ *   2. the internal audit record AUDIT-2026-05-FINAL-REPORT claimed CI runs
  *      `npm run check` for the frontend.  CI actually invokes
  *      the typecheck through `workspace-typecheck-smoke`
  *      indirectly — the literal `npm run check` step doesn't
  *      exist in any workflow.
- *   3. `TARBALL.md`'s handoff section listed three pre-launch
+ *   3. the handoff journal listed three pre-launch
  *      operator-actions as "still open" that have actually
  *      been closed for many checkpoints.
  *
- * cp111 fixes all three by hand; this smoke catches the
+ * A later change fixes all three by hand; this smoke catches the
  * fourth, fifth, and Nth recurrences automatically.
  *
  * What this smoke checks (each tuple counts as one scenario):
@@ -56,8 +56,8 @@
  *      `ASSET_TICKERS.length` from
  *      `packages/asset-registry/src/index.ts` — the canonical
  *      source-of-truth.  Catches the recurring drift caught
- *      manually at cp35 (8 stale "10 tradable" sites) and
- *      again at cp48 (3 stale "12 tradable" sites).
+ *      manually (8 stale "10 tradable" sites) and
+ *      again (3 stale "12 tradable" sites).
  *
  *   E. **Locale-count anchor.**  Any prose claim of "N locales"
  *      or "N languages" (where N is a number 5-20 or the
@@ -78,15 +78,15 @@
  *      form "0001-… through NNNN-…" or "docs/adr/0001-foo
  *      through 0042-bar.md" must name the highest non-template
  *      ADR number on disk as the upper bound.  Catches the
- *      drift caught manually at cp131 (README.md was stale at
+ *      drift caught manually (README.md was stale at
  *      "through 0036-…" when the disk had 0042-…).
  *
  * Scope: this smoke covers MORPHIT-BRAG-LIST.md, README.md,
  * and RELEASE-NOTES-v*.md — the three "marketing-class"
  * surfaces where stale specific claims hurt most.  ADRs,
- * audit logs, REVISIT-LIST, TARBALL, and PHASE-* docs are
+ * internal journals (now in the gitignored private/ folder) are
  * deliberately out of scope (they're historical / journal,
- * subject to the cp82 annotation-not-rewrite rule).
+ * subject to the annotation-not-rewrite rule).
  *
  * False-positive avoidance:
  *
@@ -282,7 +282,7 @@ const LOCALE_RE = new RegExp(
 // Words that, when they appear on the same line as a
 // non-canonical locale/language number, signal "this is a
 // subset reference, not a total claim".  Real-world false-
-// positive seen at cp111 first-run: brag entry 161 reads
+// positive seen first-run: brag entry 161 reads
 // "across all 6 locales" referring back to the 6 community-
 // translation backlog locales mentioned earlier in the same
 // sentence.  Strict literal regex can't tell that apart from
@@ -341,7 +341,7 @@ const ADR_RANGE_RE =
 interface Scenario {
 	doc: string;
 	line: number;
-	// cp474 — 'H' (ADR filename-range claims, cp131 MED-004) was wired into
+	// 'H' (ADR filename-range claims) was wired into
 	// KIND_LABEL and the report loop but never added to this union.
 	kind: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
 	claim: string;
@@ -414,7 +414,7 @@ function countAssetTickers(): number {
 	);
 	const m = src.match(/ASSET_TICKERS\s*=\s*\[([^\]]+)\]/);
 	if (!m) return -1;
-	// cp425 — the brag list's "N tradable assets" claims count CRYPTO assets
+	// the brag list's "N tradable assets" claims count CRYPTO assets
 	// (the coins a wallet would integrate). Goods assets (BARTER) are orderable
 	// but are not coins, so they're excluded from this marketing count —
 	// mirroring isGoodsAsset() in the registry and the GOODS_TICKERS exclusion
@@ -641,7 +641,7 @@ for (const docRel of MARKETING_DOCS) {
 			}
 		}
 
-		// (H) ADR filename-range claim — cp131 MED-004.
+		// (H) ADR filename-range claim.
 		ADR_RANGE_RE.lastIndex = 0;
 		while ((m = ADR_RANGE_RE.exec(ln)) !== null) {
 			const startN = parseInt(m[1]!, 10);

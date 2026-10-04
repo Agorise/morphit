@@ -221,7 +221,7 @@ describe('buildOrderPayload — structural fields', () => {
 		expect(out.expires_at).toBeNull();
 	});
 
-	// ─── operator_tag (REVISIT-LIST item 5) ────────────────────────
+	// ─── operator_tag (backlog item 5) ────────────────────────
 
 	it('omits operator_tag when not specified', () => {
 		const out = buildOrderPayload('some-permlink', mkInput());
@@ -253,7 +253,7 @@ describe('makeOrderPermlink', () => {
 		// Privacy invariant: the asset/side/fiat must NOT appear in the
 		// permlink (it leaks into URLs, RSS GUIDs, explorers). They live in
 		// the structured payload only.
-		// cp194 — assert the OPAQUE SHAPE rather than substring-checking
+		// assert the OPAQUE SHAPE rather than substring-checking
 		// against the random suffix. The permlink is `order-<12 random
 		// chars>` from charset abcdefghjkmnpqrstuvwxyz23456789, which
 		// contains b/t/c/s/e/l/u/d — so a literal `not.toContain('btc')`
@@ -269,7 +269,7 @@ describe('makeOrderPermlink', () => {
 
 	it('does not leak the asset for a privacy-sensitive asset (XMR)', () => {
 		const p = makeOrderPermlink('buy', 'XMR', 'EUR');
-		// cp194 — opaque-shape assertion (see the BTC case above). The
+		// opaque-shape assertion (see the BTC case above). The
 		// permlink must be `order-<12 random chars>` and must NOT encode
 		// side/asset/fiat. Substring checks like not.toContain('eur')
 		// flake because e/u/r are all in the permlink charset.
@@ -284,7 +284,7 @@ describe('makeOrderPermlink', () => {
 	});
 });
 
-// ─── cp425: barter accepted_assets passthrough ──────────────────────
+// ─── barter accepted_assets passthrough ──────────────────────
 describe('buildOrderPayload — accepted_assets (barter)', () => {
 	it('passes through a barter accepted-crypto set', () => {
 		const out = buildOrderPayload(
@@ -314,5 +314,43 @@ describe('buildOrderPayload — accepted_assets (barter)', () => {
 			mkInput({ asset: 'BARTER', acceptedAssets: [] })
 		);
 		expect(out.accepted_assets).toBeUndefined();
+	});
+});
+
+describe('buildOrderPayload: single-line fields the indexer would refuse', () => {
+	// The indexer's single-line gate (handlers/order.ts FORBIDDEN_TEXT_CHARS).
+	const INDEXER_SINGLE_LINE =
+		/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+	const base = {
+		side: 'buy' as const,
+		asset: 'BLURT' as const,
+		fiatCurrency: 'MXN',
+		amountMin: 100,
+		amountMax: 200,
+		priceModel: { kind: 'spread' as const, percent: 0 },
+		paymentMethods: ['cash_in_person'],
+		terms: '',
+		expiresAt: null
+	};
+	it('a pasted zero-width space in the region is removed before signing', () => {
+		const p = buildOrderPayload('order-abc', {
+			...base,
+			locationRegion: 'Ciudad de México\u200B'
+		} as never);
+		expect(p.location_region).toBe('Ciudad de México');
+		expect(INDEXER_SINGLE_LINE.test(p.location_region!)).toBe(false);
+	});
+	it('bidi overrides and control characters are removed from the region and payment methods', () => {
+		const p = buildOrderPayload('order-abc', {
+			...base,
+			locationRegion: '\u202ELagos\u0007',
+			paymentMethods: ['cash\uFEFF_in_person']
+		} as never);
+		expect(p.location_region).toBe('Lagos');
+		expect(p.payment_methods).toEqual(['cash_in_person']);
+	});
+	it('a region of only invisible characters is no region', () => {
+		const p = buildOrderPayload('order-abc', { ...base, locationRegion: '\u200B\u2060' } as never);
+		expect(p.location_region).toBeNull();
 	});
 });

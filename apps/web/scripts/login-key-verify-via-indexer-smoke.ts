@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * login-key-verify-via-indexer smoke — cp298.
+ * login-key-verify-via-indexer smoke.
  *
  * PRIVACY (priority #1). Login / key-import (onboarding/import) and the
  * settings account-name verifier used to call Blurt `get_accounts`
  * directly from the browser, leaking "IP X is logging into account Y" to
- * third-party RPC operators. cp298 routes the lookup through the
+ * third-party RPC operators. A later change routes the lookup through the
  * operator's own `/v1/account/:name/keys` endpoint. This smoke fails if
  * either surface regresses to direct RPC, or if the endpoint ever grows a
  * secret-key field.

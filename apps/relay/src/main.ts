@@ -84,7 +84,7 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
-	// cp194 — `--check-config`: validate operator-config + the full
+	// `--check-config`: validate operator-config + the full
 	// relay config schema (including that the active-key file exists
 	// and is shaped correctly), then exit. Runs BEFORE unlockActiveKey
 	// so it NEVER prompts for a passphrase — safe for `morphit-ops
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
 	// clearnet from the box's own address while the indexer beside it did not.
 	// The SAME router the indexer installs (one home, in the package), with the
 	// same rule: fail-closed on public clearnet when every endpoint is hidden.
-	// ALWAYS installed (v1.18.0 deep-deep, L3): the on-chain directory merged
+	// ALWAYS installed: the on-chain directory merged
 	// below adds `.onion`/`.i2p` nodes to a clearnet relay's pool too, and with no
 	// router their names went to the system resolver. routerInstallPolicy turns
 	// "no hidden endpoint configured" into 'allow' — clearnet unchanged.
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
 				fix:
 					st.dir === DEFAULT_RELAY_DATA_DIR
 						? 'On this server: sudo morphit-ops upgrade (it sets up the relay state directory), or sudo systemctl restart morphit-relay (systemd creates it)'
-						: `The relay runs as root WITHOUT permission overrides: it must be able to enter every folder on the path to ${st.dir} (check each with ls -ld) and write in it — or remove MORPHIT_RELAY_DATA_DIR to use ${DEFAULT_RELAY_DATA_DIR}`
+						: `On this server: the relay runs as the user morphit-relay, so it must be able to enter every folder on the path to ${st.dir} (check each with ls -ld) and write in it — or remove MORPHIT_RELAY_DATA_DIR to use ${DEFAULT_RELAY_DATA_DIR}`
 			});
 			// Only drop persistence when the file would live in the dir we just
 			// failed to write; an explicit path elsewhere is still tried.
@@ -311,10 +311,10 @@ async function main(): Promise<void> {
 		bootLog.info('kill_switch_armed', { path: killSwitch.getPath() });
 	}
 	const healthService = new HealthService(cfg, blurt, started);
-	// Wire the signup context into health so /v1/health?verbose=1
-	// exposes signup_stats (used by the indexer-side operator-
-	// balance scanner to detect anomalous volume when LOW_BALANCE
-	// fires).
+	// Wire the signup context into health so the operator block of
+	// /v1/health (local callers with X-Morphit-Local-Health: 1) carries
+	// signup_stats (used by the indexer-side operator-balance scanner
+	// to detect anomalous volume when LOW_BALANCE fires).
 	healthService.setSignupContext({
 		ceiling: globalCeiling,
 		signupEnabled: cfg.signupEnabled
@@ -356,14 +356,14 @@ async function main(): Promise<void> {
 	const queueDrainer = new RelayQueueDrainer(cfg, db, blurt);
 	healthService.setQueueStatsProvider(() => queueDrainer.queueStats());
 
-	// ── Web Push (Part 122 cp13) ───────────────────────────────
+	// ── Web Push ───────────────────────────────
 	// Subscriptions store is always created (used by the endpoints
 	// even when push is disabled — the GET key-helper returns a
 	// clean 503 push_disabled, but the endpoint code path
 	// references the store).  Sender is only constructed when
 	// pushEnabled (it calls webpush.setVapidDetails which throws
 	// on undefined keys).
-	// cp404 — a set-but-malformed VAPID public key (wrong length, a stray
+	// a set-but-malformed VAPID public key (wrong length, a stray
 	// trailing newline, or the private key pasted in) can't yield working
 	// subscriptions, so config treats push as disabled. Tell the operator
 	// clearly rather than letting every user hit a cryptic "subscribe
@@ -391,7 +391,7 @@ async function main(): Promise<void> {
 	}
 	const pushSubscriptionStore = new PushSubscriptionStore(db);
 	const pushSubscribeLimiter = new Limiter(20, 60 * 60_000); // 20/hour/IP
-	// cp131 MED-009 — per-IP rate limit on unsubscribe.  Same
+	// per-IP rate limit on unsubscribe.  Same
 	// shape as subscribe; legitimate users never hit it
 	// (humans unsubscribe one device at a time), but it
 	// shuts down the DB-leak-DoS class.
@@ -404,12 +404,13 @@ async function main(): Promise<void> {
 		pushSubscriptionStore,
 		blurt,
 		cfg.pushRequireSigned,
-		// cp131 MED-009 — unsubscribe signature requirement
+		// unsubscribe signature requirement
 		// follows the same toggle as subscribe.  Operators
 		// who require signed subscribe also require signed
 		// unsubscribe; permissive-mode operators get the
 		// signature verified opportunistically.
 		cfg.pushRequireSigned,
+		cfg.pushExtraHosts ?? [],
 		// v1.18.0 — say WHY push is off when it is off on purpose, so the
 		// browser can tell its user the truth rather than "not enabled yet".
 		cfg.hiddenOnly ? 'hidden_only' : null
@@ -462,6 +463,27 @@ async function main(): Promise<void> {
 	// per-device Web Push deliveries.  Only when VAPID is set.
 	if (pushSender) pushSender.start();
 	else pushJanitor?.start();
+
+	// Stored push data the relay will never use, removed at every boot (this is
+	// also how installed relays get it on upgrade). A hidden-only relay never
+	// sends push, so it keeps no account ↔ device mapping at all; any other
+	// relay drops subscriptions whose endpoint is outside the push endpoint
+	// policy (taken before the policy existed). Best effort, logged by count.
+	void (async () => {
+		try {
+			if (cfg.hiddenOnly) {
+				const r = await pushSubscriptionStore.deleteAll();
+				if (r.subscriptions > 0 || r.pending > 0) {
+					bootLog.info('push_data_removed_hidden_only', r);
+				}
+			} else {
+				const n = await pushSubscriptionStore.pruneEndpointsOutsidePolicy(cfg.pushExtraHosts ?? []);
+				if (n > 0) bootLog.info('push_subscriptions_outside_policy_removed', { count: n });
+			}
+		} catch (err) {
+			bootLog.error('push_subscription_sweep_failed', {}, err as Error);
+		}
+	})();
 
 	const app = new Hono();
 

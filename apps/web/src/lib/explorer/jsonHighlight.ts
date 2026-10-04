@@ -7,7 +7,8 @@
  * VALUES can contain anything, including `<script>`, `</span>`, quotes, and
  * ampersands. This function therefore ESCAPES every HTML-special character in
  * the content BEFORE emitting it, and the only markup it ever produces is
- * `<span class="json-…">` with STATIC class names. There is no code path that
+ * `<span class="json-…">` with STATIC class names (and the static continuation
+ * marker of a multi-line value). There is no code path that
  * copies attacker bytes into a tag or an attribute, so adversarial JSON can
  * never inject executable HTML. The escaped-content-plus-static-span output is
  * safe to render with `{@html}`. The companion smoke
@@ -29,21 +30,24 @@ function escapeHtml(s: string): string {
  *  escapes \n, \r, \t shown as REAL line breaks / tabs instead of literal
  *  backslash sequences, so multi-line markdown values — an order's `terms`,
  *  a post `body` — read naturally in the explorer instead of as one long
- *  `...\n\n...` line. Continuation lines hang-indent under the value.
+ *  `...\n\n...` line.
  *
- *  DISPLAY-ONLY: the wire value is unchanged. This deliberately trades strict
- *  JSON-literal validity in the *rendered* view for readability — the point
- *  is a nicer view of the same bytes, matching the module's existing
- *  expandNestedJsonStrings posture.
+ *  A value must never be able to pass for structure: each continuation line
+ *  hangs under the value behind a `│` marker, and a quote or backslash inside
+ *  the value stays escaped (`\"`, `\\`), so a memo carrying
+ *  `\n  "amount": "500.000 BLURT"` reads as part of the memo, not as a field.
+ *  `\/` shows as `/` (it cannot close the string).
+ *
+ *  DISPLAY-ONLY: the wire value is unchanged.
  *
  *  SAFETY: every literal character is still passed through escapeHtml (the
- *  only non-escaped output is real whitespace we insert ourselves and the
- *  surrounding quotes), so the "no injectable markup" guarantee is preserved
- *  — a `<script>` or `</span>` inside the string stays inert. Non-whitespace
- *  escapes (\" \\ \/ \uXXXX \b \f) are left as their literal backslash form. */
+ *  only non-escaped output is whitespace and the static marker span inserted
+ *  here, and the surrounding quotes), so the "no injectable markup" guarantee
+ *  is preserved — a `<script>` or `</span>` inside the string stays inert. */
 function renderMultilineStringValue(token: string, indent: string): string {
 	const inner = token.slice(1, -1); // drop the surrounding quotes
-	const cont = '\n' + indent + '  '; // real break + hang indent under the value
+	// Real break + hang indent + the continuation marker.
+	const cont = '\n' + indent + '  <span class="json-cont" aria-hidden="true">│</span> ';
 	let html = '"';
 	for (let i = 0; i < inner.length; i++) {
 		const ch = inner[i]!;
@@ -65,27 +69,12 @@ function renderMultilineStringValue(token: string, indent: string): string {
 				i++;
 				continue;
 			}
-			// cp425 — show the common literal escapes as their real character so
-			// values read naturally (`"weird"` not `\"weird\"`, `C:\x` not
-			// `C:\\x`). DISPLAY-ONLY, same posture as the \n/\t handling above;
-			// none of `"`, `\`, `/` is HTML-special in a text node, so the
-			// "no injectable markup" guarantee is preserved.
-			if (next === '"') {
-				html += '"';
-				i++;
-				continue;
-			}
-			if (next === '\\') {
-				html += '\\';
-				i++;
-				continue;
-			}
 			if (next === '/') {
 				html += '/';
 				i++;
 				continue;
 			}
-			// Any other escape (\uXXXX \b \f) stays in literal form.
+			// \" \\ \uXXXX \b \f stay in their literal escaped form.
 			html += escapeHtml(ch + next);
 			i++;
 			continue;
@@ -189,7 +178,7 @@ export function highlightJsonToHtml(json: string): string {
 				// Value string. A purely-numeric string (e.g. XMR `piconero`,
 				// which is string-encoded because it can exceed 2^53) reads as a
 				// quantity, so colour it like a number — consistent with the
-				// numeric `satoshis` field sitting right beside it (cp439).
+				// numeric `satoshis` field sitting right beside it.
 				if (isNumericStringValue(m[1])) {
 					out += `<span class="json-num">${escapeHtml(m[1])}</span>`;
 				} else {

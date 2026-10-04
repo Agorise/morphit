@@ -1,6 +1,6 @@
 {
 	"name": "morphit-relay",
-	"version": "1.20.3",
+	"version": "1.21.0",
 	"description": "Morphit posting relay — pays Blurt account-creation fees on behalf of new users. Never holds user private keys.",
 	"type": "module",
 	"private": true,
@@ -19,12 +19,12 @@
 	},
 	"dependencies": {
 		"@beblurt/dblurt": "^0.17.0",
-		"@hono/node-server": "^1.13.0",
-		"@morphit/asset-registry": "*",
+		"@hono/node-server": "^1.19.17",
 		"@morphit/hidden-transport": "*",
 		"@morphit/operator-config": "*",
 		"@morphit/rpc-pool": "*",
-		"hono": "^4.12.25",
+		"hono": "^4.13.12",
+		"pg": "^8.13.0",
 		"tsx": "^4.19.0",
 		"undici": "^7.29.1",
 		"web-push": "^3.6.7",

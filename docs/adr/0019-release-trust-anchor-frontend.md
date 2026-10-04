@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-29
-**Deciders:** Agorise team (Claude collaborating)
+**Deciders:** Agorise team
 **Supersedes:** —
 **Related:**
 - ADR-0010 (key custody) — defines the trust-anchor pubkey model;
@@ -11,6 +11,15 @@
 - ADR-0008 (Phase 3b indexer architecture) — the indexer's
   `morphit_release_v1` handler that this ADR's schema reconciles
   with.
+
+> **2026-10 audit note.** The release check no longer trusts one node
+> and no longer uses `getDirectChainClient()` (that function is gone). It
+> reads through the rotator (`getRotator()`), asks two RPC operators for
+> `@morphit`'s history and for the block holding the release op, recomputes
+> the transaction id, and accepts the op only if its signature recovers to
+> the pinned posting key (`apps/web/src/lib/net/releaseVerifyCore.ts`).
+> At most once per 24 h per build, success or failure. Text below that
+> says "it does not re-verify the op signature" describes the old code.
 
 ## Context
 
@@ -75,8 +84,8 @@ key listed at weight 0 to fool the check. The fix requires the
 pinned key with `weight > 0`.
 
 The pure helper `checkPinnedKeyInAuthority` lives in
-`@morphit/release-schema` (cp170; formerly
-`apps/web/src/lib/net/releaseTrustAnchor.ts` — extracted into the
+`@morphit/release-schema` (formerly
+`packages/release-schema/src/releaseTrustAnchor.ts` — extracted into the
 shared package so the indexer's parity smoke imports it without
 reaching into `apps/web` source). Its smoke
 (`apps/indexer/scripts/release-validator-smoke.ts`) covers eight
@@ -233,15 +242,15 @@ When deploying a new release, the deploy pipeline:
 
 - `packages/release-schema/src/release.ts` — schema (reconciled to
   indexer's canonical fields).  Extracted from
-  `apps/web/src/lib/net/release.ts` into the shared
-  `@morphit/release-schema` package at cp170 so both the frontend
+  `apps/web/src/lib/stores/release.ts` into the shared
+  `@morphit/release-schema` package so both the frontend
   and the indexer import one canonical copy.
 - `packages/release-schema/src/releaseValidate.ts` — pure validator;
   mirrors indexer's rejection reasons.  (Was
-  `apps/web/src/lib/net/releaseValidate.ts` pre-cp170.)
+  `packages/release-schema/src/releaseValidate.ts` older.)
 - `packages/release-schema/src/releaseTrustAnchor.ts` — pure pubkey-
   authority check (carved out for smoke-testability).  (Was
-  `apps/web/src/lib/net/releaseTrustAnchor.ts` pre-cp170; moved into
+  `packages/release-schema/src/releaseTrustAnchor.ts` older; moved into
   the package so the indexer's parity smoke imports it without a
   cross-app reach.)
 - `apps/web/src/lib/net/releaseFetch.ts` — chain-direct fetch +
@@ -250,7 +259,7 @@ When deploying a new release, the deploy pipeline:
   verification (browser SubtleCrypto-backed).
 - `apps/web/src/lib/stores/release.ts` — orchestration store with
   derived `staleBuild` and `tamperedAssets`.
-- `apps/web/src/lib/components/StaleBuildBanner.svelte` —
+- `apps/web/src/lib/components/StaleBuildBanner.svelte` (since removed) —
   informational banner.
 - `apps/web/src/lib/components/TamperAlertBanner.svelte` —
   critical banner.
@@ -282,9 +291,9 @@ When deploying a new release, the deploy pipeline:
   distinguish "patch update available" vs "MAJOR update — you
   must reload." Deferred.
 
-## Amendment (cp410, 2026-07-04) — the sole browser→node reader
+## Amendment — the sole browser→node reader
 
-cp410 made a project-wide change: the browser must NEVER contact a Blurt RPC
+A later change made a project-wide change: the browser must NEVER contact a Blurt RPC
 node directly. Every other browser chain read — account lookups, history, the
 chain head, block/tx fetches for chat payment + identity verification, and the
 broadcast path — now routes through the operator's OWN indexer (same-origin
@@ -297,7 +306,7 @@ build, so it MUST read the real chain rather than the operator's own indexer —
 routing it through the indexer would let that operator forge a "verified"
 release and defeat the check entirely (it does not re-verify the op signature;
 it trusts that an op in @morphit's history was signed by @morphit, which only
-holds against the real chain). the maintainer confirmed this trade-off explicitly (privacy
+holds against the real chain). The maintainer confirmed this trade-off explicitly (privacy
 vs. anti-tamper): release verification stays direct-to-chain.
 
 Implementation: `fetchVerifiedRelease` now uses `getDirectChainClient()`

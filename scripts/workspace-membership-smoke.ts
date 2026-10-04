@@ -7,7 +7,7 @@
  * `scripts/typecheck-sweep.sh` (or in the documented exclusion
  * set with a reason).
  *
- * Why this smoke exists: Audit Part 86 (B-1) caught a silent gap
+ * Why this smoke exists: (B-1) caught a silent gap
  * where `apps/ops-cli` had been scaffolded with its own deps,
  * tests, smoke registrations, and tsconfig — but was missing from
  * the root workspaces array.  Consequence: CI's `npm ci` did NOT
@@ -21,11 +21,11 @@
  * any future drift between "child package.json exists" and "child
  * is in root workspaces" a CI failure instead of a silent leak.
  *
- * Part 89 extension (J-4 follow-on): Section 2 also asserts every
+ * extension (J-4 follow-on): Section 2 also asserts every
  * workspace tsconfig is covered by the typecheck-sweep harness.  A
  * future workspace that ships a tsconfig but forgets to wire it
  * into the sweep would silently lose typecheck coverage just like
- * ops-cli silently lost test coverage in Part 86.
+ * ops-cli silently lost test coverage.
  *
  * What this smoke does:
  *   1. Walk `apps/*` and `packages/*` looking for `package.json`

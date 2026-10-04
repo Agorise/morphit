@@ -1,7 +1,7 @@
 /**
- * package-files-exist smoke (cp146).
+ * package-files-exist smoke.
  *
- * Catches the class of bug F-mcp-30 (cp146 mcp-server audit
+ * Catches the class of bug F-mcp-30 (mcp-server audit
  * surfaced this in apps/mcp-server/package.json): the `files`
  * array declares paths that get bundled into the published npm
  * tarball, but if a listed path doesn't exist in the working
@@ -31,7 +31,7 @@
  *      its containing directory exists, for dist/-flavored
  *      paths that get built later).  This catches "bin points
  *      at dist/main.js but no build script was ever run" — the
- *      same class cp142 caught at smoke-spawn time, here caught
+ *      same class a later change caught at smoke-spawn time, here caught
  *      at package-declaration time.
  *
  * Together: a package that ships an `npm publish` would get
@@ -182,8 +182,8 @@ for (const dir of workspaceDirs()) {
 
 		// If the bin points into dist/ AND the workspace has a build
 		// script, accept it as "buildable but not yet built" — this
-		// matches the cp142 self-healing pattern.  The
-		// spawn-dist-prebuild-coverage smoke (cp142) enforces the
+		// matches the self-healing pattern.  The
+		// spawn-dist-prebuild-coverage smoke enforces the
 		// matching guard at smoke-spawn time.
 		const inDist = binPath.startsWith('dist/') || binPath.includes('/dist/');
 		const hasBuild = !!pkg.scripts?.build;

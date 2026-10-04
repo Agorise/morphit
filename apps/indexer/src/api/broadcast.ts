@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — POST /v1/broadcast. Anchor cp344.
+ * Morphit indexer — POST /v1/broadcast. Anchor.
  *
  *   POST /v1/broadcast   body: { "trx": <signed Blurt transaction>,
  *                                 "chat_async"?: true }
@@ -19,11 +19,11 @@
  * blocks, listing-fee transfers) by calling a third-party Blurt RPC node
  * DIRECTLY. That (a) leaked the user's IP + their exact on-chain action to
  * RPC operators Morphit does not control — the same deanonymizing leak the
- * cp298 account-keys proxy closed for READS, but on WRITES, which are even
+ * account-keys proxy closed for READS, but on WRITES, which are even
  * more sensitive — and (b) depended on whichever node the browser reached
  * returning a browser-valid CORS header and staying up, so one node changing
  * its CORS config or going down silently broke every broadcast. This is the
- * WRITE sibling of the cp295/296/298 read proxies: the signed transaction is
+ * WRITE sibling of the read proxies: the signed transaction is
  * relayed across the full server-side rpc-pool (latency-aware best node +
  * cooldown failover), so third parties only ever see the indexer's request
  * and the browser opens no cross-origin RPC connection.
@@ -61,11 +61,11 @@ const ALLOWED_OP_TYPES = new Set([
 	'comment',
 	'comment_options',
 	'vote',
-	// cp396 — claim unclaimed author/curation rewards into usable balances.
+	// claim unclaimed author/curation rewards into usable balances.
 	// Posting-authority op; the signer can only claim their OWN rewards, so
 	// whitelisting it can't be abused to move anyone else's funds.
 	'claim_reward_balance',
-	// cp428 — wallet Power Up / Power Down. `transfer_to_vesting` stakes the
+	// wallet Power Up / Power Down. `transfer_to_vesting` stakes the
 	// signer's own liquid BLURT into BP; `withdraw_vesting` unstakes it back.
 	// Both are self-only (the op moves the SIGNER's own balance between liquid
 	// and staked — it cannot move anyone else's funds, same safety class as
@@ -243,10 +243,15 @@ export function broadcastRoute(
 	 * read, which on a privacy-only instance runs to 6.8 seconds for two people
 	 * on the same server.
 	 *
-	 * Called only after the node has ACCEPTED the transaction, which is what
-	 * makes the signature real. That acceptance is a stronger check than the
-	 * federation endpoint's own signature recovery, so no crypto is repeated
-	 * here.
+	 * Called only for a message whose signature verified HERE, against this
+	 * instance's own record of the sender's posting key (the fast dispatcher's
+	 * pre-send check, decision 'dispatched'), and only after the node accepted
+	 * the transaction. The node's acceptance alone is not enough: the broadcast
+	 * goes to ONE pool node, and a hostile or broken node can "accept" a
+	 * transaction signed by the wrong key, which would then reach the named
+	 * recipient's open chat and Web Push as if from the named sender. A message
+	 * that cannot be verified here reaches local listeners through the head
+	 * tailer instead, a few seconds later.
 	 */
 	localChatDeliver?: (located: LocatedChatOp, trxId: string) => void,
 	/** Tuning, for tests. `duplicateLookupDelayMs` spaces the block lookups
@@ -299,7 +304,7 @@ export function broadcastRoute(
 		// dead peer is a normal condition that must not slow a send or fail it.
 		// Errors are swallowed inside the dispatcher for the same reason.
 		//
-		// WHAT IT WILL SEND (v1.18.0 deep-deep, rv1-1): only a chat-only
+		// WHAT IT WILL SEND: only a chat-only
 		// transaction that passes the peers' own structural check and verifies
 		// against our own `accounts` row, and only as the rebuilt canonical copy.
 		// One it cannot verify here waits for the node's acceptance below; one the
@@ -344,7 +349,7 @@ export function broadcastRoute(
 				// The chain has these exact signed bytes: as good as accepted.
 				fast?.chainAccepted();
 			} else if (isDuplicateTransactionError(err)) {
-				// v1.20.0 fix wave (D8): the same holds for EVERY op, not just
+				// the same holds for EVERY op, not just
 				// chat. A node took this transaction and its reply was lost, then
 				// the pool offered the same bytes to the next node, which already
 				// had them. Answering 400 told the user their order / transfer
@@ -378,21 +383,27 @@ export function broadcastRoute(
 		let trx_id = (result?.trx_id ?? result?.id) as string | undefined;
 
 		if (chatOnly) {
-			// The node took it, so its signature is real: a message the pre-send
-			// check could not verify locally goes to the federation now (rv1-1).
+			// The node took it: a message the pre-send check could not verify
+			// locally goes to the federation now. That is safe because
+			// every peer verifies the signature itself on receipt.
 			fast?.chainAccepted();
-			// Record that this account just wrote to that one — AFTER the node
-			// accepted the transaction, never before. The node validates the
-			// signature and posting authority, so acceptance is what makes the
-			// sender real; recording ahead of it would let anyone assert a pair by
-			// posting a transaction that was never going to be accepted.
+			// Did the signature verify HERE? Local effects — the outbound-pair
+			// note and the delivery to our own listeners — need that, not just the
+			// node's word (see localChatDeliver). A local check, no chain read.
+			const verifiedHere = fast !== undefined && (await fast.decision) === 'dispatched';
+			// Record that this account just wrote to that one — only for a
+			// message verified here, and only after the node accepted it.
+			// Recording on the node's word alone would let one lying node assert
+			// a pair for any two accounts.
 			//
 			// This is what lets the OTHER side's reply notify this user inside the
 			// six seconds, instead of waiting out the 45-63s the durable table
 			// takes to admit the message we have just relayed ourselves. See
 			// recentOutboundChat.ts.
 			const located = structuralCheckChatOp(trx);
-			if (located.ok) noteOutboundChat(located.located.signer, located.located.recipient);
+			if (located.ok && verifiedHere) {
+				noteOutboundChat(located.located.signer, located.located.recipient);
+			}
 
 			// The asynchronous broadcast reports no block, by definition — there is
 			// not one yet — so requiring a numeric block_num here would reject
@@ -419,7 +430,7 @@ export function broadcastRoute(
 			}
 			// Deliver to our OWN listeners. Fire-and-forget: the sender is waiting
 			// on this response and must not also wait on the recipient's gates.
-			if (located.ok && localChatDeliver !== undefined) {
+			if (located.ok && verifiedHere && localChatDeliver !== undefined) {
 				localChatDeliver(located.located, trx_id);
 			}
 

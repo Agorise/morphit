@@ -5,7 +5,7 @@
  * (payment-method / register / show-key), without overwriting values the
  * operator set explicitly, and without throwing when files are absent.
  *
- * It ALSO covers the DB-command bridge (cp248): the DB-backed commands
+ * It ALSO covers the DB-command bridge: the DB-backed commands
  * (status / signups / drain-queue / failed-broadcasts / moderation) resolve
  * their database URL through loadConfig(), which reads process.env.  On a
  * systemd deploy the DB URL lives in morphit.env (unit-sourced only), so
@@ -167,7 +167,7 @@ function main(): void {
 		);
 	}
 
-	// Scenario 7 (cp261): a DATABASE_URL whose host is an UNEXPANDED shell
+	// Scenario 7: a DATABASE_URL whose host is an UNEXPANDED shell
 	// command substitution must fail with a CLEAR message, not the cryptic
 	// `getaddrinfo ENOTFOUND $(docker inspect …)` an operator hit on a manual
 	// deploy.  Env files are read literally — the shell never runs — so a host

@@ -3,7 +3,7 @@
 
 	Green "No mutual-review flags" when the account appears in no
 	suspicious_reciprocity pair (Signal B); amber "Mutual-review flag"
-	when it does. Extracted (v1.8.15, t.txt #5) from the profile
+	when it does. Extracted (v1.8.15) from the profile
 	Reputation card so the order DETAIL page's "POSTED BY" card shows the
 	IDENTICAL pill — one markup, one pair of localized strings
 	(profile.reciprocity_clean_pill / profile.reciprocity_flagged_pill),

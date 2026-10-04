@@ -1,7 +1,7 @@
 /**
  * The USD-pegged stablecoins that get a live-price subline on their order rows
  * (see StablecoinPriceSubline.svelte). Single source of truth so OrderCard and
- * the component agree on the set. cp417 — generalised from USDT-only to all
+ * the component agree on the set. generalised from USDT-only to all
  * three stablecoins that carry `assets.<t>.price_subline.*` strings.
  */
 export const STABLECOIN_SUBLINE_TICKERS = ['USDT', 'USDC', 'DAI'] as const;

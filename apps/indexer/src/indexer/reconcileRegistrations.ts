@@ -1,7 +1,7 @@
 /**
- * Morphit indexer — operator-registration reconciliation (cp710).
+ * Morphit indexer — operator-registration reconciliation.
  *
- * THE GAP (documented in docs/REVISIT-LIST.md, from cp670).  The
+ * THE GAP (documented in the project backlog).  The
  * dispatcher records every morphit op it sees into the `ops` event-log
  * table with a status of 'applied' or 'rejected'.  When an
  * `operator_register` op is REJECTED because of a validator BUG — not
@@ -12,10 +12,10 @@
  * re-broadcast.
  *
  * This bit us for real twice:
- *   - cp670: a display-name impersonation guard wrongly rejected every
+ *   - a display-name impersonation guard wrongly rejected every
  *     valid "Morphit <Region>" instance name → zero operators on every
  *     indexer.
- *   - cp671: a zero-width-non-joiner (U+200C) block rejected valid
+ *   - a zero-width-non-joiner (U+200C) block rejected valid
  *     Persian display names.
  *
  * Each was fixed in the validator, but the ALREADY-rejected ops on

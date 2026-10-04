@@ -1,5 +1,5 @@
 /**
- * featured-bid-history-modal-smoke — cp453 (t.txt #2)
+ * featured-bid-history-modal-smoke
  *
  * The grey inline "Your recent featured bids" section became a small "View prior
  * Featured orders" LINK in the feature-form header that opens an ELI5 modal

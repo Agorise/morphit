@@ -77,7 +77,7 @@ import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
 import { SIGNER_BACKEND } from '$net/config';
 import { signDigestWithNoble } from '$blurt/nobleSigner';
 
-// cp165 byte-budget: dblurt is type-only at module scope.  Runtime
+// Byte budget: dblurt is type-only at module scope.  Runtime
 // values (PrivateKey, Client) load dynamically inside the broadcast
 // function so the 2 MB dblurt chunk stays out of the eager-load
 // graph for routes that transitively reach this file
@@ -87,7 +87,7 @@ import { signDigestWithNoble } from '$blurt/nobleSigner';
  *  Same helper shape as sign.ts (kept local to this module to
  *  avoid a cross-module import of a private conversion).
  *  Cast via unknown — see sign.ts for rationale.
- *  cp165: async + dynamic dblurt import. */
+ *  Async: dblurt is imported dynamically. */
 async function rawToPrivateKey(raw: Uint8Array): Promise<PrivateKey> {
 	const { PrivateKey: PK } = await import('@beblurt/dblurt');
 	return new PK(raw as unknown as Buffer);
@@ -102,7 +102,7 @@ async function rawToPrivateKey(raw: Uint8Array): Promise<PrivateKey> {
  *  endpoint is never contacted (broadcast.sign is pure crypto).
  *  Local copy to keep this module self-contained per the
  *  duplication note in the helper above.
- *  cp165: async + dynamic dblurt import. */
+ *  Async: dblurt is imported dynamically. */
 let _signingClient: Client | null = null;
 async function signTransactionWithKey(
 	tx: Transaction,
@@ -115,9 +115,9 @@ async function signTransactionWithKey(
 		// chain-id binding stay dblurt's tested code), sign it with
 		// @noble/secp256k1, and append the wire sig to a cloned tx.  Keeps the
 		// syndication/comment path consistent with the transfer + order paths
-		// when an operator selects the noble backend — without this branch the
-		// cross-post would silently keep using elliptic while everything else
-		// moved to noble.
+		// when the noble backend is selected — without this branch the
+		// cross-post would keep using dblurt's signer while everything else
+		// used Morphit's own.
 		const { cryptoUtils } = await import('@beblurt/dblurt');
 		const digest = cryptoUtils.transactionDigest(tx);
 		const sigHex = signDigestWithNoble(Uint8Array.from(digest), Uint8Array.from(rawScalar));
@@ -145,9 +145,9 @@ async function getRefBlockInfo(): Promise<{
 	ref_block_prefix: number;
 	expiration: string;
 }> {
-	// cp344: read the chain head SAME-ORIGIN (indexer proxy, direct-RPC
-	// fallback) — same as sign.ts, so a syndicated comment no longer reads
-	// the head from a third-party RPC node directly.
+	// Read the chain head SAME-ORIGIN (the indexer proxy; no direct-RPC
+	// fallback) — same as sign.ts, so a syndicated comment never reads the
+	// head from a third-party RPC node directly.
 	const props = await fetchDynamicGlobalProperties();
 	const blockNum = props.head_block_number;
 	const blockId = props.head_block_id;
@@ -207,7 +207,7 @@ const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * Broadcast a native Blurt comment. Returns the block_num and trx_id.
- * cp344: submitted SAME-ORIGIN through the indexer broadcast proxy
+ * Submitted SAME-ORIGIN through the indexer broadcast proxy
  * (broadcastTransport.submitSignedTransaction). There is NO direct-RPC
  * fallback: if the instance is unreachable the send fails and the user retries —
  * no cross-origin RPC connection, no third-party IP leak.
@@ -268,7 +268,7 @@ export function buildCommentOperation(payload: CommentPayload, account: string):
 
 /** Maximum liquid share of the AUTHOR reward, in basis points.
  *
- *  v1.8.12 (the maintainer): "BP is not needed at all, we really want as much liquid BLURT
+ *  Product decision: "BP is not needed at all, we really want as much liquid BLURT
  *  as possible to go to the user/author."
  *
  *  Blurt pays the author's share as 25% liquid BLURT / 75% Blurt Power BY
@@ -277,7 +277,7 @@ export function buildCommentOperation(payload: CommentPayload, account: string):
  *  broadcast a `comment_options` op at all, so every syndicated post silently
  *  took the default.
  *
- *  NOT the 50/50 the maintainer observed between author and curators: that division is a
+ *  NOT the 50/50 split between author and curators: that division is a
  *  CHAIN parameter ("up to 50% of the reward for each post goes to the people
  *  who upvoted it") and is not settable per post. There is an
  *  `allow_curation_rewards` boolean, but disabling it on Steem-family chains
@@ -299,7 +299,7 @@ const PERCENT_BLURT_MAX_LIQUID = 10000;
  *                           allow_curation_rewards,
  *                           extensions: StaticVariant[ {beneficiaries}, {percent_blurt} ]]
  *  `percent_blurt` is variant index 1; beneficiaries is 0. We send NO
- *  beneficiaries — the maintainer: "the morphit community itself does not need to get any
+ *  beneficiaries — product decision: "the morphit community itself does not need to get any
  *  beneficiary rewards at all" — which is also the status quo, since Morphit has
  *  never set any. */
 export function buildCommentOptionsOperation(
@@ -362,11 +362,11 @@ export async function broadcastComment(
 		live.posting.privateKey
 	);
 
-	// cp344: broadcast SAME-ORIGIN through the indexer proxy (direct-RPC
+	// Broadcast SAME-ORIGIN through the indexer proxy (no direct-RPC
 	// fallback). `comment` is on the proxy's op whitelist.
 	const result = await submitSignedTransaction(signed);
 
-	// v1.8.12 (the maintainer) — ask for the maximum liquid payout, in a SEPARATE
+	// Ask for the maximum liquid payout, in a SEPARATE
 	// transaction.
 	//
 	// dblurt's own helper puts `comment` and `comment_options` in ONE
@@ -413,19 +413,4 @@ async function broadcastCommentOptions(
 		live.posting.privateKey
 	);
 	await submitSignedTransaction(signed);
-}
-
-/** Deterministic permlink for a syndication announcement. Used
- *  across the publish flow so retries are safe: the second attempt
- *  either produces an accepted edit or a duplicate-trx rejection,
- *  not a fresh duplicate post.
- *
- *  The prefix `morphit-announce-` is human-readable in the user's
- *  own post list and on blurt.blog. The suffix is the order's
- *  permlink (already a valid Blurt permlink), so the concatenation
- *  is guaranteed valid. Total length bounded by: 17 prefix chars
- *  + up to 32 order permlink chars = up to 49 chars, well under
- *  the 256-char cap. */
-export function announcementPermlinkFor(orderPermlink: string): string {
-	return `morphit-announce-${orderPermlink}`;
 }

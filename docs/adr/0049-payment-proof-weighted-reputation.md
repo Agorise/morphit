@@ -8,12 +8,12 @@
 
 ## Context
 
-Reputation today (ADR-0014 + the cp421 hardening) is a time-decay
+Reputation today (ADR-0014 + the hardening) is a time-decay
 weighted average of 1–5 ratings with a 365-day half-life. Only
 order-tethered feedback counts, reviews from detector-flagged pairs
 (`suspicious_reciprocity` / `related_accounts` / `one_way_pile_on` /
 `review_concentration`) are excluded from the aggregate, and — as of
-cp421 — a review is only *accepted at all* if the two parties have a
+a review is only *accepted at all* if the two parties have a
 substantiated two-way on-chain conversation (≥2 `morphit_chat_v1` each
 way, ≥15-min span, unflagged = the `has_verified_chat` bar). So the
 current floor is "you provably had a real conversation with this
@@ -100,7 +100,7 @@ This tension is the crux of the decision, not a footnote.
 > a settlement proof adds an on-chain **linkage** (this txid ↔ this
 > trade ↔ these two accounts) that aids chain analysis — a bounded but
 > real privacy cost on a privacy-first platform. Given (a) that cost and
-> (b) that the cp421 verified-chat gate *already* makes ghost/self-boost
+> (b) that the verified-chat gate *already* makes ghost/self-boost
 > reviews impossible and gives reputation a strong, spoof-resistant
 > floor, the **standing recommendation is to NOT build the payment tier
 > and keep reputation conversation-based** — holding this ADR as the
@@ -209,7 +209,7 @@ Two effects, both driven off payment-verified settlements where the
   addresses they control (real cost + on-chain footprint) **and** pass
   the verified-chat gate **and** evade the reciprocity detector.
 - Reuses the existing, proven fee-verification machinery.
-- Degrades gracefully — no proof ⇒ the cp421 verified-chat baseline
+- Degrades gracefully — no proof ⇒ the verified-chat baseline
   still applies; the floor never drops.
 - Respects privacy priority #1 by construction (XMR excluded, opt-in,
   warned).
@@ -249,7 +249,7 @@ Two effects, both driven off payment-verified settlements where the
 - ADR-0015 — Chat crypto (why amount/recipient live in E2E payloads).
 - ADR-0026 — Transparent-chain privacy framework (the asset-privacy
   boundary this decision leans on; XMR's privacy guarantees).
-- cp421 (TARBALL.md / REVISIT-LIST.md) — the verified-chat *gate* this
+- (the internal journals) — the verified-chat *gate* this
   builds the weight tier on top of.
 - `apps/indexer/src/indexer/fee/*` — the existing on-chain
   payment-verification machinery to be reused.

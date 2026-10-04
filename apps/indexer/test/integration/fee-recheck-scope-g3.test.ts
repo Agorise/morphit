@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, G3 — which rows the BTC/XMR fee re-check visits (real SQL).
+ * which rows the BTC/XMR fee re-check visits (real SQL).
  *
  * Expired orders stay status='live' (expiry is enforced at read time), and a
  * `pending_external` row was re-checked for as long as it existed. Both made the

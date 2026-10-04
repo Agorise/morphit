@@ -1,5 +1,5 @@
 /**
- * broadcast op-allowlist smoke (cp428).
+ * broadcast op-allowlist smoke.
  *
  * Regression for the Power Up / Power Down bug: the indexer's /v1/broadcast
  * relay allowlists the op types Morphit broadcasts from the browser. It had

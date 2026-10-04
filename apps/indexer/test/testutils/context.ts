@@ -55,7 +55,6 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		blockIntervalMs: 3_000,
 		errorBackoffMs: 10_000,
 		staleLagThreshold: 30,
-		allowedOrigins: [],
 		maxRequestBodyBytes: 4_096,
 		listRatePerMin: 120,
 		resourceRatePerMin: 600,
@@ -63,23 +62,23 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		officialAccountName: 'morphit',
 		operatorAccountName: 'morphit',
 		feeRecipient: 'morphit-fees',
-		// cp370: mock the BLURT base at the CANONICAL on-target value
+		// mock the BLURT base at the CANONICAL on-target value
 		// (LISTING_FEE_USD.blurt ÷ reference price = 62.5 BLURT,
 		// exported as FEE_FALLBACK.blurtBase) so fee-amount tests anchor
 		// to the source of truth rather than a magic constant.  NOTE the
 		// deployed config DEFAULT is still 60 (the historical ≈12¢
-		// approximation).  cp372 Model A: the /v1/listing-fee DISPLAY
+		// approximation).  Model A: the /v1/listing-fee DISPLAY
 		// now live-tracks the operator's USD-equivalent fee, and the
 		// order handler accepts the pinned base ± FEE_PRICE_TOLERANCE
 		// (15%); enforcement stays BLURT-native (no price read).
 		feeBaseBlurt: FEE_FALLBACK.blurtBase,
 		feeTolerance: 0.001,
-		// cp372: pinned BTC/XMR fee amounts, anchored to the canonical
+		// pinned BTC/XMR fee amounts, anchored to the canonical
 		// fallbacks (≈$0.25 at the reference prices) so listing-fee
 		// display tests have realistic bases to live-scale.
 		btcFeeSatoshis: FEE_FALLBACK.satoshis,
 		xmrFeePiconero: FEE_FALLBACK.piconero,
-		// Part 121 — empty by default, meaning every canonical
+		// empty by default, meaning every canonical
 		// registry asset is enabled.  Tests that exercise the
 		// instance-wide disable gate override with e.g.
 		// `{ disabledAssets: ['USDT'] }`.
@@ -87,16 +86,16 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		disabledPaymentMethods: [],
 		priceFeedEnabled: false,
 		priceFeedStaticFloor: 0.002,
-		// cp128: default to USD for backwards-compatibility with
+		// default to USD for backwards-compatibility with
 		// existing tests; tests of non-USD denomination override this.
 		priceFeedDenominationFiat: 'USD',
-		// cp130: per-asset static-floor defaults (USD-shaped).
+		// per-asset static-floor defaults (USD-shaped).
 		priceFeedBtcStaticFloor: 60_000,
 		priceFeedXmrStaticFloor: 200,
-		// cp130 factory needs these — sane defaults for tests.
+		// factory needs these — sane defaults for tests.
 		coingeckoBaseUrl: 'https://api.coingecko.com/api/v3',
 		coingeckoApiKey: '',
-		// cp372 additional crypto sources + outlier tolerance.
+		// additional crypto sources + outlier tolerance.
 		coinpaprikaBaseUrl: 'https://api.coinpaprika.com/v1',
 		krakenBaseUrl: 'https://api.kraken.com/0/public',
 		cryptocompareBaseUrl: 'https://min-api.cryptocompare.com',
@@ -109,7 +108,7 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		messariBaseUrl: 'https://data.messari.io',
 		priceOutlierTolerance: 0.05,
 		priceRefreshIntervalMs: 300_000,
-		// cp372 FX feed defaults — disabled in tests by default (the
+		// FX feed defaults — disabled in tests by default (the
 		// FX-aware floor uses ctx.fiatToUsd, which makeCtx stubs).
 		fxFeedEnabled: false,
 		fxRefreshIntervalMs: 3_600_000,
@@ -117,7 +116,7 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		fxFrankfurterBaseUrl: 'https://api.frankfurter.dev/v1',
 		fxErApiBaseUrl: 'https://open.er-api.com/v6',
 		fxCurrencyApiBaseUrl: 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1',
-		// cp127 native fetcher defaults (factory consults when
+		// native fetcher defaults (factory consults when
 		// priceFeedNativeEnabled).
 		priceFeedNativeEnabled: false,
 		priceFeedStablecoinKeys: ['usdt', 'usdc', 'dai'],
@@ -125,7 +124,7 @@ export function fakeConfig(overrides: Partial<Config> = {}): Config {
 		priceFeedNativePlausibleMax: 0.1,
 		featureFeeBlurtPerHour: 50,
 		verboseHealth: false,
-		// Part 111: default to 'morphit' so existing tests by default
+		// default to 'morphit' so existing tests by default
 		// exercise the "served by this instance, queue payouts" path.
 		// Tests of the federation-scope gate override this.
 		instanceOperatorTag: 'morphit',
@@ -151,14 +150,14 @@ export function makeCtx(overrides: Partial<OpContext> = {}): OpContext {
 		// BTC/XMR" case. Tests that exercise BTC/XMR paths pass
 		// concrete verifiers via overrides.
 		feeVerifiers: {},
-		// Part 106 — empty fee amounts by default.  Tests that
+		// empty fee amounts by default.  Tests that
 		// exercise BTC/XMR fee verification override with concrete
 		// amounts (e.g. { btcSatoshis: 416 } or
 		// { xmrPiconero: 781250000n }).  An empty object means
 		// "operator hasn't configured this method" and the order
 		// handler rejects with `fee_amount_not_configured_<method>`.
 		feeAmounts: {},
-		// cp372 — FX-aware first-order floor converter.  Default is the
+		// FX-aware first-order floor converter.  Default is the
 		// identity (treat the amount as its own USD value), which makes
 		// existing USD-denominated floor tests behave exactly as before.
 		// Tests exercising non-USD conversion override with a concrete

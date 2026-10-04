@@ -316,7 +316,15 @@ const dispatcher = new ChatFastDispatcher({
 		async query<R extends pg.QueryResultRow>(): Promise<pg.QueryResult<R>> {
 			return {
 				rows: [
-					{ origin: `http://127.0.0.1:${legTwo.port}`, reg_alt_networks: null }
+					// A probe-verified peer (only those receive pushes); the
+					// name stands for leg 2's tunnel, which `postIsolated` dials.
+					{
+						origin: 'https://instance-b.example',
+						reg_alt_networks: null,
+						last_probe_status: 'good',
+						last_probed_at: null,
+						registered_at_time: null
+					}
 				] as unknown as R[],
 				rowCount: 1,
 				command: 'SELECT',
@@ -326,18 +334,19 @@ const dispatcher = new ChatFastDispatcher({
 		}
 	},
 	selfOrigin: 'http://instance-a.invalid',
-	proxies: { torSocks: '', i2pHttpProxy: '' },
+	// Tor configured (fan-out runs only over Tor); `postIsolated` stands in.
+	proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' },
 	// Instance A knows its own user's posting key, as a real instance does from
-	// chain sync. Since v1.18.0 deep-deep (rv1-1) the sender side verifies a
+	// chain sync. Since an earlier release the sender side verifies a
 	// message against it before fanning out, and holds back what it cannot
 	// verify until the node accepts it — which, with the node stalled below,
 	// would be never.
 	lookupPostingKey: async (account) => (account === SENDER ? senderPub : null),
-	postClearnet: async (url, body, timeoutMs) => {
+	postIsolated: async (url, body, _proxies, timeoutMs) => {
 		const ctrl = new AbortController();
 		const t = setTimeout(() => ctrl.abort(), timeoutMs);
 		try {
-			const res = await fetch(url, {
+			const res = await fetch(url.replace('https://instance-b.example', `http://127.0.0.1:${legTwo.port}`), {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(body),

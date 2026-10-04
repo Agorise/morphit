@@ -144,8 +144,11 @@ function rig(
 			ephemeralPub: b64('e'),
 			nonce: b64('n')
 		})) as unknown as ChatControllerDeps['encrypt'],
-		decrypt: (async (env: { ciphertext: string }) =>
-			unb64(env.ciphertext)) as unknown as ChatControllerDeps['decrypt'],
+		// A proved sender (v2): only those drive trade state.
+		decrypt: (async (env: { ciphertext: string }) => ({
+			text: unb64(env.ciphertext),
+			authenticated: true
+		})) as unknown as ChatControllerDeps['decrypt'],
 		onChange: () => undefined,
 		subscribeStream: (h) => {
 			onAppend = h.onAppend;

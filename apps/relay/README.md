@@ -4,7 +4,7 @@ A small Node.js service that pays Blurt account-creation fees on
 behalf of new Morphit users, without ever holding user private keys.
 
 - **Phase:** 3a
-- **Design doc:** [`../../docs/PHASE-3a-DESIGN.md`](../../docs/PHASE-3a-DESIGN.md)
+- **Design doc:** [`../../docs/adr/0006-security-posture-phase3a.md](../../docs/adr/0006-security-posture-phase3a.md)
 - **Security model:**
   [`../../docs/adr/0002-live-keys-policy.md`](../../docs/adr/0002-live-keys-policy.md)
 - **Deployment target:** a single VPS, typically behind nginx, running
@@ -12,7 +12,7 @@ behalf of new Morphit users, without ever holding user private keys.
 
 ## What it does
 
-One job, three HTTP endpoints:
+Account creation, the welcome payouts, and Web Push — seven HTTP endpoints:
 
 - `GET /v1/health` — liveness / readiness. Returns JSON with status,
   version, uptime, and (in verbose mode) the relay's BLURT balance.
@@ -26,6 +26,18 @@ One job, three HTTP endpoints:
   balance, broadcasts, then sends the new account 2 BLURT so it can
   pay its first operation fees — ~102 BLURT per signup. (Blurt
   disabled account-creation tokens at HF2; there is no fee-free path.)
+- `POST /v1/account/invite` — the signed invite token (and, past a
+  per-network threshold, an ALTCHA proof-of-work) that a create
+  request must carry.
+- `GET /v1/push/vapid-public-key`, `POST /v1/push/subscribe`,
+  `POST /v1/push/unsubscribe` — Web Push. Subscribe and unsubscribe
+  are posting-key-signed; the relay delivers only to the browser push
+  services (or hosts the operator adds) and stores the account, the
+  push endpoint and its keys, a UI locale and muted categories — no
+  IP, no user-agent.
+
+It also pays, from a queue, welcome bonuses, low-balance dust refills
+and loyalty BP delegations for the users of its own instance.
 
 The user's private keys never reach the relay. The client ships only
 the four public keys that will govern their new account; the relay
@@ -129,7 +141,7 @@ check (see OPERATIONS.md §5).
 | Symptom                                                                  | Cause                                         | Fix                                                  |
 | ------------------------------------------------------------------------ | --------------------------------------------- | ---------------------------------------------------- |
 | `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "..." has permissions 0640` | Key file readable by group                    | `sudo chmod 0600` the file named in `MORPHIT_RELAY_ACTIVE_KEY_FILE` |
-| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "...": no such file`        | Typo in env or file not created yet           | `grep MORPHIT_RELAY_ACTIVE_KEY_FILE /opt/morphit/morphit.env`                     |
+| `config error: MORPHIT_RELAY_ACTIVE_KEY_FILE "...": no such file`        | Typo in env or file not created yet           | `sudo grep -h MORPHIT_RELAY_ACTIVE_KEY_FILE /etc/morphit/relay.env /opt/morphit/morphit.env` |
 | Relay starts but `/` returns 404                                         | Expected — only `/v1/*` paths are served      | Use `/v1/health`                                     |
 | CORS error in browser console                                            | Origin not in `MORPHIT_RELAY_ALLOWED_ORIGINS` | Edit env, `sudo systemctl restart morphit-relay`     |
 | 502 from nginx                                                           | Relay not running                             | `sudo systemctl status morphit-relay`, check journal |
@@ -152,9 +164,12 @@ Quarterly or on suspicion of compromise, on the server:
    active authority with an `account_update` op (signed with the account's
    owner or current active key, from your own computer — not the server).
 2. `sudo morphit-ops edit-active-key` — replaces the saved keystore with the
-   new key (it asks whether to keep a backup of the old one) and tells you
-   to restart the relay.
-3. `sudo systemctl restart morphit-relay`.
+   new key (keeping a timestamped backup of the old one — delete it once
+   the relay runs on the new key) and re-seals
+   `/etc/morphit/relay_passphrase.cred` with the passphrase, so the relay
+   still unlocks unattended (if it cannot, it prints the one
+   `systemd-creds encrypt` command to run).
+3. `sudo systemctl restart morphit-relay`. There is no passphrase prompt.
 
 Full procedure, including the "wrong key was installed" case:
 [`docs/RECOVERING-FROM-WRONG-RELAY-KEY.md`](../../docs/RECOVERING-FROM-WRONG-RELAY-KEY.md).

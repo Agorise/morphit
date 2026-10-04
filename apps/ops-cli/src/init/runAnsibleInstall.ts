@@ -1,5 +1,5 @@
 /**
- * runAnsibleInstall.ts (cp600) — the guided full install: gather the operator's
+ * runAnsibleInstall.ts — the guided full install: gather the operator's
  * answers with the wizard's existing steps + the home/VPS branch, then hand a
  * finished plan to assembleInstall (which runs the full Ansible playbook against
  * this box).  Both a home box and a VPS get the SAME hardened stack; the only
@@ -16,16 +16,14 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { stepRelayAccount, stepActiveKey, stepFeesAccount, type ActiveKeyResult } from './steps.ts';
 import { collectInstallInputs, askInstallMode, askTorOnly } from './collectInstallInputs.ts';
-import { buildAnsibleVars, validateInstallInputs } from './ansibleVars.ts';
+import { buildAnsibleVars, validateInstallInputs, type InstallMode } from './ansibleVars.ts';
 import { assembleInstall } from './assembleInstall.ts';
-import {
-	armReachabilityRevert,
-	confirmReachabilityOrRevert
-} from './reachabilityRevert.ts';
+import { armReachabilityRevert, confirmReachabilityOrRevert } from './reachabilityRevert.ts';
 import { collectInstallSummary, printInstallSummary, allComponentsUp } from './installSummary.ts';
 import { renderRemediationReport, getRemediationJournal } from './remediation.ts';
 import { promptSaveSecrets, type SecretToSave } from './saveSecrets.ts';
 import { step, beginSteps, endSteps, currentStepNum, ask } from './prompt.ts';
+import { offerTorOnlyRekey, readPriorIdentity } from '../lib/torOnlyRekey.ts';
 
 /** Ansible's `morphit_relay_keystore_path` default; we write the keystore here
  *  and pass the same path in the vars, so the two match by construction. */
@@ -66,20 +64,23 @@ export function relayKeystoreContent(activeKey: ActiveKeyResult): string {
 
 const RELAY_CRED_PATH = '/etc/morphit/relay_passphrase.cred';
 
-function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: string): void {
+export function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: string): void {
 	mkdirSync(dirname(keystorePath), { recursive: true });
+	const existed = existsSync(keystorePath);
 	writeFileSync(keystorePath, relayKeystoreContent(activeKey), { mode: 0o600 });
-	// cp663 #4 — the relay unit runs User=root with an EMPTY CapabilityBoundingSet
-	// (no DAC_OVERRIDE), so root reads the keystore ONLY via the owner bit.  The
-	// wizard may run as a non-root service user, which would leave the keystore
-	// unreadable by the relay (EACCES).  Force root:root (the Ansible run also
-	// re-asserts it — belt and braces).
-	try {
-		chownSync(keystorePath, 0, 0);
-	} catch {
-		/* not root / unsupported — the Ansible "Lock down keystore" task fixes it */
+	// The relay runs as its own user (morphit-relay) and reads the keystore
+	// through group morphit-relay, 0640; its unit's pre-start helper
+	// (morphit-service-perms.sh) sets that at every start. A NEW keystore starts
+	// root:root 0600 (the wizard may run as a non-root account); an existing one
+	// keeps the owner and mode it had (writeFileSync does not change them).
+	if (!existed) {
+		try {
+			chownSync(keystorePath, 0, 0);
+		} catch {
+			/* not root / unsupported — the Ansible "Lock down keystore" task fixes it */
+		}
 	}
-	// cp663 #3 — for an encrypted key, seal the passphrase into the systemd
+	// for an encrypted key, seal the passphrase into the systemd
 	// host-bound encrypted credential the relay unit consumes
 	// (LoadCredentialEncrypted=relay_passphrase).  Without it the relay cannot
 	// unlock unattended and the unit fails to start.
@@ -88,8 +89,11 @@ function writeRelayKeystore(activeKey: ActiveKeyResult, keystorePath: string): v
 	}
 }
 
-/** Seal the relay unlock passphrase into the systemd host-bound encrypted
- *  credential (/etc/morphit/relay_passphrase.cred) that the relay unit loads.
+/** Seal the relay unlock passphrase into the systemd encrypted credential
+ *  (/etc/morphit/relay_passphrase.cred) that the relay unit loads. Sealed with
+ *  this host's credential key (`--with-key=host`, no TPM): it opens on this
+ *  machine only, so a copied file is useless, but a full image of the disk
+ *  carries the key too (disk encryption covers that).
  *  Best-effort: if systemd-creds is missing or fails, tell the operator the
  *  exact command (also in the unit file comments). */
 function sealRelayPassphraseCred(passphrase: string): void {
@@ -100,7 +104,11 @@ function sealRelayPassphraseCred(passphrase: string): void {
 			{ input: passphrase, stdio: ['pipe', 'ignore', 'pipe'] }
 		);
 		if (r.status === 0) {
-			try { chmodSync(RELAY_CRED_PATH, 0o600); } catch { /* systemd-creds writes 0600 already */ }
+			try {
+				chmodSync(RELAY_CRED_PATH, 0o600);
+			} catch {
+				/* systemd-creds writes 0600 already */
+			}
 			console.log('  ✓ Sealed the relay unlock passphrase into /etc/morphit/relay_passphrase.cred');
 			return;
 		}
@@ -145,7 +153,26 @@ function deriveInstanceOrigin(torOnly: boolean, domain: string, repoPath: string
 	return null;
 }
 
-export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?: string }): Promise<number> {
+/**
+ * Step budget of the install wizard:
+ *   3 account steps
+ * + core questions (collectInstallInputs): 7 clearnet (domain, name, desc,
+ *   matrix, alerts, cert-email, backup encryption) OR 5 Tor-only (no domain,
+ *   no cert-email)
+ * + 3 (save DB password, register opt-in, post-install summary)
+ * + home extras: clearnet home = 4 (DDNS, router port-forward, desktop,
+ *   canary); Tor-only home = 2 (desktop, canary — no DDNS, no port-forward).
+ * Keep in sync with the step() calls (a mismatch trips the assert at the end
+ * of runAnsibleInstall). PURE.
+ */
+export function installStepTotal(mode: InstallMode, torOnly: boolean): number {
+	return 3 + (torOnly ? 5 : 7) + 3 + (mode === 'home' ? (torOnly ? 2 : 4) : 0);
+}
+
+export async function runAnsibleInstall(opts: {
+	repoRoot: string;
+	keystorePath?: string;
+}): Promise<number> {
 	const keystorePath = opts.keystorePath ?? DEFAULT_KEYSTORE_PATH;
 
 	// WHERE it runs is the one answer that changes the step count (home adds a DDNS
@@ -153,18 +180,11 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// the numbered steps — so the running "Step N of {total}" is accurate from step 1.
 	const mode = await askInstallMode();
 	const torOnly = await askTorOnly();
-	// Step budget:
-	//   3 account steps
-	// + core questions: 6 clearnet (domain, name, desc, matrix, alerts,
-	//   cert-email) OR 4 Tor-only (name, desc, matrix, alerts — no domain, no
-	//   cert-email)
-	// + 3 (save DB password, register opt-in, post-install summary)
-	// + home extras: clearnet home = 4 (DDNS, router port-forward, desktop,
-	//   canary); Tor-only home = 2 (desktop, canary — no DDNS, no port-forward).
-	// Keep in sync with the step() calls below + in collectInstallInputs (a
-	// mismatch trips the assert at the end of this function).
-	const totalSteps =
-		3 + (torOnly ? 4 : 6) + 3 + (mode === 'home' ? (torOnly ? 2 : 4) : 0);
+	// A clearnet box re-installed as tor-only keeps its published identity
+	// unless its onion / I2P keys are replaced.
+	if (torOnly)
+		await offerTorOnlyRekey(readPriorIdentity(), { print: (s) => console.log(s), askYesNo });
+	const totalSteps = installStepTotal(mode, torOnly);
 	beginSteps(totalSteps);
 
 	const relay = await stepRelayAccount();
@@ -231,21 +251,24 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// never triggers a revert. No-ops off a systemd/root box.
 	const reachabilityGuard = armReachabilityRevert();
 
-	const res = await assembleInstall({
-		vars: {
-			...buildAnsibleVars(inputs),
-			// This is a LOCAL install of the release the operator downloaded:
-			// relax the remote-only root check + deploy THESE bytes (not git).
-			morphit_local_install: true,
-			morphit_local_source_path: opts.repoRoot
+	const res = await assembleInstall(
+		{
+			vars: {
+				...buildAnsibleVars(inputs),
+				// This is a LOCAL install of the release the operator downloaded:
+				// relax the remote-only root check + deploy THESE bytes (not git).
+				morphit_local_install: true,
+				morphit_local_source_path: opts.repoRoot
+			},
+			secretsToSave,
+			playbookPath: join(opts.repoRoot, 'ops', 'ansible', 'playbook.yml'),
+			varsFilePath: VARS_FILE_PATH
 		},
-		secretsToSave,
-		playbookPath: join(opts.repoRoot, 'ops', 'ansible', 'playbook.yml'),
-		varsFilePath: VARS_FILE_PATH
-	}, {
-		// Already saved as its own numbered step above — don't prompt for them again.
-		promptSave: async (): Promise<void> => {}
-	});
+		{
+			// Already saved as its own numbered step above — don't prompt for them again.
+			promptSave: async (): Promise<void> => {}
+		}
+	);
 	if (!res.ok) {
 		console.log(`\n  ${res.reason}\n`);
 		return 1;
@@ -254,13 +277,13 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// The playbook (with the hardening role) just changed SSH + the firewall. Before
 	// anything else, make the operator prove they can still get in — or the box
 	// auto-reverts. This is the net that catches any reachability regression the
-	// per-cause guards didn't (the maintainer: harden stranded the flagship twice tonight).
+	// per-cause guards did not.
 	await confirmReachabilityOrRevert(reachabilityGuard);
 
 	// A glance-able confirmation of what actually came up + is healthy — asked for
 	// by a live operator who (reasonably) didn't want to trust a bare "installed"
 	// line. Async: several rows are LIVE (indexer/relay /v1/health, on-chain balance).
-	// cp698 — the review is COMPUTED after the canary (below) so it reflects the
+	// The review is COMPUTED after the canary (below) so it reflects the
 	// final state, and DISPLAYED as the very last step — not here, where the canary
 	// would still read "✗ missing" two steps before it's signed.
 
@@ -269,10 +292,14 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	if (inputs.mode === 'home') {
 		step(0, 0, 'Desktop notification when a new version ships');
 		const notifyScript = join(opts.repoRoot, 'ops', 'desktop', 'morphit-upgrade-notify-setup.sh');
-		if (await askYesNo('\n  Get a desktop notification when a new Morphit version is released?', true)) {
+		if (
+			await askYesNo('\n  Get a desktop notification when a new Morphit version is released?', true)
+		) {
 			const rc = spawnSync('bash', [notifyScript], { stdio: 'inherit' });
 			if ((rc.status ?? 1) !== 0) {
-				console.log('\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:');
+				console.log(
+					'\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:'
+				);
 				console.log(`        bash ${notifyScript}\n`);
 			}
 		}
@@ -285,8 +312,13 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		// next-step; setup.sh is idempotent + re-runnable.
 		step(0, 0, 'Warrant canary (signed here, auto-refreshed weekly)');
 		const canaryScript = join(opts.repoRoot, 'scripts', 'canary', 'setup.sh');
-		if (await askYesNo('\n  Set up your warrant canary now (signed on this box, refreshed weekly)?', true)) {
-			// cp693 — the wizard runs from the SOURCE tarball, but the frontend
+		if (
+			await askYesNo(
+				'\n  Set up your warrant canary now (signed on this box, refreshed weekly)?',
+				true
+			)
+		) {
+			// the wizard runs from the SOURCE tarball, but the frontend
 			// container serves the DEPLOYED build (/opt/morphit/apps/web/build).
 			// Point the canary at the served dir so /canary.txt actually loads,
 			// instead of landing in the source tree where nothing reads it.
@@ -295,7 +327,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 				env: {
 					...process.env,
 					MORPHIT_CANARY_SERVE_DIR: '/opt/morphit/apps/web/build',
-					// cp699 — the wizard already collected the domain; pre-fill the
+					// the wizard already collected the domain; pre-fill the
 					// canary's "Your instance URL" prompt so the operator confirms
 					// with Enter instead of re-typing it (and mistyping it). For a
 					// future Tor-only node this becomes the http-onion origin.
@@ -315,7 +347,9 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 				}
 			});
 			if ((rc.status ?? 1) !== 0) {
-				console.log('\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:');
+				console.log(
+					'\n  Note: couldn\u2019t set that up automatically (not essential). Do it later with:'
+				);
 				console.log(`        bash ${canaryScript}\n`);
 			}
 		}
@@ -333,7 +367,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 	// successful now-registration just makes the armed one a no-op.  We pass the
 	// instance identity through the environment because a by-hand `register`
 	// otherwise reads it from files this Ansible layout doesn't populate.
-	// cp698 — compute the review now (after desktop + canary) so canary.txt etc.
+	// compute the review now (after desktop + canary) so canary.txt etc.
 	// are ✓; everythingUp gates the listing step next. The DISPLAY happens as the
 	// final step, after listing.
 	const summaryRows = await collectInstallSummary({
@@ -356,7 +390,12 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 		(r) => r.label === 'Blurt RPC connectivity' && r.ok === true
 	);
 	step(0, 0, 'List your instance on the public federated directory');
-	if (await askYesNo('\n  List this instance on the public federated directory (start earning fees)?', true)) {
+	if (
+		await askYesNo(
+			'\n  List this instance on the public federated directory (start earning fees)?',
+			true
+		)
+	) {
 		armDeferredRegister();
 		if (everythingUp && rpcReachable) {
 			const rc = spawnSync('/usr/local/bin/morphit-ops', ['register'], {
@@ -373,27 +412,37 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 				}
 			});
 			if ((rc.status ?? 1) !== 0) {
-				console.log('\n  Couldn\u2019t reach the chain just now \u2014 no problem: it\u2019s armed to list');
+				console.log(
+					'\n  Couldn\u2019t reach the chain just now \u2014 no problem: it\u2019s armed to list'
+				);
 				console.log('  itself automatically the moment this box is online. Or do it by hand');
 				console.log('  any time with:');
 				console.log('        sudo morphit-ops register\n');
 			}
 		} else if (!rpcReachable) {
 			// OFFLINE / air-gapped install — attempting the broadcast now would hang.
-			console.log('\n  This box isn\u2019t online yet, so we won\u2019t try the on-chain listing this');
-			console.log('  second \u2014 it\u2019s armed to publish automatically the moment this box is');
+			console.log(
+				'\n  This box isn\u2019t online yet, so we won\u2019t try the on-chain listing this'
+			);
+			console.log(
+				'  second \u2014 it\u2019s armed to publish automatically the moment this box is'
+			);
 			console.log('  online. Or do it by hand any time with:');
 			console.log('        sudo morphit-ops register\n');
 		} else {
-			console.log('\n  A few pieces above aren\u2019t up yet, so we won\u2019t list it this second \u2014 but');
-			console.log('  it\u2019s armed to list itself automatically once everything is \u2713 and this box');
+			console.log(
+				'\n  A few pieces above aren\u2019t up yet, so we won\u2019t list it this second \u2014 but'
+			);
+			console.log(
+				'  it\u2019s armed to list itself automatically once everything is \u2713 and this box'
+			);
 			console.log('  is online. Check any time with `sudo morphit-ops status`.\n');
 		}
 	} else {
 		console.log('\n  No problem \u2014 list it whenever you\u2019re ready with:');
 		console.log('        sudo morphit-ops register\n');
 	}
-	// cp698 — FINAL step: show the review last, so it reflects everything the
+	// FINAL step: show the review last, so it reflects everything the
 	// operator just set up (canary signed, listing armed).
 	step(0, 0, 'Review your node');
 	printInstallSummary(summaryRows);
@@ -417,7 +466,7 @@ export async function runAnsibleInstall(opts: { repoRoot: string; keystorePath?:
 				'\n  The install is fine; please report this numbering bug.\n'
 		);
 	}
-	// cp694 — public-reachability self-check. A home box behind a router can't
+	// public-reachability self-check. A home box behind a router can't
 	// tell it's unreachable by curling its own domain (NAT hairpin), so operators
 	// used to discover an ISP 80/443 block only via a stale "Unreachable"
 	// federation pill hours later. Probe from an external Tor exit (the node

@@ -27,9 +27,17 @@
 export type ProbeStatus =
 	| { kind: 'ok'; latencyMs: number }
 	| { kind: 'wrong_shape'; latencyMs: number; reason: string }
-	| { kind: 'unreachable'; reason: string };
+	| { kind: 'unreachable'; reason: string }
+	| { kind: 'hidden_not_probed' };
 
 import { sanitizeForTerm } from '../render/term.ts';
+import { isHiddenSourceUrl } from '@morphit/operator-config/fee-sources';
+
+/** An onion / I2P source is not probed from the wizard: a plain fetch here
+ *  would hand its name to the system resolver (a leak, and it cannot resolve
+ *  anyway). The indexer reaches it over Tor / I2P and probes it itself. */
+const hiddenSkip = (url: string): ProbeStatus | null =>
+	isHiddenSourceUrl(url) ? { kind: 'hidden_not_probed' } : null;
 
 const PROBE_TIMEOUT_MS = 5_000;
 
@@ -45,6 +53,8 @@ export async function probeBitcoinExplorer(
 	baseUrl: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<ProbeStatus> {
+	const skip = hiddenSkip(baseUrl);
+	if (skip !== null) return skip;
 	const url = `${baseUrl.replace(/\/+$/, '')}/blocks/tip/height`;
 	const started = Date.now();
 	const ac = new AbortController();
@@ -100,6 +110,8 @@ export async function probeMoneroExplorer(
 	baseUrl: string,
 	fetchImpl: typeof fetch = fetch
 ): Promise<ProbeStatus> {
+	const skip = hiddenSkip(baseUrl);
+	if (skip !== null) return skip;
 	if (baseUrl.startsWith('raw-tx+')) return probeRawTxMoneroExplorer(baseUrl.slice('raw-tx+'.length), fetchImpl);
 	if (baseUrl.startsWith('node+')) return probeMoneroNode(baseUrl.slice('node+'.length), fetchImpl);
 	const url = `${baseUrl.replace(/\/+$/, '')}/api/networkinfo`;
@@ -276,7 +288,7 @@ export async function probeChatLinkExplorer(
  *  the explorer-URL editor as it polls each URL on the
  *  list and prints results inline.
  *
- *  cp139-C-9: s.reason can include HTTP server response text
+ *  s.reason can include HTTP server response text
  *  or fetch-library error messages.  These have flowed from
  *  attacker-controllable network responses, so strip terminal
  *  escapes before returning the string for display. */
@@ -288,5 +300,7 @@ export function renderProbeStatus(s: ProbeStatus): string {
 			return `⚠ unexpected response (${s.latencyMs}ms): ${sanitizeForTerm(s.reason)}`;
 		case 'unreachable':
 			return `✗ unreachable: ${sanitizeForTerm(s.reason)}`;
+		case 'hidden_not_probed':
+			return '· onion/I2P service: not checked from here; the indexer reaches it over Tor/I2P';
 	}
 }

@@ -2,7 +2,7 @@
 /**
  * payment-rail-coverage-parity-smoke.
  *
- * CP42 deep-deep I-62 closure: pins LL #36 invariant structurally
+ * CP42 closure: pins LL #36 invariant structurally
  * — every tradable asset in the canonical registry MUST have a
  * corresponding `pay_<ticker>` entry in the frontend's payments
  * registry.  If a future asset addition lands tradable status
@@ -29,7 +29,7 @@ const payRailKeys = new Set(
 	PAYMENT_METHODS.filter((m) => m.key.startsWith('pay_')).map((m) => m.key.slice('pay_'.length))
 );
 
-// cp425 — goods assets (BARTER) settle in one of the buyer's accepted
+// goods assets (BARTER) settle in one of the buyer's accepted
 // cryptos (the order's `accepted_assets`), not a fiat rail, so there's no
 // `pay_barter` payment method. Exempt them from the pay-rail requirement.
 const missing = [...tradableTickers].filter(
@@ -54,7 +54,7 @@ if (missing.length === 0 && extra.length === 0) {
 // Also assert tradable-vs-frontend parity
 const frontTickers = new Set(FRONTEND.filter((a) => a.canBeTraded).map((a) => a.ticker));
 const canonLower = new Set([...tradableTickers]);
-// cp474 — compare the two registries as plain strings.  They're typed with
+// compare the two registries as plain strings.  They're typed with
 // different unions (canonical AssetTicker vs the frontend's ChatAssetTicker),
 // so a direct `.has()` across them is a type error; widening at the comparison
 // is the honest expression of "same set of tickers, different type homes".

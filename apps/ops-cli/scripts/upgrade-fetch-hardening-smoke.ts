@@ -1,16 +1,16 @@
 /**
- * upgrade-fetch-hardening smoke (cp160 F-opscli-1).
+ * upgrade-fetch-hardening smoke.
  *
  * The ops-cli `upgrade` command fetches the Forgejo releases-latest
  * JSON from the operator-configured host (defaults to
  * git.agorise.net) to discover the newest Morphit release before
  * downloading + SHA-verifying the archive.
  *
- * Pre-cp160, `fetchLatestRelease()` in
+ * Previously, `fetchLatestRelease()` in
  * `apps/ops-cli/src/commands/upgrade.ts` did `await res.json()`
- * with no body bound and no `redirect: 'manual'`.  The cp160
- * apps/ops-cli audit (cp146 finding lens applied to the small
- * workspaces) closed this as F-opscli-1.
+ * with no body bound and no `redirect: 'manual'`.  The
+ * apps/ops-cli audit (finding lens applied to the small
+ * workspaces) closed this.
  *
  * Threat model: the host is operator-configured, so SSRF isn't the
  * canonical attack.  The exposure is a MITM'd or compromised release
@@ -18,7 +18,7 @@
  * or a 30x redirect to an unexpected host on the metadata call.
  * LOW severity (operator-run CLI, operator-controlled host) but the
  * body cap + redirect:manual are cheap defense-in-depth consistent
- * with the cp151 / cp159 body-cap pattern across the codebase.
+ * with the body-cap pattern across the codebase.
  *
  * The downloaded archive itself is SHA-256 verified downstream
  * (parseShaFile + computeSha256), so a tampered archive is already
@@ -26,8 +26,8 @@
  * no such downstream guard.
  *
  * `fetchLatestRelease()` is private (not exported), so this is a
- * source-sentinel smoke (same pattern as cp156 root-shell-then-
- * redirect-smoke + cp159 price-fetch-util-smoke source-sentinels):
+ * source-sentinel smoke (same pattern as an earlier fix root-shell-then-
+ * redirect-smoke + price-fetch-util-smoke source-sentinels):
  * pin the load-bearing source text so a future refactor that removes
  * the cap or the redirect:manual is caught.
  */
@@ -52,12 +52,10 @@ function fail(name: string, detail: string) {
 	results.push({ name, passed: false, detail });
 }
 
-const UPGRADE_PATH = resolve(
-	new URL('../src/commands/upgrade.ts', import.meta.url).pathname
-);
+const UPGRADE_PATH = resolve(new URL('../src/commands/upgrade.ts', import.meta.url).pathname);
 const src = readFileSync(UPGRADE_PATH, 'utf8');
 
-/* ---------------- local strip-comments (see cp159 Lesson #1) ---------------- */
+/* ---------------- local strip-comments ( Lesson #1) ---------------- */
 
 // Inlined rather than cross-importing scripts/lib/strip-comments.ts —
 // the 3-level relative path resolves awkwardly under tsx --tsconfig
@@ -108,7 +106,7 @@ if (/text\.length\s*>\s*RELEASE_JSON_MAX_BYTES/.test(codeOnly)) {
 
 /* ---------------- scenario 4: no bare await res.json() in release fetch ---------------- */
 
-// After cp160, the release fetch MUST use res.text() + JSON.parse with
+// The release fetch MUST use res.text() + JSON.parse with
 // the cap in between, not bare res.json().  The downloadTo() path streams
 // the binary archive to disk with an IDLE timeout (v1.16.13) — separate.
 // Count bare res.json() occurrences in code (not comments).
@@ -125,7 +123,7 @@ if (bareJsonCount === 0) {
 /* ---------------- scenario 4b: tarball download survives a slow link (v1.16.13) ---------------- */
 
 // The tarball download must NOT use a fixed total deadline (the old 30s cap
-// guillotined healthy-but-slow downloads — the maintainer/morphitir over a throttled a filtered network
+// guillotined healthy-but-slow downloads over a throttled, filtered
 // link). It streams to disk and uses an IDLE/stall timeout that re-arms on each
 // chunk, so a slow-but-progressing transfer completes; only a true stall aborts.
 if (/UPGRADE_STALL_TIMEOUT_MS/.test(codeOnly) && /getReader\(\)/.test(codeOnly)) {
@@ -136,10 +134,17 @@ if (/UPGRADE_STALL_TIMEOUT_MS/.test(codeOnly) && /getReader\(\)/.test(codeOnly))
 		'expected UPGRADE_STALL_TIMEOUT_MS + res.body.getReader() streaming in downloadTo'
 	);
 }
-if (/clearTimeout\(timer\);\s*\n\s*timer = setTimeout\(\(\) => controller\.abort\(\), UPGRADE_STALL_TIMEOUT_MS\)/.test(codeOnly)) {
+if (
+	/clearTimeout\(timer\);\s*\n\s*timer = setTimeout\(\(\) => controller\.abort\(\), UPGRADE_STALL_TIMEOUT_MS\)/.test(
+		codeOnly
+	)
+) {
 	pass('the stall timer RE-ARMS on progress (arm() resets on each chunk)');
 } else {
-	fail('the stall timer re-arms on progress', 'expected an arm() that clears + resets the timer on each chunk');
+	fail(
+		'the stall timer re-arms on progress',
+		'expected an arm() that clears + resets the timer on each chunk'
+	);
 }
 
 /* ---------------- scenario 5: cap value is sane ---------------- */
@@ -170,15 +175,7 @@ if (capMatch) {
 	fail('RELEASE_JSON_MAX_BYTES is sane', 'could not locate the cap constant assignment');
 }
 
-/* ---------------- scenario 6: cp160 attribution present ---------------- */
-
-if (src.includes('F-opscli-1')) {
-	pass('cp160 F-opscli-1 attribution present in source');
-} else {
-	fail('cp160 F-opscli-1 attribution present in source', 'no F-opscli-1 reference found');
-}
-
-/* ---------------- cp189: config/keystore carry-forward ---------------- */
+/* ---------------- config/keystore carry-forward ---------------- */
 // The upgrade renames the old install to .bak then extracts a FRESH
 // tarball that does NOT contain the operator's config or signing key.
 // Without a carry-forward step the operator's config/keystore would be
@@ -219,7 +216,13 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 	const extractIdx = codeOnly.indexOf("'tar'");
 	const carryIdx = codeOnly.indexOf('preserve');
 	const npmCiIdx = codeOnly.indexOf("'ci'");
-	if (extractIdx !== -1 && carryIdx !== -1 && npmCiIdx !== -1 && extractIdx < carryIdx && carryIdx < npmCiIdx) {
+	if (
+		extractIdx !== -1 &&
+		carryIdx !== -1 &&
+		npmCiIdx !== -1 &&
+		extractIdx < carryIdx &&
+		carryIdx < npmCiIdx
+	) {
 		pass('carry-forward sits between extract and npm ci');
 	} else {
 		fail(
@@ -240,7 +243,7 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 	}
 }
 
-/* ---------------- cp191: prerelease-aware release discovery ---------------- */
+/* ---------------- prerelease-aware release discovery ---------------- */
 // `/releases/latest` returns only the newest NON-prerelease release
 // (Forgejo API semantics).  During the beta period every release is
 // a prerelease, so that endpoint 404s and upgrade saw nothing.  The
@@ -272,7 +275,10 @@ if (/releases\?limit=1/.test(src)) {
 if (/status\s*!==\s*404/.test(codeOnly) || /status\s*===\s*404/.test(codeOnly)) {
 	pass('prerelease fallback is gated on 404 (no stable release)');
 } else {
-	fail('prerelease fallback is gated on 404', 'fallback should trigger only when /releases/latest 404s');
+	fail(
+		'prerelease fallback is gated on 404',
+		'fallback should trigger only when /releases/latest 404s'
+	);
 }
 
 /* ---------------- report ---------------- */

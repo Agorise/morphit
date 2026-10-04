@@ -1,5 +1,5 @@
 /**
- * account-suggestion-smoke.ts (cp600) — pins suggestAccountBase, which turns
+ * account-suggestion-smoke.ts — pins suggestAccountBase, which turns
  * the operator's instance name (or domain) into a relay/fees account-name
  * SUGGESTION (e.g. "Morphit NL" -> "morphitnl" -> @morphitnl-relay / -fees).
  * The suggestion must stay Blurt-name-safe: `<base>-relay` and `<base>-fees`
@@ -21,7 +21,7 @@ function check(name: string, cond: boolean): void {
 
 console.log('\u2500\u2500 account-suggestion smoke (cp600) \u2500\u2500\u2500\u2500');
 
-// the maintainer's examples.
+// The maintainer's examples.
 check('"Morphit NL" -> "morphitnl"', suggestAccountBase('Morphit NL') === 'morphitnl');
 check('"morphit.io" -> "morphitio"', suggestAccountBase('morphit.io') === 'morphitio');
 

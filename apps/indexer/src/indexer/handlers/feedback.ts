@@ -13,52 +13,54 @@
  * level: one feedback per (reviewer, subject, order_permlink).
  * Self-reviews (subject == reviewer) are rejected.
  *
- * PROVABLE-COUNTERPARTY GATE (cp420/cp421): a review is rejected with
+ * PROVABLE-COUNTERPARTY GATE: a review is rejected with
  * `no_verified_counterparty` unless the reviewer and subject have a
  * substantiated two-way on-chain conversation — ≥2 morphit_chat_v1
  * each way, ≥15-min span, and not a flagged suspicious-reciprocity
  * pair (i.e. the SAME bar as the has_verified_chat badge). Settlement
  * is off-chain and undecidable, but the conversation is on-chain — this
- * makes ghost reviews and hand-typed random subjects impossible. the maintainer
- * chose this strict bar over a looser bidirectional-only gate: it costs
+ * makes ghost reviews and hand-typed random subjects impossible. The
+ * project chose this strict bar over a looser bidirectional-only gate: it costs
  * some legitimate ultra-fast trades but forces a sockpuppeteer to
  * fabricate a sustained conversation rather than two throwaway
  * messages. See the gate block below for the full rationale.
  *
  * Comment length limit is 256 code points. Control characters
- * (C0/C1), bidi override marks (U+202A–202E, U+2066–2069), and
- * zero-width joiners (U+200B–200D, U+FEFF) are rejected — same
- * injection-resistant character policy as profile.ts display names.
+ * (C0/C1), bidi override marks (U+202A–202E, U+2066–2069), the
+ * zero-width SPACE U+200B, U+2060–2064 and U+FEFF are rejected — the
+ * same policy as profile.ts display names (ZWNJ/ZWJ, U+200C/U+200D,
+ * stay allowed: Persian and Indic text needs them).
  */
 
 import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
+import {
+	FORBIDDEN_REVIEW_TEXT_CHARS,
+	MAX_REVIEW_COMMENT_CODEPOINTS
+} from '@morphit/asset-registry';
 import { logger } from '$log';
 import { enqueueFeedbackPush } from '$indexer/feedbackPushEnqueue';
+import { inSavepoint } from '$indexer/savepoint';
+import { raiseReviewSignals } from '$indexer/signals';
 import { hasVerifiedChat as verifiedChatGate } from '$indexer/chatGates';
 import { reviewCitesFeePaidOrder } from '$indexer/reviewCitation';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 const log = logger('feedback');
 
 // Per Blurt's is_valid_account_name, account names are
 // dot-separated multi-segment.  Canonicalized to match
-// $api/shared.ts isAccountName — see REVISIT-LIST.md
+// $api/shared.ts isAccountName — see the project backlog
 // "C-19 follow-on consistency pass" for context.
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** Max comment length in USER-PERCEIVED characters (code points).
- *  256 chars is the visual budget — feedback lines render as a
- *  compact row, and anything longer turns into a wall of text on
- *  mobile. The chain can carry more, but the user-facing contract
- *  is "one tweet's worth." */
-const MAX_COMMENT_CODEPOINTS = 256;
-
-/** Same forbidden-character class as profile.ts display names.
- *  Centralizing would be nicer, but since these handlers are
- *  deliberately self-contained, we accept one copy per use site. */
-const FORBIDDEN_COMMENT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
+/** Max comment length in USER-PERCEIVED characters (code points), 256 —
+ *  feedback lines render as a compact row. The forbidden-character class
+ *  (control, bidi, zero-width) is the same one the web composer checks:
+ *  both come from @morphit/asset-registry so the two cannot drift. */
+const MAX_COMMENT_CODEPOINTS = MAX_REVIEW_COMMENT_CODEPOINTS;
+const FORBIDDEN_COMMENT_CHARS = FORBIDDEN_REVIEW_TEXT_CHARS;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -135,7 +137,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		//    is unique by (reviewer, subject, order_permlink) so
 		//    each becomes a row.
 		//
-		// 2. account IN (subject, reviewer) — cp420.  Was `= subject`
+		// 2. account IN (subject, reviewer).  Was `= subject`
 		//    only, which fit ONE direction (a taker reviewing the
 		//    order's maker).  But /my/orders reviews run the OTHER way:
 		//    the MAKER (reviewer=signer, who posted the order) reviews
@@ -147,7 +149,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		//    feedback to a real trade partner; this prong just keeps the
 		//    cited order real + fee-paid.
 		//
-		// 3. fee_status = 'verified' — Part 113 (reputation audit,
+		// 3. fee_status = 'verified' — (reputation audit,
 		//    Vector A5/B2).  Pre-Part-113 reality: an attacker
 		//    could broadcast a `morphit_order_v1` op with NO fee
 		//    transfer (or an underpaid one) and the order would
@@ -161,13 +163,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		//    every fake-feedback row carries a non-trivial real-
 		//    money cost.  ALSO closes the symmetric B2 vector
 		//    (retaliatory 1-star citing an unpaid order).
-		// (v1.18.0 deep-deep, rv6-L1) ONE predicate, shared with the head
+		// ONE predicate, shared with the head
 		// tailer's fast review notification, which used to carry its own copy
 		// that also accepted 'verified_by_attestation'.
+		// From the consensus activation time the cited order must also be one
+		// this pair traded on (see reviewCitation.ts).
 		const cited = await reviewCitesFeePaidOrder(client, {
 			permlink: ctx.payload.order_permlink,
 			subject,
-			reviewer: ctx.signer
+			reviewer: ctx.signer,
+			pairBound: consensusV2Active(ctx.blockTime),
+			asOf: ctx.blockTime
 		});
 		if (!cited) {
 			return { ok: false, reason: 'order_permlink_not_found_or_unverified' };
@@ -196,7 +202,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	//
 	// Self-feedback already rejected upstream (line ~71); we don't
 	// re-check the (reviewer != subject) invariant here.
-	// cp472 — the bar itself now lives in $indexer/chatGates (ONE
+	// the bar itself now lives in $indexer/chatGates (ONE
 	// implementation), because morphit_order_complete_v1's `counterparty`
 	// must clear the identical bar. Behaviour here is unchanged: same
 	// ≥2-each-way / ≥15-min / not-reciprocity-flagged rule, same block-time
@@ -208,7 +214,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		asOf: ctx.blockTime
 	});
 
-	// ─── cp420/cp421 PROVABLE-COUNTERPARTY GATE (the maintainer) ────────────
+	// ─── PROVABLE-COUNTERPARTY GATE ────────────
 	// A review must attach to someone the reviewer PROVABLY interacted
 	// with — not a ghost and not a self-boost. Morphit's trade
 	// SETTLEMENT is off-chain (cash/bank/crypto handoff the chain never
@@ -219,13 +225,13 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	//   ≥2 messages each way, ≥15-min span, and the sockpuppet
 	//   detector has NOT flagged the pair (suspicious_reciprocity).
 	//
-	// This makes the two abuses the maintainer called out impossible:
+	// This makes the two abuses called out impossible:
 	//   • Ghost reviews — you cannot review an account you never had a
 	//     real back-and-forth with.
 	//   • Hand-typed random subjects — same; no conversation, no review.
 	// Self-reviews are already rejected upstream (subject === signer).
 	//
-	// the maintainer chose the STRICT bar (cp421) over the looser bidirectional-
+	// The project chose the STRICT bar over the looser bidirectional-
 	// only gate: it costs some legitimate ultra-fast trades (a real
 	// deal closed in <2 messages each way or under 15 min), but a
 	// determined sockpuppeteer now has to fabricate a sustained
@@ -271,7 +277,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		throw err;
 	}
 
-	// ─── Web Push enqueue (Part 122 cp13; localized cp14) ───────
+	// ─── Web Push enqueue (localized) ───────
 	// Enqueue a push notification for `subject` (the reviewed
 	// account).  The relay's push-sender worker picks this up on
 	// its next tick and fans out to all of subject's subscribed
@@ -279,7 +285,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// already recorded; missing a push notification is a UX
 	// degradation, not a data loss.
 	//
-	// Localization (cp14): pick the recipient's most-recently-
+	// Localization: pick the recipient's most-recently-
 	// subscribed device's locale (we MAX over created_at so a
 	// user switching languages gets new notifications in their
 	// new language without losing existing subscriptions).  No
@@ -293,15 +299,19 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// It also fixes a latent bug: this insert carried NO source_trx_id, so
 		// the moment a second delivery path existed the two would both insert
 		// and the subject would get the review notification TWICE — exactly the
-		// chat duplicate the maintainer reported. Both paths now pass the trx id and the
+		// chat duplicate fixed in v1.5.5. Both paths now pass the trx id and the
 		// partial UNIQUE (account, source_trx_id) collapses them to one.
-		await enqueueFeedbackPush(client, {
-			subject,
-			reviewer: ctx.signer,
-			rating,
-			sourceTrxId: ctx.trxId,
-			eventAt: ctx.blockTime
-		});
+		// In its own savepoint, so a failed enqueue cannot abort the block
+		// transaction and take the stored review with it.
+		await inSavepoint(client, 'feedback_push_enqueue', () =>
+			enqueueFeedbackPush(client, {
+				subject,
+				reviewer: ctx.signer,
+				rating,
+				sourceTrxId: ctx.trxId,
+				eventAt: ctx.blockTime
+			})
+		);
 	} catch (err) {
 		// Non-fatal — log and continue.  The feedback row is
 		// already in.  push_pending failure most likely means the
@@ -311,6 +321,17 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			err: String((err as Error)?.message ?? err)
 		});
 	}
+
+	// ─── Review signals (B, C, D) at this review's block time ─────
+	// Advisory (reputation display): evaluated here, on chain time, so every
+	// node raises the same flags at the same block (signals.ts). A failure is
+	// logged and never rejects the review; its own savepoint keeps the block
+	// transaction usable.
+	await inSavepoint(client, 'feedback_signals', () =>
+		raiseReviewSignals(client, { reviewer: ctx.signer, subject, asOf: ctx.blockTime })
+	).catch((err: unknown) => {
+		log.warn('review_signals_failed', { err: String((err as Error)?.message ?? err) });
+	});
 
 	// ─── ADR-0011 §8: delayed welcome bonus ───────────────────────
 	// Feedback submission IS the "trade completed" signal — but
@@ -332,8 +353,8 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// Requiring `order_permlink` ties the bonus trigger to a real
 	// order on the index.  The order_permlink check upstream (in
 	// the validation block above) verified that the permlink
-	// exists AND was posted by the subject; here we require it to
-	// be present at all.
+	// exists AND was posted by the subject or the reviewer; here we
+	// require it to be present at all.
 	//
 	// Feedback without order_permlink still goes through — there
 	// are legitimate use cases (chat-only first contact, post-
@@ -382,7 +403,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	const bonusSavepoint = 'welcome_bonus_sp';
 	await client.query(`SAVEPOINT ${bonusSavepoint}`);
 	try {
-		// Part 111 — look up the cited order's operator_tag to decide
+		// look up the cited order's operator_tag to decide
 		// whether THIS instance is the one obligated for the welcome
 		// bonus.  If the cited order was attributed to a different
 		// operator's instance (or to no operator), THIS indexer still
@@ -395,7 +416,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		// (e.g. we missed its block, or the order was on a different
 		// account), `cited` returns rowCount=0 → treated as "not our
 		// instance," no bonus queued.  Conservative.
-		// (v1.18.0 deep-deep, rv6-M3) Only the SUBJECT's own PAID order can
+		// Only the SUBJECT's own PAID order can
 		// make this instance's relay pay the bonus. What was wrong: this
 		// lookup ignored the fee, so once the citation check passed — even
 		// via the REVIEWER's paid order that merely shares the permlink of
@@ -432,7 +453,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 			// Queue the two transfers. Same timestamp for both so
 			// an operator reading the queue sees them as a unit.
 			//
-			// Part 111: gated on isOurInstance — see above.
+			// gated on isOurInstance — see above.
 			await client.query(
 				`INSERT INTO relay_pending_transfers
 				   (recipient, kind, amount_blurt, reason, created_at)
@@ -442,7 +463,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 				[subject, ctx.blockTime]
 			);
 		} else if ((claimed.rowCount ?? 0) > 0 && !isOurInstance) {
-			// Part 112 hardening — record the skip so operators
+			// record the skip so operators
 			// have an audit trail.  This branch fires when:
 			// the user genuinely just completed their first trade
 			// (accounts row flipped), AND that trade was attributed

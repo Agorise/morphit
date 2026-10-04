@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — stablecoin depeg detector (cp127).
+ * Morphit indexer — stablecoin depeg detector.
  *
  * Why this module exists
  * ──────────────────────
@@ -36,7 +36,7 @@
  *
  * Black-hat resistance built in
  * ─────────────────────────────
- *   - The same Sybil filters from cp123-cp125 apply to cross-stablecoin
+ *   - The same Sybil filters from apply to cross-stablecoin
  *     orders.  An attacker can't post fake cross-ratios with zero-rep
  *     sock accounts.
  *   - Median across distinct traders, not across orders.  An attacker
@@ -132,10 +132,10 @@ export interface DepegDetectorConfig {
 	readonly stablecoinKeys: ReadonlyArray<string>;
 	/** This instance's OPERATOR account name (the `operator` column
 	 *  in operator_blocks — keyed by `operatorAccountName`, NOT
-	 *  `officialAccountName`; cp258 fix).  Orders authored by
+	 *  `officialAccountName`; fix).  Orders authored by
 	 *  accounts this operator has blocked (state='blocked') are
 	 *  excluded from the depeg ratio, mirroring the orderbook's
-	 *  instance-local moderation (cp209): a blocked seller's
+	 *  instance-local moderation: a blocked seller's
 	 *  listings are hidden on this instance, so their prices must
 	 *  not influence this instance's derived native price either.
 	 *  Pass `config.operatorAccountName`.  An empty string makes
@@ -209,8 +209,8 @@ export async function detectStablecoinDepeg(
 	//
 	// Sybil filtering: each contributing trader must NOT appear in
 	// suspicious_reciprocity, related_accounts, one_way_pile_on, or
-	// review_concentration tables (cp123-cp125 defenses), and must
-	// NOT be blocked by this operator (operator_blocks, cp209).
+	// review_concentration tables (defenses), and must
+	// NOT be blocked by this operator (operator_blocks).
 	//
 	// Order-age grace: only orders that have existed for ≥10 minutes
 	// AND are still status='live' count.  Defeats post-and-cancel
@@ -414,17 +414,25 @@ export async function detectStablecoinDepeg(
 			deviationsFromK.push(kPerOther - 1);
 		}
 
-		// Black-hat resistance: median of deviations (not mean).  A
-		// single manipulated pair can't push k into "depegged"
-		// classification on its own.
+		// k is the outlier only when MOST of its pairs put it off-peg in the
+		// SAME direction. With three stablecoins every coin has just two
+		// pairs, and a "median" of two is their mean: one manipulated pair
+		// (+7%) against an honest one (0%) averaged past the threshold and
+		// marked BOTH honest coins of that pair depegged, while a coin that
+		// really depegged dragged its two counterparties along. A single
+		// pair cannot say which side moved, so it marks both (as before).
+		const high = deviationsFromK.filter((d) => d > ratioThreshold).length;
+		const low = deviationsFromK.filter((d) => d < -ratioThreshold).length;
+		const n = deviationsFromK.length;
+		const outlier = n === 1 ? high + low === 1 : Math.max(high, low) * 2 > n;
 		deviationsFromK.sort((x, y) => x - y);
-		const midIdx = deviationsFromK.length / 2;
+		const midIdx = n / 2;
 		const medianDeviation =
-			deviationsFromK.length % 2 === 1
+			n % 2 === 1
 				? deviationsFromK[Math.floor(midIdx)]!
 				: (deviationsFromK[midIdx - 1]! + deviationsFromK[midIdx]!) / 2;
 
-		if (Math.abs(medianDeviation) > ratioThreshold) {
+		if (outlier) {
 			status[k] = 'depegged';
 			log.warn('stablecoin_depeg_detected', {
 				stablecoin: k,

@@ -1,6 +1,6 @@
 /**
  * Sign ONCE, broadcast to the best RPC node, fall back through the rest
- * (v1.20.0 fix wave, D12) — shared by the laptop broadcast scripts:
+ * — shared by the laptop broadcast scripts:
  * release-broadcast, rpc-directory-broadcast, chain-snapshot-broadcast and
  * indexer-snapshot-broadcast.
  *
@@ -17,11 +17,15 @@
  *   1. every candidate node is asked for its head in parallel (a short,
  *      bounded wait; a spinner-style line says so), and the answers are ranked
  *      — healthy and current first, then by latency;
- *   2. the transaction is built from the best node's head and SIGNED ONCE;
+ *   2. the transaction is built from the best node's head — a head a SECOND
+ *      node confirms (same head, or the same block id at that height) — and
+ *      SIGNED ONCE;
  *   3. that exact signed transaction goes to the ranked nodes in turn; a node
  *      answering "duplicate transaction" means an earlier attempt landed —
  *      success, with the same id;
- *   4. if the transaction expires before any node takes it, the script STOPS
+ *   4. a node's "accepted" is checked on ANOTHER node: the transaction must be
+ *      in the block it named (else the scripts say it is not confirmed);
+ *   5. if the transaction expires before any node takes it, the script STOPS
  *      and says to check the chain before running again — it never re-signs
  *      on its own, because the lost answer may have been an acceptance.
  *
@@ -32,6 +36,8 @@
  * from the usual env names and hidden nodes are ranked alongside clearnet.
  * `--node <url>` still pins exactly one node (backward compatible).
  */
+import { readFileSync, statSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { Client, cryptoUtils, type PrivateKey } from '@beblurt/dblurt';
 import {
 	DEFAULT_BLURT_RPC_ENDPOINTS,
@@ -160,6 +166,111 @@ export interface BroadcastResult {
 	readonly blockNum: number | null;
 	/** The node said the transaction was already known: an earlier attempt landed. */
 	readonly duplicate: boolean;
+	/** Another node that has the transaction in block `blockNum`; null when no
+	 *  second node could confirm it (check a block explorer before announcing). */
+	readonly confirmedBy: string | null;
+}
+
+/** What `condenser_api.get_block` says about one block (null: no such block yet). */
+export type BlockLookup = (
+	url: string,
+	num: number
+) => Promise<{ block_id?: string; transaction_ids?: string[] } | null>;
+
+async function getBlockOnce(
+	url: string,
+	num: number
+): Promise<{ block_id?: string; transaction_ids?: string[] } | null> {
+	const ctrl = new AbortController();
+	const t = setTimeout(() => ctrl.abort(), 10_000);
+	try {
+		const res = await fetch(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'condenser_api.get_block',
+				params: [num]
+			}),
+			redirect: 'manual',
+			signal: ctrl.signal
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const j = (await res.json()) as {
+			result?: { block_id?: string; transaction_ids?: string[] } | null;
+		};
+		return j.result ?? null;
+	} finally {
+		clearTimeout(t);
+	}
+}
+
+/**
+ * The node whose head the transaction is built on (TaPoS), confirmed by a
+ * second node: one that reports the same head, or returns the same block id
+ * for that height. A single lying node can otherwise hand out a made-up head
+ * (the transaction is then invalid on the real chain) and claim it accepted it.
+ */
+async function confirmedBase(
+	ranked: readonly NodeHealth[],
+	getBlock: BlockLookup,
+	log: (l: string) => void
+): Promise<NodeHealth> {
+	const live = ranked.filter((h) => h.ok && h.props !== undefined);
+	if (live.length === 0) throw new Error('no RPC node answered — nothing was signed or broadcast');
+	if (live.length === 1) {
+		log(`Only ${live[0]!.url} answered: its head is not cross-checked by a second node.`);
+		return live[0]!;
+	}
+	for (const base of live) {
+		const p = base.props!;
+		for (const other of live) {
+			if (other.url === base.url) continue;
+			if (other.props!.head_block_number === p.head_block_number) {
+				if (other.props!.head_block_id === p.head_block_id) return base;
+				continue;
+			}
+			if (other.props!.head_block_number < p.head_block_number) continue;
+			try {
+				if ((await getBlock(other.url, p.head_block_number))?.block_id === p.head_block_id)
+					return base;
+			} catch {
+				/* that node cannot confirm; try another */
+			}
+		}
+		log(
+			`  ${base.url}: its head block ${p.head_block_number} is not confirmed by another node — not used.`
+		);
+	}
+	throw new Error('no head block was confirmed by two nodes — nothing was signed or broadcast');
+}
+
+/** Another node that has `trxId` in block `num` (a few tries while it catches up). */
+async function confirmIncluded(
+	ranked: readonly NodeHealth[],
+	via: string,
+	trxId: string,
+	num: number,
+	getBlock: BlockLookup,
+	sleep: (ms: number) => Promise<void>
+): Promise<string | null> {
+	const others = ranked.filter((h) => h.ok && h.url !== via).map((h) => h.url);
+	for (let attempt = 0; attempt < 5 && others.length > 0; attempt++) {
+		let pending = false;
+		for (const u of others) {
+			try {
+				const b = await getBlock(u, num);
+				if (b === null) pending = true;
+				else if ((b.transaction_ids ?? []).includes(trxId)) return u;
+			} catch {
+				/* unreachable: not a confirmation */
+			}
+		}
+		if (!pending) return null;
+		await sleep(3_000);
+	}
+	return null;
 }
 
 /** The dblurt default: 60 s from the head the transaction is built on. */
@@ -177,15 +288,16 @@ export async function signOnceAndBroadcast(
 		readonly send?: (url: string, signed: unknown) => Promise<{ block_num?: number }>;
 		readonly log?: (line: string) => void;
 		readonly now?: () => number;
+		readonly getBlock?: BlockLookup;
+		readonly sleep?: (ms: number) => Promise<void>;
 	} = {}
 ): Promise<BroadcastResult> {
 	const log = opts.log ?? ((l: string) => process.stderr.write(`${l}\n`));
 	const now = opts.now ?? Date.now;
-	const base = ranked.find((h) => h.ok && h.props !== undefined);
-	if (base === undefined || base.props === undefined) {
-		throw new Error('no RPC node answered — nothing was signed or broadcast');
-	}
-	const p = base.props;
+	const getBlock = opts.getBlock ?? getBlockOnce;
+	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+	const base = await confirmedBase(ranked, getBlock, log);
+	const p = base.props!;
 	const tx = {
 		ref_block_num: p.head_block_number & 0xffff,
 		ref_block_prefix: Buffer.from(p.head_block_id, 'hex').readUInt32LE(4),
@@ -215,11 +327,23 @@ export async function signOnceAndBroadcast(
 		log(`Broadcasting via ${h.url} …`);
 		try {
 			const conf = await send(h.url, signed);
-			return { trxId, via: h.url, blockNum: conf.block_num ?? null, duplicate: false };
+			const blockNum = conf.block_num ?? null;
+			const confirmedBy =
+				blockNum === null
+					? null
+					: await confirmIncluded(ranked, h.url, trxId, blockNum, getBlock, sleep);
+			log(
+				confirmedBy !== null
+					? `Confirmed: ${confirmedBy} has transaction ${trxId} in block ${blockNum}.`
+					: `NOT confirmed by a second node: ${h.url} said it accepted ${trxId}${blockNum !== null ? ` (block ${blockNum})` : ''}. Look the id up on a block explorer before announcing it.`
+			);
+			return { trxId, via: h.url, blockNum, duplicate: false, confirmedBy };
 		} catch (e) {
 			if (/duplicate/i.test(errMsg(e))) {
-				log(`  ${h.url}: already has it — an earlier attempt was accepted.`);
-				return { trxId, via: h.url, blockNum: null, duplicate: true };
+				log(
+					`  ${h.url}: already has it — an earlier attempt was accepted. Look ${trxId} up on a block explorer to see its block.`
+				);
+				return { trxId, via: h.url, blockNum: null, duplicate: true, confirmedBy: null };
 			}
 			lastErr = e;
 			log(`  ✗ ${h.url}: ${errMsg(e)}`);
@@ -266,4 +390,40 @@ export async function broadcastCustomJsonOnce(
 		);
 	}
 	return signOnceAndBroadcast([['custom_json', opData]] as never, key, ranked);
+}
+
+/**
+ * Ask for a secret at the terminal without echoing it (the WIF never appears
+ * on screen or in a terminal log). The prompt goes to stderr.
+ */
+export function askHidden(query: string): Promise<string> {
+	process.stderr.write(query);
+	return new Promise((resolve) => {
+		const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+		(rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = () => {};
+		rl.question('', (ans) => {
+			rl.close();
+			process.stderr.write('\n');
+			resolve(ans.trim());
+		});
+	});
+}
+
+/**
+ * Read a posting WIF from a key file for an unattended run. Refuses a file
+ * other users can read or write (the key would be exposed) and anything that
+ * is not a WIF. (A key in an environment variable shows in /proc/<pid>/environ
+ * and `ps e`; a key file does not.)
+ */
+export function readWifFile(path: string): string {
+	const st = statSync(path);
+	if ((st.mode & 0o077) !== 0) {
+		throw new Error(
+			`key file ${path} is readable or writable by other users (mode ${(st.mode & 0o777).toString(8)}); chmod 600 it`
+		);
+	}
+	const wif = readFileSync(path, 'utf8').trim();
+	if (!/^5[1-9A-HJ-NP-Za-km-z]{50}$/.test(wif))
+		throw new Error(`key file ${path} does not hold a Blurt WIF`);
+	return wif;
 }

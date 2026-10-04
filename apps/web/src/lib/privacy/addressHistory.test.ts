@@ -1,19 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+/**
+ * The local address-reuse history keeps WHICH addresses were shared, as
+ * keyed one-way tags — never the address, a date or an order id — and an
+ * older build's plaintext record is converted and deleted.
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-	loadAddressHistory,
-	recordAddressShare,
-	findPriorShare,
+	ADDRESS_HISTORY_KEY,
+	LEGACY_ADDRESS_HISTORY_KEY,
+	addressHistoryCount,
 	clearAddressHistory,
-	type AddressHistoryEntry
+	hasLegacyAddressHistory,
+	migrateLegacyAddressHistory,
+	recordAddressShare,
+	shareAddress,
+	wasSharedBefore
 } from './addressHistory';
+import { ensureSodium } from '$crypto/sodium';
 
-const KEY = 'morphit.address-history.v1';
+const BTC = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+const XMR =
+	'44AFFq5kSiGBoZ4NMDwYtN18obc8AemS33DBLWs3H7otXft3XjrpDtQGv7SqSsaBYBb98uNbr2VBBEt7f2wfn3RVGQBEP3A';
 
-// Map-backed localStorage stub on globalThis. addressHistory.ts uses the
-// bare global `localStorage`, so we provide a minimal Storage shape that
-// works regardless of the test environment (node or jsdom).
+let store: Map<string, string>;
 beforeEach(() => {
-	const store = new Map<string, string>();
+	store = new Map<string, string>();
 	(globalThis as { localStorage?: unknown }).localStorage = {
 		getItem: (k: string) => (store.has(k) ? (store.get(k) as string) : null),
 		setItem: (k: string, v: string) => void store.set(k, v),
@@ -26,59 +36,115 @@ beforeEach(() => {
 	} as Storage;
 });
 
-const entry = (
-	asset: string,
-	address: string,
-	sharedAt = '2026-05-17T20:00:00Z'
-): AddressHistoryEntry => ({ asset, address, sharedAt });
+/** Everything in storage, as one string. */
+const everything = (): string => [...store.entries()].map(([k, v]) => `${k}=${v}`).join('\n');
 
-describe('addressHistory', () => {
-	it('loads an empty list when nothing is stored', () => {
-		expect(loadAddressHistory()).toEqual([]);
+describe('what is stored', () => {
+	it('no address, date or order id, in any part of storage', async () => {
+		await recordAddressShare('BTC', BTC);
+		await recordAddressShare('XMR', XMR);
+		const all = everything();
+		expect(all).not.toBe('');
+		for (const fragment of [BTC, XMR, BTC.slice(0, 12), XMR.slice(-12), '2026-', '@alice']) {
+			expect(all).not.toContain(fragment);
+		}
 	});
 
-	it('records and loads an entry', () => {
-		recordAddressShare(entry('BTC', '1A1z'));
-		const all = loadAddressHistory();
-		expect(all).toHaveLength(1);
-		expect(all[0]).toMatchObject({ asset: 'BTC', address: '1A1z' });
+	it('remembers that an address was shared — and only that one', async () => {
+		await recordAddressShare('BTC', BTC);
+		expect(await wasSharedBefore('BTC', BTC)).toBe(true);
+		expect(await wasSharedBefore('BTC', `${BTC.slice(0, -1)}x`)).toBe(false);
+		expect(await wasSharedBefore('LTC', BTC)).toBe(false);
+		expect(addressHistoryCount()).toBe(1);
 	});
 
-	it('dedupes (asset,address) and keeps the latest timestamp', () => {
-		recordAddressShare(entry('BTC', '1A1z', '2026-05-17T20:00:00Z'));
-		recordAddressShare(entry('BTC', '1A1z', '2026-05-18T20:00:00Z'));
-		const all = loadAddressHistory();
-		expect(all).toHaveLength(1);
-		expect(all[0]?.sharedAt).toBe('2026-05-18T20:00:00Z');
+	it('the same address twice is one entry; the cap is 200', async () => {
+		await recordAddressShare('BTC', BTC);
+		await recordAddressShare('BTC', BTC);
+		expect(addressHistoryCount()).toBe(1);
+		for (let i = 0; i < 205; i++) await recordAddressShare('BTC', `addr-${i}`);
+		expect(addressHistoryCount()).toBe(200);
+		expect(await wasSharedBefore('BTC', 'addr-204')).toBe(true);
+		expect(await wasSharedBefore('BTC', 'addr-0')).toBe(false);
 	});
 
-	it('findPriorShare returns a match or null', () => {
-		recordAddressShare(entry('BTC', '1A1z'));
-		expect(findPriorShare('BTC', '1A1z')).not.toBeNull();
-		expect(findPriorShare('BTC', 'other')).toBeNull();
-		expect(findPriorShare('LTC', '1A1z')).toBeNull();
+	it('two installs tag the same address differently (per-install salt)', async () => {
+		await recordAddressShare('BTC', BTC);
+		const first = JSON.parse(store.get(ADDRESS_HISTORY_KEY)!) as { tags: string[] };
+		store.clear();
+		await recordAddressShare('BTC', BTC);
+		const second = JSON.parse(store.get(ADDRESS_HISTORY_KEY)!) as { tags: string[] };
+		expect(second.tags[0]).not.toBe(first.tags[0]);
+	});
+});
+
+describe("an older build's plaintext history", () => {
+	const legacy = JSON.stringify({
+		v: 1,
+		entries: [
+			{ asset: 'BTC', address: BTC, sharedAt: '2026-05-17T20:00:00Z', orderPermlink: '@alice/abc' },
+			{ asset: 'XMR', address: XMR, sharedAt: '2026-05-18T20:00:00Z' }
+		]
 	});
 
-	// The function the Settings → Privacy "Forget address history"
-	// control is wired to (cp242).
-	it('clearAddressHistory wipes the whole history and is idempotent', () => {
-		recordAddressShare(entry('BTC', '1A1z'));
-		recordAddressShare(entry('LTC', 'Lxyz'));
-		expect(loadAddressHistory()).toHaveLength(2);
+	it('is converted to tags and deleted; reuse is still detected', async () => {
+		store.set(LEGACY_ADDRESS_HISTORY_KEY, legacy);
+		expect(hasLegacyAddressHistory()).toBe(true);
+		await migrateLegacyAddressHistory();
+		expect(store.has(LEGACY_ADDRESS_HISTORY_KEY)).toBe(false);
+		expect(everything()).not.toContain(BTC);
+		expect(everything()).not.toContain('@alice/abc');
+		expect(addressHistoryCount()).toBe(2);
+		expect(await wasSharedBefore('XMR', XMR)).toBe(true);
+	});
 
+	it('a lookup alone converts it', async () => {
+		store.set(LEGACY_ADDRESS_HISTORY_KEY, legacy);
+		expect(await wasSharedBefore('BTC', BTC)).toBe(true);
+		expect(store.has(LEGACY_ADDRESS_HISTORY_KEY)).toBe(false);
+	});
+
+	it('an unreadable one is simply deleted', async () => {
+		store.set(LEGACY_ADDRESS_HISTORY_KEY, 'not json');
+		await migrateLegacyAddressHistory();
+		expect(store.has(LEGACY_ADDRESS_HISTORY_KEY)).toBe(false);
+		expect(addressHistoryCount()).toBe(0);
+	});
+});
+
+describe('forgetting', () => {
+	it('clears the history and any plaintext leftover', async () => {
+		await recordAddressShare('BTC', BTC);
+		store.set(LEGACY_ADDRESS_HISTORY_KEY, '{}');
 		clearAddressHistory();
-		expect(loadAddressHistory()).toEqual([]);
-		expect(localStorage.getItem(KEY)).toBeNull();
-
-		// Clearing an already-empty history is a no-op, not a throw.
+		expect(everything()).toBe('');
+		expect(await wasSharedBefore('BTC', BTC)).toBe(false);
 		expect(() => clearAddressHistory()).not.toThrow();
-		expect(loadAddressHistory()).toEqual([]);
 	});
 
-	it('ignores corrupt or wrong-version stored data (fail-open)', () => {
-		localStorage.setItem(KEY, 'not json');
-		expect(loadAddressHistory()).toEqual([]);
-		localStorage.setItem(KEY, JSON.stringify({ v: 2, entries: [] }));
-		expect(loadAddressHistory()).toEqual([]);
+	it('corrupt stored data reads as an empty history', async () => {
+		store.set(ADDRESS_HISTORY_KEY, 'not json');
+		expect(addressHistoryCount()).toBe(0);
+		expect(await wasSharedBefore('BTC', BTC)).toBe(false);
+	});
+});
+
+describe('sharing an address', () => {
+	it('a share that failed to send is not remembered, so the retry does not warn', async () => {
+		// With sodium loaded, recording is microtask-only (no I/O, no timer), so
+		// one turn of the event loop below lets any stray write land.
+		await ensureSodium();
+		await expect(
+			shareAddress('BTC', BTC, async () => {
+				throw new Error('relay down');
+			})
+		).rejects.toThrow();
+		await new Promise((r) => setTimeout(r, 0));
+		expect(await wasSharedBefore('BTC', BTC)).toBe(false);
+	});
+
+	it('a share that was sent is remembered', async () => {
+		await shareAddress('BTC', BTC, async () => {});
+		await vi.waitFor(async () => expect(await wasSharedBefore('BTC', BTC)).toBe(true));
 	});
 });

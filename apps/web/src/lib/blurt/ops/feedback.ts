@@ -2,8 +2,8 @@
  * Morphit — feedback op broadcaster.
  *
  * Builds a `morphit_feedback_v1` custom_json payload, signs it with
- * the user's posting key (via LiveIdentity), and broadcasts through
- * the endpoint rotator. Parallels profile.ts — same pattern, same
+ * the user's posting key (via LiveIdentity), and broadcasts it
+ * same-origin through this instance's indexer. Parallels profile.ts — same pattern, same
  * key role, same BroadcastError class.
  *
  * Feedback is ADR-ratified on the posting key: no active-key prompt,
@@ -23,7 +23,7 @@
  * op-builder.
  */
 
-// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// Byte budget: broadcastCustomJson is dynamically imported
 // at the call site below so dblurt (a 2 MB chunk) doesn't land in
 // the eager-load graph of routes that pull this ops file for its
 // types/helpers but don't immediately trigger a broadcast.
@@ -31,27 +31,16 @@ import { OP_IDS } from '$net/config';
 import type { LiveIdentity } from '$crypto/keygen';
 import { getUserBlurtAccount, BroadcastError } from './profile';
 import { redactPrivateKeys } from '$lib/security/privateKeyDetector';
+import { MAX_REVIEW_COMMENT_CODEPOINTS, reviewCommentProblem } from '@morphit/asset-registry';
 
 /** Must match the indexer handler's ACCOUNT_NAME_RE. Graphene account
  *  names per Blurt's is_valid_account_name are dot-separated
- *  multi-segment.  Canonicalized to allow dots — see
- *  REVISIT-LIST.md "C-19 follow-on consistency pass" for context. */
+ *  multi-segment, so dots are allowed. */
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 /** Must match the indexer handler's PERMLINK_RE. Lowercase alnum
  *  segments separated by single hyphens. */
 const PERMLINK_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/** Same 256-codepoint budget as the indexer. Emoji count as one
- *  each (code-point count, not UTF-16 units). */
-const MAX_COMMENT_CODEPOINTS = 256;
-
-/** Same injection-resistant character class as the indexer + profile
- *  display-name validation: block C0/C1 controls, bidi overrides,
- *  zero-width joiners/spaces, and BOM. Centralizing would be nicer
- *  but since each handler stands alone we accept the duplication. */
-const FORBIDDEN_COMMENT_CHARS =
-	/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\u200B\uFEFF]/;
 
 export interface FeedbackPayload {
 	/** The Blurt account name being reviewed. Must differ from
@@ -113,14 +102,16 @@ export function validateFeedback(reviewer: string, payload: FeedbackPayload): vo
 		);
 	}
 	if (payload.comment !== undefined && payload.comment !== null) {
-		// Code-point count (not UTF-16 units) to match the indexer.
-		if ([...payload.comment].length > MAX_COMMENT_CODEPOINTS) {
+		// The indexer's own rule (shared package): a comment it would drop is
+		// never broadcast and paid for.
+		const problem = reviewCommentProblem(payload.comment);
+		if (problem === 'too_long') {
 			throw new FeedbackValidationError(
 				'comment_too_long',
-				`Comment must be at most ${MAX_COMMENT_CODEPOINTS} characters.`
+				`Comment must be at most ${MAX_REVIEW_COMMENT_CODEPOINTS} characters.`
 			);
 		}
-		if (FORBIDDEN_COMMENT_CHARS.test(payload.comment)) {
+		if (problem === 'forbidden_chars') {
 			throw new FeedbackValidationError(
 				'comment_forbidden_char',
 				'Comment contains forbidden characters.'

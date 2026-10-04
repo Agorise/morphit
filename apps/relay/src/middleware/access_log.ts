@@ -19,7 +19,7 @@
  *             "503 from kill switch" without reading the body.)
  *
  * What it deliberately does NOT log:
- *   - IP addresses (privacy commitment in PHASE-3a-DESIGN.md)
+ *   - IP addresses (privacy commitment in docs/SECURITY.md)
  *   - request bodies (they contain pubkeys + invite tokens)
  *   - response bodies in full (they may contain trx_id which
  *     pairs with the on-chain account name)

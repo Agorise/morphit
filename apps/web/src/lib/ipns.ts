@@ -9,7 +9,7 @@
  * one instance is alive — and no instance can repoint it. The name is PUBLIC and
  * anchored on-chain every release as `distribution.ipns_name`.
  *
- * TWO download surfaces (v1.9.6, the maintainer):
+ * TWO download surfaces (v1.9.6):
  *   - NATIVE `ipns://<name>/…` — resolves over the PUBLIC DHT with no DNS and no
  *     third party. Needs an IPFS-capable client (Brave, IPFS Companion, a local
  *     Kubo); a plain browser won't act on it. Maximally private + decentralized.
@@ -32,14 +32,6 @@ export function ipnsNativeTarballUrl(): string {
  *  can paste it into their own IPFS node/browser. */
 export function ipnsNativeDirUrl(): string {
 	return `ipns://${MORPHIT_IPNS_NAME}/`;
-}
-
-/** Public gateway to BROWSE a release directory by its immutable CID — the
- *  versioned tarball, `morphit-latest.tar.gz`, `metadata.json`, `RELEASE-NOTES.md`
- *  and the `.sha256` all sit at the root. Raw CIDs resolve on any gateway (unlike
- *  the w3name IPNS name). Empty string when no CID is known yet. */
-export function ipfsCidDirUrl(cid: string | null | undefined): string {
-	return cid ? `https://ipfs.io/ipfs/${cid}` : '';
 }
 
 /** Direct-download URL for a release's tarball, by the directory's immutable CID.

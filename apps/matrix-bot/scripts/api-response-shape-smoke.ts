@@ -5,7 +5,7 @@
  * schema matches the canonical TypeScript interface from
  * @morphit/indexer-client.
  *
- * Pattern parallel to sidecar-envelope-smoke (cp14):
+ * Pattern parallel to sidecar-envelope-smoke:
  *   - sidecar-envelope-smoke validates bash sidecar emit() output
  *     against the LogRecord shape;
  *   - this smoke validates HTTP-API responses against the shapes
@@ -27,7 +27,7 @@
  * behavior is covered by apps/indexer/test/.  The point here is
  * to lock the schema-as-contract.
  *
- * Why this matters: cp9 lessons applied to HTTP API.  If the
+ * Why this matters: lessons applied to HTTP API.  If the
  * indexer's response shape drifts from what the frontend
  * consumes (a renamed field, a removed field, a new required
  * field), this smoke catches it at CI time rather than at
@@ -46,7 +46,7 @@ import type {
 	OrderRecord,
 	FeedbackSummary,
 	ChatAdmissionResponse,
-	// cp16 additions:
+	//
 	OrderViewsResponse,
 	OrderViewIncrementResponse,
 	OrderbookResponse,
@@ -65,7 +65,7 @@ import type {
 	ChatHistoryResponse,
 	ChatMessageRecord,
 	InstanceDirectoryResponse,
-	// cp17 additions (final ~12 lower-traffic):
+	// (final ~12 lower-traffic):
 	ClearingPricePoint,
 	ClearingPriceHistoryResponse,
 	BatchProfilesResponse,
@@ -87,8 +87,9 @@ import type {
 
 const HealthSchema = z.object({
 	status: z.enum(['ok', 'degraded']),
-	version: z.string(),
-	uptime_sec: z.number(),
+	// Operator-only since an earlier release: a public caller gets neither.
+	version: z.string().optional(),
+	uptime_sec: z.number().optional(),
 	chain_head_block: z.number(),
 	indexed_block: z.number(),
 	lag_blocks: z.number(),
@@ -100,7 +101,7 @@ const ListingFeeSchema = z.object({
 	base_fee_blurt: z.number(),
 	feature_fee_blurt_per_hour: z.number(),
 	quote_ttl_seconds: z.number(),
-	// cp128 rename: pre-cp128 these were `base_fee_usd` /
+	// rename: older these were `base_fee_usd` /
 	// `blurt_price_usd` (USD hardcoded).  Now denomination-
 	// agnostic with a companion `denomination_fiat` field
 	// indicating the unit (USD / EUR / XDR / XAU / etc.).
@@ -167,20 +168,20 @@ const SeoSchema = z.object({
 const ChatLinkUrlsSchema = z.object({
 	btc: z.string().nullable(),
 	xmr: z.string().nullable(),
-	// Part 122 cp21 — BCH chat-link URL override.  Optional for
-	// back-compat with pre-cp21 indexer builds.
+	// BCH chat-link URL override.  Optional for
+	// back-compat with older indexer builds.
 	bch: z.string().nullable().optional(),
-	// Part 122 cp24 — LTC chat-link URL override.  Optional for
-	// back-compat with pre-cp24 indexer builds.
+	// LTC chat-link URL override.  Optional for
+	// back-compat with older indexer builds.
 	ltc: z.string().nullable().optional(),
-	// Part 122 cp27 — DASH chat-link URL override.  Optional for
-	// back-compat with pre-cp27 indexer builds.
+	// DASH chat-link URL override.  Optional for
+	// back-compat with older indexer builds.
 	dash: z.string().nullable().optional(),
-	// Part 122 cp33 — DOGE chat-link URL override.  Optional for
-	// back-compat with pre-cp33 indexer builds.
+	// DOGE chat-link URL override.  Optional for
+	// back-compat with older indexer builds.
 	doge: z.string().nullable().optional(),
-	// Part 122 cp39 — ZEC chat-link URL override.  Optional for
-	// back-compat with pre-cp39 indexer builds.
+	// ZEC chat-link URL override.  Optional for
+	// back-compat with older indexer builds.
 	zec: z.string().nullable().optional(),
 	arrr: z.string().nullable().optional(),
 	dcr: z.string().nullable().optional(),
@@ -195,8 +196,8 @@ const ChatLinkUrlsSchema = z.object({
 			bep20: z.string().nullable()
 		})
 		.optional(),
-	// Part 122 cp30 — USDC per-network chat-link URL overrides.
-	// Same back-compat optionality as USDT — pre-cp30 indexer
+	// USDC per-network chat-link URL overrides.
+	// Same back-compat optionality as USDT — older indexer
 	// builds may omit this field entirely.
 	usdc: z
 		.object({
@@ -206,7 +207,7 @@ const ChatLinkUrlsSchema = z.object({
 			polygon: z.string().nullable()
 		})
 		.optional(),
-	// Part 122 cp31 — DAI per-network chat-link URL overrides.
+	// DAI per-network chat-link URL overrides.
 	// 4 EVM networks: ERC-20, Polygon, Base, Arbitrum.  No SPL
 	// per ADR-0029 §1 (no canonical Maker DAI on Solana).
 	// Same back-compat optionality as USDC.
@@ -301,11 +302,10 @@ const ChatAdmissionSchema = z
 	})
 	.passthrough(); // Forward-compat for future fields.
 
-// ─── cp16 schemas (extend coverage to more interfaces) ─────────
+// ─── schemas (extend coverage to more interfaces) ─────────
 
 const OrderViewsResponseSchema = z.object({
-	count: z.number(),
-	updated_at: z.string().nullable()
+	count: z.number()
 });
 
 const OrderViewIncrementResponseSchema = z.object({
@@ -410,7 +410,7 @@ const InstanceDirectoryResponseSchema = z.object({
 	instances: z.array(InstanceDirectoryEntrySchema)
 });
 
-// ─── cp17 schemas (final ~12 lower-traffic types) ──────────────
+// ─── schemas (final ~12 lower-traffic types) ──────────────
 
 const ClearingPricePointSchema = z.object({
 	day: z.string(),
@@ -501,8 +501,8 @@ const StrangerFeeQuoteResponseSchema = z.object({
 // Each literal is `satisfies` the canonical TS interface from
 // @morphit/indexer-client.  Goal: typecheck will fail if:
 //   - a required field is added to the TS interface, OR
-//   - a required field is removed from the TS interface AND I
-//     don't update both the schema and the literal.
+//   - a required field is removed from the TS interface and the schema
+//     and the literal are not both updated.
 //
 // We use `satisfies` (TS 4.9+) instead of `as` to keep the
 // literal narrowly typed AND require structural conformance.
@@ -605,12 +605,12 @@ const sampleFeedbackSummary = {
 	count: 42,
 	weighted_rating: 4.75,
 	by_rating: { '1': 0, '2': 1, '3': 1, '4': 5, '5': 35 },
-	// cp124 H5: by-side breakdown
+	// by-side breakdown
 	by_side: {
 		buy: { count: 25, weighted_rating: 4.92 },
 		sell: { count: 17, weighted_rating: 4.5 }
 	},
-	// cp124 H6: dormancy signal
+	// dormancy signal
 	last_traded_at: '2026-05-15T12:30:00Z'
 } satisfies FeedbackSummary;
 
@@ -621,11 +621,10 @@ const sampleChatAdmission = {
 	reason: 'fee_paid' as const
 } satisfies ChatAdmissionResponse;
 
-// ─── cp16 samples ──────────────────────────────────────────────
+// ─── samples ──────────────────────────────────────────────
 
 const sampleOrderViews = {
-	count: 42,
-	updated_at: '2026-05-15T00:00:00Z'
+	count: 42
 } satisfies OrderViewsResponse;
 
 const sampleOrderViewIncrement = {
@@ -690,7 +689,7 @@ const sampleConversationSummary = {
 	peer: 'bob',
 	last_message_at: '2026-05-15T00:00:00Z',
 	message_count: 5,
-	// cp425 — ConversationSummary now carries the order the conversation is
+	// ConversationSummary now carries the order the conversation is
 	// about (ConversationOrderRef | null). Sample a real ref: bob is asking
 	// alice (the recipient / order owner) about her BTC sell order.
 	order: {
@@ -701,7 +700,7 @@ const sampleConversationSummary = {
 		fiat_currency: 'USD',
 		amount_min: 50,
 		amount_max: 500,
-		// cp446 — the inbox card shows the order's current state beside "RE:".
+		// the inbox card shows the order's current state beside "RE:".
 		status: 'live'
 	}
 } satisfies ConversationSummary;
@@ -744,7 +743,7 @@ const sampleInstanceDirectory = {
 	instances: [sampleInstanceDirEntry]
 } satisfies InstanceDirectoryResponse;
 
-// ─── cp17 samples ──────────────────────────────────────────────
+// ─── samples ──────────────────────────────────────────────
 
 const sampleClearingPricePoint = {
 	day: '2026-05-15',
@@ -847,6 +846,14 @@ const scenarios: Scenario[] = [
 		invalidReason: "status='fubar' (must be 'ok'|'degraded')"
 	},
 	{
+		// What an anonymous caller gets: no version, no uptime.
+		name: 'HealthResponse (public body)',
+		schema: HealthSchema,
+		valid: (({ version: _v, uptime_sec: _u, ...pub }) => pub)(sampleHealth),
+		invalidate: (s) => ({ ...s, indexed_block: 'oops' }),
+		invalidReason: "indexed_block='oops' (must be number)"
+	},
+	{
 		name: 'ListingFeeResponse',
 		schema: ListingFeeSchema,
 		valid: sampleListingFee,
@@ -916,7 +923,7 @@ const scenarios: Scenario[] = [
 		invalidReason: "admitted='maybe' (must be boolean)"
 	},
 
-	// ─── cp16 scenarios — extended REST coverage ──────────────
+	// ─── scenarios — extended REST coverage ──────────────
 	{
 		name: 'OrderViewsResponse',
 		schema: OrderViewsResponseSchema,
@@ -1049,7 +1056,7 @@ const scenarios: Scenario[] = [
 		invalidReason: 'missing required field "instances"'
 	},
 
-	// ─── cp17 scenarios — final lower-traffic types ───────────
+	// ─── scenarios — final lower-traffic types ───────────
 	{
 		name: 'ClearingPricePoint',
 		schema: ClearingPricePointSchema,

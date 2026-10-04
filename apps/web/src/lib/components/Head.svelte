@@ -3,7 +3,13 @@
 	import { page } from '$app/stores';
 	import { building } from '$app/environment';
 	import { currentLocale } from '$i18n';
-	import { canonicalFor, hreflangAlternates, ogLocale, ogLocaleAlternates, CANONICAL_ORIGIN } from '$lib/seo/urls';
+	import {
+		canonicalFor,
+		hreflangAlternates,
+		ogLocale,
+		ogLocaleAlternates,
+		siteOrigin
+	} from '$lib/seo/urls';
 	import { computeOnionLocation } from '$lib/seo/onionLocation';
 	import { instance } from '$stores/instance';
 	import { setBaseTitle } from '$lib/notifications/ambient';
@@ -50,7 +56,7 @@
 		 * advertise the Atom / JSON Feed variants (the type values map
 		 * to exactly what the indexer's RSS handler serves).
 		 *
-		 * **SECURITY CONSTRAINT (cp114):** the `href` field MUST be a
+		 * **SECURITY CONSTRAINT:** the `href` field MUST be a
 		 * SITE-CONTROLLED URL (literal string or relative path), NEVER
 		 * an operator-published or peer-supplied URL.  The href-xss
 		 * smoke allowlists `feed.href` on this exact basis; any new
@@ -80,8 +86,8 @@
 	}: Props = $props();
 
 	const resolvedPath = $derived(path ?? $page.url.pathname ?? '/');
-	const canonical = $derived(canonicalFor(resolvedPath));
-	const alternates = $derived(hreflangAlternates(resolvedPath));
+	const canonical = $derived(canonicalFor(resolvedPath, $page.url.origin));
+	const alternates = $derived(hreflangAlternates(resolvedPath, $page.url.origin));
 
 	const baseTitle = $derived(
 		titleValues
@@ -147,19 +153,19 @@
 		return v && v !== keywordsKey ? v : '';
 	});
 
-	/** OG image (cp112; cp213: PNG-only; cp567: PNG is the source of truth).
+	/** OG image (PNG-only; PNG is the source of truth).
 	 *
 	 *  `og:image` and `twitter:image` are the PNG. It is a hand-authored
 	 *  1200×630 asset committed at `static/og-image.png` (no longer
 	 *  rasterized from an SVG — the SVG source + its build script and
-	 *  freshness smoke were retired in cp567). SVG is deliberately NOT
+	 *  freshness smoke were retired). SVG is deliberately NOT
 	 *  advertised as an og:image: no major link-preview consumer
 	 *  (Facebook, X/Twitter, LinkedIn, Slack, Discord, iMessage,
 	 *  WhatsApp) renders SVG OG images, so a single PNG is the whole story.
 	 *
 	 *  Specs followed: 1200×630 (Twitter `summary_large_image` + Facebook
 	 *  OG recommended size), well under Twitter's 5 MB cap. */
-	const ogImagePng = `${CANONICAL_ORIGIN}/og-image.png`;
+	const ogImagePng = $derived(`${siteOrigin($page.url.origin)}/og-image.png`);
 	const ogImageAlt = $derived($_('seo.og_image_alt'));
 
 	/** Onion-Location meta tag.  When this instance has a Tor
@@ -182,7 +188,7 @@
 	 *  so Tor users land on the page they were viewing.  We
 	 *  preserve `$page.url.pathname` and search/hash.
 	 *
-	 *  Part 121 cp7: `url.search` and `url.hash` are forbidden
+	 *  `url.search` and `url.hash` are forbidden
 	 *  during SvelteKit prerender (they're runtime values not
 	 *  known at build time).  When `building` is true, we pass
 	 *  empty strings — the prerendered HTML carries the
@@ -230,7 +236,7 @@
 		<link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
 	{/each}
 
-	<!-- RSS / Atom / JSON Feed auto-discovery (cp112; 3-format cp229).
+	<!-- RSS / Atom / JSON Feed auto-discovery (3-format).
 	     Feed readers and some SEO crawlers probe the head for
 	     `rel="alternate" type="application/rss+xml"` (and the Atom /
 	     JSON Feed equivalents) tags.  Only emitted on pages that pass
@@ -267,12 +273,12 @@
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta property="og:image:alt" content={ogImageAlt} />
-	<!-- og:locale (cp112 audit A10): emit Facebook-conformant
+	<!-- og:locale (audit A10): emit Facebook-conformant
 	     `language_TERRITORY` form via ogLocale() rather than the bare
 	     hyphenated locale code, which some scrapers fall back to
 	     default-handling for. -->
 	<meta property="og:locale" content={ogLocale($currentLocale)} />
-	<!-- og:locale:alternate (cp112 audit A11): OG analog of hreflang.
+	<!-- og:locale:alternate (audit A11): OG analog of hreflang.
 	     Emits one entry per other locale; helps Facebook/LinkedIn
 	     pick the right preview when a share lands from a non-default
 	     language. -->
@@ -283,7 +289,7 @@
 	<!-- Twitter Card -->
 	<meta name="twitter:card" content="summary_large_image" />
 	{#if $instance.seo?.twitter_site}
-		<!-- cp119-A4: operator-configured X handle ("@morphit").
+		<!-- operator-configured X handle ("@morphit").
 		     Twitter cards still render without this; presence adds
 		     "via @handle" attribution to the card. -->
 		<meta name="twitter:site" content={$instance.seo.twitter_site} />

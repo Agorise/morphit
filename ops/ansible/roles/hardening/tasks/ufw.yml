@@ -28,7 +28,7 @@
 # An IPFS origin host must accept inbound swarm connections on 4001, or public
 # gateways can't dial in to fetch the seeded release and the on-chain CID never
 # resolves. Stock ufw only opens 22/80/443, so a fresh IPFS-hosting install went
-# publicly-silent on IPFS until the operator opened 4001 by hand (the maintainer/morphit.io
+# publicly-silent on IPFS until the operator opened 4001 by hand (morphit.io
 # v1.17.0). Open it automatically — BOTH tcp and udp (Kubo uses QUIC on udp/4001)
 # — whenever this box hosts IPFS.
 - name: Allow the IPFS swarm port (4001 tcp+udp) when this box hosts IPFS
@@ -63,7 +63,7 @@
 # is DROPPED — the public site goes dark while the box looks perfectly healthy to
 # itself (local curl works; the world times out). Docker rebuilds ALL its chains
 # on daemon restart, so restart it AFTER UFW settles whenever Docker is present,
-# then VERIFY the NAT rules actually came back rather than assuming (the maintainer/morphit.io).
+# then VERIFY the NAT rules actually came back rather than assuming (morphit.io).
 - name: Detect whether Docker is managing container firewall rules
   ansible.builtin.command: systemctl is-active docker
   register: morphit_docker_active

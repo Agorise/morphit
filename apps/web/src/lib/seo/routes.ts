@@ -72,7 +72,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	},
 	{ path: '/instances', key: 'instances', indexable: true, priority: 0.5, changefreq: 'weekly' },
 	{ path: '/compare', key: 'compare', indexable: true, priority: 0.5, changefreq: 'weekly' },
-	// /stats — cp406 human-readable companion to the /v1/stats aggregate
+	// /stats — human-readable companion to the /v1/stats aggregate
 	// endpoint (privacy-safe network activity). Daily-changing figures.
 	{ path: '/stats', key: 'stats', indexable: true, priority: 0.4, changefreq: 'daily' },
 	{
@@ -90,14 +90,14 @@ export const ROUTES: readonly RouteDescriptor[] = [
 		changefreq: 'yearly'
 	},
 	{ path: '/plan', key: 'plan', indexable: true, priority: 0.4, changefreq: 'monthly' },
-	// /glossary — added Part 89 (terminology reference page).  Closes
+	// /glossary — added (terminology reference page).  Closes
 	// the seo.glossary in en.json that had no matching ROUTES entry
-	// (Part 101 finding O-15).
+	// (finding O-15).
 	{ path: '/glossary', key: 'glossary', indexable: true, priority: 0.6, changefreq: 'monthly' },
-	// /cheat-sheet — added Part 95 (printable one-page reference).
+	// /cheat-sheet — added (printable one-page reference).
 	// Same Part-101 reverse-drift fix.
 	{ path: '/cheat-sheet', key: 'cheat_sheet', indexable: true, priority: 0.5, changefreq: 'monthly' },
-	// /privacy — added Part 122 cp26 (per-asset privacy guide index).
+	// /privacy — added (per-asset privacy guide index).
 	// The per-asset subpages (/privacy/btc, /privacy/xmr, /privacy/dash,
 	// etc.) are dynamic via [asset] param; not enumerated in the static
 	// sitemap to avoid coupling the SEO route registry to the asset
@@ -224,8 +224,8 @@ export const ROUTES: readonly RouteDescriptor[] = [
 		priority: 0.2,
 		changefreq: 'yearly'
 	},
-	// cp117 A7: per-asset privacy guide page (`/privacy/{ticker}`).
-	// Indexable: true (was: false, cp112).  Flipped at cp117 — these
+	// per-asset privacy guide page (`/privacy/{ticker}`).
+	// Indexable: true (was: false).  Flipped — these
 	// are substantial long-form per-asset privacy explainers that
 	// directly answer high-intent search queries ("is XMR private",
 	// "USDT traceability", etc.).  Keeping them out of the sitemap
@@ -234,7 +234,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
 	//
 	// The build-sitemap script expands the `[asset]` dynamic segment
 	// to one entry per tradable ticker from packages/asset-registry,
-	// and a new privacy-asset-sitemap-parity smoke (cp117) catches
+	// and a new privacy-asset-sitemap-parity smoke catches
 	// drift between the asset registry and the sitemap.  The pages
 	// MUST emit a full <Head /> (canonical, hreflang, OG, BreadcrumbList
 	// JSON-LD) for share previews and per-asset rich-result eligibility.
@@ -247,7 +247,7 @@ export const ROUTES: readonly RouteDescriptor[] = [
 		priority: 0.5,
 		changefreq: 'monthly'
 	},
-	// /dev is the diagnostic-tools landing page (cp136 walkthrough fix
+	// /dev is the diagnostic-tools landing page (walkthrough fix
 	// F-3).  Non-indexable on purpose — search engines have no
 	// business listing a contributor-facing icon catalog + responsive
 	// preview + WebAuthn probe.  Listed here so Head emits the

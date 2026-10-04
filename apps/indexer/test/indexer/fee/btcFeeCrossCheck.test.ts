@@ -45,22 +45,66 @@ describe('BTC fee address cross-check', () => {
 				asked
 			)
 		});
-		expect(r).toEqual({ verdict: 'agree', asked: 2, agreeing: 1 });
+		expect(r).toEqual({ verdict: 'agree', asked: 2, agreeing: 1, disagreeing: 0 });
 		expect(asked[0]).toBe('https://b.example/v1/orders/alice/a1/btc-fee');
 	});
 
-	it('disagrees when any answering peer has another index or address', async () => {
+	const other = { index: 6, address: 'bc1qother', xpub: 'xpubA' };
+	const same = { index: 5, address: 'bc1qlocal', xpub: 'xpubA' };
+
+	it('disagrees when a majority of at least two answering peers has another index or address', async () => {
+		const r = await crossCheckBtcFee({
+			local,
+			account: 'alice',
+			permlink: 'a1',
+			peers: [peer('https://b.example'), peer('https://c.example'), peer('https://d.example')],
+			fetchJson: fetcher({
+				'https://b.example': same,
+				'https://c.example': other,
+				'https://d.example': other
+			})
+		});
+		expect(r).toEqual({ verdict: 'disagree', asked: 3, agreeing: 1, disagreeing: 2 });
+	});
+
+	// one registered peer (registration is free) used to veto every
+	// BTC per-order fee address: any answering dissenter made it 'disagree',
+	// and the pay panel then shows no address.
+	it('a lone dissenting peer cannot veto: the verdict is "unchecked"', async () => {
+		const r = await crossCheckBtcFee({
+			local,
+			account: 'alice',
+			permlink: 'a1',
+			peers: [peer('https://evil.example'), peer('https://c.example'), peer('https://d.example')],
+			fetchJson: fetcher({ 'https://evil.example': other })
+		});
+		expect(r.verdict).toBe('unchecked');
+	});
+
+	it('one dissenter against two agreeing peers is outvoted', async () => {
+		const r = await crossCheckBtcFee({
+			local,
+			account: 'alice',
+			permlink: 'a1',
+			peers: [peer('https://evil.example'), peer('https://b.example'), peer('https://c.example')],
+			fetchJson: fetcher({
+				'https://evil.example': other,
+				'https://b.example': same,
+				'https://c.example': same
+			})
+		});
+		expect(r.verdict).toBe('agree');
+	});
+
+	it('a tie is "unchecked"', async () => {
 		const r = await crossCheckBtcFee({
 			local,
 			account: 'alice',
 			permlink: 'a1',
 			peers: [peer('https://b.example'), peer('https://c.example')],
-			fetchJson: fetcher({
-				'https://b.example': { index: 5, address: 'bc1qlocal', xpub: 'xpubA' },
-				'https://c.example': { index: 6, address: 'bc1qother', xpub: 'xpubA' }
-			})
+			fetchJson: fetcher({ 'https://b.example': same, 'https://c.example': other })
 		});
-		expect(r.verdict).toBe('disagree');
+		expect(r.verdict).toBe('unchecked');
 	});
 
 	it('is "unchecked" (not a disagreement) when no peer can answer', async () => {
@@ -71,7 +115,7 @@ describe('BTC fee address cross-check', () => {
 			peers: [peer('https://b.example')],
 			fetchJson: fetcher({})
 		});
-		expect(r).toEqual({ verdict: 'unchecked', asked: 1, agreeing: 0 });
+		expect(r).toEqual({ verdict: 'unchecked', asked: 1, agreeing: 0, disagreeing: 0 });
 	});
 
 	it('a hidden-only node never dials a clearnet peer', async () => {

@@ -1,5 +1,5 @@
 /**
- * @morphit/rpc-pool smoke — cp165.
+ * @morphit/rpc-pool smoke.
  *
  * Validates the four core behaviours of EndpointPool against a
  * deterministic in-memory upstream (no real network):
@@ -9,8 +9,10 @@
  *      one is the primary.
  *   2. Cooldown ladder — three consecutive transport failures push
  *      an endpoint to 60 s cooldown; success resets the ladder.
- *   3. Application-level errors propagate (no rotation, no
- *      cooldown bumped).
+ *   3. Application-level errors on a broadcast propagate (no
+ *      rotation, no cooldown bumped); endpoint faults (API missing,
+ *      non-JSON-RPC reply) rotate and cool down on every call; a
+ *      `read` fails over past one node's error and parks it.
  *   4. Adaptive hedging — when the primary's EWMA is above the
  *      degradation threshold AND `hedge: true`, the pool fires a
  *      second request to the next-best endpoint after the stagger
@@ -103,7 +105,7 @@ function sleep(ms: number): Promise<void> {
 	}
 }
 
-/* ---------------- cp474: per-endpoint RPS pacing ---------------- */
+/* ---------------- per-endpoint RPS pacing ---------------- */
 {
 	// The operator's FIRST ask: "lower the RPS or introduce a delay between
 	// requests". Steady-state Morphit is <1 req/s, but the poller's catch-up
@@ -214,7 +216,7 @@ function sleep(ms: number): Promise<void> {
 	}
 }
 
-/* ---------------- cp474: cooldown jitter (thundering-herd defence) ---------------- */
+/* ---------------- cooldown jitter (thundering-herd defence) ---------------- */
 {
 	// The rpc.blurt.blog operator asked for four things: lower RPS, batching,
 	// exponential backoff, and JITTER. Backoff already existed (the two ladders
@@ -873,7 +875,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 		'HTTP 504: Gateway Timeout',
 		'HTTP 500: Internal Server Error',
 		'HTTP 408: Request Timeout',
-		// cp328: the 520-527 family — non-standard 5xx that an upstream
+		// the 520-527 family — non-standard 5xx that an upstream
 		// edge/proxy in front of a Blurt RPC node returns when that
 		// node's origin is unreachable (521 "origin down", etc.). They
 		// mean the upstream endpoint is unreachable → transport failure
@@ -909,7 +911,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 }
 
 /* ---------------- scenario 18b: a 521 (upstream origin down) endpoint rotates ---------------- */
-// cp328: the exact relay ACT-auto-mint symptom — one upstream Blurt RPC
+// the exact relay ACT-auto-mint symptom — one upstream Blurt RPC
 // node returns `HTTP 521: <none>` (its origin is unreachable); the pool
 // must hop to a healthy endpoint instead of dead-ending the call (which
 // minted 0 ACTs).
@@ -1068,7 +1070,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 }
 
-/* ---------------- cp664: startOffset spreads concurrent callers across nodes ---------------- */
+/* ---------------- startOffset spreads concurrent callers across nodes ---------------- */
 {
 	// The indexer's concurrent backfill fires N windows at once, each with a
 	// different startOffset, so they START on different endpoints instead of all
@@ -1112,7 +1114,7 @@ if (DEFAULT_HEDGE_THRESHOLD_MS === 500) {
 	}
 }
 
-/* ---------------- cp664: a rotated call still falls back + records health ---------------- */
+/* ---------------- a rotated call still falls back + records health ---------------- */
 {
 	const pool = new EndpointPool({
 		endpoints: ['a', 'b', 'c'],
@@ -1238,7 +1240,7 @@ let failed = 0;
 	}
 }
 
-// ─── A brand-new endpoint is still bootstrapped first (cp165) ─────────
+// ─── A brand-new endpoint is still bootstrapped first ─────────
 {
 	const pool = new EndpointPool({ endpoints: ['a', 'b'], maxRequestsPerSecond: 1000 });
 	const tried: string[] = [];
@@ -1361,7 +1363,7 @@ let failed = 0;
 		);
 }
 
-/* ---------------- v1.18.0 deep-deep (rv2-2, rv2-9): quorum per OPERATOR ---------------- */
+/* ---------------- quorum per OPERATOR ---------------- */
 // One operator reached at two addresses (.onion + .b32.i2p, as every hidden
 // Blurt node is listed) answers a forged value instantly on both. Two honest
 // operators answer the truth more slowly. Counted per URL, the forger met the
@@ -1512,7 +1514,7 @@ let failed = 0;
 	else fail('quorumCall proven-first order', `asked=${asked.join(',')}`);
 }
 
-// ── v1.20.0 fix wave (D7): a BACKGROUND call's abort timer on a hidden endpoint
+// ── (D7): a BACKGROUND call's abort timer on a hidden endpoint
 // is the 60 s background floor, not the 25 s user-facing one. The pool's primary
 // pass used to hard-code userFacing=true, so every poller / backfill / one-shot
 // call to a .onion was cut at 25 s and MORPHIT_HIDDEN_RPC_TIMEOUT_MS could not
@@ -1541,7 +1543,7 @@ let failed = 0;
 	else fail('call() hidden timeout floor by call type', `background=${bg.join(',')} userFacing=${uf.join(',')}`);
 }
 
-// ── v1.20.0 fix wave (D9): the LOSER of a hedge race was aborted BY US, which
+// ── (D9): the LOSER of a hedge race was aborted BY US, which
 // says nothing about its health. It used to be recorded as a transport failure
 // (cooldown + EWMA wiped), pushing a healthy-but-slower node out of rotation, and
 // the hedge endpoint was then tried a second time on the primary pass.
@@ -1592,6 +1594,141 @@ let failed = 0;
 	if (asked.filter((u) => u === B).length === 1)
 		pass('hedge: the hedge endpoint is not asked a second time on the primary pass');
 	else fail('hedge endpoint re-tried', `asked=${asked.join(',')}`);
+}
+
+/* ---------------- endpoint faults: one node must never pin the pool ---------------- */
+// A node without the API (or a hostile one saying so) answers every call with a
+// JSON-RPC error. That error is about the NODE, not the request: the pool must
+// move on to a node that can answer and park the faulty one. Before this, the
+// error was passed to the caller with no rotation and no cooldown, so the
+// indexer stayed at block 0 and relay signups failed for as long as that node
+// sorted first.
+{
+	const pool = new EndpointPool({ endpoints: ['bad', 'good'], maxRequestsPerSecond: 0 });
+	const hits = { bad: 0, good: 0 };
+	const got: string[] = [];
+	for (let i = 0; i < 5; i++) {
+		try {
+			got.push(
+				await pool.call(async (u) => {
+					hits[u as 'bad' | 'good']++;
+					if (u === 'bad') throw new Error('Assert Exception: Could not find API condenser_api');
+					return 'block';
+				})
+			);
+		} catch (err) {
+			got.push(`threw: ${(err as Error).message}`);
+		}
+	}
+	const bad = pool.snapshot().find((e) => e.url === 'bad')!;
+	if (got.every((g) => g === 'block') && hits.bad === 1 && bad.consecutiveFailures === 1 && bad.cooldownUntil > Date.now())
+		pass('endpoint fault: a node without the API is rotated off and parked; every call is answered');
+	else fail('endpoint fault rotation', `got=${got.join('|')} hits=${JSON.stringify(hits)} bad=${JSON.stringify(bad)}`);
+}
+{
+	// A reply that is not JSON at all (an HTML error page with HTTP 200).
+	const pool = new EndpointPool({ endpoints: ['html', 'good'], maxRequestsPerSecond: 0 });
+	let out: string;
+	try {
+		out = await pool.call(async (u) => {
+			if (u === 'html') throw new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+			return 'ok';
+		});
+	} catch (err) {
+		out = `threw: ${(err as Error).message}`;
+	}
+	const html = pool.snapshot().find((e) => e.url === 'html')!;
+	if (out === 'ok' && html.consecutiveFailures === 1) pass('endpoint fault: a non-JSON-RPC reply is rotated off');
+	else fail('non-JSON reply rotation', `out=${out} html=${JSON.stringify(html)}`);
+}
+{
+	// A node that faulted and never answered is asked LAST once its cooldown is
+	// over, not first as a "never measured" bootstrap candidate.
+	const pool = new EndpointPool({
+		endpoints: ['bad', 'good'],
+		maxRequestsPerSecond: 0,
+		cooldownLadderMs: [20],
+		cooldownJitterFraction: 0
+	});
+	const fn = async (u: string): Promise<string> => {
+		if (u === 'bad') throw new Error('Could not find method get_block');
+		return u;
+	};
+	await pool.call(fn).catch(() => {});
+	await sleep(40);
+	const order: string[] = [];
+	await pool
+		.call(async (u) => {
+			order.push(u);
+			return fn(u);
+		})
+		.catch(() => {});
+	if (order[0] === 'good') pass('endpoint fault: a faulted, never-measured node ranks last after its cooldown');
+	else fail('faulted node ranking', `order=${order.join(',')}`);
+}
+{
+	// read: a plausible-looking application error from ONE node is that node's
+	// problem once another node answers the same read.
+	const pool = new EndpointPool({ endpoints: ['liar', 'good'], maxRequestsPerSecond: 0 });
+	let out: string;
+	try {
+		out = await pool.call(
+			async (u) => {
+				if (u === 'liar') throw new Error('Assert Exception: itr != idx.end(): unknown key');
+				return 'value';
+			},
+			{ read: true }
+		);
+	} catch (err) {
+		out = `threw: ${(err as Error).message}`;
+	}
+	const liar = pool.snapshot().find((e) => e.url === 'liar')!;
+	if (out === 'value' && liar.consecutiveFailures === 1 && liar.cooldownUntil > Date.now())
+		pass('read: an application error one node alone gives is failed over and that node is parked');
+	else fail('read app-error failover', `out=${out} liar=${JSON.stringify(liar)}`);
+}
+{
+	// read: the SAME error from three operators is the request's own fault
+	// (an unknown transaction id, say). It is returned, nobody is parked, and
+	// the rest of the pool is not walked.
+	const pool = new EndpointPool({ endpoints: ['a', 'b', 'c', 'd', 'e'], maxRequestsPerSecond: 0 });
+	const asked: string[] = [];
+	let msg = '';
+	try {
+		await pool.call(
+			async (u) => {
+				asked.push(u);
+				throw new Error('Assert Exception: unknown transaction');
+			},
+			{ read: true }
+		);
+	} catch (err) {
+		msg = (err as Error).message;
+	}
+	const parked = pool.snapshot().filter((e) => e.consecutiveFailures > 0).length;
+	if (msg.includes('unknown transaction') && asked.length === 3 && parked === 0)
+		pass('read: an error three operators agree on is returned without parking anyone');
+	else fail('read app-error agreement', `msg=${msg} asked=${asked.join(',')} parked=${parked}`);
+}
+{
+	// A broadcast (no `read`) keeps its semantics: the chain's rejection is the
+	// answer, the same signed bytes are not offered to every node, nothing is
+	// parked.
+	const pool = new EndpointPool({ endpoints: ['n1', 'n2'], maxRequestsPerSecond: 0 });
+	const asked: string[] = [];
+	let msg = '';
+	try {
+		await pool.call(async (u) => {
+			asked.push(u);
+			throw new Error('missing required active authority');
+		});
+	} catch (err) {
+		msg = (err as Error).message;
+	}
+	const parked = pool.snapshot().filter((e) => e.consecutiveFailures > 0).length;
+	if (msg.includes('missing required active authority') && asked.length === 1 && parked === 0)
+		pass('write: a chain rejection propagates from the first node, no rotation, no cooldown');
+	else fail('write app-error semantics', `msg=${msg} asked=${asked.join(',')} parked=${parked}`);
 }
 
 for (const r of results) {

@@ -29,7 +29,7 @@ import { Point, CURVE } from '@noble/secp256k1';
 import { sha256, sha512 } from '@noble/hashes/sha2';
 import { hmac } from '@noble/hashes/hmac';
 import { ripemd160 } from '@noble/hashes/legacy';
-import { createBase58check, bech32 } from '@scure/base';
+import { createBase58check, bech32, bech32m } from '@scure/base';
 
 const b58c = createBase58check(sha256);
 
@@ -267,4 +267,41 @@ export function deriveBtcFeeAddress(xpub: string | AccountXpub, index: number): 
 	}
 	const leaf = ckdPub(chain.publicKey, chain.chainCode, index);
 	return p2wpkhAddress(leaf.publicKey);
+}
+
+/**
+ * Is `input` a valid MAINNET Bitcoin address, checksum included? P2PKH
+ * (`1…`) and P2SH (`3…`) as base58check with their version byte; segwit
+ * (`bc1…`) as bech32 for witness v0 (20- or 32-byte program) and bech32m for
+ * v1+ (BIP173 / BIP350). An all-uppercase bech32 string is accepted as BIP173
+ * allows; mixed case is not. A shape regex alone accepted a typo — and a
+ * pinned treasury address with a typo burns every fee paid to it.
+ */
+export function isBtcMainnetAddress(input: unknown): boolean {
+	if (typeof input !== 'string' || input.length < 14 || input.length > 90) return false;
+	const s = input === input.toUpperCase() ? input.toLowerCase() : input;
+	if (s.startsWith('bc1')) {
+		for (const codec of [bech32, bech32m] as const) {
+			try {
+				const { prefix, words } = codec.decode(s as `${string}1${string}`);
+				if (prefix !== 'bc' || words.length === 0) continue;
+				const version = words[0]!;
+				if (version > 16) continue;
+				if ((version === 0) !== (codec === bech32)) continue;
+				const program = codec.fromWords(words.slice(1));
+				if (program.length < 2 || program.length > 40) continue;
+				if (version === 0 && program.length !== 20 && program.length !== 32) continue;
+				return true;
+			} catch {
+				/* try the other codec */
+			}
+		}
+		return false;
+	}
+	try {
+		const raw = b58c.decode(input);
+		return raw.length === 21 && (raw[0] === 0x00 || raw[0] === 0x05);
+	} catch {
+		return false;
+	}
 }

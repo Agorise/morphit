@@ -8,8 +8,8 @@
  * the runner extracts nothing and counts the smoke as a FAILED runner, even
  * though it exited 0.
  *
- * That exact bug has shipped repeatedly (cp235 J-1/J-2, cp249
- * identicon-data-uri, cp252 rss-dynamic-title / payment-filter-shows-all-methods
+ * That exact bug has shipped repeatedly
+ * (identicon-data-uri, rss-dynamic-title / payment-filter-shows-all-methods
  * / faq-scroll-block-start) because the author ran the smoke directly, saw a
  * "✓ all …" line, and never ran it through the runner's tally.
  *

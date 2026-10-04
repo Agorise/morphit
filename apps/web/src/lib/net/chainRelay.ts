@@ -1,5 +1,5 @@
 /**
- * Morphit frontend — chain-read relay (cp410).
+ * Morphit frontend — chain-read relay.
  *
  * The single path by which the browser reads the Blurt chain. Every read —
  * account lookups, account history, the chain head, block/tx fetches for chat
@@ -11,7 +11,7 @@
  * IP and exactly what they're reading to third-party node operators Morphit
  * doesn't control. Routed through the indexer, third parties only ever see the
  * indexer's request; the browser opens NO cross-origin RPC connection. This is
- * the read companion of the cp344 broadcast proxy. The browser no longer talks
+ * the read companion of the broadcast proxy. The browser no longer talks
  * to a Blurt node for anything.
  *
  * TRUST NOTE. Collapsing the browser's old multi-node quorum reads onto the

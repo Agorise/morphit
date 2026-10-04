@@ -1,8 +1,11 @@
 /**
  * clearnet-legs-source-guard-smoke (v1.16.x delta audit — v16-1 + H-1)
  *
- * The `clearnet_eliminated` legs `upgradeHidden` and `priceFederated` are
- * "true by construction" — correct only because code ELSEWHERE fail-closes.
+ * The `clearnet_eliminated` leg `upgradeHidden` is "true by construction" —
+ * correct only because code ELSEWHERE fail-closes. `priceFederated` needs the
+ * factory's hidden-only branch below to drop every clearnet upstream, and is
+ * further gated at runtime on a live federated median (clearnetGate.ts; held
+ * behaviourally by test/integration/price-receipt-federation.test.ts).
  * And the transport legs must validate the operator's advertised hidden address
  * (audit finding v16-1), not merely check that a string is non-empty. None of
  * those guarantees is expressible in the pure combiner test (clearnet-gate-smoke),

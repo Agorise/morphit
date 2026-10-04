@@ -92,8 +92,8 @@ Rationale:
   symptom was a display name falling back to `@account` and an avatar
   falling back to the identicon, with refreshing changing nothing.
   Positive results are still cached for the full 90s; only negatives
-  are excluded. Mirrors the client's soft-null policy (cp428) and the
-  dynamic-data service-worker exclusion (cp324).
+  are excluded. Mirrors the client's soft-null policy and the
+  dynamic-data service-worker exclusion.
 - 90 seconds = 90 blocks on Blurt (3s block time). A user who
   updates their avatar waits ~90 seconds for it to propagate via
   the cache to other visitors' orderbook views. That's acceptable

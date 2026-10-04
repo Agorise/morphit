@@ -1,24 +1,24 @@
 #!/usr/bin/env tsx
 /**
- * per-asset-mandatory-family-i18n-parity smoke — Part 122 cp75 (LL #75 / O-24).
+ * per-asset-mandatory-family-i18n-parity smoke.
  *
- * Generalises cp51-O5 (faq-per-tradable-asset-parity) from one
+ * Generalises (faq-per-tradable-asset-parity) from one
  * family (`faq.entries.what_is_<asset>`) to the full set of
  * MANDATORY-when-asset-is-tradable i18n key families.
  *
- * cp51-O5 caught the cp21/cp24/cp27 drift class — new ticker added
+ * A later change caught the drift class — new ticker added
  * to the registry but the FAQ family forgotten in some locales.
  * Since then we've added 12 more assets, AND we've added several
  * NEW per-asset families (privacy guides, cheat sheet, asset
- * explainer).  cp55-O9 polices the EN-vs-native-byte-identical
- * floor for several of these families.  cp74-O22 polices route
+ * explainer).  A later change polices the EN-vs-native-byte-identical
+ * floor for several of these families.  A later change polices route
  * SEO presence across all locales.  This smoke fills the remaining
  * gap: structural presence of MANDATORY per-asset families across
  * all 10 locales, driven by the asset registry.
  *
  * Failure mode caught:
  *   - cp NN adds ticker FOO to packages/asset-registry.
- *   - Developer adds `faq.entries.what_is_foo` (cp51-O5 happy),
+ *   - Developer adds `faq.entries.what_is_foo` (happy),
  *     and adds `privacy.guides.foo.intro` to en.json,
  *     but FORGETS the other 9 locales for some family.
  *   - i18n-locale-parity-smoke catches "key in en but not in fr",
@@ -51,7 +51,7 @@
  *      Renderer at apps/web/src/routes/[lang]/privacy/[asset]/+page.svelte:167
  *      checks `$_(key) !== key` and skips the section if the key
  *      is absent.  Chains with nothing privacy-critical to caveat
- *      (XMR, BTC, DAI, BCH, LTC at cp75) deliberately have no
+ *      (XMR, BTC, DAI, BCH, LTC) deliberately have no
  *      caveats entry.  Adding them here would force-create no-op
  *      caveats; that defeats the design.
  *
@@ -59,15 +59,15 @@
  * Adding a new optional family: document it in this header so
  * future maintainers know the family was considered.
  *
- * Mutation test M-147:
+ * Mutation test:
  *   - Delete `post_order.form.asset_explainer.xrp` from en.json
  *     → smoke fires naming the family + ticker + locale.
  *   - Restore → smoke passes.
  *
  * Recurring class scope progression (registry-driven i18n parity):
- *   cp51-O5:  faq.entries.what_is_<asset>           (1 family × all tickers × all locales)
- *   cp74-O22: seo.<route>.{title,description}       (1 registry × all routes × all locales)
- *   cp75-O24: 5 per-asset mandatory families        (5 families × all tickers × all locales)
+ *   faq.entries.what_is_<asset>           (1 family × all tickers × all locales)
+ *   seo.<route>.{title,description}       (1 registry × all routes × all locales)
+ *   5 per-asset mandatory families        (5 families × all tickers × all locales)
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -98,7 +98,7 @@ interface Family {
 	readonly id: string;
 	readonly pathTemplate: string;
 	readonly renderSite: string;
-	/** cp425 — true for families that only make sense for a crypto asset
+	/** true for families that only make sense for a crypto asset
 	 *  (e.g. the per-asset PRIVACY GUIDE). Goods assets (BARTER) have no
 	 *  on-chain privacy guide, so these are skipped for them via isGoodsAsset.
 	 *  Non-crypto-specific families (asset_explainer, cheat sheet) apply to
@@ -179,7 +179,7 @@ for (const loc of localeFiles) {
 
 for (const family of MANDATORY_FAMILIES) {
 	for (const tickerUpper of ASSET_TICKERS) {
-		// cp425 — skip crypto-only families (privacy guides) for goods
+		// skip crypto-only families (privacy guides) for goods
 		// assets (BARTER): a barter listing has no on-chain privacy guide.
 		if (family.cryptoOnly && isGoodsAsset(tickerUpper as AssetTicker)) continue;
 		const ticker = tickerUpper.toLowerCase();
@@ -242,7 +242,7 @@ const total = passed + failed;
 console.log(`\n${passed} passed, ${failed} failed (${total} total)`);
 if (failed > 0) {
 	console.error('\nper-asset-mandatory-family-i18n-parity smoke FAILED');
-	console.error('Memory rule: locale parity — every user-facing string change must be translated into all 10 locales in the same turn.');
+	console.error('Rule: locale parity — every user-facing string change must be translated into all 10 locales in the same change.');
 	console.error('When adding a new ticker to packages/asset-registry, every mandatory family must ship its keys in every locale.');
 	process.exit(1);
 }

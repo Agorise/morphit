@@ -1,5 +1,5 @@
 /**
- * Morphit frontend — account-history fetcher (cp296).
+ * Morphit frontend — account-history fetcher.
  *
  * Fetches ONE page of an account's chain history FROM THE INDEXER,
  * same-origin, instead of paging Blurt `get_account_history` straight

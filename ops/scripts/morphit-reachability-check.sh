@@ -4,7 +4,8 @@
 # won't loop an inside request back to its own public IP (NAT hairpin).  So we
 # probe from an EXTERNAL vantage point using the Tor daemon this node already
 # runs for its .onion: a Tor exit connects back to the clearnet domain, exactly
-# like an outside visitor.  No third-party services, read-only, changes nothing.
+# like an outside visitor.  Every request goes through Tor — nothing is fetched
+# from this box's own address.  Read-only, changes nothing.
 #
 # Exit status is always 0 (informational).  Usage:
 #   morphit-reachability-check.sh [domain] [onion]
@@ -45,14 +46,31 @@ if ! ss -tlnH 2>/dev/null | grep -qE ':443\b'; then
 fi
 say "  ✓ This box is listening on 80/443."
 
-# 2. is this box even online? A home box installed air-gapped (cable unplugged)
-# has no network, so probing reachability is meaningless — and must NEVER report
-# "reachable". Check connectivity against Morphit's own federation hub first.
-if ! timeout 8 curl -fsS -o /dev/null https://morphit.io/verify.json 2>/dev/null; then
+# Capture an HTTP status WITHOUT the classic `|| echo 000` double-append bug:
+# curl's -w already prints 000 on a failed connection, so appending another 000
+# yields "000000", which is != "000" and then falsely reads as a success.
+probe() { # $1 = url — always through Tor, never from this box's own address
+	local c
+	c="$(curl --socks5-hostname "$SOCKS" -sk --max-time 30 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)"
+	case "$c" in ''|000) printf '000' ;; *) printf '%s' "$c" ;; esac
+}
+
+# 2. can we probe from OUTSIDE via Tor?
+tor_ok=no
+if systemctl is-active --quiet tor 2>/dev/null && ss -tlnH 2>/dev/null | grep -qE '127\.0\.0\.1:9050\b'; then
+	tor_ok=yes
+fi
+
+# 3. is this box online at all? Asked THROUGH Tor (the same path as the probe
+# below) — never by fetching a clearnet page from this box's own address, which
+# would tell that site this home IP runs a node. An install made offline has
+# no network yet, and must never be reported "reachable".
+if [ "$tor_ok" = yes ] && [ "$(probe https://morphit.io/verify.json)" = 000 ]; then
 	say ""
-	say "  This box has no internet connection right now (an offline / air-gapped"
-	say "  install won't have one yet). Reachability can't be checked without a"
-	say "  network — re-run this once you're online:"
+	say "  Couldn't reach morphit.io through Tor just now (Tor may still be"
+	say "  connecting, or this box is offline — an offline install won't be"
+	say "  online yet). Reachability can't be checked without that — re-run"
+	say "  this in a few minutes:"
 	say "      bash ops/scripts/morphit-reachability-check.sh"
 	if [ -n "$ONION" ]; then
 		say ""
@@ -61,21 +79,6 @@ if ! timeout 8 curl -fsS -o /dev/null https://morphit.io/verify.json 2>/dev/null
 	fi
 	say "────────────────────────────────────────────────────────"
 	exit 0
-fi
-
-# Capture an HTTP status WITHOUT the classic `|| echo 000` double-append bug:
-# curl's -w already prints 000 on a failed connection, so appending another 000
-# yields "000000", which is != "000" and then falsely reads as a success.
-probe() { # $1 = url
-	local c
-	c="$(curl --socks5-hostname "$SOCKS" -sk --max-time 30 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null)"
-	case "$c" in ''|000) printf '000' ;; *) printf '%s' "$c" ;; esac
-}
-
-# 3. can we probe from OUTSIDE via Tor?
-tor_ok=no
-if systemctl is-active --quiet tor 2>/dev/null && ss -tlnH 2>/dev/null | grep -qE '127\.0\.0\.1:9050\b'; then
-	tor_ok=yes
 fi
 
 if [ "$tor_ok" = yes ]; then
@@ -95,10 +98,10 @@ if [ "$tor_ok" = yes ]; then
 	fi
 
 	say ""
-	say "  ✗ NOT REACHABLE from the public internet."
-	say "    Your box IS listening, but an outside connection to 80/443 never"
-	say "    arrived — the traffic is dropped BEFORE it reaches you. This is a"
-	say "    ROUTER/ISP issue, not a Morphit one:"
+	say "  Couldn't reach https://$DOMAIN from outside (asked through a Tor exit,"
+	say "    the way a visitor would). Your box IS listening, so if this keeps"
+	say "    happening the traffic is stopped before it reaches you — usually"
+	say "    the router or the ISP, not Morphit:"
 	say "      • Many home ISPs block inbound 80/443 on residential plans"
 	say "        (very common — ask your ISP to open them, or get a business/"
 	say "        static-IP plan)."

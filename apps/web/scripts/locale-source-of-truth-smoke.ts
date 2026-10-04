@@ -6,14 +6,14 @@
  * `apps/web/src/lib/i18n/locales.ts` is the single source of truth
  * for "which locales does Morphit ship."
  *
- * BACKGROUND.  As of cp141, every smoke and script that needs the
+ * BACKGROUND.  Every smoke and script that needs the
  * supported-locale set either:
  *   (a) imports SUPPORTED_LOCALES from $lib/i18n/locales, or
  *   (b) reads the on-disk JSON files in apps/web/src/lib/i18n/locales/
  *       (the i18n-locale-registry-smoke enforces 1:1 correspondence
  *       between the TS array and the JSON files).
  *
- * Before cp141 there were ~12 files with inline locale arrays like:
+ * Previously there were ~12 files with inline locale arrays like:
  *     const LOCALES = ['en', 'es', 'de', 'pl', 'fr', 'it', 'ru',
  *                      'fa', 'zh-CN', 'zh-HK'];
  * which would silently under-cover any newly-graduated 11th locale.
@@ -46,9 +46,7 @@ const SUPPORTED_SORTED = SUPPORTED_LOCALES.map((l) => l.code).sort();
 
 // Files whose locale array is THE source of truth itself — these
 // must NOT be flagged.
-const SOURCE_OF_TRUTH_FILES = new Set([
-	'apps/web/src/lib/i18n/locales.ts'
-]);
+const SOURCE_OF_TRUTH_FILES = new Set(['apps/web/src/lib/i18n/locales.ts']);
 
 // Files that intentionally hard-code a SUBSET (not the full set).
 // These are allowed because they track specific backlog or native-
@@ -67,10 +65,10 @@ const ALLOWED_SUBSET_FILES = new Set([
 // rationale; the smoke verifies the inline list MATCHES the canonical
 // set so drift becomes a CI failure rather than a silent miss.
 const PAIRED_UPDATE_FILES: Record<string, string> = {
-	// app.html runs in the document <head> before the JS bundle loads,
-	// so it can't `import` SUPPORTED_LOCALES.  Drift is prevented by
+	// The ?lang= hint (loaded by app.html in the document <head>, before the
+	// JS bundle) can't `import` SUPPORTED_LOCALES.  Drift is prevented by
 	// this smoke checking the inlined array equals the canonical set.
-	'apps/web/src/app.html':
+	'apps/web/static/lang-hint.js':
 		'Runs in the document <head> before the JS bundle; cannot import.',
 	// pushLocalize lives in the indexer workspace which doesn't import
 	// from apps/web/.  The KNOWN_LOCALES array AND the IndexerPushLocale
@@ -165,9 +163,12 @@ function findFullSetArrays(src: string): Array<{ snippet: string; codes: string[
 const violations: Array<{ file: string; line: number; snippet: string }> = [];
 const pairedSeen = new Set<string>();
 
-for (const root of SCAN_ROOTS) {
+// Single files outside the scanned roots that still must be checked.
+const SCAN_FILES = ['apps/web/static/lang-hint.js'];
+
+for (const root of [...SCAN_ROOTS, ...SCAN_FILES]) {
 	const abs = join(REPO_ROOT, root);
-	for (const file of walk(abs)) {
+	for (const file of SCAN_FILES.includes(root) ? [abs] : walk(abs)) {
 		const rel = relative(REPO_ROOT, file).replace(/\\/g, '/');
 		if (SOURCE_OF_TRUTH_FILES.has(rel)) continue;
 		if (ALLOWED_SUBSET_FILES.has(rel)) continue;
@@ -239,21 +240,13 @@ if (violations.length > 0) {
 		console.log(`        ${v.snippet}…`);
 	}
 	console.log('');
-	console.log(
-		'Fix: import SUPPORTED_LOCALES from $lib/i18n/locales (or relative path)'
-	);
+	console.log('Fix: import SUPPORTED_LOCALES from $lib/i18n/locales (or relative path)');
 	console.log('     and derive your local LOCALES array from it, e.g.:');
 	console.log('       const LOCALES = SUPPORTED_LOCALES.map((l) => l.code);');
 	console.log('');
-	console.log(
-		'If this is an INTENTIONAL subset, add the file path to ALLOWED_SUBSET_FILES'
-	);
-	console.log(
-		'in apps/web/scripts/locale-source-of-truth-smoke.ts.'
-	);
-	console.log(
-		'If this file cannot import (runtime constraint), add it to PAIRED_UPDATE_FILES'
-	);
+	console.log('If this is an INTENTIONAL subset, add the file path to ALLOWED_SUBSET_FILES');
+	console.log('in apps/web/scripts/locale-source-of-truth-smoke.ts.');
+	console.log('If this file cannot import (runtime constraint), add it to PAIRED_UPDATE_FILES');
 	console.log('with a rationale comment.');
 }
 
@@ -268,9 +261,7 @@ if (pairedMissing.length > 0) {
 		console.log(`        Rationale: ${PAIRED_UPDATE_FILES[pm]}`);
 	}
 	console.log('');
-	console.log(
-		'These files inline the canonical locale set because they cannot import it.'
-	);
+	console.log('These files inline the canonical locale set because they cannot import it.');
 	console.log(
 		'When SUPPORTED_LOCALES changes, the inline array in each of these files MUST be updated'
 	);

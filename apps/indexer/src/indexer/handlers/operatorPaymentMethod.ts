@@ -73,7 +73,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'barter_goods',
 	'cash_in_person',
 	'precious_metals',
-	// By Mail (cp120)
+	// By Mail
 	'cash_by_mail',
 	// Online
 	'airwallex',
@@ -84,7 +84,7 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 	'bitso',
 	'bizum',
 	'blik',
-	// cp128 — BRICS Pay (cross-border payment rail, BRICS+ bloc)
+	// BRICS Pay (cross-border payment rail, BRICS+ bloc)
 	'brics_pay',
 	'cash_app',
 	'cash_machine_code',
@@ -118,10 +118,10 @@ const RESERVED_CANONICAL_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /** Codepoints stripped from operator-supplied name + description.
- *  cp138 A-4: aligned with order/feedback/profile handlers — block
+ *  aligned with order/feedback/profile handlers — block
  *  C0/C1 control chars + DEL (U+007F) + Latin-1 supplement controls
  *  (U+0080–U+009F) in addition to the bidi-override and zero-width
- *  characters that were already covered.  Pre-cp138 the set was
+ *  characters that were already covered.  Previously, the set was
  *  narrower than the user-facing handlers'.  Risk surface here is
  *  small (operator-only signer = single trusted account, who can't
  *  really attack themselves) but the defense-in-depth pattern
@@ -130,7 +130,7 @@ const STRIP_CODEPOINTS_RE =
 	/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
 function sanitize(s: string): string {
-	// cp138 A-4: NFC-normalize first so the codepoint-strip + trim
+	// NFC-normalize first so the codepoint-strip + trim
 	// operate on the canonical form.  Matches the order/feedback/
 	// profile pattern (NFC → strip/reject → length-check).
 	return s.normalize('NFC').replace(STRIP_CODEPOINTS_RE, '').trim();

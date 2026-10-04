@@ -39,6 +39,32 @@
     group: root
     mode: '0644'
 
+- name: Check the Trivy key is the pinned one (one key, this fingerprint)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      gpg --show-keys --with-colons /etc/apt/keyrings/trivy.asc 2>/dev/null
+      | awk -F: '/^pub:/ {n++} /^fpr:/ && f == "" {f = $10} END {print n " " f}'
+    executable: /bin/bash
+  register: morphit_trivy_fpr
+  changed_when: false
+  failed_when: false
+
+- name: Stop when it is not (the key file is removed; nothing from Trivy is trusted)
+  when:
+    - (morphit_trivy_fpr.stdout | default('') | trim) != ('1 ' ~ trivy_apt_key_fingerprint)
+  block:
+    - name: Remove the unexpected Trivy key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/trivy.asc
+        state: absent
+    - name: Explain
+      ansible.builtin.fail:
+        msg: >-
+          Trivy's apt signing key is not the one Morphit expects
+          (got: {{ morphit_trivy_fpr.stdout | default('') | trim }}), so nothing from that
+          repository was trusted. Re-run later, or install from the offline bundle.
+
 - name: Add Aqua Security trivy apt repo
   ansible.builtin.apt_repository:
     repo: "deb [signed-by=/etc/apt/keyrings/trivy.asc] https://aquasecurity.github.io/trivy-repo/deb {{ morphit_ubuntu_codename | default(ansible_distribution_release) }} main"

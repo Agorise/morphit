@@ -1,7 +1,7 @@
 /**
  * recentCancels — bridges the ~1-minute indexer lag on an order cancel.
  *
- * t.txt (v1.4.9 #6 + #7): when a user cancels an order, the broadcast lands on
+ *  (v1.4.9 #6 + #7): when a user cancels an order, the broadcast lands on
  * chain immediately but the indexer takes up to a minute to reflect it. Until
  * then, any refetch (or a fresh /my/orders load after cancelling from the order
  * page) still reports the order as `live`, so the card and the Live/Cancelled

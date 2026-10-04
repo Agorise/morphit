@@ -27,7 +27,7 @@ services:
   # ── Clearnet TLS edge (BunkerWeb WAF). Omitted for a Tor-only node,
   # which serves its onion straight from the frontend below (no cert, no
   # public 80/443). ─────────────────────────────────────────────────────
-  # cp663 #8 — the bw-data named volume is created root-owned, but the
+  # the bw-data named volume is created root-owned, but the
   # scheduler + instance run as UID 101 and must write their config DB
   # there ("Database is not initialized" otherwise).  This one-shot init
   # (root) fixes ownership before anything else starts; scheduler
@@ -37,8 +37,8 @@ services:
     container_name: bunkerweb-init
     user: "0:0"
     entrypoint: ["sh", "-c"]
-    # (a) cp663 #8 — make the config volume writable by UID 101.
-    # (b) cp663 #7 — make the Let's Encrypt cert readable by GID 101
+    # (a) — make the config volume writable by UID 101.
+    # (b) — make the Let's Encrypt cert readable by GID 101
     #     (certbot writes it root-only in a 0700 archive dir; the
     #     scheduler + instance run as 101 and otherwise serve a
     #     self-signed fallback).  Runs on every `compose up`, so it also
@@ -105,18 +105,25 @@ services:
       - ./bunkerweb.env
     volumes:
       - bw-data:/data
-      # cp663 #13 — the scheduler (not just the instance) reads
+      # the scheduler (not just the instance) reads
       # CUSTOM_SSL_CERT to validate + ship the cert; without this mount
       # its customcert job logs "not a valid file" and the instance
       # falls back to a self-signed cert.
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      # cp663 #10 — BunkerWeb's scheduler manages the instance via the
+      # BunkerWeb's scheduler manages the instance via the
       # Docker API, so it needs the socket.  SECURITY: this is a raw
       # read-only socket bind; the recommended hardening is a read-only
       # docker-socket-proxy (BunkerWeb's `bw-docker` pattern) so a
       # scheduler compromise can't drive the host's Docker — deferred
       # because it needs real-host validation + a bundled proxy image.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Nothing from the internet: BunkerWeb's own GeoIP (db-ip.com), release
+      # check (api.github.com) and Pro-plugin (assets.bunkerity.com) jobs run
+      # whatever the settings, so the scheduler gets Morphit's job lists
+      # instead. The GeoIP files come from the image (mmdb-local.py).
+      - {{ morphit_repo_path }}/ops/bunkerweb/scheduler/jobs-plugin.json:/usr/share/bunkerweb/core/jobs/plugin.json:ro
+      - {{ morphit_repo_path }}/ops/bunkerweb/scheduler/mmdb-local.py:/usr/share/bunkerweb/core/jobs/jobs/mmdb-local.py:ro
+      - {{ morphit_repo_path }}/ops/bunkerweb/scheduler/pro-plugin.json:/usr/share/bunkerweb/core/pro/plugin.json:ro
     # The socket is root:docker mode 660; the scheduler user (101) needs
     # the host's docker group to read it.  GID resolved by tasks/main.yml.
     group_add:
@@ -145,7 +152,7 @@ services:
         max-size: "1m"
         max-file: "2"
     restart: unless-stopped
-    # cp695 — publish the frontend (the nginx that serves the site AND fans out
+    # publish the frontend (the nginx that serves the site AND fans out
     # /v1 -> indexer, /relay -> relay) on a HOST LOOPBACK port so the Tor + I2P
     # hidden services can reach it. They can't go through BunkerWeb (it force-
     # redirects http->https, which Tor/I2P can't follow) and the container isn't

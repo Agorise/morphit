@@ -1,7 +1,7 @@
 /**
  * apps/indexer/src/indexer/chatPushEnqueue.ts
  *
- * cp471 — shared chat Web Push enqueue, used by BOTH delivery paths:
+ * shared chat Web Push enqueue, used by BOTH delivery paths:
  *   • the DURABLE handler (chat.ts), ~irreversible, and
  *   • the FAST head-block tailer (headTailer.ts), ~5s after send.
  *
@@ -47,7 +47,7 @@ export interface ChatPushParams {
 	 *  the click-through opens the conversation with. */
 	readonly sender: string;
 	/** The order this message is tagged with, or null. Non-null → an ORDER
-	 *  signal (order title/body + deep-link to the order-scoped chat). cp471
+	 *  signal (order title/body + deep-link to the order-scoped chat).
 	 *  treats ANY present tag as an order signal in BOTH directions, matching
 	 *  the fast path (which cannot cheaply re-derive order ownership). */
 	readonly orderPermlink: string | null;
@@ -56,6 +56,41 @@ export interface ChatPushParams {
 	readonly sourceTrxId: string;
 	/** Block timestamp of the source op (push `event_at`). */
 	readonly eventAt: Date;
+}
+
+/**
+ * Until the recipient has written to the sender, the sender's messages earn
+ * ONE notification per NO_REPLY_PUSH_WINDOW_MS. The order-contact bypass
+ * admits up to 20 new senders a day per recipient (no stranger fee) and up to
+ * 50 unanswered messages each — 1,000 fee-free notifications a day from 20
+ * sock accounts. The messages are still delivered; only the pushes are
+ * capped, so 20 senders make at most 20 notifications a day. A prior message
+ * (stored by the durable path) or a prior push (queued by either path) from
+ * the same sender inside the window counts.
+ */
+const NO_REPLY_PUSH_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function quietUntilReply(db: ChatPushDb, p: ChatPushParams): Promise<boolean> {
+	const since = new Date(p.eventAt.getTime() - NO_REPLY_PUSH_WINDOW_MS);
+	const r = await db.query<{ quiet: boolean }>(
+		`SELECT NOT EXISTS (
+		          SELECT 1 FROM chat_messages WHERE sender = $1 AND recipient = $2
+		        )
+		    AND (EXISTS (
+		          SELECT 1 FROM chat_messages
+		           WHERE sender = $2 AND recipient = $1
+		             AND created_at > $3 AND created_at <= $4
+		             AND source_trx_id IS DISTINCT FROM $5
+		        )
+		     OR EXISTS (
+		          SELECT 1 FROM push_pending
+		           WHERE account = $1 AND event_at > $3
+		             AND click_path LIKE '%/chat/' || $2 || '%'
+		             AND source_trx_id IS DISTINCT FROM $5
+		        )) AS quiet`,
+		[p.recipient, p.sender, since, p.eventAt, p.sourceTrxId]
+	);
+	return r.rows[0]?.quiet === true;
 }
 
 /**
@@ -77,6 +112,7 @@ export async function enqueueChatPush(db: ChatPushDb, params: ChatPushParams): P
 		);
 		// Skip enqueue when the recipient has no push subscription at all.
 		if (localeRow.rowCount === 0) return;
+		if (await quietUntilReply(db, params)) return;
 
 		const locale = normalizeLocale(localeRow.rows[0]?.locale);
 		const isOrderSignal =
@@ -88,7 +124,7 @@ export async function enqueueChatPush(db: ChatPushDb, params: ChatPushParams): P
 		// handler-push-click-path-route-smoke.
 		//
 		// v1.7.5 — plain chat used to point at `/${locale}/chat` (the LIST), and
-		// that one missing path segment was half of the maintainer's ~1-minute dark badge.
+		// that one missing path segment was half of the ~1-minute dark badge.
 		// The service worker recovers the thread for the in-page fast badge by
 		// PARSING this path (`chatThreadFromClickPath` reads `…/chat/<peer>`), so
 		// a path with no peer means the SW posts CHAT_PUSH with no peer, the page's
@@ -104,7 +140,7 @@ export async function enqueueChatPush(db: ChatPushDb, params: ChatPushParams): P
 		const body = isOrderSignal
 			? localize(locale, 'order_body', params.sender)
 			: localize(locale, 'chat_body', params.sender);
-		// cp450 dedup tag: order signals share the in-page trade tag so the
+		// dedup tag: order signals share the in-page trade tag so the
 		// browser collapses the push and its in-page twin; plain chat has no
 		// in-page twin → NULL (the sender falls back to the queue-row id).
 		const notificationId = isOrderSignal ? `morphit-trade-${params.orderPermlink}` : null;

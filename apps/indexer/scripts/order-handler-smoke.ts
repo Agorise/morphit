@@ -12,7 +12,7 @@
  * specifically would have caught the priceSource bug
  * discovered post-§F.11 (the waiver path referenced
  * ctx.priceSource which was removed during Phase A and not
- * caught by the sandbox typecheck because path-aliased imports
+ * caught by the smoke typecheck because path-aliased imports
  * fail to resolve and OpContext became `any`).
  *
  * Usage (from apps/indexer):
@@ -22,7 +22,6 @@
 import handler from '../src/indexer/handlers/order.ts';
 import { makeCtx } from '../test/testutils/context.ts';
 import { makeMockClient, type QueryExpectation } from '../test/testutils/mockClient.ts';
-import { readFileSync } from 'node:fs';
 
 let failures = 0;
 let scenarios = 0;
@@ -146,7 +145,7 @@ await scenario('BLURT fee path: verifies a 62.5-BLURT transfer at tier 1', async
 	const insertCall = mock.queries.find((q) => q.text.includes('INSERT INTO orders'));
 	if (!insertCall) throw new Error('no INSERT INTO orders query');
 	// fee_status sits fourth-from-last in the BLURT insert's params: the three
-	// trailing columns are operator_tag then accepted_assets (cp425) then
+	// trailing columns are operator_tag then accepted_assets then
 	// specific_barter_title (v1.9.0) then lang (v1.15.0). If you add another trailing column to the
 	// BLURT insert, bump this offset.
 	const feeStatus = insertCall.params[insertCall.params.length - 5];
@@ -266,7 +265,7 @@ await scenario(
 	async () => {
 		// 62.45 is ~0.08% below the pinned 62.5 — trivially inside the
 		// Model-A FEE_PRICE_TOLERANCE band (floor 62.5 × 0.85 = 53.125),
-		// so it verifies.  (Pre-cp372 this exercised the tight 0.1%
+		// so it verifies.  (Previously, this exercised the tight 0.1%
 		// FP-rounding band; that band is now subsumed by the 15% price-
 		// drift band — see the order handler + FEE_PRICE_TOLERANCE.)
 		const signer = 'alice';
@@ -291,7 +290,7 @@ await scenario(
 await scenario(
 	'BLURT fee path: below the FEE_PRICE_TOLERANCE band (53.0 BLURT against 62.5) rejects',
 	async () => {
-		// Model A (cp372): the acceptance floor is FEE_PRICE_TOLERANCE
+		// Model A: the acceptance floor is FEE_PRICE_TOLERANCE
 		// (15%) below the pinned base — 62.5 × 0.85 = 53.125.  53.0 is
 		// just under it, so it's a genuine underpayment even allowing
 		// for live-price drift → underpaid.
@@ -516,27 +515,28 @@ await scenario('Waiver: rejects null amount_min', async () => {
 	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
 });
 
-await scenario('Waiver: rejects amount_min below the $1 USD floor', async () => {
-	// cp369/cp370: the first-order floor is $1 USD-EQUIVALENT — the
-	// canonical FIRST_ORDER_MIN_USD, a fiat value compared to
-	// amount_min (itself fiat), NO price feed.  amount_min below $1
-	// → waiver_requires_min_usd.  (Historically this scenario also
-	// caught the §F.11 priceSource bug where the handler called
-	// ctx.priceSource.current() under an OpContext lacking one.)
+await scenario('Waiver: amount_min below $1 USD is not a consensus rejection', async () => {
+	// The $1 USD-equivalent first-order minimum is enforced by the client
+	// before it signs; the indexer judges only what the chain says, so a
+	// 0.50 USD first buy that reached the chain is a valid waiver claim.
 	const ctx = makeCtx({
 		signer: 'newbie',
 		payload: makePayload({
 			fee_method: 'waived_first_buy',
 			side: 'buy',
 			asset: 'BLURT',
-			amount_min: 0.5, // below the $1 USD floor
+			amount_min: 0.5,
 			amount_max: null
 		}),
 		siblingOps: []
 	});
-	const mock = makeMockClient([]);
+	const mock = makeMockClient([
+		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
+		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
+		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
+	]);
 	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
+	assertEqual(r, { ok: true }, 'result');
 });
 
 await scenario('Waiver: $1 exactly is at the floor and accepted', async () => {
@@ -564,114 +564,41 @@ await scenario('Waiver: $1 exactly is at the floor and accepted', async () => {
 	assertEqual(r, { ok: true }, 'result');
 });
 
-// ─── cp372 — FX-aware first-order floor regressions ─────────────
-// The floor is "$1 USD-EQUIVALENT".  amount_min is denominated in
-// the order's fiat_currency, so a non-USD order must be converted
-// to USD before the $1 check.  These scenarios tamper-test that:
-// reverting to the pre-cp372 USD-only comparison (v.amount_min <
-// FIRST_ORDER_MIN_USD, ignoring fiatToUsd) breaks them.
-
-// AUD 1.52 per USD, so 1.20 AUD ≈ $0.79 — below the $1 floor.  The
-// override mimics the FX source.  The full proceed-mock is supplied
-// so that IF the floor wrongly passed (regression), the handler
-// would claim the waiver and return ok:true, making the expected-
-// reject assertion fail loudly.
-await scenario('Waiver FX: non-USD min below $1-equivalent rejected (1.20 AUD ≈ $0.79)', async () => {
-	const ctx = makeCtx({
-		signer: 'newbie_au',
-		payload: makePayload({
-			fee_method: 'waived_first_buy',
-			side: 'buy',
-			asset: 'BLURT',
-			fiat_currency: 'AUD',
-			amount_min: 1.2,
-			amount_max: null
-		}),
-		siblingOps: [],
-		fiatToUsd: (a: number, f: string) => (f === 'AUD' ? a / 1.52 : a)
+// ─── the first-order $1 minimum is advisory (client-side) ─────
+// It is not a consensus rule: judging it needed each node's FX table, so
+// the same waiver op was applied on one indexer and rejected on another.
+// A waiver order below $1-equivalent, or in a currency this node cannot
+// convert, is accepted exactly like any other first-buy waiver; the FX
+// converter handed to the handler is never consulted.
+for (const [label, fiat, min] of [
+	['1.20 AUD (≈ $0.79)', 'AUD', 1.2],
+	['1000 ZZZ (no rate anywhere)', 'ZZZ', 1000]
+] as const) {
+	await scenario(`Waiver: ${label} is judged without FX — accepted`, async () => {
+		const ctx = makeCtx({
+			signer: `newbie_${fiat.toLowerCase()}`,
+			payload: makePayload({
+				fee_method: 'waived_first_buy',
+				side: 'buy',
+				asset: 'BLURT',
+				fiat_currency: fiat,
+				amount_min: min,
+				amount_max: null
+			}),
+			siblingOps: [],
+			fiatToUsd: () => {
+				throw new Error('the waiver verdict consulted FX');
+			}
+		});
+		const mock = makeMockClient([
+			{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
+			{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
+			{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
+		]);
+		const r = await handler(ctx, mock.client);
+		assertEqual(r, { ok: true }, 'result');
 	});
-	const mock = makeMockClient([
-		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
-		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
-		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
-	]);
-	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: false, reason: 'waiver_requires_min_usd' }, 'result');
-});
-
-// 2.00 AUD ≈ $1.32 — above the floor; the waiver is claimed.
-await scenario('Waiver FX: non-USD min above $1-equivalent accepted (2.00 AUD ≈ $1.32)', async () => {
-	const ctx = makeCtx({
-		signer: 'newbie_au2',
-		payload: makePayload({
-			fee_method: 'waived_first_buy',
-			side: 'buy',
-			asset: 'BLURT',
-			fiat_currency: 'AUD',
-			amount_min: 2.0,
-			amount_max: null
-		}),
-		siblingOps: [],
-		fiatToUsd: (a: number, f: string) => (f === 'AUD' ? a / 1.52 : a)
-	});
-	const mock = makeMockClient([
-		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
-		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
-		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
-	]);
-	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: true }, 'result');
-});
-
-// Unconvertible currency (FX off + outside the static table):
-// fiatToUsd returns null.  (v1.20.0 fix wave, G5) The handler used to fall
-// back to comparing amount_min AS IF it were USD, so "1000 ZZZ" (or "1 IRR" on
-// a node without an IRR rate) passed the $1 floor — and a node that DID have
-// the rate rejected the same op.  Unconvertible now fails outright with its
-// own reason; the proceed-mock is supplied so a regression returns ok:true.
-await scenario('Waiver FX: unconvertible currency rejects the waiver even for a large amount', async () => {
-	const ctx = makeCtx({
-		signer: 'newbie_zz',
-		payload: makePayload({
-			fee_method: 'waived_first_buy',
-			side: 'buy',
-			asset: 'BLURT',
-			fiat_currency: 'ZZZ',
-			amount_min: 1000,
-			amount_max: null
-		}),
-		siblingOps: [],
-		fiatToUsd: () => null
-	});
-	const mock = makeMockClient([
-		{ match: 'COUNT(*)::text AS n FROM orders WHERE account', rows: [{ n: '0' }] },
-		{ match: 'INSERT INTO accounts', rows: [{ first_buy_waived_at: new Date() }], rowCount: 1 },
-		{ match: 'INSERT INTO orders', rows: [], rowCount: 1 }
-	]);
-	const r = await handler(ctx, mock.client);
-	assertEqual(r, { ok: false, reason: 'waiver_fiat_unconvertible' }, 'result');
-});
-
-// Structural belt-and-suspenders: the source must route the floor
-// through ctx.fiatToUsd, not compare the raw fiat amount_min to the
-// USD constant.  Catches a revert even if a future refactor changes
-// the behavioural mocks.
-await scenario('Waiver FX: order.ts routes the floor through ctx.fiatToUsd (structural)', () => {
-	const src = readFileSync(new URL('../src/indexer/handlers/order.ts', import.meta.url), 'utf-8');
-	if (!/ctx\.fiatToUsd\(v\.amount_min,\s*v\.fiat_currency\)/.test(src)) {
-		throw new Error('order.ts no longer converts amount_min via ctx.fiatToUsd');
-	}
-	if (/if\s*\(\s*v\.amount_min\s*<\s*WAIVER_MIN_FIAT_USD\s*\)/.test(src)) {
-		throw new Error('order.ts reverted to raw USD-only floor comparison');
-	}
-});
-
-await scenario('Waiver FX: orderReplace.ts routes the floor through ctx.fiatToUsd (structural)', () => {
-	const src = readFileSync(new URL('../src/indexer/handlers/orderReplace.ts', import.meta.url), 'utf-8');
-	if (!/ctx\.fiatToUsd\(v\.amount_min,\s*v\.fiat_currency\)/.test(src)) {
-		throw new Error('orderReplace.ts no longer converts amount_min via ctx.fiatToUsd');
-	}
-});
+}
 
 await scenario('Waiver: prior orders disqualify (waiver_not_first_order)', async () => {
 	const ctx = makeCtx({
@@ -726,11 +653,11 @@ await scenario('rejects payload that is not an object', async () => {
 
 await scenario('rejects unknown asset', async () => {
 	const ctx = makeCtx({
-		// cp40-A1: previously used 'DOGE' as the "unknown" stand-in,
-		// but DOGE became a valid asset at cp33 and ZEC at cp39, which
+		// previously used 'DOGE' as the "unknown" stand-in,
+		// but DOGE became a valid asset and ZEC, which
 		// silently broke this scenario.  Using a clearly-fictional
 		// 4-letter ticker that cannot collide with any future asset
-		// addition.  Future deep-deeps: if XYZQ ever becomes a real
+		// addition.  Future audits: if XYZQ ever becomes a real
 		// ticker, replace it here.
 		payload: makePayload({ asset: 'XYZQ' }),
 		siblingOps: []
@@ -798,7 +725,7 @@ await scenario('O3.4: rejects terms with control character', async () => {
 	assertEqual(r, { ok: false, reason: 'terms_forbidden_char' }, 'result');
 });
 
-// cp422 regression — the strict forbidden-char regex included the whole
+// regression — the strict forbidden-char regex included the whole
 // C0 range \u0000-\u001F, which swallowed TAB/LF/CR. Because the terms
 // field is a multi-line markdown textarea (TermsText renders headings,
 // blockquotes, lists, links, and line feeds), every order with a
@@ -837,7 +764,7 @@ await scenario('cp422: STILL rejects a bidi override in terms (RLO)', async () =
 });
 
 await scenario('O3.4: rejects payment_method item with zero-width space (ZWSP)', async () => {
-	// cp671: ZWNJ/ZWJ are now allowed (Persian/Indic cursive joiners); the
+	// ZWNJ/ZWJ are now allowed (Persian/Indic cursive joiners); the
 	// zero-width SPACE (U+200B) stays blocked as a forbidden char.
 	const mock = makeMockClient();
 	const r = await handler(
@@ -1087,7 +1014,7 @@ await scenario('accepts price_model with unknown kind (forward-compat)', async (
 	assertEqual(r, { ok: true }, 'result');
 });
 
-// ─── Disabled payment methods (cp208) ───────────────────────────
+// ─── Disabled payment methods ───────────────────────────
 
 await scenario(
 	'disabled payment methods: order offering ONLY a disabled method rejects',
@@ -1135,7 +1062,7 @@ if (failures > 0) {
 	console.log(`✗ ${failures}/${scenarios} scenarios failed`);
 	process.exit(1);
 }
-// ─── cp425: barter (accepted_assets) validation ─────────────────
+// ─── barter (accepted_assets) validation ─────────────────
 // A BARTER order settles in one of a SET of cryptos the seller accepts.
 // accepted_assets is REQUIRED (non-empty crypto set) for BARTER and
 // FORBIDDEN for crypto assets; each entry must be a real crypto ticker.

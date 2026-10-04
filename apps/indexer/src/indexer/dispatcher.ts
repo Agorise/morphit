@@ -17,6 +17,14 @@
  *                                                   The block's
  *                                                   transaction
  *                                                   stays intact.
+ *   - Handler returns ok on an aborted transaction → log rejection
+ *     (it swallowed a failed statement)              'handler_aborted_tx',
+ *                                                   roll back to the
+ *                                                   op's savepoint,
+ *                                                   continue block.
+ *   - An op's JSON nests too deep                  → log rejection
+ *                                                   'invalid_text',
+ *                                                   continue block.
  *   - Dispatcher itself fails (DB error, etc.)     → bubbles up,
  *                                                   poller rolls
  *                                                   back the block
@@ -36,12 +44,13 @@ import {
 	parseJsonPayload,
 	type CustomJsonOp
 } from '$blurt/verify';
-import type { Handler, OpContext } from '$indexer/handler-contract';
+import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { parseBlurtAmount, parseMemoPermlink } from '$indexer/fee-transfer';
 import { forgetFreshKey } from '$indexer/chatFastFederation';
 import { signingPostingKey } from '$indexer/postingKeyBackfill';
 import { confirmFeeRelevantTransactions } from '$indexer/fee/btcFeeBlockConfirm';
-import { pgSafeBlock, pgSafeDeep } from '$db/pgText';
+import { hasXmlNoncharacter, jsonNestingExceeds, pgSafeBlock, pgSafeDeep } from '$db/pgText';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
@@ -107,7 +116,7 @@ export const OP_IDS = {
 /** Map from op_id string to the handler that processes it. Every
  *  known op id is registered; unknown ids land as
  *  `handler_not_implemented` rejections (see below). */
-const HANDLERS: Readonly<Record<string, Handler>> = {
+export const HANDLERS: Readonly<Record<string, Handler>> = {
 	[OP_IDS.profile]: profileHandler,
 	[OP_IDS.order]: orderHandler,
 	[OP_IDS.orderReplace]: orderReplaceHandler,
@@ -140,6 +149,17 @@ for (const id of [OP_IDS.order, OP_IDS.featureBid, OP_IDS.strangerFee]) {
 }
 if (ACTIVE_AUTH_OP_IDS.size !== 3)
 	throw new Error('ACTIVE_AUTH_OP_IDS names an op that is not fee-bearing');
+
+/** SQLSTATE 25P02 — the transaction is aborted: a statement failed and only a
+ *  rollback (to a savepoint, or of the transaction) is accepted until then. */
+function isTransactionAborted(err: unknown): boolean {
+	return (
+		typeof err === 'object' &&
+		err !== null &&
+		'code' in err &&
+		(err as { code: unknown }).code === '25P02'
+	);
+}
 
 // ─── Event-log write ────────────────────────────────────────────────
 
@@ -259,9 +279,11 @@ function collectFeeTransfers(
 	return out;
 }
 
-/** Bulk-insert fee transfer rows. Called once per block before the
- *  morphit-op dispatch loop runs, so the order handler can see the
- *  fee_transfers table populated when it queries it. */
+/** Bulk-insert fee transfer rows (transfers to THIS node's fee account).
+ *  AUDIT-ONLY: no handler reads fee_transfers — fees are verified from the
+ *  op's sibling transfers in the same transaction — and the table is local
+ *  to this node (snapshotLocalState). Kept as the operator's own record of
+ *  what reached the fee account. */
 async function writeFeeTransfers(
 	client: pg.PoolClient,
 	rows: readonly FeeTransferRow[]
@@ -591,15 +613,48 @@ function collectMorphitOps(block: BlockHeader, trxIds: readonly string[]): Morph
 }
 
 /** Positions (`trx:op`) of custom_json ops whose body — JSON text, auths, id —
- *  holds a NUL or an unpaired surrogate as it came from the chain (V3-11). */
+ *  holds a NUL or an unpaired surrogate as it came from the chain (V3-11).
+ *  Judged per op: an op whose body cannot even be walked is counted as
+ *  invalid text rather than failing the block. */
 function customJsonWithInvalidText(block: BlockHeader): Set<string> {
 	const out = new Set<string>();
 	block.transactions.forEach((trx, ti) => {
 		trx?.operations.forEach((op, oi) => {
-			if (op?.[0] === 'custom_json' && pgSafeDeep(op[1]) !== op[1]) out.add(`${ti}:${oi}`);
+			if (op?.[0] !== 'custom_json') return;
+			try {
+				if (pgSafeDeep(op[1]) !== op[1] || jsonNestingExceeds(op[1], MAX_OP_BODY_DEPTH))
+					out.add(`${ti}:${oi}`);
+			} catch {
+				out.add(`${ti}:${oi}`);
+			}
 		});
 	});
 	return out;
+}
+
+/** How deep a custom_json op's BODY (id, auths, json text — not the parsed
+ *  payload) may nest as the RPC node serves it. A chain body is two levels
+ *  deep; anything deeper is a hostile node's invention. */
+const MAX_OP_BODY_DEPTH = 8;
+
+/**
+ * How deep a Morphit op's parsed JSON payload may nest. No Morphit client
+ * writes more than a few levels. Past the cap the op is rejected
+ * `invalid_text`, recorded with its raw text: a payload nested a few thousand
+ * levels deep (a ~6 KB custom_json) used to exhaust the call stack in the
+ * block pre-pass and halt every indexer at that block, and one deeper still
+ * cannot be serialised for the event log at all.
+ *
+ * The tight cap is a stricter acceptance rule, so it applies from the
+ * consensus activation time (see consensusActivation.ts). Before it, the
+ * cap sits far below every depth that ever failed and far above anything a
+ * client writes, so the verdict on history does not change.
+ */
+export const MAX_PAYLOAD_DEPTH = 64;
+export const MAX_PAYLOAD_DEPTH_BEFORE_ACTIVATION = 1000;
+
+function maxPayloadDepth(blockTime: Date): number {
+	return consensusV2Active(blockTime) ? MAX_PAYLOAD_DEPTH : MAX_PAYLOAD_DEPTH_BEFORE_ACTIVATION;
 }
 
 // ─── Per-block dispatch ────────────────────────────────────────────
@@ -656,7 +711,7 @@ export async function applyBlock(
 	blurt: BlurtClient,
 	config: Config,
 	feeVerifiers: OpContext['feeVerifiers'],
-	/** Part 106 — canonical expected fee amounts.  Threaded
+	/** canonical expected fee amounts.  Threaded
 	 *  through to OpContext so the order handler enforces the
 	 *  chain-pinned amount (with env fallback) instead of
 	 *  reading directly from config.  See handler-contract.ts
@@ -677,11 +732,12 @@ export async function applyBlock(
 	const blockTime = new Date(block.timestamp + (block.timestamp.endsWith('Z') ? '' : 'Z'));
 
 	// v1.20.0 (MK-H2 / V3-6) — a block holding an op that moves the per-order
-	// BTC fee-address numbering (or a release op, which can move the pin) is
-	// applied only when two independent RPC operators serve the same
-	// transactions at those positions; otherwise this throws BEFORE any write,
-	// the poller rolls the block back and fetches it again. No-op (no RPC call)
-	// for every other block. See fee/btcFeeBlockConfirm.ts for the limits.
+	// BTC fee-address numbering, a release op (it can move the pin) or an
+	// rpc-directory op (it adds quorum operators) is applied only when two
+	// RPC operators (counted by node name) serve the same transactions at those
+	// positions; otherwise this throws BEFORE any write, the poller rolls the
+	// block back and fetches it again. No-op (no RPC call) for every other
+	// block. See fee/btcFeeBlockConfirm.ts for the limits.
 	await confirmFeeRelevantTransactions(client, blurt, blockNum, block);
 
 	// v1.20.0 (V3-11) — from here on, the block as Postgres can store it: every
@@ -692,6 +748,9 @@ export async function applyBlock(
 	// confirmation above compares the RAW block with other operators, so it
 	// runs first. See db/pgText.ts.
 	const rawInvalidOps = customJsonWithInvalidText(block);
+	// The transactions as served, signatures and all, for handlers that prove
+	// who signed an op (OpContext.transaction).
+	const rawTransactions = block.transactions;
 	block = pgSafeBlock(block);
 
 	// Pre-pass: record every observed BLURT transfer to the fee-
@@ -818,13 +877,34 @@ export async function applyBlock(
 			rejected++;
 			continue;
 		}
+		// A payload nested deeper than the cap is rejected before anything walks
+		// it, and recorded with its raw text (see MAX_PAYLOAD_DEPTH).
+		if (jsonNestingExceeds(parsed, maxPayloadDepth(blockTime))) {
+			await writeEventLog(client, {
+				blockNum,
+				trxInBlock,
+				opInTrx,
+				blockTime,
+				trxId,
+				signer,
+				opId: op.id,
+				payload: { _raw: op.json },
+				status: 'rejected',
+				rejectReason: 'invalid_text'
+			});
+			rejected++;
+			continue;
+		}
 		// v1.20.0 (V3-11) — a payload whose JSON escapes decode to a NUL or an
 		// unpaired surrogate (`"\u0000"`, `"\ud800"`) is REJECTED, not repaired:
 		// no Morphit client writes one, and nothing is materialised from text
 		// other than what its signer signed. Recorded like every rejection, with
 		// the payload as Postgres can store it (U+FFFD in place of each).
 		const payload = pgSafeDeep(parsed);
-		if (payload !== parsed) {
+		// From CONSENSUS_V2_ACTIVATION_TIME, U+FFFE / U+FFFF are refused the
+		// same way: noncharacters no client writes, and not XML characters (one
+		// broke every feed that carried the op's text).
+		if (payload !== parsed || (consensusV2Active(blockTime) && hasXmlNoncharacter(parsed))) {
 			await writeEventLog(client, {
 				blockNum,
 				trxInBlock,
@@ -888,6 +968,7 @@ export async function applyBlock(
 			signer,
 			payload,
 			siblingOps,
+			transaction: rawTransactions[trxInBlock],
 			blurt,
 			config,
 			feeVerifiers,
@@ -924,7 +1005,7 @@ export async function applyBlock(
 		const savepointName = `op_${trxInBlock}_${opInTrx}`;
 		await client.query(`SAVEPOINT ${savepointName}`);
 
-		let result;
+		let result: HandlerResult;
 		try {
 			result = await handler(ctx, client);
 		} catch (err) {
@@ -954,8 +1035,23 @@ export async function applyBlock(
 		// Step 5: write the verdict to the event log. On rejection,
 		// roll back to the savepoint first so any writes the handler
 		// made before returning `{ ok: false }` are discarded.
+		//
+		// A handler that caught a failed statement without a savepoint of its
+		// own returns here with the block transaction ABORTED: its writes cannot
+		// be kept, and RELEASE fails. That op is rejected `handler_aborted_tx`
+		// and rolled back to its savepoint like any rejection, so the rest of the
+		// block applies. Throwing instead would roll the block back and the
+		// poller would fetch it again forever — one cheap op halting every
+		// indexer at that block.
 		if (result.ok) {
-			await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+			try {
+				await client.query(`RELEASE SAVEPOINT ${savepointName}`);
+			} catch (err) {
+				if (!isTransactionAborted(err)) throw err;
+				result = { ok: false, reason: 'handler_aborted_tx' };
+			}
+		}
+		if (result.ok) {
 			// Flush this op's orderbook-change notifications into
 			// the block-level set.  These won't fire on the bus
 			// until the block transaction commits (handled by the

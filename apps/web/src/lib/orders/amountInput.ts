@@ -1,5 +1,5 @@
 /**
- * Locale-aware parsing of a user-TYPED amount (v1.20.0 fix wave, G6).
+ * Locale-aware parsing of a user-TYPED amount.
  *
  * WHY THIS EXISTS
  *

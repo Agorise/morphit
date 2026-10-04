@@ -1,5 +1,5 @@
 /**
- * broadcast hedge-off smoke (cp452).
+ * broadcast hedge-off smoke.
  *
  * Regression for the ~60s send hang. The indexer's /v1/broadcast relayed a
  * SIGNED WRITE with `userFacing:true`, which `callCondenser` maps to

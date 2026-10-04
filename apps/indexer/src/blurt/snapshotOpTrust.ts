@@ -1,5 +1,5 @@
 /**
- * apps/indexer/src/blurt/snapshotOpTrust.ts — v1.18.0 deep-deep (rv2-1, rv2-4)
+ * apps/indexer/src/blurt/snapshotOpTrust.ts
  *
  * Read a pinned publisher's signed op from the chain WITHOUT trusting any one
  * RPC node.
@@ -42,7 +42,8 @@ export interface AgreedChainReader {
 		method: string,
 		params: readonly unknown[],
 		keyOf: (answer: T) => string | null,
-		minAgree: number
+		minAgree: number,
+		opts?: { readonly mutable?: boolean; readonly freshOf?: (answer: T) => number | null }
 	): Promise<{ readonly value: T; readonly key: string } | null>;
 }
 
@@ -194,7 +195,7 @@ export type TrustedSnapshotResult =
 
 /**
  * The newest `indexer_snapshot_v1` op published by `signer`, read so that no
- * single RPC operator decides it (rv2-1). See the file header for the three
+ * single RPC operator decides it. See the file header for the three
  * checks. `minAgree` is the number of distinct operators that must agree at
  * each chain read — 2 for fast-sync and the mirror.
  */
@@ -218,14 +219,25 @@ export async function resolveTrustedSnapshotOp(
 			const sel = selectNewestSnapshotOp(h, trusted);
 			return sel === null ? 'none' : `${sel.blockNum ?? '?'}|${sel.trxId ?? '?'}`;
 		},
-		args.minAgree
+		args.minAgree,
+		{
+			// The account's NEWEST op changes as the chain grows: a node that is
+			// behind names an older one. Its block number says which (VT5-1), so
+			// a stale majority cannot pin an older snapshot over a newer one.
+			mutable: true,
+			freshOf: (h) => {
+				if (!Array.isArray(h)) return null;
+				const n = selectNewestSnapshotOp(h, trusted)?.blockNum;
+				return typeof n === 'number' ? n : 0;
+			}
+		}
 	);
 	if (hist === null) {
 		return {
 			ok: false,
 			reason:
 				`the RPC nodes this box can reach did not agree on @${signer}'s newest snapshot ` +
-				`(${args.minAgree} independent operators must). Try again in a few minutes.`
+				`(${args.minAgree} operators, counted by node name, must). Try again in a few minutes.`
 		};
 	}
 	const sel = selectNewestSnapshotOp(hist.value, trusted);
@@ -255,7 +267,7 @@ export async function resolveTrustedSnapshotOp(
 				? `its signature does not come from the pinned @${signer} posting key`
 				: confirmed.reason === 'op_not_in_tx'
 					? 'the confirmed transaction does not carry that op'
-					: `${args.minAgree} independent RPC operators did not confirm the transaction in block ${sel.blockNum}`;
+					: `${args.minAgree} RPC operators (counted by node name) did not confirm the transaction in block ${sel.blockNum}`;
 		return { ok: false, reason: `refusing the newest snapshot op: ${why}.` };
 	}
 	const v = validateIndexerSnapshotPayload(confirmed.op.payload);

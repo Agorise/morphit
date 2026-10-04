@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * chat-security-preference-smoke (cp406).
+ * chat-security-preference-smoke.
  *
  * The per-account Chat Security preference (stores/chatSecurity.ts) gates a
  * security-critical decision: whether every sent message carries a self-copy
@@ -122,7 +122,7 @@ if (failures > 0) {
 }
 console.log(`✓ all ${count} chat-security-preference scenarios passed`);
 
-// cp474 — module marker. Without a top-level import/export tsc treats this
+// module marker. Without a top-level import/export tsc treats this
 // file as a global script, so its `scenarios`/`failed` consts collide with every
 // other script-style smoke when the suite is typechecked as one project. This
 // has no runtime effect under tsx.

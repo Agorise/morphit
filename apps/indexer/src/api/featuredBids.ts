@@ -22,21 +22,21 @@
  *
  * Visibility computation:
  *   - For each bid, we compute `is_visible` = "would this bid
- *     appear in the top-MAX_SLOTS active set RIGHT NOW".  This
- *     requires computing the rank against all CURRENT active
- *     bids — the same predicate as /v1/orderbook/featured.
+ *     appear in the top-MAX_SLOTS set RIGHT NOW": its rank among the
+ *     bids that can hold a slot (featuredVisibility.ts — the same set
+ *     /v1/orderbook/featured ranks).
  *
- * Cache-Control: max-age=10 to match the featured-orderbook
- * endpoint; visibility flips when other bidders move and that
- * stabilizes over tens of seconds.
+ * Cache-Control: no-store, like every answer that names an account
+ * (security middleware, VT3-6).
  *
- * Part 122 cp17.
+ *
  */
 
 import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { Database } from '$db/pool';
+import { eligibleFeaturedBidsSql } from '$api/featuredVisibility';
 
 const MAX_RESULTS = 30;
 const MAX_SLOTS = 3;
@@ -69,7 +69,7 @@ interface BidRow {
 	last_extended_at: Date | null;
 }
 
-export function featuredBidsRoute(db: Database): Hono {
+export function featuredBidsRoute(db: Database, operatorAccount: string): Hono {
 	const app = new Hono();
 
 	app.get('/', async (c) => {
@@ -84,7 +84,7 @@ export function featuredBidsRoute(db: Database): Hono {
 
 		// One SQL roundtrip.  The "is_visible_now" computation uses
 		// a window function: for each of `account`'s bids, compute
-		// its rank among all currently-active bids by the same
+		// its rank among the bids that can hold a slot by the same
 		// (blurt_per_hour DESC, block_time_at ASC) ordering as the
 		// featured-orderbook endpoint, then check rank ≤ MAX_SLOTS.
 		//
@@ -94,20 +94,15 @@ export function featuredBidsRoute(db: Database): Hono {
 		// be visible regardless of rank.
 		const rows = await db.query<BidRow>(
 			`WITH active_ranks AS (
-				-- Rank ONLY the currently-active bids (cancelled=false,
-				-- effective_at past, expires_at future).  Ranking is by
-				-- the same (blurt_per_hour DESC, block_time_at ASC) as
-				-- featuredOrderbook.ts uses so visibility flips are
-				-- consistent across the two endpoints.
+				-- Rank ONLY the bids that can hold a slot now, by the
+				-- same (blurt_per_hour DESC, block_time_at ASC) as
+				-- featuredOrderbook.ts, so the two endpoints agree.
 				SELECT
 					b.bid_id,
 					ROW_NUMBER() OVER (
 						ORDER BY b.blurt_per_hour DESC, b.block_time_at ASC
 					) AS rank
-				FROM featured_slot_bids b
-				WHERE b.cancelled = FALSE
-				  AND b.effective_at <= NOW()
-				  AND b.expires_at > NOW()
+				FROM (${eligibleFeaturedBidsSql('$4')}) b
 			)
 			SELECT
 				b.order_permlink,
@@ -116,12 +111,12 @@ export function featuredBidsRoute(db: Database): Hono {
 				b.blurt_per_hour::text AS blurt_per_hour,
 				b.effective_at,
 				b.expires_at,
-				-- Active and within top-MAX_SLOTS → visible.  Bids
-				-- that aren't in active_ranks (cancelled or expired)
-				-- are not visible by definition.
+				-- Eligible and within top-MAX_SLOTS → visible.  A bid
+				-- not in active_ranks (cancelled, expired, or on an
+				-- order the orderbook does not show) is not visible.
 				(ar.rank IS NOT NULL AND ar.rank <= $2) AS is_visible_now,
 				COALESCE(o.status, 'unknown') AS order_status,
-				-- cp453 (t.txt #2) — the order's summary fields so the
+				-- cp453 — the order's summary fields so the
 				-- "prior featured orders" modal can render a human line
 				-- ("I'm buying 40–70 AUD worth of XMR"). NULL when the
 				-- order has since been pruned (LEFT JOIN miss).
@@ -130,7 +125,7 @@ export function featuredBidsRoute(db: Database): Hono {
 				o.fiat_currency AS order_fiat_currency,
 				o.amount_min::text AS order_amount_min,
 				o.amount_max::text AS order_amount_max,
-				-- v1.9.5 (the maintainer) — the order's settlement so the modal line names it
+				-- v1.9.5 — the order's settlement so the modal line names it
 				-- ("…for BTC or XMR" / "…with Bank transfer"). accepted for barter,
 				-- payment_methods for crypto; NULL on a LEFT JOIN miss (pruned order).
 				o.accepted_assets AS order_accepted_assets,
@@ -145,7 +140,7 @@ export function featuredBidsRoute(db: Database): Hono {
 			WHERE b.bidder = $1
 			ORDER BY b.block_time_at DESC
 			LIMIT $3`,
-			[account, MAX_SLOTS, MAX_RESULTS]
+			[account, MAX_SLOTS, MAX_RESULTS, operatorAccount]
 		);
 
 		const bids = rows.rows.map((r) => ({
@@ -168,7 +163,6 @@ export function featuredBidsRoute(db: Database): Hono {
 			last_extended_at: r.last_extended_at ? r.last_extended_at.toISOString() : null
 		}));
 
-		c.header('cache-control', 'max-age=10, public');
 		return c.json({ account, bids, max_slots: MAX_SLOTS });
 	});
 

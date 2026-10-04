@@ -38,8 +38,8 @@
 		fullWidth?: boolean;
 		/** Button size. 'md' (default) is the standard CTA. 'sm' is a compact
 		 *  variant (~half the padding + smaller label + smaller spinner) for
-		 *  dense per-row action rows like the my/orders card buttons
-		 *  (t.txt v1.4.9 #4). Ignored for the 'link' variant. */
+		 *  dense per-row action rows like the my/orders card buttons.
+		 *  Ignored for the 'link' variant. */
 		size?: 'md' | 'sm';
 		/** Click handler. Can be async — busy state handled by caller. */
 		onclick?: (e: MouseEvent) => void;
@@ -72,11 +72,11 @@
 			case 'primary':
 				return 'bg-morphit-btn text-morphit-btn-text font-bold shadow hover:brightness-110 disabled:bg-ink-300 disabled:text-ink-500 disabled:shadow-none';
 			case 'secondary':
-				// v1.8.10 (the maintainer): the disabled colours carry `dark:` variants now.
+				// v1.8.10: the disabled colours carry `dark:` variants now.
 				// `border-ink-300 / text-ink-400` are LIGHT-theme greys — on the
 				// dark chat surface they render as a near-white outline and label,
 				// so a disabled Send button was the brightest thing on the screen
-				// and read as the primary call to action. the maintainer asked that it match
+				// and read as the primary call to action. The maintainer asked that it match
 				// the textarea beside it, which is `dark:border-ink-700`; the label
 				// takes ink-600 so it sits just above the placeholder text rather
 				// than shouting. Applies while `sending` too, since BusyButton

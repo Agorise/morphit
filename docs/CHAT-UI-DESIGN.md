@@ -329,7 +329,7 @@ local-only equivalent (see ADR-0013 Q1.4) and applies on
 orderbook surfaces; chat surfaces honor BOTH stores
 (§F.22 ensured the same on orderbook for symmetry).
 
-## What's left to ship (historical — all closed as of Part 120 audit)
+## What's left to ship (historical — all closed audit)
 
 The core chat infrastructure is implemented.  The remaining
 wiring described below has all shipped:

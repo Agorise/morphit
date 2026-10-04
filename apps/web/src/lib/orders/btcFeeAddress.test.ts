@@ -17,7 +17,6 @@ import {
 	externalTxidRequired,
 	satsToBtc
 } from './btcFeeAddress';
-import { btcXpubsFromReleaseHistory } from './btcFeeKeyHistory';
 
 const XPUB =
 	'xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V';
@@ -153,46 +152,5 @@ describe('per-order BTC fee address in the browser', () => {
 		});
 		// the current key needs no history
 		expect(checkIndexerFeeAddress(pinned, fee({ xpub: XPUB }))).toMatchObject({ ok: true });
-	});
-});
-
-describe('treasury keys ever pinned on chain (V3-10)', () => {
-	const rel = (treasury: unknown, author = 'morphit') => [
-		1,
-		{
-			block: 10,
-			trx_id: 't',
-			timestamp: '2026-09-01T00:00:00',
-			op: [
-				'custom_json',
-				{
-					required_auths: [],
-					required_posting_auths: [author],
-					id: 'morphit_release_v1',
-					json: JSON.stringify({
-						version: '1.20.0',
-						hash_manifest: { 'index.html': 'sha256-' + 'a'.repeat(43) + '=' },
-						treasury
-					})
-				}
-			]
-		}
-	];
-	it('collects the xpubs of valid release ops by the release account only', () => {
-		const got = btcXpubsFromReleaseHistory(
-			[
-				rel({ btc: { address: pinned.btc.address, satoshis: 1000, xpub: XPUB }, xmr: null }),
-				rel(
-					{ btc: { address: pinned.btc.address, satoshis: 1000, xpub: XPUB_B }, xmr: null },
-					'mallory'
-				),
-				rel({
-					btc: { address: pinned.btc.address, satoshis: 1000, xpub: 'xprv-not-a-key' },
-					xmr: null
-				})
-			],
-			'morphit'
-		);
-		expect([...got]).toEqual([XPUB]);
 	});
 });

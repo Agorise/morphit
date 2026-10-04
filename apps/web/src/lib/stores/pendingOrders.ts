@@ -21,7 +21,7 @@
  * wait for. Show it, mark it as still confirming, and let the indexer's copy
  * take over when it lands.
  *
- * This is the same shape `pendingFeatured` (cp431) used for feature bids —
+ * This is the same shape `pendingFeatured` used for feature bids —
  * deliberately, since it's proven — with the mechanical rules shared via
  * `pendingEcho` so the two can't drift apart.
  *
@@ -50,7 +50,7 @@ export { PENDING_TTL_MS, orderEchoKey as pendingOrderKey };
 
 /**
  * WHY THERE IS NO 'cancel' KIND. `$lib/orders/recentCancels` already bridges the
- * same lag for cancels (t.txt #6/#7), and it is the RIGHT home for them rather
+ * same lag for cancels, and it is the RIGHT home for them rather
  * than merely the incumbent:
  *
  *   - It persists in sessionStorage, and for a cancel that matters. Falling back

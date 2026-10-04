@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the compose page locks a first-ever trade to a BUY of BLURT that
- * expires in 7 days. Anchor cp295.
+ * expires in 7 days. Anchor.
  *
  * THE PRODUCT RULE THIS GUARDS (O#1 / O#9). A brand-new Blurt account holds
  * no BLURT, and BLURT is what pays Morphit listing fees — so until the
@@ -82,7 +82,7 @@ const checks: readonly Check[] = [
 			// Source of truth: the ticker list is BLURT-only during the
 			// first-trade lock.
 			/assetTickersForPicker[\s\S]{0,160}isFirstTrade \? \(\['BLURT'\] as const\)/.test(s) &&
-			// cp396 alphabetized the Step-1 blocks into `assetPickerItems`,
+			// A later change alphabetized the Step-1 blocks into `assetPickerItems`,
 			// which DERIVES from `assetTickersForPicker` (so the BLURT-only
 			// gating flows through unchanged), and the #each iterates that
 			// derived list.

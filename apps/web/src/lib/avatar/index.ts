@@ -63,7 +63,7 @@ export const MAX_AVATAR_BYTES = 6144;
  *  be resized to 96×96.  But a 100 MB image would freeze the tab
  *  inside createImageBitmap before any of our checks could run.
  *  5 MB is generous for modern phone photos and tight enough to
- *  prevent tab-DoS on a paste of a huge file.  Part 122 cp5-fix. */
+ *  prevent tab-DoS on a paste of a huge file. */
 export const MAX_INPUT_FILE_BYTES = 5 * 1024 * 1024;
 
 // A small file can still be a pixel-bomb — e.g. a 2 MB PNG that decodes to
@@ -466,7 +466,7 @@ function byteLength(s: string): number {
 	return encoder.encode(s).byteLength;
 }
 
-// (v1.18.0 deep-deep, M1) Its own tiny module, so components can show an
+// Its own tiny module, so components can show an
 // SVG avatar without pulling the whole sanitizer into their bundle.
 export { svgAvatarImgSrc } from './imgSrc';
 
@@ -474,9 +474,11 @@ export { svgAvatarImgSrc } from './imgSrc';
 
 /**
  * Sanitize SVG text. Returns the cleaned SVG source, ready to be
- * stored as-is and later rendered via `{@html}` in Svelte. The
- * caller MUST NOT pass the original untrusted input to the DOM —
- * only the output of this function.
+ * stored as-is. Avatars render through an `<img>` data URI
+ * (svgAvatarImgSrc), which runs no script; the sanitizer still
+ * strips everything active, because other readers of the chain
+ * may inline the SVG. The caller MUST NOT pass the original
+ * untrusted input anywhere — only the output of this function.
  *
  * Rejects (returns ok:false) if:
  *   - input has no `<svg>` root
@@ -769,7 +771,7 @@ export const SVG_MIMES = new Set(['image/svg+xml']);
  *  for the profile op. Dispatches by MIME type to either the SVG
  *  sanitizer or the raster re-encoder. */
 export async function processAvatarFile(file: File): Promise<AvatarResult> {
-	// Part 122 cp5-fix: reject huge inputs BEFORE expensive decode.
+	// reject huge inputs BEFORE expensive decode.
 	// A 100 MB JPEG handed to createImageBitmap can freeze the tab
 	// for seconds before any of our downstream checks would catch
 	// it.  5 MB is generous for modern phone photos (which get

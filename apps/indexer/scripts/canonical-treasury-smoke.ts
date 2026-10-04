@@ -1,5 +1,5 @@
 /**
- * canonical-treasury-smoke (cp315)
+ * canonical-treasury-smoke
  *
  * Guards the economic spine of the project: the three canonical
  * treasury accounts (BLURT @morphit-fees, BTC, XMR) and the wiring

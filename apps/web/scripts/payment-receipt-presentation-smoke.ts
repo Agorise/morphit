@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * payment-receipt-presentation — cp474 (t.txt #8).
+ * payment-receipt-presentation.
  *
- * the maintainer, on live morphit.io, listed three things wrong with the Payment Receipt
+ * on live morphit.io, listed three things wrong with the Payment Receipt
  * bubble. All three are presentation living in a .svelte file, which no vitest
  * can reach, so they are pinned here.
  *
@@ -28,7 +28,7 @@
  * duplicate of something already on screen. So the receipt opts out of the
  * affordance entirely.
  *
- * Ordinary message bubbles MUST keep it (cp402 [5]): their timestamp is printed
+ * Ordinary message bubbles MUST keep it: their timestamp is printed
  * nowhere, so tap-to-reveal is the only way to see it. Removing the popover
  * wholesale would fix the maintainer's receipt and silently break every other bubble —
  * this smoke pins both halves.
@@ -71,7 +71,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 	}
 }
 
-console.log('\n── payment-receipt-presentation (cp474 / t.txt #8) ────\n');
+console.log('\n── payment-receipt-presentation ────\n');
 
 const msg = read('apps/web/src/lib/components/ChatMessage.svelte');
 
@@ -139,7 +139,7 @@ check(
 	'their timestamp is printed nowhere — removing this would break every other bubble to fix the receipt'
 );
 
-// ─── locale parity: all ten, same turn ───────────────────────────
+// ─── locale parity: all ten, same change ───────────────────────────
 for (const loc of LOCALES) {
 	const json = JSON.parse(read(`apps/web/src/lib/i18n/locales/${loc}.json`)) as {
 		chat?: { funds_sent?: Record<string, string> };

@@ -32,68 +32,262 @@ const truthy = (n: string, c: boolean, d = '') => {
 
 // ── itemSuffix: Upgrade item ──
 {
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.4', latestVersion: 'v1.0.0-beta.5', latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }));
-	truthy('upgrade: shows now + latest', s.includes('now: v1.0.0-beta.4') && s.includes('latest: v1.0.0-beta.5'), s);
+	const s = strip(
+		itemSuffix('upgrade', {
+			currentVersion: 'v1.0.0-beta.4',
+			latestVersion: 'v1.0.0-beta.5',
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: null
+		})
+	);
+	truthy(
+		'upgrade: shows now + latest',
+		s.includes('now: v1.0.0-beta.4') && s.includes('latest: v1.0.0-beta.5'),
+		s
+	);
 	truthy('upgrade: flags update available when they differ', s.includes('update available'), s);
 }
 {
-	// cp667 — a locally-dropped signed tarball surfaces as an offline-ready upgrade
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.10.0', latestVersion: 'v1.10.1', latestIsOffline: true, unresolvedFlags: null, relayBalanceStatus: null }));
-	truthy('upgrade: offline tarball surfaces "(offline tarball ready)"', s.includes('update available') && s.includes('offline tarball ready'), s);
-	const online = strip(itemSuffix('upgrade', { currentVersion: 'v1.10.0', latestVersion: 'v1.10.1', latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }));
-	truthy('upgrade: an online update does NOT claim an offline tarball', online.includes('update available') && !online.includes('offline tarball'), online);
+	// a locally-dropped signed tarball surfaces as an offline-ready upgrade
+	const s = strip(
+		itemSuffix('upgrade', {
+			currentVersion: 'v1.10.0',
+			latestVersion: 'v1.10.1',
+			latestIsOffline: true,
+			unresolvedFlags: null,
+			relayBalanceStatus: null
+		})
+	);
+	truthy(
+		'upgrade: offline tarball surfaces "(offline tarball ready)"',
+		s.includes('update available') && s.includes('offline tarball ready'),
+		s
+	);
+	const online = strip(
+		itemSuffix('upgrade', {
+			currentVersion: 'v1.10.0',
+			latestVersion: 'v1.10.1',
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: null
+		})
+	);
+	truthy(
+		'upgrade: an online update does NOT claim an offline tarball',
+		online.includes('update available') && !online.includes('offline tarball'),
+		online
+	);
 }
 {
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: 'v1.0.0-beta.5', latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }));
-	truthy('upgrade: same version → no "update available"', s.includes('now: v1.0.0-beta.5') && !s.includes('update available'), s);
+	const s = strip(
+		itemSuffix('upgrade', {
+			currentVersion: 'v1.0.0-beta.5',
+			latestVersion: 'v1.0.0-beta.5',
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: null
+		})
+	);
+	truthy(
+		'upgrade: same version → no "update available"',
+		s.includes('now: v1.0.0-beta.5') && !s.includes('update available'),
+		s
+	);
 }
 {
-	const s = strip(itemSuffix('upgrade', { currentVersion: 'v1.0.0-beta.5', latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }));
-	truthy('upgrade: latest unknown → "now:" only, graceful', s.includes('now: v1.0.0-beta.5') && !s.includes('latest:'), s);
-	// v1.16.13 — a failed check must SAY so, not look up-to-date (the maintainer/morphitir)
-	truthy('upgrade: latest unknown → shows a network note (not a silent up-to-date)', /couldn|network/i.test(s) && !s.includes('update available'), s);
+	const s = strip(
+		itemSuffix('upgrade', {
+			currentVersion: 'v1.0.0-beta.5',
+			latestVersion: null,
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: null
+		})
+	);
+	truthy(
+		'upgrade: latest unknown → "now:" only, graceful',
+		s.includes('now: v1.0.0-beta.5') && !s.includes('latest:'),
+		s
+	);
+	// v1.16.13 — a failed check must SAY so, not look up-to-date
+	truthy(
+		'upgrade: latest unknown → shows a network note (not a silent up-to-date)',
+		/couldn|network/i.test(s) && !s.includes('update available'),
+		s
+	);
 }
-truthy('upgrade: both unknown → empty suffix', itemSuffix('upgrade', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }) === '');
+truthy(
+	'upgrade: both unknown → empty suffix',
+	itemSuffix('upgrade', {
+		currentVersion: null,
+		latestVersion: null,
+		latestIsOffline: false,
+		unresolvedFlags: null,
+		relayBalanceStatus: null
+	}) === ''
+);
 
 // ── itemSuffix: Moderation item ──
 {
-	const s = strip(itemSuffix('moderation', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: 3, relayBalanceStatus: null }));
-	truthy('moderation: ⚠ marker + count when unresolved > 0', s.includes('\u26a0') && s.includes('3 to review'), s);
+	const s = strip(
+		itemSuffix('moderation', {
+			currentVersion: null,
+			latestVersion: null,
+			latestIsOffline: false,
+			unresolvedFlags: 3,
+			relayBalanceStatus: null
+		})
+	);
+	truthy(
+		'moderation: ⚠ marker + count when unresolved > 0',
+		s.includes('\u26a0') && s.includes('3 to review'),
+		s
+	);
 }
-truthy('moderation: 0 unresolved → no marker', itemSuffix('moderation', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: 0, relayBalanceStatus: null }) === '');
-truthy('moderation: null count → no marker', itemSuffix('moderation', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }) === '');
+truthy(
+	'moderation: 0 unresolved → no marker',
+	itemSuffix('moderation', {
+		currentVersion: null,
+		latestVersion: null,
+		latestIsOffline: false,
+		unresolvedFlags: 0,
+		relayBalanceStatus: null
+	}) === ''
+);
+truthy(
+	'moderation: null count → no marker',
+	itemSuffix('moderation', {
+		currentVersion: null,
+		latestVersion: null,
+		latestIsOffline: false,
+		unresolvedFlags: null,
+		relayBalanceStatus: null
+	}) === ''
+);
 
 // ── itemSuffix: unrelated items + missing annotations ──
-truthy('status item → no suffix', itemSuffix('status', { currentVersion: 'v1', latestVersion: 'v2', latestIsOffline: false, unresolvedFlags: 5, relayBalanceStatus: null }) === '');
+truthy(
+	'status item → no suffix',
+	itemSuffix('status', {
+		currentVersion: 'v1',
+		latestVersion: 'v2',
+		latestIsOffline: false,
+		unresolvedFlags: 5,
+		relayBalanceStatus: null
+	}) === ''
+);
 truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 
 // ── itemSuffix: Status relay-balance (beta6) ──
 {
-	const err = strip(itemSuffix('status', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: 'error' }));
-	truthy('status: error → red-flag + "relay balance very low"', err.includes('\u{1F6A9}') && /very low/i.test(err), err);
-	const warn = strip(itemSuffix('status', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: 'warn' }));
-	truthy('status: warn → ⚠ + "relay balance low"', warn.includes('\u26a0') && /relay balance low/i.test(warn), warn);
-	truthy('status: ok → no suffix', itemSuffix('status', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: 'ok' }) === '');
-	truthy('status: null balance → no suffix', itemSuffix('status', { currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null }) === '');
+	const err = strip(
+		itemSuffix('status', {
+			currentVersion: null,
+			latestVersion: null,
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: 'error'
+		})
+	);
+	truthy(
+		'status: error → red-flag + "relay balance very low"',
+		err.includes('\u{1F6A9}') && /very low/i.test(err),
+		err
+	);
+	const warn = strip(
+		itemSuffix('status', {
+			currentVersion: null,
+			latestVersion: null,
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: 'warn'
+		})
+	);
+	truthy(
+		'status: warn → ⚠ + "relay balance low"',
+		warn.includes('\u26a0') && /relay balance low/i.test(warn),
+		warn
+	);
+	truthy(
+		'status: ok → no suffix',
+		itemSuffix('status', {
+			currentVersion: null,
+			latestVersion: null,
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: 'ok'
+		}) === ''
+	);
+	truthy(
+		'status: null balance → no suffix',
+		itemSuffix('status', {
+			currentVersion: null,
+			latestVersion: null,
+			latestIsOffline: false,
+			unresolvedFlags: null,
+			relayBalanceStatus: null
+		}) === ''
+	);
 }
 
 // ── itemEmphasis: whole-label coloring signal (beta6) ──
 {
-	const A = (o: Partial<{ currentVersion: string | null; latestVersion: string | null; unresolvedFlags: number | null; relayBalanceStatus: 'ok' | 'warn' | 'error' | null }>) =>
-		({ currentVersion: null, latestVersion: null, latestIsOffline: false, unresolvedFlags: null, relayBalanceStatus: null, ...o });
-	truthy('emphasis: upgrade w/ newer latest → "update"', itemEmphasis('upgrade', A({ currentVersion: 'v1.0.0-beta.5', latestVersion: 'v1.0.0-beta.6' })) === 'update');
-	truthy('emphasis: upgrade same version → null', itemEmphasis('upgrade', A({ currentVersion: 'v1.0.0-beta.6', latestVersion: 'v1.0.0-beta.6' })) === null);
-	truthy('emphasis: status balance error → "balance-error"', itemEmphasis('status', A({ relayBalanceStatus: 'error' })) === 'balance-error');
-	truthy('emphasis: status balance warn → "balance-warn"', itemEmphasis('status', A({ relayBalanceStatus: 'warn' })) === 'balance-warn');
-	truthy('emphasis: status balance ok → null', itemEmphasis('status', A({ relayBalanceStatus: 'ok' })) === null);
-	truthy('emphasis: moderation flags → "flags" (label colored too)', itemEmphasis('moderation', A({ unresolvedFlags: 5 })) === 'flags');
-	truthy('emphasis: moderation 0 flags → null', itemEmphasis('moderation', A({ unresolvedFlags: 0 })) === null);
+	const A = (
+		o: Partial<{
+			currentVersion: string | null;
+			latestVersion: string | null;
+			unresolvedFlags: number | null;
+			relayBalanceStatus: 'ok' | 'warn' | 'error' | null;
+		}>
+	) => ({
+		currentVersion: null,
+		latestVersion: null,
+		latestIsOffline: false,
+		unresolvedFlags: null,
+		relayBalanceStatus: null,
+		...o
+	});
+	truthy(
+		'emphasis: upgrade w/ newer latest → "update"',
+		itemEmphasis(
+			'upgrade',
+			A({ currentVersion: 'v1.0.0-beta.5', latestVersion: 'v1.0.0-beta.6' })
+		) === 'update'
+	);
+	truthy(
+		'emphasis: upgrade same version → null',
+		itemEmphasis(
+			'upgrade',
+			A({ currentVersion: 'v1.0.0-beta.6', latestVersion: 'v1.0.0-beta.6' })
+		) === null
+	);
+	truthy(
+		'emphasis: status balance error → "balance-error"',
+		itemEmphasis('status', A({ relayBalanceStatus: 'error' })) === 'balance-error'
+	);
+	truthy(
+		'emphasis: status balance warn → "balance-warn"',
+		itemEmphasis('status', A({ relayBalanceStatus: 'warn' })) === 'balance-warn'
+	);
+	truthy(
+		'emphasis: status balance ok → null',
+		itemEmphasis('status', A({ relayBalanceStatus: 'ok' })) === null
+	);
+	truthy(
+		'emphasis: moderation flags → "flags" (label colored too)',
+		itemEmphasis('moderation', A({ unresolvedFlags: 5 })) === 'flags'
+	);
+	truthy(
+		'emphasis: moderation 0 flags → null',
+		itemEmphasis('moderation', A({ unresolvedFlags: 0 })) === null
+	);
 	truthy('emphasis: no annotations → null', itemEmphasis('upgrade', undefined) === null);
 }
 
 // ── Alert COLOUR: every main-menu attention marker is BOLD BRIGHT
 //    YELLOW (\u001b[1;93m), never the pale standard yellow (33) or red
-//    (31). cp323 — the maintainer's directive that all menu alerts read in the
+//    (31). the maintainer's directive that all menu alerts read in the
 //    same loud bold bright yellow. ──
 {
 	initColorMode('always');
@@ -107,7 +301,11 @@ truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 		unresolvedFlags: null,
 		relayBalanceStatus: null
 	});
-	truthy('colour: "update available" marker is bold bright yellow', update.includes(BBY) && !update.includes(PALE), update);
+	truthy(
+		'colour: "update available" marker is bold bright yellow',
+		update.includes(BBY) && !update.includes(PALE),
+		update
+	);
 	const flags = itemSuffix('moderation', {
 		currentVersion: null,
 		latestVersion: null,
@@ -115,7 +313,11 @@ truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 		unresolvedFlags: 3,
 		relayBalanceStatus: null
 	});
-	truthy('colour: flags marker is bold bright yellow (not pale)', flags.includes(BBY) && !flags.includes(PALE), flags);
+	truthy(
+		'colour: flags marker is bold bright yellow (not pale)',
+		flags.includes(BBY) && !flags.includes(PALE),
+		flags
+	);
 	const balErr = itemSuffix('status', {
 		currentVersion: null,
 		latestVersion: null,
@@ -123,7 +325,11 @@ truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 		unresolvedFlags: null,
 		relayBalanceStatus: 'error'
 	});
-	truthy('colour: relay-balance error is bold bright yellow (not red)', balErr.includes(BBY) && !balErr.includes(RED), balErr);
+	truthy(
+		'colour: relay-balance error is bold bright yellow (not red)',
+		balErr.includes(BBY) && !balErr.includes(RED),
+		balErr
+	);
 	const balWarn = itemSuffix('status', {
 		currentVersion: null,
 		latestVersion: null,
@@ -131,7 +337,11 @@ truthy('no annotations → no suffix', itemSuffix('upgrade', undefined) === '');
 		unresolvedFlags: null,
 		relayBalanceStatus: 'warn'
 	});
-	truthy('colour: relay-balance warn is bold bright yellow (not pale)', balWarn.includes(BBY) && !balWarn.includes(PALE), balWarn);
+	truthy(
+		'colour: relay-balance warn is bold bright yellow (not pale)',
+		balWarn.includes(BBY) && !balWarn.includes(PALE),
+		balWarn
+	);
 	initColorMode('never'); // restore default for any later text assertions
 }
 
@@ -163,7 +373,7 @@ truthy('rootTag: health NOT tagged', rootTag('health') === '');
 truthy('rootTag: unknown subcommand NOT tagged', rootTag('definitely-not-a-command') === '');
 
 // ── payment-method menu item launches the interactive CRUD menu ──
-// Regression guard: cp357 changed this item from list-only
+// Regression guard: a later change changed this item from list-only
 // (positional ['list']) to the interactive list/add/remove menu
 // (positional ['menu']). Flipping it back to 'list' would silently
 // drop the add/remove affordance the maintainer reported missing.
@@ -180,10 +390,16 @@ truthy('rootTag: unknown subcommand NOT tagged', rootTag('definitely-not-a-comma
 {
 	const dir = mkdtempSync(join(tmpdir(), 'morphit-relinfo-'));
 	try {
-		writeFileSync(join(dir, 'release-info.json'), JSON.stringify({ tag: 'v1.0.0-beta.5', built_at: 'x' }));
+		writeFileSync(
+			join(dir, 'release-info.json'),
+			JSON.stringify({ tag: 'v1.0.0-beta.5', built_at: 'x' })
+		);
 		const prev = process.env.MORPHIT_INSTALL_DIR;
 		process.env.MORPHIT_INSTALL_DIR = dir;
-		truthy('readCurrentVersion: reads tag from release-info.json', readCurrentVersion() === 'v1.0.0-beta.5');
+		truthy(
+			'readCurrentVersion: reads tag from release-info.json',
+			readCurrentVersion() === 'v1.0.0-beta.5'
+		);
 		process.env.MORPHIT_INSTALL_DIR = join(dir, 'does-not-exist');
 		truthy('readCurrentVersion: missing file → null', readCurrentVersion() === null);
 		if (prev === undefined) delete process.env.MORPHIT_INSTALL_DIR;

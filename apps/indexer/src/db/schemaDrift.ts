@@ -1,5 +1,5 @@
 /**
- * Schema-drift detector (cp217).
+ * Schema-drift detector.
  *
  * The PRE-LAUNCH reality: the schema is a single collapsed `v1` baseline
  * (schema.sql) that is edited IN PLACE rather than via new numbered
@@ -23,7 +23,7 @@
  *   are NOT counted. There are no DROP TABLE statements in the baseline, so
  *   the table set has no removals to track.
  *
- *   v1.18.0 deep-deep (rv2-10): ALTER-added columns used to be skipped
+ *   ALTER-added columns used to be skipped
  *   entirely, and the two trust columns the chat fast path depends on —
  *   `accounts.posting_pubkey` and `accounts.posting_key_reconciled` — are
  *   added exactly that way. A database missing `posting_key_reconciled`
@@ -172,7 +172,7 @@ export function parseExpectedSchema(sql: string): Map<string, Set<string>> {
 		createRe.lastIndex = closeIdx;
 	}
 
-	// Top-level ALTER TABLE … ADD COLUMN / DROP COLUMN, in file order (rv2-10).
+	// Top-level ALTER TABLE … ADD COLUMN / DROP COLUMN, in file order.
 	// A column added and later dropped is not expected; one added is.
 	const alterRe =
 		/^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?"?([A-Za-z_][A-Za-z0-9_]*)"?\s+([\s\S]*)$/i;

@@ -146,7 +146,7 @@ describe('checkBackups', () => {
 	});
 
 	it('THE TRUNCATED-DUMP CASE: a recent but implausibly small dump is failing, not fresh', () => {
-		// Before the cp526 status-capture fix, a pg_dump that could not connect
+		// Before the status-capture fix, a pg_dump that could not connect
 		// still left a valid ~20-byte gzip member, which the script renamed to a
 		// real backup name. It is perfectly RECENT, so every timing rule passes —
 		// only the size can tell the operator their restore point is worthless.

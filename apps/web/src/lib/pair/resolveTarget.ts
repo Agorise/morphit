@@ -9,7 +9,7 @@
  * THREAT MODEL — the payload is ATTACKER-INFLUENCEABLE: any web page can mint
  * a `web+morphit://` link, so `/pair` must NOT become an open redirect or
  * allow navigation outside the closed set of intents `WriteBlockedReadOnly`
- * emits. Defenses, in order:
+ * and the backup page emit. Defenses, in order:
  *
  *   1. Decode exactly once, then require the literal `web+morphit:` scheme
  *      (rejects `javascript:`, `http(s):`, `//evil`, `web+anything-else:`).
@@ -31,14 +31,16 @@
  * pair-target-resolve-smoke.
  */
 
-/** Intents whose path is fixed (no parameters). Mirrors WriteBlockedReadOnly. */
+/** Intents whose path is fixed (no parameters): WriteBlockedReadOnly's, plus
+ *  the backup page's "back up on your main device" link. */
 const EXACT_PATHS: ReadonlySet<string> = new Set([
 	'/', // "open the app"
 	'/post',
 	'/settings',
 	'/onboarding/register-name',
 	'/run-a-node',
-	'/my/orders'
+	'/my/orders',
+	'/backup-keys'
 ]);
 
 /** Blurt account name: lowercase alnum + dot + hyphen, 3–31 chars. No slash,

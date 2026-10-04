@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave, S7 — the federation chat push to a clearnet peer is resolved
+ * the federation chat push to a clearnet peer is resolved
  * and pinned like the probe, so a registered NAME that resolves to a private
  * address is never dialled.
  *

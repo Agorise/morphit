@@ -1,5 +1,5 @@
 /**
- * Chain-pinned bounds on the listing-fee QUOTE (v1.18.0 deep-deep, M1).
+ * Chain-pinned bounds on the listing-fee QUOTE.
  *
  * What was wrong: the post page quoted exactly what `/v1/listing-fee` said
  * (`base_fee_blurt`, and the live BTC/XMR amounts). On a hidden-only node that
@@ -73,7 +73,7 @@ export function boundedPiconero(
 }
 
 /**
- * (v1.20.0 fix wave, G10) The BLURT base to quote, or null when there is no
+ * The BLURT base to quote, or null when there is no
  * SAFE quote. The bundled fallback constant (BASE_FEE_BLURT, 60) was used
  * whenever /v1/listing-fee failed — but with no chain pin the indexer
  * enforces ITS env base (MORPHIT_INDEXER_FEE_BASE_BLURT, default 125) minus

@@ -1,5 +1,5 @@
 /**
- * Morphit — treasury auto-re-pin BROADCAST (cp372).
+ * Morphit — treasury auto-re-pin BROADCAST.
  *
  * The ACTING half of the auto-re-pin system: fetch the current
  * release + live prices, decide (the pure core), and — if a re-pin
@@ -38,11 +38,16 @@
  * FAILSAFES (belt + suspenders, mostly inherited from the pure core):
  *   • EITHER fetch (release / prices) fails → abort, exit 1, NOTHING
  *     broadcast.  A network blip can never trigger a re-pin.
- *   • A down/zero/negative feed → that asset is skipped by the core;
- *     a computed amount over the validator's sanity ceiling → rejected
- *     by the core AND re-checked by buildReleaseCustomJsonOp's
- *     validateTreasury before signing.  An absurd price can never pin
- *     an absurd amount.
+ *   • Prices: CoinGecko, CoinPaprika and Kraken are each asked
+ *     (treasury-repin-prices.ts); an asset is re-pinned only from a price
+ *     at least two of them agree on (within 5%), else it is skipped.
+ *   • The core refuses a computed amount above a realistic ceiling, and
+ *     moves an existing pin by at most ×2 / ÷2 per re-pin; a larger move
+ *     is left to the operator.  buildReleaseCustomJsonOp's
+ *     validateTreasury re-checks the payload before signing.
+ *   • The transaction is signed ONCE and the same signed transaction is
+ *     offered to the ranked nodes (lib/signOnceBroadcast.ts), so a lost
+ *     answer can never put two re-pins on chain.
  *   • buildReleaseCustomJsonOp validates the WHOLE payload (semver,
  *     hash_manifest, endpoints, treasury) + runs the no-secret-hex
  *     guard — an invalid payload is never broadcast.
@@ -63,7 +68,7 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { Client, PrivateKey } from '@beblurt/dblurt';
+import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 import {
 	buildReleaseCustomJsonOp,
@@ -78,6 +83,8 @@ import {
 	type RepinPrices
 } from '../src/lib/treasuryRepin.ts';
 import { checkServedAgainstChain, fetchReleasePayloadFromChain } from '../src/lib/repinSource.ts';
+import { describeQuotes, fetchAgreedPrices } from './treasury-repin-prices.ts';
+import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
 
 function errMsg(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
@@ -135,19 +142,6 @@ async function fetchJson(url: string): Promise<unknown> {
 	}
 }
 
-async function fetchPrices(): Promise<RepinPrices> {
-	const url =
-		'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,monero,blurt&vs_currencies=usd';
-	const body = (await fetchJson(url)) as Record<string, { usd?: unknown }>;
-	const num = (v: unknown): number | null =>
-		typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
-	return {
-		btcUsd: num(body.bitcoin?.usd),
-		xmrUsd: num(body.monero?.usd),
-		blurtUsd: num(body.blurt?.usd)
-	};
-}
-
 function ask(query: string): Promise<string> {
 	return new Promise((resolve) => {
 		const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -192,10 +186,11 @@ async function main(): Promise<void> {
 		out(`✗ could not fetch ${node}/v1/release: ${errMsg(e)} — aborting (no recommendation).`);
 		process.exit(1);
 	}
-	try {
-		prices = await fetchPrices();
-	} catch (e) {
-		out(`✗ could not fetch prices: ${errMsg(e)} — aborting (no recommendation).`);
+	const fetched = await fetchAgreedPrices();
+	prices = fetched.prices;
+	if (prices.btcUsd === null && prices.xmrUsd === null && prices.blurtUsd === null) {
+		out('✗ no asset has a price two sources agree on — aborting (no recommendation).');
+		for (const l of describeQuotes(fetched.quotes, prices)) out(`  ${l}`);
 		process.exit(1);
 	}
 
@@ -209,7 +204,9 @@ async function main(): Promise<void> {
 	} | null;
 	// (V3-1) The op itself, from chain, from two agreeing RPC endpoints.
 	if (typeof rel?.source_block_num !== 'number' || typeof rel?.source_trx_id !== 'string') {
-		out('✗ /v1/release did not say which op is current (source_block_num / source_trx_id) — aborting.');
+		out(
+			'✗ /v1/release did not say which op is current (source_block_num / source_trx_id) — aborting.'
+		);
 		process.exit(1);
 	}
 	const chain = await fetchReleasePayloadFromChain(
@@ -235,21 +232,26 @@ async function main(): Promise<void> {
 		}
 	);
 	if (!chain.ok) {
-		out(`✗ could not read the current release op from chain: ${chain.reason} — aborting (no recommendation).`);
+		out(
+			`✗ could not read the current release op from chain: ${chain.reason} — aborting (no recommendation).`
+		);
 		process.exit(1);
 	}
 	const served = checkServedAgainstChain(rel, chain.payload);
 	if (!served.ok) {
 		out(`✗ refusing: ${served.reason}.`);
-		if (served.missing.length > 0) out(`  missing or different on ${node}: ${served.missing.join(', ')}`);
-		out('  Point --node at an indexer running the current version (it re-reads stored releases at boot).');
+		if (served.missing.length > 0)
+			out(`  missing or different on ${node}: ${served.missing.join(', ')}`);
+		out(
+			'  Point --node at an indexer running the current version (it re-reads stored releases at boot).'
+		);
 		process.exit(1);
 	}
 	const parsed = parseReleaseTreasury(served.chainTreasury);
 	const decision = decideRepin(parsed.pinned, prices, threshold);
 
 	out('Treasury auto-re-pin');
-	out(`  prices : BTC=${prices.btcUsd ?? 'n/a'}  XMR=${prices.xmrUsd ?? 'n/a'}  BLURT=${prices.blurtUsd ?? 'n/a'}`);
+	for (const l of describeQuotes(fetched.quotes, prices)) out(`  ${l}`);
 	out(`  ${decision.btc.note}`);
 	out(`  ${decision.xmr.note}`);
 	out(`  ${decision.blurt.note}`);
@@ -322,35 +324,27 @@ async function main(): Promise<void> {
 		}
 	}
 
-	const nodes = broadcastNode ? [broadcastNode] : [...DEFAULT_BLURT_RPC_ENDPOINTS];
 	const opData = {
 		required_auths: [...op.required_auths],
 		required_posting_auths: [...op.required_posting_auths],
 		id: op.id,
 		json: op.json
 	};
-	let lastErr: unknown;
-	for (const url of nodes) {
-		try {
-			out(`\nBroadcasting via ${url} …`);
-			const client = new Client(url, { timeout: 20_000 });
-			const conf = (await client.broadcast.customJson(opData, priv)) as {
-				id?: string;
-				block_num?: number;
-			};
-			process.stdout.write(
-				`✓ Re-pin broadcast accepted.\n  trx_id    : ${conf.id ?? '(unknown)'}\n` +
-					`  block_num : ${conf.block_num ?? '(pending)'}\n  op id     : ${RELEASE_OP_ID}\n` +
-					'Every Morphit instance picks up the re-pinned treasury within a block.\n'
-			);
-			process.exit(0);
-		} catch (e) {
-			lastErr = e;
-			out(`  ✗ ${url}: ${errMsg(e)}`);
-		}
+	try {
+		const r = await broadcastCustomJsonOnce(opData, priv, {
+			nodeOverride: broadcastNode,
+			includeHidden: false
+		});
+		process.stdout.write(
+			`✓ Re-pin broadcast ${r.duplicate ? 'already on chain' : 'accepted'}.\n  trx_id    : ${r.trxId}\n` +
+				`  block_num : ${r.blockNum ?? '(pending)'}\n  op id     : ${RELEASE_OP_ID}\n` +
+				'Every Morphit instance picks up the re-pinned treasury within a block.\n'
+		);
+		process.exit(0);
+	} catch (e) {
+		out(`✗ ${errMsg(e)}`);
+		process.exit(1);
 	}
-	out(`✗ all RPC nodes failed. Last error: ${errMsg(lastErr)}`);
-	process.exit(1);
 }
 
 void main();

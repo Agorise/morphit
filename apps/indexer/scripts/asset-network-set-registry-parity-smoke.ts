@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * asset-network-set-registry-parity — cp175 F-013 guard.
+ * asset-network-set-registry-parity — guard.
  *
  * The valid per-asset network allowlists for the multi-network assets
  * (USDT erc20/trc20/spl/bep20, USDC erc20/spl/base/polygon, DAI
@@ -43,7 +43,7 @@ console.log('\n── asset-network-set-registry-parity (cp175 F-013 guard) ─�
 
 // Registry truth: supportedNetworks for each multi-network asset, as sorted arrays.
 function registryNetworks(ticker: string): string[] {
-	// cp474 — the `|| x.displayTicker === ticker` fallback that used to live here
+	// the `|| x.displayTicker === ticker` fallback that used to live here
 	// was dead: this ASSETS is @morphit/asset-registry's `AssetEntry`, which has
 	// no displayTicker (that field is on apps/web's separate `AssetMetadata`).
 	// It read `undefined` on every entry and could never match.

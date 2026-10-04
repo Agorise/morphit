@@ -1,7 +1,7 @@
 /**
  * libsodium-not-in-baseline-closure-smoke.ts
  *
- * Byte-budget invariant (cp267 — memory Priority #4, TINY FOOTPRINT):
+ * Byte-budget invariant (memory Priority #4, TINY FOOTPRINT):
  *
  *   libsodium-wrappers-sumo is ~1 MB (the WASM is inlined into the JS,
  *   no separate .wasm). It must NEVER appear in the STATIC import
@@ -9,14 +9,14 @@
  *   closure is `<link rel="modulepreload">`-ed on EVERY page (home,
  *   orderbook, …) — including pages that never touch crypto.
  *
- *   Before cp267 it WAS in the baseline. `[lang]/+layout.svelte` reached
+ *   Previously it WAS in the baseline. `[lang]/+layout.svelte` reached
  *   it two ways:
  *     1. → $stores/identity → $crypto/keystore + $crypto/keygen, which
  *        did `import sodium from 'libsodium-wrappers-sumo'` at top level.
  *     2. → $lib/trades/tradeEventListener → $lib/chat/crypto (same
  *        static libsodium import).
  *   Measured per-page baseline was 59 chunks / 1358 KB, of which 1040 KB
- *   was libsodium. cp267 fixed it:
+ *   was libsodium. A later change fixed it:
  *     - keygen.ts + keystore.ts now `import { sodium } from './sodium'`,
  *       a lazy holder populated by a DYNAMIC `import()` inside
  *       ensureSodium(). The sodium.* call sites are byte-for-byte

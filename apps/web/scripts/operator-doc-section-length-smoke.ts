@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * operator-doc-section-length-smoke — Part 122 cp69 (LL #68 / O-17).
+ * operator-doc-section-length-smoke.
  *
- * Operator-facing docs (OPERATIONS.md, RUN-A-MORPHIT-NODE.md,
- * PRE-LAUNCH-CHECKLIST.md) and ADRs MUST be detailed enough to be
+ * Operator-facing docs (OPERATIONS.md, RUN-A-MORPHIT-NODE.md)
+ * and ADRs MUST be detailed enough to be
  * useful, but individual sections shouldn't grow unbounded.  A
  * section that's >2000 lines is a "small book inside a doc" — readers
  * lose place, search context is huge, edits are scary.
@@ -17,7 +17,6 @@
  * Per-doc thresholds (lines per top-level `##` section):
  *   OPERATIONS.md         600
  *   RUN-A-MORPHIT-NODE.md 400
- *   PRE-LAUNCH-CHECKLIST  300
  *   ADRs (any)            500
  *
  * Top-level sections are defined by `^## ` headers.  Sub-sections
@@ -26,12 +25,12 @@
  * end of file.
  *
  * Allow-list for existing oversize sections is hardcoded below
- * (these are inherited from pre-cp69 prose; documented as "to be
+ * (these are inherited from older prose; documented as "to be
  * split in a future checkpoint" so the smoke goes green and we don't
  * lie about whether the ceiling holds).  Adding a new section over
  * its threshold WITHOUT adding it to the allow-list is the bug.
  *
- * Mutation test M-139:  insert 1000 dummy lines into OPERATIONS.md's
+ * Mutation test:  insert 1000 dummy lines into OPERATIONS.md's
  * `## 1. Recurrent BLURT top-up setup (one-time)` section → smoke fires
  * with "OPERATIONS.md `## 1. Recurrent BLURT top-up setup (one-time)`
  * is N lines, threshold 600".
@@ -55,7 +54,7 @@ const SPECS: DocSpec[] = [
 	{
 		path: 'docs/OPERATIONS.md',
 		threshold: 600,
-		// Existing oversize sections inherited at cp69.  Documented here
+		// Existing oversize sections inherited.  Documented here
 		// so the smoke doesn't lie about whether the ceiling holds; each
 		// entry should eventually be split into smaller sub-runbooks.
 		allowList: new Set([
@@ -65,7 +64,7 @@ const SPECS: DocSpec[] = [
 			'14. Deployment topology requirement — apps MUST be behind a loopback proxy',
 			'16. Operator-account balance alerts',
 			'37. Comprehensive server hardening — defense-in-depth checklist',
-			// cp372: §40 covers four distinct topics (chain-pin rationale,
+			// §40 covers four distinct topics (chain-pin rationale,
 			// the three-priorities discussion, the BLURT-base + auto-re-pin
 			// addendum, and the XMR explorer-backend reference).  It crossed
 			// the 600-line ceiling when §40.3a was added; it should be split
@@ -79,13 +78,6 @@ const SPECS: DocSpec[] = [
 		threshold: 400,
 		allowList: new Set([
 			'8. First-time configuration',
-		]),
-	},
-	{
-		path: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		threshold: 300,
-		allowList: new Set([
-			'C. Operator-config files (on the morphit.io production box)',
 		]),
 	},
 ];
@@ -163,7 +155,7 @@ try {
 
 const ADR_LINE_THRESHOLD = 1000;
 const ADR_ALLOW_LIST = new Set([
-	// Inherited cp69 oversize ADRs.  Each is a substantial design doc
+	// Inherited oversize ADRs.  Each is a substantial design doc
 	// that's "complete as one read"; splitting would harm cohesion.
 	// We track them so a NEW ADR ballooning past the threshold surfaces.
 	'0011-dynamic-fee-model.md',  // 61KB, dynamic fee formula is multi-faceted

@@ -1,157 +1,202 @@
-/* Part 122 cp26 — Client-side address-reuse history.
+/* Client-side address-reuse history.
  *
- *  Tracks addresses the user has previously shared from THIS
- *  device through Morphit, so the address-share modal can warn
- *  on reuse.
+ *  Remembers WHICH addresses the user has shared from this device through
+ *  Morphit, so the address-share modal can warn when one is about to be
+ *  shared again. It cannot say what they were, when, or for which order.
  *
- *  Privacy posture: PURELY CLIENT-SIDE, localStorage only.  Never
- *  transmitted to any Morphit server.  Morphit's backend has no
- *  visibility into the user's address history; that would be a
- *  privacy regression (the moment Morphit tracks "user X uses
- *  address Y," our non-custodial story is compromised).
+ *  Privacy posture: client-side only, never transmitted. And what is kept is
+ *  not the address: each entry is HMAC-SHA256(per-install salt, asset ‖ 0 ‖
+ *  address), truncated to 16 bytes. Someone who reads this browser's storage
+ *  learns how many addresses were shared and can test whether a GIVEN address
+ *  was; they cannot read the addresses back, nor tell when they were shared or
+ *  for which orders (no timestamps, no order ids are stored).
  *
- *  Limitations the operator/user should know about:
- *  - History is per-device + per-browser (localStorage scope).
- *    Same user on multiple devices won't see reuse across them.
- *  - Clearing localStorage / using a private window resets the
- *    history.  Acceptable; the alternative (server-side history)
- *    is worse.
- *  - Storage is unencrypted at rest within localStorage.  An
- *    attacker with filesystem access can read the user's address
- *    history.  This is the same trust model as the user's seed-
- *    phrase backup, password manager, etc.; we're not adding a
- *    new attack surface beyond what the browser already exposes.
+ *  Older builds stored the addresses in plaintext with timestamps and order
+ *  ids (`morphit.address-history.v1`). That record is converted to the hashed
+ *  form and deleted the first time this module runs with storage available
+ *  (the app boot does it as soon as it sees one).
  *
- *  Storage shape:
+ *  Storage shape (`morphit.address-history.v2`):
  *  ```json
- *  {
- *    "v": 1,
- *    "entries": [
- *      { "asset": "BTC", "address": "1A1z...", "sharedAt": "2026-05-17T20:00:00Z", "orderPermlink": "@alice/abc" }
- *    ]
- *  }
+ *  { "v": 2, "salt": "<base64, 32 bytes>", "tags": ["<32 hex>", …] }
  *  ```
+ *  Bounded: at most 200 tags (oldest dropped).
  *
- *  Bounded size: max 200 entries (rolling — oldest dropped when
- *  full).  At ~120 bytes per entry that's ~25KB, well within
- *  localStorage limits.  200 trades' worth of history is plenty
- *  for the warning to be useful without unbounded growth.
+ *  Best-effort throughout: a failure means "no history", never a blocked share.
  */
+import { sodium, ensureSodium, sodiumSumo } from '$crypto/sodium';
 
-const STORAGE_KEY = 'morphit.address-history.v1';
+export const ADDRESS_HISTORY_KEY = 'morphit.address-history.v2';
+/** Plaintext addresses, timestamps and order ids written by older builds. */
+export const LEGACY_ADDRESS_HISTORY_KEY = 'morphit.address-history.v1';
 const MAX_ENTRIES = 200;
-
-export interface AddressHistoryEntry {
-	readonly asset: string; // uppercase ticker (BTC, BCH, LTC, etc.)
-	readonly address: string;
-	readonly sharedAt: string; // ISO timestamp
-	readonly orderPermlink?: string;
-}
+const TAG_BYTES = 16;
 
 interface AddressHistoryFile {
-	readonly v: 1;
-	readonly entries: readonly AddressHistoryEntry[];
+	readonly v: 2;
+	readonly salt: string;
+	readonly tags: readonly string[];
 }
 
-/** Load the address-history file from localStorage.  Returns an
- *  empty history on any error (missing key, parse failure, schema
- *  mismatch) — never throws.  The address-history feature is
- *  best-effort; failure to load means "no history available" and
- *  the modal proceeds without the reuse warning, which is the
- *  correct fail-open posture for a UX nudge. */
-export function loadAddressHistory(): readonly AddressHistoryEntry[] {
-	if (typeof localStorage === 'undefined') {
-		return [];
-	}
+function storage(): Storage | null {
 	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (raw === null) return [];
-		const parsed = JSON.parse(raw) as unknown;
+		return typeof localStorage === 'undefined' ? null : localStorage;
+	} catch {
+		return null;
+	}
+}
+
+function readFile(): AddressHistoryFile | null {
+	const s = storage();
+	if (s === null) return null;
+	try {
+		const raw = s.getItem(ADDRESS_HISTORY_KEY);
+		if (raw === null) return null;
+		const f = JSON.parse(raw) as Partial<AddressHistoryFile>;
 		if (
-			typeof parsed !== 'object' ||
-			parsed === null ||
-			(parsed as AddressHistoryFile).v !== 1 ||
-			!Array.isArray((parsed as AddressHistoryFile).entries)
+			f?.v === 2 &&
+			typeof f.salt === 'string' &&
+			Array.isArray(f.tags) &&
+			f.tags.every((t) => typeof t === 'string' && /^[0-9a-f]{32}$/.test(t))
 		) {
-			return [];
+			return f as AddressHistoryFile;
 		}
-		// Filter to entries with valid shape — defends against
-		// corrupted/older-version files mixed in.
-		return (parsed as AddressHistoryFile).entries.filter(
-			(e): e is AddressHistoryEntry =>
-				typeof e === 'object' &&
-				e !== null &&
-				typeof (e as AddressHistoryEntry).asset === 'string' &&
-				typeof (e as AddressHistoryEntry).address === 'string' &&
-				typeof (e as AddressHistoryEntry).sharedAt === 'string'
-		);
 	} catch {
-		return [];
-	}
-}
-
-/** Record a new address-share event in the history.  Trims to
- *  MAX_ENTRIES (rolling — oldest first by insertion order, since
- *  we append).  Idempotent: re-recording the same (asset, address)
- *  pair updates `sharedAt` to the latest timestamp rather than
- *  creating a duplicate entry (so the reuse warning surfaces the
- *  most recent share). */
-export function recordAddressShare(entry: AddressHistoryEntry): void {
-	if (typeof localStorage === 'undefined') return;
-	try {
-		const current = [...loadAddressHistory()];
-		// Dedupe: if (asset, address) already present, remove the
-		// old entry — we'll re-add at the end with the new timestamp.
-		const filtered = current.filter(
-			(e) =>
-				!(e.asset === entry.asset && e.address === entry.address)
-		);
-		filtered.push(entry);
-		// Trim oldest entries when over cap (rolling buffer).
-		const trimmed =
-			filtered.length > MAX_ENTRIES
-				? filtered.slice(filtered.length - MAX_ENTRIES)
-				: filtered;
-		const file: AddressHistoryFile = { v: 1, entries: trimmed };
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(file));
-	} catch {
-		// localStorage may be full or unavailable (private mode in
-		// some browsers).  Silent failure is correct: the feature is
-		// best-effort and the share itself isn't blocked.
-	}
-}
-
-/** Look up a prior share of the same (asset, address) pair.
- *  Returns the most-recent matching entry, or `null` if not in
- *  history.  Used by AddressShareModal to render the reuse-
- *  warning chip when the user pastes/types an address they've
- *  shared before. */
-export function findPriorShare(
-	asset: string,
-	address: string
-): AddressHistoryEntry | null {
-	const all = loadAddressHistory();
-	// Search from most-recent backward (entries are appended at
-	// the end, so iterate in reverse for the latest match).
-	// cp44-J-71 fix: explicit undefined guard.  At runtime
-	// all[i] is always defined for i in [0, all.length); strict
-	// mode requires the guard for the union type to be sound.
-	for (let i = all.length - 1; i >= 0; i--) {
-		const e = all[i];
-		if (e !== undefined && e.asset === asset && e.address === address) return e;
+		/* corrupt: treated as empty */
 	}
 	return null;
 }
 
-/** Clear the entire address history.  Wired to the "Forget address
- *  history" control in Settings → Privacy (NotificationSettings.svelte),
- *  and used by tests.  No confirmation prompt of its own; the settings
- *  control adds a two-step confirm before calling this. */
-export function clearAddressHistory(): void {
-	if (typeof localStorage === 'undefined') return;
+function writeFile(f: AddressHistoryFile): void {
 	try {
-		localStorage.removeItem(STORAGE_KEY);
+		storage()?.setItem(ADDRESS_HISTORY_KEY, JSON.stringify(f));
 	} catch {
-		// Same fail-silent rationale as recordAddressShare.
+		/* full / private mode: best-effort */
+	}
+}
+
+/** The file, created with a fresh per-install salt when there is none. */
+async function fileForWrite(): Promise<AddressHistoryFile> {
+	const existing = readFile();
+	if (existing !== null) return existing;
+	await ensureSodium();
+	return {
+		v: 2,
+		salt: sodium.to_base64(sodium.randombytes_buf(32), sodium.base64_variants.ORIGINAL),
+		tags: []
+	};
+}
+
+async function tagFor(salt: string, asset: string, address: string): Promise<string> {
+	await ensureSodium();
+	const key = sodium.from_base64(salt, sodium.base64_variants.ORIGINAL);
+	const msg = sodium.from_string(`${asset.toUpperCase()}\u0000${address}`);
+	const mac = sodiumSumo().crypto_auth_hmacsha256(msg, key);
+	return sodium.to_hex(mac.subarray(0, TAG_BYTES));
+}
+
+function withTag(f: AddressHistoryFile, tag: string): AddressHistoryFile {
+	const tags = [...f.tags.filter((t) => t !== tag), tag];
+	return { ...f, tags: tags.length > MAX_ENTRIES ? tags.slice(tags.length - MAX_ENTRIES) : tags };
+}
+
+/** True when an older build's plaintext history is still in storage. */
+export function hasLegacyAddressHistory(): boolean {
+	try {
+		return storage()?.getItem(LEGACY_ADDRESS_HISTORY_KEY) != null;
+	} catch {
+		return false;
+	}
+}
+
+/** Convert an older build's plaintext history to the hashed form and delete
+ *  it. Idempotent; a no-op when there is none. */
+export async function migrateLegacyAddressHistory(): Promise<void> {
+	const s = storage();
+	if (s === null) return;
+	let raw: string | null;
+	try {
+		raw = s.getItem(LEGACY_ADDRESS_HISTORY_KEY);
+	} catch {
+		return;
+	}
+	if (raw === null) return;
+	try {
+		const parsed = JSON.parse(raw) as { entries?: unknown };
+		const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
+		let f = await fileForWrite();
+		for (const e of entries) {
+			const asset = (e as { asset?: unknown })?.asset;
+			const address = (e as { address?: unknown })?.address;
+			if (typeof asset === 'string' && typeof address === 'string') {
+				f = withTag(f, await tagFor(f.salt, asset, address));
+			}
+		}
+		writeFile(f);
+	} catch {
+		/* unreadable legacy record: dropped below */
+	}
+	try {
+		s.removeItem(LEGACY_ADDRESS_HISTORY_KEY);
+	} catch {
+		/* best-effort */
+	}
+}
+
+/** Remember that `address` (of `asset`) was shared from this device. */
+export async function recordAddressShare(asset: string, address: string): Promise<void> {
+	if (storage() === null) return;
+	try {
+		await migrateLegacyAddressHistory();
+		const f = await fileForWrite();
+		writeFile(withTag(f, await tagFor(f.salt, asset, address)));
+	} catch {
+		/* best-effort: the share itself is never blocked */
+	}
+}
+
+/**
+ * Send a share with `send`, and remember the address only once it was sent.
+ * A share that failed is not a reuse: recording it first made the retry warn
+ * "you shared this address before". Recording is best-effort and never fails
+ * the share; a failed send rethrows.
+ */
+export async function shareAddress(
+	asset: string,
+	address: string,
+	send: () => Promise<void> | void
+): Promise<void> {
+	await send();
+	void recordAddressShare(asset, address);
+}
+
+/** Was `address` (of `asset`) shared from this device before? */
+export async function wasSharedBefore(asset: string, address: string): Promise<boolean> {
+	try {
+		await migrateLegacyAddressHistory();
+		const f = readFile();
+		if (f === null || f.tags.length === 0) return false;
+		return f.tags.includes(await tagFor(f.salt, asset, address));
+	} catch {
+		return false;
+	}
+}
+
+/** How many addresses are remembered (Settings → Privacy). */
+export function addressHistoryCount(): number {
+	return readFile()?.tags.length ?? 0;
+}
+
+/** Forget the whole history (Settings → Privacy "Forget address history"),
+ *  including an older build's plaintext record. */
+export function clearAddressHistory(): void {
+	const s = storage();
+	if (s === null) return;
+	for (const k of [ADDRESS_HISTORY_KEY, LEGACY_ADDRESS_HISTORY_KEY]) {
+		try {
+			s.removeItem(k);
+		} catch {
+			/* best-effort */
+		}
 	}
 }

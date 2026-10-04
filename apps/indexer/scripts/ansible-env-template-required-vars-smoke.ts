@@ -2,9 +2,9 @@
 /**
  * ansible-env-template-required-vars-smoke.
  *
- * Part 122 cp52 STRUCTURAL DEFENSE (LL #56 / O-6).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp52-A3 class: every env var that the indexer/relay
+ * Closes the class: every env var that the indexer/relay
  * Zod schema marks REQUIRED (no `.default()`, no `.optional()`)
  * MUST be present in the corresponding Ansible env template
  * (`ops/ansible/roles/morphit/templates/indexer.env.j2` and
@@ -12,23 +12,23 @@
  * fresh host yields services that fail Zod validation at startup.
  *
  * Bug history:
- *   - Ansible templates last touched at cp36; canonical env
- *     examples updated through cp49.
- *   - Cp52 deep-deep on playbook readiness surfaced
+ *   - Ansible templates last touched; canonical env
+ *     examples updated through a later fix.
+ *   - on playbook readiness surfaced
  *     `MORPHIT_INDEXER_PUBLIC_ORIGIN` missing from the indexer
  *     template despite being a `z.string().url()` required field.
  *     Indexer would crash at startup on a fresh deploy.
- *   - Fix landed inline at cp52; this smoke pins the pattern.
+ *   - Fix landed inline; this smoke pins the pattern.
  *
  * Recurring class scope progression (6 defenses across 5 checkpoints):
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker hardcoded tables
- *   cp51-O5: per-asset i18n FAQ key coverage
- *   cp52-O6: Ansible env template required-var parity (THIS)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker hardcoded tables
+ *   per-asset i18n FAQ key coverage
+ *   Ansible env template required-var parity (THIS)
  *
- * Mutation test verification: M-120 — deleting
+ * Mutation test verification: — deleting
  * `MORPHIT_INDEXER_PUBLIC_ORIGIN` from indexer.env.j2 fires:
  *   "ansible-env-template-required-vars FAILED:
  *    indexer template missing required env var
@@ -76,11 +76,11 @@ const SUBSYSTEMS: SubsystemDef[] = [
 		templatePath: join(__dirname, '..', '..', '..', 'ops', 'ansible', 'roles', 'morphit', 'templates', 'relay.env.j2')
 	},
 	{
-		// Added cp58 — matrix-bot has its own Ansible template under
+		// Added — matrix-bot has its own Ansible template under
 		// roles/matrix_bot/ separate from the morphit role.  Its schema
 		// is `const SCHEMA = z.object({` (not `envSchema`); the parser
 		// regex above matches `envSchema|envSchema\s*=` — for matrix-bot
-		// the parser does not match.  Cp58 also makes the regex match
+		// the parser does not match.  A later change also makes the regex match
 		// `SCHEMA`-named schemas.
 		name: 'matrix-bot',
 		configPath: join(__dirname, '..', '..', 'matrix-bot', 'src', 'config.ts'),

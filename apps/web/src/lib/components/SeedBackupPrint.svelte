@@ -3,7 +3,7 @@
 	 * SeedBackupPrint — printable backup card for the seed phrase
 	 * shown during /onboarding.
 	 *
-	 * Tier 1.3 follow-up (Part 92): the doc said "no printable PDF
+	 * Tier 1.3 follow-up: the doc said "no printable PDF
 	 * template, no 'send to my printer' button, no QR code that
 	 * links to a printable backup card.  The user is on her own
 	 * to find a pen and figure out how to write 12 words
@@ -32,12 +32,12 @@
 	 *   - On `afterprint`, the print-mode flag is removed so
 	 *     the screen UI returns to normal.
 	 *
-	 * Mechanics — portal + normal-flow isolation (cp261):
+	 * Mechanics — portal + normal-flow isolation:
 	 *
 	 *   SvelteKit renders the whole app inside
 	 *   `<div id="svelte" style="display: contents">` (see
 	 *   `apps/web/src/app.html`), so the card lives DEEP inside
-	 *   that subtree.  An earlier approach (cp249) collapsed that
+	 *   that subtree.  An earlier approach collapsed that
 	 *   subtree to a zero-height, overflow-clipped box and made the
 	 *   card `position: fixed` to escape the clip — but a fixed
 	 *   element whose entire normal-flow context is zero-height is
@@ -199,7 +199,7 @@
 
 	/* ── Print mode: format the card for paper, on ONE page. ──── */
 	@media print {
-		/* cp261 — print isolation, robust version.  The card is
+		/* print isolation, robust version.  The card is
 		   portaled to be a direct child of <body> (see bodyPortal in
 		   the script), so we no longer collapse the app subtree or rely
 		   on a `position: fixed` card escaping it — that approach printed

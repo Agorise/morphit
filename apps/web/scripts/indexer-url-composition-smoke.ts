@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * indexer-url-composition — cp202 guard (routing-topology fix).
+ * indexer-url-composition — guard (routing-topology fix).
  *
  * The frontend reaches the indexer at `<origin>/v1/...` (REST + SSE)
  * and `<origin>/rss/...` (feeds). The ONLY correct way to build those

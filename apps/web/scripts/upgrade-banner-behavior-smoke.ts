@@ -1,7 +1,7 @@
 /**
  * upgrade-banner-behavior-smoke.
  *
- * Guards the post-upgrade UX (the maintainer t.txt #9): after a server upgrade a user
+ * Guards the post-upgrade UX: after a server upgrade a user
  * should see ONLY the translucent "Load it now" snackbar (UpdateBanner, which
  * carries a "Later"/cancel), never the redundant reload-bar nor a red
  * "tampered" scare that a routine version bump would otherwise trip.
@@ -57,7 +57,7 @@ expect(
 	'asset-mismatch alert is gated on a non-stale build',
 	/tamperedPaths\.length > 0 &&\s*\$staleBuild !== true/.test(tamperSrc)
 );
-// cp514 (t.txt A) — the scary red "Build integrity check failed" banner still
+// the scary red "Build integrity check failed" banner still
 // flashed during a routine upgrade, before the friendly "Load it now" snackbar.
 // The asset-hash case is now ALSO suppressed while a service-worker update is
 // pending and for a short post-boot grace window, so the update path leads. A

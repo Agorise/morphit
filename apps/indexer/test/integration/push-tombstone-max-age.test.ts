@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep (rv2-11) — a push tombstone outlives the push max age.
+ * a push tombstone outlives the push max age.
  *
  * The tombstone retention was a fixed hour while MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS
  * could be raised without limit. With a two-hour max age, a tombstone pruned

@@ -1,5 +1,5 @@
 /**
- * Pay-now amount pre-fill (cp406).
+ * Pay-now amount pre-fill.
  *
  * Given an order, compute the CRYPTO amount a payer should send to cover the
  * order's fiat minimum, at the order's price. Used to seed (editable) the

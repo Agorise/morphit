@@ -149,7 +149,7 @@ fi
 # Removing it from before and re-adding it after the broadcast returns, which is
 # the shape a careless reorder produces.
 #
-# Re-aimed after the v1.18.0 deep-deep (FC-1): the call now returns a handle the
+# Re-aimed after an audit finding: the call now returns a handle the
 # send path uses once the node has accepted, so the handle is declared where the
 # call was and assigned after the chain call returns.
 snapshot "$BCAST"
@@ -171,7 +171,7 @@ else
 fi
 
 # ── N3. The fan-out is removed entirely ──────────────────────────────
-# Re-aimed after the v1.18.0 deep-deep (FC-1), as Q5 in the instance-matrix
+# Re-aimed after an audit finding, as Q5 in the instance-matrix
 # harness: deleting the fan-out means no handle at all.
 snapshot "$BCAST"
 printf '%s\n' '		const fast = fastDispatch?.dispatchIfChat(trx);' > "$WORK/.needle"

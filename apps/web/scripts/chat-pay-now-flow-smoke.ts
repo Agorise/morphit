@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * chat-pay-now-flow-smoke (cp402 [7]).
+ * chat-pay-now-flow-smoke.
  *
  * Pins down the SAFETY-CRITICAL wiring of the chat "Pay now" flow —
  * this is where a trader initiates or records a real money transfer,
@@ -11,7 +11,7 @@
  * smoke time and force the maintainer to update this file in the same
  * commit.
  *
- * The invariants (each maps to a design decision in REVISIT cp402 #7):
+ * The invariants (each maps to a design decision in backlog #7):
  *
  *   ASSET LOCK — the composer "Pay now" locks the coin to the ORDER's
  *   asset so grandma can never send the wrong coin. FundsSentModal
@@ -71,7 +71,7 @@ const SCENARIOS: readonly Scenario[] = [
 	{
 		name: '1 — composer Pay-now asset lock derives ONLY from a registry-known order asset',
 		file: CONV,
-		// cp406 — the case-folding registry lookup moved into chatAssetFromTicker
+		// the case-folding registry lookup moved into chatAssetFromTicker
 		// (in $lib/assets/registry): OrderRecord.asset is UPPERCASE ('BLURT'),
 		// ChatAssetTicker is lower-case ('blurt'); the helper folds the case and
 		// returns undefined for anything not in the registry.
@@ -136,7 +136,7 @@ const SCENARIOS: readonly Scenario[] = [
 			'{#if methodLocked}',
 			"$_('chat.funds_sent.locked_method_label'",
 			'{:else}',
-			// v1.5.0 (tt.txt B): the unlocked branch renders the coin SELECT, not
+			// v1.5.0: the unlocked branch renders the coin SELECT, not
 			// the old 16-button tablist. The invariant is unchanged — a LOCKED
 			// asset must show the read-only pill and no picker at all — only the
 			// widget that proves "picker present" in the {:else} branch changed.
@@ -154,7 +154,7 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			'amount?: number;',
 			'amountEditable?: boolean;',
-			// cp470 — enteredAmount is no longer empty-init; it pre-fills the
+			// enteredAmount is no longer empty-init; it pre-fills the
 			// order-minimum seed (via untrack(() => … seedToInput(amount) …)) so
 			// the field starts valid. Assert the state declaration + the pre-fill,
 			// not the old empty string.
@@ -169,7 +169,7 @@ const SCENARIOS: readonly Scenario[] = [
 		name: '10 — PayBlurtModal: the SAME canPay guard + broadcast use effectiveAmount, and onPaid returns it',
 		file: PAYB,
 		mustHave: [
-			// tt.txt #12 — the inline `effectiveAmount > 0 &&` guard in canPay was
+			// the inline `effectiveAmount > 0 &&` guard in canPay was
 			// replaced by `amountValid`, which is STRICTER: a hard MIN_BLURT floor
 			// plus `hasBlurtPrecision` (toFixed(3) rounds UP, so 1.0006 would have
 			// broadcast 1.001 of someone else's money). Pin the real invariant.

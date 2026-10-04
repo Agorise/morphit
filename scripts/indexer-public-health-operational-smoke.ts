@@ -1,21 +1,21 @@
 #!/usr/bin/env tsx
 /**
- * indexer-public-health-operational — cp667.
+ * indexer-public-health-operational.
  *
- * The PUBLIC /v1/health body now carries three operator-facing blocks —
- * `ipfs_seeding`, `system` (cpu/mem/disk), and `relay` ({ up }) — so an operator
- * can poll one URL over HTTP and see whether the node is seeding the release, how
- * loaded the box is, and whether the relay is reachable. (the maintainer's call to make
- * these public; backups/canary deliberately stay out of the public body.)
+ * /v1/health carries three operator-facing blocks — `ipfs_seeding`, `system`
+ * (cpu/mem/disk), and `relay` ({ up }) — served from a cached snapshot. The
+ * public body is coarse: the seeding state and whether the relay answers.
+ * The seeding detail and the host's resource figures need x-morphit-local-health
+ * (the operator's own poll); backups/canary stay out of the body entirely.
  *
  * This covers (1) the pure seeding DECISION agrees with ops-cli's checkIpfsSeeding,
- * (2) the snapshot SHAPE is stable (Zabbix-free HTTP polling depends on it), and
- * (3) the WIRING — the blocks are on the PUBLIC body, not behind the local-health
- * / verbose gate, and are served from the cached snapshot (not sampled per
- * request on this hot endpoint).
+ * (2) the snapshot SHAPE is stable (HTTP polling depends on it), and (3) the
+ * WIRING — what is public and what is local, served from the cached snapshot
+ * (not sampled per request on this hot endpoint).
  *
  * Tamper tests (each must turn this red):
- *   - Move ipfs_seeding/system/relay inside the `if (localDiag)` gate → fails.
+ *   - Move `body.system = op.system` out of the `if (localDiag)` gate → fails.
+ *   - Serve the full seeding block publicly → fails.
  *   - Drop the getOperationalSnapshot call → fails.
  *   - Sample CPU/systemctl/relay per request instead of caching → (perf) the
  *     stale-while-revalidate contract check fails.
@@ -69,7 +69,7 @@ check('a timer inactive → degraded', decideSeeding(mk({ pinTimer: 'inactive' }
 check('last rebroadcast failed → degraded', decideSeeding(mk({ rebroadcastFailed: true })).state === 'degraded');
 check('all active, no failures → ok', decideSeeding(mk({})).state === 'ok');
 
-// ── cp766: one failing block must NOT blank the others (merge resilience) ──
+// ── one failing block must NOT blank the others (merge resilience) ──
 const populated: OperationalSnapshot = {
 	ipfs_seeding: { state: 'ok', detail: 'seeding' },
 	system: { cpu_pct: 12, mem_pct: 40, mem_used_gb: 6, mem_total_gb: 15, disk_pct: 20, disk_used_gb: 90, disk_total_gb: 460, disk_avail_gb: 360 },
@@ -128,19 +128,24 @@ check('reading the snapshot never throws', !threw);
 // ── WIRING: on the PUBLIC body, not behind the gate ──────────────
 const health = read('apps/indexer/src/api/health.ts');
 check('health imports the operational snapshot', /getOperationalSnapshot|primeOperationalSnapshot/.test(health));
-check('the public body sets ipfs_seeding + system + relay', /body\.ipfs_seeding = op\.ipfs_seeding/.test(health) && /body\.system = op\.system/.test(health) && /body\.relay = \{ up: op\.relay\.up \}/.test(health));
+// the public body is coarse — the seeding state and whether the relay
+// answers. The seeding detail and the host's cpu/mem/disk figures are served
+// only with x-morphit-local-health.
+check('the public body sets the seeding state and relay.up', /body\.ipfs_seeding = localDiag \? op\.ipfs_seeding : \{ state: op\.ipfs_seeding\.state \}/.test(health) && /body\.relay = \{ up: op\.relay\.up \}/.test(health));
 // v1.18.0 (F32): the snapshot also carries the relay's hidden_only for the
 // clearnet gate. It is not a public health field; the body copies `up` alone.
 check('the relay\'s hidden_only is NOT served on the public health body', !/body\.[\w.]+\s*=[^;]*hidden_only/.test(health));
 check('the snapshot is primed at route setup', /primeOperationalSnapshot\(config\.relayHealthUrl\)/.test(health));
 
-// the three blocks must be assigned BEFORE the localDiag gate (i.e. public)
-const opIdx = health.indexOf('body.ipfs_seeding = op.ipfs_seeding');
+// the host figures are assigned INSIDE the local-health gate
 const gateIdx = health.indexOf("c.req.header('x-morphit-local-health')");
+const localIdx = health.indexOf('if (localDiag) {', gateIdx);
+const sysIdx = health.indexOf('body.system = op.system');
+const closeIdx = localIdx > 0 ? health.indexOf('\n\t\t}', localIdx) : -1;
 check(
-	'operational blocks are PUBLIC (assigned before the local-health gate)',
-	opIdx > 0 && gateIdx > 0 && opIdx < gateIdx,
-	'they must not be gated behind x-morphit-local-health'
+	'the host cpu/mem/disk figures are LOCAL only (inside the local-health gate)',
+	gateIdx > 0 && localIdx > gateIdx && sysIdx > localIdx && sysIdx < closeIdx,
+	'they must not reach the public body'
 );
 
 console.log(

@@ -1,0 +1,24 @@
+# Morphit — on a tor-only node, only Tor and i2pd may reach the internet.
+#
+# Loads the nftables rule ops/tor-only/morphit-tor-egress.sh wrote to
+# /etc/morphit/tor-egress.nft (root-owned) before the network comes up, so
+# nothing on this server gets out between boot and Tor starting. Installed and
+# enabled only on tor-only nodes (Ansible tor role; `morphit-ops upgrade`).
+# There is deliberately no ExecStop: stopping this unit does not lift the rule.
+# To lift it on purpose, on this server run:
+#   sudo nft delete table inet morphit_egress && sudo systemctl disable morphit-tor-egress
+[Unit]
+Description=Morphit tor-only egress rule (only Tor and i2pd reach the internet)
+DefaultDependencies=no
+Before=network-pre.target
+Wants=network-pre.target
+After=local-fs.target
+ConditionPathExists=/etc/morphit/tor-egress.nft
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/morphit/tor-egress.nft
+
+[Install]
+WantedBy=sysinit.target

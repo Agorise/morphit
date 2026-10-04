@@ -1,6 +1,6 @@
 # ADR-0025 — Litecoin (LTC) trade-only addition
 
-**Status:** Accepted (Part 122 cp24)
+**Status:** Accepted
 **Date:** 2026-05-17
 **Deciders:** project maintainer
 **Supersedes:** none
@@ -8,24 +8,24 @@
 **Related:** ADR-0023 (USDT multi-network — established the
 Category A/B trade-only pattern), ADR-0024 (Bitcoin Cash — first
 single-network Category-B addition), ADR-0011 (fee model +
-fee_method enum-freeze), Part 122 cp22 (interactive
+fee_method enum-freeze), (interactive
 disable-trade-only-asset wizard step).
 
 ## Context
 
 Following BCH's successful single-network Category-B integration
-in Part 122 cp21 (ADR-0024), the project maintainer requested
+ (ADR-0024), the project maintainer requested
 Litecoin (LTC) as the third Category-B trade-only asset.  LTC
 shares BCH's architectural shape — single-network transparent
-chain, no central issuer, BTC-fork heritage — making the cp21
+chain, no central issuer, BTC-fork heritage — making the
 template directly applicable.
 
-The cp21 BCH addition surfaced a CLASS of bugs cp23's fresh
-deep-deep found: canonical-source extensions (asset registry,
+The BCH addition surfaced a CLASS of bugs the fresh
+canonical-source extensions (asset registry,
 chat payload, primary UI dispatches) but missed downstream
 typed-consumer maps (price store, Coingecko ID map, fallback
 prices, payment-method registry, cheat-sheet, crawler-facing
-static files).  Cp24 closes those proactively for LTC rather
+static files).  A later change closes those proactively for LTC rather
 than waiting for a post-addition DD to surface them.
 
 ## Decision
@@ -36,7 +36,7 @@ following ADR-0024's template, with eight design choices:
 ### 1. Trade-only (Category B), `canPayListingFee: false`
 
 Listing-fee payment methods remain frozen at `{blurt, btc, xmr,
-waived_first_buy}` per Memory #23 / ADR-0011.  Adding LTC as a
+waived_first_buy}` per the frozen fee_method rule / ADR-0011.  Adding LTC as a
 new fee_method enum value would break the wire-format invariant
 that smokes (`fee-method-enum-frozen-smoke`) explicitly pin.
 
@@ -110,31 +110,30 @@ are enumerated in `docs/OPERATIONS.md` for operator reference.
 
 ### 7. Default-ON instance-wide; operator opt-out via env var
 
-Per Memory #25: every new asset ships ENABLED by default on a
+Per the default-on rule for new assets: every new asset ships ENABLED by default on a
 fresh instance.  Operators wishing to refuse LTC set
 `MORPHIT_INDEXER_DISABLED_ASSETS="LTC"` (or include LTC in a
 comma-separated list).
 
 The `morphit-ops init` wizard step 13 "Trade-only asset policy"
-(Part 122 cp22) walks new operators through this decision at
+ walks new operators through this decision at
 install time; LTC surfaces in the wizard automatically because
 the wizard iterates `ASSETS.filter(a => a.canBeTraded &&
 !a.canPayListingFee)` from the canonical registry.
 
-### 8. Operator-approved logo at `apps/web/static/icons/icon-ltc.svg` (updated Part 122 cp27-DD2)
+### 8. Operator-approved logo at `apps/web/static/icons/icon-ltc.svg` (updated)
 
 Silver-gray disc with stylized "Ł" (the Polish-style L with
 diagonal slash that distinguishes Litecoin's mark from a
 generic L).  No `<text>` elements (font-fallback rules from
-ADDING-A-COIN.md).  Originally shipped at cp24 as a placeholder
+ADDING-A-COIN.md).  Originally shipped as a placeholder
 pending community-blessed artwork from the Litecoin Foundation;
-operator-approved as-is at cp27-DD2 (the maintainer: "the current ltc icon
-looks great, i do not think u need to change that").  Minified
+approved as-is by the maintainer.  Minified
 via svgo to 0.4 KB while preserving viewBox.  Drop-in SVG swap
 remains supported with no other code changes if the Litecoin
 Foundation later publishes a different mark.
 
-## Files changed (cp24)
+## Files changed
 
 Code:
 - `packages/asset-registry/src/index.ts` — `ASSET_TICKERS` extended; LTC `AssetEntry`
@@ -165,20 +164,20 @@ i18n:
 
 Logo:
 - `apps/web/static/icons/icon-ltc.svg` — operator-approved
-  stylized "Ł" on silver disc, originally shipped cp24 as
-  placeholder; operator approval Part 122 cp27-DD2; minified
-  via svgo at cp27-DD.
+  stylized "Ł" on silver disc, originally shipped as
+  placeholder; operator approval; minified
+  via svgo.
 
-cp23-DD-class downstream consumers (the BCH-class bugs cp23 found, closed proactively for LTC):
+downstream consumers (the BCH-class bugs a later change found, closed proactively for LTC):
 - `apps/web/src/lib/prices/index.ts` — `LTC: null` in `internalStore` + `reset()`
 - `apps/web/src/lib/prices/providers/coingecko.ts` — `LTC: 'litecoin'`
-- `apps/web/src/lib/prices/providers/fallback.ts` — `LTC: 100`
+- `apps/web/src/lib/prices/providers/fallback.ts` (since removed) — `LTC: 100`
 - `apps/web/src/routes/[lang]/cheat-sheet/+page.svelte` — LTC row
 - `apps/web/src/lib/payments/registry.ts` — `pay_ltc` entry
 - `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts` — `pay_ltc` in `RESERVED_CANONICAL_KEYS`
 - `apps/indexer/src/db/schema.sql` — comments updated
 - `docs/API.md` — asset filter + example
-- `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — status notes
+- the internal grandma-UX investigation — status notes
 - `apps/web/static/llms.txt` + `llms-full.txt` — references updated
 
 ## Consequences
@@ -188,7 +187,7 @@ cp23-DD-class downstream consumers (the BCH-class bugs cp23 found, closed proact
 - **Third Category-B asset shipped** — pattern fully matured.
   Future trade-only additions (Dash, DOGE) will follow the
   same template with even less ceremony.
-- **cp23-DD class closed proactively** — for the first time
+- **Class closed proactively** — for the first time
   in the asset-addition lifecycle, the downstream typed-consumer
   maps are touched in the SAME checkpoint as the canonical
   registry, rather than days later in a follow-up DD.

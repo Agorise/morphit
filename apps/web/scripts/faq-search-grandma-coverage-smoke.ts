@@ -3,7 +3,7 @@
  * Smoke: FAQ search returns sensible top results for Grandma's
  *        first-load questions.
  *
- * Anchor: cp137 deep-deep walkthrough finding H-2.  Before the
+ * Anchor: deep walkthrough finding H-2.  Before the
  * synonym additions, queries like "how do I start" returned
  * `order_editing` at score 1.00 — completely wrong — while the
  * actually-correct entry (`how_to_trade_walkthrough`) sat at #2.

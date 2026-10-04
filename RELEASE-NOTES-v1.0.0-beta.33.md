@@ -73,4 +73,4 @@ balances carry over untouched.
   tamper-checked guard that fails if the balance cache is ever loosened back to a
   stale-serving window, and a check that keeps the operator menu wired to the
   interactive payment-method flow. A fresh five-persona walkthrough and a focused
-  deep-deep review confirmed the changed sign-in and operator surfaces end to end.
+  deep review confirmed the changed sign-in and operator surfaces end to end.

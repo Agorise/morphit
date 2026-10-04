@@ -30,17 +30,28 @@
  *     user-driven subscribe attempt.
  *
  * Privacy: this module never logs the subscription endpoint or
- * any payload content.  It does pass the user-agent string to the
- * relay (so the UI's device list can show "Firefox on Linux"); the
- * relay truncates that to 200 chars at the storage layer.
+ * any payload content. The relay is told only what delivery needs: the
+ * account, the push subscription, the privacy mode, the signature, the
+ * muted categories and the app's UI language (one of the 10 supported
+ * codes, so notifications arrive in it). Not the browser's user-agent
+ * string, not navigator.language — both would tie the account to a
+ * browser build or a region in the relay's database.
  */
 
 import { get } from 'svelte/store';
+import { locale as uiLocale } from 'svelte-i18n';
+import { DEFAULT_LOCALE, matchSupported } from '$i18n/locales';
 import { MORPHIT_RELAY_ORIGIN, resolveOrigin } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
 import { liveIdentity } from '$lib/stores/identity';
-import { notificationPrefs, mutedCategoriesFromPrefs } from './preferences';
-// cp165 byte budget: dblurt's PrivateKey + cryptoUtils are only
+import {
+	notificationPrefs,
+	mutedCategoriesFromPrefs,
+	setChannel,
+	setPushPrivacy,
+	type PushPrivacy
+} from './preferences';
+// byte budget: dblurt's PrivateKey + cryptoUtils are only
 // used inside `signSubscribe`/`signUnsubscribe`, which only fire
 // when the user toggles a notification preference.  Importing
 // dblurt statically here pulled the 2 MB chunk into
@@ -103,7 +114,7 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 }
 
 /** Re-send this device's per-category opt-outs to the relay after the
- *  user toggled a category (cp450 GAP A).
+ *  user toggled a category.
  *
  *  No-op unless the browser already holds a push subscription — a
  *  category toggle must never CREATE a subscription, only update one
@@ -222,8 +233,8 @@ async function sha256(input: string): Promise<Uint8Array> {
 
 /** Sign the canonical "morphit:push:<action>:..." string with
  *  the user's posting key.  Throws SubscribeError when the
- *  session is locked or signing fails.  cp14 (subscribe) +
- *  cp131 MED-009 (unsubscribe).
+ *  session is locked or signing fails.  (subscribe) +
+ *  (unsubscribe).
  *
  *  The signature is what the relay's user-posting-key signature
  *  verifier expects: a BLURT-prefix base58 string produced by
@@ -257,7 +268,7 @@ async function signPushAction(
 	// dblurt's PrivateKey/Sign API takes Buffer in TS types but
 	// accepts any Uint8Array at runtime.  Mirrors the pattern at
 	// apps/web/src/lib/blurt/sign.ts.
-	// cp165: dynamic-imported to keep dblurt out of the first-paint
+	// dynamic-imported to keep dblurt out of the first-paint
 	// settings-page chunk graph (the only consumer of this module).
 	const { PrivateKey, cryptoUtils } = await import('@beblurt/dblurt');
 	const messageBuf = messageHashBytes as unknown as Buffer;
@@ -270,7 +281,7 @@ async function signPushAction(
 	return sig.toString();
 }
 
-/** cp14 — sign a subscribe request. */
+/** sign a subscribe request. */
 async function signSubscribe(
 	account: string,
 	endpoint: string,
@@ -279,7 +290,7 @@ async function signSubscribe(
 	return signPushAction('subscribe', account, endpoint, timestamp);
 }
 
-/** cp131 MED-009 — sign an unsubscribe request.  Same shape
+/** sign an unsubscribe request.  Same shape
  *  as signSubscribe but binds the signature to the
  *  unsubscribe action so it can't be replayed against
  *  subscribe (or vice-versa). */
@@ -369,7 +380,7 @@ export async function subscribe(
 			'[push] pushManager.subscribe failed:',
 			err instanceof Error ? `${err.name}: ${err.message}` : err
 		);
-		// cp407 — the browser could not register with its push service. This
+		// the browser could not register with its push service. This
 		// is a BROWSER/PLATFORM limitation, not a Morphit fault: common in
 		// privacy-hardened / de-googled browsers where Google's FCM push
 		// service is disabled or unreachable, or on networks that block it.
@@ -392,25 +403,20 @@ export async function subscribe(
 		throw 'subscribe_failed' satisfies SubscribeError;
 	}
 
-	// Part 122 cp14 — sign the canonical message with the user's
+	// sign the canonical message with the user's
 	// posting key.  When the session is locked, signSubscribe
 	// throws 'locked_session' and we bail before talking to the
 	// relay (the UI surfaces a "please unlock" message).
 	const timestamp = Math.floor(Date.now() / 1000);
 	const signatureHex = await signSubscribe(account, subJson.endpoint, timestamp);
 
-	// Locale: pick the user's preferred i18n tag if svelte-i18n is
-	// running and exposes it; otherwise fall back to navigator's
-	// preferred language; otherwise 'en'.  The relay validates
-	// against its known-locale list and falls back to 'en' on its
-	// side too.
-	let locale = 'en';
-	if (typeof navigator !== 'undefined' && typeof navigator.language === 'string') {
-		locale = navigator.language;
-	}
+	// The language notifications are written in: the app's UI language, one
+	// of the supported codes (never navigator.language, which can name a
+	// region). The relay maps anything else to 'en' too.
+	const locale = matchSupported(get(uiLocale) ?? '') ?? DEFAULT_LOCALE;
 
 	const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/subscribe`;
-	// cp450 GAP A — send the user's per-category opt-outs so the relay
+	// send the user's per-category opt-outs so the relay
 	// only Web-Pushes categories this device wants. Absent/empty = all on.
 	const mutedCategories = mutedCategoriesFromPrefs(get(notificationPrefs));
 	let res: Response;
@@ -425,10 +431,6 @@ export async function subscribe(
 					keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth }
 				},
 				privacy_mode: privacyMode,
-				user_agent:
-					typeof navigator !== 'undefined' && navigator.userAgent
-						? navigator.userAgent
-						: undefined,
 				signature: signatureHex,
 				timestamp,
 				locale,
@@ -442,9 +444,9 @@ export async function subscribe(
 	if (res.status === 503) throw await pushDisabledError(res);
 	if (res.status === 401) {
 		const body = (await res.json().catch(() => ({}))) as { status?: string };
-		throw (body.status === 'signature_required'
+		throw body.status === 'signature_required'
 			? ('signature_required' as SubscribeError)
-			: ('signature_invalid' as SubscribeError));
+			: ('signature_invalid' as SubscribeError);
 	}
 	if (res.status === 429) throw 'subscribe_failed' satisfies SubscribeError;
 
@@ -463,6 +465,26 @@ export async function subscribe(
 		privacyMode: (body.privacy_mode as PushPrivacyMode) ?? privacyMode,
 		createdAt: body.created_at ?? new Date().toISOString()
 	};
+}
+
+/** The push privacy setting, applied. 'off' is not just a preference: it
+ *  cancels this browser's push subscription, in the browser and at the relay,
+ *  so nothing is delivered and the relay keeps no link between the account and
+ *  this device. Best-effort; never throws. */
+export async function setPushPrivacyLevel(
+	level: PushPrivacy,
+	account: string | null
+): Promise<void> {
+	setPushPrivacy(level);
+	if (level !== 'off' || !isPushSupported()) return;
+	try {
+		if ((await currentSubscription()) === null) return;
+		setChannel('push', false);
+		if (account) await unsubscribe(account);
+		else await (await currentSubscription())?.unsubscribe();
+	} catch {
+		// best-effort
+	}
 }
 
 /** Unsubscribe the current browser from push for `account`.  Two
@@ -491,10 +513,10 @@ export async function unsubscribe(account: string): Promise<UnsubscribeSuccess> 
 	//    the relay about; otherwise there's nothing to delete.
 	if (endpoint) {
 		const url = `${resolveOrigin(MORPHIT_RELAY_ORIGIN)}/v1/push/unsubscribe`;
-		// cp131 MED-009 — sign the unsubscribe just like
+		// sign the unsubscribe just like
 		// subscribe.  When the session is locked we can't
 		// sign; fall back to an unsigned request (the relay
-		// will accept it in cp13-compat mode, reject it
+		// will accept it in legacy-compat mode, reject it
 		// otherwise — either way the browser-side
 		// existing.unsubscribe() above already cut off
 		// future deliveries).  ACTION-binding in the
@@ -530,7 +552,7 @@ export async function unsubscribe(account: string): Promise<UnsubscribeSuccess> 
 }
 
 /** Stop this browser's notifications for `account` on an EXPLICIT sign-out.
- *  (v1.18.0 deep-deep, M2)
+ *
  *
  *  Signing out used to leave both halves of the push subscription alive: the
  *  browser kept its subscription and the relay kept the row linking the
@@ -570,7 +592,13 @@ export async function unsubscribeOnSignOut(
 		let signatureHex: string | undefined;
 		if (postingPrivateKey) {
 			try {
-				signatureHex = await signPushAction('unsubscribe', account, endpoint, timestamp, postingPrivateKey);
+				signatureHex = await signPushAction(
+					'unsubscribe',
+					account,
+					endpoint,
+					timestamp,
+					postingPrivateKey
+				);
 			} catch {
 				signatureHex = undefined;
 			}

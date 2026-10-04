@@ -42,6 +42,34 @@
     force: false
   when: not morphit_offline_install
 
+- name: Check the Docker key is the pinned one (one key, this fingerprint)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      gpg --show-keys --with-colons /etc/apt/keyrings/docker.asc 2>/dev/null
+      | awk -F: '/^pub:/ {n++} /^fpr:/ && f == "" {f = $10} END {print n " " f}'
+    executable: /bin/bash
+  register: morphit_docker_fpr
+  changed_when: false
+  failed_when: false
+  when: not morphit_offline_install
+
+- name: Stop when it is not (the key file is removed; nothing from Docker is trusted)
+  when:
+    - (morphit_docker_fpr.stdout | default('') | trim) != ('1 ' ~ docker_apt_key_fingerprint)
+    - not morphit_offline_install
+  block:
+    - name: Remove the unexpected Docker key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.asc
+        state: absent
+    - name: Explain
+      ansible.builtin.fail:
+        msg: >-
+          Docker's apt signing key is not the one Morphit expects
+          (got: {{ morphit_docker_fpr.stdout | default('') | trim }}), so nothing from that
+          repository was trusted. Re-run later, or install from the offline bundle.
+
 - name: Add Docker apt repo
   ansible.builtin.apt_repository:
     repo: "deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ morphit_ubuntu_codename | default(ansible_distribution_release) }} stable"
@@ -66,7 +94,7 @@
     enabled: true
     state: started
 
-# cp663 #10 — the scheduler needs the Docker socket (root:docker 660);
+# the scheduler needs the Docker socket (root:docker 660);
 # resolve the host's docker-group GID so the compose can group_add it to
 # the scheduler container.  The GID varies per host, so it must not be
 # hard-coded.
@@ -169,7 +197,7 @@
 # (host.docker.internal:8082). Without this rule UFW's default-deny DROPS that
 # container-to-host connect, nginx times out and returns its stock 404 — so every
 # hidden (.onion/.b32.i2p) release fetch fails and hidden-only nodes can never
-# upgrade from this peer (the maintainer/morphit.io, diagnosed 2026-09-11: morphitlat was
+# upgrade from this peer (morphit.io, diagnosed 2026-09-11: morphitlat was
 # stranded for weeks by exactly this). The gateway is read-only and serves only
 # pinned releases (NoFetch), and this opens it ONLY to the pinned bunkerweb CIDR —
 # never the public. Same shape as the relay/indexer/MCP rules above, gated on this
@@ -275,6 +303,74 @@
     (bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed)
     and not (morphit_tor_only | default(false))
     and (morphit_offline_install | default(false))
+
+# The certificate was issued with certbot's standalone server, which
+# cannot renew while BunkerWeb holds port 80.  Renew through BunkerWeb instead:
+# Let's Encrypt's request reaches the frontend, which serves /.well-known/ from
+# the web build.  `certbot reconfigure` (certbot 2.3+) runs a real test renewal
+# against Let's Encrypt's staging server and saves the new settings only when it
+# passes; the result is read back from the renewal file.  Older certbot: a real
+# renewal through the web build (once; it saves the webroot settings only on
+# success).  `morphit-ops upgrade` does the same on installed servers.
+- name: Renew the TLS certificate through BunkerWeb (webroot)
+  when:
+    - not (morphit_tor_only | default(false))
+    - not (morphit_offline_install | default(false))
+  vars:
+    tls_renewal_conf: "/etc/letsencrypt/renewal/{{ morphit_domain }}.conf"
+    tls_webroot: "{{ morphit_repo_path }}/apps/web/build"
+  block:
+    - name: Read how the certificate renews
+      ansible.builtin.command: "grep -E '^authenticator *= *' {{ tls_renewal_conf | quote }}"
+      register: tls_renew_auth
+      changed_when: false
+      failed_when: false
+
+    - name: Read certbot's version
+      ansible.builtin.command: certbot --version
+      register: tls_certbot_version
+      changed_when: false
+      failed_when: false
+      when: tls_renew_auth.stdout is search('standalone')
+
+    - name: Switch the renewal to the web build (certbot reconfigure runs a test renewal first)
+      ansible.builtin.command:
+        cmd: >-
+          certbot reconfigure --non-interactive --cert-name {{ morphit_domain }}
+          --webroot --webroot-path {{ tls_webroot | quote }}
+      register: tls_reconfigure
+      changed_when: tls_reconfigure.rc == 0
+      failed_when: false
+      when:
+        - tls_renew_auth.stdout is search('standalone')
+        - (tls_certbot_version.stdout | default('') | regex_search('[0-9]+\.[0-9]+') | default('0.0', true)) is version('2.3', '>=')
+
+    - name: Renew once through the web build (certbot older than 2.3)
+      ansible.builtin.command:
+        cmd: >-
+          certbot certonly --non-interactive --force-renewal --cert-name {{ morphit_domain }}
+          --webroot --webroot-path {{ tls_webroot | quote }} -d {{ morphit_domain }}
+      register: tls_webroot_renew
+      changed_when: tls_webroot_renew.rc == 0
+      failed_when: false
+      when:
+        - tls_renew_auth.stdout is search('standalone')
+        - (tls_certbot_version.stdout | default('') | regex_search('[0-9]+\.[0-9]+') | default('0.0', true)) is version('2.3', '<')
+
+    - name: Read how the certificate renews now
+      ansible.builtin.command: "grep -E '^authenticator *= *' {{ tls_renewal_conf | quote }}"
+      register: tls_renew_auth_after
+      changed_when: false
+      failed_when: false
+      when: tls_renew_auth.stdout is search('standalone')
+
+    - name: Report how the certificate renews
+      ansible.builtin.debug:
+        msg: >-
+          {{ "The TLS certificate now renews through BunkerWeb (a test renewal with Let's Encrypt passed; settings read back)."
+             if tls_renew_auth_after.stdout | default('') is search('webroot')
+             else "The TLS certificate could not be switched to renew through BunkerWeb yet (the domain may not point at this server). Nothing is broken now; `sudo morphit-ops upgrade` tries again, or on this server run: sudo certbot reconfigure --cert-name " ~ morphit_domain ~ " --webroot --webroot-path " ~ tls_webroot }}
+      when: tls_renew_auth.stdout is search('standalone')
 
 - name: Print BunkerWeb verification reminder
   ansible.builtin.debug:

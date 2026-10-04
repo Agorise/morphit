@@ -13,12 +13,20 @@ Pick whichever matches how you got the code:
 | a **git clone** (from any mirror) | `git verify-tag vX.Y.Z` | the release tag was GPG-signed by Morphit's key |
 | the **source tarball** (from the release page) | `verify-download.mjs` (+ `git verify-tag`) | the bytes match what `@morphit` anchored on-chain, tied to the GPG-signed release tag |
 
-Both trace back to the **same GPG key**, whose fingerprint `@morphit`
-publishes on the Blurt chain (a `morphit_release_v1` operation with a
-`distribution` block). The expected fingerprint and hash come from the
-**blockchain**, not from the host you downloaded from — so a malicious
-mirror can't serve you a bad file *and* a matching "expected" value on
-its own web page.
+Both trace back to the **same GPG key**, Morphit's release signing key:
+
+```
+7B4C 1D18 9DBB 610C 473B  59ED 5352 4E1F 1017 EB9C
+```
+
+`verify-download.mjs` has this fingerprint built in, and `@morphit`
+also publishes it on the Blurt chain (a `morphit_release_v1` operation
+with a `distribution` block). The expected hash comes from the
+**blockchain**, checked against `@morphit`'s signature, not from the
+host you downloaded from — so a malicious mirror can't serve you a bad
+file *and* a matching "expected" value on its own web page. Compare the
+fingerprint above with one you get through a different channel (the
+Matrix room, another person's copy of the repo) before you trust it.
 
 ---
 
@@ -26,11 +34,11 @@ its own web page.
 
 If you cloned the repo from **any** of the three mirrors, verify the
 release tag's signature. First import Morphit's public key (once) and
-confirm its fingerprint against the one on the project's `/security`
-page:
+confirm it is the fingerprint above:
 
 ```sh
-gpg --keyserver keyserver.ubuntu.com --recv-keys <FINGERPRINT>
+gpg --keyserver keyserver.ubuntu.com --recv-keys 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
+gpg --fingerprint 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
 ```
 
 Then, in your clone:
@@ -58,9 +66,13 @@ anchor CI recorded on-chain:
 - `morphit-vX.Y.Z.tar.gz.sha256` — its SHA-256
 - `distribution-anchor.env` — the anchor CI wrote (the SHA-256 and the
   signing-key fingerprint that also went on-chain)
-- `morphit-vX.Y.Z.tar.gz.asc` — a detached GPG signature, **present only
-  if the project signs tarballs in CI**. The release *tag* is always
-  GPG-signed regardless (Option A), so tarball signing is optional.
+- `morphit-vX.Y.Z.tar.gz.asc` — a detached GPG signature of the tarball.
+  Every release carries it: the release job fails without the signing
+  key, so a release is never published unsigned.
+- `morphit-X.Y.Z-offline.tar.gz` and its `.asc` — the offline bundle
+  (prebuilt dependencies and frontend, for upgrades without internet),
+  signed with the same key, and its SHA-256 is in the on-chain anchor
+  (`offline_sha256`).
 
 ---
 
@@ -68,25 +80,43 @@ anchor CI recorded on-chain:
 
 `@morphit` publishes each release's hash, signing-key fingerprint, and
 mirror list onto the Blurt chain (a `morphit_release_v1` operation with
-a `distribution` block). The bundled verifier reads that anchor
-**directly from a Blurt node** and compares it to your file:
+a `distribution` block). The bundled verifier does not trust any single
+Blurt node: it asks **two nodes on different hosts** (its default list is
+six public clearnet nodes), requires
+them to agree on the history and on the block that holds the release
+op, recomputes the transaction id from that block, and checks that the
+transaction's signature recovers to `@morphit`'s posting key, which is
+pinned in the script (`BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9`).
+Only then does it compare the anchor with your file. (This is stricter
+than the browser's daily release check, which asks one node and relies on
+the same signature check, asking a second node only when the
+first fails or serves something that does not verify.)
 
 ```sh
 node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz
 ```
 
-or pin the version you expect:
+or name the version you expect (this also verifies an OLDER release,
+by finding that version's op):
 
 ```sh
 node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz --version X.Y.Z
 ```
 
-It prints your file's SHA-256, fetches the on-chain anchor, and tells
-you plainly whether they **match**. On a match it also shows the **GPG
-fingerprint** the release was signed with (feeds Step 2), the mirror
-repos, and — **if the release was pinned to IPFS** — a content-addressed
-**IPFS CID** (the CID *is* the hash, so no gateway can serve altered
-bytes under it).
+The offline bundle (`morphit-X.Y.Z-offline.tar.gz`) is checked the same
+way, against the anchored `offline_sha256`; verify its `.asc` as in Step 2.
+
+It prints your file's SHA-256 and tells you plainly whether it
+**matches** the signed anchor. On a match it also shows the **GPG
+fingerprint** to use in Step 2 — the one built into the script, not one
+read from the chain (if the chain ever names a different key, it
+refuses) — the mirror repos, and — **if the release was pinned to
+IPFS** — a content-addressed **IPFS CID** (the CID *is* the hash, so no
+gateway can serve altered bytes under it).
+
+Exit codes: `0` verified · `1` mismatch, an op not signed by
+`@morphit`, or an anchor naming a GPG key other than the pinned one ·
+`2` usage error · `3` no two agreeing nodes · `4` no anchor found.
 
 Because the expected hash and fingerprint come from the **blockchain**,
 not from the host you downloaded from, a malicious mirror can't serve
@@ -99,28 +129,28 @@ hash — for those, use **Option A** (`git verify-tag`) instead.
 
 If it reports a **mismatch**, do not trust the download.
 
-The verifier is deliberately tiny and dependency-free (only Node
-built-ins). Read it — it's `scripts/verify-download.mjs`, about two
-hundred lines — so you don't have to take even *it* on trust.
+The verifier is dependency-free (only Node built-ins) and runs outside
+a checkout. Read it — it's `scripts/verify-download.mjs` — so you don't
+have to take even *it* on trust.
 
 ---
 
 ### Step 2 — confirm the signing key
 
-Step 1 ties your tarball's bytes to the fingerprint `@morphit` anchored
-on-chain. To confirm that fingerprint really is Morphit's key, verify
-the signed **tag**: clone any mirror and run **Option A**
+Step 1 ties your tarball's bytes to `@morphit`'s signed anchor, which
+names the release key. To confirm that key really signed this release,
+verify the signed **tag**: clone any mirror and run **Option A**
 (`git verify-tag vX.Y.Z`). A `Good signature` from that same fingerprint
 closes the loop — the bytes match the chain, and the chain's key signed
 the tag.
 
-If the release page also carries a `.asc`, you can additionally check a
-signature directly on the bytes:
+Every release also carries a `.asc` for the tarball and for the offline
+bundle, so you can check a signature directly on the bytes:
 
 ```sh
-# import the key once, and confirm its fingerprint against /security
-gpg --keyserver keyserver.ubuntu.com --recv-keys <FINGERPRINT>
-gpg --fingerprint <FINGERPRINT>
+# import the key once, and confirm its fingerprint (above)
+gpg --keyserver keyserver.ubuntu.com --recv-keys 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
+gpg --fingerprint 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
 
 # then verify the tarball
 gpg --verify morphit-vX.Y.Z.tar.gz.asc morphit-vX.Y.Z.tar.gz
@@ -132,12 +162,14 @@ that just means you haven't personally signed the key; the fingerprint
 match is what matters. If any check fails, **stop** — the file is not
 what Morphit published.
 
-### Pick a Blurt node
+### Pick your Blurt nodes
 
-By default it tries a few public nodes. To choose your own:
+By default it uses a few public nodes. To choose your own, give a
+comma-separated list of at least two nodes on **different hosts**
+(the script counts hosts, so list nodes you know are run by different people):
 
 ```sh
-MORPHIT_RPC=https://rpc.beblurt.com node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz
+MORPHIT_RPC=https://rpc.beblurt.com,https://rpc.blurt.one node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz
 ```
 
 ---
@@ -213,4 +245,5 @@ no matter where you pulled it from.
 ## Exit codes (for scripting `verify-download.mjs`)
 
 `0` verified · `1` MISMATCH (do not trust) · `2` usage error ·
-`3` couldn't reach any Blurt node · `4` no anchor found on chain.
+`3` no two Blurt nodes on different hosts gave the same answer ·
+`4` no anchor found on chain.

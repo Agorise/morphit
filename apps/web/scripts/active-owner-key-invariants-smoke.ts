@@ -14,25 +14,23 @@
  *
  * What this smoke checks:
  *
- * 1. `LiveIdentity` (the in-memory session identity type) does
- *    NOT have any field whose name or type suggests a
- *    private active or owner key.  It only carries
- *    `ownerPublicKey` and `activePublicKey` for the public
- *    halves.  A future maintainer adding `activePrivateKey:
- *    Uint8Array` to LiveIdentity would silently break the
- *    tier policy; this smoke fails loudly.
+ * 1. BEHAVIOUR: a live session built from a full identity
+ *    (`toLiveIdentity`) holds no owner, active or memo private key
+ *    bytes anywhere in it — and the source's copies are zeroed.
  *
- * 2. The only entry points to active/owner private keys are
- *    `useActiveKey`, `useActiveKeyForPasswordChange`, and
- *    `useOwnerKey` exported from `keystore.ts`.  No other
+ * 2. The only entry points to the active private key are
+ *    `useActiveKey` / `useActiveKeyForPasswordChange` in
+ *    `keystore.ts` (nothing hands out the owner key). No other
  *    file reaches into a `FullIdentity` to pull `keys.active`
- *    or `keys.owner` outside of keygen.ts internals.
+ *    or `keys.owner` outside the sanctioned crypto modules.
  *
- * 3. `useJitKey`'s `finally` block contains
- *    `sodium.memzero(wanted)` so the key is wiped on success
- *    and exception alike.  A regression that drops the
- *    finally-wipe (e.g., refactoring to top-level wipe) is
- *    caught.
+ * 3. BEHAVIOUR: `useActiveKey` hands the callback the ACTIVE key
+ *    (not owner, not posting), and the buffer it handed over is
+ *    zeroed afterwards — on success and when the callback throws.
+ *
+ * 3b. BEHAVIOUR: a keystore that decrypts to a different account
+ *    than the running session (the M6 defence) is refused with
+ *    `identity_mismatch`, and the callback never runs.
  *
  * 4. Every call site of `runWithActiveKey` and `useActiveKey`
  *    is accompanied by a `password = ''` or `passwordInput =
@@ -57,49 +55,35 @@ function pass(msg: string): void {
 	console.log(`  ✓ ${msg}`);
 }
 
-// ─── Scenario 1: LiveIdentity exposes only public halves ─────
-function checkLiveIdentityShape(): void {
-	// LiveIdentity moved from keygen.ts to identity-core.ts in the cp271
-	// baseline-bloat refactor (keygen.ts re-exports it).  Check it where
-	// it is now DEFINED.
-	const corePath = path.join(APP_WEB_SRC, 'lib/crypto/identity-core.ts');
-	const src = readFileSync(corePath, 'utf8');
-
-	// Find the LiveIdentity interface body
-	const m = src.match(/export interface LiveIdentity\s*\{([\s\S]*?)^\}/m);
-	if (!m) {
-		fail('identity-core.ts: cannot find LiveIdentity interface body');
+// ─── Scenario 1: a live session holds no owner/active/memo private key ─
+async function checkLiveIdentityHoldsNoRecoveryKeys(): Promise<void> {
+	const { generateFullIdentity, toLiveIdentity } = await import('../src/lib/crypto/keygen.ts');
+	const full = await generateFullIdentity();
+	const secrets = (['owner', 'active', 'memo'] as const).map((r) =>
+		full.keys[r]!.privateKey.slice()
+	);
+	const live = toLiveIdentity(full);
+	const held: Uint8Array[] = [];
+	const collect = (v: unknown): void => {
+		if (v instanceof Uint8Array) held.push(v);
+		else if (v && typeof v === 'object') for (const x of Object.values(v)) collect(x);
+	};
+	collect(live);
+	const same = (a: Uint8Array, b: Uint8Array): boolean =>
+		a.length === b.length && a.every((x, i) => x === b[i]);
+	if (held.some((h) => secrets.some((sec) => same(h, sec)))) {
+		fail('the live session holds an owner, active or memo private key');
 		return;
 	}
-	const body = m[1] ?? '';
-
-	// Forbidden field-name patterns: anything matching
-	// /(active|owner).*(private|priv)/i suggests a private key
-	// field.  We allow `ownerPublicKey` and `activePublicKey`.
-	const forbidden = [
-		/\bactivePrivate(Key)?\b/i,
-		/\bownerPrivate(Key)?\b/i,
-		/\bactive\s*:\s*Keypair\b/, // would carry the private
-		/\bowner\s*:\s*Keypair\b/
-	];
-	for (const re of forbidden) {
-		if (re.test(body)) {
-			fail(`LiveIdentity exposes a private active/owner field matching ${re}`);
-			return;
-		}
-	}
-
-	// Required: ownerPublicKey + activePublicKey must be the
-	// only owner/active surfaces.
-	if (!/ownerPublicKey\s*:/.test(body)) {
-		fail('LiveIdentity is missing ownerPublicKey field');
+	if (
+		(['owner', 'active', 'memo'] as const).some((r) =>
+			full.keys[r]!.privateKey.some((b) => b !== 0)
+		)
+	) {
+		fail('toLiveIdentity left an owner/active/memo private key un-zeroed in its source');
 		return;
 	}
-	if (!/activePublicKey\s*:/.test(body)) {
-		fail('LiveIdentity is missing activePublicKey field');
-		return;
-	}
-	pass('LiveIdentity shape: only public halves of owner/active are exposed');
+	pass('a live session holds only the posting private key (owner/active/memo zeroed)');
 }
 
 // ─── Scenario 2: only sanctioned entry points to active/owner ─
@@ -108,7 +92,7 @@ function checkEntryPointsToActiveOwner(): void {
 	const allowedFiles = new Set([
 		path.join(APP_WEB_SRC, 'lib/crypto/keystore.ts'),
 		path.join(APP_WEB_SRC, 'lib/crypto/keygen.ts'),
-		// cp271 moved the sanctioned toLiveIdentity/wipeLiveIdentity helpers
+		// A later change moved the sanctioned toLiveIdentity/wipeLiveIdentity helpers
 		// here from keygen.ts — same code (memzeroes private keys, exposes
 		// only public halves), just relocated.
 		path.join(APP_WEB_SRC, 'lib/crypto/identity-core.ts'),
@@ -137,59 +121,72 @@ function checkEntryPointsToActiveOwner(): void {
 	pass('only sanctioned files reach into FullIdentity.keys.active/owner');
 }
 
-// ─── Scenario 3: useJitKey wipes in `finally` ─────────────────
-function checkUseJitKeyFinallyWipe(): void {
-	const keystorePath = path.join(APP_WEB_SRC, 'lib/crypto/keystore.ts');
-	const src = readFileSync(keystorePath, 'utf8');
-
-	// Find the useJitKey function body
-	const m = src.match(/async function useJitKey<T>\([\s\S]*?\n\}/);
-	if (!m) {
-		fail('keystore.ts: cannot find useJitKey function body');
-		return;
-	}
-	const body = m[0];
-
-	// The body must contain a `finally` block with a
-	// `sodium.memzero(wanted)` call.  We don't enforce the exact
-	// position but we verify the two tokens appear together in a
-	// finally block.
-	const finallyRe = /finally\s*\{[\s\S]*?sodium\.memzero\(\s*wanted\s*\)/;
-	if (!finallyRe.test(body)) {
-		fail('useJitKey: finally block does not contain sodium.memzero(wanted)');
-		return;
-	}
-	pass('useJitKey: finally block wipes `wanted` on success and throw');
+// ─── Scenario 3: useActiveKey hands out the ACTIVE key and wipes it ───
+async function checkUseActiveKeyHandsOutActiveAndWipes(): Promise<void> {
+	const { generateFullIdentity } = await import('../src/lib/crypto/keygen.ts');
+	const { encryptIdentity, useActiveKey } = await import('../src/lib/crypto/keystore.ts');
+	const PW = 'correct-horse-battery-staple';
+	const full = await generateFullIdentity();
+	const active = full.keys.active!.privateKey.slice();
+	const postingPub = full.keys.posting.publicKey.slice();
+	const env = await encryptIdentity(full, PW);
+	let handed: Uint8Array | null = null;
+	let gotActive = false;
+	await useActiveKey(
+		env,
+		PW,
+		async (k) => {
+			handed = k;
+			gotActive = k.length === active.length && k.every((b, i) => b === active[i]);
+		},
+		postingPub
+	);
+	const wipedOnSuccess = handed !== null && (handed as Uint8Array).every((b) => b === 0);
+	let handedOnThrow: Uint8Array | null = null;
+	await useActiveKey(
+		env,
+		PW,
+		async (k) => {
+			handedOnThrow = k;
+			throw new Error('callback failed');
+		},
+		postingPub
+	).catch(() => undefined);
+	const wipedOnThrow =
+		handedOnThrow !== null && (handedOnThrow as Uint8Array).every((b) => b === 0);
+	if (!gotActive) fail('useActiveKey did not hand the callback the ACTIVE private key');
+	else if (!wipedOnSuccess) fail('useActiveKey left the active key un-wiped after the callback');
+	else if (!wipedOnThrow) fail('useActiveKey left the active key un-wiped when the callback threw');
+	else pass('useActiveKey hands out the active key and wipes it on success and on throw');
 }
 
-// ─── Scenario 4: M6 pubkey-pin check is reachable ─────────────
-function checkM6PubkeyPin(): void {
-	const keystorePath = path.join(APP_WEB_SRC, 'lib/crypto/keystore.ts');
-	const src = readFileSync(keystorePath, 'utf8');
-
-	// Find the useJitKey function and ensure the
-	// `expectedPostingPub` / `identity_mismatch` defense is
-	// present.
-	const m = src.match(/async function useJitKey<T>\([\s\S]*?\n\}/);
-	if (!m) {
-		fail('keystore.ts: cannot find useJitKey function body');
+// ─── Scenario 3b: a keystore of another account is refused (M6) ─────
+async function checkIdentityMismatchRefused(): Promise<void> {
+	const { generateFullIdentity } = await import('../src/lib/crypto/keygen.ts');
+	const { encryptIdentity, useActiveKey } = await import('../src/lib/crypto/keystore.ts');
+	const PW = 'correct-horse-battery-staple';
+	const mine = await generateFullIdentity();
+	const theirs = await generateFullIdentity();
+	const swapped = await encryptIdentity(theirs, PW);
+	let called = false;
+	const err = await useActiveKey(
+		swapped,
+		PW,
+		async () => {
+			called = true;
+		},
+		mine.keys.posting.publicKey
+	).then(
+		() => null,
+		(e: unknown) => e as { kind?: string }
+	);
+	if (called || err?.kind !== 'identity_mismatch') {
+		fail(
+			'a keystore of another account was not refused with identity_mismatch before the callback'
+		);
 		return;
 	}
-	const body = m[0];
-
-	if (!/expectedPostingPub/.test(body)) {
-		fail('useJitKey: missing expectedPostingPub parameter (M6 defense gone)');
-		return;
-	}
-	if (!/identity_mismatch/.test(body)) {
-		fail('useJitKey: missing identity_mismatch throw (M6 defense gone)');
-		return;
-	}
-	if (!/constantTimeEqual/.test(body)) {
-		fail('useJitKey: M6 pubkey check should use constantTimeEqual; replaced with what?');
-		return;
-	}
-	pass('useJitKey: M6 pubkey-pin check intact (constant-time, identity_mismatch throw)');
+	pass('a keystore of another account is refused (identity_mismatch), callback never runs');
 }
 
 // ─── Scenario 5: every active-key call site clears its password ─
@@ -320,17 +317,17 @@ function walkSourceFiles(dir: string, visit: (filepath: string) => void): void {
 // ─── Run all scenarios ────────────────────────────────────────
 console.log('active/owner key invariants smoke');
 console.log('=================================');
-checkLiveIdentityShape();
+await checkLiveIdentityHoldsNoRecoveryKeys();
 checkEntryPointsToActiveOwner();
-checkUseJitKeyFinallyWipe();
-checkM6PubkeyPin();
+await checkUseActiveKeyHandsOutActiveAndWipes();
+await checkIdentityMismatchRefused();
 checkPasswordClearAtCallSites();
 checkBootRoutesPasswordClear();
 checkSourcemapsDisabled();
 checkHardwareKeyCardErrorClear();
 
 // Total scenario count used by run-smokes.sh's aggregator.
-// LiveIdentity + entry-points + finally-wipe + M6
+// live session + entry-points + active key handed out & wiped + M6
 // + 4 active-key call-sites
 // + 3 boot-route call-sites
 // + sourcemaps + HardwareKeyCard

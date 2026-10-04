@@ -1,5 +1,5 @@
 <script lang="ts">
-	/* Part 122 cp26 — Privacy guide index.  Lists every tradable
+	/* Privacy guide index.  Lists every tradable
 	 *  asset with a one-line summary + link to its per-asset
 	 *  privacy guide.  Registry-driven; new assets light up
 	 *  automatically.
@@ -9,7 +9,7 @@
 	 *  hub + the cross-asset framing ("here's why this matters
 	 *  even for transparent chains").
 	 *
-	 *  cp112: converted from bare <svelte:head> to the full <Head />
+	 *  converted from bare <svelte:head> to the full <Head />
 	 *  component so canonical URL, hreflang alternates, OG / Twitter
 	 *  cards, robots, and onion-location are emitted alongside the
 	 *  title + description.  Adds BreadcrumbList JSON-LD for SERP

@@ -66,8 +66,8 @@ export type LogSink = (record: LogRecord) => void;
  *  to avoid a cross-app import (this log module is the deepest dep
  *  root in the indexer process).
  *
- *  cp139-F-1: discovered while walking the relay log module
- *  (cp139-E-1) — same bug class.  textSink's bare-string path in
+ *  discovered while walking the relay log module
+ *  — same bug class.  textSink's bare-string path in
  *  formatValue (for context values without spaces) emits the raw
  *  string to stdout/stderr.  Operator-configurable values
  *  (persistPath, endpoint URLs) or chain-RPC error messages
@@ -135,7 +135,7 @@ function sanitizeForJournal(s: string): string {
 }
 
 export const textSink: LogSink = (r) => {
-	// cp139-F-1: sanitize module + event + each context key to strip
+	// sanitize module + event + each context key to strip
 	// terminal-control escapes from the bare-string emission path.
 	const parts: string[] = [`[${sanitizeForJournal(r.module)}]`, sanitizeForJournal(r.event)];
 	const ctx = Object.entries(r.context);
@@ -163,7 +163,7 @@ export const textSink: LogSink = (r) => {
  * shouldn't crash a request handler.  We use a replacer that
  * stringifies any BigInt it encounters.
  *
- * cp70-D7: previously this throw was unguarded; a single
+ * previously this throw was unguarded; a single
  * `log.info('foo', { amount: someBigint })` would crash the
  * handler that called it.  No production crashes observed
  * (everyone happens to .toString() at the call site), but the
@@ -198,7 +198,7 @@ function formatValue(v: unknown): string {
 	if (v === null) return 'null';
 	if (v === undefined) return 'undefined';
 	if (typeof v === 'string') {
-		// cp139-F-1: sanitize bare emission to strip terminal-control
+		// sanitize bare emission to strip terminal-control
 		// escapes.  JSON.stringify path (when value has space) already
 		// escapes them natively.
 		const safe = sanitizeForJournal(v);
@@ -334,9 +334,27 @@ export function redactSecrets(
 	return out;
 }
 
+/**
+ * MORPHIT_LOG_LEVEL, validated: one of debug/info/warn/error (any case,
+ * surrounding space ignored); unset or anything else is 'info'. An
+ * unrecognised value used to be taken as-is, compared as "below nothing",
+ * and so turned on DEBUG logging — including per-account presence lines.
+ * PURE.
+ */
+export function parseLogLevel(raw: string | undefined): {
+	level: LogLevel;
+	invalid: string | null;
+} {
+	if (raw === undefined || raw.trim() === '') return { level: 'info', invalid: null };
+	const v = raw.trim().toLowerCase();
+	if (Object.prototype.hasOwnProperty.call(LEVEL_ORDER, v)) return { level: v as LogLevel, invalid: null };
+	return { level: 'info', invalid: raw };
+}
+
 /** Module-level sink; swap via setLogSink() in tests or on boot. */
 let activeSink: LogSink = pickDefaultSink();
-let minLevel: LogLevel = (process.env.MORPHIT_LOG_LEVEL as LogLevel) ?? 'info';
+const envLevel = parseLogLevel(process.env.MORPHIT_LOG_LEVEL);
+let minLevel: LogLevel = envLevel.level;
 
 function pickDefaultSink(): LogSink {
 	const fmt = (process.env.MORPHIT_LOG_FORMAT ?? '').toLowerCase();
@@ -358,10 +376,11 @@ export function setLogSink(sink: LogSink): () => void {
 	};
 }
 
-/** Change the minimum level at runtime. Returns the previous level. */
+/** Change the minimum level at runtime. Returns the previous level. An
+ *  unrecognised level leaves it unchanged. */
 export function setLogLevel(level: LogLevel): LogLevel {
 	const previous = minLevel;
-	minLevel = level;
+	if (Object.prototype.hasOwnProperty.call(LEVEL_ORDER, level)) minLevel = level;
 	return previous;
 }
 
@@ -414,4 +433,14 @@ function toErrorShape(e: unknown): LogRecord['error'] {
 		return { name: e.name, message: e.message, stack: e.stack };
 	}
 	return { name: 'UnknownError', message: String(e) };
+}
+
+// Say so once at start-up when MORPHIT_LOG_LEVEL was not a level, so an
+// operator sees why their setting has no effect.
+if (envLevel.invalid !== null) {
+	emit('warn', 'log', 'log_level_invalid', {
+		value: envLevel.invalid.slice(0, 32),
+		using: 'info',
+		valid: Object.keys(LEVEL_ORDER).join(',')
+	});
 }

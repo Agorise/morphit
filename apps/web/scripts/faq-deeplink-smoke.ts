@@ -1,7 +1,7 @@
 /**
  * faq-deeplink-smoke — every footer / in-app link that points at a specific
  * FAQ article must reference a REAL FAQ key, and the shared scroll must land
- * reliably (cp343b).
+ * reliably.
  *
  * Two failure modes this guards:
  *   1. A deep link (`/faq?q=<key>` or `/faq#<key>`) whose <key> is not in

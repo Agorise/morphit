@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the login-pairing /wait SSE stream sends keep-alive pings. Anchor cp295.
+ * Smoke: the login-pairing /wait SSE stream sends keep-alive pings. Anchor.
  *
  * THE BUG THIS GUARDS. The QR-pair desktop screen showed a 5-minute
  * countdown but the QR died at ~60s with "This code expired". Cause:

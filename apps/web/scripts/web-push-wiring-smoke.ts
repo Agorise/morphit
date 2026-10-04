@@ -3,13 +3,13 @@
  * web-push-wiring-smoke — verify every Web Push component is in
  * place and references its siblings as expected.
  *
- * Part 122 cp13.  This is a static-grep smoke: it doesn't spin
+ * This is a static-grep smoke: it doesn't spin
  * up a real push service, but it pins the wiring discipline —
  * every component referenced by another component must exist
  * with the expected anchor.
  *
  * The discipline catches the regression that triggered the maintainer's
- * WTF in cp11: a FAQ claim ("push notifications work") with no
+ * WTF: a FAQ claim ("push notifications work") with no
  * corresponding code.  This smoke is the per-checkpoint trip wire
  * specifically for the Web Push subsystem.
  */
@@ -55,7 +55,7 @@ results.push({
 	name: 'Schema v33 — push_subscriptions table',
 	ok:
 		fileContains('apps/indexer/src/db/schema.sql', 'CREATE TABLE IF NOT EXISTS push_subscriptions') &&
-		fileContains('apps/indexer/src/db/schema.sql', '-- v33 / Part 122 cp13')
+		fileContains('apps/indexer/src/db/schema.sql', '-- v33 — Web Push subscription storage')
 });
 results.push({
 	name: 'Schema v33 — push_pending queue table',
@@ -64,10 +64,10 @@ results.push({
 results.push({
 	name: 'Schema head version is bumped past v33 (where push_pending landed)',
 	ok: (() => {
-		// cp13 added push_pending at schema v33; the sentinel
+		// A later change added push_pending at schema v33; the sentinel
 		// pinned the pin literally as 'SCHEMA_HEAD_VERSION = 33'.
-		// cp131 generalized: schema head can grow past 33 freely,
-		// the cp13 invariant is "push_pending must be at or below
+		// A later change generalized: schema head can grow past 33 freely,
+		// the invariant is "push_pending must be at or below
 		// the head."  Parse the value and assert >= 33.
 		try {
 			const txt = readFileSync(
@@ -359,7 +359,7 @@ results.push({
 		)
 });
 
-// ─── 13. Part 122 cp14 — posting-key signature verification ────
+// ─── 13. posting-key signature verification ────
 results.push({
 	name: 'cp14 — signature verifier module committed',
 	ok:
@@ -394,7 +394,7 @@ results.push({
 	name: 'cp14 — client subscribe signs canonical message',
 	ok:
 		fileContains('apps/web/src/lib/notifications/push.ts', 'signSubscribe') &&
-		// cp131 refactored the literal `morphit:push:subscribe:`
+		// A later change refactored the literal `morphit:push:subscribe:`
 		// into the action-templated `morphit:push:${action}:`
 		// shared by subscribe + unsubscribe.  Both forms are
 		// acceptable evidence the canonical string is built.
@@ -458,8 +458,8 @@ results.push({
 	})()
 });
 
-// ─── cp131 MED-009 — unsubscribe signature + rate limit ──
-// Pre-cp131 the unsubscribe endpoint had no sig check and no
+// ─── unsubscribe signature + rate limit ──
+// Previously, the unsubscribe endpoint had no sig check and no
 // rate limit; this smoke pins the symmetric protections so
 // the bug class can't return silently.
 results.push({

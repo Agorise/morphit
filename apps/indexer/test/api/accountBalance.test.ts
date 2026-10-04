@@ -1,5 +1,5 @@
 /**
- * Unit test — GET /v1/account/:account/balance (cp295).
+ * Unit test — GET /v1/account/:account/balance.
  *
  * Exercises the HTTP layer with a stubbed BlurtClient (the live RPC
  * round-trip is covered by the same proven blurt.getAccount path the
@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 
 import { accountBalanceRoute } from '$api/accountBalance';
+import { security } from '$api/middleware/security';
 import type { BlurtClient, ChainAccount, DynamicGlobalProperties } from '$blurt/client';
 
 const AUTH = { weight_threshold: 1, account_auths: [], key_auths: [] };
@@ -40,8 +41,10 @@ const FULL_DGP: DynamicGlobalProperties = {
 };
 
 /** Mount the route with a partial BlurtClient stub. */
+/** Mounted as main.ts mounts it: behind the security middleware. */
 function mount(stub: Partial<BlurtClient>): Hono {
 	const app = new Hono();
+	app.use('*', security);
 	app.route('/v1/account', accountBalanceRoute(stub as unknown as BlurtClient));
 	return app;
 }
@@ -68,7 +71,7 @@ type BalanceBody = {
 };
 
 describe('GET /v1/account/:account/balance', () => {
-	it('returns account + dgp for an existing account, with a public cache header', async () => {
+	it('returns account + dgp for an existing account, never stored', async () => {
 		const app = mount({
 			getAccount: async () => FULL_ACCOUNT,
 			getDynamicGlobalProperties: async () => FULL_DGP
@@ -85,18 +88,11 @@ describe('GET /v1/account/:account/balance', () => {
 		expect(body.dgp.total_vesting_fund_blurt).toBe('1000000.000 BLURT');
 		expect(body.dgp.total_vesting_shares).toBe('2000000.000000 VESTS');
 		expect(body.dgp.current_supply).toBe('5000000.000 BLURT');
-		expect(res.headers.get('cache-control')).toContain('public');
-		expect(res.headers.get('cache-control')).toContain('max-age');
-		// Regression guard (balance-staleness bug): a balance is mutable
-		// chain data, so the response must NOT carry a stale-while-
-		// revalidate window (which serves the last cached copy — or, on a
-		// failed revalidation against a flaky node, keeps serving it
-		// indefinitely) and must keep only a tiny max-age. Re-introducing
-		// either makes the 5s wallet poll silently coast on an old number.
-		const cc = res.headers.get('cache-control') ?? '';
-		expect(cc).not.toContain('stale-while-revalidate');
-		const maxAge = Number(/max-age=(\d+)/.exec(cc)?.[1] ?? '999');
-		expect(maxAge).toBeLessThanOrEqual(5);
+		// The URL names the account, so the answer is never stored — not in
+		// the browser's disk cache after Sign out, not in a shared cache
+		// (security middleware, VT3-6). That also rules out the balance-staleness
+		// bug (a stale-while-revalidate window coasting on an old number).
+		expect(res.headers.get('cache-control')).toBe('no-store');
 	});
 
 	it('passes through a null voting_manabar without erroring', async () => {

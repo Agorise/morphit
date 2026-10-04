@@ -2,10 +2,10 @@
 /**
  * scripts/seo-url-consistency-smoke.ts
  *
- * Structural Defense #39 — canonical/hreflang/sitemap URL consistency
- * (cp112).
+ * Structural Defense #39 — canonical/hreflang/sitemap URL consistency.
  *
- * cp112 surfaced a real shipped-bug class: the `hreflangAlternates()`
+ *
+ * A later change surfaced a real shipped-bug class: the `hreflangAlternates()`
  * function in `apps/web/src/lib/seo/urls.ts` was emitting `?lang=es`
  * query-string URLs while the actual SvelteKit routes are path-based
  * at `/[lang]/...` AND the sitemap.xml was emitting path-based
@@ -27,7 +27,7 @@
  *        but didn't rebuild the sitemap).
  *
  *   I-3: `hreflangAlternates()` never emits a `?lang=` URL.  This
- *        is a defense against the specific regression cp112 fixed.
+ *        is a defense against the specific regression a later change fixed.
  *        Mutation-tested.
  *
  * One scenario per (route × locale) combo plus the explicit
@@ -66,7 +66,7 @@ function parseIndexableRoutes(): Array<{ path: string }> {
 }
 
 // ─── Expand dynamic segments ───────────────────────────────────
-// cp117 A7: indexable routes may contain dynamic segments (e.g.
+// indexable routes may contain dynamic segments (e.g.
 // `/privacy/[asset]`).  The sitemap builder expands these to one
 // URL per registry value; this smoke must mirror that logic to
 // produce a comparable URL set.  Today only `[asset]` is supported.
@@ -92,7 +92,7 @@ function readAssetTickers(): string[] {
 
 function expandRoutes(routes: Array<{ path: string }>): Array<{ path: string }> {
 	const tickers = readAssetTickers();
-	// cp425 — goods assets (BARTER) have no crypto address and no on-chain
+	// goods assets (BARTER) have no crypto address and no on-chain
 	// privacy guide (the wares change hands off-platform), so they get NO
 	// /privacy/<ticker> page. This mirrors the sitemap builder's GOODS_TICKERS
 	// exclusion in scripts/build-sitemap.mjs and the registry's isGoodsAsset()
@@ -165,7 +165,7 @@ if (routes.length < 5) {
 	process.exit(1);
 }
 
-// cp117 A7: expand dynamic segments (`[asset]` etc.) so the URL
+// expand dynamic segments (`[asset]` etc.) so the URL
 // comparisons below match the rendered sitemap's expanded URLs.
 const expandedRoutes = expandRoutes(routes);
 
@@ -212,7 +212,7 @@ if (sitemap) {
 }
 
 // ─── I-3: urls.ts has no `?lang=` regression ─────────────────────
-// The cp112 fix removed the `?lang=` URL form.  If anyone re-adds
+// The fix removed the `?lang=` URL form.  If anyone re-adds
 // query-string-form hreflang URLs, this fires.
 {
 	const src = urlsTsSource();

@@ -56,7 +56,7 @@ SIZE="$(stat -c %s "$TARBALL")"
 CID="QmHarnessMirroraaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 # ── Fake Blurt RPC serving one indexer_snapshot_v1 op ────────────────
-# v1.18.0 deep-deep (rv2-1): the mirror now accepts an op only when two RPC
+# the mirror now accepts an op only when two RPC
 # operators agree on it and on its block, and its signature recovers to the
 # pinned posting key. So the op is SIGNED with a test key (signed-snapshot-op.mjs),
 # served with its block, that key is pinned below, and the RPC is listed under
@@ -140,8 +140,8 @@ export PATH="$BIN:$PATH"
 # IPFS_PATH is deliberately NOT exported. Under systemd the job's environment
 # has none, and the script must therefore pass one explicitly on every call. An
 # exported value here would be inherited by a bare `ipfs` and would hide exactly
-# the bug that shipped (kubo reading /root/.ipfs). This is the second harness in
-# which I made that mistake; a fixture that leaks state tests nothing.
+# the bug that shipped (kubo reading /root/.ipfs). A fixture that leaks state
+# tests nothing.
 export MORPHIT_SNAPSHOT_MIRROR_STATE="$WORK/mirror-state.json"
 export MORPHIT_INDEXER_DATABASE_URL="postgres://unused"
 export MORPHIT_INDEXER_CHAIN_ID="$CHAIN_ID"
@@ -154,6 +154,12 @@ export MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY="$PINNED"
 # lever, and it exercises the same code path.
 export MORPHIT_INDEXER_LOCAL_RPC_ENDPOINTS="http://127.0.0.1:$PORT,http://localhost:$PORT"
 export MORPHIT_INDEXER_RPC_ENDPOINTS=""
+# And no hidden tier: left unset, the indexer falls back to the default .onion /
+# .b32.i2p RPC set, and a trusted read waits for every operator it asks — so
+# the stub's answer sat behind seven unreachable hidden operators (no Tor or
+# i2pd here) for longer than the smoke's five minutes. The hidden-only cases
+# below set their own hidden endpoints.
+export MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=""
 export MORPHIT_INDEXER_LOCAL_RPC_AUTODETECT="0"
 
 echo "── mirror path, executed ───────────────────────────────────────"

@@ -1,14 +1,14 @@
 /**
- * ESLint flat config for apps/web — Part 87 (J-6 finding).
+ * ESLint flat config for apps/web — (J-6 finding).
  *
- * BACKGROUND: until Part 87, `apps/web/package.json` declared
+ * BACKGROUND: until a later fix, `apps/web/package.json` declared
  * `"lint": "prettier --check . && eslint ."` with eslint v9 and
  * `eslint-plugin-svelte` in devDependencies — but no eslint config
  * file existed in the repo.  ESLint v9 requires a flat config
  * (`eslint.config.{js,mjs,cjs}`) and exits non-zero without one,
  * meaning the lint step's eslint half had been a no-op (dominated
  * by prettier failing first via `&&` short-circuit).  See J-6 in
- * the Part 87 audit notes.
+ * the audit notes.
  *
  * SCOPE: this config is intentionally pragmatic.  It loads the
  * eslint-plugin-svelte recommended ruleset (which already
@@ -52,7 +52,7 @@
  *   - The 1900+ scenario smoke baseline (i18n parity, a11y,
  *     security, etc.) — 0 failures, enforced.
  *
- * ESLint here is a recommendation engine.  The current Part 89
+ * ESLint here is a recommendation engine.  The current
  * baseline is ~150 warnings, almost entirely `no-unused-vars` on
  * caught-error parameters (where the catch handler logs through
  * a wrapper or rethrows without examining the error) and

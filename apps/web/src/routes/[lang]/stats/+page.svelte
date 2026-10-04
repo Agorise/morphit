@@ -1,5 +1,5 @@
 <script lang="ts">
-	// cp406 — human-readable companion to the /v1/stats JSON endpoint.
+	// human-readable companion to the /v1/stats JSON endpoint.
 	// Fetches the same aggregate-only summary and shows it as headline tiles,
 	// then links the raw JSON for aggregators/dashboards. Nothing here is
 	// per-account — it mirrors the endpoint's privacy shape exactly.

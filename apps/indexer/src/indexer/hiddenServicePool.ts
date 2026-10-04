@@ -1,5 +1,13 @@
 /**
- * hiddenServicePool — REUSED, kept-warm connections to hidden-service peers.
+ * hiddenServicePool — REUSED, kept-warm connections to hidden-service peers,
+ * and the one-circuit-per-push Tor transport chat fan-out uses.
+ *
+ * WHO USES WHICH. The pooled dispatcher below serves the login-pairing forward
+ * and the fan-out's background onion visits (chatFastDispatcher.warmAll). Chat
+ * pushes do NOT use it: since an earlier release each push goes through
+ * {@link postJsonViaTorIsolated} (end of file) on a fresh circuit, because a
+ * shared connection let a peer tie every account it carried to one instance.
+ * The rest of this header describes the pool's original purpose.
  *
  * WHY THIS EXISTS
  * `fetchJsonViaHiddenService` builds a brand-new undici `Agent`/`ProxyAgent` for
@@ -32,6 +40,10 @@
  * exists for shutdown and for tests, which must not leak sockets between cases.
  */
 
+import { randomBytes } from 'node:crypto';
+import { isIP, connect as netConnect, type Socket } from 'node:net';
+import { connect as tlsConnect } from 'node:tls';
+
 import { Agent, type Dispatcher } from 'undici';
 import {
 	hiddenNetworkOf,
@@ -43,7 +55,10 @@ import {
 	isProxyUnavailable,
 	isLocalTransportFault,
 	localFaultConfidence,
-	lokinetEnabled
+	lokinetEnabled,
+	socks5ConnectRequest,
+	parseSocks5ConnectReply,
+	HIDDEN_HANDSHAKE_TIMEOUT_MS
 } from '@morphit/hidden-transport';
 import type {
 	HiddenServiceProxyConfig,
@@ -404,7 +419,201 @@ export async function closePool(deadlineMs?: number): Promise<void> {
 	if (late) await Promise.all(all.map((d) => d.destroy().catch(() => undefined)));
 }
 
-/** Pooled dispatcher count — for the smoke, to prove reuse rather than assume it. */
-export function pooledDispatcherCount(): number {
-	return pool.size;
+// ─── One push, one Tor circuit ──────────────────────────────────────────────
+
+/**
+ * The SOCKS username/password pair that isolates one push onto its own Tor
+ * circuit. Tor's SocksPort isolates streams by SOCKS credentials by default
+ * (IsolateSOCKSAuth), so two pushes carrying different random credentials
+ * never share a circuit, and a peer cannot link them to each other — or to
+ * this instance — by the connection they arrive on. Exported for the test that
+ * asserts the isolation through a real SOCKS exchange.
+ */
+export function freshTorIsolation(): { user: string; pass: string } {
+	return { user: randomBytes(12).toString('hex'), pass: randomBytes(12).toString('hex') };
+}
+
+/**
+ * An undici `connect` function that opens ONE stream through Tor's SOCKS5 port
+ * with username/password authentication (RFC 1929) carrying `isolation`, to the
+ * requested host by NAME (Tor resolves it: an onion inside Tor, a clearnet name
+ * at the exit — never this box's resolver). For an `https:` origin the TLS
+ * session is run over that stream, verified against the host name; an onion is
+ * spoken to in plain HTTP, as every hidden transport here does.
+ * `handshakeTimeoutMs` bounds the SOCKS exchange, the onion rendezvous
+ * included (the fee and price sources pass a longer one: an onion service
+ * can take tens of seconds to answer the CONNECT).
+ */
+export function makeIsolatedTorConnector(
+	socksHost: string,
+	socksPort: number,
+	isolation: { user: string; pass: string },
+	handshakeTimeoutMs: number = HIDDEN_HANDSHAKE_TIMEOUT_MS
+) {
+	return (
+		opts: { hostname: string; port: number | string; protocol?: string },
+		cb: (err: Error | null, socket: Socket | null) => void
+	): void => {
+		const https = opts.protocol === 'https:';
+		const targetHost = opts.hostname;
+		const fallbackPort = https ? 443 : 80;
+		const targetPort =
+			typeof opts.port === 'string' ? Number(opts.port) || fallbackPort : opts.port || fallbackPort;
+		// A literal address is never dialled through the exit: a registered
+		// origin names a host, and Tor would refuse an internal one anyway.
+		if (isIP(targetHost) !== 0) {
+			cb(new Error(`refusing an IP-literal federation peer: ${targetHost}`), null);
+			return;
+		}
+		const sock = netConnect({ host: socksHost, port: socksPort });
+		let stage: 'greet' | 'auth' | 'connect' = 'greet';
+		let acc = Buffer.alloc(0);
+		let settled = false;
+		const fail = (err: Error): void => {
+			if (settled) return;
+			settled = true;
+			sock.destroy();
+			cb(err, null);
+		};
+		const ours = (why: string): Error =>
+			new ProxyUnavailableError(`Tor SOCKS proxy ${socksHost}:${socksPort} ${why}`);
+		sock.once('error', (err) =>
+			fail(
+				stage === 'connect'
+					? new Error(`peer unreachable via Tor: ${err.message}`)
+					: new ProxyUnavailableError(
+							`Tor SOCKS proxy ${socksHost}:${socksPort} unreachable: ${err.message}`,
+							{
+								cause: err
+							}
+						)
+			)
+		);
+		sock.setTimeout(handshakeTimeoutMs, () =>
+			fail(
+				stage === 'connect'
+					? new Error('peer unreachable via Tor: timeout')
+					: ours('did not answer in time')
+			)
+		);
+		const onEarlyClose = (): void =>
+			fail(
+				stage === 'connect'
+					? new Error('peer unreachable via Tor: closed')
+					: ours('closed the connection')
+			);
+		sock.once('close', onEarlyClose);
+		// Offer ONLY username/password: a proxy that would accept the stream
+		// without credentials could not isolate it.
+		sock.once('connect', () => sock.write(Buffer.from([0x05, 0x01, 0x02])));
+		sock.on('data', (chunk: Buffer) => {
+			if (settled) return;
+			acc = Buffer.concat([acc, chunk]);
+			if (stage === 'greet') {
+				if (acc.length < 2) return;
+				if (acc[0] !== 0x05 || acc[1] !== 0x02) {
+					return fail(ours('does not accept username/password authentication'));
+				}
+				acc = acc.subarray(2);
+				const u = Buffer.from(isolation.user, 'ascii');
+				const pw = Buffer.from(isolation.pass, 'ascii');
+				stage = 'auth';
+				sock.write(Buffer.concat([Buffer.from([0x01, u.length]), u, Buffer.from([pw.length]), pw]));
+			}
+			if (stage === 'auth') {
+				if (acc.length < 2) return;
+				if (acc[1] !== 0x00) return fail(ours('refused the isolation credentials'));
+				acc = acc.subarray(2);
+				stage = 'connect';
+				sock.write(socks5ConnectRequest(targetHost, targetPort));
+			}
+			if (acc.length < 5) return;
+			if (acc[1] !== 0x00) {
+				return fail(
+					new Error(`peer unreachable via Tor: ${parseSocks5ConnectReply(acc).error ?? 'refused'}`)
+				);
+			}
+			const atyp = acc[3];
+			const need = atyp === 0x01 ? 10 : atyp === 0x04 ? 22 : atyp === 0x03 ? 7 + (acc[4] ?? 0) : -1;
+			if (need < 0) return fail(new Error('peer unreachable via Tor: bad address type'));
+			if (acc.length < need) return;
+			settled = true;
+			sock.removeAllListeners('data');
+			sock.removeAllListeners('timeout');
+			sock.removeListener('close', onEarlyClose);
+			sock.setTimeout(0);
+			const rest = acc.subarray(need);
+			if (rest.length > 0) {
+				sock.pause();
+				sock.unshift(rest);
+				process.nextTick(() => sock.resume());
+			}
+			if (!https) {
+				cb(null, sock);
+				return;
+			}
+			const tls = tlsConnect({ socket: sock, servername: targetHost, ALPNProtocols: ['http/1.1'] });
+			tls.once('secureConnect', () => cb(null, tls as unknown as Socket));
+			tls.once('error', (err) => {
+				sock.destroy();
+				cb(new Error(`peer TLS over Tor failed: ${err.message}`), null);
+			});
+		});
+	};
+}
+
+/**
+ * POST JSON to a federation peer over a FRESH, ISOLATED Tor circuit, then close
+ * it. Used for every chat fan-out push: an onion is dialled inside Tor;
+ * a clearnet `https://` origin through a Tor exit, so the peer never sees this
+ * instance's address. The connection is never pooled or reused, so two pushes
+ * — two senders — cannot be tied together by the connection they share, which
+ * is what a long-lived pooled connection allowed.
+ *
+ * Throws {@link ProxyUnavailableError} (a local fault) when Tor is not
+ * configured or its SOCKS port does not complete the handshake.
+ */
+export async function postJsonViaTorIsolated(
+	url: string,
+	body: unknown,
+	config: HiddenServiceProxyConfig,
+	timeoutMs: number,
+	isolation: { user: string; pass: string } = freshTorIsolation()
+): Promise<HiddenPostResult> {
+	if (config.torSocks.length === 0) {
+		throw new ProxyUnavailableError('Tor SOCKS proxy not configured');
+	}
+	const { host, port } = parseHostPort(config.torSocks, 9050);
+	const dispatcher = new Agent({
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- undici's
+		// connect type doesn't model a custom SOCKS connector cleanly.
+		connect: makeIsolatedTorConnector(host, port, isolation) as any,
+		connections: 1,
+		pipelining: 0
+	});
+	const ctrl = new AbortController();
+	const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+	try {
+		const res = await fetch(url, {
+			method: 'POST',
+			signal: ctrl.signal,
+			redirect: 'manual',
+			headers: {
+				'content-type': 'application/json',
+				accept: 'application/json',
+				'user-agent': 'morphit-indexer/federation-chat-fast'
+			},
+			body: JSON.stringify(body),
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- fetch's
+			// lib.dom type omits undici's `dispatcher`.
+			dispatcher
+		} as any);
+		return { status: res.status, body: await readCappedText(res) };
+	} catch (err) {
+		throw asLocalTransportFault(err, 'tor', config);
+	} finally {
+		clearTimeout(timer);
+		// Never reused: the next push gets a new circuit.
+		await dispatcher.destroy().catch(() => undefined);
+	}
 }

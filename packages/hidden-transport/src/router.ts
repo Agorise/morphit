@@ -51,8 +51,8 @@
  *     Lokinet, the request is REFUSED before any lookup. Handing it to the
  *     direct agent would ask the system resolver (the ISP's) for the name, and
  *     that question is itself the leak (v1.18.0 review, S11; this comment said
- *     the opposite until v1.18.0 deep-deep, L4).
- *  5. ALWAYS INSTALLED (v1.18.0 deep-deep, L3). It used to be installed only
+ *     the opposite until a later fix).
+ *  5. ALWAYS INSTALLED. It used to be installed only
  *     when hidden RPC endpoints were configured, but the on-chain RPC directory
  *     merges hidden nodes into every pool, and with no router their names went
  *     to the system resolver. A clearnet node installs it in `allow` mode, where
@@ -124,7 +124,7 @@ export function isClearnetOrigin(origin: string): boolean {
 	if (host.endsWith('.loki') || host.endsWith('.onion') || host.endsWith('.i2p')) return false;
 	// Local ONLY as an address: an IP literal in a loopback / RFC1918 /
 	// link-local / ULA range (IPv4-mapped unwrapped), or exactly `localhost`.
-	// (v1.18.0 deep-deep, C1) This used to match the host's TEXT against
+	// This used to match the host's TEXT against
 	// `10.`, `127.`, `192.168.` … — so the DNS name `10.attacker.example` was
 	// "local", and a hidden-only node resolved it with the system resolver and
 	// connected to wherever the attacker's DNS pointed, from its own address.
@@ -350,7 +350,7 @@ export function installHiddenServiceDispatcher(
 
 /**
  * The policy to INSTALL, given a process's configured one. Never "none".
- * (v1.18.0 deep-deep, L3) A process whose own endpoint lists name no hidden
+ * A process whose own endpoint lists name no hidden
  * service used to install no router — but the on-chain RPC directory merges
  * `.onion`/`.i2p` nodes into every pool, and without the router those names
  * went to the system resolver (the ISP's). With it, clearnet goes to a plain

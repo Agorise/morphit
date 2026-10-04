@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: tt.txt #11 — "Keep my Active key on this device".
+ * Smoke: "Keep my Active key on this device".
  *
  * The gate in front of the money changed shape, so the invariants get pinned:
  *
@@ -78,12 +78,15 @@ check('a stale build gets an actionable error, not "corrupt"', /saved by a newer
 // ─── never silent, disk only if disk ─────────────────────────────────
 check("the retention default is 'once' (never promote silently)", /let retention = \$state<'once' \| 'keep'>\('once'\)/.test(modal));
 check('the keep branch demands the Morphit password', /device_password_label/.test(modal) && /retention === 'keep'/.test(code(modal)));
-check('keepActiveKeyOnThisDevice writes to disk ONLY if a keystore is already persisted', /if \(hasPersistedKeystore\(\)\) writeEnvelope\(nextEnv\);/.test(code(keep)));
+// Disk is written only when THIS session's keystore is the remembered
+// one — not whenever any keystore is on disk (that overwrote another account's).
+// Behaviour: src/lib/stores/yubikeyTotp.test.ts + envelopeCommit.test.ts.
+check('keepActiveKeyOnThisDevice writes to disk ONLY if this session\u2019s keystore is the persisted one', /if \(isPersistedEnvelope\(state\.envelope\)\) writeEnvelope\(nextEnv\);/.test(code(keep)));
 check('it refuses unless the session is a posting-only one', /origin !== 'posting-only'/.test(code(keep)));
 check('the scalar is wiped on EVERY path out', /finally \{[\s\S]{0,160}sodium\.memzero\(activeScalar\)/.test(code(keep)));
 check('envelope and live capability move together', /export function updateUnlockedIdentity/.test(store) && /updateUnlockedIdentity\(nextEnv, \{/.test(code(keep)));
 
-// ─── cp445 deep-deep: refusal paths must not leak key material ───────
+// ─── refusal paths must not leak key material ───────
 const unlock = read('src', 'lib', 'crypto', 'activeKeyUnlock.ts');
 check('a REFUSED wif (incl. the owner key) is wiped, not left in memory', /finally \{\s*\n\s*if \(!handedOff\) scalar\.fill\(0\);/.test(unlock));
 check('only the success path hands the scalar to the caller', /handedOff = true;\s*\n\s*return \{ ok: true, scalar/.test(unlock));

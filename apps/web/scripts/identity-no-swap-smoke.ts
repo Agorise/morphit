@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * identity-no-swap — v1.8.13 (the maintainer).
+ * identity-no-swap — v1.8.13.
  *
  * THE RULE: a surface must never assert an identity it does not yet know.
  *
@@ -9,13 +9,12 @@
  * profile, and the WRONG one while a profile is still loading — it paints a
  * confident, incorrect identity and rewrites it seconds later.
  *
- * the maintainer, on the orderbook (~7s swap): "i should NEVER see the default username
- * and identicon if a custom display name and custom avatar have been set."
- * And on chat: "imagine chatting with someone in the chatroom and then all of a
- * sudden their avatar and/or display name changes on you like that. would you
- * do a trade with that user? hell no."
+ * on the orderbook (~7s swap). Requirement: the default username and identicon
+ * never show when a custom display name and avatar are set. On chat it is
+ * worse: nobody trades with a counterparty whose avatar or display name
+ * suddenly changes mid-conversation.
  *
- * He is right that this is a TRUST defect rather than polish. An identity that
+ * This is a TRUST defect rather than polish. An identity that
  * mutates in front of you is indistinguishable from a swap attack, and on a
  * marketplace the counterparty's identity IS the product.
  *
@@ -25,10 +24,10 @@
  *   2. Pass `pending` while a fetch is in flight, so the component renders a
  *      neutral placeholder instead of a fallback it cannot justify.
  *
- * This smoke exists because I fixed the orderbook and chat by hand and the maintainer
- * asked, correctly, "what about the order view page and other pages that i have
- * not thought of?" Enumerating by hand is how surfaces get missed — so the
- * check enumerates instead.
+ * This smoke exists because the orderbook and chat were fixed by hand, which
+ * leaves the question of the order view page and every other page nobody
+ * thought of. Enumerating by hand is how surfaces get missed — so the check
+ * enumerates instead.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';

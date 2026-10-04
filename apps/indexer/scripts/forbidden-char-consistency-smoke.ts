@@ -8,12 +8,18 @@
  * per handler — the handlers are self-contained on purpose, so each
  * carries its own copy rather than importing a shared constant.
  *
- * The cost of that decision is drift: before cp232 the copies had
+ * The cost of that decision is drift: previously the copies had
  * silently diverged into three variants (the most-exposed user-facing
  * reject regexes were missing U+2028/U+2029 and U+2060-U+2064, which
  * operatorPaymentMethod and operatorBlock partially had). This smoke
  * is the enforcement that keeps them in lockstep from now on: if
  * anyone edits one copy and forgets the others, this fails.
+ *
+ * The two review handlers (feedback, feedbackResponse) no longer carry a
+ * copy: they import @morphit/asset-registry FORBIDDEN_REVIEW_TEXT_CHARS,
+ * which the web composer imports too, so this checks that shared constant
+ * against the canonical class instead (test/handlers/reviewTextParity
+ * checks the handlers' verdicts against it code point by code point).
  *
  * It also pins the DELIBERATE exclusions: the bidi MARKS U+200E (LRM),
  * U+200F (RLM), and U+061C (ALM) must NOT be blocked — Morphit ships a
@@ -27,6 +33,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { FORBIDDEN_REVIEW_TEXT_CHARS } from '@morphit/asset-registry';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const handlersDir = join(here, '..', 'src', 'indexer', 'handlers');
@@ -38,11 +45,12 @@ const CANONICAL_LITERAL = String.raw`/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2
 const REJECT_FILES = [
 	'order.ts',
 	'orderReplace.ts',
-	'feedback.ts',
-	'feedbackResponse.ts',
 	'profile.ts',
 	'operatorRegister.ts'
 ];
+
+/** Handlers that take the shared review-text class instead of a copy. */
+const SHARED_REVIEW_FILES = ['feedback.ts', 'feedbackResponse.ts'];
 
 /** operatorBlock keeps a Set (its sanitize loop strips C0/C1, so those
  *  are NOT in the Set); it must hold every OTHER dangerous codepoint. */
@@ -72,6 +80,16 @@ for (const f of REJECT_FILES) {
 	const src = read(f);
 	if (src.includes(CANONICAL_LITERAL + ';')) ok();
 	else fail(`${f}: forbidden-char reject regex is missing or has drifted from canonical`);
+}
+
+// 1b. The shared review-text class is the canonical one, and the review
+//     handlers use it (not a local copy that could drift).
+if (`/${FORBIDDEN_REVIEW_TEXT_CHARS.source}/` === CANONICAL_LITERAL && FORBIDDEN_REVIEW_TEXT_CHARS.flags === '') ok();
+else fail('@morphit/asset-registry FORBIDDEN_REVIEW_TEXT_CHARS has drifted from canonical');
+for (const f of SHARED_REVIEW_FILES) {
+	const src = read(f);
+	if (/import \{[^}]*\bFORBIDDEN_REVIEW_TEXT_CHARS\b[^}]*\} from '@morphit\/asset-registry'/.test(src)) ok();
+	else fail(`${f}: does not take FORBIDDEN_REVIEW_TEXT_CHARS from @morphit/asset-registry`);
 }
 
 // 2. operatorPaymentMethod strips with the canonical literal + global flag.

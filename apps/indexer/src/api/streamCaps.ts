@@ -1,8 +1,8 @@
 /**
- * Morphit indexer — caps on open SSE streams (v1.20.0 fix wave, E4).
+ * Morphit indexer — caps on open SSE streams.
  *
- * WHAT WAS WRONG. The four SSE routes (orderbook, chat, chat-activity,
- * instances) had no limit of any kind: no rate limit on connecting, no cap on
+ * WHAT WAS WRONG. The SSE routes (orderbook, chat, chat-activity,
+ * instances; the login-pairing wait since) had no limit of any kind: no rate limit on connecting, no cap on
  * how many stay open. The comments said per-IP connection caps "belong at the
  * reverse proxy" — but the shipped BunkerWeb frontend sets none, and Tor/I2P
  * visitors reach it without passing BunkerWeb at all. Every open stream costs
@@ -10,12 +10,16 @@
  * hundred idle connections from one client were a steady database load
  * nobody else could get past.
  *
- * NOW, two caps, both answered with 503 (the stream is unavailable right now;
- * the client's own backoff retries):
+ * NOW, three caps, all answered with 503 (the stream is unavailable right
+ * now; the client's own backoff retries):
  *   - PER CLIENT, keyed exactly as the rate limiter keys requests. Not applied
  *     to a SHARED key — our own proxy's address, which stands for every Tor/I2P
- *     visitor at once; capping it would cap the whole hidden-service audience.
- *   - INSTANCE-WIDE, which is what bounds the shared key and everything else.
+ *     visitor at once; capping it like one client would cap the whole
+ *     hidden-service audience.
+ *   - SHARED: every shared key together holds at most this many, so
+ *     the hidden-service audience cannot take the slots clearnet visitors
+ *     need (on a zero-clearnet node it is simply the audience's ceiling).
+ *   - INSTANCE-WIDE, which bounds everything else.
  *
  * A slot is released when the stream ends (the client leaves, or the stream
  * closes itself), exactly once.
@@ -28,11 +32,15 @@ import { requestClient } from '$api/middleware/ratelimit';
 export const DEFAULT_STREAMS_PER_CLIENT = 24;
 /** Streams the instance holds open in total. */
 export const DEFAULT_STREAMS_GLOBAL = 2_000;
+/** Streams all SHARED keys (the Tor/I2P gateway) may hold together. */
+export const DEFAULT_STREAMS_SHARED = 1_500;
 
 let perClientCap = DEFAULT_STREAMS_PER_CLIENT;
 let globalCap = DEFAULT_STREAMS_GLOBAL;
+let sharedCap = DEFAULT_STREAMS_SHARED;
 const perClient = new Map<string, number>();
 let open = 0;
+let openShared = 0;
 
 /**
  * Take a slot for a new stream. Returns the release function, or null when a
@@ -43,13 +51,16 @@ export function acquireStreamSlot(c: Context): (() => void) | null {
 	const { key, shared } = requestClient(c);
 	const held = perClient.get(key) ?? 0;
 	if (!shared && held >= perClientCap) return null;
+	if (shared && openShared >= sharedCap) return null;
 	open++;
+	if (shared) openShared++;
 	perClient.set(key, held + 1);
 	let released = false;
 	return () => {
 		if (released) return;
 		released = true;
 		open--;
+		if (shared) openShared--;
 		const n = (perClient.get(key) ?? 1) - 1;
 		if (n <= 0) perClient.delete(key);
 		else perClient.set(key, n);
@@ -75,14 +86,21 @@ export function openStreamCount(): number {
 }
 
 /** Test seam. */
-export function _setStreamCapsForTest(caps: { perClient: number; global: number }): void {
+export function _setStreamCapsForTest(caps: {
+	perClient: number;
+	global: number;
+	shared?: number;
+}): void {
 	perClientCap = caps.perClient;
 	globalCap = caps.global;
+	sharedCap = caps.shared ?? caps.global;
 }
 /** Test seam: restore defaults and forget every slot. */
 export function _resetStreamCapsForTest(): void {
 	perClientCap = DEFAULT_STREAMS_PER_CLIENT;
 	globalCap = DEFAULT_STREAMS_GLOBAL;
+	sharedCap = DEFAULT_STREAMS_SHARED;
 	perClient.clear();
 	open = 0;
+	openShared = 0;
 }

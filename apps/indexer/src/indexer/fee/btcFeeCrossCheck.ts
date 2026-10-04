@@ -14,9 +14,17 @@
  * over the hidden transport, clearnet only when this is not a hidden-only
  * node, never following redirects (the fetchers do that).
  *
- * Verdict: 'disagree' if ANY answering peer reports another index, address or
- * key; 'agree' if at least one answered and all agree; 'unchecked' if none
- * could answer (a lagging peer's "no such order" is no answer). Residual risk,
+ * Verdict, by MAJORITY of the peers that answered (up to `maxPeers`, default
+ * three, are asked):
+ *   - 'disagree' only when at least TWO peers answered and more of them report
+ *     another index, address or key than report this node's — so one
+ *     registered peer can no longer veto every BTC fee address (any answering
+ *     dissenter used to be enough, and registering a peer is free);
+ *   - 'agree' when more answering peers agree than disagree;
+ *   - 'unchecked' otherwise: nobody could answer (a lagging peer's "no such
+ *     order" is no answer), a tie, or a LONE dissenter — logged, since an
+ *     honest peer with a divergent log looks the same as a hostile one.
+ * Residual risk,
  * stated: the browser takes this verdict from its own indexer, so it protects
  * against an HONEST node with a divergent log, not against a lying operator —
  * who, bound by the browser's own derivation, can at worst point at another
@@ -26,6 +34,9 @@ import { hiddenNetworkOf } from '@morphit/hidden-transport';
 import { clearnetRefused } from '@morphit/hidden-transport/router';
 
 import { addressesOf, type FastPeer } from '$indexer/chatFastFederation';
+import { logger } from '$log';
+
+const log = logger('btc-fee-crosscheck');
 
 export interface LocalBtcFee {
 	readonly index: number;
@@ -41,6 +52,15 @@ export interface CrossCheckResult {
 	readonly asked: number;
 	/** Peers whose answer matched. */
 	readonly agreeing: number;
+	/** Peers whose answer named another index, address or key. */
+	readonly disagreeing: number;
+}
+
+/** The majority rule above. PURE. */
+export function crossCheckVerdict(agreeing: number, disagreeing: number): CrossCheckVerdict {
+	if (agreeing + disagreeing >= 2 && disagreeing > agreeing) return 'disagree';
+	if (agreeing > disagreeing) return 'agree';
+	return 'unchecked';
 }
 
 function sameFee(a: unknown, local: LocalBtcFee): boolean | null {
@@ -65,11 +85,11 @@ export async function crossCheckBtcFee(input: {
 	readonly fetchJson: (url: string, hidden: boolean) => Promise<unknown>;
 	readonly maxPeers?: number;
 }): Promise<CrossCheckResult> {
-	const maxPeers = input.maxPeers ?? 2;
+	const maxPeers = input.maxPeers ?? 3;
 	const path = `/v1/orders/${encodeURIComponent(input.account)}/${encodeURIComponent(input.permlink)}/btc-fee`;
 	let asked = 0;
 	let agreeing = 0;
-	let disagree = false;
+	let disagreeing = 0;
 	for (const peer of input.peers) {
 		if (asked >= maxPeers) break;
 		let tried = false;
@@ -86,10 +106,19 @@ export async function crossCheckBtcFee(input: {
 			}
 			const same = sameFee(body, input.local);
 			if (same === true) agreeing++;
-			else if (same === false) disagree = true;
+			else if (same === false) disagreeing++;
 			break;
 		}
 		if (tried) asked++;
 	}
-	return { verdict: disagree ? 'disagree' : agreeing > 0 ? 'agree' : 'unchecked', asked, agreeing };
+	const verdict = crossCheckVerdict(agreeing, disagreeing);
+	if (disagreeing > 0 && verdict !== 'disagree') {
+		log.warn('btc_fee_crosscheck_dissent_outvoted', {
+			order: `${input.account}/${input.permlink}`,
+			agreeing,
+			disagreeing,
+			verdict
+		});
+	}
+	return { verdict, asked, agreeing, disagreeing };
 }

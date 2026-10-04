@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * chat-own-sent-plaintext-cache-smoke (cp402 [3]).
+ * chat-own-sent-plaintext-cache-smoke.
  *
  * Pins the fix for "my own messages show (encrypted) after navigating
  * away and back". The chat crypto (crypto.ts) is ephemeral sender-PFS:

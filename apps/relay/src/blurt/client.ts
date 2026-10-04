@@ -5,7 +5,8 @@
  *   - Endpoint rotation across multiple Blurt RPC nodes via
  *     `@morphit/rpc-pool`'s EndpointPool (latency-aware: fastest
  *     EWMA known endpoint first, exponential cooldown ladder on
- *     transport failure, optional adaptive hedging for user-facing
+ *     transport failure or endpoint fault, reads failed over past one
+ *     node's RPC error, optional adaptive hedging for user-facing
  *     calls only — broadcasts never hedge).
  *   - A small, relay-specific API: account lookup, chain properties
  *     for the current account_creation_fee, and account creation.
@@ -14,7 +15,7 @@
  * key it handles is the relay's own active key (passed in explicitly
  * from main.ts).
  *
- * cp165: migrated from the bespoke rotation logic (round-robin +
+ * migrated from the bespoke rotation logic (round-robin +
  * raw cooldown counter, ~80 lines of private code at the bottom of
  * this class) to the shared `@morphit/rpc-pool` package.  Same
  * primitives the indexer's BlurtClient now uses, so future audits
@@ -83,7 +84,7 @@ export interface AccountInfo {
 	 *  key the user asked for) from "someone else's account" (v1.20.0, D2). */
 	readonly owner_pubkey?: string | undefined;
 	/** First posting public key (BLURT-prefix base58) from the
-	 *  account's posting authority.  Part 122 cp14 — needed so
+	 *  account's posting authority.  needed so
 	 *  the relay can verify posting-key signatures on
 	 *  /v1/push/subscribe.  Absent if the chain returned an
 	 *  account with no posting authority (shouldn't happen for
@@ -92,7 +93,7 @@ export interface AccountInfo {
 	 *
 	 *  Multi-key posting authorities exist (multisig accounts)
 	 *  but in practice every Morphit user account has a single
-	 *  posting key; for cp14 we accept signatures from the
+	 *  posting key; for we accept signatures from the
 	 *  first key in the authority and document that multi-key
 	 *  authorities aren't fully supported for push subscribe. */
 	readonly posting_pubkey: string | undefined;
@@ -182,7 +183,7 @@ export type FeeDivergenceAnalysis =
  *  fee by 50%+. */
 export const FEE_DIVERGENCE_WARN_THRESHOLD = 0.1;
 
-/** v1.20.0 fix wave (D4) — the relay REFUSES to broadcast an `account_create`
+/** the relay REFUSES to broadcast an `account_create`
  *  while the chain's live account_creation_fee is more than this multiple of
  *  the operator-configured fee (MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT).
  *  The chain requires the EXACT live fee, so the relay cannot pay less; the
@@ -226,8 +227,8 @@ export class BroadcastOutcomeUnknownError extends Error {
 	}
 }
 
-/** The chain PROVED the transaction did not land: at least TWO independent
- *  operators, each past the transaction's signed expiration, report its effect
+/** The chain PROVED the transaction did not land: at least TWO operators
+ *  (counted by node name), each past the transaction's signed expiration, report its effect
  *  absent — so it can never land. Safe to retry. `cause` is what the nodes
  *  answered to the send (e.g. a rejection reason). */
 export class BroadcastNotLandedError extends Error {
@@ -253,8 +254,8 @@ export class BroadcastNotSentError extends Error {
 }
 
 /** The account name exists with a DIFFERENT owner key — confirmed by at least
- *  two independent operators (one node's word is never enough to release
- *  the relay's limits). */
+ *  two operators, counted by node name (one node's word is never enough to
+ *  release the relay's limits). */
 export class AccountTakenError extends Error {
 	readonly code = 'account_already_exists';
 	constructor(readonly accountName: string) {
@@ -360,7 +361,7 @@ export class BlurtClient {
 	private readonly pool: EndpointPool;
 	private readonly fallbackAccountCreationFeeBlurt: number;
 	/** Throttle flag for the chain-fee-diverges-from-config warn
-	 *  log (REVISIT-LIST §G).  We warn once per process startup
+	 *  log (backlog §G).  We warn once per process startup
 	 *  rather than on every poll to avoid spamming journald;
 	 *  operators who restart the relay after updating their
 	 *  config will see a fresh check on the first poll. */
@@ -385,9 +386,11 @@ export class BlurtClient {
 		}
 		this.pool = new EndpointPool({
 			endpoints: [...endpointUrls],
-			// Same shared health file as the indexer: both learn which of the
-			// configured nodes are fast and which are down, and one-shot processes
-			// start from that knowledge instead of trying endpoints in config order.
+			// Persisted endpoint health, so a restart starts from what is known
+			// instead of trying endpoints in config order. The systemd unit points
+			// MORPHIT_RPC_HEALTH_STATE at the relay's own state directory
+			// (/var/lib/morphit-relay/rpc-health.json); the default below is for
+			// runs outside the unit.
 			healthStatePath: process.env.MORPHIT_RPC_HEALTH_STATE ?? '/var/lib/morphit/rpc-health.json',
 			// Quorum checks (did a spend land?) count OPERATORS, not URLs: a
 			// hidden node's .onion and .b32.i2p are one operator.
@@ -424,7 +427,7 @@ export class BlurtClient {
 	 * not exist (Blurt returns an empty array, not an error, for
 	 * nonexistent names).
 	 *
-	 * cp165 USER-FACING — called during signup availability check
+	 * USER-FACING — called during signup availability check
 	 * and user-posting-key verification (NOT the relay's key — the relay
 	 * holds an active key; this method only fetches the inbound user's
 	 * posting pubkey for signature verification).  Hedging on: when the primary
@@ -461,7 +464,7 @@ export class BlurtClient {
 			if (Array.isArray(first) && typeof first[0] === 'string') ownerPubkey = first[0];
 		}
 
-		// Part 122 cp14 — extract first posting public key (if any).
+		// extract first posting public key (if any).
 		// Authority shape: { weight_threshold, account_auths,
 		//                    key_auths: [[pubkey_str, weight], ...] }
 		// Tolerate missing/malformed values — return undefined so the
@@ -504,7 +507,7 @@ export class BlurtClient {
 		// analyzeFeeDivergence above).  This decides whether
 		// the chain value is unparseable (use fallback + log
 		// loudly), divergent enough to warrant a warn-log
-		// (REVISIT-LIST §G — operator config is stale), or in
+		// (backlog §G — operator config is stale), or in
 		// range (silent — most poll cycles).
 		const analysis = analyzeFeeDivergence(
 			props.account_creation_fee,
@@ -573,7 +576,7 @@ export class BlurtClient {
 	 * SIGNED ONCE, SENT AS THE SAME BYTES (v1.20.0, D2). Any answer other than
 	 * accepted / duplicate is NOT trusted as a failure — a node may have taken
 	 * the bytes (a timeout), or be hostile (relay it, then say "rejected"). The
-	 * outcome is then decided from the chain (fix wave 4, A1):
+	 * outcome is then decided from the chain:
 	 *   - the account exists with the owner key we asked for (any one node) →
 	 *     success, `recovered: true`;
 	 *   - absent, reported by >= 2 operators whose head is past the signed
@@ -697,7 +700,7 @@ export class BlurtClient {
 	 * call, so running it once per endpoint produced a NEW transaction (new
 	 * txid) on every failover. The same bytes resent are harmless.
 	 *
-	 * TRUST (fix wave 4, A1). Once the bytes have left this process, NO single
+	 * TRUST. Once the bytes have left this process, NO single
 	 * node's "rejected" is taken as a failure: a timed-out node may have taken
 	 * them, and a hostile node can relay them and still answer "rejected".
 	 * Without `confirm`, every non-success throws BroadcastOutcomeUnknownError.
@@ -807,7 +810,7 @@ export class BlurtClient {
 	}
 
 	/**
-	 * Settle a transfer whose outcome is unknown (fix wave 4, A2/A3). Each
+	 * Settle a transfer whose outcome is unknown. Each
 	 * OPERATOR is asked, on ONE connection, for its irreversible block AND its
 	 * account history — never a head from one node and a history from another:
 	 *   'found'   — any node's history holds the operation (`match`);
@@ -882,10 +885,13 @@ export class BlurtClient {
 		return 'unknown';
 	}
 
-	/** Offer one signed transaction to the pool: each endpoint gets the same
-	 *  bytes, bounded by a real per-attempt deadline. Throws the node's own
-	 *  error on a rejection, or an UnconfirmedBroadcast when no endpoint
-	 *  confirmed (transport failures / timeouts / window closed). */
+	/** Offer one signed transaction to the pool, bounded by a real per-attempt
+	 *  deadline. A transport failure, a timeout or an endpoint fault (the node
+	 *  does not serve the broadcast API, or replies with garbage) moves the SAME
+	 *  bytes on to the next endpoint; a node's rejection of the transaction is
+	 *  not a reason to try another node and is thrown as the node's own error.
+	 *  Throws UnconfirmedBroadcast when no endpoint confirmed (transport
+	 *  failures / timeouts / window closed). Never signs anything. */
 	private async sendSigned(signed: unknown, expirationMs: number): Promise<void> {
 		try {
 			await this.pool.call(
@@ -1040,14 +1046,18 @@ export class BlurtClient {
 	// ─── Endpoint rotation ─────────────────────────────────────────
 
 	/**
-	 * Invoke `fn` against a healthy endpoint, rotating on transport
-	 * failure.  RPC errors (the chain rejecting the call) bubble up
-	 * immediately without cooling the endpoint down — those are the
-	 * caller's problem, not the endpoint's.
+	 * Invoke a READ `fn` against a healthy endpoint. Every caller of this method
+	 * only reads chain state, so it runs as a pool `read`: a transport failure
+	 * or an endpoint fault (API missing, garbage reply) rotates and cools the
+	 * node down, and any other RPC error from one node is failed over too — the
+	 * node is parked once another one answers, and only an error that several
+	 * operators return alike reaches the caller. Before, one node answering
+	 * every call with an error held signup availability, the signup account
+	 * read and the live-fee read hostage for as long as it sorted first.
 	 *
-	 * cp165: delegates to `@morphit/rpc-pool`'s EndpointPool —
-	 * latency-aware (fastest known endpoint first by EWMA), with
-	 * adaptive hedging when the caller opts in via `{hedge: true}`.
+	 * Delegates to `@morphit/rpc-pool`'s EndpointPool — latency-aware (fastest
+	 * known endpoint first by EWMA), with adaptive hedging when the caller opts
+	 * in via `{hedge: true}`.
 	 *
 	 * Hedging policy on this client:
 	 *   - User-facing reads (availability check, getAccount during
@@ -1070,7 +1080,7 @@ export class BlurtClient {
 				const client = clientFor(url);
 				return fn(client, signal);
 			},
-			{ hedge: options.hedge === true }
+			{ hedge: options.hedge === true, read: true }
 		);
 	}
 }
@@ -1137,7 +1147,7 @@ function clientFor(url: string): Client {
 		const hiddenNet = hiddenHostNetworkOf(new URL(url).hostname);
 		const timeoutMs =
 			hiddenNet === null ? 10_000 : Number(process.env.MORPHIT_HIDDEN_RPC_TIMEOUT_MS ?? 60_000);
-		// (v1.18.0 deep-deep, M2) Guarded: dblurt followed redirects and read
+		// Guarded: dblurt followed redirects and read
 		// replies whole, so a directory-listed node could bounce a broadcast to
 		// our own loopback or stream memory into us. See rpcFetch.ts.
 		c = guardDblurtClient(new Client(url, { timeout: timeoutMs, userAgent: morphitUserAgent(VERSION) }));

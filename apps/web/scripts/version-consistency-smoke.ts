@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * version-consistency-smoke — Part 122 cp20.
+ * version-consistency-smoke.
  *
  * Asserts every place Morphit's version string lives agrees with
  * the root package.json `version` field.  Three categories of
@@ -10,20 +10,19 @@
  *      DYNAMICALLY by reading the root package.json's `workspaces`
  *      array.  Adding/removing a workspace automatically expands
  *      or contracts the smoke's coverage — no need to update this
- *      file when the workspace list changes (DD-cp20-14, Part 122
- *      cp20 deep-deep).
+ *      file when the workspace list changes.
  *
  *   B. Two runtime version constants shipped to operators and
  *      external monitors via /v1/health:
  *        - apps/relay/src/api/health.ts:  const VERSION = '…'
  *        - apps/indexer/src/api/health.ts: const INDEXER_VERSION = '…'
  *
- *   C. Two doc example responses that operators/integrators read:
- *        - docs/API.md            (one fenced ```json block with
+ *   C. The doc example response operators read:
+ *        - apps/indexer/README.md (one fenced ```json block with
  *                                  "version": "…")
- *        - apps/indexer/README.md (same)
+ *      (docs/API.md shows the PUBLIC /v1/health body, which has no version.)
  *
- * Why this exists.  Pre-cp20 the runtime constants reported
+ * Why this exists.  Previously, the runtime constants reported
  * `0.3.0-phase3a` and `0.1.0-phase3b` while the root package.json
  * said `0.0.0-phase3b` and the docs said `0.1.0-phase3b` — four
  * different version strings, none of them the release tag.  At
@@ -96,8 +95,8 @@ function tsConstExtractor(constName: string) {
  *  fragments elsewhere in the doc.  The regex requires the line
  *  to be inside a fenced block AND look like a real version
  *  string (digits + dots, optional pre-release suffix).  We match
- *  the FIRST such line — by convention the API.md and README
- *  example responses are at the top of the health-endpoint
+ *  the FIRST such line — by convention the README's
+ *  example response is at the top of the health-endpoint
  *  section, so this is stable. */
 function docExampleExtractor(text: string): string | null {
 	// Match "version": "<vstring>" anywhere; the smoke doc is small
@@ -111,7 +110,7 @@ const TOUCHPOINTS_STATIC: readonly Touchpoint[] = [
 	// they're discovered dynamically below from root package.json's
 	// `workspaces` array.  This way the smoke stays correct when a
 	// workspace is added or removed without anyone remembering to
-	// update this file (DD-cp20-14, Part 122 cp20 deep-deep).
+	// update this file (DD-cp20-14).
 	//
 	// The static list below covers the non-workspace touchpoints
 	// only.
@@ -135,8 +134,8 @@ const TOUCHPOINTS_STATIC: readonly Touchpoint[] = [
 		// The MCP server advertises its version in the SDK server-info
 		// handshake (buildServer). Hoisted to `const MCP_VERSION` so this
 		// smoke can gate it like the other runtime constants — it used to
-		// be an inline literal that the smoke did not cover (cp308 deep-deep
-		// drift finding).
+		// be an inline literal that the smoke did not cover (a drift
+		// finding).
 		label: "apps/mcp-server/src/main.ts (`const MCP_VERSION`)",
 		path: 'apps/mcp-server/src/main.ts',
 		extract: tsConstExtractor('MCP_VERSION'),
@@ -144,13 +143,9 @@ const TOUCHPOINTS_STATIC: readonly Touchpoint[] = [
 	},
 
 	// Category C — doc example responses.
-	{
-		label: 'docs/API.md (health example response)',
-		path: 'docs/API.md',
-		extract: docExampleExtractor,
-		remediation:
-			'update the `"version"` line in the /v1/health example response in docs/API.md'
-	},
+	// docs/API.md is not a touchpoint: its /v1/health example is the PUBLIC
+	// body, which carries no version; the version
+	// is an operator-local field there.
 	{
 		label: 'apps/indexer/README.md (health example response)',
 		path: 'apps/indexer/README.md',
@@ -259,8 +254,8 @@ function main(): void {
 		}
 	}
 
-	// cp188 — release-notes file MUST exist for the current version.
-	// the maintainer's standing rule: every release ships notes that go online
+	// release-notes file MUST exist for the current version.
+	// The maintainer's standing rule: every release ships notes that go online
 	// with it.  The release CI uploads the tarball but does not author
 	// the release body, so nothing otherwise forces a notes file into
 	// existence on a version bump.  Tie it to the version here: bumping

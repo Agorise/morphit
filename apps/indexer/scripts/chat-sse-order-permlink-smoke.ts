@@ -2,8 +2,8 @@
  * chat-sse-order-permlink-smoke — the chat SSE wire serializer (`rowToWire`)
  * MUST carry `order_permlink`.
  *
- * cp470 — the client threads chat by (peer, order) and drops any live message
- * whose `order_permlink` doesn't match the open thread (cp446 filter). When
+ * the client threads chat by (peer, order) and drops any live message
+ * whose `order_permlink` doesn't match the open thread (filter). When
  * `rowToWire` omitted the field, every SSE event (snapshot, fast-path
  * provisional, durable bus push) shipped an implicit null tag, so live
  * messages in an ORDER thread were filtered out and only surfaced ~one
@@ -73,7 +73,7 @@ scenario('rowToWire still carries the other core fields', () => {
 	assert(wire.created_at === '2026-07-13T00:00:00.000Z', 'created_at not ISO-serialized');
 });
 
-// ─── Supply-chain guards (cp470) ─────────────────────────────────────────────
+// ─── Supply-chain guards ─────────────────────────────────────────────
 // rowToWire is only the last hop. The ~5s order-thread render also depends on
 // (a) the SSE queries fetching the column, (b) the fast-path provisional wiring
 // ev.orderPermlink into rowToWire, and (c) the head tailer extracting the tag

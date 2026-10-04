@@ -13,7 +13,7 @@
  * effect: broadcasting twice produces the same row.
  */
 
-// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// byte-budget: broadcastCustomJson is dynamically imported
 // at the call site below so dblurt (a 2 MB chunk) doesn't land in
 // the eager-load graph of routes that pull this ops file for its
 // types/helpers but don't immediately trigger a broadcast.

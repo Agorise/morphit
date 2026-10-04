@@ -34,7 +34,7 @@ describe('InviteTokenService', () => {
 		const { token } = s.issue('1.2.3.4');
 		// Flip the FIRST character in the signature (after the '.').
 		//
-		// Part 85 lesson: tampering the LAST character of a base64url
+		// lesson: tampering the LAST character of a base64url
 		// HMAC is flake-prone — when the encoded payload's bit-length
 		// leaves residual bits in the final base64url digit, flipping
 		// the last char ~6% of the time decodes to the SAME bytes
@@ -64,7 +64,7 @@ describe('InviteTokenService', () => {
 	});
 
 	it('rejects expired tokens', () => {
-		// Item 6 / Audit Part 27: ManualClock is cleaner than
+		// Item 6: ManualClock is cleaner than
 		// vi.useFakeTimers + vi.setSystemTime.  Only the
 		// service's view of time is faked; the global system
 		// clock stays real, so anything else in the test (Date
@@ -146,5 +146,25 @@ describe('InviteTokenService', () => {
 		const s2 = make({ secret });
 		const result = s2.verify(token, '1.2.3.4');
 		expect(result.ok).toBe(true);
+	});
+});
+
+describe('invite token key separation', () => {
+	it('the bucket binding is not keyed with the token-signing key', async () => {
+		const { createHmac } = await import('node:crypto');
+		const secret = Buffer.alloc(32, 7);
+		const svc = new InviteTokenService({ secret });
+		const { token } = svc.issue('203.0.113.0/24');
+		const payload = JSON.parse(Buffer.from(token.split('.')[0]!, 'base64url').toString()) as {
+			ip_hash: string;
+		};
+		// One key per purpose: a value computed with the signing key must never
+		// appear as the bucket binding (and vice versa).
+		expect(payload.ip_hash).not.toBe(
+			createHmac('sha256', secret).update('203.0.113.0/24').digest('hex')
+		);
+		// And the token still round-trips.
+		expect(svc.verify(token, '203.0.113.0/24').ok).toBe(true);
+		expect(svc.verify(token, '198.51.100.0/24').ok).toBe(false);
 	});
 });

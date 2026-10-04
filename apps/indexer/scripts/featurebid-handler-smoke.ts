@@ -2,7 +2,7 @@
  * featureBid handler — tsx smoke runner.
  *
  * Exercises `morphit_feature_bid_v1` validation paths.  Coverage
- * focus is the MIN-BID INCREMENT rule shipped 2026-05-02 (REVISIT-LIST
+ * focus is the MIN-BID INCREMENT rule shipped 2026-05-02 (backlog
  * §G "Featured-slot auction refinements"):
  *
  *   - When < MAX_SLOTS_VISIBLE active bids exist, any new bid is
@@ -125,8 +125,14 @@ function expectVisibleTop(displacedRate: number | null): QueryExpectation {
 	};
 }
 
-function expectInsertBid(): QueryExpectation {
-	return { match: 'INSERT INTO featured_slot_bids', rows: [], rowCount: 1 };
+/** The bid insert runs in its own savepoint (a duplicate must not abort the
+ *  block transaction). */
+function expectInsertBid(): QueryExpectation[] {
+	return [
+		{ match: 'SAVEPOINT feature_bid_insert', rows: [], rowCount: 0 },
+		{ match: 'INSERT INTO featured_slot_bids', rows: [], rowCount: 1 },
+		{ match: 'RELEASE SAVEPOINT feature_bid_insert', rows: [], rowCount: 0 }
+	];
 }
 
 async function run(): Promise<void> {
@@ -135,21 +141,25 @@ async function run(): Promise<void> {
 	// ─── Min-bid increment scenarios ──────────────────────────────
 
 	await scenario('min-bid: < MAX_SLOTS_VISIBLE active bids — accept any', async () => {
-		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(null), expectInsertBid()]);
+		const mock = makeMockClient([
+			expectOrderLookup(),
+			expectVisibleTop(null),
+			...expectInsertBid()
+		]);
 		const ctx = ctxWith({ siblingOps: feeTransfer(2 * 24) });
 		const result = await handler(ctx, mock.client);
 		assertEqual(result, { ok: true }, 'result');
 	});
 
 	await scenario('min-bid: new bid below displaced rank — accept (queues behind)', async () => {
-		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(5), expectInsertBid()]);
+		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(5), ...expectInsertBid()]);
 		const ctx = ctxWith({ siblingOps: feeTransfer(4.5 * 24) });
 		const result = await handler(ctx, mock.client);
 		assertEqual(result, { ok: true }, 'result');
 	});
 
 	await scenario('min-bid: equal to displaced rank — accept (older wins tiebreak)', async () => {
-		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(5), expectInsertBid()]);
+		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(5), ...expectInsertBid()]);
 		const ctx = ctxWith({ siblingOps: feeTransfer(5 * 24) });
 		const result = await handler(ctx, mock.client);
 		assertEqual(result, { ok: true }, 'result');
@@ -163,14 +173,14 @@ async function run(): Promise<void> {
 	});
 
 	await scenario('min-bid: exactly +1 BLURT/hour at low rate — accept', async () => {
-		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(2), expectInsertBid()]);
+		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(2), ...expectInsertBid()]);
 		const ctx = ctxWith({ siblingOps: feeTransfer(3 * 24) });
 		const result = await handler(ctx, mock.client);
 		assertEqual(result, { ok: true }, 'result');
 	});
 
 	await scenario('min-bid: exactly +5% at high rate — accept', async () => {
-		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(100), expectInsertBid()]);
+		const mock = makeMockClient([expectOrderLookup(), expectVisibleTop(100), ...expectInsertBid()]);
 		const ctx = ctxWith({ siblingOps: feeTransfer(105 * 24) });
 		const result = await handler(ctx, mock.client);
 		assertEqual(result, { ok: true }, 'result');

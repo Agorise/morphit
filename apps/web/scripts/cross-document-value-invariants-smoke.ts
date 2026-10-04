@@ -2,23 +2,23 @@
 /**
  * cross-document-value-invariants-smoke.
  *
- * Part 122 cp66 STRUCTURAL DEFENSE (LL #67 / O-16).
+ * STRUCTURAL DEFENSE.
  *
- * Generalizes cp61-O14's value-cross-reference parity class.
+ * Generalizes the value-cross-reference parity class.
  *
- * cp61-O14 caught a specific real bug: the BunkerWeb Docker network
+ * A later change caught a specific real bug: the BunkerWeb Docker network
  * CIDR was pinned at 172.20.0.0/16 in the canonical compose but
  * 172.18.0.0/16 in the Ansible group_vars default for trusted_proxy_ips.
  * Default Ansible deploy → broken trusted-proxy chain → all signups
  * bucket into one rate-limit slot.  The structural pattern: ONE value
  * lives in N files; if one file drifts, deploy breaks silently.
  *
- * Other repo values exhibit the same pattern.  cp66 generalizes:
+ * Other repo values exhibit the same pattern.  A later change generalizes:
  * each invariant declares a SOURCE OF TRUTH (file + extraction regex)
  * and a list of CONSUMER files (each with its own regex/group).
  * Drift in any consumer fires the smoke.
  *
- * Registered invariants (cp69):
+ * Registered invariants:
  *   1. postgres_db_name             (init.sql → env.examples → ansible/group_vars)
  *   2. postgres_user_name           (init.sql → env.examples → ansible/group_vars)
  *   3. postgres_port                (ansible/group_vars → env.examples DATABASE_URL)
@@ -31,13 +31,13 @@
  *   8. relay_listen_port_default    (relay config Zod default → env.example + nginx)
  *   9. indexer_listen_port_default  (indexer config Zod default → env.example + nginx)
  *  10. matrix_bot_healthcheck_port  (matrix-bot config Zod default → env.example +
- *                                    ansible role env template)  [cp69]
+ *                                    ansible role env template)
  *  11. bunkerweb_cidr               (canonical compose subnet → ansible default
- *                                    trusted_proxy_ips)  [cp69; slim cousin of
- *                                    cp61-O14, which also checks docs]
+ *                                    trusted_proxy_ips)  [slim cousin of
+ *                                    bunkerweb-cidr-cross-reference, which also checks docs]
  *
  * NOTE: 5-6 are the BunkerWeb-fronted bind ports and 8-9 are the bare-metal
- * nginx-fronted listen ports.  As of cp224 both deploy modes are unified on
+ * nginx-fronted listen ports.  As of both deploy modes are unified on
  * the code defaults (relay 8080 / indexer 8081), but they are still checked
  * independently — the ansible group_vars bind port and the frontend nginx.conf
  * proxy port must agree (5-6), and the Zod default and the bare-metal nginx
@@ -46,21 +46,21 @@
  * or `apt install nginx` from ops/nginx/.  Each set MUST be internally
  * consistent.
  *
- * NOTE on bunkerweb_cidr (#11): cp61-O14 (bunkerweb-cidr-cross-reference-smoke)
- * has richer doc-aware behavior — it checks PRE-LAUNCH-CHECKLIST, OPERATIONS,
+ * NOTE on bunkerweb_cidr (#11): (bunkerweb-cidr-cross-reference-smoke)
+ * has richer doc-aware behavior — it checks OPERATIONS,
  * RUN-A-MORPHIT-NODE, BRAG-LIST, and ansible role templates for the canonical
  * CIDR with proximity-to-keyword scoping.  We add a slim invariant here to
  * give the registry pattern uniform coverage; if drift happens, BOTH defenses
- * fire — cp61-O14 with the rich diagnostic, cp66-O16 with the registry-shaped
- * one.  Keeping both is intentional: cp61-O14 is doc-aware (catches drift in
- * operator-facing prose); cp66-O16 is config-aware (catches drift in ansible
+ * fire — with the rich diagnostic, with the registry-shaped
+ * one.  Keeping both is intentional: a later change is doc-aware (catches drift in
+ * operator-facing prose); a later change is config-aware (catches drift in ansible
  * default).  Different failure modes, complementary signals.
  *
  * Bug class this catches at pre-launch: an operator running a fresh
  * `ops-cli init` followed by importing values from operator docs OR
  * the Ansible default OR the env example finds them in tension —
  * the deploy fails in a confusing way because one document drifted
- * away from the others.  cp66's smoke catches that BEFORE first-launch.
+ * away from the others.  the smoke catches that BEFORE first-launch.
  *
  * Adding new invariants: append to the INVARIANTS array.  Each entry
  * must point at a single source-of-truth file whose value is canonical,
@@ -69,13 +69,13 @@
  * logic.
  *
  * Mutation tests:
- *   M-130: change init.sql DATABASE name to `morphit_other` → smoke
+ *   change init.sql DATABASE name to `morphit_other` → smoke
  *          fires "ops/env/indexer.env.example mentions 'morphit_indexer'
  *          but canonical postgres_db_name is 'morphit_other'".
- *   M-131: change ansible postgres_port to 6432 → smoke fires
+ *   change ansible postgres_port to 6432 → smoke fires
  *          "ops/env/indexer.env.example DATABASE_URL port '5432' ≠
  *          canonical '6432'".
- *   M-132: change indexer config default fee_recipient to 'morphit-pool'
+ *   change indexer config default fee_recipient to 'morphit-pool'
  *          while leaving docs at 'morphit-fees' → smoke fires.
  */
 
@@ -387,7 +387,7 @@ const INVARIANTS: Invariant[] = [
 	{
 		name: 'bunkerweb_cidr',
 		description:
-			"BunkerWeb Docker network CIDR — defined by canonical compose's `subnet:` line; consumed by ansible group_vars's `morphit_relay_trusted_proxy_ips` (operator's default trusted-proxy chain). This is the SLIM cousin of cp61-O14 (bunkerweb-cidr-cross-reference-smoke), which ALSO checks docs + READMEs + PRE-LAUNCH-CHECKLIST. We keep both: cp61-O14 has doc-aware behavior with proximity-to-keyword scoping; cp66-O16 catches the same canonical→ansible-default mismatch with a registry-shaped diagnostic. If both fire on the same drift, the operator gets two helpful signals; if only the slim version fires (because doc references were sparse), cp61-O14's doc check still surfaces in cp66-O16.",
+			"BunkerWeb Docker network CIDR — defined by canonical compose's `subnet:` line; consumed by ansible group_vars's `morphit_relay_trusted_proxy_ips` (operator's default trusted-proxy chain). This is the SLIM cousin of cp61-O14 (bunkerweb-cidr-cross-reference-smoke), which ALSO checks docs + READMEs. We keep both: cp61-O14 has doc-aware behavior with proximity-to-keyword scoping; cp66-O16 catches the same canonical→ansible-default mismatch with a registry-shaped diagnostic. If both fire on the same drift, the operator gets two helpful signals; if only the slim version fires (because doc references were sparse), cp61-O14's doc check still surfaces in cp66-O16.",
 		source: {
 			file: 'ops/bunkerweb/docker-compose.yml',
 			regex: /subnet:\s*([\d./]+)/,

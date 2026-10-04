@@ -36,10 +36,12 @@
  *     in-flight cap; one fetch per peer at a time (concurrent asks share it)
  *     and a 30-second cache, so a crowd on /compare costs the peer one
  *     request per 30 s;
- *   - the answer is RE-BUILT from validated fields: the `items` array of
- *     objects that each carry a string account and permlink (at most 100),
- *     `indexed_block`, `next_cursor` — the shape of `/v1/orderbook`
- *     (OrderbookResponse). Nothing else the peer sends is passed on.
+ *   - the answer is RE-BUILT from validated fields: `items` (at most 100),
+ *     each reduced to the three fields the compare page reads — a valid
+ *     account, a valid permlink, an ISO `updated_at` — plus `indexed_block`
+ *     and `next_cursor`. Nothing else the peer sends is passed on: an item
+ *     used to be relayed whole, so a peer could hand every visitor up to
+ *     2 MB of JSON of its choosing.
  *
  * PRIVACY. Nothing here logs an address or a target.
  */
@@ -48,7 +50,8 @@ import type { HiddenServiceProxyConfig } from '@morphit/hidden-transport';
 import { hiddenNetworkOf, isProxyUnavailable } from '@morphit/hidden-transport';
 import { clearnetRefused } from '@morphit/hidden-transport/router';
 
-import { errorBody } from '$api/shared';
+import { errorBody, isAccountName } from '$api/shared';
+import { validateOrderPermlink } from '$indexer/permlink';
 import {
 	ForwardBudget,
 	parsePairingTarget,
@@ -77,28 +80,38 @@ const UNVERIFIED_DEADLINE_MS = 20_000;
 export const CACHE_MS = 30_000;
 const USER_AGENT = 'morphit-indexer/compare';
 
+/** One of the peer's orders, as much as the compare page reads. */
+export interface PeerOrderItem {
+	readonly account: string;
+	readonly permlink: string;
+	readonly updated_at: string;
+}
+
 /** The peer's `/v1/orderbook` page (packages/indexer-client OrderbookResponse:
- *  `items`, `next_cursor`, `indexed_block`). */
+ *  `items`, `next_cursor`, `indexed_block`), items reduced to PeerOrderItem. */
 export interface PeerOrderbookPage {
-	readonly items: readonly Record<string, unknown>[];
+	readonly items: readonly PeerOrderItem[];
 	readonly indexed_block: number | null;
 	readonly next_cursor: string | null;
 }
+
+/** `Date.toISOString()` output — what every indexer sends. */
+const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 
 /** The peer's answer re-built from validated fields, or null. PURE. */
 export function validatePeerOrderbook(body: unknown): PeerOrderbookPage | null {
 	if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
 	const b = body as Record<string, unknown>;
 	if (!Array.isArray(b.items)) return null;
-	const items: Record<string, unknown>[] = [];
+	const items: PeerOrderItem[] = [];
 	for (const o of b.items) {
 		if (items.length >= PEER_PAGE_LIMIT) break;
 		if (typeof o !== 'object' || o === null || Array.isArray(o)) continue;
 		const r = o as Record<string, unknown>;
-		if (typeof r.account !== 'string' || typeof r.permlink !== 'string') continue;
-		if (r.account.length === 0 || r.account.length > 32) continue;
-		if (r.permlink.length === 0 || r.permlink.length > 256) continue;
-		items.push(r);
+		if (!isAccountName(r.account) || validateOrderPermlink(r.permlink) !== null) continue;
+		const u = r.updated_at;
+		if (typeof u !== 'string' || !ISO_UTC_RE.test(u) || Number.isNaN(Date.parse(u))) continue;
+		items.push({ account: r.account, permlink: r.permlink as string, updated_at: u });
 	}
 	const ib = b.indexed_block;
 	const nc = b.next_cursor;

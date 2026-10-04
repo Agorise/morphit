@@ -1,5 +1,5 @@
 /**
- * Morphit — YubiKey enroll-time fail-closed verification smoke (cp331).
+ * Morphit — YubiKey enroll-time fail-closed verification smoke.
  *
  * Enrollment now PROVES the device performs real HMAC-SHA1 challenge-
  * response before committing a wrap (buildVerifiedYubikeyWrap /

@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 /**
- * chat-scroll-to-newest — cp474 (t.txt #7).
+ * chat-scroll-to-newest.
  *
- * THE BUG THIS GUARDS AGAINST. the maintainer, on live morphit.io, for the second time:
+ * THE BUG THIS GUARDS AGAINST. on live morphit.io, for the second time:
  * "when the chatroom page loads, it STILL does not always scroll the bubble all
  * the way up so that i can see the last, most recent message that was sent."
  *
- * The first attempt (tt.txt #8) added `pinToBottom`: jump instantly, then
+ * The first attempt added `pinToBottom`: jump instantly, then
  * re-pin while the content settles. The idea was right; the wiring made it a
  * no-op in two independent ways, and BOTH have to stay fixed or the symptom
  * comes straight back:
@@ -64,7 +64,7 @@ function check(name: string, cond: boolean, detail = ''): void {
 	}
 }
 
-console.log('\n── chat-scroll-to-newest (cp474 / t.txt #7) ───────────\n');
+console.log('\n── chat-scroll-to-newest ───────────\n');
 
 const view = read('apps/web/src/lib/components/ConversationView.svelte');
 const pin = read('apps/web/src/lib/ui/pinToBottom.ts');

@@ -1,10 +1,10 @@
 /**
- * CI workflow hardening smoke (cp145).
+ * CI workflow hardening smoke.
  *
- * Catches the class of CI bug that cp145 fixed: a Forgejo Actions
+ * Catches the class of CI bug that fixed: a Forgejo Actions
  * job declared without `timeout-minutes:` will fall back to the
  * runner's default ceiling (often unlimited on self-hosted
- * Forgejo, 360 minutes on hosted GitHub Actions).  cp143's
+ * Forgejo, 360 minutes on hosted GitHub Actions).  The
  * per-smoke timeout inside scripts/run-smokes.sh catches hangs
  * inside the smoke battery; this job-level timeout catches
  * everything else (npm ci, tsc, svelte-kit sync, svelte-check,
@@ -14,7 +14,7 @@
  * file under `.forgejo/workflows/`:
  *
  *   1. Every job declares `timeout-minutes:`.  The whole point
- *      of cp145 — any unbounded step gets caught at the
+ *      — any unbounded step gets caught at the
  *      job-level wall before it can burn the runner's default.
  *
  *   2. Every job's `timeout-minutes:` is in a sane range (1..90).

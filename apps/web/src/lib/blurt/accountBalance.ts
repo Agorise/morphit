@@ -1,5 +1,5 @@
 /**
- * Morphit frontend — account-balance fetcher (cp295).
+ * Morphit frontend — account-balance fetcher.
  *
  * Fetches an account's balance + the dynamic global properties needed
  * to render BLURT POWER / mana / APR FROM THE INDEXER, same-origin,

@@ -1,7 +1,7 @@
 /**
  * Per-DISCUSSION folder state for the /chat inbox — synced ON CHAIN.
  *
- * the maintainer's model (t.txt): the chat inbox is an email inbox. Every discussion —
+ * The maintainer's model: the chat inbox is an email inbox. Every discussion —
  * keyed by (peer, order) exactly like read-state — lives in exactly ONE of
  * three folders. The DEFAULT is **Inbox**: a thread nobody has filed hasn't been
  * archived or starred, so it behaves as un-filed (it shows in the Inbox and
@@ -45,7 +45,7 @@ import { getChatFolders } from '$indexer/client';
 import type { ChatFolderState } from '$blurt/ops/chatFolders';
 
 const KEY = 'morphit.chat.folders';
-/** cp474 (t.txt #5, "fastmessagestatusupdate") — wall-clock ms of the newest
+/** ("fastmessagestatusupdate") — wall-clock ms of the newest
  *  LOCAL folder change, persisted beside the mirror so it survives a reload.
  *
  *  THE BUG THIS FIXES. `syncChatFoldersFromChain` used to adopt the on-chain
@@ -133,7 +133,7 @@ function writeMirror(state: FolderMap): void {
 }
 
 
-/** cp474 — stamp a LOCAL change. Called from the mutators, never from the
+/** stamp a LOCAL change. Called from the mutators, never from the
  *  chain-adopt path: adopting a remote change must not make the local copy look
  *  newer than the chain it just came from, or the device would refuse every
  *  subsequent sync. */
@@ -222,7 +222,7 @@ function mapToState(map: FolderMap): ChatFolderState {
 /**
  * On-chain shape → local map.
  *
- * cp474 — `previous` matters more than it looks. The on-chain payload is
+ * `previous` matters more than it looks. The on-chain payload is
  * `{ starred: string[], archived: string[] }` and carries NO timestamps, so this
  * has to invent an `at` for every entry it adopts. Stamping `now` unconditionally
  * (which is what it used to do) quietly breaks
@@ -294,9 +294,8 @@ let broadcastTimer: ReturnType<typeof setTimeout> | null = null;
  *  inbox bundle stays light. */
 /** True while a broadcast is in flight. v1.7.7 — broadcasts must SERIALIZE.
  *
- *  the maintainer: "if i have 20 messages sitting in my inbox, and i want every single one
- *  of them to move to Archived and i click on one archive link for each message
- *  every half second, then nothing will malfunction or break, right?"
+ *  Requirement: archiving 20 inbox messages one by one, a click every half second, must not
+ *  malfunction.
  *
  *  The debounce already handles the fast case correctly — `broadcastNow` reads
  *  `get(foldersStore)` at FIRE time, not at schedule time, so twenty clicks
@@ -374,7 +373,7 @@ function scheduleBroadcast(): void {
  *  a debounced encrypted on-chain broadcast. */
 /** v1.7.7 — the timestamp we stamp on a folder entry.
  *
- *  THE BUG THIS FIXES (the maintainer's tester3): `resurrectArchivedOnNewActivity`
+ *  THE BUG THIS FIXES (tester3): `resurrectArchivedOnNewActivity`
  *  compares this value against a thread's `last_message_at`, which is a BLOCK
  *  time from the indexer. Stamping `new Date()` compared the user's LOCAL WALL
  *  CLOCK to blockchain time — so on a machine whose clock runs even slightly
@@ -441,7 +440,7 @@ export function setFolder(
 export function toggleStar(peer: string, orderPermlink: string, lastMessageAt?: string): void {
 	// v1.7.7 — starred entries take the SAME watermark basis as archived ones.
 	//
-	// [the maintainer] asked whether the Starred folder was covered by the clock rule. Today
+	// The maintainer asked whether the Starred folder was covered by the clock rule. Today
 	// a starred entry's `at` never meets a block time — `resurrectArchivedOn-
 	// NewActivity` bails on `folder !== 'archived'` — so it was not a live bug.
 	// Two things made it worth fixing anyway:
@@ -452,7 +451,7 @@ export function toggleStar(peer: string, orderPermlink: string, lastMessageAt?: 
 	//      entries stamp AHEAD of local now, sort newer, and starred entries are
 	//      evicted first. The v1.7.7 watermark fix INTRODUCED that skew — before
 	//      it, both were `new Date()`: consistently wrong, but comparable.
-	//   2. the maintainer has already floated resurrecting starred threads on new activity
+	//   2. The maintainer has already floated resurrecting starred threads on new activity
 	//      ("or too and from the starred folder as well?"). The day that ships,
 	//      a bare `now` here becomes the archive bug all over again.
 	//
@@ -599,7 +598,7 @@ export async function syncChatFoldersFromChain(): Promise<void> {
 		return;
 	}
 
-	// cp474 (t.txt #5) — LAST-WRITE-WINS, not blind adopt.
+	// LAST-WRITE-WINS, not blind adopt.
 	//
 	// This used to overwrite the mirror with whatever the chain served. But a
 	// folder move updates the mirror instantly and only reaches the chain after a
@@ -687,7 +686,7 @@ export function clearChatFolders(): void {
 	// caught).
 	setLastAdoptedAt(null);
 	safeLocal.remove(KEY);
-	// cp474 — drop the local-change stamp with the state it described. Leaving it
+	// drop the local-change stamp with the state it described. Leaving it
 	// behind would make the next session look "ahead of the chain" while holding
 	// an empty map, and the last-write-wins check would then refuse to adopt the
 	// user's real folders back from chain.

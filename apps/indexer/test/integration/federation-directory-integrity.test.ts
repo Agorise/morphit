@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave — the federation directory's integrity (E5–E9, E14).
+ * the federation directory's integrity (E5–E9, E14).
  *
  *   E5  the boot reconcile replayed an OLD rejected registration over the
  *       operator's newer applied one (the register op is an UPSERT);
@@ -120,7 +120,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('federation directory integrity', () => {
 	});
 
 	it('E6: an operator active on chain (any Morphit op) stays clearnet_blocked, and is never pruned for it', async () => {
-		expect(await register('iran', 'iran', { origin: ORIGIN }, 1_000)).toEqual({ ok: true });
+		expect(await register('filtered', 'filtered', { origin: ORIGIN }, 1_000)).toEqual({ ok: true });
 		// Censored for a week already: clearnet_blocked, with every hourly
 		// failure of that week counted (as the probe used to count them).
 		await fx.db.query(
@@ -146,7 +146,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('federation directory integrity', () => {
 									'custom_json',
 									{
 										required_auths: [],
-										required_posting_auths: ['iran'],
+										required_posting_auths: ['filtered'],
 										id: 'morphit_settings_v1',
 										json: JSON.stringify({ v: 1, enc: Buffer.from('x').toString('base64') })
 									}

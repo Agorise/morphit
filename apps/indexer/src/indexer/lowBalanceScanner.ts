@@ -26,7 +26,6 @@
  * the Poller's tick loop via maybePoll).
  */
 
-import type pg from 'pg';
 import type { BlurtClient } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { parseBlurtAmount } from '$indexer/fee-transfer';
@@ -68,7 +67,7 @@ export class LowBalanceScanner {
 		private readonly blurt: BlurtClient,
 		private readonly relayAccount: string,
 		private readonly config: LowBalanceScanConfig,
-		/** Part 111 — THIS instance's operator tag.  When set, the
+		/** THIS instance's operator tag.  When set, the
 		 *  scanner's candidate query JOINs against `orders.operator_tag`
 		 *  and refills only users whose recent orders were attributed
 		 *  to THIS instance.  When undefined (operator unregistered),
@@ -156,8 +155,7 @@ export class LowBalanceScanner {
 			}
 			if (balance < this.config.thresholdBlurt) {
 				try {
-					await this.queueRefill(name);
-					refillsQueued++;
+					if (await this.queueRefill(name)) refillsQueued++;
 				} catch (err) {
 					// Queueing failure is worth logging but shouldn't
 					// stop the scan — other accounts may still qualify.
@@ -179,9 +177,9 @@ export class LowBalanceScanner {
 	 *  the last activityWindow days, and no dust_refill queued
 	 *  within the cooldown window. Excludes the relay itself.
 	 *
-	 *  Part 111 — additionally requires that the account had an
+	 *  additionally requires that the account had an
 	 *  order in the activity window attributed to THIS instance's
-	 *  operator_tag.  Closes the federation-cost gap: pre-Part-111,
+	 *  operator_tag.  Closes the federation-cost gap: older,
 	 *  every operator's scanner queued refills for every user
 	 *  active across the federation, multiplying treasury spend
 	 *  by the federation count.  Now each operator refills only
@@ -191,14 +189,19 @@ export class LowBalanceScanner {
 	 *  each independently (per-instance cooldown applies); this
 	 *  is acceptable — they ARE active users of each.
 	 *
+	 *  Only orders whose listing fee verified count as activity: an
+	 *  account that posts orders without paying ('missing', 'underpaid')
+	 *  would otherwise collect a dust refill from this instance per
+	 *  cooldown for nothing.
+	 *
 	 *  When `instanceOperatorTag === undefined`, the JOIN's WHERE
 	 *  clause matches no rows and the scanner refills nothing.
 	 *  Conservative default — an unregistered operator pays
 	 *  nothing.
 	 */
 	private async selectCandidates(): Promise<string[]> {
-		// Part 111 fast-path: nothing to query if the operator
-		// hasn't set MORPHIT_INSTANCE_OPERATOR_TAG.  Part 112
+		// fast-path: nothing to query if the operator
+		// hasn't set MORPHIT_INSTANCE_OPERATOR_TAG.
 		// hardening: log once per tick so the operator sees an
 		// explicit "I'm running but doing nothing" trail.
 		if (this.instanceOperatorTag === undefined) {
@@ -220,6 +223,7 @@ export class LowBalanceScanner {
 			           WHERE ord.account = a.name
 			             AND ord.created_at >= $2
 			             AND ord.operator_tag = $5
+			             AND ord.fee_status IN ('verified', 'verified_by_attestation')
 			        )
 			    AND NOT EXISTS (
 			          SELECT 1 FROM relay_pending_transfers r
@@ -239,35 +243,33 @@ export class LowBalanceScanner {
 		return result.rows.map((r) => r.name);
 	}
 
-	/** Queue one refill row. Matches the pattern used by the
-	 *  welcome-bonus trigger in the feedback handler.
+	/** Queue one refill row; true when a row was queued. Matches the
+	 *  pattern used by the welcome-bonus trigger in the feedback handler.
 	 *
-	 *  Concurrency-safe: re-checks the cooldown inside the
-	 *  transaction so two concurrent scanners (e.g. HA setup
-	 *  with multiple indexer processes) can't double-queue the
-	 *  same recipient.  The candidate filter in selectCandidates
-	 *  catches the common case; this is the race-window backstop. */
-	private async queueRefill(recipient: string): Promise<void> {
+	 *  The WHERE NOT EXISTS applies the cooldown (a refill already queued
+	 *  OR sent within it). It is NOT atomic under READ COMMITTED: two
+	 *  scanners (two indexer processes on one database) could both see no
+	 *  row and both insert. The partial unique index
+	 *  relay_pending_transfers_dust_refill_queued_uidx (migration v66:
+	 *  one QUEUED dust_refill per recipient) makes the second insert a
+	 *  no-op through ON CONFLICT … DO NOTHING. */
+	private async queueRefill(recipient: string): Promise<boolean> {
 		const cooldownCutoff = this.intervalAgo(this.config.refillCooldownDays * 24 * 60 * 60 * 1000);
-		await this.db.withTx(async (client: pg.PoolClient) => {
-			// INSERT ... WHERE NOT EXISTS — atomic check-and-insert
-			// against any concurrent scanner.  If a row already
-			// exists for this recipient within the cooldown window,
-			// the WHERE NOT EXISTS returns false and the INSERT is
-			// a no-op (rowCount=0).  No error, no duplicate.
-			await client.query(
-				`INSERT INTO relay_pending_transfers
-				   (recipient, kind, amount_blurt, reason, created_at)
-				 SELECT $1, 'liquid', $2, 'dust_refill', NOW()
-				 WHERE NOT EXISTS (
-				     SELECT 1 FROM relay_pending_transfers
-				      WHERE recipient = $1
-				        AND reason = 'dust_refill'
-				        AND created_at >= $3
-				 )`,
-				[recipient, this.config.refillAmountBlurt, cooldownCutoff]
-			);
-		});
+		const r = await this.db.query(
+			`INSERT INTO relay_pending_transfers
+			   (recipient, kind, amount_blurt, reason, created_at)
+			 SELECT $1, 'liquid', $2, 'dust_refill', NOW()
+			 WHERE NOT EXISTS (
+			     SELECT 1 FROM relay_pending_transfers
+			      WHERE recipient = $1
+			        AND reason = 'dust_refill'
+			        AND created_at >= $3
+			 )
+			 ON CONFLICT (recipient) WHERE reason = 'dust_refill' AND broadcast_at IS NULL
+			 DO NOTHING`,
+			[recipient, this.config.refillAmountBlurt, cooldownCutoff]
+		);
+		return (r.rowCount ?? 0) > 0;
 	}
 
 	/** Utility: timestamp N ms ago as a Date. Extracted so tests

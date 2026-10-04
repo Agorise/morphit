@@ -2,9 +2,9 @@
 /**
  * what-is-asset-faq-native-locale-floor-smoke.
  *
- * Part 122 cp54 STRUCTURAL DEFENSE (LL #58 / O-8).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp54-D1 native-locale drift class: per Memory #29,
+ * Closes the native-locale drift class: per the native-locale policy,
  * EVERY new i18n key MUST be NATIVE in en/es/fr/de and may be
  * EN-fallback in it/pl/ru/fa/zh-CN/zh-HK.  For the per-asset
  * `what_is_<asset>` FAQ family specifically, this smoke pins
@@ -12,29 +12,29 @@
  * NOT be byte-identical to en (which would indicate EN-fallback
  * smuggled in instead of a native translation).
  *
- * Drift history surfaced at cp54:
- *   - usdt (cp4 part 121), usdc (cp30), doge (cp33): native ES/FR/DE ✓
- *   - dai (cp31), zec (cp39), arrr (cp41), dcr (cp43), sol (cp45),
- *     eth (cp47), xrp (cp49): EN-fallback in es/fr/de ✗
- *   - bch (cp51 backfill), ltc (cp51), dash (cp51): EN-fallback ✗
+ * Drift history surfaced:
+ *   - usdt (part 121), usdc, doge: native ES/FR/DE ✓
+ *   - dai, zec, arrr, dcr, sol,
+ *     eth, xrp: EN-fallback in es/fr/de ✗
+ *   - bch (backfill), ltc, dash: EN-fallback ✗
  *
- * Total drift at cp54 discovery: 10 FAQs × 3 native locales × 2
+ * Total drift discovery: 10 FAQs × 3 native locales × 2
  * fields = 60 missing native translations spanning 7+ checkpoints.
  *
- * Cp54 wrote all 60 native translations inline; this smoke pins
+ * wrote all 60 native translations inline; this smoke pins
  * the floor going forward.
  *
  * Recurring class scope progression (8 defenses across 7 checkpoints):
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker hardcoded tables
- *   cp51-O5: per-asset i18n FAQ key coverage
- *   cp52-O6: Ansible env-template required-var parity
- *   cp53-O7: operator doc per-asset coverage
- *   cp54-O8: per-asset FAQ native-locale floor (THIS)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker hardcoded tables
+ *   per-asset i18n FAQ key coverage
+ *   Ansible env-template required-var parity
+ *   operator doc per-asset coverage
+ *   per-asset FAQ native-locale floor (THIS)
  *
- * Mutation test verification: M-122 — reverting es.json's
+ * Mutation test verification: — reverting es.json's
  * what_is_xrp value back to EN-fallback fires:
  *   "what-is-asset-faq-native-locale-floor FAILED:
  *    locale es field q of what_is_xrp is EN-byte-identical
@@ -59,14 +59,14 @@ function fail(name: string, detail: string): void {
 
 console.log('\n── what-is-asset-faq-native-locale-floor smoke (cp54 LL #58 / O-8) ──\n');
 
-// Native locales per Memory #29.  EN-fallback OK for it/pl/ru/fa/zh-CN/zh-HK
+// Native locales per the native-locale policy.  EN-fallback OK for it/pl/ru/fa/zh-CN/zh-HK
 // (those will be filled in by community-supplied translations over time).
 const NATIVE_LOCALES = ['es', 'fr', 'de'] as const;
 
 // Per-asset what_is_<ticker> FAQ family.  BTC/XMR explicitly
 // excluded — they don't have dedicated FAQs (explained in
-// what_is_morphit + privacy framework FAQs instead, per cp53
-// GRANDMA-FRIENDLY documentation fix).
+// what_is_morphit + privacy framework FAQs instead, per the
+// grandma-UX documentation fix).
 const EXCLUDED_ASSETS = new Set(['BTC', 'XMR']);
 
 const SUBJECT_ASSETS = (ASSET_TICKERS as readonly string[]).filter(
@@ -74,7 +74,7 @@ const SUBJECT_ASSETS = (ASSET_TICKERS as readonly string[]).filter(
 );
 
 console.log(`Subject FAQ family: what_is_<asset> for ${SUBJECT_ASSETS.length} assets`);
-console.log(`Native locales (per Memory #29): ${NATIVE_LOCALES.join(', ')}`);
+console.log(`Native locales (per the native-locale policy): ${NATIVE_LOCALES.join(', ')}`);
 console.log();
 
 // Load EN baseline
@@ -97,8 +97,8 @@ for (const loc of NATIVE_LOCALES) {
 		const enEntry = enEntries[key];
 		const locEntry = locEntries[key];
 
-		// Per Memory #29: the FAQ entry MUST exist in the locale
-		// (cp51-O5 already pins existence; this smoke adds the
+		// Per the native-locale policy: the FAQ entry MUST exist in the locale
+		// (already pins existence; this smoke adds the
 		// native-vs-fallback check).
 		if (!enEntry) {
 			fail(`${loc}/${key}: EN entry missing`, `cp51-O5 should have caught this; verify`);

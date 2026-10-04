@@ -79,7 +79,7 @@ type ColorScale = Record<string, string>; // shade ('50'..'950') → hex
 
 const PALETTE_DEFAULTS: Record<string, ColorScale> = {
 	// Standard Tailwind v3.4 — only the families used in this
-	// codebase are needed.  See docs/REVISIT-LIST.md for the
+	// codebase are needed.  See the project backlog for the
 	// list of color families used (amber, blue, emerald, green,
 	// orange, red, rose).
 	amber: {
@@ -406,7 +406,7 @@ function extractClassLists(svelteSrc: string): string[] {
 
 interface AllowEntry { file: string; sub: string; reason: string }
 const ALLOW_LIST: AllowEntry[] = [
-	// (none yet — Part 103 establishes the smoke; populate
+	// (none yet — establishes the smoke; populate
 	// as legitimate exceptions are discovered.)
 ];
 

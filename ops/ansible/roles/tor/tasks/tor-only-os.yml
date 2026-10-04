@@ -29,6 +29,7 @@
   loop:
     - morphit-tor-only-os.sh
     - morphit-tor-timesync.sh
+    - morphit-tor-egress.sh
 
 - name: Tor-only OS — a root-only place for backups and progress markers
   ansible.builtin.file:
@@ -49,6 +50,7 @@
   loop:
     - morphit-tor-only-recover.service
     - morphit-tor-only-recover.timer
+    - morphit-tor-egress.service
 
 - name: Tor-only OS — turn the safety net on
   ansible.builtin.systemd:
@@ -301,3 +303,63 @@
     cmd: "sh /usr/local/lib/morphit/morphit-tor-only-os.sh news-apply /var/lib/morphit-tor-only/backup-ansible-{{ ansible_date_time.epoch }}-news"
   when: morphit_toros_news_check.rc != 0
   changed_when: true
+
+# ── the rest of the OS off clearnet (ops/tor-only/morphit-tor-egress.sh) ────
+# snapd, fwupd's refresh, pollinate and Ubuntu Pro's timer masked; i2pd
+# reseeds through Tor; the Docker daemon pulls images through Tor (written
+# before Docker is installed, so even the first pull goes through Tor). The
+# rule that lets only Tor and i2pd out is loaded at the very end of the
+# playbook (post_tasks), after every install step.
+- name: Tor-only OS — clearnet-only OS jobs (snapd, fwupd refresh, pollinate, Ubuntu Pro timer)
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh units-check
+  register: morphit_toreg_units
+  changed_when: false
+  failed_when: false
+
+- name: Tor-only OS — mask them
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-egress.sh units-apply /var/lib/morphit-tor-only/egress-backup"
+  when: morphit_toreg_units.rc != 0
+  changed_when: true
+
+- name: Tor-only OS — does i2pd reseed through Tor?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh i2pd-check
+  register: morphit_toreg_i2pd
+  changed_when: false
+  failed_when: false
+
+- name: Tor-only OS — i2pd reseeds through Tor
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-egress.sh i2pd-apply /var/lib/morphit-tor-only/egress-backup"
+  when: morphit_toreg_i2pd.rc != 0
+  changed_when: true
+  register: morphit_toreg_i2pd_apply
+
+- name: Tor-only OS — i2pd reads its new setting
+  ansible.builtin.command:
+    cmd: systemctl try-restart i2pd
+  when: morphit_toreg_i2pd_apply is changed
+  changed_when: true
+
+- name: Tor-only OS — does Docker pull through Tor?
+  ansible.builtin.command:
+    cmd: sh /usr/local/lib/morphit/morphit-tor-egress.sh docker-check
+  register: morphit_toreg_docker
+  changed_when: false
+  failed_when: false
+
+- name: Tor-only OS — Docker pulls images through Tor
+  ansible.builtin.command:
+    cmd: "sh /usr/local/lib/morphit/morphit-tor-egress.sh docker-apply /var/lib/morphit-tor-only/egress-backup"
+  when: morphit_toreg_docker.rc != 0
+  changed_when: true
+  register: morphit_toreg_docker_apply
+
+- name: Tor-only OS — Docker reads its new settings (if it is installed already)
+  ansible.builtin.shell:
+    cmd: systemctl daemon-reload && if systemctl cat docker.service >/dev/null 2>&1; then systemctl try-restart docker; fi
+  when: morphit_toreg_docker_apply is changed
+  changed_when: true
+

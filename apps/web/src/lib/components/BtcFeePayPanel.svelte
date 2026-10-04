@@ -20,10 +20,11 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import type { OrderRecord } from '@morphit/indexer-client';
-	import { chainPinnedTreasury, initRelease, release } from '$stores/release';
+	import { chainPinnedTreasury, initRelease, release, retryReleaseCheck } from '$stores/release';
 	import { getOrdersByAccount } from '$lib/indexer/client';
 	import { checkIndexerFeeAddress, satsToBtc } from '$lib/orders/btcFeeAddress';
-	import { loadPinnedBtcXpubs } from '$lib/orders/btcFeeKeyHistory';
+	import { verifyPinnedBtcXpub } from '$lib/orders/btcFeeKeyHistory';
+	import { parseAccountXpub } from '@morphit/release-schema';
 	import { checkFeeNow, crossCheckFeeAddress, type FeeCrossCheck } from '$lib/orders/btcFeeCheck';
 	import CopyButton from '$lib/components/CopyButton.svelte';
 	import QrPanel from '$lib/components/QrPanel.svelte';
@@ -50,8 +51,9 @@
 	let slow = $state(false);
 	const current = $derived(fetched ?? order);
 
-	/** (V3-10) Treasury keys @morphit pinned on chain, loaded only when this
-	 *  order was numbered under a key that is no longer the current pin. */
+	/** (V3-10) The order's own treasury key, once proved on chain to have been
+	 *  pinned by @morphit (empty when refused or undecided). Asked only when
+	 *  this order was numbered under a key that is no longer the current pin. */
 	let pastKeys = $state<ReadonlySet<string> | null>(null);
 	const check = $derived.by(() => {
 		const o = current;
@@ -61,8 +63,14 @@
 		});
 	});
 	$effect(() => {
+		const named = current?.btc_fee?.xpub;
 		if (check !== null && !check.ok && check.reason === 'unverified_key' && pastKeys === null) {
-			void loadPinnedBtcXpubs().then((keys) => (pastKeys = keys));
+			if (typeof named !== 'string') pastKeys = new Set();
+			else
+				void verifyPinnedBtcXpub(named).then((proved) => {
+					const canon = parseAccountXpub(named);
+					pastKeys = proved && canon.ok ? new Set([canon.value.xpub]) : new Set();
+				});
 		}
 	});
 	/** (V3-5) Did other instances give this order the same address? Asked once
@@ -161,6 +169,15 @@
 		<!-- The chain-verified release (source of the xpub) could not be read,
 		     so the address cannot be double-checked: never show it unchecked. -->
 		<StatusLine kind="error">{$_('btc_fee_pay.mismatch')}</StatusLine>
+		{#if $release.error.kind === 'rpc_failed' || $release.error.kind === 'older_release'}
+			<button
+				type="button"
+				class="mt-2 text-sm font-semibold underline underline-offset-2"
+				onclick={() => void retryReleaseCheck()}
+			>
+				{$_('common.retry')}
+			</button>
+		{/if}
 	{:else if $chainPinnedTreasury === null}
 		<StatusLine kind="loading">{$_('btc_fee_pay.checking')}</StatusLine>
 	{:else if check !== null && !check.ok && check.reason === 'unverified_key' && pastKeys === null}

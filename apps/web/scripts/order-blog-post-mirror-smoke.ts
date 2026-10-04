@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/order-blog-post-mirror-smoke.ts  (v1.9.0, the maintainer)
+ * apps/web/scripts/order-blog-post-mirror-smoke.ts  (v1.9.0)
  *
  * The per-order Blurt announcement was rewritten to MIRROR the order detail page:
  * og-image header, an H1 headline, a DETAILS block (pay/accept + methods, posted /
@@ -40,7 +40,12 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 {
 	const pub = read(resolve(SRC, 'lib', 'syndication', 'publish.ts'));
 	const checks: Array<[string, boolean]> = [
-		['leads with morphit.io/og-image.png', /morphit\.io\/og-image\.png/.test(pub)],
+		[
+			"leads with the instance's own og-image.png (none for a hidden-only origin)",
+			/`\$\{origin\}\/og-image\.png`/.test(pub) &&
+				/origin\.startsWith\('https:\/\/'\)/.test(pub) &&
+				!/morphit\.io\/og-image\.png/.test(pub)
+		],
 		['H1 headline (# ${title})', /`#\s*\$\{title\}`/.test(pub)],
 		['DETAILS label', /syndicate\.order_post\.details/.test(pub)],
 		['Terms heading', /syndicate\.order_post\.terms_heading/.test(pub)],

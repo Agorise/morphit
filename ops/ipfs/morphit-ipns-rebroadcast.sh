@@ -3,7 +3,7 @@
 # public DHT, so ipns://<name> always resolves to the LATEST release — with NO
 # third-party naming service and NO private key on this box. Runs on a timer.
 #
-# Privacy #1 / Decentralization #2 (the maintainer): the STABLE IPNS name the download page
+# Privacy #1 / Decentralization #2: the STABLE IPNS name the download page
 # links (ipns://<name>/morphit-latest.tar.gz) resolves over the PUBLIC DHT. DHT
 # IPNS records expire in ~48h, so every instance re-PUTs the SAME signed record
 # every few hours — as long as ONE instance is alive, the name stays resolvable
@@ -70,7 +70,7 @@ command -v ipfs >/dev/null 2>&1 || { log "ipfs (Kubo) not installed — skipping
 command -v curl >/dev/null 2>&1 || { log "curl not installed — skipping."; exit 0; }
 command -v base64 >/dev/null 2>&1 || { log "base64 not available — skipping."; exit 0; }
 
-# HIDDEN-ONLY node: nothing to do (v1.18.0 deep-deep, H3). `routing put` writes
+# HIDDEN-ONLY node: nothing to do. `routing put` writes
 # to the public IPFS DHT from this box's home IP, which a hidden-only node must
 # never do; its Kubo runs with Routing.Type=none, so the put could not work
 # anyway and would only fail every run. MORPHIT_IPFS_HIDDEN_ONLY comes from
@@ -130,8 +130,9 @@ fi
 # 4. Re-announce to the DHT. `ipfs routing put` re-publishes the SIGNED record under
 # its /ipns/<name> routing key WITHOUT the private key (Kubo validates the signature,
 # then PUTs to the DHT), refreshing it before the ~48h DHT expiry.
-# NB — verify on the box: if a Kubo build won't accept a foreign record via
-# `routing put`, the HTTP Routing V1 endpoint PUTs the same signed bytes:
+# If a Kubo build ever refuses a foreign record via `routing put` (every run
+# then logs "routing put did not finish"), the HTTP Routing V1 endpoint PUTs
+# the same signed bytes:
 #   curl -fsS -X PUT --data-binary @"$TMP" "http://127.0.0.1:8082/routing/v1/ipns/$NAME"
 # (the gateway port is 8082 per morphit-ipfs-setup.sh — :8081 is the indexer). The CLI path is preferred
 # where it works; both put an identical record.

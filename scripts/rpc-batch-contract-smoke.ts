@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — RPC batch contract smoke (v1.7.5, t.txt #4).
+ * Morphit — RPC batch contract smoke (v1.7.5).
  *
  * "batch" is the last of the four things the rpc.blurt.blog operator asked us
  * for — lower RPS, batch, exponential backoff, add jitter. The first, third and
@@ -14,7 +14,7 @@
  *
  * These checks pin the OUTCOMES, not the phrasing:
  *   1. the poller prefetches a window per request instead of one block per request
- *   2. the DB transaction stays BOUNDED to one window (cp666) — never the whole
+ *   2. the DB transaction stays BOUNDED to one window — never the whole
  *      catch-up. One withTx per window amortises fsync ~BLOCK_FETCH_BATCH× (fast
  *      backfill) while a crash still rolls the window back atomically and the
  *      cursor advances inside that same tx, so no partial/corrupt state survives.
@@ -40,8 +40,13 @@ const pool = readFileSync(resolve(root, 'packages/rpc-pool/src/index.ts'), 'utf8
 let pass = 0;
 let fail = 0;
 const check = (name: string, ok: boolean, detail = ''): void => {
-	if (ok) { pass++; console.log(`  \u2713 ${name}`); }
-	else { fail++; console.log(`  \u2717 ${name}${detail ? `: ${detail}` : ''}`); }
+	if (ok) {
+		pass++;
+		console.log(`  \u2713 ${name}`);
+	} else {
+		fail++;
+		console.log(`  \u2717 ${name}${detail ? `: ${detail}` : ''}`);
+	}
 };
 
 // ── 1. the poller no longer spends one request per block ────────────
@@ -59,7 +64,7 @@ const size = Number(/const BLOCK_FETCH_BATCH = (\d+)/.exec(poller)?.[1] ?? '0');
 check('4 batch size is a sane window (2..100)', size >= 2 && size <= 100, String(size));
 check('5 the cursor advances past the fetched window', /nextLo = hi \+ 1/.test(poller));
 
-// ── 2. the DB invariant the batching must respect (cp666) ───────────
+// ── 2. the DB invariant the batching must respect ───────────
 // The apply is now ONE transaction per WINDOW (fetch batch == apply batch), for
 // ~BLOCK_FETCH_BATCH× fewer fsyncs. Two things must hold or the change is unsafe:
 // (a) the tx is BOUNDED to a window — it must NOT wrap the whole catch-up
@@ -112,7 +117,7 @@ check(
 	/if \(batchUnsupported\.has\(url\)\) throw new BatchUnsupportedError\(url\)/.test(client)
 );
 
-// ── THE SUBTLE ONE (found in the v1.7.5 deep-deep) ──────────────────
+// ── THE SUBTLE ONE (found in the v1.7.5 deep audit) ──────────────────
 // The fallback MUST go back through this.getBlock(), i.e. one pool.call() per
 // block. The first version of this code looped inside the pool callback, which
 // silently made the whole task backwards: EndpointPool.attemptSingle awaits
@@ -215,4 +220,7 @@ check('25 ask 4/4 — jitter', /DEFAULT_COOLDOWN_JITTER_FRACTION = 0\.\d+/.test(
 
 console.log('');
 if (fail === 0) console.log(`\u2713 all ${pass} rpc-batch-contract checks passed`);
-else { console.error(`\u2717 ${fail} of ${pass + fail} rpc-batch-contract checks FAILED`); process.exit(1); }
+else {
+	console.error(`\u2717 ${fail} of ${pass + fail} rpc-batch-contract checks FAILED`);
+	process.exit(1);
+}

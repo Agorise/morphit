@@ -1,5 +1,5 @@
 /**
- * ddns-setup-smoke.ts (cp596) — guards the provider-agnostic dynamic-DNS
+ * ddns-setup-smoke.ts — guards the provider-agnostic dynamic-DNS
  * mechanism (ops/ddns/*.sh) that replaces the old DuckDNS / free-hostname idea.
  *
  * We cannot exercise apt/systemd/sudo or a live provider from CI, so this smoke
@@ -11,7 +11,7 @@
  *     only calls the provider when the IP actually CHANGED;
  *   - the setup writes the secret config 0600 and installs a oneshot service +
  *     a boot/interval timer, then enables it;
- *   - the word "duckdns" appears NOWHERE in the mechanism (the maintainer: removed).
+ *   - the word "duckdns" appears NOWHERE in the mechanism (removed).
  */
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';

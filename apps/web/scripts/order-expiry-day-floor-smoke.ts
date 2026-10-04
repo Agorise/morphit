@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * order-expiry-day-floor — cp175 F-015 guard.
+ * order-expiry-day-floor — guard.
  *
  * Order `expires_at` is broadcast on the public Blurt chain. If it is computed
  * as `new Date(Date.now() + expiresDays * 86_400_000)`, its ISO string carries

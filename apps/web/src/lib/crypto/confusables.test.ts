@@ -180,11 +180,11 @@ describe('impersonatesReservedName — attack coverage', () => {
 		expect(impersonatesReservedName('the-kencode')).toBe(true);
 	});
 
-	it('catches leet in testowner: k3nc0d3', () => {
+	it('catches leet in a reserved account name: k3nc0d3', () => {
 		expect(impersonatesReservedName('k3nc0d3')).toBe(true);
 	});
 
-	it('catches case variations of testowner', () => {
+	it('catches case variations of a reserved account name', () => {
 		expect(impersonatesReservedName('KENCODE')).toBe(true);
 		expect(impersonatesReservedName('Kencode')).toBe(true);
 	});
@@ -197,12 +197,10 @@ describe('impersonatesReservedName — attack coverage', () => {
 });
 
 describe('impersonatesReservedName — legitimate uses', () => {
-	it('does NOT block byte-identical reserved names (canonical lowercase)', () => {
-		expect(impersonatesReservedName('morphit')).toBe(false);
-		expect(impersonatesReservedName('morphit-fees')).toBe(false);
-		expect(impersonatesReservedName('morphit-relay')).toBe(false);
-		expect(impersonatesReservedName('agorise')).toBe(false);
-		expect(impersonatesReservedName('kencode')).toBe(false);
+	it('blocks the exact reserved names too (the owner is exempted by signer, not by spelling)', () => {
+		expect(impersonatesReservedName('morphit')).toBe(true);
+		expect(impersonatesReservedName('morphit-fees')).toBe(true);
+		expect(impersonatesReservedName('agorise')).toBe(true);
 	});
 
 	it('does NOT block unrelated names', () => {
@@ -216,7 +214,7 @@ describe('impersonatesReservedName — legitimate uses', () => {
 		expect(impersonatesReservedName('mor')).toBe(false);
 		expect(impersonatesReservedName('m')).toBe(false);
 		expect(impersonatesReservedName('ago')).toBe(false);
-		expect(impersonatesReservedName('the maintainer')).toBe(false);
+		expect(impersonatesReservedName('kenc')).toBe(false);
 	});
 });
 
@@ -246,15 +244,20 @@ describe('validateDisplayName — confusable impersonation (integration)', () =>
 		expect(validateDisplayName('4gor1se').ok).toBe(false);
 	});
 
-	it('rejects testowner-related names', () => {
+	it('rejects names built on a reserved account name', () => {
 		expect(validateDisplayName('k3nc0d3').ok).toBe(false);
 		expect(validateDisplayName('kencode-friend').ok).toBe(false);
 	});
 
-	it('accepts legitimate operator display name (byte-equal)', () => {
-		expect(validateDisplayName('morphit-fees').ok).toBe(true);
-		expect(validateDisplayName('agorise').ok).toBe(true);
-		expect(validateDisplayName('kencode').ok).toBe(true);
+	it('a stranger setting exactly a reserved name is rejected', () => {
+		expect(validateDisplayName('morphit-fees', 'mallory').ok).toBe(false);
+		expect(validateDisplayName('morphit-fees').ok).toBe(false);
+	});
+
+	it('the owner of a reserved name may use it', () => {
+		expect(validateDisplayName('morphit-fees', 'morphit-fees').ok).toBe(true);
+		expect(validateDisplayName('agorise', 'agorise').ok).toBe(true);
+		expect(validateDisplayName('kencode', 'kencode').ok).toBe(true);
 	});
 
 	it('accepts unrelated names', () => {

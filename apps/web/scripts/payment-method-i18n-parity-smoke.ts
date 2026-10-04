@@ -6,22 +6,22 @@
  * corresponding i18n key at `payment_method.<key>.description`
  * in EVERY locale (en, es, fr, de, it, pl, ru, fa, zh-CN, zh-HK).
  *
- * WHY THIS SMOKE EXISTS (Part 122 cp32 deep-deep CODE-2 finding):
+ * WHY THIS SMOKE EXISTS:
  *
- * Cp32 deep-deep surfaced that `pay_usdt` (Part 121 cp3),
- * `pay_usdc` (Part 122 cp30), and `pay_dai` (Part 122 cp31) had
+ * A later change surfaced that `pay_usdt`,
+ * `pay_usdc`, and `pay_dai` had
  * all been added to the registry + indexer's
  * RESERVED_CANONICAL_KEYS WITHOUT their i18n description keys
  * being added to ANY locale.  The picker still rendered (the
  * description lookup falls back to the key text when missing),
  * but rendered "pay_dai" instead of "Dai: USD-pegged stablecoin
- * on EVM networks."  3-checkpoint drift across cp3/cp30/cp31.
+ * on EVM networks."  drift across three asset additions.
  *
  * The existing `reserved-keys-parity-smoke.ts` enforces SET
  * parity between registry and RESERVED_CANONICAL_KEYS — but not
  * i18n coverage.  This smoke closes that gap.
  *
- * Locale parity is mandatory per Memory #8.  This smoke fires
+ * Locale parity is mandatory per the locale-parity rule.  This smoke fires
  * the moment a future asset addition extends the registry
  * without translating its description across all 10 locales.
  *

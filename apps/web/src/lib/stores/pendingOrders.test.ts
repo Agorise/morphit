@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * cp475 (v1.7.0, "fastpostorder" / "fastcancelorder", ADR-0051).
+ * (v1.7.0, "fastpostorder" / "fastcancelorder", ADR-0051).
  *
  * THE BUG THIS EXISTS TO KILL. The order detail page retried `8 × 3s ≈ 24s` and
  * then said **"Order not found"**, with a comment claiming 24s was "comfortably
@@ -55,7 +55,7 @@ describe('pendingOrders', () => {
 
 	// ─── fastpostorder ────────────────────────────────────────────
 	it('shows an order the indexer has never heard of (THE "Order not found" bug)', () => {
-		// the maintainer posts, then immediately opens the detail page. The indexer knows
+		// The maintainer posts, then immediately opens the detail page. The indexer knows
 		// nothing and will know nothing for ~45-63s.
 		addPendingOrder(mkOrder('tester3', 'sell-btc-1'), T0);
 

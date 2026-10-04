@@ -1,5 +1,5 @@
 /**
- * Morphit relay — the signup-state directory (v1.20.0 fix wave, D3).
+ * Morphit relay — the signup-state directory.
  *
  * The persisted daily-ceiling counter and the kill-switch sentinel live in one
  * directory (MORPHIT_RELAY_DATA_DIR, default /var/lib/morphit-relay). Neither

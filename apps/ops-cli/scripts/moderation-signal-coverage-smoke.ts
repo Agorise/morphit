@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * moderation-signal-coverage — v1.8.12 (the maintainer).
+ * moderation-signal-coverage — v1.8.12.
  *
- * THE BUG THIS EXISTS TO PREVENT. The reputation summary in
- * `apps/indexer/src/api/feedback.ts` excludes a review if the pair appears in
+ * THE BUG THIS EXISTS TO PREVENT. The reputation summary (`apps/indexer/src/api/
+ * feedback.ts`, predicates in `reputationJoin.ts`) excludes a review if the pair appears in
  * ANY of FOUR tables:
  *
  *   suspicious_reciprocity  (Signal B)   related_accounts     (Signal A)
@@ -21,7 +21,7 @@
  *     'related', so C and D were unclearable at the DATABASE level. That was
  *     the root: no amount of CLI work could have fixed it.
  *
- * the maintainer lost an afternoon to it. He ran the moderation command, saw zero flags,
+ * The maintainer lost an afternoon to it. He ran the moderation command, saw zero flags,
  * and had to be walked through raw SQL across all four tables before the cause
  * — two review_concentration rows on his own test accounts — was visible.
  *
@@ -45,7 +45,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..');
 const read = (p: string): string => readFileSync(join(REPO, p), 'utf8');
 
-const feedbackApi = read('apps/indexer/src/api/feedback.ts');
+// The suppression predicates are shared by the profile summary, both review
+// lists, the orderbook card and the receipt (reputationJoin.ts); feedback.ts
+// uses them.
+const feedbackApi =
+	read('apps/indexer/src/api/feedback.ts') + read('apps/indexer/src/api/reputationJoin.ts');
 const signals = read('apps/indexer/src/indexer/signals.ts');
 const modLib = read('apps/ops-cli/src/lib/moderationSignals.ts');
 const modCmd = read('apps/ops-cli/src/commands/moderation.ts');
@@ -128,9 +132,9 @@ check(
 );
 
 // ─── 3b. the INTERACTIVE menu can actually reach all four ────────
-// v1.8.12 (the maintainer): the view was fixed to show C and D, and `clearFlag` was fixed
+// v1.8.12: the view was fixed to show C and D, and `clearFlag` was fixed
 // to accept them — but the interactive "Which flag?" menu still listed only A
-// and B. the maintainer saw his two concentration flags correctly, chose "Both signals",
+// and B. The maintainer saw his two concentration flags correctly, chose "Both signals",
 // and the command recorded clearances for A and B while leaving the
 // concentration flags untouched, reporting success. Being able to clear a
 // signal is useless if the operator cannot SELECT it.

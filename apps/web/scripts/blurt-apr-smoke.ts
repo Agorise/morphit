@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * blurt-apr smoke — cp323.
+ * blurt-apr smoke.
  *
  * Locks in the Blurt staked-BLURT (BP) APR computation. The figure shown
  * under the BP balance ("Currently earning N% APR") was ~5x too high

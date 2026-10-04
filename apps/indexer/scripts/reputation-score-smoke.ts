@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/reputation-score-smoke.ts (cp404)
+ * apps/indexer/scripts/reputation-score-smoke.ts
  *
  * Invariants over the composite reputation score in
  * apps/indexer/src/indexer/reputation/score.ts — the "⭐ 4.06" shown on

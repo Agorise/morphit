@@ -2,12 +2,12 @@
 /**
  * dai-trade-only-smoke.
  *
- * Part 122 cp31 sentinel: DAI must be `canPayListingFee: false`
+ * DAI must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions (same as
+ * The frozen fee_method invariant pinned from two directions (same as
  * usdt-trade-only-smoke + usdc-trade-only-smoke):
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
@@ -70,10 +70,10 @@ if (canonDai) {
 
 // ── Scenario 2 — canonical DAI.canPayListingFee === false ────────
 if (canonDai && canonDai.canPayListingFee === false) {
-	pass('canonical DAI.canPayListingFee === false (memory #23)');
+	pass('canonical DAI.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical DAI.canPayListingFee === false (memory #23)',
+		'canonical DAI.canPayListingFee === false (trade-only rule)',
 		`DAI must be trade-only.  fee_method enum is frozen at BLURT/BTC/XMR; DAI must not pay listing fees.  Got canPayListingFee=${canonDai?.canPayListingFee}`
 	);
 }

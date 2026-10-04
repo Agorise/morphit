@@ -225,7 +225,7 @@ describe('buildProfileBody — redaction chokepoint', () => {
 	});
 
 	it('preserves empty short_bio as the explicit-clear signal', () => {
-		// cp454 (t.txt #1): a PRESENT-but-empty text field is the "clear this
+		// a PRESENT-but-empty text field is the "clear this
 		// field" signal — it must reach json_metadata as '' so the indexer merge
 		// blanks the stored value, exactly like avatar_svg above. Omitting it (the
 		// old behaviour) left a cleared field stuck at its old on-chain value.
@@ -265,7 +265,7 @@ describe('buildProfileBody — redaction chokepoint', () => {
 	});
 
 	it('preserves empty nostr_url as the explicit-clear signal', () => {
-		// cp454 (t.txt #1): present-but-empty ⇒ '' (clear), same as short_bio /
+		// present-but-empty ⇒ '' (clear), same as short_bio /
 		// streaming_url / avatar_svg. Was previously (wrongly) omitted.
 		const body1 = buildProfileBody(mkPayload({ nostr_url: '' }), FIXED_TS);
 		expect((body1.json_metadata as Record<string, unknown>).nostr_url).toBe('');

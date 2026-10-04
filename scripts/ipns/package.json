@@ -1,0 +1,13 @@
+{
+	"name": "morphit-ipns-tools",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Signs Morphit's IPNS record in the release job (ipns-sign.mjs) and makes the IPNS key once on a laptop (ipns-keygen.mjs). Installed from its own lockfile with --ignore-scripts, in a step that has no secrets.",
+	"license": "AGPL-3.0-or-later",
+	"dependencies": {
+		"@libp2p/peer-id": "5.1.9",
+		"ipns": "10.1.6",
+		"w3name": "1.1.3"
+	}
+}

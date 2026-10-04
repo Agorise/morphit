@@ -136,12 +136,6 @@ export function neverAskAgain(): void {
 	writeDecline({ count: 3, lastDeclinedAt: Date.now() });
 }
 
-/** Reset decline history — used when the user toggles native
- *  channel from Settings manually (clears any prior soft-block). */
-export function resetDeclineHistory(): void {
-	writeDecline({ count: 0, lastDeclinedAt: 0 });
-}
-
 // ────────────────────────────────────────────────────────────────
 // Firing native notifications
 // ────────────────────────────────────────────────────────────────

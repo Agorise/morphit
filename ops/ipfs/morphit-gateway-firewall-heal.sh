@@ -9,7 +9,7 @@
 # for EVERY hidden (.onion / .b32.i2p) release fetch. That is what stranded
 # morphitlat for weeks while morphit.io looked perfectly healthy to itself: a
 # host-side `curl 127.0.0.1:8082` passes happily while no container and no peer
-# can reach it (the maintainer, diagnosed 2026-09-11).
+# can reach it (diagnosed 2026-09-11).
 #
 # v1.17.2 codified the rule in the Ansible bunkerweb role — which never runs on
 # a MANUAL /opt/morphit install (morphit.io is one), and only reaches an
@@ -32,15 +32,46 @@
 # Always exits 0. POSIX sh (/bin/sh is dash on Ubuntu — no bashisms).
 set -u
 
-CONTAINER="${MORPHIT_FRONTEND_CONTAINER:-morphit-frontend}"
-NET="${MORPHIT_BUNKERWEB_NET:-bunkerweb_net}"
 FALLBACK_CIDR="172.20.0.0/16"
 
 log() { echo "morphit-gateway-heal: $*" >&2; }
 
 # ── 0. Preconditions — every one of these is a legitimate "nothing to do" ──
 command -v docker >/dev/null 2>&1 || { log "no docker on this box — nothing to heal."; exit 0; }
-docker inspect "$CONTAINER" >/dev/null 2>&1 || { log "no $CONTAINER container — this box does not front the site with one; nothing to heal."; exit 0; }
+
+# The frontend container, by what it IS — the one serving the web build
+# (a bind mount ending in /apps/web/build) — never by its name: an Ansible
+# stack calls it morphit-frontend, a hand-made Compose stack something like
+# bunkerweb-frontend-1. MORPHIT_FRONTEND_CONTAINER overrides.
+find_frontend() {
+	for id in $(docker ps -q 2>/dev/null); do
+		if docker inspect "$id" --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null | grep -qE '/apps/web/build/?$'; then
+			docker inspect "$id" --format '{{.Name}}' 2>/dev/null | sed 's#^/##'
+			return 0
+		fi
+	done
+	return 1
+}
+CONTAINER="${MORPHIT_FRONTEND_CONTAINER:-$(find_frontend)}" || true
+[ -n "${CONTAINER:-}" ] && docker inspect "$CONTAINER" >/dev/null 2>&1 || { log "no frontend container serving the web build — this box does not front the site with one; nothing to heal."; exit 0; }
+log "frontend container: $CONTAINER"
+
+# The network it reaches the host through: the one whose gateway is its
+# host.docker.internal, else its only one. MORPHIT_BUNKERWEB_NET overrides.
+find_net() {
+	gw="$(docker inspect "$CONTAINER" --format '{{range .HostConfig.ExtraHosts}}{{.}}{{"\n"}}{{end}}' 2>/dev/null | sed -n 's/^host\.docker\.internal:\(.*\)$/\1/p' | head -n 1)"
+	nets="$(docker inspect "$CONTAINER" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' 2>/dev/null)"
+	for n in $nets; do
+		if [ -n "$gw" ] && docker network inspect "$n" --format '{{range .IPAM.Config}}{{.Gateway}} {{end}}' 2>/dev/null | tr ' ' '\n' | grep -qxF "$gw"; then
+			echo "$n"
+			return 0
+		fi
+	done
+	set -- $nets
+	[ "$#" -eq 1 ] && echo "$1"
+}
+NET="${MORPHIT_BUNKERWEB_NET:-$(find_net)}"
+[ -n "${NET:-}" ] || NET=bunkerweb_net
 command -v ipfs >/dev/null 2>&1 || { log "no ipfs on this box — nothing to heal."; exit 0; }
 
 # Gateway port: read it from kubo rather than assuming 8082.

@@ -2,9 +2,9 @@
 /**
  * apps/indexer/scripts/morphit-native-fetcher-smoke.ts
  *
- * Structural defense (cp127) — invariants for the morphit_native
+ * Structural defense — invariants for the morphit_native
  * price fetcher.  Each scenario explicitly maps to one of the
- * cp127 black-hat defenses (A-E + G + H) so future maintainers
+ * black-hat defenses (A-E + G + H) so future maintainers
  * can't silently weaken a defense without breaking a smoke.
  *
  * Scenarios:
@@ -220,7 +220,7 @@ const stubDb = {
 			'utf-8'
 		);
 		// Look for each defense letter A-E + G + H in the doc comment.
-		// Defense F is deferred to cp128 and should be noted as deferred
+		// Defense F is deferred to and should be noted as deferred
 		// (presence of the word in the file is enough).
 		const defenseLetters = ['A.', 'B.', 'C.', 'D.', 'E.', 'F.', 'G.', 'H.'];
 		const missing = defenseLetters.filter((d) => !src.includes(d));

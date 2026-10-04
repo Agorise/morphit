@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-29
-**Deciders:** Agorise team (Claude collaborating)
+**Deciders:** Agorise team
 **Supersedes:** —
 **Related:**
 - ADR-0018 (operator blocks) — same operator-signed-broadcast
@@ -300,7 +300,7 @@ List subcommand reads from local DB.
   op id.
 - `apps/web/src/lib/indexer/client.ts` — added
   `getInstancePaymentMethods` wrapper.
-- `apps/indexer/src/db/schema-v24.sql` — schema migration.
+- `apps/indexer/src/db/historical/schema-v24.sql` — schema migration.
 - `apps/indexer/src/indexer/handlers/operatorPaymentMethod.ts` —
   handler.
 - `apps/indexer/src/indexer/dispatcher.ts` — wired.
@@ -321,7 +321,7 @@ List subcommand reads from local DB.
     field-shape, sanitization, state transitions).
 - i18n: 51 new keys × 10 locales = 510 strings (40 method
   descriptions + 7 picker UI keys + 4 category labels).
-- Audit: `docs/audit/2026-04-29-batch-l-payment-methods.md`.
+- Audit: the internal audit record batch-l-payment-methods (2026-04-29).
 
 ## Open questions / future work
 

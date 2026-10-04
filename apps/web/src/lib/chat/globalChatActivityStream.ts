@@ -24,6 +24,8 @@ import {
 	dismissChatNotificationsFor
 } from '$lib/notifications/chatThread';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
+import { get } from 'svelte/store';
+import { hasAnySession } from '$stores/identity';
 
 import { folderOf, restoreThread } from '$lib/chat/chatFolders';
 
@@ -123,7 +125,7 @@ function connectFor(me: string): void {
 		connectedMe = null;
 		return;
 	}
-	// v1.7.5 (t.txt #1) — the ping now NAMES the thread, so act on it rather than
+	// v1.7.5 — the ping now NAMES the thread, so act on it rather than
 	// only re-polling.
 	//
 	// This is what makes the badge fast for a user who never granted push
@@ -148,9 +150,14 @@ function connectFor(me: string): void {
 			// `inbound !== true` covers BOTH the durable path (which sends
 			// inbound:false because its event carries no direction) and a message
 			// this account SENT. Badging on either would nag the sender about their
-			// own words on their other devices — t.txt #2. Falling through to
+			// own words on their other devices — . Falling through to
 			// `fire()` still reconciles, which is all the durable path needs.
-			if (d.inbound === true && typeof d.peer === 'string' && d.peer && typeof d.order === 'string') {
+			if (
+				d.inbound === true &&
+				typeof d.peer === 'string' &&
+				d.peer &&
+				typeof d.order === 'string'
+			) {
 				if (folderOf(d.peer, d.order) === 'archived') restoreThread(d.peer, d.order);
 				// `at` is present on REPLAYED events (a browser that was closed when the
 				// message landed) and carries the message's real block time. Passing it
@@ -176,7 +183,9 @@ export function startGlobalChatActivity(): () => void {
 	if (typeof EventSource === 'undefined') return () => {};
 
 	const sync = (): void => {
-		const me = getUserBlurtAccount();
+		// Only for a signed-in (unlocked or paired) session: a locked or
+		// signed-out visit must not open a stream that names an account.
+		const me = get(hasAnySession) ? getUserBlurtAccount() : null;
 		if (!me) {
 			closeStream();
 			return;
@@ -188,7 +197,7 @@ export function startGlobalChatActivity(): () => void {
 	// Re-check the signed-in account so login/logout (re)connects promptly.
 	const watch = window.setInterval(sync, 5_000);
 
-	// cp471 — the service worker receives Web Pushes even for a backgrounded
+	// the service worker receives Web Pushes even for a backgrounded
 	// tab (it is not throttled) and postMessages every tab `{ type: 'CHAT_PUSH' }`.
 	// Treat that exactly like an EventSource ping: refresh the conversation
 	// summary so the unread badges (favicon + avatar dots) and the OS app-badge
@@ -208,7 +217,7 @@ export function startGlobalChatActivity(): () => void {
 				// and the FAST path never writes chat_messages (it emits to SSE +
 				// enqueues the push and nothing else) — so the refetch at ~5s
 				// returns the same stale last_message_at and the badge stayed dark
-				// for ~60s. That's the maintainer's tester3, sitting on another tab with the
+				// for ~60s. That's tester3, sitting on another tab with the
 				// system notification already delivered.
 				//
 				// No spam risk and no gate duplicated here: the fast-notify gate
@@ -236,8 +245,7 @@ export function startGlobalChatActivity(): () => void {
 			fire();
 		}
 	};
-	const swContainer =
-		typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+	const swContainer = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
 	swContainer?.addEventListener('message', onSwMessage);
 
 	return () => {

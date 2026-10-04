@@ -109,7 +109,7 @@ const DEFAULT_CONCURRENCY = 10;
  *  one), and nothing warns. This comment used to say the indexer "skips
  *  populating new rows and emits a warning" beyond it; it never did. */
 const MAX_TRACKED_INSTANCES = 200;
-/** (v1.18.0 deep-deep, M4) Cap on NEVER-probed rows per scan. What was wrong:
+/** Cap on NEVER-probed rows per scan. What was wrong:
  *  registrations are free, and never-probed rows sorted first
  *  (`ORDER BY last_probed_at NULLS FIRST LIMIT 200`), so a burst of throwaway
  *  registrations filled the whole scan and starved established peers of their
@@ -193,7 +193,7 @@ export interface FederationProbeConfig {
 			readonly nostr: string | null;
 		};
 	} | null;
-	/** cp316 — the RESOLVED (chain-pin > env > canonical default)
+	/** the RESOLVED (chain-pin > env > canonical default)
 	 *  treasury addresses THIS indexer verifies fee payments against.
 	 *  probeOne compares each peer's advertised `/v1/instance`
 	 *  treasury against this; a peer advertising a DIFFERENT non-null
@@ -210,7 +210,7 @@ export interface FederationProbeConfig {
 	readonly hiddenServiceProxies?: HiddenServiceProxyConfig;
 	/** The JSON fetcher for CLEARNET peers. Defaults to the SSRF-hardened
 	 *  `fetchJson`; injectable so the scheduler pass can be exercised end to
-	 *  end against stub peers (v1.18.0 deep-deep, M4 guard). */
+	 *  end against stub peers (M4 guard). */
 	readonly clearnetFetch?: <T>(url: string) => Promise<T>;
 }
 
@@ -265,6 +265,19 @@ function isHiddenServiceOrigin(origin: string): boolean {
 	return /^[a-z2-7]{56}\.onion$/.test(host) || host.endsWith('.i2p') || host.endsWith('.loki');
 }
 
+/**
+ * Whether a peer's claim to use no clearnet at all is cached as TRUE. The
+ * claim is the peer's OWN (its /v1/instance `clearnet_eliminated`); nothing
+ * here can verify its legs. What CAN be checked is the one fact that refutes
+ * it outright: an instance registered at a clearnet origin serves clearnet,
+ * whichever way this node happened to reach it. So the claim is accepted only
+ * from an instance whose registered origin is itself an onion, I2P or Lokinet
+ * address. PURE.
+ */
+export function clearnetEliminatedClaimAccepted(registeredOrigin: string, claim: boolean): boolean {
+	return claim && isHiddenServiceOrigin(registeredOrigin);
+}
+
 export interface KnownInstanceRow {
 	origin: string;
 	operator_account: string;
@@ -283,7 +296,7 @@ export interface KnownInstanceRow {
 	/** v1.15.3 — the block of the operator's most recent on-chain action. Lets us
 	 *  tell a clearnet-blocked-but-alive node from a dead one. pg BIGINT → string. */
 	last_action_block_num: string | number | null;
-	/** (v1.18.0 deep-deep, M4) OTHER accounts whose on-chain registration
+	/** OTHER accounts whose on-chain registration
 	 *  claims this same origin (operators.origin), oldest registration first.
 	 *  If the origin itself serves one of them as its relay_account, that
 	 *  registrant owns the row — see probeOne. Absent/null → none. */
@@ -294,14 +307,15 @@ export interface ProbeOutcome {
 	status: ProbeStatus;
 	error: string | null;
 	cachedName: string | null;
-	/** v1.16.1 — the peer's clearnet_eliminated gate (false/absent on older peers). */
+	/** The peer's OWN clearnet_eliminated claim (false/absent on older peers).
+	 *  Stored only through {@link clearnetEliminatedClaimAccepted}. */
 	readonly cachedClearnetEliminated?: boolean;
 	cachedTagline: string | null;
 	cachedContactUrl: string | null;
 	cachedAltNetworks: unknown | null;
 	cachedIndexedBlock: number | null;
 	cachedChainLagSec: number | null;
-	/** (v1.18.0 deep-deep, M4) Set when the origin's own /v1/instance named a
+	/** Set when the origin's own /v1/instance named a
 	 *  DIFFERENT on-chain registrant of this origin than the row's current
 	 *  operator_account; persistOutcome moves the row to that account. */
 	readonly confirmedOwner?: string;
@@ -385,7 +399,7 @@ export class FederationProbeScheduler {
 		// the per-status interval.  We compute the per-status threshold
 		// in SQL via CASE for a single round-trip.
 		//
-		// (v1.18.0 deep-deep, M4) Two queries now: at most
+		// Two queries now: at most
 		// MAX_NEW_PROBES_PER_SCAN never-probed rows (NULL last_probed_at; oldest on-chain
 		// registration first), then the established rows that are due. Before,
 		// never-probed rows sorted first under one LIMIT, so free throwaway
@@ -436,7 +450,7 @@ export class FederationProbeScheduler {
 	}
 
 	private async probePool(instances: readonly KnownInstanceRow[]): Promise<void> {
-		// cp768 — while OUR OWN indexer is still catching up, its canonical-treasury
+		// while OUR OWN indexer is still catching up, its canonical-treasury
 		// baseline (chain-pin > env > default) may be INCOMPLETE (the on-chain
 		// treasury pin not yet indexed), so comparing a synced peer's advertised
 		// fee addresses against it can FALSE-flag a legitimate instance as
@@ -551,8 +565,8 @@ export class FederationProbeScheduler {
 					let onlyOurSideFailed = true;
 					// v1.15.3 Fix A — the clearnet fetch failed, but the operator may
 					// have published a hidden address ON-CHAIN. Retry the probe over it
-					// so a clearnet-censored node (e.g. Iran) is still discovered and
-					// reachable.
+					// so a clearnet-censored node (one behind a national firewall) is
+					// still discovered and reachable.
 					//
 					// v1.18.0 — EVERY published hidden address, not just the onion.
 					// This tried `.onion` alone, which meant a clearnet-censored peer
@@ -651,7 +665,7 @@ export class FederationProbeScheduler {
 	}
 
 	private async persistOutcome(inst: KnownInstanceRow, outcome: ProbeOutcome): Promise<void> {
-		// (v1.18.0 deep-deep, M4) Ownership follows the registrant the origin
+		// Ownership follows the registrant the origin
 		// itself confirms. What was wrong: first registrant owned the origin row
 		// forever (register handler: ON CONFLICT (origin) DO NOTHING), so a
 		// squatter who registered a real operator's origin first had that
@@ -703,7 +717,7 @@ export class FederationProbeScheduler {
 					outcome.cachedAltNetworks,
 					outcome.cachedIndexedBlock,
 					outcome.cachedChainLagSec,
-					outcome.cachedClearnetEliminated ?? false
+					clearnetEliminatedClaimAccepted(inst.origin, outcome.cachedClearnetEliminated ?? false)
 				]
 			);
 		} else {
@@ -738,7 +752,7 @@ export class FederationProbeScheduler {
 	 *  network probe is unnecessary and unreliable. Flip status to
 	 *  'good'/'syncing' and clear the failure counter.
 	 *
-	 *  cp311 fix: ALSO refresh the cached_* snapshot from local config
+	 *  ALSO refresh the cached_* snapshot from local config
 	 *  (`selfBranding`).  Before this, the self row's cached_name /
 	 *  tagline / contact / alt_networks were NEVER written — the seed
 	 *  (federationSeed) doesn't set them and the only writer of cached_*
@@ -786,7 +800,9 @@ export class FederationProbeScheduler {
 			}
 		}
 		// Score our own gate from local config, the same inputs /v1/instance uses.
-		const selfClearnet = this.config.localClearnetEliminated?.() ?? null;
+		const selfGate = this.config.localClearnetEliminated?.() ?? null;
+		const selfClearnet =
+			selfGate === null ? null : clearnetEliminatedClaimAccepted(inst.origin, selfGate);
 		const branding = this.config.selfBranding?.() ?? null;
 		if (branding) {
 			await this.db.query(
@@ -871,7 +887,7 @@ export async function probeOne(
 	fetchFn: <T>(url: string) => Promise<T> = fetchJson,
 	selfCheck: SelfRelayCollisionCheck | null = null
 ): Promise<ProbeOutcome> {
-	// (v1.18.0 deep-deep, M4) the inner probe reports, through `owner`, a rival
+	// the inner probe reports, through `owner`, a rival
 	// on-chain registrant of this origin that the origin itself confirmed.
 	const owner: { confirmed?: string } = {};
 	const out = await probeOneInner(inst, canonicalTreasury, fetchFn, selfCheck, owner);
@@ -896,7 +912,7 @@ async function probeOneInner(
 		return mkUnreachable(`instance_fetch: ${errMsg(err)}`);
 	}
 	if (!isInstanceShape(instanceData)) {
-		// cp770 — an UNPARSEABLE /v1/instance (a WAF/Cloudflare challenge page, an
+		// an UNPARSEABLE /v1/instance (a WAF/Cloudflare challenge page, an
 		// HTML error, garbage) means we couldn't validly READ the peer — a
 		// reachability/transport failure, NOT a fee-redirection identity mismatch.
 		// This is the common case when a tor-only node probes a clearnet peer over
@@ -918,7 +934,7 @@ async function probeOneInner(
 	) {
 		selfCheck.onCollision(origin);
 	}
-	// cp775 — a split brand↔relay identity is legitimate when BOTH accounts are
+	// a split brand↔relay identity is legitimate when BOTH accounts are
 	// reserved brand names: reserved names can only ever be registered by their
 	// rightful owner (the reserved-name defense blocks everyone else), so an
 	// operator account and a relay account that are BOTH reserved are provably
@@ -929,7 +945,7 @@ async function probeOneInner(
 	// differs from the operator is still a mismatch.
 	const bothReservedBrandAccounts =
 		isReservedTag(operator_account) && isReservedTag(instanceData.relay_account);
-	// (v1.18.0 deep-deep, M4) The row's current owner is only the FIRST account
+	// The row's current owner is only the FIRST account
 	// that registered this origin. If the origin names a DIFFERENT account that
 	// also registered this exact origin on chain (same both-reserved rule as
 	// above), that account is the real operator: hand it the row instead of
@@ -950,7 +966,7 @@ async function probeOneInner(
 			`relay_account mismatch: chain=${operator_account} instance=${instanceData.relay_account}`
 		);
 	}
-	// cp316: treasury-address mismatch.  A peer advertising a DIFFERENT
+	// treasury-address mismatch.  A peer advertising a DIFFERENT
 	// non-null fee address is trying to redirect fee payments away from
 	// the canonical treasury (the exact "operator edits the addresses to
 	// cheat us out of income" case).  Peers that omit the field (older
@@ -1055,7 +1071,7 @@ interface InstanceShape {
 		nostr: string | null;
 	};
 	relay_account: string;
-	/** cp316 — the RESOLVED treasury fee addresses this instance
+	/** the RESOLVED treasury fee addresses this instance
 	 *  verifies against (chain-pin > env > canonical default).
 	 *  Optional: instances on an older release omit it (probe treats
 	 *  absence as "no opinion", never a mismatch).  Either chain may
@@ -1063,7 +1079,7 @@ interface InstanceShape {
 	treasury?: { btc: string | null; xmr: string | null };
 }
 
-/** cp316 — pure treasury-address comparison used by probeOne (kept
+/** pure treasury-address comparison used by probeOne (kept
  *  separate so it's unit-testable without network mocks).  Returns a
  *  mismatch reason string when `advertised` carries a non-null fee
  *  address that DIFFERS from `canonical`, else null.
@@ -1106,7 +1122,7 @@ function isInstanceShape(v: unknown): v is InstanceShape {
 	if (!isPlainObject(v)) return false;
 	if (typeof v.relay_account !== 'string') return false;
 	if (!isPlainObject(v.alt_networks)) return false;
-	// cp316: treasury is OPTIONAL (older instances omit it), but if
+	// treasury is OPTIONAL (older instances omit it), but if
 	// present it must be a well-formed object with string|null chains.
 	if (v.treasury !== undefined) {
 		if (!isPlainObject(v.treasury)) return false;
@@ -1142,7 +1158,7 @@ import { isPrivateHostname, isPrivateIp } from '@morphit/net-defense';
  * Check whether a hostname string (as it appears in a URL) is
  * one of the obviously-private literal forms.
  *
- * cp154 — implementation lifted to `@morphit/net-defense` so the
+ * implementation lifted to `@morphit/net-defense` so the
  * MCP server can consume the same primitive.  This module
  * re-exports it under the original name to keep existing
  * indexer call sites and smoke imports working.
@@ -1155,10 +1171,10 @@ export { isPrivateHostname };
  * Check whether a *resolved IP address* (as returned by DNS lookup,
  * canonical form — not user-supplied) is in a private range.
  *
- * cp154 — implementation lifted to `@morphit/net-defense`.  See
+ * implementation lifted to `@morphit/net-defense`.  See
  * the re-export note above.
  *
- * Exported for testing.  Cp3 of Part 122 — DNS-rebinding closure.
+ * Exported for testing.  — DNS-rebinding closure.
  */
 export { isPrivateIp };
 
@@ -1166,7 +1182,7 @@ export { isPrivateIp };
  * Resolve `hostname` via DNS, validate EVERY returned address
  * against isPrivateIp(), and return the first valid (public)
  * record.  Throws if any resolved IP is private — the closes
- * the DNS-rebinding gap from cp7 REVISIT §A.
+ * the DNS-rebinding gap from backlog §A.
  *
  * Why "every record must be public" rather than "at least one":
  * an attacker controlling DNS can return [203.0.113.1, 127.0.0.1].
@@ -1176,7 +1192,7 @@ export { isPrivateIp };
  * to be public, we ensure no fork of the connection can land on
  * an internal address.
  *
- * Cp3 of Part 122 — DNS-rebinding closure.
+ * — DNS-rebinding closure.
  */
 export async function resolveAndValidatePublicIp(
 	hostname: string,
@@ -1238,14 +1254,14 @@ export function _setDnsResolverForTesting(
  * (undici derives them from the URL, not from `lookup`).
  * Host header similarly uses the URL hostname for vhost routing.
  *
- * Cp3 of Part 122 — DNS-rebinding closure.
+ * — DNS-rebinding closure.
  */
 /**
  * The pinned connect-time `lookup` for {@link buildPinnedAgent}, extracted so it
  * can be unit-tested without a live socket. Returns `pinnedIp` for
  * `expectedHostname` and refuses any other hostname (DNS-rebinding closure).
  *
- * cp672 — undici 6/7 calls `connect.lookup` with `{ all: true }` and expects the
+ * undici 6/7 calls `connect.lookup` with `{ all: true }` and expects the
  * callback to receive an ARRAY of `{ address, family }`. The previous
  * single-address form (`cb(null, ip, family)`) made undici read `undefined` for
  * the address → `ERR_INVALID_IP_ADDRESS`, which silently broke EVERY peer probe
@@ -1310,14 +1326,14 @@ export function buildPinnedAgent(
  *   1. HTTPS protocol enforcement
  *   2. Literal-hostname denylist (isPrivateHostname)
  *   3. DNS resolution + EVERY record validated public
- *      (resolveAndValidatePublicIp — Cp3 DNS-rebinding closure)
+ *      (resolveAndValidatePublicIp — DNS-rebinding closure)
  *   4. IP-pinned undici dispatcher (TOCTOU defense)
  *   5. redirect: 'manual' (no following 30x to internal URLs)
  *   6. Body cap with streaming abort (MAX_BYTES = 256KB)
  *
  * Used by:
  *   - federationProbe probe loop (canonical caller)
- *   - peerPriceMonitor's per-peer receipt fetch (cp139-F-2 fix)
+ *   - peerPriceMonitor's per-peer receipt fetch
  *
  * Exported for use by other indexer subsystems that fetch from
  * peer instances stored in known_instances.  Any new fetch site
@@ -1358,7 +1374,7 @@ export async function fetchJson<T>(
 	if (isPrivateHostname(hostname)) {
 		throw new Error('fetchJson: refusing to probe non-public host');
 	}
-	// Second defense (Part 122 cp3 — DNS-rebinding closure):
+	// Second defense (DNS-rebinding closure):
 	// Resolve the hostname BEFORE fetch, validate every returned
 	// IP, and pin the resolved IP via a custom undici dispatcher
 	// so the connection can't land on a different IP than the
@@ -1380,7 +1396,7 @@ export async function fetchJson<T>(
 			},
 			signal: ctrl.signal,
 			redirect: 'manual', // Audit 2026-05 finding 5-6: don't follow redirects
-			// Part 122 cp3 — pin the resolved IP at the connect layer.
+			// pin the resolved IP at the connect layer.
 			// Without this, undici would do its own DNS lookup which
 			// could return a different (private) IP than what we
 			// pre-validated.
@@ -1390,7 +1406,7 @@ export async function fetchJson<T>(
 			dispatcher: pinnedAgent
 		});
 		if (!resp.ok) {
-			// (v1.18.0 deep-deep, L4) Cancel the unread body: left alone it kept
+			// Cancel the unread body: left alone it kept
 			// the connection to the peer open after we had given up on it.
 			await resp.body?.cancel().catch(() => {});
 			throw new Error(`HTTP ${resp.status}`);
@@ -1447,7 +1463,7 @@ export async function fetchJson<T>(
 		return JSON.parse(text) as T;
 	} finally {
 		clearTimeout(timeout);
-		// (v1.18.0 deep-deep, L4) The pinned agent is this probe's alone and is
+		// The pinned agent is this probe's alone and is
 		// never reused, so close it: it used to be dropped with its idle
 		// keep-alive connection to the peer still open — one per probe, per
 		// peer, on every scan. `destroy`, not `close`: on an error path a

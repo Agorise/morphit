@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/focus-opens-scrim-smoke.ts  (the maintainer — Settings page blurred on load)
+ * apps/web/scripts/focus-opens-scrim-smoke.ts  (Settings page blurred on load)
  *
  * THE BUG THIS EXISTS FOR
  * -----------------------

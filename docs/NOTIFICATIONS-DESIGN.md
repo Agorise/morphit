@@ -1,7 +1,7 @@
 # Morphit notifications system — design doc
 
 **Status:** Phases 1, 2, 3, 4 ✅ ALL SHIPPED.  Phase 3 (Web Push
-for tab-closed delivery) landed in Part 122 cp13.
+for tab-closed delivery) landed.
 
 Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `ambient.ts` — title-bar prefix, favicon canvas badge, App
@@ -9,8 +9,7 @@ Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `native.ts` — Notification API (tab-open OS-level pings).
 - `audio.ts` — opt-in audio cue (default off).
 - `vibrate.ts` — opt-in vibration (default off, mobile only).
-- `push.ts` — Web Push subscribe / unsubscribe client (Part 122
-  cp13).
+- `push.ts` — Web Push subscribe / unsubscribe client.
 - `preferences.ts` — per-category opt-in storage.
 - `tradeNotifications.ts` — order / chat / feedback event
   glue against the indexer streams.
@@ -19,7 +18,7 @@ Shipped infrastructure lives at `apps/web/src/lib/notifications/`:
 - `index.ts` — public `notify(event)` surface called from
   every notification site.
 
-Backend-side push infrastructure (Part 122 cp13):
+Backend-side push infrastructure:
 - `apps/relay/src/policy/pushSubscriptions.ts` — subscription
   store (upsert / list / delete, failure-counter cleanup).
 - `apps/relay/src/policy/pushSender.ts` — drains the
@@ -41,17 +40,17 @@ Backend-side push infrastructure (Part 122 cp13):
 `UnreadCounts` Readable store drives the title prefix +
 favicon badge + the in-app inbox-tab unread dots.
 
-The cp13 push-service-architecture decision: **user-selectable**
+The push-service-architecture decision: **user-selectable**
 (self-hosted / standard / off), matching the existing
 `push_notifications_privacy` FAQ entry. Operators ship a VAPID
 keypair generated via `scripts/generate-vapid-keys.sh`; users
 choose their privacy mode in Settings → Notifications.
-Authentication on the subscribe endpoint for cp13 is
+Authentication on the subscribe endpoint for a later change is
 rate-limited-only (no cryptographic proof of account ownership);
 the trade-off is documented in `docs/OPERATIONS.md` §42.5 — a
 future checkpoint may add posting-key signature verification.
 
-**Last updated:** 2026-05-15 (Part 122 cp13 — Phase 3 shipped);
+**Last updated:** 2026-05-15 (Phase 3 shipped);
 prior shipping iterated across Phases 5d-F.
 
 ## Context
@@ -341,7 +340,7 @@ resolved.  Captured here so future contributors can read the
 
 1. **Phased ship plan** — ✅ All four phases shipped.  Phases 1
    and 2 in the original sprint; Phase 4 (audio + vibrate) close
-   behind; Phase 3 (Web Push) landed in Part 122 cp13 after the
+   behind; Phase 3 (Web Push) landed after the
    wiring-completeness audit caught a "claim without code"
    regression.
 2. **Annoyance policy** — ✅ Shipped as designed: no notification
@@ -368,12 +367,12 @@ polls every 30 seconds (tunable), encrypts payloads per RFC 8291
 via the `web-push` library, handles 410 Gone with
 auto-cleanup, and drops events older than 1 hour to avoid
 delivering stale notifications.  Subscribe endpoint
-authentication was rate-limited-only in cp13; cp14 (Part 122)
+authentication was rate-limited-only
 added posting-key signature verification — every subscribe
 request must carry a signature over
 `morphit:push:subscribe:<account>:<sha256(endpoint)>:<timestamp>`
 verified against the account's posting public key from chain.
 ±5 minute skew accepted.  Push payload strings are localized at
 indexer-enqueue time using the user's locale recorded in
-`push_subscriptions.locale` (also cp14); ten locales supported
+`push_subscriptions.locale` (also); ten locales supported
 matching the client's i18n set.

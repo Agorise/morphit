@@ -1,5 +1,5 @@
 /**
- * price-feeds-health-smoke (cp372)
+ * price-feeds-health-smoke
  *
  * Verifies buildPriceFeedsHealth (the /v1/health `price_feeds`
  * block + morphit-ops node-health source) correctly summarizes the

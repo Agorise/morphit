@@ -200,7 +200,7 @@ Wraps an `<input>` with:
 
 ## Known gaps we're going to fix
 
-> **2026-05-11 forward note (Part 120 audit):** This section
+> **2026-05-11 forward note:** This section
 > originally listed gaps from the Phase 3a/3b era.  All have
 > been closed: the register-name page, onboarding flow, and
 > Settings all use `<BusyButton>` + `<StatusLine>` +
@@ -225,14 +225,14 @@ Wraps an `<input>` with:
 
 - ~~Path choice buttons use hover but not active depress. Add it.~~
   ✅ Done.
-- ~~Generating spinner is good; keep.~~ ✅ Kept; Part 89 added the
-  600ms minimum visibility per GRANDMA-FRIENDLY-INVESTIGATION
+- ~~Generating spinner is good; keep.~~ ✅ Kept; a later change added the
+  600ms minimum visibility per the grandma-UX investigation
   Tier 4.3.
 - ~~Confirm-quiz submit button disabled until quiz complete — good.
   Add inline spinner for the brief async window between quiz pass
   and session boot.~~ ✅ Done.
 - ~~The "Download backup file" button has no "Downloaded ✓" state
-  after the download initiates. Add one.~~ ✅ Done; plus Part 92's
+  after the download initiates. Add one.~~ ✅ Done; plus a later
   printable backup card path now offers a third option.
 
 ### ~~In Settings (Phase 2):~~ ✅ all closed

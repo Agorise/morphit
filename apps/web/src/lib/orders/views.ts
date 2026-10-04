@@ -1,26 +1,29 @@
 /**
  * Morphit — order viewcount helpers (task #14).
  *
- * Thin wrappers over /v1/orders/:account/:permlink/view{,s}.
+ * Thin wrappers over POST /v1/orders/:account/:permlink/view and the batch
+ * read GET /v1/orders/:account/view_counts.
  *
  * `recordOrderView` is fire-and-forget — a failed POST must
  * never block navigation or surface as a user-visible error.
  * View counts are a soft metric; correctness here is "best
  * effort" by design.
  *
- * `fetchOrderViews` is request/response — owners call this on
- * the my/orders page to display the count.
+ * `fetchOrderViewCounts` reads the counts of a page of orders in one
+ * request (my/orders).
  *
- * See apps/indexer/src/api/orderViews.ts (and orderViewsLogic.ts)
- * for the privacy-design rationale: counts are non-unique, no
- * per-viewer detail is tracked, the GET endpoint is public-
- * readable but the frontend only displays counts to the order's
- * author.
+ * See apps/indexer/src/api/orderViews.ts (and orderViewsLogic.ts):
+ * counts are non-unique, no viewer and no time of any view is stored,
+ * and the GET endpoints are public. The web app shows a count only to
+ * the order's author.
  */
 
 import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 import { fetchWithTimeout } from '$net/fetchWithTimeout';
-import type { OrderViewsResponse } from '@morphit/indexer-client';
+import type { OrderViewCountsResponse } from '@morphit/indexer-client';
+
+/** Most permlinks the indexer accepts in one view_counts request. */
+const VIEW_COUNTS_BATCH = 100;
 
 /** Fire a view-count increment.  Non-blocking; errors are
  *  swallowed.  Caller can `await` for tests but production code
@@ -28,8 +31,7 @@ import type { OrderViewsResponse } from '@morphit/indexer-client';
  *
  *  Specifically returns Promise<void> rather than the count
  *  because consumers don't have a meaningful use for the post-
- *  increment value; the my/orders page does its own GET fetch
- *  on render. */
+ *  increment value; the my/orders page reads the counts itself. */
 export async function recordOrderView(account: string, permlink: string): Promise<void> {
 	try {
 		// Root-absolute path + new URL() → discards any path on the
@@ -40,10 +42,14 @@ export async function recordOrderView(account: string, permlink: string): Promis
 			`/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/view`,
 			resolveOrigin(MORPHIT_INDEXER_ORIGIN)
 		).href;
+		// A JSON body and content type: the indexer refuses any other write
+		// (a form-encoded or bodyless POST is what a page on another origin
+		// can send without a preflight).
 		await fetchWithTimeout(url, {
 			method: 'POST',
 			credentials: 'omit',
-			headers: { Accept: 'application/json' }
+			headers: { Accept: 'application/json', 'content-type': 'application/json' },
+			body: '{}'
 		});
 	} catch {
 		// Swallow.  View-count failures must not affect anything
@@ -51,41 +57,38 @@ export async function recordOrderView(account: string, permlink: string): Promis
 	}
 }
 
-/** Fetch the current view count for an order.  Returns null on
- *  any error (network, 4xx, parse).  Owners use this on
- *  /my/orders; non-owners shouldn't call it (the frontend gates
- *  display by isAuthor — calling for a non-owned permlink would
- *  succeed against a public endpoint but display violates the
- *  privacy-by-display contract). */
-export async function fetchOrderViews(
+/** The view counts of several of one account's orders, in as few requests
+ *  as the indexer's batch limit allows (one per 100 permlinks). A permlink
+ *  whose count is missing or malformed is left out of the map. Returns null
+ *  when any request fails, so the caller keeps what it showed before. */
+export async function fetchOrderViewCounts(
 	account: string,
-	permlink: string
-): Promise<OrderViewsResponse | null> {
+	permlinks: readonly string[]
+): Promise<Map<string, number> | null> {
+	const out = new Map<string, number>();
+	const unique = [...new Set(permlinks)];
 	try {
-		const url = new URL(
-			`/v1/orders/${encodeURIComponent(account)}/${encodeURIComponent(permlink)}/views`,
-			resolveOrigin(MORPHIT_INDEXER_ORIGIN)
-		).href;
-		const res = await fetchWithTimeout(url, {
-			credentials: 'omit',
-			headers: { Accept: 'application/json' }
-		});
-		if (!res.ok) return null;
-		const body = (await res.json()) as unknown;
-		if (
-			typeof body !== 'object' ||
-			body === null ||
-			typeof (body as { count?: unknown }).count !== 'number'
-		) {
-			return null;
+		for (let i = 0; i < unique.length; i += VIEW_COUNTS_BATCH) {
+			const chunk = unique.slice(i, i + VIEW_COUNTS_BATCH);
+			const url = new URL(
+				`/v1/orders/${encodeURIComponent(account)}/view_counts`,
+				resolveOrigin(MORPHIT_INDEXER_ORIGIN)
+			);
+			url.searchParams.set('permlinks', chunk.join(','));
+			const res = await fetchWithTimeout(url.href, {
+				credentials: 'omit',
+				headers: { Accept: 'application/json' }
+			});
+			if (!res.ok) return null;
+			const body = (await res.json()) as Partial<OrderViewCountsResponse> | null;
+			const counts = body?.counts;
+			if (typeof counts !== 'object' || counts === null) return null;
+			for (const p of chunk) {
+				const n = (counts as Record<string, unknown>)[p];
+				if (typeof n === 'number' && Number.isFinite(n) && n >= 0) out.set(p, n);
+			}
 		}
-		const count = (body as { count: number }).count;
-		const updatedAt =
-			typeof (body as { updated_at?: unknown }).updated_at === 'string'
-				? (body as { updated_at: string }).updated_at
-				: null;
-		if (!Number.isFinite(count) || count < 0) return null;
-		return { count, updated_at: updatedAt };
+		return out;
 	} catch {
 		return null;
 	}

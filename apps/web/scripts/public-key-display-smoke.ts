@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * public-key-display-smoke (cp404).
+ * public-key-display-smoke.
  *
  * Pins the centralized public-key truncation (crypto/publicKeyDisplay.ts)
  * that replaced the inline head-9…tail-4 slice duplicated in IdentityLabel

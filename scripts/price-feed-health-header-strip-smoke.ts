@@ -1,7 +1,7 @@
 /**
  * Morphit smoke — operator-only price-feed-health header strip.
  *
- * cp381 added a top-level `price_feeds` block to /v1/health that the
+ * A later change added a top-level `price_feeds` block to /v1/health that the
  * indexer emits ONLY when the request carries `X-Morphit-Local-Health: 1`.
  * The local ops-cli sends that header over the internal bridge; the
  * PUBLIC edge must STRIP it so an outside caller can never forge it and

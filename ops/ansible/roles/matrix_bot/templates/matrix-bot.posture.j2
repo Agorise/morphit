@@ -1,0 +1,8 @@
+# Managed by Ansible (and `morphit-ops matrix`) — NO secret in here.
+# Whether the Matrix alert bot runs and which homeserver it talks to, for the
+# indexer's "does anything on this box reach the clearnet" check: the indexer
+# runs as its own unprivileged user and cannot read matrix-bot.env (it holds
+# the bot's access token).  Same keys as matrix-bot.env; the MXID itself is
+# not copied, only whether one is set.
+MORPHIT_MATRIX_BOT_ALERT_MXID={{ 'configured' if (matrix_bot_alert_mxid | default('') | length) > 0 else '' }}
+MORPHIT_MATRIX_BOT_HOMESERVER={{ matrix_bot_homeserver | default('') }}

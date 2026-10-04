@@ -22,7 +22,7 @@ const mkOrder = (over: Partial<OrderRecord>): OrderRecord =>
 
 describe('buildRelistPrefill', () => {
 	it('always produces a fresh-listing prefill (30-day expiry, reason relist)', () => {
-		const p = buildRelistPrefill(mkOrder({}));
+		const p = buildRelistPrefill(mkOrder({}), 'en');
 		expect(p.expiresDays).toBe(30);
 		expect(p.reason).toBe('relist');
 	});
@@ -37,7 +37,8 @@ describe('buildRelistPrefill', () => {
 				amount_max: 900,
 				location_region: 'Berlin',
 				terms: 'cash only'
-			})
+			}),
+			'en'
 		);
 		expect(p.side).toBe('sell');
 		expect(p.asset).toBe('XMR');
@@ -49,34 +50,35 @@ describe('buildRelistPrefill', () => {
 	});
 
 	it('maps a spread price_model to the split form state', () => {
-		const p = buildRelistPrefill(mkOrder({ price_model: { kind: 'spread', percent: 2.5 } }));
+		const p = buildRelistPrefill(mkOrder({ price_model: { kind: 'spread', percent: 2.5 } }), 'en');
 		expect(p.priceModelKind).toBe('spread');
 		expect(p.spreadPercent).toBe('2.5');
 		expect(p.fixedPrice).toBe('');
 	});
 
 	it('maps a fixed price_model to the split form state', () => {
-		const p = buildRelistPrefill(mkOrder({ price_model: { kind: 'fixed', price: 0.0013 } }));
+		const p = buildRelistPrefill(mkOrder({ price_model: { kind: 'fixed', price: 0.0013 } }), 'en');
 		expect(p.priceModelKind).toBe('fixed');
 		expect(p.fixedPrice).toBe('0.0013');
 		expect(p.spreadPercent).toBe('0');
 	});
 
 	it('falls back to spread 0 on an unknown price_model shape', () => {
-		const p = buildRelistPrefill(mkOrder({ price_model: { weird: true } as never }));
+		const p = buildRelistPrefill(mkOrder({ price_model: { weird: true } as never }), 'en');
 		expect(p.priceModelKind).toBe('spread');
 		expect(p.spreadPercent).toBe('0');
 		expect(p.fixedPrice).toBe('');
 	});
 
 	it('carries a multi-network asset_network forward (empty picker bug guard)', () => {
-		const p = buildRelistPrefill(mkOrder({ asset: 'USDT', asset_network: 'trc20' }));
+		const p = buildRelistPrefill(mkOrder({ asset: 'USDT', asset_network: 'trc20' }), 'en');
 		expect(p.assetNetwork).toBe('trc20');
 	});
 
 	it('normalises null amounts + nullable fields to empty strings', () => {
 		const p = buildRelistPrefill(
-			mkOrder({ amount_min: null, amount_max: null, location_region: null, terms: null })
+			mkOrder({ amount_min: null, amount_max: null, location_region: null, terms: null }),
+			'en'
 		);
 		expect(p.amountMin).toBe('');
 		expect(p.amountMax).toBe('');
@@ -86,12 +88,22 @@ describe('buildRelistPrefill', () => {
 
 	it('copies payment_methods into a NEW array (no shared mutable ref)', () => {
 		const src = ['cash_in_person', 'bank_transfer'];
-		const p = buildRelistPrefill(mkOrder({ payment_methods: src }));
+		const p = buildRelistPrefill(mkOrder({ payment_methods: src }), 'en');
 		expect(p.paymentMethods).toEqual(src);
 		expect(p.paymentMethods).not.toBe(src);
 	});
 
 	it('exposes the /post prefill key', () => {
 		expect(RELIST_PREFILL_KEY).toBe('morphit.post.prefill');
+	});
+
+	it('a comma locale reads a 3-decimal price and amount back exactly', async () => {
+		const { parseAmountInput } = await import('./amountInput');
+		const p = buildRelistPrefill(
+			mkOrder({ amount_min: 1500.125, price_model: { kind: 'fixed', price: 95000.125 } }),
+			'de'
+		);
+		expect(parseAmountInput(p.fixedPrice, 'de')).toMatchObject({ ok: true, number: 95000.125 });
+		expect(parseAmountInput(p.amountMin, 'de')).toMatchObject({ ok: true, number: 1500.125 });
 	});
 });

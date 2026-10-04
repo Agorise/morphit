@@ -24,7 +24,7 @@
  * visible read position advances.
  */
 
-// cp165 byte-budget: broadcastCustomJson is dynamically imported
+// byte-budget: broadcastCustomJson is dynamically imported
 // at the call site below so dblurt (a 2 MB chunk) doesn't land in
 // the eager-load graph of routes that pull this ops file for its
 // types/helpers but don't immediately trigger a broadcast.
@@ -42,8 +42,8 @@ export interface ChatReadPayload {
 	/** ISO 8601 UTC timestamp through which we've read. Any
 	 *  chat_messages.created_at <= this is marked read. */
 	readonly last_read_at: string;
-	/** cp446 — WHICH discussion was read: the order's permlink, or '' for the
-	 *  thread that cites no order. Omitted only by pre-cp446 clients, where it
+	/** WHICH discussion was read: the order's permlink, or '' for the
+	 *  thread that cites no order. Omitted only by older clients, where it
 	 *  meant "everything with this peer". Never '*': that sentinel is the
 	 *  indexer's own marker for those legacy acks and a client may not forge it. */
 	readonly order_permlink: string;

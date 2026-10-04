@@ -19,40 +19,42 @@
  * The helper auto-detects whether the input is a TOTP code or
  * backup code based on character class:
  *   - 6 digits → TOTP
- *   - 8 chars from the Crockford-base32 alphabet (with optional dash) → backup code
+ *   - 8 chars from the backup-code alphabet (A–Z without I/O, 2–9; optional dash) → backup code
  *
  * Whitespace and case are normalized at entry; the user can type
  * "123 456" or "ABCD efgh" or "abcd-EFGH" — all are accepted forms.
+ *
+ * An authenticator code is accepted ONCE: its time step must be later than
+ * the last step accepted for the same secret in this page session. The
+ * ±1-step window keeps a code valid for up to 90 s, and someone who watched
+ * it being typed could otherwise use it again within that time. Kept in
+ * memory only — writing it to storage would tell anyone reading this
+ * browser's storage that 2FA is enrolled.
  *
  * Honest threat-model framing:
  *
  *   This gate runs AFTER the keystore is already plaintext in
  *   memory.  An attacker who has reached this point with the
- *   correct password has access to the unwrapped keys via the
- *   FullIdentity object directly — the TOTP check doesn't add
- *   cryptographic strength to that attack path.
+ *   correct password (or the YubiKey) has access to the unwrapped
+ *   keys via the FullIdentity object directly — the TOTP check
+ *   doesn't add cryptographic strength to that attack path. It is
+ *   a gate in this app, not cryptography.
  *
  *   What it DOES gate is the call-graph leading to the unlocked
  *   session state in the identity store: until this returns 'ok',
- *   `bootFromEnvelope` will not set the internal state to
- *   `'unlocked'` and the rest of the app cannot see the keys.
- *   This is meaningful protection against:
+ *   neither `bootFromEnvelope` nor `bootFromEnvelopeWithYubikey`
+ *   sets the internal state to `'unlocked'` and the rest of the app
+ *   cannot see the keys. This is meaningful protection against:
  *     - Shoulder-surfing: someone watching you type a password
  *       can't unlock without also watching you type a code that
- *       expires every 30 seconds.
- *     - Borrowed-laptop: a friend who knows your password from
- *       seeing you log in once still needs your authenticator app.
+ *       expires within 90 seconds and is accepted only once.
  *     - Casual local malware that grabs the keystore + password
  *       but doesn't know to also locate and use the TOTP secret.
- *
- *   For cryptographically-meaningful 2FA (where the second
- *   factor's secret never lives on the protected device), the
- *   path forward is FIDO2/WebAuthn — see the yubikey-probe
- *   exploratory route.
  */
 
 import type { Identity } from './keygen';
 import { KeystoreError } from './keystore';
+import { sodium, ensureSodium } from './sodium';
 import { verifyCode as verifyTotpCode } from '../auth/totp';
 import { webCryptoAvailable } from '$lib/security/secureContext';
 import {
@@ -66,9 +68,20 @@ export type TotpUnlockResult =
 	| { kind: 'ok' }
 	| { kind: 'backup_redeemed'; updatedIdentity: Identity };
 
+/** Last accepted authenticator time step per TOTP secret, this page
+ *  session only. Keyed by a short keyed hash of the secret. */
+const acceptedSteps = new Map<string, number>();
+
+async function stepMemoryKey(secret: Uint8Array): Promise<string> {
+	await ensureSodium();
+	const key = new TextEncoder().encode('morphit-totp-step-memory');
+	return sodium.to_hex(sodium.crypto_generichash(16, new Uint8Array(secret), new Uint8Array(key)));
+}
+
 /** Auto-detect whether the input looks like a TOTP code or a
  *  backup code, and verify accordingly.  Throws KeystoreError
- *  'totp_invalid' on no match. */
+ *  'totp_invalid' on no match, and on an authenticator code whose
+ *  time step was already accepted (a replay). */
 export async function verifyTotpOrBackup(
 	identity: Identity,
 	userInput: string
@@ -96,16 +109,25 @@ export async function verifyTotpOrBackup(
 			}
 		} else {
 			const result = await verifyTotpCode(identity.totpSecret, trimmed);
-			if (result.valid) {
+			if (result.valid && result.usedStep !== undefined) {
+				const memoryKey = await stepMemoryKey(identity.totpSecret);
+				const last = acceptedSteps.get(memoryKey);
+				if (last !== undefined && result.usedStep <= last) {
+					throw new KeystoreError(
+						'totp_invalid',
+						'That code was already used. Wait for the next one from your authenticator.'
+					);
+				}
+				acceptedSteps.set(memoryKey, result.usedStep);
 				return { kind: 'ok' };
 			}
 		}
 		// Fall through — could still be a backup code with all-digit chars,
-		// though Crockford-base32 alphabet doesn't include 0/1, so a pure
+		// though the backup-code alphabet has no 0 or 1, so a pure
 		// digit string of length 8 IS a possible backup code.  Try it.
 	}
 
-	// Backup code: 8 Crockford-base32 chars (with optional dash/whitespace).
+	// Backup code: 8 chars of the backup-code alphabet (with optional dash/whitespace).
 	const canonical = canonicalizeBackup(trimmed);
 	if (canonical.length === BACKUP_CODE_LENGTH) {
 		const slots = identity.totpBackupCodes;

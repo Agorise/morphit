@@ -17,9 +17,8 @@
 # (One shared database — indexer + relay both use it — so one password.)
 vault_postgres_indexer_password: REPLACE-ME-WITH-RANDOM-32-CHAR-STRING
 
-# Relay keystore passphrase.  This decrypts the BLURT active key
-# file on disk.  Strong passphrase recommended (24+ chars random).
-vault_relay_keystore_passphrase: REMOVED  # Part 122 cp5 F13: no env path consumes this. Relay unlocks via TTY prompt or systemd LoadCredential.
+# (No relay keystore passphrase here: nothing reads one from a file. The
+# relay unlocks its keystore from a TTY prompt or a systemd credential.)
 
 # SMTP credentials for outbound alerts.
 vault_alert_smtp_password: REPLACE-ME-WITH-SMTP-PASSWORD

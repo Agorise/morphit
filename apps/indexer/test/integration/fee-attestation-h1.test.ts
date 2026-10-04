@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep, H1 — free "verified" listings through BTC fee attestation.
+ * free "verified" listings through BTC fee attestation.
  *
  * The chain the red team reproduced (rv6 A1): post a BTC order with a random
  * txid, every explorer answers 404, the verifier called that "no usable
@@ -30,6 +30,8 @@ const FEE_ADDR = 'bc1qdwaelg52ts3e0m8fellkw5u9x7plfwc0kxnwnk';
 const SATS = 416;
 const NOW = new Date('2026-09-24T12:00:00Z');
 const OLD = new Date(NOW.getTime() - 31 * 86400_000);
+/** A re-check pass after the first one (PER_ORDER_MIN_SPACING_MS later). */
+const LATER = new Date(NOW.getTime() + 3_600_000);
 
 type ExplorerMode = { kind: 'paid'; sats: number } | { kind: '404' } | { kind: '500' };
 
@@ -106,7 +108,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 			txid: string,
 			v: BitcoinExplorerFeeVerifier
 		) {
-			return fx.db.withTx((c) =>
+			const r = await fx.db.withTx((c) =>
 				orderHandler(
 					makeCtx({
 						signer,
@@ -118,6 +120,15 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 					c
 				)
 			);
+			// The order is stored pending_external; its first explorer check
+			// is the re-check job's, outside the block.
+			await recheckExternalFees({
+				db: fx.db,
+				verifiers: { btc: v },
+				amounts: { btcSatoshis: SATS },
+				now: NOW
+			});
+			return r;
 		}
 		async function attest(attestor: string, account: string, permlink: string) {
 			return fx.db.withTx((c) =>
@@ -211,7 +222,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				db: fx.db,
 				verifiers: { btc: btcVerifier({ [txid]: { kind: 'paid', sats: SATS } }) },
 				amounts: { btcSatoshis: SATS },
-				now: NOW
+				now: LATER
 			});
 			expect(res.changed).toBe(1);
 			expect(await feeStatus('sell-btc-late')).toBe('verified');
@@ -227,7 +238,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				db: fx.db,
 				verifiers: { btc: btcVerifier({}) },
 				amounts: { btcSatoshis: SATS },
-				now: NOW
+				now: LATER
 			});
 			expect(await feeStatus('sell-btc-att')).toBe('missing');
 		});
@@ -249,7 +260,7 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				db: fx.db,
 				verifiers: { btc: btcVerifier({ [txid]: { kind: '500' } }) },
 				amounts: { btcSatoshis: SATS },
-				now: NOW
+				now: LATER
 			});
 			expect(await feeStatus('sell-btc-legacy')).toBe('pending_external');
 		});

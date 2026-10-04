@@ -2,12 +2,12 @@
 /**
  * bch-trade-only-smoke.
  *
- * Part 122 cp21 sentinel: BCH must be `canPayListingFee: false`
+ * BCH must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping BCH's flag to true would fail the
@@ -52,10 +52,10 @@ if (canonBch) {
 
 // ── Scenario 2 — canonical BCH.canPayListingFee === false ────────
 if (canonBch && canonBch.canPayListingFee === false) {
-	pass('canonical BCH.canPayListingFee === false (memory #23)');
+	pass('canonical BCH.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical BCH.canPayListingFee === false (memory #23)',
+		'canonical BCH.canPayListingFee === false (trade-only rule)',
 		`BCH must be trade-only.  Got canPayListingFee=${canonBch?.canPayListingFee}`
 	);
 }

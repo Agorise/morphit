@@ -41,7 +41,7 @@ import type { AssetTicker } from '@morphit/asset-registry';
  *                 null for entries without a single canonical URL
  *                 (e.g. "Cash").
  *   - category  : 'crypto' | 'in_person' | 'by_mail' | 'online'.
- *                 'by_mail' (cp120) covers asynchronous mail-based
+ *                 'by_mail' covers asynchronous mail-based
  *                 payment methods; currently only `cash_by_mail`.
  *                 Trades using by_mail methods unlock the in-chat
  *                 mailing-address-share + shipment-tracking pills.
@@ -70,7 +70,7 @@ export interface PaymentMethodEntry {
 	 *  (`/icons/icon-<ticker>.svg`) and ignore this; a non-crypto
 	 *  entry that wants a glyph (e.g. Barter) sets it explicitly. */
 	readonly icon?: string;
-	/** cp406 — this method can involve mailing/shipping a PHYSICAL thing,
+	/** this method can involve mailing/shipping a PHYSICAL thing,
 	 *  so a trade using it unlocks the in-chat "Share mailing address" +
 	 *  "Record shipment" controls. True for barter goods, precious metals
 	 *  (both handed over in person OR shipped) and cash-by-mail (the cash
@@ -105,7 +105,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'BTC'
 	},
 	{
-		// Part 122 cp21 + cp23 DD — Bitcoin Cash as a payment
+		// Bitcoin Cash as a payment
 		// method.  Same Category-B semantics as USDT: when the
 		// trade's traded asset is BCH, "pay with BCH" is hidden
 		// (assetExclusion); when the traded asset is something
@@ -127,7 +127,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'BLURT'
 	},
 	{
-		// Part 122 cp31 — Dai as a payment method.  Same Category-B
+		// Dai as a payment method.  Same Category-B
 		// semantics as USDT/USDC: when the trade's traded asset is
 		// DAI, "pay with DAI" is hidden (assetExclusion); when the
 		// traded asset is something else, DAI appears as a
@@ -136,8 +136,8 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// pinned at chat-time via AddressShareModal's DAI tab; the
 		// picker itself doesn't disambiguate network.
 		//
-		// Part 122 cp32 — this entry was MISSING from cp31 and
-		// surfaced as CODE-1 (HIGH) finding in the cp32 deep-deep:
+		// this entry was once MISSING and
+		// surfaced as a HIGH finding in an audit:
 		// DAI was wired as a tradable asset but not as a payment
 		// rail.  Without this entry, a seller posting a BTC order
 		// who wanted to accept DAI as payment had no way to pick
@@ -149,7 +149,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'DAI'
 	},
 	{
-		// Part 122 cp27 — Dash as a payment method.  Same
+		// Dash as a payment method.  Same
 		// Category-B semantics as BCH/LTC: when the trade's
 		// traded asset is DASH, "pay with DASH" is hidden
 		// (assetExclusion); when the traded asset is something
@@ -164,7 +164,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'DASH'
 	},
 	{
-		// Part 122 cp43 — Decred as a payment method.  Same
+		// Decred as a payment method.  Same
 		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC/ARRR:
 		// when the trade's traded asset is DCR, "pay with DCR"
 		// is hidden (assetExclusion); when the traded asset is
@@ -174,10 +174,10 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// formats (Ds P2PKH-Secp256k1 and Dc P2SH).
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp43 ships DCR with the
+		// be wired as a payment rail.  A later change ships DCR with the
 		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE at cp33, ZEC at cp39,
-		// and ARRR at cp41.
+		// pattern established for DOGE, ZEC,
+		// and ARRR.
 		key: 'pay_dcr',
 		name: 'Decred (DCR)',
 		url: 'https://decred.org',
@@ -185,7 +185,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'DCR'
 	},
 	{
-		// Part 122 cp33 — Dogecoin as a payment method.  Same
+		// Dogecoin as a payment method.  Same
 		// Category-B semantics as BCH/LTC/DASH: when the trade's
 		// traded asset is DOGE, "pay with DOGE" is hidden
 		// (assetExclusion); when the traded asset is something
@@ -197,8 +197,8 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// derivative scheme.
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp31 missed this for DAI
-		// (closed in cp32 CODE-1); cp33 ships DOGE with the
+		// be wired as a payment rail.  A later change missed this for DAI
+		// (closed); a later change ships DOGE with the
 		// payment-rail axis as a same-turn deliverable.
 		key: 'pay_doge',
 		name: 'Dogecoin (DOGE)',
@@ -207,7 +207,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'DOGE'
 	},
 	{
-		// Part 122 cp47 — Ethereum as a payment method.  Same
+		// Ethereum as a payment method.  Same
 		// Category-B semantics as the other trade-only assets:
 		// when the trade's traded asset is ETH, "pay with ETH"
 		// is hidden (assetExclusion); when the traded asset is
@@ -217,10 +217,10 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// handles native ETH transfers.
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp47 ships ETH with the
+		// be wired as a payment rail.  A later change ships ETH with the
 		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE at cp33, ZEC at cp39,
-		// ARRR at cp41, DCR at cp43, SOL at cp45.
+		// pattern established for DOGE, ZEC,
+		// ARRR, DCR, SOL.
 		key: 'pay_eth',
 		name: 'Ethereum (ETH)',
 		url: 'https://ethereum.org',
@@ -228,7 +228,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'ETH'
 	},
 	{
-		// Part 122 cp24 — Litecoin as a payment method.  Same
+		// Litecoin as a payment method.  Same
 		// Category-B semantics as BCH: when the trade's traded
 		// asset is LTC, "pay with LTC" is hidden (assetExclusion);
 		// when the traded asset is something else, LTC appears as
@@ -250,7 +250,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'XMR'
 	},
 	{
-		// Part 122 cp41 — Pirate Chain as a payment method.  Same
+		// Pirate Chain as a payment method.  Same
 		// Category-B semantics as BCH/LTC/DASH/DOGE/ZEC: when the
 		// trade's traded asset is ARRR, "pay with ARRR" is hidden
 		// (assetExclusion); when the traded asset is something
@@ -261,9 +261,9 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// transaction goes through the shielded pool by construction.
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp41 ships ARRR with the
+		// be wired as a payment rail.  A later change ships ARRR with the
 		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE in cp33 and ZEC in cp39.
+		// pattern established for DOGE and ZEC.
 		key: 'pay_arrr',
 		name: 'Pirate Chain (ARRR)',
 		url: 'https://piratechain.com',
@@ -271,7 +271,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'ARRR'
 	},
 	{
-		// Part 122 cp49 — Ripple as a payment method.  Cp32 LL #36
+		// Ripple as a payment method.
 		// invariant: every tradable asset MUST also be wired as a
 		// payment rail.
 		key: 'pay_xrp',
@@ -281,7 +281,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'XRP'
 	},
 	{
-		// Part 122 cp45 — Solana as a payment method.  Same
+		// Solana as a payment method.  Same
 		// Category-B semantics as the other trade-only assets:
 		// when the trade's traded asset is SOL, "pay with SOL"
 		// is hidden (assetExclusion); when the traded asset is
@@ -291,10 +291,10 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// transfers.
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp45 ships SOL with the
+		// be wired as a payment rail.  A later change ships SOL with the
 		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE at cp33, ZEC at cp39,
-		// ARRR at cp41, and DCR at cp43.
+		// pattern established for DOGE, ZEC,
+		// ARRR, and DCR.
 		key: 'pay_sol',
 		name: 'Solana (SOL)',
 		url: 'https://solana.com',
@@ -318,7 +318,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'USDT'
 	},
 	{
-		// Part 122 cp30 — USD Coin as a payment method.  Same
+		// USD Coin as a payment method.  Same
 		// Category-B semantics as USDT: when the trade's traded
 		// asset is USDC, "pay with USDC" is hidden
 		// (assetExclusion); when the traded asset is something
@@ -333,7 +333,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		assetExclusion: 'USDC'
 	},
 	{
-		// Part 122 cp39 — Zcash as a payment method.  Same
+		// Zcash as a payment method.  Same
 		// Category-B semantics as BCH/LTC/DASH/DOGE: when the trade's
 		// traded asset is ZEC, "pay with ZEC" is hidden
 		// (assetExclusion); when the traded asset is something
@@ -345,9 +345,9 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		// that matches their preferred privacy posture.
 		//
 		// CP32 LL #36 INVARIANT: every tradable asset MUST also
-		// be wired as a payment rail.  Cp39 ships ZEC with the
+		// be wired as a payment rail.  A later change ships ZEC with the
 		// payment-rail axis as a same-turn deliverable per the
-		// pattern established for DOGE in cp33.
+		// pattern established for DOGE.
 		key: 'pay_zec',
 		name: 'Zcash (ZEC)',
 		url: 'https://z.cash',
@@ -361,7 +361,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 	// open-ended — the order's free-form `terms` field carries
 	// what's actually being bartered ("orange trees," "used
 	// bicycle," "raw garlic," "handwoven baskets").
-	// cp406: barter goods + precious metals are `shippable` — the physical
+	// barter goods + precious metals are `shippable` — the physical
 	// item can be handed over in person OR posted, so they unlock the in-chat
 	// mailing/shipment controls. Cash-in-person is NOT shippable (face-to-face
 	// cash only).
@@ -387,8 +387,8 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		shippable: true
 	},
 
-	// ─── By mail (cp120) ────────────────────────────────────────
-	// Asynchronous mail-based payments.  These are `shippable` (cp406) — the
+	// ─── By mail ────────────────────────────────────────
+	// Asynchronous mail-based payments.  These are `shippable` — the
 	// cash envelope itself is posted, unlocking the in-chat mailing-address-
 	// share + shipment-tracking controls.  Currently one entry; future
 	// additions like money orders or postal money orders fit here.
@@ -455,7 +455,7 @@ export const PAYMENT_METHODS: readonly PaymentMethodEntry[] = [
 		category: 'online'
 	},
 	{
-		// cp128 — BRICS Pay (cross-border payment rail launched in
+		// BRICS Pay (cross-border payment rail launched in
 		// pilot in 2026 by the BRICS economic bloc, expanding through
 		// 2026 Q4 to India/Brazil/China/South Africa/Indonesia/Saudi
 		// Arabia).  Lives in 'online' alongside Alipay, AliPay,
@@ -661,7 +661,7 @@ export function findPaymentMethod(key: string): PaymentMethodEntry | null {
 }
 
 /**
- * cp406 — does any of these payment methods involve mailing/shipping a
+ * does any of these payment methods involve mailing/shipping a
  * physical thing (barter goods, precious metals, cash-by-mail)? Drives whether
  * the in-chat "Share mailing address" + "Record shipment" controls appear.
  * Unknown keys are ignored. Pure.

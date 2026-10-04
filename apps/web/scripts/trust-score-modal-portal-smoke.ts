@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the TrustScoreModal's portaled backdrop (the maintainer, t.txt v1.8.16 #4 —
- * wrap-is-wrong.png / "click outside should always close, no matter which page").
+ * Smoke: the TrustScoreModal's portaled backdrop ("click outside
+ * should always close, no matter which page").
  *
  * Two symptoms, one cause, same family as the avatar-menu bug:
  * TrustScoreModal is NOT mounted at page/layout level like SendBlurtModal — it

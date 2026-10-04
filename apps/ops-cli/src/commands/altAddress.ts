@@ -1,6 +1,6 @@
 /**
- * morphit-ops `alt-address` — guided setup for a Tor / Lokinet / I2P address
- * (cp216).
+ * morphit-ops `alt-address` — guided setup for a Tor / Lokinet / I2P address.
+ *
  *
  * The init flow and `edit` only ever STORED a pasted address. This wizard is
  * the missing "how do I even make one?" layer: it walks the operator through
@@ -64,7 +64,7 @@ function cleanPrefix(raw: string): string {
  * served. We give the per-network wiring at the moment the address is set, but
  * deliberately do NOT auto-rewrite lokinet.ini / i2pd configs here: a bad tunnel
  * edit takes the site down, and it must be verified against the live box. Guidance
- * + a clear yes/no, not a blind mutation (the maintainer).
+ * + a clear yes/no, not a blind mutation.
  */
 async function offerFrontendServing(net: AltNet, addr: string): Promise<void> {
 	console.log('');
@@ -162,7 +162,7 @@ async function collectAddress(net: AltNet): Promise<string | null> {
 	}
 }
 
-// ─── cp311: managed-address CRUD helpers ─────────────────────────
+// ─── managed-address CRUD helpers ─────────────────────────
 //
 // The wizard now manages four addresses, not three: Tor / Lokinet /
 // I2P (which have an AltNet generator flow) plus Nostr (a pubkey the

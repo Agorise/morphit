@@ -1,10 +1,12 @@
 /**
  * Morphit indexer — Bitcoin fee verifier (ADR-0011 sub-phase 4b).
  *
- * Reads public block explorers to confirm a Bitcoin transaction
- * paid the Morphit fee address.  Multiple explorers are queried in
- * parallel for cross-check; quorum forms when ≥minSuccessfulResponses
- * agree on the amount paid to the fee address.
+ * Reads public block explorers (Esplora API) to confirm a Bitcoin
+ * transaction paid the Morphit fee address.  Multiple explorers are
+ * queried in parallel for cross-check; quorum forms when
+ * ≥minSuccessfulResponses agree on the amount paid to the fee address.
+ * The poller builds one of these per tier (onion explorers first, over
+ * Tor; fee/tieredFeeVerifier.ts) with indexer/sourceFetch.ts as fetch.
  *
  * Why public explorers instead of a self-hosted Bitcoin node:
  * ADR-0011 §8 — self-hosted nodes are an operator burden (disk,
@@ -21,7 +23,7 @@
  * extra satoshis by accident — we accept overpayment but not
  * underpayment.
  *
- * cp166 — migrated from `Promise.allSettled` + CircuitBreaker to
+ * migrated from `Promise.allSettled` + CircuitBreaker to
  * `@morphit/rpc-pool` + `quorumCall`.  The key behavioral change:
  * verification returns the moment ≥minSuccessfulResponses agree on
  * the same fee-address amount, instead of waiting for every
@@ -43,6 +45,7 @@ import type {
 import { EndpointPool, type EndpointState } from '@morphit/rpc-pool';
 import { minAcceptableSatoshis, FEE_PRICE_TOLERANCE } from '@morphit/asset-registry';
 import { logger } from '$log';
+import { explorerInit, readExplorerJson, readExplorerText } from './explorerHttp';
 
 const log = logger('btc-verify');
 
@@ -51,37 +54,25 @@ export interface BitcoinExplorerFeeVerifierConfig {
 	 *  toward the fee payment. Case-sensitive for bech32 addresses
 	 *  (though Bitcoin normalises them to lowercase anyway). */
 	readonly feeAddress: string;
-	/** Explorer base URLs. Typically Blockstream + mempool.space.
-	 *  Both expose the same /tx/{txid} JSON shape — we query both
-	 *  and cross-check results. */
+	/** Explorer base URLs (Esplora API: mempool and Blockstream
+	 *  instances, onion or clearnet). All expose the same /tx/{txid}
+	 *  JSON shape — we query them and cross-check results. */
 	readonly explorerUrls: readonly string[];
 	/** Minimum confirmations required before a tx is considered
 	 *  final. 1 is fine for small amounts; 3 for larger. Default 1. */
 	readonly minConfirmations: number;
-	/** Per-explorer HTTP timeout. Default 5000ms. */
+	/** Per-explorer HTTP timeout (5 s clearnet; 60 s for a list with
+	 *  onion explorers — externalFeeVerifiers.ts). */
 	readonly requestTimeoutMs: number;
-	/** Part 109 quorum gate.  Minimum number of explorers that
+	/** quorum gate.  Minimum number of explorers that
 	 *  must return a successful, agreeing response before the
 	 *  verifier promotes to `verified`.  When the bar isn't met
 	 *  (degraded outage), the verifier returns `pending_external`
-	 *  instead of trusting a single source.  Default `1` preserves
-	 *  pre-Part-109 behavior for back-compat; operators with 3+
-	 *  configured explorers should raise this to 2 (or higher)
-	 *  for cross-source verification on every payment.  Bounded:
-	 *  must be >= 1 and <= explorerUrls.length. */
+	 *  instead of trusting a single source.  The shipped default is
+	 *  2 (config resolveBtcQuorum): one explorer alone cannot mark a
+	 *  fee paid.  Bounded: must be >= 1 and <= explorerUrls.length. */
 	readonly minSuccessfulResponses: number;
 }
-
-export const DEFAULT_BITCOIN_EXPLORER_CONFIG: Omit<BitcoinExplorerFeeVerifierConfig, 'feeAddress'> =
-	{
-		explorerUrls: ['https://blockstream.info/api', 'https://mempool.space/api'],
-		minConfirmations: 1,
-		requestTimeoutMs: 5_000,
-		// Default of 1 preserves pre-Part-109 behavior (any
-		// successful response is enough).  Operators with 3+
-		// explorers should bump to 2 for true cross-source check.
-		minSuccessfulResponses: 1
-	};
 
 /** Minimal shape of the Blockstream/mempool.space /tx/{txid}
  *  response we rely on. Both APIs return the same structure. */
@@ -114,7 +105,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 
 	/** The address the verifier was constructed with.  Surfaced
 	 *  so the poller can detect when a treasury chain-pin updates
-	 *  the address and rebuild — see Part 106. */
+	 *  the address and rebuild — see. */
 	get currentAddress(): string {
 		return this.config.feeAddress;
 	}
@@ -149,7 +140,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			};
 		}
 
-		// cp166: quorum-with-early-return.  Fire to all healthy
+		// quorum-with-early-return.  Fire to all healthy
 		// explorers in parallel; return the moment
 		// `minSuccessfulResponses` agree on the amount paid to the
 		// fee address.  Slow / dead explorers don't gate completion.
@@ -171,7 +162,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		// (but eventually responding) explorer can still arrive
 		// while we wait for the quorum to coalesce.
 		const quorumTimeoutMs = this.config.requestTimeoutMs * 2;
-		// (v1.18.0 deep-deep, H1) Count explorers that answered a clean 404
+		// Count explorers that answered a clean 404
 		// ("no such transaction"). Before, a 404 was just "no usable answer",
 		// so a made-up txid that EVERY explorer 404s ended as
 		// `pending_external` — the state the attestation path can promote —
@@ -223,7 +214,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		// or returned null.  Either way the verdict is pending —
 		// UNLESS a quorum of explorers positively answered "not found".
 		if (quorumResult.kind === 'all_responses_in') {
-			// (v1.18.0 deep-deep, H1) A quorum (the same
+			// A quorum (the same
 			// minSuccessfulResponses bar a payment needs to verify) of
 			// explorers answering 404 is a definitive answer: the tx does
 			// not exist, so the fee is MISSING, not pending.  Only when no
@@ -253,7 +244,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		const successful = agreeingResponses.map((p) => p.body);
 
 		const observedSats = agreedSats;
-		// Model-A tolerance (cp372): accept a payment within
+		// Model-A tolerance: accept a payment within
 		// FEE_PRICE_TOLERANCE below the chain-pinned expected amount,
 		// so a user paying the live-displayed amount isn't rejected
 		// when crypto has appreciated since the operator last re-pinned.
@@ -334,7 +325,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		// Flag partial explorer agreement in the reason log if
 		// not every explorer contributed to the agreeing bucket —
 		// useful for operators debugging "why did this verify
-		// slower than usual" concerns.  Under cp166's quorumCall,
+		// slower than usual" concerns.  Under the quorumCall,
 		// `quorumResult.contacted` counts explorers we actually
 		// reached out to, `quorumResult.responses.length` is total
 		// usable responses (across all buckets), and
@@ -499,15 +490,14 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
 		}
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'application/json' },
-				signal: ac.signal
-			});
+			const res = await this.fetchImpl(
+				url,
+				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
+			);
 			if (res.status === 404 || res.status === 400) return { kind: 'data_malformed' };
 			if (!res.ok) return { kind: 'transport_failure' };
 			try {
-				return { kind: 'ok', body: (await res.json()) as unknown };
+				return { kind: 'ok', body: await readExplorerJson(res, ac) };
 			} catch {
 				return { kind: 'data_malformed' };
 			}
@@ -535,7 +525,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		const url = `${baseUrl.replace(/\/+$/, '')}/tx/${txid}`;
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
-		// cp166 — wire the pool's AbortSignal through to fetch so
+		// wire the pool's AbortSignal through to fetch so
 		// quorum-met cancellation aborts in-flight fetches and
 		// frees up the socket.  Belt-and-braces: also abort on the
 		// per-call timeout.
@@ -545,11 +535,10 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			else poolSignal.addEventListener('abort', onPoolAbort, { once: true });
 		}
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'application/json' },
-				signal: ac.signal
-			});
+			const res = await this.fetchImpl(
+				url,
+				explorerInit({ method: 'GET', accept: 'application/json' }, ac.signal)
+			);
 			if (res.status === 404) {
 				log.warn('explorer_tx_not_found', {
 					explorer: baseUrl,
@@ -577,7 +566,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 			}
 			let body: unknown;
 			try {
-				body = (await res.json()) as unknown;
+				body = await readExplorerJson(res, ac);
 			} catch {
 				log.warn('explorer_non_json', {
 					explorer: baseUrl,
@@ -653,15 +642,14 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), this.config.requestTimeoutMs);
 		try {
-			const res = await this.fetchImpl(url, {
-				method: 'GET',
-				headers: { accept: 'text/plain' },
-				signal: ac.signal
-			});
+			const res = await this.fetchImpl(
+				url,
+				explorerInit({ method: 'GET', accept: 'text/plain' }, ac.signal)
+			);
 			if (!res.ok) {
 				return { kind: 'transport_failure' };
 			}
-			const body = await res.text();
+			const body = await readExplorerText(res, ac, 64);
 			const parsed = parseInt(body.trim(), 10);
 			if (!Number.isFinite(parsed) || parsed < 0) {
 				return { kind: 'data_malformed' };
@@ -678,7 +666,7 @@ export class BitcoinExplorerFeeVerifier implements FeeVerifier {
 		if (typeof body !== 'object' || body === null) return false;
 		const b = body as Record<string, unknown>;
 		if (typeof b.txid !== 'string') return false;
-		// Item 4 (Audit Part 26) — txid-echo verification.  The
+		// Item 4 — txid-echo verification.  The
 		// `/tx/{txid}` request URL embeds a txid; the response
 		// JSON includes its own `txid` field.  An explorer
 		// returning a tx whose echoed txid doesn't match what

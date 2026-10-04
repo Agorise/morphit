@@ -343,7 +343,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	}
 
 	// A flag given with no value parses as the string "true" — never store
-	// that as a name or description (v1.19.0 deep-deep).
+	// that as a name or description.
 	for (const f of ['name', 'description'] as const) {
 		if (ctx.flags[f] === 'true') {
 			console.log(`✗ --${f} needs a value: --${f} "…"`);
@@ -378,7 +378,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 
 	const category = (ctx.flags.category ?? '').trim();
 	if (!VALID_CATEGORIES.has(category)) {
-		// cp139-C-16: operator's --category flag value echoed in
+		// operator's --category flag value echoed in
 		// error.  Sanitize before display.
 		console.log(`✗ Invalid --category: "${sanitizeForTerm(category)}".  Must be one of: crypto, in_person, online.`);
 		return 1;
@@ -448,7 +448,7 @@ async function runAdd(ctx: PaymentMethodCtx): Promise<number> {
 	// keeping a live reference past the single use.
 	let result: { trx_id: string };
 	try {
-		// v1.18.0 deep-deep, H1: on a hidden-only node this goes through the
+		// on a hidden-only node this goes through the
 		// node's own indexer over Tor/I2P and can take a minute, so show a spinner
 		// rather than a silent terminal.
 		result = await withSpinner('Broadcasting to the chain…', () => broadcastCustomJson({
@@ -546,7 +546,7 @@ async function runRemove(ctx: PaymentMethodCtx): Promise<number> {
 	// Audit 2026-05 hardening (NEW-9-13): see add() for rationale.
 	let result: { trx_id: string };
 	try {
-		// Spinner: see add() (v1.18.0 deep-deep, H1).
+		// Spinner: see add().
 		result = await withSpinner('Broadcasting to the chain…', () => broadcastCustomJson({
 			account,
 			wif,
@@ -611,7 +611,7 @@ async function runList(_ctx: PaymentMethodCtx): Promise<number> {
 		console.log(`Operator: @${sanitizeForTerm(account)}`);
 		console.log('');
 		for (const row of result.rows) {
-			// cp139-C-4: DB rows from instance_payment_methods could
+			// DB rows from instance_payment_methods could
 			// carry attacker-controlled text in theory (compromised
 			// peer instance replicating a chain op with hostile
 			// fields, although the indexer's NFC + forbidden-char

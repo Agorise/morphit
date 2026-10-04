@@ -1,11 +1,12 @@
 # Role: postgres
 #
 # Install Postgres, bind to loopback only (§37.8), provision the
-# morphit_indexer + morphit_relay databases and users.
+# morphit_indexer database and user (the relay uses the same ones) and
+# give that role its session defaults.  The schema comes from the
+# indexer's own migrations when it starts, not from here.
 #
 # Uses the Ubuntu-shipped postgresql package (Ubuntu 24.04 ships
-# PG 16 by default).  If you need PG 17 to match the repo's
-# ops/postgres/init.sql, add the PGDG apt repository first.
+# PG 16 by default).
 
 ---
 - name: Install PostgreSQL + Python adapter
@@ -23,7 +24,7 @@
 # WITHOUT this task every one of those expressions (including its own
 # `'postgresql' in ansible_facts.packages` guard) raised
 # "object of type 'dict' has no attribute 'packages'" and the install died the
-# moment it reached postgres.  cp635.
+# moment it reached postgres..
 - name: Gather installed-package facts (populates ansible_facts.packages)
   ansible.builtin.package_facts:
     manager: auto
@@ -51,7 +52,7 @@
   # We do NOT want a blanket "any user, any DB over 127.0.0.1" rule. But we MUST
   # still let the ONE user the indexer + relay use in (both connect via
   # localhost:PORT = loopback TCP, sharing the morphit_indexer DB/user) — the
-  # scoped rule below does exactly that. cp668: previously this task removed the
+  # scoped rule below does exactly that. previously this task removed the
   # blanket rule and added NOTHING, so the indexer's TCP login had no matching
   # pg_hba entry and died with 'no pg_hba.conf entry for host "127.0.0.1"' the
   # first time Postgres reloaded pg_hba.conf (i.e. the next restart/reboot).
@@ -94,13 +95,8 @@
   become: true
   become_user: postgres
 
-# cp663 #5 — the relay + indexer SHARE the indexer DB (the relay's tables
-# are part of the indexer's single unified migration set, applied only to
-# the indexer DB).  A separate morphit_relay DB/user was created here but
-# never got the schema, so the relay hit "relation does not exist".  It's
-# no longer created; relay.env.j2 points the relay at the indexer DB.
-# (cp664 deep-deep: the vestigial postgres_relay_* / vault_postgres_relay_password
-# vars and the ops-cli relayDbPassword input have now been removed too.)
+# The relay and indexer SHARE this database and role: the relay's tables are
+# part of the indexer's single migration set.
 
 - name: Create morphit_indexer database
   community.postgresql.postgresql_db:
@@ -114,13 +110,44 @@
   become: true
   become_user: postgres
 
-- name: Apply repo's init.sql to indexer DB if present
+- name: Give the indexer role its session defaults (JIT off, idle-transaction cap)
+  # JIT compiled the featured-strip query on an inflated row estimate: ~2 s
+  # of CPU per request for a query that runs in under a millisecond.  A
+  # connection left inside an open transaction is closed after 5 minutes
+  # instead of holding its locks and a pool slot.  The indexer asks for both
+  # (and tighter limits for its API) on its own connections; these defaults
+  # cover the relay, which logs in as the same role, and any script.
+  # (ops/postgres/init.sql, a manual install's script, is not run here: it
+  # creates the role and database, which the tasks above already did.)
   ansible.builtin.shell:
-    cmd: psql -d {{ postgres_indexer_db }} -f {{ morphit_source_dir }}/ops/postgres/init.sql
-    creates: "{{ morphit_source_dir }}/ops/postgres/.init.applied"
+    cmd: |
+      set -eu
+      want="jit=off idle_in_transaction_session_timeout=300s"
+      have=$(psql -X -At -d postgres -c "SELECT array_to_string(setconfig, ' ') FROM pg_db_role_setting WHERE setdatabase = 0 AND setrole = '{{ postgres_indexer_user }}'::regrole")
+      missing=""
+      for kv in $want; do
+        case " $have " in *" $kv "*) ;; *) missing="$missing $kv" ;; esac
+      done
+      [ -z "$missing" ] && { echo unchanged; exit 0; }
+      for kv in $missing; do
+        psql -X -v ON_ERROR_STOP=1 -d postgres -c "ALTER ROLE \"{{ postgres_indexer_user }}\" SET ${kv%%=*} = '${kv#*=}'"
+      done
+      echo "set:$missing"
   become: true
   become_user: postgres
-  failed_when: false
-  # init.sql may already have been applied; the schema migrator
-  # handles further evolution.  The `morphit` role runs migrations
-  # after services start.
+  register: morphit_pg_role_defaults
+  changed_when: "'set:' in morphit_pg_role_defaults.stdout"
+
+- name: Read the indexer role's defaults back
+  ansible.builtin.command:
+    cmd: >-
+      psql -X -At -d postgres -c "SELECT array_to_string(setconfig, ' ')
+      FROM pg_db_role_setting WHERE setdatabase = 0
+      AND setrole = '{{ postgres_indexer_user }}'::regrole"
+  become: true
+  become_user: postgres
+  register: morphit_pg_role_defaults_now
+  changed_when: false
+  failed_when: >-
+    'jit=off' not in morphit_pg_role_defaults_now.stdout.split(' ')
+    or 'idle_in_transaction_session_timeout=300s' not in morphit_pg_role_defaults_now.stdout.split(' ')

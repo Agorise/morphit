@@ -2,10 +2,10 @@
 /**
  * scripts/no-master-password-in-fee-flows-smoke.ts
  *
- * v1.8.15 (cp555) — SECURITY guard: Morphit never asks for, accepts, or even
+ * v1.8.15 — SECURITY guard: Morphit never asks for, accepts, or even
  * mentions a master password.
  *
- * THE POLICY (the maintainer, stated three times). A "master password" is the pre-fork
+ * THE POLICY (stated three times). A "master password" is the pre-fork
  * Blurt account secret from which EVERY role's key is derived — owner included.
  * Typing it into a web form hands over the key that can steal the whole account.
  * Morphit's own "Morphit password" (which unlocks the LOCAL keystore) is a
@@ -58,7 +58,8 @@ const REPO = resolve(HERE, '..');
 const stripComments = (src: string): string =>
 	src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 
-const readStripped = (rel: string): string => stripComments(readFileSync(resolve(REPO, rel), 'utf8'));
+const readStripped = (rel: string): string =>
+	stripComments(readFileSync(resolve(REPO, rel), 'utf8'));
 
 interface Scenario {
 	name: string;
@@ -119,7 +120,11 @@ const FEE_FLOWS = [
 ];
 for (const rel of FEE_FLOWS) {
 	const src = readStripped(rel);
-	check(`${rel.split('/').pop()} references no masterPassword symbol`, !/masterPassword/i.test(src), rel);
+	check(
+		`${rel.split('/').pop()} references no masterPassword symbol`,
+		!/masterPassword/i.test(src),
+		rel
+	);
 }
 
 // ── 4. StrangerFeeModal wires the posting-only path ────
@@ -152,17 +157,32 @@ check(
 );
 
 // ── 4b. active-key UX PARITY across EVERY spend flow ───
-// the maintainer (t.txt #3): wherever an active key is needed, the spot must offer the
+// Wherever an active key is needed, the spot must offer the
 // SAME unlock UX the "Pay now" flow uses — Active-key WIF + optional Morphit
 // password, one-time-use OR keep-encrypted — never a bare password field that
 // dead-ends a posting-only session. This locks that invariant across all of
 // them, so a NEW active-key flow can't ship with only the password path again.
 const ACTIVE_KEY_FLOWS: Array<{ rel: string; ephemeral: RegExp }> = [
-	{ rel: 'apps/web/src/lib/components/PayBlurtModal.svelte', ephemeral: /payWithEphemeralActiveKey/ },
-	{ rel: 'apps/web/src/lib/components/StrangerFeeModal.svelte', ephemeral: /payWithEphemeralActiveKey/ },
-	{ rel: 'apps/web/src/lib/components/SendBlurtModal.svelte', ephemeral: /(payWithEphemeralActiveKey|EphemeralActiveKey)/ },
-	{ rel: 'apps/web/src/lib/components/PowerModal.svelte', ephemeral: /powerWithEphemeralActiveKey/ },
-	{ rel: 'apps/web/src/lib/components/FeatureBidForm.svelte', ephemeral: /bidWithEphemeralActiveKey/ }
+	{
+		rel: 'apps/web/src/lib/components/PayBlurtModal.svelte',
+		ephemeral: /payWithEphemeralActiveKey/
+	},
+	{
+		rel: 'apps/web/src/lib/components/StrangerFeeModal.svelte',
+		ephemeral: /payWithEphemeralActiveKey/
+	},
+	{
+		rel: 'apps/web/src/lib/components/SendBlurtModal.svelte',
+		ephemeral: /(payWithEphemeralActiveKey|EphemeralActiveKey)/
+	},
+	{
+		rel: 'apps/web/src/lib/components/PowerModal.svelte',
+		ephemeral: /powerWithEphemeralActiveKey/
+	},
+	{
+		rel: 'apps/web/src/lib/components/FeatureBidForm.svelte',
+		ephemeral: /bidWithEphemeralActiveKey/
+	}
 ];
 for (const { rel, ephemeral } of ACTIVE_KEY_FLOWS) {
 	const src = readStripped(rel);
@@ -244,7 +264,8 @@ for (const lang of LANGS) {
 	if (TERMS.some((re) => re.test(raw))) localeOffenders.push(`${lang}.json`);
 	const parsed = JSON.parse(raw) as { backup_keys_panel?: Record<string, unknown> };
 	const panel = parsed.backup_keys_panel ?? {};
-	if (!('no_account_wide_password' in panel) || 'no_master_password' in panel) renamedKeyPresent = false;
+	if (!('no_account_wide_password' in panel) || 'no_master_password' in panel)
+		renamedKeyPresent = false;
 }
 check(
 	'no locale advertises a "master password" term',

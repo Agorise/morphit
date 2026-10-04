@@ -1,6 +1,6 @@
 # ADR-0028 — USDC (USD Coin) multi-network trade-only addition + stablecoin amount-jitter design correction
 
-**Status:** Accepted (Part 122 cp30)
+**Status:** Accepted
 **Date:** 2026-05-17
 **Deciders:** project maintainer
 **Supersedes:** none
@@ -16,7 +16,7 @@ ADR-0027 (DASH addition — same Category-B trade-only shape).
 
 USDC is the second-most-traded fiat-pegged stablecoin (after USDT)
 and the only major USD-pegged stablecoin issued by a US-based,
-publicly-disclosed issuer (Circle, USA).  the maintainer requested that Morphit
+publicly-disclosed issuer (Circle, USA).  The maintainer requested that Morphit
 add USDC support and "implement as many of our privacy things with
 this as we have done with the others so far."  The ask carried two
 design questions worth decision-record treatment:
@@ -30,18 +30,18 @@ design questions worth decision-record treatment:
      - https://solscan.io/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v (Solana)
      - https://basescan.org/token/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913 (Base)
      - https://polygonscan.com/token/0x3c499c542cef5e3811e1192ce70d8cc03d5c3359 (Polygon)
-   That's four chain-specific URLs.  the maintainer subsequently asked
+   That's four chain-specific URLs.  The maintainer subsequently asked
    whether BNB Chain USDC ("if USDC IS on BNB Chain, then go
    ahead and use that one too if it's useful") should be added
    as a fifth network.
 
 2. **Should USDT and USDC trades get the amount-jitter privacy
    technique** that Morphit ships for the other transparent-chain
-   trades?  The cp26 generalization of amount-jitter to all
+   trades?  The generalization of amount-jitter to all
    transparent UTXO chains (BTC, BCH, LTC, DASH) plus BLURT
    explicitly excluded USDT with the reasoning "USDT's privacy
    issue is centralization not amount-correlation; jitter doesn't
-   address Tether freezes."  the maintainer pushed back on this during cp30:
+   address Tether freezes."  The maintainer pushed back on this:
    "if usdc and usdt trades could benefit from the jitter option,
    then why not add it?"
 
@@ -112,7 +112,7 @@ for Binance-Peg) can be added by appending `'bep20'` to
 `USDC_NETWORKS` in `apps/web/src/lib/assets/networks.ts`,
 extending `USDC_NETWORK_METADATA`, adding `bep20: string | null`
 to the instance-store sub-map, and shipping the matching
-i18n keys.  A REVISIT-LIST entry tracks the question for future
+i18n keys.  A backlog entry tracks the question for future
 re-evaluation.
 
 **TRC-20 USDC is similarly NOT supported, but for a different
@@ -124,7 +124,7 @@ just not in scope at all.
 
 ### Decision 2 — Amount-jitter for stablecoins: enabled
 
-The cp26 USDT-no-jitter decision was wrong, or at least
+The USDT-no-jitter decision was wrong, or at least
 incomplete.  The original rationale ("USDT's privacy issue is
 centralization not amount-correlation; jitter doesn't address
 Tether freezes") was a correct observation but an unsound
@@ -146,7 +146,7 @@ privacy guides (`/privacy/usdt`, `/privacy/usdc`) and the
 privacy-warning chip — not a justification for skipping the
 amount-correlation defense.
 
-cp30 ships `jitterStablecoinAmount(base)` (in
+A later change ships `jitterStablecoinAmount(base)` (in
 `apps/web/src/lib/chat/payload.ts`) parallel to
 `jitterMoneroAmount`, `jitterUtxoAmount`, and
 `jitterBlurtAmount`.  6-decimal precision, 0–999 micro-unit
@@ -163,12 +163,12 @@ and add USDT + USDC to the per-asset jitter range table.
 
 ### Decision 3 — Operator-stance freedom remains via env var
 
-Same as USDT (ADR-0023) and the cp21–cp27 trade-only assets:
+Same as USDT (ADR-0023) and the trade-only assets:
 operators who prefer not to host USDC trades on their instance
 disable it via `MORPHIT_INDEXER_DISABLED_ASSETS=USDC` (or the
 ops-cli wizard's "Trade-only asset policy" step, which now
 includes USDC in the per-ticker per-asset prompt).  USDC ships
-**default-ON** (Memory #25).  Federation still surfaces other
+**default-ON** (the default-on rule for new assets).  Federation still surfaces other
 operators' USDC orders to the user's orderbook regardless of
 this operator's stance.
 
@@ -270,21 +270,21 @@ Code:
 - `apps/web/static/icons/networks/icon-network-polygon.svg` (new)
 
 Locales (10 × ~25 new strings + 5 FAQ-asset-enum extensions × 10 + jitter FAQ rewrite × 10):
-- en/es/fr/de native, it/pl/ru/fa/zh-CN/zh-HK EN-fallback per cp27 precedent
+- en/es/fr/de native, it/pl/ru/fa/zh-CN/zh-HK EN-fallback precedent
 - Locale parity 2,644 × 10 = 26,440 → 2,673 × 10 = 26,730
 
 Docs:
 - `docs/adr/0028-usdc-multi-network-trade-only-addition.md` (this file)
-- `docs/REVISIT-LIST.md` — BEP-20-USDC decline entry + cp30 native-QA entry + jitter-design-correction note
-- `docs/AUDIT-2026-05.md` — cp30 entry
-- `docs/MORPHIT-BRAG-LIST.md` — #29 amount-jitter extended; ADR count 27→28; asset-enum entries; new #280
+- the project backlog — BEP-20-USDC decline entry + native-QA entry + jitter-design-correction note
+- the internal audit record AUDIT-2026-05 — entry
+- `MORPHIT-BRAG-LIST.md` — #29 amount-jitter extended; ADR count 27→28; asset-enum entries; new #280
 - `docs/RUN-A-MORPHIT-NODE.md` — trade-only-assets section USDC env-var examples
-- `docs/PRE-LAUNCH-CHECKLIST.md` — USDC awareness
+- the pre-launch checklist (an internal record) — USDC awareness
 - `docs/OPERATIONS.md` — USDC awareness
-- `docs/GRANDMA-FRIENDLY-INVESTIGATION.md` — asset enumerations
+- the internal grandma-UX investigation — asset enumerations
 - `ops/env/indexer.env.example` — MORPHIT_INDEXER_DISABLED_ASSETS examples
 - `apps/web/static/llms.txt` + `llms-full.txt` regenerated via `scripts/build-llms-full.mjs` (header bumped)
-- `TARBALL.md` — cp30 entry prepended
+- the handoff journal — entry prepended
 
 Smokes:
 - `packages/asset-registry/scripts/usdc-trade-only-smoke.ts` (new, ~13 scenarios mirroring usdt-trade-only-smoke)
@@ -305,16 +305,16 @@ Smokes:
 - Operators have first-class control via env var + wizard.
 - The non-breaking add path for future networks (including
   Binance-Peg or future native-Circle BSC USDC) is documented
-  in this file and in the REVISIT-LIST.
+  in this file and in the backlog.
 
 ## Tracking
 
 Brag-list entry #280 (added this checkpoint).
-REVISIT-LIST entries: BEP-20-USDC reconsideration; native-QA
-for cp30 USDC i18n in the 6 EN-fallback locales (parallel to
-the existing DASH/BCH/LTC native-QA REVISIT).
+backlog entries: BEP-20-USDC reconsideration; native-QA
+for USDC i18n in the 6 EN-fallback locales (parallel to
+the existing DASH/BCH/LTC native-QA backlog entry).
 
-This decision-record file replaces the cp30-mid TARBALL.md
+This decision-record file replaces the handoff-journal
 notes with a permanent on-disk explanation.  Future asset
 additions that follow this multi-network pattern should
 reference this ADR for the per-network design (alongside

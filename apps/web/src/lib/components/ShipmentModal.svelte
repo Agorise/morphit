@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * ShipmentModal (cp121) — record that the user shipped
+	 * ShipmentModal — record that the user shipped
 	 * something physical to their trade counterparty.  Generic
 	 * to both cash-by-mail trades (buyer ships cash to seller)
 	 * and physical-goods trades (seller ships e.g. a Barbie doll
@@ -19,7 +19,7 @@
 	 *     - Use a tracked, INSURED service
 	 *     - Plain unmarked envelope/box (don't advertise contents)
 	 *     - Return address tradeoff (anonymity vs. recovery)
-	 *     - Tracking number is OPTIONAL but recommended as proof
+	 *     - Tracking number as proof (the payload requires one)
 	 *
 	 *  2. Collapsible "If you're mailing CASH" expander:
 	 *     - Wrap cash in foil/aluminum (defeats envelope-fishers
@@ -42,10 +42,11 @@
 	import { _ } from 'svelte-i18n';
 	import {
 		encodeShipmentPayload,
-		isValidTrackingNumber,
-		isValidCustomTrackingUrl,
+		PayloadValidationError,
+		shipmentProblem,
 		SHIPMENT_LIMITS,
-		type ShipmentPayload
+		type ShipmentPayload,
+		type ShipmentProblem
 	} from '$lib/chat/payload';
 	import { CARRIERS } from '$lib/shipping/carriers';
 
@@ -68,23 +69,45 @@
 	let note = $state('');
 	let cashTipsOpen = $state(false);
 
-	const carrierValid = $derived(carrier.length > 0 && /^[a-z0-9_]{2,32}$/.test(carrier));
-	const trackingValid = $derived(isValidTrackingNumber(tracking));
-	const customCarrierNameValid = $derived(
-		carrier !== 'other' ||
-			(customCarrierName.length > 0 &&
-				customCarrierName.length <= SHIPMENT_LIMITS.customCarrierNameMax)
-	);
-	const customTrackingUrlValid = $derived(
-		carrier !== 'other' ||
-			customTrackingUrl.length === 0 ||
-			isValidCustomTrackingUrl(customTrackingUrl)
-	);
-	const noteValid = $derived(note.length <= SHIPMENT_LIMITS.noteMax);
+	/** Exactly what the button would send (trimmed; optional fields only
+	 *  when set). */
+	const payload = $derived.by((): ShipmentPayload => {
+		const p: ShipmentPayload = {
+			v: 1,
+			kind: 'morphit_shipment',
+			carrier,
+			tracking: tracking.trim()
+		};
+		const opt = p as {
+			customCarrierName?: string;
+			customTrackingUrl?: string;
+			note?: string;
+			orderPermlink?: string;
+		};
+		if (carrier === 'other') {
+			if (customCarrierName.trim()) opt.customCarrierName = customCarrierName.trim();
+			if (customTrackingUrl.trim()) opt.customTrackingUrl = customTrackingUrl.trim();
+		}
+		if (note.trim()) opt.note = note.trim();
+		if (orderPermlink) opt.orderPermlink = orderPermlink;
+		return p;
+	});
 
-	const canShare = $derived(
-		carrierValid && trackingValid && customCarrierNameValid && customTrackingUrlValid && noteValid
-	);
+	/** The encoder's verdict on that payload (null = it will be accepted). */
+	const problem = $derived<ShipmentProblem | null>(shipmentProblem(payload));
+	// Stricter than the encoder: with 'other', the reader needs the carrier's
+	// name to look the parcel up.
+	const customNameMissing = $derived(carrier === 'other' && customCarrierName.trim() === '');
+	const canShare = $derived(problem === null && !customNameMissing);
+
+	/** A problem worth explaining now; an untouched required field only keeps
+	 *  the button disabled. */
+	const shownProblem = $derived.by((): ShipmentProblem | null => {
+		if (problem === null) return null;
+		if (problem === 'carrier_invalid' && carrier === '') return null;
+		if (problem === 'tracking_invalid' && tracking.trim() === '') return null;
+		return problem;
+	});
 
 	let sending = $state(false);
 	let errorMsg = $state<string | null>(null);
@@ -94,24 +117,15 @@
 		errorMsg = null;
 		sending = true;
 		try {
-			const payload: ShipmentPayload = {
-				v: 1,
-				kind: 'morphit_shipment',
-				carrier,
-				tracking: tracking.trim()
-			};
-			if (carrier === 'other') {
-				if (customCarrierName.trim())
-					(payload as { customCarrierName?: string }).customCarrierName = customCarrierName.trim();
-				if (customTrackingUrl.trim())
-					(payload as { customTrackingUrl?: string }).customTrackingUrl = customTrackingUrl.trim();
-			}
-			if (note.trim()) (payload as { note?: string }).note = note.trim();
-			if (orderPermlink) (payload as { orderPermlink?: string }).orderPermlink = orderPermlink;
 			const encoded = encodeShipmentPayload(payload);
 			await onShare(encoded);
 		} catch (e) {
-			errorMsg = e instanceof Error ? e.message : String(e);
+			// Never the exception text: an encoder refusal has a translated
+			// reason, anything else (the send itself) a generic one.
+			errorMsg =
+				e instanceof PayloadValidationError
+					? $_(`shipment_modal.problem.${e.problem}`)
+					: $_('shipment_modal.send_failed');
 			sending = false;
 		}
 	}
@@ -290,6 +304,12 @@
 					class="mt-1 w-full rounded-lg border border-ink-200 bg-white p-2 text-sm dark:border-ink-700 dark:bg-ink-950"
 				></textarea>
 			</div>
+
+			{#if shownProblem !== null && errorMsg === null}
+				<p class="text-sm text-red-700 dark:text-red-300" role="status">
+					{$_(`shipment_modal.problem.${shownProblem}`)}
+				</p>
+			{/if}
 
 			{#if errorMsg}
 				<div

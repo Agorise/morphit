@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * ansible-idempotency-discipline-smoke — Part 122 cp69 (LL #69 / O-18).
+ * ansible-idempotency-discipline-smoke.
  *
  * The Ansible README claims "Every role is written to be idempotent —
  * re-running the playbook is a no-op when the system is in the
@@ -30,7 +30,7 @@
  * `shell:` is indented under `ansible.builtin.user:` — at greater
  * indentation than the action key.
  *
- * Mutation test M-141: add a `command: /usr/local/bin/something` task
+ * Mutation test: add a `command: /usr/local/bin/something` task
  * to a role's main.yml WITHOUT a guard → smoke fires with the file +
  * task name.
  */

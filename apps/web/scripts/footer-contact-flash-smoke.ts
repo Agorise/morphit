@@ -1,5 +1,5 @@
 /**
- * footer-contact-flash-smoke — cp453 (t.txt #5)
+ * footer-contact-flash-smoke
  *
  * The footer used to print "Operated by <instance>"; that line is removed, and a
  * "Contact" link now sits at the end of the footer nav (after FAQ). Clicking it

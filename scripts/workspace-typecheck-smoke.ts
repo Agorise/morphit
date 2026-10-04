@@ -1,35 +1,35 @@
 #!/usr/bin/env tsx
 /**
- * workspace-typecheck-smoke (cp44 — LL #52 closure).
+ * workspace-typecheck-smoke (LL #52 closure).
  *
  * Runs `tsc --noEmit` against every TS workspace in the monorepo
  * AND `svelte-check` against apps/web.  Catches the class of bugs
- * the cp42-J-68 finding warned about: TypeScript compile errors
+ * the finding warned about: TypeScript compile errors
  * (or Svelte template errors) that survive the runtime-only smoke
  * battery because no smoke ran the actual compiler.
  *
  * What this catches that other smokes don't:
- *   - Type-union widening misses (cp42-J-68 class: ZEC+ARRR
+ *   - Type-union widening misses (class: ZEC+ARRR
  *     shipped with TS errors because optInPrivacyTech didn't
- *     include 'shielded-pools'; survived 2 deep-deeps before
- *     cp42-J-68 surfaced it via manual tsc invocation).
- *   - `<svelte:head>` inside {#if} blocks (cp44-J-69 class:
+ *     include 'shielded-pools'; survived 2 audits before
+ *     A later change surfaced it via manual tsc invocation).
+ *   - `<svelte:head>` inside {#if} blocks (class:
  *     all 13 privacy guide pages shipped without <title>/
  *     <meta description> tags for ~3 checkpoints because the
  *     Svelte compiler's error was never visible to CI).
  *   - `Object is possibly 'undefined'` under strict noUnchecked-
- *     IndexedAccess (cp44-J-70/71 class: 8 errors in jitter
+ *     IndexedAccess (class: 8 errors in jitter
  *     functions + address-history; all silent because tsx runs
  *     fine even with these warnings, and the smoke battery
  *     never ran the actual compiler).
  *   - DOM type mismatches like applicationServerKey overload
- *     (cp44-J-72 class: surfaces only under svelte-check).
+ *     (class: surfaces only under svelte-check).
  *
- * Discipline (LL #52): defensive smokes MUST include compiler
+ * Discipline: defensive smokes MUST include compiler
  * runs across all workspaces, not just runtime-behaviour checks.
  *
  * RUNTIME PERFORMANCE: tsc + smoke-scripts tsc + svelte-check across all
- * workspaces takes ~150-200 seconds (cp474 added the smoke-scripts phase,
+ * workspaces takes ~150-200 seconds (a later change added the smoke-scripts phase,
  * roughly +60s).  The run-smokes.sh default timeout is 240s, so this passes
  * unattended — but like `vitest-must-pass-smoke`, it WILL false-fail if the
  * battery is run with MORPHIT_SMOKE_TIMEOUT lowered to 90 or 120 for chunked
@@ -56,11 +56,11 @@ const WORKSPACES_TSC = [
 	'apps/relay',
 	'apps/ops-cli',
 	'apps/matrix-bot',
-	// cp176: apps/mcp-server was missing from this gate even though it
+	// apps/mcp-server was missing from this gate even though it
 	// is one of the 8 TS projects and ships account-name validators
 	// (getListing.ts).  Added so a tsc error there can't slip through.
 	'apps/mcp-server',
-	// cp242: the remaining 5 workspace packages were not gated here.
+	// the remaining 5 workspace packages were not gated here.
 	// They compile clean and are imported transitively, but a type error
 	// in a file no app imports (or in an unused export) would slip past
 	// the per-app tsc.  Gate every workspace so nothing escapes.
@@ -101,7 +101,7 @@ if (!existsSync(join(ROOT, 'node_modules'))) {
 	process.exit(0);
 }
 
-// ─── svelte-kit sync FIRST, before anything typechecks apps/web (cp478) ──
+// ─── svelte-kit sync FIRST, before anything typechecks apps/web ──
 //
 // `apps/web/tsconfig.json` extends `./.svelte-kit/tsconfig.json` — a GENERATED
 // file that only exists after `svelte-kit sync`.  Nothing in the install path
@@ -119,9 +119,9 @@ if (!existsSync(join(ROOT, 'node_modules'))) {
 // any tree nobody had run svelte-check in first.  It never fired for us because a
 // warm workspace (ours, and a reused Forgejo runner) always had the file already.
 //
-// This is a RE-ENTRY, not a new bug.  docs/AUDIT-2026-05.md §7714 found this exact
+// This is a RE-ENTRY, not a new bug.  The internal audit record AUDIT-2026-05 (§7714) found this exact
 // trap ("the smoke runner does NOT run `svelte-kit sync` before tsc, so strict
-// TypeScript caught nothing") and closed it for svelte-check.  cp474's newer
+// TypeScript caught nothing") and closed it for svelte-check.  the newer
 // smoke-typecheck phase re-opened it by extending `./tsconfig.json` — the same
 // missing generated file, one door over.  Sync once, up front, and both phases and
 // any future one inherit a config that resolves.
@@ -162,9 +162,9 @@ for (const ws of WORKSPACES_TSC) {
 	}
 }
 
-// ─── smoke scripts/** typecheck (cp474) ──────────────────────────
+// ─── smoke scripts/** typecheck ──────────────────────────
 //
-// Until cp474, `scripts/**` was typechecked by NOTHING.  Every workspace's
+// Until a later fix, `scripts/**` was typechecked by NOTHING.  Every workspace's
 // tsconfig covers `src/**` and `test/**` only, and the battery runs smokes via
 // tsx, which strips types without checking them.  So `makeRow(): OrderbookStreamRow`
 // in a smoke was decorative: the annotation was never verified against the type.
@@ -173,12 +173,12 @@ for (const ws of WORKSPACES_TSC) {
 // the shapes they claim to model, which quietly hollows out the assertions built
 // on them.  What this gate found on first run across all 514 smoke files:
 //   - chat-stream-smoke's row fixture omitted `order_permlink` entirely, so the
-//     cp470 fix for the ~60s "fast chat is broken" outage had NO regression
+//     for the ~60s "fast chat is broken" outage had NO regression
 //     guard — deleting the fix again would not have failed a single smoke.
-//   - treasury-source-smoke's env fixture predated cp372's `blurtBase`, so
+//   - treasury-source-smoke's env fixture predated the `blurtBase`, so
 //     `resolveBlurt`'s env branch (`env.blurtBase > 0` → `undefined > 0`) was
 //     unreachable in every scenario in the file.
-//   - price-model-display-smoke omitted `asset`, so cp425's BARTER price-line
+//   - price-model-display-smoke omitted `asset`, so the BARTER price-line
 //     suppression — the only behaviour that function has — was never exercised.
 //   - asset-registry-smoke's "registry is frozen" scenario compared a value to
 //     itself and could not fail; the web registry was in fact not frozen at all.
@@ -243,13 +243,13 @@ for (const ws of dirsWithSmokeScripts()) {
 	// A tsc error carrying no `file(line,col):` prefix is not about a source file —
 	// it is tsc reporting that it could not SET UP the project at all (TS5083 can't
 	// read an extended config, TS6053 file not found, TS18003 no inputs…).  The
-	// `startsWith('scripts/')` filter above cannot see those, so before cp478 the
+	// `startsWith('scripts/')` filter above cannot see those, so previously the
 	// phase swallowed them and reported PASS while typechecking nothing.
 	//
 	// That is not theoretical.  With `.svelte-kit/tsconfig.json` absent, apps/web
 	// emitted 29 errors: 1 config-level TS5083, 26 in `src/**`, and 2 in `scripts/**`
 	// — and the only reason the gate went red at all was that ONE file
-	// (smoke-tsconfig-alias-parity-smoke.ts, written for an unrelated cp448 bug)
+	// (smoke-tsconfig-alias-parity-smoke.ts, written for an unrelated bug)
 	// happens to import through `$` aliases.  Make its two imports relative and the
 	// gate would report clean with the whole alias map broken.  Accidental honesty,
 	// not designed honesty.

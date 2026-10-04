@@ -1,19 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * order-card-identity-first-paint — v1.8.13 (the maintainer).
+ * order-card-identity-first-paint — v1.8.13.
  *
- * the maintainer'S REQUIREMENT, VERBATIM: "i should NEVER see the default username and
- * identicon if a custom display name and custom avatar have been set."
+ * THE REQUIREMENT: the default username and identicon never show when a custom
+ * display name and avatar are set.
  *
  * THE BUG. The orderbook returned `posting_pubkey` inline but not the profile,
  * so the browser fetched names and avatars in a SECOND round-trip. Cards
  * painted `@account` + identicon and swapped to the real identity seconds later
  * — ~7s on morphit.io.
  *
- * WHY THAT IS A TRUST DEFECT, NOT A PERFORMANCE ONE. the maintainer: "if i were an
- * interested user in that order, i would think twice because it looks like i
- * might get scammed when that user's ordercard seems like it can just change
- * itself on the fly like that." On a marketplace where the counterparty's
+ * WHY THAT IS A TRUST DEFECT, NOT A PERFORMANCE ONE. Reported: an order card that visibly
+ * changes itself after load looks like a scam to an interested buyer. On a marketplace where
+ * the counterparty's
  * identity IS the product, an identity that visibly rewrites itself is
  * indistinguishable from a swap attack. Fixing it by making the swap FASTER
  * would not fix it; the swap has to not happen.
@@ -38,7 +37,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..');
 const read = (p: string): string => readFileSync(join(REPO, p), 'utf8');
 
-const orderbookApi = read('apps/indexer/src/api/orderbook.ts');
+// The REST query lives in orderbook.ts; its row → wire mapping (rowToWire) is
+// shared with the stream and RSS feed in orderbookStreamHelpers.ts.
+const orderbookApi =
+	read('apps/indexer/src/api/orderbook.ts') +
+	read('apps/indexer/src/api/orderbookStreamHelpers.ts');
 const joins = read('apps/indexer/src/api/reputationJoin.ts');
 const client = read('packages/indexer-client/src/index.ts');
 const page = read('apps/web/src/routes/[lang]/orderbook/+page.svelte');
@@ -57,12 +60,12 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 
 console.log('\n── order-card-identity-first-paint (v1.8.13) ─────────\n');
 
-// v1.8.14 (the maintainer) — EVERY query that builds an order row must join profiles, not
-// just the one I happened to fix. v1.8.13 added it to the REST orderbook query
+// v1.8.14 — EVERY query that builds an order row must join profiles, not
+// just the first one fixed. v1.8.13 added it to the REST orderbook query
 // only; `orderbookStream.ts` (the LIVE feed) and `featuredOrderbook.ts` were
 // missed, so orders arriving or refreshing through those paths still painted
-// @account + identicon and swapped. the maintainer: "it STILL takes 5-6 seconds... not all
-// of the time, but half of the time or so" — the intermittency WAS the tell:
+// @account + identicon and swapped. Reported: it still took 5 to 6 seconds, about half of the
+// time — the intermittency WAS the tell:
 // different rows arrived by different paths.
 // `accountsJoin` marks a query that builds order rows, so it is the anchor:
 // wherever it appears, `profileJoin` must too.
@@ -109,7 +112,7 @@ check(
 check(
 	'both are returned in the response row',
 	/display_name: r\.display_name \?\? null/.test(orderbookApi) &&
-		/profile_json_metadata: r\.profile_json_metadata \?\? null/.test(orderbookApi),
+		/profile_json_metadata:\s*r\.profile_json_metadata\b/.test(orderbookApi),
 	'selected but not returned is the same as not selected'
 );
 check(
@@ -136,7 +139,7 @@ check(
 	'an instance that omits the fields must fall back, not render blanks'
 );
 
-// v1.8.16 (the maintainer) — the SELECT-vs-EMIT gap, now closed for the FEATURED path too.
+// v1.8.16 — the SELECT-vs-EMIT gap, now closed for the FEATURED path too.
 // The block above checks all three endpoints SELECT the identity columns, but it
 // only checked that orderbook.ts EMITS them. featuredOrderbook.ts has its OWN
 // wire mapping (a literal spreading reputationFieldsFromRow, NOT rowToWire) and
@@ -157,7 +160,7 @@ check(
 check(
 	'featuredOrderbook RETURNS the identity fields in its wire mapping',
 	/display_name: r\.display_name \?\? null/.test(featuredApi) &&
-		/profile_json_metadata: r\.profile_json_metadata \?\? null/.test(featuredApi),
+		/profile_json_metadata:\s*r\.profile_json_metadata\b/.test(featuredApi),
 	'featured selected them but dropped them from the payload — the homepage card swapped'
 );
 check(

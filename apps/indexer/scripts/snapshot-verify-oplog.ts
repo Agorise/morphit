@@ -1,17 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/snapshot-verify-oplog.ts  (cp767)
+ * apps/indexer/scripts/snapshot-verify-oplog.ts
  *
  * Tier-2 snapshot hardening — the RUNNER.
  *
- * After a federated restore, spot-check that the snapshot's `ops` log (the
- * source of truth every view is derived from) genuinely matches the CHAIN.
- * Samples applied ops across the pre-tail range (preferring order/content ops
- * that carry a permlink), fetches each sampled block from the pool, and confirms
- * the recorded op is really there at its recorded position (see
- * snapshotOplogVerify.ts). If ANY sampled op is absent/altered on-chain, the
- * snapshot fabricated data → exit non-zero (QUARANTINE): the operator should wipe
- * and full-replay. All-pass ⇒ high confidence the derived state is authentic.
+ * After a federated restore, spot-check the snapshot against the CHAIN — the
+ * op log, sampled `orders` and `accounts` rows (src/indexer/snapshotChainCheck.ts).
+ * Any mismatch → exit 3 (QUARANTINE): the operator should wipe and full-replay.
+ *
+ * It is a spot check. A pass means every sampled row matched the chain; it
+ * lowers the odds that the snapshot carries fabricated data, it does not prove
+ * there is none. Reads go through the service's router (bootChainClient.ts),
+ * so a hidden-only node checks over Tor/I2P and never asks the system resolver
+ * for a hidden name.
  *
  * Invoked automatically by snapshot-bootstrap.ts --from-chain (unless
  * --skip-verify). Also runnable standalone:
@@ -19,23 +20,17 @@
  *   node_modules/.bin/tsx --tsconfig tsconfig.smoke.json \
  *     apps/indexer/scripts/snapshot-verify-oplog.ts [--samples 40] [--up-to <block>]
  *
- * Exit 0 = verified. Exit 3 = QUARANTINE (a sampled op is not on the chain as
- * recorded). Exit 2 = inconclusive (chain unreachable, or nothing to sample) —
- * treated as NOT verified. Any other code (a crash) is inconclusive too.
- *
- * v1.18.0 deep-deep (rv2-6): quarantine used to be exit 1 — the same code Node
- * uses for an uncaught startup error, so a script that could not even load read
- * as "this snapshot is fabricated". And an empty ops log exited 0, "verified",
- * when nothing had been checked at all.
+ * Exit 0 = every sampled row matched, and at least MIN_VERIFIED_FRACTION of
+ * the sample could be checked. Exit 3 = QUARANTINE. Exit 2 = inconclusive
+ * (too much of the chain unreachable, or nothing to sample) — treated as NOT
+ * verified. Any other code (a crash) is inconclusive too.
  */
+import { randomInt } from 'node:crypto';
 import { loadConfig } from '../src/config/index.ts';
 import { createDatabase } from '../src/db/pool.ts';
-import { BlurtClient } from '../src/blurt/client.ts';
-import {
-	pickVerificationSample,
-	verifyStoredOpAgainstBlock,
-	type StoredOpRef
-} from '../src/db/snapshotOplogVerify.ts';
+import { MIN_VERIFIED_FRACTION } from '../src/db/snapshotOplogVerify.ts';
+import { bootChainClient } from '../src/indexer/bootChainClient.ts';
+import { checkSnapshotAgainstChain } from '../src/indexer/snapshotChainCheck.ts';
 
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
@@ -49,111 +44,40 @@ async function main(): Promise<void> {
 
 	const config = loadConfig();
 	const db = createDatabase(config);
-	const blurt = new BlurtClient(config);
-
+	const chain = bootChainClient(config);
 	try {
-		// Candidate pool: applied ops in the pre-tail range. Pull a generous
-		// candidate set (permlink-bearing first) and let the pure sampler spread it.
-		const upperClause = upTo !== undefined ? 'AND block_num <= $2' : '';
-		const params: unknown[] = [config.startBlock];
-		if (upTo !== undefined) params.push(upTo);
-		const res = await db.query<{
-			block_num: string;
-			trx_in_block: number;
-			op_in_trx: number;
-			signer: string;
-			op_id: string;
-			permlink: string | null;
-		}>(
-			`SELECT block_num::text, trx_in_block, op_in_trx, signer, op_id,
-			        (payload->>'permlink') AS permlink
-			   FROM ops
-			  WHERE status = 'applied' AND block_num >= $1 ${upperClause}
-			  ORDER BY (payload->>'permlink') IS NOT NULL DESC, block_num
-			  LIMIT 5000`,
-			params
-		);
-		const rows: StoredOpRef[] = res.rows.map((r) => ({
-			blockNum: parseInt(r.block_num, 10),
-			trxInBlock: r.trx_in_block,
-			opInTrx: r.op_in_trx,
-			signer: r.signer,
-			opId: r.op_id,
-			permlink: r.permlink
-		}));
-
-		if (rows.length === 0) {
-			// rv2-6: nothing sampled is not a pass. A restored snapshot always has
-			// applied ops; an empty log proves nothing about the rest of the data.
+		const r = await checkSnapshotAgainstChain({
+			db,
+			chain,
+			startBlock: config.startBlock,
+			...(upTo !== undefined ? { upTo } : {}),
+			samples,
+			randomInt,
+			say: (line) => process.stderr.write(`${line}\n`)
+		});
+		if (r.verdict === 'quarantine') {
+			process.stderr.write(`\n  ✗ ${r.failures.length} sampled row(s) do NOT match the chain:\n`);
+			for (const f of r.failures.slice(0, 20)) process.stderr.write(`      ${f}\n`);
 			process.stderr.write(
-				'snapshot-verify-oplog: no applied ops in range — nothing could be checked, so this is\n' +
-					'  INCONCLUSIVE, not a pass.\n'
-			);
-			process.exit(2);
-		}
-
-		const sample = pickVerificationSample(rows, samples);
-		process.stderr.write(
-			`snapshot-verify-oplog: checking ${sample.length} sampled ops against the chain ` +
-				`(pool ${rows.length}, blocks ${sample[0]!.blockNum.toLocaleString()}–${sample[sample.length - 1]!.blockNum.toLocaleString()})…\n`
-		);
-
-		// Group by block so we fetch each block once.
-		const byBlock = new Map<number, StoredOpRef[]>();
-		for (const r of sample) {
-			const arr = byBlock.get(r.blockNum) ?? [];
-			arr.push(r);
-			byBlock.set(r.blockNum, arr);
-		}
-
-		let verified = 0;
-		let unreachable = 0;
-		const failures: string[] = [];
-		for (const [blockNum, refs] of byBlock) {
-			let block: unknown = null;
-			try {
-				block = await blurt.getBlock(blockNum);
-			} catch (e) {
-				unreachable++;
-				process.stderr.write(`  ? block ${blockNum}: could not fetch (${errMsg(e)})\n`);
-				continue;
-			}
-			if (!block) {
-				unreachable++;
-				process.stderr.write(`  ? block ${blockNum}: RPC returned no block\n`);
-				continue;
-			}
-			for (const ref of refs) {
-				const m = verifyStoredOpAgainstBlock(ref, block as never);
-				if (m.ok) {
-					verified++;
-				} else {
-					const perm = ref.permlink ? ` permlink=${ref.permlink}` : '';
-					failures.push(`block ${blockNum} @${ref.signer} ${ref.opId}${perm}: ${m.reason}`);
-				}
-			}
-		}
-
-		// ── verdict (fail closed) ─────────────────────────────────
-		if (failures.length > 0) {
-			process.stderr.write(`\n  ✗ ${failures.length} sampled op(s) are NOT on the chain as recorded:\n`);
-			for (const f of failures.slice(0, 20)) process.stderr.write(`      ${f}\n`);
-			process.stderr.write(
-				`\n  QUARANTINE: this snapshot's op log does not match the chain — it was fabricated or\n` +
+				`\n  QUARANTINE: this snapshot does not match the chain — it was fabricated or\n` +
 					`  corrupted. Do NOT serve from it. Wipe the DB and full-replay:\n` +
 					`      set MORPHIT_INDEXER_START_BLOCK to genesis, then start the indexer.\n`
 			);
 			process.exit(3);
 		}
-		if (verified === 0) {
+		if (r.verdict === 'inconclusive') {
 			process.stderr.write(
-				`\n  ? could not verify any sampled op (chain unreachable for all ${unreachable} sampled block(s)).\n` +
-					`  This is INCONCLUSIVE, not a pass. Re-run when the pool is reachable.\n`
+				`\n  ? only ${r.verified} of ${r.sampled} sampled rows could be checked (${r.unreachable} unreachable);\n` +
+					`  at least ${Math.round(MIN_VERIFIED_FRACTION * 100)}% must be. This is INCONCLUSIVE, not a pass.\n` +
+					`  Re-run when the pool is reachable.\n`
 			);
 			process.exit(2);
 		}
-		const note = unreachable > 0 ? ` (${unreachable} block(s) unreachable, skipped)` : '';
-		process.stderr.write(`\n  ✓ all ${verified} sampled ops verified on-chain${note}. Snapshot op log matches the chain.\n`);
+		const note = r.unreachable > 0 ? ` (${r.unreachable} unreachable, skipped)` : '';
+		process.stderr.write(
+			`\n  ✓ all ${r.verified} checked rows match the chain${note}. This is a spot check of a random\n` +
+				`  sample: it lowers the odds of fabricated data in this snapshot, it does not rule it out.\n`
+		);
 		process.exit(0);
 	} finally {
 		await db.close();

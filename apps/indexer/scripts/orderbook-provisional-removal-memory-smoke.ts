@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/orderbook-provisional-removal-memory-smoke.ts (cp508)
+ * apps/indexer/scripts/orderbook-provisional-removal-memory-smoke.ts
  *
- * Guards the fix for tt.txt #1/#2: "i canceled one of my orders, but it took
+ * Guards the fix for "i canceled one of my orders, but it took
  * almost a minute for it to disappear from the orderbook."
  *
  * ROOT CAUSE. `orderbookEventBus.emitProvisional` (the head-block cancel/

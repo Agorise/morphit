@@ -1,10 +1,10 @@
 /**
- * lockfile-sync smoke (cp144).
+ * lockfile-sync smoke.
  *
- * Catches the cp140 → cp143 latent bug: when a new workspace
+ * Catches the → latent bug: when a new workspace
  * (`apps/mcp-server`) was added to the root `package.json`,
  * `package-lock.json` was not regenerated.  `npm ci` requires
- * the two to be in sync — so every CI run after cp140 failed
+ * the two to be in sync — so every CI run later failed
  * with EUSAGE at the install step, gating ALL downstream jobs
  * (typecheck, smokes, svelte-check, build).  The repo looked
  * green locally because `npm install` (the dev command) silently
@@ -24,7 +24,7 @@
  *      so the operator can diagnose.
  *
  * Runtime: ~4 seconds when the lockfile IS in sync (npm ci
- * dry-run + tree walk).  Well under the cp143 240s ceiling.
+ * dry-run + tree walk).  Well under the 240s ceiling.
  *
  * To tamper-test: revert any workspace dep in package-lock.json
  * (e.g. delete the "node_modules/morphit-mcp" entry) and re-run.
@@ -62,7 +62,7 @@ function fail(name: string, detail: string) {
 
 // Markers that the npm ci EUSAGE failure mode uses.  These are
 // stable across at least npm 10.x — verified against the 2026-05-27
-// cp140-stale-lockfile Forgejo CI log the maintainer caught.
+// stale-lockfile Forgejo CI log the maintainer caught.
 const STALE_LOCKFILE_MARKERS = [
 	'EUSAGE',
 	'package.json and package-lock.json',
@@ -154,7 +154,7 @@ if (!existsSync(lockPath)) {
 // Scenario 3 — every workspace declared in root package.json
 // must have a corresponding entry in package-lock.json's
 // `packages` map.  This is the FAST offline check that catches
-// the cp140 specific bug class even if `npm ci` is somehow
+// the specific bug class even if `npm ci` is somehow
 // unavailable.  Authoritative for the workspace-add forgot-the-lockfile
 // path; not authoritative for transitive-dep drift (that's what
 // scenario 1 covers).
@@ -186,13 +186,13 @@ try {
 }
 
 let failed = 0;
-// ─── Workspace VERSION parity (cp472) ──────────────────────────────
+// ─── Workspace VERSION parity ──────────────────────────────
 // This smoke only ever checked that each workspace is PRESENT in the
-// lockfile (the cp140 `npm ci` EUSAGE bug). It never checked the version
+// lockfile (the `npm ci` EUSAGE bug). It never checked the version
 // each entry reports — so the lockfile silently sat at 1.4.12 through the
 // whole of v1.5.0 while every package.json said 1.5.0, and CI stayed green.
 // `npm install` heals it locally, which is exactly why nobody noticed.
-// the maintainer: "i do not like anything to go stale, so fix where necessary, always."
+// Requirement: nothing may go stale; fix it wherever needed.
 //
 // Version-only drift doesn't break `npm ci`, but it makes the lockfile lie
 // about what the repo is: anything reading it (supply-chain tooling, an

@@ -1,13 +1,12 @@
 /**
  * Morphit — @noble/secp256k1-based Blurt transaction signer (opt-in).
  *
- * This is the durable replacement for @beblurt/dblurt's elliptic-based
- * signing, per ADR-0046.  `elliptic` (reached transitively through dblurt's
- * `ecurve` dependency and the `secp256k1` native package's pure-JS fallback)
- * is unmaintained and carries CVE-2025-14505 (an unfixed RFC-6979 nonce
- * mis-truncation flaw, all versions affected).  @noble/secp256k1 is
- * constant-time, actively maintained, and is ALREADY this app's keygen
- * library (ADR-0007).
+ * An alternative to @beblurt/dblurt's own signer, per ADR-0046 (selected by
+ * SIGNER_BACKEND).  ADR-0046 was written while dblurt signed with
+ * `elliptic`; dblurt 0.17 now signs with @noble/secp256k1 itself and
+ * `elliptic` is no longer in the dependency tree, so both paths run the
+ * same constant-time, maintained library (ALREADY this app's keygen
+ * library, ADR-0007).
  *
  * ── Why this is safe to swap ────────────────────────────────────────────
  * Graphene-lineage chains (Blurt / Steem / Hive) verify a signature by
@@ -34,7 +33,7 @@
  * Wired but NOT the default.  `SIGNER_BACKEND` in `$net/config` selects the
  * backend and defaults to `'dblurt'`.  Flipping it to `'noble'` is gated on a
  * real Blurt chain broadcast confirming end-to-end acceptance, which cannot be
- * done in a code-review sandbox (no chain access).  See ADR-0046 §"cutover".
+ * done offline (no chain access).  See ADR-0046 §"cutover".
  */
 
 import * as secp from '@noble/secp256k1';
@@ -92,5 +91,7 @@ export function signDigestWithNoble(digest32: Uint8Array, priv: Uint8Array): str
 		// hex encode (noble's helper — browser-safe, no Buffer global needed)
 		return secp.etc.bytesToHex(wire);
 	}
-	throw new Error('signDigestWithNoble: no canonical signature in 1000 iterations (astronomically unlikely)');
+	throw new Error(
+		'signDigestWithNoble: no canonical signature in 1000 iterations (astronomically unlikely)'
+	);
 }

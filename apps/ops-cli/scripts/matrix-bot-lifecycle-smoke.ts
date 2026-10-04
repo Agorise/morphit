@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * matrix-bot-lifecycle-smoke — locks down `morphit-ops matrix` + the
- * matrix-bot lifecycle. the maintainer's requirement: the bot is installed by
+ * matrix-bot lifecycle. The maintainer's requirement: the bot is installed by
  * default but only RUNS when a valid alert username is configured; it
  * auto-starts when the username is set, auto-stops when it is cleared,
  * and every upgrade re-checks the field.

@@ -52,7 +52,7 @@
  *
  * The wrap/unwrap math (wrap.ts) is independently smoke-tested with a
  * deterministic stub HMAC.  This byte channel, however, cannot run in
- * CI — WebHID has no sandbox — so it is a hardware-INFORMED
+ * CI — WebHID needs a real key — so it is a hardware-INFORMED
  * implementation that has NOT yet been proven end-to-end against a
  * physical YubiKey in this tree.  Before relying on it, prove a full
  * enroll -> reload -> unlock round-trip in a real Chromium browser

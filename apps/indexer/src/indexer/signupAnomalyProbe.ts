@@ -104,10 +104,10 @@ export function buildSignupAnomalyProbe(
 		const controller = new AbortController();
 		const t = setTimeout(() => controller.abort(), timeoutMs);
 		try {
-			// cp159 F-indexer-4 — `redirect: 'manual'` + named UA.
+			// `redirect: 'manual'` + named UA.
 			// The relay URL is operator-config (sibling process,
 			// typically colocated), but defense-in-depth via these
-			// headers matches the cp146-style finding shape.  A
+			// headers matches the finding shape.  A
 			// misconfigured relay URL that redirects elsewhere
 			// should be an operator-visible failure, not a silent
 			// follow.
@@ -126,7 +126,7 @@ export function buildSignupAnomalyProbe(
 					message: `relay /v1/health returned ${res.status}; anomaly check skipped`
 				};
 			}
-			// cp159 F-indexer-4 — bound the body size before parse.
+			// bound the body size before parse.
 			// Relay /v1/health responses are <1 KB; the 16 KiB cap
 			// catches any pathology (e.g. a misbehaving relay
 			// echoing a large error page) without affecting any

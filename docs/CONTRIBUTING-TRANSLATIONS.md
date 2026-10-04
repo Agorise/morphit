@@ -235,6 +235,6 @@ Translations welcome in any order — pick whichever you can find a native speak
 - `apps/web/src/lib/i18n/locales/` — JSON files, one per supported locale
 - `apps/web/scripts/i18n-locale-parity-smoke.ts` — enforces parity across locales
 - `apps/web/scripts/i18n-locale-registry-smoke.ts` — validates the locales.ts shape + 1:1 JSON correspondence
-- `apps/web/scripts/i18n-translator-diff.ts` — translator-facing diff tool (added cp141)
+- `apps/web/scripts/i18n-translator-diff.ts` — translator-facing diff tool (added)
 - `docs/LOCALE-GRADUATION.md` — graduation procedure (the maintainer-side counterpart to this doc)
 - This document — `docs/CONTRIBUTING-TRANSLATIONS.md`

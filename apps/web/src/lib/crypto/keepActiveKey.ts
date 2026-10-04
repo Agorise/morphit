@@ -1,5 +1,5 @@
 /**
- * Morphit — "Keep my Active key on this device" (tt.txt #11).
+ * Morphit — "Keep my Active key on this device".
  *
  * Orchestrates the one moment a posting-only account becomes able to spend:
  * decrypt with the user's Morphit password, store the verified Active key
@@ -12,10 +12,10 @@
  *     would widen their password from "can post" to "can spend" without asking.
  *  2. THE PASSWORD IS THE GATE. The upgrade decrypts the existing envelope
  *     first, so possession of the Active key alone cannot rewrite a keystore.
- *  3. DISK ONLY IF DISK. If the user never chose to persist a keystore, we
- *     upgrade the in-memory session and leave the disk exactly as we found it.
- *     "Keep on this device" must not quietly start writing keys to a device
- *     the user deliberately kept clean.
+ *  3. DISK ONLY IF DISK. The copy on disk is replaced only when it IS this
+ *     session's keystore (Remember-me for this account). Otherwise — nothing
+ *     remembered, or another account remembered on this device — the
+ *     in-memory session is upgraded and the disk left exactly as it was.
  */
 
 import { get } from 'svelte/store';
@@ -23,8 +23,8 @@ import * as secp256k1 from '@noble/secp256k1';
 import sodium from 'libsodium-wrappers-sumo';
 
 import { identity, updateUnlockedIdentity } from '$stores/identity';
-import { upgradeToPostingActive } from '$crypto/keystore';
-import { hasPersistedKeystore, writeEnvelope } from '$crypto/persistentKeystore';
+import { KeystoreError, upgradeToPostingActive } from '$crypto/keystore';
+import { isPersistedEnvelope, writeEnvelope } from '$crypto/persistentKeystore';
 import { ensureSodium } from '$crypto/keygen';
 import { markBackupMaterialPending } from '$lib/stores/backupPending';
 
@@ -56,9 +56,10 @@ export async function keepActiveKeyOnThisDevice(
 	try {
 		const nextEnv = await upgradeToPostingActive(state.envelope, password, activeScalar, activePub);
 
-		// Persist ONLY if this device already holds a keystore. Otherwise the
-		// session is memory-only by the user's own choice, and it stays that way.
-		if (hasPersistedKeystore()) writeEnvelope(nextEnv);
+		// Persist ONLY if the keystore on disk is this session's. Otherwise the
+		// session is memory-only by the user's own choice (or the disk holds
+		// another account), and the disk stays as it was.
+		if (isPersistedEnvelope(state.envelope)) writeEnvelope(nextEnv);
 
 		// Both halves move together: envelope + the capability the UI reads.
 		updateUnlockedIdentity(nextEnv, {
@@ -71,10 +72,9 @@ export async function keepActiveKeyOnThisDevice(
 		markBackupMaterialPending();
 		return { ok: true };
 	} catch (e) {
-		const msg = e instanceof Error ? e.message : '';
-		if (/refusing to upgrade/.test(msg)) return { ok: false, kind: 'not_posting_only' };
-		// decryptIdentity throws on a wrong password.
-		return { ok: false, kind: /password|decrypt|bad/i.test(msg) ? 'bad_password' : 'failed' };
+		if (e instanceof KeystoreError && e.kind === 'bad_password')
+			return { ok: false, kind: 'bad_password' };
+		return { ok: false, kind: 'failed' };
 	} finally {
 		try {
 			sodium.memzero(activeScalar);

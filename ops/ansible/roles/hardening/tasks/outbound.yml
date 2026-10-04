@@ -1,8 +1,11 @@
 # §37.13 — Outbound network policy.
 #
-# UFW outbound default allow is the standard, but for max hardening
-# we set default deny and explicitly allow the destinations Morphit
-# needs.  See group_vars/all.yml > outbound_allowed_destinations.
+# On a clearnet node outgoing traffic stays ALLOWED (UFW's default):
+# nothing here changes the firewall; this file only prints guidance.
+# group_vars/all.yml > outbound_allowed_destinations is a reference
+# list for an operator who writes their own default-deny rule.  A
+# tor-only node is different: there only Tor and i2pd may reach the
+# internet, enforced by ops/tor-only/morphit-tor-egress.sh.
 #
 # NOTE: federation probes target arbitrary peer instances, so
 # completely sealing outbound is incompatible with operating a

@@ -32,6 +32,11 @@ DONE_TLS="${STATE_DIR}/tls.done"
 DONE_REGISTER="${STATE_DIR}/register.done"
 DONE_RPC="${STATE_DIR}/rpc.done"
 DONE_CANARY="${STATE_DIR}/canary.done"
+# Certificate attempts back off (Let's Encrypt limits failed validations): the
+# earliest next attempt (epoch seconds) and how many have failed so far.
+TLS_NEXT="${STATE_DIR}/tls.next"
+TLS_TRIES="${STATE_DIR}/tls.tries"
+LE_LIVE="${MORPHIT_FIRST_ONLINE_LE_LIVE:-/etc/letsencrypt/live}"
 ENV_FILE="${MORPHIT_FIRST_ONLINE_ENV:-/etc/morphit/first-online.env}"
 RELAY_ENV="${MORPHIT_FIRST_ONLINE_RELAY_ENV:-/etc/morphit/relay.env}"
 INDEXER_ENV="${MORPHIT_FIRST_ONLINE_INDEXER_ENV:-/etc/morphit/indexer.env}"
@@ -51,7 +56,7 @@ log() { logger -t "${LOG_TAG}" -- "$*" 2>/dev/null || true; printf '[%s] %s\n' "
 # `set +e` around the source: an EnvironmentFile may legitimately hold an unquoted
 # value with spaces (systemd parses it literally), which EXECUTES under `.` and, with
 # errexit on, would abort the whole script right here — the same class of bug as the
-# reachability probe (cp661).  Disable errexit only for the read, then restore it.
+# reachability probe.  Disable errexit only for the read, then restore it.
 if [ -f "${ENV_FILE}" ]; then set +e; . "${ENV_FILE}"; set -e; fi
 MORPHIT_DOMAIN="${MORPHIT_DOMAIN:-}"
 MORPHIT_ACME_EMAIL="${MORPHIT_ACME_EMAIL:-}"
@@ -70,7 +75,7 @@ rpc_endpoints() {
 	# non-zero, and under this script's `set -e` that aborts the whole `$(rpc_endpoints)`
 	# sub-run BEFORE it reaches the fallback below.  That left check_online with ZERO
 	# endpoints, so it never probed and reported "no internet" forever even when fully
-	# online (cp661).  sed is inert — it can't execute anything in the file.  The var is
+	# online.  sed is inert — it can't execute anything in the file.  The var is
 	# MORPHIT_INDEXER_RPC_ENDPOINTS (no "BLURT" — matches apps/indexer + indexer.env.j2).
 	eps=''
 	if [ -f "${INDEXER_ENV}" ]; then
@@ -92,7 +97,7 @@ indexer_env_value() {
 }
 
 # HIDDEN-ONLY node: the clearnet pool key is PRESENT but EMPTY — exactly what a
-# tor-only install writes (v1.18.0 deep-deep, H4).  rpc_endpoints() treated that
+# tor-only install writes.  rpc_endpoints() treated that
 # as "not configured" and fell back to the six clearnet defaults, so every
 # tor-only box POSTed to clearnet RPCs from its home IP on its first run, and
 # every five minutes after that for as long as clearnet stayed firewalled.
@@ -129,10 +134,17 @@ check_online_hidden() {
 	done
 	_port="$(indexer_env_value MORPHIT_INDEXER_LISTEN_PORT)"
 	[ -n "${_port}" ] || _port=8081
-	_health="$(curl -fsS --max-time 8 "http://127.0.0.1:${_port}/v1/health" 2>/dev/null || true)"
+	# The counts are in the indexer's local block: asked on loopback, with the
+	# local-health header and no forwarding headers. `rpc_ok` (public) is the
+	# fallback when an older indexer does not know the header.
+	_health="$(curl -fsS --max-time 8 -H 'X-Morphit-Local-Health: 1' "http://127.0.0.1:${_port}/v1/health" 2>/dev/null || true)"
 	_healthy="$(printf '%s' "${_health}" | sed -n 's/.*"rpc_endpoints_healthy"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n1)"
 	if [ -n "${_healthy}" ] && [ "${_healthy}" -gt 0 ]; then
 		log "the local indexer reaches the chain over Tor/I2P (${_healthy} healthy source(s))"
+		return 0
+	fi
+	if [ -z "${_healthy}" ] && printf '%s' "${_health}" | grep -q '"rpc_ok"[[:space:]]*:[[:space:]]*true'; then
+		log "the local indexer reaches the chain over Tor/I2P (rpc_ok)"
 		return 0
 	fi
 	return 1
@@ -161,7 +173,7 @@ check_online() {
 all_done() {
 	_tls=no
 	if [ -z "${MORPHIT_DOMAIN}" ] || [ -f "${DONE_TLS}" ] \
-		|| [ -f "/etc/letsencrypt/live/${MORPHIT_DOMAIN}/fullchain.pem" ]; then _tls=yes; fi
+		|| [ -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.pem" ]; then _tls=yes; fi
 	_reg=no
 	if [ "${MORPHIT_AUTO_REGISTER}" != "yes" ] || [ -f "${DONE_REGISTER}" ]; then _reg=yes; fi
 	_rpc=no
@@ -200,8 +212,8 @@ if [ -f /etc/apt/apt.conf.d/99-morphit-offline.conf ]; then
 	log 'restoring normal apt (removing the offline local-repo override)'
 	rm -f /etc/apt/apt.conf.d/99-morphit-offline.conf
 	# Not on a hidden-only node: an apt refresh is a clearnet fetch from its home
-	# IP, and "online" here was proven over Tor/I2P, not clearnet (v1.18.0
-	# deep-deep, H4).  The operator's own update routine takes it from here.
+	# IP, and "online" here was proven over Tor/I2P, not clearnet.
+	# The operator's own update routine takes it from here.
 	if ! hidden_only; then
 		apt-get update >/dev/null 2>&1 || true
 	fi
@@ -210,25 +222,59 @@ fi
 # ── Step 1: TLS — obtain the real Let's Encrypt certificate. ──
 # Until now the site has been served on BunkerWeb's self-signed fallback (fine on
 # a LAN).  certbot writes the real cert and its deploy-hook reloads BunkerWeb.
-if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "/etc/letsencrypt/live/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
-	_server='https://acme-v02.api.letsencrypt.org/directory'
-	[ "${MORPHIT_TLS_STAGING}" = yes ] && _server='https://acme-staging-v02.api.letsencrypt.org/directory'
-	log "requesting Let's Encrypt certificate for ${MORPHIT_DOMAIN}"
-	if certbot certonly --standalone --non-interactive --agree-tos \
-		--email "${MORPHIT_ACME_EMAIL}" --server "${_server}" -d "${MORPHIT_DOMAIN}" >/dev/null 2>&1 \
-		&& [ -f "/etc/letsencrypt/live/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
-		log 'certificate obtained — fixing perms + reloading BunkerWeb'
-		# cp663 #7 — certbot writes the cert root-only (0700 archive), but
-		# BunkerWeb runs as GID 101 and would keep serving its self-signed
-		# fallback.  Make it group-readable before the reload.  (`certbot
-		# certonly` does NOT run the renewal deploy-hook, so do it here;
-		# renewals are covered by the deploy-hook, fresh installs by bw-init.)
-		chgrp -R 101 "/etc/letsencrypt/live" "/etc/letsencrypt/archive" >/dev/null 2>&1 || true
-		chmod -R g+rX "/etc/letsencrypt/live" "/etc/letsencrypt/archive" >/dev/null 2>&1 || true
-		docker exec bunkerweb sh -c 'kill -HUP 1' >/dev/null 2>&1 || true
-		touch "${DONE_TLS}"
+# BunkerWeb holds port 80 by now, so certbot cannot run its own server there:
+# it writes the challenge into the web build instead, which BunkerWeb's
+# frontend serves at /.well-known/ (and certbot then RENEWS the same way).
+# Only when nothing holds port 80 does it use its standalone server.  Failed
+# attempts back off — 5 min, 10, 20 … up to a day — so a domain that does not
+# point here yet never runs into Let's Encrypt's failed-validation limit.
+if [ -n "${MORPHIT_DOMAIN}" ] && [ ! -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
+	_now="$(date +%s)"
+	_next="$(cat "${TLS_NEXT}" 2>/dev/null || echo 0)"
+	case "${_next}" in '' | *[!0-9]*) _next=0 ;; esac
+	if [ "${_now}" -lt "${_next}" ]; then
+		log "next certificate attempt in $(((_next - _now + 59) / 60)) min (after an earlier one did not succeed)"
 	else
-		log 'certbot not successful yet (domain may not resolve to this box) — will retry'
+		_server='https://acme-v02.api.letsencrypt.org/directory'
+		[ "${MORPHIT_TLS_STAGING}" = yes ] && _server='https://acme-staging-v02.api.letsencrypt.org/directory'
+		_webroot="${MORPHIT_WEBROOT:-${MORPHIT_OPS_DIR}/apps/web/build}"
+		if [ -n "$(ss -ltnH 'sport = :80' 2>/dev/null)" ]; then
+			set -- --webroot --webroot-path "${_webroot}"
+			_how='through the web build (port 80 is held by the web server)'
+		else
+			set -- --standalone
+			_how='with its own server on port 80'
+		fi
+		log "requesting Let's Encrypt certificate for ${MORPHIT_DOMAIN} ${_how}"
+		if certbot certonly "$@" --non-interactive --agree-tos \
+			--email "${MORPHIT_ACME_EMAIL}" --server "${_server}" -d "${MORPHIT_DOMAIN}" >/dev/null 2>&1 \
+			&& [ -f "${LE_LIVE}/${MORPHIT_DOMAIN}/fullchain.pem" ]; then
+			log 'certificate obtained — fixing perms + reloading BunkerWeb'
+			rm -f "${TLS_NEXT}" "${TLS_TRIES}"
+			# certbot writes the cert root-only (0700 archive), but
+			# BunkerWeb runs as GID 101 and would keep serving its self-signed
+			# fallback.  Make it group-readable before the reload.  (`certbot
+			# certonly` does NOT run the renewal deploy-hook, so do it here;
+			# renewals are covered by the deploy-hook, fresh installs by bw-init.)
+			chgrp -R 101 "${LE_LIVE}" "${LE_LIVE%/live}/archive" >/dev/null 2>&1 || true
+			chmod -R g+rX "${LE_LIVE}" "${LE_LIVE%/live}/archive" >/dev/null 2>&1 || true
+			docker exec bunkerweb sh -c 'kill -HUP 1' >/dev/null 2>&1 || true
+			touch "${DONE_TLS}"
+		else
+			_tries="$(cat "${TLS_TRIES}" 2>/dev/null || echo 0)"
+			case "${_tries}" in '' | *[!0-9]*) _tries=0 ;; esac
+			_tries=$((_tries + 1))
+			_delay=300
+			_i=1
+			while [ "${_i}" -lt "${_tries}" ] && [ "${_delay}" -lt 86400 ]; do
+				_delay=$((_delay * 2))
+				_i=$((_i + 1))
+			done
+			[ "${_delay}" -gt 86400 ] && _delay=86400
+			echo "${_tries}" >"${TLS_TRIES}"
+			echo "$((_now + _delay))" >"${TLS_NEXT}"
+			log "certbot not successful yet (the domain may not point at this box yet) — next try in $((_delay / 60)) min"
+		fi
 	fi
 fi
 
@@ -256,13 +302,13 @@ fi
 # MORPHIT_INSTANCE_NAME/ORIGIN/OPERATOR_TAG (morphit.config.env).  We EXTRACT each value
 # inertly with sed rather than sourcing those files: morphit.config.env carries the
 # marketplace NAME in systemd-EnvironmentFile form (unquoted, may contain spaces), so a
-# `.`-source would truncate a multi-word name or, under set -e, abort (cp661).  (The old
+# `.`-source would truncate a multi-word name or, under set -e, abort.  (The old
 # code sourced relay.env, which doesn't even carry MORPHIT_INSTANCE_ORIGIN — so register
 # failed on a missing var regardless of the relay's balance.)  An encrypted relay key
 # additionally needs MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE; if that isn't set here,
 # unattended unlock is impossible by design and the operator registers by hand.
 # On a hidden-only node `register` broadcasts through this node's own indexer
-# over Tor/I2P, never to a clearnet RPC (v1.18.0 deep-deep, H1/H4).
+# over Tor/I2P, never to a clearnet RPC.
 if [ "${MORPHIT_AUTO_REGISTER}" = "yes" ] && [ ! -f "${DONE_REGISTER}" ]; then
 	log 'auto-registering this instance on chain (operator opted in)'
 	_get_env() { sed -n "s/^[[:space:]]*$1=//p" "$2" 2>/dev/null | tail -n1 | sed 's/^"//; s/"$//'; }

@@ -24,7 +24,7 @@ import type { PriceFetch } from '$indexer/price/source';
 import { FEE_PRICE_TOLERANCE, LISTING_FEE_USD } from '@morphit/asset-registry';
 
 /**
- * (v1.18.0 deep-deep, M1) ONE sample per peer OPERATOR: the latest fresh
+ * ONE sample per peer OPERATOR: the latest fresh
  * morphit_native observation of each operator account in the federation
  * directory. What was wrong: the median ran over every observation ROW, so a
  * peer sampled twice (or one operator publishing several origins) weighed
@@ -43,7 +43,7 @@ export const PER_OPERATOR_LATEST_PRICE_SQL = `
 	 ORDER BY ki.operator_account, ppo.observed_at DESC`;
 
 /**
- * (v1.18.0 deep-deep, M1) Clamp a federated price to the chain-pinned price
+ * Clamp a federated price to the chain-pinned price
  * ± FEE_PRICE_TOLERANCE. Per-operator aggregation alone cannot stop K+1 free
  * operator registrations from outvoting K honest peers, so the federated
  * number may never leave the band the chain-pinned fee amount already
@@ -61,7 +61,7 @@ export function clampToPinned(price: number | null, pinned: number | null): numb
 }
 
 /**
- * (v1.18.0 deep-deep, M1) The USD price per whole coin that a chain-pinned
+ * The USD price per whole coin that a chain-pinned
  * fee amount implies (the canonical USD fee target ÷ the pinned amount).
  * BLURT: base in BLURT; BTC: satoshis; XMR: piconero (string). null when the
  * asset has no pinned fee amount. PURE.
@@ -89,6 +89,36 @@ export function federatedMedian(prices: readonly number[], minCount: number): nu
 	return clean.length % 2 === 1 ? clean[mid]! : (clean[mid - 1]! + clean[mid]!) / 2;
 }
 
+/**
+ * What the federated fetcher saw on its latest run, per asset: how many fresh
+ * per-operator peer samples it had and whether that made a median. The
+ * clearnet gate's `priceFederated` leg reads it (federatedPriceIsLive), so the
+ * claim "this node prices from the federation" holds only while it actually
+ * does — not merely because the node is hidden-only.
+ */
+interface FederatedRun {
+	readonly at: number;
+	readonly peerSamples: number;
+	readonly median: boolean;
+}
+const latestRuns = new Map<string, FederatedRun>();
+
+/** A run older than this no longer counts (the refresher stopped, or the
+ *  operator set a refresh interval longer than this). */
+export const FEDERATED_RUN_MAX_AGE_MS = 60 * 60_000;
+
+/** True when the federated fetcher for `asset` ran within
+ *  FEDERATED_RUN_MAX_AGE_MS and produced a median from fresh peer samples. */
+export function federatedPriceIsLive(asset = 'BLURT', now: number = Date.now()): boolean {
+	const r = latestRuns.get(asset.toUpperCase());
+	return r !== undefined && now - r.at <= FEDERATED_RUN_MAX_AGE_MS && r.median && r.peerSamples > 0;
+}
+
+/** Tests only. */
+export function _resetFederatedRuns(): void {
+	latestRuns.clear();
+}
+
 export interface FederatedFetcherDeps {
 	readonly db: Database | undefined;
 	readonly asset: string;
@@ -99,7 +129,7 @@ export interface FederatedFetcherDeps {
 	readonly freshnessMinutes: number;
 	/** Minimum total samples (peers + self) before a median is trusted. */
 	readonly minObservations: number;
-	/** (v1.18.0 deep-deep, M1) The price the chain-pinned fee amount implies
+	/** The price the chain-pinned fee amount implies
 	 *  (USD only). The median is clamped to it ± FEE_PRICE_TOLERANCE. Absent or
 	 *  null → unclamped. */
 	readonly pinnedPrice?: () => Promise<number | null>;
@@ -116,7 +146,7 @@ export function createFederatedFetcher(deps: FederatedFetcherDeps): PriceFetch {
 		let peers: number[] = [];
 		try {
 			if (deps.db) {
-				// (v1.18.0 deep-deep, M1) one latest sample per operator account.
+				// one latest sample per operator account.
 				const res = await deps.db.query<{ observed_price: string }>(
 				PER_OPERATOR_LATEST_PRICE_SQL,
 				[deps.asset, deps.denominationFiat, new Date(Date.now() - deps.freshnessMinutes * 60_000)]
@@ -132,7 +162,12 @@ export function createFederatedFetcher(deps: FederatedFetcherDeps): PriceFetch {
 			if (own !== null && Number.isFinite(own) && own > 0) samples.push(own);
 		}
 		const med = federatedMedian(samples, deps.minObservations);
-		// (v1.18.0 deep-deep, M1) bound it by the chain pin.
+		latestRuns.set(deps.asset.toUpperCase(), {
+			at: Date.now(),
+			peerSamples: peers.length,
+			median: med !== null
+		});
+		// bound it by the chain pin.
 		const pinned = deps.pinnedPrice ? await deps.pinnedPrice().catch(() => null) : null;
 		return clampToPinned(med, pinned);
 	};

@@ -3,8 +3,9 @@
  * fully — no network, no Postgres.
  *
  * Fixture shape differs from WitnessFeePoller's:
- * - scanOnce does both db.query (candidate select) and db.withTx
- *   (queue insert). The fixture handles both paths.
+ * - scanOnce does db.query for both the candidate select and the queue
+ *   insert (one statement, ON CONFLICT on the v66 partial unique index);
+ *   the fixture records the inserts on `txClient`.
  * - The BlurtClient mock must return a ReadonlyMap<string,
  *   ChainAccount> for getAccounts.
  */
@@ -47,7 +48,7 @@ interface Fixture {
 	scanner: LowBalanceScanner;
 	/** Queries recorded via db.query (candidate SELECT). */
 	directQueries: { text: string; params: readonly unknown[] }[];
-	/** Queries recorded via db.withTx (INSERT into queue). */
+	/** The queue INSERTs. */
 	txClient: ReturnType<typeof makeMockClient>;
 	/** getAccounts spy so tests can assert RPC arguments + count. */
 	getAccountsSpy: ReturnType<typeof vi.fn>;
@@ -75,6 +76,9 @@ function makeFixture(opts: {
 			text: string,
 			params?: readonly unknown[]
 		): Promise<pg.QueryResult<R>> {
+			if (text.includes('INSERT INTO relay_pending_transfers')) {
+				return txClient.client.query(text, params as unknown[]) as unknown as pg.QueryResult<R>;
+			}
 			directQueries.push({ text, params: params ?? [] });
 			// Candidate SELECT.
 			const rows = opts.candidates.map((name) => ({ name }));
@@ -99,7 +103,7 @@ function makeFixture(opts: {
 		blurt,
 		'morphit-relay',
 		defaultConfig(),
-		'morphit' // Part 111: matches operator_tag on test orders
+		'morphit' // matches operator_tag on test orders
 	);
 	return { db, blurt, scanner, directQueries, txClient, getAccountsSpy };
 }
@@ -230,9 +234,9 @@ describe('LowBalanceScanner.scanOnce', () => {
 		// The query should:
 		// - exclude relay account (first param)
 		// - check accounts table joined against orders table
-		//   (Part 111 — orders.operator_tag gates by THIS instance)
+		//   (orders.operator_tag gates by THIS instance)
 		// - check relay_pending_transfers table (cooldown)
-		// - filter by our operator tag (Part 111)
+		// - filter by our operator tag
 		expect(q.text).toContain('a.name <> $1');
 		expect(q.text).toContain('FROM orders');
 		expect(q.text).toContain('operator_tag');

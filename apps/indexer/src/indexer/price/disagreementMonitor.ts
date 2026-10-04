@@ -1,5 +1,5 @@
 /**
- * Morphit indexer — cross-source disagreement monitor (cp127, defense C).
+ * Morphit indexer — cross-source disagreement monitor (defense C).
  *
  * The black-hat scenario this defends against
  * ───────────────────────────────────────────
@@ -23,11 +23,8 @@
  *   - Surfaced in /v1/health for operator dashboards
  *   - Exposed via /v1/price/morphit-native/receipt for forensic review
  *
- * Operators who trust their on-platform data more than external
- * feeds (likely once Morphit has substantial volume) can OPT IN to
- * priority-flip behavior via the env var
- * MORPHIT_INDEXER_PRICE_PREFER_NATIVE_WHEN_DISAGREEING.  Default:
- * false — external sources remain primary.
+ * There is no switch that flips priority to the native price: the
+ * operator responds to an alert by hand (docs/INCIDENT-RUNBOOK.md).
  *
  * Detection logic
  * ───────────────
@@ -77,7 +74,7 @@ export interface DisagreementCheckResult {
 
 /**
  * Stateful monitor.  Hold one instance per (asset, fiat) pair in
- * memory (typically just one for BLURT/USD in cp127).
+ * memory (typically just one for BLURT/USD).
  *
  * Pure-method-with-state pattern: the monitor's only state is the
  * "disagreement-since" timestamp.  All other inputs come from each
@@ -88,7 +85,7 @@ export class DisagreementMonitor {
 		disagreementSince: null,
 		lastAlertFired: null
 	};
-	/** cp233 — last check result, retained for the /v1/health
+	/** last check result, retained for the /v1/health
 	 *  disagreement surface (symmetric with B's drift surface).
 	 *  null until the first check() runs. */
 	private lastResult: DisagreementCheckResult | null = null;
@@ -111,7 +108,7 @@ export class DisagreementMonitor {
 		};
 	}
 
-	/** cp233 — the most recent check result, or null before the
+	/** the most recent check result, or null before the
 	 *  first check.  Read by /v1/health to show the live
 	 *  external-vs-native deviation + alert state. */
 	lastCheck(): DisagreementCheckResult | null {
@@ -215,7 +212,7 @@ export class DisagreementMonitor {
  *  briefly unreachable. */
 const EXTERNAL_MARKET_SOURCES: ReadonlySet<string> = new Set(['coingecko', 'external_avg']);
 
-/** Run config for the cp233 disagreement-monitor loop.  Mirrors the
+/** Run config for the disagreement-monitor loop.  Mirrors the
  *  shape of the peer-price monitor's config (defense F) so the two
  *  read alike at the main.ts wiring site. */
 export interface DisagreementRunConfig {
@@ -269,7 +266,7 @@ export async function runDisagreementCheckCycle(
 	return cfg.monitor.check({ externalPrice, externalSourceName, nativePrice, now });
 }
 
-/** Start the cp233 disagreement monitor.  Schedules a recurring
+/** Start the disagreement monitor.  Schedules a recurring
  *  check at `intervalMs` (main.ts passes the price-refresh interval,
  *  so the cross-check runs at the same cadence prices refresh).
  *  Returns a stop function for graceful shutdown.  Mirrors

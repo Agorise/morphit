@@ -1,10 +1,10 @@
 # ADR-0036: Ripple (XRP) Addition — Trade-Only with XRPL Federated Byzantine Agreement Consensus, 6-Decimal Drops Precision, and Destination-Tag / Reserve-Requirement UX
 
-**Status:** Accepted (Part 122 cp49, 2026-05-19)
+**Status:** Accepted
 
 **Context:**
 
-Following Ethereum (ADR-0035), Solana (ADR-0034), Decred (ADR-0033), Pirate Chain (ADR-0032), Zcash (ADR-0031), Dogecoin (ADR-0030), DAI (ADR-0029), USDC (ADR-0028), Dash (ADR-0027), Litecoin (cp24), Bitcoin Cash (cp21), USDT (Part 121), and the founders' BLURT/BTC/XMR set, Morphit adds Ripple (XRP) as the sixteenth tradable asset. XRP launched in 2012 as the native digital asset of the XRP Ledger (XRPL). XRPL uses Federated Byzantine Agreement (FBA) consensus — validators on a Unique Node List (UNL) reach agreement on transaction ordering. The default UNL is published by the XRP Ledger Foundation (a non-profit), with the for-profit Ripple Labs Inc. historically influencing validator selection.
+Following Ethereum (ADR-0035), Solana (ADR-0034), Decred (ADR-0033), Pirate Chain (ADR-0032), Zcash (ADR-0031), Dogecoin (ADR-0030), DAI (ADR-0029), USDC (ADR-0028), Dash (ADR-0027), Litecoin, Bitcoin Cash, USDT, and the founders' BLURT/BTC/XMR set, Morphit adds Ripple (XRP) as the sixteenth tradable asset. XRP launched in 2012 as the native digital asset of the XRP Ledger (XRPL). XRPL uses Federated Byzantine Agreement (FBA) consensus — validators on a Unique Node List (UNL) reach agreement on transaction ordering. The default UNL is published by the XRP Ledger Foundation (a non-profit), with the for-profit Ripple Labs Inc. historically influencing validator selection.
 
 The chain is transparent at the base layer (sender, recipient, amount, and optional destination tag visible on chain). XRPL has no native protocol-level mixing protocol.
 
@@ -19,7 +19,7 @@ Both are documented in Morphit's privacy guide and FAQ.
 
 ### 1. XRP is a Category-B trade-only asset
 
-Per Memory #23 the `fee_method` enum stays frozen at `{blurt, btc, xmr, waived_first_buy}`. XRP ships with `canBeTraded: true` and `canPayListingFee: false`, matching the existing 12 Category-B coins.
+Per the frozen fee_method rule the `fee_method` enum stays frozen at `{blurt, btc, xmr, waived_first_buy}`. XRP ships with `canBeTraded: true` and `canPayListingFee: false`, matching the existing 12 Category-B coins.
 
 ### 2. Single-network mainnet
 
@@ -37,7 +37,7 @@ XRPL has testnets (Devnet, Testnet) but Morphit trades only on XRPL mainnet.
 
 **Destination tags** are NOT part of the address regex. They ride in the URI query string `?dt=N` (XRPL Pay-style) and on-chain as a separate transaction field. Morphit's address regex matches the address part only; the `ripple:` URI builder supports the `?dt=N` parameter; privacy guide warns users to check whether the recipient requires a tag.
 
-**LL #50 OVERLAP:** XRP addresses share their base58 shape (32-44 char range) with USDT/USDC SPL-network paths and SOL addresses. The asset field disambiguates at the order layer. Cp42 `address-shape-overlap-smoke` extended at cp49 with XRP specimens; 6 new overlaps added (81→87 entries). NO reverse-direction overlaps — USDT/USDC/SOL specimens don't start with `r`, so they don't pass the XRP regex.
+**LL #50 OVERLAP:** XRP addresses share their base58 shape (32-44 char range) with USDT/USDC SPL-network paths and SOL addresses. The asset field disambiguates at the order layer. `address-shape-overlap-smoke` extended with XRP specimens; 6 new overlaps added (81→87 entries). NO reverse-direction overlaps — USDT/USDC/SOL specimens don't start with `r`, so they don't pass the XRP regex.
 
 ### 4. 6-decimal drops precision — NEW jitterXrpAmount
 
@@ -45,11 +45,11 @@ XRPL uses 6 decimals on-chain (drops; 1 XRP = 10^6 drops). Same smallest-unit pr
 
 The new `jitterXrpAmount` function in `apps/web/src/lib/chat/payload.ts` provides 6-decimal output. A separate function (rather than reusing `jitterStablecoinAmount` or `jitterEthAmount`) provides clarity (XRP is not a stablecoin, not an EVM asset) and future flexibility (XRP-specific tuning if needed).
 
-**Jitter range:** 0..999 microXRP (drops). At cp49-era XRP price (~$2.50) that's about $0.0000025 max per jitter event — effectively zero financially but full decorrelation against exact-amount-matching heuristics on the public XRPL.
+**Jitter range:** 0..999 microXRP (drops). At XRP price (~$2.50) that's about $0.0000025 max per jitter event — effectively zero financially but full decorrelation against exact-amount-matching heuristics on the public XRPL.
 
 **Reserve invariant:** Jitter only ADDS drops (round-UP-only), never subtracts. An order of "1.000000 XRP" jitters to "1.000NNN XRP" which is still above the 1.0 reserve; jitter never threatens the reserve invariant.
 
-Cp46 `asset-payload-precision-parity-smoke` captures `expectedJitterDecimals: 6` for XRP with comment-anchor matching this rationale. Per the maintainer's directive at cp49 ("implement as many of our privacy things with this as we have done with the others so far (jitter, etc)"), amount-jitter is wired same-turn.
+`asset-payload-precision-parity-smoke` captures `expectedJitterDecimals: 6` for XRP with comment-anchor matching this rationale. Per the maintainer's directive ("implement as many of our privacy things with this as we have done with the others so far (jitter, etc)"), amount-jitter is wired same-turn.
 
 ### 5. Transparent base layer with no native mixing
 
@@ -79,9 +79,9 @@ Operators wanting different defaults override via `MORPHIT_FRONTEND_XRP_CHAT_LIN
 
 XRPL transaction hashes are 256-bit (32 bytes) hex, conventionally uppercase but case-insensitive on the chain. 64 hex chars, NO prefix. The canonical `XRP_TXID_RE` regex is `/^[a-fA-F0-9]{64}$/`, same shape as the BTC-family hex txids (BTC/BCH/LTC/DASH/DOGE/ZEC/ARRR/DCR). Asset field disambiguates.
 
-### 9. Universal no-favoritism principle (adopted at cp39, reapplied 6th consecutive checkpoint)
+### 9. Universal no-favoritism principle (adopted, reapplied 6th consecutive checkpoint)
 
-XRP ships with chain-level transparency, FBA consensus, and a UNL with documented influence from Ripple Labs Inc. Per the universal no-favoritism principle (cp39 → ADR-0031 §5), Morphit's framing of XRP describes what the chain IS (FBA consensus, UNL composition documented factually, transparent base layer, destination tag UX, reserve requirement) WITHOUT comparative claims. The phrase "the most decentralized" does not appear. The phrase "better than" does not appear. The phrase "centralized" does not appear as a judgment — UNL composition is documented as fact, not as a political stance. XRP is described as a payment-focused cryptocurrency with FBA consensus — neither superior nor inferior to any other Morphit-traded asset.
+XRP ships with chain-level transparency, FBA consensus, and a UNL with documented influence from Ripple Labs Inc. Per the universal no-favoritism principle (→ ADR-0031 §5), Morphit's framing of XRP describes what the chain IS (FBA consensus, UNL composition documented factually, transparent base layer, destination tag UX, reserve requirement) WITHOUT comparative claims. The phrase "the most decentralized" does not appear. The phrase "better than" does not appear. The phrase "centralized" does not appear as a judgment — UNL composition is documented as fact, not as a political stance. XRP is described as a payment-focused cryptocurrency with FBA consensus — neither superior nor inferior to any other Morphit-traded asset.
 
 ### 10. `ripple:` URI scheme
 
@@ -91,11 +91,11 @@ Native XRP only — Morphit doesn't generate `ripple:` URIs for issued-token (IO
 
 ### 11. Brand color `text-cyan-600`
 
-XRP's brand color is #008dff (a specific blue). `text-cyan-600` lands a clean cyan accent distinct from all 15 existing assignments (DASH uses sky-500, USDC uses blue-500 — cyan-600 is visually distinct from both). Verified at cp49 via cp42 `asset-accent-class-uniqueness-smoke`.
+XRP's brand color is #008dff (a specific blue). `text-cyan-600` lands a clean cyan accent distinct from all 15 existing assignments (DASH uses sky-500, USDC uses blue-500 — cyan-600 is visually distinct from both). Verified `asset-accent-class-uniqueness-smoke`.
 
-### 12. LL #52 + cp46 asset-payload-precision-parity + cp48 stand-in meta-assertion discipline applied
+### 12. LL #52 + asset-payload-precision-parity + stand-in meta-assertion discipline applied
 
-Cp44 LL #52 (workspace-typecheck-smoke) catches type-union widening bugs at smoke time. Cp46 asset-payload-precision-parity-smoke pins per-asset jitter precision, URI scheme, and txid shape. Cp48 structural defense (synthetic non-ticker + meta-assertion) closes the "unknown stand-in becomes valid" recurring class. All three ran clean during cp49 XRP wiring.
+(workspace-typecheck-smoke) catches type-union widening bugs at smoke time. asset-payload-precision-parity-smoke pins per-asset jitter precision, URI scheme, and txid shape. structural defense (synthetic non-ticker + meta-assertion) closes the "unknown stand-in becomes valid" recurring class. All three ran clean XRP wiring.
 
 ## Consequences
 
@@ -119,11 +119,11 @@ Cp44 LL #52 (workspace-typecheck-smoke) catches type-union widening bugs at smok
 - XRPL base58 alphabet — https://xrpl.org/base58-encodings.html
 - XRPL destination tags — https://xrpl.org/source-and-destination-tags.html
 - XRPL reserves — https://xrpl.org/reserves.html
-- Memory #23 (fee_method enum frozen at BLURT/BTC/XMR).
-- Memory #29 (NEW-asset i18n native-en/es/fr/de + EN-fallback discipline).
-- Cp32 LL #36 (payment-rail axis same-turn discipline).
-- Cp33 CODE-3 (atomically widen all 4 wire-format gates).
-- Cp40 LL #49 (defensive smokes verify i18n existence for dynamic-key reads).
-- Cp42-J-68 LL #51 + cp44 LL #52 (workspace-wide compiler smoke).
-- Cp46-O-1 (asset-payload-precision-parity-smoke pinning runtime arithmetic).
-- Cp48-O-1 (stand-in meta-assertion closing unknown-literal-becomes-valid class).
+- The frozen fee_method rule (fee_method enum frozen at BLURT/BTC/XMR).
+- The native-locale policy (NEW-asset i18n native-en/es/fr/de + EN-fallback discipline).
+- (payment-rail axis same-turn discipline).
+- (atomically widen all 4 wire-format gates).
+- (defensive smokes verify i18n existence for dynamic-key reads).
+- (workspace-wide compiler smoke).
+- (asset-payload-precision-parity-smoke pinning runtime arithmetic).
+- (stand-in meta-assertion closing unknown-literal-becomes-valid class).

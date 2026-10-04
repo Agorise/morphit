@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: tt.txt #7 — the chat header, restructured (the maintainer).
+ * Smoke: the chat header, restructured.
  *
- * the maintainer's reason was mobile: the old header spent its horizontal budget on a
+ * The maintainer's reason was mobile: the old header spent its horizontal budget on a
  * single-line IdentityLabel plus a LIVE pip stacked under the kebab, leaving the
  * sprout / trade-count / reputation nowhere to go. The header is now shaped like
  * an order card, and LIVE moved inside the kebab menu.
@@ -54,7 +54,7 @@ const at = (needle: string): number => {
 
 // ─── the identity cluster ────────────────────────────────────────────
 check('the avatar is bigger (48px) and rendered without its inline handle', /avatarSize=\{48\}/.test(code) && /hideHandle/.test(code));
-// v1.8.13 (the maintainer) — line 1 is still the display name, but it no longer falls
+// v1.8.13 — line 1 is still the display name, but it no longer falls
 // back to `@peer` UNCONDITIONALLY. While the peer profile is loading it shows a
 // neutral placeholder instead: asserting the handle and then rewriting it to a
 // display name is a mid-conversation identity change, which the maintainer rightly called
@@ -79,7 +79,7 @@ check(
 	'the RE: line must sit below the identity cluster'
 );
 
-// ─── the maintainer: the reputation must NEVER wrap ─────────────────────────────
+// ─── Requirement: the reputation must NEVER wrap ─────────────────────────────
 // On a narrow viewport line 2 (key · trades · ⭐) is the line that runs out of
 // room, so the score renders on the DISPLAY-NAME line instead. Two variants,
 // split by a breakpoint — deterministic, no measuring. There are therefore TWO
@@ -87,7 +87,7 @@ check(
 // to hold no longer does.
 // Each variant uses the score three times: aria-label, title, and the visible
 // text. Two variants → six. Pinning the number keeps a third stray copy out.
-// v1.7.5 (t.txt #8) — the four checks below pinned the HAND-ROLLED score
+// v1.7.5 — the four checks below pinned the HAND-ROLLED score
 // (`peerReputation.score.toFixed(2)` and a long literal class string). That
 // implementation is the bug the maintainer reported — a GOLD emoji where the app's star has
 // been emerald since v1.5.5, and no counts beside the average. Pinning its
@@ -105,7 +105,7 @@ check(
 	'the mobile cluster sits on the display-name line and hides from `sm` up',
 	/<span class="sm:hidden">[\s\S]{0,200}<TradeRepCluster/.test(code) &&
 		at('<span class="sm:hidden">') < at('truncatePublicKey(peerPostingKey)'),
-	'the maintainer: the reputation must NEVER wrap — on a phone it rides line 1 instead'
+	'Requirement: the reputation must NEVER wrap — on a phone it rides line 1 instead'
 );
 check(
 	'the desktop cluster sits on line 2 and appears only from `sm` up',
@@ -117,8 +117,8 @@ check('line 2 cannot wrap at all (flex-nowrap)', /mt-0\.5 flex min-w-0 flex-nowr
 check('if anything must give, it is the posting key that truncates', /<span class="truncate font-mono">\(\{truncatePublicKey\(peerPostingKey\)\}\)<\/span>/.test(code));
 // v1.7.5 — `flex-none whitespace-nowrap` was on the hand-rolled trades span. The
 // rule now lives inside TradeRepCluster, which is where it belongs: the cluster
-// is ONE unbreakable chunk by contract (the maintainer: "none of that chunk ever gets
-// broken, no wrap"). Assert it where it actually is, rather than pinning a
+// is ONE unbreakable chunk by contract (Requirement: the chunk never wraps internally). Assert
+// it where it actually is, rather than pinning a
 // literal in a file that no longer owns the rule.
 check(
 	'the trade count never wraps or truncates',
@@ -133,7 +133,7 @@ check('the RE: line still links to the order', /\/@\$\{orderOwner \?\? peer\}\/\
 // NB: match the kebab's MARKUP (`bind:this=`), not the identifier — the latter
 // is declared in <script>, thousands of characters before any of this.
 check('the kebab is the last item of the identity ROW (top-aligned with the name)', at('items-start gap-3') < at('bind:this={overflowTriggerEl}'));
-// v1.8.10 (the maintainer) — this used to assert the RE: line came BEFORE the kebab, i.e.
+// v1.8.10 — this used to assert the RE: line came BEFORE the kebab, i.e.
 // that it lived inside the identity row. That was the bug: the kebab is
 // `flex-none`, so sitting in the same row it reserved its footprint against all
 // three lines and the subject truncated early with visible empty space beside
@@ -188,9 +188,9 @@ check('Chat Security still clears its one-time nudge dot', /onclick=\{openChatSe
 check('Export chat still wired', /onclick=\{exportChatToPdf\}/.test(code));
 check('the whole menu is still gated on an unlocked session', /\{#if \$isUnlocked\}/.test(code));
 
-// ─── v1.7.5 (t.txt #8 avatar alignment, #9 whoami avatar) ───────────
+// ─── v1.7.5 (avatar alignment, #9 whoami avatar) ───────────
 //
-// #8: the maintainer — "the avatar image is not properly vertically aligned with the 3
+// #8: "the avatar image is not properly vertically aligned with the 3
 // (sometimes 2) lines of text that appear to the right of the avatar image. i
 // love its current size though, so please do not change that."
 check(
@@ -205,11 +205,11 @@ check(
 		'with the display name, so centring the row would fix the avatar and break it'
 );
 check(
-	'the header avatar keeps its size (the maintainer: "do not change that")',
+	'the header avatar keeps its size ("do not change that")',
 	/avatarSize=\{48\}/.test(code)
 );
 
-// #9: the maintainer — "the avatar image is too small. make it span the full height of the
+// #9: "the avatar image is too small. make it span the full height of the
 // username/postingkey lines." 34px is measured, not eyeballed: the row inherits
 // the 16px page base and IdentityLabel's keyed path stacks two leading-tight
 // (1.25) lines where the key is text-[0.7em] — 16x1.25 + 16x0.7x1.25 = 34.

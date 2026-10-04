@@ -1,5 +1,5 @@
 /**
- * import-account-auto-resolve-smoke (cp354)
+ * import-account-auto-resolve-smoke
  *
  * Pins the invariant that a successful import NEVER forces the user to type
  * their Blurt account name by hand — for ANY of the three import methods.
@@ -8,7 +8,7 @@
  * same-origin `get_key_references` proxy (accountByKey → /v1/chain/key-references,
  * pinned same-origin by rpc-privacy-routing-smoke). A unique match is
  * authoritative (the key is in exactly that account's posting authority);
- * cp434: when the derived key can't map to a unique account (prefork /
+ * when the derived key can't map to a unique account (prefork /
  * ambiguous / no-match), the posting-only path reveals a VALIDATED manual
  * Username field (checked against the derived key in real time) instead of
  * dead-ending — the could_not_resolve message stays as a final fallback.
@@ -18,7 +18,7 @@
  *     so keyfile silently falls through to manual /settings entry;
  *   - the posting-only path losing its auto-resolve (unique key → account, no
  *     typing) — the common case must never force manual entry;
- *   - cp434's prefork fallback regressing: the validated manual field, its
+ *   - the prefork fallback regressing: the validated manual field, its
  *     real-time key-check, or the manual_account_* / could_not_resolve strings
  *     disappearing.
  *
@@ -82,7 +82,7 @@ check(
 	/resolveAccountsByPublicKeys\(pendingPubKeysBLT\)/.test(importPage)
 );
 
-// ─── posting-only: auto-resolve when unique; cp434 reveals a validated ───────
+// ─── posting-only: auto-resolve when unique; a later change reveals a validated ───────
 //     manual Username field when the key can't map to a unique account.
 check(
 	'posting-only does NOT reintroduce the old cp406 postingAccount field',

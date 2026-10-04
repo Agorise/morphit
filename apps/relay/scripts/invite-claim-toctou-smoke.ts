@@ -103,7 +103,7 @@ check('consume() is permanent — claim and future verify both rejected', () => 
 });
 
 check('a claim held by a still-running create survives the sweep; it is freed only once the invite expired', () => {
-	// v1.20.0 fix wave (D6): claims used to be swept 120 s after claiming,
+	// claims used to be swept 120 s after claiming,
 	// while a create can legitimately still be broadcasting — freeing the
 	// invite mid-flight let ONE invite create TWO accounts. The create endpoint
 	// consumes or releases its claim on every path (try/finally); the sweep

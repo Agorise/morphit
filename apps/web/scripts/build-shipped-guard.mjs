@@ -1,5 +1,5 @@
 /**
- * apps/web build guard (cp751; hardened cp-frontend-integrity).
+ * apps/web build guard (hardened cp-frontend-integrity).
  *
  * WHY THIS EXISTS. Federated operators must serve @morphit's EXACT frontend bytes
  * to pass the on-chain build-integrity check — a local rebuild is not
@@ -83,6 +83,19 @@ const slots = spawnSync(
 if ((slots.status ?? 1) !== 0) {
 	console.error('apps/web: brand-slot post-processing failed (scripts/build-brand-slots.mjs).');
 	process.exit(slots.status ?? 1);
+}
+// Per-instance site origin (scripts/origin-slots.mjs): record every place
+// a prerendered page or a static SEO file names the build origin, strip the
+// page markers and shift the brand-slot offsets to match — after the brand
+// slots (whose offsets it adjusts) and before verify.json hashes the build.
+const origins = spawnSync(
+	process.execPath,
+	[join(webRoot, 'scripts', 'origin-slots.mjs'), 'record', buildDir],
+	{ stdio: 'inherit', cwd: webRoot }
+);
+if ((origins.status ?? 1) !== 0) {
+	console.error('apps/web: site-origin post-processing failed (scripts/origin-slots.mjs).');
+	process.exit(origins.status ?? 1);
 }
 console.log('apps/web: build complete — root entry point (index.html) present.');
 process.exit(0);

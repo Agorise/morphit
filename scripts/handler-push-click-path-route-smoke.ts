@@ -3,13 +3,13 @@
  * scripts/handler-push-click-path-route-smoke.ts
  *
  * Structural Defense #32 — handler push click_path route
- * verifier (cp82-B3 candidate, deferred from cp82, shipped cp84).
+ * verifier (candidate, deferred, shipped).
  *
  * Verifies that every `click_path` value INSERTed into the
  * `push_pending` table by indexer handlers maps to a real
  * SvelteKit route in `apps/web/src/routes/[lang]/`.
  *
- * Closes the bug class cp82-B1 (chat handler) + cp82-B2
+ * Closes the bug class (chat handler) +
  * (feedback handler) surfaced manually: handlers emitted
  * click_paths pointing at routes that didn't exist, so push-
  * notification taps would land on 404 pages.
@@ -33,13 +33,13 @@
  * Each (handler, line, click_path-template) tuple counts as one
  * scenario.
  *
- * NB: cp470 — this smoke now DOES verify the i18n locale prefix.
+ * NB: — this smoke now DOES verify the i18n locale prefix.
  * Every app route lives under `[lang]`, so a valid click_path must be
  * `/${locale}/<route>` (with `@{account}` for the account route). Route
  * shapes are locale-prefixed and `[x+40]` is decoded to `@`, so a
- * locale-less or @-less path — the cp82-B1/B2 and cp470 (tester3) 404
+ * locale-less or @-less path — the 404
  * bug class — no longer matches anything and fails loudly. The service-
- * worker sanitizeClickPath gate (cp81-D22b) still handles the orthogonal
+ * worker sanitizeClickPath gate still handles the orthogonal
  * cross-origin / malformed-path failure mode.
  */
 
@@ -77,7 +77,7 @@ function pathShape(path: string): string {
 	// Anchors and trailing slashes are caller's responsibility.
 	const segs = path.split('/').filter(Boolean);
 	const out = segs.map((s) => {
-		// SvelteKit bracketed segment. cp470: decode [x+HH] literal-char
+		// SvelteKit bracketed segment. decode [x+HH] literal-char
 		// encodings FIRST (e.g. [x+40] → '@', so the account route
 		// `[x+40][account=account]` becomes the URL shape `@*`), THEN collapse
 		// any remaining [param] brackets to `*`. The `@` matters: an account
@@ -93,10 +93,10 @@ function pathShape(path: string): string {
 	return '/' + out.join('/');
 }
 
-// cp470 — every app route lives under `[lang]`, and every handler click_path
+// every app route lives under `[lang]`, and every handler click_path
 // is emitted as `/${locale}/…`. walkRoutes + routes.ts give us [lang]-RELATIVE
 // shapes; prefix each with a locale wildcard so a correct click_path
-// (`/*/@*/*`, `/*/chat`, …) matches AND a locale-less one (the pre-cp470 bug,
+// (`/*/@*/*`, `/*/chat`, …) matches AND a locale-less one (the older bug,
 // e.g. `/${recipient}/${permlink}` → `/*/*`) matches nothing and fails.
 function localePrefix(shape: string): string {
 	return shape === '/' ? '/*' : '/*' + shape;
@@ -160,7 +160,7 @@ function literalToShape(literal: string): string {
 	// Strip `#anchor` suffix (browser-side, route-irrelevant).
 	const hashIdx = s.indexOf('#');
 	if (hashIdx >= 0) s = s.slice(0, hashIdx);
-	// cp471 — strip `?query` suffix too. A click_path like
+	// strip `?query` suffix too. A click_path like
 	// `/${locale}/chat/${signer}?order=${permlink}` deep-links to the
 	// [lang]/chat/[peer] route (shape `/*/chat/*`); the ?order= is a query the
 	// route reads, not a path segment, so it must not affect route matching.
@@ -180,7 +180,7 @@ function literalToShape(literal: string): string {
 const handlerFiles = readdirSync(HANDLER_DIR)
 	.filter((f) => f.endsWith('.ts'))
 	.map((f) => join(HANDLER_DIR, f));
-// cp471 — the chat push enqueue moved to a shared module; scan it too so the
+// the chat push enqueue moved to a shared module; scan it too so the
 // chat click_path stays covered by this route guard.
 handlerFiles.push(join(REPO, 'apps/indexer/src/indexer/chatPushEnqueue.ts'));
 

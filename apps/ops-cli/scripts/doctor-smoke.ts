@@ -1,5 +1,5 @@
 /**
- * doctor-smoke (cp194)
+ * doctor-smoke
  *
  * Guards the `morphit-ops doctor` command and the `--check-config`
  * contract it depends on. doctor is a READ-ONLY preflight that tells
@@ -22,7 +22,7 @@
  * whole reason doctor is trustworthy.
  */
 
-import { mkdtempSync, writeFileSync, chmodSync, symlinkSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync, symlinkSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -204,6 +204,19 @@ try {
 			ok('plaintext key → security warns (encryption advisory), boot still OK (exit 0)');
 		} else {
 			bad('plaintext-key security warning missing', `exit=${code}\n${out.slice(0, 400)}`);
+		}
+		// the advice must match the relay unit (it auto-unlocks from the
+		// host-sealed credential) and not overclaim what the seal protects.
+		const unit = readFileSync(join(REPO, 'ops', 'systemd', 'morphit-relay.service'), 'utf8');
+		if (
+			/LoadCredentialEncrypted=relay_passphrase/.test(unit) &&
+			/sealed with this host's systemd credential key/i.test(out.replace(/\s+/g, ' ')) &&
+			/no TPM/.test(out) &&
+			!/no auto-unlock|unlocked by hand each time/i.test(out)
+		) {
+			ok('the encryption advice matches the relay unit (auto-unlock from the host-sealed credential, no TPM)');
+		} else {
+			bad('the encryption advice does not match the relay unit', out.slice(0, 400));
 		}
 		// and it must NOT leak the key material
 		if (!out.includes(PLAINTEXT_WIF)) ok('security check does not print key material');

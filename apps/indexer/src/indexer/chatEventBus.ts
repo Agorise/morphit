@@ -59,7 +59,7 @@ export interface ChatEvent {
 export type ChatListener = (ev: ChatEvent) => void;
 
 /**
- * cp403 [1] — head-block fast-path event.
+ * head-block fast-path event.
  *
  * Emitted by the headTailer (ADR-0048) for a chat message seen in
  * a chain HEAD block, BEFORE it is irreversible and therefore before
@@ -109,7 +109,7 @@ export interface ChatFastEvent {
 	 *  against its durable twin. Extracted once here so SSE subscribers
 	 *  don't each re-parse the header. */
 	readonly clientTag: string | null;
-	/** cp446 — the order this message is about, or null. Threads the inbox and
+	/** the order this message is about, or null. Threads the inbox and
 	 *  scopes the transcript; see chatStream.ts. */
 	readonly orderPermlink: string | null;
 }
@@ -118,7 +118,7 @@ export type ChatFastListener = (ev: ChatFastEvent) => void;
 
 class ChatEventBus {
 	private readonly listeners: Set<ChatListener> = new Set();
-	/** cp403 [1] — separate listener set for head-block fast-path
+	/** separate listener set for head-block fast-path
 	 *  events. Kept distinct from the durable listeners so the two
 	 *  channels can't be accidentally cross-wired. */
 	private readonly fastListeners: Set<ChatFastListener> = new Set();
@@ -132,7 +132,7 @@ class ChatEventBus {
 		};
 	}
 
-	/** cp403 [1] — subscribe to head-block fast-path events. Returns an
+	/** subscribe to head-block fast-path events. Returns an
 	 *  unsubscribe function; the SSE handler calls it on close. */
 	onFast(listener: ChatFastListener): () => void {
 		this.fastListeners.add(listener);
@@ -158,7 +158,7 @@ class ChatEventBus {
 		}
 	}
 
-	/** cp403 [1] — emit a head-block fast-path event. Same
+	/** emit a head-block fast-path event. Same
 	 *  fire-and-forget, error-isolating discipline as `emit`. */
 	emitFast(ev: ChatFastEvent): void {
 		// v1.5.5 — retain replayable events so a chatroom OPENED shortly after
@@ -182,10 +182,9 @@ class ChatEventBus {
 	 * THE PROBLEM. The fast path is deliberately ephemeral: it emits to SSE and
 	 * enqueues the push, and never writes chat_messages (only the durable
 	 * handler does, ~60s later). So it only ever helped a chatroom that was
-	 * ALREADY OPEN. the maintainer's tester3 was on another tab: he got the push in ~6s,
-	 * tapped through, and the chatroom loaded its snapshot from the DB — which
-	 * didn't have the message yet. "messages from tester2 are taking about a
-	 * minute to actually appear on tester3's chatroom page."
+	 * ALREADY OPEN. A recipient on another tab got the push in ~6s, tapped
+	 * through, and the chatroom loaded its snapshot from the DB — which didn't
+	 * have the message yet, so it took about a minute to appear.
 	 *
 	 * WHY A BUFFER AND NOT A DB WRITE. Persisting from the fast path would mean
 	 * storing messages the DURABLE handler may still reject — it runs the
@@ -229,7 +228,7 @@ class ChatEventBus {
 	}
 
 	/**
-	 * v1.7.5 (t.txt #1) — recent replayable fast events this ACCOUNT is a party
+	 * v1.7.5 — recent replayable fast events this ACCOUNT is a party
 	 * to, oldest first. The participant-scoped sibling of `recentFast`.
 	 *
 	 * WHY: `recentFast(lo, hi)` answers "what did I miss in THIS conversation",
@@ -241,7 +240,7 @@ class ChatEventBus {
 	 * irreversibility: the page mounts, reads `getConversations`, and the durable
 	 * table legitimately has nothing (ADR-0051 invariant #1 — the fast path never
 	 * writes it). The live SSE ping only helps if you were already connected when
-	 * it fired. So the maintainer opens a tab 10s after a message lands and sees a dark
+	 * it fired. So a user who opens a tab 10s after a message lands sees a dark
 	 * badge for the rest of the minute — through no fault of any single component.
 	 *
 	 * Same ring, same TTL, same cap, same `replayable` gate as the chatroom
@@ -281,7 +280,7 @@ class ChatEventBus {
 		return this.listeners.size;
 	}
 
-	/** cp403 [1] — count of active fast-path subscribers (same as
+	/** count of active fast-path subscribers (same as
 	 *  subscriberCount; the SSE handler subscribes to both channels,
 	 *  so this normally equals subscriberCount when the fast path is
 	 *  enabled). Surfaced on /v1/health verbose. */

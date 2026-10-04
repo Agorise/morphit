@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * lazy-import-catch-fallback-smoke (cp418).
+ * lazy-import-catch-fallback-smoke.
  *
  * The interactive lazily-imported UI ({#await loadXxx() then Comp}) — forms,
  * pickers, modals, key-backup panels — MUST have a {:catch} fallback so a

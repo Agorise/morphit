@@ -48,7 +48,7 @@ export interface CoingeckoConfig {
 	 *  BLURT use 'blurt'; for BTC use 'bitcoin'; for XMR use
 	 *  'monero'; etc.  Operator can override if Coingecko renames. */
 	readonly coinId: string;
-	/** cp130: Coingecko vs_currency (the fiat the price is denominated
+	/** Coingecko vs_currency (the fiat the price is denominated
 	 *  in).  Default 'usd'.  Coingecko supports many: usd, eur, gbp,
 	 *  jpy, brl, cny, inr, rub, etc.  Must be the lowercase form
 	 *  Coingecko expects in the API.  When the operator's
@@ -63,8 +63,8 @@ export interface CoingeckoConfig {
 
 export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<number | null> {
 	const fetchImpl = config.fetchImpl ?? globalThis.fetch;
-	// cp130: vs_currencies is now operator-configurable (was hardcoded 'usd'
-	// pre-cp130).  Lowercase per Coingecko API convention.
+	// vs_currencies is now operator-configurable (was hardcoded 'usd'
+	// older).  Lowercase per Coingecko API convention.
 	const vsCurrency = config.vsCurrency.toLowerCase();
 	const url = `${config.baseUrl.replace(/\/+$/, '')}/simple/price?ids=${encodeURIComponent(config.coinId)}&vs_currencies=${encodeURIComponent(vsCurrency)}`;
 
@@ -72,12 +72,12 @@ export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<n
 		const ac = new AbortController();
 		const timer = setTimeout(() => ac.abort(), config.timeoutMs);
 		try {
-			// cp159 F-indexer-3 — named User-Agent via shared helper.
+			// named User-Agent via shared helper.
 			const headers: Record<string, string> = priceUpstreamHeaders();
 			if (config.apiKey) {
 				headers['x-cg-pro-api-key'] = config.apiKey;
 			}
-			// cp159 F-indexer-2 — `redirect: 'manual'` via priceUpstreamFetchInit.
+			// `redirect: 'manual'` via priceUpstreamFetchInit.
 			// A 30x to an unexpected host should be an operator-visible
 			// failure, not a silent redirect.
 			const res = await fetchImpl(url, {
@@ -95,7 +95,7 @@ export function createCoingeckoFetcher(config: CoingeckoConfig): () => Promise<n
 				log.warn('http_not_ok', { url, status: res.status });
 				return null;
 			}
-			// cp159 F-indexer-1 — capped body read.  Replaces
+			// capped body read.  Replaces
 			// `await res.json()` which had no size bound.  Coingecko
 			// price payloads are <100 bytes normally; 64 KiB cap is
 			// 600x normal and still catches any pathology.

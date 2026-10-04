@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
 	 * OrderPosterIdentity — the poster identity + reputation row shown on an
-	 * order. Extracted from OrderCard (cp406, the maintainer) so the order DETAIL page's
+	 * order. Extracted from OrderCard so the order DETAIL page's
 	 * "POSTED BY" card renders the EXACT same layout as the orderbook cards:
 	 * avatar, then display name · new-trader chip · ⭐ reputation, then the
 	 * truncated posting key · trade-count line. The trade specifics (side,
@@ -55,7 +55,7 @@
 	const ratingCount = $derived(order.feedback_count ?? 0);
 	const tradeCount = $derived(order.trade_count ?? 0);
 	const score = $derived(order.reputation_score ?? null);
-	// v1.8.11 (the maintainer) — resolve through the shared resolver instead of trusting
+	// v1.8.11 — resolve through the shared resolver instead of trusting
 	// `order.posting_pubkey` alone. That column is filled by a BACKFILL JOB, so
 	// for an account new to Morphit it is briefly empty and the card rendered
 	// with no key while the order detail page — which does a live authority
@@ -86,7 +86,7 @@
 	// v1.5.5 — the trade count moved into TradeRepCluster ("1 trade · ★5.00
 	// (34)"), which owns the wording. The old "852 trades since July, 2026"
 	// tail is deliberately gone from this row: the cluster is `whitespace-
-	// nowrap` by contract (the maintainer: the chunk must never break mid-way), and a
+	// nowrap` by contract (the chunk must never break mid-way), and a
 	// "since {month}" tail makes it long enough to overflow a phone instead of
 	// wrapping — the exact tightness problem the maintainer asked to fix. The first-trade
 	// date remains available on the profile.
@@ -100,12 +100,22 @@
 	<div class="min-w-0 flex-1 pt-1">
 		<!-- Line 1: display name · new-trader · reputation score -->
 		<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-			<a
-				href={profileHref}
-				class="relative z-10 truncate font-bold text-ink-900 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-white"
-			>
-				{displayName || handle}
-			</a>
+			{#if pending && !displayName}
+				<!-- Profile still loading: a quiet placeholder, not the bare @handle
+				     that would then swap to the display name (same rule as
+				     IdentityLabel's pending state). -->
+				<span
+					class="inline-block h-4 w-28 animate-pulse rounded bg-ink-200 dark:bg-ink-800"
+					aria-hidden="true"
+				></span>
+			{:else}
+				<a
+					href={profileHref}
+					class="relative z-10 truncate font-bold text-ink-900 hover:text-morphit-emerald focus:outline-none focus-visible:ring-2 focus-visible:ring-morphit-emerald dark:text-white"
+				>
+					{displayName || handle}
+				</a>
+			{/if}
 			{#if order.is_new_trader}
 				<NewTraderChip />
 			{/if}

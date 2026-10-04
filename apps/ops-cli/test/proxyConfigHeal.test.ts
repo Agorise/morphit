@@ -29,6 +29,7 @@ import {
 } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { SchedulerCycle } from '../src/lib/bunkerwebScheduler.ts';
+import { BUNKERWEB_PRIVACY_SETTINGS } from '../src/lib/bunkerwebPrivacy.ts';
 import { join, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -42,7 +43,12 @@ import {
 	frontendEdgePort,
 	frontendFileMissesAre404,
 	frontendForwardsOneAddress,
+	frontendCspStrict,
+	frontendHidesInternals,
 	identifyContainers,
+	isMorphitCsp,
+	isMorphitFrontendDockerfile,
+	FRONTEND_BASE,
 	nginxLogFormats,
 	parseComposeModel,
 	parseDockerInspect,
@@ -105,7 +111,7 @@ USE_REVERSE_PROXY=yes
 REVERSE_PROXY_HOST=http://frontend:80
 `;
 
-// morphit.io (docs/REVISIT-LIST.md "LIVE VPS TOPOLOGY"): one hand-made
+// morphit.io (the project backlog "LIVE VPS TOPOLOGY"): one hand-made
 // /opt/bunkerweb project; containers bunkerweb-<service>-1; bridge 172.18.0.0/24.
 const MORPHITIO_COMPOSE = `services:
   bunkerweb:
@@ -287,6 +293,19 @@ class Sim {
 	acquis = new Map<string, string | null>();
 	served: string | null = SERVED_OK;
 	servedAfterRefresh: string | null = SERVED_OK;
+	/** The running frontend image's base label, before and after a rebuild. */
+	feBase: string | null = FRONTEND_BASE;
+	feBaseAfterRefresh: string | null = FRONTEND_BASE;
+	/** A rebuild uses a Dockerfile Morphit shipped (so it sets the label). */
+	fePinnable = true;
+	/** Hidden-only node; whether the pinned base is here, in the bundle, or
+	 *  pullable through Tor; and what each rebuild was allowed to do. */
+	hidden = false;
+	basePresent = false;
+	bundledBase = false;
+	torPulls = false;
+	loads = 0;
+	refreshWithBase: boolean[] = [];
 	newerThanStart = false;
 	/** The edge's nginx regenerates its log_format from its environment. */
 	edgeRegenerates = true;
@@ -310,6 +329,12 @@ class Sim {
 	/** BunkerWeb's scheduler verdict, by time since the last `up` (v1.20.1). */
 	verdict: ((sinceUpMs: number) => SchedulerCycle) | null = null;
 	lastUpAt = 0;
+	/** BunkerWeb's generated /etc/nginx/variables.env per edge: rebuilt
+	 *  from the edge's environment on each up unless `settingsFrozen` (a
+	 *  scheduler that never pushes); null when it cannot be read. */
+	edgeSettings = new Map<string, string>();
+	settingsFrozen = false;
+	settingsReadable = true;
 	info: string[] = [];
 	warn: string[] = [];
 	readonly project: string;
@@ -353,6 +378,8 @@ class Sim {
 				gateways: k.gateways ?? ['172.20.0.1']
 			});
 			if (svc) this.c.get(k.name)!.env = this.resolvedEnv(k.service);
+			if (/bunkerity\/bunkerweb:/.test(k.image))
+				this.edgeSettings.set(k.name, this.generated(this.c.get(k.name)!));
 		}
 		/** A blocking call: it costs `ms`, but like spawnSync it is killed at its
 		 *  timeout (then it reports failure). */
@@ -431,12 +458,18 @@ class Sim {
 					}
 				};
 			},
+			frontendBase: () => this.feBase,
+			frontendRebuildPinsBase: () => this.fePinnable,
 			nginxT: (n, t) => {
 				if (!cost(this.costs.probe, 'nginxT', t)) return null;
 				const x = this.c.get(n);
 				if (!x) return null;
 				if (/bunkerity\/bunkerweb:/.test(x.image)) return this.edgeDump.get(n) ?? this.edgeNginx(x);
 				return this.served;
+			},
+			bunkerwebSettings: (n, t) => {
+				if (!cost(this.costs.probe, 'bunkerwebSettings', t) || !this.settingsReadable) return null;
+				return this.edgeSettings.get(n) ?? null;
 			},
 			configNewerThanStart: (_n, t) => (cost(this.costs.probe, 'stat', t), this.newerThanStart),
 			reloadNginx: (_n, t) => (
@@ -445,12 +478,24 @@ class Sim {
 				(this.newerThanStart = false),
 				true
 			),
-			refreshFrontend: (_r, t) => {
+			refreshFrontend: (_r, t, withBase = true) => {
 				if (!cost(this.costs.refresh, 'refresh', t)) return false;
 				this.refreshes++;
+				this.refreshWithBase.push(withBase);
 				this.served = this.servedAfterRefresh;
+				// Without the new Dockerfile the image keeps its old base.
+				if (withBase) this.feBase = this.feBaseAfterRefresh;
 				return true;
 			},
+			hiddenOnly: () => this.hidden,
+			baseImagePresent: () => this.basePresent,
+			loadBundledBase: () => {
+				if (!this.bundledBase) return false;
+				this.loads++;
+				this.basePresent = true;
+				return true;
+			},
+			dockerPullsThroughTor: () => this.torPulls,
 			schedulerCycle: () =>
 				this.verdict ? this.verdict(this.t - this.lastUpAt) : { kind: 'loaded' as const },
 			onTerminate: (fn) => ((this.terminate = fn), () => (this.terminate = null)),
@@ -485,6 +530,16 @@ class Sim {
 			([k, v]) => `${k}=${v.replace(/\$\$/g, '$')}`
 		);
 	}
+	/** What BunkerWeb 1.5's generator writes: every setting, default or set. */
+	generated(x: ContainerInfo): string {
+		const vars = new Map<string, string>([
+			...BUNKERWEB_PRIVACY_SETTINGS.map((p) => [p.key, p.bunkerwebDefault] as [string, string]),
+			['USE_ANTIBOT', 'no'],
+			['ANTIBOT_URI', '/challenge']
+		]);
+		for (const e of x.env) vars.set(e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1));
+		return [...vars].map(([k, v]) => `${k}=${v}`).join('\n');
+	}
 	edgeNginx(x: ContainerInfo): string {
 		const lf = x.env.find((e) => e.startsWith('LOG_FORMAT='))?.slice(11) ?? BW_DEFAULT_LOG_FORMAT;
 		return `# configuration file /etc/nginx/nginx.conf:\nhttp {\n  log_format logf '${lf}';\n  access_log /var/log/bunkerweb/access.log logf;\n}\n`;
@@ -502,6 +557,8 @@ class Sim {
 			x.extraHosts = s.extra_hosts.map((h) => h.replace('=', ':'));
 			x.env = this.resolvedEnv(service);
 			x.running = !this.notRunningAfterUp.has(name);
+			if (/bunkerity\/bunkerweb:/.test(x.image) && !this.settingsFrozen)
+				this.edgeSettings.set(name, this.generated(x));
 			if (this.portsAfterUp.has(name)) x.ports = this.portsAfterUp.get(name)!;
 			this.recreated.push(name);
 		}
@@ -1557,6 +1614,235 @@ describe('the frontend REALLY sends one address to the indexer (served config, n
 		expect(out.forwarding).toBe('unknown');
 		expect(s.refreshes).toBe(0);
 		expect(s.warn).toEqual([]);
+	});
+});
+
+describe('BunkerWeb stops sending visitor data to third parties', () => {
+	const PRIVACY = [
+		'USE_BUNKERNET=no',
+		'USE_DNSBL=no',
+		'USE_BLACKLIST=no',
+		'USE_WHITELIST=no',
+		'SEND_ANONYMOUS_REPORT=no'
+	];
+	const runs = (s: Sim, name: string): string[] => s.edgeSettings.get(name)!.split('\n');
+	it('an installed box: every disclosing feature off, live in what BunkerWeb runs with', async () => {
+		const s = oldBox();
+		expect(runs(s, 'bunkerweb')).toContain('USE_BUNKERNET=yes'); // the 1.5.10 default
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		const env = readFileSync(s.path('bunkerweb.env'), 'utf8');
+		for (const kv of PRIVACY) {
+			expect(env.split('\n')).toContain(kv);
+			expect(s.c.get('bunkerweb')!.env).toContain(kv);
+			expect(runs(s, 'bunkerweb')).toContain(kv);
+		}
+		expect(runs(s, 'bunkerweb')).toContain('USE_GREYLIST=no');
+		expect(s.info.join('\n')).toMatch(/Seen in the settings BunkerWeb runs with/);
+		expect(s.warn).toEqual([]);
+		expect((await s.run()).kind).toBe('already');
+	});
+	it("morphit.io's stack: the scheduler (which runs the BunkerNet and report jobs) gets them too", async () => {
+		const s = morphitIo('source: docker\ncontainer_name:\n  - bunkerweb-db-1\n');
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		for (const kv of PRIVACY) {
+			expect(s.c.get('bunkerweb-bw-scheduler-1')!.env).toContain(kv);
+			expect(runs(s, 'bunkerweb-bunkerweb-1')).toContain(kv);
+		}
+	});
+	it('values set to "yes" (as OPERATIONS once advised for USE_DNSBL) are turned off, every line', async () => {
+		const s = oldBox(`${OLD_ENV}USE_DNSBL=yes\nUSE_BUNKERNET=yes\nUSE_DNSBL="yes"\n`);
+		expect((await s.run()).kind).toBe('applied');
+		const env = readFileSync(s.path('bunkerweb.env'), 'utf8');
+		expect(env).not.toMatch(/^USE_(DNSBL|BUNKERNET)=("?)yes\2$/m);
+		expect(runs(s, 'bunkerweb')).toContain('USE_DNSBL=no');
+	});
+	it('a scheduler that never brings the new settings live: not reported as done, the previous file back', async () => {
+		const s = oldBox();
+		s.settingsFrozen = true;
+		const before = readFileSync(s.path('bunkerweb.env'));
+		const out = await s.run();
+		expect(out.kind).toBe('rolled-back');
+		expect(s.warn.join(' ')).toMatch(/BunkerWeb still runs with USE_BUNKERNET=yes/);
+		expect(readFileSync(s.path('bunkerweb.env')).equals(before)).toBe(true);
+	});
+	it("BunkerWeb's generated settings unreadable: checked in the containers' environment, and said so", async () => {
+		const s = oldBox();
+		s.settingsReadable = false;
+		expect((await s.run()).kind).toBe('applied');
+		expect(s.info.join('\n')).toMatch(/containers' environment/);
+	});
+	it('anti-bot: a third-party challenge or one on a live path goes off; a dedicated local one stays', async () => {
+		const a = oldBox(`${OLD_ENV}USE_ANTIBOT=captcha\nANTIBOT_URI=/relay/v1/account/invite\n`);
+		await a.run();
+		expect(runs(a, 'bunkerweb')).toContain('USE_ANTIBOT=no');
+		const b = oldBox(`${OLD_ENV}USE_ANTIBOT=turnstile\nANTIBOT_URI=/__antibot\n`);
+		await b.run();
+		expect(runs(b, 'bunkerweb')).toContain('USE_ANTIBOT=no');
+		const c = oldBox(`${OLD_ENV}USE_ANTIBOT=cookie\nANTIBOT_URI=/__antibot\n`);
+		await c.run();
+		expect(runs(c, 'bunkerweb')).toContain('USE_ANTIBOT=cookie');
+	});
+});
+
+describe('the frontend sends a strict page CSP, hides its version and drops visitor-set internal headers', () => {
+	/** The frontend before this release: inline script and eval allowed, the
+	 *  nginx version shown, internal headers passed through. */
+	const loose = (conf: string): string =>
+		conf
+			.replace(
+				/script-src 'self' 'wasm-unsafe-eval'/g,
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"
+			)
+			.replace(/\n\s*server_tokens off;/g, '')
+			.replace(/\n\s*proxy_set_header (X-Morphit-Local-Health|X-I2P-Dest(B64|B32|Hash)) "";/g, '');
+	const SERVED_LOOSE = dumpOf(loose(SHIPPED_FE));
+	it('reads it from what nginx serves: the release config passes, the older one fails each part', () => {
+		expect(loose(SHIPPED_FE)).not.toBe(SHIPPED_FE);
+		expect(frontendCspStrict(SERVED_OK)).toBe(true);
+		expect(frontendHidesInternals(SERVED_OK)).toEqual({ tokensOff: true, uncleared: [] });
+		expect(frontendCspStrict(SERVED_LOOSE)).toBe(false);
+		const h = frontendHidesInternals(SERVED_LOOSE);
+		expect(h.tokensOff).toBe(false);
+		expect(h.uncleared).toContain('/relay/');
+		expect(h.uncleared).toContain('/v1/');
+		// one header missing in one location is enough to fail, by name
+		const one = SHIPPED_FE.replace(
+			/(location \/relay\/ \{[\s\S]*?)\n\s*proxy_set_header X-I2P-DestB32 "";/,
+			'$1'
+		);
+		expect(one).not.toBe(SHIPPED_FE);
+		expect(frontendHidesInternals(dumpOf(one)).uncleared).toEqual(['/relay/']);
+	});
+	it('an older frontend is rebuilt from the release once, and says so', async () => {
+		const s = oldBox();
+		s.served = SERVED_LOOSE;
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		const info = s.info.join(' ');
+		expect(info).toMatch(/no inline script and no eval/);
+		expect(info).toMatch(/hides its nginx version/);
+		expect(s.silent).toEqual([]);
+	});
+	it('still loose after the rebuild: a calm warning naming what, with the command', async () => {
+		const s = oldBox();
+		s.served = SERVED_LOOSE;
+		s.servedAfterRefresh = SERVED_LOOSE;
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		const w = s.warn.join(' ');
+		expect(w).toMatch(/inline script and eval/);
+		expect(w).toMatch(/nginx version/);
+		expect(w).toContain('up -d --no-deps --build --force-recreate frontend');
+	});
+	it("BunkerWeb's env: an older Morphit CSP is replaced, an operator's own is kept", () => {
+		const older = MORPHIT_CSP.replace(
+			"script-src 'self' 'wasm-unsafe-eval'",
+			"script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"
+		).replace("connect-src 'self'", "connect-src 'self' https://rpc.blurt.one");
+		expect(isMorphitCsp(older)).toBe(true);
+		const p = planBunkerwebEnv(`CONTENT_SECURITY_POLICY=${older}\n`);
+		expect(p.text).toContain(`CONTENT_SECURITY_POLICY=${MORPHIT_CSP}\n`);
+		expect(p.text).not.toContain("'unsafe-eval'");
+		const own = `${MORPHIT_CSP.replace("img-src 'self' data: blob:", "img-src 'self' data: blob: https://img.example.org")}`;
+		expect(isMorphitCsp(own)).toBe(false);
+		expect(planBunkerwebEnv(`CONTENT_SECURITY_POLICY=${own}\n`).text).toContain(
+			`CONTENT_SECURITY_POLICY=${own}\n`
+		);
+	});
+});
+
+describe("the frontend is built from this release's pinned nginx base", () => {
+	const DOCKERFILE = readFileSync(join(REPO, 'ops/bunkerweb/frontend/Dockerfile'), 'utf8');
+	it('the Dockerfile pins the base by digest and labels it with the value the heal expects', () => {
+		expect(DOCKERFILE).toMatch(
+			new RegExp(`^FROM ${FRONTEND_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm')
+		);
+		expect(DOCKERFILE).toContain(`LABEL org.morphit.frontend-base="${FRONTEND_BASE}"`);
+		expect(FRONTEND_BASE).toMatch(/@sha256:[0-9a-f]{64}$/);
+	});
+	it('only a Dockerfile Morphit shipped (this one or an earlier `FROM nginx:alpine` one) is replaced on a rebuild', () => {
+		expect(isMorphitFrontendDockerfile(DOCKERFILE)).toBe(true);
+		const older = DOCKERFILE.replace(/^FROM .*$/m, 'FROM nginx:alpine').replace(/^LABEL .*\n/m, '');
+		expect(isMorphitFrontendDockerfile(older)).toBe(true);
+		expect(isMorphitFrontendDockerfile(`${older}RUN apk add curl\n`)).toBe(false);
+		expect(
+			isMorphitFrontendDockerfile(
+				older.replace('FROM nginx:alpine', 'FROM openresty/openresty:alpine')
+			)
+		).toBe(false);
+	});
+	it('a frontend built from an older base is rebuilt once, and says so', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		const out = await s.run();
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshes).toBe(1);
+		expect(s.info.join(' ')).toMatch(
+			/pinned base image \(nginx:1\.30\.5-alpine, label read back\)/
+		);
+	});
+	it('still on an older base after the rebuild: a calm warning with the command', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.feBaseAfterRefresh = '';
+		const out = await s.run();
+		expect(out.forwarding).toBe('stale');
+		expect(s.warn.join(' ')).toMatch(/older nginx base image/);
+	});
+	it("a frontend a rebuild cannot re-base (the operator's own Dockerfile, or an image-only service): not judged on it, not rebuilt for it", async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.feBaseAfterRefresh = '';
+		s.fePinnable = false;
+		const out = await s.run();
+		expect(out.forwarding).toBe('ok');
+		expect(s.refreshes).toBe(0);
+		expect(s.warn).toEqual([]);
+	});
+	it('a hidden-only node without the base image and without Docker over Tor: not rebuilt for the base (no Docker Hub pull), and said calmly', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.hidden = true;
+		const out = await s.run();
+		expect(out.forwarding).toBe('ok');
+		expect(s.refreshes).toBe(0);
+		expect(s.warn).toEqual([]);
+	});
+	it('a hidden-only node whose offline bundle carries the base: it is loaded, then the rebuild uses it', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.hidden = true;
+		s.bundledBase = true;
+		const out = await s.run();
+		expect(s.loads).toBe(1);
+		expect(out.forwarding).toBe('refreshed');
+		expect(s.refreshWithBase).toEqual([true]);
+	});
+	it('a hidden-only node whose Docker pulls through Tor: rebuilt on the pinned base', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.hidden = true;
+		s.torPulls = true;
+		expect((await s.run()).forwarding).toBe('refreshed');
+		expect(s.refreshWithBase).toEqual([true]);
+	});
+	it('a hidden-only node that needs a rebuild for its config but cannot get the base: rebuilt WITHOUT the new base', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.feBaseAfterRefresh = '';
+		s.hidden = true;
+		s.served = SERVED_STALE;
+		await s.run();
+		expect(s.refreshes).toBe(1);
+		expect(s.refreshWithBase).toEqual([false]);
+	});
+	it('the label cannot be read: not judged on it', async () => {
+		const s = oldBox();
+		s.feBase = null;
+		expect((await s.run()).forwarding).toBe('ok');
 	});
 });
 

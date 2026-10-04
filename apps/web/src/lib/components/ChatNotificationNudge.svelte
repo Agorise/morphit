@@ -85,12 +85,12 @@
 		busy = true;
 		errorCode = null;
 		try {
-			// v1.7.7 (t.txt #6) — always 'standard'. The wire/relay still ACCEPT
+			// v1.7.7 — always 'standard'. The wire/relay still ACCEPT
 			// 'self_hosted' so a browser running pre-1.7.7 cached JS keeps working,
 			// but this client no longer produces it: it selected a mode nothing
 			// downstream ever read.
 			const mode: PushPrivacyMode = 'standard';
-			// cp450 GAP A — enable the chat category BEFORE subscribing, so the
+			// enable the chat category BEFORE subscribing, so the
 			// subscribe payload's muted_categories list already reflects chat=on.
 			// (If we subscribed first, the relay would store chat as muted and
 			// this nudge — whose entire job is to turn chat pings ON — would
@@ -120,7 +120,7 @@
 		const supported = isPushSupported();
 		const loggedIn = getUserBlurtAccount() !== null;
 		const dismissed = readDismissed();
-		// v1.9.0 (the maintainer) — a user who had already enabled "Push notifications
+		// v1.9.0 — a user who had already enabled "Push notifications
 		// (tab closed)" in Settings kept getting nudged in the chatroom. The old
 		// gate ALSO hard-required a live currentSubscription() probe, which returns
 		// null on a service worker that isn't ready yet (and threw → false in the

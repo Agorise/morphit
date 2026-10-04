@@ -23,7 +23,7 @@
 		 *  own click handler (e.g. an asset block that selects on tap). When
 		 *  omitted, the default ⓘ icon button renders (existing behavior). */
 		trigger?: Snippet;
-		/** cp406 (the maintainer) — delay, in ms, before a POINTER hover opens the tooltip.
+		/** delay, in ms, before a POINTER hover opens the tooltip.
 		 *  0 (default) = open immediately (existing behavior). When > 0, the
 		 *  tooltip only opens if the pointer stays over the trigger for this
 		 *  long; a hover that leaves sooner never opens it (used on the /post
@@ -31,11 +31,11 @@
 		 *  tooltip). Only the mouse-hover path is delayed — keyboard focus and
 		 *  tap-to-pin still open instantly, so touch + a11y are unaffected. */
 		hoverOpenDelayMs?: number;
-		/** cp511 — optional interpolation values for `textKey`, so a tooltip can
+		/** optional interpolation values for `textKey`, so a tooltip can
 		 *  render a dynamic string (e.g. "+ 260.901 BP delegated to you"). When
 		 *  omitted the key is rendered with no values, exactly as before. */
 		textValues?: Record<string, string | number>;
-		/** cp512 [PR4] — drop the circular border on the default ⓘ trigger, for
+		/** drop the circular border on the default ⓘ trigger, for
 		 *  places where the icon sits inline beside text (e.g. the delegated-BP
 		 *  hint next to the BP balance) and the badge outline reads as clutter.
 		 *  Ignored when a custom `trigger` is supplied. */
@@ -52,7 +52,7 @@
 		noBorder = false
 	}: Props = $props();
 
-	// Sally finding S-12 (Part 119): pre-fix this defaulted to the
+	// Sally finding S-12: pre-fix this defaulted to the
 	// English string 'More info', which leaked into ARIA labels for
 	// non-English screen-reader users.  Default now reads from i18n.
 	// Callers that explicitly pass a hardcoded string still win
@@ -60,8 +60,8 @@
 	// (see /post asset-explainer tooltips).
 	const effectiveAriaLabel = $derived(ariaLabel ?? ($_('a11y.tooltip_more_info') as string));
 
-	// ── Open-state management (cp249 + cp257) ───────────────────────
-	// Pre-cp249 the open/close handlers lived on the trigger button and
+	// ── Open-state management ───────────────────────
+	// Previously, the open/close handlers lived on the trigger button and
 	// the panel floated below an 8px gap; moving the pointer toward the
 	// panel fired the BUTTON's mouseleave and closed it before the pointer
 	// arrived, so "Learn more" was unclickable.  Fix: track hover + focus
@@ -69,7 +69,7 @@
 	// while EITHER is active, bridge the gap with transparent padding, and
 	// defer close on a short timer so a brief edge-slip doesn't dismiss it.
 	//
-	// cp257 adds two things:
+	// A later change adds two things:
 	//   • `pinned` — a tap/click toggle. iOS doesn't reliably focus a
 	//     <button> on tap, so hover/focus alone left touch users unable to
 	//     open the tooltip at all. Tapping the icon now pins it open (and an
@@ -82,19 +82,19 @@
 	let placement = $state<'above' | 'below'>('below');
 	let hovering = false;
 	let focusWithin = false;
-	// cp427 — the panel is PORTALED to <body> (below), so it no longer lives
+	// the panel is PORTALED to <body> (below), so it no longer lives
 	// inside the wrapper's hover/focus region. These mirror the wrapper flags
 	// for the panel itself, so the "trigger → panel" pointer/keyboard journey
-	// keeps the tooltip open (the exact hover-bridge cp249 protected, now
+	// keeps the tooltip open (the exact hover-bridge protected, now
 	// spanning the portal boundary).
 	let panelHovering = false;
 	let panelFocusWithin = false;
 	let closeTimer: ReturnType<typeof setTimeout> | null = null;
-	// cp406 — pending hover-open timer (only used when hoverOpenDelayMs > 0).
+	// pending hover-open timer (only used when hoverOpenDelayMs > 0).
 	let openTimer: ReturnType<typeof setTimeout> | null = null;
 	let wrapperEl = $state<HTMLSpanElement>();
 	let panelEl = $state<HTMLDivElement>();
-	// cp427 — computed FIXED coordinates for the portaled panel (viewport
+	// computed FIXED coordinates for the portaled panel (viewport
 	// space). `left` is clamped so the w-64 card never spills off either edge;
 	// `top` anchors flush to the trigger (the transparent padding bridges the
 	// 8px visual gap). Recomputed on open and on scroll/resize while open.
@@ -210,7 +210,7 @@
 		}
 	}
 
-	// cp427 — the portaled panel's own hover/focus, so pointer or keyboard can
+	// the portaled panel's own hover/focus, so pointer or keyboard can
 	// move from the trigger onto the panel (e.g. to click "Learn more") without
 	// the tooltip closing. The 140ms close-timer bridges the 8px gap during the
 	// hand-off; the transparent padding in the markup keeps the hover region
@@ -246,7 +246,7 @@
 
 	// While pinned open (tapped), an outside tap dismisses it. Scoped to the
 	// pinned window and self-cleaning, so no listener lingers after close.
-	// cp427 — the panel is now portaled OUTSIDE the wrapper, so a tap on the
+	// the panel is now portaled OUTSIDE the wrapper, so a tap on the
 	// panel itself must count as "inside" too, else tapping "Learn more" would
 	// dismiss before the click lands.
 	$effect(() => {
@@ -264,7 +264,7 @@
 		return () => document.removeEventListener('pointerdown', onDocPointer, true);
 	});
 
-	// cp427 — while open, keep the fixed-positioned panel glued to the trigger
+	// while open, keep the fixed-positioned panel glued to the trigger
 	// as the page scrolls or the window resizes (a fixed element does NOT move
 	// with scroll on its own). Capture-phase scroll catches nested scroll
 	// containers too; both listeners are passive (read-only) and torn down when
@@ -280,19 +280,19 @@
 		};
 	});
 
-	// cp510 [9] — INSTANT dismiss when the pointer rests over NEITHER the
+	// INSTANT dismiss when the pointer rests over NEITHER the
 	// trigger nor the panel. With a portaled, fixed panel a plain mouseleave
 	// can be missed — the pointer jumps to an element painted above, or the
 	// w-64 card overlaps neighbouring chips — leaving `panelHovering` stuck
-	// true so the tooltip lingers (the maintainer: "if my mouse is not resting over the
-	// asset block or its tooltip, the tooltip needs to instantly disappear").
+	// true so the tooltip lingers (Requirement: when the pointer is over neither the asset
+	// block nor its tooltip, the tooltip disappears at once).
 	// A capture-phase document `pointerover` fires on every element boundary
 	// the pointer crosses; if the new target is inside neither region, close
 	// now (no 140ms bridge). Only a `pinned` (tap-toggle) tooltip is exempt —
 	// it has its own outside-tap dismiss. A tooltip merely held open by focus
 	// is NOT exempt: `pointerover` only fires when a MOUSE moves, so a mouse
 	// roaming away should dismiss even if the trigger still holds focus.
-	// cp512 [P4]: clicking a Step-1 asset block to SELECT it focuses the
+	// clicking a Step-1 asset block to SELECT it focuses the
 	// block, which previously left the explainer stuck open until you clicked
 	// elsewhere. Keyboard users never move a mouse, so their focus-opened
 	// tooltips are untouched. We also clear the focus/hover flags so
@@ -379,7 +379,7 @@
 	{/if}
 
 	{#if open}
-		<!-- cp427 — the panel is PORTALED to <body> and FIXED-positioned, so it
+		<!-- the panel is PORTALED to <body> and FIXED-positioned, so it
 		     floats above every card / stacking context ("on top of everything")
 		     and its horizontal origin is clamped to the viewport ("visible near
 		     the edge / page fold"). The outer div anchors flush to the trigger

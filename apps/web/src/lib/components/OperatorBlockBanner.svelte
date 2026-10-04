@@ -10,7 +10,8 @@
 
 	Lifecycle:
 	  • Subscribes to `identity` so we re-fetch when the user signs
-	    in or out.  No fetch when not signed in.
+	    in or out.  No fetch without a session (a remembered account
+	    name on a locked visit is not a session).
 	  • Calls /v1/operator-blocks/by-blocked/:account once per
 	    sign-in event.  No polling — operator blocks are
 	    chain-driven and rare; a stale-by-one-page-load cache is
@@ -32,13 +33,13 @@
 	import { _ } from 'svelte-i18n';
 	import { browser } from '$app/environment';
 	import { identity } from '$stores/identity';
-	import { getUserBlurtAccount } from '$blurt/ops/profile';
+	import { sessionAccountName } from '$stores/sessionAccount';
 	import { getOperatorBlockStatus, type OperatorBlockStatus } from '$lib/indexer/client';
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 
-	// Part 121 cp7 — per-locale internal-link wrapper. cp242: the
+	// per-locale internal-link wrapper. the
 	// "contact the operator" link below was a bare `/inbox/<operator>` —
 	// a route that does not exist AND a bare 2-segment path (which the
 	// [lang]/+layout invalid-locale redirect cannot rescue, unlike a
@@ -69,9 +70,9 @@
 	async function refresh(): Promise<void> {
 		if (!browser) return;
 		const myGen = ++fetchGen;
-		const acct = getUserBlurtAccount();
+		const acct = sessionAccountName();
 		if (!acct) {
-			// Signed out — clear the banner.  This write is unguarded
+			// Signed out or locked — clear the banner.  This write is unguarded
 			// (no async wait) so it can't be raced.
 			status = null;
 			return;
@@ -81,7 +82,7 @@
 		// OR if the user signed out / switched account in the
 		// meantime.
 		if (myGen !== fetchGen) return;
-		if (getUserBlurtAccount() !== acct) return;
+		if (sessionAccountName() !== acct) return;
 		if (!result.ok) {
 			// Network / shape error.  Stay silent.
 			return;

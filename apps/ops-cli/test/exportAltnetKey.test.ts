@@ -1,6 +1,6 @@
 /**
  * `export-altnet-key --out` never writes the plaintext key into a file someone
- * else already made (v1.18.0 deep-deep, ops-6).
+ * else already made.
  *
  * It did `writeFileSync(out, key, { mode: 0o600 })` then chmod. Mode applies
  * only to a NEW file: a file another user pre-created at the predictable path

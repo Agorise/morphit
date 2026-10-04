@@ -5,9 +5,9 @@
  *
  * Why this exists: bash sidecars are written by hand, and the
  * emit() helper format can silently drift from what classifier
- * + parseJournalLine expect.  The cp9 codebase had this exact
- * bug at the start of cp10 (uppercase event names + made-up
- * payload keys).  The cp10 fix rewrote classifier.ts to use
+ * + parseJournalLine expect.  The codebase had this exact
+ * bug at the start of (uppercase event names + made-up
+ * payload keys).  The fix rewrote classifier.ts to use
  * real event names + payload keys verified by grep across emit
  * sites.  This smoke is the regression test that locks it down.
  *
@@ -143,8 +143,8 @@ function runSidecar(spec: SidecarSpec, mockBinDir: string): RunResult {
 	const r: SpawnSyncReturns<string> = spawnSync('sh', [scriptPath], {
 		env,
 		encoding: 'utf-8',
-		// Per-sidecar wall-clock budget.  Bumped 30s → 60s in cp22
-		// after the cp21 disclosure that ~1 in 7 pulses flaked at
+		// Per-sidecar wall-clock budget.  Bumped 30s → 60s
+		// after the disclosure that ~1 in 7 pulses flaked at
 		// 2,881 scenarios (smoke total -24, matching this smoke's
 		// scenario count).  Root cause was apt-monitor.sh's
 		// `apt-get update` occasionally stalling past 30s under
@@ -181,7 +181,7 @@ for (const spec of SIDECARS) {
 			if (r.status !== 0) {
 				// Surface the signal explicitly when set — spawnSync's
 				// timeout fires SIGTERM, and `exited null` alone is
-				// hard to debug.  Per Part 121 cp22 disclosure post-
+				// hard to debug.  Per disclosure post-
 				// mortem.
 				const sigSuffix = r.signal ? ` (signal=${r.signal})` : '';
 				return {
@@ -270,12 +270,12 @@ for (const spec of SIDECARS) {
 	});
 }
 
-// ─── cp22 regression sentinel: timeout discipline ──────────────
+// ─── regression sentinel: timeout discipline ──────────────
 //
-// Per Part 121 cp21 disclosure, this smoke flaked ~1 pulse in
+// Per disclosure, this smoke flaked ~1 pulse in
 // ~7 with a 24-scenario drop matching this smoke's size.  Root
 // cause was apt-monitor.sh's `apt-get update` occasionally
-// exceeding the 30s spawnSync budget.  Two-layer fix (cp22):
+// exceeding the 30s spawnSync budget.  Two-layer fix:
 //   (a) apt-monitor.sh wraps `apt-get update` in `timeout 20`
 //       so a slow mirror can't blow the smoke budget
 //   (b) this smoke's spawnSync timeout is now 60_000ms

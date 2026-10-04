@@ -1,5 +1,5 @@
 /**
- * Smoke — /v1/fx endpoint (cp372).
+ * Smoke — /v1/fx endpoint.
  *
  * Verifies the public USD→fiat endpoint serves the whole cached
  * table (privacy: client picks its own currency, no per-currency

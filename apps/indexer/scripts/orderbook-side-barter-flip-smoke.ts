@@ -1,7 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Smoke: the orderbook "I want to see" side filter flips BARTER's direction
- * (the maintainer, t.txt v1.8.16 #3).
+ * Smoke: the orderbook "I want to see" side filter flips BARTER's direction.
  *
  * The filter options are phrased in CRYPTO terms — "posts wanting to buy crypto"
  * / "…sell crypto". For an ordinary crypto/fiat order, `o.side` already IS the
@@ -17,7 +16,8 @@
  *   - the SQL is two index-usable equality branches keyed on `o.asset`;
  *   - BARTER is the SOLE goods asset (so the 'BARTER' literal is exhaustive);
  *   - all THREE orderbook surfaces — snapshot (orderbook.ts), live SSE stream
- *     (orderbookStreamHelpers.ts) and RSS (rssOrderbookHandlers.ts) — call the
+ *     and RSS (rssOrderbookHandlers.ts) — take the side clause from
+ *     orderbookStreamHelpers.buildWhereClauses, which calls the
  *     shared helper and NONE keeps a raw `o.side = ${p(...)}` clause, so they
  *     can never drift apart on barter.
  *
@@ -112,13 +112,19 @@ function strip(src: string): string {
 		.filter((l) => !l.trim().startsWith('*') && !l.trim().startsWith('//'))
 		.join('\n');
 }
+// orderbookStreamHelpers.buildWhereClauses holds the side clause; the REST
+// orderbook and the feeds take their WHERE from it.
 for (const file of ['orderbook.ts', 'orderbookStreamHelpers.ts', 'rssOrderbookHandlers.ts']) {
 	const code = strip(readFileSync(join(API, file), 'utf8'));
-	check(`${file} calls cryptoFacingSideWhere`, /cryptoFacingSideWhere\s*\(/.test(code));
-	check(
-		`${file} imports it from $api/shared`,
-		/import\s*\{[^}]*cryptoFacingSideWhere[^}]*\}\s*from\s*'\$api\/shared'/.test(code)
-	);
+	if (file === 'orderbookStreamHelpers.ts') {
+		check(`${file} calls cryptoFacingSideWhere`, /cryptoFacingSideWhere\s*\(/.test(code));
+		check(
+			`${file} imports it from $api/shared`,
+			/import\s*\{[^}]*cryptoFacingSideWhere[^}]*\}\s*from\s*'\$api\/shared'/.test(code)
+		);
+	} else {
+		check(`${file} builds its WHERE with buildWhereClauses`, /buildWhereClauses\s*\(/.test(code));
+	}
 	check(
 		`${file} keeps NO raw \`o.side = \${p(...)}\` clause (can't drift from the flip)`,
 		!/o\.side\s*=\s*\$\{\s*p\(/.test(code)

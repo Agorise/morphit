@@ -7,8 +7,7 @@ import {
 	FEE_TOLERANCE,
 	FEE_RECIPIENT,
 	resolveFeeRecipient,
-	feeTransfersFor,
-	sybilTierCount
+	feeTransfersFor
 } from './fee';
 
 /**
@@ -105,7 +104,7 @@ describe('computeFee', () => {
 	});
 });
 
-// cp407 — federated operators earn 90% of BLURT fees and advertise their own
+// federated operators earn 90% of BLURT fees and advertise their own
 // fee account at /v1/instance.fee_recipient. The frontend must pay exactly that
 // (so it matches what the operator's indexer verifies), and fall back to the
 // canonical treasury only when the advertised value is missing or malformed
@@ -139,7 +138,7 @@ describe('resolveFeeRecipient', () => {
 });
 
 /**
- * cp408 — payment-time federation split. `feeTransfersFor` builds the actual
+ * payment-time federation split. `feeTransfersFor` builds the actual
  * transfer legs the fee tx carries. The indexer's `sumFeeTransfers` /
  * `canonicalShareOk` verify exactly what this produces, so the two must agree.
  */
@@ -213,39 +212,5 @@ describe('feeTransfersFor', () => {
 		const legs = feeTransfersFor(0.004, 'op-node', CANON);
 		expect(legs).toHaveLength(1);
 		expect(legs[0]!.to).toBe(CANON);
-	});
-});
-
-/**
- * v1.20.0 (G2) — the Sybil-tier count must not include orders that merely
- * EXPIRED. The indexer never writes status='expired', so an expired order
- * still reads status 'live'; counting it compounded the quote 1.5× per
- * expired order (12 expired → a 16× fee).
- */
-describe('sybilTierCount (G2)', () => {
-	const NOW = Date.parse('2026-09-27T12:00:00Z');
-	const DAY = 86_400_000;
-	const iso = (ms: number) => new Date(ms).toISOString();
-
-	it('ignores live-stored orders whose expires_at has passed (older than 24h)', () => {
-		const expired = Array.from({ length: 12 }, (_, i) => ({
-			status: 'live',
-			created_at: iso(NOW - (60 - i) * DAY),
-			expires_at: iso(NOW - (53 - i) * DAY)
-		}));
-		expect(sybilTierCount(expired, NOW)).toBe(0);
-		expect(computeFee(sybilTierCount(expired, NOW) + 1, 62.5).multiplier).toBe(1);
-	});
-
-	it('counts unexpired live orders, no-expiry live orders, and anything from the last 24h', () => {
-		const orders = [
-			{ status: 'live', created_at: iso(NOW - 10 * DAY), expires_at: iso(NOW + DAY) },
-			{ status: 'live', created_at: iso(NOW - 10 * DAY), expires_at: null },
-			{ status: 'cancelled', created_at: iso(NOW - 3_600_000), expires_at: null },
-			{ status: 'live', created_at: iso(NOW - 3_600_000), expires_at: iso(NOW - 60_000) },
-			{ status: 'cancelled', created_at: iso(NOW - 3 * DAY), expires_at: null },
-			{ status: 'completed', created_at: iso(NOW - 3 * DAY), expires_at: null }
-		];
-		expect(sybilTierCount(orders, NOW)).toBe(4);
 	});
 });

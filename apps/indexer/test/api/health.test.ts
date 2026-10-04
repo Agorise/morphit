@@ -7,7 +7,7 @@
  * it with fetch-style requests.
  *
  * Coverage:
- *   - Baseline shape (status/version/blocks/lag/stale fields)
+ *   - Public shape (no host facts) vs the local caller's shape
  *   - `degraded` status when lag exceeds the configured threshold
  *   - Verbose diagnostics included when config.verboseHealth=true
  *   - Verbose diagnostics included when ?verbose=1 is on the URL
@@ -44,7 +44,7 @@ function fakeConfig(overrides: Partial<Config> = {}): Config {
 
 /**
  * Build a Poller stand-in with the minimal surface healthRoute
- * uses: getStatus() + explorerHealthSnapshot.  cp166 — the old
+ * uses: getStatus() + explorerHealthSnapshot.  the old
  * shared CircuitBreaker was replaced by per-verifier EndpointPool
  * instances; the poller now merges their snapshots into one list.
  * For tests, we inject the merged list directly so the diagnostic
@@ -127,11 +127,12 @@ async function getHealth(
 	cfg: Config,
 	poller: Poller,
 	query = '',
-	priceSource: BlurtPriceSource | null = fakePriceSource()
+	priceSource: BlurtPriceSource | null = fakePriceSource(),
+	local = false
 ): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
 	const app = healthRoute(cfg, poller, priceSource);
 	const url = `http://localhost/${query ? '?' + query : ''}`;
-	const res = await app.request(url);
+	const res = await app.request(url, local ? { headers: { 'x-morphit-local-health': '1' } } : {});
 	const body = (await res.json()) as Record<string, unknown>;
 	return { status: res.status, body, headers: res.headers };
 }
@@ -139,19 +140,43 @@ async function getHealth(
 // ─── Tests ──────────────────────────────────────────────────────
 
 describe('healthRoute — baseline shape', () => {
-	it('returns the expected top-level fields', async () => {
+	it('the PUBLIC body is status, chain position and coarse booleans — nothing about the host', async () => {
 		const { status, body } = await getHealth(fakeConfig(), fakePoller());
 		expect(status).toBe(200);
+		expect(Object.keys(body).sort()).toEqual(
+			[
+				'status',
+				'chain_head_block',
+				'indexed_block',
+				'lag_blocks',
+				'lag_blocks_note',
+				'stale',
+				'sync',
+				'rpc_ok',
+				'ipfs_seeding',
+				'relay',
+				'price_feed'
+			].sort()
+		);
+		expect(Object.keys(body.sync as object).sort()).toEqual(
+			['behind', 'pct_complete', 'eta_seconds', 'eta_utc'].sort()
+		);
+		expect(Object.keys(body.ipfs_seeding as object)).toEqual(['state']);
+		expect(Object.keys(body.relay as object)).toEqual(['up']);
+	});
+
+	it('a LOCAL caller (X-Morphit-Local-Health: 1) also gets version, uptime, RPC counts and host figures', async () => {
+		const { body } = await getHealth(fakeConfig(), fakePoller(), '', fakePriceSource(), true);
 		expect(body).toMatchObject({
 			status: 'ok',
 			uptime_sec: expect.any(Number),
-			chain_head_block: expect.any(Number),
-			indexed_block: expect.any(Number),
-			lag_blocks: expect.any(Number),
-			lag_blocks_note: expect.any(String),
-			stale: expect.any(Boolean),
-			version: expect.any(String)
+			version: expect.any(String),
+			rpc_endpoints_healthy: expect.any(Number),
+			rpc_endpoints_total: expect.any(Number),
+			system: expect.any(Object)
 		});
+		expect((body.sync as { blocks_per_sec?: unknown }).blocks_per_sec).toEqual(expect.any(Number));
+		expect((body.ipfs_seeding as { detail?: unknown }).detail).toEqual(expect.any(String));
 	});
 
 	it('reports ok status when lag is within threshold', async () => {
@@ -202,16 +227,19 @@ describe('healthRoute — baseline shape', () => {
 	});
 
 	it('includes a non-verbose price_feed summary when a price source is present', async () => {
-		// cp365 — `morphit-ops health` reads this without the verbose
+		// `morphit-ops health` reads this without the verbose
 		// token.  Nothing sensitive: the price is already public via
 		// /v1/listing-fee.
 		const { body } = await getHealth(fakeConfig(), fakePoller());
-		expect(body.price_feed).toMatchObject({
+		expect(body.price_feed).toEqual({
 			enabled: true,
 			blurt_fiat: 0.002,
-			source: 'test_static',
+			denomination_fiat: undefined,
 			stale: false
 		});
+		// Which upstream serves it is for a local caller only.
+		const local = await getHealth(fakeConfig(), fakePoller(), '', fakePriceSource(), true);
+		expect(local.body.price_feed).toMatchObject({ source: 'test_static' });
 	});
 
 	it('reports price_feed.enabled=false when the feed is disabled (null source)', async () => {
@@ -224,7 +252,8 @@ describe('healthRoute — baseline shape', () => {
 			fakeConfig(),
 			fakePoller(),
 			'',
-			fakePriceSource({ stale: true, price: 0.0015, source: 'static_floor' })
+			fakePriceSource({ stale: true, price: 0.0015, source: 'static_floor' }),
+			true
 		);
 		expect(body.price_feed).toMatchObject({
 			enabled: true,
@@ -312,7 +341,7 @@ describe('healthRoute — verbose diagnostics', () => {
 });
 
 describe('healthRoute — explorer diagnostics reflect EndpointPool state', () => {
-	// cp166 — was driven by a real CircuitBreaker; the breaker
+	// was driven by a real CircuitBreaker; the breaker
 	// class is gone (per-verifier EndpointPool replaces it).
 	// Diagnostic state is now sourced from the poller's
 	// `explorerHealthSnapshot` accessor which is a merged list of
@@ -326,7 +355,7 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 			consecutiveFailures: 0,
 			cooldownUntil: 0,
 			lastSuccessAt: 0,
-			// cp474 — the RPS pacer's per-endpoint cursor. The health endpoint
+			// the RPS pacer's per-endpoint cursor. The health endpoint
 			// projects named fields rather than spreading EndpointState, so this
 			// never reaches the wire; it's here because the factory is TYPED, which
 			// is what made tsc flag the new field rather than let it drift.
@@ -424,7 +453,7 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 	});
 
 	// ── beta5: the Blurt RPC pool (block feed) exposed on /v1/health ──
-	it('reports compact rpc_endpoints_healthy / _total on the PUBLIC body', async () => {
+	it('reports rpc_ok publicly, and the healthy / total counts to a local caller', async () => {
 		const { body } = await getHealth(
 			fakeConfig({ verboseHealth: false }),
 			fakePoller({
@@ -437,12 +466,16 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 						cooldownUntil: Date.now() + 30_000
 					})
 				]
-			})
+			}),
+			'',
+			fakePriceSource(),
+			true
 		);
-		// Available even without verbose (this is the at-a-glance triage signal).
+		// Available without verbose (the at-a-glance triage signal), to the box.
 		expect(body.rpc_endpoints_total).toBe(3);
 		expect(body.rpc_endpoints_healthy).toBe(2);
-		// Per-endpoint detail must NOT leak onto the public body.
+		expect(body.rpc_ok).toBe(true);
+		// Per-endpoint detail must NOT leak onto the non-verbose body.
 		expect(body.diagnostics).toBeUndefined();
 	});
 
@@ -454,10 +487,14 @@ describe('healthRoute — explorer diagnostics reflect EndpointPool state', () =
 					ep('https://rpc.a.example', { cooldownUntil: Date.now() + 10_000 }),
 					ep('https://rpc.b.example', { cooldownUntil: Date.now() + 10_000 })
 				]
-			})
+			}),
+			'',
+			fakePriceSource(),
+			true
 		);
 		expect(body.rpc_endpoints_total).toBe(2);
 		expect(body.rpc_endpoints_healthy).toBe(0);
+		expect(body.rpc_ok).toBe(false);
 	});
 
 	it('exposes full rpc_endpoints detail (url/state/latency) in the verbose block', async () => {
@@ -614,7 +651,7 @@ describe('healthRoute — price source diagnostics', () => {
 	});
 });
 
-// ─── cp381: operator-only per-source price-feed health ──────────
+// ─── operator-only per-source price-feed health ──────────
 describe('healthRoute — operator-only price_feeds (cp381)', () => {
 	// A crypto source that reports per-provider health, including each
 	// provider's last reading (the price the morphit-ops view shows).

@@ -1,11 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Morphit — chat inbox motion smoke (v1.7.7, t.txt #4).
+ * Morphit — chat inbox motion smoke (v1.7.7).
  *
- * [the maintainer]: "on chat page, whenever a message appears or disappears (manually or
- * dynamically/automatically) from Inbox, Starred, or Archived, please use a
- * smooth slide-in or slide-out effect so the eye can see easier what is
- * happening."
+ * Requirement: a message entering or leaving Inbox, Starred or Archived (by hand or
+ * automatically) slides in or out smoothly, so the eye can follow it.
  *
  * THE TRAP THIS FILE MOSTLY EXISTS FOR — reduced motion looks handled and isn't.
  *
@@ -45,7 +43,7 @@ const css = read('apps/web/src/app.css');
 check(
 	'1 inbox cards slide in and out',
 	/transition:slide=\{\{ duration: cardSlideDuration\(\) \}\}/.test(page),
-	"the maintainer: 'so the eye can see easier what is happening'"
+	'cards move, so the eye can follow what is happening'
 );
 check(
 	'2 the slide honours prefers-reduced-motion EXPLICITLY',

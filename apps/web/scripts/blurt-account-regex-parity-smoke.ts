@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * blurt-account-regex-parity — cp175 F-007 guard.
+ * blurt-account-regex-parity — guard.
  *
  * The Blurt account-name shape validator (BLURT_ACCOUNT_RE /
  * ACCOUNT_NAME_RE / BROADCAST_ACCOUNT_RE) is inlined in ~12 frontend
@@ -14,7 +14,7 @@
  * security hole (chain is the authority) but an inconsistent UX, so
  * F-007 aligned every copy to one canonical form.
  *
- * cp176: that canonical form had a latent flaw — its final character
+ * that canonical form had a latent flaw — its final character
  * class still admitted a trailing dash or dot, but real Blurt account
  * names must end alphanumeric (the indexer asset-registry smoke caught
  * `addressValidator('trailing-')` returning true).  The canonical was
@@ -33,8 +33,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
 
-// cp176: the guard now spans EVERY workspace that inlines the Blurt
-// account-name shape — not just apps/web/src.  The cp175 divergence
+// the guard now spans EVERY workspace that inlines the Blurt
+// account-name shape — not just apps/web/src.  The divergence
 // (registry.ts) slipped through because the old guard walked only
 // apps/web AND matched only NAMED `*_RE` consts, so it never saw the
 // indexer/relay/mcp-server copies nor the inline `.test()`/`.regex()`
@@ -42,13 +42,19 @@ const REPO = resolve(HERE, '..', '..', '..');
 // literals — KEY_RE `[a-z0-9_]+`, NUMERIC_SUFFIX_RE, a URI-scheme
 // matcher — share neither the `*ACCOUNT*_RE` name nor the dot-dash
 // `[a-z0-9.-]{` class signature, so neither matcher below trips them.)
+// The shared packages too (asset-registry, indexer-client, relay-client, …):
+// a copy there ships to every app that imports it.
+const PACKAGE_SRC_ROOTS = existsSync(resolve(REPO, 'packages'))
+	? readdirSync(resolve(REPO, 'packages')).map((d) => `packages/${d}/src`)
+	: [];
 const SRC_ROOTS = [
 	'apps/web/src',
 	'apps/indexer/src',
 	'apps/relay/src',
 	'apps/mcp-server/src',
 	'apps/ops-cli/src',
-	'apps/matrix-bot/src'
+	'apps/matrix-bot/src',
+	...PACKAGE_SRC_ROOTS
 ]
 	.map((p) => resolve(REPO, p))
 	.filter((p) => existsSync(p));
@@ -59,7 +65,7 @@ const CANONICAL = '/^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/';
 //  (1) NAMED — `const NAME_RE = /…/` where NAME is *ACCOUNT*_RE /
 //      *ACCOUNT_NAME_RE / BROADCAST_ACCOUNT_RE.  Name-gated, so it
 //      stays robust even if a copy diverged to a different CHARACTER
-//      CLASS (e.g. dropped the dot) — the cp175-style regression.
+//      CLASS (e.g. dropped the dot) — the regression.
 //  (2) INLINE — any account-shaped literal carrying the dot-dash
 //      class+quantifier signature `[a-z0-9.-]{`, confirmed UNIQUE to
 //      the account regex.  Catches the nameless `/…/.test(x)` and
@@ -129,9 +135,9 @@ for (const root of SRC_ROOTS) {
 }
 
 if (found.length < 25) {
-	bad('discovery', `expected ≥25 account-name regex literals across web/indexer/relay/mcp-server, found ${found.length}. If validators were refactored to a shared module, update/retire this sentinel.`);
+	bad('discovery', `expected ≥25 account-name regex literals across the apps and packages, found ${found.length}. If validators were refactored to a shared module, update/retire this sentinel.`);
 } else {
-	ok(`discovered ${found.length} Blurt account-name regex literal(s) across web/indexer/relay/mcp-server`);
+	ok(`discovered ${found.length} Blurt account-name regex literal(s) across the apps and packages`);
 }
 
 // Every literal must equal the canonical form.

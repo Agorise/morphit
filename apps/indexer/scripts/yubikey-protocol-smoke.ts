@@ -2,8 +2,8 @@
 /**
  * Smoke for YubiKey unlock protocol — Batch I, ADR-0017.
  *
- * Sandbox lacks libsodium-wrappers-sumo; the wrap/unwrap math
- * (Argon2id, ChaCha20-Poly1305) cannot be exercised here.  What
+ * This smoke does not load libsodium-wrappers-sumo, so the wrap/unwrap
+ * math (Argon2id, ChaCha20-Poly1305) is not exercised here.  What
  * this smoke DOES cover, which is the protocol-level invariants
  * production also relies on:
  *

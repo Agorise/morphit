@@ -62,16 +62,6 @@ import {
 
 const log = logger('chat-stream');
 
-/** Opt-in SSE fast-forward tracing (MORPHIT_CHAT_DEBUG=1). Shows, per
- *  OPEN client connection, whether an emitted fast-path event matched
- *  this connection's (lo, hi) filter and was pushed. Pinpoints a
- *  subscription/filter mismatch between "tailer emitted" and "client
- *  received". Metadata only. */
-const CHAT_DEBUG = process.env.MORPHIT_CHAT_DEBUG === '1';
-function streamDbg(event: string, data: Record<string, unknown>): void {
-	if (CHAT_DEBUG) log.info(event, data);
-}
-
 /** Backstop poll interval — catches messages the bus missed.
  *  60s matches the orderbook stream; chat is more
  *  latency-sensitive but at <1msg/s typical the bus path is
@@ -114,7 +104,7 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 		order_permlink: string | null;
 	}>(sql, [f.lo, f.hi]);
 	// pg returns BIGINT-as-string for id::text; coerce to JS number.
-	// cp138 A-3 correction: schema declares chat_messages.id as
+	// correction: schema declares chat_messages.id as
 	// BIGSERIAL (not SERIAL as a prior comment claimed).  Range is
 	// 2^63 (max ~9.2e18); JS Number.MAX_SAFE_INTEGER is 2^53 (~9e15).
 	// At Morphit's projected message volume — even very optimistic
@@ -122,8 +112,8 @@ async function fetchSnapshot(db: Database, f: ChatStreamFilter): Promise<ChatStr
 	// generation, so parseInt is safe in practice.  If we ever
 	// approach 2^53 messages, this codepath needs to switch to
 	// string-based ids end-to-end (DB → wire → client) since JSON
-	// has no native bigint.  cp138 R-1 tracks this in
-	// REVISIT-LIST.md as "bigint id propagation, post-launch
+	// has no native bigint.  A later change tracks this in
+	// the project backlog as "bigint id propagation, post-launch
 	// scaling work."  Reverse the list to match the wire-format
 	// expectation of newest-first.
 	return result.rows.map((r) => ({
@@ -239,7 +229,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 		// silently dropping events).
 		let snapshotSent = false;
 		const pendingDuringSnapshot: ChatEvent[] = [];
-		// cp403 [1] — parallel queue for head-block fast-path events that
+		// parallel queue for head-block fast-path events that
 		// arrive before the snapshot is sent. Drained right after the
 		// snapshot, same as pendingDuringSnapshot. Carries the full
 		// payload (fast events have no DB row to re-fetch).
@@ -314,7 +304,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					}
 				};
 
-				/** cp403 [1] — push a head-block fast-path message as a
+				/** push a head-block fast-path message as a
 				 *  PROVISIONAL message_appended. The message isn't in the
 				 *  DB yet (it's not irreversible), so it carries id:0 and
 				 *  the full payload from the event. The client dedupes it
@@ -368,22 +358,16 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					void processMessage(ev.messageId);
 				});
 
-				// cp403 [1] — subscribe to the fast path too: the head tailer
+				// subscribe to the fast path too: the head tailer
 				// (always on since ADR-0051) and verified peer pushes both emit
 				// here. Same queue-during-snapshot discipline; carries the full
 				// payload so there's no DB fetch.
 				unsubscribeFastBus = chatEventBus.onFast((ev) => {
 					if (cancelled) return;
+					// (A temporary MORPHIT_CHAT_DEBUG trace here logged every chat
+					// pair — who wrote to whom, and who had a chat open — for each
+					// open connection. Removed: the server keeps no such record.)
 					const matches = eventMatchesFilter(ev, filter);
-					streamDbg('stream.fastEvent', {
-						connFilter: { lo: filter.lo, hi: filter.hi },
-						evPair: { lo: ev.lo, hi: ev.hi },
-						sender: ev.sender,
-						recipient: ev.recipient,
-						matches,
-						snapshotSent,
-						willPush: matches && snapshotSent
-					});
 					if (!matches) return;
 					if (!snapshotSent) {
 						if (pendingFastDuringSnapshot.length >= PENDING_DURING_SNAPSHOT_CAP) {
@@ -409,7 +393,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					// events the indexer hasn't durably stored yet.
 					//
 					// The fast path never writes chat_messages, so it only ever
-					// helped a chatroom that was ALREADY open. the maintainer's tester3 was
+					// helped a chatroom that was ALREADY open. tester3 was
 					// on another tab: push in ~6s, tap through, and the chatroom
 					// loaded a DB snapshot that didn't have the message — "about a
 					// minute to actually appear on tester3's chatroom page".
@@ -476,7 +460,7 @@ export function chatStreamRoute(db: Database, poller: Poller): Hono {
 					void processMessage(ev.messageId);
 				}
 
-				// cp403 [1] — drain fast-path events that arrived during
+				// drain fast-path events that arrived during
 				// the snapshot. Order relative to the durable drain doesn't
 				// matter: the client sorts by created_at and dedupes by
 				// client_tag, so a provisional and its durable twin collapse

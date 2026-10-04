@@ -4,7 +4,7 @@
  *
  * Walk apps/web/build/ recursively and emit a SHA-256 manifest of
  * every emitted file.  TWO output formats, for two DISTINCT purposes
- * — do not confuse them (cp319 fixed a launch-path mix-up where the
+ * — do not confuse them (a later change fixed a launch-path mix-up where the
  * release op was fed the wrong one):
  *
  *   1. DEFAULT (no flag) — reproducible-build fingerprint.
@@ -71,7 +71,7 @@ const DEFAULT_RELEASE_OUT = join(WEB_ROOT, 'build-manifest.release.json');
 /** Mirror of @morphit/release-schema MANIFEST_MAX_SERIALIZED_BYTES.
  *  Kept in sync by build-manifest-release-json-smoke (which also runs
  *  the real validateReleasePayload, so a drift here is caught).
- *  cp430: aligned to the indexer's real per-field JSONB cap (4096) —
+ *  aligned to the indexer's real per-field JSONB cap (4096) —
  *  the on-chain manifest is a tamper-critical SUBSET (shell + entry +
  *  service worker); full per-file coverage is the served /verify.json. */
 const MANIFEST_MAX_SERIALIZED_BYTES = 4096;
@@ -114,7 +114,7 @@ export async function computeManifest(buildDir) {
 }
 
 /** Reproducible-build fingerprint: `<hex>  ./<rel>` per line, sorted.
- *  Byte-identical to the pre-cp319 default output. */
+ *  Byte-identical to the older default output. */
 export function renderSha256sumText(entries) {
 	return entries.map((e) => `${e.hex}  ./${e.rel}`).join('\n') + '\n';
 }
@@ -132,7 +132,7 @@ function normalizePrefix(p) {
  * by key.  Optionally scoped to entries whose path starts with one of
  * `prefixes`.  Returns the manifest OBJECT (caller serializes).
  *
- * cp474 — the JSDoc types below are load-bearing, not decoration: with
+ * the JSDoc types below are load-bearing, not decoration: with
  * `prefixes = []` and no annotation, TypeScript infers the default as
  * `never[]`, so every typed caller passing real prefixes was an error the
  * moment `scripts/**` started being typechecked.

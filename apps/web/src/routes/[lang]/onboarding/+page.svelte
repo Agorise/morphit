@@ -12,12 +12,12 @@
 	import Head from '$components/Head.svelte';
 	import SignupProgress from '$components/SignupProgress.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
-	// cp165 byte-budget: SeedBackupPrint only renders after the user
+	// byte-budget: SeedBackupPrint only renders after the user
 	// clicks "Show seed" — a one-time onboarding action.  Defer the
 	// ~9 KB component until then.
 	// import SeedBackupPrint from '$components/SeedBackupPrint.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	// cp165: lazy ConfirmModal (only renders on leave-with-pending-state prompt)
+	// lazy ConfirmModal (only renders on leave-with-pending-state prompt)
 	// import ConfirmModal from '$components/ConfirmModal.svelte';
 	import {
 		generateIdentity,
@@ -36,7 +36,6 @@
 	import { scorePassword, isPasswordAcceptable } from '$lib/auth/passwordStrength';
 
 	type Stage = 'choose' | 'generating' | 'review' | 'confirm' | 'done';
-	type Path = 'reputation' | 'anonymous';
 
 	let stage = $state<Stage>('choose');
 
@@ -63,7 +62,7 @@
 	let wroteDown = $state(false);
 	let understand = $state(false);
 
-	// cp165: lazy SeedBackupPrint (only rendered after Show Seed click)
+	// lazy SeedBackupPrint (only rendered after Show Seed click)
 	const loadSeedBackupPrint = () =>
 		import('$components/SeedBackupPrint.svelte').then((m) => m.default);
 	// Same byte-budget treatment for the 4-key backup panel — only pulled
@@ -110,18 +109,13 @@
 	 *  navigate). Drives the submit button's busy state. */
 	let quizSubmitting = $state(false);
 
-	async function pickPath(_path: Path): Promise<void> {
-		// `_path` is currently unused — the reputation-vs-anonymous
-		// branching is downstream of identity generation (it shows
-		// up in the post-onboarding review copy and in whether the
-		// user is nudged to register a name).  Kept as a parameter
-		// so the call sites remain self-documenting and so a future
-		// path-aware generation can wire in without touching the
-		// callers.
+	/** Create the one identity the user trades under. (There is no
+	 *  per-trade identity mode: every trade of an account is linked to it.) */
+	async function createIdentity(): Promise<void> {
 		stage = 'generating';
 		errorMsg = '';
 		try {
-			// Tier 4.3 (Part 89): 600ms min-visibility on the spinner.
+			// Tier 4.3: 600ms min-visibility on the spinner.
 			// On fast machines `generateIdentity()` resolves in <1
 			// frame, so the user sees the spinner flash and then the
 			// seed phrase appear instantly — which reads as "did
@@ -429,7 +423,7 @@
 		}
 		password = '';
 		// Reset the auxiliary review-stage state so re-entering
-		// `review` from a fresh `pickPath` call doesn't carry over
+		// `review` from a fresh `createIdentity` call doesn't carry over
 		// stale checkbox or quiz state.
 		wroteDown = false;
 		understand = false;
@@ -452,7 +446,7 @@
 
 	const avatarUri = $derived(live ? identiconDataUri(live.posting.publicKey, 96) : '');
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	// From the active-locale STORE (not $page.data.lang) so an in-place
@@ -463,7 +457,7 @@
 	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 
-	// Signup progress (the maintainer's request): a skinny "Step X of Y" bar. The
+	// Signup progress: a skinny "Step X of Y" bar. The
 	// new-account journey is 4 steps — (1) choose path + generate keys,
 	// (2) back up seed (review), (3) confirm seed (confirm), (4) claim
 	// account name (the /onboarding/register-name route, which renders
@@ -502,28 +496,16 @@
 	{#if stage === 'choose'}
 		<section class="animate-fade-up" aria-labelledby="paths-heading">
 			<h2 id="paths-heading" class="sr-only">{$_('onboarding.paths.heading')}</h2>
-			<div class="grid gap-4 sm:grid-cols-2">
+			<div class="mx-auto grid max-w-xl gap-4">
 				<button
 					type="button"
-					onclick={() => pickPath('reputation')}
+					onclick={createIdentity}
 					class="group card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
 				>
 					<h3 class="font-display text-xl font-bold">{$_('onboarding.path_reputation.title')}</h3>
 					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_reputation.body')}</p>
 					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
 						{$_('onboarding.path_reputation.cta_hint')}
-						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
-					</p>
-				</button>
-				<button
-					type="button"
-					onclick={() => pickPath('anonymous')}
-					class="group card text-left transition hover:-translate-y-1 hover:border-morphit-emerald hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
-				>
-					<h3 class="font-display text-xl font-bold">{$_('onboarding.path_anonymous.title')}</h3>
-					<p class="mt-2 text-ink-700 dark:text-ink-200">{$_('onboarding.path_anonymous.body')}</p>
-					<p class="mt-4 flex items-center gap-1.5 font-semibold text-morphit-emerald">
-						{$_('onboarding.path_anonymous.cta_hint')}
 						<span class="nav-arrow nav-arrow-right" aria-hidden="true">⇨</span>
 					</p>
 				</button>
@@ -591,7 +573,7 @@
 					{/if}
 				</div>
 
-				<!-- Tier 1.3 follow-up (Part 92): printable backup
+				<!-- Tier 1.3 follow-up: printable backup
 				     card.  Only meaningful when the seed is currently
 				     visible (otherwise there's nothing for the user
 				     to compare the printout against, and printing an

@@ -50,7 +50,7 @@
 	import Tooltip from '$components/Tooltip.svelte';
 	import IdentityLabel from '$components/IdentityLabel.svelte';
 	import BusyButton from '$components/BusyButton.svelte';
-	// cp376 byte-budget: ConfirmModal is the leave-guard modal — it only
+	// byte-budget: ConfirmModal is the leave-guard modal — it only
 	// renders if the user tries to navigate away with an unclaimed name
 	// (an edge interaction, not part of the Step 1/Step 2 flow), so its
 	// JS is deferred out of the initial register-name bundle and loaded
@@ -73,7 +73,7 @@
 		type SignupError
 	} from '$lib/auth/signupClient';
 
-	// cp376: lazy-loader for the leave-guard ConfirmModal (see import
+	// lazy-loader for the leave-guard ConfirmModal (see import
 	// block note).  Gated in the template behind {#if leaveGuard.open}
 	// so the dynamic import fires only when the guard actually triggers.
 	const loadConfirmModal = () => import('$components/ConfirmModal.svelte').then((m) => m.default);
@@ -90,10 +90,8 @@
 		// onboarding flow itself never routes paired users to register-
 		// name — they already have an account on chain).  Send them to
 		// the orderbook where the paired-readonly experience makes
-		// sense.  ADR-0022 Option A: posting key lives on the phone,
-		// so a register-name op (account_create_with_delegation, signs
-		// with the parent's posting/active key) is not something the
-		// paired desktop can do anyway.
+		// sense.  ADR-0022 Option A: the keys live on the phone, and the
+		// account a paired desktop would register already exists.
 		if ($isPairedReadOnly) {
 			gotoLocale('/orderbook');
 			return;
@@ -411,7 +409,7 @@
 		// The user keeps their generated identity and enters a read-only
 		// exploration mode. The orderbook (and any write action — post,
 		// place order, leave feedback) shows a register prompt, so this is
-		// where they finish signup later. (cp308 F-004: Settings has no
+		// where they finish signup later. (Settings has no
 		// account-CREATION path — only on-chain name verification for
 		// imported accounts — so the register nudge lives on the trade
 		// surfaces, NOT in Settings.)
@@ -477,7 +475,7 @@
 	// json_metadata, so the profile hero falls back to the same
 	// name-seeded identicon). Before a valid name is typed (< 3 chars,
 	// the registration minimum) we fall back to the posting pubkey so the
-	// preview isn't blank. (cp323 — previously this always seeded from the
+	// preview isn't blank. (previously this always seeded from the
 	// pubkey, so the preview didn't match the post-registration avatar.)
 	const avatarUri = $derived(
 		normalizedName.length >= 3
@@ -487,7 +485,7 @@
 				: ''
 	);
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	// Active-locale STORE (not $page.data.lang) so an in-place language swap
@@ -713,7 +711,7 @@
 								{$_('onboarding.register_name.errors.daily_ceiling_voucher_step_3')}
 							</li>
 						</ol>
-						<!-- Sally finding H3 follow-up (Part 69):
+						<!-- Sally finding H3 follow-up:
 						     blurtplugin.online is a third-party
 						     Blurt-community service, not run by
 						     Morphit.  Surface the trust boundary

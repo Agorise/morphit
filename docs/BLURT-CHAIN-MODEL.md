@@ -71,7 +71,7 @@ votes, so it effectively never does.
 
 ## If you find RC/mana language elsewhere in the repo
 
-Older docs (some `docs/PHASE-3a-*`, audit notes, an OPERATIONS troubleshooting
+Older docs (early design and audit notes, an OPERATIONS troubleshooting
 line) were written with the Hive/Steem RC model in mind and are **wrong** for
 Blurt on this point. Correct them toward this document when you touch them; do
 not propagate "Blurt RC cost" / "low on mana → tx fails" phrasings.

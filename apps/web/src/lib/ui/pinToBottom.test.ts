@@ -51,10 +51,10 @@ describe('pinToBottom', () => {
 		expect(el.scrollTop).toBe(1000); // left alone
 	});
 
-	// ─── cp474 (t.txt #7) ─────────────────────────────────────────
+	// ─── ─────────────────────────────────────────
 	//
-	// the maintainer: "it STILL does not always scroll ... so that i can see the last, most
-	// recent message." The settle window used to be a fixed wall-clock deadline,
+	// Reported: it still did not always scroll the last, most recent message fully into view.
+	// The settle window used to be a fixed wall-clock deadline,
 	// which is a guess about how slow the slowest asset is. Anything that lays out
 	// after it — a web-font swap, the Payment Receipt bubble, a decrypted body —
 	// grew the list ABOVE the viewport with no re-pin left to correct it.

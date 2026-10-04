@@ -126,7 +126,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('schema drift, against a real database', (
 			).rejects.toThrow();
 			const valid = await fx.db.query<{ indisvalid: boolean }>(
 				`SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-				  WHERE c.relname = $1`,
+				  WHERE c.relname = $1 AND c.relnamespace = current_schema()::regnamespace`,
 				[DEDUP_INDEX]
 			);
 			expect(valid.rows[0]?.indisvalid, 'setup: the failed build left an invalid index').toBe(

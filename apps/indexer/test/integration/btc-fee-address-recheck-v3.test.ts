@@ -222,25 +222,41 @@ describe.skipIf(!INTEGRATION_ENABLED)('BTC fee address checks (V3-3)', () => {
 		).toEqual({ kind: 'not_awaiting' });
 	});
 
-	it('POST /v1/orders/:account/:permlink/check-fee runs the check and says when to ask again', async () => {
+	it('POST /v1/orders/:account/:permlink/check-fee starts the check in the background and says when to ask again', async () => {
 		await ins('alice', 'mine', new Date(T0 - 60_000), 8);
 		let t = T0;
+		// The background look reports the flip once it is written.
+		let noteChange!: (orderId: string) => void;
+		const changed = new Promise<string>((r) => (noteChange = r));
 		const app = feeCheckRoute({
 			db: fx.db,
 			current: () => ({
 				verifiers: { btc: watcher(new Set(['bc1qaddr8'])) },
 				amounts: { btcSatoshis: 1000 }
 			}),
-			onChange: () => {},
+			onChange: (orderId) => noteChange(orderId),
 			clock: () => t
 		});
 		const r1 = await app.request('/alice/mine/check-fee', { method: 'POST' });
 		expect(r1.status).toBe(200);
-		expect(await r1.json()).toMatchObject({ fee_status: 'verified' });
+		// The request answers at once; the explorer look runs after it.
+		expect(await r1.json()).toMatchObject({ checked: false, queued: true });
+		const status = async () =>
+			(
+				await fx.db.query<{ fee_status: string }>(
+					`SELECT fee_status FROM orders WHERE account = 'alice' AND permlink = 'mine'`
+				)
+			).rows[0]?.fee_status;
+		expect(await changed).toBe('alice/mine');
+		expect(await status()).toBe('verified');
 		t += 1_000;
 		const r2 = await app.request('/alice/mine/check-fee', { method: 'POST' });
 		expect(r2.status).toBe(200);
-		expect(await r2.json()).toMatchObject({ fee_status: 'verified', checked: false });
+		expect(await r2.json()).toMatchObject({
+			fee_status: 'verified',
+			checked: false,
+			queued: false
+		});
 		const bad = await app.request('/Alice!/mine/check-fee', { method: 'POST' });
 		expect(bad.status).toBe(400);
 	});
@@ -263,19 +279,39 @@ describe.skipIf(!INTEGRATION_ENABLED)('BTC fee address cross-check routes (V3-5)
 			   'awaiting_payment', 'btc', 'xpubA', 5, 'bc1qfive', 1000)`
 		);
 		const peerAnswer = { index: 6, address: 'bc1qsix', xpub: 'xpubA' };
-		const app = feeCheckRoute({
-			db: fx.db,
-			current: () => ({ verifiers: {}, amounts: {} }),
-			onChange: () => {},
-			crossCheck: {
-				peers: async () => [{ origin: 'https://peer.example', hidden: false }],
-				fetchJson: async () => peerAnswer
-			}
-		});
+		const appWith = (n: number) =>
+			feeCheckRoute({
+				db: fx.db,
+				current: () => ({ verifiers: {}, amounts: {} }),
+				onChange: () => {},
+				crossCheck: {
+					peers: async () =>
+						Array.from({ length: n }, (_, i) => ({
+							origin: `https://peer${i}.example`,
+							hidden: false
+						})),
+					fetchJson: async () => peerAnswer
+				}
+			});
+		const app = appWith(1);
 		const own = await app.request('/alice/a1/btc-fee');
 		expect(await own.json()).toEqual({ index: 5, address: 'bc1qfive', xpub: 'xpubA' });
 		expect((await app.request('/alice/nope/btc-fee')).status).toBe(404);
-		const cc = await app.request('/alice/a1/btc-fee-crosscheck');
-		expect(await cc.json()).toEqual({ verdict: 'disagree', asked: 1, agreeing: 0 });
+		// One dissenting peer is not a majority: a single lying or
+		// stale peer cannot flag an honest order.
+		const lone = await app.request('/alice/a1/btc-fee-crosscheck');
+		expect(await lone.json()).toEqual({
+			verdict: 'unchecked',
+			asked: 1,
+			agreeing: 0,
+			disagreeing: 1
+		});
+		const two = await appWith(2).request('/alice/a1/btc-fee-crosscheck');
+		expect(await two.json()).toEqual({
+			verdict: 'disagree',
+			asked: 2,
+			agreeing: 0,
+			disagreeing: 2
+		});
 	});
 });

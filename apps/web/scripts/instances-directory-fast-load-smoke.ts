@@ -5,7 +5,7 @@
  * v1.16.12 — a stream-first load left the page stuck on "Loading directory…" for
  * minutes when the SSE stream was slow to first-flush (WAF/proxy buffering): a
  * buffered-but-connected stream never fires `error`, so the REST fallback never
- * kicked in (the maintainer/timeapp). REST-first makes the cards appear instantly and the
+ * kicked in (timeapp). REST-first makes the cards appear instantly and the
  * stream just layers live updates over the idempotent snapshot. Pin it.
  */
 import { readFileSync } from 'node:fs';

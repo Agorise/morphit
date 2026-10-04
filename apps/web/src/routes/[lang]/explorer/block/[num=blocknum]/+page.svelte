@@ -16,7 +16,7 @@
 <script lang="ts">
 	import { localePath } from '$i18n/path';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { page } from '$app/stores';
 	import type { BlurtBlock } from '$blurt/client';
@@ -37,11 +37,19 @@
 	let errorMsg = $state('');
 	let block = $state<BlurtBlock | null>(null);
 
-	async function load(): Promise<void> {
+	/** Bumped by every load; an older load's result is dropped (the block
+	 *  number changed — "Previous block" — while it was in flight). */
+	let loadGen = 0;
+
+	async function load(num: number): Promise<void> {
+		const g = ++loadGen;
 		status = 'loading';
+		errorMsg = '';
+		block = null;
 		try {
 			// Block via the indexer (privacy: no direct RPC from the browser).
-			const r = await fetchChainBlock(resolveOrigin(MORPHIT_INDEXER_ORIGIN), blockNumber);
+			const r = await fetchChainBlock(resolveOrigin(MORPHIT_INDEXER_ORIGIN), num);
+			if (g !== loadGen) return;
 			if (r.kind === 'not_found') {
 				status = 'not_found';
 				return;
@@ -50,17 +58,21 @@
 			block = r.block;
 			status = 'ok';
 		} catch (err) {
+			if (g !== loadGen) return;
 			console.warn('[explorer/block] load failed:', err);
 			errorMsg = $_('explorer.block.error.load_failed');
 			status = 'error';
 		}
 	}
 
-	onMount(() => {
-		void load();
+	// Load whenever the route's block number changes: the page component is
+	// reused when following "Previous block" or another block link.
+	$effect(() => {
+		const num = blockNumber;
+		untrack(() => void load(num));
 	});
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);

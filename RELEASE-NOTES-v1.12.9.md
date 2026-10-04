@@ -19,5 +19,5 @@
 ## Notes
 
 - No database migration in this release.
-- The tor-only privacy work in this release (indexer hidden-only RPC + the canary routing over Tor) is code-complete but its live Tor routing was validated by shape/smoke, not end-to-end in CI — confirm on a real tor-only box that the canary's `route = tor-only (SOCKS …)` and the indexer reads only over hidden endpoints. Details in `docs/AUDIT-cp760-v1.12.9-DELTA-DEEP-DEEP.md`.
+- The tor-only privacy work in this release (indexer hidden-only RPC + the canary routing over Tor) is code-complete but its live Tor routing was validated by shape/smoke, not end-to-end in CI — confirm on a real tor-only box that the canary's `route = tor-only (SOCKS …)` and the indexer reads only over hidden endpoints. Details in an internal audit record.
 - Everything from v1.12.8 (the build-integrity banner bootstrap fix) is included.

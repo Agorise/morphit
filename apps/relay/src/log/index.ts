@@ -53,7 +53,7 @@ export type LogSink = (record: LogRecord) => void;
  *  to avoid a cross-app import (relay log is the deepest dep root
  *  in the relay process).
  *
- *  cp139-E-1: a malicious operator-configurable value (RPC endpoint
+ *  a malicious operator-configurable value (RPC endpoint
  *  URL, persistPath, etc.) or a chain-RPC error message that contains
  *  control bytes would otherwise reach the operator's terminal via
  *  textSink's bare-string emission of values without spaces.  jsonSink
@@ -128,7 +128,7 @@ function sanitizeForJournal(s: string): string {
  * appended in a machine-parseable form at the end.
  */
 export const textSink: LogSink = (r) => {
-	// cp139-E-1: sanitize module + event + each context value to
+	// sanitize module + event + each context value to
 	// strip terminal-control escapes.  Defense-in-depth against
 	// operator-configurable values (RPC URLs, file paths) that
 	// reach context fields and would otherwise emit raw to the
@@ -158,7 +158,7 @@ function formatValue(v: unknown): string {
 	if (v === null) return 'null';
 	if (v === undefined) return 'undefined';
 	if (typeof v === 'string') {
-		// cp139-E-1: bare emission (no space) skips JSON.stringify
+		// bare emission (no space) skips JSON.stringify
 		// which would have escaped control bytes.  Sanitize so a
 		// value like an operator-configured persistPath with embedded
 		// ESC can't inject terminal-control escapes into the

@@ -1,13 +1,13 @@
 /**
  * Morphit indexer — /v1/accounts/:account/reputation-receipt
  *
- * The "show your work" endpoint (cp124, H4).  Returns the FULL set
+ * The "show your work" endpoint.  Returns the FULL set
  * of inputs that go into the published weighted_rating, so any
  * third party can re-derive the score locally and verify it matches.
  *
  * WHY THIS ENDPOINT EXISTS
  * ────────────────────────
- * Pre-cp124, a reader trusted the indexer's weighted_rating output
+ * Previously, a reader trusted the indexer's weighted_rating output
  * blindly.  Different indexers maintain their own signal tables
  * (suspicious_reciprocity, related_accounts, one_way_pile_on,
  * review_concentration), so two indexers viewing the same chain
@@ -91,7 +91,8 @@ type ExclusionReason =
 	| 'suspicious_reciprocity'
 	| 'related_accounts'
 	| 'one_way_pile_on'
-	| 'review_concentration';
+	| 'review_concentration'
+	| 'superseded_by_later_review';
 
 interface ReceiptRow {
 	source_trx_id: string;
@@ -114,7 +115,7 @@ interface ReceiptResponse {
 		count_total: number; // ALL feedback rows about this subject
 		count_included: number; // rows that count toward weighted_rating
 		count_excluded: number;
-		/** cp473 — COMPLETED TRADES (both parties credited, sock-puppet-pair
+		/** COMPLETED TRADES (both parties credited, sock-puppet-pair
 		 *  filtered). A DIFFERENT number from every count above: those are
 		 *  RATINGS. This is what the 🌱 new-trader sprout keys off since v1.5.5,
 		 *  everywhere it renders.
@@ -127,7 +128,7 @@ interface ReceiptResponse {
 		trade_count: number;
 		weight_sum: number; // sum of decay weights of included rows
 		weighted_rating: number | null; // null when count_included = 0
-		// Composite reputation score + factor breakdown (cp404).
+		// Composite reputation score + factor breakdown.
 		reputation_score: number | null;
 		reputation_base: number | null;
 		reputation_bonus: number;
@@ -223,7 +224,7 @@ export function reputationReceiptRoute(db: Database): Hono {
 				  WHERE dominant_subject = $1`,
 				[account]
 			),
-			// cp473 — the account's COMPLETED-TRADE count, from the canonical
+			// the account's COMPLETED-TRADE count, from the canonical
 			// aggregate (never a local copy — see reputationJoin's warning).
 			// Scoped to this one account, so this adds a bounded lookup, not a
 			// whole-instance aggregate.
@@ -252,7 +253,14 @@ export function reputationReceiptRoute(db: Database): Hono {
 		let lastIncludedMs: number | null = null;
 		const receiptRows: ReceiptRow[] = [];
 
-		for (const row of rowsRes.rows) {
+		// One review per (reviewer, subject) counts: the reviewer's latest
+		// order-bound one (rows are in (created_at, id) order).
+		const latestOfReviewer = new Map<string, number>();
+		rowsRes.rows.forEach((row, i) => {
+			if (row.order_permlink !== null) latestOfReviewer.set(row.reviewer, i);
+		});
+
+		for (const [i, row] of rowsRes.rows.entries()) {
 			const ageMs = Math.max(0, asOfMs - row.created_at.getTime());
 			const ageDays = ageMs / MS_PER_DAY;
 			const weight = reputationDecayWeight(ageMs);
@@ -268,6 +276,8 @@ export function reputationReceiptRoute(db: Database): Hono {
 				reason = 'one_way_pile_on';
 			} else if (rcSet.has(row.reviewer)) {
 				reason = 'review_concentration';
+			} else if (latestOfReviewer.get(row.reviewer) !== i) {
+				reason = 'superseded_by_later_review';
 			}
 
 			const included = reason === null;
@@ -319,7 +329,8 @@ export function reputationReceiptRoute(db: Database): Hono {
 				'recency_frac = 0.5 ^ (days_since_last_feedback / 180)). ' +
 				'Rows excluded when order_permlink is null OR the (reviewer, subject) pair ' +
 				'is in suspicious_reciprocity OR related_accounts OR one_way_pile_on.attacking_reviewers ' +
-				'OR review_concentration with dominant_subject = subject. ' +
+				'OR review_concentration with dominant_subject = subject, ' +
+				'and every review but the reviewer\'s latest order-bound one of this subject. ' +
 				'See apps/indexer/src/indexer/reputation/{decay,score}.ts and ADR-0038.',
 			summary: {
 				count_total: rowsRes.rows.length,

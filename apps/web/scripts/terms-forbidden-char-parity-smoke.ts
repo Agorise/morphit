@@ -1,5 +1,8 @@
 /**
- * terms-forbidden-char-parity — cp422.
+ * terms-forbidden-char-parity.
+ *
+ * (Also the single-line gate for location_region / payment-method items:
+ * FORBIDDEN_SINGLE_LINE_CHARS vs the indexer's FORBIDDEN_TEXT_CHARS.)
  *
  * The frontend blocks submit on terms the indexer would reject, using
  * `FORBIDDEN_TERMS_CHARS` in `src/lib/orders/termsForbiddenChars.ts`. That is
@@ -39,6 +42,22 @@ const indexerReplace = extractClass(
 	'FORBIDDEN_MULTILINE_TEXT_CHARS'
 );
 
+// The single-line gate: location_region and the payment-method items.
+// The client strips this class before signing (stripSingleLineForbidden), so it
+// must be the indexer's class exactly.
+const frontendSingle = extractClass(
+	'apps/web/src/lib/orders/termsForbiddenChars.ts',
+	'FORBIDDEN_SINGLE_LINE_CHARS'
+);
+const indexerCreateSingle = extractClass(
+	'apps/indexer/src/indexer/handlers/order.ts',
+	'FORBIDDEN_TEXT_CHARS'
+);
+const indexerReplaceSingle = extractClass(
+	'apps/indexer/src/indexer/handlers/orderReplace.ts',
+	'FORBIDDEN_TEXT_CHARS'
+);
+
 let failures = 0;
 function check(name: string, cond: boolean, detail = ''): void {
 	if (cond) {
@@ -70,7 +89,18 @@ check('blocks a C0 control (BEL)', rx.test('\u0007'));
 check('blocks a bidi override (RLO)', rx.test('\u202E'));
 check('blocks a zero-width char (ZWSP)', rx.test('\u200B'));
 
-const scenarios = 8;
+check(
+	'frontend FORBIDDEN_SINGLE_LINE_CHARS matches indexer order.ts FORBIDDEN_TEXT_CHARS',
+	frontendSingle === indexerCreateSingle,
+	`frontend: ${frontendSingle}\n      order.ts: ${indexerCreateSingle}`
+);
+check(
+	'indexer order.ts and orderReplace.ts FORBIDDEN_TEXT_CHARS match',
+	indexerCreateSingle === indexerReplaceSingle,
+	`order.ts:        ${indexerCreateSingle}\n      orderReplace.ts: ${indexerReplaceSingle}`
+);
+
+const scenarios = 10;
 console.log(`\n${'─'.repeat(56)}`);
 if (failures === 0) {
 	console.log(`✓ all ${scenarios} terms-forbidden-char-parity scenarios passed`);

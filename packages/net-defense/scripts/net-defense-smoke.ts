@@ -1,5 +1,5 @@
 /**
- * @morphit/net-defense self-test smoke (cp154).
+ * @morphit/net-defense self-test smoke.
  *
  * The package exports two pure functions consumed by both the
  * indexer (full SSRF lockdown) and the mcp-server (opt-in
@@ -8,7 +8,7 @@
  * drifts, this smoke fires before any downstream consumer's
  * tamper test does.
  *
- * Mirrors the structure of cp153's `scripts/strip-comments-smoke.ts`
+ * Mirrors the structure of the `scripts/strip-comments-smoke.ts`
  * (self-test for `scripts/lib/strip-comments.ts`): a dedicated
  * smoke per shared helper, pinning both the positive behaviors
  * (catches what it should) and the documented limitations
@@ -21,7 +21,7 @@
  *     mapped IPv6 unwrap + a public control.
  *
  * Provenance: the source-of-truth function bodies are byte-for-
- * byte identical to the pre-cp154 implementations in
+ * byte identical to the older implementations in
  * `apps/indexer/src/indexer/federationProbe.ts`.  All scenarios
  * here are direct counterparts to the existing
  * `apps/indexer/scripts/dns-rebinding-defense-smoke.ts` and
@@ -123,14 +123,9 @@ expect('IP allows 100.128.0.1 (just above CGNAT)', !isPrivateIp('100.128.0.1'));
 
 /* ---------------- documented edge cases ---------------- */
 
-// Hostnames with trailing dots (FQDN form) — current implementation
-// does NOT strip the trailing dot, so `localhost.` would slip past.
-// This is a documented limitation (consumers should normalize before
-// calling).  Pin the current behavior so any change is deliberate.
-expect(
-	'PIN: hostname with trailing dot ("localhost.") is NOT rejected (consumer should normalize)',
-	!isPrivateHostname('localhost.')
-);
+// Hostnames with a trailing root dot (FQDN form) name the same host:
+// `localhost.` and `printer.local.` are caught like their dotless forms
+// (see the legacy-spelling scenarios below).
 
 // Mixed-case hostnames are normalized via toLowerCase, so case
 // variations don't bypass.
@@ -140,7 +135,7 @@ expect('mixed-case "::FFFF:127.0.0.1" → IP-side rejected', isPrivateIp('::FFFF
 /* ---------------- report ---------------- */
 
 let failed = 0;
-/* ---------------- v1.20.0 fix wave (D13) ----------------
+/* ---------------- (D13) ----------------
  * Forms the probe-time check used to MISS. The registration-time check (a
  * BlockList in hidden-transport) caught some of them, the probe did not: two
  * homes for one decision. Each is fed exactly as a consumer sees it — the
@@ -175,6 +170,27 @@ for (const [label, ip] of [
 	['224.0.0.1', '224.0.0.1']
 ] as const) {
 	expect(`isPrivateIp rejects ${label}`, isPrivateIp(ip));
+}
+// Legacy IPv4 spellings that inet_aton / getaddrinfo still resolve: decimal,
+// hex, octal and short forms all reach the same address, so they are judged
+// by the address they spell. A trailing root dot is the same name.
+for (const h of [
+	'2130706433',
+	'0x7f000001',
+	'0x7f.0.0.1',
+	'0177.0.0.1',
+	'127.1',
+	'10.1',
+	'0xa.0x0.0x0.0x1',
+	'3232235777',
+	'169.254.43518',
+	'localhost.',
+	'printer.local.'
+]) {
+	expect(`isPrivateHostname catches the spelling ${h}`, isPrivateHostname(h));
+}
+for (const h of ['16843009', '0x1010101', '1.1.257', 'example.com.', '1.2.3.4.5', '08.1.1.1']) {
+	expect(`isPrivateHostname leaves ${h} alone`, !isPrivateHostname(h));
 }
 // And the check must not over-reach: real public addresses stay public.
 for (const ip of ['1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '::ffff:5db8:d822']) {

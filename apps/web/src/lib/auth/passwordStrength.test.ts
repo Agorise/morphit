@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scorePassword, isPasswordAcceptable } from './passwordStrength';
+import { newPasswordProblem, scorePassword, isPasswordAcceptable } from './passwordStrength';
 
 describe('scorePassword — strengthened policy', () => {
 	describe('hard fails (UI must block submission)', () => {
@@ -88,5 +88,18 @@ describe('scorePassword — strengthened policy', () => {
 			// and reaches the common-password check, which lowercases first.
 			expect(scorePassword('Password123')).toBe('common');
 		});
+	});
+});
+
+describe('newPasswordProblem — one rule wherever a password is set', () => {
+	it('refuses what the keystore would refuse (under 10 characters), and simple 10–11 character ones', () => {
+		expect(newPasswordProblem('abcdefgh', 'abcdefgh')).toBe('too_weak');
+		expect(newPasswordProblem('abcdefghij', 'abcdefghij')).toBe('too_weak');
+	});
+	it('a mismatch is reported only for an acceptable password', () => {
+		expect(newPasswordProblem('river-lantern-quietly', 'river-lantern-quiet')).toBe('mismatch');
+	});
+	it('accepts a long password typed twice', () => {
+		expect(newPasswordProblem('river-lantern-quietly', 'river-lantern-quietly')).toBeNull();
 	});
 });

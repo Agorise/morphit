@@ -1,5 +1,5 @@
 /**
- * v1.20.0 fix wave 4 (verifier P1) — the per-client stream cap must never
+ * (verifier P1) — the per-client stream cap must never
  * become a cap on the whole site.
  *
  * morphit.io's Docker bridge is 172.18.0.0/24, not the 172.20.0.0/16 the
@@ -9,8 +9,11 @@
  * 16 of them refused with 503.
  *
  * Two fixes, each guarded here:
- *   1. the default trusted set is Docker's whole default bridge pool,
- *      172.16.0.0/12 (172.16–172.31), not one pinned /16;
+ *   1. the bridge is trusted: by default the pinned 172.20.0.0/16, and on a
+ *      box whose bridge is elsewhere MORPHIT_INDEXER_TRUSTED_PROXY_CIDRS —
+ *      which `morphit-ops upgrade` writes from the detected bridge. (The
+ *      default was once all of 172.16.0.0/12, which also trusted every other
+ *      container network on the host.)
  *   2. FAIL SAFE — a private peer outside the trusted set that forwards a
  *      client address is a proxy nobody told us about. Its address stands for
  *      everyone behind it, so only the instance-wide cap applies to it. A
@@ -61,7 +64,8 @@ describe('per-client stream cap behind a proxy (verifier P1)', () => {
 		configureTrustedProxies(undefined);
 	});
 
-	it("morphit.io's frontend on 172.18.0.0/24 is trusted by default: 40 visitors, 40 streams", () => {
+	it("morphit.io's frontend on 172.18.0.0/24, once its bridge is configured: 40 visitors, 40 streams", () => {
+		configureTrustedProxies(['127.0.0.0/8', '::1/128', '172.18.0.0/24']);
 		const r = open40('172.18.0.3', viaFrontend);
 		expect(r, 'the whole site shared one per-client stream cap').toEqual({
 			accepted: 40,

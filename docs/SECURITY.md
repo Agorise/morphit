@@ -8,24 +8,28 @@
 - Storage: encrypted with Argon2id (KDF) + XSalsa20-Poly1305 (AEAD) using
   a user-chosen password. Ciphertext lives in `localStorage` (or
   `sessionStorage` in Privacy Mode)
-- Reload hand-off (v1.20.0): with **Remember me** on, a plain page reload
-  (F5) keeps you signed in. At `pagehide` the decrypted posting/memo keys
-  are written to that tab's `sessionStorage` and read back on the next load
-  ONLY if it is a reload (navigation type `reload`), a service worker
-  controls the page (so not a hard reload) and the copy is at most 30
-  seconds old; otherwise it is deleted unused. It is never written when the
-  page goes into the back/forward cache. Browsers may keep a closed tab's
-  `sessionStorage` for "Reopen closed tab" (Firefox may also save it in its
-  session file on disk); after 30 s such a copy is refused. With Remember me
-  off, nothing is ever written.
+- Reload hand-off: with **Remember me** on, a plain page reload (F5) keeps
+  you signed in without ever writing a decrypted key to storage. At
+  `pagehide` the page writes only a secretbox **ciphertext** of the session
+  keys to that tab's `sessionStorage`; the 32-byte key that opens it is
+  handed to the service worker, which holds it in memory only, gives it back
+  once and forgets it after 30 seconds. Only the remembered session is
+  stashed (never a "just this session" sign-in or a second account). No
+  service worker, a hard reload, a tab restored after 30 s or a worker that
+  was stopped all mean the page loads locked. The plaintext stash older
+  builds wrote (`morphit.session.reload-stash-v1`) is deleted on every boot
+  and never read.
 - Signing: happens in browser memory, key material zeroed after use where
   the JS engine permits
-- Transmission: **forbidden by architecture** (the CSP's `connect-src`
-  allows only this site and the Blurt RPC nodes), by the code-review
-  checklist, and by locked dependency versions; the served bundle is
-  checked against the chain-signed release manifest.
+- Transmission: no code path sends key material anywhere (the CSP's
+  `connect-src` allows only this site and the Blurt RPC nodes). This rests
+  on the code, the code-review checklist and locked dependency versions.
+  The page compares the files that start the app with the hashes in the
+  chain-signed release; that catches a changed file served by an honest
+  operator's compromised server or proxy, not a hostile operator, who
+  serves the check too.
 
-#### 1a. Only posting + memo keys live in session memory
+#### 1a. Only the posting key lives in session memory
 
 Blurt accounts have four keys: `owner`, `active`, `posting`, `memo`.
 Morphit enforces a strict tier policy:
@@ -34,26 +38,30 @@ Morphit enforces a strict tier policy:
   (orders, feedback, chat ciphertext, profile updates). Routinely used.
   It also seeds the chat identity key (X25519, derived deterministically
   from posting via BLAKE2b — see ADR-0015).
-- **`memo`** is live in session memory. Reserved for Blurt-native memo
-  encryption; not currently used by Morphit features (chat uses a
-  posting-derived X25519 identity, not the memo key).
+- **`memo`**: only its PUBLIC key is held in the session. Morphit features
+  do not use the memo private key (chat uses a posting-derived X25519
+  identity), so it is not cloned to sibling tabs or put in the reload
+  stash.
 - **`active`** is NEVER held in session memory. Needed only to sign
   `transfer` ops (BLURT-denominated listing fee path). Accessed via the
   `useActiveKey(env, password, callback)` pattern: the keystore decrypts,
   hands the key to the callback for one signing operation, and wipes it
   in a `finally` block — success or exception.
-- **`owner`** is NEVER held in session memory. Needed only for initial
-  account creation (once, ever) and for key rotation. Accessed via the
-  equivalent `useOwnerKey()` pattern.
+- **`owner`** is NEVER held in session memory, and Morphit never signs
+  with it: account creation needs only the new account's PUBLIC keys,
+  and changing your password re-encrypts the keystore instead of
+  rotating keys. It stays in the encrypted keystore (and is derivable
+  from your seed) for use in a Blurt wallet if you ever rotate keys.
 
 This is enforced at the type level: a running session holds a
 `LiveIdentity`, which structurally has no `active` or `owner` private-key
 fields. Code that wants to sign a transfer must go through
 `useActiveKey()`; there is no way to "just grab it from the identity."
 
-Rationale: compromise of posting exposes Morphit activity but cannot
-transfer funds, cannot rotate keys, cannot compromise the account.
-Compromise of memo exposes chat history but nothing else. Active and
+Rationale: compromise of posting exposes Morphit activity, and — because
+the chat identity is derived from it — every chat message sent to or by
+that account (there is no forward secrecy, §3); it cannot transfer funds,
+rotate keys or take over the account. Active and
 owner, the high-value keys, spend ~milliseconds in cleartext memory per
 transaction and are otherwise only ciphertext under Argon2id.
 
@@ -71,8 +79,7 @@ there are no pre-minted ACTs; see "Account-creation key
 handling" below). The user supplies only the **public keys**
 they want their new account governed by.  Their `owner`
 private key never touches the network — the user generates
-it locally, encrypts it under their password, and the
-owner key is needed thereafter only for key rotation.
+it locally and it is kept encrypted under their password.
 
 #### 1b. Active/Owner key deep-audit findings (2026-05-07)
 
@@ -82,7 +89,8 @@ owner key was performed. Findings:
 **Architecture is sound.** `LiveIdentity` (the in-memory session
 identity) holds only public copies of owner and active. The private
 keys for those roles exist exclusively in the encrypted keystore and
-are JIT-decrypted via `useActiveKey()` / `useOwnerKey()`, which:
+are JIT-decrypted via `useActiveKey()` (the active key; nothing
+decrypts the owner key for signing), which:
 
 1. Decrypt the full identity from the envelope.
 2. M6 pubkey-pin check: verify the decrypted posting pubkey matches
@@ -124,7 +132,7 @@ the attacker's keys and throws `identity_mismatch` rather than
 handing those keys to the broadcast callback.
 
 **Sourcemaps disabled in production builds.** Variable names like
-`activePriv` and `wanted` are minified in `pnpm build`, raising
+`activePriv` and `wanted` are minified in the production build, raising
 the cost of targeted heap-scraping attacks.
 
 **No analytics, no error reporters, no telemetry.** Error stacks
@@ -179,53 +187,122 @@ against the account's on-chain authorities before signing anything
 (`crypto/activeKeyUnlock.ts`); a non-WIF string is rejected outright
 as invalid, never used to derive or sign with a key.
 
-**Password-change flow is shipped but UI not yet wired** for the
-end user (`useActiveKeyForPasswordChange` exists, `changePassword`
-exists; settings page calls the latter with proper finally-block
-password clearing). When the change-password UI lands, this
-audit's invariants must be re-checked against any new call site.
+**Password change re-wraps; it never rotates keys.** Settings → change
+password (`changePassword`, with finally-block password clearing)
+re-encrypts the same keys under the new password. The keys themselves do
+not change, so an old keyfile export together with the OLD password still
+opens them. If a keyfile and its password may have leaked, rotate the keys
+on chain instead.
 
 ### 2. Servers see signatures, never keys
 
-- Relay accepts signed ops and broadcasts them; cannot forge user ops
-- Indexer reads chain data; cannot author anything on a user's behalf
-- Avatar server stores bytes with hashes; user's chain profile is the
-  source of truth for which bytes are theirs
+- The indexer forwards transactions the browser has already signed
+  (`/v1/broadcast`) and reads chain data; it cannot forge a user's op
+- The relay creates accounts with its own key from public keys the user
+  supplies, and pays welcome bonuses and refills; it holds no user key
+- Avatars are part of the user's on-chain profile (a sanitized data URI);
+  there is no avatar server
 
-### 3. Chat is end-to-end encrypted
+### 3. Chat is end-to-end encrypted (no forward secrecy)
 
-- X25519 key agreement + ChaCha20-Poly1305 AEAD (ECIES-style,
-  via libsodium); see ADR-0015 for the full protocol.
-- Per-message sender ephemerals: each outbound message generates
-  a fresh ephemeral keypair, used once and wiped. Provides
-  one-sided forward secrecy (sender's posting-key compromise
-  doesn't retroactively decrypt past sent messages).
-- Recipient's long-term chat identity is derived from their
-  posting key. NO per-message receiver-key rotation — by
-  deliberate design, see the "Does Morphit chat have forward
-  secrecy?" FAQ entry for the full tradeoff rationale.
-- Ciphertext on Blurt, plaintext only in participants' browsers.
+- X25519 key agreement + ChaCha20-Poly1305 AEAD via libsodium; see
+  `docs/CHAT-CRYPTO.md` and ADR-0015.
+- v2 envelope: the message key is BLAKE2b over two Diffie-Hellman results
+  (the sender's fresh ephemeral key with the recipient's chat key, and the
+  sender's chat key with the recipient's), bound to both account names and
+  the three public keys. The recipient opens it only with the sender's
+  PINNED chat key, so nobody holding only public keys (an indexer
+  included) can write a message "from" someone. Older v1 messages still
+  open but are marked "Sender not verified" and never move a trade forward.
+- **No forward secrecy in either mode.** The recipient's chat key, derived
+  from their posting key, decrypts every message they ever received. In the
+  default mode ('keep') the sender's key also reopens their own sent
+  messages; 'destroy' only removes the sender's own ability to reread.
+- Peers compare a 60-digit safety number. First contact is
+  trust-on-first-use; a later change of a peer's chat key holds messages
+  back until the user accepts the new key.
+- Ciphertext on Blurt, plaintext only in participants' browsers. Who
+  talks to whom, when, about which order, and read receipts are public
+  (`docs/METADATA-LEAK-CATALOG.md`).
 
-### 4. Zero tracking, zero logging
+### 4. No tracking; visitor addresses kept in memory only
 
 - No cookies (encrypted keystore uses localStorage / sessionStorage)
 - No analytics, no third-party scripts, no telemetry
-- No web server keeps visitor addresses: every shipped nginx server block
-  sets `access_log off` (`ops/nginx/*.conf`,
-  `ops/bunkerweb/frontend/nginx.conf`); BunkerWeb's `LOG_FORMAT` names no
-  address, and its container keeps no Docker log at all (its error, ban and
-  ModSecurity lines would name visitors). The one exception: when CrowdSec
-  reads BunkerWeb's log, BunkerWeb keeps a small local log (5 MB, one file)
-  with addresses, because CrowdSec needs them. Existing installs are brought to
-  this by `morphit-ops upgrade` (v1.20.0; before, the shipped configs did
-  log visitor addresses).
-- Rate limiting is memory-only per time window, no IP persisted to disk
+- **One browser → third-party request: the release check.** At most
+  once a day per browser and running build (success or failure is
+  remembered 24 h and shared by every tab), the browser asks ONE Blurt
+  RPC node for `@morphit`'s latest release: two requests (one
+  `get_account_history` of the last 100 entries, one `get_block` for the
+  block that holds the release; browsers may add a CORS preflight before
+  each). If the release op is older than those 100 entries, one more
+  history read of up to ~115 KB. A second node is asked the same reads
+  only when the first fails,
+  serves a record that cannot be verified (unsigned, another key,
+  malformed, none) or a genuine release whose version differs from the
+  running build; never a third. A verified release OLDER than the build
+  the site runs is not taken as the current release: its treasury is
+  never used (the newest release this browser already verified keeps
+  supplying the fee addresses, or they stay hidden and "About this
+  instance" says the newest release could not be confirmed), and that
+  answer is checked again within the hour instead of a day. An order numbered under a previous
+  treasury BTC key is checked against releases this browser already
+  verified, with no request. The node pool
+  depends on the page's origin: any clearnet page (https or plain
+  http) uses the 5 clearnet nodes, a `.onion` page the 7 onion nodes,
+  an `.i2p` page the 7 `.b32.i2p` nodes.
+  Each node sees the visitor's IP (on clearnet), `Origin`,
+  `User-Agent` and `Accept-Language`; nothing about the account. A
+  release is accepted only if the transaction id recomputed from the
+  block matches and its signature recovers to `@morphit`'s pinned key,
+  so a node can make the check fail but cannot make a forged release
+  pass. Everything else (chain reads, broadcasts, prices) goes through
+  the operator's own server.
+- Access logs are off: every shipped nginx server block sets
+  `access_log off` (`ops/nginx/*.conf`, `ops/bunkerweb/frontend/nginx.conf`).
+  The bare-metal configs log only critical errors (to the journal) and log
+  rate-limit refusals below that level; a rare critical nginx error line
+  can still name a client. BunkerWeb's `LOG_FORMAT` names no address and
+  its container keeps no Docker log; BunkerWeb holds its bans in memory.
+  The one exception: when CrowdSec reads BunkerWeb's log, BunkerWeb keeps a
+  small local log (5 MB, one file) with addresses, because CrowdSec needs
+  them. Existing installs are brought to this by `morphit-ops upgrade`.
+- The indexer and relay see each visitor's address like any web server
+  and keep it in memory only, for rate limiting: minutes for indexer
+  reads, up to 1 hour for the relay's signup and push limits, up to
+  24 hours for the relay's daily signup limit (the /24 or /64 network,
+  never written to disk or logged). The relay's sequential-name detector
+  keys its one-hour memory on a keyed hash of that network, regenerated at
+  every restart.
+- BunkerWeb, as Morphit configures it, contacts no third party: BunkerNet,
+  DNSBL, the black/white/greylist plugins, the anonymous report and
+  anti-bot are off, and its daily GeoIP download, update check and Pro
+  plugin download are removed from its scheduler (the GeoIP files come
+  with its image). Kubo's AutoConf, HTTP routers and delegated IPNS
+  publishing are off too. Every remaining outbound connection of a server,
+  and why it is needed, is listed in `docs/OPERATIONS.md` §37.13a.
+- Push subscriptions link an account to a browser's push endpoint in the
+  relay's database (no IP, no user-agent); see `METADATA-LEAK-CATALOG.md`.
 
-### 5. Reproducible builds
+### 5. Signed, hashed releases (not byte-reproducible)
 
 - Every release is built from a tagged commit with locked dependencies
-- Release artifacts include a manifest of SHA-256 hashes
-- Third parties can rebuild and compare
+- The release op on chain carries the SHA-256 of the source tarball and
+  the hashes of the files that start the app; the tag is GPG-signed
+- Builds are **not** byte-for-byte reproducible today (the release
+  pipeline says so): a third party can rebuild and compare file by file,
+  but should expect differences and cannot treat a matching hash as proof
+- The release job fails without the signing key (there is no unsigned
+  release), it refuses to attach anything to a release that was already
+  published from a different tag object (a tag moved after publication),
+  and only a tag signed by a pinned fingerprint
+  (`RELEASE_SIGNER_FINGERPRINTS` in `packages/operator-config`, mirrored in
+  `release.yml`) on `main` releases. Optional one-time repository settings
+  that strengthen this (none is part of a release): Forgejo protects `v*` tags; the release
+  workflow runs on a runner label that runs no pull-request CI; the
+  `morphit-ops` and `morphit-mcp` names and the `@morphit` scope are
+  registered on npm as placeholders so nobody else can publish under them
+  (Morphit itself is never installed from npm).
 
 ## Threat model
 
@@ -237,22 +314,26 @@ audit's invariants must be re-checked against any new call site.
   HSTS + CSP restricting script sources to this site + the running-bundle
   check against the chain-signed release manifest.
 - **Compromised Morphit server**: attacker controls morphit.io host.
-  Mitigation: cannot steal user keys (never sent); can serve malicious JS
-  (partially mitigated by the chain-signed release manifest the app checks
-  its own bundle against + reproducible builds + PWA cache + PGP-signed
-  release pointers on Blurt; user community can detect divergence).
-- **Compromised relay**: cannot forge user ops (signatures); can refuse to
-  broadcast. Mitigation: multi-relay client-side failover.
-- **Cross-site requests to the indexer**: the indexer's public API sends
-  `Access-Control-Allow-Origin: *` (GET/OPTIONS, no credentials). That stops
-  other sites from reading responses, not from making a visitor's browser
-  send requests — including to the `/v1` POST routes (`/v1/broadcast`, the
-  federation chat push, `/v1/chain`, login pairing). Mitigation: must come
-  from what each route accepts and from the rate limits — nothing may rely
-  on CORS to keep a POST route private.
-- **Compromised indexer**: can serve stale or filtered orderbook.
-  Mitigation: peer gossip + client-side fallback indexer list + users can
-  consume RSS or run their own indexer.
+  Mitigation: cannot steal keys from a page it has not changed (never
+  sent); CAN serve malicious JS that steals keys as they are typed. The
+  in-page check against the chain-signed release does not stop this — the
+  operator serves the checker too. Real mitigations: the PWA cache, the
+  signed release anyone can compare against out of band, and choosing an
+  operator you trust (or running your own instance).
+- **Compromised relay**: cannot forge user ops (it holds no user key); can
+  refuse to create accounts or pay bonuses, and can spend its own BLURT.
+- **Cross-site requests to the indexer**: the indexer is a public read
+  API: `Access-Control-Allow-Origin: *` on GET/HEAD only, never
+  credentials. Every write must be `application/json` (415 otherwise) and
+  carries no Allow-Origin, so another website cannot drive or read the
+  write endpoints from its visitors' browsers. Nothing relies on CORS to
+  keep a route private; the routes' own checks and rate limits do.
+- **Compromised indexer**: the page talks only to its own operator's
+  indexer, which can serve a stale, filtered or false orderbook, false
+  balances and false chain reads. Mitigation: the instance directory
+  (switch to another operator), the "Verify on a block explorer" links,
+  and running your own instance. There is no automatic fallback to
+  another indexer.
 - **Phishing clone**: attacker stands up fake Morphit site. Mitigation:
   vanity .onion / .loki / .i2p addresses + Blurt discovery op + PGP-signed
   release announcements.
@@ -263,7 +344,9 @@ audit's invariants must be re-checked against any new call site.
   would reintroduce a middleman, which contradicts the project's core
   trust-minimization design.
 - **Sybil / fake reputation**: listing fees + escalating fees per 24h +
-  self-trade detection + account-age weighting.
+  self-trade detection + account-age weighting; a review needs a real
+  two-way chat and only a reviewer's latest order-bound review of a trader
+  counts.
 - **Order-edit fraud** (replace an accepted order's terms mid-negotiation):
   15-min replace-window lock + state-based lock on `negotiating`. `custom_json`
   ops are natively immutable; Morphit "edits" are layer-2 replacement ops
@@ -293,7 +376,7 @@ audit's invariants must be re-checked against any new call site.
 - **Coerced disclosure**: user forced to reveal password. Mitigation
   (partial): Privacy Mode (sessionStorage) + fresh-key-per-trade option +
   plausibly deniable encrypted-volume backups (documented, not enforced).
-- **Quantum adversary**: current crypto (ed25519, X25519, XSalsa20, SHA-2)
+- **Quantum adversary**: current crypto (secp256k1, X25519, XSalsa20, SHA-2)
   is not post-quantum. Migration path to PQ primitives is a future ADR.
 - **Sovereign state attacker**: a well-resourced state can block Tor /
   Lokinet / I2P / clearnet. Mitigation: multiple transports, but this is
@@ -310,13 +393,13 @@ Every PR touching key-handling code must explicitly answer:
 4. Is the key zeroed (where possible) after use?
 5. Does this code hold an `active` or `owner` private key in any scope
    that outlives a single signing operation? (It must not — use
-   `useActiveKey` / `useOwnerKey` with a callback.)
+   `useActiveKey` with a callback; nothing signs with `owner`.)
 6. Does this code pass a `FullIdentity` (all four private keys) to any
    code path other than the keystore encrypt/decrypt pair? (It must not
    — only the keystore module holds full sets; everything else receives
-   a `LiveIdentity` with `posting` + `memo` only.)
+   a `LiveIdentity` with the `posting` private key only.)
 
-CI blocks merges that fail the key-handling checklist (Phase 2+).
+The checklist is applied in review; it is not an automated CI gate.
 
 ## Cryptographic primitives
 
@@ -347,59 +430,60 @@ purely local and uses the more storage-compact secretbox form.
 
 Morphit pages do **not** carry `integrity="sha384-…"` (SRI) attributes: the
 build emits none, and every script and stylesheet is same-origin. The
-integrity backstop is the release manifest broadcast on-chain by `@morphit`:
-the app hashes the bundle it is running and warns ("Build integrity check
-failed") when it does not match the signed release.
+release op `@morphit` signs on chain lists the hashes of the files that
+start the app. When the site runs that signed version, About this instance
+fetches each of those files and compares it with the signed hash ("N of N
+signed files match"). That catches a file changed by accident, by a partial
+break-in or in transit, and stale caches. It cannot protect against the
+operator itself, who serves the check too.
 
-## CSP (per-vhost)
+## CSP (what ships)
 
-Baseline CSP (Phase 2 revision; tightened per-vhost in Phase 5):
+The header every shipped config sends (`ops/nginx/web.conf`,
+`ops/bunkerweb/frontend/nginx.conf`, the BunkerWeb env files; the
+`csp-header-consistency` smoke keeps them identical to OPERATIONS §15):
 
 ```
 default-src 'self';
-script-src 'self';
-style-src 'self';
-img-src 'self' data:;
+script-src 'self' 'wasm-unsafe-eval';
+style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob:;
 font-src 'self';
-connect-src 'self' https:;
-frame-ancestors 'none';
-form-action 'self';
-base-uri 'self';
+connect-src 'self' https://rpc.drakernoise.com https://blurtrpc.dagobert.uk https://rpc.blurt.blog https://rpc.beblurt.com https://blurt-rpc.saboin.com;
+media-src 'none';
 object-src 'none';
+child-src 'none';
+frame-src 'none';
+worker-src 'self' blob:;
+manifest-src 'self';
+form-action 'self';
+frame-ancestors 'none';
+base-uri 'self'
 ```
 
-`connect-src 'self' https:` allows the endpoint rotator to reach the
-Blurt RPC pool (rpc.drakernoise.com, blurtrpc.dagobert.uk,
-rpc.blurt.blog, rpc.beblurt.com, rpc.blurt.one, blurt-rpc.saboin.com) plus any user-added community mirrors. A narrower
-per-endpoint CSP isn't feasible because the user can add their own
-endpoint through Settings. Mitigation: every outbound RPC request goes
-through the rotator, which sets `credentials: 'omit'`,
-`referrerPolicy: 'no-referrer'`, and `cache: 'no-store'` — no cookies,
-no referer leakage, no cache poisoning opportunity. Request payloads
-are JSON-RPC envelopes only; no key material is ever in the body.
-
-No `'unsafe-inline'`, no `'unsafe-eval'`, no CDNs, no Google Fonts, no
-analytics origins. `frame-src` remains absent (implicit `default-src`
-= `'self'`); Phase 2's FAQ explicitly links out to blurt.media for
-video tutorials rather than embedding, preserving the strict frame
-policy.
-
-## Reproducible build protocol (Phase 1 draft)
-
-1. Lock dependencies with exact versions in `package-lock.json`
-2. Build in a containerized, deterministic environment (Phase 5: Nix or
-   Docker pinned digest)
-3. Strip build timestamps and random IDs from output
-4. Produce `build-manifest.json` with SHA-256 of every emitted file
-5. Sign the manifest with the release key; publish signature alongside
-
-Phase 1 establishes the scaffolding; Phase 5 closes the last gaps.
+- `script-src 'self' 'wasm-unsafe-eval'`: script from this origin only. No
+  `'unsafe-inline'` (the build moves every inline script into a hashed file
+  and fails if one is left) and no `'unsafe-eval'`. `'wasm-unsafe-eval'`
+  lets WebAssembly compile (argon2, signing); it does not allow JavaScript
+  `eval`.
+- `style-src` keeps `'unsafe-inline'` (Svelte transitions and the branding
+  theme use inline styles).
+- `connect-src` lists only this origin and the five HTTPS Blurt RPC nodes
+  the browser uses. A `.onion` or `.i2p` mirror sends its own list (its
+  hidden RPC nodes). There is no setting for a user to add another
+  node. Every request the browser makes to
+  an RPC node sets `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`
+  and `cache: 'no-store'`; payloads are JSON-RPC reads, never key material.
+- No CDNs, no Google Fonts, no analytics origins; `frame-ancestors 'none'`.
 
 ## Responsible disclosure
 
-Security researchers: please contact via Matrix (address in repo post-
-Phase 5) or by posting an encrypted `custom_json` to the `morphit` Blurt
-account using a published GPG key (Phase 5 deliverable).
+The root [`SECURITY.md`](../SECURITY.md) is the one procedure: a **Matrix
+DM to `@agorise:matrix.org`** (a user, not a room). If you cannot DM, say
+in the public room `#agorise:matrix.org` that you have a report — with no
+details — and a maintainer will DM you. Never use a public issue, a public
+room message with details, or anything posted on chain: all of those are
+public.
 
 ## Phase 2 addendum — additional threat-model entries
 
@@ -413,36 +497,36 @@ account using a published GPG key (Phase 5 deliverable).
       broadcast as `morphit_profile_v1` when registered)
     - `morphit.rpcEndpoints` — the user's customized RPC endpoint list
       (low-sensitivity; reveals which community mirrors they prefer)
-    - `morphit.btc.hashes` / `morphit.xmr.hashes` — SHA-256 hashes of
-      receiving addresses the user has previously entered (for the
-      address-reuse warning). The hashes are one-way, so an attacker
-      reading them cannot recover the addresses, only confirm whether
-      a specific candidate address has been used before
+    - the address-reuse history — one-way tags only:
+      HMAC-SHA256(per-install random salt, asset ‖ address), truncated to
+      16 bytes; never the address, a date or an order id. An attacker
+      reading them (with the salt, which sits beside them) can only
+      confirm whether a specific candidate address was shared before.
+      Older plaintext records are converted and deleted on load
     - `morphit.locale` — the user's chosen UI language
     - `morphit.updateDismissed` — a flag (sessionStorage only)
-  **Mitigation:** no private-key material is stored in `localStorage`
-  (see the reload hand-off in §1 for the 30-second `sessionStorage` copy). An attacker
-  with a local-script vector (XSS, supply-chain compromise) can read
-  these values but cannot impersonate the user, broadcast ops, or
-  recover addresses. The only key material in process memory is the
-  posting + memo private keys (ADR-0002); compromising those is bounded
-  to "can sign Morphit ops" — no funds movement, no account recovery,
-  no chat history reconstruction of past sent messages (sender-side
-  PFS holds — sender ephemerals are wiped after use).
+  **Mitigation:** no plaintext private-key material is stored in
+  `localStorage` or `sessionStorage` (the reload hand-off in §1 stores a
+  ciphertext whose key lives only in the service worker's memory). An
+  attacker with a local-script vector (XSS, supply-chain compromise) can
+  read these values but cannot impersonate the user, broadcast ops, or
+  recover addresses from them. Script running in the page can, however,
+  read the posting private key from memory (next item); that key signs
+  Morphit ops and decrypts the account's chats (no forward secrecy). It
+  cannot move funds or recover the account.
   **Why not encrypt these:** they're inputs to a display layer that
   must work before the user unlocks their keystore. Encrypting them
   would require prompting for a password on every page load.
   The cost-benefit favors leaving them plain.
 
-- **Session-memory-only exfiltration of `posting` / `memo` privates.**
-  The LiveIdentity's posting and memo private keys are in browser heap
+- **Session-memory-only exfiltration of the `posting` private key.**
+  The LiveIdentity's posting private key is in browser heap
   while the user is signed in. A rogue script in the same origin can
-  read them via the identity store's exported subscriber. **Mitigation:**
-  CSP with no third-party script origins (it still allows
-  `'unsafe-inline'` and `'unsafe-eval'` for same-origin code, so it is not
-  a boundary against script already running on the page), no external
-  resources at all, and reproducible builds plus the chain-signed release
-  manifest that let the community detect a compromised host. Phase 4 adds the
+  read it via the identity store's exported subscriber. **Mitigation:**
+  a CSP that runs script from this origin only (no inline script, no
+  `eval`), so injected markup cannot run code; no external resources at
+  all; and the chain-signed release that lets anyone compare what a host
+  serves. None of this stops script the host itself serves. Phase 4 adds the
   WhaleVault / Gravity extension path which removes these keys from
   Morphit's origin entirely. See ADR-0002 for the full key-handling
   policy.
@@ -467,8 +551,9 @@ offline. Users should understand that:
 - **Feedback** is permanent, signed, and publicly associated with the
   reviewer's account.
 - **Chat ciphertext** is visible as a blob on chain; only its content is
-  opaque. An adversary cannot read it but can see that two accounts
-  exchanged a message at a specific block height.
+  opaque. Anyone can see that two accounts exchanged a message at a
+  specific block height, which order it is about, and the plaintext read
+  receipts. The full list is in `docs/METADATA-LEAK-CATALOG.md`.
 
 The FAQ entries `data_collection`, `chat_privacy`, and `feedback_immutable`
 communicate this to users; the orderbook UI will surface it again at
@@ -495,8 +580,11 @@ Each vector is classified as *covered* (mitigated in code or
 config), *not-applicable* (structurally prevented — e.g. no PHP
 means no PHP-specific CVEs), *deferred* (tracked for a specific
 later phase), or *out-of-scope* (operator/infrastructure
-responsibility). That ADR is the authoritative answer to "Is
-Morphit vulnerable to X?"
+responsibility). It is a 2026-04 snapshot (amendments at its end
+record later changes); the current threat model is
+`docs/audit/2026-10-stride-matrix.md`,
+`docs/audit/2026-10-attack-tree.md` and
+`docs/audit/2026-10-red-team-narrative.md`.
 
 The public-facing FAQ entry `security_attack_vectors` (available
 in all 10 supported locales) summarises the headline defenses for
@@ -528,11 +616,15 @@ are not mistaken for missed coverage.
   characters. No user-supplied string reaches a log line.
   Structured logging with a library like Pino is a Phase-4
   improvement but not a safety gap.
-- **Supply chain.** `npm ci --omit=dev` with a committed lockfile
-  pins versions and integrity hashes. Dependency count is
-  deliberately small (~4 runtime deps for the relay). Residual
-  risk: npm's own signing is what it is. Phase 5 can evaluate
-  `socket.dev`, `npm-audit-resolver`, or similar.
+- **Supply chain.** The committed `package-lock.json` pins versions
+  and integrity hashes. Node installs run npm with `--ignore-scripts`
+  (no dependency's install script runs on a node); the Matrix bot's
+  two native binaries are fetched only when the bot is enabled and are
+  checked against pinned SHA-256 values; a tor-only box takes them from
+  the offline bundle. Dev dependencies are installed too (the services
+  run TypeScript through `tsx`). Residual risk: npm's own signing is
+  what it is, and every runtime dependency runs with the service's
+  rights.
 - **Password-string memory residue.** The keystore-decrypt path
   takes the user's passphrase as a JS `string` (see
   `apps/web/src/lib/crypto/keystore.ts`). Everything the code
@@ -569,7 +661,10 @@ Some attack surfaces cannot be closed in Morphit's code alone.
 These are the operator's responsibility:
 
 - **Volumetric DDoS.** Network-layer floods require upstream
-  scrubbing (VPS provider, Cloudflare, or equivalent). Morphit's
+  scrubbing from your VPS provider. (A CDN proxy in front of the
+  site would see every visitor's address and every request, which
+  conflicts with Morphit's privacy model; Morphit does not
+  recommend one.) Morphit's
   application-layer mitigations (rate limits, body caps, tight
   resource ceilings) handle L7 abuse but cannot absorb L3/L4
   volumetric attacks. Document your DDoS response plan.
@@ -577,24 +672,23 @@ These are the operator's responsibility:
   kernel current with security updates. `unattended-upgrades` on
   Ubuntu or equivalent is the minimum baseline.
 - **Key rotation.** The relay's active key should be rotated
-  quarterly or on suspicion of compromise, per the procedure in
-  `apps/relay/README.md`. An ADR for the formal rotation policy
-  lands in Phase 4.
+  quarterly or on suspicion of compromise, per OPERATIONS.md §8
+  (`sudo morphit-ops edit-active-key` installs the new key and
+  re-seals the unlock credential).
 - **Balance monitoring.** Watch the relay's BLURT balance. A
   sudden drop suggests either heavy legitimate use (good signal
-  to top up) or abuse (investigate). Phase 5 adds Zabbix
-  alerting; until then, a simple cron job polling
-  `/v1/health` is enough.
-- **Abuse response via fail2ban.** The relay does not log IPs
-  (privacy commitment). However, systemd journal entries of
-  rate-limit rejections are transient and can be consumed by
-  `fail2ban` to install iptables bans without persisting IP data
-  to disk. A `jail.local` snippet is documented in the relay
-  README.
-- **`npm audit` on every deploy.** Run `npm audit` before every
-  production deploy and before bumping any dependency. If an
-  advisory is found, decide explicitly: upgrade, pin to a fork,
-  or accept the risk with a note in the relevant ADR.
+  to top up) or abuse (investigate). The Matrix bot alerts on low
+  balance (OPERATIONS.md §16).
+- **No IP-based banning from logs.** The relay and the shipped nginx
+  configs log no visitor addresses, so there is nothing for
+  `fail2ban` to read; fail2ban guards SSH only. Abuse is bounded by
+  the in-memory rate limits (OPERATIONS.md §18, §34).
+- **The dependency audit gate.** CI and the release run
+  `scripts/audit-gate.mjs`, with ONE allowlist
+  (`.audit-allowlist.json`, every entry with its reason and review
+  date). It fails when the audit cannot run, on any untriaged
+  moderate/high/critical advisory, on an allowlisted advisory npm no
+  longer reports, and on an advisory an in-range update fixes.
 
 ### Known supply-chain advisories (May 2026 audit)
 
@@ -645,7 +739,7 @@ stranger_fee, withdraw_vesting, account_create, delegate_vesting_shares).
   An attacker who already has that capability has easier paths.
   Not reasonably exploitable from a remote attacker.
 - *Relay signing* (server, relay active key): the active key is
-  used for relay-funded account creation and 1-BLURT signup
+  used for relay-funded account creation and 2-BLURT signup
   dust transfers. A remote timing attack against `/v1/account/
   create` would need to extract bits from response timing —
   but the relay batches, makes upstream chain calls, and is
@@ -698,13 +792,11 @@ still pins `request: ^2.88.2` + `request-promise: ^4.2.6`, and
 `request` itself was deprecated in 2020 and will not be patched.
 Bumping the SDK does not remove the chain.
 
-**Enforced by CI:** the two CRITICALs here (`request` SSRF and
-`form-data` boundary) are the allowlisted entries in
-`apps/web/scripts/npm-audit-gate-smoke.ts`, which runs
-`npm audit --json` on every build and fails on any **new**
-HIGH/CRITICAL — or any new CVE title for an already-allowlisted
-package — that isn't reviewed there.  This table and that gate
-are two views of the same accepted-risk set; keep them in sync.
+**Enforced by CI:** the accepted entries live in ONE allowlist,
+`.audit-allowlist.json`, which `scripts/audit-gate.mjs` (CI and
+release) and `apps/web/scripts/npm-audit-gate-smoke.ts` both read.
+That file, not this table, is authoritative; the table is a
+snapshot.
 
 **Threat-model assessment for Morphit:**
 - *Optionality.* The bot only runs if the operator opts into
@@ -736,39 +828,19 @@ for a `request`-free release.
 
 **Recommended operator practice:** when deploying, run
 `npm audit --omit=dev` for the runtime-only view. The expected
-runtime diff is `elliptic` always, plus the `matrix-bot-sdk` /
-`request` cluster above **iff** you installed the optional Matrix
-bot. If anything beyond those shows up, triage before deploying.
+runtime findings are the entries in `.audit-allowlist.json`
+(the `matrix-bot-sdk` / `request` cluster matters only if you
+enabled the optional Matrix bot). If anything beyond those shows
+up, triage before deploying.
 The build/test advisories above are real but exposed only on the
 build host (CI or dev machine), which should already be
 isolated from production.
 
-**Recommended Morphit-project practice:** `elliptic` is
-effectively unmaintained (no release in ~12 months) and
-CVE-2025-14505 is unfixed across all published versions, so the
-durable path is to move off it rather than wait for a patch.
-The frontend already depends directly on `@noble/secp256k1`
-(constant-time, actively maintained).
-
-**Migration status (cp173–cp174):** a `@noble/secp256k1`-based
-Blurt signer has been built, proven, and **wired** into the
-frontend signing path behind the `SIGNER_BACKEND` flag in
-`apps/web/src/lib/net/config.ts` (see ADR-0046). Feasibility is
-proven against dblurt's own verifier — graphene chains verify by
-public-key recovery, and noble signatures recover to the correct
-key (`scripts/blurt-noble-signer-recovery-proof.ts`, 300/300;
-full-transaction coverage incl. transfer/order/comment/custom_json
-in `scripts/blurt-noble-tx-signature-proof.ts`). Every signer in
-`apps/web` honors the flag (enforced by
-`scripts/signer-backend-consistency-smoke.ts`). The default remains
-`'dblurt'` deliberately: flipping to `'noble'` is gated on one real
-Blurt chain broadcast per op class confirming end-to-end
-acceptance, which cannot be done without chain access. Until that
-flip, `elliptic` remains in the tree transitively and its
-advisories are accepted risk per the threat model above. Also
-monitor `@beblurt/dblurt` upstream for a `@noble`-based signer that
-would let the dependency be dropped entirely. Tracked as a standing
-REVISIT item.
+**Status:** `elliptic` is gone from the tree since dblurt 0.17.0
+(dblurt signs with `@noble/secp256k1`; there is no `elliptic` in
+`node_modules` or `package-lock.json`), and the frontend's own
+signing path also uses `@noble/secp256k1` (ADR-0046). The
+assessment above is kept as history.
 
 ### Legal considerations for operators
 
@@ -779,8 +851,8 @@ code concerns but should shape deployment posture:
 - **Sanctioned-country trades.** Without KYC, a Morphit frontend
   cannot block a user in a sanctioned jurisdiction from reading
   the orderbook. However, Morphit itself never facilitates the
-  atomic trade — two users agree off-platform (Matrix chat,
-  external wallets), and the per-asset settlement transfer
+  atomic trade — two users agree in Morphit's encrypted chat (or
+  anywhere else), and the per-asset settlement transfer
   (BTC, XMR, BLURT, USDT, USDC, DAI, BCH, LTC, DASH, DOGE, ZEC, ARRR, DCR, SOL, ETH, or XRP) happens
   between their own wallets. The operator hosts a reader over
   public chain data, not a money-transmission service.
@@ -793,9 +865,16 @@ code concerns but should shape deployment posture:
 - **Release-discovery impersonation.** The pinned
   `MORPHIT_OFFICIAL_POSTING_PUBKEY` constant in
   `$net/config.ts` defends against a malicious actor forging
-  release-discovery ops claiming to be from `@morphit`. Clients
-  verify the signature against this pinned key and ignore ops
-  that don't match.
+  release-discovery ops claiming to be from `@morphit`. The
+  browser accepts a release op only if the transaction id
+  recomputed from the block matches and its signature recovers to
+  this pinned key; anything else is ignored. The signature decides,
+  not the node: a second node is asked only when the first fails or
+  serves something that does not verify. Two genuine releases are
+  ordered by their signed version, never by the block number a node
+  reports. Stated limit: a node can withhold the newest release (serve
+  an older genuine one) when the second node is unreachable or does the
+  same, so an update notice can be late; nothing forged is accepted.
 
 ## Phase 5d addendum — chat anti-spam and attestation sybil defenses
 
@@ -844,8 +923,10 @@ the fan-in cap.
 
 ### Finding I mitigation — attestor eligibility (SHIPPED 2026-04-24, indexer side)
 
-ADR-0011 §3 requires ≥2 distinct attestors with ≥1 non-poster
-to promote a BTC/XMR order's fee status from
+ADR-0011 §3 requires two distinct attestors, both independent of the
+poster (a poster's own attestation is rejected outright with
+`attestor_is_poster`, and accounts flagged as a pair with the poster
+do not count), to promote a BTC/XMR order's fee status from
 `pending_external` to `verified_by_attestation`. Without
 further gating, a grifter could cheaply farm accounts (the
 @morphit-relay welcome waiver creates them for free), have
@@ -853,20 +934,30 @@ each throwaway attest their own never-paid fee, and bypass the
 $0.125 listing fee.
 
 The indexer now requires each attestor to satisfy a **loyalty
-threshold** (cumulative 100 BLURT paid in listing fees —
-matching the first loyalty milestone) OR/AND an **age
-threshold** (account created ≥30 days ago on the Blurt chain).
-The gate runs in two phases controlled by the
+threshold** OR/AND an **age threshold** (account created ≥30
+days ago on the Blurt chain). The loyalty threshold is 100 BLURT
+paid to the **canonical Morphit treasury** in listing fees. Only
+the treasury's share counts, because the operator's share can go
+to an account the payer controls (anyone can register an operator
+naming itself as the fee recipient): on a federated instance the
+treasury gets 10% of each fee, so this is about 1,000 BLURT of
+fees there; on the canonical instance, 100 BLURT. (Attestation ops
+in blocks stamped before 2026-11-01 00:00 UTC, the consensus-v2
+activation time, keep the old measure, all
+fee legs.) The gate runs in two phases controlled by the
 `MORPHIT_INDEXER_ATTESTATION_PHASE` env var:
 
 - **Launch** (OR gate): attestor qualifies by meeting either
-  condition. Lower bar for ecosystem bootstrap while still
-  blocking same-day-farmed sock accounts (they would need to
-  pay $20+ OR wait a month).
-- **Steady** (AND gate): attestor must meet both. Makes
-  sustained sybil abuse negative-ROI — the attacker must both
-  wait 30 days AND pay $20+ per sock puppet, to bypass a
-  $0.125-per-order fee.
+  condition. Plainly: an account at least 30 days old qualifies
+  **without paying anything**, so aged sock accounts cost an
+  attacker only time.
+- **Steady** (AND gate): attestor must meet both — 30 days AND
+  the treasury-share threshold for every sock account.
+
+**Known gap:** the phase is a node-local setting, yet it decides
+whether an attestation op is applied or rejected — a verdict every
+node should reach the same way. Until it is pinned on chain, nodes on
+different phases can disagree about attested orders.
 
 The phase flip is an operator config change, not a redeploy.
 Per the ADR-0011 addendum, the transition trigger is whichever
@@ -887,11 +978,14 @@ Phase F.5 introduced on-chain verification of BLURT trade
 payments.  The following residual trust assumptions apply to
 this feature:
 
-### Single Blurt RPC trust (audit F-11)
+### Operator and RPC trust in payment checks (audit F-11)
 
-The verifier fetches transaction details from one of the
-shipped Blurt RPC nodes (the six documented in
-`apps/web/src/lib/net/config.ts`).  A hostile RPC can:
+The browser does not read the chain itself for this: it asks the
+operator's own indexer (`POST /v1/chain/condenser`,
+`apps/web/src/lib/net/chainRelay.ts`), which reads from its RPC
+pool. So the user trusts their chosen operator for this answer, as
+for the orderbook and balances. A hostile operator, or a hostile
+RPC node the indexer happens to use, can:
 
 - Fabricate a `verified` result for a transfer that doesn't
   actually exist on chain
@@ -901,10 +995,9 @@ shipped Blurt RPC nodes (the six documented in
 
 Mitigations in place:
 
-- **Defense via quorum:** the chain-RPC verifier (audit 2-7)
-  fans out to multiple endpoints and requires 2-of-3 agreement
-  before treating a result as authoritative. A single hostile
-  RPC cannot forge or hide a transaction unilaterally.
+- **An independent check:** the UI offers "Verify on a block
+  explorer" next to a payment result, so a cautious user can
+  confirm without trusting the operator.
 - **Defense via observability:** the same chain is observable
   by both parties (buyer and seller).  If a quorum-passing
   result later turns out to be wrong, the buyer can
@@ -914,12 +1007,9 @@ Mitigations in place:
   perspective — disagreement between buyer's view and seller's
   view of the same txid would surface as contradictory mismatch
   reports.
-- **Operator-extensible endpoint list:** the canonical Morphit
-  deployment ships six endpoints (rpc.drakernoise.com,
-  blurtrpc.dagobert.uk, rpc.blurt.blog, rpc.beblurt.com,
-  rpc.blurt.one, blurt-rpc.saboin.com).
-  Operators concerned about RPC trust can add their own node
-  via Settings.
+- **Operator-chosen RPC pool:** an operator concerned about RPC
+  trust can point the indexer at nodes they run or trust
+  (`MORPHIT_INDEXER_RPC_ENDPOINTS`, OPERATIONS.md §22).
 - **Verification is not the primary settlement mechanism:**
   the on-chain transfer is what actually settles the trade.
   The verifier is a UX aid that surfaces mismatches faster than
@@ -928,9 +1018,9 @@ Mitigations in place:
   would discover the missing funds when reconciling their
   wallet.
 
-Future architectural mitigation: multi-node quorum verification
-(verify against 2-of-3 RPCs).  Heavier engineering cost; not
-landed pre-launch.  Tracked as a post-launch enhancement.
+Not in place: a quorum of RPC operators for these
+reads. The indexer reads each answer from one node of its pool; a
+periodic chain-consistency sample is an alarm, not a filter.
 
 ### tradeStatus lock-on-engagement (audit F-40)
 
@@ -980,7 +1070,7 @@ updates.
 
 This addendum captures security-relevant invariants and known
 residual trust assumptions added during the multi-session audit
-campaign documented in `docs/AUDIT-2026-05.md` (Parts 1-14).
+campaign documented in the internal audit record AUDIT-2026-05 (Parts 1-14).
 Read the audit doc for the full STRIDE matrices, attack trees,
 and red-team narratives; this addendum extracts the
 externally-relevant invariants for operators and security
@@ -996,7 +1086,7 @@ chain, and a deeper audit on the user-question-driven feature
 batch (Q1-Q11 + their follow-ups #4-#6). Each pass produced a
 STRIDE matrix, attack trees, red-team narratives, and a
 findings catalogue with severity ratings. Findings were either
-fixed inline (the majority), deferred to `docs/REVISIT-LIST.md`
+fixed inline (the majority), deferred to the project backlog
 with full context, or accepted with documented rationale. The
 campaign is ongoing; the audit document is a living log that
 gets a new part each time we audit a meaningful change.
@@ -1043,12 +1133,13 @@ itself is the Q11 plaintext field above.
 Same Sybil amplification applies: an attacker can inflate this
 chip up to the fan-in rate limit. Mitigation options
 (`feedback_count > 0` filter, "5+" cap on display) tracked in
-REVISIT-LIST under BATCH14-2; pre-launch the working signal is
+backlog under BATCH14-2; pre-launch the working signal is
 preferred over the harder-to-debug filtered version.
 
 ### Real-time balance card
 
-`MyBalanceCard.svelte` polls the user's RPC every 5 seconds
+`MyBalanceCard.svelte` polls the user's balance through the
+operator's indexer (`/v1/chain/condenser`) every 5 seconds
 when the tab is visible (paused on hidden) and additionally
 listens on an in-process pub/sub bus that producers fire on
 known balance-changing events (BLURT-paid broadcast success,
@@ -1060,7 +1151,8 @@ The bus is **in-process only** — no cross-tab or cross-origin
 signal channel. An attacker controlling another tab cannot fire
 the bus. An attacker who controls page JS (via XSS) can fire
 arbitrary bus events, but the underlying balance values come
-from chain RPC; the bus only accelerates legitimate refreshes.
+from the indexer's chain reads; the bus only accelerates
+legitimate refreshes.
 
 ### Account-creation key handling (ACT-mint timer removed)
 
@@ -1077,31 +1169,45 @@ The passphrase residual that section described still applies to
 the relay's main service: the active-key passphrase enters the
 V8 heap as a JavaScript string at unlock and stays there until
 garbage collection — a known limitation of any JS service
-handling secrets. High-threat-model operators should use
-`LoadCredentialEncrypted=` (see `man systemd-creds`) and size
-host physical security to the fee volume they process. See
+handling secrets. The unit already loads the passphrase with
+`LoadCredentialEncrypted=` from a credential sealed to the host's
+systemd key (`--with-key=host`, no TPM): a copy of the whole disk
+unseals it, so use full-disk encryption and size host physical
+security to the fee volume you process. See
 ADR-0010 §4 for the relay's in-memory key posture.
 
 ### Price-feed posture
 
-The indexer's price feed reads BLURT/USD as an outlier-rejected
-**median across several independent external feeds** (Coingecko,
+BLURT/USD comes from **`api.blurt.blog` first**: whenever its value
+is plausible, it is the price (`apps/indexer/src/indexer/price/factory.ts`).
+Only when it fails or is implausible does the indexer fall back to an
+outlier-rejected median across independent external feeds (CoinGecko,
 CoinPaprika, CryptoCompare, and — for the assets they list —
 Kraken/Binance/Coinbase/OKX/Bybit, plus the optional key-gated
-CoinCap/Messari). (Klingex, the former BLURT-only primary, went
-out of business in 2026 and was removed; rather than depend on a
-single replacement, the external tier averages many feeds.) No
-single provider banning us, rate-limiting us to nothing, or
-returning a bad number can move the published price — any feed
-that returns nothing is dropped from the median, never
-substituted with a guess. The USD echo on
-Morphit's benefits ladder and other UI surfaces is
-**display-only** — not a settlement reference. Operators who
-anticipate an upstream outage or compromise can disable the
-price feed entirely; the BLURT-denominated fees and amounts
-continue to work without the USD overlay. Behind the external
-median sit the opt-in self-sovereign morphit_native source and
-the static floor, so the chain degrades rather than breaks.
+CoinCap/Messari); a feed that returns nothing is dropped from the
+median, never replaced by a guess. So one provider does decide the
+price in normal operation, and could skew it within the plausibility
+band. A hidden-only (zero-clearnet) node does not call these at all:
+it takes the federation price, the median of peers' own prices. Behind
+the external median sit the opt-in self-sovereign morphit_native
+source and the static floor, so the chain degrades rather than breaks.
+
+BTC and XMR prices, and the USD→fiat table, come first from the Haveno
+and Bisq pricenodes, reached as Tor onion services on a fresh circuit
+per request (`apps/indexer/src/indexer/price/pricenodes.ts`): a value is
+taken only when at least two pricenodes agree within the tolerance and
+form a majority of those that answered (their median); no consensus
+means no new value, never one node's word. The clearnet feeds above are
+only their fallback where clearnet is allowed, and a zero-clearnet node
+never asks them. The BTC/XMR fee explorers are reached the same way,
+onion first (docs/OPERATIONS.md §40.4a).
+
+The price is **display-only**: fee verification reads no price (the
+BLURT fee floor is chain-pinned in the signed release), so a wrong
+price can mislead a user about fiat value but cannot make a payment
+fail or pass. Operators who anticipate an upstream outage or
+compromise can disable the price feed entirely; the BLURT-denominated
+fees and amounts continue to work without the fiat overlay.
 
 Operator-trust assumption (BATCH14-4): a malicious operator
 can lie about the fiat price displayed alongside BLURT amounts
@@ -1110,8 +1216,8 @@ in the frontend state) to mislead users about how much fiat
 their BLURT actually represents. This is the pre-existing
 operator-trust boundary; users cross-check by comparing
 instances or by visiting `/v1/price/morphit-native/receipt`
-(cp127) to see exactly what data the operator's indexer used to
-derive the displayed price.  Cp128: the denomination is now
+to see exactly what data the operator's indexer used to
+derive the displayed price.  The denomination is
 operator-configurable (USD/EUR/XDR/XAU/...); the same trust
 analysis applies regardless of the chosen unit.  Not remedied
 in code beyond the receipt endpoint; documented as a known
@@ -1142,31 +1248,29 @@ overriding either default should adjust both files.
 
 ### Database backup posture
 
-The recommended backup script (RUN-A-MORPHIT-NODE.md §10)
-writes nightly gzipped pg_dumps to `/home/morphit/backups/`
-mode 0600, prunes after 30 days, and atomically renames from
-`.partial` → final to prevent half-written files being
-mistaken for valid backups. Backup contents include chat
-ciphertexts (which only the participants can decrypt),
-feedback content, and engagement aggregates. None of it is
-"secret" in the cryptographic sense (all derivable from chain
-ops), but the backup file's mode 0600 prevents other local
-users from reading it.
-
-Off-server copy is documented but not automated — operators
-must add their own rsync/rclone target.
+The daily backup (`ops/backup/morphit-backup.sh`, set up by the
+installer; `RUN-A-MORPHIT-NODE.md` §9) writes gzipped `pg_dump`s to
+`/home/morphit/backups/` mode 0600, keeps 30 days, and renames from
+`.partial` → final so a half-written file is never mistaken for a
+backup. **They are plain text unless you give an age public key**:
+the install wizard asks for one ("Encrypt your daily backups"), and
+`morphit-ops upgrade` asks once about plain-text backups already on
+the box. Contents include chat ciphertexts (which only the
+participants can decrypt), feedback, engagement aggregates, and also
+local data the chain does not have (operator blocks, moderation
+records, view counters). Push subscription rows are left out of the
+dumps. Off-server copies are opt-in (`REMOTE_DESTINATION` in
+`/etc/morphit/backup.env`, OPERATIONS.md §37.12).
 
 ## Responsible disclosure (updated)
 
 Security researchers, please report findings via one of these
 channels in order of preference:
 
-1. **Matrix DM** to **`@agorise:matrix.org`** — fastest path
-   to a real human on the project.  End-to-end encrypted by
-   default in Element/most Matrix clients; no infrastructure
-   we run handles the message in cleartext.  Use this for
-   anything sensitive enough you wouldn't want a passive
-   observer to see.
+1. **Matrix DM** to **`@agorise:matrix.org`** (a user, not a
+   room) — the one channel for every vulnerability report.
+   End-to-end encrypted by default in Element/most Matrix
+   clients.
 2. If you cannot use Matrix: say so in the public room
    **`#agorise:matrix.org`** WITHOUT any details, and ask a maintainer to
    DM you. Do not open a public issue on git.agorise.net for an
@@ -1229,8 +1333,7 @@ suggests.  Instead, we promise:
    address shared at payment time), based on severity, exploit
    complexity, and the report's quality.
 4. **Reports we don't pay for still get hall-of-fame credit**
-   if you want it — public attribution at /security-credits, in
-   `docs/AUDIT-2026-05.md`, and in our release notes.
+   if you want it — public attribution in our release notes.
 
 This posture follows pre-launch reality: the project's funding
 is bootstrapped, the canonical operator's BLURT runway is finite,
@@ -1268,13 +1371,12 @@ prevent.  In scope:
   denial-of-service against the directory itself
 - Cryptography misuse — wrong primitive choices, insufficient
   randomness, key-reuse, misuse of nonces, any side channel in
-  code we wrote (we accept the timing-side-channel advisory in
-  `elliptic` as documented in this file's Known supply-chain
-  advisories section; new findings AT THAT LAYER are also in
-  scope, and should be reported upstream as well)
-- The build-from-source pipeline — anything that lets a build
-  produce different bytes than the on-chain `morphit_release_v1`
-  manifest, in a way that compromises reproducibility
+  code we wrote or in the signing libraries we ship
+  (`@noble/secp256k1`, libsodium) — report those upstream as well
+- The release pipeline — anything that lets a release, or the
+  files an honest instance serves, differ from what the on-chain
+  `morphit_release_v1` op signs (builds are not byte-reproducible
+  today; a way to exploit that is in scope)
 - Privacy regressions — IP retention, telemetry leaks,
   third-party requests we didn't disclose, cookie or fingerprint
   surfaces
@@ -1370,9 +1472,9 @@ rather not depend on).  Workflow:
 
 ### Hall of fame
 
-A list of researchers who've helped harden Morphit lives at
-`/security-credits` on the canonical operator's instance.
-Inclusion is opt-in.  We list:
+Researchers who've helped harden Morphit are credited in the
+release notes of the release that ships the fix. Inclusion is
+opt-in.  We list:
 
 - Researcher name (or pseudonym, your choice)
 - Brief finding summary (you can review and approve the wording
@@ -1398,6 +1500,7 @@ To be explicit about what's NOT part of this program:
   anything.
 - **No "we'll get back to you in three months."**  72-hour
   acknowledgment is a firm commitment, not a stretch goal.  If
-  you don't hear back in 72 hours, the disclosure channel
-  failed (Matrix server down, agorise account compromised,
-  whatever) and you should escalate via a different channel.
+  you don't hear back in 72 hours, say in the public room
+  `#agorise:matrix.org` that a security report is waiting for an
+  answer — still with **no details** — and a maintainer will DM
+  you. Never move the details to a public channel.

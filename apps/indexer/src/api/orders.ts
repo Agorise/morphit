@@ -1,12 +1,17 @@
 /**
- * Morphit indexer — /v1/orders/:account endpoint.
+ * Morphit indexer — /v1/orders/:account endpoints.
  *
- * All orders belonging to one account, regardless of status. UI
- * decides whether to hide cancelled or show them greyed out.
+ *   GET /v1/orders/:account             all of an account's orders, any
+ *                                       status, paginated (cursor on
+ *                                       updated_at DESC, permlink ASC).
+ *   GET /v1/orders/:account/sybil_tier  how many of them count toward the
+ *                                       Sybil fee tier now (or ?at=).
+ *   GET /v1/orders/:account/:permlink   one order (orderByPermlinkRoute).
  *
- * Pagination: cursor on (updated_at DESC, permlink ASC). The
- * account is already fixed by the path parameter, so we don't
- * need it in the cursor.
+ * A page that needs one order, or the fee tier, asks for exactly that: reading
+ * the newest page of the list and searching it reported a live order as "not
+ * found" and under-quoted the fee for an account with more orders than a page.
+ * `sybil_tier` cannot collide with a permlink (no underscore in permlinks).
  */
 
 import { Hono } from 'hono';
@@ -14,9 +19,11 @@ import { z } from 'zod';
 
 import type { Database } from '$db/pool';
 import type { AssetTicker } from '@morphit/asset-registry';
-import { decodeCursor, encodeCursor, errorBody, isAccountName } from '$api/shared';
+import { decodeCursor, encodeCursor, errorBody, isCursorTime, isAccountName } from '$api/shared';
 import { tradeCountJoin, feedbackAggregateJoin } from '$api/reputationJoin';
 import { computeReputationScore } from '$indexer/reputation/score';
+import { validateOrderPermlink } from '$indexer/permlink';
+import { countForSybilTier } from '$api/sybilTier';
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
@@ -35,7 +42,7 @@ function narrowCursor(v: unknown): Cursor | null {
 	if (typeof v !== 'object' || v === null) return null;
 	const o = v as Record<string, unknown>;
 	if (typeof o.u !== 'string' || typeof o.p !== 'string') return null;
-	if (Number.isNaN(new Date(o.u).getTime())) return null;
+	if (!isCursorTime(o.u)) return null;
 	return { u: o.u, p: o.p };
 }
 
@@ -50,7 +57,7 @@ interface OrderRow {
 	price_model: unknown;
 	location_region: string | null;
 	payment_methods: string[];
-	/** cp425 — accepted crypto set for a BARTER order; null for crypto assets. */
+	/** accepted crypto set for a BARTER order; null for crypto assets. */
 	accepted_assets: string[] | null;
 	/** v1.9.0 — a BARTER order's inline goods label; null for crypto orders. */
 	specific_barter_title: string | null;
@@ -84,7 +91,7 @@ interface OrderRow {
 	 *  unproven completions stay NULL). */
 	completed_counterparty: string | null;
 	/** v1.5.5: the owner's COMPLETED-TRADE count (both sides credited,
-	 *  sock-puppet-pair filtered). v1.8.15 (the maintainer, t.txt #5) — this endpoint
+	 *  sock-puppet-pair filtered). v1.8.15 — this endpoint
 	 *  now ALSO carries the rating aggregate + reciprocity flag so the order
 	 *  DETAIL page's "POSTED BY" card can render the ⭐ reputation pill and the
 	 *  "No mutual-review flags" pill without a second round-trip, matching the
@@ -108,6 +115,8 @@ interface OrderRow {
 	is_new_trader: boolean;
 	created_at: Date;
 	updated_at: Date;
+	/** updated_at to the microsecond, for the cursor (see orderbook.ts). */
+	updated_at_cursor: string;
 	expires_at: Date | null;
 	/** v1.20.0 (MK-H2) — this order's own BTC fee address (NULL unless it
 	 *  was posted after the treasury xpub pin), its receive index, the
@@ -140,7 +149,7 @@ function rowToWire(r: OrderRow) {
 		fee_method: r.fee_method,
 		completed_counterparty: r.completed_counterparty,
 		trade_count: r.trade_count,
-		// v1.8.15 (t.txt #5) — rating aggregate + composite score, computed
+		// v1.8.15 — rating aggregate + composite score, computed
 		// with the SAME helper the orderbook uses so the detail-page card and
 		// an orderbook card show the identical ⭐ number for the same account.
 		feedback_count: r.feedback_count,
@@ -175,8 +184,60 @@ function rowToWire(r: OrderRow) {
 	};
 }
 
+/** The order-card SELECT … FROM … JOINs every endpoint here shares. */
+const ORDER_SELECT = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
+			        o.amount_min::text, o.amount_max::text, o.price_model,
+			        o.location_region, o.payment_methods, o.accepted_assets,
+			        o.specific_barter_title, o.terms,
+			        o.status, o.fee_status, o.fee_method,
+			        o.completed_counterparty,
+			        -- v1.5.5: the 🌱 new-trader chip now keys off COMPLETED
+			        -- TRADES, not reviews. A trader who has actually completed
+			        -- trades shouldn't still read as new just because nobody left
+			        -- stars — reviews are optional, trades are the real signal.
+			        COALESCE(tc.c, 0) AS trade_count,
+			        (COALESCE(tc.c, 0) < 4) AS is_new_trader,
+			        -- v1.8.15 — rating aggregate (same CTE the orderbook
+			        -- + feedback summary use) so the detail page's POSTED BY card
+			        -- shows the ⭐ reputation pill, plus the suspicious-reciprocity
+			        -- flag for the "No mutual-review flags" trust pill.
+			        COALESCE(f.c, 0)::int AS feedback_count,
+			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
+			        f.last_feedback_at,
+			        EXISTS (
+			          SELECT 1 FROM suspicious_reciprocity sr
+			           WHERE sr.account_a = o.account OR sr.account_b = o.account
+			        ) AS reciprocity_flagged,
+			        o.created_at, o.updated_at, o.expires_at,
+			        to_char(o.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_cursor,
+			        o.btc_fee_index, o.btc_fee_address, o.btc_fee_xpub, o.btc_fee_sats::text,
+			        o.btc_fee_received_sats::text, o.btc_fee_unconfirmed_sats::text
+			 FROM orders o
+			 ${feedbackAggregateJoin('o')}
+${tradeCountJoin('o')}`;
+
+/** Instance-local block: an account blocked on THIS instance has its
+ *  listings hidden here too. */
+const notBlocked = (opParam: string): string =>
+	`NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')`;
+
 export function ordersByAccountRoute(db: Database, operatorAccount: string): Hono {
 	const app = new Hono();
+
+	app.get('/:account/sybil_tier', async (c) => {
+		const account = c.req.param('account');
+		if (!isAccountName(account)) {
+			return c.json(errorBody('bad_request', 'invalid account name'), 400);
+		}
+		const atRaw = c.req.query('at');
+		const at = atRaw === undefined ? new Date() : new Date(atRaw);
+		if (Number.isNaN(at.getTime())) {
+			return c.json(errorBody('bad_request', 'invalid at'), 400);
+		}
+		const count = await countForSybilTier(db, account, at);
+		c.header('cache-control', 'no-store');
+		return c.json({ account, at: at.toISOString(), count });
+	});
 
 	app.get('/:account', async (c) => {
 		const account = c.req.param('account');
@@ -201,11 +262,11 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 			if (!cur) {
 				return c.json(errorBody('bad_request', 'invalid cursor'), 400);
 			}
-			params.push(new Date(cur.u), cur.p);
+			params.push(cur.u, cur.p);
 			// Same mixed-direction predicate pattern as orderbook: we
 			// can't use a tuple comparison because updated_at is DESC
 			// and permlink is ASC.
-			cursorClause = ` AND (o.updated_at < $2 OR (o.updated_at = $2 AND o.permlink > $3))`;
+			cursorClause = ` AND (o.updated_at < $2::timestamptz OR (o.updated_at = $2::timestamptz AND o.permlink > $3))`;
 		}
 		params.push(limit + 1);
 		const limitParam = `$${params.length}`;
@@ -214,37 +275,9 @@ export function ordersByAccountRoute(db: Database, operatorAccount: string): Hon
 		params.push(operatorAccount);
 		const opParam = `$${params.length}`;
 
-		const sql = `SELECT o.account, o.permlink, o.side, o.asset, o.fiat_currency,
-			        o.amount_min::text, o.amount_max::text, o.price_model,
-			        o.location_region, o.payment_methods, o.accepted_assets,
-			        o.specific_barter_title, o.terms,
-			        o.status, o.fee_status, o.fee_method,
-			        o.completed_counterparty,
-			        -- v1.5.5 (the maintainer): the 🌱 new-trader chip now keys off COMPLETED
-			        -- TRADES, not reviews. A trader who has actually completed
-			        -- trades shouldn't still read as new just because nobody left
-			        -- stars — reviews are optional, trades are the real signal.
-			        COALESCE(tc.c, 0) AS trade_count,
-			        (COALESCE(tc.c, 0) < 4) AS is_new_trader,
-			        -- v1.8.15 (t.txt #5) — rating aggregate (same CTE the orderbook
-			        -- + feedback summary use) so the detail page's POSTED BY card
-			        -- shows the ⭐ reputation pill, plus the suspicious-reciprocity
-			        -- flag for the "No mutual-review flags" trust pill.
-			        COALESCE(f.c, 0)::int AS feedback_count,
-			        CASE WHEN f.r IS NOT NULL THEN f.r::text ELSE NULL END AS weighted_rating,
-			        f.last_feedback_at,
-			        EXISTS (
-			          SELECT 1 FROM suspicious_reciprocity sr
-			           WHERE sr.account_a = o.account OR sr.account_b = o.account
-			        ) AS reciprocity_flagged,
-			        o.created_at, o.updated_at, o.expires_at,
-			        o.btc_fee_index, o.btc_fee_address, o.btc_fee_xpub, o.btc_fee_sats::text,
-			        o.btc_fee_received_sats::text, o.btc_fee_unconfirmed_sats::text
-			 FROM orders o
-			 ${feedbackAggregateJoin('o')}
-${tradeCountJoin('o')}
+		const sql = `${ORDER_SELECT}
 			 WHERE o.account = $1${cursorClause}
-			   AND NOT EXISTS (SELECT 1 FROM operator_blocks ob WHERE ob.operator = ${opParam} AND ob.blocked = o.account AND ob.state = 'blocked')
+			   AND ${notBlocked(opParam)}
 			 ORDER BY o.updated_at DESC, o.permlink ASC
 			 LIMIT ${limitParam}`;
 
@@ -255,7 +288,7 @@ ${tradeCountJoin('o')}
 			rows.pop();
 			const last = rows[rows.length - 1]!;
 			nextCursor = encodeCursor({
-				u: last.updated_at.toISOString(),
+				u: last.updated_at_cursor,
 				p: last.permlink
 			});
 		}
@@ -264,6 +297,35 @@ ${tradeCountJoin('o')}
 			items: rows.map(rowToWire),
 			next_cursor: nextCursor
 		});
+	});
+
+	return app;
+}
+
+/** GET /v1/orders/:account/:permlink — one order, in the same shape as an item
+ *  of /v1/orders/:account; 404 when this instance has no such order (or hides
+ *  its owner). Mounted after every other two-segment /v1/orders route. */
+export function orderByPermlinkRoute(db: Database, operatorAccount: string): Hono {
+	const app = new Hono();
+
+	app.get('/:account/:permlink', async (c) => {
+		const account = c.req.param('account');
+		const permlink = c.req.param('permlink');
+		if (!isAccountName(account)) {
+			return c.json(errorBody('bad_request', 'invalid account name'), 400);
+		}
+		if (validateOrderPermlink(permlink) !== null) {
+			return c.json(errorBody('bad_request', 'invalid permlink'), 400);
+		}
+		const result = await db.query<OrderRow>(
+			`${ORDER_SELECT}
+			 WHERE o.account = $1 AND o.permlink = $2
+			   AND ${notBlocked('$3')}`,
+			[account, permlink, operatorAccount]
+		);
+		const row = result.rows[0];
+		if (row === undefined) return c.json(errorBody('not_found', 'order not found'), 404);
+		return c.json({ item: rowToWire(row) });
 	});
 
 	return app;

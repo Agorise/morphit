@@ -220,7 +220,7 @@ export interface AideBaselineStatus {
 	readonly detail: string;
 }
 
-/** AIDE filesystem-integrity baseline state (cp680–cp682). The baseline builds
+/** AIDE filesystem-integrity baseline state. The baseline builds
  *  in a deferred background one-shot that SELF-REMOVES on success, so the raw
  *  service state is misleading (absent = done, not missing). Combine on-disk
  *  facts instead, so a background failure is visible here even without Matrix:
@@ -308,7 +308,7 @@ function tlsStatusFromDays(days: number, served: boolean): TlsCertStatus {
 /** TLS certificate status. Prefers host certbot certs in `liveDir`; when none is
  *  found there, falls back to `servedProbe` (the cert actually served on 443) so
  *  a BunkerWeb-managed cert — which lives in BunkerWeb's own volume, not
- *  /etc/letsencrypt — is recognised instead of reported as "not set up". cp684. */
+ *  /etc/letsencrypt — is recognised instead of reported as "not set up".. */
 export function checkTlsCert(
 	liveDir = '/etc/letsencrypt/live',
 	servedProbe?: () => number | null
@@ -363,7 +363,7 @@ export function checkTlsCert(
 
 /** The alert MXID(s) the matrix-bot is configured to DM, from its env file.
  *  Read-only; null when unset/unreadable. Lets health confirm the bot targets
- *  the address the operator entered, not just that the service is up. cp684. */
+ *  the address the operator entered, not just that the service is up.. */
 export function readMatrixMxid(envPath = '/etc/morphit/matrix-bot.env'): string | null {
 	try {
 		const txt = readFileSync(envPath, 'utf8');
@@ -459,7 +459,7 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 			detail: 'past its "valid through" date — regenerate it'
 		};
 	}
-	// cp622 — still valid but running LOW on validity: the weekly refresh has
+	// still valid but running LOW on validity: the weekly refresh has
 	// likely stalled (an upgrade wiped the canary and it wasn't re-run, or the
 	// timer died). Normal operation keeps a wide margin, so warn now — while
 	// there's still time — instead of waiting for it to expire.
@@ -480,7 +480,7 @@ export function checkCanary(filePath: string, now: Date): CanaryStatus {
 
 /** Resolve the canary file inside the install tree.  It reads the
  *  SERVED copy — nginx's web root is the `build/` dir, so `/canary.txt`
- *  is served from `apps/web/build/canary.txt`, NOT `static/`.  (cp431:
+ *  is served from `apps/web/build/canary.txt`, NOT `static/`.  (It
  *  was `static/`, which is only the build-time source and is never the
  *  file the public actually fetches — so health reported "missing" even
  *  with a live, verified canary at the URL.) */
@@ -518,12 +518,12 @@ export interface HealthSummary {
 	 *  body's `price_feed`.  null when the field is absent (relay health,
 	 *  or an indexer built before this field existed). */
 	readonly priceFeed: PriceFeedSummary | null;
-	/** cp372 — per-source FX + crypto feed health from the verbose
+	/** per-source FX + crypto feed health from the verbose
 	 *  body's `diagnostics.price_feeds`.  null when the verbose block
 	 *  is absent (verboseHealth off, relay health, or a pre-field
 	 *  indexer build) — the renderer then shows a one-line hint. */
 	readonly priceFeeds: PriceFeedsHealthSummary | null;
-	/** cp403 [1] — chat head-block fast-path status from the operator-only
+	/** chat head-block fast-path status from the operator-only
 	 *  top-level `fastpath` block (same X-Morphit-Local-Health gate as
 	 *  price_feeds). null when absent (relay health, or a pre-fast-path
 	 *  indexer build) — the renderer then shows a one-line hint. */
@@ -1142,7 +1142,7 @@ export function shortEndpoint(url: string): string {
 async function fetchHealth(url: string, timeoutMs = 5000): Promise<FetchedHealth> {
 	const controller = new AbortController();
 	const t = setTimeout(() => controller.abort(), timeoutMs);
-	// cp381: request the operator-only per-source price-feed health.
+	// request the operator-only per-source price-feed health.
 	// The ops-cli hits the indexer directly on the internal bridge, so
 	// this header reaches it; the public edge strips X-Morphit-Local-Health
 	// (proxy_set_header … ""), so a public caller can never forge it. The
@@ -1320,7 +1320,7 @@ export const BACKUP_STALE_AFTER_MS = 36 * 60 * 60 * 1000;
 export const BACKUP_TRIGGER_SLACK_MS = 15 * 60 * 1000;
 /** Below this, the file cannot be a dump of the Morphit schema.
  *
- *  WHY (cp526). Before the status-capture fix in `ops/backup/morphit-backup.sh`,
+ *  WHY. Before the status-capture fix in `ops/backup/morphit-backup.sh`,
  *  a FAILED pg_dump still left a valid ~20-byte gzip member behind, which the
  *  script renamed to a real backup name and reported as written. Freshness
  *  alone therefore CANNOT be trusted: the dash bug's successor produces a dump
@@ -1539,7 +1539,7 @@ export function formatBackupSize(bytes: number): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-// ─── IPFS / IPNS release seeding (cp667) ───────────────────────────
+// ─── IPFS / IPNS release seeding ───────────────────────────
 //
 // Every instance runs a small Kubo node that PINS the signed release to IPFS and
 // REBROADCASTS the on-chain IPNS record to the DHT, so releases stay hosted and
@@ -1621,7 +1621,7 @@ function opsProblemText(p: SeedingProblem, f: IpfsSeedingFacts): string {
 
 /** Decide whether this node is successfully seeding releases to IPFS/IPNS. PURE.
  *  The STATE decision is the shared classifier (@morphit/node-health) so this
- *  CLI view and the public /v1/health endpoint can never drift (cp707); only
+ *  CLI view and the public /v1/health endpoint can never drift; only
  *  the CLI's richer DETAIL wording (remediation hints + last-run ages) lives
  *  here. */
 export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
@@ -1658,7 +1658,7 @@ export function checkIpfsSeeding(f: IpfsSeedingFacts): IpfsSeedingStatus {
 			// release is pinned locally and the IPNS record was rebroadcast. They do
 			// NOT prove a peer can fetch it — on morphit.io both ran happily for weeks
 			// while the firewall dropped the frontend's connect to the gateway, so every
-			// hidden fetch 404'd (the maintainer/timeapp flagged the old wording as misleading;
+			// hidden fetch 404'd (timeapp flagged the old wording as misleading;
 			// morphitlat was stranded by exactly that gap). The upgrade's seed step does
 			// the real end-to-end reachability check and reports per transport.
 			return {
@@ -1787,7 +1787,7 @@ export async function readSystemResources(): Promise<SystemResources> {
 		/* leave null */
 	}
 
-	// Disk: the filesystem holding the node's DATA (cp708).  Defaults to
+	// Disk: the filesystem holding the node's DATA.  Defaults to
 	// `/` (the VPS's drive on a single-disk box; Docker volumes / the DB
 	// live under it), but a split-volume node points
 	// MORPHIT_HEALTH_DISK_PATH at its data mount so this figure tracks the
@@ -1846,7 +1846,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// The report gathers a lot of live values (indexer + relay probes, per-RPC
 	// reachability, systemctl, TLS, CPU/mem/disk), which takes a beat. Without
 	// feedback the prompt looks hung, so show a spinner immediately — but never in
-	// --json mode (it would corrupt machine-readable stdout) (the maintainer).
+	// --json mode (it would corrupt machine-readable stdout).
 	const stopSpinner = json ? null : startDotsSpinner('Generating your health report…');
 	const gateways = bridgeGatewayHosts(networkInterfaces());
 
@@ -1932,7 +1932,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 						age_ms: backups.ageMs ?? null,
 						detail: backups.detail
 					},
-					// cp667 — is this node doing its share of hosting the release +
+					// is this node doing its share of hosting the release +
 					// keeping IPNS alive? Zabbix can alert on state !== 'ok'/'not-configured'.
 					ipfs_seeding: {
 						state: ipfsSeeding.state,
@@ -2032,7 +2032,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 				console.log(`                     ${line}`);
 			}
 		}
-		// cp684 — make the FAST catch-up explicit: a behind node fetches blocks
+		// make the FAST catch-up explicit: a behind node fetches blocks
 		// from all reachable endpoints at once (one prefetch window per endpoint).
 		// Use the same rows-derived count as the header so the two never disagree.
 		if (!s.synced && rpcHealthy !== null && rpcHealthy > 0) {
@@ -2057,7 +2057,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			}
 			console.log(`      Price feed:    ${pfLine}`);
 		}
-		// cp381 — per-source price-feed health (operator-only; from the
+		// per-source price-feed health (operator-only; from the
 		// top-level `price_feeds` block, gated by the X-Morphit-Local-Health
 		// header the public edge strips).  For crypto feeds, one line per
 		// provider — status, the price that provider reported, and its
@@ -2069,7 +2069,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			// A source that is up for SOME asset but "never answered" for another is
 			// NOT down — that exchange just doesn't list this asset (e.g. no BLURT
 			// market on coingecko/coinpaprika). Label those "n/a — no market"
-			// (neutral), not red "down", so an operator isn't alarmed (the maintainer).
+			// (neutral), not red "down", so an operator isn't alarmed.
 			const upSomewhere = new Set<string>();
 			for (const f of s.priceFeeds.feeds) {
 				if (!f.isCrypto) continue;
@@ -2368,7 +2368,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 		console.log(serviceLine(c, svc.unit, svc.state));
 	}
 	// matrix-bot: confirm it's DMing the address the operator entered, not just
-	// that the service is up (cp684).
+	// that the service is up.
 	{
 		const mb = services.find((s) => s.unit === 'morphit-matrix-bot');
 		if (mb !== undefined && (mb.state === 'active' || mb.state === 'activating')) {
@@ -2379,7 +2379,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 			);
 		}
 	}
-	// HTTPS / TLS certificate (cp684).
+	// HTTPS / TLS certificate.
 	{
 		const tlsTag =
 			tls.state === 'valid'
@@ -2465,7 +2465,7 @@ export async function runHealth(ctx: HealthCtx): Promise<number> {
 	// v1.16.14 — show this instance's OWN reachable addresses (clearnet + every
 	// hidden service it advertises), so the operator sees concretely that the
 	// release + site are served over clearnet, Tor and I2P — not just a generic
-	// "if you run Tor/I2P" nudge (the maintainer). Read from the loaded operator config.
+	// "if you run Tor/I2P" nudge. Read from the loaded operator config.
 	const addrRows: Array<[string, string | undefined]> = [
 		['Clearnet', process.env.MORPHIT_INSTANCE_ORIGIN],
 		['Tor', process.env.MORPHIT_INSTANCE_TOR_ADDRESS],

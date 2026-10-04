@@ -82,10 +82,10 @@ function pageIsFocused(): boolean {
  *  the same underlying event (e.g. the same chat message redelivered)
  *  doesn't double-count.
  *
- *  Preference-gating: the user's per-category opt-in is consulted at
- *  fire time via the preferences store. If they've switched the
- *  category off in Settings, the event produces no ambient badge at
- *  all. */
+ *  Preference-gating: the ambient count (title prefix, favicon, app
+ *  badge) always updates. The user's per-category opt-in, read at fire
+ *  time from the preferences store, gates only the ALERTS (native
+ *  notification, chime, vibrate). */
 export function notify(event: NotificationEvent): void {
 	if (typeof window === 'undefined') return;
 

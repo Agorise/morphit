@@ -20,12 +20,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { runExplicitLockExtras } from './explicitLock';
 import { recordRecentPeer, loadRecentPeers } from './recentPeers';
+import { setPersonStorageTier } from '$lib/storage/personStorage';
 import { markConversationRead, getLastVisited } from './readState';
 import { setPin, getPin, type ChatPubPin } from './pubPin';
 import { saveDraft, loadDraft } from '$lib/drafts';
+import { handleSessionHandoffMessage, reset } from '$stores/identity';
 
 describe('explicitLock — runExplicitLockExtras', () => {
 	beforeEach(() => {
+		setPersonStorageTier('local');
 		// Clear any cross-test leftovers.
 		try {
 			localStorage.clear();
@@ -125,10 +128,17 @@ describe('explicitLock — runExplicitLockExtras', () => {
 		expect(getLastVisited('bob', '')).toBeNull();
 	});
 
-	it('clears all chat-pub pins (Option 5 / S2 wiring)', () => {
+	it('leaves no readable chat-pub pin (Option 5 / S2 wiring)', () => {
 		// The chain-anchored chat-pub pins reveal which peers the
 		// user has chatted with — same privacy class as recent-
-		// peers and read-state.  Explicit lock must wipe them.
+		// peers and read-state. Explicit lock takes them off disk
+		// (sealed for the next unlock when a posting key is present —
+		// see keyChangeGuards.test.ts; removed when the session has
+		// none, as a paired read-only one here).
+		handleSessionHandoffMessage(
+			{ t: 'offer', payload: { state: 'paired-readonly', paired: { account: 'me' } } },
+			() => {}
+		);
 		const pin: ChatPubPin = {
 			blockNum: 12345,
 			trxId: 'a'.repeat(40),
@@ -140,6 +150,7 @@ describe('explicitLock — runExplicitLockExtras', () => {
 		expect(getPin('bob')).not.toBeNull();
 
 		runExplicitLockExtras();
+		reset();
 
 		expect(getPin('alice')).toBeNull();
 		expect(getPin('bob')).toBeNull();

@@ -1,8 +1,8 @@
 /**
  * Morphit — pure base58 (Bitcoin alphabet) decoder.
  *
- * Split from wif.ts so it can be smoke-tested without libsodium in
- * the sandbox.  No crypto, no I/O — just the Bitcoin base58 alphabet
+ * Split from wif.ts so it can be smoke-tested without loading
+ * libsodium.  No crypto, no I/O — just the Bitcoin base58 alphabet
  * and bigint long-division.
  *
  * Used by:
@@ -107,7 +107,7 @@ export function looksLikeWif(s: string): boolean {
  *
  * Splits cleanly from `wif.ts` so the entire decode path (base58 +
  * checksum + version + length checks) can be smoke-tested with a
- * Node `crypto.subtle` SHA-256 in the sandbox, while the production
+ * Node `crypto.subtle` SHA-256 in a smoke, while the production
  * caller wires in libsodium.  The verdict shape is identical to
  * what wif.ts surfaces; wif.ts just translates non-success into
  * a thrown WifDecodeError with a UI-friendly code.

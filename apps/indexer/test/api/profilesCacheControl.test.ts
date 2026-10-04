@@ -48,7 +48,7 @@ function row(account: string): Row {
  * v1.5.5 — a row for an account that EXISTS on-chain but has never set a
  * profile. Impossible before the batch was re-anchored on `accounts`: such an
  * account simply returned nothing, which is why its posting key never reached
- * the profile's review cards (t155, the maintainer: no truncated key under @tester2).
+ * the profile's review cards (t155: no truncated key under @tester2).
  *
  * It is the whole reason the completeness check can no longer count rows. This
  * row IS returned, but it is NOT a profile — pinning a batch containing one
@@ -173,9 +173,9 @@ describe('GET /v1/profiles/:account — single lookup', () => {
 });
 
 /**
- * Server-side warm-positive cache (t.txt avatar latency). the maintainer: profiles "STILL
- * taking up to 7 seconds … the server itself can cache the user avatars and
- * display name text". The endpoint now serves warm POSITIVES from an in-memory
+ * Server-side warm-positive cache (avatar latency). Profiles took up
+ * to 7 seconds to appear for some accounts, so the server caches avatars and
+ * display names itself. The endpoint now serves warm POSITIVES from an in-memory
  * cache and DB-queries only the misses, so a hot avatar/name returns without
  * touching Postgres (and stops queueing behind the poller's block writes).
  * Negatives are never cached — a fresh profile must not be hidden.

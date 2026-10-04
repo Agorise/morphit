@@ -17,7 +17,7 @@
  * ≥3 mutual 5-star reviews within 7 days with no third-party
  * feedback.
  *
- * **Signal C — one-way pile-on (Part 113).** ≥3 distinct reviewers
+ * **Signal C — one-way pile-on.** ≥3 distinct reviewers
  * targeting the same subject with avg rating ≤2, posted within a
  * 7-day window, where all reviewers' first_activity_at clusters
  * within a 14-day window AND each reviewer has narrow review
@@ -26,7 +26,7 @@
  * (different creators) and Signal B misses (one-way, not mutual,
  * low-star not high-star).
  *
- * **Signal D — review concentration (cp123 H2).** Closes Part 113
+ * **Signal D — review concentration.** Closes
  * A4 "Signal B evasion via diversification."  Signal B requires
  * distinct_subjects=1 (the reviewer reviewed ONLY the target).
  * A smart attacker reviews 2-3 throwaway third parties to evade
@@ -44,11 +44,23 @@
  * is flagged, it stays flagged.  A false-positive's recovery path
  * is operator-side (DELETE the row), not automated.
  *
- * The detectors are called from the poller between block-
- * processing cycles. They're not tied to any specific block; they
- * read materialised state and write to a separate table. Running
- * them once per hour is plenty — the patterns they detect don't
- * form on sub-second timescales.
+ * WHEN THEY RUN — on chain time, never the wall clock. Signals B, C
+ * and D are evaluated when a review is applied, and Signal E when an
+ * order is completed (raiseReviewSignals / raiseTradeSignals), each
+ * over windows that END AT THAT OP'S BLOCK TIME and scoped to the
+ * accounts the op involves. They used to run hourly over windows
+ * ending at the wall clock, so whether a flag existed depended on
+ * when a node happened to run its detector: a node indexing the same
+ * history later never raised flags a live node had, and the review
+ * gate that read them admitted different reviews on different nodes.
+ * Signal A (related accounts) has no time window; the poller runs it
+ * periodically.
+ *
+ * The review and trade-credit GATES never read these tables: they
+ * call reciprocityEverHeld, a pure function of the chain-derived
+ * feedback rows up to the op's block time, so an operator's local
+ * clearance (moderation_flag_clearances) can never change a verdict.
+ * The tables are what reputation display reads.
  */
 
 import type pg from 'pg';
@@ -70,6 +82,8 @@ const SIGNAL_B_WINDOW_DAYS = 7;
  *  by the same creator whose first Morphit activities fall within
  *  this window are candidates for flagging. */
 const SIGNAL_A_PROXIMITY_MINUTES = 5;
+/** Upper bound on one Signal A statement. */
+export const SIGNAL_A_STATEMENT_TIMEOUT_MS = 30_000;
 
 /**
  * Run Signal B — suspicious reciprocity detection.
@@ -87,14 +101,28 @@ const SIGNAL_A_PROXIMITY_MINUTES = 5;
  * Returns the number of NEW rows inserted this run (existing
  * flagged pairs are not double-counted).
  */
-export async function detectSuspiciousReciprocity(db: Database): Promise<number> {
-	return db.withTx((client) => detectSuspiciousReciprocityInTx(client));
+export async function detectSuspiciousReciprocity(
+	db: Database,
+	opts: SignalWindow & { readonly pair?: readonly [string, string] }
+): Promise<number> {
+	return db.withTx((client) => detectSuspiciousReciprocityInTx(client, opts));
+}
+
+/** Where a detector's windows end. */
+export interface SignalWindow {
+	/** The windows end here: the block time of the op that triggered the
+	 *  evaluation. Never the wall clock. */
+	readonly asOf: Date;
 }
 
 /** Implementation that operates on a caller-provided transaction.
  *  Extracted for testability — tests can run this against a mock
- *  client without touching the real pool. */
-export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Promise<number> {
+ *  client without touching the real pool. The window is
+ *  ($4 - 7 days, $4]; $5/$6, when given, restrict it to one pair. */
+export async function detectSuspiciousReciprocityInTx(
+	client: pg.PoolClient,
+	opts: SignalWindow & { readonly pair?: readonly [string, string] }
+): Promise<number> {
 	// The CTEs below build up the pair candidates:
 	//   direction_stats: per (reviewer, subject) in the window,
 	//                    count and avg rating.
@@ -113,7 +141,9 @@ export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Pr
 				COUNT(*) AS cnt,
 				AVG(rating)::NUMERIC(3,2) AS avg_rating
 			FROM feedback
-			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
+			WHERE created_at > $4::timestamptz - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
+			  AND created_at <= $4::timestamptz
+			  AND ($5::text IS NULL OR reviewer IN ($5::text, $6::text))
 			GROUP BY reviewer, subject
 		),
 		reviewer_diversity AS (
@@ -121,7 +151,9 @@ export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Pr
 				reviewer,
 				COUNT(DISTINCT subject) AS distinct_subjects
 			FROM feedback
-			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
+			WHERE created_at > $4::timestamptz - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
+			  AND created_at <= $4::timestamptz
+			  AND ($5::text IS NULL OR reviewer IN ($5::text, $6::text))
 			GROUP BY reviewer
 		),
 		mutual AS (
@@ -147,12 +179,13 @@ export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Pr
 			  AND a.reviewer < a.subject -- canonical ordering, dedupes (a,b)/(b,a)
 		)
 		INSERT INTO suspicious_reciprocity
-			(account_a, account_b, mutual_review_count, avg_rating)
+			(account_a, account_b, mutual_review_count, avg_rating, detected_at)
 		SELECT
 			acct_x,
 			acct_y,
 			(x_to_y_count + y_to_x_count)::INTEGER AS mutual_review_count,
-			((x_to_y_avg + y_to_x_avg) / 2)::NUMERIC(3,2) AS avg_rating
+			((x_to_y_avg + y_to_x_avg) / 2)::NUMERIC(3,2) AS avg_rating,
+			$4::timestamptz
 		FROM mutual
 		-- v1.8.9 — never re-raise a flag the operator has cleared. Without this
 		-- the clear is cosmetic: the row comes straight back on the next pass.
@@ -179,9 +212,66 @@ export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Pr
 	const result = await client.query(sql, [
 		SIGNAL_B_MIN_COUNT,
 		SIGNAL_B_MIN_AVG_RATING,
-		SIGNAL_B_CLEARANCE_GROWTH
+		SIGNAL_B_CLEARANCE_GROWTH,
+		opts.asOf,
+		opts.pair?.[0] ?? null,
+		opts.pair?.[1] ?? null
 	]);
 	return result.rowCount ?? 0;
+}
+
+/** The minimal read surface (a PoolClient inside a handler, the pool outside). */
+interface Queryable {
+	query<R extends pg.QueryResultRow = pg.QueryResultRow>(
+		text: string,
+		params?: readonly unknown[]
+	): Promise<pg.QueryResult<R>>;
+}
+
+/**
+ * Did the Signal B pattern (suspicious reciprocity) EVER hold for the pair
+ * (a, b) at or before `asOf`? Evaluated over the 7-day window ending at each of
+ * the pair's own review times up to `asOf` — the moments the pattern can come
+ * into being — from the chain-derived feedback rows alone.
+ *
+ * This is what the consensus gates use (the verified-chat bar for reviews and
+ * order-complete counterparties, and the fee-attestation quorum): the same
+ * answer on every node for the same chain history, whenever it is asked, and
+ * independent of an operator's local clearances.
+ */
+export async function reciprocityEverHeld(
+	db: Queryable,
+	args: { a: string; b: string; asOf: Date }
+): Promise<boolean> {
+	if (args.a === args.b) return false;
+	const r = await db.query<{ held: boolean }>(
+		`WITH moments AS (
+		   SELECT DISTINCT created_at AS t FROM feedback
+		    WHERE ((reviewer = $1 AND subject = $2) OR (reviewer = $2 AND subject = $1))
+		      AND created_at <= $3
+		 )
+		 SELECT EXISTS (
+		   SELECT 1 FROM moments m
+		    CROSS JOIN LATERAL (
+		      SELECT
+		        COUNT(*) FILTER (WHERE f.reviewer = $1 AND f.subject = $2) AS ab,
+		        COUNT(*) FILTER (WHERE f.reviewer = $2 AND f.subject = $1) AS ba,
+		        AVG(f.rating) FILTER (WHERE f.reviewer = $1 AND f.subject = $2) AS ab_avg,
+		        AVG(f.rating) FILTER (WHERE f.reviewer = $2 AND f.subject = $1) AS ba_avg,
+		        COUNT(DISTINCT f.subject) FILTER (WHERE f.reviewer = $1) AS a_subjects,
+		        COUNT(DISTINCT f.subject) FILTER (WHERE f.reviewer = $2) AS b_subjects
+		        FROM feedback f
+		       WHERE f.reviewer IN ($1, $2)
+		         AND f.created_at > m.t - INTERVAL '${SIGNAL_B_WINDOW_DAYS} days'
+		         AND f.created_at <= m.t
+		    ) w
+		    WHERE w.ab >= $4 AND w.ba >= $4
+		      AND w.ab_avg::NUMERIC(3,2) >= $5 AND w.ba_avg::NUMERIC(3,2) >= $5
+		      AND w.a_subjects = 1 AND w.b_subjects = 1
+		 ) AS held`,
+		[args.a, args.b, args.asOf, SIGNAL_B_MIN_COUNT, SIGNAL_B_MIN_AVG_RATING]
+	);
+	return r.rows[0]?.held === true;
 }
 
 /**
@@ -201,14 +291,20 @@ export async function detectSuspiciousReciprocityInTx(client: pg.PoolClient): Pr
  * Idempotent via ON CONFLICT DO NOTHING — re-running the
  * detector on the same data produces no new rows.
  *
- * `excludeCreators` lists creator account names that should NOT
- * trigger the signal — pass the Morphit relay account so two
- * friends signing up back-to-back via the relay aren't flagged
- * as related (Finding N28).  The relay creates the vast majority
- * of Morphit-onboarded accounts, so "same creator" is meaningful
- * only when the shared creator is something OTHER than the relay
- * (e.g. a custom blurt-cli operator with their own onboarding
- * pipeline).
+ * Creators that do NOT trigger the signal: every REGISTERED operator
+ * account (each instance's relay creates its users' accounts, so two
+ * friends signing up back-to-back through any instance are not related —
+ * Finding N28; only this instance's relay used to be excluded) plus
+ * `excludeCreators` (this instance's relay, also before it registers).
+ * "Same creator" is meaningful only for some other creator, e.g. a
+ * custom blurt-cli onboarding pipeline.
+ *
+ * Cost: a RANGE join — each account is compared only with same-creator
+ * accounts whose first activity falls within the window, served by the
+ * (creator, first_activity_at) index (v66). The old self-join compared
+ * every same-creator pair (O(k²) for a creator with k accounts) inside the
+ * poll loop with no time limit. The statement is capped at
+ * SIGNAL_A_STATEMENT_TIMEOUT_MS; the poller runs it off the block loop.
  */
 export async function detectRelatedAccounts(
 	db: Database,
@@ -222,11 +318,9 @@ export async function detectRelatedAccountsInTx(
 	options: { excludeCreators?: readonly string[] } = {}
 ): Promise<number> {
 	const excludeCreators = options.excludeCreators ?? [];
-	// The CTE joins the accounts table to itself on matching
-	// creator. We filter to pairs where both halves have produced
-	// their first Morphit op (first_activity_at IS NOT NULL) and
-	// the time gap between those first activities is within the
-	// proximity window. Canonical (a < b) ordering dedupes.
+	await client.query(`SET LOCAL statement_timeout = ${SIGNAL_A_STATEMENT_TIMEOUT_MS}`);
+	// Same-creator pairs whose first activities are within the window,
+	// found with a range join (see above). Canonical (a < b) ordering dedupes.
 	const sql = `
 		WITH candidates AS (
 			SELECT
@@ -238,11 +332,13 @@ export async function detectRelatedAccountsInTx(
 				ABS(EXTRACT(EPOCH FROM (b.first_activity_at - a.first_activity_at))) AS gap_seconds
 			FROM accounts a
 			JOIN accounts b
-				ON a.creator = b.creator
+				ON b.creator = a.creator
+			   AND b.first_activity_at BETWEEN a.first_activity_at - make_interval(secs => $1)
+			                               AND a.first_activity_at + make_interval(secs => $1)
 			   AND a.name < b.name
 			WHERE a.first_activity_at IS NOT NULL
-			  AND b.first_activity_at IS NOT NULL
 			  AND a.creator <> ALL($2::text[])
+			  AND NOT EXISTS (SELECT 1 FROM operators o WHERE o.account = a.creator)
 		)
 		INSERT INTO related_accounts
 			(account_a, account_b, reason, evidence)
@@ -306,14 +402,22 @@ const SIGNAL_C_RECENCY_DAYS = 30;
  *   4. clusters: subjects with ≥3 qualifying attackers whose
  *      first_activity_at span is ≤ ACTIVITY_CLUSTER_DAYS.
  */
-export async function detectOneWayPileOn(db: Database): Promise<number> {
-	return db.withTx((client) => detectOneWayPileOnInTx(client));
+export async function detectOneWayPileOn(
+	db: Database,
+	opts: SignalWindow & { readonly subject?: string }
+): Promise<number> {
+	return db.withTx((client) => detectOneWayPileOnInTx(client, opts));
 }
 
 /** Implementation that operates on a caller-provided transaction.
  *  Extracted for testability — tests can run this against a mock
  *  client without touching the real pool. */
-export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<number> {
+export async function detectOneWayPileOnInTx(
+	client: pg.PoolClient,
+	opts: SignalWindow & { readonly subject?: string }
+): Promise<number> {
+	// Windows end at $6 (the triggering op's block time); $7, when given,
+	// restricts the evaluation to one subject.
 	const sql = `
 		WITH attacker_stats AS (
 			SELECT
@@ -322,7 +426,9 @@ export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<num
 				COUNT(*)::int AS cnt,
 				AVG(rating)::NUMERIC(3,2) AS avg_rating
 			FROM feedback
-			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_C_REVIEW_WINDOW_DAYS} days'
+			WHERE created_at > $6::timestamptz - INTERVAL '${SIGNAL_C_REVIEW_WINDOW_DAYS} days'
+			  AND created_at <= $6::timestamptz
+			  AND ($7::text IS NULL OR subject = $7::text)
 			GROUP BY reviewer, subject
 		),
 		attacker_diversity AS (
@@ -330,7 +436,9 @@ export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<num
 				reviewer,
 				COUNT(DISTINCT subject)::int AS distinct_subjects
 			FROM feedback
-			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_C_RECENCY_DAYS} days'
+			WHERE created_at > $6::timestamptz - INTERVAL '${SIGNAL_C_RECENCY_DAYS} days'
+			  AND created_at <= $6::timestamptz
+			  AND reviewer IN (SELECT reviewer FROM attacker_stats)
 			GROUP BY reviewer
 		),
 		attacker_qualifying AS (
@@ -374,14 +482,16 @@ export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<num
 		)
 		INSERT INTO one_way_pile_on
 			(subject, attacking_reviewers, avg_rating, review_count,
-			 review_window_days, activity_cluster_days)
+			 review_window_days, activity_cluster_days, detected_at, detection_date)
 		SELECT
 			subject,
 			attackers,
 			pile_avg_rating,
 			pile_review_count,
 			$5::int,
-			$4::int
+			$4::int,
+			$6::timestamptz,
+			($6::timestamptz AT TIME ZONE 'UTC')::date
 		FROM subject_clusters
 		WHERE attacker_count >= $3
 		  AND EXTRACT(EPOCH FROM (latest_activity - earliest_activity)) <= $4 * 86400
@@ -392,12 +502,14 @@ export async function detectOneWayPileOnInTx(client: pg.PoolClient): Promise<num
 		SIGNAL_C_MAX_DISTINCT_SUBJECTS,
 		SIGNAL_C_MIN_REVIEWERS,
 		SIGNAL_C_ACTIVITY_CLUSTER_DAYS,
-		SIGNAL_C_REVIEW_WINDOW_DAYS
+		SIGNAL_C_REVIEW_WINDOW_DAYS,
+		opts.asOf,
+		opts.subject ?? null
 	]);
 	return result.rowCount ?? 0;
 }
 
-// ─── Signal D constants (cp123 H2 — review concentration) ──────────
+// ─── Signal D constants (review concentration) ──────────
 
 /** Window over which a reviewer's concentration is computed. */
 const SIGNAL_D_WINDOW_DAYS = 30;
@@ -423,7 +535,7 @@ const SIGNAL_D_MIN_AVG_RATING = 4.5;
 /**
  * Run Signal D — review-concentration detection.
  *
- * Closes Part 113 A4 "Signal B evasion via diversification."
+ * Closes "Signal B evasion via diversification."
  * Signal B fires only when distinct_subjects=1 (the reviewer
  * reviewed ONLY the target).  An attacker who reviews 2-3
  * throwaway third parties evades Signal B while still pumping
@@ -440,12 +552,20 @@ const SIGNAL_D_MIN_AVG_RATING = 4.5;
  *
  * Returns the number of NEW rows inserted this run.
  */
-export async function detectReviewConcentration(db: Database): Promise<number> {
-	return db.withTx((client) => detectReviewConcentrationInTx(client));
+export async function detectReviewConcentration(
+	db: Database,
+	opts: SignalWindow & { readonly reviewer?: string }
+): Promise<number> {
+	return db.withTx((client) => detectReviewConcentrationInTx(client, opts));
 }
 
-/** Implementation that operates on a caller-provided transaction. */
-export async function detectReviewConcentrationInTx(client: pg.PoolClient): Promise<number> {
+/** Implementation that operates on a caller-provided transaction. The window
+ *  ends at $6 (the triggering op's block time); $7, when given, restricts it
+ *  to one reviewer. */
+export async function detectReviewConcentrationInTx(
+	client: pg.PoolClient,
+	opts: SignalWindow & { readonly reviewer?: string }
+): Promise<number> {
 	const sql = `
 		WITH reviewer_totals AS (
 			-- Per-reviewer total review count in the window.
@@ -453,7 +573,9 @@ export async function detectReviewConcentrationInTx(client: pg.PoolClient): Prom
 				reviewer,
 				COUNT(*)::int AS total_reviews
 			FROM feedback
-			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'
+			WHERE created_at > $6::timestamptz - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'
+			  AND created_at <= $6::timestamptz
+			  AND ($7::text IS NULL OR reviewer = $7::text)
 			GROUP BY reviewer
 		),
 		reviewer_subject_stats AS (
@@ -464,7 +586,9 @@ export async function detectReviewConcentrationInTx(client: pg.PoolClient): Prom
 				COUNT(*)::int AS pair_count,
 				AVG(rating)::NUMERIC(3,2) AS pair_avg_rating
 			FROM feedback
-			WHERE created_at >= NOW() - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'
+			WHERE created_at > $6::timestamptz - INTERVAL '${SIGNAL_D_WINDOW_DAYS} days'
+			  AND created_at <= $6::timestamptz
+			  AND ($7::text IS NULL OR reviewer = $7::text)
 			GROUP BY reviewer, subject
 		),
 		concentration AS (
@@ -482,21 +606,22 @@ export async function detectReviewConcentrationInTx(client: pg.PoolClient): Prom
 			  AND rs.pair_avg_rating >= $2
 		)
 		INSERT INTO review_concentration
-			(reviewer, dominant_subject, concentration_pct, review_count, window_days)
+			(reviewer, dominant_subject, concentration_pct, review_count, window_days, detected_at)
 		SELECT
 			reviewer,
 			dominant_subject,
 			concentration_pct,
 			pair_count,
-			$4::int
+			$4::int,
+			$6::timestamptz
 		FROM concentration
 		WHERE concentration_pct >= $3
-		-- v1.8.12 (the maintainer): honour operator clearances, as Signals A and B already
+		-- v1.8.12: honour operator clearances, as Signals A and B already
 		-- do. Without this, Signal D was UNCLEARABLE — an operator could delete
 		-- the row, but the very next detector pass re-created it, so a
 		-- reputation suppressed by a false positive stayed suppressed forever.
-		-- the maintainer hit exactly that: he deleted two rows, watched both reputations
-		-- return, reloaded, and found them suppressed again.
+		-- In practice: two rows deleted, both reputations returned, and a reload
+		-- found them suppressed again.
 		--
 		-- Watermark semantics match Signal B: the clearance forgives the
 		-- history it was granted against, and the pair is re-flagged only if
@@ -518,7 +643,9 @@ export async function detectReviewConcentrationInTx(client: pg.PoolClient): Prom
 		SIGNAL_D_MIN_AVG_RATING,
 		SIGNAL_D_MIN_CONCENTRATION_PCT,
 		SIGNAL_D_WINDOW_DAYS,
-		SIGNAL_D_CLEARANCE_GROWTH
+		SIGNAL_D_CLEARANCE_GROWTH,
+		opts.asOf,
+		opts.reviewer ?? null
 	]);
 	return result.rowCount ?? 0;
 }
@@ -553,7 +680,7 @@ const SIGNAL_E_MIN_CONCENTRATION_PCT = 80;
  * credits come from a single peer — because that's the sock-puppet shape: the
  * farmed account has one source and the farmer has many victims-of-convenience.
  *
- * KNOWN COST (documented, same trade-off the maintainer accepted for Signal D): two people
+ * KNOWN COST (documented, same trade-off accepted for Signal D): two people
  * who genuinely only ever trade with each other — a regular customer and their
  * regular seller — look identical to this from the outside and will be flagged.
  * They keep their ratings; only the concentrated TRADE credits stop counting.
@@ -561,12 +688,21 @@ const SIGNAL_E_MIN_CONCENTRATION_PCT = 80;
  *
  * Returns the number of NEW rows inserted this run.
  */
-export async function detectTradeConcentration(db: Database): Promise<number> {
-	return db.withTx((client) => detectTradeConcentrationInTx(client));
+export async function detectTradeConcentration(
+	db: Database,
+	opts: SignalWindow & { readonly accounts?: readonly string[] }
+): Promise<number> {
+	return db.withTx((client) => detectTradeConcentrationInTx(client, opts));
 }
 
-/** Implementation that operates on a caller-provided transaction. */
-export async function detectTradeConcentrationInTx(client: pg.PoolClient): Promise<number> {
+/** Implementation that operates on a caller-provided transaction. The window
+ *  ends at $4 (the triggering op's block time — a completed order's
+ *  updated_at is its completion's block time); $5, when given, restricts it
+ *  to those accounts. */
+export async function detectTradeConcentrationInTx(
+	client: pg.PoolClient,
+	opts: SignalWindow & { readonly accounts?: readonly string[] }
+): Promise<number> {
 	const sql = `
 		WITH credits AS (
 			-- One row per trade CREDIT: both sides of every completed order in
@@ -576,13 +712,17 @@ export async function detectTradeConcentrationInTx(client: pg.PoolClient): Promi
 			  FROM orders o
 			 WHERE o.status = 'completed'
 			   AND o.completed_counterparty IS NOT NULL
-			   AND o.updated_at >= NOW() - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			   AND o.updated_at > $4::timestamptz - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			   AND o.updated_at <= $4::timestamptz
+			   AND ($5::text[] IS NULL OR o.account = ANY($5::text[]))
 			UNION ALL
 			SELECT o.completed_counterparty AS account, o.account AS peer
 			  FROM orders o
 			 WHERE o.status = 'completed'
 			   AND o.completed_counterparty IS NOT NULL
-			   AND o.updated_at >= NOW() - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			   AND o.updated_at > $4::timestamptz - INTERVAL '${SIGNAL_E_WINDOW_DAYS} days'
+			   AND o.updated_at <= $4::timestamptz
+			   AND ($5::text[] IS NULL OR o.completed_counterparty = ANY($5::text[]))
 		),
 		account_totals AS (
 			SELECT account, COUNT(*)::int AS total_trades
@@ -605,13 +745,14 @@ export async function detectTradeConcentrationInTx(client: pg.PoolClient): Promi
 			 WHERE at.total_trades >= $1
 		)
 		INSERT INTO trade_concentration
-			(account, dominant_peer, concentration_pct, trade_count, window_days)
+			(account, dominant_peer, concentration_pct, trade_count, window_days, detected_at)
 		SELECT
 			account,
 			dominant_peer,
 			concentration_pct,
 			pair_count,
-			$3::int
+			$3::int,
+			$4::timestamptz
 		FROM concentration
 		WHERE concentration_pct >= $2
 		ON CONFLICT (account, dominant_peer) DO NOTHING
@@ -619,7 +760,36 @@ export async function detectTradeConcentrationInTx(client: pg.PoolClient): Promi
 	const result = await client.query(sql, [
 		SIGNAL_E_MIN_TRADE_COUNT,
 		SIGNAL_E_MIN_CONCENTRATION_PCT,
-		SIGNAL_E_WINDOW_DAYS
+		SIGNAL_E_WINDOW_DAYS,
+		opts.asOf,
+		opts.accounts ?? null
 	]);
 	return result.rowCount ?? 0;
+}
+
+/**
+ * Evaluate the review signals (B, C, D) for the accounts one applied review
+ * involves, with windows ending at that review's block time. Called by the
+ * feedback handler right after it stores the review, inside the block
+ * transaction, so every node raises the same flags at the same block.
+ */
+export async function raiseReviewSignals(
+	client: pg.PoolClient,
+	args: { reviewer: string; subject: string; asOf: Date }
+): Promise<void> {
+	await detectSuspiciousReciprocityInTx(client, {
+		asOf: args.asOf,
+		pair: [args.reviewer, args.subject]
+	});
+	await detectOneWayPileOnInTx(client, { asOf: args.asOf, subject: args.subject });
+	await detectReviewConcentrationInTx(client, { asOf: args.asOf, reviewer: args.reviewer });
+}
+
+/** Evaluate Signal E for the accounts one completed order credits, with the
+ *  window ending at the completion's block time. */
+export async function raiseTradeSignals(
+	client: pg.PoolClient,
+	args: { accounts: readonly string[]; asOf: Date }
+): Promise<void> {
+	await detectTradeConcentrationInTx(client, { asOf: args.asOf, accounts: args.accounts });
 }

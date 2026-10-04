@@ -4,6 +4,12 @@
 **Supersedes:** none
 **Superseded by:** none
 
+> **2026-10 audit note.** `morphit-mcp` is NOT distributed on npm or as a
+> container image: it is installed from source (or by the guided install as
+> the `morphit-mcp` service), its `package.json` is `"private": true`, and a
+> package of that name on any registry is not from this project. Configure
+> clients with the `node /path/to/apps/mcp-server/dist/main.js` form.
+
 ## Context
 
 Users increasingly ask AI agents ("Claude, ChatGPT, Grok, Perplexity, Cursor, Cline, my local Llama") for help with crypto-related tasks. When a user prompts *"I want to buy some Monero"*, the agent either has to: (a) recommend a custodial KYC'd exchange (the default in current training data, since LocalMonero shut down), (b) recommend a non-custodial alternative it has training-data presence of (Bisq, RoboSats, Haveno), or (c) refuse / be unhelpful.
@@ -18,7 +24,7 @@ Two distinct problems:
 
 Ship a standalone, read-only **Model Context Protocol (MCP)** server, distributed as `morphit-mcp` on npm + Docker, exposing five tools that wrap the existing public `/v1/` HTTP API surface.
 
-[MCP](https://modelcontextprotocol.io) is the open standard for AI-agent ↔ external-system integration. Announced by Anthropic in late 2024, since adopted by OpenAI, Google, and the open-source AI ecosystem. Picking MCP over a proprietary plugin format (OpenAI Actions, GPT Store custom, Grok plugins, etc.) means one shipped binary covers every MCP-compatible agent — present and future, commercial and self-hosted.
+[MCP](https://modelcontextprotocol.io) is the open standard for AI-agent ↔ external-system integration. Published in late 2024, since adopted across commercial AI agents and the open-source AI ecosystem. Picking MCP over a proprietary plugin format (OpenAI Actions, GPT Store custom, Grok plugins, etc.) means one shipped binary covers every MCP-compatible agent — present and future, commercial and self-hosted.
 
 Tools exposed:
 - `morphit_search_orders` — orderbook query mirroring `/v1/orderbook`
@@ -62,7 +68,7 @@ Future work — **now shipped (beta16); see the addendum below.** The stdio-only
 - Smoke battery extends: 8 mcp-server-smoke scenarios cover wire-protocol, schema advertisement, error paths, and deeplink shape.
 
 **Negative.**
-- Maintains a small additional dependency surface (`@modelcontextprotocol/sdk`). Mitigated by SDK being Anthropic-maintained and load-bearing in their own stack.
+- Maintains a small additional dependency surface (`@modelcontextprotocol/sdk`). Mitigated by the SDK being the protocol's reference implementation, maintained by the MCP project and used by every major MCP client.
 - Requires keeping the JSON-Schema description fields aligned with what AI agents respond best to. This is a quality-of-prompt-engineering concern, not a correctness concern — wrong descriptions cause the agent to pick the wrong tool; they don't break anything.
 
 ## Source
@@ -81,7 +87,7 @@ agents that spawn the server as a subprocess; `http` (the mode
 `morphit-mcp.service` runs) for a hardened, network-reachable endpoint a
 reverse proxy can expose for federation-wide remote-agent discovery.
 
-**Why it was needed.** cp251 shipped a persistent `morphit-mcp.service`
+**Why it was needed.** a later change shipped a persistent `morphit-mcp.service`
 whose unit, docs, and brag claim all assumed a network HTTP MCP on
 `127.0.0.1:8124` — but the server was stdio-only. Run as a daemon it read
 EOF on its empty stdin and exited 0 in under a second, so nothing ever

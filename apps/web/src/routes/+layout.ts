@@ -1,7 +1,7 @@
 /**
  * Root +layout.ts — detection-redirect shell config.
  *
- * Part 121 cp7 (per-locale prerendering, ADR-0024).
+ * (per-locale prerendering, ADR-0024).
  *
  * The root route serves a minimal HTML shell whose only job is to
  * detect the user's preferred locale and redirect to the

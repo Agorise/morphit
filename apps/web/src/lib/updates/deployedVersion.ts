@@ -1,5 +1,5 @@
 /**
- * Morphit — deployed-version poll helpers (cp294).
+ * Morphit — deployed-version poll helpers.
  *
  * Why this exists. The "update available" snackbar (UpdateBanner.svelte)
  * is driven by the service-worker update lifecycle: the browser refetches

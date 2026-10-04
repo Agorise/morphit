@@ -1,5 +1,5 @@
 /**
- * wizard-step-count-doc-parity smoke (cp171).
+ * wizard-step-count-doc-parity smoke.
  *
  * Makes the operator-wizard step count self-synchronizing across
  * code and docs.  `apps/ops-cli/src/init/steps.ts` declares the
@@ -9,14 +9,14 @@
  * WHY THIS EXISTS — recurring drift:
  *   The wizard step count has drifted from its doc references at
  *   least three times as operator-config surface was added:
- *     - cp22 inserted a step (15 → 16); doc "~17 prompts" went
- *       stale (AUDIT-2026-05 D-9 / DD-cp27-DD-13/20 fixed it).
- *     - cp167 added the MCP step (18 → 20).  That bump updated
+ *     - inserted a step (15 → 16); doc "~17 prompts" went
+ *       stale (AUDIT-2026-05 / DD-cp27-DD-13/20 fixed it).
+ *     - A later change added the MCP step (18 → 20).  That bump updated
  *       the F14b TOTAL_STEPS sentinel in persona-walkthrough-
- *       smoke but MISSED the prose count in README, PRE-LAUNCH-
- *       CHECKLIST, METADATA-LEAK-CATALOG, and the init.ts JSDoc
- *       ("19 ELI5"), which all stayed at the pre-cp167 numbers.
- *       cp171 fixed those and added this smoke so the next bump
+ *       smoke but MISSED the prose count in README, the launch
+ *       checklist, METADATA-LEAK-CATALOG, and the init.ts JSDoc
+ *       ("19 ELI5"), which all stayed at the older numbers.
+ *       A later change fixed those and added this smoke so the next bump
  *       can't repeat the miss.
  *
  * The F14b sentinel only pins the literal `const TOTAL_STEPS =
@@ -25,14 +25,14 @@
  * closes that gap: it derives N from steps.ts at runtime and
  * fails the instant any tracked doc quotes a different number.
  *
- * The companion persona-walkthrough So-4 / D-9 scenarios pin the
+ * The companion persona-walkthrough So-4 / scenarios pin the
  * exact doc strings; this smoke pins the code↔doc relationship.
  * If you bump TOTAL_STEPS, update every file listed in
  * DOC_CLAIMS below (and the two persona-smoke pins) in the same
  * work unit and this smoke goes green again.
  *
- * Out of scope: historical audit/archive logs (AUDIT-2026-05.md,
- * REVISIT-LIST*.md, *WALKTHROUGH-cp*.md, RELEASE-NOTES*.md) that
+ * Out of scope: historical logs (the internal journals in private/,
+ * *WALKTHROUGH-cp*.md, RELEASE-NOTES*.md) that
  * record a count as it was at a past checkpoint.  Those are
  * deliberately frozen and not scanned here.
  */
@@ -125,12 +125,6 @@ const DOC_CLAIMS: DocClaim[] = [
 	{
 		path: 'README.md',
 		where: 'README quick-start step 4',
-		expect: (n) => `~${n} prompts`,
-		anyNumber: /~\d+ prompts/
-	},
-	{
-		path: 'docs/PRE-LAUNCH-CHECKLIST.md',
-		where: 'PRE-LAUNCH-CHECKLIST wizard item',
 		expect: (n) => `~${n} prompts`,
 		anyNumber: /~\d+ prompts/
 	},

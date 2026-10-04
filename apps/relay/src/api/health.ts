@@ -5,16 +5,31 @@
  * the frontend (to decide whether to show a "registration temporarily
  * unavailable" banner) and external monitoring.
  *
- * Verbose mode adds the relay's current BLURT balance and an estimate
- * of how many more account creations it can fund, polled every 30
- * seconds in the background. We do NOT query the chain on every
- * /v1/health request — that would make the endpoint latency a function
- * of whichever Blurt RPC node is healthiest today, and an external
- * monitor polling every 5 seconds would turn into 5 chain reads a
- * second.
+ * WHO SEES WHAT. Anyone: `status`, `rpc_ok` (at least one RPC endpoint is
+ * out of cooldown) and `hidden_only` — the same coarse shape as the
+ * indexer's public health. The operator block — version and uptime,
+ * Node.js version, relay balance and live fee, the healthy / total RPC
+ * endpoint counts and the full per-endpoint list with each node's state, the payment queue and the signup counters —
+ * only for a LOCAL caller: a request carrying `X-Morphit-Local-Health: 1` and
+ * none of the forwarding headers every public edge adds (X-Forwarded-For,
+ * X-Real-IP, X-Forwarded-Proto — ops/nginx/web.conf, relay.conf and the
+ * BunkerWeb frontend each set at least one). The edges also overwrite the
+ * local header with an empty value; either check alone keeps an anonymous
+ * caller out. Local callers: the indexer's signup-anomaly probe and
+ * `morphit-ops health`. MORPHIT_RELAY_VERBOSE_HEALTH=true is an
+ * explicit operator opt-in to serve the block to everyone (default off). It
+ * used to be on by default and public: live signup volume and headroom, the
+ * node's RPC topology (on a hidden node, its own .onion/.b32.i2p endpoints)
+ * and the exact Node.js version, to any anonymous caller.
+ *
+ * The balance and fee are polled every 30 seconds in the background. We do
+ * NOT query the chain on every /v1/health request — that would make the
+ * endpoint latency a function of whichever Blurt RPC node is healthiest
+ * today, and an external monitor polling every 5 seconds would turn into 5
+ * chain reads a second.
  */
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { Config } from '../config/index.ts';
 import { FEE_REFUSE_MULTIPLIER, type BlurtClient } from '../blurt/client.ts';
 import type { GlobalDailyCeiling } from '../policy/globalDailyCeiling.ts';
@@ -23,13 +38,13 @@ import { logger } from '$log';
 const log = logger('relay-acts');
 
 // Keep in sync with the root package.json `version`.  The
-// version-consistency-smoke (Part 122 cp20) fails the build if
+// version-consistency-smoke fails the build if
 // this constant drifts from any other package.json or from the
 // indexer's INDEXER_VERSION constant.  When bumping for a new
 // release, update all 10 package.json files + this constant +
 // apps/indexer/src/api/health.ts INDEXER_VERSION + the example
 // response in docs/API.md in the same commit.
-export const VERSION = '1.20.3';
+export const VERSION = '1.21.0';
 const POLL_INTERVAL_MS = 30_000;
 /** Liquid-BLURT headroom (above the account_creation_fee) the relay
  *  must hold to accept a signup. Blurt disabled the ACT model at HF2,
@@ -63,6 +78,16 @@ interface ChainSnapshot {
 	live_fee_blurt: number | null;
 }
 
+/** A request from this box, not through a public edge: it asks with
+ *  X-Morphit-Local-Health: 1 and carries none of the headers the edges set. */
+export function isLocalHealthCaller(c: Context): boolean {
+	if (c.req.header('x-morphit-local-health') !== '1') return false;
+	for (const h of ['x-forwarded-for', 'x-real-ip', 'x-forwarded-proto']) {
+		if (c.req.header(h) !== undefined) return false;
+	}
+	return true;
+}
+
 export class HealthService {
 	private snapshot: ChainSnapshot = {
 		blurt_balance: 'unknown',
@@ -76,13 +101,13 @@ export class HealthService {
 	 *  reset when it recovers. In memory only — a restart at worst
 	 *  re-alerts once (cheap; a missed alert would be worse). */
 	private lowBalanceAlerted = false;
-	/** Optional reference to the signup ceiling. When present,
-	 *  /v1/health?verbose=1 includes signup_stats so the indexer-
-	 *  side operator-balance scanner can detect anomalous signup
-	 *  volume when it fires a LOW_BALANCE alert. */
+	/** Optional reference to the signup ceiling. When present, the
+	 *  operator block of /v1/health (local callers only) includes
+	 *  signup_stats so the indexer-side operator-balance scanner can
+	 *  detect anomalous signup volume when it fires a LOW_BALANCE alert. */
 	private ceiling: GlobalDailyCeiling | null = null;
 	/** Pending-transfer queue counts (unsettled / escalated) from the
-	 *  drainer; null until wired (v1.20.0 fix wave 4, A3). */
+	 *  drainer; null until wired. */
 	private queueStats: (() => { unsettled: number; escalated: number } | null) | null = null;
 	private signupEnabled: boolean = true;
 
@@ -218,18 +243,16 @@ export class HealthService {
 
 	register(app: Hono): void {
 		app.get('/v1/health', (c) => {
-			// Compact Blurt RPC-pool health for at-a-glance triage. The
-			// relay broadcasts through this pool; if every endpoint is
-			// unreachable, signups/listings can't post. Per-endpoint
-			// detail stays in the gated verbose block.
+			// The relay broadcasts through this pool; if every endpoint is
+			// unreachable, signups/listings can't post. Public: one boolean.
+			// The counts and per-endpoint detail stay in the gated block.
 			const rpcSnap = this.blurt.endpointSnapshot();
 			const nowMs = Date.now();
 			const rpcEndpointsHealthy = rpcSnap.filter((e) => e.cooldownUntil <= nowMs).length;
 
 			const body: Record<string, unknown> = {
 				status: 'ok',
-				rpc_endpoints_healthy: rpcEndpointsHealthy,
-				rpc_endpoints_total: rpcSnap.length,
+				rpc_ok: rpcEndpointsHealthy > 0,
 				// v1.18.0 (F32) — whether this relay reaches the chain ONLY over
 				// hidden services. The indexer reads it to decide whether the
 				// instance may claim "Zero use of clearnet internet": the relay is
@@ -237,7 +260,9 @@ export class HealthService {
 				// just the indexer. Not sensitive — the claim itself is public.
 				hidden_only: this.cfg.hiddenOnly
 			};
-			if (this.cfg.verboseHealth) {
+			// Operator block: local callers only (see the header comment), unless
+			// the operator explicitly chose to publish it.
+			if (isLocalHealthCaller(c) || this.cfg.verboseHealth) {
 				const elapsedNs = process.hrtime.bigint() - this.startedHrTime;
 				body.version = VERSION;
 				body.uptime_sec = Number(elapsedNs / 1_000_000_000n);
@@ -255,6 +280,8 @@ export class HealthService {
 				if (this.snapshot.live_fee_blurt !== null) body.account_creation_fee_blurt = this.snapshot.live_fee_blurt;
 				if (this.isStale()) body.stale = true;
 
+				body.rpc_endpoints_healthy = rpcEndpointsHealthy;
+				body.rpc_endpoints_total = rpcSnap.length;
 				// Full per-endpoint RPC health (same shape the indexer
 				// exposes) for deep triage of broadcast failures.
 				body.rpc_endpoints = rpcSnap.map((s) => {
@@ -278,7 +305,7 @@ export class HealthService {
 
 				// Pending-transfer queue (welcome bonus / dust / BP). `escalated`
 				// rows are payments whose outcome no two RPC nodes could settle;
-				// they are NOT re-sent and need the operator (fix wave 4, A3).
+				// they are NOT re-sent and need the operator.
 				const q = this.queueStats?.() ?? null;
 				if (q !== null) body.transfer_queue = q;
 

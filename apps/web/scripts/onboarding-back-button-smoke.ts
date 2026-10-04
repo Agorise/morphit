@@ -6,7 +6,7 @@
  * before transitioning back to `choose`.  Failing to wipe leaves
  * the seed bytes and posting/memo private keys in heap until
  * GC, which is exactly the K1.2 / O2.1 finding pattern that the
- * existing wipe call sites (lines ~221 and ~310 at Part 98 time)
+ * existing wipe call sites (lines ~221 and ~310 time)
  * were added to fix.
  *
  * This smoke is structural: it parses the onboarding +page.svelte

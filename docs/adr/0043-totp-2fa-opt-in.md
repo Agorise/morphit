@@ -5,6 +5,13 @@
 **Supersedes:** —
 **Superseded by:** —
 
+> **2026-10 audit note.** The keystore container is Argon2id +
+> **XSalsa20-Poly1305** (libsodium `crypto_secretbox`), not XChaCha20 as
+> written below. TOTP remains a UI gate: the secret is inside the same
+> encrypted keystore, so the keystore file plus the password opens the keys
+> with other code. An authenticator code's 30-s step is accepted once per
+> page session.
+
 ## Context
 
 Morphit is a non-custodial peer-to-peer marketplace. The user's

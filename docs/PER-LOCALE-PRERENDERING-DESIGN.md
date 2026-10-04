@@ -1,7 +1,7 @@
 # Per-locale prerendering — design discussion
 
-**Status:** ✅ **SHIPPED in Part 121 cp7 (2026-05-14).**  Route restructure complete; at cp7 the build produced 200 locale-prefixed HTML files (20 routes × 10 locales) + redirect shell.  Route count grows as new pages ship (cp24 added cheat-sheet, cp26 added privacy index + per-asset privacy pages); the current authoritative list is whatever `apps/web/src/routes/[lang]/**/+page.svelte` enumerates at build time.  Helpers shipped in cp6 (2026-05-13); route restructure in cp7 (next day).
-**Date:** 2026-04-21 (design); 2026-05-13 (cp6 partial: helpers + smoke + i18n module split); 2026-05-14 (cp7 full: route restructure + redirect shell + 88 link-site sweep + verification)
+**Status:** ✅ **SHIPPED (2026-05-14).**  Route restructure complete; the build produced 200 locale-prefixed HTML files (20 routes × 10 locales) + redirect shell.  Route count grows as new pages ship (later changes added cheat-sheet, privacy index + per-asset privacy pages); the current authoritative list is whatever `apps/web/src/routes/[lang]/**/+page.svelte` enumerates at build time.  Helpers shipped (2026-05-13); route restructure (next day).
+**Date:** 2026-04-21 (design); 2026-05-13 (partial: helpers + smoke + i18n module split); 2026-05-14 (full: route restructure + redirect shell + 88 link-site sweep + verification)
 **Interacts with:** `apps/web/svelte.config.js`
 (prerender + adapter-static config + `handleUnseenRoutes:'ignore'`), `apps/web/src/app.html`
 (pre-paint locale script), `apps/web/src/hooks.client.ts`
@@ -11,14 +11,14 @@
 
 ✅ **All Option C scope SHIPPED:**
 
-cp6 (2026-05-13):
+
 - `apps/web/src/lib/i18n/locales.ts` — pure SSoT (zero SvelteKit deps).
 - `apps/web/src/lib/i18n/path.ts` — `localePath()`, `stripLocalePrefix()`, `pickLocaleFromAcceptLanguages()`, `isLocalePrefixed()`.
 - `apps/web/scripts/i18n-path-helpers-smoke.ts` — 22 scenarios.
 - `apps/web/src/lib/auth/pairingPhoneSigner.ts` Buffer-import build blocker fixed.
 - `scripts/build-sitemap.mjs` ROUTES re-synced with `routes.ts` (14→17).
 
-cp7 (2026-05-14):
+
 - Physical route move: 24 subdirs + +layout.{svelte,ts} + +page.svelte moved under `[lang]/`.
 - `apps/web/src/routes/[lang]/+layout.ts` — `prerender = true`, `ssr = true`, `load({params})` validates lang + calls initI18nFor + waitLocale.
 - `apps/web/src/routes/[lang]/+page.ts` — `entries()` enumerating SUPPORTED_LOCALES (must live on +page.ts per SvelteKit).
@@ -37,7 +37,7 @@ cp7 (2026-05-14):
 - Rendered `de.html` carries `/de/` prefix on all nav + footer + CTAs; 0 bare paths.
 - Same symmetry confirmed for `fa.html` (RTL).
 
-⏸ **Follow-on SEO refinements (NOT cp7 scope, not blocking launch):**
+⏸ **Follow-on SEO refinements (NOT scope, not blocking launch):**
 
 - Sitemap hreflang `<xhtml:link rel="alternate">` tags per URL (sitemap.xml already emits 170 indexable URLs but lacks the per-URL alternates block).
 - Per-locale RSS feeds at `/<lang>/rss/orderbook.xml` (currently single-locale at `/rss/orderbook.xml`).
@@ -71,7 +71,7 @@ direction, browser translation UI) is right from frame
 zero — but the **text content** of the page is
 English until hydration completes.
 
-This is a known architectural issue. The revisit list
+This is a known architectural issue. The project backlog
 has carried "per-locale prerendering" as a pending fix.
 
 ---
@@ -330,7 +330,7 @@ path under a different locale prefix. Already exists
 
 ---
 
-## What I'd verify before shipping
+## What to verify before shipping
 
 1. A working local `npm run build` produces the
    expected 150+ HTML files and they serve correctly

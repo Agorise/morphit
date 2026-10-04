@@ -35,6 +35,15 @@ export function escapeLike(s: string): string {
 	return s.replace(/[\\%_]/g, '\\$&');
 }
 
+/** A cursor's timestamp: UTC ISO-8601 with up to microseconds (what the
+ *  cursors are minted with; older ones carry milliseconds). Anything else is
+ *  refused before it can reach Postgres as a timestamptz. */
+export function isCursorTime(u: string): boolean {
+	return (
+		/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/.test(u) && !Number.isNaN(Date.parse(u))
+	);
+}
+
 /** Generic cursor codec. Cursors are opaque to the client — we
  *  base64url-encode JSON and the client just passes it back. Shape
  *  of the decoded object is endpoint-specific; the endpoint narrows
@@ -55,7 +64,13 @@ export function decodeCursor(s: string): unknown {
  *  type in @morphit/indexer-client. */
 export interface ErrorBody {
 	readonly status: 'error';
-	readonly code: 'not_found' | 'bad_request' | 'rate_limited' | 'internal' | 'service_starting';
+	readonly code:
+		| 'not_found'
+		| 'bad_request'
+		| 'rate_limited'
+		| 'internal'
+		| 'service_starting'
+		| 'reply_too_large';
 	readonly message: string;
 }
 
@@ -72,8 +87,8 @@ export function errorBody(code: ErrorBody['code'], message: string): ErrorBody {
  * IS that crypto direction. But for a BARTER (goods/services) order, `o.side` is
  * the GOODS direction, which is the INVERSE of the crypto one: selling goods
  * (e.g. bananas) means the poster is ACQUIRING crypto — i.e. BUYING crypto — and
- * buying goods means the poster is SPENDING crypto — i.e. SELLING crypto (the maintainer,
- * t.txt v1.8.16 #3). The filter used to splice `o.side = <side>` for every
+ * buying goods means the poster is SPENDING crypto — i.e. SELLING crypto.
+ * The filter used to splice `o.side = <side>` for every
  * order, so a banana-seller wrongly showed under "wanting to sell crypto". Barter
  * rows therefore match the OPPOSITE side.
  *

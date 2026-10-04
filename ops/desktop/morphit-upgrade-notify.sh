@@ -1,5 +1,5 @@
 #!/bin/sh
-# morphit-upgrade-notify.sh (cp598) — pop a DESKTOP notification on the
+# morphit-upgrade-notify.sh — pop a DESKTOP notification on the
 # operator's screen when a newer Morphit release is available, telling them to
 # run `sudo morphit-ops` and upgrade.
 #

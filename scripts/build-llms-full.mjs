@@ -20,7 +20,7 @@
  * diff them against the committed artifact. This is the single
  * source of truth for the file format — the CLI writer below and
  * the smoke both go through it, so they can never disagree on
- * format. (cp229: the committed artifact had silently drifted ~2
+ * format. (the committed artifact had silently drifted ~2
  * weeks from en.json because no guard existed; this closes that.)
  */
 

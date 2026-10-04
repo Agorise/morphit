@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * chat-fastpath-dedup-smoke (cp403 [1], ADR-0048).
+ * chat-fastpath-dedup-smoke (ADR-0048).
  *
  * The indexer head-block fast path (headTailer.ts) streams a chat
  * message over SSE as a PROVISIONAL copy (wire id 0) seconds before its

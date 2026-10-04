@@ -3,7 +3,7 @@
  * sally-walkthrough-smoke.
  *
  * Structural smokes for the Sally walkthrough fixes from the
- * Part 68 hardening pass.  Each scenario locks in a specific
+ * pass.  Each scenario locks in a specific
  * UX or security protection by greping the source for the
  * sentinel pattern that proves the fix is still wired.  If a
  * later refactor accidentally removes the protection, the
@@ -28,7 +28,7 @@
  *   H8  AvatarMenu has View my profile
  *   H9  per-order syndicate checkbox with selling-point pitch
  *       (the separate LeaveFeedbackForm first-trade box was
- *        removed in cp399 — announcing is still on by default,
+ *        removed — announcing is still on by default,
  *        controlled on the post form + in Settings)
  *   L8  /post broadcasts run redactPrivateKeys() over region +
  *       payment-method entries (in addition to terms)
@@ -171,7 +171,7 @@ const SCENARIOS: readonly Scenario[] = [
 			'chat.address.xmr_jitter_off_warning_body'
 		]
 	},
-	// ─── Part 69 second-pass scenarios ─────────────────────────────
+	// ─── second-pass scenarios ─────────────────────────────
 	{
 		name: 'DL1 — /download direct-APK link no longer points at /morphit.apk',
 		file: 'src/routes/[lang]/download/+page.svelte',
@@ -215,10 +215,11 @@ const SCENARIOS: readonly Scenario[] = [
 		mustHave: [
 			'Sally finding CMP2',
 			'`/@${o.account}/${o.permlink}`',
-			// Part 70 hardening: hardened cross-instance links
+			// hardened cross-instance links
 			// through safeInstanceOrigin().
 			'safeInstanceOrigin(otherOrigin)',
-			'`${safeOther}/@${o.account}/${o.permlink}`'
+			// The other instance's page, with the locale prefix.
+			'`${safeOther}${localePath(`/@${o.account}/${o.permlink}`, currentLang)}`'
 		],
 		// Pre-Part-69 they were plain mono text spans.
 		mustNotHave: ['<li class="font-mono text-xs break-all">']
@@ -291,6 +292,6 @@ if (failed > 0) {
 // Canonical success line — run-smokes.sh greps for `^✓ all` to tally
 // scenarios. Without this, the runner counts this smoke as 0 scenarios
 // even when it passes, which silently undercounts the smoke total. See
-// J-2 finding (Part 87): sally was added Part 68/69 but used a custom
+// J-2 finding: sally was added but used a custom
 // `N passed, M failed (T total)` format that the runner could not parse.
 console.log(`✓ all ${SCENARIOS.length} sally-walkthrough scenarios passed`);

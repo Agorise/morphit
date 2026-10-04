@@ -34,7 +34,7 @@ interface BlurtAccountRow {
  *  answer AND the node is not hidden-only, a health-ordered EndpointPool over
  *  the configured clearnet list (shared health file) — never a fixed-order walk
  *  that always starts on the same node. A HIDDEN-ONLY node never falls back to
- *  clearnet (v1.18.0 deep-deep, H1): if its indexer does not answer this throws,
+ *  clearnet: if its indexer does not answer this throws,
  *  and every caller already treats that as "unknown". An explicit `endpoints`
  *  list (tests / a wizard probing a candidate list) is used as the pool. */
 export async function lookupBlurtAccount(
@@ -57,7 +57,7 @@ export async function lookupBlurtAccount(
 function accountInfoFromRows(result: unknown, accountName: string): AccountInfo | null {
 	if (!Array.isArray(result) || result.length === 0) return null;
 	const first = result[0];
-	// cp139-C-2: runtime type guard before the cast.  If a
+	// runtime type guard before the cast.  If a
 	// rogue RPC endpoint returns `[null]` (or any non-object)
 	// as the first row, `first.balance` would TypeError on
 	// the null path.  The catch below would absorb it and

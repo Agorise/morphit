@@ -1,7 +1,7 @@
 /**
  * Morphit smoke — raw exception message → UI anti-pattern detector.
  *
- * Closes C-28 from Audit Part 31(R3).  The bug pattern:
+ * Closes an audit finding.  The bug pattern:
  *
  *   } catch (err) {
  *       errorMsg = err instanceof Error ? err.message : String(err);
@@ -11,10 +11,10 @@
  *
  * Sally in a non-English locale sees "Seed must be 12 or 24
  * words" or "fetch failed" mixed in with otherwise-localized UI.
- * This pattern was found at 11 sites during Part 31(R3) and
+ * This pattern was found at 11 sites during an audit and
  * fixed; this smoke prevents regression.
  *
- * The fix pattern (see Part 31(R3) commits):
+ * The fix pattern ((R3) commits):
  *
  *   } catch (err) {
  *       console.warn('[component] thing failed:', err);
@@ -25,7 +25,8 @@
  *
  *   Any line in apps/web/src/routes or apps/web/src/lib/components
  *   that assigns `err instanceof Error ? err.message : ...` (or
- *   close variants) to anything OTHER than:
+ *   close variants, for whatever name the file's catch clauses bind:
+ *   `e`, `error`, …) to anything OTHER than:
  *     - a `const`/`let` local (debug, used for further analysis)
  *     - a console.* call argument
  *
@@ -127,6 +128,21 @@ function* walk(dir: string): Generator<string> {
 	}
 }
 
+// ─── Exception names ──────────────────────────────────────────────
+//
+// The patterns below match the exception by NAME. The name is whatever the
+// file's `catch (…)` clauses bind (`err`, `e`, `error`, `ex`, …), plus `err`
+// for `.catch((err) => …)` callbacks; a fixed `err` let `catch (e)` sites
+// through unchecked.
+function exceptionNames(src: string): string[] {
+	const names = new Set<string>(['err']);
+	for (const m of src.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) names.add(m[1]!);
+	for (const m of src.matchAll(/\.catch\(\s*\(?\s*([A-Za-z_$][\w$]*)\s*\)?\s*=>/g))
+		names.add(m[1]!);
+	return [...names];
+}
+const escapeRe = (s: string): string => s.replace(/[$]/g, '\\$');
+
 // ─── Detector ─────────────────────────────────────────────────────
 //
 // The pattern we're looking for:
@@ -178,12 +194,13 @@ function detectRawException(absPath: string): readonly Hit[] {
 	//
 	// Each pattern's match is then checked against the same
 	// "is this an assignment to a non-local var?" gate.
-	const PATTERNS: RegExp[] = [
-		/err\s+instanceof\s+Error\s*\?\s*err\.message/g,
-		/\bString\(\s*err\s*\)/g,
-		/\berr\.toString\(\s*\)/g,
-		/\berr\.message\b/g
-	];
+	const names = exceptionNames(src).map(escapeRe);
+	const PATTERNS: RegExp[] = names.flatMap((n) => [
+		new RegExp(`\\b${n}\\s+instanceof\\s+Error\\s*\\?\\s*${n}\\.message`, 'g'),
+		new RegExp(`\\bString\\(\\s*${n}\\s*\\)`, 'g'),
+		new RegExp(`\\b${n}\\.toString\\(\\s*\\)`, 'g'),
+		new RegExp(`\\b${n}\\.message\\b`, 'g')
+	]);
 	const newlinePositions: number[] = [-1];
 	for (let i = 0; i < src.length; i++) {
 		if (src[i] === '\n') newlinePositions.push(i);
@@ -340,8 +357,11 @@ function detectRawExceptionViaLocal(absPath: string): readonly Hit[] {
 	// The RHS may span multiple lines (terminated by `;`); we
 	// don't actually care about the RHS shape past finding one
 	// of the err tokens.
-	const DECL_RE =
-		/\b(?:const|let|var)\s+(\w+)\s*=\s*([^;]*?(?:err\.message|String\(\s*err\s*\)|err\.toString\(\s*\))[^;]*?);/g;
+	const alt = exceptionNames(src).map(escapeRe).join('|');
+	const DECL_RE = new RegExp(
+		`\\b(?:const|let|var)\\s+(\\w+)\\s*=\\s*([^;]*?(?:\\b(?:${alt})\\.message|String\\(\\s*(?:${alt})\\s*\\)|\\b(?:${alt})\\.toString\\(\\s*\\))[^;]*?);`,
+		'g'
+	);
 
 	let m: RegExpExecArray | null;
 	while ((m = DECL_RE.exec(src)) !== null) {
@@ -487,7 +507,8 @@ function detectRawResultMessage(absPath: string): readonly Hit[] {
 	// Excludes:
 	//  - declarations: `const X = result.message`
 	//  - the property setter: `result.message = ...`
-	const PAT = /\b(\w+)\s*=\s*(r|res|result|be|err)\b\s*\.\s*message\b/g;
+	const roots = ['r', 'res', 'result', 'be', ...exceptionNames(src)].map(escapeRe).join('|');
+	const PAT = new RegExp(`\\b(\\w+)\\s*=\\s*(${roots})\\b\\s*\\.\\s*message\\b`, 'g');
 
 	let m: RegExpExecArray | null;
 	while ((m = PAT.exec(src)) !== null) {

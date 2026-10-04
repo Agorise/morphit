@@ -2,12 +2,12 @@
 /**
  * dash-trade-only-smoke.
  *
- * Part 122 cp27 sentinel: DASH must be `canPayListingFee: false`
+ * DASH must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping DASH's flag to true would fail the
@@ -54,10 +54,10 @@ if (canonDash) {
 
 // ── Scenario 2 — canonical DASH.canPayListingFee === false ───────
 if (canonDash && canonDash.canPayListingFee === false) {
-	pass('canonical DASH.canPayListingFee === false (memory #23)');
+	pass('canonical DASH.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical DASH.canPayListingFee === false (memory #23)',
+		'canonical DASH.canPayListingFee === false (trade-only rule)',
 		`DASH must be trade-only.  Got canPayListingFee=${canonDash?.canPayListingFee}`
 	);
 }

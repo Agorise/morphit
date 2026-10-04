@@ -5,7 +5,7 @@
  * against morphit.io's real stack shape — one hand-made /opt/bunkerweb Compose
  * project with bunkerweb, its scheduler, CrowdSec, redis, postgres, an onion
  * service and the frontend, containers named bunkerweb-<service>-1, bridge
- * 172.18.0.0/24 (docs/REVISIT-LIST.md "LIVE VPS TOPOLOGY") — through a fake
+ * 172.18.0.0/24 (the project backlog "LIVE VPS TOPOLOGY") — through a fake
  * `docker` on PATH:
  *  - `docker compose … config` is answered by the REAL Docker Compose CLI when
  *    one is installed (it needs no daemon), so the merge of several -f files,

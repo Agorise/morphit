@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * display-name-cap-smoke (cp404).
+ * display-name-cap-smoke.
  *
- * the maintainer set the display-name cap to 24 code points. This locks:
+ * The maintainer set the display-name cap to 24 code points. This locks:
  *   - DISPLAY_NAME_MAX_LENGTH === 24,
  *   - validateDisplayName() rejects a 25-codepoint name and accepts 24,
  *   - capDisplayName() truncates legacy over-long names by CODE POINT

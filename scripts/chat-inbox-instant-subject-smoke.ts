@@ -1,12 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * chat-inbox-instant-subject — cp515 (the maintainer's t.txt).
+ * chat-inbox-instant-subject.
  *
- * THE BUG. cp514 made the optimistic inbox card appear within ~4s of the push.
+ * THE BUG. A later change made the optimistic inbox card appear within ~4s of the push.
  * Its SUBJECT still didn't: the "RE:" line rendered a placeholder for about a
- * minute until the durable conversation row arrived. the maintainer: "please make the
- * subject line show up immediately as well if it has an order id permlink
- * attached to it (which in this case it does)."
+ * minute until the durable conversation row arrived. Requirement: the subject line shows
+ * immediately as well when the message carries an order permlink.
  *
  * WHY it lagged: the fast push carries only (peer, orderPermlink), so the
  * injected card's `order` was a STUB of empty strings — enough to link to, not
@@ -51,14 +50,12 @@ check(
 	/for \(const owner of \[peer, me\]\)/.test(page),
 	'the order always belongs to one of the two people in the thread'
 );
-check(
-	'it fetches the order rather than inventing a title',
-	/getOrdersByAccount\(owner/.test(page)
-);
+check('it fetches the order rather than inventing a title', /getOrder\(owner,/.test(page));
 check(
 	'the resolved card uses the REAL order, falling back to the stub',
-	/const resolved = p\.orderPermlink \? pendingOrders\.get\(p\.orderPermlink\) : undefined;/.test(page) &&
-		/order: p\.orderPermlink\s*\?\s*\(resolved \?\?/.test(page)
+	/const resolved = p\.orderPermlink \? pendingOrders\.get\(p\.orderPermlink\) : undefined;/.test(
+		page
+	) && /order: p\.orderPermlink\s*\?\s*\(resolved \?\?/.test(page)
 );
 check(
 	'`pending` means "a subject is still loading", not "this card is optimistic"',
@@ -76,7 +73,8 @@ check(
 
 // The lookup must be driven by an effect. A $derived that fires fetches is
 // impure and re-enters on its own result.
-const derivedBody = /const sortedConversations = \$derived\.by\(\(\) => \{([\s\S]*?)\n\t\}\);/.exec(page)?.[1] ?? '';
+const derivedBody =
+	/const sortedConversations = \$derived\.by\(\(\) => \{([\s\S]*?)\n\t\}\);/.exec(page)?.[1] ?? '';
 check('the sortedConversations derived was located', derivedBody.length > 0);
 check(
 	'the derived stays PURE — no resolver call inside it',

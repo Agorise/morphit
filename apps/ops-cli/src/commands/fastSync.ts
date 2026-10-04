@@ -1,5 +1,5 @@
 /**
- * morphit-ops fast-sync (cp766).
+ * morphit-ops fast-sync.
  *
  * Bring a FRESH node's indexer to a live orderbook in minutes by restoring the
  * newest federation snapshot published on-chain (indexer_snapshot_v1), instead
@@ -86,7 +86,7 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 	// instant); fall back to the cursor-recency heuristic only when systemd can't be
 	// queried. If it IS running, OFFER to stop it (and wait for it to actually stop)
 	// rather than refusing with a "stop it first" wall + a 90s cursor lag, and OFFER
-	// to discard existing data rather than demanding --force (the maintainer/morphit.io).
+	// to discard existing data rather than demanding --force (morphit.io).
 	let forceEffective = force;
 	let wasRunning = false;
 	try {
@@ -155,8 +155,8 @@ export async function runFastSync(ctx: CommandCtx): Promise<number> {
 					skipVerify: ctx.flags['skip-verify'] === 'true'
 				});
 	// If WE stopped the indexer, restart it so the operator doesn't have to — the
-	// tail catch-up + re-verify happens automatically on start (the maintainer: "finish up
-	// and check things automatically").
+	// tail catch-up + re-verify happens automatically on start (Requirement: finish and check
+	// things automatically).
 	if (code === 0 && wasRunning) {
 		blank();
 		info('Restarting the indexer to catch up the short tail…');
@@ -198,7 +198,7 @@ function stopIndexerAndWait(): boolean {
 export function fastSyncFromChain(opts: {
 	repoRoot: string;
 	signer?: string;
-	/** v1.18.0 deep-deep (rv2-1): the posting key a non-official --signer must
+	/** the posting key a non-official --signer must
 	 *  have signed with. The official account's key is pinned in indexer.env. */
 	signerPubkey?: string;
 	force?: boolean;
@@ -229,7 +229,7 @@ export function fastSyncFromChain(opts: {
 	// validates against the FULL indexer config. CHAIN_ID / PUBLIC_ORIGIN /
 	// OFFICIAL_POSTING_PUBKEY live in /etc/morphit/indexer.env, which morphit-ops's
 	// own process env does NOT include — without this, snapshot-bootstrap fails
-	// "MORPHIT_INDEXER_*: Required" on a perfectly-configured box (the maintainer/morphit.io).
+	// "MORPHIT_INDEXER_*: Required" on a perfectly-configured box (morphit.io).
 	// Mirror the unit's `set -a; . each; set +a` (morphit.config.env before
 	// indexer.env, last-wins) then exec tsx.
 	const envFiles = [

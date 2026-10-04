@@ -14,7 +14,7 @@
  *
  * The derivation's correctness is in i2p-destination-smoke; whether i2pd
  * serves the address is a host concern (i2pd Ansible role + the operator's
- * deploy — i2pd's cold router init can't be exercised in-sandbox).
+ * deploy — i2pd's cold router init can't be exercised in a smoke).
  */
 
 import { readFileSync } from 'node:fs';
@@ -55,16 +55,22 @@ expect(
 	'don\u2019t-overwrite also checks an existing config file',
 	initSrc.includes('MORPHIT_INSTANCE_I2P_B32_ADDRESS\\s*=')
 );
-expect('validates an existing address before reusing it', initSrc.includes("validateAltAddress('i2p'"));
+expect(
+	'validates an existing address before reusing it',
+	initSrc.includes("validateAltAddress('i2p'")
+);
 expect(
 	'a manually-entered / existing address wins (only generate when null)',
 	/if \(i2pB32 === null\)/.test(initSrc)
 );
-expect('generation failure is non-fatal (wrapped in try/catch)', /try \{[\s\S]{0,200}generateI2pDestination/.test(initSrc));
+expect(
+	'generation failure is non-fatal (wrapped in try/catch)',
+	/try \{[\s\S]{0,200}generateI2pDestination/.test(initSrc)
+);
 expect('injects the resolved address into altNetworks', initSrc.includes('altNetworksFinal'));
 expect('passes i2pDestination into the answers', /i2pDestination\b/.test(initSrc));
 
-// ─── slow-generation spinner (the maintainer t.txt #1) ──────────────────────────
+// ─── slow-generation spinner ──────────────────────────────────────
 // i2pd's destination generation can take minutes on a small VPS; without
 // on-screen motion an operator assumes a hang and Ctrl-C's out, losing the
 // work. A 6-dot braille spinner + a "stand by" label reassures them.
@@ -99,17 +105,36 @@ expect(
 // site. Exercise the REAL stanza builder + the shared constant, not a regex.
 {
 	const stanza = i2pTunnelStanza('morphit.dat', HIDDEN_FRONTEND_PORT);
-	expect('HIDDEN_FRONTEND_PORT is the frontend fan-out (8090), not the relay (8080)', HIDDEN_FRONTEND_PORT === 8090);
+	expect(
+		'HIDDEN_FRONTEND_PORT is the frontend fan-out (8090), not the relay (8080)',
+		HIDDEN_FRONTEND_PORT === 8090
+	);
 	expect('the emitted i2p tunnel stanza targets port 8090', /(^|\n)port = 8090(\n|$)/.test(stanza));
-	expect('the emitted i2p tunnel stanza does NOT target the relay 8080', !/port = 8080/.test(stanza));
+	expect(
+		'the emitted i2p tunnel stanza does NOT target the relay 8080',
+		!/port = 8080/.test(stanza)
+	);
 	// render.ts + i2pGenerate.ts must pass the constant, never a literal 8080.
 	const i2pGenSrc = readFileSync(join(here, '../src/init/i2pGenerate.ts'), 'utf8');
-	expect('render passes HIDDEN_FRONTEND_PORT to the stanza', /i2pTunnelStanza\([^)]*HIDDEN_FRONTEND_PORT\)/.test(renderSrc));
-	expect('i2pGenerate passes HIDDEN_FRONTEND_PORT to the stanza', /i2pTunnelStanza\([^)]*HIDDEN_FRONTEND_PORT\)/.test(i2pGenSrc));
+	expect(
+		'render passes HIDDEN_FRONTEND_PORT to the stanza',
+		/i2pTunnelStanza\([^)]*HIDDEN_FRONTEND_PORT\)/.test(renderSrc)
+	);
+	expect(
+		'i2pGenerate passes HIDDEN_FRONTEND_PORT to the stanza',
+		/i2pTunnelStanza\([^)]*HIDDEN_FRONTEND_PORT\)/.test(i2pGenSrc)
+	);
 	// The printed Tor + I2P instructions point at 8090 too.
-	expect('init.ts Tor HiddenServicePort instruction targets 8090', /HiddenServicePort 80 127\.0\.0\.1:8090/.test(initSrc) && !/HiddenServicePort 80 127\.0\.0\.1:8080/.test(initSrc));
+	expect(
+		'init.ts Tor HiddenServicePort instruction targets 8090',
+		/HiddenServicePort 80 127\.0\.0\.1:8090/.test(initSrc) &&
+			!/HiddenServicePort 80 127\.0\.0\.1:8080/.test(initSrc)
+	);
 	const genI2pSh = readFileSync(join(here, '../../../scripts/generate-i2p.sh'), 'utf8');
-	expect('generate-i2p.sh instruction targets port 8090', /port = 8090/.test(genI2pSh) && !/port = 8080/.test(genI2pSh));
+	expect(
+		'generate-i2p.sh instruction targets port 8090',
+		/port = 8090/.test(genI2pSh) && !/port = 8080/.test(genI2pSh)
+	);
 }
 
 console.log('');

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run on: the sandbox/dev container (NOT a production node).
+# Run on: a dev checkout or container (NOT a production node).
 #
 # fastchat-latency-probe-harness — EXECUTE ops/fastchat-latency-probe.sh
 # against real stub proxies and a real stub peer, and check what it reports.
@@ -217,7 +217,7 @@ else
 	no "P5 a peer answering only 503 produced exit $RC"
 fi
 
-# L2a (v1.18.0 deep-deep) — the network is decided by the real host, not by
+# L2a — the network is decided by the real host, not by
 # how the string ends. `http://<clearnet>?.loki` used to read as Lokinet, get no
 # proxy, skip the --allow-clearnet guard, and be fetched from this box's IP (no
 # port, because the old parse cut at the first colon). Exit 2 is "refused before
@@ -232,7 +232,7 @@ for bad in 'http://127.0.0.1?.loki' 'http://127.0.0.1#.onion' 'http://127.0.0.1/
 	fi
 done
 
-# L2b (v1.18.0 deep-deep) — a BLANK Tor setting means Tor is off, as it does for
+# L2b — a BLANK Tor setting means Tor is off, as it does for
 # the indexer; it used to fall back to 127.0.0.1:9050 and the "switched off"
 # message could never print.
 run MORPHIT_INDEXER_TOR_SOCKS= bash "$PROBE" "http://$ONION" --samples 3

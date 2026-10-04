@@ -1,5 +1,10 @@
 # Blurt blockchain snapshot (block_log)
 
+> This file is the README of the separate snapshot mirror repository (Git LFS),
+> not of this one. It is kept here next to `make-snapshot.sh`, which produces
+> the snapshot it describes; copy it into the mirror repository and update the
+> table when you publish a new snapshot.
+
 A periodically-refreshed, **self-verifying** snapshot of the Blurt chain's raw
 `block_log`, used to bootstrap new [hidden-rpc](https://git.agorise.net/agorise/hidden-rpc)
 nodes in hours instead of days.

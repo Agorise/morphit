@@ -8,9 +8,11 @@
  * becomes dead code.
  *
  * Storage:
- *   safeLocal key 'morphit.chat.recent_peers' — a JSON array of
- *   Blurt account names, most-recently-opened first. Capped at
- *   MAX_RECENT_PEERS.
+ *   key 'morphit.chat.recent_peers' in the session's person storage
+ *   ($lib/storage/personStorage: localStorage when the session is
+ *   remembered, this tab's sessionStorage for "just this session", nowhere
+ *   while locked or signed out) — a JSON array of Blurt account names,
+ *   most-recently-opened first. Capped at MAX_RECENT_PEERS.
  *
  * Invariants:
  *   - Only valid account names stored.
@@ -22,14 +24,14 @@
  *     breaking.
  */
 
-import { safeLocal } from '$utils/safeStorage';
+import { personGet, personSet, personRemove } from '$lib/storage/personStorage';
 
 const KEY = 'morphit.chat.recent_peers';
 const MAX_RECENT_PEERS = 20;
 const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
 
 function readRaw(): string[] {
-	const raw = safeLocal.get(KEY);
+	const raw = personGet(KEY);
 	if (raw === null) return [];
 	try {
 		const parsed = JSON.parse(raw);
@@ -42,9 +44,9 @@ function readRaw(): string[] {
 
 function writeRaw(peers: readonly string[]): void {
 	try {
-		safeLocal.set(KEY, JSON.stringify(peers));
+		personSet(KEY, JSON.stringify(peers));
 	} catch {
-		// safeLocal is best-effort; writes can fail in quota-exceeded
+		// Storage is best-effort; writes can fail in quota-exceeded
 		// or private-mode contexts. Silently ignore — the inbox will
 		// just show an empty or stale list.
 	}
@@ -88,5 +90,5 @@ export function loadRecentPeers(): readonly string[] {
  * alongside other conversation-related local state.
  */
 export function clearRecentPeers(): void {
-	safeLocal.remove(KEY);
+	personRemove(KEY);
 }

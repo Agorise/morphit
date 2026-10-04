@@ -1,5 +1,23 @@
-# §37.14 — Operator alerting via Postfix smarthost.
+# §37.14 — Operator alerting via Postfix smarthost — only when a real relay is
+# configured (morphit_alert_mail_enabled, group_vars).  Otherwise Postfix
+# delivers on this server only: nothing is relayed, and mail for anyone off the
+# box is refused locally (a bounce to root's mailbox), so no SMTP connection to
+# any outside server is ever made.
 ---
+- name: Keep Postfix local-only (no alert relay configured, or a tor-only node)
+  ansible.builtin.lineinfile:
+    path: /etc/postfix/main.cf
+    regexp: "^{{ item.key }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+    state: present
+  loop:
+    - { key: "relayhost", value: "" }
+    - { key: "default_transport", value: "error:outbound mail is off on this server" }
+    - { key: "relay_transport", value: "error:outbound mail is off on this server" }
+    - { key: "inet_interfaces", value: "loopback-only" }
+  when: not (morphit_alert_mail_enabled | bool)
+  notify: Restart postfix
+
 - name: Configure Postfix for smarthost relay
   ansible.builtin.lineinfile:
     path: /etc/postfix/main.cf
@@ -15,6 +33,10 @@
     - { key: "smtp_tls_CAfile", value: "/etc/ssl/certs/ca-certificates.crt" }
     - { key: "inet_interfaces", value: "loopback-only" }
     - { key: "smtpd_relay_restrictions", value: "permit_mynetworks reject_unauth_destination" }
+    # Postfix's own defaults, in case mail was off before.
+    - { key: "default_transport", value: "smtp" }
+    - { key: "relay_transport", value: "relay" }
+  when: morphit_alert_mail_enabled | bool
   notify: Restart postfix
 
 - name: Configure Postfix SASL credentials
@@ -25,4 +47,5 @@
     mode: '0600'
     content: |
       [{{ morphit_alert_smtp_host }}]:{{ morphit_alert_smtp_port }} {{ morphit_alert_smtp_user }}:{{ morphit_alert_smtp_password }}
+  when: morphit_alert_mail_enabled | bool
   notify: Rebuild postfix sasl map

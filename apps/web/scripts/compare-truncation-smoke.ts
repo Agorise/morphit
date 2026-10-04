@@ -31,7 +31,11 @@
  * cannot hide in here.
  */
 
-import { compareOrderbooks, type OrderbookSide } from '../src/lib/utils/compareOrderbooks';
+import {
+	compareOrderbooks,
+	type OrderKey,
+	type OrderbookSide
+} from '../src/lib/utils/compareOrderbooks';
 import type { OrderRecord } from '@morphit/indexer-client';
 
 let pass = 0;
@@ -95,7 +99,7 @@ function page(all: readonly OrderRecord[], limit: number, indexedBlock: number):
 	};
 }
 
-const key = (o: OrderRecord) => `${o.account}/${o.permlink}`;
+const key = (o: OrderKey) => `${o.account}/${o.permlink}`;
 
 // ── the mutants this suite must discriminate against ─────────────────
 
@@ -107,8 +111,8 @@ interface Outcome {
 
 const outcomeOf = (r: {
 	verdict: string;
-	onlyHere: readonly OrderRecord[];
-	onlyThere: readonly OrderRecord[];
+	onlyHere: readonly OrderKey[];
+	onlyThere: readonly OrderKey[];
 }): Outcome => ({
 	verdict: r.verdict,
 	onlyHere: r.onlyHere.map(key).sort(),
@@ -150,7 +154,7 @@ function timestampWindow(
 		if (o !== null) cut.push(o);
 	}
 	const start = cut.length ? cut.reduce((x, y) => (x > y ? x : y)) : null;
-	const inW = (o: OrderRecord) => (start === null ? true : cmp(o.updated_at, start));
+	const inW = (o: OrderKey) => (start === null ? true : cmp(o.updated_at, start));
 	const ai = a.items.filter(inW);
 	const bi = b.items.filter(inW);
 	const ka = new Set(ai.map(key));
@@ -420,19 +424,31 @@ console.log('');
 	} else bad('8. M2 survives — it should be blinded by the single shared timestamp');
 }
 
-// ── 8b. A truncated side that returned nothing IS inconclusive ───────
-// The one shape where no comparable region exists at all.
+// ── 8b. A side that says "more exist" but sent no rows is MALFORMED ──
+// The first page of a non-empty orderbook holds rows, so items:[] with a
+// cursor is an impossible answer — how an instance hiding every order would
+// reply. It is named (malformedSide) rather than passed off as "nothing to
+// compare", and no individual order is listed, because none was compared.
 {
 	const here: OrderbookSide = { items: [], next_cursor: 'cursor', indexed_block: BLOCK };
 	const there = page(series('t', 10, NOW), 100, BLOCK);
 	const r = compareOrderbooks(here, there);
-	if (r.verdict === 'inconclusive' && r.onlyHere.length === 0 && r.onlyThere.length === 0)
-		ok('8b. a truncated side that returned no rows is inconclusive and accuses nobody');
+	if (
+		r.verdict === 'malformed' &&
+		r.malformedSide === 'here' &&
+		r.onlyHere.length === 0 &&
+		r.onlyThere.length === 0
+	)
+		ok('8b. a side that returned no rows but a cursor is named malformed and no order is listed');
 	else
 		bad(
-			`8b. expected inconclusive with no findings, got ${r.verdict} ` +
+			`8b. expected malformed (here) with no findings, got ${r.verdict}/${r.malformedSide} ` +
 				`(${r.onlyHere.length}/${r.onlyThere.length})`
 		);
+	const r2 = compareOrderbooks(there, here);
+	if (r2.verdict === 'malformed' && r2.malformedSide === 'there')
+		ok('8b. …whichever side sent it (a peer hiding every order is named)');
+	else bad(`8b. expected malformed (there), got ${r2.verdict}/${r2.malformedSide}`);
 	if (mutantLegacy(here, there).verdict !== 'inconclusive') {
 		caughtBy.add('M1_legacy_no_window');
 		ok('8b. catches M1_legacy_no_window (it reports every remote order as missing here)');

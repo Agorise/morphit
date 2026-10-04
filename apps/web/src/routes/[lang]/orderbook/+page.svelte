@@ -35,7 +35,7 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import ConfirmModal from '$components/ConfirmModal.svelte';
 	import StatusLine from '$components/StatusLine.svelte';
-	// cp165 byte-budget: FeaturedOrders + FeaturedAuctionHistory are
+	// byte-budget: FeaturedOrders + FeaturedAuctionHistory are
 	// lazy-imported below.  Both render below the orderbook fold
 	// AND each fires an HTTP fetch on onMount — for visitors who
 	// don't scroll, that's bytes downloaded and requests issued
@@ -82,6 +82,7 @@
 	import { resolveOrigin, MORPHIT_INDEXER_ORIGIN } from '$net/config';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
 	import { isUnlocked, hasAnySession } from '$stores/identity';
+	import { sessionAccountName } from '$stores/sessionAccount';
 	import { networkChipFor } from '$lib/orders/networkChip';
 
 	// ─── Filter state ────────────────────────────────────────────────
@@ -176,10 +177,10 @@
 		return () => clearTimeout(timer);
 	});
 
-	// cp165 byte-budget: lazy-load below-the-fold featured components.
+	// byte-budget: lazy-load below-the-fold featured components.
 	// Each kicks off a network fetch in its onMount, so deferring the
 	// import also defers the fetch for visitors who don't scroll past
-	// the orderbook list. cp428 — FeaturedAuctionHistory now pulls in
+	// the orderbook list. FeaturedAuctionHistory now pulls in
 	// FeaturedOrders itself (the live cards render inside its card), so the
 	// orderbook only lazy-loads the one component.
 	const loadFeaturedAuctionHistory = () =>
@@ -230,7 +231,7 @@
 	// through example payment methods.  Like the place names, these are
 	// brand/method names shown verbatim in every locale (NOT translated).
 	// HOLD_MS is deliberately 1s LONGER than the Region field's so the two
-	// placeholders never cycle in lockstep (the maintainer's ask).  Runs only while
+	// placeholders never cycle in lockstep.  Runs only while
 	// NOTHING is selected; reduced-motion shows a single static name.
 	// (Declared here, after paymentMethods, so the $derived below can read it.)
 	const PAYMENT_PLACEHOLDERS = [
@@ -304,7 +305,7 @@
 	 *  marked as hidden). Flipped by the transparency link under the
 	 *  filter bar. Per-session only — doesn't touch the hidden set. */
 	let showHiddenTemporarily = $state(false);
-	/** cp453 — the account a "hide" click is awaiting confirmation for, or null.
+	/** the account a "hide" click is awaiting confirmation for, or null.
 	 *  Hiding is gated behind a ConfirmModal because the eyeball toggle sits
 	 *  inside the card's stretched "open order" click area: a stray click used to
 	 *  hide an account in one silent, unconfirmed action — and hiding also
@@ -313,7 +314,7 @@
 	 *  Unhide stays instant (harmless + reversible). */
 	let accountPendingHide = $state<string | null>(null);
 
-	// ─── Free-text "Order details" filter (cp411) ────────────────────
+	// ─── Free-text "Order details" filter ────────────────────
 	/** Raw query for the free-text search over each order's terms/details.
 	 *  This is a CLIENT-SIDE filter over the already-loaded page(s) — it
 	 *  never hits the indexer (it is deliberately NOT part of currentQuery,
@@ -458,7 +459,7 @@
 	let errorMessage = $state('');
 	let loadingMore = $state(false);
 
-	/** cp411 — don't flash the load-error card during a transient first-load
+	/** don't flash the load-error card during a transient first-load
 	 *  hiccup. On a fresh page the indexer/SSE stream can briefly be
 	 *  unreachable before the first snapshot lands; a bright red "couldn't
 	 *  load" card that appears for a beat and then vanishes reads like the
@@ -485,7 +486,7 @@
 	 *  auto-updating; flips false on transient EventSource errors and
 	 *  back true when the next snapshot arrives. */
 	let streaming = $state(false);
-	/** cp512 [O8] — true once the CURRENT stream's authoritative snapshot has
+	/** true once the CURRENT stream's authoritative snapshot has
 	 *  landed. Reset at the top of every buildStream() (a fresh stream = no
 	 *  snapshot yet). fetchFirstPage() reads it so a late REST prefetch never
 	 *  clobbers the snapshot (or a just-arrived upsert) — the flash-then-vanish
@@ -500,7 +501,7 @@
 	 *  the server enforces it.  Updated by the upsert/remove
 	 *  callbacks below. */
 	const streamedIds = new Set<string>();
-	// t.txt (v1.4.9 #9) — IDs of orders that arrived LIVE (prepended via the
+	// IDs of orders that arrived LIVE (prepended via the
 	// stream while the user is watching), so their card plays the one-shot
 	// slide-in. Reactive (SvelteSet) because it drives OrderCard rendering; each
 	// id is auto-cleared shortly after the animation so it never replays.
@@ -520,7 +521,7 @@
 		return getUserBlurtAccount();
 	});
 
-	// cp384 (#2): the "Posted an order but don't see it? Check fee status"
+	// the "Posted an order but don't see it? Check fee status"
 	// hint only makes sense once the viewer has actually posted an order, so
 	// gate it on waiver eligibility — checkWaiverEligibility returns
 	// `ineligible_has_orders` exactly when the account has ≥1 order. Fetched
@@ -528,7 +529,9 @@
 	let viewerHasOrdered = $state(false);
 	let eligibilityCheckedFor: string | null = null;
 	$effect(() => {
-		const acct = viewerAccount;
+		// Only with a session: a remembered name on a locked visit does not
+		// ask the indexer about the account (the hint is session-only anyway).
+		const acct = $hasAnySession ? viewerAccount : null;
 		if (!acct || acct === eligibilityCheckedFor) return;
 		eligibilityCheckedFor = acct;
 		void (async () => {
@@ -552,7 +555,7 @@
 	 *  lookup idiom `profileMap[account]` in the template is natural. */
 	let profileMap = $state<Record<string, ProfileResponse | null>>({});
 	/** False until this surface's profile hydrate has completed once.
-	 *  v1.8.13 (the maintainer) — while false, identity labels render a neutral placeholder
+	 *  v1.8.13 — while false, identity labels render a neutral placeholder
 	 *  instead of asserting @account + identicon and then rewriting themselves.
 	 *  An identity that visibly changes is indistinguishable from a swap attack. */
 
@@ -578,7 +581,7 @@
 		const blocked = $blockedAccounts;
 		const now = $nowMs;
 		return items.filter((o) => {
-			// cp508 (tt.txt #1) — hide an order the instant its expiry passes,
+			// hide an order the instant its expiry passes,
 			// client-side, so a live-streamed orderbook agrees with a fresh server
 			// snapshot (the indexer already drops expired orders at query time).
 			// Expiry fires no op or SSE event — it's purely the clock advancing —
@@ -591,7 +594,7 @@
 				const acct = o.account.toLowerCase();
 				if (hidden.has(acct) || blocked.has(acct)) return false;
 			}
-			// cp411 — free-text "Order details" filter: every query token must
+			// free-text "Order details" filter: every query token must
 			// appear (case-insensitively) somewhere in the order's terms text.
 			if (tokens.length > 0) {
 				const terms = (o.terms ?? '').toLowerCase();
@@ -626,7 +629,7 @@
 		// the assignment back to OrderbookQuery on return is a
 		// type-level no-op (the values are identical).
 		const q: { -readonly [K in keyof OrderbookQuery]: OrderbookQuery[K] } = {};
-		// cp425 — 'barter' selects the goods/services ASSET, mapped to the
+		// 'barter' selects the goods/services ASSET, mapped to the
 		// uppercase registry ticker 'BARTER'. One clear "Barter" filter that
 		// surfaces the wares (no hidden payment-method filter).
 		if (asset === 'barter') q.asset = 'BARTER';
@@ -637,7 +640,7 @@
 		if (fiatList.length) q.fiat_currency = fiatList.join(',');
 		const regionTrim = region.trim();
 		if (regionTrim) q.location_region = regionTrim;
-		// cp425 — barter is now an ASSET filter (above), not a payment
+		// barter is now an ASSET filter (above), not a payment
 		// filter, so payment_methods carries only the user's typed picks.
 		const uniquePayment = [...new Set(paymentMethods)];
 		if (uniquePayment.length) q.payment_methods = uniquePayment.join(',');
@@ -794,7 +797,7 @@
 		}
 		profileMap = next;
 
-		// v1.8.12 (the maintainer) — re-ask for accounts whose read was a TRANSIENT FAILURE.
+		// v1.8.12 — re-ask for accounts whose read was a TRANSIENT FAILURE.
 		//
 		// The cache distinguishes a failed fetch (soft-cached 5s) from an
 		// authoritative "no profile" (90s), on the reasoning that the short entry
@@ -824,7 +827,7 @@
 	}
 
 
-	/** cp452 (t.txt item 2) — re-read the logged-in user's OWN profile into
+	/** re-read the logged-in user's OWN profile into
 	 *  profileMap when the shared selfProfile store changes. profileMap is a
 	 *  one-shot snapshot from hydrateProfiles; on a "Load it now" SW-upgrade
 	 *  reload the first profile fetch can race SW activation and come back empty
@@ -862,7 +865,7 @@
 
 		if (!result.ok) {
 			console.warn('[orderbook] first-page fetch failed:', result.message);
-			// cp512 [O8] — if the stream's snapshot already populated the list,
+			// if the stream's snapshot already populated the list,
 			// the SSE stream is our source of truth; don't flip to an error
 			// card over a failed REST prefetch.
 			if (currentStreamHadSnapshot) {
@@ -875,7 +878,7 @@
 		}
 		cursor = result.data.next_cursor;
 		phase = 'ready';
-		// cp512 [O8] — do NOT clobber the authoritative SSE snapshot. If the
+		// do NOT clobber the authoritative SSE snapshot. If the
 		// stream already replaced items (snapshot, or a live upsert of a
 		// just-verified order), a late REST prefetch that queried a moment
 		// before that order went live would otherwise overwrite items and
@@ -891,6 +894,9 @@
 		void hydrateProfiles(result.data.items, currentAbort.signal);
 	}
 
+	/** A failed Load more, shown beside the button. */
+	let loadMoreError = $state('');
+
 	async function loadMore(): Promise<void> {
 		if (!cursor || loadingMore) return;
 		loadingMore = true;
@@ -898,12 +904,14 @@
 		const result = await getOrderbook({ ...currentQuery(), cursor }, signal);
 		loadingMore = false;
 		if (!result.ok) {
-			// Non-fatal — show the error inline but keep the list so
+			// Non-fatal — shown next to the Load more button (errorMessage
+			// renders only in the page-level error card), keeping the list so
 			// the user doesn't lose scroll position.
 			console.warn('[orderbook] load-more failed:', result.message);
-			errorMessage = $_('orderbook.error.load_more_failed');
+			loadMoreError = $_('orderbook.error.load_more_failed');
 			return;
 		}
+		loadMoreError = '';
 		// Append rather than replace; dedupe by (account, permlink)
 		// in case reordering caused overlap.
 		const seen = new Set(items.map((o) => `${o.account}/${o.permlink}`));
@@ -930,11 +938,12 @@
 		}, 250);
 	}
 
-	/** Filter-card collapse.  Expanded on page load; the user controls it
-	 *  via the header toggle (clicking anywhere on the title row).  There
-	 *  is deliberately NO auto-collapse on filter changes — folding the
-	 *  card away mid-adjustment was disorienting, so it stays open until
-	 *  the user chooses to collapse it. */
+	/** Filter-card collapse.  Collapsed on page load, except when a saved
+	 *  language filter is applied (a filter the user can't see would hide
+	 *  orders silently); the user controls it via the header toggle
+	 *  (clicking anywhere on the title row).  There is deliberately NO
+	 *  auto-collapse on filter changes — folding the card away
+	 *  mid-adjustment was disorienting. */
 	let filtersExpanded = $state(false);
 
 	// Re-fetch when any filter changes.
@@ -1004,7 +1013,7 @@
 				} else {
 					// New row — prepend (recent sort puts newest first).
 					items = [entry, ...items];
-					// t.txt #9 — this is a genuinely-live new order (the initial
+					// this is a genuinely-live new order (the initial
 					// snapshot goes through applySnapshot, not here), so slide its
 					// card into first place. Clear the flag just after the CSS
 					// animation (0.32s) so a later re-render never replays it.
@@ -1038,10 +1047,11 @@
 	onMount(() => {
 		// Seed the language filter once: an EXPLICIT saved/chain preference, else
 		// EMPTY (all languages). It must NOT default to the UI locale — that hid
-		// non-locale orders and re-appeared on every page refresh (the maintainer/timeapp).
+		// non-locale orders and re-appeared on every page refresh (timeapp).
 		if (!langFilterSeeded) {
 			langFilter = resolveOrderbookLangFilter(null);
 			langFilterSeeded = true;
+			if (langFilter.length > 0) filtersExpanded = true;
 		}
 		fetchFirstPage();
 		// Catch-up banner: check sync state now, then poll every 30s while behind.
@@ -1056,11 +1066,11 @@
 		// Populate the blocked-accounts store if user is logged in,
 		// so visibleItems can filter chain-blocked peers from the
 		// orderbook view.  Fire-and-forget: the derived re-runs
-		// reactively when blockedSet updates.  Anon viewers never
-		// trigger this (no account → no fetch).
-		const me = getUserBlurtAccount();
+		// reactively when blockedSet updates.  Anon viewers and
+		// locked visits never trigger this (no session → no fetch).
+		const me = sessionAccountName();
 		if (me) void loadBlocks(me);
-		// cp452 (t.txt 2) — keep the user's OWN order cards' avatar + name fresh:
+		// keep the user's OWN order cards' avatar + name fresh:
 		// re-read self into profileMap whenever the shared selfProfile store
 		// resolves or changes (a late arrival after a "Load it now" SW-upgrade
 		// race, or an optimistic edit from settings), so self's orders upgrade
@@ -1095,6 +1105,7 @@
 		minTrades = 0;
 		sortMode = 'recent';
 		orderDetailsQuery = '';
+		langFilter = [];
 	}
 
 	// ─── Formatting helpers ──────────────────────────────────────────
@@ -1110,7 +1121,7 @@
 		return $_(tp.key, { values: tp.values }) as string;
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -1120,14 +1131,19 @@
 <Head
 	routeKey="orderbook"
 	feeds={[
-		{ title: $_('seo.site_name') + ' — orderbook (RSS)', href: '/rss/orderbook.xml' },
 		{
-			title: $_('seo.site_name') + ' — orderbook (Atom)',
+			title: $_('orderbook.feed_title', { values: { site: $_('seo.site_name'), format: 'RSS' } }),
+			href: '/rss/orderbook.xml'
+		},
+		{
+			title: $_('orderbook.feed_title', { values: { site: $_('seo.site_name'), format: 'Atom' } }),
 			href: '/rss/orderbook.atom',
 			type: 'atom'
 		},
 		{
-			title: $_('seo.site_name') + ' — orderbook (JSON Feed)',
+			title: $_('orderbook.feed_title', {
+				values: { site: $_('seo.site_name'), format: 'JSON Feed' }
+			}),
 			href: '/rss/orderbook.json',
 			type: 'json'
 		}
@@ -1172,8 +1188,8 @@
 		</a>
 	</header>
 
-	<!-- cp420: the fee-status recovery link that used to sit here (Tier 2.7 /
-	     Part 91 — a user who paid a listing fee but doesn't see their order,
+	<!-- the fee-status recovery link that used to sit here (Tier 2.7 /
+	     a user who paid a listing fee but doesn't see their order,
 	     because fee verification silently failed, gets a path back to
 	     /my/orders) moved to the FOOT of the filter card below. It was too
 	     prominent at the top of the page. Same gating: signed-in users with a
@@ -1181,7 +1197,7 @@
 
 	<WelcomeFirstBuyHero />
 
-	<!-- Sally finding H4 (Part 68): if the user is unlocked but
+	<!-- Sally finding H4: if the user is unlocked but
 	     hasn't completed account-name registration, the per-row
 	     "Message" CTA is silently invisible (see line where
 	     `viewerAccount !== null` gates it).  Without this banner
@@ -1332,9 +1348,9 @@
 					</div>
 				</div>
 
-				<!-- cp411 — free-text search over each order's terms/details.
-				     Client-side over the loaded page(s); no help text under it
-				     (the maintainer's ask). Animated multilingual typewriter placeholder. -->
+				<!-- free-text search over each order's terms/details.
+				     Client-side over the loaded page(s); no help text under it.
+				     Animated multilingual typewriter placeholder. -->
 				<label class="mt-4 block">
 					<span class="mb-1 block text-sm font-semibold">
 						{$_('orderbook.filters.order_details_label')}
@@ -1387,7 +1403,7 @@
 					</label>
 				</div>
 
-				{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent' || orderDetailsQuery.trim()}
+				{#if asset || side || fiatList.length || region || paymentMethods.length || minTrades > 0 || sortMode !== 'recent' || orderDetailsQuery.trim() || langFilter.length}
 					<div class="mt-4 flex flex-wrap items-center gap-3">
 						<BusyButton variant="ghost" onclick={clearFilters}>
 							{$_('orderbook.filters.clear')}
@@ -1426,7 +1442,7 @@
 						{/if}
 					</div>
 				{/if}
-				<!-- cp420: the "posted an order but don't see it? check fee
+				<!-- the "posted an order but don't see it? check fee
 				     status" recovery link lives at the FOOT of the filter card
 				     now — it was too prominent at the top of the page. Signed-in
 				     users who've actually posted an order only. -->
@@ -1445,7 +1461,7 @@
 		{/if}
 	</section>
 
-	<!-- cp428 — the LIVE featured orders now render INSIDE the unified
+	<!-- the LIVE featured orders now render INSIDE the unified
 	     "🎉 Featured" card (FeaturedAuctionHistory), above the clearing-price
 	     history + window selector, instead of a separate section here (which
 	     read as a jumbled second featured block). Self-hides when empty. -->
@@ -1484,7 +1500,7 @@
 		</section>
 	{/if}
 
-	<!-- Error (cp411: 2s-delayed reveal + dimmed so a transient load blip
+	<!-- Error (2s-delayed reveal + dimmed so a transient load blip
 	     doesn't read as a big red "site is broken" flag) -->
 	{#if showLoadError}
 		<section
@@ -1521,7 +1537,7 @@
 				</p>
 			</section>
 		{:else if visibleItems.length === 0 && orderDetailsTokens.length > 0}
-			<!-- cp411 — the free-text "Order details" search filtered every
+			<!-- the free-text "Order details" search filtered every
 			     loaded order out. Offer a clear-search escape hatch rather than
 			     an empty list, and echo the query so it's obvious what matched
 			     nothing. -->
@@ -1541,6 +1557,23 @@
 				>
 					{$_('orderbook.search_clear')}
 				</button>
+				<!-- The search covers only the orders loaded so far: matches may be
+				     on a later page, so keep the way to load more. -->
+				{#if cursor}
+					<div class="mt-3 flex justify-center">
+						<BusyButton
+							variant="secondary"
+							busy={loadingMore}
+							busyLabel={$_('common.loading')}
+							onclick={loadMore}
+						>
+							{$_('orderbook.load_more')}
+						</BusyButton>
+					</div>
+					{#if loadMoreError}
+						<div class="mt-2"><StatusLine kind="error">{loadMoreError}</StatusLine></div>
+					{/if}
+				{/if}
 			</section>
 		{:else if visibleItems.length === 0 && hiddenInView > 0}
 			<!-- Every item in the fetched page is from an account the
@@ -1563,10 +1596,10 @@
 				</button>
 			</section>
 		{:else if visibleItems.length === 0}
-			<!-- cp510 [11d] — CATCH-ALL: items loaded but every one filtered out
+			<!-- CATCH-ALL: items loaded but every one filtered out
 			     for a reason the branches above do not name (e.g. all expired
 			     client-side between the server snapshot and the local clock).
-			     Show the standard filtered-empty card, NEVER a blank <ul> — the maintainer
+			     Show the standard filtered-empty card, NEVER a blank <ul>
 			     saw a blank orders section here (the "no orders match your
 			     filters" card was missing entirely). -->
 			<section class="card text-center">
@@ -1607,7 +1640,7 @@
 				{#each visibleItems as o (o.account + '/' + o.permlink)}
 					{@const accountIsHidden = $hiddenAccounts.has(o.account.toLowerCase())}
 					{@const accountIsBlocked = $blockedAccounts.has(o.account.toLowerCase())}
-				<!-- v1.8.13 (the maintainer) — prefer the INLINE profile the orderbook now
+				<!-- v1.8.13 — prefer the INLINE profile the orderbook now
 				     returns, so the card is correct on FIRST paint and never
 				     shows @account + identicon before swapping to the real
 				     identity. That swap took ~7s on morphit.io and read as a
@@ -1622,11 +1655,11 @@
 					profileMap[o.account] ?? inlineProfileOf(o)
 				)}
 					{@const networkChip = networkChipFor(o, $_)}
-					<!-- v1.8.12 (the maintainer): the Message button now shows for SIGNED-OUT
+					<!-- v1.8.12: the Message button now shows for SIGNED-OUT
 					     visitors too. It was hidden whenever `viewerAccount` was
 					     null, so someone browsing the orderbook saw a wall of
 					     orders and no way to begin — the one action the page
-					     exists to produce. the maintainer reported it missing; his
+					     exists to produce. The maintainer reported it missing; his
 					     screenshots show the header "Start" button, i.e. a
 					     signed-out session.
 					     Nothing unsafe follows: /chat/:peer is already guarded,
@@ -1674,6 +1707,11 @@
 						{$_('orderbook.load_more')}
 					</BusyButton>
 				</div>
+				{#if loadMoreError}
+					<div class="mt-2 flex justify-center">
+						<StatusLine kind="error">{loadMoreError}</StatusLine>
+					</div>
+				{/if}
 			{/if}
 		{/if}
 	{/if}

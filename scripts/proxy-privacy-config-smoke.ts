@@ -387,8 +387,10 @@ async function main(): Promise<void> {
 				);
 				const cspI2p = i2p.headers.get('content-security-policy') ?? '';
 				check(
-					'F: an I2P request as i2pd forwards it carries the hidden CSP (no clearnet host)',
-					cspI2p === cspOnion && cspI2p !== '' && !/connect-src[^;]*https:/.test(cspI2p),
+					'F: an I2P request as i2pd forwards it carries the I2P CSP (.b32.i2p RPC only, no clearnet host)',
+					/connect-src 'self' http:\/\/[a-z2-7]+\.b32\.i2p/.test(cspI2p) &&
+						!/connect-src[^;]*https:/.test(cspI2p) &&
+						!/\.onion/.test(cspI2p),
 					cspI2p.slice(0, 60)
 				);
 				check(

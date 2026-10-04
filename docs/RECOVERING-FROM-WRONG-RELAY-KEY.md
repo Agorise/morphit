@@ -1,8 +1,8 @@
-# Recovering from a wrong relay key (cp167)
+# Recovering from a wrong relay key
 
 This document is the exact procedure for fixing one specific scenario:
 
-> An operator ran `morphit-ops init`, the pre-cp167 wizard asked them
+> An operator ran `morphit-ops init`, the older wizard asked them
 > for "your relay's posting key", they pasted the posting key
 > (encrypted), and now the relay won't work because the chain rejects
 > every operation with "missing required active authority".
@@ -24,7 +24,7 @@ Every one of those requires **active** authority. The posting key can
 sign comments and votes, nothing else. If the relay has a posting key,
 the chain rejects every relay op.
 
-The cp167 wizard fix renames the prompt + the variables + the
+The wizard fix renames the prompt + the variables + the
 internal commentary; any new operator running `morphit-ops init`
 will be asked unambiguously for the **active** key. This document is
 for operators who set up before that fix landed.
@@ -35,7 +35,7 @@ for operators who set up before that fix landed.
    account on hand (a 51-character string starting with `5`).
 2. They have shell access to the server as the user that runs
    `morphit-ops` (the same user that ran the install).
-3. `morphit-ops` itself is at the cp167 build or later. Check:
+3. `morphit-ops` itself is at the build or later. Check:
    ```
    sudo morphit-ops --help | grep edit-active-key
    ```
@@ -101,7 +101,9 @@ sudo systemctl restart morphit-relay.service
 
 The relay's startup unlock step:
 
-1. Prompts for the passphrase (whatever you typed in step 7 above).
+1. Reads the passphrase from the sealed credential
+   (`/etc/morphit/relay_passphrase.cred`, which `edit-active-key`
+   re-sealed with the passphrase you typed in step 7) — nothing to type.
 2. Decrypts the envelope to get the active-key WIF.
 3. Derives the public key from that WIF.
 4. Fetches the current active authority of `@<account>` from chain.

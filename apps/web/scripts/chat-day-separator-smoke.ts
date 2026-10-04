@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke: the chat log carries a subtle, locale-aware day divider at the first
- * message of each UTC day (the maintainer, 2026-07-08).
+ * message of each UTC day.
  *
  * "Scroll back through hundreds of old messages and land on a specific day's
  * conversation." The divider is a hairline running the full width of the log

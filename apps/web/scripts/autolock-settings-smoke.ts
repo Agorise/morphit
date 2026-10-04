@@ -1,5 +1,5 @@
 /**
- * autolock-settings-smoke — the Settings auto-lock timeout selector (cp343).
+ * autolock-settings-smoke — the Settings auto-lock timeout selector.
  *
  * The settings page (`settings/+page.svelte`) renders a `<select>` letting a
  * password-mode user choose how long their unlocked session survives before

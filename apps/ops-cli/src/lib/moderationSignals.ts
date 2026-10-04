@@ -62,14 +62,14 @@ export async function fetchReciprocityFlags(
 
 /** How many flags are ACTIVE but fall outside the display window.
  *
- *  v1.8.12 (the maintainer) — THE OPERATOR BLIND SPOT. The flag lists above are windowed
+ *  v1.8.12 — THE OPERATOR BLIND SPOT. The flag lists above are windowed
  *  (`WHERE detected_at >= $1`, default 7d), but the reputation suppression in
  *  `apps/indexer/src/api/feedback.ts` has NO time filter: any row in these
  *  tables excludes that pair's feedback from the score forever. So a flag older
  *  than the window keeps a reputation suppressed while being INVISIBLE to the
  *  operator — who then cannot clear what they cannot see.
  *
- *  the maintainer hit this precisely: `morphit-ops moderation` reported "0 flags
+ *  The maintainer hit this precisely: `morphit-ops moderation` reported "0 flags
  *  (0 reciprocity, 0 related-account)" while @tester3's reputation card showed
  *  every review excluded. Reproduced against real Postgres: operator view 0,
  *  enforcement 1, resulting score count 0.
@@ -123,7 +123,7 @@ export async function fetchRelatedFlags(
  *  attacking one subject. Rendered as a pair (subject, attacker) so it fits the
  *  same shape as A/B and can be cleared with the same command.
  *
- *  v1.8.12 (the maintainer) — C and D were never listed by `morphit-ops moderation`, which
+ *  v1.8.12 — C and D were never listed by `morphit-ops moderation`, which
  *  queried only suspicious_reciprocity and related_accounts. They suppress
  *  reputation exactly like A and B, so an operator saw "0 flags" while a
  *  reputation sat suppressed. That is what cost the maintainer an afternoon. */
@@ -255,7 +255,7 @@ export async function clearFlag(
 	const a = params.accountA.toLowerCase();
 	const b = params.accountB.toLowerCase();
 	const [lo, hi] = a < b ? [a, b] : [b, a];
-	// v1.8.12 (the maintainer) — all FOUR signals, not two. Signals C and D suppress
+	// v1.8.12 — all FOUR signals, not two. Signals C and D suppress
 	// reputation exactly like A and B, but had no clearance path at all: the
 	// operator could not see them in `morphit-ops moderation` and could not
 	// clear them, so a false positive suppressed a reputation permanently.

@@ -1,5 +1,5 @@
 /**
- * Tests for MoneroProofFeeVerifier (Part 108++).
+ * Tests for MoneroProofFeeVerifier (later+).
  *
  * Verifies the per-payment tx_proof verification path that
  * REPLACED the old view-key-based MoneroExplorerFeeVerifier.
@@ -29,9 +29,7 @@ const VALID_TXID = 'a'.repeat(64);
 // used to end up `missing`.
 const VALID_TX_KEY = 'e5b4fe26ae0a3a2f7d2bbed8a0c2a1c6d66925ccdbcb6bcef67a0ad66a9b9807';
 const OUTPROOF =
-	'OutProofV2' +
-	'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789' +
-	'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789';
+	'OutProofV2' + 'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789' + 'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789';
 
 function baseConfig(
 	overrides: Partial<MoneroProofFeeVerifierConfig> = {}
@@ -60,11 +58,9 @@ function claim(overrides: Partial<FeeClaim> = {}): FeeClaim {
 }
 
 function mockFetchJson(body: unknown, status = 200): typeof fetch {
-	return vi.fn(async () => ({
-		ok: status >= 200 && status < 300,
-		status,
-		json: async () => body
-	})) as unknown as typeof fetch;
+	return vi.fn(
+		async () => new Response(JSON.stringify(body), { status: status })
+	) as unknown as typeof fetch;
 }
 
 /** Per-host fetch mock (module scope; the quorum-gate block has its own). */
@@ -77,7 +73,7 @@ function fetchByHost(
 			if (url.includes(match)) {
 				if (cfg.throws) throw cfg.throws;
 				const status = cfg.status ?? 200;
-				return { ok: status >= 200 && status < 300, status, json: async () => cfg.body };
+				return new Response(JSON.stringify(cfg.body), { status: status });
 			}
 		}
 		throw new Error(`unmocked URL: ${url}`);
@@ -86,9 +82,9 @@ function fetchByHost(
 
 describe('MoneroProofFeeVerifier — construction', () => {
 	it('rejects empty explorer URL list', () => {
-		expect(
-			() => new MoneroProofFeeVerifier(baseConfig({ explorerUrls: [] }))
-		).toThrow(/at least one explorer URL/);
+		expect(() => new MoneroProofFeeVerifier(baseConfig({ explorerUrls: [] }))).toThrow(
+			/at least one explorer URL/
+		);
 	});
 
 	it('rejects non-HTTPS explorer URL (privacy invariant)', () => {
@@ -106,12 +102,9 @@ describe('MoneroProofFeeVerifier — construction', () => {
 	});
 
 	it('does NOT expose any view-key getter (Part 108++ invariant)', () => {
-		const v = new MoneroProofFeeVerifier(baseConfig()) as unknown as Record<
-			string,
-			unknown
-		>;
+		const v = new MoneroProofFeeVerifier(baseConfig()) as unknown as Record<string, unknown>;
 		// The old MoneroExplorerFeeVerifier had a `currentViewKey`
-		// getter.  The Part 108++ replacement holds NO viewkey and
+		// getter.  The later+ replacement holds NO viewkey and
 		// MUST NOT surface anything related to one.
 		expect('currentViewKey' in v).toBe(false);
 		expect(v.currentViewKey).toBeUndefined();
@@ -319,7 +312,7 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 		expect(r.kind).toBe('pending_external');
 	});
 
-	// v1.20.0 fix wave, G4 — the MK-H1 fix (a quorum of explorers answering
+	// the MK-H1 fix (a quorum of explorers answering
 	// "no such transaction" is a definitive MISSING, not pending) was applied to
 	// the BTC verifier only. An XMR order with a made-up txid/proof stayed
 	// `pending_external` forever — the state attestation can promote and the
@@ -383,7 +376,7 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 	});
 
 	it('two explorers disagree on proven amount → pending_external (no quorum)', async () => {
-		// cp166 — under the old "any disagreement = reject" model,
+		// under the old "any disagreement = reject" model,
 		// this returned `rejected`.  Under the new quorum-with-early-
 		// return model, with minAgree=2 and only 2 disagreeing
 		// explorers, no bucket reaches the threshold so the verifier
@@ -398,10 +391,8 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 			vi.fn(async (input: Parameters<typeof fetch>[0]) => {
 				const url = typeof input === 'string' ? input : input.toString();
 				const amount = url.includes('explorer-a') ? 781_250_000 : 1_000_000_000;
-				return {
-					ok: true,
-					status: 200,
-					json: async () => ({
+				return new Response(
+					JSON.stringify({
 						status: 'success',
 						data: {
 							address: FEE_ADDRESS,
@@ -409,8 +400,9 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 							outputs: [{ amount, match: true }],
 							tx_confirmations: 5
 						}
-					})
-				};
+					}),
+					{ status: 200 }
+				);
 			}) as unknown as typeof fetch
 		);
 		const r = await v.verify(claim());
@@ -422,7 +414,7 @@ describe('MoneroProofFeeVerifier — explorer health paths', () => {
 });
 
 describe('MoneroProofFeeVerifier — privacy invariants', () => {
-	it('sends the tx key only as the explorer\'s viewkey parameter', async () => {
+	it("sends the tx key only as the explorer's viewkey parameter", async () => {
 		// We can't easily intercept the structured logger here, but
 		// we can confirm the URL-construction path uses the proof
 		// only as a query parameter to fetchImpl (not in any log
@@ -434,10 +426,8 @@ describe('MoneroProofFeeVerifier — privacy invariants', () => {
 			vi.fn(async (input: Parameters<typeof fetch>[0]) => {
 				const url = typeof input === 'string' ? input : input.toString();
 				seenUrls.push(url);
-				return {
-					ok: true,
-					status: 200,
-					json: async () => ({
+				return new Response(
+					JSON.stringify({
 						status: 'success',
 						data: {
 							address: FEE_ADDRESS,
@@ -445,8 +435,9 @@ describe('MoneroProofFeeVerifier — privacy invariants', () => {
 							outputs: [{ amount: 781_250_000, match: true }],
 							tx_confirmations: 5
 						}
-					})
-				};
+					}),
+					{ status: 200 }
+				);
 			}) as unknown as typeof fetch
 		);
 		await v.verify(claim());
@@ -467,10 +458,8 @@ describe('MoneroProofFeeVerifier — privacy invariants', () => {
 			vi.fn(async (input: Parameters<typeof fetch>[0]) => {
 				const url = typeof input === 'string' ? input : input.toString();
 				seenUrls.push(url);
-				return {
-					ok: true,
-					status: 200,
-					json: async () => ({
+				return new Response(
+					JSON.stringify({
 						status: 'success',
 						data: {
 							address: FEE_ADDRESS,
@@ -478,8 +467,9 @@ describe('MoneroProofFeeVerifier — privacy invariants', () => {
 							outputs: [{ amount: 781_250_000, match: true }],
 							tx_confirmations: 5
 						}
-					})
-				};
+					}),
+					{ status: 200 }
+				);
 			}) as unknown as typeof fetch
 		);
 		await v.verify(claim());
@@ -497,11 +487,7 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 				if (url.includes(match)) {
 					if (cfg.throws) throw cfg.throws;
 					const status = cfg.status ?? 200;
-					return {
-						ok: status >= 200 && status < 300,
-						status,
-						json: async () => cfg.body
-					};
+					return new Response(JSON.stringify(cfg.body), { status: status });
 				}
 			}
 			throw new Error(`unmocked URL: ${url}`);
@@ -540,7 +526,7 @@ describe('MoneroProofFeeVerifier — quorum gate (Part 109)', () => {
 		expect(result.kind).toBe('pending_external');
 		if (result.kind === 'pending_external') {
 			expect(result.reason).toMatch(/quorum not met/);
-			// cp166 — new wording references the agreeing-bucket size
+			// new wording references the agreeing-bucket size
 			// in plain language rather than the old "N/M" fraction.
 			expect(result.reason).toMatch(/< 2 agreeing/);
 		}

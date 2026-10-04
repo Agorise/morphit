@@ -44,7 +44,7 @@
 	import AltNetworkIcon from '$components/AltNetworkIcon.svelte';
 	import { validateNostrUrlForRender } from '$utils/nostrUrl';
 	import { validateWebUrlForRender } from '$utils/webUrl';
-	// cp165 byte-budget: MyBalanceCard renders only on a viewer's
+	// byte-budget: MyBalanceCard renders only on a viewer's
 	// OWN profile (rare path — most profile-page traffic is people
 	// looking at counterparties).  RespondToFeedbackForm renders
 	// only when actively replying to a piece of feedback (rare
@@ -64,7 +64,7 @@
 		getProfile,
 		getFeedback,
 		getFeedbackGiven,
-		getOrdersByAccount,
+		getAccountOrderPages,
 		getReputationReceipt
 	} from '$lib/indexer/client';
 	import { getProfilesBatch, isSoftMiss } from '$lib/indexer/profileCache';
@@ -102,7 +102,7 @@
 	 *  logged-out visitor still match isOwnProfile and see the PRIVATE
 	 *  balance card ("Only you see this") after a refresh. Gating on the
 	 *  live session keeps the page consistent with the nav: no session ⇒
-	 *  public view. (cp323) */
+	 *  public view. */
 	const viewerAccount = $derived.by((): string | null => {
 		if (!$isUnlocked && !$isPairedReadOnly) return null;
 		return getUserBlurtAccount();
@@ -129,16 +129,16 @@
 	let ordersState = $state<LoadState>('loading');
 	let profile = $state<ProfileResponse | null>(null);
 	/** False until THIS page's subject profile has resolved.
-	 *  v1.8.13 (the maintainer) — the Active-orders tab renders the subject's own order
+	 *  v1.8.13 — the Active-orders tab renders the subject's own order
 	 *  cards, so it needs the same guarantee as the orderbook: no `@account` +
 	 *  identicon asserted before the real identity is known. */
 	let subjectProfileResolved = $state(false);
 
 	let feedback = $state<AccountFeedbackResponse | null>(null);
-	/** The composite reputation score (cp404 Bayesian-shrunk, experience- and
+	/** The composite reputation score (Bayesian-shrunk, experience- and
 	 *  recency-adjusted) — the SAME number every order card and chat header
 	 *  shows. Distinct from `feedback.summary.weighted_rating`, which is the raw
-	 *  time-decayed mean. the maintainer hit the mismatch: the profile trumpeted the raw
+	 *  time-decayed mean. The maintainer hit the mismatch: the profile trumpeted the raw
 	 *  4.75 while the trade-decision surfaces showed the composite 3.97 for the
 	 *  same trader. The headline now shows THIS, so the number a viewer sees on
 	 *  the profile matches the one they saw before clicking through. */
@@ -152,8 +152,8 @@
 	);
 	/** WHICH metric the big number currently is.
 	 *
-	 *  v1.8.12 (the maintainer) — the fallback above silently swaps metrics, and until now
-	 *  said so nowhere. the maintainer compared two profiles and found the one with a
+	 *  v1.8.12 — the fallback above silently swaps metrics, and until now
+	 *  said so nowhere. The maintainer compared two profiles and found the one with a
 	 *  4-star review (tester3, 4.80) outranking the one with five perfect
 	 *  5-star reviews (tester2, 4.24) — impossible, until you notice they were
 	 *  not the same measurement: tester2's composite had resolved and was
@@ -170,7 +170,7 @@
 	let feedbackNextCursor: string | null = $state(null);
 	let feedbackError = $state('');
 
-	// cp165 lazy-loaders for /[account] conditional components
+	// lazy-loaders for /[account] conditional components
 	const loadMyBalanceCard = () => import('$components/MyBalanceCard.svelte').then((m) => m.default);
 	const loadRespondToFeedbackForm = () =>
 		import('$components/RespondToFeedbackForm.svelte').then((m) => m.default);
@@ -214,7 +214,7 @@
 	 *  deduplicates across all calls. */
 	let reviewerProfileMap = $state<Record<string, ProfileResponse | null>>({});
 	/** False until the reviewer-profile hydrate has completed once.
-	 *  v1.8.13 (the maintainer) — a review list whose author names and avatars rewrite
+	 *  v1.8.13 — a review list whose author names and avatars rewrite
 	 *  themselves undermines the very thing the list exists to establish. */
 	let reviewerProfilesHydrated = $state(false);
 
@@ -226,6 +226,7 @@
 		kind: 'received' | 'given',
 		attempt = 0
 	): Promise<void> {
+		const forAccount = account;
 		const accounts = new Set<string>();
 		for (const fb of items) {
 			// For received feedback, reviewer is what we want to show.
@@ -240,6 +241,8 @@
 		if (accounts.size === 0) return;
 		const list = Array.from(accounts);
 		const fetched = await getProfilesBatch(list);
+		// Another profile is on screen now: its own hydration will run.
+		if (forAccount !== account) return;
 		const next = { ...reviewerProfileMap };
 		for (const [a, p] of fetched) {
 			next[a] = p;
@@ -247,7 +250,7 @@
 		reviewerProfileMap = next;
 		reviewerProfilesHydrated = true;
 
-		// v1.8.12 (the maintainer) — same rule as the orderbook: re-ask for reviewers whose
+		// v1.8.12 — same rule as the orderbook: re-ask for reviewers whose
 		// read was a TRANSIENT failure, so a reviewer's name and avatar are not
 		// stuck on an identicon until the page is refreshed. Only soft misses
 		// are retried, so a reviewer who genuinely has no profile settles first
@@ -364,17 +367,15 @@
 		const forAccount = account;
 		ordersState = 'loading';
 		ordersError = '';
-		// Max limit so we capture all live orders for almost every
-		// realistic user. Power users with >100 live orders would
-		// need pagination here; not implemented as it's not a
-		// Phase 5 problem.
-		const r = await getOrdersByAccount(forAccount, { limit: 100 });
+		// Up to 5 pages of 100 (newest-updated first), so live orders older
+		// than the newest hundred still show.
+		const r = await getAccountOrderPages(forAccount, { maxPages: 5 });
 		if (forAccount !== account) return;
-		if (r.ok) {
-			allOrders = [...r.data.items];
+		if (r !== null) {
+			allOrders = [...r.items];
 			ordersState = 'ready';
 		} else {
-			console.warn('[profile] orders load failed:', r.message);
+			console.warn('[profile] orders load failed');
 			ordersError = $_('profile.error.orders_load_failed');
 			ordersState = 'error';
 		}
@@ -403,7 +404,7 @@
 	// so onMount fires only for the first profile viewed. Without this effect,
 	// every subsequent profile rendered the PREVIOUS user's data — reputation,
 	// reviews and orders all stale — until a hard refresh forced a fresh mount.
-	// the maintainer hit exactly this: /@tester3 showed tester2's 5-star card.
+	// The maintainer hit exactly this: /@tester3 showed tester2's 5-star card.
 	//
 	// Reading `account` registers the dependency. On each change we first RESET
 	// every per-account slice back to its loading baseline (so the old user's
@@ -436,6 +437,11 @@
 			ordersError = '';
 			ordersState = 'loading';
 			reviewerProfileMap = {};
+			subjectProfileResolved = false;
+			reviewerProfilesHydrated = false;
+			// The previous profile's tab may not exist here (Trade history is
+			// owner-only): start on the default tab.
+			activeTab = 'reviews';
 
 			// Parallel fetch — profile, feedback (received + given) and orders are
 			// all independent. Each updates its own loading state and self-guards
@@ -470,7 +476,7 @@
 	const streamingUrl = $derived(labelProps.streamingUrl);
 	const websiteUrl = $derived(labelProps.websiteUrl);
 
-	// cp377 — render-safe validation for the hero's avatar-corner glyphs.
+	// render-safe validation for the hero's avatar-corner glyphs.
 	// Mirrors IdentityLabel's own render guard so an unsafe or malformed
 	// URL can never reach an <a href> on this page either.
 	const validatedNostrUrl = $derived(validateNostrUrlForRender(nostrUrl));
@@ -530,7 +536,7 @@
 	 *      order whose expires_at has passed still reads status 'live'. Using
 	 *      the shared expiry helper (same as the orderbook, /my/orders, and
 	 *      the order-detail page) keeps an EXPIRED order out of "Active
-	 *      orders" instead of showing it with an "Expired" badge (cp429).
+	 *      orders" instead of showing it with an "Expired" badge.
 	 *    - expires_at ASC (earliest first)
 	 *    - expires_at === null ranks after all dated expiries
 	 *      (a non-expiring order is less time-pressured than
@@ -565,7 +571,7 @@
 		return n % 1 === 0 ? String(n) : n.toFixed(2);
 	}
 
-	// ─── cp511 [B]: tabbed detail section ───────────────────────────
+	// ─── tabbed detail section ───────────────────────────
 	// Groups the four profile detail views under the Reputation card so
 	// the page reads as a compact card stack instead of a long scroll.
 	// Tab order follows the maintainer's list: reviews received / reviews given /
@@ -573,7 +579,7 @@
 	// reputation drill-down that pairs with the summary card above).
 	type ProfileTab = 'reviews' | 'given' | 'orders' | 'history';
 	let activeTab = $state<ProfileTab>('reviews');
-	// cp511 [B] (the maintainer): Trade history is OWNER-ONLY — it surfaces completed
+	// Trade history is OWNER-ONLY — it surfaces completed
 	// orders, so the tab appears only when you're viewing your own profile.
 	const tabDefs = $derived(
 		[
@@ -605,7 +611,7 @@
 		requestAnimationFrame(() => document.getElementById(`tab-${nextId}`)?.focus());
 	}
 	// Completed trades for the Trade history tab. Same source as
-	// liveOrders — allOrders is already fetched via getOrdersByAccount and
+	// liveOrders — allOrders is already fetched via getAccountOrderPages and
 	// carries every status — filtered to completed, newest-first. No new
 	// endpoint or public exposure; counterparty shows only when the owner
 	// named it in morphit_order_complete_v1.
@@ -628,7 +634,7 @@
 		return '★'.repeat(n) + '☆'.repeat(5 - n);
 	}
 
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -642,8 +648,8 @@
 	<section class="mb-8 flex flex-col items-center text-center">
 		<!-- Avatar with the user's social-link glyphs (Nostr / Website / Blurt.media)
 		     to its RIGHT. `items-center` vertically centres the glyph column
-		     against the avatar (cp511 [D] — the maintainer: "perfectly to the right of the
-		     avatar … perfectly spaced"), so 1, 2, or all 3 icons sit level with
+		     against the avatar (Requirement: the icons sit right of the avatar,
+		     evenly spaced), so 1, 2, or all 3 icons sit level with
 		     the avatar's middle rather than clinging to its bottom corner. The
 		     avatar + glyph column are centred together as one unit (justify-center)
 		     so the pair stays centred on the page; `gap-2` is the even spacing
@@ -653,8 +659,8 @@
 		<div class="mb-3 flex items-center justify-center gap-2">
 			{#if avatarSvg}
 				<!-- Sanitized avatar_svg, shown as an <img>: inlined, its own
-				     style/class could escape this frame and cover the page
-				     (v1.18.0 deep-deep, M1). -->
+				     style/class could escape this frame and cover the page.
+-->
 				<img
 					src={svgAvatarImgSrc(avatarSvg)}
 					alt=""
@@ -776,7 +782,7 @@
 				{$_('profile.reputation_heading')}
 			</h2>
 			{#if feedback && feedback.summary.last_traded_at !== null}
-				<!-- cp512 [PR2] — "Last trade: N ago" moved to the top-right corner. -->
+				<!-- "Last trade: N ago" moved to the top-right corner. -->
 				<div class="flex-none text-xs text-ink-500">
 					<span>{$_('profile.last_traded_label')}</span>
 					<RelativeTime iso={feedback.summary.last_traded_at} format="descriptive" />
@@ -792,12 +798,12 @@
 		{:else if feedback && feedback.summary.count > 0}
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
 				<!-- Big number + stars.
-				     v1.8.10 (the maintainer): this headline used to be the RAW time-decayed
+				     v1.8.10: this headline used to be the RAW time-decayed
 				     average (`weighted_rating`), while every order card and chat
 				     header showed the COMPOSITE `reputation_score`. Same trader,
 				     two different headline numbers depending on the page — and the
 				     profile always flattered, because the composite shrinks a thin
-				     sample toward neutral. the maintainer spotted 4.75 here vs 3.97 there.
+				     sample toward neutral. The maintainer spotted 4.75 here vs 3.97 there.
 				     The headline is now the composite, so the number you see after
 				     clicking a trader's name matches the one that made you click.
 				     The raw average stays visible directly below, labelled, since
@@ -854,7 +860,7 @@
 				</div>
 			</div>
 
-			<!-- cp124 H5: by-side breakdown.  Surfaces buy/sell asymmetry when
+			<!-- by-side breakdown.  Surfaces buy/sell asymmetry when
 			     either side has trade history.  Hidden when one side has zero
 			     count (avoids visual clutter on new accounts). -->
 			{#if feedback.summary.by_side.buy.count > 0 || feedback.summary.by_side.sell.count > 0}
@@ -888,11 +894,11 @@
 				</div>
 			{/if}
 
-			<!-- cp124 H6: dormancy signal.  Surface "last traded N ago" so
+			<!-- dormancy signal.  Surface "last traded N ago" so
 			     readers see freshness without changing the score.  Hidden
 			     when null (brand-new account, never traded). -->
 		{:else if feedbackItems.length > 0}
-			<!-- v1.8.11 (the maintainer) — reviews EXIST but none of them COUNT.
+			<!-- v1.8.11 — reviews EXIST but none of them COUNT.
 			     The summary is computed over non-suppressed feedback while the
 			     list below returns every row (suppressed ones marked and shown
 			     subdued), so an account whose reviewers are all flagged scored
@@ -912,7 +918,7 @@
 			</p>
 		{/if}
 
-		<!-- cp512 [PR1] — reciprocity pill pinned to the bottom-right corner.
+		<!-- reciprocity pill pinned to the bottom-right corner.
 		     v1.8.15 — markup extracted to ReciprocityPill (shared with the
 		     order detail POSTED BY card). -->
 		{#if feedback}
@@ -922,7 +928,7 @@
 		{/if}
 	</section>
 
-	<!-- ─── cp511 [B]: tabbed detail navigation (WAI-ARIA tabs) ─── -->
+	<!-- ─── tabbed detail navigation (WAI-ARIA tabs) ─── -->
 	<div
 		role="tablist"
 		aria-label={$_('profile.tabs_aria')}
@@ -1005,7 +1011,7 @@
 										tone: 'dai' as const
 									}
 								: null}
-					<!-- v1.8.12 (the maintainer) — same rule as the orderbook: the Message
+					<!-- v1.8.12 — same rule as the orderbook: the Message
 					     button shows for SIGNED-OUT visitors too. /chat/:peer is
 					     already guarded and bounces an anonymous visitor to
 					     onboarding/unlock carrying ?next=, returning them to this
@@ -1096,7 +1102,7 @@
 							</a>
 						{/if}
 						<div class="mb-2 flex items-start justify-between gap-2">
-							<!-- v1.8.0 (t.txt): received card now mirrors the given
+							<!-- v1.8.0: received card now mirrors the given
 							     card — avatar + display name (truncated posting key
 							     stacked under it by IdentityLabel) + the REVIEWER's
 							     current reputation. flex-wrap so the chip drops to its
@@ -1125,7 +1131,7 @@
 								<RelativeTime iso={fb.created_at} format="terse" ago />
 							</span>
 						</div>
-						<!-- v1.8.0 (t.txt): "@X rated me: ★★★★☆" with the Verified-chat
+						<!-- v1.8.0: "@X rated me: ★★★★☆" with the Verified-chat
 						     pill on the SAME line as the stars; wraps cleanly on narrow
 						     screens via flex-wrap. -->
 						<div
@@ -1165,7 +1171,7 @@
 							{/if}
 						</div>
 						{#if fb.comment}
-							<!-- cp512 [PR6] — the "@X said:" prefix was removed; the reviewer
+							<!-- the "@X said:" prefix was removed; the reviewer
 							     is already named by the IdentityLabel above the rating. -->
 							<p dir="auto" class="whitespace-pre-wrap text-sm text-ink-700 dark:text-ink-200">
 								{fb.comment}
@@ -1221,7 +1227,7 @@
 						     been responded to (one response per feedback by
 						     convention; the indexer accepts multiple as an
 						     edit-in-place, but the UI limits to one to avoid
-						     confusing the reader).  Part 116: paired-readonly
+						     confusing the reader).  paired-readonly
 						     users see an inline affordance pointing at their
 						     phone instead of the reply button being silently
 						     hidden. -->
@@ -1323,7 +1329,7 @@
 							</a>
 						{/if}
 						<div class="mb-2 flex items-start justify-between gap-2">
-							<!-- v1.5.0 (t.txt E): avatar + display name (truncated posting
+							<!-- v1.5.0: avatar + display name (truncated posting
 							     key stacked under it by IdentityLabel) + the reviewed
 							     account's CURRENT reputation. flex-wrap so the chip drops
 							     to its own line on a narrow phone instead of squashing
@@ -1351,7 +1357,7 @@
 								<RelativeTime iso={fb.created_at} format="terse" ago />
 							</span>
 						</div>
-						<!-- v1.5.0 (t.txt E): "I rated @X: ★★★★★" with the Verified-chat
+						<!-- v1.5.0: "I rated @X: ★★★★★" with the Verified-chat
 						     pill on the SAME line as the stars; wraps cleanly on narrow
 						     screens via flex-wrap. -->
 						<div
@@ -1455,7 +1461,7 @@
 		{/if}
 	</section>
 	{#if isOwnProfile}
-		<!-- ─── cp511 [B]: Trade history (completed trades) ─────── -->
+		<!-- ─── Trade history (completed trades) ─────── -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 		<section
 			role="tabpanel"

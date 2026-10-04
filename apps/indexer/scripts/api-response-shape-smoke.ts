@@ -8,8 +8,7 @@
  *   - isAccountName (apps/indexer/src/api/shared.ts)
  *
  * Why pure-helper smokes instead of full Hono route smokes:
- * the sandbox doesn't have node_modules installed, so we can't
- * load `hono` at runtime.  The route handlers stay thin wrappers
+ * they run without loading `hono` at runtime.  The route handlers stay thin wrappers
  * around the pure helpers; this smoke covers the interesting
  * gating and response-shape logic.  The Hono routing itself
  * (URL matching, status codes for invalid input) is exercised
@@ -151,7 +150,7 @@ await scenario('listing-fee body: includes fiat echo when price is non-stale and
 	// ~$0.125 — NOT feeBaseBlurt × price.
 	assertEqual(body.base_fee_fiat, 0.125, 'base_fee_fiat');
 	assertEqual(body.blurt_price_fiat, 0.002, 'blurt_price_fiat');
-	// cp128: default config denomination is 'USD'; operators in
+	// default config denomination is 'USD'; operators in
 	// non-USD markets configure differently.  The fakeConfig helper
 	// defaults to 'USD' to match.
 	assertEqual(body.denomination_fiat, 'USD', 'denomination_fiat');
@@ -194,7 +193,7 @@ await scenario('listing-fee body: tracks operator-tunable feeBaseBlurt', () => {
 });
 
 await scenario('listing-fee body: canonical display ignores feeBaseBlurt for the live amount', () => {
-	// Pre-cp372 the displayed fee was feeBaseBlurt-driven (80 × $0.002
+	// Previously, the displayed fee was feeBaseBlurt-driven (80 × $0.002
 	// = $0.16).  Under canonical Model A the DISPLAY tracks the
 	// canonical target (~$0.125) regardless of the operator's
 	// feeBaseBlurt — that value is now the enforcement floor, not the
@@ -206,7 +205,7 @@ await scenario('listing-fee body: canonical display ignores feeBaseBlurt for the
 	assertEqual(body.base_fee_blurt, 62.5, 'base_fee_blurt is canonical 62.5, not 80');
 });
 
-// ── Model A (cp372): displayed base tracks the operator's USD fee ──
+// ── Model A: displayed base tracks the operator's USD fee ──
 const approxEq = (actual: unknown, expected: number, label: string, eps = 1e-9): void => {
 	if (typeof actual !== 'number' || Math.abs(actual - expected) > eps) {
 		throw new Error(`${label}: expected ≈${expected}, got ${JSON.stringify(actual)}`);
@@ -302,7 +301,7 @@ await scenario('listing-fee body (cp128): XAU-denominated operator returns XAU i
 	assertEqual(body.blurt_price_fiat, 0.00000037, 'blurt_price_fiat');
 });
 
-// ── Model A (cp372): live BTC/XMR fee amounts (USD-denominated) ──
+// ── Model A: live BTC/XMR fee amounts (USD-denominated) ──
 
 await scenario('listing-fee body (Model A): BTC live amount equals pinned at the reference price', () => {
 	const cfg = fakeConfig({ priceFeedEnabled: true }); // btcFeeSatoshis defaults to 417
@@ -564,7 +563,7 @@ const mkState = (o: Partial<EndpointState> & { url: string }): EndpointState => 
 	ewmaLatencyMs: o.ewmaLatencyMs ?? null,
 	consecutiveFailures: o.consecutiveFailures ?? 0,
 	cooldownUntil: o.cooldownUntil ?? 0,
-	// cp474 — the RPS pacer's per-endpoint cursor. Present only so this fixture
+	// the RPS pacer's per-endpoint cursor. Present only so this fixture
 	// satisfies EndpointState; `buildRpcEndpointsResponse` projects named fields
 	// and deliberately does NOT publish it (an internal pacing cursor is not
 	// operator-facing), which is exactly what the shape assertions below pin.

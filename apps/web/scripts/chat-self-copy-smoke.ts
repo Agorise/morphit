@@ -1,21 +1,23 @@
 /**
- * Chat sender self-copy smoke (cp406).
+ * Chat sender self-copy smoke.
  *
- * The chat crypto is one-sided sender-PFS: the sender wipes the per-message
- * ephemeral private key, so it can never re-derive its OWN sent messages from
- * chain. cp406 adds an OPTIONAL self-copy (default "keep history" mode) — the
- * same plaintext, encrypted under a key the SENDER can re-derive from its own
- * private key + the ephemeralPub already in the header (ECDH against the
- * sender's own pubkey, distinct AAD). PFS "destroy on leave" mode omits it.
+ * The sender wipes the per-message ephemeral private key, so it cannot
+ * re-derive the recipient copy of its OWN sent messages from chain. The
+ * OPTIONAL self-copy (default "keep history" mode) is the same plaintext under
+ * a key the SENDER re-derives from its own private key, the ephemeralPub in the
+ * header and — in the v2 envelope the app sends — the static-static term with
+ * the recipient's key, so only one of the two parties can have written it.
+ * "Destroy" mode omits it.
  *
- * This locks the security-critical properties:
+ * This locks the security-critical properties (v2 unless stated):
  *   - keep mode emits selfCiphertext/selfNonce; the SENDER decrypts them.
  *   - the RECIPIENT still decrypts the main ciphertext exactly as before.
  *   - the RECIPIENT can NEVER open the self-copy (different key + AAD).
  *   - the SENDER can NOT open the recipient copy with its own key (that's the
  *     whole reason the self-copy exists).
- *   - PFS mode / legacy (no senderChatPub) → no self-copy; decryptSelfCopy
- *     rejects.
+ *   - destroy mode → no self-copy; decryptSelfCopy rejects.
+ *   - a self-copy forged with only the sender's PUBLIC key does not open.
+ *   - the legacy v1 self-copy still opens (older messages).
  *   - tampering any self-copy field → rejects (AEAD MAC).
  *   - a THIRD party can't open the self-copy.
  *   - Unicode round-trips (grandma's accents/emoji).
@@ -27,6 +29,7 @@
 import {
 	deriveChatIdentity,
 	encryptToRecipient,
+	encryptToRecipientV1,
 	decryptFromSender,
 	decryptSelfCopy,
 	DecryptError,
@@ -64,8 +67,8 @@ async function assertRejects(fn: () => Promise<unknown>, label: string): Promise
 	throw new Error(`${label}: expected a DecryptError, but it resolved`);
 }
 
-const SENDER = 'tester3';
-const RECIPIENT = 'tester2';
+const SENDER = 'alice';
+const RECIPIENT = 'bob';
 const THIRD = 'mallory1';
 
 // Deterministic 32-byte test "posting privs" — NOT real keys.
@@ -84,8 +87,11 @@ async function main(): Promise<void> {
 
 	// ── keep-history mode (default): self-copy present ──────────────────
 	let keep: ChatEnvelopeWire;
-	await scenario('keep mode emits selfCiphertext + selfNonce', async () => {
-		keep = await encryptToRecipient(MSG, recipientId.pub, SENDER, RECIPIENT, senderId.pub, true);
+	const opened = async (env: ChatEnvelopeWire, id: typeof recipientId, pubs: Uint8Array[]) =>
+		(await decryptFromSender(env, id, SENDER, RECIPIENT, pubs)).text;
+	await scenario('keep mode emits selfCiphertext + selfNonce (v2 envelope)', async () => {
+		keep = await encryptToRecipient(MSG, recipientId.pub, senderId, SENDER, RECIPIENT, true);
+		if (keep.v !== 2) throw new Error('not a v2 envelope');
 		if (keep.selfCiphertext === undefined || keep.selfNonce === undefined) {
 			throw new Error('self-copy fields missing');
 		}
@@ -95,45 +101,90 @@ async function main(): Promise<void> {
 	});
 
 	await scenario('recipient decrypts the MAIN ciphertext (unchanged behavior)', async () => {
-		assertEqual(await decryptFromSender(keep, recipientId, SENDER, RECIPIENT), MSG, 'recipient');
+		assertEqual(await opened(keep, recipientId, [senderId.pub]), MSG, 'recipient');
 	});
 
 	await scenario('SENDER decrypts its own SELF-copy (the new capability)', async () => {
-		assertEqual(await decryptSelfCopy(keep, senderId, SENDER, RECIPIENT), MSG, 'sender self');
+		assertEqual(
+			await decryptSelfCopy(keep, senderId, SENDER, RECIPIENT, [recipientId.pub]),
+			MSG,
+			'sender self'
+		);
 	});
 
 	await scenario('recipient CANNOT open the self-copy', async () => {
-		await assertRejects(() => decryptSelfCopy(keep, recipientId, SENDER, RECIPIENT), 'recip self');
+		await assertRejects(
+			() => decryptSelfCopy(keep, recipientId, SENDER, RECIPIENT, [senderId.pub]),
+			'recip self'
+		);
 	});
 
 	await scenario('sender CANNOT open the recipient copy with its own key', async () => {
 		// This is exactly why the self-copy is needed: the sender's key does not
 		// open the recipient ciphertext.
-		await assertRejects(() => decryptFromSender(keep, senderId, SENDER, RECIPIENT), 'sender main');
+		await assertRejects(
+			() => decryptFromSender(keep, senderId, SENDER, RECIPIENT, [senderId.pub, recipientId.pub]),
+			'sender main'
+		);
 	});
 
 	await scenario('a THIRD party opens neither copy', async () => {
-		await assertRejects(() => decryptFromSender(keep, thirdId, SENDER, RECIPIENT), 'third main');
-		await assertRejects(() => decryptSelfCopy(keep, thirdId, SENDER, RECIPIENT), 'third self');
+		await assertRejects(
+			() => decryptFromSender(keep, thirdId, SENDER, RECIPIENT, [senderId.pub]),
+			'third main'
+		);
+		await assertRejects(
+			() => decryptSelfCopy(keep, thirdId, SENDER, RECIPIENT, [recipientId.pub]),
+			'third self'
+		);
 	});
 
 	// ── PFS "destroy" mode: NO self-copy ────────────────────────────────
-	await scenario('PFS mode (includeSelfCopy=false) omits the self-copy', async () => {
-		const pfs = await encryptToRecipient(MSG, recipientId.pub, SENDER, RECIPIENT, senderId.pub, false);
+	await scenario('destroy mode (includeSelfCopy=false) omits the self-copy', async () => {
+		const pfs = await encryptToRecipient(MSG, recipientId.pub, senderId, SENDER, RECIPIENT, false);
 		if (pfs.selfCiphertext !== undefined || pfs.selfNonce !== undefined) {
-			throw new Error('PFS mode must not emit a self-copy');
+			throw new Error('destroy mode must not emit a self-copy');
 		}
-		assertEqual(await decryptFromSender(pfs, recipientId, SENDER, RECIPIENT), MSG, 'pfs recipient');
-		await assertRejects(() => decryptSelfCopy(pfs, senderId, SENDER, RECIPIENT), 'pfs sender self');
+		assertEqual(await opened(pfs, recipientId, [senderId.pub]), MSG, 'pfs recipient');
+		await assertRejects(
+			() => decryptSelfCopy(pfs, senderId, SENDER, RECIPIENT, [recipientId.pub]),
+			'pfs sender self'
+		);
 	});
 
-	// ── legacy callers (no senderChatPub): unchanged, no self-copy ──────
-	await scenario('legacy 4-arg call → no self-copy, recipient still decrypts', async () => {
-		const legacy = await encryptToRecipient(MSG, recipientId.pub, SENDER, RECIPIENT);
-		if (legacy.selfCiphertext !== undefined) throw new Error('legacy must not emit a self-copy');
-		assertEqual(await decryptFromSender(legacy, recipientId, SENDER, RECIPIENT), MSG, 'legacy');
-		await assertRejects(() => decryptSelfCopy(legacy, senderId, SENDER, RECIPIENT), 'legacy self');
+	await scenario("a self-copy forged with only the sender's PUBLIC key does not open", async () => {
+		const v1 = await encryptToRecipientV1(
+			'fake',
+			recipientId.pub,
+			SENDER,
+			RECIPIENT,
+			senderId.pub,
+			true
+		);
+		const forged: ChatEnvelopeWire = { ...v1, v: 2 };
+		await assertRejects(
+			() => decryptSelfCopy(forged, senderId, SENDER, RECIPIENT, [recipientId.pub]),
+			'forged self'
+		);
 	});
+
+	// ── legacy v1 envelopes (older messages): still readable ────────────
+	await scenario(
+		'legacy v1 self-copy and recipient copy still open (recipient copy unauthenticated)',
+		async () => {
+			const legacy = await encryptToRecipientV1(
+				MSG,
+				recipientId.pub,
+				SENDER,
+				RECIPIENT,
+				senderId.pub,
+				true
+			);
+			const r = await decryptFromSender(legacy, recipientId, SENDER, RECIPIENT, [senderId.pub]);
+			assertEqual(r, { text: MSG, authenticated: false }, 'legacy recipient');
+			assertEqual(await decryptSelfCopy(legacy, senderId, SENDER, RECIPIENT), MSG, 'legacy self');
+		}
+	);
 
 	// ── tamper detection on the self-copy ───────────────────────────────
 	await scenario('tampered selfCiphertext → rejected', async () => {
@@ -141,20 +192,30 @@ async function main(): Promise<void> {
 		const bytes = Buffer.from(t.selfCiphertext!, 'base64');
 		bytes[0] ^= 0xff;
 		const tampered: ChatEnvelopeWire = { ...t, selfCiphertext: bytes.toString('base64') };
-		await assertRejects(() => decryptSelfCopy(tampered, senderId, SENDER, RECIPIENT), 'tamper cipher');
+		await assertRejects(
+			() => decryptSelfCopy(tampered, senderId, SENDER, RECIPIENT, [recipientId.pub]),
+			'tamper cipher'
+		);
 	});
 	await scenario('wrong-account AAD on self-copy → rejected', async () => {
 		// Same envelope, but claim a different recipient: the self-copy AAD binds
 		// (sender, recipient), so decrypt with a mismatched pair must fail.
-		await assertRejects(() => decryptSelfCopy(keep, senderId, SENDER, THIRD), 'aad mismatch');
+		await assertRejects(
+			() => decryptSelfCopy(keep, senderId, SENDER, THIRD, [recipientId.pub]),
+			'aad mismatch'
+		);
 	});
 
 	// ── Unicode round-trips through the self-copy ───────────────────────
 	await scenario('Unicode plaintext round-trips via the self-copy', async () => {
 		const u = 'café ☕ — envíame 0.5 BLURT 请稍等 🙏';
-		const env = await encryptToRecipient(u, recipientId.pub, SENDER, RECIPIENT, senderId.pub, true);
-		assertEqual(await decryptSelfCopy(env, senderId, SENDER, RECIPIENT), u, 'unicode self');
-		assertEqual(await decryptFromSender(env, recipientId, SENDER, RECIPIENT), u, 'unicode recip');
+		const env = await encryptToRecipient(u, recipientId.pub, senderId, SENDER, RECIPIENT, true);
+		assertEqual(
+			await decryptSelfCopy(env, senderId, SENDER, RECIPIENT, [recipientId.pub]),
+			u,
+			'unicode self'
+		);
+		assertEqual(await opened(env, recipientId, [senderId.pub]), u, 'unicode recip');
 	});
 
 	console.log(`\nchat-self-copy-smoke: ${scenarios - failures}/${scenarios} passed`);

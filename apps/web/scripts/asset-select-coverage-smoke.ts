@@ -2,12 +2,12 @@
 /**
  * Smoke: the orderbook Asset filter offers ALL tradable assets.
  *
- * Catches the F-1 regression class from cp136's three-persona
+ * Catches the F-1 regression class from the three-persona
  * walkthrough: the orderbook asset filter once had three hardcoded
  * options (BTC / XMR / BLURT) and was missing the other 13 tradable
  * assets, so users couldn't filter for SOL, ETH, USDT, etc.
  *
- * cp208 ARCHITECTURE CHANGE: a native <select> can't render the
+ * ARCHITECTURE CHANGE: a native <select> can't render the
  * per-coin SVG logos the maintainer wanted, so the orderbook asset filter is now
  * the custom `AssetFilterSelect.svelte` component, which renders one
  * row per `ASSETS` entry with `canBeTraded === true` (from the

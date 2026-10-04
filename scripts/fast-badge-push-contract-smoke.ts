@@ -1,13 +1,13 @@
 #!/usr/bin/env tsx
 /**
- * fast-badge-push-contract — v1.7.5 (t.txt #1).
+ * fast-badge-push-contract (v1.7.5).
  *
  * THE BUG THIS EXISTS TO CATCH, AND WHY NOTHING ELSE CAUGHT IT.
  *
- * the maintainer: tester2 revives an archived thread and messages tester3. The system
+ * Requirement: tester2 revives an archived thread and messages tester3. The system
  * notification lands in ~4s. The avatar/favicon badges take about a MINUTE.
  *
- * The whole fast-badge path was already built (v1.5.5 `emitFastPush`, cp474's
+ * The whole fast-badge path was already built (v1.5.5 `emitFastPush`, the
  * archived-thread resurrect) and unit-tested — and it had never once run in
  * production, because the SERVER and the SERVICE WORKER disagreed about how the
  * thread reaches the page, in a way that was a perfect inversion:
@@ -65,7 +65,7 @@ const check = (name: string, cond: boolean, detail = ''): void => {
 	}
 };
 
-console.log('\n── fast-badge-push-contract (v1.7.5 / t.txt #1) ───────\n');
+console.log('\n── fast-badge-push-contract (v1.7.5) ──────────────────\n');
 
 const enqueue = read('apps/indexer/src/indexer/chatPushEnqueue.ts');
 const sw = read('apps/web/src/service-worker.ts');
@@ -121,10 +121,10 @@ check(
 check(
 	'the SW pokes EVERY open tab, including backgrounded ones',
 	/matchAll\(\{[\s\S]{0,80}?includeUncontrolled: true/.test(sw),
-	'the maintainer was on another tab; a focused-only poke would never reach him'
+	'the user was on another tab; a focused-only poke would never reach them'
 );
 
-// ─── 2b. the SW SUPPRESSES a redundant notification for BOTH categories (cp514 / t.txt C) ──
+// ─── 2b. the SW SUPPRESSES a redundant notification for BOTH categories ──
 // While both parties are actively in the same chatroom, no OS notification
 // should keep popping. The suppression check must run for the 'order' category
 // too: an order-scoped chat message (messaging from an order card) is labelled
@@ -136,8 +136,8 @@ check(
 	/let activelyViewing = false;\s*if \(category === 'chat' \|\| category === 'order'\) \{/.test(sw),
 	"a 'chat'-only suppression pops a notification for every order-scoped reply while you're in the room"
 );
-// cp515 — suppression keys on HAVING THE THREAD OPEN, not on tab visibility.
-// cp514 extended the guard to the 'order' category and the pop STILL happened
+// suppression keys on HAVING THE THREAD OPEN, not on tab visibility.
+// A later change extended the guard to the 'order' category and the pop STILL happened
 // on every reply, because `visibilityState === 'visible'` fails in the ordinary
 // case: the two participants of one conversation are, on a single machine, two
 // tabs — and only ONE can be 'visible', so the other was judged "not looking"
@@ -155,7 +155,7 @@ check(
 );
 check(
 	'activelyViewing actually gates whether the notification is shown',
-	/if \(!activelyViewing\) \{[\s\S]{0,80}?showNotification/.test(sw),
+	/if \(!activelyViewing\) \{[\s\S]{0,600}?showNotification/.test(sw),
 	'the suppression only matters if it skips showNotification'
 );
 
@@ -166,7 +166,10 @@ check(
 	/folderOf\(data\.peer, order\) === 'archived'\) restoreThread\(data\.peer, order\)/.test(bridge),
 	'a message arriving after you archived a thread IS the un-archive signal'
 );
-check('the bridge lights the badge straight off the push', /emitFastPush\(data\.peer, order\)/.test(bridge));
+check(
+	'the bridge lights the badge straight off the push',
+	/emitFastPush\(data\.peer, order\)/.test(bridge)
+);
 check(
 	'the badge channel subscribes to the fast push',
 	/subscribeFastPush\(\(peer, order/.test(unread)
@@ -190,21 +193,25 @@ check(
 check(
 	'the SSE fast path forwards the order permlink it already has',
 	/ev\.orderPermlink \?\? ''/.test(activityStream),
-	"the fast bus event carries orderPermlink; dropping it was the whole bug"
+	'the fast bus event carries orderPermlink; dropping it was the whole bug'
 );
 check(
 	'the SSE marks direction, so a sender is never badged for their own message',
 	/ev\.recipient === account/.test(activityStream),
-	'this is a PARTICIPANT stream — it fires for what you send too (t.txt #2)'
+	'this is a PARTICIPANT stream — it fires for what you send too'
 );
 check(
 	'the client lights the badge off the SSE ping, not just off a push',
-	/d\.inbound === true && typeof d\.peer === 'string'[\s\S]{0,900}?emitFastPush\(d\.peer, d\.order/.test(bridge),
+	/d\.inbound === true &&\s*typeof d\.peer === 'string'[\s\S]{0,900}?emitFastPush\(d\.peer, d\.order/.test(
+		bridge
+	),
 	'without this, a user who denied notifications waits ~60s for every badge'
 );
 check(
 	'the client resurrects an archived thread from the SSE ping too',
-	/if \(folderOf\(d\.peer, d\.order\) === 'archived'\) restoreThread\(d\.peer, d\.order\);/.test(bridge)
+	/if \(folderOf\(d\.peer, d\.order\) === 'archived'\) restoreThread\(d\.peer, d\.order\);/.test(
+		bridge
+	)
 );
 check(
 	'the SSE listener is NOT gated on document.hidden',
@@ -219,8 +226,8 @@ check(
 
 // ─── 3c. the COLD START — browser was CLOSED when the message landed ──
 //
-// the maintainer: "even when the browser itself or tab is closed completely, and then I
-// open a new tab and go to Morphit, I want the badges in 6 seconds or less."
+// Requirement: with the browser fully closed, opening Morphit in a new tab shows the badges
+// within 6 seconds.
 //
 // No live stream can serve this: the message arrived while no page existed to
 // hear it, and getConversations legitimately cannot help because the fast path
@@ -234,7 +241,7 @@ check(
 	'a cold start has no thread in mind yet — only a badge to paint'
 );
 check(
-	'that listing is scoped to the account (never another user\'s activity)',
+	"that listing is scoped to the account (never another user's activity)",
 	/this\.fastRing\.filter\(\(e\) => e\.lo === account \|\| e\.hi === account\)/.test(bus)
 );
 check(
@@ -242,7 +249,7 @@ check(
 	/for \(const ev of chatEventBus\.recentFastForAccount\(account\)\)/.test(activityStream)
 );
 check(
-	'the replay carries the message\'s REAL block time, not now()',
+	"the replay carries the message's REAL block time, not now()",
 	/ev\.createdAt\.getTime\(\)/.test(activityStream),
 	'now() would date an old message to this instant and badge one already read'
 );

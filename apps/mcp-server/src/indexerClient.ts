@@ -12,13 +12,15 @@
  * visiting the Morphit web UI in a browser.
  */
 
-import { isPrivateHostname } from '@morphit/net-defense';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
+import { isPrivateHostname, isPrivateIp } from '@morphit/net-defense';
 
 const DEFAULT_INSTANCE_URL = 'https://morphit.io';
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * Maximum response body size in bytes.  cp151 finding F-mcp-5.
+ * Maximum response body size in bytes.  F-mcp-5.
  *
  * Threat model: a malicious instance operator can return an
  * arbitrarily large response body (multi-GB JSON, infinite
@@ -56,7 +58,7 @@ function maxBodyBytes(): number {
 /**
  * Server identification string for the User-Agent header.  Read
  * the version from the bundled package.json so it never drifts
- * when the package version bumps.  See cp146 finding F-mcp-4.
+ * when the package version bumps.  finding F-mcp-4.
  *
  * createRequire is the canonical ESM-safe way to load JSON in
  * Node 22+; the alternative (`with { type: 'json' }` import
@@ -71,7 +73,7 @@ const USER_AGENT = `morphit-mcp/${PKG.version} (+https://morphit.io)`;
 /**
  * Strip userinfo (user / password) from a URL for safe inclusion
  * in error messages and logs.  `new URL().toString()` preserves
- * userinfo; we clear it before stringifying.  cp146 finding
+ * userinfo; we clear it before stringifying.  finding
  * F-mcp-2: if MORPHIT_MCP_INSTANCE_URL is set to
  * `https://user:pass@morphit.io/`, the original `fetchJson` error
  * paths echoed the full URL (including creds) back to the AI
@@ -99,7 +101,7 @@ function redactUserinfo(url: string): string {
  * Resolve the target instance URL from env var, with a fallback
  * and a sanity check.  Strip trailing slash for clean joins.
  *
- * cp154 F-mcp-1 — defense-in-depth against private-address
+ * defense-in-depth against private-address
  * instance URLs.  By default reject hostnames in the private
  * ranges (localhost, 127.0.0.1, 10/8, 192.168/16, link-local
  * cloud-metadata addresses, .local/.internal TLDs).  Opt-in via
@@ -136,7 +138,7 @@ export function getInstanceUrl(): string {
 			`MORPHIT_MCP_INSTANCE_URL has unsupported scheme (${u.protocol}): ${raw}`
 		);
 	}
-	// cp154 F-mcp-1 — private-address denylist.  See docblock above.
+	// private-address denylist.  See docblock above.
 	if (isPrivateHostname(u.hostname)) {
 		const allow = process.env.MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE === '1';
 		if (!allow) {
@@ -146,6 +148,37 @@ export function getInstanceUrl(): string {
 		}
 	}
 	return raw.replace(/\/+$/, '');
+}
+
+/**
+ * Refuse a request whose host NAME resolves to a private address — the
+ * literal check in getInstanceUrl() only sees the text of the hostname, and a
+ * public-looking name can point at 127.0.0.1, a LAN host or the cloud
+ * metadata address. Every answer must be public.
+ *
+ * Limits, stated plainly: fetch() resolves the name again when it connects,
+ * so a DNS server that answers differently the second time is not stopped
+ * here (pinning the vetted address needs a custom dispatcher). The URL is the
+ * user's own setting; this guards against mistakes and planted names, not
+ * against an attacker who controls the user's resolver. A name that does not
+ * resolve at all is left to fetch() to report.
+ */
+async function assertPublicResolution(url: string): Promise<void> {
+	if (process.env.MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE === '1') return;
+	const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+	if (isIP(host) !== 0) return; // a literal was judged by getInstanceUrl()
+	let addresses: string[];
+	try {
+		addresses = (await lookup(host, { all: true, verbatim: true })).map((a) => a.address);
+	} catch {
+		return;
+	}
+	const bad = addresses.find((a) => isPrivateIp(a));
+	if (bad !== undefined) {
+		throw new Error(
+			`MORPHIT_MCP_INSTANCE_URL host ${host} resolves to a private address (${bad}).  If this is intentional (self-hosted instance, dev setup), set MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE=1 to opt in.`
+		);
+	}
 }
 
 /** Build a v1 URL with proper query-string encoding. */
@@ -172,18 +205,19 @@ export async function fetchJson<T = unknown>(
 	opts: { timeoutMs?: number } = {}
 ): Promise<T> {
 	const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+	await assertPublicResolution(url);
 	const ac = new AbortController();
 	const timer = setTimeout(() => ac.abort(), timeoutMs);
 	try {
 		const res = await fetch(url, {
 			signal: ac.signal,
-			// cp146 F-mcp-3 — `redirect: 'manual'` so a malicious
+			// `redirect: 'manual'` so a malicious
 			// or misconfigured instance can't redirect the client
 			// to an unintended URL (internal address, third-party
 			// origin) and have us fetch it.  We treat any redirect
 			// as a hard error; callers expect Morphit's /v1/ surface
 			// to respond 2xx directly.  Mirrors the indexer's
-			// federationProbe SSRF defense posture (cp139-F-2).
+			// federationProbe SSRF defense posture.
 			redirect: 'manual',
 			headers: {
 				// User-Agent identifies the MCP server to instance
@@ -205,7 +239,7 @@ export async function fetchJson<T = unknown>(
 			);
 		}
 
-		// cp151 F-mcp-5 — Content-Length pre-check.  If the
+		// Content-Length pre-check.  If the
 		// server declares a body larger than the cap, reject
 		// BEFORE allocating a single byte.  This handles the
 		// honest-server case where the response was unexpectedly
@@ -224,7 +258,7 @@ export async function fetchJson<T = unknown>(
 			}
 		}
 
-		// cp151 F-mcp-5 — Streaming body read with cap
+		// Streaming body read with cap
 		// enforcement.  Read chunks via the response's body
 		// reader, accumulate bytes into an array, and abort the
 		// fetch if total exceeds the cap.  This handles chunked
@@ -261,7 +295,7 @@ export async function fetchJson<T = unknown>(
 }
 
 /**
- * Read a response body with a hard byte-count cap.  cp151 F-mcp-5.
+ * Read a response body with a hard byte-count cap..
  *
  * Uses the streaming reader to pull chunks one at a time.  When
  * the running total exceeds the cap, abort the fetch (releasing
@@ -348,20 +382,27 @@ const ORDERBOOK_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
 	'permlink',
 	'asset',
 	'side',
+	// USDT/USDC/DAI: which chain (trc20, erc20, spl, …). Without it a
+	// USDT listing cannot be told apart from one on another network.
+	'asset_network',
 	'fiat_currency',
-	'price',
+	// How the listing is priced (fixed, or a spread over the market). The
+	// API has no flat `price` field; this is the price.
+	'price_model',
 	'amount_min',
 	'amount_max',
 	'location_region',
 	'payment_methods',
-	// cp425 — the crypto set a BARTER (goods/services) listing accepts as
+	// the crypto set a BARTER (goods/services) listing accepts as
 	// settlement. A first-class, public trade signal like payment_methods, so
 	// a read-only agent can relay "these baskets take XMR or BTC".
 	'accepted_assets',
+	// A BARTER listing's goods label (lister-written, like `terms`).
+	'specific_barter_title',
 	'terms',
 	'feedback_count',
 	'weighted_rating',
-	// cp404 — the composite reputation score (0–5) and the earliest
+	// the composite reputation score (0–5) and the earliest
 	// completed-trade timestamp. Both are first-class trust signals now
 	// shown on the order cards; surfacing them lets a read-only agent
 	// relay "this trader scores 4.06, trading since July 2026" and pairs
@@ -370,9 +411,14 @@ const ORDERBOOK_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
 	// agent has no use for, same trimming philosophy as fee mechanics.)
 	'reputation_score',
 	'first_trade_at',
+	// Real completed trades (both sides); what min_trades and the new-trader
+	// flag are computed from. `feedback_count` is the number of ratings.
+	'trade_count',
 	'is_new_trader',
 	'updated_at',
-	'created_at'
+	'created_at',
+	// When the listing lapses (null = no expiry).
+	'expires_at'
 ]);
 
 /** Strip a known set of indexer-internal fields that aren't useful
@@ -392,12 +438,11 @@ export function trimOrderRow(row: Record<string, unknown>): Record<string, unkno
  *  fee mechanics (`fee_status`, `fee_method`) — which the public
  *  orderbook never exposes and an agent has no use for (knowing a
  *  lister paid their listing fee in XMR vs Blurt, or that it was their
- *  waived first buy, is a needless pattern leak). We keep `status` and
- *  `expires_at` (genuinely useful for a specific-listing view — the
- *  agent can tell the user a listing is cancelled/expired or when it
- *  lapses) and drop the rest via the same allowlist. */
+ *  waived first buy, is a needless pattern leak). We keep `status`
+ *  (the agent can tell the user a listing is cancelled or expired)
+ *  and drop the rest via the same allowlist. */
 export function trimListingRow(row: Record<string, unknown>): Record<string, unknown> {
-	const keep = new Set<string>([...ORDERBOOK_PUBLIC_FIELDS, 'status', 'expires_at']);
+	const keep = new Set<string>([...ORDERBOOK_PUBLIC_FIELDS, 'status']);
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(row)) {
 		if (keep.has(k)) out[k] = v;

@@ -1,7 +1,7 @@
 /**
  * @morphit/node-health — health disk-path resolution (PURE).
  *
- * WHY THIS EXISTS (cp708).  The health "disk" figure (in both the
+ * WHY THIS EXISTS.  The health "disk" figure (in both the
  * `morphit-ops` health view and the public /v1/health `system` block)
  * used to `statfs('/')` unconditionally.  On a single-volume box —
  * morphit.io — that's correct: the DB, IPFS repo, and backups all live

@@ -1,5 +1,5 @@
 /**
- * prefetch.ts (cp664) — bounded-concurrency prefetch + strictly-in-order consume.
+ * prefetch.ts — bounded-concurrency prefetch + strictly-in-order consume.
  *
  * The indexer's catch-up backfill must reconcile two opposing pressures:
  *   - the volunteer-run RPC nodes want FEW requests, spread across nodes;

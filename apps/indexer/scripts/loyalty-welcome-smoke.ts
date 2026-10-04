@@ -51,14 +51,14 @@ await scenario('first verified BLURT fee queues a 1 BP delegation', async () => 
 		{ match: /^RELEASE SAVEPOINT first_fee_welcome_sp$/ },
 		// cumulative BP query → 1 BP (just the welcome row)
 		{
-			match: /SELECT COALESCE\(SUM\(bp_rewarded\)/,
-			rows: [{ cumulative_bp: '1' }]
+			match: /SELECT COALESCE\(SUM\(m\.bp_rewarded\)/,
+			rows: [{ bp: '1' }]
 		},
 		// queue the delegation
 		{ match: /INSERT INTO relay_pending_transfers/, rowCount: 1 }
 	]);
 
-	await trackVerifiedBlurtFee(mock.client, 'alice', 10, 1000, new Date(), 'morphit', 'morphit');
+	await trackVerifiedBlurtFee(mock.client, 'alice', 10, 1000, new Date(), 'morphit', 'morphit', 10);
 
 	// Verify the queue row carries the correct cumulative target.
 	const queueRow = mock.queries.find((q) => /relay_pending_transfers/.test(q.text));
@@ -91,7 +91,7 @@ await scenario('replay of fee does NOT double-queue welcome', async () => {
 		// NO cumulative query, NO queue row — welcome already happened
 	]);
 
-	await trackVerifiedBlurtFee(mock.client, 'alice', 10, 1001, new Date(), 'morphit', 'morphit');
+	await trackVerifiedBlurtFee(mock.client, 'alice', 10, 1001, new Date(), 'morphit', 'morphit', 10);
 
 	const queueRow = mock.queries.find((q) => /relay_pending_transfers/.test(q.text));
 	if (queueRow) throw new Error('welcome should not re-queue');
@@ -112,8 +112,8 @@ await scenario('large first fee crosses welcome + 100 BLURT milestone', async ()
 		{ match: /^RELEASE SAVEPOINT first_fee_welcome_sp$/ },
 		// Cumulative after welcome → 1 BP
 		{
-			match: /SELECT COALESCE\(SUM\(bp_rewarded\)/,
-			rows: [{ cumulative_bp: '1' }]
+			match: /SELECT COALESCE\(SUM\(m\.bp_rewarded\)/,
+			rows: [{ bp: '1' }]
 		},
 		// Welcome queue row
 		{ match: /INSERT INTO relay_pending_transfers/, rowCount: 1 },
@@ -123,14 +123,14 @@ await scenario('large first fee crosses welcome + 100 BLURT milestone', async ()
 		{ match: /^RELEASE SAVEPOINT loyalty_ms_100_sp$/ },
 		// Cumulative after milestone → 1 + 10 = 11 BP
 		{
-			match: /SELECT COALESCE\(SUM\(bp_rewarded\)/,
-			rows: [{ cumulative_bp: '11' }]
+			match: /SELECT COALESCE\(SUM\(m\.bp_rewarded\)/,
+			rows: [{ bp: '11' }]
 		},
 		// Milestone queue row (cumulative = 11)
 		{ match: /INSERT INTO relay_pending_transfers/, rowCount: 1 }
 	]);
 
-	await trackVerifiedBlurtFee(mock.client, 'bob', 100, 1002, new Date(), 'morphit', 'morphit');
+	await trackVerifiedBlurtFee(mock.client, 'bob', 100, 1002, new Date(), 'morphit', 'morphit', 100);
 
 	const queueRows = mock.queries.filter((q) => /INSERT INTO relay_pending_transfers/.test(q.text));
 	if (queueRows.length !== 2) {
@@ -177,7 +177,7 @@ await scenario('loyalty milestones still 100/500/2000/10000 → 10/50/200/1000',
 
 await scenario('zero-amount fee returns immediately', async () => {
 	const mock = makeMockClient();
-	await trackVerifiedBlurtFee(mock.client, 'alice', 0, 1003, new Date(), 'morphit', 'morphit');
+	await trackVerifiedBlurtFee(mock.client, 'alice', 0, 1003, new Date(), 'morphit', 'morphit', 0);
 	if (mock.queries.length !== 0) throw new Error(`leaked queries: ${mock.queries.length}`);
 });
 

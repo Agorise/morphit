@@ -8,7 +8,7 @@
  * XMR-fee order must pay the integrated address of this address that carries
  * the order's own payment ID.
  *
- *   npx tsx apps/indexer/scripts/set-treasury-xmr-primary.ts <4…address>
+ *   node_modules/.bin/tsx apps/indexer/scripts/set-treasury-xmr-primary.ts <4…address>
  *
  * Run on the LAPTOP, in the repo root, and only after the pre-pin checklist
  * (docs/OPERATIONS.md §40.13) passed. It refuses a subaddress (`8…`), an

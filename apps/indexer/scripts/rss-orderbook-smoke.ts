@@ -227,7 +227,7 @@ await scenario('per-account feed accepts @alice.xml and queries with alice', asy
 	assertContains(r.body, 'Morphit — Orders by @alice', 'channel title');
 	assertContains(r.body, 'polling a per-trader URL reveals', 'privacy note');
 	// Human link must point at the real profile route /@<account>,
-	// not a nonexistent /u/<account> (cp229 broken-ref fix).
+	// not a nonexistent /u/<account> (broken-ref fix).
 	assertContains(r.body, '<link>https://example.com/@alice</link>', 'human link → profile');
 	if (mock.queries[0]!.params[0] !== 'alice') {
 		throw new Error(`expected alice, got ${mock.queries[0]?.params[0]}`);

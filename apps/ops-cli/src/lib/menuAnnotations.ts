@@ -63,7 +63,7 @@ export function readCurrentVersion(): string | null {
  *  null on any error/timeout. Prefers /releases/latest (stable), falls
  *  back to the newest release of any kind. */
 export async function fetchLatestVersion(timeoutMs = 2500): Promise<string | null> {
-	// v1.18.0 deep-deep, H1: a hidden-only node must not ask git.agorise.net
+	// a hidden-only node must not ask git.agorise.net
 	// anything — this ran on EVERY interactive launch, putting the box's home IP
 	// in the code host's logs. Its own indexer already holds the release the
 	// chain says is current (the same record a hidden upgrade verifies against),

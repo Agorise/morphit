@@ -1,5 +1,5 @@
 /**
- * fetchJson body-cap smoke (cp151 F-mcp-5).
+ * fetchJson body-cap smoke.
  *
  * Verifies the response-body size cap in `fetchJson()`:
  *
@@ -15,8 +15,8 @@
  * over-cap cases without allocating actual MB of memory.
  *
  * Threat: a malicious instance operator returns a multi-GB
- * response, exhausting Charlie's heap.  cp146 fixed
- * redirect-follow + URL-redaction; cp151 closes the last
+ * response, exhausting Charlie's heap.  A later change fixed
+ * redirect-follow + URL-redaction; a later change closes the last
  * size-vector by capping the body.
  */
 
@@ -69,7 +69,7 @@ async function main() {
 	const originalCap = process.env.MORPHIT_MCP_MAX_BODY_BYTES;
 	const originalAllowPrivate = process.env.MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE;
 	process.env.MORPHIT_MCP_MAX_BODY_BYTES = String(CAP_FOR_TEST);
-	// cp154 F-mcp-1 — startServer binds to 127.0.0.1 which is in
+	// startServer binds to 127.0.0.1 which is in
 	// the private-address denylist getInstanceUrl() enforces by
 	// default.  Opt in to allow the loopback URL.
 	process.env.MORPHIT_MCP_ALLOW_PRIVATE_INSTANCE = '1';

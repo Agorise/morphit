@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * removed-static-asset-guard smoke — cp300.
+ * removed-static-asset-guard smoke.
  *
  * FOOTPRINT + REGRESSION GUARD. Some static assets were deliberately
  * removed and MUST NOT silently reappear in the shipped `static/` tree
@@ -8,15 +8,13 @@
  *
  * Why this guard exists: `brand/morphit-fee-flow.png` (~475 KB) was
  * removed once (2026-05-06 audit: "drop the PNG, reference the SVG")
- * and later crept back in when a session re-rendered it via rsvg-convert
- * "for blog upload convenience" and the export landed in `static/brand/`
- * instead of `/mnt/user-data/outputs/`. cp299 caught it as unreferenced
- * dead weight; cp300 deleted it again. This smoke makes the deletion
+ * and later crept back in when it was re-rendered via rsvg-convert
+ * "for blog upload convenience" and the export landed in `static/brand/`.
+ * It was caught as unreferenced dead weight and deleted again. This smoke makes the deletion
  * STICK — same spirit as the Forgejo-naming regression guard.
  *
- * Rule for the future: a one-off raster export for a blog post goes to
- * `/mnt/user-data/outputs/` (handed to the maintainer), NEVER committed into the
- * web app's `static/` dir. The SVG source-of-truth
+ * Rule for the future: a one-off raster export for a blog post stays
+ * outside the repository, NEVER committed into the web app's `static/` dir. The SVG source-of-truth
  * (`brand/morphit-fee-flow.svg`, referenced by docs/FEES-AND-REWARDS.md)
  * is the thing that ships.
  *
@@ -49,7 +47,7 @@ const FORBIDDEN: { path: string; reason: string }[] = [
 	{
 		path: 'brand/morphit-fee-flow.png',
 		reason:
-			'orphan raster removed twice; ships ~475 KB for nothing. Use the .svg; blog exports go to /mnt/user-data/outputs.'
+			'orphan raster removed twice; ships ~475 KB for nothing. Use the .svg; keep blog exports out of the repository.'
 	}
 ];
 

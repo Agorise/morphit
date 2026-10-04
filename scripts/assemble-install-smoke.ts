@@ -1,7 +1,7 @@
 /**
- * assemble-install-smoke.ts (cp600) — pins the install runner's orchestration
+ * assemble-install-smoke.ts — pins the install runner's orchestration
  * invariants (assembleInstall) with mock deps: the real ansible-playbook/apt
- * spawn is a mini PC territory, but the ORDER and SAFETY must hold — secrets
+ * spawn is checked on a real machine, but the ORDER and SAFETY must hold — secrets
  * saved before the run, vars file always cleaned up (even on failure), correct
  * local argv, failures turned into a plain re-runnable message, and best-effort
  * post-install steps (the home desktop notifier) that run on success but can

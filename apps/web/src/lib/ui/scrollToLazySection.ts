@@ -11,7 +11,7 @@
  * 40 animation frames is ~0.66s at 60fps. That is a **rendering** budget being
  * spent on a **network** wait: on a cold click the chunk is still downloading,
  * the element never appears inside 40 frames, and the page silently doesn't
- * scroll. the maintainer watched exactly that happen.
+ * scroll. The maintainer watched exactly that happen.
  *
  * Two fixes, both needed:
  *

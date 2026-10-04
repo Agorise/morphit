@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { hiddenHostNetworkOf, isLocalHost } from '@morphit/hidden-transport';
+import { federatedPriceIsLive } from '$indexer/price/federatedPriceFetcher';
+import { pricenodePriceIsLive } from '$indexer/price/pricenodes';
 /**
  * clearnetGate — computes the `clearnet_eliminated` flag (v1.15.x stage 4).
  *
@@ -25,8 +27,13 @@ export interface ClearnetEliminationLegs {
 	 *  or block of one network can't dark the node — and so "zero clearnet" never
 	 *  rests on a single hidden network. */
 	readonly transportI2p: boolean;
-	/** Price comes from the federation over Tor/I2P (federated median primary),
-	 *  never a clearnet price API. */
+	/** Price comes over Tor/I2P, never from a clearnet price API: the node is
+	 *  hidden-only (the price factory then has no clearnet upstream) AND it is
+	 *  actually getting prices that way — the onion pricenodes answered
+	 *  recently (price/pricenodes.ts), or its federated fetcher is producing a
+	 *  median from fresh peer samples. Being hidden-only alone is not enough:
+	 *  with neither, the price falls to the static floor. (The key keeps its
+	 *  historical name; peers read it from /v1/instance.) */
 	readonly priceFederated: boolean;
 	/** The served frontend auto-loads nothing external (build-time invariant,
 	 *  enforced by frontend-local-only-smoke). */
@@ -86,7 +93,7 @@ export function matrixHomeserverIsHidden(homeserverUrl: string | null | undefine
 	return host.endsWith('.onion') || host.endsWith('.i2p');
 }
 
-// ─── the alert bot's real configuration (v1.18.0 deep-deep, M3) ───────────
+// ─── the alert bot's real configuration ───────────
 //
 // WHAT WAS WRONG. `matrixClean` read `MORPHIT_INSTANCE_MATRIX_HOMESERVER`, which
 // no installer, playbook or ops-cli command sets — so it was always "clean". The
@@ -97,10 +104,16 @@ export function matrixHomeserverIsHidden(homeserverUrl: string | null | undefine
 // therefore claimed `clearnet_eliminated: true` while the bot connected to
 // matrix.org from the home IP.
 //
-// The indexer runs as root (ops/systemd/morphit-indexer.service), so it can read
-// that 0600 file. When it cannot — any error other than "no such file" — the
-// answer is unknown, and unknown is never clean.
+// The indexer does not run as root and cannot read that file (it holds the
+// bot's access token). The installer and `morphit-ops upgrade` therefore write
+// a secret-free copy of the two settings that matter here,
+// /etc/morphit/matrix-bot.posture, readable by the indexer's group, in the
+// same KEY=value shape. It is read first; only when it does not exist is the
+// bot's own env file tried. When neither can be read — any error other than
+// "no such file" — the answer is unknown, and unknown is never clean.
 
+/** The secret-free posture file the installer writes for the indexer. */
+export const MATRIX_BOT_POSTURE_PATH = '/etc/morphit/matrix-bot.posture';
 /** The file the bot's systemd unit loads (EnvironmentFile=). */
 export const MATRIX_BOT_ENV_PATH = '/etc/morphit/matrix-bot.env';
 /** The bot's own default homeserver (apps/matrix-bot/src/config.ts). */
@@ -143,6 +156,7 @@ export function matrixBotIsClean(p: MatrixBotPosture): boolean {
 	}
 }
 
+let matrixBotPosturePath = MATRIX_BOT_POSTURE_PATH;
 let matrixBotEnvPath = MATRIX_BOT_ENV_PATH;
 let matrixBotCache: { at: number; posture: MatrixBotPosture } | null = null;
 const MATRIX_BOT_CACHE_MS = 30_000;
@@ -153,12 +167,16 @@ export function currentMatrixBotPosture(now: number = Date.now()): MatrixBotPost
 	if (matrixBotCache !== null && now - matrixBotCache.at < MATRIX_BOT_CACHE_MS) {
 		return matrixBotCache.posture;
 	}
-	let posture: MatrixBotPosture;
-	try {
-		posture = matrixBotPostureFromEnvText(readFileSync(matrixBotEnvPath, 'utf8'));
-	} catch (err) {
-		posture = (err as NodeJS.ErrnoException).code === 'ENOENT' ? { state: 'inert' } : { state: 'unknown' };
-	}
+	const read = (path: string): MatrixBotPosture | 'absent' => {
+		try {
+			return matrixBotPostureFromEnvText(readFileSync(path, 'utf8'));
+		} catch (err) {
+			return (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : { state: 'unknown' };
+		}
+	};
+	const fromPosture = read(matrixBotPosturePath);
+	const fromEnv = fromPosture === 'absent' ? read(matrixBotEnvPath) : fromPosture;
+	const posture: MatrixBotPosture = fromEnv === 'absent' ? { state: 'inert' } : fromEnv;
 	matrixBotCache = { at: now, posture };
 	return posture;
 }
@@ -169,22 +187,29 @@ export function _setMatrixBotEnvPathForTesting(p: string | null): void {
 	matrixBotCache = null;
 }
 
+/** Tests only: point the posture reader at another file (null restores it). */
+export function _setMatrixBotPosturePathForTesting(p: string | null): void {
+	matrixBotPosturePath = p ?? MATRIX_BOT_POSTURE_PATH;
+	matrixBotCache = null;
+}
+
 /** The frontend is local-only by build invariant (frontend-local-only-smoke
  *  fails CI otherwise), so the served bundle a node ships auto-loads nothing
  *  external. Exposed as a constant the runtime gate can trust. */
 export const FRONTEND_IS_LOCAL_ONLY = true;
 
 /**
- * Assemble the legs: seven from config, and the relay's from what the relay
- * itself last reported (relayPosture.ts) — passed in, because it is the one leg
- * config cannot answer.
+ * Assemble the legs: six from config, the relay's from what the relay itself
+ * last reported (relayPosture.ts) — passed in, because config cannot answer
+ * it — and the price leg from what the pricenode and federated price fetchers
+ * last did.
  *
  * Extracted so the SELF row in the federation directory can be scored with the
  * exact same inputs `/v1/instance` serves to peers. Before this, a node's own
  * `cached_clearnet_eliminated` was only ever written by the network probe —
  * which is skipped for self — so the column sat at its `false` default forever
  * and the one instance that had actually earned the badge was the only one that
- * could not see it on its own directory card. (Same defect class as cp311, one
+ * could not see it on its own directory card. (Same defect class as an earlier fix, one
  * column over.)
  */
 export function clearnetLegsFromConfig(cfg: {
@@ -194,14 +219,14 @@ export function clearnetLegsFromConfig(cfg: {
 	instanceI2pB32Address?: string | null;
 	instanceI2pNameAddress?: string | null;
 	instanceMatrixHomeserver?: string | null;
-}, relayHiddenOnly: boolean, matrixBot: MatrixBotPosture = currentMatrixBotPosture()): ClearnetEliminationLegs {
+}, relayHiddenOnly: boolean, matrixBot: MatrixBotPosture = currentMatrixBotPosture(), federatedPriceLive: boolean = federatedPriceIsLive() || pricenodePriceIsLive()): ClearnetEliminationLegs {
 	return {
 		chainHidden: cfg.blurtRpcEndpoints.length === 0 && cfg.hiddenRpcEndpoints.length > 0,
 		transportTor: hiddenHostNetworkOf(cfg.instanceTorAddress ?? '') === 'tor',
 		transportI2p:
 			hiddenHostNetworkOf(cfg.instanceI2pB32Address ?? '') === 'i2p' ||
 			hiddenHostNetworkOf(cfg.instanceI2pNameAddress ?? '') === 'i2p',
-		priceFederated: cfg.blurtRpcEndpoints.length === 0,
+		priceFederated: cfg.blurtRpcEndpoints.length === 0 && federatedPriceLive,
 		frontendLocal: FRONTEND_IS_LOCAL_ONLY,
 		upgradeHidden: true,
 		// The bot's real config decides (M3); the old instance-level variable is

@@ -3,7 +3,7 @@
  *
  * Set when a posting-only account keeps its Active key on this device: it now
  * holds key material that exists NOWHERE else, and losing the device loses it.
- * the maintainer: put a red dot on the avatar and beside "Back up my keys".
+ * Requirement: put a red dot on the avatar and beside "Back up my keys".
  *
  * Cleared when the user visits /backup-keys. Deliberately local-only and
  * account-scoped-by-nature (the keystore is per-device); nothing is broadcast,

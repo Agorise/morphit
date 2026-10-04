@@ -46,14 +46,14 @@
 	}
 	let { children }: Props = $props();
 
-	// Part 121 cp7 — local helper that always wraps a path with
+	// local helper that always wraps a path with
 	// the current page's locale prefix.  Falls back to
 	// DEFAULT_LOCALE when $page.data.lang is missing (defensive;
 	// shouldn't happen under the [lang]/+layout.ts load() but
 	// covers the brief window between route mount and load
 	// resolve).  Used by every internal anchor and navigation
 	// site in the nav/header/footer; see also: the deferred
-	// internal-link audit in REVISIT-LIST §A for the sweep of
+	// internal-link audit in the backlog §A for the sweep of
 	// per-page link sites still using bare hrefs.
 	// Drive the locale prefix from the active-locale STORE, not
 	// $page.data.lang.  The two are equal on every real navigation (the
@@ -66,7 +66,7 @@
 	const currentLang = $derived($currentLocale);
 	const lp = $derived((path: string) => localePath(path, currentLang));
 	// Footer link + column-header styling, shared across the footer's 5 columns
-	// (t.txt — the maintainer). `ltr:tracking-widest` keeps the wide letter-spacing to LTR
+	// (the maintainer). `ltr:tracking-widest` keeps the wide letter-spacing to LTR
 	// only, so Arabic-script (Farsi) column headers don't get their connected
 	// letters broken apart by letter-spacing.
 	const footLink =
@@ -74,7 +74,7 @@
 	const footHead =
 		'mb-2.5 text-xs font-semibold uppercase ltr:tracking-widest text-ink-500 dark:text-ink-400';
 
-	/** cp402 [9] — the chat CONVERSATION route (/[lang]/chat/[peer]) is an
+	/** the chat CONVERSATION route (/[lang]/chat/[peer]) is an
 	 *  immersive, full-viewport view: ConversationView fills the space
 	 *  below the header, its composer stays pinned and visible, and the
 	 *  marketing footer is suppressed. Without this the chat's own
@@ -89,7 +89,7 @@
 		return parts.length === 3 && parts[1] === 'chat';
 	});
 
-	// Tier-N a11y deferred from Part 100 — route-transition focus
+	// Tier-N a11y deferred — route-transition focus
 	// management.  SvelteKit's default doesn't move focus on
 	// client-side navigation, which is a documented SPA a11y
 	// issue: a screen-reader user who navigates from /faq to
@@ -129,7 +129,7 @@
 		// overlaying the top) tucks the page's top heading UNDER the
 		// header on every client-side navigation. SvelteKit already
 		// resets a new page to the top, so we keep that and only move
-		// focus, never scroll. (cp305 — fixes "page loads slightly
+		// focus, never scroll. (fixes "page loads slightly
 		// scrolled, header text cut off" on link clicks.)
 		queueMicrotask(() => mainEl?.focus({ preventScroll: true }));
 	});
@@ -250,7 +250,7 @@
 	]);
 
 	function isActive(href: string): boolean {
-		// Part 121 cp7 — both `href` and `path` now carry the
+		// both `href` and `path` now carry the
 		// locale prefix (e.g. /de/orderbook), so the existing
 		// startsWith test still works.  Old comment preserved
 		// for the no-prefix design: the test was startsWith
@@ -295,7 +295,7 @@
 				<MorphitLogoBling heightPx={32} shine priority />
 			</a>
 
-			<nav aria-label="Primary" class="hidden gap-1 md:flex">
+			<nav aria-label={$_('a11y.nav_primary') as string} class="hidden gap-1 md:flex">
 				{#each navLinks as link (link.href)}
 					<a
 						href={link.href}
@@ -326,7 +326,7 @@
 		</div>
 
 		<!-- Mobile nav -->
-		<nav aria-label="Mobile" class="border-t border-ink-100 dark:border-ink-800 md:hidden">
+		<nav aria-label={$_('a11y.nav_mobile') as string} class="border-t border-ink-100 dark:border-ink-800 md:hidden">
 			<div class="mx-auto flex max-w-7xl items-center justify-around px-2 py-1">
 				{#each navLinks as link (link.href)}
 					<a
@@ -386,16 +386,16 @@
 		{@render children()}
 	</main>
 
-	<!-- cp402 [9] — the footer is suppressed on the immersive chat route:
+	<!-- the footer is suppressed on the immersive chat route:
 	     rendered below a viewport-tall conversation it would force the
 	     page to scroll past the composer, hiding the Send button. -->
 	{#if !isImmersiveChat}
 		<footer class="mt-16 border-t border-ink-100 bg-ink-50 py-10 dark:border-ink-800 dark:bg-ink-950">
 		<div class="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center md:px-6">
 			<!-- Footer brand: full wide wordmark only. Small mark + "Morphit" text removed.
-			     cp304 — same occasional letterform "bling" glint (shine) as the top-left
+			     same occasional letterform "bling" glint (shine) as the top-left
 			     header, no extra effects. (The former animate-morphit-hue-shift was dropped
-			     at the maintainer's request so the footer matches the header exactly — only the display
+			     at the request so the footer matches the header exactly — only the display
 			     height differs.) variant="footer" → /brand/site-logo-footer.svg: identical to
 			     the header logo on a canonical build, but an operator can give the footer its
 			     own wordmark (docs/BRANDING.md). One cached file, served stale-while-revalidate
@@ -605,7 +605,7 @@
 				</ul>
 			</div>
 
-			<nav aria-label="Footer" class="grid w-full max-w-4xl grid-cols-2 gap-x-6 gap-y-8 text-sm sm:grid-cols-3 lg:grid-cols-5">
+			<nav aria-label={$_('a11y.nav_footer') as string} class="grid w-full max-w-4xl grid-cols-2 gap-x-6 gap-y-8 text-sm sm:grid-cols-3 lg:grid-cols-5">
 				<div>
 					<h2 class={footHead}>{$_('footer.col_federation')}</h2>
 					<ul class="space-y-1.5">
@@ -621,6 +621,7 @@
 						<li><a href={lp('/stats')} class={footLink} title={$_('footer.stats_title')}>{$_('footer.stats')}</a></li>
 						<li><a href="{lp('/faq')}?q=wallet_developer_api&lang={currentLang}" class={footLink} title={$_('footer.api_title')}>{$_('footer.api')}</a></li>
 						<li><a href="https://git.agorise.net/agorise/morphit" class={footLink} target="_blank" rel="noopener noreferrer">{$_('footer.source')}</a></li>
+						<li><a href="/licenses.txt" data-sveltekit-reload class={footLink} title={$_('footer.licenses_title')} rel="noopener">{$_('footer.licenses')}</a></li>
 					</ul>
 				</div>
 				<div>
@@ -664,12 +665,12 @@
 						title={$_('footer.agpl_title')}>AGPL-3.0</a
 					> · #noaggression #countereconomics
 				</p>
-				<!-- Language switcher lives here (cp401): shares the copyright
+				<!-- Language switcher lives here: shares the copyright
 				     row at the far end (bottom-right in LTR, bottom-left in RTL —
-				     the reading-direction end). cp414 — dropped flex-wrap on the
+				     the reading-direction end). dropped flex-wrap on the
 				     row + min-w-0 on the copyright so on a narrow phone the
 				     copyright text wraps INSIDE its own paragraph instead of
-				     bumping the switcher onto a new line below it. cp428 — the row
+				     bumping the switcher onto a new line below it. the row
 				     is items-end and the switcher gets pb-0.5, so the BOTTOM of the
 				     switcher sits on (a hair above) the AGPL line rather than
 				     hanging below it. dropUp so its menu opens upward, not below

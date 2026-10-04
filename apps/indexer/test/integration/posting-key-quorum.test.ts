@@ -42,8 +42,12 @@ interface FakeRpc {
 }
 
 /** A JSON-RPC endpoint answering `get_accounts` with `key` as alice's posting
- *  key — or omitting her entirely when `key` is undefined — after `latencyMs`. */
-async function fakeRpc(key: string | undefined, latencyMs: number): Promise<FakeRpc> {
+ *  key — or omitting her entirely when `key` is undefined — after `latencyMs`.
+ *  A function is asked on every request (a node that catches up). */
+async function fakeRpc(
+	keyOrNow: string | undefined | (() => string | undefined),
+	latencyMs: number
+): Promise<FakeRpc> {
 	const server = http.createServer((req, res) => {
 		let body = '';
 		req.on('data', (c) => (body += c));
@@ -54,6 +58,7 @@ async function fakeRpc(key: string | undefined, latencyMs: number): Promise<Fake
 			} catch {
 				/* default id */
 			}
+			const key = typeof keyOrNow === 'function' ? keyOrNow() : keyOrNow;
 			const auth = (k: string) => ({ weight_threshold: 1, account_auths: [], key_auths: [[k, 1]] });
 			const result = body.includes('get_accounts')
 				? key === undefined
@@ -78,7 +83,7 @@ async function fakeRpc(key: string | undefined, latencyMs: number): Promise<Fake
 			}, latencyMs);
 		});
 	});
-	// v1.18.0 deep-deep (rv2-2): the quorum counts OPERATORS, and two ports on
+	// the quorum counts OPERATORS, and two ports on
 	// one host are one operator. Each fake node here stands for an independent
 	// operator, so each gets its own loopback address.
 	const host = `127.0.0.${nextHost++}`;
@@ -149,11 +154,21 @@ describe.skipIf(!INTEGRATION_ENABLED)('the reconcile trusts only an AGREED answe
 		expect(r.remaining, 'the row is counted as still to do, so it is asked about again').toBe(1);
 	});
 
-	it('two endpoints that agree are enough, and outvote the lagging one', async () => {
-		const lagging = await fakeRpc(LEAKED, 5);
+	it('a node that disagrees delays the confirmation; once it agrees, the key is confirmed', async () => {
+		// VT5-1: a dissent that is not provably older (these answers carry no
+		// last_account_update) is not outvoted on the spot — it may be the one
+		// node that has applied a rotation. The row stays unconfirmed and is
+		// asked again; nothing is decided against it.
+		let lagKey = LEAKED;
+		const lagging = await fakeRpc(() => lagKey, 5);
 		const honest1 = await fakeRpc(CURRENT, 40);
 		const honest2 = await fakeRpc(CURRENT, 60);
-		const r = await reconcilePostingKeys(fx.db, client(lagging, honest1, honest2), { pauseMs: 0 });
+		const blurt = client(lagging, honest1, honest2);
+		const first = await reconcilePostingKeys(fx.db, blurt, { pauseMs: 0 });
+		expect(await row()).toEqual({ posting_pubkey: LEAKED, posting_key_reconciled: false });
+		expect(first.remaining).toBe(1);
+		lagKey = CURRENT;
+		const r = await reconcilePostingKeys(fx.db, blurt, { pauseMs: 0 });
 		expect(await row()).toEqual({ posting_pubkey: CURRENT, posting_key_reconciled: true });
 		expect(r).toEqual({ checked: 1, corrected: 1, remaining: 0 });
 	});

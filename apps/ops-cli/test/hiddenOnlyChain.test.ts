@@ -1,6 +1,6 @@
 /**
- * ops-cli on a HIDDEN-ONLY node never leaves the box for the chain
- * (v1.18.0 deep-deep, H1).
+ * ops-cli on a HIDDEN-ONLY node never leaves the box for the chain.
+ *
  *
  * On a tor-only node (empty MORPHIT_INDEXER_RPC_ENDPOINTS in indexer.env) every
  * interactive launch fetched the latest version from git.agorise.net and read

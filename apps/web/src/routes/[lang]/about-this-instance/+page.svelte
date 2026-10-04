@@ -8,23 +8,18 @@
 	 *
 	 * OPERATOR-TRUST-DESIGN.md item 2.
 	 *
-	 * Consumes the verify.json file produced by
-	 * scripts/build-verify-json.mjs at build time. Shows the
-	 * instance's claimed version, git commit, build timestamp,
-	 * operator tag, and a count of hashed assets.
+	 * Shows what this instance says about itself, from the verify.json file
+	 * scripts/build-verify-json.mjs writes at build time: version, git
+	 * commit, build time, operator tag, number of hashed files.
 	 *
-	 * The point of this page is LEGIBILITY: users who suspect
-	 * they're on a wrong instance can read, at a glance, what
-	 * the instance says it is. A watchdog tool (future work)
-	 * can then cross-check the hash_manifest against the
-	 * latest @morphit release-op on chain.
-	 *
-	 * Currently this page does NOT fetch the release-op itself —
-	 * that requires a chain RPC round trip with the same
-	 * endpoint rotation the rest of the frontend uses, and is
-	 * complexity that's orthogonal to "make the claim
-	 * visible." A followup can add the cross-check; the
-	 * scaffolding for endpoint rotation already exists.
+	 * Next to that claim it shows the result of the in-page check against
+	 * the signed release ($stores/release, the same check the tamper banner
+	 * uses): how many of the files the latest @morphit release lists — the
+	 * files that start the app — this site served unchanged. It is a
+	 * per-file count against the signed manifest; the signed release
+	 * carries no aggregate hash, so none is shown. This page makes no
+	 * Blurt request of its own: the release check the layout runs is
+	 * reused.
 	 */
 
 	import { onMount } from 'svelte';
@@ -34,10 +29,9 @@
 	import StatusLine from '$components/StatusLine.svelte';
 	import { instance } from '$stores/instance';
 	import { showFeeRecipientUnregistered } from '$stores/feeRecipient';
-	import { chainPinnedTreasury } from '$stores/release';
+	import { chainPinnedTreasury, integritySummary } from '$stores/release';
 	import { btcFeeKeyId } from '$lib/orders/btcFeeAddress';
 	import { findPaymentMethod } from '$lib/payments/registry';
-	import { webCryptoAvailable } from '$lib/security/secureContext';
 
 	interface VerifyPayload {
 		schema_version: number;
@@ -117,43 +111,7 @@
 		return formatDayMonthTime(verify.built_at);
 	});
 
-	/** Aggregate hash: SHA-256 of the manifest JSON itself.
-	 *  Shown for quick eyeball comparison against the
-	 *  @morphit release-op's published aggregate (once that
-	 *  op shape is decided — see OPERATOR-TRUST-DESIGN.md
-	 *  item 4). Computed lazily via SubtleCrypto.
-	 *
-	 *  Keys are sorted before serialization so the aggregate
-	 *  is deterministic regardless of runtime iteration order
-	 *  — matches what an external verification tool computing
-	 *  from the raw JSON would produce. */
-	let aggregateHash = $state<string>('');
-
-	$effect(() => {
-		if (!verify) return;
-		// v1.20.0 (F-9): no WebCrypto on a plain-HTTP I2P address (not a secure
-		// context) — say so instead of showing "computing…" forever.
-		if (!webCryptoAvailable()) {
-			aggregateHash = $_('about_this_instance.field.aggregate_hash_unavailable');
-			return;
-		}
-		void (async () => {
-			const sortedKeys = Object.keys(verify.hash_manifest).sort();
-			const sorted: Record<string, string> = {};
-			for (const k of sortedKeys) {
-				const v = verify.hash_manifest[k];
-				if (v !== undefined) sorted[k] = v;
-			}
-			const manifestStr = JSON.stringify(sorted);
-			const enc = new TextEncoder().encode(manifestStr);
-			const digest = await crypto.subtle.digest('SHA-256', enc);
-			aggregateHash = Array.from(new Uint8Array(digest))
-				.map((b) => b.toString(16).padStart(2, '0'))
-				.join('');
-		})();
-	});
-
-	// Part 121 cp7 — per-locale internal-link wrapper.  See
+	// per-locale internal-link wrapper.  See
 	// $i18n/path.localePath() + the analogous helper in
 	// [lang]/+layout.svelte for design rationale.
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
@@ -296,18 +254,18 @@
 			{/if}
 		</section>
 
-		<!-- Item 3 / Part 121 cp6 — operator-stance surfacing.
+		<!-- Item 3 / — operator-stance surfacing.
 		     Renders THIS instance's asset-policy stance for users who
 		     want to know whether they're on a "USDT-enabled" or
 		     "privacy-pure" Morphit before deciding to trade here.
 		     Data source: $instance.disabled_assets, pulled from
-		     /v1/instance at session start (Memory #25 — every new
+		     /v1/instance at session start (the default-on rule for new assets — every new
 		     tradable asset defaults ON instance-wide; operators opt
 		     OUT via MORPHIT_INDEXER_DISABLED_ASSETS).  Federation
 		     note: this is THIS instance's stance; peer instances'
 		     stances surface on /operators once the federation probe
 		     starts caching disabled_assets (deferred to a follow-on
-		     Part; REVISIT entry filed). -->
+		     Part; backlog entry filed). -->
 		<section class="card mb-6">
 			<h2 class="font-display text-xl font-bold">
 				{$_('about_this_instance.section.asset_stance')}
@@ -339,7 +297,7 @@
 			</p>
 		</section>
 
-		<!-- cp208 — payment-method stance, parity with the asset stance
+		<!-- payment-method stance, parity with the asset stance
 		     above.  Data source: $instance.disabled_payment_methods from
 		     /v1/instance.  Canonical keys are mapped to display names via
 		     the payments registry; unknown keys fall back to the raw key. -->
@@ -396,10 +354,50 @@
 				</div>
 				<div class="flex flex-col sm:flex-row sm:items-baseline sm:gap-4">
 					<dt class="font-semibold text-ink-700 dark:text-ink-200 sm:w-48 sm:shrink-0">
-						{$_('about_this_instance.field.aggregate_hash')}
+						{$_('about_this_instance.field.signed_check')}
 					</dt>
-					<dd class="break-all font-mono">
-						{aggregateHash || $_('about_this_instance.field.aggregate_hash_computing')}
+					<dd data-testid="integrity-summary">
+						{#if $integritySummary.kind === 'checked' && $integritySummary.matched === $integritySummary.total}
+							<span class="text-morphit-emerald">
+								{$_('about_this_instance.integrity.check_ok', {
+									values: {
+										matched: $integritySummary.matched,
+										total: $integritySummary.total,
+										version: $integritySummary.version
+									}
+								})}
+							</span>
+						{:else if $integritySummary.kind === 'checked'}
+							<span class="font-semibold text-red-700 dark:text-red-300">
+								{$_('about_this_instance.integrity.check_mismatch', {
+									values: {
+										matched: $integritySummary.matched,
+										total: $integritySummary.total,
+										version: $integritySummary.version
+									}
+								})}
+							</span>
+						{:else if $integritySummary.kind === 'not_checked'}
+							{$_('about_this_instance.integrity.check_not_checked', {
+								values: {
+									running: $integritySummary.running,
+									version: $integritySummary.announced
+								}
+							})}
+						{:else if $integritySummary.kind === 'unconfirmed'}
+							{$_('about_this_instance.integrity.check_unconfirmed', {
+								values: {
+									running: $integritySummary.running,
+									version: $integritySummary.announced
+								}
+							})}
+						{:else if $integritySummary.kind === 'no_release'}
+							{$_('about_this_instance.integrity.check_no_release')}
+						{:else if $integritySummary.kind === 'incomplete'}
+							{$_('about_this_instance.integrity.check_incomplete')}
+						{:else}
+							<span class="text-ink-500">{$_('common.loading')}</span>
+						{/if}
 					</dd>
 				</div>
 			</dl>
@@ -423,18 +421,15 @@
 			<p class="mt-2 text-ink-700 dark:text-ink-200">
 				{$_('about_this_instance.worried.explain')}
 			</p>
-			<!-- Sally finding ATI1 (Part 69): a user who suspects
+			<!-- Sally finding ATI1: a user who suspects
 			     they're on a rogue instance can't trust the rendered
 			     links here either — a malicious instance can rewrite
 			     the hrefs to point at attacker.example with the
 			     visible text still saying "morphit.io".  Surface
 			     this honestly with a "type these into your browser
 			     bar" warning and render the URLs with select-all
-			     styling so they copy cleanly.  The links remain
-			     clickable for the much-more-common non-suspicious
-			     case (user verifying out of caution, not under
-			     attack), but the warning makes the trust boundary
-			     visible. -->
+			     styling so they copy cleanly.  They are addresses to
+			     type, not links. -->
 			<div
 				class="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
 			>
@@ -443,22 +438,13 @@
 			</div>
 			<ul class="mt-4 space-y-2 text-sm">
 				<li>
-					<!-- v1.7.5 (t.txt #10) — `rel="noopener noreferrer"`, like every other
-					     outbound link in the app. This was the only external anchor without
-					     it. It matters MORE here than it looks: on a FEDERATED instance this
-					     link points off-instance, so without noreferrer the destination
-					     learns "a user of <this operator's node> clicked through" — a
-					     cross-instance correlation hint, handed over for free, on the page
-					     whose whole purpose is telling a worried user how to check their
-					     operator. `noopener` also denies the target window a handle back. -->
-					<a
-						href="https://morphit.io"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2 hover:no-underline"
+					<!-- An address to TYPE (the warning above), not a link: a link here would
+					     be a clearnet URL on every instance, hidden-only ones included, and on
+					     a rogue instance its href could point anywhere. -->
+					<code
+						class="select-all text-morphit-emerald underline decoration-dotted underline-offset-2"
+						>morphit.io</code
 					>
-						morphit.io
-					</a>
 					<span class="ml-2 text-ink-500">
 						{$_('about_this_instance.worried.known_good_note')}
 					</span>

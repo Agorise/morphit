@@ -191,7 +191,7 @@ export async function truncateAll(fx: IntegrationFixture): Promise<void> {
 		'fee_transfers',
 		'feedback_responses',
 		'feedback',
-		// v31 (Part 113): Signal C pile-on detector storage.
+		// v31: Signal C pile-on detector storage.
 		// Pre-Part-118 this table was missing from truncateAll,
 		// meaning cross-test bleed could leave Signal C rows from a
 		// prior test polluting the next.  Added in the same work

@@ -18,7 +18,8 @@
  * — it keeps its minimal contract "wipe live keys, flip state."
  *
  * Scope: clears every draft in any category (chat, post-order,
- * feedback-leave, feedback-response) plus the recent-peers list.
+ * feedback-leave, feedback-response) plus the recent-peers list, and seals
+ * the chat-key pins (kept, but unreadable until this account unlocks).
  * Extension to future draft categories is one line per category
  * using `clearDraftsMatching`.
  */
@@ -27,17 +28,20 @@ import { clearDraft, clearDraftsMatching } from '$lib/drafts';
 import { clearRecentPeers } from '$lib/chat/recentPeers';
 import { clearReadState } from '$lib/chat/readState';
 import { clearChatFolders } from '$lib/chat/chatFolders';
-import { clearAllPins } from '$lib/chat/pubPin';
+import { get } from 'svelte/store';
+import { dropReadablePins, sealPinsForLock } from '$lib/chat/pubPin';
+import { hasAnySession, liveIdentity } from '$stores/identity';
 import { clearAllTradeStates } from '$lib/trades/tradeStatus';
 import { _clearVerifyCache } from '$lib/chat/blurtVerify';
 
 /**
  * Run the extra cleanup that happens on a user-initiated Lock,
  * beyond what `lockSession()` itself does. Safe to call when no
- * drafts exist (each clear is idempotent). Must be called BEFORE
- * or AFTER `lockSession()` — order doesn't matter because the
- * state being cleared lives in localStorage, not the identity
- * store.
+ * drafts exist (each clear is idempotent). Call it BEFORE
+ * `lockSession()`: sealing the chat-key pins needs the posting key,
+ * which the lock wipes. Called after the lock it still clears
+ * everything else, but leaves the pins readable rather than lose
+ * them (they are sealed at the next Lock of an unlocked session).
  */
 export function runExplicitLockExtras(): void {
 	// Chat drafts. Use prefix-match clearing rather than iterating
@@ -59,12 +63,22 @@ export function runExplicitLockExtras(): void {
 	// archived). Same privacy class as read-state — it reveals which
 	// discussions the user has been organising — so an explicit lock wipes it.
 	clearChatFolders();
-	// And the chain-anchored chat-pub pins (Option 5 / S2
-	// mitigation).  The pin set reveals which peers the user has
-	// chatted with, same privacy class as recentPeers and
-	// readState.  Clearing on explicit lock means the next
-	// session starts fresh and TOFUs all peers anew.
-	clearAllPins();
+	// The chain-anchored chat-pub pins are NOT wiped: a lock that forgot
+	// them would let the operator substitute any peer's key at the next
+	// contact with no "safety number changed" step. They reveal who the user
+	// talks to, though, so they leave disk readable only by this account:
+	// sealed under a posting-key-derived key, restored at the next unlock
+	// (pubPin sealPinsForLock / unsealPins).
+	// (A paired read-only session has no posting key, so nothing can seal
+	// them; they are then removed as before. Already locked — called after
+	// lockSession() — the key is gone too: then they stay as they are, since
+	// forgetting them is exactly what must not happen.)
+	const live = get(liveIdentity);
+	if (live !== null) {
+		void sealPinsForLock(live.posting.privateKey).catch(() => {});
+	} else if (get(hasAnySession)) {
+		dropReadablePins();
+	}
 
 	// Post-compose draft — single well-known key. Matches
 	// DRAFT_KEY = 'post.compose' in routes/post/+page.svelte.

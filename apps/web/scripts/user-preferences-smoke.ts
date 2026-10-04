@@ -142,7 +142,7 @@ const scenarios: readonly Scenario[] = [
 		run: () => {
 			storage = new MemoryStorage();
 			writeToStorage({ fiat: 'USD', region: 'US' });
-			// cp474 — read the size into a fresh local at each checkpoint. Comparing
+			// read the size into a fresh local at each checkpoint. Comparing
 			// `storage.size` directly let TS narrow it to the literal `1` at the
 			// first guard and hold that narrowing across `writeToStorage`, which it
 			// can't see mutate the store — so `=== 0` looked impossible.
@@ -255,7 +255,7 @@ if (failed === 0) {
 	process.exit(1);
 }
 
-// cp474 — module marker. Without a top-level import/export tsc treats this
+// module marker. Without a top-level import/export tsc treats this
 // file as a global script, so its `scenarios`/`failed` consts collide with every
 // other script-style smoke when the suite is typechecked as one project. This
 // has no runtime effect under tsx.

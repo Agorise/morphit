@@ -49,7 +49,7 @@ export interface State {
  *  StructuredAlert instances, tolerating rows with corrupt JSON.
  *
  *  Exported so the matrix-bot-input-hardening smoke can verify
- *  cp139 B-1 (tolerant drain) without standing up a real SQLite
+ *  (tolerant drain) without standing up a real SQLite
  *  instance — the smoke environment may not have a built
  *  better-sqlite3 binary.  Production `drainInfoEvents()` below
  *  calls this with the rows it SELECTed from the DB.
@@ -162,7 +162,7 @@ export function openState(path: string): State {
 		},
 		drainInfoEvents() {
 			const rows = stmts.selectInfo.all() as ReadonlyArray<{ payload_json: string }>;
-			// cp139 B-1: tolerant parse — see parseInfoRowsTolerantly
+			// tolerant parse — see parseInfoRowsTolerantly
 			// docstring above for the full rationale.  Net: corrupt
 			// row (operator hand-edit, partial-write recovery, bug
 			// in a prior version's pushInfoEvent) doesn't throw the

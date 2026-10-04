@@ -13,9 +13,12 @@
  * this module is the single-device fast path.
  *
  * Storage:
- *   safeLocal key `morphit.chat.read_state`. Value is a JSON object
- *   mapping `peer → iso-timestamp`. Bounded at MAX_PEERS entries;
- *   overflow drops the oldest visit.
+ *   key `morphit.chat.read_state` in the session's person storage
+ *   ($lib/storage/personStorage: localStorage when the session is
+ *   remembered, this tab's sessionStorage for "just this session", nowhere
+ *   while locked or signed out). Value is a JSON object mapping
+ *   `peer → iso-timestamp`. Bounded at MAX_PEERS entries; overflow drops
+ *   the oldest visit.
  *
  * Reactivity:
  *   Callers that render inbox state can subscribe to
@@ -33,7 +36,13 @@
  */
 
 import { writable, get, type Readable } from 'svelte/store';
-import { safeLocal } from '$utils/safeStorage';
+import {
+	personGet,
+	personSet,
+	personRemove,
+	personStorageTier,
+	type PersonStorageTier
+} from '$lib/storage/personStorage';
 
 const KEY = 'morphit.chat.read_state';
 const MAX_PEERS = 500;
@@ -49,7 +58,7 @@ function threadKey(peer: string, orderPermlink: string): string {
 }
 
 function readRaw(): ReadStateMap {
-	const raw = safeLocal.get(KEY);
+	const raw = personGet(KEY);
 	if (raw === null) return {};
 	try {
 		const parsed = JSON.parse(raw);
@@ -64,7 +73,7 @@ function readRaw(): ReadStateMap {
 			if (typeof k !== 'string' || typeof v !== 'string') continue;
 			if (Number.isNaN(new Date(v).getTime())) continue;
 
-			// cp446 — MIGRATE, don't discard. Before threading, a key was the bare
+			// MIGRATE, don't discard. Before threading, a key was the bare
 			// peer name and the value meant "everything with this peer, up to here".
 			// That is precisely a peer-wide ack, so it becomes `peer\u0000*`. Drop
 			// it instead and every existing user's whole inbox lights up unread on
@@ -89,9 +98,9 @@ function readRaw(): ReadStateMap {
 
 function writeRaw(state: ReadStateMap): void {
 	try {
-		safeLocal.set(KEY, JSON.stringify(state));
+		personSet(KEY, JSON.stringify(state));
 	} catch {
-		// safeLocal is best-effort; writes can fail in quota-exceeded
+		// Storage is best-effort; writes can fail in quota-exceeded
 		// or private-mode contexts. Silently ignore — the inbox will
 		// just show a stale unread signal rather than breaking.
 	}
@@ -111,6 +120,14 @@ function cap(state: ReadStateMap): ReadStateMap {
  *  point; imperative helpers below sync the underlying storage
  *  and push updates through. */
 const readStateStore = writable<ReadStateMap>(readRaw());
+// A session starting or ending: show its own state. The same session changing
+// where it is kept (local ↔ session) keeps what it shows and stores it there.
+let shownTier: PersonStorageTier = null;
+personStorageTier.subscribe((tier) => {
+	if (shownTier !== null && tier !== null) writeRaw(get(readStateStore));
+	else readStateStore.set(readRaw());
+	shownTier = tier;
+});
 
 /** Public reactive view. UI subscribes here to reflect
  *  mark-read actions across components. */
@@ -124,15 +141,14 @@ export const readState: Readable<ReadStateMap> = {
  * storage and notifies subscribers.
  */
 /**
- * cp446 — read state is per DISCUSSION, not per person (the maintainer: "if I read one
- * thread from a user, it should not mark other threads with that user as read.
- * Think of it like email.").
+ * read state is per DISCUSSION, not per person (Requirement: reading one thread with a
+ * user must not mark that user's other threads as read, like email).
  *
  * A map key is `peer` + NUL + one of:
  *   - the order's permlink,
  *   - `''` for the thread that cites no order,
  *   - `PEER_WIDE` (`'*'`) for a legacy ack, which covers every thread with that
- *     peer up to its timestamp. Pre-cp446 clients only ever sent these, and an
+ *     peer up to its timestamp. Previously, clients only ever sent these, and an
  *     old client still sends them today.
  *
  * NUL cannot occur in an account name or a permlink, so no two distinct threads
@@ -156,7 +172,8 @@ export function markConversationRead(
  * Monotonic-advance merge of remote read-state entries into the
  * local store. Each (peer, timestamp) entry only updates the
  * local state if the incoming timestamp is strictly newer than
- * the current local value. Invalid entries are silently skipped.
+ * the current local value. Invalid entries, and timestamps in the
+ * future, are silently skipped.
  *
  * Used by the inbox on load: after fetching
  * GET /v1/chat-read-state/:me, we merge the server's view into
@@ -176,9 +193,13 @@ export function mergeRemoteReadState(
 	let mutated = false;
 	for (const entry of remote) {
 		if (!ACCOUNT_NAME_RE.test(entry.peer)) continue;
-		const incoming = new Date(entry.last_read_at).getTime();
-		if (!Number.isFinite(incoming)) continue;
-		// cp446 — an ack names the discussion it acknowledges. A pre-cp446 instance
+		// The indexer's cursor is sanitised like any block time: a cursor in
+		// the future (a skewed or hostile indexer) would mark every later
+		// message in the thread as read — muting it for good.
+		const at = sanitizeBlockTime(entry.last_read_at);
+		if (at === null) continue;
+		const incoming = at.getTime();
+		// an ack names the discussion it acknowledges. An older instance
 		// omits the field, and every ack it ever stored was peer-wide; treat it as
 		// such rather than silently attributing it to the order-less thread, which
 		// would leave the user's other threads looking unread on that device.
@@ -219,7 +240,7 @@ export function getLastVisited(peer: string, orderPermlink: string): string | nu
  * Is this conversation unread? Unread means its `last_message_at` is newer than
  * your last visit (or you've never visited) AND the last word isn't your own.
  *
- * v1.7.5 (t.txt #2) — `lastMessageIsMine` is new, and the old doc comment here
+ * v1.7.5 — `lastMessageIsMine` is new, and the old doc comment here
  * had already spotted the bug it fixes:
  *
  *   "A conversation started by the user themselves (where the last message is
@@ -276,7 +297,7 @@ export function isUnread(
  * flow alongside other conversation-related local state.
  */
 export function clearReadState(): void {
-	safeLocal.remove(KEY);
+	personRemove(KEY);
 	readStateStore.set({});
 }
 
@@ -324,8 +345,8 @@ const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000;
  *  won't accept a block from the future, so anything materially ahead of `now`
  *  is a lie or a bug, and either way it must not be trusted.
  *
- *  WHAT THIS DEFENDS (found in the v1.7.7 adversarial pass, prompted by the maintainer:
- *  "this is exactly the type of thing that a black hat would try to do"):
+ *  WHAT THIS DEFENDS (found in the v1.7.7 adversarial pass, prompted by the question
+ *  of what a black hat would try here):
  *  a hostile or compromised operator serves `last_message_at: '2099-01-01'`.
  *  Unsanitised, that value:
  *    1. becomes the user's READ CURSOR the moment they open the thread — so
@@ -340,7 +361,10 @@ const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000;
  *  Clamping to null means "we have no trustworthy message time here", and every
  *  caller already has a correct answer for that case: fall back to `now`. The
  *  worst a hostile timestamp can then do is nothing at all. */
-export function sanitizeBlockTime(at: string | Date | null | undefined, now: number = Date.now()): Date | null {
+export function sanitizeBlockTime(
+	at: string | Date | null | undefined,
+	now: number = Date.now()
+): Date | null {
 	if (at === null || at === undefined) return null;
 	const d = at instanceof Date ? at : new Date(at);
 	const t = d.getTime();

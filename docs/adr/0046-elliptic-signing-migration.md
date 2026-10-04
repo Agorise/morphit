@@ -4,6 +4,11 @@
 **Supersedes:** none
 **Superseded by:** none
 
+> **2026-10 audit note.** Status is out of date: the frontend already signs
+> with `@noble/secp256k1` (`apps/web/src/lib/blurt/sign.ts` →
+> `signDigestWithNoble`), and dblurt 0.17 removed `elliptic` from the tree
+> entirely. The `SIGNER_BACKEND` flag in `net/config.ts` is legacy.
+
 ## Context
 
 Morphit's frontend signs every Blurt operation through one chokepoint —
@@ -64,7 +69,7 @@ wire types, and RPC. The signer's contract:
 3. Emit the 65-byte graphene wire format `[recovery+31] ++ r ++ s`.
 
 This is **Proposed**, not yet shipped. The signing path in
-`apps/web/src/lib/blurt/sign.ts` is unchanged as of cp173.
+`apps/web/src/lib/blurt/sign.ts` is unchanged.
 
 ## Evidence (what has been proven, in-sandbox)
 
@@ -94,7 +99,7 @@ This ADR documents a **feasibility spike**. Shipping the migration requires:
 3. **One real Blurt chain broadcast** of each operation class
    (`custom_json`, `transfer`, the order-with-fee two-op transaction) against
    a live node, to confirm the chain accepts noble-signed transactions
-   end-to-end. **The sandbox cannot do this — it has no chain access.** This
+   end-to-end. **This needs real chain access.** This
    step is the gate before the migration is called "shipped."
 4. Re-run the full persona walkthrough + smoke suite; triple-pulse.
 
@@ -121,6 +126,6 @@ twice).
 
 ## Tracking
 
-A standing item in `docs/REVISIT-LIST.md` tracks the cutover. Watch
+A standing item in the project backlog tracks the cutover. Watch
 `@beblurt/dblurt` upstream as well: if it ships a `@noble`-based signer first,
 that may be a lower-effort path than Morphit maintaining its own signer.

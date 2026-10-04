@@ -2,12 +2,12 @@
 /**
  * doge-trade-only-smoke.
  *
- * Part 122 cp33 sentinel: DOGE must be `canPayListingFee: false`
+ * DOGE must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping DOGE's flag to true would fail the
@@ -55,10 +55,10 @@ if (canonDogecoin) {
 
 // ── Scenario 2 — canonical DOGE.canPayListingFee === false ───────
 if (canonDogecoin && canonDogecoin.canPayListingFee === false) {
-	pass('canonical DOGE.canPayListingFee === false (memory #23)');
+	pass('canonical DOGE.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical DOGE.canPayListingFee === false (memory #23)',
+		'canonical DOGE.canPayListingFee === false (trade-only rule)',
 		`DOGE must be trade-only.  Got canPayListingFee=${canonDogecoin?.canPayListingFee}`
 	);
 }

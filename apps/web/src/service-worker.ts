@@ -59,6 +59,13 @@
  *
  *   The message surface (`CHECK_UPDATE`, `APPLY_UPDATE`, `RELEASE_INFO`)
  *   drives UpdateBanner.svelte's "Load it now / Later" snackbar.
+ *
+ * ─── Reload stash key ─────────────────────────────────────────────────────
+ *
+ *   `RELOAD_STASH_PUT` / `RELOAD_STASH_TAKE` keep the key of a Remember-me
+ *   session's encrypted reload stash in this worker's MEMORY (never in a
+ *   cache or storage), for at most 30 s, handed out once — see
+ *   $lib/auth/reloadStash.
  */
 
 /// <reference lib="webworker" />
@@ -70,6 +77,8 @@ import { isDynamicDataPath, isBrandOverridablePath } from '$lib/net/dynamicPaths
 import { withHiddenFloor } from '$lib/net/transportBudget';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
 import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
+import { ReloadStashKeys, SW_STASH_PUT, SW_STASH_TAKE } from '$lib/auth/reloadStash';
+import { isSilencedAt, readSilenceState } from '$lib/notifications/silenceState';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -112,6 +121,23 @@ function isCacheable(req: Request): boolean {
 	return true;
 }
 
+/** The page-bootstrap scripts the precached pages reference. */
+const BOOT_SCRIPT_RE = /\/_app\/immutable\/boot\/[0-9a-f]{20}\.js/g;
+
+async function precacheBootScripts(cache: Cache): Promise<void> {
+	const boot = new Set<string>();
+	for (const page of prerendered) {
+		try {
+			const res = await cache.match(page);
+			if (res === undefined) continue;
+			for (const m of (await res.text()).matchAll(BOOT_SCRIPT_RE)) boot.add(m[0]);
+		} catch {
+			/* one unreadable page must not stop the rest */
+		}
+	}
+	await Promise.allSettled([...boot].map((u) => cache.add(u)));
+}
+
 self.addEventListener('install', (event: ExtendableEvent) => {
 	event.waitUntil(
 		(async () => {
@@ -122,6 +148,12 @@ self.addEventListener('install', (event: ExtendableEvent) => {
 			// batch, the install fails, and users stay pinned to an older
 			// worker. allSettled lets the rest of the bundle precache.
 			await Promise.allSettled(PRECACHE_ASSETS.map((a) => cache.add(a)));
+			// Each page's bootstrap lives in its own /_app/immutable/boot/ file
+			// (the build moves it out of the HTML so the CSP needs no inline
+			// script). Those files are made after this worker's asset list, so
+			// read them off the pages just cached: every cached page must also
+			// boot offline.
+			await Promise.allSettled([precacheBootScripts(cache)]);
 			// DO NOT skipWaiting() here. While a controller already exists, a
 			// freshly installed worker must SIT IN "waiting" so the in-app
 			// UpdateBanner can surface "Load it now / Later" and the user
@@ -300,12 +332,33 @@ self.addEventListener('fetch', (event: FetchEvent) => {
  *     SW calls skipWaiting() so the waiting worker (with the new cache)
  *     takes over on the next navigation / reload.
  *
- * The Phase-5 update UI will send APPLY_UPDATE only after the user has
- * clicked "Install new version" in a banner.
+ *   page → SW: `{ type: 'RELOAD_STASH_PUT', id, key }` / `{ type:
+ *     'RELOAD_STASH_TAKE', id }` + a MessagePort — the reload-stash key
+ *     (see the header); TAKE replies `{ key }` (or `{ key: null }`) on the
+ *     port.
+ *
+ * APPLY_UPDATE is sent only after the user clicked "Load it now".
  */
+const reloadStashKeys = new ReloadStashKeys();
+
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
 	const data = event.data;
 	if (!data || typeof data.type !== 'string') return;
+
+	if (data.type === SW_STASH_PUT) {
+		reloadStashKeys.put(data.id, data.key, Date.now());
+		return;
+	}
+	if (data.type === SW_STASH_TAKE) {
+		const port = event.ports[0];
+		const key = reloadStashKeys.take(data.id, Date.now());
+		try {
+			port?.postMessage({ key });
+		} finally {
+			key?.fill(0);
+		}
+		return;
+	}
 
 	if (data.type === 'CHECK_UPDATE') {
 		event.source?.postMessage({ type: 'RELEASE_INFO', installed: version });
@@ -317,7 +370,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
 	}
 });
 
-// ─── Web Push (Part 122 cp13) ───────────────────────────────────
+// ─── Web Push ───────────────────────────────────
 //
 // `push` fires when the operator's relay delivers an encrypted
 // payload via the browser's push service.  The web-push library
@@ -342,17 +395,16 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
  *  targets: same locale-prefixed /chat/[peer] path AND same ?order. Used
  *  to suppress a redundant OS notification while the user is actively
  *  viewing that exact conversation (focused tab). */
-/** cp508 (tt.txt #8) — true when a tab is viewing a chat thread with the SAME
- *  PEER a chat push targets. the maintainer: while "actually chatting with that person"
- *  there's no reason to pop a system notification for them — only for "someone
- *  else who is trying to chat with me". So we deliberately match on the PEER
+/** true when a tab is viewing a chat thread with the SAME
+ *  PEER a chat push targets. While the user is actually chatting with that person
+ *  there's no reason to pop a system notification for them, only for someone
+ *  else who is trying to reach them. So we deliberately match on the PEER
  *  and ignore the ?order scope: a per-thread match would still interrupt you
  *  with the same person's message in a different order thread. A different peer
  *  never matches, so their notifications still come through. Locale-robust —
  *  compares the peer extracted from the `/chat/<peer>` segment, not the whole
  *  locale-prefixed pathname, so a push minted under one locale still suppresses
  *  for a tab browsing in another. */
-
 
 /** v1.5.0 — extract the (peer, order) a chat push targets from its
  *  clickPath (/[lang]/chat/[peer]?order=[permlink]), so the badge-poke can
@@ -406,13 +458,10 @@ self.addEventListener('push', (event: PushEvent) => {
 	const payloadTitle = typeof payload.title === 'string' ? payload.title : null;
 	const body = typeof payload.body === 'string' ? payload.body : '';
 	const category =
-		payload.category === 'order' ||
-		payload.category === 'chat' ||
-		payload.category === 'feedback'
+		payload.category === 'order' || payload.category === 'chat' || payload.category === 'feedback'
 			? payload.category
 			: 'order';
-	const clickPath =
-		typeof payload.clickPath === 'string' ? payload.clickPath : '/';
+	const clickPath = typeof payload.clickPath === 'string' ? payload.clickPath : '/';
 	const tag =
 		typeof payload.eventId === 'string'
 			? `morphit-${category}-${payload.eventId}`
@@ -421,10 +470,10 @@ self.addEventListener('push', (event: PushEvent) => {
 	event.waitUntil(
 		(async () => {
 			// v1.5.0 — suppress a redundant OS notification when a tab the user is
-			// looking at is already on a chat thread with this PEER (cp508 tt.txt
-			// #8 — peer, not the exact order thread).
+			// looking at is already on a chat thread with this PEER
+			// (peer, not the exact order thread).
 			//
-			// cp514 (t.txt C) — ALSO suppress the 'order' category. An order-SCOPED
+			// ALSO suppress the 'order' category. An order-SCOPED
 			// chat message (someone messaging you from your order card) is sent with
 			// category='order' — it carries the order signal and deep-links to
 			// /chat/<peer> — NOT 'chat'. So while both parties were actively in the
@@ -443,8 +492,8 @@ self.addEventListener('push', (event: PushEvent) => {
 						type: 'window',
 						includeUncontrolled: true
 					});
-					// cp515 (t.txt) — HAVING THE THREAD OPEN IS THE SIGNAL; visibility is
-					// not. cp514 extended this to the 'order' category and the maintainer STILL got a
+					// HAVING THE THREAD OPEN IS THE SIGNAL; visibility is
+					// not. A later change extended this to the 'order' category and the maintainer STILL got a
 					// pop on every reply, because the surviving
 					// `visibilityState === 'visible'` gate fails in the ordinary case: two
 					// participants in one conversation are, on any single machine, two tabs
@@ -453,7 +502,7 @@ self.addEventListener('push', (event: PushEvent) => {
 					// The same gate misfires whenever someone reads on their phone while a
 					// desktop tab holds the thread.
 					//
-					// the maintainer's rule: "if both users are in the same chatroom with each other,
+					// The maintainer's rule: "if both users are in the same chatroom with each other,
 					// then there is no need to keep giving each user a system notification
 					// … of course if some other user is pinging me … I definitely want to
 					// get notified then, but not notified about the guy I am already
@@ -474,10 +523,16 @@ self.addEventListener('push', (event: PushEvent) => {
 				}
 			}
 			if (!activelyViewing) {
+				// Quiet hours / "Silence everything" (recorded by the page): the
+				// notification still has to be shown — a browser shows a generic
+				// one of its own when a push shows none — but silent.
+				const silence = await readSilenceState();
+				const silent = silence !== null && isSilencedAt(silence, new Date());
 				await self.registration.showNotification(payloadTitle ?? (await cachedBrandName()), {
 					body,
 					tag, // dedup key — same eventId across devices doesn't double-notify
 					data: { clickPath, category },
+					silent,
 					// `requireInteraction: false` so notifications auto-dismiss
 					// after the OS-default window; "loud about orders, silent
 					// about chat noise" is governed at the relay side by the
@@ -486,7 +541,7 @@ self.addEventListener('push', (event: PushEvent) => {
 				});
 			}
 
-			// cp471 — fast badge. The SW is NOT throttled, so on every push we
+			// fast badge. The SW is NOT throttled, so on every push we
 			// poke every open Morphit tab to repaint its in-page unread badges
 			// (favicon + avatar dots) immediately, even a backgrounded tab whose
 			// own EventSource/poll the browser has throttled. This is the
@@ -511,9 +566,7 @@ self.addEventListener('push', (event: PushEvent) => {
 				//
 				// Both categories name a chat thread; only the ?order scope differs.
 				const chatThread =
-					category === 'chat' || category === 'order'
-						? chatThreadFromClickPath(clickPath)
-						: null;
+					category === 'chat' || category === 'order' ? chatThreadFromClickPath(clickPath) : null;
 				for (const client of tabs) {
 					client.postMessage({
 						type: 'CHAT_PUSH',
@@ -525,7 +578,7 @@ self.addEventListener('push', (event: PushEvent) => {
 				// Best-effort; the notification already showed.
 			}
 
-			// cp471 — OS app-badge for an installed PWA (dock / taskbar / home
+			// OS app-badge for an installed PWA (dock / taskbar / home
 			// screen). A focused page sets the precise count itself; setting a
 			// generic badge here keeps it prompt while backgrounded. Guarded —
 			// the Badging API is not in every browser's service worker scope.
@@ -547,11 +600,9 @@ self.addEventListener('push', (event: PushEvent) => {
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
 	event.notification.close();
 
-	const data = event.notification.data as
-		| { clickPath?: unknown }
-		| undefined;
+	const data = event.notification.data as { clickPath?: unknown } | undefined;
 
-	// SECURITY (cp81-D22b): clickPath comes from the push payload,
+	// SECURITY: clickPath comes from the push payload,
 	// which the operator's relay generates.  A malicious or
 	// compromised operator could craft `clickPath: '//evil.com/'`
 	// (protocol-relative URL) — `new URL(path, origin)` would then

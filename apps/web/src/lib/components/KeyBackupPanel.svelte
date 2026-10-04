@@ -27,13 +27,14 @@
 	function downloadTxt(): void {
 		// ISO (YYYY-MM-DD) for the FILENAME only — sortable + filesystem-safe.
 		const date = new Date().toISOString().slice(0, 10);
-		// cp509 (v1.8.4 D) — the human-readable "Saved:" line follows the sitewide
+		// (v1.8.4 D) — the human-readable "Saved:" line follows the sitewide
 		// standard: day-first, full localized month ("20 July, 2026").
 		const savedLabel = formatDayMonth(new Date());
 		const lines: string[] = [];
-		lines.push('Morphit / Blurt account keys');
-		if (accountName) lines.push(`Account: @${accountName}`);
-		lines.push(`Saved: ${savedLabel}`);
+		lines.push($_('backup_keys_panel.txt_title'));
+		if (accountName)
+			lines.push($_('backup_keys_panel.txt_account', { values: { account: accountName } }));
+		lines.push($_('backup_keys_panel.txt_saved', { values: { date: savedLabel } }));
 		lines.push('');
 		lines.push($_('backup_keys_panel.txt_warning'));
 		lines.push('');

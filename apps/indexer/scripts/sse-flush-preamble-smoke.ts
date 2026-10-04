@@ -4,7 +4,7 @@
  *
  * v1.16.12 — a compressing/buffering proxy (BunkerWeb gzip/brotli) holds an SSE
  * stream's first bytes until its buffer fills, ignoring no-transform and
- * X-Accel-Buffering, stalling the stream for minutes (the maintainer/timeapp directory
+ * X-Accel-Buffering, stalling the stream for minutes (timeapp directory
  * "Loading…"). ~2 KB of leading SSE comment fills+flushes that buffer at once.
  * Pin it on every stream so the mitigation can't quietly drop off one of them.
  */
@@ -13,7 +13,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const apiDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'api');
-const streams = ['instancesStream.ts', 'orderbookStream.ts']; // chat streams intentionally EXCLUDED — hands-off fast-chat (the maintainer)
+const streams = ['instancesStream.ts', 'orderbookStream.ts']; // chat streams intentionally EXCLUDED — hands-off fast-chat
 
 let pass = 0;
 let fail = 0;

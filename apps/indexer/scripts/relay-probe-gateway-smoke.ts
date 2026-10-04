@@ -63,13 +63,13 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 	check('gateway == interface addr is de-duplicated', cands.filter((u) => u.includes('172.18.0.1')).length === 1);
 }
 {
-	// cp771 — local probes use the relay's canonical /v1/health at the configured
+	// local probes use the relay's canonical /v1/health at the configured
 	// port, NOT the configured path (a proxy path like /relay/... isn't what the
 	// relay serves locally).
 	const cands = buildRelayCandidates('http://127.0.0.1:9999/relay/v1/health', [], '10.0.0.1');
 	check('reuses the configured port but canonicalises the path on the gateway candidate', cands.includes('http://10.0.0.1:9999/v1/health'));
 }
-// ── cp771: relay up/down is measured with ZERO config — every local address
+// ── relay up/down is measured with ZERO config — every local address
 //     (loopback, host IPs incl. the docker bridge, gateway) is auto-probed at
 //     the relay's canonical /v1/health, even when RELAY_HEALTH_URL is empty ──
 {
@@ -93,7 +93,7 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 	check('explicit relay port is reused on host-IP probes', cands.includes('http://10.0.0.5:9000/v1/health'));
 }
 {
-	// cp773 — the LOCAL relay probe must use node:http(s), NOT fetch: the indexer's
+	// the LOCAL relay probe must use node:http(s), NOT fetch: the indexer's
 	// global undici dispatcher (Tor/I2P chain routing) also governs built-in fetch,
 	// so a fetch probe gets routed away from the local relay and reads it down.
 	// node:http bypasses undici entirely. Proven with a broken-global-dispatcher test.
@@ -104,7 +104,7 @@ check('garbage → null (no throw)', parseDefaultGatewayV4('not a route table') 
 		!/\bfetch\(/.test(oh.slice(oh.indexOf('function probeRelay'), oh.indexOf('function probeRelay') + 900)));
 }
 {
-	// cp774 — THE fix. relayProbeCandidates calls os.networkInterfaces(), which
+	// THE fix. relayProbeCandidates calls os.networkInterfaces(), which
 	// THROWS EAFNOSUPPORT under a systemd sandbox missing AF_NETLINK. Unguarded,
 	// probeRelayAny rejects and /v1/health is frozen at up:false with no fetch ever
 	// tried (proven live on morphit.io). It must catch that throw.

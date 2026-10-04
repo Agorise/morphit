@@ -2,11 +2,11 @@
 /**
  * apps/web/scripts/privacy-headline-length-smoke.ts
  *
- * Structural Defense (cp119 A8) — `privacy.guide_heading` × asset ×
+ * Structural Defense — `privacy.guide_heading` × asset ×
  * locale must render to ≤110 chars (Google's recommended `headline`
  * length limit for Article schema).
  *
- * cp118 flipped `/privacy/[asset]` to indexable: true.  Each rendered
+ * A later change flipped `/privacy/[asset]` to indexable: true.  Each rendered
  * page emits an Article JSON-LD node with `headline` set to
  * t('privacy.guide_heading', { asset: TICKER }).  Per Google's spec,
  * Article `headline` should be ≤110 chars; values exceeding that

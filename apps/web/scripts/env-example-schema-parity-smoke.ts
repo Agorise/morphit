@@ -2,10 +2,10 @@
 /**
  * env-example-schema-parity-smoke.
  *
- * Part 122 cp57 STRUCTURAL DEFENSE (LL #61 / O-11).
+ * STRUCTURAL DEFENSE.
  *
  * BIDIRECTIONAL canonical-example ↔ Zod-schema parity for the
- * indexer and relay services.  Catches the cp57-D1/D2 drift class
+ * indexer and relay services.  Catches the drift class
  * where the Zod schema (source of truth) ships an env var that
  * never makes it into the operator-facing canonical example.
  *
@@ -23,46 +23,46 @@
  *   main server, and are legitimately not part of the server Zod
  *   schema. (The original motivating case was the relay's
  *   MORPHIT_RELAY_WEEKLY_ACT_COUNT, read by apps/relay/scripts/mint-acts.ts;
- *   that ACT-minting model was removed at beta.28 / cp329 — account
+ *   that ACT-minting model was removed at beta.28 / — account
  *   creation is now a direct account_create op paying the fee inline —
  *   so neither the var nor the script exists any more. The exception
  *   mechanism is kept for any future script-consumed env var.)
  *
- * Drift surfaced at cp57:
+ * Drift surfaced:
  *   - Indexer: 13 vars in schema but not in ops/env/indexer.env.example
- *     (cp57-D1 MEDIUM) — mostly MORPHIT_INSTANCE_* metadata vars +
+ *     (MEDIUM) — mostly MORPHIT_INSTANCE_* metadata vars +
  *     MORPHIT_INDEXER_COINGECKO_API_KEY + MORPHIT_INDEXER_OPERATOR_MATRIX_ROOM.
  *   - Relay: 17 vars in schema but not in ops/env/relay.env.example
- *     (cp57-D2 HIGH) — includes SECURITY-CRITICAL VAPID Web Push
+ *     (HIGH) — includes SECURITY-CRITICAL VAPID Web Push
  *     keys, TRUSTED_PROXY_IPS, and SEQUENTIAL_* squatter-defense
  *     knobs that operators couldn't tune through canonical docs.
  *   - Relay: 1 var (MORPHIT_RELAY_WEEKLY_ACT_COUNT) in example but
- *     not in schema → false-positive Direction-B candidate at cp57;
+ *     not in schema → false-positive Direction-B candidate;
  *     was consumed by apps/relay/scripts/mint-acts.ts (since removed
- *     at beta.28 / cp329 along with the var itself).
+ *     at beta.28 / along with the var itself).
  *
  * Recurring class scope progression (11 defenses across 10 checkpoints):
- *   cp48-O1: standalone smoke scripts
- *   cp49-O2: vitest unit tests
- *   cp50-O3: HTTP route handler regex
- *   cp51-O4: ops-cli per-ticker tables
- *   cp51-O5: per-asset i18n FAQ key coverage
- *   cp52-O6: Ansible env-template required-vars (different surface!)
- *   cp53-O7: operator doc per-asset coverage ("totally absent")
- *   cp54-O8: what_is_<asset> FAQ native-locale floor
- *   cp55-O9: multi-family per-asset native-locale floor (registry)
- *   cp56-O10: operator doc per-asset CONFIG EXAMPLE coverage (shallow)
- *   cp57-O11: env-example ↔ schema parity (bidirectional) (THIS)
+ *   standalone smoke scripts
+ *   vitest unit tests
+ *   HTTP route handler regex
+ *   ops-cli per-ticker tables
+ *   per-asset i18n FAQ key coverage
+ *   Ansible env-template required-vars (different surface!)
+ *   operator doc per-asset coverage ("totally absent")
+ *   what_is_<asset> FAQ native-locale floor
+ *   multi-family per-asset native-locale floor (registry)
+ *   operator doc per-asset CONFIG EXAMPLE coverage (shallow)
+ *   env-example ↔ schema parity (bidirectional) (THIS)
  *
- * Relation to cp52-O6:
- *   cp52-O6 checks REQUIRED-only parity between the Zod schema and
+ * Relation:
+ *   checks REQUIRED-only parity between the Zod schema and
  *   the Ansible Jinja2 TEMPLATE (apps/<svc>/...).env.j2.  It catches
- *   "REQUIRED schema var not in Ansible template".  Cp57-O11 checks
+ *   "REQUIRED schema var not in Ansible template".  checks
  *   FULL-SURFACE parity between the Zod schema and the canonical
  *   EXAMPLE (ops/env/<svc>.env.example).  Different surfaces, different
  *   scopes; both needed.
  *
- * Mutation test verification: M-125 — deleting the
+ * Mutation test verification: — deleting the
  * MORPHIT_INSTANCE_NAME documentation block from indexer.env.example
  * fires:
  *   "env-example-schema-parity FAILED:
@@ -130,8 +130,8 @@ const SERVICES: Service[] = [
 		scriptsDir: 'apps/relay/scripts'
 	},
 	{
-		// Added cp58 — matrix-bot got a canonical example for the
-		// first time at cp58.  Schema lives in `config.ts` directly
+		// Added — matrix-bot got a canonical example for the
+		// first time.  Schema lives in `config.ts` directly
 		// (not under `src/config/`).
 		name: 'matrix-bot',
 		schemaPath: 'apps/matrix-bot/src/config.ts',

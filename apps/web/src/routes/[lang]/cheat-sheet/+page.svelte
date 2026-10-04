@@ -14,7 +14,7 @@
 	 * Designed for paper.  The on-screen view shows the same
 	 * content with regular SvelteKit-app styling; clicking
 	 * "Print cheat-sheet" activates the same visibility-isolation
-	 * pattern as SeedBackupPrint (Part 92) so the printout is
+	 * pattern as SeedBackupPrint so the printout is
 	 * just the cheat-sheet, no chrome.
 	 *
 	 * Static content — doesn't load any user data, can be
@@ -214,7 +214,7 @@
 	}
 
 	/* Print mode: visibility-based isolation, identical pattern
-	   to SeedBackupPrint (Part 92). */
+	   to SeedBackupPrint. */
 	@media print {
 		:global(html.morphit-printing-cheatsheet *) {
 			visibility: hidden;

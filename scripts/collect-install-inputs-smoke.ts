@@ -1,5 +1,5 @@
 /**
- * collect-install-inputs-smoke.ts (cp600) — pins the home/VPS branch: the
+ * collect-install-inputs-smoke.ts — pins the home/VPS branch: the
  * per-field validators, and the collectInstallInputs flow driven with SCRIPTED
  * answers (home path asks DDNS + generates two different DB passwords; vps path
  * skips DDNS; a bad answer re-prompts).  Every prompt must show an example and

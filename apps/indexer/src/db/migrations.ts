@@ -6,10 +6,13 @@
  * order, tracked in `schema_migrations`. No ORM, no framework. Works
  * the way `psql -f schema.sql` would, but idempotent and traceable.
  *
- * Run modes:
- *   - default: apply any migrations not yet recorded
- *   - --rebuild-materialized: drop and re-derive materialised tables
- *     from the event log, for class-2 migrations per ADR-0008.
+ * Applies any migrations not yet recorded. Two runners at once (a boot
+ * racing `npm run migrate`, two containers) are serialised by a
+ * transaction-scoped advisory lock, and each re-reads what is applied
+ * under it, so neither fails nor applies a migration twice.
+ *
+ * There is no rebuild mode: `--rebuild-materialized` existed only as a
+ * placeholder that did nothing and logged success; it now refuses.
  *
  * Called both from main.ts on boot (ensures DB is current before the
  * poller starts) and from the CLI via `npm run migrate`.
@@ -43,6 +46,13 @@ interface Migration {
 	readonly sqlPath?: string;
 	readonly sql?: string;
 	readonly subsumesVersions?: readonly number[];
+	/**
+	 * Data changes run after `sql`, in the same transaction, each logged with
+	 * the number of rows it touched — for a one-shot repair an operator should
+	 * be able to see the size of in the log. Not mirrored in schema.sql: a
+	 * fresh database has no rows to repair.
+	 */
+	readonly dataSteps?: readonly { readonly label: string; readonly sql: string }[];
 }
 
 const MIGRATIONS: readonly Migration[] = [
@@ -52,18 +62,18 @@ const MIGRATIONS: readonly Migration[] = [
 		sqlPath: resolve(HERE, 'schema.sql'),
 		// On a fresh DB, mark all the historical versions as applied
 		// so any downstream check "is v15 applied?" sees true.  The
-		// collapsed schema produces byte-for-byte the same end state
-		// as applying v1-v36 incrementally; this list preserves the
-		// version-tracking semantics.  The original per-version files
-		// are archived under apps/indexer/src/db/historical/ for
-		// archaeology.
+		// collapsed schema stands in for v1-v36 (and carries a section
+		// for each later version too — see the header of schema.sql);
+		// this list preserves the version-tracking semantics.  The
+		// original per-version files are archived under
+		// apps/indexer/src/db/historical/ for archaeology.
 		//
-		// cp131 DEEP-002 — list extended 2..27 → 2..35 to match the
+		// list extended 2..27 → 2..35 to match the
 		// actual section markers in schema.sql (v28, v33.1/v33.2,
-		// v34, v35 sections were added in-place during cp82+ work
+		// v34, v35 sections were added in-place during later work
 		// rather than as separate migration entries, contrary to the
-		// original cp82 "future migrations land here at v28" framing).
-		// cp404 — extended 2..35 → 2..36 for the v36 accounts.posting_pubkey
+		// original "future migrations land here at v28" framing).
+		// extended 2..35 → 2..36 for the v36 accounts.posting_pubkey
 		// section, likewise added in-place. A fresh DB gets the column from
 		// this baseline schema.sql; an existing beta DB (already recorded at
 		// v1, so the baseline won't re-run) gets it from the idempotent
@@ -77,7 +87,7 @@ const MIGRATIONS: readonly Migration[] = [
 			32, 33, 34, 35, 36
 		]
 	},
-	// cp425 — the first separate additive migration after the v1 collapse
+	// the first separate additive migration after the v1 collapse
 	// baseline (which subsumes 2..36), so this is version 37. Adds the barter
 	// accepted-crypto set to `orders`. Idempotent (IF NOT EXISTS): on a fresh
 	// DB the v1 schema.sql already created the column + index, so this is a
@@ -109,7 +119,7 @@ COMMENT ON COLUMN orders.accepted_assets IS
 			'cp440: index accounts.posting_pubkey for the key-references reverse lookup (login auto-resolve)',
 		// The posting_pubkey column (v36) had no index because it was only ever
 		// SERVED (SELECT by account name, which is the PK / already indexed).
-		// cp440 added a reverse lookup — SELECT name WHERE posting_pubkey = ANY(...)
+		// A later change added a reverse lookup — SELECT name WHERE posting_pubkey = ANY(...)
 		// in the /v1/chain/key-references union — which runs on every posting-key
 		// login attempt; without this index it seq-scans the accounts table.
 		// Partial (WHERE NOT NULL) since NULL rows (not yet backfilled) are never
@@ -133,8 +143,8 @@ CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
 		version: 39,
 		description:
 			'cp446: chat read-state is per THREAD (reader, peer, order), not per peer — like an email inbox',
-		// the maintainer: "if I read one thread from a user, it should not mark other threads
-		// with that user as read." A discussion is (peer, order); reading one must
+		// Requirement: reading one thread with a user must not mark that user's other threads
+		// as read. A discussion is (peer, order); reading one must
 		// not silence the others.
 		//
 		// WHY A SENTINEL AND NOT NULL: this column is in the primary key, and
@@ -142,7 +152,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_posting_pubkey
 		// the same (reader, peer) would both be insertable, and the ON CONFLICT
 		// upsert would never fire. So the key is always a non-null TEXT:
 		//
-		//    '*'  — a PEER-WIDE ack. What every pre-cp446 client sent (the op had
+		//    '*'  — a PEER-WIDE ack. What every older client sent (the op had
 		//           no order field) and what an old client still sends today. It
 		//           means "everything with this peer, up to last_read_at".
 		//    ''   — the order-LESS thread: real messages that cite no order.
@@ -233,7 +243,7 @@ COMMENT ON COLUMN push_pending.notification_id IS
 		version: 42,
 		description:
 			'cp462: chat_folders — per-account ENCRYPTED chat folder organization (Inbox/Starred; rest Archived), synced across devices. morphit_chat_folders_v1.',
-		// t.txt (v1.4.9 #5). One row per account holding the ENCRYPTED folder
+		// One row per account holding the ENCRYPTED folder
 		// state — the client encrypts the thread lists with a posting-key-derived
 		// key, so the indexer stores + serves OPAQUE ciphertext and never learns a
 		// user's chat organization. Written ONLY by the morphit_chat_folders_v1
@@ -256,7 +266,7 @@ COMMENT ON TABLE chat_folders IS
 		version: 43,
 		description:
 			'cp471: push_pending.source_trx_id — per-message dedup key so the fast head-block enqueue and the durable enqueue of the SAME chat message produce exactly ONE notification (fast when the tailer wins).',
-		// Fast notifications (cp471). The head-block tailer now enqueues the chat
+		// Fast notifications. The head-block tailer now enqueues the chat
 		// Web Push ~5s after send, alongside the durable handler (~irreversible).
 		// Both set source_trx_id = the on-chain trx id; the partial UNIQUE index
 		// makes the second INSERT a no-op, so the recipient gets ONE push, fast.
@@ -423,7 +433,7 @@ CREATE TABLE IF NOT EXISTS moderation_flag_clearances (
 	{
 		version: 51,
 		description:
-			"v1.8.12: widen moderation_flag_clearances.signal to all FOUR suppression signals. The clearance table shipped in v1.8.9 permitted only 'reciprocity' and 'related' — but the reputation summary in apps/indexer/src/api/feedback.ts suppresses on FOUR tables: it also excludes feedback matched by one_way_pile_on (Signal C) and review_concentration (Signal D). Those two were therefore unclearable at the DATABASE level, not merely missing from the CLI: an operator could delete the row by hand, and the detector re-created it on its next pass, so a false positive suppressed a reputation permanently with no recourse. the maintainer hit exactly that — two review_concentration rows on his own test accounts, invisible to `morphit-ops moderation` (which only ever queried two of the four tables), deleted by hand, reputations restored, and suppressed again on the next detector run. Widening the CHECK is the schema half; detectReviewConcentrationInTx now consults the table like Signals A and B already did, and clearFlag/unclearFlag accept all four. No data migration: existing rows keep their values and every previously-valid signal stays valid, so this only ADDS permitted values.",
+			"v1.8.12: widen moderation_flag_clearances.signal to all FOUR suppression signals. The clearance table shipped in v1.8.9 permitted only 'reciprocity' and 'related' — but the reputation summary in apps/indexer/src/api/feedback.ts suppresses on FOUR tables: it also excludes feedback matched by one_way_pile_on (Signal C) and review_concentration (Signal D). Those two were therefore unclearable at the DATABASE level, not merely missing from the CLI: an operator could delete the row by hand, and the detector re-created it on its next pass, so a false positive suppressed a reputation permanently with no recourse. The maintainer hit exactly that — two review_concentration rows on his own test accounts, invisible to `morphit-ops moderation` (which only ever queried two of the four tables), deleted by hand, reputations restored, and suppressed again on the next detector run. Widening the CHECK is the schema half; detectReviewConcentrationInTx now consults the table like Signals A and B already did, and clearFlag/unclearFlag accept all four. No data migration: existing rows keep their values and every previously-valid signal stays valid, so this only ADDS permitted values.",
 		sql: `
 ALTER TABLE moderation_flag_clearances
     DROP CONSTRAINT IF EXISTS moderation_flag_clearances_signal_check;
@@ -436,7 +446,7 @@ ALTER TABLE moderation_flag_clearances
 	{
 		version: 52,
 		description:
-			"v1.9.0 (the maintainer): add orders.specific_barter_title. For a BARTER (goods/services) listing, the seller's own short label for WHAT they're offering (e.g. 'bananas'), typed inline where the order summary would otherwise read the generic 'goods/services'. It flows into the order title ('…of bananas') and the on-chain Blurt announcement. Letters-only, ≤24 chars, validated on ingest (order.ts / orderReplace.ts); NULL for every crypto order and for a blank barter title. Additive + backward-compatible: older payloads omit it, older indexers ignore it. No index — it's a display label, never a filter key.",
+			"v1.9.0: add orders.specific_barter_title. For a BARTER (goods/services) listing, the seller's own short label for WHAT they're offering (e.g. 'bananas'), typed inline where the order summary would otherwise read the generic 'goods/services'. It flows into the order title ('…of bananas') and the on-chain Blurt announcement. Letters-only, ≤24 chars, validated on ingest (order.ts / orderReplace.ts); NULL for every crypto order and for a blank barter title. Additive + backward-compatible: older payloads omit it, older indexers ignore it. No index — it's a display label, never a filter key.",
 		sql: `
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS specific_barter_title TEXT;
@@ -451,7 +461,7 @@ COMMENT ON COLUMN orders.specific_barter_title IS
 	{
 		version: 53,
 		description:
-			"v1.9.x (the maintainer): add releases.distribution (JSONB, nullable). The optional decentralized-distribution anchor from morphit_release_v1 (source_sha256, gpg_fingerprint, ipfs_cid, ipns_name, mirrors) was validated on ingest since cp556 but NOT stored (\"downloaders read it from the chain\"). It is now persisted so (a) /v1/release can surface ipfs_cid/ipns_name, and (b) every instance's built-in IPFS release-pinning service can read the current release's ipfs_cid from its OWN indexer and `ipfs pin add` it — decentralizing release availability off any single pinning provider. Additive + backward-compatible: pre-existing rows get NULL (back-filled naturally as new releases are indexed / after a reindex); older indexers ignore the column. No index — read one-row-latest alongside the existing valid/created_at path.",
+			"v1.9.x: add releases.distribution (JSONB, nullable). The optional decentralized-distribution anchor from morphit_release_v1 (source_sha256, gpg_fingerprint, ipfs_cid, ipns_name, mirrors) was validated on ingest since cp556 but NOT stored (\"downloaders read it from the chain\"). It is now persisted so (a) /v1/release can surface ipfs_cid/ipns_name, and (b) every instance's built-in IPFS release-pinning service can read the current release's ipfs_cid from its OWN indexer and `ipfs pin add` it — decentralizing release availability off any single pinning provider. Additive + backward-compatible: pre-existing rows get NULL (back-filled naturally as new releases are indexed / after a reindex); older indexers ignore the column. No index — read one-row-latest alongside the existing valid/created_at path.",
 		sql: `
 ALTER TABLE releases
     ADD COLUMN IF NOT EXISTS distribution JSONB;
@@ -874,6 +884,121 @@ UPDATE orders
 `
 	}
 
+	,{
+		version: 66,
+		description:
+			'Indexes for chat sender/recipient lookups, Signal A (creator, first_activity_at) and avatar uniqueness; at most one queued dust_refill per recipient (duplicates removed); push_subscriptions keep no User-Agent and only a supported locale code; order_views keeps no view time; operator_attribution_events no longer unique on trx_id; every confirmed posting key re-confirmed by the two-operator quorum; account_loyalty.canonical_blurt_paid for the attestor loyalty gate. Idempotent.',
+		dataSteps: [
+			{
+				// until this release a posting key could be CONFIRMED by a
+				// quorum that had shrunk to one RPC operator, and those rows cannot
+				// be told apart from ones two operators confirmed. All go back to
+				// unconfirmed; the reconcile loop re-confirms them with the fixed
+				// two-operator quorum, and until then the fast path asks the chain.
+				label: 'posting keys set to unconfirmed for re-confirmation',
+				sql: `UPDATE accounts SET posting_key_reconciled = FALSE WHERE posting_key_reconciled`
+			}
+		],
+		sql: `
+-- Chat lookups by sender and by recipient. The stranger gate, the fan-in and
+-- per-pair limits and the verified-chat gate run inside the block transaction
+-- for every incoming chat message, and the inbox query filters on
+-- \`sender = $1 OR recipient = $1\`; chat_pair_idx (LEAST/GREATEST) serves none
+-- of those predicates, so each was a full scan of chat_messages.
+CREATE INDEX IF NOT EXISTS chat_messages_sender_idx
+    ON chat_messages (sender, recipient, created_at);
+CREATE INDEX IF NOT EXISTS chat_messages_recipient_idx
+    ON chat_messages (recipient, created_at);
+
+-- Signal A groups accounts by creator and compares first-activity times.
+CREATE INDEX IF NOT EXISTS accounts_creator_first_activity_idx
+    ON accounts (creator, first_activity_at)
+    WHERE first_activity_at IS NOT NULL;
+
+-- At most one queued (not yet broadcast) low-balance refill per recipient.
+-- The scanner's INSERT ... WHERE NOT EXISTS is not atomic under READ
+-- COMMITTED, so two scanners could both queue one. Existing duplicates are
+-- removed first (the oldest queued row is kept) so the index can be built.
+DELETE FROM relay_pending_transfers d
+ USING relay_pending_transfers k
+ WHERE d.reason = 'dust_refill' AND d.broadcast_at IS NULL
+   AND k.reason = 'dust_refill' AND k.broadcast_at IS NULL
+   AND k.recipient = d.recipient
+   AND k.id < d.id;
+CREATE UNIQUE INDEX IF NOT EXISTS relay_pending_transfers_dust_refill_queued_uidx
+    ON relay_pending_transfers (recipient)
+    WHERE reason = 'dust_refill' AND broadcast_at IS NULL;
+
+-- Avatar uniqueness: the profile handler looks for another account holding
+-- the same image on every profile op. Hash indexes, because an avatar value
+-- can be several KB, more than a B-tree entry may hold.
+CREATE INDEX IF NOT EXISTS profiles_avatar_svg_hash_idx
+    ON profiles USING hash ((json_metadata->>'avatar_svg'))
+    WHERE json_metadata->>'avatar_svg' IS NOT NULL;
+CREATE INDEX IF NOT EXISTS profiles_avatar_data_uri_hash_idx
+    ON profiles USING hash ((json_metadata->>'avatar_data_uri'))
+    WHERE json_metadata->>'avatar_data_uri' IS NOT NULL;
+
+-- Push subscriptions no longer keep the browser's User-Agent (nothing reads
+-- it), and keep the language only as one of the 10 supported locale codes,
+-- mapped the way the push localizer maps it (pushLocalize.normalizeLocale).
+UPDATE push_subscriptions SET user_agent = NULL WHERE user_agent IS NOT NULL;
+UPDATE push_subscriptions
+   SET locale = CASE
+           WHEN split_part(locale, '-', 1) IN ('en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa')
+               THEN split_part(locale, '-', 1)
+           WHEN split_part(locale, '-', 1) = 'zh'
+               THEN CASE WHEN locale ~ '(Hant|TW|HK)' THEN 'zh-HK' ELSE 'zh-CN' END
+           ELSE 'en'
+       END
+ WHERE locale NOT IN ('en', 'es', 'fr', 'de', 'it', 'pl', 'ru', 'fa', 'zh-CN', 'zh-HK');
+COMMENT ON COLUMN push_subscriptions.user_agent IS
+    'Not stored: always NULL. Kept only so an older relay that still writes '
+    'the column does not fail.';
+COMMENT ON COLUMN push_subscriptions.locale IS
+    'One of the 10 supported locale codes, used to localize push text.';
+
+-- Order view counter: no time of any view is kept or served, only the count.
+ALTER TABLE order_views ALTER COLUMN updated_at DROP NOT NULL;
+ALTER TABLE order_views ALTER COLUMN updated_at DROP DEFAULT;
+UPDATE order_views SET updated_at = NULL WHERE updated_at IS NOT NULL;
+COMMENT ON COLUMN order_views.updated_at IS
+    'Not stored: always NULL. A last-view time would let anyone correlate '
+    'views with outside events.';
+
+-- One transaction may carry two fee-paid orders, each with its own operator
+-- attribution; a UNIQUE trx_id made the second one's earnings row collide and
+-- go missing. (order_account, order_permlink) stays unique, which is what
+-- keeps a replayed block from crediting an order twice.
+ALTER TABLE operator_attribution_events
+    DROP CONSTRAINT IF EXISTS operator_attribution_events_trx_id_key;
+
+-- The directory's zero-clearnet badge is the peer's own claim. An instance
+-- registered at a clearnet origin serves clearnet, so its claim is never kept
+-- (federationProbe.clearnetEliminatedClaimAccepted); clear any stored before.
+UPDATE known_instances SET cached_clearnet_eliminated = FALSE
+ WHERE cached_clearnet_eliminated
+   AND lower(coalesce(substring(origin from '^[A-Za-z][A-Za-z0-9+.-]*://([^/:?#]+)'), ''))
+       !~ '(^[a-z2-7]{56}\\.onion|\\.i2p|\\.loki)$';
+COMMENT ON COLUMN known_instances.cached_clearnet_eliminated IS
+    'The peer''s own clearnet_eliminated claim from its /v1/instance, kept TRUE '
+    'only for an instance whose registered origin is an onion, I2P or Lokinet '
+    'address: one registered at a clearnet origin serves clearnet.';
+
+-- The attestor loyalty gate's measure: BLURT this account paid to the
+-- canonical treasury in listing fees from CONSENSUS_V2_ACTIVATION_TIME on. No
+-- backfill: the legs of older fees are not stored anywhere chain-derived, so an
+-- upgraded node and a fresh replay hold the same value.
+ALTER TABLE account_loyalty
+    ADD COLUMN IF NOT EXISTS canonical_blurt_paid NUMERIC NOT NULL DEFAULT 0
+    CHECK (canonical_blurt_paid >= 0);
+COMMENT ON COLUMN account_loyalty.canonical_blurt_paid IS
+    'BLURT this account paid to the canonical treasury in listing fees from '
+    'CONSENSUS_V2_ACTIVATION_TIME on; the attestor loyalty gate reads this, not '
+    'cumulative_blurt_paid (an owner leg can go to an account the payer controls).';
+`
+	}
+
 	// Future migrations land here.  The v1 collapsed schema is the
 	// pre-launch baseline; from v37 forward, every new schema change is its
 	// own additive migration with its own version number.  No further
@@ -976,18 +1101,25 @@ async function loadSql(migration: Migration): Promise<string> {
 	throw new Error(`migration ${migration.version} has neither sql nor sqlPath`);
 }
 
+/** Advisory-lock key serialising migration runners ("morphit-migrate"). */
+const MIGRATION_LOCK_KEY = 0x6d6f7270_6d696772n;
+
 /** Check which migration versions are already applied. */
 async function appliedVersions(db: Database): Promise<Set<number>> {
-	// Create the tracking table if it's the first run. We do this
-	// outside the migration transaction loop because the schema_migrations
+	// Create the tracking table if it's the first run, under the runners'
+	// lock (two concurrent CREATE TABLE IF NOT EXISTS can still collide).
+	// We do this outside the migration transaction loop because the schema_migrations
 	// table must exist before we can query it.
-	await db.query(`
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INT PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			description TEXT NOT NULL
-		)
-	`);
+	await db.withTx(async (client) => {
+		await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK_KEY.toString()]);
+		await client.query(`
+			CREATE TABLE IF NOT EXISTS schema_migrations (
+				version INT PRIMARY KEY,
+				applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				description TEXT NOT NULL
+			)
+		`);
+	});
 	const res = await db.query<{ version: number }>('SELECT version FROM schema_migrations');
 	return new Set(res.rows.map((r) => r.version));
 }
@@ -1019,8 +1151,20 @@ export async function runMigrations(db: Database): Promise<{
 			continue;
 		}
 		const sql = await loadSql(m);
-		await db.withTx(async (client: pg.PoolClient) => {
+		const stepRows: { label: string; rows: number }[] = [];
+		const ran = await db.withTx(async (client: pg.PoolClient) => {
+			// One runner at a time; under the lock, re-check — another runner
+			// may have applied this version while we waited.
+			await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK_KEY.toString()]);
+			const done = await client.query('SELECT 1 FROM schema_migrations WHERE version = $1', [
+				m.version
+			]);
+			if ((done.rowCount ?? 0) > 0) return false;
 			await client.query(sql);
+			for (const step of m.dataSteps ?? []) {
+				const r = await client.query(step.sql);
+				stepRows.push({ label: step.label, rows: r.rowCount ?? 0 });
+			}
 			await client.query(
 				'INSERT INTO schema_migrations (version, description) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING',
 				[m.version, m.description]
@@ -1037,40 +1181,36 @@ export async function runMigrations(db: Database): Promise<{
 					[v, `subsumed by v${m.version} (${m.description})`]
 				);
 			}
+			return true;
 		});
+		if (!ran) {
+			skipped.push(m.version);
+			continue;
+		}
+		for (const st of stepRows) {
+			log.info('migration_data_step', { version: m.version, step: st.label, rows: st.rows });
+		}
 		applied.push(m.version);
 	}
 
 	return { applied, skipped };
 }
 
-/** Drop all materialised tables and re-derive their state by
- *  replaying the `ops` event log. Only the event log is sacred; any
- *  column we can compute from it can be dropped and rebuilt.
- *
- *  Called explicitly via `npm run migrate:rebuild`. Does NOT run on
- *  normal boot — this can take minutes on a fully-synced indexer. */
-export async function rebuildMaterialized(db: Database): Promise<void> {
-	// Empty in v1 — there are no class-2 migrations yet. This
-	// placeholder lets future versions add rebuild logic without
-	// renaming the CLI surface.
-	await db.query('SELECT 1');
-}
-
 /** CLI entry point. Usage:
  *    tsx src/db/migrations.ts              → apply pending migrations
- *    tsx src/db/migrations.ts --rebuild-materialized
  */
 async function main(): Promise<void> {
+	if (process.argv.includes('--rebuild-materialized')) {
+		// Never implemented: it used to do nothing and report success.
+		log.error('rebuild_materialized_not_available', {
+			hint: 'nothing is rebuilt; to re-derive the database, reset it and let the indexer re-sync from the chain'
+		});
+		process.exitCode = 2;
+		return;
+	}
 	const config = loadConfig();
 	const db = createDatabase(config);
 	try {
-		if (process.argv.includes('--rebuild-materialized')) {
-			log.info('rebuild_started');
-			await rebuildMaterialized(db);
-			log.info('rebuild_complete');
-			return;
-		}
 		const { applied, skipped } = await runMigrations(db);
 		if (applied.length > 0) {
 			log.info('applied', { versions: applied });

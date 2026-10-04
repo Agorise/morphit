@@ -87,7 +87,7 @@ export async function broadcastStrangerFee(
 	signCallback: (tx: Transaction) => SignedTransaction | Promise<SignedTransaction>,
 	recipient: string,
 	amountBlurt: number,
-	/** cp407 — operator's BLURT fee-collection account (from
+	/** operator's BLURT fee-collection account (from
 	 *  `$instance.fee_recipient`); distinct from `recipient` (the chat peer
 	 *  being paid to message). Defaults to the canonical treasury. */
 	feeRecipient: string = FEE_RECIPIENT
@@ -117,7 +117,7 @@ export async function broadcastStrangerFee(
 	};
 
 	// Phase F.5 audit fix (F-18) — three-phase split:
-	// cp408 — fee split at payment time (90% owner / 10% canonical, or a single
+	// fee split at payment time (90% owner / 10% canonical, or a single
 	// 100% transfer when the recipient is canonical).
 	const feeTransfers = feeTransfersFor(amountBlurt, feeRecipient, FEE_RECIPIENT, account);
 	const unsigned = await prepareUnsignedOrderWithFee(

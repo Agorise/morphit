@@ -10,7 +10,7 @@ Most of this release makes it far easier to run your own Morphit node.
 
 ### A guided, near-one-command setup
 
-Setting up a node from a fresh machine is now a mostly copy-and-paste procedure. After you download and extract the release, a single command walks you through the whole install — it checks and installs what's needed, asks a short series of plain-language questions (each with an example), generates your secrets and helps you save them somewhere safe, then runs the full hardened install for you. A home mini-PC (like a a mini PC) gets the same complete, hardened stack as a cloud server; the only difference is the extra networking a home connection needs.
+Setting up a node from a fresh machine is now a mostly copy-and-paste procedure. After you download and extract the release, a single command walks you through the whole install — it checks and installs what's needed, asks a short series of plain-language questions (each with an example), generates your secrets and helps you save them somewhere safe, then runs the full hardened install for you. A home mini-PC gets the same complete, hardened stack as a cloud server; the only difference is the extra networking a home connection needs.
 
 ### Optional Matrix setup help
 

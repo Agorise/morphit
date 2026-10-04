@@ -5,7 +5,7 @@
  * reusable from any caller that needs the same chain-anchored
  * resolution (chat send, OOB fingerprint verification).
  *
- * REVISIT-LIST item 11 follow-up: the verify-peer panel
+ * Backlog item 11 follow-up: the verify-peer panel
  * MUST use this same path, not a raw `getChatIdentity`
  * call.  Otherwise the fingerprint could be computed over an
  * indexer-supplied pub that differs from the chain-verified

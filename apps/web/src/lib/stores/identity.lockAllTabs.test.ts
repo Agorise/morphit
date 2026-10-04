@@ -10,58 +10,46 @@
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
-import {
-	identity,
-	handleSessionHandoffMessage,
-	lockAllTabs,
-	reset,
-	restoreSessionFromReloadStash
-} from './identity';
+import { identity, handleSessionHandoffMessage, lockAllTabs, reset } from './identity';
 import { ensureSodium } from '$crypto/sodium';
 
-const STASH_KEY = 'morphit.session.reload-stash-v1';
 const ENVELOPE = {
 	v: 1,
 	kdf: 'argon2id',
-	kdfParams: { opslimit: 64, memlimit: 1 << 30 },
+	kdfParams: { opslimit: 2, memlimit: 64 * 1024 * 1024 },
 	salt: 'c2FsdA==',
 	nonce: 'bm9uY2U=',
 	ciphertext: 'Y3Q=',
 	createdAt: 1
 };
 
-/** Put this "tab" in an unlocked state (via the reload-stash path). */
+/** Put this "tab" in an unlocked state with Remember-me on (a sibling tab
+ *  hands its session over). */
 function unlock(): void {
-	Object.defineProperty(navigator, 'serviceWorker', {
-		configurable: true,
-		value: { controller: {} }
-	});
-	vi.spyOn(performance, 'getEntriesByType').mockImplementation(((k: string) =>
-		k === 'navigation'
-			? [{ type: 'reload' }]
-			: []) as unknown as typeof performance.getEntriesByType);
 	window.localStorage.setItem('morphit.keystore.mode', 'password');
 	window.localStorage.setItem('morphit.keystore.envelope', JSON.stringify(ENVELOPE));
-	window.sessionStorage.setItem(
-		STASH_KEY,
-		JSON.stringify({
-			at: Date.now(),
-			live: {
-				createdAt: 1,
-				origin: 'posting-only',
-				posting: {
-					role: 'posting',
-					publicKey: { __u8__: btoa('AB') },
-					privateKey: { __u8__: btoa('CD') }
-				},
-				memo: null,
-				ownerPublicKey: null,
-				activePublicKey: null
-			},
-			envelope: ENVELOPE
-		})
+	handleSessionHandoffMessage(
+		{
+			t: 'offer',
+			payload: {
+				state: 'unlocked',
+				envelope: ENVELOPE,
+				live: {
+					createdAt: 1,
+					origin: 'posting-only',
+					posting: {
+						role: 'posting',
+						publicKey: new Uint8Array([65, 66]),
+						privateKey: new Uint8Array([67, 68])
+					},
+					memo: null,
+					ownerPublicKey: null,
+					activePublicKey: null
+				}
+			}
+		},
+		() => {}
 	);
-	restoreSessionFromReloadStash();
 	expect(get(identity).state).toBe('unlocked');
 }
 

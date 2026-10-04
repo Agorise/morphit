@@ -2,13 +2,13 @@
 /**
  * scripts/canary-setup-smoke.ts
  *
- * cp614 — the warrant-canary setup used to be a hand-rolled script living only
+ * the warrant-canary setup used to be a hand-rolled script living only
  * on the operator's laptop, so every new operator had to reinvent it. It now
  * ships in the repo as scripts/canary/setup.sh: one guided command that works
  * for BOTH a remote VPS (sign on your laptop, upload) and a home box (sign +
  * serve locally), offers to create a PGP key for operators who have none, and
  * arms a weekly refresh. This smoke locks in the pieces that make it work for
- * everyone and stay correct against the cp431 build/ lifecycle:
+ * everyone and stay correct against the build/ lifecycle:
  *
  *   - the script exists, is executable, and asks which deployment you have;
  *   - it can create + publish a signing key (grandma has none);
@@ -70,7 +70,7 @@ check(
 		(/gpg --armor --export/.test(setup) && /pgp_keys\.asc/.test(setup))
 );
 
-// ─── cp763: stage in a USER-WRITABLE dir, never the root-owned source tree ─
+// ─── stage in a USER-WRITABLE dir, never the root-owned source tree ─
 // A root-installed /opt/morphit makes apps/web/static/ root-owned; a non-root
 // operator running setup.sh used to die there at "pgp_keys.asc: Permission
 // denied" (set -e) before the refresh script or timer were ever written. The
@@ -92,7 +92,7 @@ check(
 		/PUBKEY="\$STAGE\/pgp_keys\.asc"/.test(setup)
 );
 
-// ─── v1.17.1: turnkey unattended autorenew (the maintainer/morphit.io v1.17.0) ─
+// ─── v1.17.1: turnkey unattended autorenew (morphit.io v1.17.0) ─
 // The weekly timer runs with no TTY, so both of these must hold or the canary
 // silently goes stale (a FALSE warrant-canary trip):
 //   1) the generated systemd service pins node's PATH, or an nvm/version-manager
@@ -122,7 +122,7 @@ check(
 	/MORPHIT_CANARY_OPERATOR_EMAIL/.test(setup)
 );
 
-// ─── the weekly refresh delivers to the SERVED build/ dir (cp431) ─
+// ─── the weekly refresh delivers to the SERVED build/ dir ─
 check('the refresh runs generate.sh to sign a fresh canary', /scripts\/canary\/generate\.sh/.test(setup));
 check(
 	'LOCAL mode places the canary into the served apps/web/build/ (not static/)',
@@ -138,7 +138,7 @@ check(
 		setup.includes('pgp_keys.asc')
 );
 
-// ─── the refresh SELF-HEALS a re-rooted build/ before delivering (cp627) ─
+// ─── the refresh SELF-HEALS a re-rooted build/ before delivering ─
 // An in-place upgrade re-roots the served build/ dir; the weekly refresh must
 // take it back (best-effort, passwordless sudo) so the canary upload can never
 // break on an upgrade, on any version.
@@ -172,7 +172,7 @@ check(
 	'morphit-ops upgrade reminder points at the refresh script',
 	upgradeTs.includes('update-canary.sh')
 );
-// cp666 — the guided install (home mode) OFFERS to run the canary setup as a
+// the guided install (home mode) OFFERS to run the canary setup as a
 // final step, not just print it: a home box signs locally, so the wizard can arm
 // the weekly-refreshing canary right there. (A VPS signs on the laptop → keeps
 // the printed next-step; the offer is gated on inputs.mode === 'home'.)

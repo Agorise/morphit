@@ -4,7 +4,7 @@
  * TOTP needs no device — the code is a pure function of the secret + the
  * clock — so the whole 2FA path is testable here: the RFC 6238 algorithm,
  * the keystore-level enroll + verify gate, the backup-code recovery path,
- * and (the claim the old REVISIT note got wrong) that TOTP SURVIVES a
+ * and (the claim the old backlog note got wrong) that TOTP SURVIVES a
  * password change.  totpSecret/backup codes live INSIDE the encrypted
  * identity blob, so re-encrypting under a new password — exactly what
  * changePassword does for a simple-passphrase (TOTP) keystore — preserves
@@ -55,14 +55,23 @@ const now = Math.floor(Date.now() / 1000);
 const secret = generateSecret();
 const code = await computeCode(secret, now);
 const algoOk = await verifyCode(secret, code);
-ok(/^\d{6}$/.test(code) && algoOk.valid === true, 'computeCode produces a 6-digit code that verifyCode accepts');
+ok(
+	/^\d{6}$/.test(code) && algoOk.valid === true,
+	'computeCode produces a 6-digit code that verifyCode accepts'
+);
 
 // 2-3. Enroll TOTP on a fresh identity, then verify through the keystore gate.
 const OLD_PW = 'old-passphrase-1';
 const NEW_PW = 'new-passphrase-2';
 const backupCodes = generatePlaintextCodes();
 const full = await generateFullIdentity();
-const enrolled = await enrollTotp(full, OLD_PW, secret, backupCodes);
+const enrolled = await enrollTotp(
+	await encryptIdentity(full, OLD_PW),
+	full,
+	OLD_PW,
+	secret,
+	backupCodes
+);
 const id1 = await decryptIdentity(enrolled.envelope as never, OLD_PW);
 ok(!!id1.totpSecret, 'enrolled envelope decrypts to an identity carrying totpSecret');
 
@@ -88,7 +97,12 @@ const reDecrypted = await decryptIdentity(enrolled.envelope as never, OLD_PW);
 const newEnv = await encryptIdentity(reDecrypted, NEW_PW);
 const id2 = await decryptIdentity(newEnv as never, NEW_PW);
 ok(!!id2.totpSecret, 'after a password change, totpSecret is still present');
-const gate2 = await verifyTotpOrBackup(id2, await computeCode(id2.totpSecret!));
+// The code of the NEXT time step: a code is accepted once, and step 3 may
+// have used the current one moments ago.
+const gate2 = await verifyTotpOrBackup(
+	id2,
+	await computeCode(id2.totpSecret!, Math.floor(Date.now() / 1000) + 30)
+);
 ok(gate2.kind === 'ok', 'after a password change, a TOTP code still verifies');
 
 // 6. Backup code redemption.

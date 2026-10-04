@@ -38,7 +38,13 @@
 import { MORPHIT_INDEXER_ORIGIN, resolveOrigin } from '$net/config';
 import { indexerTimeoutMs } from '$net/transportBudget';
 import { PENDING_TTL_MS } from '$lib/stores/pendingEcho';
-import { idbGetProfiles, idbPutProfiles, idbDeleteProfile } from '$lib/indexer/profilePersist';
+import {
+	idbClearProfiles,
+	idbDeleteProfile,
+	idbGetProfiles,
+	idbPutProfiles,
+	setProfilePersistScope
+} from '$lib/indexer/profilePersist';
 import type { PersistedProfile } from '$lib/indexer/profilePersist';
 import type { BatchProfilesResponse, ProfileResponse } from '@morphit/indexer-client';
 
@@ -46,17 +52,17 @@ import type { BatchProfilesResponse, ProfileResponse } from '@morphit/indexer-cl
 const CACHE_TTL_MS = 90_000;
 
 /** Persistent (IndexedDB) TTL — how long a profile written to disk stays
- *  servable WITHOUT a network round-trip. Far longer than the 90s memory TTL:
- *  the whole point of the disk layer is that revisiting an account tomorrow is
- *  instant (the maintainer: "cache all avatars … the moment they need to be loaded", "it
- *  needs to be instantaneous"), so a resolved avatar/name renders from disk for
- *  up to a week. It never goes STALE-invisible in the process — a disk hit
- *  older than CACHE_TTL_MS is served immediately AND revalidated against the
- *  indexer in the background (stale-while-revalidate), so a changed avatar
- *  catches up within one more view while the user waits for nothing. */
+ *  servable WITHOUT a network round-trip, and after which it is deleted. Far
+ *  longer than the 90s memory TTL: the point of the disk layer is that
+ *  revisiting an account tomorrow is instant, so a resolved avatar/name
+ *  renders from disk for up to a week. It never goes stale-invisible in the
+ *  process — a disk hit older than CACHE_TTL_MS is served immediately AND
+ *  revalidated against the indexer in the background (stale-while-revalidate)
+ *  with an ordinary request, so a changed avatar catches up within one more
+ *  view while the user waits for nothing. */
 const PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** cp428 — negative-cache TTL for a null that came from a FETCH FAILURE
+/** negative-cache TTL for a null that came from a FETCH FAILURE
  *  (network error / non-200 / timeout / abort), NOT from a genuine
  *  "account has no profile". A transient indexer blip during a profile batch
  *  used to poison EVERY account in that batch with a 90s null — so a card
@@ -85,7 +91,7 @@ interface CacheEntry {
 	/** `Date.now()` at the moment this entry was populated. Used for
 	 *  TTL expiry checks. */
 	readonly fetchedAt: number;
-	/** cp428 — true when `value` is a null that came from a FETCH FAILURE
+	/** true when `value` is a null that came from a FETCH FAILURE
 	 *  rather than an authoritative "no such profile". Soft entries expire on
 	 *  the short {@link FAILED_FETCH_TTL_MS} so a transient blip doesn't hide
 	 *  a real display name for the full {@link CACHE_TTL_MS}. */
@@ -113,12 +119,12 @@ function isFresh(entry: CacheEntry): boolean {
 	return Date.now() - entry.fetchedAt < ttl;
 }
 
-/** cp452 — accounts the LOCAL user just wrote via their OWN confirmed
+/** accounts the LOCAL user just wrote via their OWN confirmed
  *  broadcast, and when. A server fetch that resolves within
  *  {@link PRIME_HOLD_MS} of a prime must NOT overwrite that account's cache
  *  entry, or an in-flight or immediately-following fetch clobbers the user's own
  *  new display name / avatar with the still-stale server read — the "I saved it
- *  but it reverted for a few seconds" flicker (t.txt items 2 + 3).
+ *  but it reverted for a few seconds" flicker.
  *
  *  v1.7.0 — this window was **12 seconds**, with a comment claiming the indexer
  *  "needs ~1-2 blocks" and that 12s "comfortably covers indexer catch-up". It
@@ -261,8 +267,14 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 export async function getProfilesBatch(
 	accounts: readonly string[],
 	signal?: AbortSignal,
-	opts?: { reload?: boolean }
+	opts?: { reload?: boolean; revalidate?: boolean }
 ): Promise<Map<string, ProfileResponse | null>> {
+	// `reload` (the user's own just-broadcast profile) and `revalidate` (a
+	// background refresh of stale disk hits) both skip the memory and disk
+	// layers. Only `reload` also bypasses the browser's HTTP cache: a
+	// `cache:'reload'` request for accounts this browser has on disk would
+	// tell the operator which accounts it had seen before.
+	const bypass = opts?.reload === true || opts?.revalidate === true;
 	// Deduplicate + strip empties. A caller passing ['alice', '',
 	// 'alice', 'bob'] gets one lookup per distinct non-empty name.
 	const deduped = Array.from(
@@ -275,9 +287,9 @@ export async function getProfilesBatch(
 	const awaitingInFlight: Array<{ account: string; promise: Promise<ProfileResponse | null> }> = [];
 
 	for (const account of deduped) {
-		// #2 — a reload request must not be answered from any cached or
-		// in-flight value; the whole point is to go past every cache layer.
-		if (opts?.reload) {
+		// #2 — a reload/revalidate request must not be answered from any cached
+		// or in-flight value; the whole point is to go past those layers.
+		if (bypass) {
 			needsFetch.push(account);
 			continue;
 		}
@@ -333,8 +345,8 @@ export async function getProfilesBatch(
 			const resolved = new Map<string, Resolved>();
 			let networkNeeded = toResolve;
 
-			if (!opts?.reload) {
-				const persisted = await idbGetProfiles(toResolve);
+			if (!bypass) {
+				const persisted = await idbGetProfiles(toResolve, PERSIST_TTL_MS);
 				if (persisted.size > 0) {
 					const miss: string[] = [];
 					const now = Date.now();
@@ -380,7 +392,7 @@ export async function getProfilesBatch(
 
 		// Apply results to the memory cache + this call's result map, persist
 		// network positives, and clean up the in-flight map. A prime-held account
-		// keeps its own just-broadcast value (cp452).
+		// keeps its own just-broadcast value.
 		fetchPromises.push(
 			resolution.then(
 				(resolved) => {
@@ -397,7 +409,7 @@ export async function getProfilesBatch(
 							// A disk hit is treated as fresh in memory (fetchedAt now) so
 							// the session doesn't re-read disk every call; its background
 							// revalidation, if it was stale, refreshes the real data.
-							// cp428 — a failure-null is SOFT (short TTL); a real "no
+							// a failure-null is SOFT (short TTL); a real "no
 							// profile" and a real profile are hard.
 							cache.set(account, { value, fetchedAt: now, soft: failed });
 							result.set(account, value);
@@ -444,12 +456,16 @@ export async function getProfilesBatch(
 	// Stale-while-revalidate: any disk hit that was older than the 90s memory
 	// TTL was already served above (instantly); now refresh it against the
 	// indexer in the background so a changed avatar/name catches up by the next
-	// view. `reload: true` forces a network read that SKIPS the disk
-	// read-through (so this can't recurse) and, on success, rewrites both the
-	// memory cache and disk via the write-through. Deduped by the in-flight map;
-	// fire-and-forget — the caller already has its answer.
+	// view. `revalidate: true` SKIPS the disk read-through (so this can't
+	// recurse) and, on success, rewrites both the memory cache and disk via the
+	// write-through. An ordinary request — no `cache:'reload'`. Being a second
+	// request, it still shows that this browser had these accounts on disk;
+	// the disk is only used while someone is signed in ($lib/indexer/
+	// profilePersist), whose session names its account anyway, never for a
+	// logged-out visitor. Deduped by the in-flight map; fire-and-forget — the
+	// caller already has its answer.
 	if (staleRevalidate.length > 0) {
-		void getProfilesBatch(staleRevalidate, undefined, { reload: true });
+		void getProfilesBatch(staleRevalidate, undefined, { revalidate: true });
 	}
 
 	return result;
@@ -490,7 +506,7 @@ export interface ProfileFetchResult {
 /**
  * Like {@link getProfileCached}, but distinguishes a failed fetch from an
  * authoritative "no profile" via the {@link ProfileFetchResult.failed} flag.
- * The distinction comes from the cache entry's soft-null marker (cp428): a
+ * The distinction comes from the cache entry's soft-null marker: a
  * soft null was a fetch failure, a hard null is authoritative.
  */
 export async function getProfileCachedDetailed(
@@ -506,25 +522,17 @@ export async function getProfileCachedDetailed(
 	return { profile, failed };
 }
 
-/**
- * Clear the cache. Exposed for tests and for explicit invalidation
- * after a user updates their own profile (so they see their own
- * change immediately rather than waiting up to 90s).
- *
- * When `account` is provided, only that account's entry is removed;
- * otherwise the full cache is cleared.
- */
 /** Did this account's last read come back as a TRANSIENT FAILURE rather than an
  *  authoritative "no profile"?
  *
- *  v1.8.12 (the maintainer) — cp428 already drew this distinction internally: a failed
+ *  v1.8.12 — already drew this distinction internally: a failed
  *  fetch is cached SOFT (5s) while a real absence is cached for the full 90s,
  *  on the reasoning that the short entry would "expire in seconds and the next
  *  render re-fetches". The reasoning was right; the trigger was missing.
  *  `hydrateProfiles` runs once per page load and once per loadMore, so on a
  *  settled orderbook NOTHING asks again — the soft entry expired into silence
- *  and the row kept its identicon until the user navigated or refreshed. the maintainer:
- *  "i should never have to refresh the page to see the truth."
+ *  and the row kept its identicon until the user navigated or refreshed.
+ *  Requirement: the page never needs a refresh to show the truth.
  *
  *  Exposing the distinction (rather than retrying in here) is deliberate. Two
  *  previous attempts put the retry inside this module and both failed: one
@@ -538,6 +546,28 @@ export function isSoftMiss(account: string): boolean {
 	return cache.get(account)?.soft === true;
 }
 
+/** File the on-disk profile cache under the signed-in account (null when
+ *  nobody is), so one account never reads the accounts another one looked at.
+ *  Wired from $blurt/ops/profile's account-name store. */
+export function setProfileCacheScope(account: string | null): void {
+	setProfilePersistScope(account);
+}
+
+/** Explicit Sign Out: forget every profile this browser looked up — on disk
+ *  (all accounts) and in memory. Best-effort. */
+export async function forgetProfilesOnSignOut(): Promise<void> {
+	cache.clear();
+	await idbClearProfiles();
+}
+
+/**
+ * Clear the cache. Exposed for tests and for explicit invalidation
+ * after a user updates their own profile (so they see their own
+ * change immediately rather than waiting up to 90s).
+ *
+ * When `account` is provided, only that account's entry is removed;
+ * otherwise the full cache is cleared.
+ */
 export function clearProfileCache(account?: string): void {
 	if (account === undefined) {
 		cache.clear();
@@ -552,11 +582,11 @@ export function clearProfileCache(account?: string): void {
 }
 
 /**
- * cp452 — optimistically write the LOCAL user's OWN profile into the shared
+ * optimistically write the LOCAL user's OWN profile into the shared
  * cache right after a CONFIRMED broadcast (block_num returned), so the
  * orderbook and every IdentityLabel that reads this cache show the new display
  * name / avatar / bio INSTANTLY instead of waiting on the 90s TTL + indexer
- * catch-up (t.txt items 2 + 3). This is the shared-cache twin of
+ * catch-up. This is the shared-cache twin of
  * stores/selfProfile.setSelfAvatar, which covers only the avatar-menu store.
  *
  * Gated by the caller on a CONFIRMED broadcast, so the value is already on

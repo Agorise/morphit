@@ -1,11 +1,11 @@
 /**
  * Strip TypeScript/JavaScript comments from source text.
  *
- * Shared helper extracted in cp153 from two duplicated
+ * Shared helper extracted from two duplicated
  * implementations:
  *
- *   - cp142 `scripts/spawn-dist-prebuild-coverage-smoke.ts`
- *   - cp149 `scripts/mcp-server-read-only-invariant-smoke.ts`
+ *   - `scripts/spawn-dist-prebuild-coverage-smoke.ts`
+ *   - `scripts/mcp-server-read-only-invariant-smoke.ts`
  *
  * Both smokes scan TS/JS source for code patterns (raw `fetch(`
  * calls, `ensureBuilt()` guards, etc.) and need to ignore

@@ -27,6 +27,15 @@
  *       via the supplied HMAC callback.  Returns the recovered
  *       Identity.
  *
+ *   - openWithYubikey(env, hmacFn) / rotateYubikeyChallenge(env, i, cek, hmacFn)
+ *       What the unlock path ($stores/identity) uses: open the keystore
+ *       and keep the CEK, so that after the 2FA gate the wrap that was
+ *       used can be rebuilt under a FRESH challenge. A static challenge
+ *       means one recorded (challenge, response) pair — from a borrowed
+ *       or compromised computer the key was once plugged into — unwraps
+ *       the keystore forever; rotating it on every unlock makes such a
+ *       recording useless after the next unlock.
+ *
  * All operations are pure transformations over the envelope plus
  * caller-supplied secrets.  Persistence (writing back to local-
  * storage) happens in the caller — the same layer that calls
@@ -55,6 +64,7 @@ import {
 } from './yubikey/protocol';
 import {
 	buildVerifiedYubikeyWrap,
+	buildYubikeyWrap,
 	recoverCekFromYubikey,
 	type YubikeyHmacFn
 } from './yubikey/wrap';
@@ -75,7 +85,7 @@ function toB64(bytes: Uint8Array): string {
 // `kind` discriminator. The UI maps `kind` → i18n key. The free-form
 // `message` is kept for log/devtools but never user-facing.
 //
-// REVISIT-LIST item 3 follow-up (2026-05-02): the kind taxonomy
+// Backlog item 3 follow-up (2026-05-02): the kind taxonomy
 // originally only covered keystore-shape errors raised by THIS file.
 // Real-world YubiKey unlock paths can also fail at the WebHID
 // transport layer (browser/OS issues) or in the cryptographic wrap
@@ -374,21 +384,35 @@ export async function unlockWithYubikey(
 	env: KeystoreEnvelope,
 	hmacFn: YubikeyHmacFn
 ): Promise<Identity> {
+	const opened = await openWithYubikey(env, hmacFn);
+	sodium.memzero(opened.cek);
+	return opened.identity;
+}
+
+/** Open a layered keystore with the YubiKey and KEEP the CEK. Returns the
+ *  identity, the layered envelope, the CEK (the caller owns it and MUST wipe
+ *  it) and the index of the wrap that opened it. */
+export async function openWithYubikey(
+	env: KeystoreEnvelope,
+	hmacFn: YubikeyHmacFn
+): Promise<{ identity: Identity; env: LayeredCekEnvelope; cek: Uint8Array; wrapIndex: number }> {
 	if (!isLayered(env)) {
 		throw new YubikeyKeystoreError('not_layered', 'not-layered: this keystore has no YubiKey wrap');
 	}
 	validateLayeredEnvelope(env);
-	const ykWraps = env.wraps.filter(isYubikeyWrap);
+	const ykWraps = listYubikeyWraps(env);
 	if (ykWraps.length === 0) {
 		throw new YubikeyKeystoreError('no_yubikey_wrap', 'no-yubikey-wrap');
 	}
 	let lastErr: unknown = null;
-	for (const wrap of ykWraps) {
+	for (const { index, wrap } of ykWraps) {
 		let cek: Uint8Array | null = null;
 		try {
 			cek = await recoverCekFromYubikey(wrap, hmacFn);
-			const id = decryptIdentityFromCek(env, cek);
-			return id;
+			const identity = decryptIdentityFromCek(env, cek);
+			const opened = { identity, env, cek, wrapIndex: index };
+			cek = null; // handed to the caller
+			return opened;
 		} catch (err) {
 			lastErr = err;
 		} finally {
@@ -405,6 +429,30 @@ export async function unlockWithYubikey(
 	);
 	(e as Error & { cause?: unknown }).cause = lastErr;
 	throw e;
+}
+
+/** Rebuild the YubiKey wrap at `wrapIndex` under a fresh random challenge
+ *  (and fresh salt and nonce) for the same CEK: one more touch of the key.
+ *  Slot, label and enrolment date are kept; every other wrap is untouched.
+ *  Caller owns `cek` and persists the result. */
+export async function rotateYubikeyChallenge(
+	env: LayeredCekEnvelope,
+	wrapIndex: number,
+	cek: Uint8Array,
+	hmacFn: YubikeyHmacFn
+): Promise<LayeredCekEnvelope> {
+	validateLayeredEnvelope(env);
+	const old = env.wraps[wrapIndex];
+	if (old === undefined || !isYubikeyWrap(old)) {
+		throw new YubikeyKeystoreError('wrap_index_out_of_range', `No YubiKey wrap at ${wrapIndex}`);
+	}
+	const fresh = await buildYubikeyWrap(cek, hmacFn, old.slot, old.label);
+	const next: LayeredCekEnvelope = {
+		...env,
+		wraps: env.wraps.map((w, i) => (i === wrapIndex ? { ...fresh, enrolledAt: old.enrolledAt } : w))
+	};
+	validateLayeredEnvelope(next);
+	return next;
 }
 
 /** List the YubiKey wraps on a layered envelope, in display order.

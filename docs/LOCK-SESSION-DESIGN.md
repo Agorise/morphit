@@ -10,20 +10,34 @@ gate on the persist path.  Sign Out (the nuclear option) now
 wipes the envelope from localStorage; Lock Session preserves
 the envelope for next-session password unlock.
 
+**Current behaviour (summary).**
+- **Lock** keeps the encrypted keystore and seals the chat keys you
+  have pinned for your partners in a per-account encrypted slot that
+  only that account's key opens; they are restored at its next unlock. A locked tab shows no chat badge and asks
+  the operator nothing about the account until it is unlocked.
+- **Sign Out** wipes the keystore and removes the readable pins; the
+  sealed copy stays (it names nobody), so signing back in to the same
+  account restores them and another account using the same browser
+  cannot remove them. It reaches every open tab: each one drops its keys, its "just this session"
+  account name, chat state, avatar and profile cache.
+- A **"just this session"** sign-in keeps the account name, the chat
+  read state and the recent chat partners in that tab only; they are
+  gone when the tab closes. Nothing about profiles is cached on disk
+  while logged out.
+
 This doc captures the original design rationale.  The header
 "Decision needed from you" section below documents what was
 ratified before implementation; the body matches what shipped.
 
 **Last updated:** 2026-04-21 (design ratification); shipped
-shortly after.  Doc maintained through 2026-05-17 (Part 122
-cp27-DD2 fixed a route-path reference for cp7 per-locale
-prerendering migration).
+shortly after.  Doc maintained through 2026-05-17 (a route-path reference
+was fixed for the per-locale prerendering migration).
 
 ## Problem
 
 The avatar dropdown currently has one destructive action: **Sign Out**.
 You asked for both **Lock Session** and **Sign Out** with confirmation
-modals. This doc explains why only Sign Out shipped this turn, and
+modals. This doc explains why only Sign Out shipped at first, and
 what's required for Lock Session to be genuinely different rather
 than a lie to the user.
 
@@ -160,7 +174,7 @@ wipe:
 Sign Out becomes a **real** clean slate on this device. The user's
 on-chain data remains untouched.
 
-## Modal copy (already needed next turn)
+## Modal copy
 
 Lock Session modal:
 - Title: "Lock this session?"

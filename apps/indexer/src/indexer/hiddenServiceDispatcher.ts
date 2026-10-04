@@ -36,7 +36,7 @@ const log = logger('hidden-dispatcher');
 /**
  * Install the routing dispatcher globally (see the package), and say so in the
  * indexer's log. main.ts always installs it; `indexerRouterPolicy` picks the
- * policy (v1.18.0 deep-deep, L3).
+ * policy.
  */
 export function installHiddenServiceDispatcher(
 	config: HiddenServiceProxyConfig,
@@ -58,7 +58,7 @@ export function installHiddenServiceDispatcher(
 /**
  * Whether, and how, the indexer installs the router. PURE. Always installed.
  *
- * (v1.18.0 deep-deep, L3) It used to be installed only when hidden RPC
+ * It used to be installed only when hidden RPC
  * endpoints were CONFIGURED, which left two configurations without one:
  *   - a clearnet node with a blank hidden list still merges `.onion`/`.i2p`
  *     nodes from the on-chain RPC directory into its pool (at boot and at

@@ -22,9 +22,9 @@ import {
 	type IntegrationFixture
 } from './harness';
 
-// The production SELECT itself — imported, not duplicated (cp448).  cp447 flagged
+// The production SELECT itself — imported, not duplicated.  A later change flagged
 // that this test kept a hand-copied "kept in sync" mirror of the query, which had
-// already forced the cp446 owner-join fix to be applied in two places.  Importing
+// already forced the owner-join fix to be applied in two places.  Importing
 // the exported constant makes drift impossible: change the query once, this test
 // exercises the change automatically.  (Aliased to the old local name so the
 // assertions below need no edits.)
@@ -233,7 +233,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		order_status: string | null;
 	};
 
-	// the maintainer (cp445) — the inbox card shows "(Live/Expired/Cancelled)" beside the
+	// the inbox card shows "(Live/Expired/Cancelled)" beside the
 	// RE: line, so a thread about a dead order says so before it is opened.
 	// NOTE: this SQL is a hand-kept COPY of `src/api/conversations.ts`. It has
 	// already drifted once; when you change one, change both.
@@ -252,7 +252,7 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		}
 	);
 
-	// cp446 (the maintainer's mockup) — tester3 talks to exampleuser about TWO different
+	// One user talks to the same peer about TWO different
 	// orders. That is two discussions, so it is two cards.
 	it('splits one peer into one thread PER ORDER, like an email inbox', async () => {
 		await insertOrder(fx, 'bob', 'order-xmr', { side: 'sell', asset: 'XMR', fiat: 'MXN' });
@@ -340,11 +340,11 @@ describe.skipIf(!INTEGRATION_ENABLED)('conversations endpoint — SQL integratio
 		expect(r.order_asset).toBe('BTC');
 	});
 
-	// cp446 — REPLACES 'picks the MOST RECENT order-carrying message when several
+	// REPLACES 'picks the MOST RECENT order-carrying message when several
 	// orders were discussed'. That test pinned the old collapse: several orders,
-	// one card, showing whichever was cited last. the maintainer asked for an email inbox, so
+	// one card, showing whichever was cited last. The maintainer asked for an email inbox, so
 	// several orders is now several cards — and this same fixture proves it.
-	// (Caught by CI on real Postgres; the sandbox cannot run the integration suite.)
+	// (Caught by CI on real Postgres.)
 	it('gives each discussed order its own thread, newest first, plus the order-less one', async () => {
 		await insertOrder(fx, 'bob', 'order-old', { asset: 'BLURT' });
 		await insertOrder(fx, 'bob', 'order-new', { asset: 'LTC' });

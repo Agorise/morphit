@@ -7,7 +7,7 @@
  * that DOM order inside /[lang]/orderbook). Each opens an absolutely-
  * positioned dropdown over a full-screen blur scrim.
  *
- * cp256 ported the FaqSearch scrim pattern onto all three but gave every
+ * A later change ported the FaqSearch scrim pattern onto all three but gave every
  * root a BARE `relative z-30`. That shipped a stacking bug (first seen live
  * on beta16): each root is its own `relative` stacking context, and sibling
  * contexts at EQUAL z-index paint in DOM ORDER — so an open dropdown was
@@ -16,7 +16,7 @@
  * of the OPEN fiat-currency list. A cache clear could not fix it: the bug
  * is in the built component, not a stale asset.
  *
- * The fix (cp260) makes each root z CONDITIONAL on `open`:
+ * The fix makes each root z CONDITIONAL on `open`:
  *   • OPEN   → z-30  (ABOVE the z-20 scrim, so the dropdown overlays)
  *   • CLOSED → z-10  (BELOW the z-20 scrim, so an idle sibling can neither
  *                     paint over the active dropdown nor swallow the tap —
@@ -38,7 +38,7 @@
  *   I-4  The exact regressed root — `class="relative z-30" bind:this=
  *        {rootEl}` — appears in NONE of the three.
  *
- * cp282 added a SECOND outside-close mechanism on top of the scrim,
+ * A later change added a SECOND outside-close mechanism on top of the scrim,
  * because the scrim alone can't catch every outside press: the sticky
  * page header paints at z-40, ABOVE the z-20 scrim, so a press in the
  * header strip never reached the scrim and the menu stayed stuck open
@@ -58,7 +58,7 @@
  *        `removeEventListener` cleanup. (A drop to scrim-only, a switch
  *        to `click`, or losing the capture flag each fail this.)
  *   I-6  No select reintroduces a document-level `click` outside-close
- *        listener — the racing pattern cp282 replaced. (The scrim's own
+ *        listener — the racing pattern a later change replaced. (The scrim's own
  *        `onclick=` element attribute is NOT a document listener and is
  *        unaffected.)
  */
@@ -81,7 +81,7 @@ const sources = new Map<string, string>(
 	])
 );
 
-// The orderbook page that hosts the three selects. cp314 un-wrapped them
+// The orderbook page that hosts the three selects. un-wrapped them
 // from <label> elements: a <label> adopts its first labelable descendant
 // (the trigger <button>) as its control, so on the single-select Asset
 // menu — which closes on choose() and thus detaches the clicked option
@@ -104,10 +104,10 @@ const labelWrapsSelect = (name: string): boolean =>
 const ROOT_RE =
 	/<div class="relative \{open \? '(z-\d+)' : '(z-\d+)'\}"\s+bind:this=\{rootEl\}>/;
 
-// The exact bug pattern cp256 shipped.
+// The exact bug pattern a later change shipped.
 const REGRESSED_ROOT_RE = /<div class="relative z-30"\s+bind:this=\{rootEl\}>/;
 
-// cp282 capture-phase pointerdown outside-close handler. Whitespace-
+// capture-phase pointerdown outside-close handler. Whitespace-
 // tolerant so a reformat doesn't false-fail; the listener arg name is
 // matched as a bare identifier (any name works as long as it's the same
 // one passed to add + remove).
@@ -120,7 +120,7 @@ const OUTSIDE_CLOSE_RE = /!rootEl\.contains\([^)]*\)\)\s*open\s*=\s*false/;
 // The open-gate that prevents the listener from being attached while
 // the menu is closed (no idle global listener).
 const OPEN_GATE_RE = /if\s*\(!open\)\s*return;/;
-// The racing pattern cp282 replaced — a DOCUMENT-level click listener.
+// The racing pattern a later change replaced — a DOCUMENT-level click listener.
 // Must NOT reappear. (Element `onclick=` attributes like the scrim's are
 // not document listeners and don't match.)
 const DOC_CLICK_RE = /document\.addEventListener\(\s*['"]click['"]/;

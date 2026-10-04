@@ -2,39 +2,37 @@
 /**
  * scripts/canary/verify.ts
  *
- * Verify a Morphit canary file for freshness and structural
- * sanity.  Used by:
+ * Verify a Morphit warrant canary: its PGP signature, by the key you expect,
+ * and then its content (freshness and structure) — the content that was
+ * signed, never text around the signature.
  *
- *   1. CI on every PR that modifies the canary template — fails
- *      the build if the template is missing required placeholders.
+ *   ./node_modules/.bin/tsx scripts/canary/verify.ts <path-or-url> --fingerprint <40-hex>
+ *   … --key-file pgp_keys.asc      verify against that key file only (a
+ *                                  throw-away keyring), not your own keyring
+ *   … --structure-only             a template or draft: structure only; it
+ *                                  says plainly that nothing was verified
  *
- *   2. Operators running `npx tsx scripts/canary/verify.ts <url>`
- *      against their own (or another operator's) canary as a quick
- *      "is it still being published, and is it fresh?" check.
+ * The fingerprint is the operator's canary signing key, learned out of band
+ * (not from the canary's own instance). gpg must be installed; without gpg,
+ * the key, or a good signature from exactly that key, the verdict is FAIL.
  *
- *      The cryptographic check is the PGP signature: verify it
- *      out-of-band with `gpg --verify` against the operator's
- *      release public key (published at /pgp_keys.asc on the same
- *      instance).  This script confirms the PGP signature block is
- *      PRESENT and the freshness window is intact; it does not
- *      itself run gpg.
- *
- *   3. The frontend's degraded-canary banner pulls /canary.txt and
- *      applies similar freshness logic in JS.  This script is the
- *      authoritative reference for what "fresh" means.
+ * The frontend's degraded-canary banner pulls /canary.txt and applies the
+ * same freshness logic in JS; this script is the reference for "fresh".
  *
  * Exit codes:
- *   0  — structurally valid, PGP signature block present, and the
- *        freshness window is intact.
- *   1  — missing, malformed, no PGP signature block, or the
- *        freshness window has expired (treat as silent).
+ *   0  — signed by the given key, structurally valid, fresh.
+ *   1  — anything else: no gpg, no key, bad / missing / other key's
+ *        signature, malformed, or stale (treat as silent).
  *   2  — valid but with non-fatal warnings (e.g. a future-dated
  *        Generated: timestamp).
+ *   3  — --structure-only: the structure is fine; the signature was NOT checked.
  */
 
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const REQUIRED_PLACEHOLDERS_OR_FILLED = [
 	'OPERATOR_NAME',
@@ -71,8 +69,18 @@ export function parseCanaryTimestamp(raw: string): number {
 	if (human) {
 		const [, d, monthName, y, hh, mm, ss] = human;
 		const months = [
-			'january', 'february', 'march', 'april', 'may', 'june',
-			'july', 'august', 'september', 'october', 'november', 'december'
+			'january',
+			'february',
+			'march',
+			'april',
+			'may',
+			'june',
+			'july',
+			'august',
+			'september',
+			'october',
+			'november',
+			'december'
 		];
 		const mi = months.indexOf(monthName!.toLowerCase());
 		if (mi === -1) return NaN;
@@ -95,12 +103,12 @@ interface Verification {
 	readonly ageDays: number | null;
 }
 
-function verify(text: string): Verification {
+export function verifyStructure(text: string): Verification {
 	const errors: string[] = [];
 	const warnings: string[] = [];
 
 	// ── Structural: must start with the canary header.
-	//    cp432 renamed the inner marker `-----BEGIN MORPHIT CANARY-----`
+	//    A later change renamed the inner marker `-----BEGIN MORPHIT CANARY-----`
 	//    (which forced PGP dash-escaping) to `=== MORPHIT CANARY ===`.
 	//    Accept BOTH during the transition so an operator's still-valid
 	//    OLD-format canary (signed before they pulled the new template)
@@ -149,17 +157,6 @@ function verify(text: string): Verification {
 		errors.push('no Generated: line found');
 	}
 
-	// ── PGP signature is the canary's cryptographic anchor, so its
-	// ABSENCE is a hard error (an unsigned canary proves nothing).
-	// Signature VALIDITY is checked out-of-band with `gpg --verify`;
-	// here we only confirm the block is present and closed.
-	if (!text.includes('-----BEGIN PGP SIGNATURE-----')) {
-		errors.push('no PGP signature block — canary is unsigned');
-	}
-	if (!text.includes('-----END PGP SIGNATURE-----')) {
-		errors.push('PGP signature block is not closed');
-	}
-
 	return {
 		ok: errors.length === 0,
 		warnings,
@@ -167,6 +164,66 @@ function verify(text: string): Verification {
 		generatedAt,
 		ageDays
 	};
+}
+
+/** The result of checking the PGP signature of a clearsigned canary. */
+export type SignatureCheck =
+	| { readonly ok: true; readonly signedText: string; readonly fingerprint: string }
+	| { readonly ok: false; readonly reason: string };
+
+const FPR_RE = /^[0-9A-F]{40}$/;
+
+/**
+ * Check a clearsigned canary with gpg: a good signature (VALIDSIG) whose key
+ * fingerprint — the signing subkey's or its primary key's — equals
+ * `fingerprint`. With `keyFile`, gpg uses a throw-away keyring holding only
+ * that file's keys. Returns the SIGNED text (what gpg says was signed).
+ * Fails closed: no gpg, no key, a bad signature, or another key → ok:false.
+ */
+export function checkCanarySignature(
+	text: string,
+	opts: { readonly fingerprint: string; readonly keyFile?: string; readonly gpg?: string }
+): SignatureCheck {
+	const want = opts.fingerprint.replace(/\s+/g, '').toUpperCase();
+	if (!FPR_RE.test(want))
+		return { ok: false, reason: 'the --fingerprint is not a 40-hex-digit key fingerprint' };
+	if (!text.startsWith('-----BEGIN PGP SIGNED MESSAGE-----')) {
+		return { ok: false, reason: 'the canary is not a PGP-signed message' };
+	}
+	const gpg = opts.gpg ?? 'gpg';
+	const work = mkdtempSync(join(tmpdir(), 'canary-verify-'));
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, LC_ALL: 'C' };
+		if (opts.keyFile !== undefined) {
+			env.GNUPGHOME = join(work, 'gnupg');
+			spawnSync('mkdir', ['-m', '700', env.GNUPGHOME]);
+			const imp = spawnSync(gpg, ['--batch', '--import', opts.keyFile], { env, encoding: 'utf8' });
+			if (imp.error) return { ok: false, reason: 'gpg is not installed' };
+			if (imp.status !== 0) return { ok: false, reason: `could not import ${opts.keyFile}` };
+		}
+		const input = join(work, 'canary.txt');
+		writeFileSync(input, text);
+		const r = spawnSync(gpg, ['--batch', '--status-fd', '2', '--output', '-', '--decrypt', input], {
+			env,
+			encoding: 'utf8',
+			maxBuffer: 4 * 1024 * 1024
+		});
+		if (r.error) return { ok: false, reason: 'gpg is not installed' };
+		const status = r.stderr ?? '';
+		if (/^\[GNUPG:\] NO_PUBKEY /m.test(status)) {
+			return { ok: false, reason: `the signing key is not in ${opts.keyFile ?? 'your keyring'}` };
+		}
+		const valid = [...status.matchAll(/^\[GNUPG:\] VALIDSIG (\S+)(?: \S+)*? (\S+)$/gm)];
+		const fprs = valid.flatMap((m) => [m[1]!.toUpperCase(), m[2]!.toUpperCase()]);
+		if (r.status !== 0 || valid.length === 0)
+			return { ok: false, reason: 'the PGP signature is not good' };
+		if (!fprs.includes(want)) {
+			return { ok: false, reason: `signed by ${valid[0]![1]}, not by ${want}` };
+		}
+		return { ok: true, signedText: r.stdout ?? '', fingerprint: want };
+	} finally {
+		rmSync(work, { recursive: true, force: true });
+	}
 }
 
 async function loadFromArg(arg: string): Promise<string> {
@@ -180,10 +237,24 @@ async function loadFromArg(arg: string): Promise<string> {
 	return readFileSync(arg, 'utf8');
 }
 
+function flag(args: readonly string[], name: string): string | undefined {
+	const i = args.indexOf(name);
+	return i === -1 ? undefined : args[i + 1];
+}
+
 async function main(): Promise<void> {
-	const arg = process.argv[2];
-	if (!arg) {
-		console.error('usage: verify.ts <path-or-url>');
+	const args = process.argv.slice(2);
+	const arg = args.find(
+		(a, i) => !a.startsWith('--') && !['--fingerprint', '--key-file'].includes(args[i - 1] ?? '')
+	);
+	const fingerprint = flag(args, '--fingerprint');
+	const keyFile = flag(args, '--key-file');
+	const structureOnly = args.includes('--structure-only');
+	if (!arg || (!structureOnly && !fingerprint)) {
+		console.error(
+			'usage: verify.ts <path-or-url> --fingerprint <40-hex> [--key-file <pgp_keys.asc>]\n' +
+				'       verify.ts <path> --structure-only      (no signature check)'
+		);
 		process.exit(1);
 	}
 	let text: string;
@@ -196,21 +267,32 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
-	const v = verify(text);
-
 	console.log(`source: ${arg}`);
-	if (v.generatedAt !== null) {
-		console.log(`generated: ${v.generatedAt}`);
+	let content = text;
+	if (!structureOnly) {
+		const sig = checkCanarySignature(text, { fingerprint: fingerprint!, keyFile });
+		if (!sig.ok) {
+			console.log(`  error: ${'reason' in sig ? sig.reason : 'signature not verified'}`);
+			console.log('canary-verify: FAIL');
+			process.exit(1);
+		}
+		console.log(`signature: good, by ${sig.fingerprint}`);
+		content = sig.signedText;
 	}
-	if (v.ageDays !== null) {
-		console.log(`age: ${v.ageDays.toFixed(1)} days`);
-	}
+
+	const v = verifyStructure(content);
+	if (v.generatedAt !== null) console.log(`generated: ${v.generatedAt}`);
+	if (v.ageDays !== null) console.log(`age: ${v.ageDays.toFixed(1)} days`);
 	for (const w of v.warnings) console.log(`  warn: ${w}`);
 	for (const e of v.errors) console.log(`  error: ${e}`);
 
 	if (!v.ok) {
 		console.log('canary-verify: FAIL');
 		process.exit(1);
+	}
+	if (structureOnly) {
+		console.log('canary-verify: structure OK — the signature was NOT checked (--structure-only)');
+		process.exit(3);
 	}
 	if (v.warnings.length > 0) {
 		console.log('canary-verify: OK (with warnings)');
@@ -223,8 +305,7 @@ async function main(): Promise<void> {
 // `parseCanaryTimestamp`) must not execute the CLI. Mirrors the guard the
 // llms-full-freshness smoke enforces on scripts/build-llms-full.mjs.
 const invokedDirectly =
-	process.argv[1] !== undefined &&
-	fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+	process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
 if (invokedDirectly) {
 	main().catch((err) => {

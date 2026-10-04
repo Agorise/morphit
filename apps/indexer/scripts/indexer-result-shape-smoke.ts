@@ -1,7 +1,7 @@
 /**
  * Static-analysis smoke: Indexer-Result-shape antipattern detector.
  *
- * BATCH19D-result-shape (audit doc Part 19) caught ~16 production
+ * BATCH19D-result-shape (audit doc) caught ~16 production
  * code paths reading `result.value` (instead of `result.data`) or
  * `result.error.kind` (instead of `result.code`) on indexer-Result
  * types — undefined at runtime, silent breakage.  The bug shipped
@@ -118,7 +118,7 @@ const FALSE_POSITIVE_SUBSTRINGS: readonly string[] = [
 // DOM elements (HTMLInputElement / HTMLTextAreaElement / Node) —
 // never an indexer-client Result.  `el.value` is the DOM `.value`
 // property (e.g. the /post `syncCleaned(el: HTMLInputElement)`
-// helper added in cp368), not a Result read.  Checked against the
+// helper added), not a Result read.  Checked against the
 // VALUE_RE capture as a WHOLE TOKEN, so this does NOT suppress
 // `model.value`, `cancel.value`, `panel.value`, etc. — only an exact
 // `el`/`input`/… binding.

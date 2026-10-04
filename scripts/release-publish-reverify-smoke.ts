@@ -1,5 +1,5 @@
 /**
- * release-publish-reverify-smoke (v1.18.0 deep-deep, ops-3).
+ * release-publish-reverify-smoke.
  *
  * The release job ran `actions/upload-artifact@v3` — referenced by a movable
  * TAG — after the tarball, .sha256, .asc and distribution-anchor.env were
@@ -76,28 +76,39 @@ try {
 	if (setup.status !== 0) throw new Error(`setup failed: ${setup.stderr}`);
 
 	const T = 'morphit-v9.9.9.tar.gz';
+	// The signed offline bundle is published with the tarball (and checked the same way).
+	const OFF = 'morphit-v9.9.9-offline.tar.gz';
+	writeFileSync(join(S, 'repo', OFF), 'offline bundle bytes\n');
+	sh(`sha256sum ${OFF} > ${OFF}.sha256`);
+	const offSha = readFileSync(join(S, 'repo', `${OFF}.sha256`), 'utf8').split(/\s/)[0];
 	const files = (content: string, anchor?: string): void => {
 		writeFileSync(join(S, 'repo', T), content);
 		sh(`sha256sum ${T} > ${T}.sha256`);
 		const sha = anchor ?? readFileSync(join(S, 'repo', `${T}.sha256`), 'utf8').split(/\s/)[0];
 		writeFileSync(
 			join(S, 'repo', 'distribution-anchor.env'),
-			`export MORPHIT_BUILD_SOURCE_SHA256=${sha}\n`
+			`export MORPHIT_BUILD_SOURCE_SHA256=${sha}\nexport MORPHIT_BUILD_OFFLINE_SHA256=${offSha}\n`
 		);
 	};
 	files('genuine release bytes\n');
 	sh(`gpg ${pp} --armor --detach-sign -o ${T}.asc ${T}`, G);
+	sh(`gpg ${pp} --armor --detach-sign -o ${OFF}.asc ${OFF}`, G);
+	const fpr =
+		/^fpr:+([0-9A-F]{40}):/m.exec(sh('gpg --with-colons --list-keys', G).stdout)?.[1] ?? '';
 	// The signing key has left the runner by the time the publish step runs.
 	rmSync(gnupg, { recursive: true, force: true });
 	mkdirSync(gnupg, { mode: 0o700 });
 
 	// Tokens empty: the step's publish part stops with "no token available",
 	// which is how a run that got PAST the verification shows itself here.
-	const run = () =>
+	// MORPHIT_RELEASE_SIGNERS is the job-level pin; here it names the throwaway key.
+	const run = (signers = fpr) =>
 		sh('bash -eu ../publish.sh', {
 			...G,
 			TAG: 'v9.9.9',
 			TARBALL: T,
+			OFFLINE: OFF,
+			MORPHIT_RELEASE_SIGNERS: signers,
 			RELEASE_TOKEN: '',
 			AUTO_TOKEN: ''
 		});
@@ -110,6 +121,23 @@ try {
 		reachedPublish(genuine),
 		genuine.stderr.slice(-400)
 	);
+
+	const unpinned = run('0'.repeat(40));
+	check(
+		'a good signature from a key the tag ships but that is not pinned is not published',
+		!reachedPublish(unpinned) && unpinned.status !== 0,
+		unpinned.stdout.slice(-400)
+	);
+
+	const ascBytes = readFileSync(join(S, 'repo', `${T}.asc`));
+	rmSync(join(S, 'repo', `${T}.asc`));
+	const unsigned = run();
+	check(
+		'an unsigned release is not published',
+		!reachedPublish(unsigned) && unsigned.status !== 0,
+		unsigned.stdout.slice(-400)
+	);
+	writeFileSync(join(S, 'repo', `${T}.asc`), ascBytes);
 
 	files('REWRITTEN release bytes\n'); // tarball, .sha256 and anchor all consistent; old .asc
 	const tampered = run();

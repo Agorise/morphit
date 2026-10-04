@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * price-model-picker-parity-smoke (Part 117).
+ * price-model-picker-parity-smoke.
  *
  * Sister smoke to `price-model-display-smoke`.  Where the display
  * smoke validates the read-side formatter (priceModelDisplay.ts +
@@ -16,7 +16,7 @@
  *   Pre-Part-117, /post had the picker but /post/edit kept the
  *   loaded `price_model` opaque and passed it through unchanged.
  *   A user who wanted to change their pricing after posting had
- *   to cancel and re-list.  Part 117 closed the gap by mirroring
+ *   to cancel and re-list.  A later change closed the gap by mirroring
  *   /post's picker into /post/edit.  This smoke makes the
  *   asymmetry actively dangerous to re-introduce: any commit that
  *   removes the picker, the validation, or the canonical {kind,
@@ -288,5 +288,5 @@ if (failures > 0) {
 	process.exit(1);
 }
 // Canonical success line — run-smokes.sh greps for `^✓ all` to tally
-// scenarios.  J-2 finding from Part 87.
+// scenarios.  J-2 finding.
 console.log(`✓ all ${SCENARIOS.length} price-model-picker-parity scenarios passed`);

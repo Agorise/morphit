@@ -7,19 +7,18 @@
  * route in `listingFee.ts` is now a thin wrapper around this and
  * a cache-control header.
  *
- * Lives in its own module because tsx-style smokes can't load
- * modules that import `hono` (the package isn't installed in the
- * sandbox).  Hono is a runtime dep of the route; this helper is
- * pure TS.
+ * Lives in its own module so smokes and unit tests can load it without
+ * the HTTP framework: `hono` is a runtime dep of the route; this helper
+ * is pure TS.
  *
- * cp128 field rename
+ * field rename
  * ──────────────────
- * Before cp128, the USD echo fields were `base_fee_usd` and
+ * The USD echo fields were `base_fee_usd` and
  * `blurt_price_usd`.  Those names hardcoded USD as the denomination,
  * which breaks if an operator serves a non-USD market (EUR, BRL,
  * XDR, XAU, etc.) or hedges against future USD erosion.
  *
- * cp128 renames the fields to be denomination-agnostic:
+ * A later change renames the fields to be denomination-agnostic:
  *
  *   base_fee_usd       →  base_fee_fiat
  *   blurt_price_usd    →  blurt_price_fiat
@@ -46,7 +45,7 @@ export function buildListingFeeBody(
 	btcSource: BlurtPriceSource | null = null,
 	xmrSource: BlurtPriceSource | null = null
 ): Record<string, unknown> {
-	// Model A (cp372, canonical): `base_fee_blurt` is the amount the UI
+	// Model A (canonical): `base_fee_blurt` is the amount the UI
 	// quotes and the user pays.  It tracks the CANONICAL USD target
 	// (`listingFeeBlurtBase` = LISTING_FEE_USD.blurt ÷ live price ≈
 	// 12.5¢) so the fee's USD value stays put instead of drifting as a
@@ -95,7 +94,7 @@ export function buildListingFeeBody(
 			body.base_fee_fiat = baseFeeBlurt * detail.price;
 			body.blurt_price_fiat = detail.price;
 			body.denomination_fiat = config.priceFeedDenominationFiat;
-			// cp127 defense H: NOT-AN-ORACLE warning.  Loudly visible
+			// defense H: NOT-AN-ORACLE warning.  Loudly visible
 			// to downstream consumers parsing this payload.  Other
 			// smart contracts or value-bearing systems that ignore
 			// this warning and use blurt_price_fiat as oracle input
@@ -113,7 +112,7 @@ export function buildListingFeeBody(
 	// (false — price feed off/stale, or a non-USD denomination).
 	body.base_fee_blurt_live = liveTracked;
 
-	// ── Model A (cp372, canonical): live BTC/XMR fee amounts + USD echo ──
+	// ── Model A (canonical): live BTC/XMR fee amounts + USD echo ──
 	// The order handler enforces the operator's chain-pinned satoshi /
 	// piconero amount ± FEE_PRICE_TOLERANCE (see minAcceptableSatoshis
 	// / minAcceptablePiconero).  Here we serve the amount the UI should

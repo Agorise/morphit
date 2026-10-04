@@ -2,7 +2,7 @@
 	/**
 	 * TrustScoreModal — explains why the pill's number is not the plain average.
 	 *
-	 * v1.8.14 (the maintainer). The pill shows a Bayesian-shrunk trust score; a profile also
+	 * v1.8.14. The pill shows a Bayesian-shrunk trust score; a profile also
 	 * shows the raw average beneath its headline. Two numbers, and until now
 	 * nothing on screen said why they differ — the maintainer asked directly, and if the
 	 * person who commissioned the system has to ask, every trader will wonder
@@ -46,11 +46,11 @@
 
 <svelte:window on:keydown={open ? onKeydown : undefined} />
 
-<!-- Backdrop: dark + blur so the dialog lifts off the page, per the maintainer. Clicking
+<!-- Backdrop: dark + blur so the dialog lifts off the page, as requested. Clicking
      it closes, which is the expected escape on touch where Esc has no key.
 
-     `use:portal` moves this container to <body> for the life of the component
-     (t.txt v1.8.16 #4). This modal is not mounted at page/layout level like
+     `use:portal` moves this container to <body> for the life of the component.
+     This modal is not mounted at page/layout level like
      SendBlurtModal et al. — it lives DEEP inside the RatingChip, which sits
      inside TradeRepCluster's `whitespace-nowrap` span, inside OrderCard, and
      also inside ConversationView's slide-transitioned chat panel and the sticky
@@ -62,8 +62,7 @@
            containing block for `position: fixed`, so `fixed inset-0` no longer
            covered the viewport on those pages — the scrim was clipped to the
            card/panel and a click in the uncovered area never reached it, so the
-           modal wouldn't close (the maintainer: "doesn't always close, no matter which
-           page").
+           modal wouldn't close (Reported: it did not always close, on any page).
      Portaling to <body> escapes BOTH: <body> is `white-space: normal` and has
      no filtered/transformed ancestor, so the text wraps and the scrim truly
      fills the viewport. z-[60] (not z-50) to sit above the sticky header (z-40)
@@ -107,7 +106,7 @@
 				{$t('trust_score.heading', { values: { score: shown } })}
 			</h2>
 
-			<!-- `whitespace-normal` is belt-and-suspenders (t.txt v1.8.16 #4): the
+			<!-- `whitespace-normal` is belt-and-suspenders: the
 			     portal already re-parents this to <body> so nowrap is no longer
 			     inherited, but stating it here means a future re-mount inside a
 			     nowrap ancestor can't silently regress the wrapping again. -->

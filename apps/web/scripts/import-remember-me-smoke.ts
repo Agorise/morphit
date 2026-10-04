@@ -2,7 +2,7 @@
 /**
  * Smoke: post-seed-import "remember me on this device" step is wired.
  *
- * Anchor: cp137 deep-deep walkthrough H-1.
+ * Anchor: deep walkthrough H-1.
  *
  * Pre-fix behavior: seed-mode import encrypted the envelope with a
  * random session password, never persisted it, and immediately
@@ -10,7 +10,7 @@
  * envelope was gone and they had to re-paste their 12 words from
  * scratch.  Grandma-hostile UX trap.
  *
- * Fix shipped cp137: after a successful seed-mode import, the page
+ * Fix shipped: after a successful seed-mode import, the page
  * transitions to a `remember_me_choice` stage that asks the user
  * whether to persist the envelope behind a password on this device,
  * with a checkbox UNCHECKED BY DEFAULT.  Privacy-positive default

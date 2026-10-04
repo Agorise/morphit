@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * service-worker-single-registration smoke — Part 122 cp81
- * (LL #81 / O-27).
+ * service-worker-single-registration smoke.
  *
- * Prevents the cp81-D22 dual-registration bug from regressing.
+ *
+ * Prevents the dual-registration bug from regressing.
  *
  * The bug: app.html manually called
  *   navigator.serviceWorker.register('/sw.js', { scope: '/' })
@@ -20,8 +20,8 @@
  * were silently broken in production despite the full stack
  * being wired correctly.
  *
- * cp81-D22a fix: removed the manual register from app.html.
- * cp81-D22b fix: deleted apps/web/static/sw.js entirely.
+ * removed the manual register from app.html.
+ * deleted apps/web/static/sw.js entirely.
  *
  * This smoke locks in the fix:
  *   - app.html must NOT contain any manual
@@ -33,12 +33,12 @@
  *     has something to register).
  *
  * Mutation tests:
- *   M-150a: re-add manual register('/sw.js') to app.html →
+ *   re-add manual register('/sw.js') to app.html →
  *     smoke fires.
- *   M-150b: recreate apps/web/static/sw.js → smoke fires.
- *   M-150c: set serviceWorker.register: false in svelte.config →
+ *   recreate apps/web/static/sw.js → smoke fires.
+ *   set serviceWorker.register: false in svelte.config →
  *     smoke fires.
- *   M-150d: delete apps/web/src/service-worker.ts → smoke fires.
+ *   delete apps/web/src/service-worker.ts → smoke fires.
  *
  * Why this matters:
  *   - Push notifications are user-facing; silent breakage is
@@ -138,7 +138,7 @@ const root = resolve(import.meta.dirname, '..');
 	});
 }
 
-// ─── 6. clickPath origin validation present (cp81-D22b) ─────
+// ─── 6. clickPath origin validation present ─────
 //
 // The logic is extracted to $lib/notifications/sanitizeClickPath
 // so it can be unit-tested.  Verify two things:
@@ -256,7 +256,7 @@ const root = resolve(import.meta.dirname, '..');
 // ─── 10. UpdateBanner wires the consent → apply → reload flow ───
 // The page must refresh ONLY when the user clicks "Load it now" — never on its
 // own. So: posts APPLY_UPDATE (asks the SW to skipWaiting), offers Later/apply,
-// and the single location.reload() lives inside applyUpdate(). cp368: applyUpdate
+// and the single location.reload() lives inside applyUpdate(). applyUpdate
 // now also waits for controllerchange before reloading (one tap lands the new
 // bundle on mobile) — that listener is allowed, but ONLY inside applyUpdate,
 // never at module/effect scope where it would auto-reload behind the user's back.
@@ -343,7 +343,7 @@ const root = resolve(import.meta.dirname, '..');
 // PC bug (beta18): the click reloaded but the snackbar kept reappearing,
 // clearing only minutes later. The earlier fix PERSISTED an `applying` flag
 // across the reload — which then got STUCK true and suppressed the snackbar
-// for minutes (cp339). The correct fix: `applying` gates the snackbar so it
+// for minutes. The correct fix: `applying` gates the snackbar so it
 // hides instantly on click, but is IN-MEMORY ONLY — a reload resets it, so it
 // can never wedge. If the update didn't actually land, the snackbar correctly
 // reappears so the user can retry.

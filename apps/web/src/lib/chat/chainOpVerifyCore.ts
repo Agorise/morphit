@@ -1,7 +1,6 @@
 /**
  * Morphit chat — pure cryptographic verification of a Blurt
- * SignedTransaction against an Authority struct (S14, Audit
- * Part 26).
+ * SignedTransaction against an Authority struct.
  *
  * This module is intentionally I/O-free.  It has no dependency
  * on SvelteKit ($app, $net, $stores, etc.); it consumes a
@@ -19,22 +18,13 @@
  */
 
 import type { Buffer } from 'buffer';
-import type {
-	Client,
-	AuthorityType,
-	SignedTransaction
-} from '@beblurt/dblurt';
+import type { Client, AuthorityType, SignedTransaction } from '@beblurt/dblurt';
 
-// cp165 byte-budget: dblurt is statically imported here as TYPES
-// ONLY (`import type` — erased at compile time, zero runtime cost).
-// The runtime values (`cryptoUtils`, `PublicKey`, `Signature`, the
-// Client.DEFAULT_CHAIN_ID constant) are pulled via dynamic import
-// inside the verify function so the 2 MB dblurt chunk doesn't land
-// on the chat page first-paint graph.  This file is reachable from
-// chat/chainVerify → chatService + peerPubFetch, both of which load
-// on /chat/* routes.  Verification only fires on a rare pin-mismatch
-// path, so deferring the load until that path actually triggers is
-// a strict improvement.
+// dblurt is imported here as TYPES only (erased at compile time). The
+// runtime values (`cryptoUtils`, `Signature`, `DEFAULT_CHAIN_ID` — the
+// Blurt mainnet chain id, a module export) are loaded dynamically inside the
+// verify function so the dblurt chunk stays off the chat page's first paint;
+// verification only runs on the rare pin-mismatch path.
 
 /** Result of a local signature verification. */
 export type ChainOpVerifyResult =
@@ -55,46 +45,26 @@ export type ChainOpVerifyResult =
 			readonly message: string;
 	  };
 
-/** Cache for the chain-id buffer.  We resolve it once per
- *  module load via the dblurt default — runtime cost of repeat
- *  resolution is zero, but a let-cache makes it easy to override
- *  in tests if a future audit needs to verify against a custom
- *  chain id. */
-let chainIdCache: Buffer | null = null;
-
-async function getChainId(): Promise<Buffer> {
-	if (chainIdCache !== null) return chainIdCache;
-	// dblurt's DEFAULT_CHAIN_ID is exposed on the Client class.
-	// We don't need a working Client instance to read it; the
-	// constant is a module-level static.  cp165: dynamic import to
-	// keep dblurt out of the first-paint chunk graph.
-	const { Client } = await import('@beblurt/dblurt');
-	const c = Client as unknown as { DEFAULT_CHAIN_ID: Buffer };
-	chainIdCache = c.DEFAULT_CHAIN_ID;
-	return chainIdCache;
-}
-
 /**
  * Pure verification: given a fetched SignedTransaction and an
  * Authority struct (typically the named account's `posting`),
  * verify that the transaction's signatures clear the
  * authority's weight_threshold.
  *
- * Returns ok=true iff at least one signature recovers to a key
- * in `authority.key_auths` and the sum of matching weights
- * meets or exceeds `authority.weight_threshold`.  Multi-sig
- * works correctly: two signatures recovering to two distinct
- * keys (each weight 1, threshold 2) clear together.
+ * Returns ok=true iff the signatures recover to DISTINCT keys in
+ * `authority.key_auths` whose weights sum to at least
+ * `authority.weight_threshold`. Each key counts once: a signature
+ * listed twice adds nothing (two signatures recovering to two
+ * distinct keys, each weight 1, threshold 2, clear together; one
+ * key's signature repeated does not). The digest uses the Blurt
+ * chain id unless `chainId` is given.
  *
  * The function does NOT descend `account_auths` (delegated
  * authority).  An account whose posting authority delegates to
  * another account's posting key is treated as "no matching
  * key_auth signature found" — conservative but safe.
  *
- * cp165: now async.  dblurt's runtime values (`cryptoUtils`,
- * `Signature`, `PublicKey`) are dynamically imported inside.
- * The only caller (`verifyChainOpSignature` in chainOpVerify.ts)
- * was already async, so this is a transparent refactor.
+ * Async because dblurt is loaded on first use.
  */
 export async function verifyTransactionSignatures(
 	tx: SignedTransaction,
@@ -105,12 +75,12 @@ export async function verifyTransactionSignatures(
 		return { ok: false, code: 'no_signatures', message: 'tx has no signatures' };
 	}
 
-	const { cryptoUtils, Signature } = await import('@beblurt/dblurt');
+	const { cryptoUtils, Signature, DEFAULT_CHAIN_ID } = await import('@beblurt/dblurt');
 	type PublicKeyT = import('@beblurt/dblurt').PublicKey;
 
 	let digest: Buffer;
 	try {
-		digest = cryptoUtils.transactionDigest(tx, chainId ?? (await getChainId()));
+		digest = cryptoUtils.transactionDigest(tx, chainId ?? DEFAULT_CHAIN_ID);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		return { ok: false, code: 'rpc_error', message: `digest_failed: ${message}` };
@@ -125,18 +95,14 @@ export async function verifyTransactionSignatures(
 		keyToWeight.set(keyStr, weight);
 	}
 
-	let weightSum = 0;
-	const recoveredKeys: string[] = [];
+	// Distinct recovered keys only: a repeated signature must not count twice
+	// toward the threshold.
+	const recoveredKeys = new Set<string>();
 	for (const sigStr of tx.signatures) {
 		try {
 			const sig = Signature.fromString(sigStr);
 			const recovered: PublicKeyT = sig.recover(digest);
-			const recoveredStr = recovered.toString();
-			recoveredKeys.push(recoveredStr);
-			const w = keyToWeight.get(recoveredStr);
-			if (w !== undefined) {
-				weightSum += w;
-			}
+			recoveredKeys.add(recovered.toString());
 		} catch {
 			// Malformed signature — skip it.  A real chain-accepted
 			// transaction should never have malformed signatures, but
@@ -146,6 +112,8 @@ export async function verifyTransactionSignatures(
 		}
 	}
 
+	let weightSum = 0;
+	for (const k of recoveredKeys) weightSum += keyToWeight.get(k) ?? 0;
 	const threshold = authority.weight_threshold;
 	if (weightSum >= threshold) {
 		return { ok: true, weightSum, threshold };
@@ -153,6 +121,6 @@ export async function verifyTransactionSignatures(
 	return {
 		ok: false,
 		code: 'weight_below_threshold',
-		message: `weight_sum=${weightSum} below threshold=${threshold} (recovered: ${recoveredKeys.join(', ')})`
+		message: `weight_sum=${weightSum} below threshold=${threshold} (recovered: ${[...recoveredKeys].join(', ')})`
 	};
 }

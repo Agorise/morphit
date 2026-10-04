@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/indexer/scripts/indexer-snapshot-op-smoke.ts (cp766)
+ * apps/indexer/scripts/indexer-snapshot-op-smoke.ts
  *
  * Locks the indexer_snapshot_v1 on-chain op contract: the pure validator +
  * builder that decide what may be broadcast as @morphit's canonical indexer-DB

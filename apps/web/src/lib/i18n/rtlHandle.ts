@@ -1,5 +1,5 @@
 /**
- * RTL @handle isolation (t.txt — the maintainer, "set in stone").
+ * RTL @handle isolation ("set in stone").
  *
  * A Blurt @handle (e.g. @tester3) is a stable ASCII identifier — the exact
  * thing a URL uses (`/@tester3`, never `/tester3@`). But inside RTL prose

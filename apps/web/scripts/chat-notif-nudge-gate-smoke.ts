@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/chat-notif-nudge-gate-smoke.ts  (v1.9.0, the maintainer)
+ * apps/web/scripts/chat-notif-nudge-gate-smoke.ts  (v1.9.0)
  *
  * The in-chat "turn on notifications" nudge kept prompting users who had ALREADY
  * enabled "Push notifications (tab closed)". Two root causes, both pinned here:

@@ -19,8 +19,9 @@ import type pg from 'pg';
 import type { Handler, HandlerResult, OpContext } from '$indexer/handler-contract';
 import { checkJsonbSize } from '$indexer/payloadSize';
 import { validateOrderPermlink } from '$indexer/permlink';
-import { ASSET_TICKERS_SET, FIRST_ORDER_MIN_USD, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
+import { ASSET_TICKERS_SET, isGoodsAsset, type AssetTicker } from '@morphit/asset-registry';
 import { isOrderLang } from '@morphit/operator-config';
+import { consensusV2Active } from '$indexer/consensusActivation';
 
 const SIDES = new Set(['buy', 'sell']);
 
@@ -45,7 +46,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * cp440 — order-independent equality for two barter accepted-crypto sets.
+ * order-independent equality for two barter accepted-crypto sets.
  * Both `null`/absent (crypto orders) counts as equal; a set vs null (or two
  * different sets) does not. Sorted-copy comparison so element ordering can't
  * produce a false mismatch on replace. A nullish (null/undefined) operand is
@@ -86,11 +87,11 @@ interface Validated {
 	readonly payment_methods: readonly string[];
 	readonly terms: string | null;
 	readonly expires_at: Date | null;
-	/** cp30-DD-DD CODE-3 — multi-network asset_network (Part 121
-	 *  USDT + cp30 USDC + cp31 DAI).  Required for USDT/USDC/DAI, null for every
+	/** multi-network asset_network (USDT + USDC
+	 *  + DAI).  Required for USDT/USDC/DAI, null for every
 	 *  other asset.  Same shape contract as order.ts. */
 	readonly asset_network: string | null;
-	/** cp425 — for a BARTER order, the non-empty canonical-sorted set of
+	/** for a BARTER order, the non-empty canonical-sorted set of
 	 *  crypto tickers the seller accepts (editable on replace, like the
 	 *  amount/terms; the asset itself stays locked to BARTER). Null for
 	 *  crypto assets. */
@@ -99,7 +100,7 @@ interface Validated {
 	readonly lang: string | null;
 }
 
-function validate(payload: unknown): Validated | { reason: string } {
+function validate(payload: unknown, blockTime: Date): Validated | { reason: string } {
 	if (!isPlainObject(payload)) return { reason: 'payload_not_object' };
 
 	const permlinkFail = validateOrderPermlink(payload.permlink);
@@ -224,15 +225,15 @@ function validate(payload: unknown): Validated | { reason: string } {
 		if (!ISO_8601_RE.test(payload.expires_at)) return { reason: 'expires_at_unparseable' };
 		const d = new Date(payload.expires_at);
 		if (Number.isNaN(d.getTime())) return { reason: 'expires_at_unparseable' };
-		// Sanity-cap.  Mirror of order.ts.
+		// Sanity-cap from the op's block time.  Mirror of order.ts.
 		const maxFutureMs = MAX_EXPIRES_AT_DAYS * 86_400_000;
-		if (d.getTime() - Date.now() > maxFutureMs) {
+		if (d.getTime() - blockTime.getTime() > maxFutureMs) {
 			return { reason: 'expires_at_too_far_future' };
 		}
 		expires_at = d;
 	}
 
-	// cp30-DD-DD CODE-3 — asset_network gate.  Mirror of order.ts
+	// asset_network gate.  Mirror of order.ts
 	// §"asset_network for multi-network assets".  USDT, USDC, and DAI
 	// REQUIRE asset_network; every other asset must omit (or pass
 	// null).  Strict per-asset allowlists.  The replace handler
@@ -243,9 +244,9 @@ function validate(payload: unknown): Validated | { reason: string } {
 	const networkRaw = payload.asset_network;
 	const USDT_NETWORKS_VALID = new Set(['erc20', 'trc20', 'spl', 'bep20']);
 	const USDC_NETWORKS_VALID = new Set(['erc20', 'spl', 'base', 'polygon']);
-	// Part 122 cp31 — DAI's 4 EVM networks per ADR-0029 §1.
+	// DAI's 4 EVM networks per ADR-0029 §1.
 	const DAI_NETWORKS_VALID = new Set(['erc20', 'polygon', 'base', 'arbitrum']);
-	// cp30-DD-DD I-1 (defense-in-depth) — bound input before
+	// (defense-in-depth) — bound input before
 	// allocating a lowercased copy.  Mirror of order.ts.
 	const MAX_NETWORK_LEN = 16;
 	if (asset === 'USDT') {
@@ -282,10 +283,10 @@ function validate(payload: unknown): Validated | { reason: string } {
 		asset_network_validated = null;
 	}
 
-	// cp425 — accepted_assets gate.  Mirror of order.ts.  REQUIRED
+	// accepted_assets gate.  Mirror of order.ts.  REQUIRED
 	// (non-empty crypto set) when the asset is BARTER; forbidden for every
 	// crypto asset.  Each entry a real crypto ticker, never a goods asset.
-	// cp440 — LOCKED on replace: the handle() body rejects a replace whose
+	// LOCKED on replace: the handle() body rejects a replace whose
 	// accepted-crypto set differs from the target's (bait-and-switch guard,
 	// parallel to the side/asset/fiat/network lock-down).
 	let accepted_assets_validated: string[] | null = null;
@@ -318,8 +319,8 @@ function validate(payload: unknown): Validated | { reason: string } {
 		accepted_assets_validated = null;
 	}
 
-	// v1.9.0 (the maintainer) — specific_barter_title on edit. Mirror of order.ts: a BARTER
-	// order's inline goods label, letters + single internal spaces (t.txt #5),
+	// v1.9.0 — specific_barter_title on edit. Mirror of order.ts: a BARTER
+	// order's inline goods label, letters + single internal spaces,
 	// ≤24 chars, validated strictly so the edited on-chain value matches the
 	// client sanitizer. Optional for barter; must be absent for a crypto asset.
 	// Editing to blank clears it (→ null).
@@ -366,7 +367,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 		payment_methods: normalizedPm,
 		terms,
 		expires_at,
-		// cp30-DD-DD CODE-3 — multi-network asset_network gate.
+		// multi-network asset_network gate.
 		// Mirror of order.ts §"asset_network for multi-network
 		// assets".  Required for USDT/USDC/DAI, forbidden for single-
 		// network assets, strictly allowlisted per asset.  The
@@ -380,7 +381,7 @@ function validate(payload: unknown): Validated | { reason: string } {
 	};
 }
 
-// Part 70 closure of REVISIT-LIST item: bumped from 3 minutes
+// of backlog item: bumped from 3 minutes
 // to 15 minutes per ADR-0001 (updated) / ADR-0009 (updated).
 // Rationale: 3 min was so short Sally would lock herself out
 // after stepping away from the keyboard for ~4 min — costing
@@ -401,8 +402,20 @@ function validate(payload: unknown): Validated | { reason: string } {
 const REPLACE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes per ADR-0001/0009
 
 const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<HandlerResult> => {
-	const v = validate(ctx.payload);
+	const v = validate(ctx.payload, ctx.blockTime);
 	if ('reason' in v) return { ok: false, reason: v.reason };
+
+	// The order handler's payment-method gate, applied to a replacement too
+	// (from CONSENSUS_V2_ACTIVATION_TIME): a replace could otherwise swap a
+	// live order's methods for ones this instance has turned off — every
+	// method offered disabled here, which the order handler refuses.
+	if (
+		consensusV2Active(ctx.blockTime) &&
+		ctx.config.disabledPaymentMethods.length > 0 &&
+		v.payment_methods.every((m) => ctx.config.disabledPaymentMethods.includes(m.toLowerCase()))
+	) {
+		return { ok: false, reason: 'payment_methods_all_disabled' };
+	}
 
 	// Look up the target first so we can distinguish the three
 	// rejection reasons (not_found / not_live / window_expired)
@@ -414,10 +427,10 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		asset: string;
 		fiat_currency: string;
 		fee_method: string;
-		// cp30-DD-DD CODE-3 — read original asset_network so we
+		// read original asset_network so we
 		// can enforce it as a frozen substance field on replace.
 		asset_network: string | null;
-		// cp440 — read the original barter accepted-crypto set so we can
+		// read the original barter accepted-crypto set so we can
 		// freeze it on replace (bait-and-switch protection), like the
 		// substance fields above. null for crypto orders.
 		accepted_assets: string[] | null;
@@ -464,7 +477,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (v.fiat_currency !== target.fiat_currency) {
 		return { ok: false, reason: 'replace_fiat_change_forbidden' };
 	}
-	// cp30-DD-DD CODE-3 — for multi-network assets (USDT/USDC/DAI),
+	// for multi-network assets (USDT/USDC/DAI),
 	// asset_network is substance per ADR-0023/0028 (which chain
 	// is the trade actually on?) and must not change in a replace.
 	// For single-network assets both are null so the comparison
@@ -474,7 +487,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	if (v.asset_network !== target.asset_network) {
 		return { ok: false, reason: 'replace_asset_network_change_forbidden' };
 	}
-	// cp440 — the accepted-crypto set of a BARTER order is substance too: a
+	// the accepted-crypto set of a BARTER order is substance too: a
 	// counterparty who clicked through on the original listing chose it partly
 	// on WHICH coins they'd be paid in. Dropping one — or unchecking them all —
 	// in a replace is a bait-and-switch, so the set is frozen like
@@ -485,35 +498,14 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 		return { ok: false, reason: 'replace_accepted_assets_change_forbidden' };
 	}
 
-	// B1 audit fix — waiver substance protection.
-	// If the original order was created under fee_method='waived_first_buy',
-	// the replace must not let the user dial back the substance that
-	// earned the waiver.  The waiver floor ($1 USD-equivalent first-buy
-	// VALUE — amount_min is a fiat value) is only enforced at create-
-	// time in order.ts; without this check, a user could create an
-	// order at amount_min=$1 to claim the waiver, then replace within
-	// the 15-minute window with amount_min=0.01, leaving a tiny "waived
-	// first buy" order on the orderbook that defeats the floor policy.
-	//
-	// side/asset/fiat are already locked above.  We only re-verify
-	// the amount-floor here; the rest of the waiver shape (side='buy',
-	// asset='BLURT') is implied by the substance-equals checks
-	// because the original passed them at create-time.  cp369: fiat
-	// floor (was a 500-BLURT constant under the §F.11 regression).
-	// cp370: canonical FIRST_ORDER_MIN_USD (@morphit/asset-registry).
-	const WAIVER_MIN_FIAT_USD = FIRST_ORDER_MIN_USD;
-	if (target.fee_method === 'waived_first_buy') {
-		// cp372: FX-aware floor, identical conversion to create-time in
-		// order.ts — amount_min is in v.fiat_currency; convert to USD
-		// before the $1 check.  A null amount_min fails the floor outright
-		// (can't claim the waiver on an unbounded min), and so (v1.20.0,
-		// G5) does an amount this node cannot convert — it used to be
-		// compared as if it were already USD.
-		const minUsd =
-			v.amount_min === null ? null : ctx.fiatToUsd(v.amount_min, v.fiat_currency);
-		if (minUsd === null || minUsd < WAIVER_MIN_FIAT_USD) {
-			return { ok: false, reason: 'replace_below_waiver_floor' };
-		}
+	// A waived-first-buy order keeps a stated minimum through a replace: a
+	// waiver claimed on a bounded order cannot be turned into an unbounded
+	// one. side/asset/fiat are already locked above by the substance-equals
+	// checks. The $1 USD-equivalent floor itself is advisory, checked by the
+	// client before it signs: judging it here needed each node's live
+	// FX rate, so nodes disagreed on the same op.
+	if (target.fee_method === 'waived_first_buy' && v.amount_min === null) {
+		return { ok: false, reason: 'replace_below_waiver_floor' };
 	}
 
 	// Apply the update. Note we re-check status = 'live' in the

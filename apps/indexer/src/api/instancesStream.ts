@@ -201,7 +201,7 @@ export function instancesStreamRoute(db: Database): Hono {
 				// A compressing/buffering proxy (e.g. BunkerWeb with gzip/brotli
 				// enabled) can hold an SSE stream in its buffer until it fills —
 				// ignoring `no-transform` and `X-Accel-Buffering: no` — which stalls
-				// the initial snapshot for MINUTES (the maintainer/timeapp: the directory stuck
+				// the initial snapshot for MINUTES (timeapp: the directory stuck
 				// on "Loading…" while morphit.io, not compressing that path, was
 				// instant). Push ~2 KB of SSE comment FIRST: EventSource ignores
 				// `:`-prefixed lines, so it's invisible to the client, but it fills

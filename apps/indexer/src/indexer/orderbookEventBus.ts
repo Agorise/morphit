@@ -68,7 +68,7 @@ export interface ProvisionalOrderEvent {
 export type ProvisionalOrderListener = (event: ProvisionalOrderEvent) => void;
 
 /**
- * cp508 (tt.txt #1/#2) — a short-lived memory of orders the fast path has
+ * a short-lived memory of orders the fast path has
  * provisionally REMOVED (a cancel/complete seen at head), so a freshly-opened
  * orderbook stream doesn't re-show them.
  *

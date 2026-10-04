@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Tests for the per-discussion chat folder store (t.txt — email inbox, now
+ * Tests for the per-discussion chat folder store (email inbox, now
  * on-chain synced). Covers the model: default = Inbox (absence from the map),
  * the star / archive / restore transitions, per-(peer, order) keying, mirror
  * roundtrip, corrupt-storage fallback, store reactivity, validation, and

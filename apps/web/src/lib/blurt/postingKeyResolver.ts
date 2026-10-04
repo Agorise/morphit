@@ -3,7 +3,7 @@
  *
  * ─── Why this exists ──────────────────────────────────────────────────
  *
- * the maintainer posted his first order as @testowner and the order CARD showed no
+ * A user posted their first order and the order CARD showed no
  * truncated key, while the order DETAIL page and the settings display-name
  * card both showed `BLT8eGZMn…oAVo` perfectly. Three surfaces, three different
  * ways of obtaining the same fact:
@@ -19,8 +19,8 @@
  *
  * So the card alone depended on a background job having already run. For an
  * account new to Morphit the column is briefly empty, the card renders without
- * the key, and it appears minutes later once the backfill catches up. the maintainer saw
- * exactly that, and reasonably read it as "pre-fork accounts are broken" —
+ * the key, and it appears minutes later once the backfill catches up. That was
+ * seen, and reasonably read as "pre-fork accounts are broken" —
  * they are not; nothing about the key is special, only where that one surface
  * looked for it.
  *
@@ -90,10 +90,4 @@ export async function resolvePostingKey(
 	})();
 	inFlight.set(account, p);
 	return p;
-}
-
-/** Test seam / sign-out hook: forget every resolved key. */
-export function clearPostingKeyCache(): void {
-	cache.clear();
-	inFlight.clear();
 }

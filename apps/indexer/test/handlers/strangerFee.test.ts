@@ -139,7 +139,12 @@ describe('stranger-fee handler — idempotency', () => {
 			// recent count of fees from this sender → multiplier.
 			// 0 = first fee in the window → multiplier=1 → 5 BLURT.
 			{ match: 'COUNT(*)', rows: [{ count: '0' }] },
-			{ match: 'INSERT INTO stranger_fees', throwError: pgErr }
+			{ match: 'SAVEPOINT stranger_fee_insert' },
+			{ match: 'INSERT INTO stranger_fees', throwError: pgErr },
+			// The unique violation is rolled back in its own savepoint, so the
+			// block transaction stays usable.
+			{ match: 'ROLLBACK TO SAVEPOINT stranger_fee_insert' },
+			{ match: 'RELEASE SAVEPOINT stranger_fee_insert' }
 		]);
 		const r = await handler(makeStrangerFeeCtx({ transferAmountBlurt: 5 }), mock.client);
 		expect(r).toEqual({ ok: true });
@@ -151,13 +156,16 @@ describe('stranger-fee handler — fee verification', () => {
 		const mock = makeMockClient([
 			{ match: 'FROM stranger_fees', rows: [{ exists: false }] },
 			{ match: 'COUNT(*)', rows: [{ count: '0' }] },
-			{ match: 'INSERT INTO stranger_fees' }
+			{ match: 'SAVEPOINT stranger_fee_insert' },
+			{ match: 'INSERT INTO stranger_fees' },
+			{ match: 'RELEASE SAVEPOINT stranger_fee_insert' }
 		]);
 		// 5 BLURT base fee, multiplier=1, exact match.
 		const r = await handler(makeStrangerFeeCtx({ transferAmountBlurt: 5 }), mock.client);
 		expect(r).toEqual({ ok: true });
-		expect(mock.queries).toHaveLength(3);
-		const insert = mock.queries[2]!;
+		// existence check, count, SAVEPOINT, INSERT, RELEASE
+		expect(mock.queries).toHaveLength(5);
+		const insert = mock.queries[3]!;
 		expect(insert.params).toContain('alice');
 		expect(insert.params).toContain('bob');
 	});
@@ -250,7 +258,9 @@ describe('stranger-fee handler — fee verification', () => {
 		const mock = makeMockClient([
 			{ match: 'FROM stranger_fees', rows: [{ exists: false }] },
 			{ match: 'COUNT(*)', rows: [{ count: '0' }] },
-			{ match: 'INSERT INTO stranger_fees' }
+			{ match: 'SAVEPOINT stranger_fee_insert' },
+			{ match: 'INSERT INTO stranger_fees' },
+			{ match: 'RELEASE SAVEPOINT stranger_fee_insert' }
 		]);
 		// Payload says 5 BLURT, transfer was 5.05 BLURT — within
 		// the 2% tolerance, but extra is on the user (no refund).

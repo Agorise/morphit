@@ -17,7 +17,7 @@
  *   - stops reading the fee live from the chain.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -132,6 +132,36 @@ scenario('broadcastAccountCreate reads the account_creation_fee LIVE from the ch
 		/getChainProperties\(\)/.test(CLIENT_CODE) && /account_creation_fee/.test(CLIENT_CODE),
 		'broadcastAccountCreate must read getChainProperties().account_creation_fee per call'
 	);
+});
+
+// The shared packages and the MCP server describe the relay to other code and
+// to AI agents: they must not present the retired claimed-account model as how
+// signups work.
+scenario('packages/ and the MCP server do not describe the retired ACT model', () => {
+	const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+	const roots = [join(repo, 'apps', 'mcp-server', 'src')];
+	for (const pkg of readdirSync(join(repo, 'packages'))) roots.push(join(repo, 'packages', pkg, 'src'));
+	const hits: string[] = [];
+	const walk = (d: string): void => {
+		let names: string[];
+		try {
+			names = readdirSync(d);
+		} catch {
+			return;
+		}
+		for (const n of names) {
+			const p = join(d, n);
+			if (statSync(p).isDirectory()) walk(p);
+			else if (/\.(ts|js)$/.test(n)) {
+				// Comment lines joined, so a phrase wrapped over two lines still matches.
+				const text = readFileSync(p, 'utf-8').replace(/\n\s*(?:\/\/|\*)\s*/g, ' ');
+				const m = /create_claimed_account|\bclaim_account\b|\bACT[- ]mint|\bACT auto-mint/i.exec(text);
+				if (m !== null) hits.push(`${p.slice(repo.length + 1)} ("${m[0]}")`);
+			}
+		}
+	};
+	for (const r of roots) walk(r);
+	assert(hits.length === 0, `retired ACT-model text at ${hits.join(', ')}`);
 });
 
 console.log(`\n${'─'.repeat(56)}`);

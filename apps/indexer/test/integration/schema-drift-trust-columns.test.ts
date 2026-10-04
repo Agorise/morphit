@@ -1,5 +1,5 @@
 /**
- * v1.18.0 deep-deep (rv2-10) — the doctor notices a missing posting-key trust
+ * the doctor notices a missing posting-key trust
  * column.
  *
  * `accounts.posting_pubkey` and `accounts.posting_key_reconciled` are added to

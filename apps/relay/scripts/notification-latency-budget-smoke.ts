@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * notification-latency-budget-smoke (cp450) — lock the "lightning-fast"
+ * notification-latency-budget-smoke — lock the "lightning-fast"
  * guarantee (<6s end-to-end) against regression.
  *
  * The end-to-end budget for a chat message / notification is ~6s:

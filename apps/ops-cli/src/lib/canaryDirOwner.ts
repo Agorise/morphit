@@ -1,5 +1,5 @@
 /**
- * cp619 (the maintainer — canary) — decide who should own `apps/web/build` after
+ * (canary) — decide who should own `apps/web/build` after
  * `morphit-ops upgrade` rebuilds it.
  *
  * The web frontend rebuild runs as root (`sudo morphit-ops`) and vite RECREATES
@@ -41,7 +41,7 @@ export function chooseCanaryDirOwner(
 }
 
 /**
- * cp622 (the maintainer — canary smoothness) — parse a `getent passwd <uid>` line into the
+ * (canary smoothness) — parse a `getent passwd <uid>` line into the
  * canary owner's username + the path to their weekly refresh script. After an
  * upgrade rebuild wipes the served canary, the caller uses this to tell a
  * SAME-BOX operator — one who signs the canary HERE, so their

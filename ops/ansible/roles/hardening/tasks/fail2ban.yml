@@ -20,10 +20,10 @@
       # in group_vars (space-separated; CIDR ok). Loopback is always included.
       ignoreip = 127.0.0.1/8 ::1{{ (' ' + fail2ban_ignoreip) if fail2ban_ignoreip | default('') | length > 0 else '' }}
       backend  = systemd
-      destemail = {{ morphit_alert_email_to }}
-      sender   = fail2ban@{{ morphit_domain }}
-      mta      = mail
-      action   = %(action_mwl)s
+      # Ban only.  action_mwl mailed every ban with a `whois` of the banned
+      # address — a lookup to a clearnet whois server per visitor, and mail
+      # that on most boxes went nowhere.
+      action   = %(action_)s
 
       [sshd]
       enabled = true

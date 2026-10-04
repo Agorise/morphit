@@ -283,7 +283,9 @@ scenario('mismatch:amount — recipient + sender match, amount off', () => {
 		memo: 'abc12345'
 	});
 	const r = verifyBlurtTransferAgainstTx(tx, baselineExpect);
-	assertEqual(r, { kind: 'mismatch', field: 'amount' }, 'amount mismatch');
+	// The amount that actually arrived comes with it, so the seller is told
+	// "received 1500 of 1700", not just "wrong amount".
+	assertEqual(r, { kind: 'mismatch', field: 'amount', received: '1500.000' }, 'amount mismatch');
 });
 
 scenario('mismatch:amount — outside epsilon', () => {
@@ -295,7 +297,7 @@ scenario('mismatch:amount — outside epsilon', () => {
 		memo: 'abc12345'
 	});
 	const r = verifyBlurtTransferAgainstTx(tx, baselineExpect);
-	assertEqual(r, { kind: 'mismatch', field: 'amount' }, 'epsilon');
+	assertEqual(r, { kind: 'mismatch', field: 'amount', received: '1700.001' }, 'epsilon');
 });
 
 scenario('mismatch:amount — malformed amount string', () => {
@@ -306,6 +308,7 @@ scenario('mismatch:amount — malformed amount string', () => {
 		memo: 'abc12345'
 	});
 	const r = verifyBlurtTransferAgainstTx(tx, baselineExpect);
+	// An amount that cannot be read is never reported as "received".
 	assertEqual(r, { kind: 'mismatch', field: 'amount' }, 'malformed');
 });
 

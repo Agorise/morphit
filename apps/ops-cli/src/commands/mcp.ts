@@ -19,7 +19,7 @@
  * *install* (the isolated `/opt/morphit-mcp` working dir + the
  * low-privilege `morphit-mcp` service user that exists specifically
  * so the MCP process CANNOT read the main install's DB password and
- * relay keys — REVISIT-LIST §isolation).  Standing up or removing
+ * relay keys — backlog §isolation).  Standing up or removing
  * that isolated deploy is the installer's job (the Ansible playbook /
  * the documented manual steps); flattening it into this CLI would
  * weaken the least-privilege boundary, so we don't.  If the unit

@@ -44,7 +44,7 @@
  *   - All input validation happens before any chain call. Malformed
  *     or policy-rejected inputs never reach the signing code path.
  *
- * See docs/PHASE-3a-DESIGN.md for the full design + threat model.
+ * See docs/adr/0006-security-posture-phase3a.md and docs/SECURITY.md for the design and threat model.
  * See docs/OPERATIONS.md §17-§18 for operator guidance on the
  * signup-drain defenses.
  */
@@ -153,7 +153,7 @@ interface RequestCtx {
 }
 
 /** How long a per-IP slot kept by a `broadcast_outcome_unknown` attempt waits
- *  for its same-name retry (fix wave 4, A4). */
+ *  for its same-name retry. */
 const HELD_SLOT_TTL_MS = 30 * 60_000;
 
 interface DedupeEntry {
@@ -260,27 +260,9 @@ export class CreateEndpoint {
 		}
 
 		const bucketKey = canonicalBucketKey(clientIp(c));
-		// Per-IP burst cap (e.g. 5/hour) — consume on check.
-		// This is the cheap limit that bounds the rate of
-		// availability+broadcast attempts.  A legitimate user
-		// trying to find an unregistered username gets 5 attempts
-		// per hour, which is comfortable for finding a name they
-		// like.  Consuming on every request (not only successful
-		// broadcasts) is what makes this an actual rate limiter
-		// against attackers; if we peeked here, an attacker could
-		// burst unbounded.
-		if (!this.limiter.allow(bucketKey)) {
-			return c.json(
-				{
-					status: 'rejected',
-					code: 'rate_limited',
-					message: 'Too many account-creation requests from this client. Try again in an hour.'
-				},
-				429
-			);
-		}
 
-		// Parse + validate body shape.
+		// Parse + validate body shape. Before the burst cap: a request the
+		// relay rejects outright must not use up the bucket (see below).
 		let parsed: z.infer<typeof requestSchema>;
 		try {
 			const body = await c.req.json();
@@ -308,7 +290,38 @@ export class CreateEndpoint {
 			);
 		}
 
-		// ── "Already created with YOUR key" — answered FIRST (fix wave 4, A4).
+		// Per-IP burst cap (e.g. 5/hour) — consume on check, for every request
+		// that can lead to work: a well-formed body with a valid name and valid
+		// keys (it triggers chain reads and may spend). A legitimate user trying
+		// to find an unregistered username gets 5 attempts per hour. Consuming
+		// on every such request (not only successful broadcasts) is what makes
+		// this a real rate limit; if we peeked, an attacker could burst
+		// unbounded. A request rejected without any work (bad JSON, bad shape,
+		// invalid name or key) does NOT take a slot: every Tor/I2P visitor
+		// shares one bucket, and junk from one of them used to lock all of
+		// them out of signups for an hour. Those requests fall through to the
+		// cheap validation below, which rejects them before any chain call.
+		{
+			const name = parsed.op.new_account_name.trim().toLowerCase();
+			const keysValid = [
+				parsed.op.owner.key_auths[0]![0],
+				parsed.op.active.key_auths[0]![0],
+				parsed.op.posting.key_auths[0]![0],
+				parsed.op.memo_key
+			].every((k) => isValidPublicKey(k));
+			if (validateBlurtName(name) === 'ok' && keysValid && !this.limiter.allow(bucketKey)) {
+				return c.json(
+					{
+						status: 'rejected',
+						code: 'rate_limited',
+						message: 'Too many account-creation requests from this client. Try again in an hour.'
+					},
+					429
+				);
+			}
+		}
+
+		// ── "Already created with YOUR key" — answered FIRST.
 		// After `broadcast_outcome_unknown` the user is told to retry with the
 		// same name. That retry must reach this answer, not the per-IP spacing
 		// rule (a 60-minute 429 that pushed people to pick ANOTHER name — a
@@ -331,7 +344,7 @@ export class CreateEndpoint {
 		}
 
 		// Global daily ceiling pre-check + atomic reservation.
-		// Audit fix (this turn): pre-fix this used canAccept() to
+		// Audit fix: pre-fix this used canAccept() to
 		// gate the pre-check, then a separate recordSuccess() at
 		// the very end to count the success.  Concurrent requests
 		// from N different IPs could all see canAccept()=true at
@@ -382,7 +395,7 @@ export class CreateEndpoint {
 	private async handleWithReservation(c: Context, finalize: () => void, ctx: RequestCtx): Promise<Response> {
 		const { bucketKey } = ctx;
 		// A same-name, same-key retry after `broadcast_outcome_unknown` reuses
-		// the per-IP slot that attempt kept (fix wave 4, A4): no new
+		// the per-IP slot that attempt kept: no new
 		// reservation, so the spacing rule cannot refuse it. If this retry ends
 		// without spending, that slot is returned.
 		const heldKey = `${ctx.parsed.op.new_account_name.trim().toLowerCase()}|${ctx.parsed.op.owner.key_auths[0]![0]}`;
@@ -527,8 +540,10 @@ export class CreateEndpoint {
 				shortNameThreshold: this.highValueShortThreshold
 			});
 			if (hvClass !== null && isHighValueBlocked(hvClass, this.highValuePolicy)) {
+				// No name: a refused name never reaches the chain, so logging it
+				// would record what this client tried. The category is enough to
+				// audit false positives.
 				log.info('highvalue_name_rejected', {
-					name,
 					classification: hvClass,
 					policy: this.highValuePolicy
 				});
@@ -557,11 +572,12 @@ export class CreateEndpoint {
 		if (this.sequentialDetector !== null) {
 			const seqResult = this.sequentialDetector.check(name, bucketKey);
 			if (seqResult.blocked) {
+				// Reason and a count only. The client's network prefix and the
+				// names already created from it must never reach the journal —
+				// together they link real accounts to an address range.
 				log.info('sequential_pattern_rejected', {
-					name,
-					bucketKey,
 					reason: seqResult.reason,
-					matched: seqResult.matchedPrior
+					matched_count: seqResult.matchedPrior.length
 				});
 				return c.json(
 					{
@@ -784,8 +800,7 @@ export class CreateEndpoint {
 			// and never re-signed (D2); a failure or an unknown outcome is
 			// logged and not retried here — the account already exists, and
 			// the low-balance auto-refill (ADR-0010 §3) tops it up later.
-			// Only when a node ACCEPTED this request's own transaction (fix wave
-			// 4): a `recovered` account may have been created by an EARLIER
+			// Only when a node ACCEPTED this request's own transaction: a `recovered` account may have been created by an EARLIER
 			// attempt that already sent its dust (a retry whose availability
 			// read hit a lagging node lands here), and a second 2 BLURT would
 			// be a double payment. The auto-refill tops up a missed dust.

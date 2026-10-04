@@ -2,12 +2,12 @@
 /**
  * usdt-trade-only-smoke.
  *
- * Part 121 sentinel: USDT must be `canPayListingFee: false`
+ * USDT must be `canPayListingFee: false`
  * AND `canBeTraded: true` in BOTH the canonical and frontend
  * asset registries.  If a future contributor toggles either
  * value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor
  *    flipping USDT's flag to true would fail the
@@ -52,10 +52,10 @@ if (canonUsdt) {
 
 // ── Scenario 2 — canonical USDT.canPayListingFee === false ───────
 if (canonUsdt && canonUsdt.canPayListingFee === false) {
-	pass('canonical USDT.canPayListingFee === false (memory #23)');
+	pass('canonical USDT.canPayListingFee === false (trade-only rule)');
 } else {
 	fail(
-		'canonical USDT.canPayListingFee === false (memory #23)',
+		'canonical USDT.canPayListingFee === false (trade-only rule)',
 		`USDT must be trade-only.  Got canPayListingFee=${canonUsdt?.canPayListingFee}`
 	);
 }
@@ -100,7 +100,7 @@ if (canonUsdt && canonUsdt.privacyWarningKey === 'usdt_centralized') {
 } else {
 	fail(
 		'canonical USDT.privacyWarningKey === "usdt_centralized"',
-		`USDT must surface a privacy warning (Memory #19 priority #1).  Got ${canonUsdt?.privacyWarningKey}`
+		`USDT must surface a privacy warning (privacy is priority #1).  Got ${canonUsdt?.privacyWarningKey}`
 	);
 }
 

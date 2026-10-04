@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * pwa-install-button — cp701.
+ * pwa-install-button.
  *
  * The PWA install affordance was ~built but never appeared: installPrompt.ts
  * captures `beforeinstallprompt`, but it was imported only by the settings page,
  * so the (single, early) event was missed and the deferred prompt store stayed
- * null. cp701 registers the capture at boot and adds a prominent, dismissible
+ * null. A later change registers the capture at boot and adds a prominent, dismissible
  * InstallBanner that covers Chromium (native prompt) AND iOS Safari (manual
  * Add-to-Home-Screen guidance). Guards all of that + 10-locale string parity.
  */

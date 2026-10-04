@@ -5,16 +5,17 @@
 	 * Self-contained route at /[lang]/settings/security/2fa.
 	 *
 	 * Honest design framing surfaced in the UI itself: this is a
-	 * SESSION GATE, not cryptographic 2FA.  An attacker with the
-	 * encrypted keystore + cracked password can extract the TOTP
-	 * secret directly.  The protection bounds are:
-	 *   - shoulder-surfing
-	 *   - borrowed-device replay
-	 *   - casual local malware
+	 * UI GATE in this app, not cryptographic 2FA.  The TOTP secret is
+	 * stored inside the same encrypted keystore as the keys, so anyone
+	 * who has the keystore file and the password can decrypt the keys
+	 * without the code (with this app or any other code).  What it
+	 * stops: someone who learns the password and uses THIS app to
+	 * unlock, without the authenticator.
 	 *
-	 * For cryptographic-strength 2FA, the path forward is FIDO2/
-	 * WebAuthn hardware keys (see HardwareKeyCard.svelte and the
-	 * yubikey-probe exploratory route).
+	 * Every change here goes to the session's own keystore
+	 * ($currentEnvelope) and is committed with commitSessionEnvelope,
+	 * so the session and the device's remembered copy never diverge,
+	 * and another account remembered on this device is never touched.
 	 *
 	 * Component states:
 	 *   - loading              — initial read of identity store + envelope
@@ -35,9 +36,8 @@
 	import { localePath } from '$i18n/path';
 	import { page } from '$app/stores';
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
-	import { isUnlocked, updateEnvelope } from '$stores/identity';
+	import { isUnlocked, currentEnvelope, commitSessionEnvelope } from '$stores/identity';
 	import RequireLiveSession from '$components/RequireLiveSession.svelte';
-	import { readEnvelope, writeEnvelope } from '$crypto/persistentKeystore';
 	import { decryptIdentity, KeystoreError } from '$crypto/keystore';
 	import {
 		enrollTotp,
@@ -65,7 +65,7 @@
 	import BusyButton from '$components/BusyButton.svelte';
 	import { webCryptoAvailable } from '$lib/security/secureContext';
 
-	// Display order = alphabetical by name (the maintainer's request). The source
+	// Display order = alphabetical by name. The source
 	// arrays keep their own documented order for programmatic/smoke use;
 	// the picker sorts a copy so neither array is mutated. localeCompare
 	// gives a stable, locale-aware order (digits before letters, so
@@ -122,7 +122,7 @@
 			phase = 'locked';
 			return;
 		}
-		const env = readEnvelope();
+		const env = $currentEnvelope;
 		if (!env) {
 			phase = 'locked';
 			return;
@@ -164,7 +164,7 @@
 	async function startEnrollment(): Promise<void> {
 		if (busy) return;
 		errorMsg = '';
-		const env = readEnvelope();
+		const env = $currentEnvelope;
 		if (!env || !$isUnlocked) {
 			phase = 'locked';
 			return;
@@ -263,7 +263,7 @@
 			errorMsg = $_('settings.totp.enroll.err_locked');
 			return;
 		}
-		const env = readEnvelope();
+		const env = $currentEnvelope;
 		if (!env || !$isUnlocked) {
 			phase = 'locked';
 			return;
@@ -272,9 +272,11 @@
 		try {
 			const full = await decryptIdentity(env, password);
 			try {
-				const result = await enrollTotp(full, password, pendingSecret, pendingBackupCodes);
-				writeEnvelope(result.envelope);
-				updateEnvelope(result.envelope);
+				const result = await enrollTotp(env, full, password, pendingSecret, pendingBackupCodes);
+				if (commitSessionEnvelope(result.envelope) === 'persist_failed') {
+					errorMsg = $_('settings.hardware_key.error.persist_failed');
+					return;
+				}
 				hasTotp = true;
 				backupTotal = 10;
 				backupRemaining = 10;
@@ -307,7 +309,7 @@
 			errorMsg = $_('settings.totp.unenroll.err_invalid_code');
 			return;
 		}
-		const env = readEnvelope();
+		const env = $currentEnvelope;
 		if (!env || !$isUnlocked) {
 			phase = 'locked';
 			return;
@@ -325,9 +327,11 @@
 					errorMsg = $_('settings.totp.unenroll.err_invalid_code');
 					return;
 				}
-				const result = await unenrollTotp(full, password);
-				writeEnvelope(result.envelope);
-				updateEnvelope(result.envelope);
+				const result = await unenrollTotp(env, full, password);
+				if (commitSessionEnvelope(result.envelope) === 'persist_failed') {
+					errorMsg = $_('settings.hardware_key.error.persist_failed');
+					return;
+				}
 				hasTotp = false;
 				backupRemaining = 0;
 				backupTotal = 0;
@@ -354,7 +358,7 @@
 			errorMsg = $_('settings.totp.regenerate.err_invalid_code');
 			return;
 		}
-		const env = readEnvelope();
+		const env = $currentEnvelope;
 		if (!env || !$isUnlocked) {
 			phase = 'locked';
 			return;
@@ -373,9 +377,11 @@
 					return;
 				}
 				const fresh = generatePlaintextCodes();
-				const result = await regenerateBackupCodes(full, password, fresh);
-				writeEnvelope(result.envelope);
-				updateEnvelope(result.envelope);
+				const result = await regenerateBackupCodes(env, full, password, fresh);
+				if (commitSessionEnvelope(result.envelope) === 'persist_failed') {
+					errorMsg = $_('settings.hardware_key.error.persist_failed');
+					return;
+				}
 				pendingBackupCodes = fresh;
 				backupRemaining = 10;
 				backupTotal = 10;
@@ -517,7 +523,7 @@
 				{/each}
 			</div>
 
-			<details class="apps not-recommended">
+			<details class="apps not-recommended" bind:open={showNotRecommended}>
 				<summary
 					>{showNotRecommended
 						? $_('settings.totp.not_recommended_apps.collapse')

@@ -1,15 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * no-real-time-setTimeout-in-tests smoke — Part 122 cp76 (LL #76 / O-25).
+ * no-real-time-setTimeout-in-tests smoke.
  *
- * Closes the cp76-D16 class: real-time setTimeout waits inside test
+ * Closes the class: real-time setTimeout waits inside test
  * files create CI flakes whose margin can vanish under CPU contention.
  *
- * cp76-D16 fixed the symptom: `apps/relay/test/killSwitch.test.ts`
+ * A later change fixed the symptom: `apps/relay/test/killSwitch.test.ts`
  * was using `await new Promise((r) => setTimeout(r, 1500))` with only
  * 500 ms margin on a 1000 ms `setInterval` poll inside the production
  * `KillSwitch` class.  Under CI contention the margin vanished; pulse
- * 1 of the cp74 battery would intermittently fail.  cp76's fix
+ * 1 of the battery would intermittently fail.  the fix
  * replaced the real-time wait with `vi.useFakeTimers()` +
  * `vi.advanceTimersByTime(1100)` — deterministic, no real-time
  * sensitivity, 30/30 clean over a 30-run reproduction.
@@ -35,7 +35,7 @@
  * Comments don't count:
  *   Lines with `setTimeout` inside a `//` comment or a `*` JSDoc
  *   line are ignored.  Historical commentary (e.g. "Previously: real
- *   setTimeout(150)") in cp76-D16's own header and in
+ *   setTimeout(150)") in the own header and in
  *   altcha/ratelimit comments is legitimate.
  *
  * Fix pattern: replace
@@ -46,14 +46,14 @@
  * and ensure afterEach calls vi.useRealTimers().
  *
  * Recurring class scope progression (test-reliability defenses):
- *   cp71-O19: vitest-must-pass (every workspace's tests must pass)
- *   cp71-O20: untrusted-parseint-safety
- *   cp71-O21: fetch-must-have-timeout
- *   cp75-O23: brag-list-trailer-invariants
- *   cp75-O24: per-asset-mandatory-family-i18n-parity
- *   cp76-O25: no-real-time-setTimeout-in-tests (THIS smoke)
+ *   vitest-must-pass (every workspace's tests must pass)
+ *   untrusted-parseint-safety
+ *   fetch-must-have-timeout
+ *   brag-list-trailer-invariants
+ *   per-asset-mandatory-family-i18n-parity
+ *   no-real-time-setTimeout-in-tests (THIS smoke)
  *
- * Mutation test M-148:
+ * Mutation test:
  *   - Reintroduce `await new Promise((r) => setTimeout(r, 1500))` in
  *     any test file → smoke fires naming file + line + the offending
  *     numeric argument.

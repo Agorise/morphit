@@ -4,9 +4,10 @@
  * Tor/I2P hide WHERE we read from, not WHETHER what we read is true. A hidden
  * (or clearnet) RPC node we don't control can lie about the chain — serve a
  * forged block, a stale head, a fork. Racing endpoints for latency does nothing
- * about that on its own; the defence is to CROSS-CHECK: ask several independent
- * endpoints for the SAME block height and require a quorum to agree on that
- * block's canonical identity before we trust it.
+ * about that on its own. This check asks endpoints of different operator names
+ * (operators are counted by node name) for the SAME irreversible block and
+ * compares the block id. It is an ALARM, not a filter: the poller runs it every
+ * five minutes and logs a disagreement loudly; it never gates what is indexed.
  *
  * This module is the pure decision logic (keying + interpretation); the actual
  * fan-out is `EndpointPool.quorumCall` (which already existed, unused until now).

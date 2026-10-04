@@ -1,20 +1,19 @@
 #!/usr/bin/env tsx
 /**
- * Smoke for the post-cp7 routes/ structural invariant (Part 121
- * cp21, 2026-05-15).
+ * Smoke for the newer routes/ structural invariant.
  *
- * Background: cp7 (per-locale prerendering, ADR design doc
+ * Background: (per-locale prerendering, ADR design doc
  * `docs/PER-LOCALE-PRERENDERING-DESIGN.md`) MOVED every page-
  * level route from `apps/web/src/routes/<route>/` to
  * `apps/web/src/routes/[lang]/<route>/`.  The cleanup left only
  * three files at the top-level routes directory — the locale-
  * detection redirect shell — plus the `[lang]/` subtree itself.
  *
- * The bug: delta-tarballs from cp11 onwards (changed/added
- * files only) couldn't communicate the cp7 deletions, so any
- * recipient who applied the cp8+ deltas on top of a pre-cp7
+ * The bug: delta-tarballs from onwards (changed/added
+ * files only) couldn't communicate the deletions, so any
+ * recipient who applied the later deltas on top of an older
  * working tree accumulated BOTH the old top-level routes AND
- * the new `[lang]/` routes.  Discovered Part 121 cp21
+ * the new `[lang]/` routes.  Discovered
  * (2026-05-15) when a fresh tarball was pulled apart for
  * audit and 23 leaf routes + the dynamic account route were
  * found duplicated.
@@ -22,7 +21,7 @@
  * What this smoke locks down: `apps/web/src/routes/` must
  * contain EXACTLY the locale-detection redirect shell plus the
  * `[lang]/` directory.  Any other top-level directory means
- * either (a) the cp7 cleanup never landed, (b) it was
+ * either (a) the cleanup never landed, (b) it was
  * partially reverted, or (c) a future restructure introduced
  * fresh top-level routes that have not been mirrored into
  * `[lang]/` — all three are bugs.
@@ -48,7 +47,7 @@ const LANG_DIR = join(ROUTES_DIR, '[lang]');
 
 // The locale-detection redirect shell — these three top-level
 // route entries are legitimate and must stay.  Anything else at
-// top level is stale debris from before cp7's restructure
+// top level is stale debris from previously's restructure
 // landed (or a future restructure missed the [lang]/ mirror).
 const ALLOWED_TOP_LEVEL_FILES: ReadonlySet<string> = new Set([
 	'+layout.svelte',

@@ -1,17 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/chat-pdf-export-smoke.ts (cp404)
+ * apps/web/scripts/chat-pdf-export-smoke.ts
  *
- * Invariants over the LOCKED, courtroom-grade chat PDF export in
- * ConversationView.svelte:
+ * Invariants over the chat PDF export in ConversationView.svelte:
  *   • Built entirely client-side from decrypted in-memory messages — no
  *     plaintext leaves the browser, no server round-trip.
  *   • jsPDF is DYNAMICALLY imported (await import('jspdf')) so it is
  *     code-split and only fetched when a user actually exports — the
  *     footprint stays lean and it honours the lazy-load posture. There
  *     must be NO static top-level `import ... from 'jspdf'`.
- *   • The PDF is LOCKED: an owner password + a permission set that omits
- *     modification (view/print/copy only).
+ *   • The PDF is an ordinary, unencrypted PDF (src/lib/ui/chatExportPdf.ts):
+ *     jsPDF's only "lock" is RC4-40 with an empty user password, which any
+ *     reader strips, so the export makes no tamper claim from encryption
+ *     (behaviour: chatExportPdf.test.ts).
  *   • The REAL tamper-evidence: every message cites its on-chain
  *     transaction id (LocalMessage.trxId → "Blockchain proof"), with a
  *     "pending confirmation" fallback for not-yet-anchored messages.
@@ -56,12 +57,8 @@ check(
 	'jspdf must be dynamically imported only'
 );
 check(
-	'4 PDF is locked (owner password + restricted permissions, no modify)',
-	/encryption:\s*\{[\s\S]*ownerPassword[\s\S]*userPermissions:\s*\[['"]print['"],\s*['"]copy['"]\]/.test(cv)
-);
-check(
-	'5 owner password is randomly generated (crypto.getRandomValues)',
-	/crypto\.getRandomValues/.test(cv) && /ownerPassword/.test(cv)
+	'4 the PDF is built by newChatExportPdf (no pretend encryption)',
+	/newChatExportPdf\(/.test(cv) && !/ownerPassword|userPermissions/.test(cv)
 );
 check(
 	'6 every message cites its on-chain transaction id (proof)',

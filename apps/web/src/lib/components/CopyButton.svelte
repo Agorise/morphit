@@ -2,8 +2,8 @@
 	/**
 	 * CopyButton — one copy-to-clipboard control used everywhere (fee
 	 * addresses, keys, feed URLs, transaction ids…) so the "Copied" feedback
-	 * is identical across the app: after a click it turns GREEN and shows a ✓
-	 * (the maintainer #6). Encapsulates the clipboard write + the flash-then-revert timer
+	 * is identical across the app: after a click it turns GREEN and shows a ✓.
+	 * Encapsulates the clipboard write + the flash-then-revert timer
 	 * so call sites don't each re-implement it (and drift).
 	 *
 	 * Styling: pass the button's structural classes (border/bg/padding/hover)

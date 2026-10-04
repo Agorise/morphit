@@ -8,15 +8,16 @@
  *
  * Codes are:
  *   - 8 characters long
- *   - Drawn from Crockford-base32 (the user-friendly alphabet — no
- *     0/O/1/I ambiguity, no padding noise) → 32^8 = 1.1 trillion
- *     possible codes per slot, far above any guessing attack budget
+ *   - Drawn from a 32-character alphabet without the look-alikes
+ *     0/O and 1/I (A–Z minus I and O, plus 2–9; not Crockford's
+ *     base32) → 32^8 ≈ 2^40 possible codes per slot
  *   - Display-formatted as `XXXX-XXXX` for readability (the dash is
  *     ignored at redemption — users can type either form)
  *
  * Storage model:
- *   - 10 codes generated.  Each is hashed with Argon2id (mobile-grade
- *     params) before being persisted to the encrypted keystore.
+ *   - 10 codes generated.  Each is hashed with Argon2id at libsodium's
+ *     INTERACTIVE cost (64 MiB, 2 passes) before being persisted inside
+ *     the encrypted keystore.
  *   - At redemption time: hash the user's input with each stored
  *     hash's salt and check.  First match consumes that slot.
  *   - Each slot is single-use.  The "used" flag is flipped in the
@@ -38,7 +39,7 @@
 import sodium from 'libsodium-wrappers-sumo';
 import { ensureSodium } from '../crypto/keygen';
 
-/** Crockford Base32 alphabet — no 0/O/1/I ambiguity. */
+/** 32 characters without the look-alikes 0/O and 1/I. */
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** Length of each backup code (in alphabet characters). */
@@ -100,30 +101,33 @@ export function generatePlaintextCodes(): string[] {
 	return codes;
 }
 
-/** Hash a backup code with Argon2id (interactive params).  Returns
- *  the libsodium pwhash_str format which embeds salt + params
- *  alongside the hash, suitable for direct storage. */
+/** Hash a backup code with Argon2id at INTERACTIVE cost. Returns the
+ *  libsodium pwhash_str format, which embeds salt + params alongside the
+ *  hash, suitable for direct storage.
+ *
+ *  Why INTERACTIVE and not more: the hashes live INSIDE the encrypted
+ *  keystore, so whoever can read them has already got past the password and
+ *  holds the keys — the hash cost buys nothing against them. What the cost
+ *  does buy is waiting: a redemption verifies up to 10 hashes one after the
+ *  other, and at MODERATE (256 MiB, 3 passes) that froze a phone for many
+ *  seconds or ran it out of memory. Codes hashed by older builds keep their
+ *  embedded MODERATE parameters until they are regenerated (the plaintext
+ *  is never available to re-hash them). */
 async function hashCode(canonical: string): Promise<string> {
 	await ensureSodium();
-	// Use a SHORTER op/mem here than the keystore-unlock KDF.  These
-	// are throwaway hashes — the user verifies once per emergency-
-	// recovery event, not once per login — and slowing redemption
-	// down on phones adds no value.  Use moderate (not interactive)
-	// because plaintext codes have only 40 bits of entropy (32^8 ≈
-	// 2^40); moderate Argon2id makes brute-force impractical even
-	// if the encrypted keystore is stolen and password cracked.
-	//
-	// The TS type definitions for libsodium-wrappers-sumo don't
-	// expose `crypto_pwhash_str` / `crypto_pwhash_str_verify` or
-	// the MODERATE constants in the @types module, but they exist
-	// at runtime in the sumo variant (confirmed by the unit tests
-	// in backupCodes.test.ts).  Cast through `any` to access them.
+	// The TS type definitions for libsodium-wrappers-sumo don't expose
+	// `crypto_pwhash_str` / `crypto_pwhash_str_verify`, but they exist at
+	// runtime in the sumo variant (backupCodes.test.ts uses them).
 	const s = sodium as unknown as {
-		crypto_pwhash_OPSLIMIT_MODERATE: number;
-		crypto_pwhash_MEMLIMIT_MODERATE: number;
+		crypto_pwhash_OPSLIMIT_INTERACTIVE: number;
+		crypto_pwhash_MEMLIMIT_INTERACTIVE: number;
 		crypto_pwhash_str: (passwd: string, opslimit: number, memlimit: number) => string;
 	};
-	return s.crypto_pwhash_str(canonical, s.crypto_pwhash_OPSLIMIT_MODERATE, s.crypto_pwhash_MEMLIMIT_MODERATE);
+	return s.crypto_pwhash_str(
+		canonical,
+		s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+		s.crypto_pwhash_MEMLIMIT_INTERACTIVE
+	);
 }
 
 /** Verify a candidate code against a stored hash string.  Returns
@@ -176,10 +180,9 @@ export async function hashCodesForStorage(plaintextCodes: string[]): Promise<Bac
  *    that slot has already been redeemed.  The caller should
  *    refuse the redemption and warn the user.
  *
- *  Iteration is sequential through all unused slots — the
- *  per-hash verify is intentionally moderate-cost (Argon2id), and
- *  doing all 10 sequentially still completes in well under a
- *  second on a modern phone.
+ *  Iteration is sequential through all unused slots, each an Argon2id
+ *  verify at the cost the slot was hashed with (INTERACTIVE for codes
+ *  made by this build: well under a second each).
  */
 export async function redeemBackupCode(
 	userInput: string,

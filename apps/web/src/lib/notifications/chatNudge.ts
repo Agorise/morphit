@@ -6,9 +6,9 @@
  * a counterparty replies — even with the tab closed — WITHOUT any
  * privacy cost. This rides the existing web-push system (opaque push
  * endpoint, no PII; see $lib/notifications/push.ts), NOT any stored
- * contact address. The `chat` notification category ships OFF by default
- * (tuned down for noise), so most users never discover it; this nudge
- * surfaces it at the one moment it's clearly relevant.
+ * contact address. The `chat` category is on by default, but the tab-closed
+ * channel needs a push subscription the user has to grant; this nudge asks
+ * at the one moment it's clearly relevant.
  *
  * The component owns the side effects (reading the browser push
  * subscription, the prefs store, localStorage dismissal, and the

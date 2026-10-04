@@ -282,7 +282,7 @@ export const KEY_RETRY_DEADLINE_MS = 15_000;
 
 /**
  * How many queued entries a claimed signer with a recent `bad_signature` may
- * hold (v1.18.0 deep-deep, rv1-4). One: enough that a real sender whose name
+ * hold. One: enough that a real sender whose name
  * was abused is not locked out completely, small enough that junk in that name
  * costs the worker next to nothing.
  */
@@ -293,7 +293,7 @@ interface QueuedPush {
 	readonly trx: CanonicalChatTrx;
 	/** CLAIMED, not verified — the queue exists to verify it. */
 	readonly signer: string;
-	/** When it reached us: the clock the notify gate judges it by (rv1-6). */
+	/** When it reached us: the clock the notify gate judges it by. */
 	readonly arrivedAt: Date;
 }
 
@@ -330,13 +330,13 @@ export function gatesFromDb(db: FastFederationDb, opts: GateOptions = {}): FastD
 		},
 
 		async fastNotifyAllowed(located: LocatedChatOp, at: Date): Promise<boolean> {
-			// THE SAME FUNCTION the head tailer calls (v1.18.0 deep-deep, rv1-2).
+			// THE SAME FUNCTION the head tailer calls.
 			// This used to be a copy, and both copies let the "recent outbound"
 			// shortcut answer before the order tag was validated. A first-contact
 			// stranger with no order tag never passes, so a push notification
 			// cannot become a spam vector — while DELIVERY to an open chatroom is
 			// unconditional, because a message you are looking at is not a
-			// notification. `at` is the ARRIVAL time (rv1-6).
+			// notification. `at` is the ARRIVAL time.
 			return fastChatNotifyAllowed(db, located, at, {
 				...(opts.meterFirstContact === true ? { meterFirstContact: true } : {})
 			});
@@ -385,7 +385,7 @@ export interface FederationChatFastIntake {
 		 */
 		replayTableFull: number;
 		/** Pushes refused because their signer already held its whole share of
-		 *  the replay memory (rv1-4). Non-zero is one account pushing far more
+		 *  the replay memory. Non-zero is one account pushing far more
 		 *  than any person types — a flood aimed at the table, contained to
 		 *  that account. */
 		replayQuota: number;
@@ -419,7 +419,7 @@ export function federationChatFastRoute(
 	//
 	// Each entry carries its CLAIMED signer (not yet verified — that is what the
 	// queue is for) and when it arrived, which is the clock the notify gate
-	// judges it by (rv1-6).
+	// judges it by.
 	const queue: QueuedPush[] = [];
 	/** Queued entries per claimed signer, kept in step with `queue`. */
 	const queuedPerSigner = new Map<string, number>();
@@ -468,8 +468,8 @@ export function federationChatFastRoute(
 				}
 				if (verdict.ok) {
 					verified++;
-					// sentAt orders the transcript; the gate is judged at arrival
-					// (rv1-6).
+					// sentAt orders the transcript; the gate is judged at arrival.
+					//
 					await deliverVerifiedPush(
 						verdict.located,
 						verdict.trxId,
@@ -511,7 +511,7 @@ export function federationChatFastRoute(
 
 	/**
 	 * With the queue full, which queued entry should make room for one from
-	 * `signer`? The index to drop, or -1 to shed the newcomer instead (rv1-4).
+	 * `signer`? The index to drop, or -1 to shed the newcomer instead.
 	 *
 	 *   1. The newest entry of a recently bad-signed name — unless the newcomer
 	 *      is one itself. Those names have already shown junk under them.
@@ -599,7 +599,7 @@ export function federationChatFastRoute(
 						// DISPLAY in the SENDER's time, read off the signed
 						// transaction (see PushVerdict.sentAt) — but GATE on ours at
 						// arrival: sentAt is sender-chosen and may sit six minutes in
-						// the past, which moved the order-liveness check (rv1-6).
+						// the past, which moved the order-liveness check.
 						await deliverVerifiedPush(
 							verdict.located,
 							verdict.trxId,
@@ -708,7 +708,7 @@ export function federationChatFastRoute(
 			const signer = structural.located.signer;
 			const suspect = recentBadSignature(signer);
 			// A name whose pushes recently failed signature verification gets a
-			// token share of the queue (rv1-4): junk in one name is paid for by
+			// token share of the queue: junk in one name is paid for by
 			// that name, not by everyone queued behind it.
 			if (suspect && countOf(signer) >= QUEUE_PER_SUSPECT_SIGNER_MAX) {
 				shed++;
@@ -722,8 +722,8 @@ export function federationChatFastRoute(
 				// still carries this message, so dropping it costs delivery speed
 				// and nothing else.
 				//
-				// BUT WHOSE MESSAGE IS DROPPED is the whole question (v1.18.0
-				// deep-deep, rv1-4). This was a single FIFO that shed the
+				// BUT WHOSE MESSAGE IS DROPPED is the whole question.
+				// This was a single FIFO that shed the
 				// newcomer, so anyone could keep it full — 16 requests a second of
 				// junk in one name, well inside the rate limit and indistinguishable
 				// by source over Tor — and every real sender was shed. Now a full

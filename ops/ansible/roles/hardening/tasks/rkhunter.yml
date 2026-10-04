@@ -8,9 +8,12 @@
     state: present
   loop:
     - { key: "CRON_DAILY_RUN", value: "false" }
-    - { key: "CRON_DB_UPDATE", value: "true" }
+    # No data-file update from the internet on any node: Ubuntu's rkhunter
+    # cannot fetch one anyway (its rkhunter.conf has WEB_CMD="/bin/false"), and
+    # its data files come with the apt package.
+    - { key: "CRON_DB_UPDATE", value: "false" }
     - { key: "APT_AUTOGEN", value: "true" }
-    - { key: "REPORT_EMAIL", value: "{{ morphit_alert_email_to }}" }
+    - { key: "REPORT_EMAIL", value: "{{ morphit_alert_email_to if (morphit_alert_mail_enabled | bool) else '' }}" }
 
 - name: Schedule weekly rkhunter check
   ansible.builtin.copy:
@@ -20,5 +23,12 @@
     mode: '0755'
     content: |
       #!/bin/sh
-      rkhunter --update --quiet
-      rkhunter --check --sk --rwo 2>&1 | mail -s "[morphit] rkhunter weekly $(date +%F)" {{ morphit_alert_email_to }}
+      # The latest result stays on this server in
+      # /var/log/morphit/rkhunter-check.log{{ ' and is mailed to the operator' if (morphit_alert_mail_enabled | bool) else '' }}.
+      # Its data files come with the apt package; nothing is downloaded.
+      mkdir -p /var/log/morphit
+      rkhunter --check --sk --rwo > /var/log/morphit/rkhunter-check.log.new 2>&1
+      mv /var/log/morphit/rkhunter-check.log.new /var/log/morphit/rkhunter-check.log
+      {% if morphit_alert_mail_enabled | bool %}
+      mail -s "[morphit] rkhunter weekly $(date +%F)" {{ morphit_alert_email_to | quote }} < /var/log/morphit/rkhunter-check.log
+      {% endif %}

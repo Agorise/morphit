@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# snapshot-autopublish.sh (cp766) — the job the morphit-snapshot-publish.timer
+# snapshot-autopublish.sh — the job the morphit-snapshot-publish.timer
 # runs on a CAUGHT-UP publishing node (morphit.io / morphitlat). Keeps a fresh
 # federated indexer snapshot pinned + anchored so new nodes fast-sync in minutes.
 #
@@ -10,11 +10,15 @@
 #               than none, so we simply skip this run and try again next timer.
 #   2. EXPORT — snapshot-export.ts → morphit-indexer-snapshot-<block>-<date>.tar.gz
 #   3. PIN    — pin-indexer-snapshot.sh → CID + always-newest IPNS + payload json
-#   4. ANCHOR — OPTIONAL. If MORPHIT_SNAPSHOT_SIGNING_WIF is set (a DEDICATED
-#               posting key for @morphit, never the main release key), broadcast
-#               indexer_snapshot_v1 non-interactively. Otherwise emit the payload
-#               and log the exact manual broadcast command (safe default — no key
-#               on the box).
+#   4. ANCHOR — MANUAL, on the laptop: the payload is emitted and the exact
+#               broadcast command logged. Nodes accept an indexer_snapshot_v1
+#               only when @morphit's ONE posting key signed it (there is no
+#               "second" or "dedicated" key — adding one to the account would
+#               make every later release fail verification), and that key never
+#               lives on a server. A key file at
+#               MORPHIT_SNAPSHOT_SIGNING_KEY_FILE (root 0600, the WIF only)
+#               would put it here and make this step broadcast by itself:
+#               don't create one.
 #   5. ROTATE — keep the last KEEP exported tarballs in MORPHIT_SNAPSHOT_OUT.
 #               (Superseded snapshot CIDs, and the copy each run stages inside
 #               the IPFS repo for `ipfs add --nocopy`, are let go by
@@ -31,7 +35,8 @@
 #   MORPHIT_SNAPSHOT_OUT       (default /opt/morphit/snapshots)
 #   MORPHIT_SNAPSHOT_KEEP      (default 3)
 #   MORPHIT_SNAPSHOT_FORGEJO_URL   (optional https mirror recorded in the op)
-#   MORPHIT_SNAPSHOT_SIGNING_WIF   (optional; enables step 4 auto-broadcast)
+#   MORPHIT_SNAPSHOT_SIGNING_KEY_FILE (default /etc/morphit/snapshot-signing.wif;
+#                               leave it absent: anchoring is done on the laptop)
 #
 set -uo pipefail
 REPO="${MORPHIT_REPO_PATH:-/opt/morphit}"
@@ -151,17 +156,19 @@ fi
 log "payload: $PAYLOAD"
 
 # ── 4. ANCHOR (optional auto-broadcast) ────────────────────────────
-if [ -n "${MORPHIT_SNAPSHOT_SIGNING_WIF:-}" ]; then
-	log "auto-broadcasting indexer_snapshot_v1 (dedicated signing key present) …"
-	( cd "$REPO" && MORPHIT_SNAPSHOT_SIGNING_WIF="$MORPHIT_SNAPSHOT_SIGNING_WIF" \
-		"$TSX" --tsconfig "$TSCFG" apps/indexer/scripts/indexer-snapshot-broadcast.ts "$PAYLOAD" --yes ) \
+KEY_FILE="${MORPHIT_SNAPSHOT_SIGNING_KEY_FILE:-/etc/morphit/snapshot-signing.wif}"
+if [ -r "$KEY_FILE" ]; then
+	log "$KEY_FILE exists — that puts @morphit's posting key on a server; anchoring belongs on the laptop. Broadcasting anyway …"
+	( cd "$REPO" && "$TSX" --tsconfig "$TSCFG" apps/indexer/scripts/indexer-snapshot-broadcast.ts "$PAYLOAD" \
+		--broadcast --yes --key-file "$KEY_FILE" ) \
 		|| die "auto-broadcast failed"
 	log "✓ anchored on-chain"
 else
-	log "no MORPHIT_SNAPSHOT_SIGNING_WIF set — snapshot pinned but NOT anchored."
+	log "snapshot pinned but NOT anchored (anchoring is done on the laptop)."
 	log "  broadcast manually from your laptop (prompts for the @morphit POSTING WIF):"
 	log "    scp -O root@<this-node>:$PAYLOAD .      (-O: hardened boxes turn SFTP off)"
-	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $(basename "$PAYLOAD")"
+	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $(basename "$PAYLOAD")            (dry run: shows the op)"
+	log "    node_modules/.bin/tsx --tsconfig tsconfig.smoke.json apps/indexer/scripts/indexer-snapshot-broadcast.ts $(basename "$PAYLOAD") --broadcast"
 fi
 
 # ── 5. ROTATE ──────────────────────────────────────────────────────

@@ -50,7 +50,7 @@ import {
 	_resetSeenForTest,
 	_setSeenMaxForTest,
 	replayTableFullCount,
-	fastPeerFromRow,
+	fanOutPeerFromRow,
 	MAX_AGE_MS,
 	MAX_FUTURE_MS,
 	SEEN_TTL_MS,
@@ -64,8 +64,16 @@ import {
 	fastNotifyBudgetSize,
 	_resetFastNotifyBudgetForTest
 } from '../src/indexer/fastNotifyBudget';
-import { closePool, postJsonViaHiddenService } from '../src/indexer/hiddenServicePool';
-import { ProxyUnavailableError } from '@morphit/hidden-transport';
+import {
+	closePool,
+	postJsonViaHiddenService,
+	postJsonViaTorIsolated
+} from '../src/indexer/hiddenServicePool';
+import {
+	ProxyUnavailableError,
+	isProxyUnavailable,
+	localFaultConfidence
+} from '@morphit/hidden-transport';
 import {
 	federationChatFastRoute,
 	gatesFromDb,
@@ -262,14 +270,15 @@ function nextFastEvent(ms: number): Promise<ChatFastEvent | null> {
 	});
 }
 
-/** A PeerSender wired to plain HTTP for clearnet peers. This is the production
- *  class — the smoke deliberately has no fan-out implementation of its own, so
- *  a scenario passing here says something about what ships. */
+/** A PeerSender whose isolated-Tor transport is stood in for by plain HTTP to
+ *  loopback peers. This is the production class — the smoke deliberately has
+ *  no fan-out implementation of its own, so a scenario passing here says
+ *  something about what ships. */
 function makeSender(timeoutMs = 5_000): PeerSender {
 	return new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: '' },
+		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' },
 		timeoutMs,
-		postClearnet: async (url, body, ms) => {
+		postIsolated: async (url, body, _proxies, ms) => {
 			const ctrl = new AbortController();
 			const t = setTimeout(() => ctrl.abort(), ms);
 			try {
@@ -287,18 +296,13 @@ function makeSender(timeoutMs = 5_000): PeerSender {
 	});
 }
 
-/** A PeerSender that reaches hidden peers through the pooled dispatcher. */
+/** A PeerSender on the REAL transport: one isolated Tor circuit per push
+ *  (postJsonViaTorIsolated), through whatever SOCKS5 proxy `proxies` names. */
 function makeHiddenSender(
 	proxies: { torSocks: string; i2pHttpProxy: string },
 	timeoutMs = 20_000
 ): PeerSender {
-	return new PeerSender({
-		proxies,
-		timeoutMs,
-		postClearnet: async () => {
-			throw new Error('a hidden peer must not be routed through the clearnet transport');
-		}
-	});
+	return new PeerSender({ proxies, timeoutMs });
 }
 
 console.log('federation-chat-fast — two zero-clearnet instances, under six seconds');
@@ -384,9 +388,9 @@ console.log('');
 	// One more hidden hop for browser→A, which the real send also pays.
 	await sleep(WARM_HIDDEN_RTT_MS);
 	const e2eSender = new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: '' },
+		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' },
 		timeoutMs: 5_000,
-		postClearnet: postWithHiddenLatency
+		postIsolated: (url, body, _proxies, ms) => postWithHiddenLatency(url, body, ms)
 	});
 	e2eSender.enqueue(buildSignedChatTx(), peers);
 	await e2eSender.drain();
@@ -437,22 +441,22 @@ console.log('');
 	await new Promise<void>((r) => server.close(() => r()));
 }
 
-// ── 2a. THE POOL, OVER A REAL SOCKS5 TUNNEL ──────────────────────────
+// ── 2a. ONE PUSH, ONE CIRCUIT, OVER A REAL SOCKS5 TUNNEL ─────────────
 //
-// An earlier version of this file claimed to prove connection reuse by counting
-// TCP connections in scenario 2. It proved nothing: that peer is `hidden:false`,
-// so delivery goes through the injected `postClearnet` and never touches
-// `hiddenServicePool` at all. What it measured was undici's global agent — which
-// would have gone on passing with the pool deleted.
+// a push must not be linkable to another push — or to this instance —
+// by the connection it arrives on. Pushes used to share ONE long-lived pooled
+// connection per hidden peer, so a peer that sent one message of its own through
+// an instance could label that connection and with it every account on it.
 //
-// So this scenario routes a `.onion` peer through the REAL pooled dispatcher,
-// through a REAL SOCKS5 proxy (implemented below, speaking the actual wire
-// protocol `makeSocks5Connector` expects), to the real receiving handler.
+// So this scenario routes a `.onion` peer through the REAL transport
+// (postJsonViaTorIsolated), through a REAL SOCKS5 proxy implemented below that
+// demands username/password authentication — the credentials Tor isolates
+// circuits by (IsolateSOCKSAuth) — to the real receiving handler. The proxy
+// counts tunnels and records each one's credentials.
 //
-// The proxy charges CIRCUIT_BUILD_MS before completing any new CONNECT, which is
-// what a cold Tor circuit actually costs. That turns pooling from a statistic
-// into a consequence: reuse the connection and the messages are fast, lose it
-// and every single one pays the build again.
+// It also charges CIRCUIT_BUILD_MS before completing any new CONNECT, which is
+// what a fresh Tor circuit costs: every push pays it now, and must still land
+// inside the delivery target.
 {
 	_resetSeenForTest();
 	await closePool(); // no dispatcher carried over from another scenario
@@ -491,13 +495,14 @@ console.log('');
 	await new Promise<void>((r) => origin.listen(0, '127.0.0.1', r));
 	const originPort = (origin.address() as AddressInfo).port;
 
-	// A minimal but genuine SOCKS5 proxy: greeting, CONNECT (ATYP=domain), then
-	// a raw pipe. It counts tunnels, which is the number the pool is supposed to
-	// hold down, and it makes every new one expensive.
+	// A minimal but genuine SOCKS5 proxy: greeting, username/password
+	// (RFC 1929), CONNECT (ATYP=domain), then a raw pipe. It counts tunnels and
+	// records each tunnel's username, and makes every new one expensive.
 	// net.createServer, NOT http.createServer: an HTTP server attaches a parser
 	// to every connection, and it destroys the socket the moment the SOCKS
 	// greeting fails to look like a request line.
 	let tunnels = 0;
+	const tunnelUsers: string[] = [];
 	const socks: NetServer = createNetServer();
 	socks.on('connection', (client) => {
 		tunnels++;
@@ -507,7 +512,7 @@ console.log('');
 			if (process.env.SOCKS_DEBUG)
 				console.log(`      [socks] tunnel closed at ${Date.now() % 100000}`);
 		});
-		let stage: 'greet' | 'connect' | 'piped' = 'greet';
+		let stage: 'greet' | 'auth' | 'connect' | 'piped' = 'greet';
 		let acc = Buffer.alloc(0);
 		client.on('error', () => undefined);
 		client.on('data', (chunk: Buffer) => {
@@ -517,9 +522,27 @@ console.log('');
 				if (acc.length < 2) return;
 				const n = acc[1] ?? 0;
 				if (acc.length < 2 + n) return;
+				const offersAuth = [...acc.subarray(2, 2 + n)].includes(0x02);
 				acc = acc.subarray(2 + n);
+				if (!offersAuth) {
+					// No credentials, no isolation: refuse, as a proxy that isolates must.
+					client.end(Buffer.from([0x05, 0xff]));
+					return;
+				}
+				stage = 'auth';
+				client.write(Buffer.from([0x05, 0x02]));
+				if (acc.length === 0) return;
+			}
+			if (stage === 'auth') {
+				if (acc.length < 2) return;
+				const ulen = acc[1] ?? 0;
+				if (acc.length < 3 + ulen) return;
+				const plen = acc[2 + ulen] ?? 0;
+				if (acc.length < 3 + ulen + plen) return;
+				tunnelUsers.push(acc.subarray(2, 2 + ulen).toString('ascii'));
+				acc = acc.subarray(3 + ulen + plen);
 				stage = 'connect';
-				client.write(Buffer.from([0x05, 0x00]));
+				client.write(Buffer.from([0x01, 0x00]));
 				if (acc.length === 0) return;
 			}
 			// CONNECT: VER CMD RSV ATYP LEN <domain> PORT(2)
@@ -567,7 +590,7 @@ console.log('');
 	const coldMs = Date.now() - cold0;
 
 	if (d1.delivered === 1 && e1 !== null)
-		ok(`a .onion peer is reached through the pooled dispatcher over a real SOCKS5 tunnel`);
+		ok(`a .onion peer is reached over an isolated circuit through a real SOCKS5 tunnel`);
 	else
 		bad(
 			`the .onion peer was not reached: delivered=${d1.delivered} event=${e1 !== null}`,
@@ -575,15 +598,18 @@ console.log('');
 		);
 
 	if (coldMs >= CIRCUIT_BUILD_MS)
-		ok(`the first message paid the ${CIRCUIT_BUILD_MS}ms circuit build (${coldMs}ms) — as it must`);
+		ok(
+			`the message paid the ${CIRCUIT_BUILD_MS}ms circuit build (${coldMs}ms) — as every push must`
+		);
 	else
 		bad(
 			`the first message took ${coldMs}ms, less than the ${CIRCUIT_BUILD_MS}ms circuit build ` +
 				'the proxy charges — the tunnel is not being used, so this scenario proves nothing'
 		);
 
-	// Six more. With the pool they reuse the tunnel; without it each rebuilds.
+	// Six more. Each must get its OWN tunnel with its own credentials.
 	const tunnelsBefore = tunnels;
+	const usersBefore = tunnelUsers.length;
 	let slowest = 0;
 	for (let i = 0; i < 6; i++) {
 		const w = nextFastEvent(TARGET_MS + 4_000);
@@ -597,62 +623,56 @@ console.log('');
 		slowest = Math.max(slowest, took);
 	}
 	const opened = tunnels - tunnelsBefore;
+	const sixUsers = tunnelUsers.slice(usersBefore);
 
-	if (opened === 0)
-		ok('six further messages opened 0 new tunnels — the pooled connection is being reused');
+	if (opened === 6 && new Set(sixUsers).size === 6)
+		ok(
+			'six further messages took six tunnels with six different isolation credentials — none shares a circuit'
+		);
 	else
 		bad(
-			`six further messages opened ${opened} new tunnel(s). Each one is a fresh circuit ` +
-				'build on a real hidden transport, which is exactly the latency this pool exists ' +
-				'to remove — reuse is broken',
-			`tunnels total: ${tunnels}`
+			`six further messages opened ${opened} tunnel(s) with ${new Set(sixUsers).size} distinct credential(s)`,
+			'two pushes on one connection or one circuit can be tied together by the peer, and ' +
+				'with them the accounts they carry'
 		);
 
 	if (slowest < TARGET_MS)
-		ok(`and the slowest of them was ${slowest}ms, inside the ${TARGET_MS}ms target`);
+		ok(
+			`and the slowest of them was ${slowest}ms, inside the ${TARGET_MS}ms target even with a fresh circuit each`
+		);
 	else
 		bad(
-			`the slowest subsequent message took ${slowest}ms, over the ${TARGET_MS}ms target — ` +
-				'a reused tunnel should cost a round trip, not a rebuild'
+			`the slowest subsequent message took ${slowest}ms, over the ${TARGET_MS}ms target`,
+			'a fresh circuit per push must still fit the delivery budget'
 		);
 
-	// ONE CONNECTION PER ORIGIN, proven rather than asserted.
-	//
-	// The loop above cannot prove it: it awaits each message, so a single
-	// connection is reused at ANY pool size and the constant could be changed to
-	// four without a single test noticing. The claim is specifically about
-	// CONCURRENT requests to one hidden origin — where a second connection means
-	// a second circuit build, which is the entire cost this module exists to
-	// avoid paying. So this drives the pool directly, past PeerSender's
-	// one-in-flight-per-origin rule, because that rule would otherwise hide the
-	// behaviour under test.
+	// Concurrent pushes to one onion: the claim is about CONCURRENT requests,
+	// which a sequential loop cannot make — a pool would merge them onto one
+	// connection here if anything did.
 	{
 		const before = tunnels;
+		const beforeUsers = tunnelUsers.length;
 		const url = `http://${ONION_HOST}/v1/federation/chat-fast`;
 		await Promise.all(
 			Array.from({ length: 4 }, () =>
-				postJsonViaHiddenService(url, { trx: buildSignedChatTx() }, proxies, 20_000).catch(
+				postJsonViaTorIsolated(url, { trx: buildSignedChatTx() }, proxies, 20_000).catch(
 					() => undefined
 				)
 			)
 		);
 		const extra = tunnels - before;
-		if (extra === 0) ok('four CONCURRENT pushes to one .onion share the single pooled connection');
+		const users = new Set(tunnelUsers.slice(beforeUsers));
+		if (extra === 4 && users.size === 4)
+			ok('four CONCURRENT pushes to one .onion take four isolated circuits');
 		else
 			bad(
-				`four concurrent pushes to one .onion opened ${extra} extra tunnel(s)`,
-				'each one is a fresh circuit build — 30-60s on a real hidden transport — which ' +
-					'is precisely the cost CONNECTIONS_PER_ORIGIN = 1 exists to refuse to pay'
+				`four concurrent pushes to one .onion took ${extra} tunnel(s), ${users.size} credential(s)`
 			);
 	}
 
-	// One connection per origin serialises two messages to the SAME peer on
-	// purpose. That is only acceptable if it does NOT serialise the
-	// federation — so this proves the claim rather than asserting it in a
-	// comment. Three distinct .onion peers, all cold, all behind the same
-	// dispatcher: if they were serialised, three circuit builds would cost
-	// 3 × CIRCUIT_BUILD_MS. Concurrent, they cost one.
-	await closePool();
+	// Three distinct .onion peers, all cold: if pushes were serialised across
+	// peers, three circuit builds would cost 3 × CIRCUIT_BUILD_MS. Concurrent,
+	// they cost one.
 	const threePeers: FastPeer[] = ['bravo', 'charlie', 'delta'].map((n) => ({
 		origin: `http://${`morphitfastchat${n}`.padEnd(56, 'a')}.onion`,
 		hidden: true
@@ -674,7 +694,7 @@ console.log('');
 	// round trip completed, whatever the status said.
 	const transportFailures = fan.failures.filter((f) => !f.reason.startsWith('HTTP '));
 	if (transportFailures.length === 0 && fanTunnels === 3)
-		ok('three separate .onion peers each get their own connection through the shared dispatcher');
+		ok('three separate .onion peers each get their own circuit');
 	else
 		bad(
 			`hidden fan-out did not reach all three peers: ${transportFailures.length} transport ` +
@@ -688,13 +708,12 @@ console.log('');
 	if (fanMs < CIRCUIT_BUILD_MS * 2)
 		ok(
 			`and all three were built concurrently (${fanMs}ms, not ${CIRCUIT_BUILD_MS * 3}ms) — ` +
-				'the one-connection-per-origin cap does not serialise the federation'
+				'peers are not serialised against each other'
 		);
 	else
 		bad(
 			`three cold peers took ${fanMs}ms, near the ${CIRCUIT_BUILD_MS * 3}ms a serial fan-out ` +
-				'would cost — the per-origin cap is serialising peers against each other, which ' +
-				"makes the slowest peer everyone else's latency"
+				"would cost — the slowest peer has become everyone else's latency"
 		);
 
 	await closePool();
@@ -797,9 +816,9 @@ console.log('');
 	const peerPort = (peer.address() as AddressInfo).port;
 
 	const sender = new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: '' },
+		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' },
 		timeoutMs: 10_000,
-		postClearnet: async (url, body, timeoutMs) => {
+		postIsolated: async (url, body, _proxies, timeoutMs) => {
 			const ctrl = new AbortController();
 			const t = setTimeout(() => ctrl.abort(), timeoutMs);
 			try {
@@ -884,9 +903,9 @@ console.log('');
 	const peerPort = (peer.address() as AddressInfo).port;
 
 	const sender = new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: '' },
+		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '' },
 		timeoutMs: 5_000,
-		postClearnet: async (url, body, timeoutMs) => {
+		postIsolated: async (url, body, _proxies, timeoutMs) => {
 			const ctrl = new AbortController();
 			const t = setTimeout(() => ctrl.abort(), timeoutMs);
 			try {
@@ -2662,25 +2681,14 @@ console.log('');
 		);
 }
 
-// ── 18. EVERY NETWORK, AND A ROUTE THAT STILL WORKS WHEN ONE IS GONE ──
+// ── 18. THE TRANSPORTS, AND WHAT CHAT FAN-OUT MAY USE ────────────────
 //
-// Morphit's hidden transport is three separate implementations wearing one
-// name: a hand-written SOCKS5 connector for Tor, a hand-written CONNECT one for
-// I2P, and a plain agent riding Lokinet's tun. Before this section, EVERY
-// scenario in this file — and every unit test in the tree — drove the Tor
-// branch and nothing else. The other two were carried on the assertion that
-// they were similar enough, on the two networks the zero-clearnet instances
-// most depend on.
-//
-// And underneath that sat a worse problem. `fastPeersFromDirectory` chose one
-// address per peer at DIRECTORY-READ time, preferring whatever hidden address
-// the peer had published, and discarded the rest. Nothing anywhere asked
-// whether THIS instance could reach the network it had just committed to. On a
-// clearnet-only box — no Tor daemon, which is the state of a fresh install —
-// that meant picking the `.onion` of every onion-publishing peer, dropping
-// their working clearnet origins on the floor, and failing every push locally
-// in about a millisecond. Federated chat between those pairs did not degrade;
-// it stopped, silently, and every message fell back to chain timing.
+// Chat fan-out uses Tor only, one isolated circuit per push: an onion
+// inside Tor, a clearnet https origin through a Tor exit. I2P and Lokinet
+// cannot isolate one request from the next, so a push over them could be tied
+// to the instance's other pushes; they are not used for fan-out. Their
+// transports are still used — by the login-pairing forward — and the I2P one
+// is exercised directly below, as is what fan-out does when Tor is unusable.
 {
 	_resetSeenForTest();
 	await closePool();
@@ -2741,18 +2749,20 @@ console.log('');
 
 	const I2P_HOST = `${'b'.repeat(52)}.b32.i2p`;
 	const i2pProxies = { torSocks: '', i2pHttpProxy: `127.0.0.1:${i2pPort}` };
-	const i2pSender = makeHiddenSender(i2pProxies);
-	i2pSender.enqueue(buildSignedChatTx(), [{ origin: `http://${I2P_HOST}`, hidden: true }]);
-	await i2pSender.drain();
+	// The pairing forward's I2P transport, driven directly.
+	const i2pPush = await postJsonViaHiddenService(
+		`http://${I2P_HOST}/v1/federation/chat-fast`,
+		{ trx: buildSignedChatTx() },
+		i2pProxies,
+		20_000
+	).catch((e: unknown) => ({ status: 0, body: String(e) }));
 
-	if (i2pSender.stats().delivered === 1 && i2pRequests === 1)
+	if (i2pPush.status === 202 && i2pRequests === 1)
 		ok('a .b32.i2p peer is reached through our CONNECT connector and a real I2P HTTP proxy');
 	else
 		bad(
-			`the I2P branch did not route: delivered=${i2pSender.stats().delivered} ` +
-				`proxyRequests=${i2pRequests}`,
-			'this is the transport two of Morphit’s three hidden networks run on, and ' +
-				'nothing in the tree exercised it before'
+			`the I2P branch did not route: status=${i2pPush.status} proxyRequests=${i2pRequests}`,
+			'this is the transport the pairing forward uses on I2P'
 		);
 
 	// Asserting the CONNECT target means the scenario cannot pass by accident if
@@ -2817,157 +2827,92 @@ console.log('');
 			);
 	}
 
-	// ── the same, for a peer the local daemon cannot reach ──
+	// ── fan-out when this box's Tor is unusable ─────────────────────────
 	//
-	// THE REGRESSION. Tor is configured but nothing is listening — the exact
-	// shape of a box whose daemon is not installed, since the shipped default
-	// (`127.0.0.1:9050`) is non-empty whether or not anything is behind it. The
-	// peer also published a clearnet origin, which the old code discarded.
+	// Tor is configured but nothing is listening — the shape of a box whose
+	// daemon is not installed, since the shipped default (`127.0.0.1:9050`) is
+	// non-empty whether or not anything is behind it. Both of the peer's
+	// fan-out addresses — its onion and its https origin through an exit — need
+	// Tor, so the push fails locally, at once, and the message goes by chain.
+	// What must NOT happen is a direct clearnet connection: that is what told a
+	// peer which instance a user is on.
 	_resetSeenForTest();
-	let clearnetHits = 0;
-	const clearnetPeer: Server = createServer((req, res) => {
-		clearnetHits++;
-		req.resume();
-		req.on('end', () => {
-			res.writeHead(202, { 'content-type': 'application/json' });
-			res.end('{"status":"accepted"}');
-		});
-	});
-	await new Promise<void>((r) => clearnetPeer.listen(0, '127.0.0.1', r));
-	const clearnetPort = (clearnetPeer.address() as AddressInfo).port;
-
 	const DEAD_TOR = { torSocks: '127.0.0.1:1', i2pHttpProxy: '127.0.0.1:1' };
-	const failoverSender = new PeerSender({
-		proxies: DEAD_TOR,
-		timeoutMs: 5_000,
-		postClearnet: async (url, body, ms) => {
-			const ctrl = new AbortController();
-			const t = setTimeout(() => ctrl.abort(), ms);
-			try {
-				const r = await fetch(url, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(body),
-					signal: ctrl.signal
-				});
-				return { status: r.status, body: await r.text() };
-			} finally {
-				clearTimeout(t);
-			}
-		}
-	});
-
-	// Built the way the directory builds it: Tor CONFIGURED, so the onion is
-	// preferred — config cannot tell a dead daemon from a live one. The clearnet
-	// origin survives as the fallback, which is the whole fix.
-	const failoverPeer = fastPeerFromRow(
-		{
-			origin: `http://127.0.0.1:${clearnetPort}`,
-			reg_alt_networks: { tor: `${'c'.repeat(56)}.onion` }
-		},
+	const deadTorSender = new PeerSender({ proxies: DEAD_TOR, timeoutMs: 5_000 });
+	const deadTorPeer = fanOutPeerFromRow(
+		{ origin: 'https://peer.example', reg_alt_networks: { tor: `${'c'.repeat(56)}.onion` } },
 		DEAD_TOR
 	);
-
-	const beforeMs = Date.now();
-	failoverSender.enqueue(buildSignedChatTx(), [failoverPeer]);
-	await failoverSender.drain();
-	const failoverMs = Date.now() - beforeMs;
-
-	if (failoverSender.stats().delivered === 1 && clearnetHits === 1)
-		ok('a dead Tor daemon fails over to the peer clearnet origin inside the same push');
-	else
-		bad(
-			`the message did not reach the peer: delivered=${failoverSender.stats().delivered} ` +
-				`clearnetHits=${clearnetHits}`,
-			'before this fix a clearnet-only instance had federated chat completely dead with ' +
-				'every peer that had published an onion, and nothing said so'
-		);
-
-	// The failover must be CHEAP. A refused local connection is immediate; if
-	// this ever started costing the push timeout, the fallback would be worse
-	// than the failure it replaces.
-	if (failoverMs < 1_000) ok(`and it cost ${failoverMs}ms — a refused local socket, not a timeout`);
-	else
-		bad(
-			`the failover took ${failoverMs}ms`,
-			'a local daemon that is absent refuses instantly; anything near the push timeout ' +
-				'means the failure is being waited out rather than detected'
-		);
-
-	// Having learned, the instance must not re-dial the dead network.
-	const failuresAfterFirst = failoverSender.stats().failures.length;
-	failoverSender.enqueue(buildSignedChatTx(), [failoverPeer]);
-	await failoverSender.drain();
 	if (
-		failoverSender.stats().delivered === 2 &&
-		failoverSender.stats().failures.length === failuresAfterFirst
+		deadTorPeer !== null &&
+		deadTorPeer.origin === `http://${'c'.repeat(56)}.onion` &&
+		(deadTorPeer.alternates ?? []).map((a) => a.origin).join(',') === 'https://peer.example'
 	)
-		ok('and the next message skips the dead network entirely rather than re-paying for it');
+		ok('a peer is addressed by its onion, then its https origin — both over Tor');
+	else bad(`unexpected fan-out addresses: ${JSON.stringify(deadTorPeer)}`);
+
+	const deadStart = Date.now();
+	if (deadTorPeer !== null) deadTorSender.enqueue(buildSignedChatTx(), [deadTorPeer]);
+	await deadTorSender.drain();
+	const deadMs = Date.now() - deadStart;
+	const deadStats = deadTorSender.stats();
+	if (deadStats.delivered === 0 && deadStats.failed === 1 && deadMs < 1_000)
+		ok(`a dead Tor fails the push locally in ${deadMs}ms — nothing is sent around it`);
 	else
 		bad(
-			`the second message re-dialled the dead transport: ` +
-				`failures ${failuresAfterFirst} -> ${failoverSender.stats().failures.length}`,
-			'one refused connection per peer per message is the cost this tracker exists to ' +
-				'remove, and on a federation of any size it is the dominant one'
+			`dead Tor: delivered=${deadStats.delivered} failed=${deadStats.failed} in ${deadMs}ms`,
+			'a refused local proxy is immediate; delivery without Tor would mean a non-Tor road'
 		);
-
-	if (failoverSender.reachability.isDown('tor'))
-		ok('the instance records WHICH network is down, so a failure count is a diagnosis');
+	if (deadStats.failures.every((f) => f.localFault === true) && deadStats.failures.length > 0)
+		ok('and every recorded failure is attributed to this instance, not the peer');
+	else bad(`failures: ${JSON.stringify(deadStats.failures).slice(0, 200)}`);
+	if (deadTorSender.reachability.isDown('tor'))
+		ok('the instance records that its Tor is down, so a failure count is a diagnosis');
 	else bad('a local Tor outage left no record an operator could read');
 
-	// ...and the failure it DID record says it was ours, not the peer's.
-	const firstFailure = failoverSender.stats().failures[0];
-	if (firstFailure?.localFault === true)
-		ok('the recorded failure is attributed to this instance, not blamed on the peer');
-	else
-		bad(
-			`the failure was recorded as the peer's: ${JSON.stringify(firstFailure)}`,
-			'a peer wrongly blamed for our dead daemon is a peer an operator will go and ' +
-				'investigate instead of starting their own Tor'
-		);
-
-	// ── a zero-clearnet pair, with one of its two networks gone ──
+	// ── a zero-clearnet peer that also publishes I2P ────────────────────
 	//
-	// Neither side has a clearnet address at all, so the only escape from a dead
-	// Tor is the peer's OTHER hidden network. This is the case Morphit exists
-	// for and the one with no safety net underneath it.
-	_resetSeenForTest();
-	const bothNetworksSender = new PeerSender({
-		proxies: { torSocks: '127.0.0.1:1', i2pHttpProxy: `127.0.0.1:${i2pPort}` },
-		timeoutMs: 5_000,
-		postClearnet: async () => {
-			throw new Error('a zero-clearnet pair must never be routed over clearnet');
-		}
-	});
+	// Fan-out does not fall back to I2P when Tor is down: the I2P proxy would put
+	// every push on one client tunnel, and the peer could link them.
 	const i2pBefore = i2pRequests;
-	bothNetworksSender.enqueue(buildSignedChatTx(), [
-		fastPeerFromRow(
+	const bothNetworks = fanOutPeerFromRow(
+		{
+			origin: `http://${'d'.repeat(56)}.onion`,
+			reg_alt_networks: { tor: `${'d'.repeat(56)}.onion`, i2p_b32: I2P_HOST }
+		},
+		{ torSocks: '127.0.0.1:1', i2pHttpProxy: `127.0.0.1:${i2pPort}` }
+	);
+	const zeroSender = new PeerSender({
+		proxies: { torSocks: '127.0.0.1:1', i2pHttpProxy: `127.0.0.1:${i2pPort}` },
+		timeoutMs: 5_000
+	});
+	if (bothNetworks !== null) zeroSender.enqueue(buildSignedChatTx(), [bothNetworks]);
+	await zeroSender.drain();
+	if (
+		bothNetworks !== null &&
+		[bothNetworks.origin, ...(bothNetworks.alternates ?? []).map((a) => a.origin)].every((o) =>
+			o.endsWith('.onion')
+		) &&
+		i2pRequests === i2pBefore
+	)
+		ok('a zero-clearnet peer is pushed to over its onion only — never over I2P');
+	else
+		bad(
+			`I2P was used for fan-out: requests ${i2pRequests - i2pBefore}, peer ${JSON.stringify(bothNetworks)}`
+		);
+
+	// ...and a node with no Tor at all has no fan-out address for anyone.
+	if (
+		fanOutPeerFromRow(
 			{
-				origin: `http://${'d'.repeat(56)}.onion`,
-				reg_alt_networks: { tor: `${'d'.repeat(56)}.onion`, i2p_b32: I2P_HOST }
+				origin: 'https://peer.example',
+				reg_alt_networks: { tor: `${'c'.repeat(56)}.onion`, i2p_b32: I2P_HOST }
 			},
-			{ torSocks: '127.0.0.1:1', i2pHttpProxy: `127.0.0.1:${i2pPort}` }
-		)
-	]);
-	await bothNetworksSender.drain();
-
-	if (bothNetworksSender.stats().delivered === 1 && i2pRequests === i2pBefore + 1)
-		ok('a zero-clearnet peer with a dead Tor is still reached, over its I2P address');
-	else
-		bad(
-			`the zero-clearnet pair lost contact: delivered=` +
-				`${bothNetworksSender.stats().delivered} i2pRequests=${i2pRequests - i2pBefore}`,
-			'these instances have no clearnet fallback by design, so a single dead local ' +
-				'daemon taking chat offline for them is the worst outcome in this subsystem'
-		);
-
-	if (bothNetworksSender.reachability.downNetworks().join(',') === 'tor')
-		ok('and only the network that actually failed was taken off the list');
-	else
-		bad(
-			`networks marked down: [${bothNetworksSender.reachability.downNetworks().join(', ')}]`,
-			'marking a working network down costs every peer on it a needless detour'
-		);
+			{ torSocks: '', i2pHttpProxy: `127.0.0.1:${i2pPort}` }
+		) === null
+	)
+		ok('without Tor there is no fan-out address — its users get chain-speed delivery instead');
+	else bad('a node without Tor was given a fan-out address');
 
 	// ── a peer that ANSWERED is not dialled again somewhere else ────────
 	//
@@ -3050,10 +2995,7 @@ console.log('');
 	const strandedSender = new PeerSender({
 		proxies: { torSocks: '127.0.0.1:1', i2pHttpProxy: '' },
 		timeoutMs: 1_000,
-		postClearnet: async () => {
-			throw new Error('a hidden-only peer must never be routed over clearnet');
-		},
-		postHidden: async () => {
+		postIsolated: async () => {
 			strandedAttempts++;
 			throw new ProxyUnavailableError('Tor SOCKS proxy unreachable');
 		}
@@ -3081,13 +3023,11 @@ console.log('');
 	// ── the proxy that answers CONNECT and refuses it ───────────────────
 	//
 	// The Java router's `i2ptunnel.httpclient.allowInternalSSL=false` refuses
-	// CONNECT to in-network destinations outright, port 80 included despite the
-	// name. The proxy is up and answers — it just will not open the tunnel — so
-	// this is neither a connect failure nor a peer refusing a message, and
-	// under undici's ProxyAgent it arrived as UND_ERR_ABORTED with the status
-	// only in prose, indistinguishable from an ordinary abort. It was recorded
-	// against the PEER, and an operator in that configuration had federated
-	// chat over I2P dead with nothing anywhere naming why.
+	// CONNECT to in-network destinations outright. The proxy is up and answers —
+	// it just will not open the tunnel — so the transport must report OUR fault
+	// (not the peer refusing), and an AMBIGUOUS one: a router refusing by policy
+	// refuses every destination, one that cannot reach a destination refuses
+	// that one. Driven on the pairing forward's I2P transport.
 	_resetSeenForTest();
 	const refuseProxy: Server = createServer((_req, res) => res.writeHead(400).end());
 	refuseProxy.on('connect', (_req, socket) => {
@@ -3096,212 +3036,30 @@ console.log('');
 	});
 	await new Promise<void>((r) => refuseProxy.listen(0, '127.0.0.1', r));
 	const refusePort = (refuseProxy.address() as AddressInfo).port;
-
-	const refusedSender = new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: `127.0.0.1:${refusePort}` },
-		timeoutMs: 4_000,
-		postClearnet: async () => {
-			throw new Error('a hidden-only peer must never be routed over clearnet');
-		}
-	});
-	refusedSender.enqueue(buildSignedChatTx(), [
-		{ origin: `http://${'c'.repeat(52)}.b32.i2p`, hidden: true, key: 'https://refused.example' }
-	]);
-	await refusedSender.drain();
-
-	const refusedStats = refusedSender.stats();
-	const refusedFailure = refusedStats.failures[refusedStats.failures.length - 1];
-	if (refusedFailure?.localFault === true)
-		ok('a router that refuses CONNECT is recorded as OUR fault, not the peer refusing');
-	else
-		bad(
-			`a refused CONNECT was recorded as ${JSON.stringify(refusedFailure)}`,
-			'the operator sees failures against healthy peers and no sign that their own ' +
-				'router is configured to refuse every tunnel it is asked for'
-		);
-
-	// ...and it is AMBIGUOUS: a router refusing by policy refuses every
-	// destination (ours), a router that cannot reach one refuses that one
-	// (theirs), and the status that distinguishes them differs per router and
-	// has not been verified against a live Java router. So one is not enough.
-	if (!refusedSender.reachability.isDown('i2p'))
-		ok('...and one refusal is not enough to take I2P away from every other peer');
-	else
-		bad(
-			'a single refused CONNECT marked the whole I2P network down',
-			'a destination this router cannot reach would then cost every other I2P ' +
-				'peer the network, which is the same over-reach the Lokinet rule exists to avoid'
-		);
-
-	// v1.18.0 review (S2): ONE instance may publish two I2P names — an origin
-	// and an alt `i2p_name` are both accepted at registration — and the send
-	// path walks a peer's addresses in turn. Counted by ADDRESS, one registration
-	// whose names the proxy refuses supplied both pieces of evidence in a single
-	// push and took I2P away from every other peer. Counted by PEER, it is one.
-	_resetSeenForTest();
-	const twoNames = new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: `127.0.0.1:${refusePort}` },
-		timeoutMs: 4_000,
-		postClearnet: async () => {
-			throw new Error('a hidden-only peer must never be routed over clearnet');
-		}
-	});
-	twoNames.enqueue(buildSignedChatTx(), [
-		{
-			origin: `http://${'d'.repeat(52)}.b32.i2p`,
-			hidden: true,
-			key: 'https://two-names.example',
-			alternates: [{ origin: 'http://junk-second-name.i2p', hidden: true }]
-		}
-	]);
-	await twoNames.drain();
-	if (!twoNames.reachability.isDown('i2p'))
-		ok('one instance refused at BOTH of its I2P names is still one piece of evidence');
-	else
-		bad(
-			'one registration with two refused I2P names took the I2P network down for every peer',
-			'the corroboration counted addresses, and a single peer can publish two'
-		);
-	// ...while two DIFFERENT instances refused is what a router refusing every
-	// tunnel looks like, and that still convicts.
-	const twoPeers = new PeerSender({
-		proxies: { torSocks: '', i2pHttpProxy: `127.0.0.1:${refusePort}` },
-		timeoutMs: 4_000,
-		postClearnet: async () => {
-			throw new Error('a hidden-only peer must never be routed over clearnet');
-		}
-	});
-	twoPeers.enqueue(buildSignedChatTx(), [
-		{ origin: `http://${'e'.repeat(52)}.b32.i2p`, hidden: true, key: 'https://peer-one.example' },
-		{ origin: `http://${'f'.repeat(52)}.b32.i2p`, hidden: true, key: 'https://peer-two.example' }
-	]);
-	await twoPeers.drain();
-	if (twoPeers.reachability.isDown('i2p'))
-		ok('...while two different instances refused still takes I2P down, as a dead router should');
-	else bad('two instances refused by our router did not take I2P down — the breaker cannot fire');
-
+	const refusedErr = await postJsonViaHiddenService(
+		`http://${'c'.repeat(52)}.b32.i2p/v1/federation/chat-fast`,
+		{ trx: buildSignedChatTx() },
+		{ torSocks: '', i2pHttpProxy: `127.0.0.1:${refusePort}` },
+		4_000
+	).then(
+		() => null,
+		(e: unknown) => e
+	);
+	if (isProxyUnavailable(refusedErr))
+		ok('a router that refuses CONNECT is reported as OUR fault, not the peer refusing');
+	else bad(`a refused CONNECT surfaced as ${String(refusedErr)}`);
+	if (localFaultConfidence(refusedErr, 'i2p') === 'ambiguous')
+		ok('...and as an ambiguous one, so one refusal cannot convict the network');
+	else bad(`a refused CONNECT was classified ${localFaultConfidence(refusedErr, 'i2p')}`);
 	refuseProxy.closeAllConnections?.();
 	await new Promise<void>((r) => refuseProxy.close(() => r()));
 
-	// ── the breaker needs evidence about the NETWORK ────────────────────
-	//
-	// Failover and the network breaker are one decision in the send path and two
-	// decisions in fact, and they need different evidence. Any local fault should
-	// move this message to the peer's next address. Taking the network away from
-	// every OTHER peer for a minute is a claim about our own daemon.
-	//
-	// On Tor and I2P one failure carries that claim: the SOCKS connector raises
-	// the marker only when OUR proxy failed or answered wrongly (a dead onion
-	// takes the other branch), and the I2P branch matches our configured
-	// address and port. A peer cannot produce either shape.
-	//
-	// Lokinet's local fault is a DNS miss, which carries THEIR name. A stale,
-	// mistyped or deregistered .loki record produces exactly the ENOTFOUND our
-	// own router being gone produces. Reading one of those as "our transport is
-	// down" costs every other .loki peer the network for a minute — and on an
-	// instance that publishes a clearnet origin too, silently moves their
-	// traffic onto the clearnet, which is the property those addresses existed
-	// to avoid.
-	_resetSeenForTest();
-	const lokiDeadHosts = new Set<string>(['stale.loki']);
-	const lokiHiddenUrls: string[] = [];
-	const lokiClearnetUrls: string[] = [];
-	const lokiSender = new PeerSender({
-		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '127.0.0.1:4444' },
-		timeoutMs: 1_000,
-		postClearnet: async (url: string) => {
-			lokiClearnetUrls.push(url);
-			return { status: 200, body: '{}' };
-		},
-		postHidden: async (url: string) => {
-			lokiHiddenUrls.push(url);
-			const host = new URL(url).hostname;
-			if (lokiDeadHosts.has(host))
-				throw new ProxyUnavailableError(
-					`local loki transport unavailable: getaddrinfo ENOTFOUND ${host}`
-				);
-			return { status: 200, body: '{}' };
-		}
-	});
-	lokiSender.enqueue(buildSignedChatTx(), [
-		{ origin: 'http://stale.loki', hidden: true, key: 'https://stale.example' }
-	]);
-	await lokiSender.drain();
-
-	if (!lokiSender.reachability.isDown('loki'))
-		ok('one unresolvable .loki name is not read as our router being gone');
-	else
-		bad(
-			'a single .loki address that would not resolve marked the whole network down',
-			'one peer with a stale chain record now costs every other .loki peer the ' +
-				'network for a minute — and the error cannot tell the two cases apart, ' +
-				'which is exactly why one of them is not enough to decide'
-		);
-
-	// The consequence, driven rather than argued: a DIFFERENT peer, healthy and
-	// reachable over Lokinet, must still be reached over Lokinet.
-	lokiSender.enqueue(buildSignedChatTx(), [
-		{
-			origin: 'http://healthy.loki',
-			hidden: true,
-			key: 'https://healthy.example',
-			alternates: [{ origin: 'https://healthy.example', hidden: false }]
-		}
-	]);
-	await lokiSender.drain();
-
-	if (
-		lokiHiddenUrls.includes('http://healthy.loki/v1/federation/chat-fast') &&
-		lokiClearnetUrls.length === 0
-	)
-		ok("a healthy .loki peer is not downgraded to clearnet by another peer's bad address");
-	else
-		bad(
-			`a healthy .loki peer was routed wrongly: hidden=[${lokiHiddenUrls.join(', ')}] ` +
-				`clearnet=[${lokiClearnetUrls.join(', ')}]`,
-			'the operator chose a hidden network and the message left over the clearnet ' +
-				'anyway, because a different peer published an address that does not resolve'
-		);
-
-	// ...and the breaker must still WORK. Two DISTINCT names is the first point
-	// at which our resolver is the better explanation than their records, and a
-	// router that is actually gone fails every address, so the second arrives in
-	// the same batch rather than a minute later.
-	_resetSeenForTest();
-	lokiDeadHosts.add('other.loki');
-	const lokiDownSender = new PeerSender({
-		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '127.0.0.1:4444' },
-		timeoutMs: 1_000,
-		postClearnet: async () => ({ status: 200, body: '{}' }),
-		postHidden: async (url: string) => {
-			throw new ProxyUnavailableError(
-				`local loki transport unavailable: getaddrinfo ENOTFOUND ${new URL(url).hostname}`
-			);
-		}
-	});
-	lokiDownSender.enqueue(buildSignedChatTx(), [
-		{ origin: 'http://stale.loki', hidden: true, key: 'https://a.example' },
-		{ origin: 'http://other.loki', hidden: true, key: 'https://b.example' }
-	]);
-	await lokiDownSender.drain();
-
-	if (lokiDownSender.reachability.isDown('loki'))
-		ok('two distinct .loki names failing IS read as our router being gone');
-	else
-		bad(
-			'two unresolvable .loki names left the network on the list',
-			'the breaker no longer fires at all on Lokinet, so a dead router costs one ' +
-				'refused dial per peer per message — the exact cost it was added to avoid'
-		);
-
-	// The networks whose evidence DOES name our end must not be slowed down by
-	// the rule that fixes the one whose evidence does not.
+	// Tor's local-fault evidence names our own proxy, so one fault is enough.
 	_resetSeenForTest();
 	const torOneShot = new PeerSender({
 		proxies: { torSocks: '127.0.0.1:9050', i2pHttpProxy: '127.0.0.1:4444' },
 		timeoutMs: 1_000,
-		postClearnet: async () => ({ status: 200, body: '{}' }),
-		postHidden: async () => {
+		postIsolated: async () => {
 			throw new ProxyUnavailableError('SOCKS proxy 127.0.0.1:9050 unreachable');
 		}
 	});
@@ -3332,8 +3090,6 @@ console.log('');
 	await new Promise<void>((r) => i2pProxy.close(() => r()));
 	i2pOrigin.closeAllConnections?.();
 	await new Promise<void>((r) => i2pOrigin.close(() => r()));
-	clearnetPeer.closeAllConnections?.();
-	await new Promise<void>((r) => clearnetPeer.close(() => r()));
 	await closePool();
 }
 

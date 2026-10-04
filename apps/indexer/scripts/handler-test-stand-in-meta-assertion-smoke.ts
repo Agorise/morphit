@@ -2,22 +2,22 @@
 /**
  * handler-test-stand-in-meta-assertion-smoke.
  *
- * Part 122 cp49 STRUCTURAL DEFENSE (LL #53 / O-2).  Closes the
- * cp47-A1 recurring class permanently for vitest unit-test files
- * (the cp48-O1 closure covered only standalone smoke scripts;
+ * STRUCTURAL DEFENSE.  Closes the
+ * recurring class permanently for vitest unit-test files
+ * (the closure covered only standalone smoke scripts;
  * the vitest test path was an unprotected sibling).
  *
  * Recurring class history:
- *   cp33 — handler tests used 'DOGE' as the "unknown asset"
- *          stand-in; cp33 added DOGE; tests silently passed because
+ *   handler tests used 'DOGE' as the "unknown asset"
+ *          stand-in; a later change added DOGE; tests silently passed because
  *          they ran before the asset list was rechecked.
- *   cp39 — same pattern with 'ZEC'.
- *   cp47 — same pattern with 'ETH'.  Vitest tests SILENTLY BROKE
+ *   same pattern with 'ZEC'.
+ *   same pattern with 'ETH'.  Vitest tests SILENTLY BROKE
  *          (handler returned ok:true; expectation was
  *          asset_invalid) but the unit-test path was NOT part of
  *          run-smokes.sh, so the breakage went undetected for
- *          2 checkpoints (cp47, cp48).
- *   cp49 — surfaced via deep-deep A-2 grep; fixed inline AND
+ *          2 checkpoints.
+ *   surfaced via grep; fixed inline AND
  *          structural defense added here.
  *
  * Defense: any time a vitest test file contains a hardcoded
@@ -27,16 +27,16 @@
  * '__UNKNOWN__' (or any value with chars outside the canonical
  * ticker regex /^[A-Z]+$/) is acceptable.
  *
- * Mutation-test verification: M-111 in cp49 deep-deep.  Swapping
+ * Mutation-test verification:.  Swapping
  * '__UNKNOWN__' back to a real ticker like 'XRP' fires:
  *   "handler-test-stand-in-meta-assertion FAILED:
  *    apps/indexer/test/handlers/order.test.ts uses 'XRP' as
  *    asset_invalid stand-in — XRP is a real ticker.  Pick a
  *    synthetic non-ticker like '__UNKNOWN__'."
  *
- * Also pins cp48-O1's UNKNOWN_STANDIN constant in
+ * Also pins the UNKNOWN_STANDIN constant in
  * asset-registry-smoke.ts — confirms that defense is still
- * intact at cp49.
+ * intact.
  */
 
 import { readFileSync, readdirSync, statSync } from 'fs';
@@ -135,7 +135,7 @@ if (violations.length === 0) {
 	}
 }
 
-// ── Also pin cp48-O1's UNKNOWN_STANDIN integrity ──
+// ── Also pin the UNKNOWN_STANDIN integrity ──
 const indexerSmokePath = join(__dirname, '..', '..', '..', 'apps', 'indexer', 'scripts', 'asset-registry-smoke.ts');
 try {
 	const c = readFileSync(indexerSmokePath, 'utf-8');

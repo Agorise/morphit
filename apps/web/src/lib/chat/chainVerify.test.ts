@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * v1.8.15 (cp555) — witness chat-identity chain verification.
+ * v1.8.15 — witness chat-identity chain verification.
  *
- * THE BUG THIS GUARDS AGAINST. the maintainer and @exampleuser (mk), on live
+ * THE BUG THIS GUARDS AGAINST. Two users on live
  * morphit.io: neither could open a chat with the Blurt witness @khrom — every
  * send died with the red "tamper detected — the blockchain reports none"
  * banner (pub_pin_chain_reports_none) — yet the two of them could chat with
@@ -11,7 +11,7 @@
  * `morphit_chat_identity_v1` op far beyond get_account_history's 10000-entry
  * per-call cap (barely a week of a witness's activity). The old chain check
  * WALKED that window, found no identity op, and returned null → false tamper.
- * mk (a non-producer) verified fine because its identity op sat inside the
+ * An ordinary account (a non-producer) verified fine because its identity op sat inside the
  * window.
  *
  * The fix verifies the indexer's CLAIMED op directly by trx_id
@@ -63,12 +63,6 @@ vi.mock('./chainOpVerify', () => {
 		verifyTransactionSignatures: vi.fn(async () => verdict())
 	};
 });
-
-// chainVerify imports getBlurtClient at module top (used only by the non-quorum
-// helper, which these tests don't exercise) — the import must still resolve.
-vi.mock('$blurt/client', () => ({
-	getBlurtClient: () => ({ getLatestCustomJson: async () => null })
-}));
 
 import { verifyClaimedChatIdentityOnChain, verifyPeerChatIdentityOnChain } from './chainVerify';
 import { OP_IDS } from '$net/config';
@@ -138,23 +132,17 @@ describe('verifyClaimedChatIdentityOnChain — witness fix (cp555)', () => {
 
 	it('rejects a claimed trx not authored by peer (indexer pointing at a foreign op)', async () => {
 		h.txByTrx.set(TRX_A, chatIdentityTx({ author: 'someoneelse', pubB64: PUB_A }));
-		expect(
-			await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })
-		).toBeNull();
+		expect(await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })).toBeNull();
 	});
 
 	it('rejects a chat-identity op whose signature does not verify (fabricated body)', async () => {
 		h.txByTrx.set(TRX_A, chatIdentityTx({ author: KHROM, pubB64: PUB_A }));
 		h.sigOk = false;
-		expect(
-			await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })
-		).toBeNull();
+		expect(await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })).toBeNull();
 	});
 
 	it('rejects when get_transaction returns null (fabricated / unknown trx_id)', async () => {
-		expect(
-			await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })
-		).toBeNull();
+		expect(await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })).toBeNull();
 	});
 
 	it('rejects a malformed trx_id without any RPC round-trip', async () => {
@@ -168,17 +156,13 @@ describe('verifyClaimedChatIdentityOnChain — witness fix (cp555)', () => {
 			TRX_A,
 			chatIdentityTx({ author: KHROM, pubB64: PUB_A, id: 'morphit_chat_message_v1' })
 		);
-		expect(
-			await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })
-		).toBeNull();
+		expect(await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })).toBeNull();
 	});
 
 	it('rejects when peer has no on-chain posting authority', async () => {
 		h.txByTrx.set(TRX_A, chatIdentityTx({ author: KHROM, pubB64: PUB_A }));
 		h.postingByName.delete(KHROM);
-		expect(
-			await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })
-		).toBeNull();
+		expect(await verifyClaimedChatIdentityOnChain(KHROM, { blockNum: 1, trxId: TRX_A })).toBeNull();
 	});
 
 	it('falls back to the claimed block when a non-conformant node omits block_num', async () => {

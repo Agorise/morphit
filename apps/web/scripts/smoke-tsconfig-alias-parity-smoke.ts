@@ -1,5 +1,5 @@
 /**
- * smoke-tsconfig-alias-parity — cp448.
+ * smoke-tsconfig-alias-parity.
  *
  * The SvelteKit `$`-aliases are PER-APP.  `$blurt` and `$indexer` name
  * DIFFERENT directories in the web app vs. the indexer:
@@ -17,7 +17,7 @@
  * indexer's client.ts (no such export) and died with a confusing error.  Fourteen
  * web source files import `$blurt/*` and survived only because no smoke happened to
  * load them; the workaround was relative imports (`../src/lib/blurt/*`) guarded by
- * ad-hoc greps.  cp448 gives apps/web its own `tsconfig.smoke.json` (resolving the
+ * ad-hoc greps.  A later change gives apps/web its own `tsconfig.smoke.json` (resolving the
  * web aliases to WEB) and teaches run-smokes.sh to prefer a workspace-local smoke
  * config; this smoke pins that arrangement so it can't silently regress:
  *
@@ -127,7 +127,7 @@ check(
 	`got typeof getInstance = ${typeof getInstance}`
 );
 // Transitive: a real web module that imports `$blurt/*` loads without binding the
-// indexer's copy (the exact break cp448 fixes).
+// indexer's copy (the exact break a later change fixes).
 let transitiveOk = false;
 try {
 	await import('../src/lib/chat/chainVerify.ts');

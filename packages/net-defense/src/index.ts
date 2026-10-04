@@ -2,7 +2,7 @@
  * Network-defense primitives — private-address detection.
  *
  * Lifted from `apps/indexer/src/indexer/federationProbe.ts` at
- * cp154 (cp146 F-mcp-1 Tier-B closure).  The full indexer probe
+ * (Tier-B closure).  The full indexer probe
  * implementation has six SSRF defense layers; this package
  * extracts the two PURE building blocks so multiple consumers
  * can compose their own policies:
@@ -12,8 +12,9 @@
  *     DNS + every-record-public, IP-pin dispatcher, manual
  *     redirect, body cap).
  *   - apps/mcp-server/src/indexerClient.ts uses these primitives
- *     to reject private-address instance URLs by default, with
- *     an env-var opt-in for legitimate localhost/Tor use.
+ *     to reject private-address instance URLs by default (the
+ *     literal check, then every DNS answer), with an env-var
+ *     opt-in for legitimate localhost/Tor use.
  *
  * Why split: the consumers have DIFFERENT THREAT MODELS:
  *
@@ -43,7 +44,7 @@
 
 import { BlockList, isIP } from 'node:net';
 
-// ─── THE non-public address set (v1.20.0 fix wave, D13) ─────────────────────
+// ─── THE non-public address set ─────────────────────
 //
 // One definition for every "is this address public?" decision in the repo:
 // this package's two checks below, and @morphit/hidden-transport's
@@ -128,18 +129,49 @@ export function isNonPublicIpLiteral(host: string): boolean {
 }
 
 /**
+ * The dotted-quad an inet_aton-style IPv4 spelling stands for, or null when
+ * `h` is not one. getaddrinfo still accepts these legacy forms — `2130706433`,
+ * `0x7f000001`, `0x7f.0.0.1`, `0177.0.0.1`, `127.1` are all 127.0.0.1 — so a
+ * check that only knows the dotted-quad lets them through. 1 to 4 parts, each
+ * decimal, 0x-hex or 0-led octal; the last part fills the remaining bytes.
+ */
+export function legacyIpv4ToDotted(h: string): string | null {
+	const parts = h.split('.');
+	if (parts.length < 1 || parts.length > 4) return null;
+	const nums: number[] = [];
+	for (const part of parts) {
+		let n: number;
+		if (/^0x[0-9a-f]+$/i.test(part)) n = parseInt(part.slice(2), 16);
+		else if (/^0[0-7]*$/.test(part)) n = parseInt(part, 8);
+		else if (/^[1-9][0-9]*$/.test(part)) n = parseInt(part, 10);
+		else return null;
+		if (!Number.isSafeInteger(n)) return null;
+		nums.push(n);
+	}
+	const last = nums.pop()!;
+	if (nums.some((x) => x > 255)) return null;
+	const lastBytes = 4 - nums.length;
+	if (last >= 2 ** (8 * lastBytes)) return null;
+	const bytes = [...nums];
+	for (let i = lastBytes - 1; i >= 0; i--) bytes.push(Math.floor(last / 2 ** (8 * i)) % 256);
+	return bytes.join('.');
+}
+
+/**
  * Check whether a hostname string (as it appears in a URL) is
  * one of the obviously-private literal forms.  This is the FIRST
  * defense — catches `https://127.0.0.1/`, `https://localhost/`,
- * `https://[::1]/`, cloud-metadata addresses, and the
- * `.local`/`.localhost`/`.internal` TLDs.
+ * `https://[::1]/`, cloud-metadata addresses, the
+ * `.local`/`.localhost`/`.internal` TLDs, and the legacy IPv4
+ * spellings resolvers still accept (`2130706433`, `0x7f.1`, `127.1`).
  *
- * Use BEFORE any DNS work.  Catches the easy 99% of attacks at
- * zero cost; DNS-based defenses catch the rebinding-class
- * remainder.
+ * Use BEFORE any DNS work, and never INSTEAD of it: a public-looking
+ * NAME can still resolve to a private address, so every resolved
+ * answer must also pass {@link isPrivateIp}.
  */
 export function isPrivateHostname(hostnameRaw: string): boolean {
-	const h = hostnameRaw.toLowerCase();
+	// A trailing root dot names the same host ("localhost." is localhost).
+	const h = hostnameRaw.toLowerCase().replace(/\.$/, '');
 	if (/^127\.\d+\.\d+\.\d+$/.test(h)) return true;
 	if (/^10\.\d+\.\d+\.\d+$/.test(h)) return true;
 	if (/^192\.168\.\d+\.\d+$/.test(h)) return true;
@@ -157,6 +189,9 @@ export function isPrivateHostname(hostnameRaw: string): boolean {
 	if (h.endsWith('.internal')) return true;
 	// Every other IP-literal form, judged by value (D13).
 	if (isNonPublicIpLiteral(h)) return true;
+	// Legacy IPv4 spellings, judged by the address they spell.
+	const dotted = legacyIpv4ToDotted(h);
+	if (dotted !== null && isNonPublicIpLiteral(dotted)) return true;
 	return false;
 }
 

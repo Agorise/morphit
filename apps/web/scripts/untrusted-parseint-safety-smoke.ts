@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * untrusted-parseint-safety smoke — Part 122 cp71 (LL #72 / O-20).
+ * untrusted-parseint-safety smoke.
  *
  * `parseInt('999000abc', 10) = 999000` silently accepts trailing
  * garbage.  Number.isFinite(parseInt(s,10)) returns true for any
@@ -10,7 +10,7 @@
  * passes the validity check and the rest of the code trusts a
  * partially-parsed number.
  *
- * cp70-D1 found a real instance of this in bodyCap middleware
+ * A later change found a real instance of this in bodyCap middleware
  * where `parseInt(c.req.header('content-length'), 10)` would
  * accept "999000abc".  The fix: require `/^\d+$/.test(s)` BEFORE
  * parsing, and prefer `Number()` to `parseInt()` for stricter
@@ -30,7 +30,7 @@
  * call, OR are operating on DB-row data (rows from a SELECT) where
  * Postgres's type system guarantees the format.
  *
- * Mutation test M-143:  introduce `parseInt(c.req.header('foo'), 10)`
+ * Mutation test:  introduce `parseInt(c.req.header('foo'), 10)`
  * to any API file → smoke fires.
  */
 

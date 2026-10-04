@@ -1,6 +1,6 @@
 # Morphit v1.11.4
 
-**Theme: reading the chain without depending on the clear net. A Morphit node can now reach Blurt RPC over Tor and I2P, cross-checks what it reads across independent nodes, and — on Tor Browser — even verifies its own release without a visitor's IP ever touching the clear net. Plus a smoother first install and a round of polish.**
+**Theme: reading the chain without depending on the clear net. A Morphit node can now reach Blurt RPC over Tor and I2P, cross-checks what it reads across several nodes, and — on Tor Browser — even verifies its own release without a visitor's IP ever touching the clear net. Plus a smoother first install and a round of polish.**
 
 ## Added
 

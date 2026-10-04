@@ -1,6 +1,6 @@
 /**
- * Hidden-service connectors refuse `https:` instead of silently downgrading
- * (v1.20.0 fix wave 2, S9).
+ * Hidden-service connectors refuse `https:` instead of silently downgrading.
+ *
  *
  * makeSocks5Connector / makeHttpConnectConnector hand undici a PLAIN socket
  * (they never wrap TLS) and default a missing port to 80. So an

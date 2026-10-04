@@ -16,8 +16,8 @@
 	 * so the user visually notices this isn't a routine dialog.
 	 *
 	 * Default focus goes to the Cancel button so a stray Enter press
-	 * doesn't trigger the destructive action. Escape routes through
-	 * the cancel handler too.
+	 * doesn't trigger the destructive action. Escape and a backdrop
+	 * click route through onDismiss (default: the cancel handler).
 	 */
 	import { onMount } from 'svelte';
 	import BusyButton from './BusyButton.svelte';
@@ -39,6 +39,10 @@
 		onConfirm: () => void | Promise<void>;
 		/** Called when user cancels (button, Escape, or backdrop click). */
 		onCancel: () => void;
+		/** Called instead of onCancel on Escape or a backdrop click. Give it when
+		 *  the cancel button itself records a choice ("No, keep them"), so that
+		 *  merely dismissing the dialog records none. */
+		onDismiss?: () => void;
 		/** Visual variant — 'destructive' tints the top border red
 		 *  and gives the confirm button destructive styling. */
 		variant?: 'destructive' | 'neutral';
@@ -56,6 +60,7 @@
 		cancelLabel,
 		onConfirm,
 		onCancel,
+		onDismiss,
 		variant = 'destructive',
 		busyLabel
 	}: Props = $props();
@@ -103,23 +108,29 @@
 		}
 	}
 
-	/** Wrap cancel so backdrop click, Escape key, and Cancel button
-	 *  all route through the same handler. */
+	/** The Cancel button. */
 	function handleCancel(): void {
 		if (confirming) return; // don't cancel mid-confirm
 		onCancel();
 	}
 
+	/** Escape or a backdrop click: onDismiss when given, else the same as
+	 *  Cancel. */
+	function handleDismiss(): void {
+		if (confirming) return;
+		(onDismiss ?? onCancel)();
+	}
+
 	// Intercept Escape + backdrop-click — the native <dialog>
 	// behavior is to close on Escape, which we want to catch so
-	// the caller's onCancel runs (for bookkeeping like clearing
+	// the caller's handler runs (for bookkeeping like clearing
 	// pending state).
 	function onDialogClose(): void {
 		// If the dialog closed without our setter knowing (via
-		// Escape), sync the bound state and fire onCancel.
+		// Escape), sync the bound state and fire the dismiss handler.
 		if (open) {
 			open = false;
-			handleCancel();
+			handleDismiss();
 		}
 	}
 
@@ -128,7 +139,7 @@
 		// the backdrop. The backdrop is the dialog element itself
 		// (the content is a child wrapper), so a click whose target
 		// is exactly dialogEl = backdrop click.
-		if (e.target === dialogEl) handleCancel();
+		if (e.target === dialogEl) handleDismiss();
 	}
 
 	onMount(() => {

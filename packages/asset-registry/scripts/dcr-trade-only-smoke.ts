@@ -2,12 +2,12 @@
 /**
  * dcr-trade-only-smoke.
  *
- * Part 122 cp43 sentinel: DCR (Decred) must be
+ * DCR (Decred) must be
  * `canPayListingFee: false` AND `canBeTraded: true` in BOTH the
  * canonical and frontend asset registries.  If a future contributor
  * toggles either value the wrong way, this smoke fails loudly.
  *
- * Memory #23 invariant pinned from two directions:
+ * The frozen fee_method invariant pinned from two directions:
  *  - Canonical registry's `canPayListingFee: true → ticker ∈
  *    {BLURT, BTC, XMR}` rule means a future contributor flipping
  *    DCR's flag to true would fail the asset-registry-smoke first.
@@ -24,7 +24,7 @@
  * users who want transaction-level privacy).  optInPrivacyTech
  * includes 'csppmix' to reflect the CoinShuffle++ wallet-side
  * mixing protocol integrated into dcrwallet — NEW tech tag
- * introduced at cp43.
+ * introduced.
  *
  * Address-validator coverage: Ds P2PKH-Secp256k1 (35 chars, most
  * common), Dc P2SH (35 chars, multisig/escrow).  Rejects Dp/Dr/De
@@ -57,8 +57,8 @@ if (!canonDcr) {
 	pass('canonical registry contains DCR entry');
 	if (canonDcr.canBeTraded === true) pass('canonical DCR.canBeTraded === true');
 	else fail('canonical DCR.canBeTraded === true', `actual: ${canonDcr.canBeTraded}`);
-	if (canonDcr.canPayListingFee === false) pass('canonical DCR.canPayListingFee === false (memory #23)');
-	else fail('canonical DCR.canPayListingFee === false (memory #23)', `actual: ${canonDcr.canPayListingFee}`);
+	if (canonDcr.canPayListingFee === false) pass('canonical DCR.canPayListingFee === false (trade-only rule)');
+	else fail('canonical DCR.canPayListingFee === false (trade-only rule)', `actual: ${canonDcr.canPayListingFee}`);
 	if (canonDcr.decimals === 8) pass('canonical DCR.decimals === 8');
 	else fail('canonical DCR.decimals === 8', `actual: ${canonDcr.decimals}`);
 	if (Array.isArray(canonDcr.supportedNetworks) && canonDcr.supportedNetworks.length === 1 && canonDcr.supportedNetworks[0] === 'mainnet') {
@@ -90,7 +90,7 @@ if (!feDcr) {
 	pass('frontend registry contains dcr entry');
 	if (feDcr.canBeTraded === true) pass('frontend dcr.canBeTraded === true');
 	else fail('frontend dcr.canBeTraded === true', `actual: ${feDcr.canBeTraded}`);
-	if (feDcr.canBeUsedForListingFee === false) pass('frontend dcr.canBeUsedForListingFee === false (memory #23)');
+	if (feDcr.canBeUsedForListingFee === false) pass('frontend dcr.canBeUsedForListingFee === false (trade-only rule)');
 	else fail('frontend dcr.canBeUsedForListingFee === false', `actual: ${feDcr.canBeUsedForListingFee}`);
 	if (feDcr.decimals === 8) pass('frontend dcr.decimals === 8');
 	else fail('frontend dcr.decimals === 8', `actual: ${feDcr.decimals}`);

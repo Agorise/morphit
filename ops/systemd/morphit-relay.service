@@ -1,7 +1,12 @@
 [Unit]
 # Morphit relay — broadcasts user-signed chain ops with the relay active key,
-# plus invite/push/challenge REST endpoints. Matches the morphit-ops
-# deployment: monorepo at /opt/morphit, root-owned config, Docker Postgres.
+# plus invite/push/challenge REST endpoints. Monorepo at /opt/morphit
+# (root-owned: only root can change the code this runs or the config it
+# reads), Postgres reached over TCP.
+#
+# Runs as its own unprivileged user `morphit-relay` (no shell, no home, no
+# capabilities, read-only view of the system); it can read its own keystore
+# (root:morphit-relay 0640) and nothing of the indexer's or the backups'.
 #
 # Unattended unlock of the encrypted active key (ADR-0010 §4):
 #   The relay active key is an encrypted envelope. Its passphrase is delivered
@@ -11,6 +16,10 @@
 #   Create the credential once and migrate, per docs/OPERATIONS.md.
 #
 # Install (one-time, as root) — the encrypted credential MUST exist first:
+#   groupadd --system morphit-relay
+#   useradd --system --gid morphit-relay --groups morphit --no-create-home \
+#     --home-dir /nonexistent --shell /usr/sbin/nologin morphit-relay
+#   chgrp morphit-relay <the keystore>; chmod 0640 <the keystore>
 #   echo -n 'your-relay-passphrase' | systemd-creds encrypt --name=relay_passphrase - /etc/morphit/relay_passphrase.cred
 #   cp ops/systemd/morphit-relay.service /etc/systemd/system/
 #   systemctl daemon-reload
@@ -20,7 +29,7 @@ Description=Morphit relay (broadcasts user-signed chain ops; REST API)
 Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
 After=network-online.target docker.service
 Wants=network-online.target
-# Reboot recovery (cp597): disable the start-rate-limit so a power-cut restart
+# Reboot recovery: disable the start-rate-limit so a power-cut restart
 # never latches this unit into a permanent 'failed' state while Postgres (a
 # Docker container here) is still coming up — it keeps retrying every RestartSec
 # until the DB is reachable, with no ceiling on attempts.
@@ -28,14 +37,18 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-# Matches the current deployment (root-owned tree + config). De-privilege by
-# chowning config + data to a service user and setting User=/Group= here.
-User=root
+User=morphit-relay
+Group=morphit-relay
+# Read access to the operator config (/etc/morphit and the env files are
+# root:morphit 0750/0640). Nothing more: not the docker group.
+SupplementaryGroups=morphit
 WorkingDirectory=/opt/morphit/apps/relay
+# The RPC pool's health memory, in the relay's own state directory (below).
+Environment=MORPHIT_RPC_HEALTH_STATE=/var/lib/morphit-relay/rpc-health.json
 # ENFORCED encrypted-at-rest passphrase via systemd-creds. Create it ONCE:
 #   echo -n 'your-relay-passphrase' | systemd-creds encrypt --name=relay_passphrase - /etc/morphit/relay_passphrase.cred
-# systemd decrypts it at every start (host key / TPM) into a memory-backed,
-# service-only file; the relay reads the passphrase from that FILE
+# systemd decrypts it at every start (host key / TPM) into a memory-backed
+# file only this service's user can read; the relay reads the passphrase from that FILE
 # (MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE) so the secret never enters the
 # process environment, and never touches persistent disk in plaintext. If the
 # credential is missing this unit FAILS to start — intentionally; do not fall
@@ -46,8 +59,15 @@ LoadCredentialEncrypted=relay_passphrase:/etc/morphit/relay_passphrase.cred
 # (/etc/morphit/relay.env), plus the generate-once VAPID file.  Whichever a
 # given install produced is sourced; the other is simply absent.  This is why
 # the relay works identically whether it was set up by `morphit-ops init` or
-# by the Ansible playbook (which writes /etc/morphit/relay.env).
-ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env; do [ -f "$f" ] && . "$f"; done; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
+# by the Ansible playbook (which writes /etc/morphit/relay.env).  A file that
+# exists but cannot be read stops the start (exit 78, "configuration error")
+# instead of starting without its settings.
+# As root, just before each start: keep the env files it sources readable by
+# the service's group (root:morphit 0640, and the keystore root:morphit-relay 0640) —
+# a tool that rewrote one atomically leaves it root-only. Root-owned helper;
+# it never makes anything writable (ops/scripts/morphit-service-perms.sh).
+ExecStartPre=+-/usr/local/lib/morphit/morphit-service-perms.sh relay
+ExecStart=/usr/bin/env bash -c 'set -a; for f in /opt/morphit/morphit.env /opt/morphit/morphit.config.env /etc/morphit/relay.env /etc/morphit/relay-vapid.env; do if [ -e "$f" ]; then [ -r "$f" ] || { echo "cannot read $f" >&2; exit 78; }; . "$f"; fi; done; export MORPHIT_RELAY_ACTIVE_KEY_PASSPHRASE_FILE="${CREDENTIALS_DIRECTORY}/relay_passphrase"; set +a; exec /opt/morphit/node_modules/.bin/tsx src/main.ts'
 # With the env-var passphrase path, restart-on-crash actually succeeds now
 # (no interactive prompt to hang on).
 # v1.20.1: ALWAYS, not on-failure. On morphitir (2026-09-27) the relay's boot
@@ -63,19 +83,21 @@ StandardError=journal
 SyslogIdentifier=morphit-relay
 
 # v1.20.0 (D3): the relay's state directory — the kill-switch sentinel
-# (SIGNUPS_DISABLED) and the persisted daily signup ceiling. systemd creates it
-# (mode 0700) before start; the relay also creates it and logs whether it is
-# writable. Matches the code default MORPHIT_RELAY_DATA_DIR.
-# v1.20.1: /var/lib/morphit-relay, NOT /var/lib/morphit/relay. /var/lib/morphit
-# belongs to the `morphit` user (mode 0750) and this service runs as root with
-# an EMPTY capability set (no permission override), so it could not even enter
-# /var/lib/morphit: the ceiling was never kept and the switch never seen (all
-# three live boxes, 2026-09-30). The upgrade leaves a link at the old path.
+# (SIGNUPS_DISABLED), the persisted daily signup ceiling and the RPC pool's
+# health memory. systemd creates it (mode 0700) owned by the relay's user before
+# start (and hands an existing one to that user); the relay also creates it and
+# logs whether it is writable. Matches the code default MORPHIT_RELAY_DATA_DIR.
+# v1.20.1: /var/lib/morphit-relay, NOT /var/lib/morphit/relay (/var/lib/morphit
+# belongs to the `morphit` user, mode 0750). The upgrade leaves a link at the
+# old path.
 StateDirectory=morphit-relay
 StateDirectoryMode=0700
 
-# --- Hardening (safe with User=root) -------------------------------
+# --- Hardening -------------------------------------------------------
 NoNewPrivileges=yes
+# The whole file system is read-only for it except its StateDirectory and a
+# private /tmp (tsx keeps its compile cache there).
+ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes
@@ -91,6 +113,10 @@ LockPersonality=yes
 RestrictNamespaces=yes
 SystemCallArchitectures=native
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+PrivateDevices=yes
+ProtectHostname=yes
+UMask=0077
+# No capabilities at all, and none it could gain.
 CapabilityBoundingSet=
 AmbientCapabilities=
 # A core dump would contain the decrypted WIF in memory.

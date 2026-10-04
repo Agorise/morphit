@@ -1,5 +1,5 @@
 #!/bin/sh
-# verify-cid-public.sh — the release GUARD. (v1.9.3, the maintainer)
+# verify-cid-public.sh — the release GUARD. (v1.9.3)
 #
 # Refuses to let a release anchor/broadcast a CID the public can't actually fetch.
 # Run on the laptop during the ELI5 ceremony, AFTER the seed box has `ipfs add`ed
@@ -8,7 +8,7 @@
 # is permanent. This is the check that would have stopped the dead Qmb11…/empty
 # bafkr… CIDs from ever nearing the chain.
 #
-# Rule (from the cp573 spike): pass on the FIRST independent public gateway that
+# Rule (from the spike): pass on the FIRST independent public gateway that
 # serves the CID's metadata.json with the expected version. A healthy node
 # routinely has one gateway serve instantly while another 504s on cold content, so
 # requiring ALL gateways would be flaky and could block a good release. We poll a

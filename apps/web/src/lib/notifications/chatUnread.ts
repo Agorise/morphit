@@ -15,7 +15,9 @@
  * (markConversationRead → read-state store → recount, no network round-trip).
  *
  * Runs from startAmbientChannels() alongside the title/favicon/badge channels.
- * Logged-out → count 0, no polling. Poll cadence is gentle (60 s) and pauses
+ * No live session (locked, or signed out — also by another tab) → count 0, no
+ * request: like the activity stream, a poll names the account to the operator,
+ * so a remembered name alone never starts one. Polls every 5 s (POLL_MS) and pauses
  * while the tab is hidden; a focus/visibility change forces an immediate poll
  * so a returning user sees a fresh count.
  */
@@ -23,6 +25,7 @@
 import { get, writable } from 'svelte/store';
 import { getConversations, getChatReadState } from '$lib/indexer/client';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
+import { hasAnySession } from '$stores/identity';
 import {
 	readState,
 	isUnread,
@@ -52,9 +55,9 @@ const POLL_MS = 5_000;
 let convos: ReadonlyArray<{
 	peer: string;
 	last_message_at: string;
-	/** cp446 — the discussion this row is about; null when it cites no order. */
+	/** the discussion this row is about; null when it cites no order. */
 	order: { permlink: string } | null;
-	/** v1.7.5 (t.txt #2) — the last word in this thread is the signed-in user's
+	/** v1.7.5 — the last word in this thread is the signed-in user's
 	 *  own, so there is nothing here to read on ANY of their devices. */
 	last_message_is_mine: boolean;
 }> = [];
@@ -67,7 +70,7 @@ let convos: ReadonlyArray<{
  *  head-block tailer emits to SSE and enqueues the push, but it does NOT write
  *  chat_messages — only the durable handler does, ~60s later. So a push could
  *  land in ~5s while `last_message_at` sat unchanged and the badge stayed dark
- *  for the best part of a minute. the maintainer, on tester3 sitting on another tab:
+ *  for the best part of a minute. on tester3 sitting on another tab:
  *  "he should have received a fastnotif (not just the fast system notif)".
  *
  *  This is NOT a second source of truth. It only ever ADDS a thread to the
@@ -77,7 +80,7 @@ let convos: ReadonlyArray<{
  *  SPAM-SAFE BY CONSTRUCTION, without duplicating the anti-spam gates: the only
  *  thing that can put an entry here is a delivered Web Push, and the fast-notify
  *  gate already refuses to push for anyone but an established counterparty. No
- *  push, no bump. the maintainer: "unless it's a spammer, fastnotifs please." */
+ *  push, no bump. Requirement: fast notifications for everyone except spammers. */
 /** v1.7.7 — bumped whenever `fastPending` changes, so Svelte `$derived` blocks
  *  that consult `threadIsUnread` re-run when a push lands. `fastPending` is a
  *  plain Map (it is hot, and recount() walks it every 5s); this is the smallest
@@ -94,7 +97,7 @@ export const fastPendingTick = writable(0);
  *  card showed it as READ — no green border — because the row backing it still
  *  described the previous message.
  *
- *  The badge and the cards have to agree: cp452 established that a badge which
+ *  The badge and the cards have to agree: established that a badge which
  *  outruns the visible cards nags about threads the inbox won't show, and the
  *  inverse (a lit card with no badge, or the maintainer's case — neither, despite a
  *  delivered push) is the same defect wearing a different hat. Two call sites
@@ -154,7 +157,7 @@ export function noteFastChatPush(peer: string, orderPermlink: string, atMs?: num
 }
 
 /**
- * cp508 (tt.txt #7) — the pending fast-pushes as structured entries, so the
+ * the pending fast-pushes as structured entries, so the
  * inbox can render an optimistic CARD for a brand-new thread the same way the
  * badge already COUNTS it.
  *
@@ -185,10 +188,10 @@ export function listFastPending(): { peer: string; orderPermlink: string; atMs: 
 /** A conversation feeds the chat badge iff it is not with yourself, not
  *  archived, and its peer is neither hidden (orderbook "hide") nor blocked —
  *  exactly the set the inbox renders (chat/+page.svelte filters hidden +
- *  blocked, then drops archived from the nag total). Before cp452 the badge
+ *  blocked, then drops archived from the nag total). Previously the badge
  *  skipped only self + archived, so an unread thread with a hidden or blocked
  *  peer inflated the avatar/favicon badge above the visible unread cards
- *  (t.txt item 1 — badge said 2 while no card was lit). Keeping this predicate
+ *  (badge said 2 while no card was lit). Keeping this predicate
  *  identical to the inbox keeps the count and the cards in lockstep. */
 function badgeEligible(
 	c: { peer: string; order: { permlink: string } | null },
@@ -244,10 +247,10 @@ function recount(): void {
 	const counted = new Set<string>();
 	for (const c of convos) {
 		if (!badgeEligible(c, meLc, hidden, blocked)) continue;
-		// cp446 — one count per DISCUSSION: three unread threads with the same
+		// one count per DISCUSSION: three unread threads with the same
 		// person are three unread conversations, exactly as in an email inbox.
 		const order = c.order?.permlink ?? '';
-		// v1.7.5 (t.txt #2) — a thread whose last word is mine is not unread on ANY
+		// v1.7.5 — a thread whose last word is mine is not unread on ANY
 		// of my devices. Absent (older instance) → false, i.e. the old
 		// timestamp-only rule, rather than silently marking everything read.
 		if (isUnread(c.peer, order, c.last_message_at, c.last_message_is_mine === true)) {
@@ -283,8 +286,10 @@ function recount(): void {
 		if (counted.has(key)) continue; // already counted as unread above
 		// SAME eligibility as every other counted thread — a push must never
 		// light the badge for a self/hidden/blocked/archived thread the inbox
-		// won't show, or the count outruns the visible cards (the cp452 bug).
-		if (!badgeEligible({ peer, order: order ? { permlink: order } : null }, meLc, hidden, blocked)) {
+		// won't show, or the count outruns the visible cards (the bug).
+		if (
+			!badgeEligible({ peer, order: order ? { permlink: order } : null }, meLc, hidden, blocked)
+		) {
 			continue;
 		}
 		// Judge it by the SAME read-state rule as a real conversation, treating
@@ -304,7 +309,7 @@ function recount(): void {
 
 /** Acknowledge EVERY badge-eligible unread discussion as read, so the
  *  avatar-menu / favicon chat badge drops to zero the same way the inbox's own
- *  "Mark all read" does. cp452 (t.txt item I): the avatar-menu "Mark all read"
+ *  "Mark all read" does. the avatar-menu "Mark all read"
  *  called notifications.markRead(), which deliberately skips the state-based
  *  chat count — so it could never clear a chat badge. This gives it a real way
  *  to acknowledge chat, over the SAME (peer, order) read-state the inbox uses.
@@ -344,7 +349,7 @@ let lastPolledAccount: string | null = null;
 /** Fetch conversations + read-state, then recount. Best-effort: a
  *  transient failure keeps the last known count. */
 async function poll(): Promise<void> {
-	const me = getUserBlurtAccount();
+	const me = get(hasAnySession) ? getUserBlurtAccount() : null;
 	if (!me) {
 		convos = [];
 		blocksLoadedFor = null;
@@ -365,7 +370,7 @@ async function poll(): Promise<void> {
 		blocksLoadedFor = me;
 		// Populate the blocked set so the badge filter matches the inbox even
 		// for a user who never opens the inbox. Best-effort; a failure just
-		// leaves the set empty (badge falls back to the pre-cp452 behaviour).
+		// leaves the set empty (badge falls back to the older behaviour).
 		void loadBlocks(me);
 	}
 	try {
@@ -426,7 +431,7 @@ export function startChatUnreadChannel(): () => void {
 
 	// Hiding (orderbook "hide") or blocking a peer removes their threads from
 	// the inbox — the badge must drop in lockstep or it nags about hidden
-	// conversations (cp452, t.txt item 1). Recount when either set changes.
+	// conversations. Recount when either set changes.
 	// (Both also fire once on subscribe.)
 	const unsubHidden = hiddenAccounts.subscribe(() => recount());
 	const unsubBlocked = blockedAccounts.subscribe(() => recount());
@@ -441,7 +446,7 @@ export function startChatUnreadChannel(): () => void {
 	// update in real time instead of on the ≤5s backstop. Same-origin,
 	// content-free ping — see globalChatActivityStream.ts.
 	//
-	// v1.4.8 (t.txt #6) — do NOT gate this on `!document.hidden`. A background
+	// v1.4.8 — do NOT gate this on `!document.hidden`. A background
 	// notification is exactly the case where the tab IS hidden: the whole point
 	// is that the favicon/title badge updates while the user is on another tab so
 	// they see there's a new message when they glance back. The ping is
@@ -456,10 +461,9 @@ export function startChatUnreadChannel(): () => void {
 	// badge immediately instead of waiting for the indexer. The poll above is
 	// the reconciler, not the trigger: the fast path never writes
 	// chat_messages, so polling on a push just re-reads the same stale
-	// last_message_at (the ~60s dark badge the maintainer reported on tester3's other
-	// tab).
+	// last_message_at (a badge that stayed dark for ~60s in the other tab).
 	const unsubFastPush = subscribeFastPush((peer, order, atMs) => {
-		// cp474 (t.txt #3 + #4) — a push for an ARCHIVED thread used to light
+		// a push for an ARCHIVED thread used to light
 		// nothing for ~60s, and this is why.
 		//
 		// `noteFastChatPush` files the thread in `fastPending`, but `recount()`
@@ -471,7 +475,7 @@ export function startChatUnreadChannel(): () => void {
 		// the maintainer's symptoms at once: the ~1-minute dark badge, and the new message
 		// sitting in Archived instead of moving to the Inbox.
 		//
-		// The eligibility check itself is right and stays (cp452: a badge that
+		// The eligibility check itself is right and stays (a badge that
 		// outruns the visible cards nags about threads the inbox won't show). The
 		// error was treating "archived" as a reason to stay silent, when a message
 		// arriving after you archived a thread is precisely the Gmail-style

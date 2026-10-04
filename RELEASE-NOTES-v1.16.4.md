@@ -41,10 +41,10 @@ consensus or protocol change.
 - **No behaviour change for clearnet nodes**, no migration, no protocol change.
   Offline-first preserved; no new external dependency.
 - **Fresh security audit of the v1.16.0→v1.16.2 delta**
-  (`docs/AUDIT-v1.16.x-DELTA-DEEP-DEEP.md`): the clearnet-elimination gate and
+  (an internal audit record): the clearnet-elimination gate and
   hidden-transport layer verified sound; the two findings above were the only
-  gaps, both fixed. Threat models refreshed
-  (`docs/audit/2026-09-v1.16-delta-threat-model.md`).
+  gaps, both fixed. Threat models refreshed (since replaced by the 2026-10
+  models in `docs/audit/`).
 - **CI now catches browser-bundle breaks.** A new `web-build-smoke` runs
   `vite build` in the battery, so a Node-only import reaching the client bundle
   fails on push (and locally) rather than at release time. Two guard smokes pin

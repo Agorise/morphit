@@ -1,7 +1,7 @@
 /**
  * avatar-upload-robustness-smoke (v1.16.5)
  *
- * the maintainer's rule: every way the avatar upload can fail must surface a concise,
+ * The maintainer's rule: every way the avatar upload can fail must surface a concise,
  * actionable message (or be auto-handled) — never a dead-end, never a silent
  * choke. This pins:
  *   1. every AvatarErrorCode the processor can return has an i18n message;

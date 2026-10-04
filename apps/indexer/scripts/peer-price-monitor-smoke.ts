@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Structural smoke for cp129 Defense F — cross-instance peer price
+ * Structural smoke for Defense F — cross-instance peer price
  * monitor (peerPriceMonitor.ts).
  *
  * What this verifies (without spinning up Postgres or real federation
@@ -262,8 +262,8 @@ scenario('PPM-6: module source still documents the design pillars', () => {
 	}
 });
 
-// ─── PPM-7: cp139-F-2 SSRF defense via fetchJson ──
-// Pre-cp139-F-2, fetchPeerReceipt called bare fetch() and lacked
+// ─── PPM-7: SSRF defense via fetchJson ──
+// Previously, fetchPeerReceipt called bare fetch() and lacked
 // the DNS-rebinding closure / redirect:manual / body-cap defenses
 // that federationProbe.fetchJson() has.  This batch pins:
 //   (a) the helper now routes through fetchJson (source sentinel)
@@ -302,11 +302,10 @@ scenario('PPM-7-2: fetchPeerReceipt no longer calls bare fetch()', () => {
 });
 
 scenario(
-	'PPM-7-3: cp139-F-2 design-rationale marker present in source',
+	'PPM-7-3: design-rationale markers present in source',
 	() => {
 		const src = readFileSync(MODULE_PATH, 'utf-8');
 		const markers = [
-			'cp139-F-2', // explicit finding reference
 			'DNS-rebinding', // the hardening this closes
 			'six-layer' // points at federationProbe.fetchJson's defense stack
 		];
@@ -399,7 +398,7 @@ scenario(
 	}
 );
 
-// ─── PPM-10: fan-out-all architecture guard (cp167 decision lock) ──
+// ─── PPM-10: fan-out-all architecture guard (decision lock) ──
 //
 // peerPriceMonitor MUST query every healthy peer and collect all
 // observations (the median + disagreement signal depend on it).  It

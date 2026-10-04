@@ -1,5 +1,5 @@
 /**
- * chat-ui-v148-smoke — v1.4.8 (t.txt)
+ * chat-ui-v148-smoke — v1.4.8
  *
  * Three chat-UI fixes:
  *   #2 "Mark all as read" only shows where there's a markable unread — the Inbox
@@ -33,8 +33,8 @@ function check(name: string, cond: boolean): void {
 // #2 — mark-all-read scoped to the active tab's markable unread (not global).
 check(
 	'#2 "Mark all as read" is gated on activeTabHasUnread, not the global unread total',
-	/activeTabHasUnread && conversations\.length > 0/.test(inbox) &&
-		!/unreadTotal > 0 && conversations\.length > 0/.test(inbox)
+	/activeTabHasUnread && sortedConversations\.length > 0/.test(inbox) &&
+		!/unreadTotal > 0 && (?:sorted)?[cC]onversations\.length > 0/.test(inbox)
 );
 check(
 	'#2 the Archived tab never shows it (activeTabHasUnread is false on archived)',

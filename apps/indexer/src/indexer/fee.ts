@@ -5,7 +5,7 @@
  * against `base × sybilMultiplier(nth) × (1 − max(feeTolerance,
  * FEE_PRICE_TOLERANCE))` with NO price read, so the floor is deterministic
  * across the federation (no TOCTOU). `base` is the chain-pinned
- * `treasury.blurt.base` (cp372 Model A; auto-re-pinned by the maintainer as
+ * `treasury.blurt.base` (Model A; auto-re-pinned by the maintainer as
  * BLURT/USD drifts), falling back to MORPHIT_INDEXER_FEE_BASE_BLURT when no
  * pin exists. What the UI QUOTES tracks the canonical USD target live
  * (`LISTING_FEE_USD.blurt` in `@morphit/asset-registry`, ~12.5¢); the 15%
@@ -58,7 +58,7 @@ export function expectedFeeBlurt(nth: number, baseBlurt: number): number {
 }
 
 /**
- * cp408 — tolerance on the canonical treasury's 10% split leg.
+ * tolerance on the canonical treasury's 10% split leg.
  *
  * The frontend rounds each leg of the fee to milliBLURT
  * (`splitListingFeeBlurt`), so the canonical share can land a
@@ -71,7 +71,7 @@ export function expectedFeeBlurt(nth: number, baseBlurt: number): number {
 export const FEE_SPLIT_TOLERANCE = 0.02;
 
 /**
- * cp408 — did the canonical treasury receive its 10% cut?
+ * did the canonical treasury receive its 10% cut?
  *
  * Federation instances split BLURT fees at payment time: 90% to the
  * instance owner, 10% to the canonical treasury. This checks that
@@ -93,7 +93,7 @@ export function canonicalShareOk(totalBlurt: number, toCanonicalBlurt: number): 
 }
 
 /**
- * cp408 — sum the sibling transfer(s) that paid a fee (listing, feature bid, or
+ * sum the sibling transfer(s) that paid a fee (listing, feature bid, or
  * stranger DM), honoring the payment-time federation split.
  *
  * A fee is one or two sibling transfers that share `expectedMemo`: the owner
@@ -170,7 +170,7 @@ export function sumFeeTransfers(
 }
 
 /**
- * (v1.20.0 fix wave, G8) Parse a Graphene BLURT asset string ("56.250 BLURT")
+ * Parse a Graphene BLURT asset string ("56.250 BLURT")
  * into an exact INTEGER count of milliBLURT, or null if malformed. The chain
  * serialises BLURT with exactly 3 decimals; more than 3 is not a valid amount.
  * Parsing the decimal string directly avoids binary-float error entirely.
@@ -183,7 +183,7 @@ export function parseBlurtMilli(s: string): number | null {
 }
 
 /**
- * (v1.20.0 fix wave, G8) Did `paidMilli` (exact milliBLURT) meet a floor
+ * Did `paidMilli` (exact milliBLURT) meet a floor
  * expressed in BLURT? The floor is a float product (base × tier × (1 − T));
  * paying EXACTLY that amount rounded up to the milli must pass, so the floor
  * is taken to whole milliBLURT with a tiny epsilon for the product's own float

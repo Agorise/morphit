@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * profile-account-change-reload — v1.8.10 (the maintainer, t.txt).
+ * profile-account-change-reload — v1.8.10.
  *
  * TWO BUGS THIS EXISTS TO CATCH, both on the profile page.
  *
@@ -9,7 +9,7 @@
  *    /@a → /@b (same route, different param), so onMount fired only for the
  *    first profile viewed and nothing ever reloaded. Every subsequent profile
  *    rendered the PREVIOUS user's reputation, reviews and orders until a hard
- *    refresh forced a fresh mount. the maintainer hit it live: /@tester3 showed
+ *    refresh forced a fresh mount. The maintainer hit it live: /@tester3 showed
  *    tester2's 5-star card. The fix is an `$effect` keyed on `account` that
  *    RESETS the account-scoped state and re-fires the loads.
  *
@@ -20,9 +20,9 @@
  *
  * 2. TWO DIFFERENT HEADLINE NUMBERS FOR ONE TRADER. The hero showed the RAW
  *    time-decayed average (`weighted_rating`), while every order card and chat
- *    header shows the COMPOSITE `reputation_score` (cp404 Bayesian shrinkage).
+ *    header shows the COMPOSITE `reputation_score` (Bayesian shrinkage).
  *    Same trader, different number per page — and the profile always flattered,
- *    since the composite pulls a thin sample toward neutral. the maintainer saw 4.75 on
+ *    since the composite pulls a thin sample toward neutral. The maintainer saw 4.75 on
  *    the profile vs 3.97 everywhere else. The headline is now the composite.
  *
  * Tamper tests (each must turn this red):

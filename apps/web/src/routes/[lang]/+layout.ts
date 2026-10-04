@@ -1,7 +1,7 @@
 /**
  * [lang]/+layout.ts — per-locale route subtree configuration.
  *
- * Part 121 cp7 (per-locale prerendering route restructure, ADR-0024,
+ * (per-locale prerendering route restructure, ADR-0024,
  * design doc docs/PER-LOCALE-PRERENDERING-DESIGN.md, Option C).
  *
  * Every route under `apps/web/src/routes/[lang]/` inherits this:

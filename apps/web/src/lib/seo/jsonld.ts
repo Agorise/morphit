@@ -14,7 +14,7 @@
  * Reference: https://developers.google.com/search/docs/appearance/structured-data
  */
 
-import { CANONICAL_ORIGIN } from './urls';
+import { siteOrigin } from './urls';
 import { stripMarkdown } from './stripMarkdown';
 import type { FaqEntry } from '$utils/faqIndex';
 
@@ -31,9 +31,9 @@ export function organizationSchema(
 	const out: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'Organization',
-		'@id': `${CANONICAL_ORIGIN}/#organization`,
+		'@id': `${siteOrigin()}/#organization`,
 		name: siteName,
-		url: CANONICAL_ORIGIN,
+		url: siteOrigin(),
 		description: tagline,
 		sameAs: [
 			// Populated in Phase 3+ as the Blurt community accounts
@@ -41,7 +41,7 @@ export function organizationSchema(
 			// rather than listing placeholders that could be stale.
 		],
 		logo: {
-			// cp112 audit fix (A4): point at /app-icon.svg which IS
+			// fix (A4): point at /app-icon.svg which IS
 			// 512×512 (viewBox 0 0 512 512), not the brand mark which
 			// is 41×26 with viewBox 0 0 10.889 7.049 — declaring 512×512
 			// for a non-square asset would make Google fetch the SVG,
@@ -51,12 +51,12 @@ export function organizationSchema(
 			// laid out on a square canvas, so visual identity is
 			// preserved.
 			'@type': 'ImageObject',
-			url: `${CANONICAL_ORIGIN}/app-icon.svg`,
+			url: `${siteOrigin()}/app-icon.svg`,
 			width: 512,
 			height: 512
 		}
 	};
-	// cp119-A5: emit inLanguage when caller passes a locale.  Optional
+	// emit inLanguage when caller passes a locale.  Optional
 	// for back-compat with old call sites; new callers pass it so
 	// Google can disambiguate translated copies of this Organization
 	// node across hreflang variants.
@@ -73,25 +73,25 @@ export function websiteSchema(siteName: string, locale?: string): Record<string,
 	const out: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'WebSite',
-		'@id': `${CANONICAL_ORIGIN}/#website`,
+		'@id': `${siteOrigin()}/#website`,
 		name: siteName,
-		url: CANONICAL_ORIGIN,
+		url: siteOrigin(),
 		potentialAction: {
 			'@type': 'SearchAction',
 			target: {
 				'@type': 'EntryPoint',
-				urlTemplate: `${CANONICAL_ORIGIN}/faq?q={search_term_string}`
+				urlTemplate: `${siteOrigin()}/faq?q={search_term_string}`
 			},
 			'query-input': 'required name=search_term_string'
 		}
 	};
-	// cp119-A5: emit inLanguage when caller passes a locale.
+	// emit inLanguage when caller passes a locale.
 	if (locale) out.inLanguage = locale;
 	return out;
 }
 
 /**
- * SoftwareApplication schema (cp112).  Morphit is a Progressive Web App
+ * SoftwareApplication schema.  Morphit is a Progressive Web App
  * in the FinanceApplication category, free to use, AGPL-3.0 source.
  * Google's installation-rich-result UI shows price/category/operating
  * system for software-marked pages — relevant for "morphit" / "p2p
@@ -109,7 +109,7 @@ export function softwareApplicationSchema(
 	const out: Record<string, unknown> = {
 		'@context': 'https://schema.org',
 		'@type': 'SoftwareApplication',
-		'@id': `${CANONICAL_ORIGIN}/#software`,
+		'@id': `${siteOrigin()}/#software`,
 		name: siteName,
 		description,
 		// FinanceApplication is Schema.org's specific subtype for
@@ -119,7 +119,7 @@ export function softwareApplicationSchema(
 		applicationSubCategory: 'CryptocurrencyTrading',
 		// PWA: works in any modern browser; no native install required.
 		operatingSystem: 'Web',
-		url: CANONICAL_ORIGIN,
+		url: siteOrigin(),
 		// Morphit itself is free; users pay only on-chain network fees +
 		// optional listing fees that go to the operator.  Schema.org's
 		// `offers` with `price: '0'` is the canonical way to signal this.
@@ -128,7 +128,7 @@ export function softwareApplicationSchema(
 			price: '0',
 			priceCurrency: 'USD'
 		},
-		// cp119-A7: softwareVersion lives in MORPHIT_SOFTWARE_VERSION
+		// softwareVersion lives in MORPHIT_SOFTWARE_VERSION
 		// constant below.  Update there on each pre-launch/launch/major
 		// release.  Avoids the drift risk of hardcoding 'beta' here when
 		// the project actually ships a numbered release.
@@ -139,19 +139,19 @@ export function softwareApplicationSchema(
 		// Publisher uses an @id pointer to the Organization node so the
 		// two schemas link in Google's structured-data graph.
 		publisher: {
-			'@id': `${CANONICAL_ORIGIN}/#organization`
+			'@id': `${siteOrigin()}/#organization`
 		},
 		// Browser requirements — modern evergreen browser with JS.  No
 		// version pin (Morphit runs on whatever the user has).
 		browserRequirements: 'JavaScript enabled, modern web browser'
 	};
-	// cp119-A5: emit inLanguage when caller passes a locale.
+	// emit inLanguage when caller passes a locale.
 	if (locale) out.inLanguage = locale;
 	return out;
 }
 
 /**
- * cp119-A7 — single source of truth for the SoftwareApplication
+ * single source of truth for the SoftwareApplication
  * `softwareVersion` field.  Update this constant on each pre-launch
  * milestone or launch event.
  *
@@ -159,7 +159,7 @@ export function softwareApplicationSchema(
  * At launch: bump to '1.0' (or whatever the launch version is).
  * Subsequent: bump on each numbered release.
  *
- * Read by softwareApplicationSchema().  Memory rule "no hardcoded
+ * Read by softwareApplicationSchema().  Rule: "no hardcoded
  * figures that change over time" applies — but the right fix for
  * a version-string is a labeled constant in one place, not a
  * dynamic lookup (a build-time JSON.parse of package.json would
@@ -185,16 +185,16 @@ export function faqPageSchema(entries: FaqEntry[]): Record<string, unknown> {
 	return {
 		'@context': 'https://schema.org',
 		'@type': 'FAQPage',
-		'@id': `${CANONICAL_ORIGIN}/faq#faqpage`,
+		'@id': `${siteOrigin()}/faq#faqpage`,
 		mainEntity: entries.map((entry) => ({
 			'@type': 'Question',
-			// cp119-A1: question text is plain in source today, but
+			// question text is plain in source today, but
 			// strip defensively so future markdown additions can't
 			// leak literal asterisks into SERP results.
 			name: stripMarkdown(entry.question),
 			acceptedAnswer: {
 				'@type': 'Answer',
-				// cp119-A1: 77 of 128 FAQ entries contain light
+				// 77 of 128 FAQ entries contain light
 				// markdown (`**bold**`, backticks, `\n\n`, bullets).
 				// Strip before feeding to JSON-LD so Google's
 				// FAQ rich-snippet renders clean plaintext.
@@ -205,7 +205,7 @@ export function faqPageSchema(entries: FaqEntry[]): Record<string, unknown> {
 }
 
 /**
- * BreadcrumbList schema (cp112).  Google uses BreadcrumbList to show
+ * BreadcrumbList schema.  Google uses BreadcrumbList to show
  * crumb navigation in SERPs (e.g. "morphit.io › privacy › Bitcoin"
  * instead of just the URL).  Big legibility lift for sub-pages.
  *

@@ -180,7 +180,7 @@ if (existsSync(ZIP_PATH) && missing.length === 0) {
 			stale.length === 0
 				? undefined
 				: `The zip is stale relative to: [${stale.map((s) => s.label).join(', ')}]. ` +
-				  `Run \`bash scripts/build-mediakit.sh\` to regenerate, then commit the new zip.`
+					`Run \`bash scripts/build-mediakit.sh\` to regenerate, then commit the new zip.`
 	});
 }
 
@@ -200,7 +200,7 @@ results.push({
 	detail: footerWired
 		? undefined
 		: `Could not find both "/morphit-mediakit.zip" and "$_('footer.mediakit')" in ` +
-		  `apps/web/src/routes/[lang]/+layout.svelte.  Was the footer link removed?`
+			`apps/web/src/routes/[lang]/+layout.svelte.  Was the footer link removed?`
 });
 
 // ─── 6. Every SUPPORTED locale has the mediakit + mediakit_title keys ───
@@ -223,9 +223,7 @@ results.push({
 	name: `all ${LOCALES.length} locales define footer.mediakit + footer.mediakit_title`,
 	ok: missingLocaleKeys.length === 0,
 	detail:
-		missingLocaleKeys.length === 0
-			? undefined
-			: `Missing keys: [${missingLocaleKeys.join(', ')}]`
+		missingLocaleKeys.length === 0 ? undefined : `Missing keys: [${missingLocaleKeys.join(', ')}]`
 });
 
 // ─── 7. Zip CONTENT matches sources byte-for-byte ───
@@ -242,13 +240,21 @@ results.push({
 // timestamp guard above.)
 if (existsSync(ZIP_PATH) && missing.length === 0) {
 	const contentChecks = [
-		{ entry: 'morphit-mediakit/MORPHIT-BRAG-LIST.md', source: BRAG_LIST, label: 'MORPHIT-BRAG-LIST.md' },
+		{
+			entry: 'morphit-mediakit/MORPHIT-BRAG-LIST.md',
+			source: BRAG_LIST,
+			label: 'MORPHIT-BRAG-LIST.md'
+		},
 		{
 			entry: 'morphit-mediakit/morphit-comparison.png',
 			source: COMPARISON_PNG,
 			label: 'morphit-comparison.png'
 		},
-		{ entry: 'morphit-mediakit/logos/morphit-mark.svg', source: MARK_SVG, label: 'logos/morphit-mark.svg' },
+		{
+			entry: 'morphit-mediakit/logos/morphit-mark.svg',
+			source: MARK_SVG,
+			label: 'logos/morphit-mark.svg'
+		},
 		{
 			entry: 'morphit-mediakit/logos/morphit-wordmark.svg',
 			source: WORDMARK_SVG,
@@ -293,6 +299,65 @@ if (existsSync(ZIP_PATH) && missing.length === 0) {
 						`Run \`bash scripts/build-mediakit.sh\` to rebuild from current sources, then commit the new zip.`
 		});
 	}
+}
+
+// ─── 8. The zip is deterministic and carries no builder clock ───
+// The same sources must give the same bytes on any machine: every entry
+// stamped with the one fixed time build-mediakit.sh sets (MEDIAKIT_EPOCH,
+// in UTC), entries in sorted order, and no extra fields. Zip's default
+// "UT" (0x5455) and "ux" (0x7875) extra fields carry the builder's own
+// clock, timezone and user ids, and its DOS times are in local time — a
+// kit built on a laptop told every downloader the builder's UTC offset.
+if (existsSync(ZIP_PATH)) {
+	const problems: string[] = [];
+	const epochMatch = /MEDIAKIT_EPOCH=(\d+)/.exec(readFileSync(BUILD_SCRIPT, 'utf-8'));
+	if (!epochMatch) problems.push('build-mediakit.sh does not set a fixed MEDIAKIT_EPOCH');
+	const epoch = new Date(Number(epochMatch?.[1] ?? 0) * 1000);
+	const wantDate =
+		((epoch.getUTCFullYear() - 1980) << 9) | ((epoch.getUTCMonth() + 1) << 5) | epoch.getUTCDate();
+	const wantTime =
+		(epoch.getUTCHours() << 11) |
+		(epoch.getUTCMinutes() << 5) |
+		Math.floor(epoch.getUTCSeconds() / 2);
+	const zip = readFileSync(ZIP_PATH);
+	const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+	if (eocd < 0) problems.push('no end-of-central-directory record');
+	else {
+		const count = zip.readUInt16LE(eocd + 10);
+		let off = zip.readUInt32LE(eocd + 16);
+		const names: string[] = [];
+		for (let i = 0; i < count; i++) {
+			if (zip.readUInt32LE(off) !== 0x02014b50) {
+				problems.push(`central directory entry ${i} is malformed`);
+				break;
+			}
+			const time = zip.readUInt16LE(off + 12);
+			const date = zip.readUInt16LE(off + 14);
+			const nameLen = zip.readUInt16LE(off + 28);
+			const extraLen = zip.readUInt16LE(off + 30);
+			const commentLen = zip.readUInt16LE(off + 32);
+			const local = zip.readUInt32LE(off + 42);
+			const name = zip.toString('utf8', off + 46, off + 46 + nameLen);
+			names.push(name);
+			const localExtra = zip.readUInt16LE(local + 28);
+			if (time !== wantTime || date !== wantDate)
+				problems.push(`${name}: stamped with the builder's clock, not MEDIAKIT_EPOCH (UTC)`);
+			if (extraLen !== 0 || localExtra !== 0)
+				problems.push(`${name}: carries extra fields (timestamps / user ids of the builder)`);
+			off += 46 + nameLen + extraLen + commentLen;
+		}
+		const sorted = [...names].sort();
+		if (names.join('\n') !== sorted.join('\n')) problems.push('entries are not in sorted order');
+	}
+	results.push({
+		name: 'zip is deterministic: fixed UTC timestamp, sorted entries, no extra fields',
+		ok: problems.length === 0,
+		detail:
+			problems.length === 0
+				? undefined
+				: `${problems.slice(0, 8).join('; ')}${problems.length > 8 ? ` … (+${problems.length - 8})` : ''}. ` +
+					'Rebuild with `bash scripts/build-mediakit.sh`.'
+	});
 }
 
 // ─── Report ──

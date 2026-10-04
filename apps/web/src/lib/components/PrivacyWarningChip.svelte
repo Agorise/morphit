@@ -13,7 +13,7 @@
 	(or `assets.privacy_warnings.<key>` in the i18n bundle).
 	Assets with privacyWarningKey === null render nothing.
 
-	Per Memory #19 (privacy is priority #1): the warning is
+	Per the privacy-first rule (privacy is priority #1): the warning is
 	required, not optional, for any asset that fails the
 	privacy bar.
 
@@ -112,7 +112,7 @@
 			<button
 				type="button"
 				class="flex-none text-ink-400 hover:text-ink-100"
-				aria-label="Dismiss for this session"
+				aria-label={$_('a11y.dismiss_for_session') as string}
 				onclick={() => (dismissed = true)}
 			>
 				<svg

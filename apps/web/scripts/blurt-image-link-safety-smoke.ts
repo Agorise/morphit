@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * blurt-image-link-safety smoke — cp388.
+ * blurt-image-link-safety smoke.
  *
  * HIGH-SECURITY regression net for the order-`terms` Blurt-image
  * link feature. Order terms are public, on-chain, attacker-controlled
@@ -156,9 +156,9 @@ expect(
 }
 
 // ── 5. Render wiring: TermsText is the single render path, no {@html}, privacy attrs present ──
-// cp406 — TermsText renders a structured tree from parseTermsMarkdown()
-// (restricted markdown: headings/bold/italics/lists/hr; cp413 blockquotes;
-// cp414 `[text](url)` hyperlinks). Safe hrefs originate from TWO validated
+// TermsText renders a structured tree from parseTermsMarkdown()
+// (restricted markdown: headings/bold/italics/lists/hr; a later change blockquotes;
+// `[text](url)` hyperlinks). Safe hrefs originate from TWO validated
 // builders baked into the parse tree in termsMarkdown.ts — safeBlurtImageUrl
 // (auto-linked Blurt images) and safeContactUrl (explicit `[text](url)` links,
 // which REFUSES javascript:/data:/etc, leaving an unsafe scheme as inert text) —
@@ -188,7 +188,7 @@ expect(
 	termsText.includes('referrerpolicy="no-referrer"'),
 	'TermsText link sets referrerpolicy="no-referrer"'
 );
-// cp415 — terms links render in the brand emerald (visible on the dark terms
+// terms links render in the brand emerald (visible on the dark terms
 // panel) and, on click/tap, open a "Leaving Morphit" interstitial before
 // navigating; the actual navigation is an anchor-click with noopener/noreferrer.
 expect(
@@ -214,7 +214,7 @@ expect(
 );
 
 // ── 6. Full-terms views render clickable terms through TermsText ──
-// cp404 — the orderbook + account LIST cards were consolidated into the
+// the orderbook + account LIST cards were consolidated into the
 // shared OrderCard, which shows terms as a TRUNCATED, plain-escaped preview
 // (no clickable links, no {@html} — see section 6b). The views below render
 // the FULL terms with clickable links, so they MUST route through TermsText.
@@ -237,14 +237,14 @@ for (const rel of SITES) {
 
 // ── 6b. OrderCard list-preview terms are SAFE escaped text ──
 // The browse cards intentionally show a one-line truncated preview (full
-// terms + clickable safe links live on the order detail page). cp406 — the
+// terms + clickable safe links live on the order detail page). the
 // preview is stripMarkdown(order.terms) rendered inside a `.truncate` span, so
 // hostile markup/URLs in terms are neutralised (inert, markdown-stripped
 // escaped text), not executed or turned into links. This preserves the
 // link-safety model without the invalid nested-<a> a TermsText link would
 // create inside the card's stretched detail-page link.
 //
-// cp411 — when the orderbook "Order details" search is active, the matched
+// when the orderbook "Order details" search is active, the matched
 // word(s) are highlighted via a SINGLE `{@html termsPreviewHtml}`. That is
 // SAFE: termsPreviewHtml is produced by highlightMatches(), which HTML-escapes
 // every character of the (attacker-controllable) terms and only ever injects a

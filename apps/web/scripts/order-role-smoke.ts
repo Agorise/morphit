@@ -1,5 +1,5 @@
 /**
- * Order-role money-flow smoke (cp406).
+ * Order-role money-flow smoke.
  *
  * Pure-function coverage of peerCryptoSide() — the helper that decides,
  * for a chat about an order, whether the PEER is buying or selling the
@@ -8,10 +8,10 @@
  * I receive crypto ⇒ "Share address". Getting it wrong shows the wrong
  * party the wrong action, so it is regression-locked here.
  *
- * The subtlety this guards (cp406): the chat may be about the peer's
+ * The subtlety this guards: the chat may be about the peer's
  * order OR our own (the peer opened the chat about it). An order's raw
  * `side` is ALWAYS the poster's perspective, so when the order is ours
- * the peer's side is the OPPOSITE. the maintainer's canonical scenario — tester3
+ * the peer's side is the OPPOSITE. The maintainer's canonical scenario — tester3
  * posts a BUY order, tester2 is the seller — is asserted from both
  * sides.
  *
@@ -83,7 +83,7 @@ scenario('tester2 (peer, selling) sees peer=BUY → Pay now (locked to BLURT)', 
 	assertEqual(peerCryptoSide('buy', /* orderIsMine */ false), 'buy', 'tester2 view');
 });
 
-// ── cp406 (the maintainer) — chatMoneyFlow: NO live order ⇒ BOTH buttons hidden ──
+// ── chatMoneyFlow: NO live order ⇒ BOTH buttons hidden ──
 // The reported bug: an unsolicited chat (profile "Message" button) or a chat
 // whose order went non-live showed BOTH "Pay now" and "Share address" (the
 // old peerOrderSide===null fallback showed them). chatMoneyFlow(null,…) must

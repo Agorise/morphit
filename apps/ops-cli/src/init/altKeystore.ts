@@ -31,13 +31,7 @@
  * Mode 0600 enforced on every write.
  */
 
-import {
-	createCipheriv,
-	createDecipheriv,
-	randomBytes,
-	scryptSync,
-	timingSafeEqual
-} from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 
 /** Networks we support encrypted-at-rest storage for.  Adding
  *  a new one is a one-line change to this union and the
@@ -162,8 +156,32 @@ export function decryptAltKey(envelope: AltKeyEnvelope, passphrase: string): Buf
 		throw new AltKeyEnvelopeError(`unsupported cipher ${envelope.cipher}`);
 	}
 
+	// The KDF parameters come from the file: never derive with weaker ones than
+	// this tool writes (a file whose parameters were lowered is refused before
+	// any work), nor with ones large enough to stall the box.
+	const { N, r, p } = envelope.kdf_params;
+	if (!Number.isInteger(N) || N < SCRYPT_N || N > 1 << 20 || (N & (N - 1)) !== 0) {
+		throw new AltKeyEnvelopeError(
+			`refusing scrypt N=${N}: must be a power of two from ${SCRYPT_N} to ${1 << 20}`
+		);
+	}
+	if (
+		!Number.isInteger(r) ||
+		r < SCRYPT_R ||
+		r > 32 ||
+		!Number.isInteger(p) ||
+		p < SCRYPT_P ||
+		p > 16
+	) {
+		throw new AltKeyEnvelopeError(
+			`refusing scrypt r=${r} p=${p}: below this tool's ${SCRYPT_R}/${SCRYPT_P} or too large`
+		);
+	}
 	const salt = Buffer.from(envelope.kdf_params.salt, 'base64');
 	const iv = Buffer.from(envelope.iv, 'base64');
+	if (salt.length < SALT_LENGTH || iv.length !== IV_LENGTH) {
+		throw new AltKeyEnvelopeError('refusing an envelope with a short salt or a wrong-size IV');
+	}
 	const ctWithTag = Buffer.from(envelope.ct, 'base64');
 	if (ctWithTag.length < 16) {
 		throw new AltKeyEnvelopeError('ciphertext too short to contain tag');
@@ -171,12 +189,7 @@ export function decryptAltKey(envelope: AltKeyEnvelope, passphrase: string): Buf
 	const tag = ctWithTag.subarray(ctWithTag.length - 16);
 	const ciphertext = ctWithTag.subarray(0, ctWithTag.length - 16);
 
-	const key = scryptSync(passphrase, salt, KEY_LENGTH, {
-		N: envelope.kdf_params.N,
-		r: envelope.kdf_params.r,
-		p: envelope.kdf_params.p,
-		maxmem: 256 * 1024 * 1024
-	});
+	const key = scryptSync(passphrase, salt, KEY_LENGTH, { N, r, p, maxmem: 256 * 1024 * 1024 });
 
 	const decipher = createDecipheriv('aes-256-gcm', key, iv);
 	decipher.setAAD(buildAad(envelope.v, envelope.purpose, envelope.network));
@@ -194,14 +207,4 @@ export function decryptAltKey(envelope: AltKeyEnvelope, passphrase: string): Buf
 
 	key.fill(0);
 	return plaintext;
-}
-
-/** Side-channel-resistant constant-time compare of two
- *  passphrases.  Used by tests; not currently called by the
- *  prod path but kept here for parity with relay/keyEnvelope.ts. */
-export function passphrasesEqual(a: string, b: string): boolean {
-	const ba = Buffer.from(a, 'utf-8');
-	const bb = Buffer.from(b, 'utf-8');
-	if (ba.length !== bb.length) return false;
-	return timingSafeEqual(ba, bb);
 }

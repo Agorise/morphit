@@ -36,6 +36,7 @@ import {
 import { brandNameProblem } from '../lib/branding.ts';
 import { runBranding } from './branding.ts';
 import { defaultRepoRoot } from '../lib/repoRoot.ts';
+import { keepOwnerAndMode } from '../lib/keepOwner.ts';
 import {
 	existsSync,
 	readFileSync,
@@ -51,6 +52,8 @@ import { ask, askYesNo, askChoice, step, explain } from '../init/prompt.ts';
 import { runRegister } from './register.ts';
 import { sanitizeForTerm } from '../render/term.ts';
 import { offerRestart } from '../lib/restartServices.ts';
+import { syncInstanceOrigin } from '../lib/instanceOrigin.ts';
+import { resolveWebRoot } from './upgrade.ts';
 import {
 	stepOrigin,
 	stepListingFee,
@@ -73,7 +76,7 @@ interface ExistingConfig {
 	readonly path: string;
 	readonly text: string;
 	readonly origin: string | null;
-	/** cp311 — displayed branding (name / tagline / contact).  Set at
+	/** displayed branding (name / tagline / contact).  Set at
 	 *  init time but previously NOT re-editable here, so an operator who
 	 *  wanted to rename their instance had to hand-edit the env file
 	 *  (and hit the unquoted-space shell-source trap).  Now editable in
@@ -90,7 +93,7 @@ interface ExistingConfig {
 	 *  b32 / vanity keys. */
 	readonly legacyI2pAddress: string | null;
 	readonly seo: SeoResult;
-	/** Part 110 — listing-fee + fallback-price slice.  Optional
+	/** listing-fee + fallback-price slice.  Optional
 	 *  fields (any may be null if the operator has hand-edited
 	 *  the config to remove a key). */
 	readonly listingFee: {
@@ -98,7 +101,7 @@ interface ExistingConfig {
 		readonly xmrPiconero: string | null;
 		readonly fallbackBlurtPriceUsd: string | null;
 	};
-	/** Part 111 — operator tag for federation-scoped payouts. */
+	/** operator tag for federation-scoped payouts. */
 	readonly operatorTag: string | null;
 }
 
@@ -191,7 +194,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 
 	const configUpdates: Map<string, string | null> = new Map();
 	const envUpdates: Map<string, string | null> = new Map();
-	// cp186 — track whether the operator changed anything that lives
+	// track whether the operator changed anything that lives
 	// in the ON-CHAIN operator-register record (origin / tag).  Those
 	// changes only reach other instances' /instances directories after
 	// a fresh `morphit-ops register`; a local file edit alone is
@@ -240,8 +243,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			'Full .loki address or your ONS name (e.g. "yourbrand.loki").',
 			existing.altNetworks.lokinet
 		);
-		if (lokinetR.changed)
-			configUpdates.set('MORPHIT_INSTANCE_LOKINET_ADDRESS', lokinetR.value);
+		if (lokinetR.changed) configUpdates.set('MORPHIT_INSTANCE_LOKINET_ADDRESS', lokinetR.value);
 
 		// I2P has two independent slots — always-resolvable b32 + optional
 		// vanity name.  Writing either modern key also clears the legacy single
@@ -283,7 +285,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		if (ensR.changed) configUpdates.set('MORPHIT_INSTANCE_ENS_NAME', ensR.value);
 	}
 	if (choice === 'seo' || choice === 'all') {
-		// cp311 — "Branding & SEO".  All six fields use keep-current /
+		// "Branding & SEO".  All six fields use keep-current /
 		// clear semantics (Enter keeps, "-" clears), so editing one
 		// (e.g. the instance name) never silently wipes the others.
 		// Branding identity first (what shows on the directory card,
@@ -355,7 +357,9 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 					console.log('  Leaving the contact URL unchanged.');
 				} else {
 					if (normalized !== rawContact) {
-						console.log(`  → repaired "${sanitizeForTerm(rawContact)}" to "${sanitizeForTerm(normalized)}"`);
+						console.log(
+							`  → repaired "${sanitizeForTerm(rawContact)}" to "${sanitizeForTerm(normalized)}"`
+						);
 					}
 					configUpdates.set('MORPHIT_INSTANCE_CONTACT_URL', normalized);
 					contactChanged = true;
@@ -375,8 +379,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 			'One sentence (~150 chars) for search results + social link previews.',
 			existing.seo.description
 		);
-		if (seoDescR.changed)
-			configUpdates.set('MORPHIT_INSTANCE_SEO_DESCRIPTION', seoDescR.value);
+		if (seoDescR.changed) configUpdates.set('MORPHIT_INSTANCE_SEO_DESCRIPTION', seoDescR.value);
 
 		const seoKwR = await editField(
 			'SEO <meta keywords>',
@@ -387,21 +390,12 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	}
 	if (choice === 'listing-fee' || choice === 'all') {
 		const fee = await stepListingFee();
-		configUpdates.set(
-			'MORPHIT_INDEXER_BTC_FEE_SATOSHIS',
-			String(fee.btcSatoshis)
-		);
-		configUpdates.set(
-			'MORPHIT_INDEXER_XMR_FEE_PICONERO',
-			String(fee.xmrPiconero)
-		);
-		configUpdates.set(
-			'MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR',
-			String(fee.fallbackBlurtPriceUsd)
-		);
+		configUpdates.set('MORPHIT_INDEXER_BTC_FEE_SATOSHIS', String(fee.btcSatoshis));
+		configUpdates.set('MORPHIT_INDEXER_XMR_FEE_PICONERO', String(fee.xmrPiconero));
+		configUpdates.set('MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR', String(fee.fallbackBlurtPriceUsd));
 	}
 	if (choice === 'fees-account' || choice === 'all') {
-		// cp407 — redirect where BLURT listing fees land (the operator earns
+		// redirect where BLURT listing fees land (the operator earns
 		// 90% of them). Default to the account currently configured; if none is
 		// set yet, require an explicit entry (stepFeesAccount no longer defaults
 		// to the relay account). stepFeesAccount validates the Blurt account name;
@@ -468,7 +462,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 	if (configUpdates.size > 0) {
 		const result = atomicEnvWrite(configPath, existing.text, configUpdates, 'parseEnv');
 		if (!result.ok) {
-			// cp139-C-6: result.message includes err.message from
+			// result.message includes err.message from
 			// the filesystem layer and may reference paths.
 			// Sanitize at display.
 			console.log(`\n✗ ${sanitizeForTerm(result.message)}`);
@@ -520,7 +514,29 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 		}
 	}
 
-	// cp186 — the one easy-to-miss second step.  origin, operator tag, AND the
+	// the served pages, sitemap and robots.txt name the instance's
+	// origin (or its onion on a hidden-only node); a changed origin or Tor
+	// address is put on the live site now.
+	if (originChanged || configUpdates.has('MORPHIT_INSTANCE_TOR_ADDRESS')) {
+		try {
+			const webRoot = resolveWebRoot(process.env);
+			const r = syncInstanceOrigin(
+				{
+					info: (m) => console.log(`  ${m}`),
+					warn: (m) => console.log(`  ! ${m}`),
+					spinner: () => () => {}
+				},
+				{ installDir: repoRoot, webRoot: existsSync(webRoot) ? webRoot : null }
+			);
+			if (r.detail !== '') console.log(`\n  ${r.verified ? '' : '! '}${sanitizeForTerm(r.detail)}`);
+		} catch (err) {
+			console.log(
+				`\n  ! The site's origin was not updated (${sanitizeForTerm(err instanceof Error ? err.message : String(err))}). Run: sudo morphit-ops upgrade`
+			);
+		}
+	}
+
+	// the one easy-to-miss second step.  origin, operator tag, AND the
 	// instance display name (title) are part of the ON-CHAIN operator-register
 	// record; editing the local config does NOT update what other Morphit
 	// instances show in their /instances directory.  Make the re-register step
@@ -601,7 +617,7 @@ export async function runEdit(ctx: EditCtx): Promise<number> {
 
 /** Atomic env-file write helper.  Backs up the original to a
  *  timestamped sibling, writes the new text to a `.tmp` file with
- *  mode 0600 + fsync, then renames.  Used for BOTH
+ *  the original's owner + mode (0600 for a new file) + fsync, then renames.  Used for BOTH
  *  morphit.config.env and morphit.env so the two paths share the
  *  same durability + permissions guarantees.  Returns ok on
  *  success or { ok: false, message } on any failure; the caller
@@ -641,6 +657,9 @@ export function atomicEnvWrite(
 	try {
 		writeFileSync(tmpPath, newText, { mode: 0o600, flag: 'w' });
 		chmodSync(tmpPath, 0o600);
+		// Keep the file's owner, group and mode (e.g. root:morphit 0640, which
+		// lets the unprivileged services read it); a fresh file stays 0600.
+		keepOwnerAndMode(path, tmpPath);
 		// Audit 2026-05 finding NEW-9-12: fsync the tmp file before
 		// rename so contents are durable on disk. Without this, a
 		// power loss between write and rename can leave the renamed
@@ -722,8 +741,7 @@ function loadExisting(path: string): ExistingConfig {
 		listingFee: {
 			btcSatoshis: kv.get('MORPHIT_INDEXER_BTC_FEE_SATOSHIS') ?? null,
 			xmrPiconero: kv.get('MORPHIT_INDEXER_XMR_FEE_PICONERO') ?? null,
-			fallbackBlurtPriceUsd:
-				kv.get('MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR') ?? null
+			fallbackBlurtPriceUsd: kv.get('MORPHIT_INDEXER_PRICE_FEED_STATIC_FLOOR') ?? null
 		},
 		operatorTag: kv.get('MORPHIT_INSTANCE_OPERATOR_TAG') ?? null
 	};
@@ -852,7 +870,7 @@ function applyUpdates(
 	return joined;
 }
 
-/** Quote a value for the env file.  cp139-D-1 v2: prefers single-
+/** Quote a value for the env file.  v2: prefers single-
  *  quoted form in BOTH consumer modes since single-quoted handles
  *  `$`/`(`/`"`/etc. literally in both parseEnv and bash.  Differs
  *  only in apostrophe handling:
@@ -874,7 +892,7 @@ function quoteValue(v: string, consumer: EnvFileConsumer = 'bash'): string {
 		if (!v.includes("'")) {
 			return `'${v}'`;
 		}
-		// v1.19.0 deep-deep: morphit.config.env is NOT parseEnv-only — the
+		// morphit.config.env is NOT parseEnv-only — the
 		// indexer/relay/matrix-bot systemd units SOURCE it with bash (as root).
 		// Inside double quotes bash still expands `$…`, `$(…)` and backticks, so
 		// the double-quoted fallback is only safe when none of those can occur.
@@ -898,7 +916,10 @@ function quoteValue(v: string, consumer: EnvFileConsumer = 'bash'): string {
  * (a hand-rolled one, or a split deployment) is left without it: adding a key
  * the operator never had is not this edit's call.
  */
-export function rpcEnvUpdates(existingText: string, newList: readonly string[]): Map<string, string> {
+export function rpcEnvUpdates(
+	existingText: string,
+	newList: readonly string[]
+): Map<string, string> {
 	const out = new Map<string, string>([['MORPHIT_INDEXER_RPC_ENDPOINTS', newList.join(',')]]);
 	if (parseKvLines(existingText).has('MORPHIT_RELAY_BLURT_RPC')) {
 		out.set('MORPHIT_RELAY_BLURT_RPC', newList.join(','));
@@ -912,7 +933,17 @@ export { atomicEnvWrite as _testAtomicEnvWrite };
 
 async function pickSection(
 	rpcAvailable: boolean
-): Promise<'origin' | 'alt-networks' | 'seo' | 'listing-fee' | 'fees-account' | 'operator-tag' | 'rpc' | 'all' | 'cancel'> {
+): Promise<
+	| 'origin'
+	| 'alt-networks'
+	| 'seo'
+	| 'listing-fee'
+	| 'fees-account'
+	| 'operator-tag'
+	| 'rpc'
+	| 'all'
+	| 'cancel'
+> {
 	step(1, 1, 'What do you want to edit?');
 
 	// Build the menu dynamically so adding/removing sections in
@@ -1004,17 +1035,14 @@ async function pickSection(
 		{
 			key: 'all',
 			label: rpcAvailable ? 'All five' : 'All four',
-			description:
-				rpcAvailable
-					? 'All five sections in sequence.'
-					: 'All four sections in sequence.'
+			description: rpcAvailable
+				? 'All five sections in sequence.'
+				: 'All four sections in sequence.'
 		},
 		{ key: 'cancel', label: 'Cancel', description: 'Cancel without changes.' }
 	];
 
-	const numbered = sections
-		.map((s, i) => `  ${i + 1}. ${s.description}`)
-		.join('\n');
+	const numbered = sections.map((s, i) => `  ${i + 1}. ${s.description}`).join('\n');
 	explain(
 		'Each option re-prompts the relevant questions; everything\n' +
 			'else in your config stays exactly as it is.  Press Ctrl+C\n' +
@@ -1031,7 +1059,7 @@ async function pickSection(
 	return sections[idx]?.key ?? 'cancel';
 }
 
-/** cp311 — edit one optional text field with keep-current / clear
+/** edit one optional text field with keep-current / clear
  *  semantics, used by the "Branding & SEO" section.  Shows the current
  *  value, then interprets the answer:
  *    - empty (just Enter) → keep current, report no change
@@ -1048,9 +1076,7 @@ async function editField(
 	console.log('');
 	console.log(`  ${label}`);
 	if (hint.length > 0) console.log(`    ${hint}`);
-	console.log(
-		`    Current: ${current !== null ? sanitizeForTerm(current) : '(unset)'}`
-	);
+	console.log(`    Current: ${current !== null ? sanitizeForTerm(current) : '(unset)'}`);
 	const ans = (await ask('    New value ([Enter] to keep, "-" to clear)', '')).trim();
 	if (ans.length === 0) return { changed: false, value: current };
 	if (ans === '-') return { changed: current !== null, value: null };
@@ -1059,38 +1085,54 @@ async function editField(
 
 function printCurrent(c: ExistingConfig, env: ExistingEnv | null): void {
 	console.log('Current values:\n');
-	// cp139-C-17: every value here comes from file-system read of
+	// every value here comes from file-system read of
 	// morphit.config.env / morphit.env.  An operator who pasted a
 	// hostile blob into the file (or a process that wrote there
 	// with elevated privilege) could plant ANSI escapes that fire
 	// at next `morphit-ops edit` invocation.  Sanitize on display.
 	console.log(`  Primary origin:    ${c.origin !== null ? sanitizeForTerm(c.origin) : '(unset)'}`);
-	console.log(`  Instance name:     ${c.name !== null ? sanitizeForTerm(c.name) : '(unset — falls back to "Morphit" / your operator account)'}`);
-	console.log(`  Site brand name:   ${c.brandName !== null ? sanitizeForTerm(c.brandName) : '(unset — "Morphit")'}`);
-	console.log(`  Tagline:           ${c.tagline !== null ? sanitizeForTerm(truncate(c.tagline, 50)) : '(unset)'}`);
-	console.log(`  Contact URL:       ${c.contactUrl !== null ? sanitizeForTerm(c.contactUrl) : '(unset)'}`);
-	console.log(`  Tor address:       ${c.altNetworks.tor !== null ? sanitizeForTerm(c.altNetworks.tor) : '(unset)'}`);
-	console.log(`  Lokinet address:   ${c.altNetworks.lokinet !== null ? sanitizeForTerm(c.altNetworks.lokinet) : '(unset)'}`);
-	console.log(`  I2P b32:           ${c.altNetworks.i2pB32 !== null ? sanitizeForTerm(c.altNetworks.i2pB32) : '(unset)'}`);
-	console.log(`  I2P vanity name:   ${c.altNetworks.i2pName !== null ? sanitizeForTerm(c.altNetworks.i2pName) : '(unset)'}`);
-	console.log(`  Nostr pubkey:      ${c.altNetworks.nostr !== null ? sanitizeForTerm(c.altNetworks.nostr) : '(unset)'}`);
-	console.log(`  ENS .eth name:     ${c.altNetworks.ens !== null ? sanitizeForTerm(c.altNetworks.ens) : '(unset)'}`);
-	console.log(`  SEO title:         ${c.seo.title !== null ? sanitizeForTerm(c.seo.title) : '(default)'}`);
+	console.log(
+		`  Instance name:     ${c.name !== null ? sanitizeForTerm(c.name) : '(unset — falls back to "Morphit" / your operator account)'}`
+	);
+	console.log(
+		`  Site brand name:   ${c.brandName !== null ? sanitizeForTerm(c.brandName) : '(unset — "Morphit")'}`
+	);
+	console.log(
+		`  Tagline:           ${c.tagline !== null ? sanitizeForTerm(truncate(c.tagline, 50)) : '(unset)'}`
+	);
+	console.log(
+		`  Contact URL:       ${c.contactUrl !== null ? sanitizeForTerm(c.contactUrl) : '(unset)'}`
+	);
+	console.log(
+		`  Tor address:       ${c.altNetworks.tor !== null ? sanitizeForTerm(c.altNetworks.tor) : '(unset)'}`
+	);
+	console.log(
+		`  Lokinet address:   ${c.altNetworks.lokinet !== null ? sanitizeForTerm(c.altNetworks.lokinet) : '(unset)'}`
+	);
+	console.log(
+		`  I2P b32:           ${c.altNetworks.i2pB32 !== null ? sanitizeForTerm(c.altNetworks.i2pB32) : '(unset)'}`
+	);
+	console.log(
+		`  I2P vanity name:   ${c.altNetworks.i2pName !== null ? sanitizeForTerm(c.altNetworks.i2pName) : '(unset)'}`
+	);
+	console.log(
+		`  Nostr pubkey:      ${c.altNetworks.nostr !== null ? sanitizeForTerm(c.altNetworks.nostr) : '(unset)'}`
+	);
+	console.log(
+		`  ENS .eth name:     ${c.altNetworks.ens !== null ? sanitizeForTerm(c.altNetworks.ens) : '(unset)'}`
+	);
+	console.log(
+		`  SEO title:         ${c.seo.title !== null ? sanitizeForTerm(c.seo.title) : '(default)'}`
+	);
 	console.log(
 		`  SEO description:   ${c.seo.description !== null ? sanitizeForTerm(truncate(c.seo.description, 50)) : '(default)'}`
 	);
 	console.log(
 		`  SEO keywords:      ${c.seo.keywords !== null ? sanitizeForTerm(truncate(c.seo.keywords, 50)) : '(default)'}`
 	);
-	console.log(
-		`  BTC fee:           ${c.listingFee.btcSatoshis ?? '(unset)'} satoshis`
-	);
-	console.log(
-		`  XMR fee:           ${c.listingFee.xmrPiconero ?? '(unset)'} piconero`
-	);
-	console.log(
-		`  Fallback BLURT/USD: ${c.listingFee.fallbackBlurtPriceUsd ?? '(unset)'}`
-	);
+	console.log(`  BTC fee:           ${c.listingFee.btcSatoshis ?? '(unset)'} satoshis`);
+	console.log(`  XMR fee:           ${c.listingFee.xmrPiconero ?? '(unset)'} piconero`);
+	console.log(`  Fallback BLURT/USD: ${c.listingFee.fallbackBlurtPriceUsd ?? '(unset)'}`);
 	console.log(
 		`  Operator tag:      ${c.operatorTag !== null ? sanitizeForTerm(c.operatorTag) : '(unset — relay queues nothing)'}`
 	);
@@ -1131,4 +1173,3 @@ function printGreeting(): void {
 			'changes are applied.\n'
 	);
 }
-

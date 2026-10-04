@@ -14,8 +14,8 @@ export default defineConfig({
 		globals: false,
 		// Tests touch no external services; each runs in isolation.
 		isolate: true,
-		// cp79-D21: uniform 30s per-test timeout across all
-		// workspaces (relay applied at cp78-D19 after a confirmed
+		// uniform 30s per-test timeout across all
+		// workspaces (relay applied after a confirmed
 		// flake on scrypt-heavy tests).  Indexer's tests are fast
 		// today (total 615ms for 481 tests = ~1.3ms avg), but
 		// preemptively defending against the same dynamic-class

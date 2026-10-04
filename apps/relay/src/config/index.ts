@@ -11,8 +11,10 @@
  */
 
 import { readFileSync, statSync } from 'node:fs';
+import { assertKeystorePermissions, currentProcessIdentity } from './keystorePerms.ts';
 import { z } from 'zod';
 import { looksLikeEnvelope } from '../crypto/keyEnvelope.ts';
+import { parsePushExtraHosts } from '../policy/pushEndpoint.ts';
 import { DEFAULT_BLURT_RPC_ENDPOINTS, DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
 import {
 	hiddenNetworkOf,
@@ -134,7 +136,7 @@ const envSchema = z.object({
 	// Optional (have defaults).
 	MORPHIT_RELAY_LISTEN_HOST: z.string().default('127.0.0.1'),
 	MORPHIT_RELAY_LISTEN_PORT: z.coerce.number().int().positive().default(8080),
-	// cp663 #6 — MUST be set to this instance's public origin (the
+	// MUST be set to this instance's public origin (the
 	// deploy template does).  The default is a RESERVED, never-resolving
 	// `.invalid` placeholder (RFC 6761) so a missing value fails loudly
 	// and visibly instead of silently pointing at a plausible-looking
@@ -340,10 +342,14 @@ const envSchema = z.object({
 	 *  exponential backoff still caps total catch-up time. */
 	MORPHIT_RELAY_QUEUE_MAX_RETRIES: z.coerce.number().int().min(1).default(3),
 
-	// Health verbosity.
+	// Health verbosity. The operator block of /v1/health (signup counters,
+	// RPC topology, Node.js version, balance, payment queue) is always served
+	// to local callers presenting X-Morphit-Local-Health: 1 (stripped at every
+	// public edge). true = ALSO publish it to anonymous callers. Default off:
+	// it used to default on, which handed all of that to anyone.
 	MORPHIT_RELAY_VERBOSE_HEALTH: z
 		.enum(['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
-		.default('true')
+		.default('false')
 		.transform((v) => v === 'true' || v === '1' || v === 'yes' || v === 'on'),
 
 	/** Operator-tunable mirror of the Blurt chain's
@@ -361,7 +367,7 @@ const envSchema = z.object({
 	 *  the live fee is back within 1.5x of it. */
 	MORPHIT_INDEXER_ACCOUNT_CREATION_FEE_BLURT: z.coerce.number().positive().default(100),
 
-	// ── Web Push (Part 122 cp13) ───────────────────────────────
+	// ── Web Push ───────────────────────────────
 	// VAPID keypair (RFC 8292) for Web Push.  Operators generate
 	// once via `bash scripts/generate-vapid-keys.sh` and add to
 	// their relay config.  When ANY of the three is unset, push
@@ -381,7 +387,7 @@ const envSchema = z.object({
 	// operator when a subject is set-but-invalid.
 	MORPHIT_RELAY_VAPID_SUBJECT: z.string().trim().optional(),
 	// Push-sender worker polling interval (ms).  Default 2s.
-	// cp450 — notifications must feel immediate: the end-to-end
+	// notifications must feel immediate: the end-to-end
 	// budget is <6s (a ~3s Blurt block + indexer enqueue + this
 	// drain + push-service delivery), so this drain is the one
 	// piece we fully control and it's kept small.  The prior 30s
@@ -418,15 +424,20 @@ const envSchema = z.object({
 		.min(1)
 		.max(50)
 		.default(5),
-	// Part 122 cp14 — when 'true' (default), /v1/push/subscribe
+	// when 'true' (default), /v1/push/subscribe
 	// requires a valid posting-key signature over the canonical
 	// message.  Set to 'false' to accept unsigned subscribes
-	// (cp13-compat mode) — useful only for the brief window
+	// (legacy-compat mode) — useful only for the brief window
 	// during a frontend roll-forward.
 	MORPHIT_RELAY_PUSH_REQUIRE_SIGNED: z
 		.enum(['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
 		.default('true')
-		.transform((v) => v === 'true' || v === '1' || v === 'yes' || v === 'on')
+		.transform((v) => v === 'true' || v === '1' || v === 'yes' || v === 'on'),
+
+	/** Push-service hosts accepted on top of the browser push services
+	 *  (policy/pushEndpoint.ts), comma-separated; `*.example.org` = any
+	 *  subdomain. Only for a browser whose push service is not listed. */
+	MORPHIT_RELAY_PUSH_EXTRA_HOSTS: z.string().optional()
 });
 
 export interface Config {
@@ -508,9 +519,11 @@ export interface Config {
 	readonly queueMaxRetries: number;
 	/** Undecided settle checks before a pending transfer whose outcome is
 	 *  unknown is escalated to the operator (never re-sent blind). Default 30
-	 *  (drainer). v1.20.0 fix wave 4, A3. */
+	 *  (drainer).. */
 	readonly queueMaxSettleChecks?: number;
 
+	/** Publish the /v1/health operator block to anonymous callers too (local
+	 *  callers with X-Morphit-Local-Health: 1 always get it). Default false. */
 	readonly verboseHealth: boolean;
 
 	/** Operator-tunable mirror of the chain's account_creation_fee
@@ -518,7 +531,7 @@ export interface Config {
 	 *  ways this is consumed. */
 	readonly accountCreationFeeBlurt: number;
 
-	// ── Web Push (Part 122 cp13) ───────────────────────────────
+	// ── Web Push ───────────────────────────────
 	/** VAPID public key (base64url, ~88 chars).  Sent to clients
 	 *  in pushManager.subscribe()'s applicationServerKey.  When
 	 *  undefined, push is disabled at runtime. */
@@ -544,8 +557,10 @@ export interface Config {
 	readonly pushMaxConsecutiveFailures: number;
 	/** When true (default), the subscribe endpoint requires a
 	 *  valid posting-key signature on every request.  When
-	 *  false (cp13-compat), rate-limited-only.  Part 122 cp14. */
+	 *  false (legacy-compat), rate-limited-only.. */
 	readonly pushRequireSigned: boolean;
+	/** Operator-added push-service hosts (MORPHIT_RELAY_PUSH_EXTRA_HOSTS). */
+	readonly pushExtraHosts?: readonly string[];
 }
 
 /** Config variant guaranteed to have the active-key WIF
@@ -585,20 +600,12 @@ export function loadConfig(): Config {
 			}`
 		);
 	}
-	// Mode & 0o077 must be zero — no group or other permission bits.
-	// (On Windows, stat mode is always lax; in that case skip the check.
-	// Production deployments are Linux-only so this edge case is
-	// developer-convenience only.)
+	// Owner-only (0400/0600), or root:<the relay's group> 0640/0440 — the shape
+	// the installer and morphit-service-perms.sh set so an unprivileged relay
+	// reads it through its group (see keystorePerms.ts). (On Windows, stat mode
+	// is always lax; skip the check there — production is Linux-only.)
 	if (process.platform !== 'win32') {
-		const mode = keyStat.mode & 0o777;
-		if ((mode & 0o077) !== 0) {
-			throw new Error(
-				`MORPHIT_RELAY_ACTIVE_KEY_FILE ${JSON.stringify(
-					keyPath
-				)} has permissions 0${mode.toString(8)}; must be 0400 or 0600 ` +
-					`(run: chmod 0400 ${keyPath})`
-			);
-		}
+		assertKeystorePermissions(keyPath, currentProcessIdentity(), keyStat);
 	}
 
 	// Read the key file. The file may be either:
@@ -744,7 +751,8 @@ export function loadConfig(): Config {
 		pushBatchSize: env.MORPHIT_RELAY_PUSH_BATCH_SIZE,
 		pushMaxAgeSeconds: env.MORPHIT_RELAY_PUSH_MAX_AGE_SECONDS,
 		pushMaxConsecutiveFailures: env.MORPHIT_RELAY_PUSH_MAX_CONSECUTIVE_FAILURES,
-		pushRequireSigned: env.MORPHIT_RELAY_PUSH_REQUIRE_SIGNED
+		pushRequireSigned: env.MORPHIT_RELAY_PUSH_REQUIRE_SIGNED,
+		pushExtraHosts: parsePushExtraHosts(env.MORPHIT_RELAY_PUSH_EXTRA_HOSTS)
 	};
 }
 

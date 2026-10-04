@@ -1,15 +1,18 @@
 /**
  * Morphit indexer — /v1/release endpoint.
  *
- * Latest verified release. The handler for morphit_release_v1 only
- * marks a row valid=true if its signer and signer's posting pubkey
- * both match the pinned trust anchor — this endpoint just surfaces
- * the newest such row.
+ * Latest verified release. The handler for morphit_release_v1
+ * (indexer/handlers/release.ts) marks a row valid=true only when the op
+ * names the pinned official account AND its transaction's signature,
+ * recovered from the block itself, is the pinned posting key
+ * (officialOpTrust); the block is applied once RPC operators (counted by node name)
+ * serve the same transaction. This endpoint just surfaces the newest
+ * such row.
  *
  * 404 if the table contains no valid releases (pre-launch state,
  * or the trust anchor is stale).
  *
- * **Treasury block (Part 106).**  When the most recent valid
+ * **Treasury block.**  When the most recent valid
  * release op carried a `treasury` field, we surface it here.
  * Frontend reads this to display the canonical BTC/XMR fee
  * address to users on the post-order page; every federated
@@ -18,7 +21,7 @@
  *
  * `treasury` is `null` in the response when:
  *   - The release op did not include a `treasury` field
- *     (pre-Part-106 releases, or operators who opted not to pin)
+ *     (older releases, or operators who opted not to pin)
  *   - OR the field was structurally invalid (defense-in-depth;
  *     the handler validator should already have caught this)
  *
@@ -30,13 +33,13 @@
  * Either chain may be null inside the object — operators can
  * pin one chain at a time during ramp-up.
  *
- * **Part 107 / 108++ / 109**: the XMR object does NOT include
- * a `viewkey` field.  Per-payment tx_proof verification
- * replaced view-key decryption entirely; no Morphit indexer
- * holds an XMR view key, and the API contract surfaces none.
- * The `stripViewkey()` helper below is defense-in-depth
- * against historical Part 106 transitional release-op rows
- * that may still contain a stale viewkey field.
+ * The XMR object does NOT include a `viewkey` field. An XMR fee is
+ * proven per payment with the transaction's private key (tx_key) that
+ * the payer supplies; an order carrying only an OutProof cannot be
+ * checked and never verifies. No Morphit indexer holds an XMR view key,
+ * and the API contract surfaces none. The `stripViewkey()` helper below
+ * is defense-in-depth against historical release-op rows that may still
+ * contain a stale viewkey field.
  */
 
 import { Hono } from 'hono';
@@ -81,13 +84,13 @@ export function releaseRoute(db: Database): Hono {
 			source_trx_id: r.source_trx_id,
 			source_block_num: parseInt(r.source_block_num, 10),
 			created_at: r.created_at.toISOString(),
-			// Part 106 — chain-pinned treasury addresses.  null when
+			// chain-pinned treasury addresses.  null when
 			// the release op didn't carry a treasury block.  Frontend
 			// renders the address with copy + QR when present;
 			// operators verifying federation consistency can compare
 			// this field across instances.
 			//
-			// Part 107 — defense-in-depth viewkey strip.  The handler
+			// defense-in-depth viewkey strip.  The handler
 			// validateTreasury() already strips any `viewkey` field
 			// before persisting, so r.treasury should never contain
 			// one.  But we strip again here on the way out: belt-
@@ -97,7 +100,7 @@ export function releaseRoute(db: Database): Hono {
 			// this column.  The privacy invariant — viewkey never
 			// surfaces via API — is enforced at multiple layers.
 			treasury: stripViewkey(r.treasury) ?? null,
-			// cp564 — decentralized-distribution anchor (source_sha256,
+			// decentralized-distribution anchor (source_sha256,
 			// gpg_fingerprint, ipfs_cid, ipns_name, mirrors) or null. Public +
 			// verification-only (no secret, same as treasury). The built-in IPFS
 			// release-pinning service reads ipfs_cid from here to pin the release.
@@ -109,7 +112,7 @@ export function releaseRoute(db: Database): Hono {
 }
 
 /** Strip any `viewkey` field from a treasury JSONB blob.
- *  Defense-in-depth for Part 107.  Returns the input unchanged
+ *  Defense-in-depth.  Returns the input unchanged
  *  when null/undefined or when no viewkey is present. */
 function stripViewkey(treasury: unknown): unknown {
 	if (treasury === null || treasury === undefined) return treasury;

@@ -6,7 +6,7 @@
  * (deciding whether to take one back down). These two answers must never
  * disagree, so they must not be two implementations.
  *
- * WHY THE PAGE NEEDS TO TAKE THEM DOWN AT ALL. the maintainer reported the same annoyance
+ * WHY THE PAGE NEEDS TO TAKE THEM DOWN AT ALL. The maintainer reported the same annoyance
  * three releases running: chatting with someone, and every reply raising an OS
  * notification for a message he was watching arrive. The suppression lives in
  * the service worker — and a service worker is the one piece of the app that

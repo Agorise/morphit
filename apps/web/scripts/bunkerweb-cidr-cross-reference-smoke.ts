@@ -2,9 +2,9 @@
 /**
  * bunkerweb-cidr-cross-reference-smoke.
  *
- * Part 122 cp61 STRUCTURAL DEFENSE (LL #64 / O-14).
+ * STRUCTURAL DEFENSE.
  *
- * Closes the cp61-D1 class: the canonical BunkerWeb Docker network
+ * Closes the class: the canonical BunkerWeb Docker network
  * CIDR is referenced across many operator-facing files, and the
  * Ansible default for `morphit_relay_trusted_proxy_ips` MUST match
  * what the bunkerweb role's docker-compose actually deploys.  If
@@ -12,7 +12,7 @@
  * broken trusted-proxy chain → per-IP rate limiting breaks → all
  * user signups bucket into the BunkerWeb container's single IP.
  *
- * Bug history (cp61-D1):
+ * Bug history:
  *   - Pre-cp61: group_vars/all.yml defaulted
  *     `morphit_relay_trusted_proxy_ips: "172.18.0.0/16"` (the
  *     comment claimed "typical user-defined compose CIDR").
@@ -24,9 +24,9 @@
  *     172.18.0.0/16 → BunkerWeb's X-Forwarded-For is REJECTED,
  *     relay falls back to peer IP (BunkerWeb's container IP),
  *     all users bucket into one rate-limit slot.
- *   - This is exactly the §32 CRITICAL failure mode the cp57
+ *   - This is exactly the §32 CRITICAL failure mode the
  *     audit warned about, hidden behind playbook defaults.
- *   - Fix at cp61: group_vars/all.yml default changed to
+ *   - Fix: group_vars/all.yml default changed to
  *     172.20.0.0/16, with a comment block explaining the
  *     coupling to the bunkerweb role's docker-compose.
  *
@@ -42,7 +42,7 @@
  *      broken trusted-proxy chain).
  *   4. Documentation files that reference the bunkerweb CIDR
  *      (operator-facing examples + READMEs + OPERATIONS.md +
- *      RUN-A-MORPHIT-NODE.md + PRE-LAUNCH-CHECKLIST.md +
+ *      RUN-A-MORPHIT-NODE.md +
  *      MORPHIT-BRAG-LIST.md) MUST mention the canonical CIDR.
  *
  * Note: docs that describe Docker's DEFAULT bridge ranges
@@ -54,12 +54,12 @@
  * to a CIDR.
  *
  * Recurring class scope progression (16 defenses across 14 checkpoints):
- *   cp48-O1 through cp60-O13 (as listed above)
- *   cp61-O14: bunkerweb CIDR cross-reference (THIS)
+ *   through a later fix (as listed above)
+ *   bunkerweb CIDR cross-reference (THIS)
  *
- * Mutation test verification: M-128 — change
+ * Mutation test verification: — change
  * group_vars/all.yml's trusted_proxy_ips to 172.18.0.0/16
- * (the pre-cp61 broken state) fires the smoke with
+ * (the older broken state) fires the smoke with
  * "Ansible default trusted_proxy_ips '172.18.0.0/16' does not
  * match canonical bunkerweb CIDR '172.20.0.0/16'".
  */
@@ -179,7 +179,6 @@ const CROSS_REFERENCE_FILES = [
 	'ops/bunkerweb/bunkerweb.env.example',
 	'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2',
 	'docs/OPERATIONS.md',
-	'docs/PRE-LAUNCH-CHECKLIST.md',
 	'MORPHIT-BRAG-LIST.md'
 ];
 

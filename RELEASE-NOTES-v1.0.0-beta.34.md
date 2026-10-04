@@ -53,5 +53,5 @@ balances carry over untouched.
 - The order-form changes ship with a regression test that locks the draft and
   pricing-error behaviour, the plain-language summary, the numbers-only fields, and
   the first-time prompts so they can't quietly regress. A fresh five-persona
-  walkthrough and a focused deep-deep review confirmed the new-order and edit-order
+  walkthrough and a focused deep review confirmed the new-order and edit-order
   screens end to end, across all supported languages.

@@ -6,9 +6,11 @@ Postgres schema, and exposes the result over HTTP.
 
 ## What it does
 
-- **Polls** the chain every `blockIntervalMs` (default 3s), catches
-  up block by block, never reads a block more recent than
-  `last_irreversible_block_num`
+- **Polls** the chain every `blockIntervalMs` (default 3s) and
+  catches up block by block up to `last_irreversible_block_num`; a
+  separate head-block fast path (ADR-0048) shows chat messages,
+  review notifications and order cancels before they are
+  irreversible, only after checking their signatures
 - **Dispatches** each `custom_json` op with a registered morphit id
   to a typed handler, validates payload, writes derived state
 - **Records** every op in an append-only event log (`ops` table)
@@ -20,24 +22,33 @@ Postgres schema, and exposes the result over HTTP.
   `/v1/orderbook/stream` (SSE),
   `/v1/chat/:a/:b/stream` (SSE)
 
+It also:
+
+- **Forwards signed transactions** to the chain (`POST /v1/broadcast`)
+  and relays the browser's chain reads (`/v1/chain/*`), so browsers
+  never talk to a Blurt node for these; it never holds a user key
+- Accepts a few public writes: the order-view counter, the BTC/XMR
+  "check my fee now" request, and federation fast-chat pushes from
+  verified peers (all `application/json`, rate-limited)
+
 It does NOT:
 
-- Broadcast transactions to the chain (that's the frontend's job,
-  via the relay for account creation or the user's own key for
-  trades)
-- Hold any authentication state — every endpoint is public-read
-- Make cryptographic re-verification of signatures — consensus
-  already did that before the block hit `last_irreversible_block_num`
+- Hold any authentication state — there are no accounts, sessions
+  or API keys
+- Re-verify signatures of irreversible blocks (consensus did that);
+  it does verify signatures on the head-block fast path, on
+  fast-chat pushes, and on the release / snapshot ops it trusts
 
-See `docs/PHASE-3b-DESIGN.md` and `docs/adr/0008-phase3b-indexer-architecture.md`
+See `docs/adr/0008-phase3b-indexer-architecture.md`
 for the design rationale.
 
 ## Running locally
 
 ### Prerequisites
 
-- Node 24+ (see `engines` in `package.json`)
-- Postgres 15+
+- Node 22+ (see `engines` in `package.json`)
+- PostgreSQL 16 (what the installer sets up; a restricted-mode
+  `psql` from August 2025 or later is needed for fast-sync)
 - Network access to at least one Blurt RPC endpoint
 
 ### One-time setup
@@ -56,12 +67,12 @@ createuser morphit_indexer --pwprompt
 createdb morphit_indexer --owner=morphit_indexer
 ```
 
-Copy the env example and fill in your values:
+Set the environment (there is no `.env` loader; export the variables,
+or source a file, in the shell that starts the indexer):
 
 ```bash
-cp ops/env/indexer.env.example apps/indexer/.env
-# Edit apps/indexer/.env — at minimum, DATABASE_URL must point at
-# your local Postgres.
+set -a; . ops/env/indexer.env.example; set +a   # then override what you need
+export MORPHIT_INDEXER_DATABASE_URL=postgresql://morphit_indexer:<password>@127.0.0.1:5432/morphit_indexer
 ```
 
 Apply migrations:
@@ -117,8 +128,8 @@ via `src/db/migrations.ts`. Two kinds of tables:
   retry.
 - **Materialised state** — `profiles`, `orders`, `feedback`,
   `feedback_responses`, `releases`, `chat_messages`. Derived from
-  the event log; can be dropped and rebuilt via
-  `npm run migrate:rebuild` (placeholder in v1).
+  the event log. There is no in-place rebuild command
+  (`--rebuild-materialized` refuses); re-sync or fast-sync instead.
 
 Plus `indexer_state` (single-row table tracking
 `last_applied_block` and the chain id) and `schema_migrations`
@@ -194,7 +205,7 @@ concern.
 ```json
 {
   "status": "ok",
-  "version": "1.20.3",
+  "version": "1.21.0",
   "uptime_sec": 12345,
   "chain_head_block": 80123456,
   "indexed_block": 80123441,
@@ -261,11 +272,10 @@ location ~ ^/v1/(instances/stream|orderbook/stream|chat/[^/]+/[^/]+/stream)$ {
 }
 ```
 
-Per-IP open-connection caps belong here too (`limit_conn`)
-rather than in the indexer middleware. The indexer
-deliberately mounts SSE endpoints OUTSIDE its rate-limit
-middleware so a few REST requests can't starve a user's SSE
-connection budget.
+Per-IP open-connection caps belong here too (`limit_conn`), as a
+first layer. The indexer also limits streams itself: opening one is
+rate-limited on the `list` tier, and `src/api/streamCaps.ts` caps open
+streams per client and in total.
 
 ## File layout
 

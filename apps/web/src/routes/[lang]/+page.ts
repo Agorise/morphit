@@ -1,7 +1,7 @@
 /**
  * [lang]/+page.ts — locale-root prerender entry list.
  *
- * Part 121 cp7.  SvelteKit only accepts `entries()` on +page.ts,
+ * SvelteKit only accepts `entries()` on +page.ts,
  * +page.server.ts, or +server.ts (not on layout files), so the
  * enumeration of valid `[lang]` parameter values lives here on the
  * locale-root page rather than on `[lang]/+layout.ts`.

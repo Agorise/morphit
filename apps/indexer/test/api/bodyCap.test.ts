@@ -6,7 +6,7 @@
  *   - Valid Content-Length over budget rejected with 413
  *   - Malformed Content-Length rejected with 400
  *
- * cp70-D1 regression: parseInt() silently accepts trailing garbage
+ * regression: parseInt() silently accepts trailing garbage
  * ("999000abc" → 999000), which would let a hostile client smuggle
  * a misdeclared Content-Length past the cap.  The middleware now
  * uses strict /^\d+$/ validation BEFORE parsing.
@@ -45,7 +45,7 @@ describe('bodyCap middleware', () => {
 		expect(res.status).toBe(413);
 	});
 
-	// ─── cp70-D1 regression: trailing-garbage smuggling ───────────
+	// ─── regression: trailing-garbage smuggling ───────────
 
 	it('rejects Content-Length with trailing garbage ("999000abc")', async () => {
 		const app = buildApp(1_000_000);

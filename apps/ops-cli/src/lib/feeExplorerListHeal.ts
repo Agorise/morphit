@@ -1,23 +1,26 @@
 /**
- * Post-upgrade self-heal: bring an installed node's XMR fee-source list up to
- * date (v1.20.2).
+ * Post-upgrade self-heal: bring an installed node's fee-source lists up to
+ * date (XMR since v1.20.2; BTC since v1.21.0, lib/btcFeeExplorerListHeal.ts).
  *
- * WHY. `morphit-ops init` writes MORPHIT_INDEXER_XMR_EXPLORER_URLS into
- * /opt/morphit/morphit.env with the defaults OF THAT DAY, and an upgrade never
- * rewrote it. Every node set up before v1.20.0 therefore still lists
- * localmonero.co/blocks, monerohash.com/explorer and exploremonero.com — none
- * of which answers the API anymore — and lacks moneroblocks.info and the
- * public Monero nodes. Such a node verifies XMR fees on exactly two working
- * explorers: if either is down, every XMR fee waits. (An Ansible install
- * leaves the key unset and already gets the indexer's current default.)
+ * WHY. `morphit-ops init` writes MORPHIT_INDEXER_BTC_EXPLORER_URLS and
+ * MORPHIT_INDEXER_XMR_EXPLORER_URLS into /opt/morphit/morphit.env with the
+ * defaults OF THAT DAY, and an upgrade never rewrote them. A node set up before
+ * v1.20.0 still lists localmonero.co/blocks, monerohash.com/explorer and
+ * exploremonero.com — none of which answers the API anymore — and every node
+ * set up before v1.21.0 lacks the onion explorers, so it would keep asking
+ * clearnet websites. (An Ansible install leaves the keys unset and already gets
+ * the indexer's current default.)
  *
  * WHAT IT CHANGES, in every env file the indexer reads that sets the key:
- *   - removes the retired explorers (RETIRED_XMR_FEE_EXPLORERS);
+ *   - removes the retired explorers;
  *   - adds each current default source the list does not have — ONCE: what it
  *     offered is remembered in /var/lib/morphit/fee-explorer-defaults.json, so
  *     an operator who later removes a default on purpose is not overruled at
  *     the next upgrade;
- *   - keeps every other entry (an operator's own explorers) and their order.
+ *   - keeps every other entry (an operator's own explorers) and their order;
+ *   - leaves an explicitly EMPTY list alone: empty turns that fee method off
+ *     on the node (the operator's choice), and an upgrade never turns it back
+ *     on.
  * Nothing else in the file changes. The indexer restarts later in the same
  * upgrade, so it takes effect on this one.
  *
@@ -45,13 +48,15 @@ export { DEFAULT_XMR_FEE_EXPLORERS, RETIRED_XMR_FEE_EXPLORERS };
 export const XMR_EXPLORER_ENV_KEY = 'MORPHIT_INDEXER_XMR_EXPLORER_URLS';
 
 /** The env files the indexer sources, in its order (last one wins). */
-export function xmrExplorerEnvFiles(root = ''): string[] {
+export function explorerEnvFiles(root = ''): string[] {
 	return [
 		`${root}/opt/morphit/morphit.env`,
 		`${root}/opt/morphit/morphit.config.env`,
 		`${root}/etc/morphit/indexer.env`
 	];
 }
+/** Kept for existing callers. */
+export const xmrExplorerEnvFiles = explorerEnvFiles;
 
 export const offeredStatePath = (root = ''): string =>
 	`${root}/var/lib/morphit/fee-explorer-defaults.json`;
@@ -66,35 +71,46 @@ export interface ExplorerListPlan {
 }
 
 /** PURE. `offered`: defaults an earlier upgrade already added once. */
+export function planExplorerList(
+	current: readonly string[],
+	offered: ReadonlySet<string>,
+	defaults: readonly string[],
+	retired: readonly string[]
+): ExplorerListPlan {
+	// Explicitly empty = the method is off on this node: the operator's choice.
+	if (current.length === 0) return { next: null, added: [], removed: [] };
+	const retiredSet = new Set(retired.map(norm));
+	const removed = current.filter((u) => retiredSet.has(norm(u)));
+	const kept = current.filter((u) => !retiredSet.has(norm(u)));
+	const have = new Set(kept.map(norm));
+	let added = defaults.filter((d) => !have.has(norm(d)) && !offered.has(norm(d)));
+	// Never let removing dead entries leave the node with nothing to ask: an
+	// empty list would turn the method off, which the operator did not ask for.
+	if (kept.length + added.length === 0) added = [...defaults];
+	if (removed.length === 0 && added.length === 0) return { next: null, added: [], removed: [] };
+	return { next: [...kept, ...added], added, removed };
+}
+
+/** PURE. The XMR list's plan (the v1.20.2 name). */
 export function planXmrExplorerList(
 	current: readonly string[],
 	offered: ReadonlySet<string>,
 	defaults: readonly string[] = DEFAULT_XMR_FEE_EXPLORERS,
 	retired: readonly string[] = RETIRED_XMR_FEE_EXPLORERS
 ): ExplorerListPlan {
-	const retiredSet = new Set(retired.map(norm));
-	const removed = current.filter((u) => retiredSet.has(norm(u)));
-	const kept = current.filter((u) => !retiredSet.has(norm(u)));
-	const have = new Set(kept.map(norm));
-	let added = defaults.filter((d) => !have.has(norm(d)) && !offered.has(norm(d)));
-	// Never leave the node with nothing to ask: an empty list turns XMR fee
-	// checks off altogether.
-	if (kept.length + added.length === 0) added = [...defaults];
-	if (removed.length === 0 && added.length === 0) return { next: null, added: [], removed: [] };
-	return { next: [...kept, ...added], added, removed };
+	return planExplorerList(current, offered, defaults, retired);
 }
 
-const LINE_RE = new RegExp(
-	`^([ \\t]*(?:export[ \\t]+)?${XMR_EXPLORER_ENV_KEY}[ \\t]*=[ \\t]*)(.*?)[ \\t]*$`,
-	'm'
-);
+const lineRe = (key: string): RegExp =>
+	new RegExp(`^([ \\t]*(?:export[ \\t]+)?${key}[ \\t]*=[ \\t]*)(.*?)[ \\t]*$`, 'm');
 
-/** The list a file sets, with its quote character; null when the file does
- *  not set the key. PURE. */
-export function readXmrExplorerLine(
-	text: string
+/** The list a file sets for `key`, with its quote character; null when the
+ *  file does not set the key. PURE. */
+export function readExplorerLine(
+	text: string,
+	key: string
 ): { readonly list: string[]; readonly quote: '' | "'" | '"' } | null {
-	const m = LINE_RE.exec(text);
+	const m = lineRe(key).exec(text);
 	if (m === null) return null;
 	let v = m[2] ?? '';
 	let quote: '' | "'" | '"' = '';
@@ -109,16 +125,31 @@ export function readXmrExplorerLine(
 	return { list, quote };
 }
 
-/** The file's text with the key's value replaced (prefix and quoting kept). PURE. */
+/** The file's text with `key`'s value replaced (prefix and quoting kept). PURE. */
+export function writeExplorerLine(
+	text: string,
+	key: string,
+	list: readonly string[],
+	quote: '' | "'" | '"'
+): string {
+	return text.replace(
+		lineRe(key),
+		(_all, prefix: string) => `${prefix}${quote}${list.join(',')}${quote}`
+	);
+}
+
+/** PURE. The XMR line (the v1.20.2 names). */
+export function readXmrExplorerLine(
+	text: string
+): { readonly list: string[]; readonly quote: '' | "'" | '"' } | null {
+	return readExplorerLine(text, XMR_EXPLORER_ENV_KEY);
+}
 export function writeXmrExplorerLine(
 	text: string,
 	list: readonly string[],
 	quote: '' | "'" | '"'
 ): string {
-	return text.replace(
-		LINE_RE,
-		(_all, prefix: string) => `${prefix}${quote}${list.join(',')}${quote}`
-	);
+	return writeExplorerLine(text, XMR_EXPLORER_ENV_KEY, list, quote);
 }
 
 function readOffered(root: string): Set<string> {
@@ -157,18 +188,29 @@ export type ExplorerListOutcome =
 	  }
 	| { readonly kind: 'failed'; readonly reason: string };
 
-export function healXmrExplorerList(
+export interface ExplorerListSpec {
+	readonly key: string;
+	readonly defaults: readonly string[];
+	readonly retired: readonly string[];
+	/** Start of the operator-facing line, e.g. 'Monero fee checks'. */
+	readonly label: string;
+	/** Noun for a warning, e.g. 'Monero fee sources'. */
+	readonly what: string;
+}
+
+export function healExplorerList(
+	spec: ExplorerListSpec,
 	root = '',
 	log: (m: string) => void = () => {},
 	warn: (m: string) => void = () => {}
 ): ExplorerListOutcome {
 	const offered = readOffered(root);
-	const files = xmrExplorerEnvFiles(root).filter((f) => existsSync(f));
+	const files = explorerEnvFiles(root).filter((f) => existsSync(f));
 	const setting = files
 		.map((f) => {
 			try {
 				const text = readFileSync(f, 'utf8');
-				const line = readXmrExplorerLine(text);
+				const line = readExplorerLine(text, spec.key);
 				return line === null ? null : { f, text, line };
 			} catch {
 				return null;
@@ -183,9 +225,9 @@ export function healXmrExplorerList(
 	const addedAll = new Set<string>();
 	const removedAll = new Set<string>();
 	for (const { f, text, line } of setting) {
-		const plan = planXmrExplorerList(line.list, offered);
+		const plan = planExplorerList(line.list, offered, spec.defaults, spec.retired);
 		if (plan.next === null) continue;
-		const updated = writeXmrExplorerLine(text, plan.next, line.quote);
+		const updated = writeExplorerLine(text, spec.key, plan.next, line.quote);
 		try {
 			const mode = statSync(f).mode & 0o777;
 			const tmp = `${f}.morphit-tmp`;
@@ -193,14 +235,14 @@ export function healXmrExplorerList(
 			chmodSync(tmp, mode);
 			renameSync(tmp, f);
 			// Verify by reading back what is on disk.
-			const back = readXmrExplorerLine(readFileSync(f, 'utf8'));
+			const back = readExplorerLine(readFileSync(f, 'utf8'), spec.key);
 			if (back === null || back.list.join(',') !== plan.next.join(',')) {
-				warn(`Could not update the Monero fee sources in ${f} (read-back differs).`);
+				warn(`Could not update the ${spec.what} in ${f} (read-back differs).`);
 				return { kind: 'failed', reason: `read-back differs in ${f}` };
 			}
 		} catch (err) {
 			warn(
-				`Could not update the Monero fee sources in ${f}: ${err instanceof Error ? err.message : String(err)}`
+				`Could not update the ${spec.what} in ${f}: ${err instanceof Error ? err.message : String(err)}`
 			);
 			return { kind: 'failed', reason: String(err) };
 		}
@@ -210,13 +252,32 @@ export function healXmrExplorerList(
 	}
 	// Whatever the outcome, every current default has now been offered once.
 	const nextOffered = new Set(offered);
-	for (const d of DEFAULT_XMR_FEE_EXPLORERS) nextOffered.add(norm(d));
+	for (const d of spec.defaults) nextOffered.add(norm(d));
 	writeOffered(root, nextOffered);
 	if (changed.length === 0) return { kind: 'already' };
 	const parts: string[] = [];
 	if (addedAll.size > 0) parts.push(`added ${[...addedAll].join(', ')}`);
 	if (removedAll.size > 0)
 		parts.push(`removed ${[...removedAll].join(', ')} (no longer answering)`);
-	log(`Monero fee checks: ${parts.join('; ')}.`);
+	log(`${spec.label}: ${parts.join('; ')}.`);
 	return { kind: 'updated', files: changed, added: [...addedAll], removed: [...removedAll] };
+}
+
+export function healXmrExplorerList(
+	root = '',
+	log: (m: string) => void = () => {},
+	warn: (m: string) => void = () => {}
+): ExplorerListOutcome {
+	return healExplorerList(
+		{
+			key: XMR_EXPLORER_ENV_KEY,
+			defaults: DEFAULT_XMR_FEE_EXPLORERS,
+			retired: RETIRED_XMR_FEE_EXPLORERS,
+			label: 'Monero fee checks',
+			what: 'Monero fee sources'
+		},
+		root,
+		log,
+		warn
+	);
 }

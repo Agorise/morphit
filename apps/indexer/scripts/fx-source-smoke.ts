@@ -76,7 +76,7 @@ function makeComposite(
 		refreshIntervalMs: 1000,
 		staleThresholdMs: 3000,
 		now: () => clock.t,
-		// cp474 — the stub deliberately ignores the handler (the smoke drives the
+		// the stub deliberately ignores the handler (the smoke drives the
 		// clock by hand), so it can't structurally match setInterval's overloads;
 		// route through `unknown` rather than claim an overlap that isn't there.
 		setInterval: (() => 0) as unknown as typeof globalThis.setInterval,

@@ -1,6 +1,6 @@
 /**
  * hidden-rpc-https-config-smoke — MORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS written
- * with https:// (v1.20.0 fix wave 3). Runs the REAL loadConfig.
+ * with https://. Runs the REAL loadConfig.
  *
  * The hidden-network connectors now REFUSE an https:// URL (S9: Tor and I2P
  * carry plain HTTP; the network encrypts and authenticates). An operator-written

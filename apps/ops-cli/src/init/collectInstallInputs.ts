@@ -1,5 +1,5 @@
 /**
- * collectInstallInputs.ts (cp600) — the home/VPS branch of the grandma install.
+ * collectInstallInputs.ts — the home/VPS branch of the grandma install.
  *
  * Both a home box and a VPS get the SAME full hardened stack; the only
  * difference is networking, so this asks the few install-specific questions and
@@ -12,7 +12,13 @@
  * one).  Interactive, but every dependency is injectable so the flow is
  * unit-tested with scripted answers.
  */
-import { ask as realAsk, askChoice as realAskChoice, examples as realExamples, askPassword as realAskPassword, step } from './prompt.ts';
+import {
+	ask as realAsk,
+	askChoice as realAskChoice,
+	examples as realExamples,
+	askPassword as realAskPassword,
+	step
+} from './prompt.ts';
 import { checkDomainPointsHere } from './systemCheck.ts';
 import { withSpinner } from './spinner.ts';
 import {
@@ -23,6 +29,8 @@ import {
 	validateInstanceTitle,
 	validateMatrixAddress,
 	validateAlertMxid,
+	validateTorOnlyHomeserver,
+	validateAgeRecipient,
 	matrixToContactUrl,
 	resolveOperatorTag,
 	type AnsibleInstallInputs,
@@ -85,8 +93,8 @@ export async function askTorOnly(deps: CollectDeps = {}): Promise<boolean> {
 	print(
 		'\n  Note: the free HTTPS certificate needs the internet to reach this box from\n' +
 			'  outside. If your country blocks incoming connections, that can fail — and\n' +
-			'  Tor-only avoids it entirely (a .onion needs no certificate and can\'t be\n' +
-			'  blocked). If you\'re unsure whether your clearnet site is reachable from\n' +
+			"  Tor-only avoids it entirely (a .onion needs no certificate and can't be\n" +
+			"  blocked). If you're unsure whether your clearnet site is reachable from\n" +
 			'  abroad, Tor-only is the safe pick; you can always add a domain later.\n'
 	);
 	const idx = await askChoice('How will people reach your marketplace?', [
@@ -229,16 +237,37 @@ export async function collectInstallInputs(
 	).trim();
 	if (alertToken.length > 0) {
 		matrixAlertToken = alertToken;
-		const hs = (await ask('Alert bot homeserver', 'https://matrix.org')).trim();
-		matrixAlertHomeserver = hs.length > 0 ? hs : 'https://matrix.org';
+		if (!torOnly) {
+			const hs = (await ask('Alert bot homeserver', 'https://matrix.org')).trim();
+			matrixAlertHomeserver = hs.length > 0 ? hs : 'https://matrix.org';
+		} else {
+			// A tor-only node never talks to the clearnet: the bot may only use a
+			// homeserver on this machine or a .onion one, reached through Tor.
+			print(
+				'\n  This is a tor-only node, so the bot can only use a homeserver on this\n' +
+					'  machine or a .onion homeserver (reached through Tor). A clearnet\n' +
+					'  homeserver such as matrix.org would end this node\u2019s zero-clearnet\n' +
+					'  setup, so it is not offered. Press Enter to skip alerts.\n'
+			);
+			for (let attempt = 0; attempt < 5 && matrixAlertHomeserver === undefined; attempt++) {
+				const hs = (
+					await ask('Alert bot homeserver (http://\u2026.onion or http://127.0.0.1:\u2026)')
+				).trim();
+				if (hs === '') break;
+				const verdict = validateTorOnlyHomeserver(hs);
+				if (verdict === true) matrixAlertHomeserver = hs;
+				else print(`  \u2717 That ${verdict}.  Try again.\n`);
+			}
+			if (matrixAlertHomeserver === undefined) matrixAlertToken = undefined;
+		}
 		// Default the recipient to the operator's own contact account, but ONLY
 		// if that contact was a personal @user (a #room would leak private alerts,
 		// and validateAlertMxid rejects it anyway).
 		const defaultMxid = matrixAddress.startsWith('@') ? matrixAddress : undefined;
-		examples(['@you:matrix.org']);
+		if (matrixAlertToken !== undefined) examples(['@you:matrix.org']);
 		// Bounded: an empty entry skips (also stops an infinite re-prompt if stdin
 		// is non-interactive/EOF, e.g. a piped install), and 5 tries caps typos.
-		for (let attempt = 0; attempt < 5; attempt++) {
+		for (let attempt = 0; attempt < 5 && matrixAlertToken !== undefined; attempt++) {
 			const raw = (
 				await ask('Send alerts to your Matrix account (@you:server)', defaultMxid)
 			).trim();
@@ -295,6 +324,35 @@ export async function collectInstallInputs(
 		);
 	}
 
+	// Daily database backups: plain text unless encrypted to an
+	// age key whose secret half stays off this server.
+	step(0, 0, 'Encrypt your daily backups (recommended)');
+	print(
+		'\n  Every night this server saves a copy of its database, and keeps each copy\n' +
+			'  for 30 days. Without a key those copies are in plain text: anyone who gets\n' +
+			'  this disk, or a copy of it, can read them. With an age key they are\n' +
+			'  encrypted, and only the matching secret key (kept on YOUR computer, not\n' +
+			'  here) can open them.\n' +
+			'\n' +
+			'  To make one, on your own computer (not this server):\n' +
+			'      age-keygen -o morphit-backup-key.txt\n' +
+			'  Keep that file safe (you need it to restore), and paste the line it\n' +
+			'  prints after "Public key:" here. Press Enter to keep plain-text backups.\n'
+	);
+	let backupAgeRecipient: string | undefined;
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const raw = (
+			await ask('Backup encryption: your age public key (age1\u2026; Enter to skip)')
+		).trim();
+		if (raw === '') break;
+		const verdict = validateAgeRecipient(raw);
+		if (verdict === true) {
+			backupAgeRecipient = raw;
+			break;
+		}
+		print(`  \u2717 That ${verdict}.  Try again.\n`);
+	}
+
 	// Whether to list this instance on-chain is NOT asked here — it's offered
 	// AFTER the install summary (in runAnsibleInstall), so the operator decides
 	// once they can see the node actually came up.  We bake auto-register OFF; the
@@ -329,6 +387,7 @@ export async function collectInstallInputs(
 		matrixAlertHomeserver,
 		matrixAlertToken,
 		matrixAlertMxid,
-		installMatrixBotDeferred
+		installMatrixBotDeferred,
+		backupAgeRecipient
 	};
 }

@@ -1,5 +1,5 @@
 /**
- * Unit test — POST /v1/chain/condenser (cp410).
+ * Unit test — POST /v1/chain/condenser.
  *
  * The generic read-only condenser relay: the ONLY path by which the browser
  * reads the Blurt chain (every other browser→node read was removed for

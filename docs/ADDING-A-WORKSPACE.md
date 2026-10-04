@@ -5,19 +5,19 @@ workspace (under `apps/` or `packages/`) to the Morphit
 monorepo.  Follow it whenever you add `apps/<new-thing>/` or
 `packages/<new-thing>/` — even if the new workspace seems tiny.
 
-The cp140 → cp146 progression is what this doc exists to
-prevent.  `apps/mcp-server` was added in cp140, and four
+The → progression is what this doc exists to
+prevent.  `apps/mcp-server` was added, and four
 separate problems went undetected for ~24 hours, each of them
 caused by skipping one sub-pipeline of the install + build +
 publish + smoke surface:
 
-- **cp142** — The new workspace's smoke spawned `node dist/main.js`, but `dist/` was gitignored and never built.  Smoke hung indefinitely on every fresh checkout (including every CI run).
-- **cp143** — The hang would burn the runner's full default ceiling.  Added per-smoke timeout as a runtime complement.
-- **cp144** — `package-lock.json` was never regenerated after adding the workspace.  `npm ci` (CI's install command) refused to install with EUSAGE for ~24 hours.  Every downstream CI job was red.
-- **cp145** — No CI job had `timeout-minutes`.  Defense-in-depth complement to cp143.
-- **cp146** — The workspace's `package.json:files` array declared `LICENSE` but the file didn't exist.  `npm publish` would have shipped a tarball without a license.
+- **Dist never built.** The new workspace's smoke spawned `node dist/main.js`, but `dist/` was gitignored and never built.  Smoke hung indefinitely on every fresh checkout (including every CI run).
+- **No smoke timeout.** The hang would burn the runner's full default ceiling.  Added per-smoke timeout as a runtime complement.
+- **Stale lockfile.** `package-lock.json` was never regenerated after adding the workspace.  `npm ci` (CI's install command) refused to install with EUSAGE for ~24 hours.  Every downstream CI job was red.
+- **No job timeout.** No CI job had `timeout-minutes`.  Defense-in-depth complement.
+- **Missing packaged file.** The workspace's `package.json:files` array declared `LICENSE` but the file didn't exist.  `npm publish` would have shipped a tarball without a license.
 
-Read those checkpoints in `docs/REVISIT-LIST.md` before doing
+Read those checkpoints in the project backlog before doing
 this work — the lessons there explain *why* each step matters,
 not just what to do.
 
@@ -59,7 +59,7 @@ multiplies the work below.
   via `tsx` at runtime); `npm run build` is a no-op or absent.
 - **Yes** (e.g. `apps/mcp-server` ships `dist/main.js` as its
   bin): the workspace needs a `build` script + `tsconfig.build.json`
-  + a smoke that lazy-builds.  See cp142 lesson #2 in REVISIT.
+  + a smoke that lazy-builds.  lesson #2 in the backlog.
 
 ### 4. Does it call out over the network?
 
@@ -179,7 +179,7 @@ cp LICENSE apps/<name>/LICENSE
 ```
 
 This is non-negotiable.  `npm publish` silently skips missing
-files from the `files` array — the cp146 `package-files-exist-smoke`
+files from the `files` array — the `package-files-exist-smoke`
 catches this, but it's easier to do it right the first time.
 
 ---
@@ -211,7 +211,7 @@ npm install
 git diff package-lock.json | head -20    # confirm new workspace entries appear
 ```
 
-**Do not skip this step.**  This is the cp144 failure mode.
+**Do not skip this step.**  This is the failure mode.
 Adding the workspace to `package.json:workspaces` without
 regenerating the lockfile causes CI's `npm ci` to fail with
 EUSAGE, gating every downstream job.
@@ -256,7 +256,7 @@ Add a build step to `.forgejo/workflows/ci.yml`'s smokes job:
           npm run build -w apps/<your-new-workspace>   # <-- add
 ```
 
-The cp142 `spawn-dist-prebuild-coverage-smoke` will fail if a
+The `spawn-dist-prebuild-coverage-smoke` will fail if a
 smoke spawns from `dist/` without a corresponding guard; the
 CI build step is the legible counterpart so failures surface
 as a named step rather than buried in smoke output.
@@ -280,7 +280,7 @@ Create `apps/<name>/scripts/<name>-smoke.ts` covering:
 
 ### 2. If the workspace spawns its own bin from `dist/`
 
-Read `scripts/spawn-dist-prebuild-coverage-smoke.ts` (cp142).
+Read `scripts/spawn-dist-prebuild-coverage-smoke.ts`.
 The smoke MUST contain either `ensureBuilt(` or `existsSync(<dist path>)`
 before the spawn, in non-comment code.  The meta-smoke verifies
 this with a comment-stripped scan; without the guard, the
@@ -312,7 +312,7 @@ SMOKES=(
 )
 ```
 
-The runner counts smokes by parsing this array.  cp143's
+The runner counts smokes by parsing this array.  A
 `timeout --signal=TERM --kill-after=5 240` wraps each smoke;
 if your smoke needs longer than 240 seconds, write it so it
 DOESN'T (split into multiple smokes; reduce scenario size).
@@ -326,8 +326,8 @@ convention as every other smoke in the repo.
 
 ### 5. If the workspace ships compiled artifacts, also build dist/ at smoke startup
 
-The cp142 self-healing pattern.  Without it, a fresh-checkout
-CI run hangs indefinitely (which cp143 catches with a 240s
+The self-healing pattern.  Without it, a fresh-checkout
+CI run hangs indefinitely (which a later change catches with a 240s
 timeout, but you don't want hangs in the first place).
 
 ---
@@ -391,17 +391,17 @@ Zero errors and zero warnings.
 
 ### 6. Meta-smokes
 
-The four cp142–146 meta-smokes are in the run-smokes.sh
+The four meta-smokes for these are in the run-smokes.sh
 battery and should all pass automatically:
 
-- `spawn-dist-prebuild-coverage-smoke` (cp142)
-- `lockfile-sync-smoke` (cp144)
-- `ci-workflow-hardening-smoke` (cp145)
-- `package-files-exist-smoke` (cp146)
+- `spawn-dist-prebuild-coverage-smoke`
+- `lockfile-sync-smoke`
+- `ci-workflow-hardening-smoke`
+- `package-files-exist-smoke`
 
 If any of these fail, the failure message points at the file +
 class-of-bug.  Don't bypass them — they exist because the
-cp140 oversight that this doc exists to prevent.
+oversight that this doc exists to prevent.
 
 ---
 
@@ -414,7 +414,7 @@ cp140 oversight that this doc exists to prevent.
 - What the workspace does in one paragraph.
 - How to install / run it (from-source instructions first;
   npm / Docker forthcoming markers if those pipelines haven't
-  shipped yet — cp146 lesson #4).
+  shipped yet — lesson #4).
 - Configuration env vars (with defaults).
 - Privacy posture if the workspace is user-facing.
 - Where to file bugs (`git.agorise.net/agorise/morphit/issues`).
@@ -443,15 +443,15 @@ inserted in the proper themed section.
 
 ### 4. Update this doc if you find a new gotcha
 
-If your workspace add surfaces a problem that none of cp142–
-cp146 caught, add it as a new cp checkpoint with REVISIT entry
+If your workspace add surfaces a problem that none–
+A later change caught, add it as a new cp checkpoint with backlog entry
 + extend this doc.  Then we've raised the floor for next time.
 
 ---
 
 ## What gets caught automatically
 
-The cp142–cp146 meta-smokes catch the following classes
+The meta-smokes catch the following classes
 without any action on your part:
 
 | Smoke | Catches |
@@ -466,7 +466,7 @@ needing it.
 
 ---
 
-## Reference: the cp140 → cp146 sequence
+## Reference: the → sequence
 
 | cp | Caught | Fix |
 |---|---|---|

@@ -1,5 +1,5 @@
 /**
- * Morphit — release-op builder (cp317).
+ * Morphit — release-op builder.
  *
  * Pure, network-free, key-free helpers shared by the
  * `release-broadcast` CLI and its smoke.  Given the JSON payload
@@ -26,7 +26,7 @@ export const RELEASE_OP_ID = 'morphit_release_v1';
  *  with `o.json.length() <= BLURT_CUSTOM_OP_DATA_MAX_LENGTH`.  The
  *  whole release payload (version + hash_manifest + endpoints +
  *  treasury) is that `json` field, so it — not just the manifest —
- *  must fit here.  (cp430: a 16 KB manifest sailed past the 64 KB
+ *  must fit here.  (a 16 KB manifest sailed past the 64 KB
  *  schema cap and only failed at broadcast, AFTER the operator had
  *  already pasted their key.  This guard now catches it up front.) */
 export const BLURT_CUSTOM_JSON_MAX_BYTES = 8192;
@@ -54,7 +54,7 @@ export interface ReleaseCustomJsonOp {
  *  refuses a payload the builder happily emitted. */
 const SECRET_HEX_RE = /\b[0-9a-f]{64}\b/;
 
-/** Throws if `payloadJson` contains a 64-hex run — the Part 107/109
+/** Throws if `payloadJson` contains a 64-hex run — the
  *  invariant enforced again at the broadcast boundary so a Monero
  *  view key (or any private key) can NEVER reach the chain through a
  *  hand-edited release.json.  Pass the payload with the distribution
@@ -70,8 +70,7 @@ export function assertNoSecretHex(payloadJson: string): void {
 	}
 }
 
-/** Blurt account-name shape — the project-canonical regex (cp175
- *  F-007): 3–16 chars, lowercase, leading letter, `[a-z0-9.-]`
+/** Blurt account-name shape — the project-canonical regex: 3–16 chars, lowercase, leading letter, `[a-z0-9.-]`
  *  interior.  Kept byte-identical to every other account-name regex
  *  in the tree (blurt-account-regex-parity sentinel). */
 const ACCOUNT_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
@@ -100,10 +99,10 @@ export function buildReleaseCustomJsonOp(
 	if (!result.ok) {
 		throw new Error(`release payload failed validation: ${result.reason}`);
 	}
-	// Part 107/109 secret-hex guard — but EXCLUDE the distribution block,
+	// secret-hex guard — but EXCLUDE the distribution block,
 	// whose source_sha256 (and the 64-hex form of gpg_fingerprint) are
 	// LEGITIMATELY 64 lowercase hex and are strictly validated by
-	// validateReleasePayload above (cp556).  This mirrors the identical
+	// validateReleasePayload above.  This mirrors the identical
 	// exclusion in the builder (release-build-payload.ts), so the
 	// broadcaster never refuses a payload the builder happily emitted.  A
 	// re-introduced XMR view key would live in the TREASURY block, which is

@@ -3,8 +3,8 @@
  * Smoke for heading-hierarchy a11y on every public-page
  * route.
  *
- * Deferred from Part 100's Memory #11 Category N a11y
- * audit; closed in Part 102.
+ * Deferred from the a11y audit, Category N
+ * audit; closed.
  *
  * Why this matters: screen-reader users navigate by
  * heading level (key 1 / 2 / 3 / 4 / 5 / 6 in NVDA, JAWS,
@@ -67,7 +67,7 @@ const ALLOW_LIST: ReadonlySet<string> = new Set([
 	// /onboarding/register-name — same pattern.
 	'apps/web/src/routes/[lang]/onboarding/register-name/+page.svelte',
 	// /cheat-sheet uses the visibility-isolation pattern
-	// from Memory #29 — a `screen-only` div renders one
+	// — a `screen-only` div renders one
 	// <h1> for the on-screen UI and a sibling
 	// `morphit-cheat-sheet` div renders an identical
 	// <h1> for the print output.  The print-half has

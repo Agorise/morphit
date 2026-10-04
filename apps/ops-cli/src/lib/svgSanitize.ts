@@ -8,7 +8,7 @@
  * file or site, no CSS escape tricks.
  *
  * WHY AN ALLOWLIST. The first version refused known-bad patterns with regexes.
- * A deep-deep red team walked straight past it with a namespace prefix
+ * A deep audit red team walked straight past it with a namespace prefix
  * (`<h:script xmlns:h="http://www.w3.org/1999/xhtml">` is a live script
  * element the regex `/<script\b/` never sees), CSS escapes (`url(\68ttps:…)`)
  * and protocol-relative URLs (`url(//host/…)`). So this parses the file into

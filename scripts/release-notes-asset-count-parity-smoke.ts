@@ -3,14 +3,14 @@
  * scripts/release-notes-asset-count-parity-smoke.ts
  *
  * Structural Defense #36 — release-notes asset-count parity
- * (cp84 Lesson #4 #1, shipped cp85).
+ * (Lesson #4 #1, shipped).
  *
- * Catches the cp84-A1 drift class: RELEASE-NOTES-*.md carries
+ * Catches the drift class: RELEASE-NOTES-*.md carries
  * literal asset-count claims ("Sixteen tradable assets",
  * "thirteen are trade-only", "Three can pay listing fees") that
  * silently go stale as new assets are added to the registry.
  *
- * The cp84 manual fix touched 5 sections to bring counts back
+ * The manual fix touched 5 sections to bring counts back
  * in line.  Without this smoke, the next asset addition would
  * leak the same drift.
  *
@@ -63,7 +63,7 @@ if (!tickersMatch) {
 	process.exit(1);
 }
 const tickerStrings = tickersMatch[1]!.match(/'[A-Z0-9]+'/g) ?? [];
-// cp425 — these release-notes counts describe the tradable *cryptocurrencies*
+// these release-notes counts describe the tradable *cryptocurrencies*
 // ("N tradable assets", "N trade-only", "N can pay listing fees"). Goods assets
 // (barter) are a distinct category with their own release-notes section, not one
 // of the coins, so they must NOT count here. Derive the goods tickers straight

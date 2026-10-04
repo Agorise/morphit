@@ -28,15 +28,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 
 /** Files that expose orders to non-owner viewers and must
- *  therefore allow both verification paths. The RSS routes
- *  live in rssOrderbookHandlers.ts (rssOrderbook.ts is now a
- *  thin Hono adapter with no SQL of its own — the lint
- *  follows the SQL). */
-const PROTECTED_FILES = [
-	'src/api/orderbook.ts',
-	'src/api/rssOrderbookHandlers.ts',
-	'src/api/featuredOrderbook.ts'
-];
+ *  therefore allow both verification paths. The REST orderbook,
+ *  its SSE stream and the RSS/Atom/JSON feeds all take their
+ *  WHERE from buildWhereClauses in orderbookStreamHelpers.ts, and
+ *  the featured strip from featuredVisibility.ts — the lint follows
+ *  the SQL. */
+const PROTECTED_FILES = ['src/api/orderbookStreamHelpers.ts', 'src/api/featuredVisibility.ts'];
 
 /** The exact anti-pattern: a hardcoded single-value filter
  *  that would silently exclude attestation-verified orders.

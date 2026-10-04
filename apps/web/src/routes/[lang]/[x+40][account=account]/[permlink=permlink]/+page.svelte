@@ -4,7 +4,7 @@
 	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
 	import { orderTitleParts } from '$lib/utils/orderTitle';
 
-	// cp242 — per-locale internal-link wrapper (cp7 design: every
+	// per-locale internal-link wrapper (design: every
 	// internal link is locale-prefixed; bare 2-segment paths 404).
 	const currentLang = $derived(($page.data?.lang ?? DEFAULT_LOCALE) as LocaleCode);
 	const lp = $derived((path: string) => localePath(path, currentLang));
@@ -17,7 +17,7 @@
 	 * location, expiry) plus the poster's identity and a link back
 	 * to their profile for reputation.
 	 *
-	 * Owner actions live here too (cp363+): when the signed-in user
+	 * Owner actions live here too (later): when the signed-in user
 	 * is the poster, an owner-only card offers edit/cancel while the
 	 * order is live, and Re-list once it has expired — mirroring the
 	 * affordances on /my/orders so either entry point works.
@@ -33,7 +33,7 @@
 	 * would need pagination; not a Phase 5 problem.
 	 */
 
-	import { onMount, onDestroy } from 'svelte';
+	import { untrack } from 'svelte';
 	import {
 		EDIT_WINDOW_MS,
 		editWindowRemainingSeconds,
@@ -60,7 +60,7 @@
 	import { recordCancel, applyRecentCancels } from '$lib/orders/recentCancels';
 	import { applyRecentCompletes } from '$lib/orders/recentCompletes';
 	import { KeystoreError } from '$crypto/keystore';
-	import { getOrdersByAccount } from '$lib/indexer/client';
+	import { getOrder } from '$lib/indexer/client';
 	import { createOrderbookStream, type OrderbookStreamHandle } from '$lib/orderbook/stream';
 	import { pendingOrders, mergePendingOrders, pendingOrderKeys } from '$lib/stores/pendingOrders';
 	import { orderEchoKey } from '$lib/stores/pendingEcho';
@@ -103,8 +103,9 @@
 	// The fix is NOT a longer retry (that just replaces "Order not found" with 90
 	// seconds of spinner). `pendingOrders` means this browser already has the
 	// order it just broadcast, so the not-found path is now only reachable for an
-	// order this browser did NOT post — where "not found" is the honest answer and
-	// a long retry would be pure delay. The window stays modest on purpose.
+	// order this browser did NOT post. The retry (and its "being posted" copy)
+	// runs only for the poster's own account — another device of theirs; anyone
+	// else gets the honest "not found" at once. The window stays modest.
 	const ORDER_RETRY_ATTEMPTS = 8;
 	const ORDER_RETRY_INTERVAL_MS = 3000;
 	let orderRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -137,7 +138,7 @@
 	 *  instantly without a second round-trip. */
 	let posterProfile = $state<ProfileResponse | null>(null);
 	/** False until the poster's profile has been fetched at least once.
-	 *  v1.8.13 (the maintainer) — without this the card asserted `@account` + identicon and
+	 *  v1.8.13 — without this the card asserted `@account` + identicon and
 	 *  rewrote itself once the fetch landed. On the page where someone decides
 	 *  whether to trade with this person, an identity that changes on its own is
 	 *  a trust defect, not a loading state. */
@@ -162,15 +163,26 @@
 	/** Non-empty when the last cancel attempt failed. */
 	let cancelError = $state('');
 
+	/** Bumped whenever the route's order changes, so a reply for the previous
+	 *  order (SvelteKit reuses this component across /@a/x → /@b/y) is dropped. */
+	let loadGen = 0;
+
 	async function loadOrder(attempt = 0): Promise<void> {
+		const gen = loadGen;
+		const a = account;
+		const p = permlink;
 		if (attempt === 0) phase = 'loading';
-		const r = await getOrdersByAccount(account, { limit: 100 });
-		if (!r.ok) {
+		// The order itself, whatever its age: searching the account's newest page
+		// reported live orders past the hundredth as "not found".
+		const r = await getOrder(a, p);
+		if (gen !== loadGen) return;
+		if (!r.ok && r.code !== 'not_found') {
 			console.warn('[listing-detail] loadOrder failed:', r.message);
 			errorMessage = $_('order_detail.error_load_failed');
 			phase = 'error';
 			return;
 		}
+		const indexed: OrderRecord[] = r.ok ? [r.data.item] : [];
 		// v1.7.0 — consult this browser's own just-broadcast orders alongside the
 		// indexer's. The indexer is authoritative and wins whenever it has the row
 		// (findOrderWithPending prefers it); the staged copy only covers the
@@ -178,7 +190,7 @@
 		// v1.7.0 — two provisional overlays, each authoritative for its own case:
 		//
 		//   applyRecentCancels / applyRecentCompletes — a cancel or complete this
-		//     session broadcast. This page RECORDED cancels (t.txt #6/#7) and never
+		//     session broadcast. This page RECORDED cancels and never
 		//     APPLIED either, so cancelling or completing from /my/orders and then
 		//     opening the order showed it "live" for the ~45-63s the indexer needs.
 		//     It recorded the truth and then didn't use it.
@@ -195,10 +207,10 @@
 		// post that the user has since cancelled is not in `r.data.items` at all
 		// (the indexer has never seen it), so applying cancels to that list alone
 		// would leave the staged copy reading "live" on a cancelled order.
-		const merged = mergePendingOrders(r.data.items, get(pendingOrders), Date.now());
+		const merged = mergePendingOrders(indexed, get(pendingOrders), Date.now());
 		const found =
 			applyRecentCompletes(applyRecentCancels(merged)).find(
-				(o) => o.account === account && o.permlink === permlink
+				(o) => o.account === a && o.permlink === p
 			) ?? null;
 		if (found) {
 			order = found;
@@ -210,8 +222,10 @@
 		// the new block, so an instant "Order not found" reads as "my money
 		// vanished". A freshly-posted order is almost always just mid-indexing
 		// (block time + indexer poll lag), so show a reassuring "still posting"
-		// state and retry a few times before ever saying not-found.
-		if (attempt < ORDER_RETRY_ATTEMPTS) {
+		// state and retry a few times before ever saying not-found. Only for the
+		// poster: telling a stranger "your order is being posted" about a typo'd
+		// or deleted link was wrong.
+		if (viewerAccount === a && attempt < ORDER_RETRY_ATTEMPTS) {
 			phase = 'pending';
 			orderRetryTimer = setTimeout(() => {
 				void loadOrder(attempt + 1);
@@ -234,7 +248,10 @@
 	async function loadPosterProfile(): Promise<void> {
 		// Silent: if the profile fetch fails, OrderPosterIdentity renders
 		// its identicon fallback cleanly.
-		posterProfile = await getProfileCached(account);
+		const gen = loadGen;
+		const p = await getProfileCached(account);
+		if (gen !== loadGen) return;
+		posterProfile = p;
 		posterProfileResolved = true;
 	}
 
@@ -242,24 +259,27 @@
 		// Best-effort, same-origin (indexer /keys proxy — no browser→RPC,
 		// no dblurt on this page). Silent on failure: the poster card
 		// still shows the name + identicon, just without the key line.
+		const gen = loadGen;
+		let key: string | null = null;
 		try {
 			const keys = await fetchAccountKeys(resolveOrigin(MORPHIT_INDEXER_ORIGIN), account, fetch);
 			const k = keys?.posting?.key_auths?.[0]?.[0];
-			posterPostingKey = typeof k === 'string' ? k : null;
+			key = typeof k === 'string' ? k : null;
 		} catch {
-			posterPostingKey = null;
+			key = null;
 		}
+		if (gen === loadGen) posterPostingKey = key;
 	}
 
 	/** v1.7.0 "fastorderstatuschange" (ADR-0051) — live subscription for THIS order.
 	 *
-	 *  the maintainer: "if i am looking at an order detail page and its status changes, i want
-	 *  the pills to update WHILE i am looking at the page."
+	 *  Requirement: when an order's status changes while its detail page is open, the pills
+	 *  update in place.
 	 *
 	 *  Only ONE case is actually stale, and it's worth being precise about which:
 	 *    - Live→Expired already flips client-side off `expires_at`.
 	 *    - Payment status ("funds sent") is a CHAT message, so it already rides the
-	 *      chat fast path (cp403).
+	 *      chat fast path.
 	 *    - Cancel/complete by the OWNER, viewed by the owner, is instant already —
 	 *      they did it on this page (`recordCancel`).
 	 *  What's left: watching SOMEONE ELSE'S order when the owner cancels or
@@ -306,22 +326,34 @@
 		orderStream.start();
 	}
 
-	onMount(() => {
-		void loadOrder();
-		void loadPosterProfile();
-		void loadPosterPostingKey();
-		startOrderStream();
-	});
-
-	onDestroy(() => {
-		if (orderRetryTimer !== null) {
-			clearTimeout(orderRetryTimer);
-			orderRetryTimer = null;
-		}
-		// An EventSource that outlives the page holds a server connection open for a
-		// user who has navigated away.
-		orderStream?.stop();
-		orderStream = null;
+	// Load (and subscribe) for the order in the URL, and again whenever it
+	// changes: SvelteKit keeps this component when the user follows a link
+	// from one order to another, so a mount-only load kept showing the first.
+	$effect(() => {
+		void account;
+		void permlink;
+		untrack(() => {
+			loadGen++;
+			order = null;
+			noLongerLive = false;
+			posterProfile = null;
+			posterProfileResolved = false;
+			posterPostingKey = null;
+			void loadOrder();
+			void loadPosterProfile();
+			void loadPosterPostingKey();
+			startOrderStream();
+		});
+		return () => {
+			if (orderRetryTimer !== null) {
+				clearTimeout(orderRetryTimer);
+				orderRetryTimer = null;
+			}
+			// An EventSource that outlives the page (or the order) holds a server
+			// connection open for an order nobody is looking at.
+			orderStream?.stop();
+			orderStream = null;
+		};
 	});
 
 	// ─── Ownership + owner-only actions ────────────────────────────
@@ -346,7 +378,7 @@
 	/** v1.7.0 "fastdisplaycurrentstatus" (ADR-0051 §3) — is the order on screen the
 	 *  one THIS browser just broadcast, rather than one the indexer served?
 	 *
-	 *  the maintainer: "never make the user wonder what is going on."
+	 *  Requirement: never leave the user wondering what is going on.
 	 *
 	 *  A staged order renders from `pendingOrders` with `status: 'live'`, which is
 	 *  true — and, unlabelled, misleading. It is on chain; it is NOT yet in the
@@ -355,7 +387,7 @@
 	 *  yet. Left unmarked, the honest reading of the page is "my order is live",
 	 *  and the user's first clue otherwise is a friend saying they can't find it.
 	 *
-	 *  ADR-0051 §3 requires exactly this label and I owed it: "the user gets
+	 *  ADR-0051 §3 requires exactly this label: "the user gets
 	 *  feedback in ~6s, not finality in ~6s, and is never misled about which one
 	 *  they have."
 	 *
@@ -390,7 +422,7 @@
 	 *  + expiry — never a silent re-sign of the old one). */
 	function relistOrder(): void {
 		if (!order) return;
-		safeSession.set(RELIST_PREFILL_KEY, JSON.stringify(buildRelistPrefill(order)));
+		safeSession.set(RELIST_PREFILL_KEY, JSON.stringify(buildRelistPrefill(order, currentLang)));
 		void gotoLocale('/post');
 	}
 
@@ -444,7 +476,7 @@
 		try {
 			await broadcastOrderCancel(state.live, order.permlink);
 			cancelled = true;
-			// t.txt #6/#7 — record the cancel so /my/orders reflects it INSTANTLY
+			// record the cancel so /my/orders reflects it INSTANTLY
 			// on arrival: its load() runs applyRecentCancels, which shows this
 			// order as Cancelled (and fixes the Live/Cancelled pill counts) even
 			// though the indexer lags ~1min. No artificial wait needed — the
@@ -465,7 +497,7 @@
 			pendingCancel = false;
 		}
 
-		// the maintainer: confirming the cancel used to leave you sitting on the same page,
+		// Requirement: confirming the cancel used to leave you sitting on the same page,
 		// still staring at the red "Cancel this order" button, with no evidence
 		// anything happened. Take the user to /my/orders, where the order now
 		// shows as Cancelled.
@@ -488,13 +520,15 @@
 	function formatTimeUntil(iso: string): string {
 		const diff = new Date(iso).getTime() - Date.now();
 		if (diff <= 0) return $_('profile.expires_now') as string;
+		// Short units in the reader's language ("5 min", "3 Std.", "2 дн.").
+		const unit = (n: number, u: 'minute' | 'hour' | 'day'): string =>
+			new Intl.NumberFormat(currentLang, { style: 'unit', unit: u, unitDisplay: 'narrow' }).format(n);
 		const minutes = Math.floor(diff / 60_000);
-		if (minutes < 1) return '<1m';
-		if (minutes < 60) return `${minutes}m`;
+		if (minutes < 1) return `<${unit(1, 'minute')}`;
+		if (minutes < 60) return unit(minutes, 'minute');
 		const hours = Math.floor(minutes / 60);
-		if (hours < 24) return `${hours}h`;
-		const days = Math.floor(hours / 24);
-		return `${days}d`;
+		if (hours < 24) return unit(hours, 'hour');
+		return unit(Math.floor(hours / 24), 'day');
 	}
 
 	function formatAbsoluteDate(iso: string): string {
@@ -721,7 +755,7 @@
 					</a>
 				</div>
 			{/if}
-			<!-- v1.8.15 (t.txt #5) — the same suspicious-reciprocity trust pill as
+			<!-- v1.8.15 — the same suspicious-reciprocity trust pill as
 			     the profile Reputation card, pinned bottom-right. order carries
 			     reciprocity_flagged from /v1/orders/:account (v1.8.15). -->
 			<div class="mt-4 flex justify-end">
@@ -884,7 +918,7 @@
 				</h2>
 
 				{#if $isPairedReadOnly}
-					<!-- Part 116: paired-readonly users see explicit
+					<!-- paired-readonly users see explicit
 					     affordances for edit + cancel pointing at their
 					     phone (with permlink preserved), instead of a
 					     misleading "session locked" hint. -->
@@ -910,7 +944,7 @@
 					{#if isOrderExpired(order, nowMs) || order.status === 'cancelled'}
 						<!-- Expired OR cancelled: nothing live to edit or cancel —
 						     offer a fresh Re-list (a new order with a new permlink +
-						     expiry) via the same prefill path as /my/orders. the maintainer: a
+						     expiry) via the same prefill path as /my/orders. Requirement: a
 						     cancelled order re-lists here exactly like an expired one;
 						     the on-chain order itself stays cancelled/immutable. Being
 						     the first branch, it also skips the Edit/Cancel actions
@@ -921,7 +955,7 @@
 					{:else if withinEditWindow(order)}
 						{@const editLeft = editSecondsLeft(order)}
 						<div class="flex flex-col gap-2 sm:flex-row">
-							<!-- #21 (the maintainer) — the Edit button carries its own live countdown and
+							<!-- the Edit button carries its own live countdown and
 							     removes itself the instant the 15-minute window closes. The
 							     branch is guarded by the same ticking `nowMs`, so there is no
 							     window in which the label says 0s but the button still sits

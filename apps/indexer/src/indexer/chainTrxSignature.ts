@@ -1,7 +1,7 @@
 /**
  * Morphit indexer — "did this account really sign this block transaction?"
  *
- * WHY THIS EXISTS (v1.20.0 fix wave, E1). The head tailer reads a head block
+ * WHY THIS EXISTS. The head tailer reads a head block
  * from ONE RPC endpoint — whichever the pool ranks first — and used to emit
  * every chat op in it as a live message from the account the op NAMES. Nothing
  * checked a signature: a single hostile endpoint in the pool could hand us a

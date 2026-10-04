@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Smoke for the accessibility patterns established in
- * Memory #11 Category N (Part 100).
+ * The a11y audit's Category N.
  *
  * Asserts structural invariants that svelte-check's
  * standard a11y rules don't catch:
@@ -115,7 +115,7 @@ const scenarios: readonly Scenario[] = [
 	},
 
 	// ─── /post field validation aria ───────────────────────
-	// The fiat field is a FiatCurrencySelect combobox (cp295): the page
+	// The fiat field is a FiatCurrencySelect combobox: the page
 	// passes invalid/describedById, and the component forwards them to its
 	// <input role="combobox"> as aria-invalid / aria-describedby — the same
 	// error association the old native input had. Both legs are checked.
@@ -136,10 +136,10 @@ const scenarios: readonly Scenario[] = [
 		ok: /<StatusLine[^>]*id="fiat-error"[^>]*>\{fiatError\}/.test(POST)
 	},
 	// NB /post's amount + price inputs are one-way `value={…}` +
-	// `oninput` (cp360: the decimal sanitiser keepDecimal/keepSignedDecimal
+	// `oninput` (the decimal sanitiser keepDecimal/keepSignedDecimal
 	// can't run cleanly through a two-way bind), so these match `value={…}`
 	// not `bind:value={…}`.  /post/edit (below) still uses bind:value.
-	// cp368 split the shared `amountError` into per-field `amountMinHasError`
+	// A later change split the shared `amountError` into per-field `amountMinHasError`
 	// / `amountMaxHasError` and gated the red on `amountTouched` /
 	// `fixedPriceTouched` (premature-red fix).  The a11y requirement is that
 	// each input still carries an aria-invalid wired to the field's OWN error
@@ -170,7 +170,7 @@ const scenarios: readonly Scenario[] = [
 	},
 
 	// ─── /post/edit field validation aria ──────────────────
-	// (cp401: fiat is now a read-only locked-substance chip — no fiat
+	// (fiat is now a read-only locked-substance chip — no fiat
 	//  input, so the former fiat aria-invalid / edit-fiat-error checks
 	//  were removed. side/asset/fiat/network are immutable in a replace.)
 	{
@@ -198,7 +198,7 @@ const scenarios: readonly Scenario[] = [
 			/kind === 'error' \? 'assertive' : 'polite'/.test(STATUS_LINE)
 	},
 
-	// ─── Layout afterNavigate focus management (Part 102) ─
+	// ─── Layout afterNavigate focus management ─
 	{
 		name: 'Layout imports afterNavigate from $app/navigation',
 		ok: /import\s*\{[^}]*afterNavigate[^}]*\}\s*from\s*['"]\$app\/navigation['"]/.test(LAYOUT)
@@ -208,7 +208,7 @@ const scenarios: readonly Scenario[] = [
 		ok: /afterNavigate\s*\(\s*\(\s*nav\s*\)\s*=>[\s\S]{0,1100}mainEl\?\.focus\(/.test(LAYOUT)
 	},
 	{
-		// cp305 — the focus MUST be { preventScroll: true }. A plain
+		// the focus MUST be { preventScroll: true }. A plain
 		// .focus() scrolls <main> into view, and with the sticky top-0
 		// header that tucks the page's top heading under the header on
 		// every client-side navigation. Guarding so the scroll bug
@@ -225,7 +225,7 @@ const scenarios: readonly Scenario[] = [
 		ok: /<main\b[^>]*bind:this=\{mainEl\}/.test(LAYOUT)
 	},
 
-	// ─── PaymentMethodsPicker aria props (Part 102) ────────
+	// ─── PaymentMethodsPicker aria props ────────
 	{
 		name: 'PaymentMethodsPicker accepts invalid + describedById props',
 		ok: /invalid\?:\s*boolean/.test(PICKER) && /describedById\?:\s*string/.test(PICKER)
@@ -250,9 +250,9 @@ const scenarios: readonly Scenario[] = [
 		name: '/post/edit passes invalid + describedById to PaymentMethodsPicker',
 		ok: /<PaymentMethodsPicker\b[\s\S]{0,400}invalid=\{!!pmError\}[\s\S]{0,200}describedById="edit-pm-error"/.test(POST_EDIT)
 	},
-	// ─── Form-field id/name (cp371 — clears the "a form field should
+	// ─── Form-field id/name (clears the "a form field should
 	//     have an id or name attribute" autofill warning the maintainer flagged;
-	//     completes the cp369 form-id/name pass) ──────────────────
+	//     completes the form-id/name pass) ──────────────────
 	{
 		name: 'PaymentMethodsPicker search input carries a name',
 		ok: PICKER.includes('name="payment-methods-search"')

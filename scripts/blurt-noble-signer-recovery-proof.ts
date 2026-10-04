@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /*
- * blurt-noble-signer-recovery-proof — cp173 elliptic-migration feasibility proof.
+ * blurt-noble-signer-recovery-proof — elliptic-migration feasibility proof.
  *
  * Proves the ONLY property the elliptic→@noble/secp256k1 signing migration
  * actually requires: that a @noble/secp256k1-based Blurt signer produces
@@ -24,11 +24,11 @@
  *
  * SCOPE.  This is a FEASIBILITY PROOF, not a shipped migration.  It does NOT
  * change any Morphit signing path (apps/web/src/lib/blurt/sign.ts still calls
- * dblurt's broadcast.sign).  It does NOT broadcast to the live chain — the
- * sandbox has no chain access, so the FINAL cutover still requires one real
+ * dblurt's broadcast.sign).  It does NOT broadcast to the live chain — it
+ * runs without chain access, so the FINAL cutover still requires one real
  * Blurt broadcast to confirm end-to-end acceptance.  See
  * docs/adr/0046-elliptic-signing-migration.md for the full plan and the
- * standing REVISIT item.
+ * standing backlog item.
  *
  * Runtime note: dblurt loads in CI via its pure-JS elliptic fallback (the
  * native secp256k1 addon is not required for signing/recovery), so this smoke
@@ -57,7 +57,9 @@ const RESET = '\x1b[0m';
 
 // RFC-6979 HMAC hook required by noble v2's synchronous sign().
 secp.etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) =>
-	createHmac('sha256', key).update(secp.etc.concatBytes(...msgs)).digest();
+	createHmac('sha256', key)
+		.update(secp.etc.concatBytes(...msgs))
+		.digest();
 
 type Result = { name: string; ok: boolean; detail?: string };
 const results: Result[] = [];
@@ -80,12 +82,12 @@ function blurtSignNoble(digest32: Uint8Array, priv: Uint8Array): Buffer {
 			opts.extraEntropy = e;
 		}
 		const sig = secp.sign(digest32, priv, opts);
-		// cp474 — @noble/secp256k1 v2's `Signature.toBytes()` takes NO arguments;
-	// the 'compact' we used to pass was silently ignored. It already returns the
-	// 64-byte compact (r || s) form (it's the inverse of `fromBytes`, and
-	// `toCompactRawBytes()` is its explicit alias), so behaviour is unchanged —
-	// but the call now says what it actually does.
-	const compact = sig.toBytes();
+		// @noble/secp256k1 v2's `Signature.toBytes()` takes NO arguments;
+		// the 'compact' we used to pass was silently ignored. It already returns the
+		// 64-byte compact (r || s) form (it's the inverse of `fromBytes`, and
+		// `toCompactRawBytes()` is its explicit alias), so behaviour is unchanged —
+		// but the call now says what it actually does.
+		const compact = sig.toBytes();
 		const r = compact.slice(0, 32);
 		const s = compact.slice(32, 64);
 		if ((r[0] & 0x80) !== 0 || (s[0] & 0x80) !== 0) continue; // not canonical (high-R/high-S) — retry
@@ -140,7 +142,9 @@ function randPriv(): Uint8Array {
 	let okCount = 0;
 	for (let i = 0; i < N; i++) {
 		const priv = randPriv();
-		const digest = createHash('sha256').update('canon-' + i).digest();
+		const digest = createHash('sha256')
+			.update('canon-' + i)
+			.digest();
 		const wire = blurtSignNoble(digest, priv);
 		const recByte = wire[0];
 		const r0 = wire[1];
@@ -151,7 +155,8 @@ function randPriv(): Uint8Array {
 		const lowS = (s0 & 0x80) === 0;
 		if (lenOk && recOk && lowR && lowS) okCount++;
 	}
-	if (okCount === N) pass(`canonical form: all ${N} sigs are 65-byte, low-R, low-S, valid recovery byte`);
+	if (okCount === N)
+		pass(`canonical form: all ${N} sigs are 65-byte, low-R, low-S, valid recovery byte`);
 	else fail('canonical form', `${N - okCount}/${N} violated canonical constraints`);
 }
 
@@ -162,7 +167,9 @@ function randPriv(): Uint8Array {
 	for (let i = 0; i < N; i++) {
 		const priv = randPriv();
 		const pub = secp.getPublicKey(priv, true);
-		const digest = createHash('sha256').update('verify-' + i).digest();
+		const digest = createHash('sha256')
+			.update('verify-' + i)
+			.digest();
 		const wire = blurtSignNoble(digest, priv);
 		const compact = new Uint8Array(64);
 		wire.copy(Buffer.from(compact.buffer), 0, 1, 65);
@@ -185,7 +192,9 @@ for (const r of results) {
 }
 console.log('──────────────────────────────────────────────────────');
 if (failed > 0) {
-	console.log(`✗ ${failed} of ${results.length} blurt-noble-signer-recovery-proof scenarios failed`);
+	console.log(
+		`✗ ${failed} of ${results.length} blurt-noble-signer-recovery-proof scenarios failed`
+	);
 	process.exit(1);
 } else {
 	console.log(`✓ all ${results.length} blurt-noble-signer-recovery-proof scenarios pass`);

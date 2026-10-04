@@ -50,11 +50,11 @@ BunkerWeb source code.
   narrowed to the hidden Blurt RPC nodes. It keeps no access log.
 - `bunkerweb.env.example` — environment variables with sensible
   defaults: a single `REVERSE_PROXY_HOST` pointing BunkerWeb at the
-  `frontend` container, OWASP CRS paranoia level 3, anti-`Referer:
-  none` rule on `/relay/v1/account/invite` (§38.6 item d), ASN-block
-  stubs for cheap-VPS providers (§38.6 item c, commented in; uncomment
-  to activate), Real-IP forwarding wired for the relay's trusted-proxy
-  chain, and the **security headers** (`CONTENT_SECURITY_POLICY`,
+  `frontend` container, OWASP CRS paranoia level 3, every BunkerWeb
+  feature that contacts a third party or looks up visitors turned off
+  (BunkerNet, DNSBL, the black/white/grey lists, anonymous report,
+  anti-bot, metrics), Real-IP forwarding wired for the relay's
+  trusted-proxy chain, and the **security headers** (`CONTENT_SECURITY_POLICY`,
   `REFERRER_POLICY`, `X_FRAME_OPTIONS`, `PERMISSIONS_POLICY`) for clearnet
   visitors. BunkerWeb keeps the frontend's own values for these headers
   where the frontend sends them (its default `KEEP_UPSTREAM_HEADERS`) —
@@ -94,9 +94,12 @@ sudo cp ops/bunkerweb/docker-compose.yml /etc/bunkerweb/
 sudo cp ops/bunkerweb/bunkerweb.env.example /etc/bunkerweb/bunkerweb.env
 
 # 2. Edit the env file — set SERVER_NAME, the operator-tunable
-#    values flagged with DUMMY-VALUE, and any ASN/country blocks
-#    you want active from the start.
+#    values flagged with DUMMY-VALUE, and any country blocks you want
+#    active from the start (no ASN blocks: they need the blacklist
+#    plugin, which Morphit leaves off).  Then give compose the Docker
+#    socket's group:
 sudoedit /etc/bunkerweb/bunkerweb.env
+echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee /etc/bunkerweb/.env
 
 # 3. Ensure /etc/letsencrypt/ has a cert for SERVER_NAME (per
 #    OPERATIONS.md §35).  BunkerWeb mounts this read-only.
@@ -244,9 +247,14 @@ testing in staging.
 ## Customization that's expected per-deployment
 
 - `SERVER_NAME` — your instance's public domain.
-- ASN block list (`BLACKLIST_ASN`) — uncomment and populate based
-  on what you see while watching BunkerWeb live
-  (`sudo docker attach --no-stdin --sig-proxy=false bunkerweb`; nothing is
+- IP or network blocks — ASN blocks need BunkerWeb's blacklist plugin,
+  which stays off because it looks up the reverse DNS of every visitor.
+  Block an address or network with
+  `CUSTOM_CONF_SERVER_HTTP_morphit_ip_blocks=deny <address-or-network>; …`
+  in `/etc/bunkerweb/bunkerweb.env`, then run
+  `sudo docker compose up -d --force-recreate` in the compose directory on
+  the server (`OPERATIONS.md` §37.13a). Watch BunkerWeb live with
+  `sudo docker attach --no-stdin --sig-proxy=false bunkerweb` (nothing is
   stored).
 - Country block list (`BLACKLIST_COUNTRY`) — empty by default;
   populate only under active attack (§38.6 item b).
@@ -281,25 +289,21 @@ brings the compose up, and enables it.  If you're using the playbook,
 you don't `cp` this directory manually; the playbook handles it.  If
 you're not using the playbook, follow the Quick Start above.
 
-**The two are NOT byte-identical** (they were originally, but the
-Ansible path gained fresh-install hardening the first real automated
-install surfaced):
+**The two carry the same security posture** (the same
+WAF/CRS/rate-limit/bad-behavior settings, the same security headers,
+and the same list of BunkerWeb features turned OFF because they would
+tell a third party about your visitors: BunkerNet, DNSBL, the
+black/white/greylist plugins and the anonymous report; antibot off).
+In both, the scheduler finds the BunkerWeb instance through the Docker
+socket (mounted read-only, with a `group_add` for the socket's group —
+the manual compose needs `DOCKER_GID` in `/etc/bunkerweb/.env`: `echo
+"DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee
+/etc/bunkerweb/.env`) and pushes the configuration over the instance
+API; there is no shared-volume coordination. Both mount
+`/etc/letsencrypt` into the scheduler and the instance, both run the
+`bw-init` one-shot that fixes `bw-data` + certificate ownership, and
+both publish the frontend on `127.0.0.1:8090` (where Tor and i2pd
+deliver hidden-service visitors). `BUNKERWEB_INSTANCES` is not a
+BunkerWeb 1.5.10 setting and appears in neither. A smoke compares the
+security-relevant keys of the example env with the template.
 
-- **Shared** — both now include the `bw-init` one-shot that fixes
-  `bw-data` + Let's Encrypt cert ownership for the image-default UID
-  (see the compose comments), the same WAF/CRS/rate-limit/bad-behavior
-  posture, and the same security headers.
-- **Ansible-only** — the templated env additionally sets
-  `BUNKERWEB_INSTANCES=bunkerweb` + `API_WHITELIST_IP` and its compose
-  mounts the Docker socket (read-only) into the scheduler with a
-  `group_add` for the socket's GID.  That wires BunkerWeb's explicit
-  **scheduler↔instance API mode**.  This manual config omits those:
-  it relies on the simpler shared-`bw-data`-volume coordination (which
-  morphit.io's hand-made stack ran on until it was reinstalled with the
-  standard Ansible install on v1.17.0 release night).  If a
-  **fresh** manual install shows the scheduler falling back to Docker
-  discovery or failing to push config (check
-  `docker compose logs bunkerweb-scheduler` for "Sending nginx
-  configs failed" / discovery errors), set `BUNKERWEB_INSTANCES=bunkerweb`
-  and `API_WHITELIST_IP=127.0.0.0/8 172.20.0.0/16` in your
-  `bunkerweb.env` — mirroring the Ansible template — and re-`up`.

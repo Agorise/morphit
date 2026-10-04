@@ -67,40 +67,150 @@ function isPlainObject(v: object): v is Record<string, unknown> {
  * Two keys that become equal (`"a\u0000"` and `"a\uFFFD"`) keep the later
  * one's value, in the object's own key order — deterministic, like JSON.parse
  * itself on a duplicate key. A `__proto__` key stays an own property.
+ *
+ * Iterative, with an explicit stack: it never throws on nesting depth. A
+ * recursive walk ran out of call stack on a few thousand levels of `[`, which a
+ * ~6 KB custom_json carries, and threw out of the dispatcher's block pre-pass —
+ * every indexer halted at that block. How deep an op may nest is a separate
+ * rule (`jsonNestingExceeds`), judged per op.
  */
 export function pgSafeDeep<T>(v: T): T {
 	if (typeof v === 'string') return pgSafeText(v) as T;
-	if (v === null || typeof v !== 'object') return v;
-	if (Array.isArray(v)) {
-		let out: unknown[] | null = null;
-		for (let i = 0; i < v.length; i++) {
-			const c = pgSafeDeep(v[i] as unknown);
-			if (out === null && c !== v[i]) out = v.slice(0, i);
-			if (out !== null) out.push(c);
+	if (!isContainer(v)) return v;
+
+	const root = openFrame(v);
+	const stack: Frame[] = [root];
+	let done: unknown = v;
+	while (stack.length > 0) {
+		const top = stack[stack.length - 1]!;
+		if (top.i < top.len) {
+			const child =
+				top.keys === null
+					? (top.src as unknown[])[top.i]
+					: (top.src as Record<string, unknown>)[top.keys[top.i]!];
+			if (isContainer(child)) {
+				stack.push(openFrame(child));
+				continue;
+			}
+			deliver(top, typeof child === 'string' ? pgSafeText(child) : child, child);
+			continue;
 		}
-		return (out ?? v) as T;
+		stack.pop();
+		const out = closeFrame(top);
+		if (stack.length === 0) {
+			done = out;
+			break;
+		}
+		const parent = stack[stack.length - 1]!;
+		const orig =
+			parent.keys === null
+				? (parent.src as unknown[])[parent.i]
+				: (parent.src as Record<string, unknown>)[parent.keys[parent.i]!];
+		deliver(parent, out, orig);
 	}
-	if (!isPlainObject(v)) return v;
-	const keys = Object.keys(v);
-	let changed = false;
-	const entries: [string, unknown][] = [];
-	for (const k of keys) {
+	return done as T;
+}
+
+/** An array or a plain object — the two shapes pgSafeDeep descends into. */
+function isContainer(v: unknown): v is unknown[] | Record<string, unknown> {
+	if (v === null || typeof v !== 'object') return false;
+	return Array.isArray(v) || isPlainObject(v);
+}
+
+interface Frame {
+	readonly src: unknown[] | Record<string, unknown>;
+	/** Own keys for an object; null for an array. */
+	readonly keys: string[] | null;
+	readonly len: number;
+	i: number;
+	readonly vals: unknown[];
+	readonly outKeys: string[];
+	changed: boolean;
+}
+
+function openFrame(src: unknown[] | Record<string, unknown>): Frame {
+	const keys = Array.isArray(src) ? null : Object.keys(src);
+	return {
+		src,
+		keys,
+		len: keys === null ? (src as unknown[]).length : keys.length,
+		i: 0,
+		vals: [],
+		outKeys: [],
+		changed: false
+	};
+}
+
+/** Record the canonical value of the current child and move to the next. */
+function deliver(f: Frame, value: unknown, orig: unknown): void {
+	if (value !== orig) f.changed = true;
+	f.vals.push(value);
+	if (f.keys !== null) {
+		const k = f.keys[f.i]!;
 		const ck = pgSafeText(k);
-		const cv = pgSafeDeep(v[k]);
-		if (ck !== k || cv !== v[k]) changed = true;
-		entries.push([ck, cv]);
+		if (ck !== k) f.changed = true;
+		f.outKeys.push(ck);
 	}
-	if (!changed) return v;
-	const out: Record<string, unknown> = Object.getPrototypeOf(v) === null ? Object.create(null) : {};
-	for (const [k, val] of entries) {
-		Object.defineProperty(out, k, {
-			value: val,
+	f.i++;
+}
+
+function closeFrame(f: Frame): unknown {
+	if (!f.changed) return f.src;
+	if (f.keys === null) return f.vals;
+	const out: Record<string, unknown> =
+		Object.getPrototypeOf(f.src) === null ? Object.create(null) : {};
+	for (let j = 0; j < f.vals.length; j++) {
+		Object.defineProperty(out, f.outKeys[j]!, {
+			value: f.vals[j],
 			enumerable: true,
 			writable: true,
 			configurable: true
 		});
 	}
-	return out as T;
+	return out;
+}
+
+/**
+ * Does `v` nest arrays / objects more than `maxDepth` levels deep? A bare
+ * scalar is depth 0, `[]` and `{}` are depth 1, `[[1]]` is depth 2.
+ * Iterative, so it answers for any depth without throwing, and it stops at the
+ * first container past the limit.
+ */
+export function jsonNestingExceeds(v: unknown, maxDepth: number): boolean {
+	if (v === null || typeof v !== 'object') return false;
+	const stack: [unknown, number][] = [[v, 1]];
+	while (stack.length > 0) {
+		const [cur, depth] = stack.pop()!;
+		if (depth > maxDepth) return true;
+		const children = Array.isArray(cur) ? cur : Object.values(cur as Record<string, unknown>);
+		for (const c of children) {
+			if (c !== null && typeof c === 'object') stack.push([c, depth + 1]);
+		}
+	}
+	return false;
+}
+
+/** U+FFFE and U+FFFF: Unicode noncharacters, and not XML characters — one in
+ *  an order's text made every RSS/Atom feed that carried it unparseable. */
+const XML_NONCHARACTER = /[\uFFFE\uFFFF]/;
+
+/** Does any string (value or key) in `v` hold U+FFFE or U+FFFF? Iterative. */
+export function hasXmlNoncharacter(v: unknown): boolean {
+	const stack: unknown[] = [v];
+	while (stack.length > 0) {
+		const cur = stack.pop();
+		if (typeof cur === 'string') {
+			if (XML_NONCHARACTER.test(cur)) return true;
+		} else if (cur !== null && typeof cur === 'object') {
+			if (Array.isArray(cur)) stack.push(...cur);
+			else
+				for (const [k, c] of Object.entries(cur as Record<string, unknown>)) {
+					if (XML_NONCHARACTER.test(k)) return true;
+					stack.push(c);
+				}
+		}
+	}
+	return false;
 }
 
 /** Minimal block shape — what the dispatcher reads. */

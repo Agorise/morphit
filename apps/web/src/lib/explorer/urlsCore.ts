@@ -20,55 +20,55 @@ export const BTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 /** XMR txid: 64 hex chars (32 bytes).  Case-insensitive. */
 export const XMR_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** BCH txid (Part 122 cp21).  64 hex chars (sha256d of the
+/** BCH txid.  64 hex chars (sha256d of the
  *  transaction, same format as BTC since BCH forked from BTC).
  *  Case-insensitive at the regex layer; chat-link substitution
  *  normalizes to lowercase before URL construction. */
 export const BCH_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** LTC txid (Part 122 cp24).  64 hex chars (sha256d, same as
+/** LTC txid.  64 hex chars (sha256d, same as
  *  BTC and BCH since all three share Bitcoin's hash structure).
  *  Case-insensitive at regex layer; substitution normalizes. */
 export const LTC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** DASH txid (Part 122 cp27).  64 hex chars (sha256d, same as
+/** DASH txid.  64 hex chars (sha256d, same as
  *  the whole BTC family — DASH forked from Litecoin which forked
  *  from Bitcoin, preserving the hash structure). */
 export const DASH_TXID_RE = /^[0-9a-fA-F]{64}$/;
 export const DOGE_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** ZEC txid (Part 122 cp39).  64 hex chars — same shape for
+/** ZEC txid.  64 hex chars — same shape for
  *  transparent and shielded transactions; the shielded payload
  *  is hidden inside the tx, but the txid itself is canonical
  *  and shareable. */
 export const ZEC_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** ARRR txid (Part 122 cp41).  64 hex chars — Pirate Chain
+/** ARRR txid.  64 hex chars — Pirate Chain
  *  Sapling shielded transactions surface a canonical 64-char
  *  hex txid even though sender/recipient/amount are hidden
  *  inside the shielded payload. */
 export const ARRR_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** DCR txid (Part 122 cp43).  64 hex chars — Decred forked
+/** DCR txid.  64 hex chars — Decred forked
  *  from a Bitcoin-derived codebase and inherited the 32-byte
  *  SHA-256 txid convention. */
 export const DCR_TXID_RE = /^[0-9a-fA-F]{64}$/;
 
-/** SOL txid (Part 122 cp45).  Solana transaction signatures
+/** SOL txid.  Solana transaction signatures
  *  are 64 bytes encoded as base58, surfacing as 87-88 char
  *  strings.  Notably DIFFERENT from the BTC/ZEC/ARRR/DCR family's
  *  64-hex-char convention — Solana uses base58 throughout for
  *  addresses, signatures, and mint addresses. */
 export const SOL_TXID_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
 
-/** ETH txid (Part 122 cp47).  Ethereum transaction hashes are
+/** ETH txid.  Ethereum transaction hashes are
  *  32 bytes hex with optional 0x prefix — 64 hex chars (or 66
  *  with prefix).  Same shape as the EVM stablecoin txid forms
  *  (USDT-ERC20, USDC-ERC20, DAI-ERC20, USDC-Base, etc).  Asset
  *  field disambiguates at order layer per LL #50. */
 export const ETH_TXID_RE = /^(0x)?[a-fA-F0-9]{64}$/;
 
-/** XRP txid (Part 122 cp49).  XRPL transaction hashes are 256-bit
+/** XRP txid.  XRPL transaction hashes are 256-bit
  *  (32 bytes) hex, conventionally uppercase on the chain but the
  *  regex is case-insensitive.  64 hex chars, NO prefix — same
  *  shape as the BTC-family hex txids (BTC/BCH/LTC/DASH/DOGE/ZEC/
@@ -89,8 +89,8 @@ export const ACCOUNT_NAME_RE = /^[a-z][a-z0-9.-]{1,14}[a-z0-9]$/;
  *   - mempool.space: no JS, no tracking, fast, popular
  *   - xmrchain.net: reference for Monero block explorers
  *   - blockchair.com/bitcoin-cash: established multi-chain
- *     explorer, predictable URL format, good uptime (Part 122
- *     cp21 BCH addition; chosen from operator's eight-explorer
+ *     explorer, predictable URL format, good uptime (BCH
+ *     addition; chosen from operator's eight-explorer
  *     candidate list as the best balance of reliability +
  *     URL-format predictability — operators wanting different
  *     defaults override via MORPHIT_FRONTEND_BCH_CHAT_LINK_URL)
@@ -111,7 +111,7 @@ export const BUNDLED_BCH_CHAT_LINK_URL =
 	'https://blockchair.com/bitcoin-cash/transaction/{txid}';
 export const BUNDLED_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
 
-/** Bundled DASH chat-link explorer (Part 122 cp27).
+/** Bundled DASH chat-link explorer.
  *
  *  Chosen from operator's nine-explorer candidate list as the
  *  community-led, official-project equivalent of mempool.space /
@@ -143,14 +143,14 @@ export const BUNDLED_LTC_CHAT_LINK_URL = 'https://litecoinspace.org/tx/{txid}';
  *  MORPHIT_FRONTEND_DASH_CHAT_LINK_URL. */
 export const BUNDLED_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{txid}';
 
-/** DOGE chat-link explorer default (cp33 — Part 122).
+/** DOGE chat-link explorer default.
  *  blockchair.com chosen from the maintainer's 9-explorer survey for
  *  predictable URL format, multi-chain support (already used as
  *  BCH default — operator gets one origin in their CSP allowlist
  *  for two chains), uptime track record, no aggressive
  *  fingerprinting, and HTTPS-only.
  *
- *  Full survey (the maintainer-provided 2026-05-19):
+ *  Full survey (provided 2026-05-19):
  *  - dogechain.info — community-favored historical default;
  *    occasional uptime issues and sketchy ad inventory.
  *  - blockchair.com/dogecoin — clean URL pattern, multi-chain,
@@ -170,7 +170,7 @@ export const BUNDLED_DASH_CHAT_LINK_URL = 'https://insight.dash.org/insight/tx/{
  *  MORPHIT_FRONTEND_DOGE_CHAT_LINK_URL. */
 export const BUNDLED_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/transaction/{txid}';
 
-/** ZEC chat-link explorer (cp39 — Part 122).  Default uses
+/** ZEC chat-link explorer.  Default uses
  *  Zcash's community-run mainnet explorer at
  *  mainnet.zcashexplorer.app — official project pointer,
  *  no third-party tracking, supports both transparent and
@@ -180,7 +180,7 @@ export const BUNDLED_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/trans
  *  (blockstream.info) choices: prefer a project-aligned or
  *  community-run explorer over third-party aggregators.
  *
- *  Operator's 7-explorer survey at cp39:
+ *  Operator's 7-explorer survey:
  *  - mainnet.zcashexplorer.app — community-run, official-style
  *    pointer.  CHOSEN as bundled default.
  *  - blockchair.com/zcash — third-party multi-chain aggregator;
@@ -197,7 +197,7 @@ export const BUNDLED_DOGE_CHAT_LINK_URL = 'https://blockchair.com/dogecoin/trans
  *  MORPHIT_FRONTEND_ZEC_CHAT_LINK_URL. */
 export const BUNDLED_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/transactions/{txid}';
 
-/** ARRR chat-link explorer (cp41 — Part 122).  Default uses
+/** ARRR chat-link explorer.  Default uses
  *  Pirate Chain's official project explorer at
  *  explorer.piratechain.com — project-aligned, no third-party
  *  tracking, supports shielded-transaction lookups by txid.
@@ -207,7 +207,7 @@ export const BUNDLED_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/tran
  *  project-aligned explorer over third-party aggregators or
  *  exchange-affiliated services.
  *
- *  Operator's 3-explorer survey at cp41:
+ *  Operator's 3-explorer survey:
  *  - explorer.piratechain.com — official project explorer.
  *    CHOSEN as bundled default.
  *  - pirate.explorer.dexstats.info — community-run, supports
@@ -219,7 +219,7 @@ export const BUNDLED_ZEC_CHAT_LINK_URL = 'https://mainnet.zcashexplorer.app/tran
  *  MORPHIT_FRONTEND_ARRR_CHAT_LINK_URL. */
 export const BUNDLED_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{txid}';
 
-/** DCR chat-link explorer (cp43 — Part 122).  Default uses
+/** DCR chat-link explorer.  Default uses
  *  Decred's official project explorer at dcrdata.decred.org —
  *  project-aligned, run by Decred itself (no third-party
  *  tracking), supports both transparent and mixed-output
@@ -230,7 +230,7 @@ export const BUNDLED_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{
  *  prefer a project-aligned explorer over third-party
  *  aggregators or exchange-affiliated services.
  *
- *  Operator's 4-explorer survey at cp43:
+ *  Operator's 4-explorer survey:
  *  - dcrdata.decred.org — official project explorer.
  *    CHOSEN as bundled default.
  *  - blockchain.com/explorer/assets/dcr — third-party
@@ -244,7 +244,7 @@ export const BUNDLED_ARRR_CHAT_LINK_URL = 'https://explorer.piratechain.com/tx/{
  *  MORPHIT_FRONTEND_DCR_CHAT_LINK_URL. */
 export const BUNDLED_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
 
-/** SOL chat-link explorer (cp45 — Part 122).  Default uses
+/** SOL chat-link explorer.  Default uses
  *  Solana's official project explorer at explorer.solana.com —
  *  project-aligned, run by Solana Labs, no third-party tracking,
  *  supports SPL token transfers and native SOL transfers, full
@@ -257,7 +257,7 @@ export const BUNDLED_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
  *  project-aligned explorer over third-party aggregators or
  *  exchange-affiliated services.
  *
- *  Operator's 5-explorer survey at cp45:
+ *  Operator's 5-explorer survey:
  *  - explorer.solana.com — official project explorer.
  *    CHOSEN as bundled default.
  *  - solscan.io — third-party aggregator; most popular by
@@ -265,14 +265,14 @@ export const BUNDLED_DCR_CHAT_LINK_URL = 'https://dcrdata.decred.org/tx/{txid}';
  *  - solanabeach.io — validator-focused explorer; tertiary.
  *  - www.oklink.com/solana — OKX-affiliated, third-party;
  *    quaternary.
- *  - solana.fm — community-run; was unreachable at cp45 survey
+ *  - solana.fm — community-run; was unreachable survey
  *    time (per the maintainer's note "not working?"); not surveyed.
  *
  *  Operators wanting different defaults override via
  *  MORPHIT_FRONTEND_SOL_CHAT_LINK_URL. */
 export const BUNDLED_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}';
 
-/** ETH chat-link explorer (cp47 — Part 122).  Default uses
+/** ETH chat-link explorer.  Default uses
  *  Blockscout's official Ethereum mainnet instance at
  *  eth.blockscout.com — open-source explorer, project-aligned
  *  with Ethereum's transparency ethos, frequently used by
@@ -295,7 +295,7 @@ export const BUNDLED_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}'
  *  AML/compliance pressure.  Blockscout is the most aligned
  *  with Ethereum's open-source ethos.
  *
- *  Operator's 9-explorer survey at cp47:
+ *  Operator's 9-explorer survey:
  *  - eth.blockscout.com — open-source Blockscout.
  *    CHOSEN as bundled default.
  *  - etherscan.io — most popular by traffic; third-party,
@@ -318,7 +318,7 @@ export const BUNDLED_SOL_CHAT_LINK_URL = 'https://explorer.solana.com/tx/{txid}'
  *  MORPHIT_FRONTEND_ETH_CHAT_LINK_URL. */
 export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
 
-/** XRP chat-link explorer (cp49 — Part 122).  Default uses XRP
+/** XRP chat-link explorer.  Default uses XRP
  *  Ledger Foundation's official livenet explorer at
  *  livenet.xrpl.org — non-profit foundation, project-aligned,
  *  separate from Ripple Labs Inc. (the for-profit company that
@@ -333,7 +333,7 @@ export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
  *  foundation explorer over commercial or exchange-affiliated
  *  ones.
  *
- *  Operator's 5-explorer survey at cp49:
+ *  Operator's 5-explorer survey:
  *  - livenet.xrpl.org — XRP Ledger Foundation (non-profit).
  *    CHOSEN as bundled default.
  *  - xrpscan.com — XRPL-focused, third-party; secondary.
@@ -347,7 +347,7 @@ export const BUNDLED_ETH_CHAT_LINK_URL = 'https://eth.blockscout.com/tx/{txid}';
  *  MORPHIT_FRONTEND_XRP_CHAT_LINK_URL. */
 export const BUNDLED_XRP_CHAT_LINK_URL = 'https://livenet.xrpl.org/transactions/{txid}';
 
-/** cp167 — best→worst ordered lists of bundled explorer templates
+/** best→worst ordered lists of bundled explorer templates
  *  per asset.  The first element is the same string as the singular
  *  `BUNDLED_<ASSET>_CHAT_LINK_URL` constant above; the rest are
  *  alternatives the frontend offers in a "Open in other explorer"
@@ -445,7 +445,7 @@ export const BUNDLED_XRP_CHAT_LINK_URLS: readonly string[] = [
 	'https://blockchair.com/xrp-ledger/transaction/{txid}'
 ];
 
-/** cp174 — per-NETWORK ordered explorer-alternative lists for the
+/** per-NETWORK ordered explorer-alternative lists for the
  *  multi-network tokens (USDT, USDC, DAI).  Keyed by network rather
  *  than by asset because the explorer for a given chain is the same
  *  regardless of which token rides on it: an ERC-20 USDT tx and an

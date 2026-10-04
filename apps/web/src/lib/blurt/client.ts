@@ -1,16 +1,13 @@
 /**
  * Morphit — Blurt chain client.
  *
- * Read-only helpers over the Blurt chain. cp410: by default every call routes
- * through the operator's OWN indexer via `chainRelay` (POST /v1/chain/condenser),
- * so the browser NEVER contacts a Blurt RPC node directly (privacy #1).
+ * Read-only helpers over the Blurt chain. Every call routes through the
+ * operator's OWN indexer via `chainRelay` (POST /v1/chain/condenser), so these
+ * reads never contact a Blurt RPC node from the browser (privacy #1).
  *
- * THE ONE EXCEPTION is release verification (net/releaseFetch.ts): its trust
- * anchor exists specifically to detect a malicious operator serving a tampered
- * build, so it MUST read the real chain rather than the operator's indexer. It
- * gets a DIRECT-to-chain client via `getDirectChainClient()` — the sole
- * sanctioned browser→node reader, kept narrow and auditable. Everything else
- * uses `getBlurtClient()` (indexer-routed).
+ * The one browser→node read in the app is the release check
+ * ($net/releaseFetch), which talks to the nodes through the rotator
+ * ($net/endpoints) and does not use this client.
  *
  * Helpers:
  *   - getAccount(name) — fetch a Blurt account's public keys + metadata
@@ -20,19 +17,10 @@
  */
 
 import { chainRelay } from '$net/chainRelay';
-import { getRotator } from '$net/endpoints';
 
 /** How a BlurtClient reads the chain. Default = the same-origin indexer relay
- *  (privacy #1). Release verification injects a direct-to-chain reader. */
+ *  (privacy #1); tests inject a stub. */
 export type ChainReadFn = <T>(method: string, params?: unknown[]) => Promise<T>;
-
-/** Direct-to-chain reader via the node-hopping rotator. Used ONLY by release
- *  verification (getDirectChainClient) — its trust anchor requires reading the
- *  REAL chain, not the operator's indexer (which it exists to distrust). The
- *  rotator speaks `condenser_api.<method>`; the typed helpers pass bare method
- *  names, so prefix them here. */
-const directRotatorRead: ChainReadFn = <T>(method: string, params?: unknown[]): Promise<T> =>
-	getRotator().call<T>(method.includes('.') ? method : `condenser_api.${method}`, params);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types (mirror Blurt's blockchain JSON shapes)
@@ -108,8 +96,7 @@ export interface ChainOperation {
 // ────────────────────────────────────────────────────────────────────────────
 
 export class BlurtClient {
-	/** @param read chain-read transport; defaults to the indexer relay. Release
-	 *  verification injects the direct-to-chain reader. */
+	/** @param read chain-read transport; defaults to the indexer relay. */
 	constructor(private readonly read: ChainReadFn = chainRelay) {}
 
 	/**
@@ -261,22 +248,9 @@ export interface BlurtTransaction {
 
 let singleton: BlurtClient | null = null;
 
-/** The default chain client — every read routes through the operator's indexer
- *  (privacy #1). Use this everywhere EXCEPT release verification. */
+/** The chain client — every read routes through the operator's indexer
+ *  (privacy #1). */
 export function getBlurtClient(): BlurtClient {
 	if (!singleton) singleton = new BlurtClient();
 	return singleton;
-}
-
-let directSingleton: BlurtClient | null = null;
-
-/** Direct-to-chain client — reads the REAL chain via the node-hopping rotator,
- *  bypassing the indexer. This is the SOLE sanctioned browser→Blurt-node reader
- *  and exists ONLY for release verification (net/releaseFetch.ts), whose
- *  anti-tamper trust anchor is meaningless if it trusts the operator's indexer.
- *  Do NOT use this for anything else — every other read must go through
- *  getBlurtClient() so the browser leaks nothing to third-party nodes. */
-export function getDirectChainClient(): BlurtClient {
-	if (!directSingleton) directSingleton = new BlurtClient(directRotatorRead);
-	return directSingleton;
 }

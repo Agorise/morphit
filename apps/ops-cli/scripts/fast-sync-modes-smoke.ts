@@ -2,7 +2,7 @@
  * fast-sync-modes-smoke — pins two fast-sync robustness fixes (v1.16.14):
  *   1. Both bootstrap spawns SOURCE the indexer's env files (morphit.config.env +
  *      /etc/morphit/indexer.env) so CHAIN_ID/PUBLIC_ORIGIN/OFFICIAL_POSTING_PUBKEY
- *      are present — a stock box couldn't fast-sync without this (the maintainer/morphit.io).
+ *      are present — a stock box couldn't fast-sync without this (morphit.io).
  *   2. A `--from-file` peer-import mode exists (fastSyncFromFile) using the
  *      bootstrap's positional file + `--i-trust-this-source` — for when @morphit
  *      has no fresh on-chain snapshot (publisher rebuilt).

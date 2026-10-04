@@ -1,5 +1,5 @@
 /**
- * apps/indexer/src/blurt/chainSnapshotOp.ts  (cp765)
+ * apps/indexer/src/blurt/chainSnapshotOp.ts
  *
  * The `chain_snapshot_v1` on-chain op — the canonical POINTER to a published
  * Blurt block_log snapshot, posted by @morphit exactly like `morphit_release_v1`
@@ -7,12 +7,13 @@
  * @morphit's account history to bootstrap the raw chain in hours instead of
  * cold-syncing for days.
  *
- * TRUST: this points at the RAW chain (blurtd's block_log), which is SELF-
- * VERIFYING — blurtd re-checks every block's witness signature + prev-hash on
- * import, so a tampered file fails on replay. The op therefore only needs to
- * carry integrity/locator fields (CID + sha256 + height); it does NOT ask anyone
- * to trust derived state. (Contrast the indexer-DB snapshot, cp764, which is
- * derived and stays same-operator-only.)
+ * TRUST: this points at the RAW chain (blurtd's block_log), not at derived
+ * state. The op carries integrity/locator fields (CID + sha256 + height), and
+ * the sha256 binds the file to what @morphit signed. Whether a replay ALSO
+ * re-checks every block's witness signature depends on the flags blurtd is
+ * replayed with (a skip-flags replay does not), so the file is trusted on the
+ * signed hash, not on replay alone. (Contrast the indexer-DB snapshot, which
+ * is derived and is spot-checked against the chain after restore.)
  *
  * This module is PURE (no network, no key, no fs): the validator + builder that
  * decide what may go on-chain are unit-tested. Reuses the release op's Blurt

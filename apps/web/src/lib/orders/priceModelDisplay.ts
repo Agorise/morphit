@@ -85,7 +85,7 @@ export function formatOrderPriceModel(
 	o: Pick<OrderRecord, 'price_model' | 'fiat_currency' | 'asset'>,
 	t: Translator
 ): string | null {
-	// cp425 — a BARTER (goods/services) order has no crypto-vs-fiat rate; it
+	// a BARTER (goods/services) order has no crypto-vs-fiat rate; it
 	// ships an inert price_model that would otherwise render as "Market rate".
 	// Suppress the price line entirely for goods — the card shows the value
 	// range + accepted cryptos instead.

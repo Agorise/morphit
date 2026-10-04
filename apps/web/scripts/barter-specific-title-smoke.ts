@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * apps/web/scripts/barter-specific-title-smoke.ts  (v1.9.0, the maintainer)
+ * apps/web/scripts/barter-specific-title-smoke.ts  (v1.9.0)
  *
  * The BARTER "goods/services" text in the create-order summary became an inline
  * fill-in-the-blank: the user types WHAT they're offering (e.g. "bananas") and it
@@ -68,7 +68,7 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 	if (sanitizeBarterTitle('bananas') === 'bananas') ok('plain letters pass through');
 	else bad('plain letters pass through');
 
-	// t.txt #5 — spaces between words are now KEPT (multi-word wares)
+	// spaces between words are now KEPT (multi-word wares)
 	if (sanitizeBarterTitle('banana trees') === 'banana trees') ok('internal space kept (banana trees)');
 	else bad('internal space kept', JSON.stringify(sanitizeBarterTitle('banana trees')));
 
@@ -136,7 +136,7 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 	if (!('specific_barter_title' in none)) ok('no title → field omitted');
 	else bad('no title → omitted');
 
-	// t.txt #5 — multi-word wares carry through; a trailing space the live field
+	// multi-word wares carry through; a trailing space the live field
 	// kept while typing is trimmed before broadcast (single spaces internal).
 	const spaced = buildOrderPayload('order-x', { ...base, specificBarterTitle: 'banana trees' });
 	if (spaced.specific_barter_title === 'banana trees') ok('payload carries multi-word title');
@@ -167,7 +167,7 @@ const LOCS = SUPPORTED_LOCALES.map((l) => l.code);
 		if (typeof gs !== 'string' || gs.length === 0) placeholderOk = false;
 		for (const k of NOVALUE) {
 			const v = ot[k];
-			// t.txt #5 — the value-free barter title carries the goods {asset} + the
+			// the value-free barter title carries the goods {asset} + the
 			// accepted {settlement}: "I'm selling {asset} for {settlement}" (v1.9.5).
 			if (typeof v !== 'string' || !v.includes('{asset}') || !v.includes('{settlement}')) {
 				novalueOk = false;
@@ -200,7 +200,7 @@ for (const rel of [
 		['forbidden_char reason', src.includes('specific_barter_title_forbidden_char')],
 		// STRICT: counts code points, rejects >24 (never truncates)
 		['code-point length guard', /Array\.from\(normalized\)\.length > 24/.test(src)],
-		// t.txt #5 — letters + single internal spaces (no leading/trailing/double)
+		// letters + single internal spaces (no leading/trailing/double)
 		['letters+spaces guard', /\\p\{L\}\+\(\?: \\p\{L\}\+\)\*/.test(src)]
 	];
 	for (const [n, okp] of checks) okp ? ok(`${tag}: ${n}`) : bad(`${tag}: ${n}`);
@@ -217,7 +217,13 @@ for (const rel of [
 		'apps/indexer/src/api/orderbook.ts',
 		'apps/indexer/src/api/featuredOrderbook.ts'
 	]) {
-		const src = stripComments(read(resolve(ROOT, rel)));
+		// orderbook.ts maps its rows through the rowToWire it shares with the
+		// stream and RSS feed (orderbookStreamHelpers.ts).
+		const src =
+			stripComments(read(resolve(ROOT, rel))) +
+			(rel.endsWith('/orderbook.ts')
+				? stripComments(read(resolve(ROOT, 'apps/indexer/src/api/orderbookStreamHelpers.ts')))
+				: '');
 		const name = rel.split('/').pop();
 		const selected = /o\.specific_barter_title/.test(src) || /specific_barter_title,/.test(src);
 		const mapped = /specific_barter_title:\s*r\.specific_barter_title/.test(src);

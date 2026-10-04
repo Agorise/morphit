@@ -3,24 +3,20 @@
  * schema-migration-coverage-smoke — cross-check schema.sql's declared
  * head version against `MIGRATIONS[]` coverage in migrations.ts.
  *
- * Part 122 cp6 F8.  Tighter form of cp2 F5: instead of pinning a
+ * Tighter form: instead of pinning a
  * brittle literal head-version COMMENT STRING, this smoke PARSES
  * both artifacts and pins the DERIVED NUMERIC values.  An editor
  * who tweaks the prose of the schema head banner (e.g. fixes a
  * typo in "multi-network") no longer breaks the sentinel — only
  * a semantic change (version number drift) does.
  *
- * Background: pre-launch, the indexer schema was collapsed —
- * `MIGRATIONS[]` has exactly ONE entry (version 1) with
- * `subsumesVersions: [2..27]`.  Subsequent schema changes (v28-v32)
- * were added INLINE as DDL appended after the collapsed base, NOT
- * as separate MIGRATIONS entries.  Only the head version (v32) has
- * an explicit `-- v<N>` banner; v28-v31 are unannotated inline DDL.
- *
- * Fresh deploys are fine — they apply schema.sql in full.  The
- * foot-gun is post-launch UPGRADE deploys where a new v33
- * inline-only DDL gets silently dropped because runMigrations()
- * sees v1 applied and has nothing else to do.
+ * Background: migration v1 is schema.sql, which stands in for the
+ * collapsed versions 2..36 (`subsumesVersions`) and also carries a
+ * `-- ─── vNN` section for every later version, so a fresh install has
+ * the current schema after one file. An EXISTING database never
+ * re-runs schema.sql: it gets each version from its own MIGRATIONS[N]
+ * entry. The foot-gun is a change added to schema.sql only — fresh
+ * installs get it, upgraded nodes silently do not.
  *
  * The invariant this smoke defends:
  *
@@ -38,10 +34,9 @@
  *       MIGRATIONS[] can't claim to cover a version that doesn't
  *       exist in schema.sql).
  *
- * The gap SCHEMA_HEAD_VERSION - MIGRATIONS_COVERAGE_HIGH is the
- * pre-launch inline-only window (currently 5: v28-v32).  After
- * launch this gap closes naturally as new schema changes land as
- * MIGRATIONS[N] entries rather than inline DDL.
+ * The two are equal today: every schema.sql section has its
+ * MIGRATIONS[N] entry. (Whether the two bodies agree is checked by
+ * schemaDrift and, for v66, by test/integration/migration-v66-upgrade.)
  *
  * Scenarios:
  *   1. schema.sql's highest `-- v<N>` banner === SCHEMA_HEAD_VERSION
@@ -65,11 +60,11 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // ─── Pinned expected values (the contract this smoke defends) ─────
 /** Highest `-- v<N>` banner in schema.sql.  Bump in lockstep
  *  with a schema change; the smoke fails until you do, which is
- *  the point.  cp131 DEEP-003 — bumped 33 → 35 after the parser
- *  was widened to recognize the cp123/cp127-era banner format
+ *  the point.  bumped 33 → 35 after the parser
+ *  was widened to recognize the later banner format
  *  `-- ─── v<N>: <description>` (previously only `-- v<N> / ...`
  *  was recognized, silently undercounting v34 and v35). */
-// v1.5.0 (cp471): 43 → 45. v44 = orders.status += 'completed' (the
+// v1.5.0: 43 → 45. v44 = orders.status += 'completed' (the
 // morphit_order_complete_v1 op); v45 = user_settings, the ENCRYPTED
 // settings-to-chain blob. Both verified present + idempotent in schema.sql
 // AND migrations.ts before bumping — this pin attests to that, it is not a
@@ -90,21 +85,26 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // fee_status 'awaiting_payment' (MK-H2, M), orders.xmr_{tx_key,payment_id,fee_address},
 // fee_status 'proof_unsupported' (M-X1). Both present in schema.sql (banners
 // at the end) and MIGRATIONS[] — checked.
-const SCHEMA_HEAD_VERSION = 65;
+// 65 → 66: chat/account/avatar indexes, one queued dust refill per recipient,
+// push_subscriptions and order_views data minimised. Present in both schema.sql
+// (banner at the end) and MIGRATIONS[]; the upgrade path is exercised by
+// test/integration/migration-v66-upgrade.test.ts.
+const SCHEMA_HEAD_VERSION = 66;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
- *  entry lands.  cp131 DEEP-002 — bumped 27 → 35 when
+ *  entry lands.  bumped 27 → 35 when
  *  `subsumesVersions` was extended to match the in-place
- *  v28-v35 sections in schema.sql.  cp425 — bumped 36 → 37 when the
- *  accepted_assets migration (v37) landed.  cp466 — bumped 41 → 42
- *  when the chat_folders migration (v42, t.txt #5) landed. */
-// v1.5.0 (cp471): 43 → 45, in lockstep with SCHEMA_HEAD_VERSION above.
+ *  v28-v35 sections in schema.sql.  bumped 36 → 37 when the
+ *  accepted_assets migration (v37) landed.  bumped 41 → 42
+ *  when the chat_folders migration (v42) landed. */
+// v1.5.0: 43 → 45, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.18.0: 59 → 60, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.18.0: 60 → 61, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.20.0: 61 → 62, in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.20.0: 62 → 63 (G3), in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.20.0: 63 → 65 (G1 v64, MK-H2 v65), in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 65;
+// 65 → 66, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 66;
 
 interface ScenarioResult {
 	readonly name: string;
@@ -123,12 +123,12 @@ function readFileOrFail(path: string): string {
 /** Parse `-- v<N>` head-section banners in schema.sql.  Recognizes
  *  two banner formats that coexist in the codebase:
  *
- *  Format A (cp82-era, used through v33):
+ *  Format A (used through v33):
  *      `-- v<N>` followed by end-of-line OR ` / Part ...` continuation
- *  Format B (cp123/cp127-era, used for v34 and v35):
+ *  Format B (used for v34 and v35):
  *      `-- ─── v<N>:` (box-decorator prefix + colon separator)
  *
- *  cp131 DEEP-003 — pre-cp131 the regex only recognized Format A,
+ *  older the regex only recognized Format A,
  *  silently undercounting v34 (review_concentration) and v35
  *  (price_drift_baseline).  Both formats are now accepted.
  *
@@ -147,7 +147,7 @@ function parseSchemaHeadBanners(): number[] {
 		}
 		// Format B: -- ─── v<N>: <description> ─── (box-decorator
 		// frame).  The non-ASCII U+2500/2501-class box-drawing
-		// characters appear in cp123+ schema sections.  We don't
+		// characters appear in later schema sections.  We don't
 		// pin the exact decorator characters — any non-word run
 		// between `-- ` and `v<N>` is accepted, since the
 		// alternative is to babysit a unicode allowlist that

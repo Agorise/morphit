@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * cp474 (t.txt #5, "fastmessagestatusupdate") — a folder move must survive an
+ * ("fastmessagestatusupdate") — a folder move must survive an
  * immediate refresh.
  *
- * THE BUG THIS GUARDS AGAINST. the maintainer, on live morphit.io: "if i move a message to
+ * THE BUG THIS GUARDS AGAINST. on live morphit.io: "if i move a message to
  * a different folder, and then i immediately refresh the page, my message move
  * doesn't actually take effect until after around 1 minute."
  *
@@ -91,7 +91,7 @@ import {
 	syncChatFoldersFromChain
 } from './chatFolders';
 
-describe('cp474 — chat folder sync is last-write-wins (t.txt #5)', () => {
+describe('cp474 — chat folder sync is last-write-wins', () => {
 	beforeEach(() => {
 		localStorage.clear();
 		clearChatFolders();
@@ -143,7 +143,7 @@ describe('cp474 — chat folder sync is last-write-wins (t.txt #5)', () => {
 		expect(isArchived(PEER, ORDER)).toBe(false);
 	});
 
-	// cp474 — found during the cp474 deep-deep, not reported by the maintainer. The on-chain
+	// found during an audit, not reported by the maintainer. The on-chain
 	// payload carries no timestamps, so `stateToMap` has to invent an `at`. It
 	// used to stamp `now` on EVERY adopted entry, which silently switched off
 	// `resurrectArchivedOnNewActivity` on the poll path: that compares a thread's
@@ -196,7 +196,7 @@ describe('cp474 — chat folder sync is last-write-wins (t.txt #5)', () => {
 
 	it('adopts when there is no local change at all (fresh device)', async () => {
 		// A brand-new device has no stamp, so the chain is authoritative — the
-		// pre-cp474 behaviour, and the correct default.
+		// older behaviour, and the correct default.
 		h.chain.updatedAt = '2026-07-15T08:00:00.000Z';
 		h.chain.state = { starred: [], archived: [`${PEER}\u0000${ORDER}`] };
 

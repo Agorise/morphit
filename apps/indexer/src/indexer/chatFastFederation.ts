@@ -57,10 +57,26 @@
  *     noticing. `fastpath-always-on-smoke` now greps THIS FILE and the intake
  *     route as well as the head tailer, so the next such line fails a test.
  *
- *  3. IT LEAKS NOTHING NEW. `morphit_chat_v1` is a public `custom_json` on a
- *     public chain: the sender/recipient pair is already visible to anyone. The
- *     body stays end-to-end encrypted. Fanning out to peers reveals to them
- *     only what the chain publishes to everyone a few seconds later.
+ *  3. WHAT IT TELLS PEERS. `morphit_chat_v1` is a public `custom_json` on a
+ *     public chain, so the sender/recipient pair, the order tag and the
+ *     ciphertext are visible to everyone a few seconds later anyway; the body
+ *     stays end-to-end encrypted. What the chain does NOT record is which
+ *     instance a chatting account uses, and a push could reveal exactly that:
+ *     from the TCP source of a clearnet push, or from many accounts' pushes
+ *     arriving on one long-lived pooled connection. So:
+ *       - pushes go only to peers a probe has verified ('good' that was really
+ *         probed, 'quiet', 'syncing' — see isFanOutPeer), never to a mere
+ *         registration, which anyone can create;
+ *       - every push travels over Tor, on a FRESH circuit isolated by random
+ *         SOCKS credentials (hiddenServicePool.postJsonViaTorIsolated): an
+ *         onion inside Tor, a clearnet origin through a Tor exit. No pooled
+ *         connection, no direct clearnet connection, no I2P or Lokinet (their
+ *         proxies cannot isolate one request from the next);
+ *       - one push carries one sender's messages only, so a batch cannot tie
+ *         two accounts to one instance either.
+ *     A node with no Tor does not fan out at all; its users' messages arrive
+ *     at chain speed. A verified peer still learns the message a few seconds
+ *     before the chain publishes it, and the timing of its arrival.
  *
  *  4. IT ADMITS A SUBSET. The same block check and the same safe-subset gate
  *     the head tailer applies are applied here, through the same functions.
@@ -68,10 +84,10 @@
  * WHY FAN-OUT RATHER THAN A LOOKUP
  * Accounts are not bound to instances — anyone can read their chat from any
  * instance, which is the point of the federation. There is no "which instance
- * is Bob on" to query. So the op goes to every known instance, each of which
+ * is Bob on" to query. So the op goes to every verified instance, each of which
  * emits it only if someone there is actually listening for that conversation.
- * A federation of a few dozen instances makes that a few dozen small POSTs on
- * already-warm connections.
+ * A federation of a few dozen instances makes that a few dozen small POSTs, each
+ * on its own Tor circuit.
  */
 
 import { Buffer } from 'node:buffer';
@@ -85,7 +101,7 @@ import {
 	CHAT_OP_ID,
 	type LocatedChatOp
 } from '$indexer/headTailer';
-import { postJsonViaHiddenService } from '$indexer/hiddenServicePool';
+import { postJsonViaTorIsolated } from '$indexer/hiddenServicePool';
 import { hiddenOriginForDial } from '$indexer/hiddenOriginForDial';
 import { primaryPostingKey } from '$indexer/postingKeyBackfill';
 import { clearnetRefused } from '@morphit/hidden-transport/router';
@@ -157,8 +173,8 @@ export type PushRejectCode =
 	 */
 	| 'replay_table_full'
 	/**
-	 * This SIGNER already holds its whole share of the replay memory (v1.18.0
-	 * deep-deep, rv1-4). Refused so that one account's pushes — which it can
+	 * This SIGNER already holds its whole share of the replay memory.
+	 * Refused so that one account's pushes — which it can
 	 * mint offline for free — can never occupy the space every other sender
 	 * needs. See `SEEN_PER_SIGNER_MAX`.
 	 */
@@ -224,8 +240,7 @@ const MAX_SIGNATURES = 2;
 const MAX_SIGNATURE_CHARS = 200;
 
 /**
- * The longest chat-op `json` the fast path will carry (v1.18.0 deep-deep,
- * rv1-1).
+ * The longest chat-op `json` the fast path will carry.
  *
  * WHAT WAS WRONG. Nothing bounded it. /v1/broadcast handed any transaction
  * with a chat op to the sender queue for every peer before the chain had
@@ -256,8 +271,7 @@ const SEEN_MAX_DEFAULT = 50_000;
 let SEEN_MAX = SEEN_MAX_DEFAULT;
 
 /**
- * The most replay-memory entries ONE SIGNER may hold at once (v1.18.0
- * deep-deep, rv1-4).
+ * The most replay-memory entries ONE SIGNER may hold at once.
  *
  * WHAT WAS WRONG. F21 made the table refuse rather than forget, which closed
  * the replay hole and opened a lockout: one cheap account mints validly signed
@@ -361,7 +375,7 @@ export function replayTableFullCount(): number {
 function rememberSeen(
 	trxId: string,
 	nowMs: number = Date.now(),
-	/** Who signed it — the key the per-signer quota is kept on (rv1-4). */
+	/** Who signed it — the key the per-signer quota is kept on. */
 	signer = ''
 ): boolean | 'full' | 'quota' {
 	const now = nowMs;
@@ -370,7 +384,7 @@ function rememberSeen(
 		else break; // Map preserves insertion order; the rest are newer.
 	}
 	if (seen.has(trxId)) return false;
-	// THE SIGNER'S SHARE FIRST (v1.18.0 deep-deep, rv1-4). A signer at its
+	// THE SIGNER'S SHARE FIRST. A signer at its
 	// quota is refused before it can reach the table-wide rule below, so its
 	// own entries are the only thing its flood can ever displace — which is
 	// nothing, since protected entries are never evicted. See
@@ -415,8 +429,8 @@ export function _setSeenPerSignerMaxForTest(n: number): void {
 }
 
 /**
- * Signers whose pushes recently failed signature verification, and when
- * (v1.18.0 deep-deep, rv1-4).
+ * Signers whose pushes recently failed signature verification, and when.
+ *
  *
  * A junk signature costs its sender nothing and costs us a key recovery, and
  * the name it claims is the only handle we have on it before that cost is
@@ -483,7 +497,7 @@ export interface PostingKeyLookup {
 			/**
 			 * Does this message's signature recover to `key`? Supplied by the
 			 * verifier so the lookup can tell WHICH refresh budget a chain read
-			 * should be charged to (v1.18.0 deep-deep, rv1-3): a stored key the
+			 * should be charged to: a stored key the
 			 * signature matches is a question only the key's holder can raise,
 			 * while a mismatch is something anyone can produce for free. Absent
 			 * means "unknown", which is charged as a mismatch.
@@ -522,7 +536,7 @@ export interface DurableProgress {
 
 /**
  * Is the durable record current enough for a stored posting key to vouch for
- * itself? (D6, completed in v1.18.0 deep-deep, rv2-7.)
+ * itself? (D6, completed.)
  *
  * WHAT WAS WRONG. The wiring answered TRUE whenever the chain head was unknown
  * (`chainHeadBlock` 0), on the theory that this was only the boot window and
@@ -560,8 +574,8 @@ export interface AgreedAccountReader {
 }
 
 /**
- * The fast path's chain re-read of one posting key, through a QUORUM
- * (v1.18.0 deep-deep, rv2-3).
+ * The fast path's chain re-read of one posting key, through a QUORUM.
+ *
  *
  * WHAT WAS WRONG. main.ts wired this as `blurt.getAccounts`: ONE endpoint,
  * whichever the pool ranked first. It runs for every unconfirmed row, while
@@ -572,7 +586,7 @@ export interface AgreedAccountReader {
  * rows included. D1 moved the reconcile onto a quorum for exactly this reason;
  * the fast path's read was left behind.
  *
- * Now two independent endpoints must agree on the account's signing key (the
+ * Now two operators (counted by node name) must agree on the account's signing key (the
  * same agreement the reconcile uses: a node that does not know the account
  * disagrees rather than abstains). No agreement answers null — "no fast
  * verdict" — and the message goes by chain delivery.
@@ -629,7 +643,7 @@ const refreshedAt = new Map<string, number>();
 const REFRESH_TRACK_MAX = 5_000;
 
 /**
- * WHICH CEILING a chain read is charged to (v1.18.0 deep-deep, rv1-3).
+ * WHICH CEILING a chain read is charged to.
  *
  * WHAT WAS WRONG. There was one global ceiling of 30 reads a minute, and the
  * cheapest way to spend it was a junk signature: sign with your own key, claim
@@ -656,7 +670,7 @@ export type RefreshBudget = 'verify' | 'mismatch';
 const refreshTimes: Record<RefreshBudget, number[]> = { verify: [], mismatch: [] };
 
 /**
- * Chain reads in flight, per account (v1.18.0 deep-deep, rv1-5).
+ * Chain reads in flight, per account.
  *
  * WHAT WAS WRONG. The cooldown is stamped when a read STARTS, so for as long as
  * it was running a `network: false` lookup saw "no refresh available" and
@@ -825,7 +839,7 @@ export function postingKeyLookupFromDb(
 		budget: RefreshBudget
 	): Promise<string | null> => {
 		// A read for this account is already running: wait for ITS answer
-		// rather than refusing on the cooldown it stamped (rv1-5). The worker
+		// rather than refusing on the cooldown it stamped. The worker
 		// never waits, so it hands the message to the side pass, which does.
 		const running = refreshInFlight.get(account);
 		if (network === false) {
@@ -889,7 +903,7 @@ export function postingKeyLookupFromDb(
 	): Promise<string | null> => {
 		if (opts?.refresh === true && refreshFromChain !== undefined) {
 			// An explicit refresh is the verifier's "the signature did not match
-			// the key on file": the attacker-reachable budget (rv1-3).
+			// the key on file": the attacker-reachable budget.
 			return refreshKey(refreshFromChain, account, opts.network, 'mismatch');
 		}
 		// A correction we have already been told about beats the stale column.
@@ -910,18 +924,20 @@ export function postingKeyLookupFromDb(
 		// against the chain, ask the chain instead, through the refresh path above
 		// with its cooldown and ceiling. No answer means no fast verdict: the
 		// message goes by chain delivery, slower, and a leaked key gets nothing.
-		// Without a refresher (tests that drive the column alone) the column is
-		// what there is, as before.
 		// A durable record far behind the chain cannot vouch for a key either:
 		// a rotation inside the gap is simply not in it yet. Same answer as an
 		// unconfirmed row, for the same reason.
-		if (
-			refreshFromChain !== undefined &&
-			(row.posting_key_reconciled === false || options.durableIsCurrent?.() === false)
-		) {
+		const unvouched =
+			row.posting_key_reconciled === false || options.durableIsCurrent?.() === false;
+		// VT1-4: with no refresher there is no chain to ask, and such a key is
+		// still not trusted — an unconfirmed column can hold a key one RPC node
+		// put in a block. No key, no fast verdict: the message waits for the
+		// chain.
+		if (unvouched && refreshFromChain === undefined) return null;
+		if (unvouched && refreshFromChain !== undefined) {
 			// Charged to the budget junk cannot reach ONLY when the signature
 			// matches the stored key — the ordinary case after an upgrade, and
-			// one an attacker needs that key to produce (rv1-3). A mismatch
+			// one an attacker needs that key to produce. A mismatch
 			// here (a key rotated before the upgrade, or a forgery) competes
 			// with every other mismatch instead.
 			const stored = row.posting_pubkey;
@@ -1169,7 +1185,7 @@ export async function verifyPushedChatOp(
 		network?: boolean;
 		/**
 		 * False: check only, record nothing in the replay memory. For the
-		 * SENDER's pre-fan-out check (rv1-1), which decides what we send, not
+		 * SENDER's pre-fan-out check, which decides what we send, not
 		 * what we deliver: recording there would make this instance's own intake
 		 * refuse the message as a duplicate and charge our own users' sends
 		 * against the per-signer replay quota. The `trxId` is still returned.
@@ -1220,7 +1236,7 @@ export async function verifyPushedChatOp(
 	// push doubles this instance's verification cost for free, on the queue
 	// whose depth is sized against that cost.
 	//
-	// Lazy (v1.18.0 deep-deep, rv1-3) because the key lookup now asks it too —
+	// Lazy because the key lookup now asks it too —
 	// "does this signature match the stored key?" decides which refresh budget a
 	// chain read is charged to — and an unknown sender must still cost no
 	// recovery at all.
@@ -1288,7 +1304,7 @@ export async function verifyPushedChatOp(
 	}
 
 	if (!signedByPostingKey) {
-		// Remembered as a PRIORITY HINT for the intake queue (rv1-4): the name
+		// Remembered as a PRIORITY HINT for the intake queue: the name
 		// this junk claimed gets a smaller share of the queue for a while, so a
 		// flood in one name is paid for by that name. Never a verdict.
 		if (options.remember !== false) noteBadSignature(located.signer, now.getTime());
@@ -1374,7 +1390,7 @@ export interface FastDeliveryGates {
 	/** Recipient has blocked sender → drop. Fails CLOSED on error. */
 	recipientBlockedSender(recipient: string, sender: string): Promise<boolean>;
 	/** The safe-subset gate — governs push and snapshot replay, not delivery. */
-	/** `at` is the ARRIVAL time, never the sender-chosen `sentAt` (rv1-6). */
+	/** `at` is the ARRIVAL time, never the sender-chosen `sentAt`. */
 	fastNotifyAllowed(located: LocatedChatOp, at: Date): Promise<boolean>;
 	/** Enqueue the web push. Only called when the gate allows it. */
 	enqueuePush(located: LocatedChatOp, trxId: string, createdAt: Date): Promise<void>;
@@ -1397,7 +1413,7 @@ export async function deliverVerifiedPush(
 	createdAt: Date = new Date(),
 	/**
 	 * The time every GATE decision is made against: when the message reached
-	 * us (v1.18.0 deep-deep, rv1-6).
+	 * us.
 	 *
 	 * WHAT WAS WRONG. The notify gate was handed `createdAt`, and `createdAt`
 	 * on the peer route is `sentAt` — derived from an expiry the SENDER picks.
@@ -1746,30 +1762,12 @@ export interface DispatchDeps {
 	/** Budget for one peer push. Bounded well under the delivery target so a
 	 *  slow peer cannot consume it. */
 	readonly timeoutMs: number;
-	/** Clearnet POST, injected so the smoke can drive it without a network. */
-	postClearnet(
-		url: string,
-		body: unknown,
-		timeoutMs: number
-	): Promise<{ status: number; body: string }>;
 	/**
-	 * Hidden-transport POST. Defaults to the real pooled one.
-	 *
-	 * Injectable for the same reason `postClearnet` is, and for a sharper one:
-	 * the three hidden branches are three genuinely different pieces of code — a
-	 * hand-written SOCKS5 connector for Tor, undici's `ProxyAgent` for I2P, a
-	 * plain agent riding Lokinet's tun — and without a seam here, only the first
-	 * was reachable from any test. A branch nothing can drive is a branch whose
-	 * behaviour is a matter of opinion, and two of the three networks this
-	 * federation is FOR were in that state.
-	 *
-	 * It is also the only way to exercise the SUCCESS side of a hidden push,
-	 * which is what clears a network's down-mark. A test can stand up a failing
-	 * hidden transport trivially (point it at a closed port) and a working one
-	 * not at all, so without this seam the recovery path could only be argued
-	 * for, never shown.
+	 * One push over a FRESH, ISOLATED Tor circuit — the only way a push is
+	 * made. Defaults to {@link postJsonViaTorIsolated}; injected by the
+	 * tests and smokes, which stand peers up on loopback.
 	 */
-	postHidden?(
+	postIsolated?(
 		url: string,
 		body: unknown,
 		proxies: HiddenServiceProxyConfig,
@@ -1839,6 +1837,16 @@ export const BATCH_MAX = 64;
  */
 export const BATCH_MAX_BYTES = 200_000;
 
+/** The account that signed a queued chat transaction ('' when it cannot be
+ *  read). Batches never mix two of them: one push = one sender. */
+function pushSigner(trx: unknown): string {
+	const op = (trx as { operations?: unknown[] } | null)?.operations?.[0];
+	const auths = Array.isArray(op)
+		? (op[1] as { required_posting_auths?: unknown })?.required_posting_auths
+		: undefined;
+	return Array.isArray(auths) && typeof auths[0] === 'string' ? auths[0] : '';
+}
+
 /** Wire size of one transaction, near enough to build a batch with. Measured
  *  once per message per peer rather than per batch attempt, because a message
  *  can be weighed once and batched many times. */
@@ -1886,11 +1894,22 @@ function approxJsonBytes(trx: unknown): number {
  * PEERS DO NOT QUEUE BEHIND EACH OTHER. The queue is per ORIGIN, so a slow or
  * dead peer holds up only its own stream; every other peer is pushed to at the
  * same time. The recipient may well be behind the slowest peer in the list.
+ *
+ * ONE SENDER PER BATCH. A batch is one request, and one request on one
+ * circuit tells the peer its messages came from the same instance — so a batch
+ * only ever carries consecutive messages of ONE signing account, whose messages
+ * are linked to each other anyway. Every push builds its own Tor circuit (see
+ * postJsonViaTorIsolated), so a push costs more than a round trip on a warm
+ * connection; batching still amortises that for a busy sender.
  */
 export class PeerSender {
 	private readonly queues = new Map<
 		string,
-		{ peer: FastPeer; pending: { trx: unknown; bytes: number }[]; inFlight: boolean }
+		{
+			peer: FastPeer;
+			pending: { trx: unknown; bytes: number; signer: string }[];
+			inFlight: boolean;
+		}
 	>();
 
 	private delivered = 0;
@@ -1937,6 +1956,7 @@ export class PeerSender {
 		// Weighed once, not once per peer: the same object goes to every peer, so
 		// serialising it in the loop would cost N stringifies of the same bytes.
 		const bytes = approxJsonBytes(trx);
+		const signer = pushSigner(trx);
 		for (const peer of peers) {
 			const key = peerKey(peer);
 			let q = this.queues.get(key);
@@ -1952,26 +1972,29 @@ export class PeerSender {
 			}
 			// A peer that has been unreachable long enough to accumulate this much
 			// is not coming back inside anyone's six seconds, and holding the
-			// backlog only costs memory. Dropping is safe: the chain still carries
+			// Backlog only costs memory. Dropping is safe: the chain still carries
 			// every one of these messages durably.
 			if (q.pending.length >= BATCH_MAX * 4) {
 				this.dropped++;
 				continue;
 			}
-			q.pending.push({ trx, bytes });
+			q.pending.push({ trx, bytes, signer });
 			if (!q.inFlight) void this.pump(key);
 		}
 	}
 
-	/** Take the next batch off a queue, bounded by BOTH the count and the byte
-	 *  budget. Always takes at least one, so an oversized lone message still
-	 *  travels (alone) rather than wedging the queue behind itself forever. */
-	private takeBatch(pending: { trx: unknown; bytes: number }[]): unknown[] {
+	/** Take the next batch off a queue, bounded by the count, the byte budget
+	 *  and the sender: it stops at the first message of a different signer.
+	 *  Always takes at least one, so an oversized lone message still travels
+	 *  (alone) rather than wedging the queue behind itself forever. */
+	private takeBatch(pending: { trx: unknown; bytes: number; signer: string }[]): unknown[] {
 		let n = 0;
 		let total = 0;
+		const signer = pending[0]?.signer;
 		while (n < pending.length && n < BATCH_MAX) {
 			const next = pending[n];
 			if (next === undefined) break;
+			if (n > 0 && (next.signer !== signer || next.signer === '')) break;
 			if (n > 0 && total + next.bytes > BATCH_MAX_BYTES) break;
 			total += next.bytes;
 			n++;
@@ -2094,7 +2117,8 @@ export class PeerSender {
 	}
 }
 
-/** POST one batch to ONE ADDRESS. Returns null on success, or why it failed. */
+/** POST one batch to ONE ADDRESS, over a fresh isolated Tor circuit. Returns
+ *  null on success, or why it failed. */
 async function sendBatchToAddress(
 	addr: FastPeerAddress,
 	batch: readonly unknown[],
@@ -2105,10 +2129,8 @@ async function sendBatchToAddress(
 	// common case stays the simplest thing on the wire and is readable in a log.
 	const body = batch.length === 1 ? { trx: batch[0] } : { trxs: batch };
 	try {
-		const postHidden = deps.postHidden ?? postJsonViaHiddenService;
-		const res = addr.hidden
-			? await postHidden(url, body, deps.proxies, deps.timeoutMs)
-			: await deps.postClearnet(url, body, deps.timeoutMs);
+		const post = deps.postIsolated ?? postJsonViaTorIsolated;
+		const res = await post(url, body, deps.proxies, deps.timeoutMs);
 		if (res.status >= 200 && res.status < 300) return null;
 		// AN ANSWER, even an unhappy one. The peer was reached, so this is never
 		// a local fault however bad the status is — and must not be, or a peer
@@ -2120,9 +2142,7 @@ async function sendBatchToAddress(
 			origin: addr.origin,
 			reason: err instanceof Error ? err.message : String(err),
 			localFault,
-			// Classified at the transport entry point and carried on the marker,
-			// because by here the wrapper looks the same whatever produced it.
-			confidence: localFault ? localFaultConfidence(err, hiddenNetworkOf(addr.origin)) : undefined
+			confidence: localFault ? localFaultConfidence(err, 'tor') : undefined
 		};
 	}
 }
@@ -2133,26 +2153,19 @@ async function sendBatchToAddress(
  * The ONE place a peer push is made — nothing else opens a connection to a
  * peer, so transport, status handling and error reporting cannot drift.
  *
- * ADDRESS CHOICE, IN ORDER OF WHAT IT COSTS TO GET WRONG:
+ * Every address is reached over Tor: the peer's onion first, then its
+ * clearnet origin through a Tor exit. So there is one local transport to track:
  *
- *  1. Addresses on a network we recently failed to use are skipped. This is
- *     what keeps a dead local Tor daemon from costing one refused connection
- *     per peer per message.
+ *  1. While our Tor was recently found unusable, the push is still ATTEMPTED —
+ *     the cooldown may be stale and the attempt is how we find out. A breaker
+ *     that can silence a peer permanently is worse than the failure it was
+ *     added to avoid.
  *
- *  2. ...unless that leaves nothing. A peer with only an onion, on an instance
- *     whose Tor is briefly down, must still be ATTEMPTED — both because the
- *     cooldown may be stale and because the attempt is how we find out it is.
- *     A breaker that can silence a peer permanently is worse than the failure
- *     it was added to avoid.
+ *  2. On a LOCAL fault, Tor is reported and the next address is tried within
+ *     the same push.
  *
- *  3. On a LOCAL fault, the network is marked down and the next address is
- *     tried immediately, within the same push. Failing this batch and waiting
- *     for the next one to discover the fallback would sacrifice the first
- *     message of the conversation — the one message whose latency the whole
- *     subsystem exists to protect.
- *
- *  4. On a PEER failure, we stop. The peer answered; asking it again somewhere
- *     else is not a retry, it is a duplicate.
+ *  3. On a PEER failure, we stop. The peer answered, or its address did not;
+ *     asking it again somewhere else is not a retry, it is a duplicate.
  */
 async function sendBatchToPeer(
 	peer: FastPeer,
@@ -2163,7 +2176,7 @@ async function sendBatchToPeer(
 	note?: (f: DispatchFailure) => void
 ): Promise<DispatchFailure | null> {
 	const all = addressesOf(peer);
-	const usable = all.filter((a) => !reach.isDown(hiddenNetworkOf(a.origin)));
+	const usable = all.filter(() => !reach.isDown(FAN_OUT_NETWORK));
 	const order = usable.length > 0 ? usable : all;
 
 	// A peer with nowhere to send is a FAILURE, never a success.
@@ -2204,7 +2217,7 @@ async function sendBatchToPeer(
 	};
 
 	for (const addr of order) {
-		const network = hiddenNetworkOf(addr.origin);
+		const network = FAN_OUT_NETWORK;
 		const res = await sendBatchToAddress(addr, batch, deps);
 		if (res === null) {
 			reach.markUp(network);
@@ -2230,6 +2243,9 @@ async function sendBatchToPeer(
 	}
 	return last;
 }
+
+/** The one transport chat fan-out uses: Tor, a fresh circuit per push. */
+const FAN_OUT_NETWORK: HiddenNetwork = 'tor';
 
 /** Every alt-network key that names something this indexer can DIAL, in the
  *  order it would rather use them.
@@ -2275,7 +2291,9 @@ function normalisedOrigin(origin: string): string {
 	return origin.toLowerCase().replace(/\/+$/, '');
 }
 
-/** Turn one directory row into a peer with every address we could reach it at. */
+/** Turn one directory row into a peer with every address we could reach it at,
+ *  on any network this node runs. Used by the login-pairing forward; chat
+ *  fan-out uses the Tor-only {@link fanOutPeerFromRow}. */
 export function fastPeerFromRow(row: DirectoryRow, proxies: HiddenServiceProxyConfig): FastPeer {
 	const addresses: FastPeerAddress[] = [];
 	const seen = new Set<string>();
@@ -2313,7 +2331,7 @@ export function fastPeerFromRow(row: DirectoryRow, proxies: HiddenServiceProxyCo
 	// zero-clearnet its origin IS a hidden address, in which case `add`'s
 	// de-duplication keeps it from appearing twice.
 	//
-	// EXCEPT on a hidden-only node (v1.18.0 deep-deep, C1, defence in depth).
+	// EXCEPT on a hidden-only node (defence in depth).
 	// There a clearnet origin is not an address at all: dialling it means a
 	// system-resolver query and a connection from this node's own IP, which is
 	// the one thing the node exists not to do. The router refuses it too, but
@@ -2334,6 +2352,64 @@ export function fastPeerFromRow(row: DirectoryRow, proxies: HiddenServiceProxyCo
 	// lookup (`dispatcherFor`: "not a hidden-service URL") — never to
 	// `postClearnet`.
 	const first = addresses[0] ?? { origin: row.origin, hidden: hiddenOnly || originHidden };
+	return {
+		origin: first.origin,
+		hidden: first.hidden,
+		// The peer's IDENTITY is its registered origin, never whichever address
+		// we happen to be dialling. See `FastPeer.key`.
+		key: normalisedOrigin(row.origin),
+		alternates: addresses.slice(1)
+	};
+}
+
+/**
+ * Turn one directory row into a peer with every address chat fan-out may use,
+ * or null when there is none.
+ *
+ * Fan-out goes over Tor only, each push on its own circuit, so the
+ * addresses are, in order:
+ *   1. the onion the peer published on chain (`reg_alt_networks.tor`);
+ *   2. its registered origin — itself an onion, or a clearnet `https://`
+ *      origin reached through a Tor exit, so the peer never sees this
+ *      instance's address. Not on a hidden-only node: there a clearnet origin
+ *      is not an address at all, even through an exit.
+ * I2P and Lokinet addresses are not used: their proxies cannot put two
+ * requests on unlinkable paths, so pushes over them could be tied together.
+ * A node with no Tor configured has no fan-out address for anyone.
+ */
+export function fanOutPeerFromRow(
+	row: DirectoryRow,
+	proxies: HiddenServiceProxyConfig
+): FastPeer | null {
+	if (!networkConfigured('tor', proxies)) return null;
+	const addresses: FastPeerAddress[] = [];
+	const seen = new Set<string>();
+	const add = (origin: string, hidden: boolean): void => {
+		const norm = normalisedOrigin(origin);
+		if (norm.length === 0 || seen.has(norm)) return;
+		seen.add(norm);
+		addresses.push({ origin, hidden });
+	};
+
+	const onion = row.reg_alt_networks?.tor;
+	if (typeof onion === 'string' && onion.length > 0) {
+		const bare = onion.replace(/^https?:\/\//, '');
+		// Re-classified rather than trusted: "validated when it was written" and
+		// "valid now, in this row" are different claims.
+		if (hiddenHostNetworkOf(bare) === 'tor') add(`http://${bare}`, true);
+	}
+
+	const originNetwork = hiddenNetworkOf(row.origin);
+	if (originNetwork === 'tor') {
+		// A legacy https:// onion origin is dialled as http (v1.20.0, S9): Tor
+		// carries plain HTTP, and `:443` meant plaintext to a TLS port.
+		add(hiddenOriginForDial(row.origin), true);
+	} else if (originNetwork === null && !clearnetRefused() && /^https:\/\//i.test(row.origin)) {
+		add(row.origin, false);
+	}
+
+	const first = addresses[0];
+	if (first === undefined) return null;
 	return {
 		origin: first.origin,
 		hidden: first.hidden,
@@ -2420,6 +2496,26 @@ export function peerRank(status: string | null, lastProbeError?: string | null):
 	return PEER_RANK[status] ?? PEER_RANK_UNKNOWN;
 }
 
+/**
+ * May this directory row receive chat pushes? Only an instance a probe has
+ * VERIFIED: it answered /v1/instance and /v1/health as the registered
+ * operator's instance. Registering an origin is an ordinary on-chain op anyone
+ * can make, so a mere registration ('never'), a peer that stopped answering
+ * ('stale', 'unreachable', 'mismatch'), one that has never answered at all
+ * ('clearnet_blocked' — alive on chain, unreachable everywhere), and a 'good'
+ * the probe only LISTED without asking, all get chain-speed delivery instead
+ * of a copy of every message ahead of the chain. PURE.
+ */
+export function isFanOutPeer(status: string | null, lastProbeError?: string | null): boolean {
+	if (status === 'quiet' || status === 'syncing') return true;
+	if (status !== 'good') return false;
+	return !(
+		lastProbeError !== undefined &&
+		lastProbeError !== null &&
+		LISTED_NOT_PROBED.has(lastProbeError)
+	);
+}
+
 /** The reasons `federationProbe.persistListedNotProbed` records beside a
  *  `good` it did not verify. */
 const LISTED_NOT_PROBED: ReadonlySet<string> = new Set([
@@ -2436,12 +2532,6 @@ export interface DirectoryPeerRow extends DirectoryRow {
 	readonly last_probe_error?: string | null;
 }
 
-function timeValue(v: Date | string | null | undefined): number | null {
-	if (v === null || v === undefined) return null;
-	const t = v instanceof Date ? v.getTime() : Date.parse(v);
-	return Number.isFinite(t) ? t : null;
-}
-
 /**
  * Order directory rows by who most deserves one of the bounded fan-out slots.
  *
@@ -2454,10 +2544,9 @@ function timeValue(v: Date | string | null | undefined): number | null {
  * else's deployment, years from now, with nobody watching. That is precisely
  * the kind of rule that has to be executable in a test.
  *
- * Stable within a tier: most recently confirmed first, then the longest
- * registered. The last key matters against the same abuse the `never` tier is
- * placed for — a burst of fresh registrations ranks behind instances that have
- * been part of the federation for a while.
+ * Within a tier, by origin: a stable key a peer cannot influence by how it
+ * answers. (It was most-recently-probed first, but a probe's time is stamped
+ * when it FINISHES, so a peer that stalled its probe sorted to the front.)
  */
 export function rankDirectoryPeers(rows: readonly DirectoryPeerRow[]): DirectoryPeerRow[] {
 	return [...rows].sort((a, b) => {
@@ -2465,25 +2554,11 @@ export function rankDirectoryPeers(rows: readonly DirectoryPeerRow[]): Directory
 		const rb = peerRank(b.last_probe_status, b.last_probe_error);
 		if (ra !== rb) return ra - rb;
 
-		// Most recently confirmed first; never-probed rows fall to the tiebreak
-		// below rather than being scattered by a missing value.
-		const pa = timeValue(a.last_probed_at);
-		const pb = timeValue(b.last_probed_at);
-		if (pa !== pb) {
-			if (pa === null) return 1;
-			if (pb === null) return -1;
-			return pb - pa;
-		}
-
-		const ga = timeValue(a.registered_at_time);
-		const gb = timeValue(b.registered_at_time);
-		if (ga !== gb) {
-			if (ga === null) return 1;
-			if (gb === null) return -1;
-			return ga - gb;
-		}
-		// Total order, so a refresh cannot reshuffle an unchanged directory.
-		return a.origin.localeCompare(b.origin);
+		// Then a stable key. Not last_probed_at: it is stamped when a probe
+		// FINISHES, so a peer that answers slowly — or stalls its probe on
+		// purpose — would sort first. A total order, so a refresh cannot
+		// reshuffle an unchanged directory.
+		return a.origin.toLowerCase().localeCompare(b.origin.toLowerCase());
 	});
 }
 
@@ -2512,7 +2587,12 @@ export async function fastPeerDirectory(
 	db: FastFederationDb,
 	selfOrigin: string,
 	proxies: HiddenServiceProxyConfig,
-	limit = 40
+	limit = 40,
+	/** 'fanout': chat pushes — Tor-only addressing (fanOutPeerFromRow).
+	 *  'direct': a read from a peer (fee cross-check) — every registered
+	 *  address, hidden first (fastPeerFromRow), as before the fan-out
+	 *  change; never clearnet from a hidden-only node either way. */
+	addressing: 'fanout' | 'direct' = 'fanout'
 ): Promise<FastPeerDirectory> {
 	const r = await db.query<DirectoryPeerRow>(
 		// Self-exclusion is on the ORIGIN, NORMALISED — lowercased and with any
@@ -2556,7 +2636,7 @@ export async function fastPeerDirectory(
 		   FROM known_instances ki
 		   LEFT JOIN operators o ON o.account = ki.operator_account
 		  WHERE lower(rtrim(ki.origin, '/')) <> lower(rtrim($1, '/'))
-		    AND (ki.last_probe_status IS NULL OR ki.last_probe_status <> 'mismatch')
+		    AND ki.last_probe_status IN ('good', 'quiet', 'syncing')
 		  ORDER BY CASE ki.last_probe_status
 		             WHEN 'good' THEN 0
 		             WHEN 'quiet' THEN 1
@@ -2567,27 +2647,36 @@ export async function fastPeerDirectory(
 		             WHEN 'unreachable' THEN 6
 		             ELSE 7
 		           END,
-		           ki.last_probed_at DESC NULLS LAST,
-		           ki.registered_at_time ASC NULLS LAST
+		           lower(ki.origin)
 		  LIMIT $2`,
 		[selfOrigin, DIRECTORY_SCAN_MAX]
 	);
 
-	const ranked = rankDirectoryPeers(r.rows);
+	const ranked = rankDirectoryPeers(
+		r.rows.filter((row) => isFanOutPeer(row.last_probe_status, row.last_probe_error))
+	);
+	const reachable: FastPeer[] = [];
+	for (const row of ranked) {
+		const peer =
+			addressing === 'fanout' ? fanOutPeerFromRow(row, proxies) : fastPeerFromRow(row, proxies);
+		if (peer !== null) reachable.push(peer);
+	}
 	return {
-		peers: ranked.slice(0, limit).map((row) => fastPeerFromRow(row, proxies)),
-		dropped: Math.max(0, ranked.length - limit)
+		peers: reachable.slice(0, limit),
+		dropped: Math.max(0, reachable.length - limit)
 	};
 }
 
-/** Peers only — the shape most callers want. */
+/** Peers to READ from (the BTC fee cross-check): every registered address,
+ *  hidden first, as fastPeerFromRow builds them — not the Tor-only fan-out
+ *  addressing, which would leave a node without Tor no peer to ask. */
 export async function fastPeersFromDirectory(
 	db: FastFederationDb,
 	selfOrigin: string,
 	proxies: HiddenServiceProxyConfig,
 	limit = 40
 ): Promise<FastPeer[]> {
-	return (await fastPeerDirectory(db, selfOrigin, proxies, limit)).peers;
+	return (await fastPeerDirectory(db, selfOrigin, proxies, limit, 'direct')).peers;
 }
 
 /**

@@ -127,3 +127,10 @@ describe('backup codes — hashing + redemption round-trip', () => {
 		await expect(hashCodesForStorage(['SHORT', 'ABCD-EFGH'])).rejects.toThrow(/canonicalized/);
 	});
 });
+
+describe('backup-code hashing cost', () => {
+	it('is Argon2id at INTERACTIVE cost (64 MiB, 2 passes), not MODERATE', async () => {
+		const [slot] = await hashCodesForStorage(['ABCD-EFGH']);
+		expect(slot!.hash).toMatch(/^\$argon2id\$v=19\$m=65536,t=2,p=1\$/);
+	});
+});

@@ -4,11 +4,16 @@
 #
 #   ansible-galaxy collection install -r collections/requirements.yml
 #
-# CI / linter use the same.
+# Pinned to the versions bundled in ansible 12.3.0 (the package CI installs,
+# hash-pinned in .forgejo/ansible-lint-requirements.txt), so a box, the
+# offline bundle and CI run the same modules.
 collections:
   - name: community.general
+    version: "11.4.2"
     # community.general.timezone (roles/base) and other helpers.
   - name: community.postgresql
+    version: "4.2.0"
     # community.postgresql.postgresql_{db,user} (roles/postgres).
   - name: community.docker
+    version: "4.8.5"
     # community.docker.docker_compose_v2 (roles/bunkerweb).

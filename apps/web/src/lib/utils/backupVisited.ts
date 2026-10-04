@@ -43,10 +43,3 @@ export function markBackupVisited(): void {
 	safeLocal.set(STORAGE_KEY, '1');
 	internal.set(true);
 }
-
-/** Reset the visited flag — used by Settings' "Remind me about key
- *  backup again" affordance, for users who want the nudge back. */
-export function clearBackupVisited(): void {
-	safeLocal.remove(STORAGE_KEY);
-	internal.set(false);
-}

@@ -1,5 +1,5 @@
 /**
- * Morphit — Shipment-carrier registry (cp120).
+ * Morphit — Shipment-carrier registry.
  *
  * Top 20 worldwide carriers + an "other" free-text option.
  * Selected by global parcel volume / locale relevance for the 10
@@ -208,9 +208,6 @@ export const CARRIERS: readonly CarrierEntry[] = [
 		trackingUrlTemplate: null
 	}
 ] as const;
-
-/** Set of canonical keys for O(1) lookup. */
-export const CARRIER_KEYS: ReadonlySet<string> = new Set(CARRIERS.map((c) => c.key));
 
 /** Find a carrier by key.  Returns undefined for unknown keys. */
 export function getCarrier(key: string): CarrierEntry | undefined {

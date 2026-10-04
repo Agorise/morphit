@@ -9,13 +9,13 @@
  * (e.g. "see OPERATIONS.md §46 for the reset steps"). When OPERATIONS.md is
  * reorganized (it's edited in place, sections renumbered/merged), a code ref
  * can silently point at a section that no longer exists, sending the operator
- * to a dead pointer. This is exactly what cp242 found: `systemCheck.ts` cited
+ * to a dead pointer. This is exactly what a later change found: `systemCheck.ts` cited
  * "OPERATIONS.md §14.6" for the hardening checks, but §14 had been reorganized
  * to unnumbered subsections and the unattended-upgrades content moved to §37.2
  * — so §14.6 didn't exist. No guard caught it.
  *
  * Scope: CODE only (`apps/<ws>/src`, `packages/<ws>/src`, excluding tests).
- * The docs/ ledgers (TARBALL, REVISIT, AUDIT-*) intentionally contain
+ * The internal ledgers (in the gitignored private/ folder) intentionally contain
  * point-in-time §-refs that may be historical; this guard does not police
  * them. It captures a doc name immediately followed by one or more `§N`
  * tokens (including `, §M` / `/ §M` / `and §M` continuations, e.g.
