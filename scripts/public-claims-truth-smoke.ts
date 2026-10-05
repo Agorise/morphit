@@ -176,9 +176,9 @@ const BANNED: Banned[] = [
 		why: 'the chain-consistency sample is an alarm, not a filter'
 	},
 	{
-		id: 'tarball-signing-optional',
-		re: /tarball signing is optional|only if the project signs tarballs/i,
-		why: 'every release tarball and the offline bundle are signed; an unsigned release is never published'
+		id: 'unsigned-never-published',
+		re: /never published unsigned|nothing is published unsigned|every release (?:tarball )?carries (?:a |its )?(?:detached )?(?:GPG )?signature/i,
+		why: 'a release is published without .asc files when CI holds no signing key; nodes then install it by the on-chain SHA-256'
 	},
 	{
 		id: 'custom-rpc-setting',

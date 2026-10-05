@@ -43,8 +43,8 @@ jobs:
     # V8's ~2 GB default on the container executor.
     env:
       NODE_OPTIONS: --max-old-space-size=3072
-      # The ONLY keys whose signatures make a tag a release and sign its
-      # tarball (space-separated, upper-case fingerprints). Trust is decided
+      # The ONLY keys whose signatures make a tag a release and, when the
+      # signing secret is set, sign its tarball (space-separated, upper-case fingerprints). Trust is decided
       # here, never by which .asc files the tagged tree carries under
       # .forgejo/release-signers/ (a tag pusher controls those). Must equal
       # RELEASE_SIGNER_FINGERPRINTS in packages/operator-config, which installed
@@ -109,6 +109,7 @@ jobs:
           echo "✓ ${TAG} restored as annotated tag object"
 
       - name: Verify tag is signed by a pinned release key and is on main
+        id: taggate
         # The tag must be signed by a key whose fingerprint is in
         # MORPHIT_RELEASE_SIGNERS (job env above). The .asc files in the
         # tagged tree's .forgejo/release-signers/ only supply key MATERIAL:
@@ -163,6 +164,8 @@ jobs:
             exit 1
           fi
           echo "✓ $TAG is signed by pinned key $SIGNER, names itself, is the checked-out commit, and is on main"
+          # The anchor names this key when the release carries no .asc.
+          echo "tag_signer=${SIGNER}" >> "$GITHUB_OUTPUT"
 
       - name: Install Node.js 22 LTS
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
@@ -359,10 +362,10 @@ jobs:
         # `morphit-ops upgrade --from-file=<this bundle>`. The bundle carries
         # node_modules with the marker that makes the upgrade skip npm, the
         # frontend this job built (the same bytes as the slim tarball), and the
-        # slim tarball itself. The next step signs it with the pinned key; an
-        # installed node (v1.20.2 included) checks that signature against its own
-        # .forgejo/release-signers before it uses a byte of it. A failure here
-        # fails the release.
+        # slim tarball itself. The next step signs it when the signing secret is
+        # set; an installed node checks its SHA-256 against @morphit's signed
+        # on-chain record, or that signature against a pinned key, before it
+        # uses a byte of it. A failure here fails the release.
         # Built without Docker (this job runs in a container that has none): no
         # apt packages and no images, which only a fresh, fully offline install
         # would use; scripts/build-offline-bundle.sh without --without-docker
@@ -381,6 +384,7 @@ jobs:
           ls -lh "$OFFLINE"
 
       - name: Sign release tarball (detached GPG signature)
+        id: sign
         # Installed nodes accept a tarball signed by a fingerprint pinned in
         # @morphit/operator-config (or one matching @morphit's signed on-chain
         # record). The key comes from two repo secrets (Forgejo → repo →
@@ -388,11 +392,14 @@ jobs:
         #   MORPHIT_RELEASE_SIGNING_KEY         — ASCII-armored PRIVATE key of a
         #     pinned fingerprint (MORPHIT_RELEASE_SIGNERS).
         #   MORPHIT_RELEASE_SIGNING_PASSPHRASE  — its passphrase (may be empty).
-        # A missing key, or a key that is not pinned, FAILS the release: a
-        # release is never published unsigned. The passphrase reaches gpg on a
-        # file descriptor, never on its command line. The signature logic is
-        # inline here, not a repository script, so nothing a dependency wrote
-        # into the workspace earlier in this job is run with the key.
+        # With no key set, the release is published without .asc files: an
+        # installed node then accepts it only by its SHA-256 in @morphit's
+        # signed on-chain record (ELI5 Block 4), and the anchor names the
+        # pinned key that signed the tag. A key that is set but not pinned
+        # FAILS the release. The passphrase reaches gpg on a file descriptor,
+        # never on its command line. The signature logic is inline here, not a
+        # repository script, so nothing a dependency wrote into the workspace
+        # earlier in this job is run with the key.
         env:
           TARBALL: ${{ steps.ver.outputs.tarball }}
           OFFLINE: ${{ steps.ver.outputs.offline }}
@@ -400,9 +407,12 @@ jobs:
           SIGNING_PASSPHRASE: ${{ secrets.MORPHIT_RELEASE_SIGNING_PASSPHRASE }}
         run: |
           set -eu
+          rm -f release-signer.fpr
           if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "ERROR: MORPHIT_RELEASE_SIGNING_KEY is not set. A release is never published unsigned." >&2
-            exit 1
+            rm -f "$TARBALL.asc" "${OFFLINE:-}.asc"
+            echo "::notice::No MORPHIT_RELEASE_SIGNING_KEY secret: publishing without .asc files. Installed nodes accept this release only by its SHA-256 in @morphit's signed on-chain record (ELI5 Block 4)."
+            echo "signed=no" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           SIGN_HOME="$(mktemp -d)"
           chmod 700 "$SIGN_HOME"
@@ -437,6 +447,7 @@ jobs:
             echo "Signed $f with pinned key $FPR."
           done
           printf '%s\n' "$FPR" > release-signer.fpr
+          echo "signed=yes" >> "$GITHUB_OUTPUT"
 
       - name: Compute canonical IPFS CID (self-hosted seed model — Kubo, no pinning service)
         # v1.9.3: releases are hosted on our OWN nodes (the maintainer's release box seeds via
@@ -579,8 +590,9 @@ jobs:
         # genuine against the chain. The hash MUST be the published tarball's —
         # this job built it; a laptop `git archive` would produce different
         # bytes and a mismatched anchor (the old release-sign.sh footgun). The
-        # fingerprint is the one the sign step signed the tarball with, which it
-        # checked against MORPHIT_RELEASE_SIGNERS. The mirror list is a fixed
+        # fingerprint is the one the sign step signed the tarball with, or, when
+        # the release carries no .asc, the one that signed the tag; either way
+        # it must be in MORPHIT_RELEASE_SIGNERS. The mirror list is a fixed
         # default baked into the payload builder, so it is NOT written here. The
         # ELI5 ceremony fetches this file back from the release and hands it to the
         # payload builder (MORPHIT_BUILD_ANCHOR_FILE), which PARSES it against an
@@ -589,11 +601,24 @@ jobs:
           TARBALL: ${{ steps.ver.outputs.tarball }}
           TAG: ${{ steps.ver.outputs.tag }}
           OFFLINE: ${{ steps.ver.outputs.offline }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
+          TAG_SIGNER: ${{ steps.taggate.outputs.tag_signer }}
         run: |
           set -eu
           SHA256=$(awk '{print $1}' "$TARBALL.sha256")
-          # The key that signed the tarball (the sign step checked it is pinned).
-          FPR=$(cat release-signer.fpr 2>/dev/null || true)
+          # The key that signed the tarball (the sign step checked it is
+          # pinned); with no .asc, the pinned key that signed the tag.
+          if [ "${SIGNED:-}" = yes ]; then
+            FPR=$(cat release-signer.fpr 2>/dev/null || true)
+          else
+            FPR="${TAG_SIGNER:-}"
+          fi
+          FPR=$(printf '%s' "$FPR" | tr a-f A-F)
+          PINNED=no
+          for p in $MORPHIT_RELEASE_SIGNERS; do
+            [ "$FPR" = "$(printf '%s' "$p" | tr a-f A-F)" ] && PINNED=yes
+          done
+          [ "$PINNED" = yes ] || FPR=""
           # The signed tag object this job verified and built. Block 4 (on the
           # laptop that made the tag in Block 2) refuses an anchor naming any
           # other object, so a tag re-pointed at an older signed object of the
@@ -692,6 +717,7 @@ jobs:
           TAG: ${{ steps.ver.outputs.tag }}
           TARBALL: ${{ steps.ver.outputs.tarball }}
           OFFLINE: ${{ steps.ver.outputs.offline }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
           # Prefer an operator-supplied token (only needed if the default
           # Forgejo Actions token can't write releases); otherwise fall back
           # to the automatic token. Forgejo's `permissions:` key is ignored,
@@ -704,11 +730,17 @@ jobs:
           # steps that ran after signing (a third-party action among them) could
           # have rewritten the tarball, .sha256 and anchor consistently. The
           # signing key left the runner when the sign step finished, so a
-          # rewritten tarball cannot carry a valid .asc. The signature must be
-          # there, and good, from a PINNED key (MORPHIT_RELEASE_SIGNERS); the
-          # key material is read from the signed tag's own tree.
-          # Both the slim tarball and the offline bundle: each must match its
-          # anchored SHA-256 and carry a good signature from a pinned key.
+          # rewritten tarball cannot carry a valid .asc. When the sign step
+          # signed (its step output, which later steps cannot change), each
+          # signature must be there, and good, from a PINNED key
+          # (MORPHIT_RELEASE_SIGNERS); the key material is read from the signed
+          # tag's own tree. When it did not, no .asc may be attached.
+          # Both the slim tarball and the offline bundle must match their
+          # anchored SHA-256.
+          case "${SIGNED:-}" in
+            yes | no) ;;
+            *) echo "ERROR: the sign step did not report whether it signed; not publishing." >&2; exit 1 ;;
+          esac
           VERIFY_HOME="$(mktemp -d)"
           chmod 700 "$VERIFY_HOME"
           for key in $(git ls-tree --name-only "$TAG" .forgejo/release-signers/ | grep '\.asc$'); do
@@ -727,8 +759,16 @@ jobs:
               echo "ERROR: distribution-anchor.env does not anchor $F." >&2
               exit 1
             fi
+            if [ "$SIGNED" = no ]; then
+              if [ -e "$F.asc" ]; then
+                echo "ERROR: $F.asc exists, but the sign step signed nothing; not publishing." >&2
+                exit 1
+              fi
+              echo "$F matches its anchored SHA-256 (no .asc: the on-chain record is its proof)"
+              continue
+            fi
             if [ ! -f "$F.asc" ]; then
-              echo "ERROR: $F.asc is missing; nothing is published unsigned." >&2
+              echo "ERROR: $F.asc is missing, but the sign step signed it; not publishing." >&2
               exit 1
             fi
             VSTATUS="$(gpg --homedir "$VERIFY_HOME" --batch --status-fd 1 --verify "$F.asc" "$F" 2>/dev/null || true)"
@@ -832,6 +872,7 @@ jobs:
           # last, after its signature.
           for f in distribution-anchor.env "$TARBALL" "$TARBALL.sha256" "$TARBALL.asc" \
                    "$OFFLINE.sha256" "$OFFLINE.asc" "$OFFLINE"; do
+            case "$f" in *.asc) [ "$SIGNED" = yes ] || continue ;; esac
             NAME=$(basename "$f")
             CODE=$(curl -sS -o /tmp/asset.json -w '%{http_code}' -X POST \
               -H "$AUTH" -F "attachment=@${f}" \

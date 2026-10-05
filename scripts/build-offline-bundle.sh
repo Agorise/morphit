@@ -217,10 +217,20 @@ rm -f "${_ntar}"
 log "3/6  Fetching Kubo ${KUBO_VERSION}…"
 _ktar="kubo_${KUBO_VERSION}_linux-amd64.tar.gz"
 KUBO_INCLUDED=0
-if curl -fsSLO "${CURL_BOUNDS[@]}" "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/${_ktar}" \
-	&& printf '%s  %s\n' "${KUBO_SHA512%% *}" "${_ktar}" | sha512sum -c -; then
+# dist.ipfs.tech first, then the same release on GitHub (the release job saw
+# dist.ipfs.tech time out); the SHA-512 pin checks whichever answered.
+for _kurl in "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/${_ktar}" \
+	"https://github.com/ipfs/kubo/releases/download/${KUBO_VERSION}/${_ktar}"; do
+	rm -f "${_ktar}"
+	if curl -fsSL "${CURL_BOUNDS[@]}" "${_kurl}" -o "${_ktar}" \
+		&& printf '%s  %s\n' "${KUBO_SHA512%% *}" "${_ktar}" | sha512sum -c -; then
+		KUBO_INCLUDED=1
+		break
+	fi
+	warn "Kubo ${KUBO_VERSION}: no good copy from ${_kurl}"
+done
+if [ "${KUBO_INCLUDED}" = 1 ]; then
 	mv "${_ktar}" "${VENDOR}/kubo/${_ktar}"
-	KUBO_INCLUDED=1
 else
 	rm -f "${_ktar}"
 	rm -rf "${VENDOR}/kubo"

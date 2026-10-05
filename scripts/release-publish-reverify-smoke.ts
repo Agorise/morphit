@@ -12,8 +12,10 @@
  * signer: the genuine files must pass the new re-verification (and go on to
  * the publish, which stops at "no token" here), a consistently rewritten
  * tarball or an anchor for different bytes must stop before anything is
- * published. It also checks every `uses:` in the workflows is pinned to a
- * full commit SHA.
+ * published. With no signing key (the sign step reports signed=no) nothing
+ * can detect a consistent rewrite of tarball, .sha256 and anchor; the files
+ * must still match the anchor, and no .asc is attached. It also checks every
+ * `uses:` in the workflows is pinned to a full commit SHA.
  *
  * To watch it fail on the old workflow:
  *   MORPHIT_RELEASE_WORKFLOW=<old>/.forgejo/workflows/release.yml npx tsx scripts/release-publish-reverify-smoke.ts
@@ -102,12 +104,14 @@ try {
 	// Tokens empty: the step's publish part stops with "no token available",
 	// which is how a run that got PAST the verification shows itself here.
 	// MORPHIT_RELEASE_SIGNERS is the job-level pin; here it names the throwaway key.
-	const run = (signers = fpr) =>
+	// SIGNED is the sign step's output (yes: it signed both files).
+	const run = (signers = fpr, signed = 'yes') =>
 		sh('bash -eu ../publish.sh', {
 			...G,
 			TAG: 'v9.9.9',
 			TARBALL: T,
 			OFFLINE: OFF,
+			SIGNED: signed,
 			MORPHIT_RELEASE_SIGNERS: signers,
 			RELEASE_TOKEN: '',
 			AUTO_TOKEN: ''
@@ -131,13 +135,31 @@ try {
 
 	const ascBytes = readFileSync(join(S, 'repo', `${T}.asc`));
 	rmSync(join(S, 'repo', `${T}.asc`));
-	const unsigned = run();
+	const stripped = run();
 	check(
-		'an unsigned release is not published',
-		!reachedPublish(unsigned) && unsigned.status !== 0,
-		unsigned.stdout.slice(-400)
+		'a signature the sign step made but that is gone by publish time is not published around',
+		!reachedPublish(stripped) && stripped.status !== 0,
+		stripped.stdout.slice(-400)
 	);
+	// No signing key set: the sign step signed nothing (signed=no).
+	const offAscBytes = readFileSync(join(S, 'repo', `${OFF}.asc`));
+	rmSync(join(S, 'repo', `${OFF}.asc`));
+	const unsigned = run(fpr, 'no');
+	check(
+		'an unsigned release (signed=no) whose files match the anchor goes on to be published',
+		reachedPublish(unsigned),
+		unsigned.stderr.slice(-400)
+	);
+	files('genuine release bytes\n', 'f'.repeat(64));
+	const unsignedBadAnchor = run(fpr, 'no');
+	check(
+		'an unsigned release with an anchor that names different bytes is not published',
+		!reachedPublish(unsignedBadAnchor) && unsignedBadAnchor.status !== 0,
+		unsignedBadAnchor.stdout.slice(-400)
+	);
+	files('genuine release bytes\n');
 	writeFileSync(join(S, 'repo', `${T}.asc`), ascBytes);
+	writeFileSync(join(S, 'repo', `${OFF}.asc`), offAscBytes);
 
 	files('REWRITTEN release bytes\n'); // tarball, .sha256 and anchor all consistent; old .asc
 	const tampered = run();

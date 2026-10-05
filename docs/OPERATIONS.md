@@ -495,8 +495,8 @@ the primary is unreachable).  The bundle's prebuilt
 `node_modules` (marked `.morphit-bundle-complete`) means the
 rebuild skips `npm ci`, so it reaches no registry either — the
 entire upgrade completes with the network cable unplugged. The
-release's bundle is built by the release job without Docker and is
-always signed (`.asc` attached): it carries `node_modules`, the
+release's bundle is built by the release job without Docker, and its
+SHA-256 is in @morphit's signed on-chain record: it carries `node_modules`, the
 prebuilt frontend and the canonical tarball (and Node/Kubo where
 they are downloaded), but no apt packages and no Docker images. A
 fully offline FRESH install therefore needs the appliance bundle,

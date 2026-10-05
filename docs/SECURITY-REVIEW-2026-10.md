@@ -62,6 +62,9 @@ The release notes ([RELEASE-NOTES-v1.21.0.md](../RELEASE-NOTES-v1.21.0.md)) desc
   catches accidental tampering, not a hostile operator. The download verifier (`scripts/verify-download.mjs`)
   is the independent check.
 - **Chat messages sent before v1.21.0** are shown as unverified.
+- **A release is GPG-signed only when the release job holds the signing key.** Without it, nodes install the
+  release by the SHA-256 in @morphit's signed on-chain record, and that hash is the one the release job computed:
+  the job's runner is trusted to build what the signed tag names.
 
 ## Reproducing
 

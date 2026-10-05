@@ -65,14 +65,14 @@ anchor CI recorded on-chain:
 - `morphit-vX.Y.Z.tar.gz` — the source
 - `morphit-vX.Y.Z.tar.gz.sha256` — its SHA-256
 - `distribution-anchor.env` — the anchor CI wrote (the SHA-256 and the
-  signing-key fingerprint that also went on-chain)
-- `morphit-vX.Y.Z.tar.gz.asc` — a detached GPG signature of the tarball.
-  Every release carries it: the release job fails without the signing
-  key, so a release is never published unsigned.
-- `morphit-X.Y.Z-offline.tar.gz` and its `.asc` — the offline bundle
-  (prebuilt dependencies and frontend, for upgrades without internet),
-  signed with the same key, and its SHA-256 is in the on-chain anchor
-  (`offline_sha256`).
+  release-key fingerprint that also went on-chain)
+- `morphit-vX.Y.Z.tar.gz.asc` — a detached GPG signature of the tarball,
+  when the release job holds the signing key. A release without it is
+  checked by its SHA-256 in the on-chain anchor (Step 1), which is what
+  `morphit-ops upgrade` does too.
+- `morphit-X.Y.Z-offline.tar.gz` (and its `.asc`, when signed) — the
+  offline bundle (prebuilt dependencies and frontend, for upgrades without
+  internet); its SHA-256 is in the on-chain anchor (`offline_sha256`).
 
 ---
 

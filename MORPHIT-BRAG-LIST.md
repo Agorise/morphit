@@ -141,7 +141,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 52. **Two verification paths for a download**: (a) the GPG-signed release tag (`git verify-tag`), (b) the on-chain hash anchor, checked by `scripts/verify-download.mjs`. If either is wrong, do not use the file. For the code a website serves you, the in-page check has the limit in #51.
 
-53. **Every release is hashed + tag-signed by CI.** The release pipeline (`.forgejo/workflows/release.yml`) builds each release tarball, publishes its SHA-256, and refuses to publish unless the git tag is GPG-signed by a maintainer key committed under `.forgejo/release-signers/`. A downloaded source can be checked against a published hash and an authenticated tag.
+53. **Every release is hashed and built from a signed tag.** The release pipeline (`.forgejo/workflows/release.yml`) builds each release tarball, publishes its SHA-256, and refuses to publish unless the git tag is GPG-signed by a maintainer key pinned in the workflow and in `@morphit/operator-config`. A downloaded source can be checked against a published hash and an authenticated tag.
 
 54. **Verify your download against the blockchain, not against us.** Every release's source-tarball SHA-256 and GPG signing-key fingerprint are anchored on the Blurt chain in the `morphit_release_v1` op, alongside the mirror list — so you can prove a copy is the genuine, unmodified release without trusting the host you fetched it from. Clone any mirror and `git verify-tag` checks the signed tag; download the release bundle and `scripts/verify-download.mjs` cross-checks it against the on-chain record. Step-by-step: `docs/VERIFY-YOUR-DOWNLOAD.md`.
 

@@ -90,7 +90,7 @@ git push origin main
 
 ---
 
-**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs (a release is never published unsigned), **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\` + the signed offline bundle** — you download and upload nothing:
+**BLOCK 2** — tag + push (laptop, repo root; signed). Pushing the tag fires \`release.yml\`, which builds, hashes, signs when the signing secret is set, **publishes the Forgejo release, and attaches the tarball + \`.sha256\` + \`distribution-anchor.env\` + the offline bundle** — you download and upload nothing:
 \`\`\`
 git tag -s v${VERSION} -m "Morphit v${VERSION}"
 git push origin v${VERSION}

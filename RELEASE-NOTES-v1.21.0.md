@@ -134,8 +134,8 @@ On a zero-clearnet node, **do not** run the plain upgrade for this release. That
 `sudo morphit-ops upgrade`. The upgrader already on your box (v1.20.3 or older) would then install the packages with `npm ci`
 from the npm registry over the clearnet.
 
-Use the offline bundle instead. The release job builds it and signs it with the release key your box already trusts,
-so nothing on the box touches the clearnet and npm is not used.
+Use the offline bundle instead. The release job builds it, and it is signed with the release key your box already
+trusts, so nothing on the box touches the clearnet and npm is not used.
 
 **On your own computer** (any computer with internet), download the two files from the release page. The bundle is
 about **250 MB**: 246.5 MB measured when it carries its Node.js and Kubo runtimes. Without the runtimes it is
@@ -270,11 +270,14 @@ If something goes wrong:
   The indexer now reads its own cap, so the optional flow catch-up sizes its buffer to fit.
 - **Served web files stay with the canary user.** The service-user heal no longer hands `apps/web/static` back to
   root (it already left `apps/web/build` alone).
-## Releasing (maintainer): nothing new to do
+## Releasing (maintainer)
 
-**The offline bundle.** The release job now builds it itself, without Docker, and signs it with the same key as the
-tarball. It attaches the bundle, its `.sha256` and its `.asc`. Without the bundle and a good signature, the release
-is not published.
+**The offline bundle.** The release job now builds it itself, without Docker, and attaches it with its `.sha256`.
+Without the bundle the release is not published. The job signs the tarball and the bundle only when the
+`MORPHIT_RELEASE_SIGNING_KEY` secret is set; otherwise it attaches no `.asc`, and a node running this release
+installs later ones by the SHA-256 in @morphit's signed on-chain record. For this release only, the maintainer signs
+the bundle and attaches its `.asc`, because the upgrader on v1.20.x zero-clearnet nodes accepts the bundle only with
+a signature.
 
 The bundle carries no OS packages or Docker images. A fully offline **fresh install** still needs the full appliance
 bundle: `bash scripts/build-offline-bundle.sh` on an Ubuntu 24.04 box with Docker. That build is optional and not

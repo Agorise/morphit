@@ -25,9 +25,12 @@ On every pushed `v*` tag, before any dependency is installed:
 2. the signing key's fingerprint is in `MORPHIT_RELEASE_SIGNERS`;
 3. the tagged commit is on `main`.
 
-It then signs the tarball with the key in the `MORPHIT_RELEASE_SIGNING_KEY`
-secret, which must be a pinned key; a missing or unpinned key fails the
-release. Nothing is published unsigned.
+When the `MORPHIT_RELEASE_SIGNING_KEY` secret is set, it then signs the
+tarball and the offline bundle with that key, which must be a pinned key; an
+unpinned key fails the release. When the secret is not set, the release is
+published without `.asc` files and its anchor names the pinned key that
+signed the tag; installed nodes then accept it only by the SHA-256 in
+@morphit's signed on-chain record.
 
 These checks run inside the tagged tree's own workflow, so they stop a key
 someone slipped into this directory, not someone who can rewrite the workflow

@@ -412,37 +412,30 @@ Crucially, **a mirror is never trusted just because it served the bytes** —
 verifying a mirror's tarball against that same mirror's checksum proves
 nothing. Two integrity paths apply, in trust order:
 
-1. **GPG signature (source-independent).** If the release carries a
-   `*.tar.gz.asc`, `upgrade` verifies it against the release-signer public
-   keys that ship in your install at `.forgejo/release-signers/*.asc`. The
-   trust anchor is local and code-reviewed, so a signed tarball is
-   trustworthy no matter which mirror served it — this is what makes a
-   fully standalone mirror safe, even if the primary is censored or gone.
-   Since v1.18.0 a signature that is **present but does not verify**
-   stops the upgrade (it used to be ignored when the primary's hash
-   matched), and a verified signature no longer overrides a mismatch
-   with the primary's hash: when the primary's hash is known, the bytes
-   must match it too. The signature is not tied to a version, so this is
-   what stops a mirror serving an older signed release.
+1. **On-chain SHA-256 (every path).** `upgrade` reads @morphit's
+   `morphit_release_v1` record for the target version through your own
+   indexer, checks its signature against the posting key pinned in
+   `@morphit/operator-config`, and requires the tarball's SHA-256 to equal
+   the hash it names. The primary's `.sha256` is only a transit check: it
+   must agree with the chain, and it is never enough on its own.
 
-2. **Anchored SHA-256.** When there's no signature, the tiny `.sha256` is
-   always fetched from the **trusted primary** over HTTPS; the big tarball
-   bytes may come from a mirror; the bytes are checked against the
-   primary's hash. A hostile mirror can't forge this. If the primary is
-   completely unreachable **and** the release is unsigned, `upgrade`
-   refuses rather than trust a mirror blindly.
+2. **GPG signature.** If the release carries a `*.tar.gz.asc`, `upgrade`
+   accepts it when gpg reports a good signature from a fingerprint pinned
+   in `@morphit/operator-config` (the key material comes from your
+   install's `.forgejo/release-signers/`). A signature that is **present
+   but does not verify** stops the upgrade, and a good signature never
+   overrides a known hash mismatch.
 
-**To publish signed releases** (recommended — it's what enables fully
-independent mirrors), set two repo secrets in Forgejo → repo → Settings →
-Actions → Secrets:
+**To publish signed releases**, set two repo secrets in Forgejo → repo →
+Settings → Actions → Secrets:
 
-- `MORPHIT_RELEASE_SIGNING_KEY` — an ASCII-armored **private** signing key
-  whose **public** half is committed under `.forgejo/release-signers/` (so
-  every operator can verify it).
+- `MORPHIT_RELEASE_SIGNING_KEY` — an ASCII-armored **private** key whose
+  fingerprint is pinned (`MORPHIT_RELEASE_SIGNERS` in `release.yml` and
+  `RELEASE_SIGNER_FINGERPRINTS` in `@morphit/operator-config`).
 - `MORPHIT_RELEASE_SIGNING_PASSPHRASE` — its passphrase (or empty).
 
-If those secrets are absent, CI still publishes a working release, but
-unsigned — mirror installs then rely on the anchored-SHA-256 path only.
+Without them, CI publishes the release without `.asc` files, and every
+node installs it by the on-chain SHA-256 (path 1).
 
 
 ## Get notified about new releases — `morphit-release-monitor`
