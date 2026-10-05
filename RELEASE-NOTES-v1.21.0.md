@@ -3,7 +3,7 @@
 A full security and privacy review of the whole codebase, done the way a hostile expert would: 19
 independent reviewers, a red team against a running instance, a fresh threat model, and four rounds of
 fixes, each checked by reviewers who had not seen the fix. Every fix comes with a test that was run
-against the old code and seen failing. This release also includes everything prepared for v1.20.3.
+against the old code and seen failing.
 
 **Upgrading:** clearnet servers run `sudo morphit-ops upgrade` as usual (see "Every node" below for the
 new `--questions` and `--heals`). **Zero-clearnet servers must use the signed offline bundle** — follow
@@ -101,7 +101,7 @@ Please upgrade every instance before then. The rules are listed under "Marketpla
 ## Every node: questions and repairs after the upgrade
 
 **The repair part of the upgrade never waits for an answer now.** A question asked part-way through could hold up
-the upgrade or cut it off. On the upgrade *to* this release, v1.20.2's own two questions (described below) still
+the upgrade or cut it off. On the upgrade *to* this release, the old upgrader's own two questions (described below) still
 wait unless you pass `--yes`.
 
 Where the repairs used to ask, they now take the safe choice and tell you:
@@ -131,7 +131,7 @@ is kept. The rule would cut the bot off, including the DNS lookups it needs. To 
 ## Zero-clearnet nodes: upgrade from the signed offline bundle
 
 On a zero-clearnet node, **do not** run the plain upgrade for this release. That includes menu option 2 and a bare
-`sudo morphit-ops upgrade`. The upgrader already on your box (v1.20.2) would then install the packages with `npm ci`
+`sudo morphit-ops upgrade`. The upgrader already on your box (v1.20.3 or older) would then install the packages with `npm ci`
 from the npm registry over the clearnet.
 
 Use the offline bundle instead. The release job builds it and signs it with the release key your box already trusts,
@@ -160,7 +160,7 @@ scp -O morphit-v1.21.0-offline.tar.gz morphit-v1.21.0-offline.tar.gz.asc <you>@<
    gpg --version | head -1
    ls /opt/morphit/.forgejo/release-signers/agorise.asc
    ```
-2. Run the upgrade from the bundle. `--yes` answers the two questions the old v1.20.2 upgrader asks; they would
+2. Run the upgrade from the bundle. `--yes` answers the two questions the old upgrader asks; they would
    otherwise wait for you with no time limit:
    ```
    sudo morphit-ops upgrade --from-file=/tmp/morphit-v1.21.0-offline.tar.gz --yes
@@ -172,8 +172,8 @@ scp -O morphit-v1.21.0-offline.tar.gz morphit-v1.21.0-offline.tar.gz.asc <you>@<
 
    Let it run until `✓ Success — your Morphit server is now running v1.21.0` (about two to three minutes).
 
-   The rest of the output comes from the old v1.20.2 upgrader, which cannot be changed. Read it like this:
-   - **Without `--yes`, it asks "Apply upgrade from v1.20.2 to v1.21.0? … This will: … run npm ci, rebuild + redeploy
+   The rest of the output comes from the old upgrader already on your box, which cannot be changed. Read it like this:
+   - **Without `--yes`, it asks "Apply upgrade from v1.20.x to v1.21.0? … This will: … run npm ci, rebuild + redeploy
      the web frontend …".** That text is old. With the bundle, nothing is installed from npm and nothing is rebuilt
      (see the two lines above). Answer `y`.
    - **Without `--yes`, a box that has never had a warrant canary may also ask "Set one up now, right here on this
@@ -210,7 +210,7 @@ scp -O morphit-v1.21.0-offline.tar.gz morphit-v1.21.0-offline.tar.gz.asc <you>@<
 If something goes wrong:
 - **`Cannot verify the integrity of release v1.21.0`**: nothing was changed. The two files must sit side by side
   under exactly these names. Download the `.asc` again and repeat step 2. If the same error also says "No on-chain
-  hash available … Start it with: sudo systemctl start morphit-indexer", ignore that hint. v1.20.2's indexer never
+  hash available … Start it with: sudo systemctl start morphit-indexer", ignore that hint. the old indexer never
   stores the bundle's hash, so starting it does not help. Only the `.asc` does.
 - **`Could not import release-signer key agorise.asc`**: gpg could not start its helper. Run step 2 as
   `sudo env TMPDIR=/tmp morphit-ops upgrade --from-file=/tmp/morphit-v1.21.0-offline.tar.gz --yes`.
