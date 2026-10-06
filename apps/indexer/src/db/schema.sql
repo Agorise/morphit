@@ -3326,3 +3326,13 @@ COMMENT ON COLUMN account_loyalty.canonical_blurt_paid IS
     'BLURT this account paid to the canonical treasury in listing fees from '
     'CONSENSUS_V2_ACTIVATION_TIME on; the attestor loyalty gate reads this, not '
     'cumulative_blurt_paid (an owner leg can go to an account the payer controls).';
+
+-- ─── v67: orders.lang comment (language filter lists only tagged orders) ───
+-- Since v1.21.1 a language filter lists only orders tagged with one of its
+-- languages; untagged orders (posted before v1.15.0) show only with no
+-- language chosen. The v56 section above keeps its original wording.
+COMMENT ON COLUMN orders.lang IS
+    'Language the order text is written in (a SUPPORTED_LOCALES code: en/es/de/'
+    'pl/fr/it/ru/fa/zh-CN/zh-HK). NULL = untagged (created before the feature, '
+    'or unspecified). A language filter lists only orders tagged with one of its '
+    'languages (v1.21.1); with no language chosen, untagged orders show too.';

@@ -10,12 +10,12 @@
 # What goes in the zip:
 #   README.txt                — what this is + how to use it
 #   MORPHIT-BRAG-LIST.md      — current public-facing claims (copied
-#                                from the repo-root brag list)
+#                                from docs/MORPHIT-BRAG-LIST.md)
 #   logos/morphit-mark.svg    — the standalone mark, no wordmark
 #   logos/morphit-wordmark.svg — the mark + "Morphit" wordmark
 #
 # When to run this:
-#   - The brag list changes (any commit that edits MORPHIT-BRAG-LIST.md)
+#   - The brag list changes (any commit that edits docs/MORPHIT-BRAG-LIST.md)
 #   - The brand logos change (any commit that edits the SVGs in
 #     apps/web/static/brand/)
 #   - You're prepping a release tarball (cheap to re-run; idempotent)
@@ -34,7 +34,7 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo"
 
 # ─── Source files ──────────────────────────────────────────────────
-BRAG_LIST="MORPHIT-BRAG-LIST.md"
+BRAG_LIST="docs/MORPHIT-BRAG-LIST.md"
 MARK_SVG="apps/web/static/brand/morphit-mark.svg"
 WORDMARK_SVG="apps/web/static/brand/morphit-wordmark.svg"
 # The feature-comparison image (Morphit vs Bisq/Haveno/OpenMonero/
@@ -134,7 +134,7 @@ something other than Morphit, or use them in a way that implies
 official endorsement of an unrelated product or service.
 
 The brag list reflects the state of the repo at the time this
-zip was built.  For the absolute latest, see MORPHIT-BRAG-LIST.md
+zip was built.  For the absolute latest, see docs/MORPHIT-BRAG-LIST.md
 in the source repo.
 EOF
 

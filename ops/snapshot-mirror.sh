@@ -45,6 +45,14 @@ while IFS='=' read -r k v; do
 	esac
 done < "$INDEXER_ENV"
 set +a
+# Inside `morphit-ops upgrade` (output piped, not a systemd unit) the indexer
+# library's own log lines (RPC pool, hidden routing) are noise: this script
+# reports its result itself. The weekly timer (a systemd unit: INVOCATION_ID)
+# and a run at a terminal keep the log level from indexer.env, with the reason
+# each RPC node failed.
+if [ "${MORPHIT_QUIET_BUILD:-}" = 1 ] || { [ -z "${INVOCATION_ID:-}" ] && [ ! -t 1 ]; }; then
+	export MORPHIT_LOG_LEVEL=error
+fi
 
 cd "$REPO" || skip "could not enter $REPO"
 "$TSX" --tsconfig "$TSCFG" apps/indexer/scripts/snapshot-mirror.ts --signer "$SIGNER" || true

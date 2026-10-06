@@ -844,7 +844,7 @@ const CHECKS: readonly Check[] = [
 
 // ─── Verifier ──────────────────────────────────────────────────────
 function bragText(): string {
-	return readFileSync(join(REPO, 'MORPHIT-BRAG-LIST.md'), 'utf-8');
+	return readFileSync(join(REPO, 'docs', 'MORPHIT-BRAG-LIST.md'), 'utf-8');
 }
 
 function faqText(): string {

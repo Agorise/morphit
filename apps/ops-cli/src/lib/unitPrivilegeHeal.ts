@@ -292,6 +292,7 @@ export async function healServicePrivileges(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: notes.length === 0,
 			detail: notes.length
 				? `Service users: ${notes.join('; ')}.`
 				: 'Service users: no indexer or relay unit on this server.'

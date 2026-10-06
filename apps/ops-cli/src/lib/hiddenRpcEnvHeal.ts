@@ -212,6 +212,7 @@ export async function healHiddenRpc(
 	return {
 		strategy,
 		verified,
+		routine: lines.length === 0,
 		detail:
 			lines.length > 0
 				? `Hidden RPC nodes: ${lines.join('; ')}.`

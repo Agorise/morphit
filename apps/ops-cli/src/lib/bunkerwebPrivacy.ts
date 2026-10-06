@@ -102,6 +102,21 @@ export const BUNKERWEB_PRIVACY_SETTINGS: readonly PrivacySetting[] = [
 		value: 'no',
 		bunkerwebDefault: 'no',
 		what: "reverse scan, which connects back to each visitor's address to probe its ports"
+	},
+	// v1.21.1 — no Morphit instance turns visitors away by country: people behind
+	// national firewalls must be able to reach the instance of their choice. An
+	// empty list is BunkerWeb's default and means no country rule at all.
+	{
+		key: 'BLACKLIST_COUNTRY',
+		value: '',
+		bunkerwebDefault: '',
+		what: 'country blocks, which turn away every visitor from the listed countries (no Morphit instance blocks by country)'
+	},
+	{
+		key: 'WHITELIST_COUNTRY',
+		value: '',
+		bunkerwebDefault: '',
+		what: 'the country allow-list, which turns away every visitor from any other country (no Morphit instance blocks by country)'
 	}
 ];
 
@@ -214,7 +229,7 @@ export function planBunkerwebPrivacy(text: string): PrivacyPlan {
 				const v = (vals.get(key) ?? '').trim();
 				if (v !== '')
 					notices.push(
-						`BunkerWeb: your ${what} (${key}=${v}) no longer apply. BunkerWeb checks them only in its blacklist plugin, which looks up every visitor's address in reverse DNS. Country blocks (BLACKLIST_COUNTRY) still work, from the GeoIP file on this server`
+						`BunkerWeb: your ${what} (${key}=${v}) no longer apply. BunkerWeb checks them only in its blacklist plugin, which looks up every visitor's address in reverse DNS`
 					);
 			}
 		}
@@ -236,6 +251,22 @@ export function planBunkerwebPrivacy(text: string): PrivacyPlan {
 			continue;
 		setAll(s.key, s.value);
 		changes.push(`BunkerWeb: ${s.what} — off (${s.key}=${s.value})`);
+	}
+	// Per-site country lists (multisite: `<server name>_BLACKLIST_COUNTRY`).
+	for (const m of [
+		...text.matchAll(/^\s*(?:export\s+)?([A-Za-z0-9.-]+_(?:BLACKLIST|WHITELIST)_COUNTRY)=(.*)$/gm)
+	]) {
+		const key = m[1]!;
+		if (unquote(m[2]!).trim() === '' || want.has(key)) continue;
+		want.set(key, '');
+		const re = new RegExp(
+			`^(\\s*(?:export\\s+)?)${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=.*$`,
+			'gm'
+		);
+		out = out.replace(re, (_l, pre: string) => `${pre}${key}=`);
+		changes.push(
+			`BunkerWeb: the country list ${key} — emptied (no Morphit instance blocks by country)`
+		);
 	}
 	const antibot = effectiveSetting(before, 'USE_ANTIBOT').toLowerCase();
 	const uri = effectiveSetting(before, 'ANTIBOT_URI');
@@ -263,16 +294,46 @@ export function bunkerwebSettingsProblems(
 ): string[] {
 	const have = new Map<string, string>();
 	for (const line of variablesEnv.split('\n')) {
-		const m = /^([A-Za-z0-9_-]+)=(.*)$/.exec(line.replace(/\r$/, ''));
+		const m = /^([A-Za-z0-9_.-]+)=(.*)$/.exec(line.replace(/\r$/, ''));
 		if (m) have.set(m[1]!, m[2]!);
 	}
 	const problems: string[] = [];
 	for (const [k, v] of want) {
 		const got = have.get(k);
+		// A per-site country list (`<server name>_…_COUNTRY`) wanted empty may
+		// simply be absent (BunkerWeb writes per-site keys only in multisite).
+		if (
+			got === undefined &&
+			v === '' &&
+			isCountryListKey(k) &&
+			!/^(?:BLACKLIST|WHITELIST)_COUNTRY$/.test(k)
+		)
+			continue;
 		if (got === undefined) problems.push(`BunkerWeb's running settings do not show ${k} yet`);
 		else if (got.trim() !== v) problems.push(`BunkerWeb still runs with ${k}=${got.trim()}`);
 	}
+	// (A country list that reaches BunkerWeb another way — a compose
+	// `environment:` entry this heal does not edit — is named separately by the
+	// heal, never a reason to put this heal's own changes back.)
 	return problems;
+}
+
+/** The non-empty country lists (`[<server name>_](BLACKLIST|WHITELIST)_COUNTRY`)
+ *  in BunkerWeb's generated settings, as `KEY=value`. PURE. */
+export function countryListsInSettings(variablesEnv: string): string[] {
+	const out: string[] = [];
+	for (const line of variablesEnv.split('\n')) {
+		const m = /^((?:[A-Za-z0-9.-]+_)?(?:BLACKLIST|WHITELIST)_COUNTRY)=(.*)$/.exec(
+			line.replace(/\r$/, '')
+		);
+		if (m && m[2]!.trim() !== '') out.push(`${m[1]}=${m[2]!.trim()}`);
+	}
+	return out;
+}
+
+/** True for a BunkerWeb country-list key, global or per site. PURE. */
+export function isCountryListKey(k: string): boolean {
+	return /^(?:[A-Za-z0-9.-]+_)?(?:BLACKLIST|WHITELIST)_COUNTRY$/.test(k);
 }
 
 /** The keys this module manages (the heal's verification needs them). */

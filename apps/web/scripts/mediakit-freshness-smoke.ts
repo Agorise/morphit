@@ -41,7 +41,7 @@ import { SUPPORTED_LOCALES } from '../src/lib/i18n/locales';
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..');
 
 const ZIP_PATH = join(REPO_ROOT, 'apps', 'web', 'static', 'morphit-mediakit.zip');
-const BRAG_LIST = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
+const BRAG_LIST = join(REPO_ROOT, 'docs', 'MORPHIT-BRAG-LIST.md');
 const MARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-mark.svg');
 const WORDMARK_SVG = join(REPO_ROOT, 'apps', 'web', 'static', 'brand', 'morphit-wordmark.svg');
 // The feature-comparison PNG is bundled into the kit (build-mediakit.sh),

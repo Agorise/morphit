@@ -57,6 +57,7 @@ const MUST_IGNORE: readonly string[] = [
 	'ipfs-cid.txt', // release job
 	'ipns-name.txt', // release job
 	'ipns-sign.json', // release job
+	'release.json', // ELI5 Block 4 (release-build-payload.ts output)
 	'apps/web/static/canary.txt', // scripts/canary/generate.sh default output
 	'apps/web/static/pgp_keys.asc', // an operator's key, staged by older canary setups
 	'.npm-cache/_cacache/index', // ops/ansible clone_and_build.yml

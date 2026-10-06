@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC = REPO_ROOT / "MORPHIT-BRAG-LIST.md"
+SRC = REPO_ROOT / "docs" / "MORPHIT-BRAG-LIST.md"
 
 
 def main() -> int:

@@ -50,6 +50,11 @@ import type { AssetTicker } from '@morphit/asset-registry';
 import { broadcastComment, type CommentPayload } from '$blurt/ops/comment';
 import { getUserBlurtAccount } from '$blurt/ops/profile';
 import { DEFAULT_LOCALE } from '$i18n/locales';
+import { BRAND_JSON_PATH } from '$lib/brand/brand';
+import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
+import { fetchWithTimeout } from '$net/fetchWithTimeout';
+import { isHiddenOrigin } from '$net/transportBudget';
+import { BRAND_FRESH_PARAM } from '$lib/net/dynamicPaths';
 
 /** The @morphit community account on Blurt. Posts here get
  *  surfaced to @morphit subscribers and indexed under the
@@ -61,11 +66,10 @@ const MORPHIT_COMMUNITY = 'blurt-176570';
  *  on Blurt. Aligns with the project tag. */
 const MORPHIT_TAG = 'morphit';
 
-/** Image URLs (operator-supplied, pre-uploaded to Blurt's image
- *  host). Hardcoded here because the syndication flow shouldn't
- *  do per-post uploads — the same image is used for every Morphit
- *  user's announcement. If we later want operator-customizable
- *  images we'd thread these through config. */
+/** The Morphit picture for the first-trade post, pre-uploaded to Blurt's
+ *  image host, so it loads from any instance (also one only on Tor/I2P). Used
+ *  only by an instance that serves the shipped link-preview picture; a branded
+ *  instance shows its own (postPictures below). */
 const IMAGE_FIRST_TRADE =
 	'https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png';
 /** This instance's origin: the links in a post lead to the site the user
@@ -74,12 +78,79 @@ function instanceOrigin(): string {
 	return typeof window !== 'undefined' ? window.location.origin : '';
 }
 
-/** The per-order announcement leads with the site's og-image (the order detail
- *  page's header), also used as the post's social-card thumbnail — only from
- *  an https origin: Blurt's frontends cannot load an image from a hidden
- *  service (or from plain http), and would show a broken image. */
-function orderPostImage(origin: string): string | null {
-	return origin.startsWith('https://') ? `${origin}/og-image.png` : null;
+/** How long a post waits for /brand/brand.json before deciding without it
+ *  (raised to the hidden-transport floor on a Tor/I2P address). */
+const BRAND_JSON_TIMEOUT_MS = 5_000;
+
+interface PostBrand {
+	/** The site's name ("Morphit" unbranded), for the picture's alt text. */
+	readonly name: string;
+	/** The instance is branded (its own name or logo). */
+	readonly branded: boolean;
+	/** The served /og-image.png is this instance's own (`morphit-ops branding`
+	 *  writes `og_image: "own"` into brand.json when it drew or was given one,
+	 *  `"shipped"` when a branded instance's picture could not be drawn). */
+	readonly ownPicture: boolean;
+}
+
+/** This instance's brand, read when a post is made: /brand/brand.json, or —
+ *  when that cannot be read — the name the page was stamped with. */
+async function postBrand(): Promise<PostBrand> {
+	const stamped =
+		sanitizeBrandName(
+			typeof document !== 'undefined' ? document.documentElement.dataset.brandName : undefined
+		) ?? DEFAULT_BRAND_NAME;
+	try {
+		const res = await fetchWithTimeout(
+			`${BRAND_JSON_PATH}?${BRAND_FRESH_PARAM}=1`,
+			{ credentials: 'same-origin', cache: 'no-store' },
+			BRAND_JSON_TIMEOUT_MS
+		);
+		if (res.ok) {
+			const b = (await res.json()) as { name?: unknown; og_image?: unknown } | null;
+			if (b !== null && typeof b === 'object') {
+				const name = sanitizeBrandName(b.name) ?? stamped;
+				const byName = name !== DEFAULT_BRAND_NAME || stamped !== DEFAULT_BRAND_NAME;
+				const branded = byName || b.og_image === 'own' || b.og_image === 'shipped';
+				return {
+					name,
+					branded,
+					// A brand.json without the flag (an older copy, or one written by
+					// an older upgrader) on a branded site: its picture was drawn.
+					ownPicture: b.og_image === 'own' || (b.og_image === undefined && byName)
+				};
+			}
+		}
+	} catch {
+		// Offline / slow / malformed → decide from the stamped name.
+	}
+	const byName = stamped !== DEFAULT_BRAND_NAME;
+	return { name: stamped, branded: byName, ownPicture: byName };
+}
+
+/** Blurt's frontends load a post's picture only from a public https address
+ *  (not a hidden service, even one served over https). */
+function canShowPicture(origin: string): boolean {
+	return origin.startsWith('https://') && !isHiddenOrigin(origin);
+}
+
+/** The pictures for both posts (v1.21.1: they follow the instance's branding).
+ *  - a branded instance: its own link-preview picture (/og-image.png), or none
+ *    when it has none of its own — never Morphit's;
+ *  - an unbranded one: the per-order post leads with the site's link-preview
+ *    picture, the first-trade post with the Morphit picture (hosted on Blurt).
+ *  A picture from this instance is used only from a public https address:
+ *  Blurt's frontends cannot load one from a hidden service (or plain http). */
+function postPictures(
+	origin: string,
+	brand: PostBrand
+): { readonly order: string | null; readonly firstTrade: string | null } {
+	const own = canShowPicture(origin) ? `${origin}/og-image.png` : null;
+	if (brand.branded) {
+		const pic = brand.ownPicture ? own : null;
+		return { order: pic, firstTrade: pic };
+	}
+	return { order: own, firstTrade: IMAGE_FIRST_TRADE };
 }
 
 // ─── Result types ──────────────────────────────────────────────────
@@ -136,9 +207,11 @@ export async function publishFirstTradePost(
 		values: { seller: ctx.seller }
 	}) as string;
 	const lang = (get(locale) ?? DEFAULT_LOCALE) as string;
-	const body = t('syndicate.first_trade.body', {
+	const text = t('syndicate.first_trade.body', {
 		values: { profile_url: `${instanceOrigin()}/${lang}/@${account}` }
 	}) as string;
+	const image = postPictures(instanceOrigin(), await postBrand()).firstTrade;
+	const body = image !== null ? `![](${image})\n\n${text}` : text;
 
 	const permlink = firstTradePermlink(account);
 
@@ -148,9 +221,7 @@ export async function publishFirstTradePost(
 		permlink,
 		title,
 		body,
-		extraMetadata: {
-			image: [IMAGE_FIRST_TRADE]
-		}
+		extraMetadata: image !== null ? { image: [image] } : {}
 	};
 
 	try {
@@ -273,7 +344,8 @@ export async function publishOrderPost(
 
 	const bullets: string[] = [];
 	if (methods.length > 0) bullets.push(`- ${payAcceptLabel}: ${methods}`);
-	if (ctx.createdAtIso) bullets.push(`- ${colon('order_detail.posted_on')}${formatDayMonth(ctx.createdAtIso)}`);
+	if (ctx.createdAtIso)
+		bullets.push(`- ${colon('order_detail.posted_on')}${formatDayMonth(ctx.createdAtIso)}`);
 	if (ctx.expiresAtIso)
 		bullets.push(`- ${colon('order_detail.expires_on')}${formatDayMonth(ctx.expiresAtIso)}`);
 	if (ctx.locationRegion && ctx.locationRegion.trim().length > 0)
@@ -285,12 +357,17 @@ export async function publishOrderPost(
 	}
 
 	const origin = instanceOrigin();
-	const image = orderPostImage(origin);
+	// No picture is possible from a hidden or plain-http address: then there is
+	// nothing to read brand.json for (it would only wait on Tor).
+	const brand: PostBrand = canShowPicture(origin)
+		? await postBrand()
+		: { name: DEFAULT_BRAND_NAME, branded: false, ownPicture: false };
+	const image = postPictures(origin, brand).order;
 	const orderUrl = `${origin}/${lang}/@${account}/${ctx.orderPermlink}`;
 	const termsText = (ctx.terms ?? '').trim();
 
 	const sections: string[] = [
-		...(image !== null ? [`![Morphit](${image})`] : []),
+		...(image !== null ? [`![${brand.name}](${image})`] : []),
 		`# ${title}`,
 		`## ${t('syndicate.order_post.details') as string}`,
 		bullets.join('\n')

@@ -610,7 +610,16 @@ export interface LoadResult {
  *  No-op (and returns `applied: 0`, `file: null`) if no file
  *  is found in the search paths AND the override env var is
  *  unset. Pure env-var deployments are fully supported. */
-export function loadOperatorConfig(opts: { searchPaths?: readonly string[] } = {}): LoadResult {
+export function loadOperatorConfig(
+	opts: {
+		searchPaths?: readonly string[];
+		/** No "loaded …" lines (a CLI that prints its own output); errors still throw. */
+		quiet?: boolean;
+	} = {}
+): LoadResult {
+	const say = (m: string): void => {
+		if (opts.quiet !== true) console.log(m);
+	};
 	const overridePath = process.env.MORPHIT_OPERATOR_CONFIG_FILE;
 	let path: string | null = null;
 
@@ -637,7 +646,7 @@ export function loadOperatorConfig(opts: { searchPaths?: readonly string[] } = {
 	if (path === null) {
 		// Genuinely optional. Operators who only use env vars
 		// see no behavior change.
-		console.log(`[operator-config] no morphit.config.env found — using OS environment only`);
+		say(`[operator-config] no morphit.config.env found — using OS environment only`);
 		return { file: null, applied: 0, skipped: [] };
 	}
 
@@ -697,16 +706,14 @@ export function loadOperatorConfig(opts: { searchPaths?: readonly string[] } = {
 		applied++;
 	}
 
-	console.log(
+	say(
 		`[operator-config] loaded ${sanitizeForTerm(path)} (${applied} applied, ${skipped.length} skipped — env wins)`
 	);
 	if (skipped.length > 0) {
 		// Allowlist keys (which is all `skipped` entries can be)
 		// are constants from ALLOWLIST, but sanitize for defense in
 		// depth.
-		console.log(
-			`[operator-config] skipped (already in env): ${skipped.map(sanitizeForTerm).join(', ')}`
-		);
+		say(`[operator-config] skipped (already in env): ${skipped.map(sanitizeForTerm).join(', ')}`);
 	}
 
 	return { file: path, applied, skipped };
@@ -741,7 +748,7 @@ export {
  * The language codes an order may be tagged with, and that the orderbook
  * language filter offers. Kept in lockstep with the web SUPPORTED_LOCALES codes
  * (a parity smoke asserts they match). An order with no lang (every order
- * created before this feature) is always shown, never filtered out.
+ * created before this feature) shows only when no language is chosen.
  */
 export const ORDER_LANG_CODES = [
 	'en',

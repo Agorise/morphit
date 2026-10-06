@@ -495,8 +495,8 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	L.push('## 3. Web edge');
 	L.push('');
 	if (bw) {
-		L.push('- [ ] **BunkerWeb fronts the stack** (OWASP Top-10, bot detection, GeoIP,');
-		L.push('      per-AS rate limiting, DDoS mitigation):');
+		L.push('- [ ] **BunkerWeb fronts the stack** (OWASP Top-10, bot detection,');
+		L.push('      rate limiting, DDoS mitigation):');
 		L.push('      ```');
 		L.push('      sudo cp -r ops/bunkerweb /etc/bunkerweb');
 		L.push(`      # edit /etc/bunkerweb/bunkerweb.env: SERVER_NAME=${domain}`);

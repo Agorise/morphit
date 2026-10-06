@@ -11,7 +11,7 @@
  * goes to a log file the operator is pointed at.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export const AFTER_RESTART_SUBCOMMAND = '__post-upgrade-after-restart';
@@ -19,8 +19,11 @@ export const AFTER_RESTART_UNIT = 'morphit-after-upgrade-heal';
 /** Longest wait for the restarts, then the heals run anyway. */
 export const AFTER_RESTART_WAIT_MS = 15 * 60_000;
 // Restarts (15 min at most), the web-proxy heal the egress heal waits for
-// (10 min at most), the egress heal itself (about 4 min at worst), the rest.
-const UNIT_MAX_S = 45 * 60;
+// (10 min at most), the egress heal itself (about 4 min at worst), the
+// frontend base image fetch through Tor (15 min at most; the rebuild onto it
+// runs as its own unit, morphit-web-heal, after the web heal is idle — 10 min
+// at most), the rest.
+const UNIT_MAX_S = 65 * 60;
 
 export function afterRestartLogPath(): string {
 	return process.env.MORPHIT_AFTER_RESTART_LOG ?? '/var/log/morphit/after-upgrade-heal.log';
@@ -152,7 +155,16 @@ export function launchAfterRestartHeals(
 			],
 			{ encoding: 'utf8', timeout: 20_000 }
 		);
-		return r.status === 0 ? 'launched' : 'unavailable';
+		if (r.status === 0) return 'launched';
+		// Not started: the log must not look like this upgrade's run of the
+		// checks (the upgrade's last lines would say "still running").
+		try {
+			writeFileSync(log, 'The background checks could not be started.\n', { mode: 0o640 });
+			utimesSync(log, 0, 0);
+		} catch {
+			/* nothing to correct */
+		}
+		return 'unavailable';
 	} catch {
 		return 'unavailable';
 	}

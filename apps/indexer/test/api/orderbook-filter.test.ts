@@ -106,6 +106,22 @@ describe('buildWhereClauses — orderbook filter fields', () => {
 		expect(params).toContain(5);
 	});
 
+	// v1.21.1 — on morphit.io, filtering by one post language still showed every
+	// order: orders with no language tag (all posted before v1.15.0) always
+	// matched. A language filter now shows only orders written in a chosen
+	// language; with no language chosen, every order shows as before.
+	it('langs: only orders in a chosen language (untagged orders do not match a language filter)', () => {
+		const { sql, params } = clausesFor({ langs: 'es' });
+		expect(sql).toMatch(/o\.lang = ANY\(\$\d+::text\[\]\)/);
+		expect(sql).not.toContain('o.lang IS NULL');
+		expect(params).toContainEqual(['es']);
+		const many = clausesFor({ langs: 'es, fr,zz-nope' });
+		expect(many.params).toContainEqual(['es', 'fr']);
+		expect(clausesFor({}).sql).not.toContain('o.lang');
+		// Nothing valid chosen → no language filtering (never an empty orderbook).
+		expect(clausesFor({ langs: 'zz-nope' }).sql).not.toContain('o.lang');
+	});
+
 	it('all fields together compose without collision', () => {
 		const { sql } = clausesFor({
 			asset: 'BTC',

@@ -1242,6 +1242,18 @@ export function planBranding(
 		name: brandName ?? DEFAULT_BRAND_NAME,
 		beta_badge: beta
 	};
+	// The served og-image.png is this instance's own (drawn above, or the
+	// operator's static/og-image.png). The page reads this to put the instance's
+	// picture, not the Morphit one, in the Blurt posts users publish from it
+	// (apps/web/src/lib/syndication/publish.ts).
+	{
+		const og = files.get(OG_IMAGE_REL);
+		// (An overlay byte-identical to the shipped picture is the shipped picture.)
+		if (og !== undefined && !(ogCanon !== null && og.equals(ogCanon))) brandDoc.og_image = 'own';
+		// Branded (a name or a logo), but its picture could not be drawn: the page
+		// must not put Morphit's picture on this instance's posts either.
+		else if (settings.brandName !== null || ogMark !== null) brandDoc.og_image = 'shipped';
+	}
 	if (palette !== null) {
 		// Applied by the SPA shell (apps/web/src/lib/brand/brand.ts applyTheme);
 		// prerendered pages carry the same values in their theme <style> slot.

@@ -505,8 +505,11 @@ jobs:
           #    SHARED script (identical to what the seed box stages → identical CID).
           STAGE="$(mktemp -d)/morphit"
           mkdir -p "$STAGE"
+          # SEED_VERBOSE=1: the log lists the staged files (RELEASE-NOTES.md
+          # included); it changes nothing in the directory, so not the CID.
           if ! MORPHIT_STAGE_TARBALL="$TARBALL" \
                MORPHIT_STAGE_SHA256="${TARBALL}.sha256" \
+               SEED_VERBOSE=1 \
                sh ops/ipfs/stage-release-dir.sh "$TAG" "$STAGE"; then
             echo "WARNING: staging failed — no ipfs_cid this run." >&2
             exit 0
@@ -798,7 +801,7 @@ jobs:
           # the notes can't break the payload. Missing file => empty body (never
           # fails the release). The PATCH variant omits tag_name so a re-run can
           # NEVER re-point or re-create the signed tag.
-          NOTES_FILE="RELEASE-NOTES-${TAG}.md"
+          NOTES_FILE="docs/release-notes/RELEASE-NOTES-${TAG}.md"
           NOTES_FILE="$NOTES_FILE" node -e '
             const fs = require("fs");
             const tag = process.env.TAG;
@@ -916,7 +919,7 @@ jobs:
           # so quotes/newlines in the notes can't break the payload; missing notes =>
           # empty body). tag_name is set on create; a re-run reuses the release and
           # never re-points the signed tag.
-          NOTES_FILE="RELEASE-NOTES-${TAG}.md"
+          NOTES_FILE="docs/release-notes/RELEASE-NOTES-${TAG}.md"
           NOTES_FILE="$NOTES_FILE" node -e '
             const fs = require("fs");
             const tag = process.env.TAG;

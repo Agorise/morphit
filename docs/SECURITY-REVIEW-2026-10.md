@@ -46,7 +46,7 @@ except where listed under "Known limits". The most serious:
 - the service account could gain root; TLS certificates did not renew on BunkerWeb servers;
 - several public claims about privacy and security were not true; they were corrected or removed.
 
-The release notes ([RELEASE-NOTES-v1.21.0.md](../RELEASE-NOTES-v1.21.0.md)) describe the fixes.
+The release notes ([RELEASE-NOTES-v1.21.0.md](release-notes/RELEASE-NOTES-v1.21.0.md)) describe the fixes.
 
 ## Known limits
 

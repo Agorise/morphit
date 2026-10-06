@@ -81,6 +81,8 @@ import { isHiddenOnlyNode } from './hiddenOnly.ts';
 import {
 	BUNKERWEB_PRIVACY_KEYS,
 	bunkerwebSettingsProblems,
+	countryListsInSettings,
+	isCountryListKey,
 	planBunkerwebPrivacy
 } from './bunkerwebPrivacy.ts';
 
@@ -239,7 +241,8 @@ export function envFileValue(raw: string): string {
 export function envFileEntries(text: string): Map<string, string> {
 	const out = new Map<string, string>();
 	for (const line of text.split('\n')) {
-		const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+		// Keys may carry a server name (`<server name>_KEY`, BunkerWeb multisite).
+		const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)=(.*)$/.exec(line);
 		if (m) out.set(m[1]!, envFileValue(m[2]!));
 	}
 	return out;
@@ -1170,7 +1173,12 @@ export async function applyAndVerifyProxyConfig(opts: HealOpts): Promise<ProxyHe
 	} finally {
 		stop();
 	}
-	if (list === null) return { kind: 'no-proxy' };
+	if (list === null)
+		return {
+			kind: 'left-alone',
+			reason:
+				'Docker did not list the containers in time, so the web containers could not be checked; on this server check: sudo docker ps'
+		};
 	let id = identifyContainers(list, opts.buildDir);
 	// The frontend first: what it really serves decides whether BunkerWeb may
 	// be pointed at its edge listener, and a rebuild here must precede that.
@@ -1633,7 +1641,27 @@ async function applyComposeAndEnv(
 	const staleEdge = staleOf(edgeIn);
 	const staleFe = staleOf(feIn);
 	const allChanges = [...envChanges, ...composeChanges];
-	if (allChanges.length === 0 && !staleEdge && !staleFe) return { kind: 'already' };
+	// Nothing to change in the files: still, no country list may reach BunkerWeb
+	// another way (a compose `environment:` entry this heal does not edit).
+	const countryElsewhere = (): ComposeOutcome | null => {
+		if (!edgeIn || !rt.bunkerwebSettings) return null;
+		const stop = rt.spinner('Checking that no country list reaches BunkerWeb…');
+		let vars: string | null;
+		try {
+			vars = rt.bunkerwebSettings(edgeIn.name, clock.t(PROBE_MS));
+		} finally {
+			stop();
+		}
+		if (vars === null) return null;
+		const lists = countryListsInSettings(vars);
+		if (lists.length === 0) return null;
+		return {
+			kind: 'left-alone',
+			reason: `BunkerWeb runs with a country list (${lists.join(', ')}) that its env file does not set (a compose "environment:" entry?). No Morphit instance blocks by country: remove it there, then recreate BunkerWeb on this server (sudo docker compose up -d --force-recreate in its compose directory)`
+		};
+	};
+	if (allChanges.length === 0 && !staleEdge && !staleFe)
+		return countryElsewhere() ?? { kind: 'already' };
 
 	const upServices: string[] = [];
 	const upNames: string[] = [];
@@ -1648,7 +1676,7 @@ async function applyComposeAndEnv(
 	if (envChanges.length > 0) for (const s of schedulers) addUp(s);
 	if (edgeIn && (envChanges.length > 0 || touched.has(svc.edge!) || staleEdge)) addUp(edgeIn);
 	if (feIn && (touched.has(svc.frontend!) || staleFe)) addUp(feIn);
-	if (upServices.length === 0) return { kind: 'already' };
+	if (upServices.length === 0) return countryElsewhere() ?? { kind: 'already' };
 
 	if (clock.left() < UP_MIN_MS + VERIFY_MIN_MS + reserve) {
 		note(
@@ -1763,7 +1791,7 @@ async function applyComposeAndEnv(
 		// that file cannot be read) the containers' environment.
 		const privacyWant = new Map(
 			changedKeys
-				.filter((k) => BUNKERWEB_PRIVACY_KEYS.includes(k))
+				.filter((k) => BUNKERWEB_PRIVACY_KEYS.includes(k) || isCountryListKey(k))
 				.map((k) => [k, envFinal.get(k)!] as const)
 		);
 		const evidence: { seen: 'generated' | 'environment' } = { seen: 'environment' };
@@ -1884,6 +1912,10 @@ async function applyComposeAndEnv(
 				);
 			if (staleEdge || staleFe)
 				opts.info('✓ The web containers now run with the logging their Compose file sets.');
+			// Applied and checked. A country list that reaches BunkerWeb another
+			// way (not this heal's to edit) is still named, with what to do.
+			const elsewhere = countryElsewhere();
+			if (elsewhere !== null && elsewhere.kind === 'left-alone') opts.warn(elsewhere.reason);
 			return { kind: 'applied', changes: allChanges };
 		}
 
@@ -1941,12 +1973,85 @@ function list0(id: Identified, names: readonly string[]): ContainerInfo[] {
 
 // ─── real entry point ───────────────────────────────────────────────────
 
-function docker(args: string[], timeout = 15_000): { ok: boolean; out: string } {
+/** The RUNNING Docker daemon pulls through Tor: its environment has the
+ *  socks5 proxy the tor-only egress heal writes. */
+export function dockerDaemonPullsThroughTor(): boolean {
+	// daemon.json's "proxies" win over the daemon's environment (Docker 23+):
+	// one that is not Tor's makes every pull go there instead.
+	let daemonJson: string | null = null;
+	try {
+		daemonJson = readFileSync('/etc/docker/daemon.json', 'utf8');
+	} catch {
+		daemonJson = null;
+	}
+	if (!daemonJsonProxiesAllowTor(daemonJson)) return false;
+	const pid = spawnSync('systemctl', ['show', '-p', 'MainPID', '--value', 'docker'], {
+		encoding: 'utf8',
+		timeout: 10_000
+	}).stdout?.trim();
+	if (!pid || !/^[1-9]\d*$/.test(pid)) return false;
+	try {
+		const env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
+		const noProxy = env
+			.filter((e) => /^no_proxy=/i.test(e))
+			.map((e) => e.slice(e.indexOf('=') + 1))
+			.join(',');
+		return (
+			env.some((e) => /^HTTPS_PROXY=socks5h?:\/\/127\.0\.0\.1:\d+$/i.test(e)) &&
+			!noProxyBypassesRegistry(noProxy)
+		);
+	} catch {
+		return false;
+	}
+}
+
+/** PURE. A NO_PROXY list that sends a Docker registry pull around the proxy
+ *  (`*`, or an entry covering docker.io / docker.com, where Docker Hub's
+ *  registry and its storage live). */
+export function noProxyBypassesRegistry(list: string): boolean {
+	return list
+		.split(/[,\s]+/)
+		.map((e) =>
+			e
+				.trim()
+				.toLowerCase()
+				.replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+				.replace(/:\d+$/, '')
+				.replace(/^\*?\./, '')
+		)
+		.some((e) => e === '*' || /(^|\.)docker\.(io|com)$/.test(e) || e === 'io' || e === 'com');
+}
+
+/** PURE. Docker's daemon.json leaves pulls to Tor: no "proxies" block, or one
+ *  whose http/https proxies are Tor's local SOCKS port. An unreadable or
+ *  malformed file is not proof of anything: false. */
+export function daemonJsonProxiesAllowTor(text: string | null): boolean {
+	if (text === null || text.trim() === '') return true;
+	let doc: unknown;
+	try {
+		doc = JSON.parse(text);
+	} catch {
+		return false;
+	}
+	if (doc === null || typeof doc !== 'object') return false;
+	const proxies = (doc as { proxies?: unknown }).proxies;
+	if (proxies === undefined) return true;
+	if (proxies === null || typeof proxies !== 'object') return false;
+	const p = proxies as Record<string, unknown>;
+	const tor = (v: unknown): boolean =>
+		v === undefined || (typeof v === 'string' && /^socks5h?:\/\/127\.0\.0\.1:\d+$/i.test(v));
+	const np = p['no-proxy'];
+	if (np !== undefined && (typeof np !== 'string' || noProxyBypassesRegistry(np))) return false;
+	return tor(p['http-proxy']) && tor(p['https-proxy']);
+}
+
+function docker(args: string[], timeout = 15_000): { ok: boolean; out: string; missing: boolean } {
 	try {
 		const r = spawnSync('docker', args, { encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024 });
-		return { ok: r.status === 0, out: `${r.stdout ?? ''}`.trim() };
+		const missing = (r.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
+		return { ok: r.status === 0, out: `${r.stdout ?? ''}`.trim(), missing };
 	} catch {
-		return { ok: false, out: '' };
+		return { ok: false, out: '', missing: false };
 	}
 }
 
@@ -1963,9 +2068,17 @@ export async function healProxyConfig(deps: {
 	readonly rollbackReserveMs?: number;
 }): Promise<ProxyHealOutcome> {
 	const stop = deps.spinner('Looking for the web containers…');
-	const up = docker(['version', '--format', '{{.Server.Version}}'], 10_000).ok;
+	const ver = docker(['version', '--format', '{{.Server.Version}}'], 10_000);
 	stop();
-	if (!up) return { kind: 'no-proxy' };
+	// No Docker on this server: no web containers. Docker installed but not
+	// answering is a problem the operator must see, never "nothing to change".
+	if (ver.missing) return { kind: 'no-proxy' };
+	if (!ver.ok)
+		return {
+			kind: 'left-alone',
+			reason:
+				'Docker is not answering on this server, so the web containers could not be checked; on this server check: sudo systemctl status docker'
+		};
 	// Inside the re-exec'd self-heal child, finish before its kill.
 	const inChild = process.argv.includes('__post-upgrade-selfheal');
 	const hardStopAt = inChild
@@ -2194,18 +2307,7 @@ export async function healProxyConfig(deps: {
 					return false;
 				}
 			},
-			dockerPullsThroughTor: () => {
-				const pid = spawnSync('systemctl', ['show', '-p', 'MainPID', '--value', 'docker'], {
-					encoding: 'utf8'
-				}).stdout?.trim();
-				if (!pid || !/^[1-9]\d*$/.test(pid)) return false;
-				try {
-					const env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
-					return env.some((e) => /^HTTPS_PROXY=socks5h?:\/\/127\.0\.0\.1:\d+$/i.test(e));
-				} catch {
-					return false;
-				}
-			},
+			dockerPullsThroughTor: () => dockerDaemonPullsThroughTor(),
 			schedulerCycle: (schedulers, edge, sinceIso, t) => {
 				const edgeLogs = edge ? dockerLogsSince(edge, sinceIso, t) : '';
 				let pending = false;

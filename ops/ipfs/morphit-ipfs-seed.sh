@@ -40,6 +40,13 @@
 set -eu
 
 log() { echo "morphit-ipfs-seed: $*" >&2; }
+# Each step is shown at a terminal (or with MORPHIT_SEED_VERBOSE=1); piped into
+# `morphit-ops upgrade`, only results and problems are. The bare CID on stdout
+# is part of the steps (since v1.21.1); the result line on stderr ("hosted …" or
+# "✓ CID matches …") always names it.
+if [ -t 2 ] || [ "${MORPHIT_SEED_VERBOSE:-}" = 1 ]; then SEED_VERBOSE=1; else SEED_VERBOSE=0; fi
+export SEED_VERBOSE
+step() { [ "$SEED_VERBOSE" = 1 ] && log "$@"; return 0; }
 
 # Braille spinner shown on stderr while a background PID runs, so the operator
 # is never left staring at a frozen terminal during a slow step. TTY-guarded
@@ -128,16 +135,16 @@ if [ -z "$EXPECTED" ] && [ "$HIDDEN_ONLY" = no ] && command -v curl >/dev/null 2
 	EXPECTED="$(printf '%s' "$ANCHOR" \
 		| sed -n 's/^[[:space:]]*export MORPHIT_BUILD_IPFS_CID=//p' \
 		| tr -d '"' | head -n1)"
-	[ -n "$EXPECTED" ] && log "expected CID from $TAG anchor: $EXPECTED"
+	[ -n "$EXPECTED" ] && step "expected CID from $TAG anchor: $EXPECTED"
 fi
 
 # 3. Reconstruct the canonical directory (SAME script CI hashed) + add it.
 STAGE="$(mktemp -d)/morphit"
 mkdir -p "$STAGE"
-log "staging $TAG…"
+step "staging $TAG…"
 sh "$STAGER" "$TAG" "$STAGE"
 
-log "ipfs add (timeout ${ADD_TIMEOUT}s)…"
+step "ipfs add (timeout ${ADD_TIMEOUT}s)…"
 # Run in the background with a spinner so a slow add (large tree, busy daemon,
 # or a Tor-routed box) never looks frozen. CID is captured via a temp file.
 _cidfile="$(mktemp)"
@@ -148,7 +155,7 @@ CID="$(cat "$_cidfile" 2>/dev/null | tr -d '[:space:]')"
 rm -f "$_cidfile"
 rm -rf "$(dirname "$STAGE")" 2>/dev/null || true
 [ -n "$CID" ] || { log "ipfs add produced no CID"; exit 1; }
-log "hosted $TAG → $CID"
+if [ -n "$EXPECTED" ]; then step "hosted $TAG → $CID"; else log "hosted $TAG → $CID"; fi
 
 # 4. Determinism assertion — the produced CID MUST equal the anchored one.
 if [ -n "$EXPECTED" ]; then
@@ -167,11 +174,11 @@ fi
 if [ "$HIDDEN_ONLY" = yes ]; then
 	log "not announcing $CID to the public IPFS network (hidden-only node)."
 else
-	log "announcing to the network…"
+	step "announcing to the network…"
 	ipfs --timeout=60s routing provide "$CID" >/dev/null 2>&1 &
 	_spin "$!" "announcing $CID to the DHT…"
 	if wait "$!" 2>/dev/null; then
-		log "announced $CID to the network."
+		step "announced $CID to the network."
 	else
 		log "routing provide did not complete (non-fatal) — the daemon reprovides on its own schedule."
 	fi
@@ -427,9 +434,9 @@ if [ -z "${_onion:-}" ] && [ -z "${_i2p:-}" ]; then
 	log "   peers may well reach it fine; only this self-check could not confirm it.)"
 fi
 
-echo "$CID"
+[ "$SEED_VERBOSE" = 1 ] && echo "$CID"
 if [ "$HIDDEN_ONLY" = yes ]; then
-	log "done. Peers fetch it from this node's hidden addresses at /ipfs/$CID/morphit-latest.tar.gz"
+	step "done. Peers fetch it from this node's hidden addresses at /ipfs/$CID/morphit-latest.tar.gz"
 else
-	log "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"
+	step "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"
 fi

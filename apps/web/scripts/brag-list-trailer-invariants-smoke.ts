@@ -71,7 +71,7 @@ function fail(name: string, detail: string): void {
 
 console.log('\n── brag-list-trailer-invariants smoke (cp75 LL #75 / O-23) ──\n');
 
-const bragPath = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
+const bragPath = join(REPO_ROOT, 'docs', 'MORPHIT-BRAG-LIST.md');
 const bragSrc = readFileSync(bragPath, 'utf-8');
 
 // ── I-1: trailer entry count vs actual entries ──────────────────

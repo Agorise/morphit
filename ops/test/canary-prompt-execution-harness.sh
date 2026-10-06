@@ -88,8 +88,8 @@ case "$src" in
 	*) no "the reminder still assumes a weekly refresh every box has" ;;
 esac
 case "$src" in
-	*"This box has NO scheduled refresh"*)
-		ok "…and tells a remote signer plainly that nothing here will republish it" ;;
+	*"on the computer that holds its key"*)
+		ok "…and tells a remote signer plainly to re-sign it on the computer with the key" ;;
 	*) no "a remote signer is not told their canary will NOT self-refresh" ;;
 esac
 case "$src" in
@@ -102,7 +102,7 @@ esac
 # The main flow refreshes nginx.conf and rebuilds; the self-heal did it again
 # seconds later — two container restarts, two brief outages, every upgrade.
 case "$src" in
-	*"Frontend already serves the current nginx.conf"*)
+	*"if (alreadyCurrent) {"*)
 		ok "the self-heal skips when the container already has this config" ;;
 	*) no "the self-heal rebuilds unconditionally — two restarts per upgrade" ;;
 esac

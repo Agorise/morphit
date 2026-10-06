@@ -90,6 +90,11 @@ export const BRAND_OVERRIDABLE_PATHS: readonly string[] = [
 	'/manifest.webmanifest'
 ];
 
+/** Query parameter asking the service worker for the NETWORK's copy of a
+ *  brand file (the cached one only when offline). Sent only by the Blurt post
+ *  (lib/syndication/publish.ts), right before posting. */
+export const BRAND_FRESH_PARAM = 'fresh';
+
 /**
  * @param pathname  A URL pathname with no query or hash.
  * @returns `true` for a brand asset the operator may replace in place

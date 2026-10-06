@@ -4,6 +4,9 @@
  * heals that need them. Here: the waiting rule and the unit it starts.
  */
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
 	AFTER_RESTART_SUBCOMMAND,
 	launchAfterRestartHeals,
@@ -94,5 +97,26 @@ describe('waiting for another background unit', () => {
 			})
 		).toBe('timed-out');
 		expect(t).toBeGreaterThanOrEqual(60_000);
+	});
+	// v1.21.1 review: the log was emptied before systemd-run, so a launch
+	// that failed still looked like this upgrade's run and the last lines said
+	// the checks were "still running".
+	it('a launch that fails leaves a log that does not look like this run', () => {
+		const d = mkdtempSync(join(tmpdir(), 'after-restart-'));
+		process.env.MORPHIT_AFTER_RESTART_LOG = join(d, 'log');
+		try {
+			const r = launchAfterRestartHeals({
+				run: (cmd) => ({ status: cmd === 'systemctl' ? 3 : 1 }),
+				cliPath: '/x/main.js',
+				nodePath: '/usr/bin/node',
+				sinceUs: 1
+			});
+			expect(r).toBe('unavailable');
+			expect(statSync(join(d, 'log')).mtimeMs).toBeLessThan(Date.now() - 86_400_000);
+			expect(readFileSync(join(d, 'log'), 'utf8')).toMatch(/could not be started/);
+		} finally {
+			delete process.env.MORPHIT_AFTER_RESTART_LOG;
+			rmSync(d, { recursive: true, force: true });
+		}
 	});
 });

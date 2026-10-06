@@ -49,6 +49,8 @@ export interface WebHealState {
 	/** The web-proxy heal's outcome kind (applied, already, rolled-back, …). */
 	readonly result?: string;
 	readonly detail?: string;
+	/** Warnings the run printed (into the web-heal log). */
+	readonly warnings?: number;
 }
 
 export function readWebHealState(path = webHealStatePath()): WebHealState | null {
@@ -80,6 +82,15 @@ export function describeWebHeal(s: WebHealState, nowMs: number): string {
 		return m < 1 ? 'just now' : m < 120 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
 	};
 	if (s.state === 'running') return `being applied in the background (started ${ago(s.startedAt)})`;
+	const n = s.warnings ?? 0;
+	const warned =
+		n > 0
+			? `; ${n === 1 ? 'one warning' : `${n} warnings`}, see on this server: sudo cat ${webHealLogPath()}`
+			: '';
+	return `${describeOutcome(s, ago)}${warned}`;
+}
+
+function describeOutcome(s: WebHealState, ago: (iso: string | undefined) => string): string {
 	const when = ago(s.finishedAt);
 	switch (s.result) {
 		case 'applied':
@@ -154,6 +165,8 @@ export interface FollowDeps {
 	/** New text in the log since byte `from`; returns [text, nextOffset]. */
 	readonly readLogFrom?: (from: number) => [string, number];
 	readonly info: (m: string) => void;
+	/** Warnings the unit printed are passed here (counted by the upgrade). */
+	readonly warn?: (m: string) => void;
 	readonly spinner: (label: string) => () => void;
 }
 
@@ -181,6 +194,12 @@ function readLogFromFile(from: number): [string, number] {
  * the final state when it finished (a run started at or after `sinceMs`), else
  * null (still running).
  */
+/** PURE. A spinner label written without a terminal: two spaces, then text
+ *  that ends in an ellipsis (init/spinner.ts). */
+export function isProgressLabel(line: string): boolean {
+	return /^ {2}\S.*\u2026$/.test(line);
+}
+
 export async function followWebHeal(
 	untilMs: number,
 	sinceMs: number,
@@ -203,7 +222,15 @@ export async function followWebHeal(
 				.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '')
 				.replace(/\r/g, '')
 				.trimEnd();
-			if (clean.trim() !== '') deps.info(clean);
+			// A wait label the background unit printed (its spinner has no
+			// terminal) is progress, not a result: the log keeps it; the
+			// upgrade's own spinner already shows that work goes on.
+			if (clean.trim() === '' || isProgressLabel(clean)) continue;
+			// A warning or error the unit printed (NO_COLOR: "[WARN] …" / "[ERR] …")
+			// stays one here: it is counted for the upgrade's last word.
+			const w = /^\s*(?:\[WARN\]|\[ERR\]|⚠|✗)\s+(.*)$/.exec(clean);
+			if (w && deps.warn) deps.warn(w[1]!);
+			else deps.info(clean);
 		}
 	};
 	for (;;) {

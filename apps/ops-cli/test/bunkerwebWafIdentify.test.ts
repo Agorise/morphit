@@ -540,7 +540,7 @@ describe('v1.20.1: on a BunkerWeb box the web-proxy heals run in the background'
 			expect(r.env).toBe(before);
 			expect(ups(r.st)).toEqual([]);
 			expect(r.st.restarted).toEqual([]);
-			expect(r.out).toMatch(/being applied in the background/);
+			expect(r.out).toMatch(/checked in the background/);
 		} finally {
 			delete process.env.MORPHIT_WEB_HEAL_STATE;
 			delete process.env.MORPHIT_WEB_HEAL_LOG;

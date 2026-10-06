@@ -445,6 +445,58 @@ describe('the social-preview image of a branded instance', () => {
 	});
 });
 
+// v1.21.1 — the pictures in the Blurt posts a user publishes from an instance
+// (the first-trade post to the community, the per-order post to their blog)
+// follow the instance's branding. brand.json tells the page whether the served
+// og-image.png is this instance's own; without that, a branded instance's
+// community post showed the Morphit picture.
+describe('brand.json says whether the link-preview picture is the instance’s own', () => {
+	const brandJson = (): Record<string, unknown> =>
+		JSON.parse(readFileSync(join(buildDir, 'brand', 'brand.json'), 'utf8')) as Record<
+			string,
+			unknown
+		>;
+	it('drawn for a name or a logo → og_image: "own"', () => {
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(brandJson().og_image).toBe('own');
+		writeFileSync(join(brandDir, 'icon.svg'), ICON_SVG);
+		applyBranding({ buildDir, settings: settings() });
+		expect(brandJson().og_image).toBe('own');
+	});
+	it('the operator’s own static/og-image.png → og_image: "own"', () => {
+		mkdirSync(join(brandDir, 'static'), { recursive: true });
+		const own = Buffer.concat([CANONICAL_OG, Buffer.from([0])]);
+		writeFileSync(join(brandDir, 'static', 'og-image.png'), own);
+		applyBranding({ buildDir, settings: settings({ theme: { preset: 'champagne-gold' } }) });
+		expect(og().equals(own)).toBe(true);
+		expect(brandJson().og_image).toBe('own');
+	});
+	it('an overlay identical to the shipped picture is the shipped picture → no og_image field', () => {
+		mkdirSync(join(brandDir, 'static'), { recursive: true });
+		writeFileSync(join(brandDir, 'static', 'og-image.png'), CANONICAL_OG);
+		applyBranding({ buildDir, settings: settings({ theme: { preset: 'champagne-gold' } }) });
+		expect(brandJson().og_image).toBeUndefined();
+	});
+	it('branded, but the picture could not be drawn → og_image: "shipped" (the page then shows none)', () => {
+		// A shipped image that is not 1200 × 630 (its PNG header says 1000 wide):
+		// nothing is drawn over it.
+		const odd = Buffer.from(CANONICAL_OG);
+		odd.writeUInt32BE(1000, 16);
+		writeFileSync(join(buildDir, 'og-image.png'), odd);
+		writeVerifyJson();
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(brandJson().og_image).toBe('shipped');
+	});
+	it('the shipped picture (unbranded, or colours only) → no og_image field', () => {
+		applyBranding({ buildDir, settings: settings({ theme: { preset: 'champagne-gold' } }) });
+		expect(og().equals(CANONICAL_OG)).toBe(true);
+		expect(brandJson().og_image).toBeUndefined();
+		applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		applyBranding({ buildDir, settings: settings(), reset: true });
+		expect(brandJson().og_image).toBeUndefined();
+	});
+});
+
 describe('names in scripts the bundled fonts lack', () => {
 	const NOTO = '/usr/share/fonts/opentype/noto';
 	it.skipIf(!existsSync(NOTO))(

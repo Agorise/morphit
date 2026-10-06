@@ -1316,7 +1316,7 @@
 			},
 			"run_your_own": {
 				"q": "Posso gestire una mia Morphit?",
-				"a": "Sì, e per favore fallo: Morphit resta inarrestabile solo se tante persone lo fanno girare. Un'installazione ti dà tutto lo stack:\n\n• Il sito web — lo stesso codice sul tuo dominio, o a un indirizzo .onion o .b32.i2p (o tutti).\n\n• Un indexer — legge la catena Blurt e serve ai tuoi visitatori il libro ordini, la cronologia della chat e i profili, come API REST e feed RSS, e dialoga con le altre istanze della federazione.\n\n• Un relay — crea account Blurt per i nuovi utenti della tua istanza (il tuo relay paga la commissione di creazione account della catena) e invia le notifiche push.\n\nPerché conta: ogni istanza è una strada in più che un censore, un hosting fallito o una cattiva sentenza non possono chiudere tutte insieme. Un'istanza è un bersaglio. Cinquanta sono un movimento. Tutti i servizi sono programmi Node.js (TypeScript) leggeri con file di configurazione semplici, installati su un server Ubuntu con un solo comando guidato; docs/RUN-A-MORPHIT-NODE.md ti accompagna e indica la dimensione del server che serve. Gestire un nodo Morphit ti fa guadagnare il 90% delle commissioni di pubblicazione pagate in BLURT su di esso.\n\n**Un operatore può andare fino in fondo.** Un nodo può funzionare senza alcun clearnet: letture della catena, verifiche delle commissioni in BTC/XMR, prezzi e aggiornamenti viaggiano su Tor e I2P, e su un nodo così una regola del firewall lascia uscire verso internet solo Tor e I2P. Il nodo si dichiara senza clearnet solo quando superano i suoi controlli su ogni percorso in uscita, e la directory lo mostra come \"Dichiara di non usare internet clearnet\": la dichiarazione dell'istanza stessa, che gli altri nodi non possono verificare. I visitatori raggiungono un nodo così solo tramite Tor o I2P, e nessuna delle due reti dice al visitatore dove si trova il server. Un avvertimento: un server che è stato una volta su clearnet resta collegato al suo vecchio dominio, quindi avvia un nodo nascosto con chiavi nuove e un nuovo account operatore."
+				"a": "Sì, e per favore fallo: Morphit resta inarrestabile solo se tante persone lo fanno girare. Un'installazione ti dà tutto lo stack:\n\n• Il sito web — lo stesso codice sul tuo dominio, o a un indirizzo .onion o .b32.i2p (o tutti).\n\n• Un indexer — legge la catena Blurt e serve ai tuoi visitatori il libro ordini, la cronologia della chat e i profili, come API REST e feed RSS, e dialoga con le altre istanze della federazione.\n\n• Un relay — crea account Blurt per i nuovi utenti della tua istanza (il tuo relay paga la commissione di creazione account della catena) e invia le notifiche push.\n\nPerché conta: ogni istanza è una strada in più che un censore, un hosting fallito o una cattiva sentenza non possono chiudere tutte insieme. Un'istanza è un bersaglio. Cinquanta sono un movimento. Tutti i servizi sono programmi Node.js (TypeScript) leggeri con file di configurazione semplici, installati su un server Ubuntu con un solo comando guidato; docs/RUN-A-MORPHIT-NODE.md ti accompagna e indica la dimensione del server che serve. Gestire un nodo Morphit ti fa guadagnare il 90% delle commissioni di pubblicazione pagate in BLURT su di esso.\n\n**Un operatore può andare fino in fondo.** Un nodo può funzionare senza alcun clearnet: letture della catena, verifiche delle commissioni in BTC/XMR, prezzi e aggiornamenti viaggiano su Tor e I2P, e su un nodo così una regola del firewall lascia uscire verso internet solo Tor e I2P. Il nodo si dichiara senza clearnet solo quando superano i suoi controlli su ogni percorso in uscita, e la directory lo mostra come \"Zero utilizzo di internet clearnet\": la dichiarazione dell'istanza stessa, che gli altri nodi non possono verificare. I visitatori raggiungono un nodo così solo tramite Tor o I2P, e nessuna delle due reti dice al visitatore dove si trova il server. Un avvertimento: un server che è stato una volta su clearnet resta collegato al suo vecchio dominio, quindi avvia un nodo nascosto con chiavi nuove e un nuovo account operatore."
 			},
 			"security_attack_vectors": {
 				"q": "Morphit è vulnerabile ad attacchi, furto di dati o blocchi?",
@@ -2240,7 +2240,7 @@
 		"last_probed_label": "Ultimo controllo",
 		"this_instance": "Sei qui",
 		"live": "Live",
-		"clearnet_eliminated": "Dichiara di non usare internet clearnet",
+		"clearnet_eliminated": "Zero utilizzo di internet clearnet",
 		"contact_via": "Contatta tramite {app}",
 		"contact_copy": "Copia indirizzo {app}"
 	},
@@ -2869,7 +2869,7 @@
 			"side_help": "Suggerimento: se vuoi comprare crypto, cerca annunci che vogliono vendere. Se vuoi vendere, cerca annunci che vogliono comprare.",
 			"order_details_label": "Termini / Dettagli / Note dell’ordine",
 			"language_label": "Lingua",
-			"language_hint": "Mostra solo ordini scritti in queste lingue. Lascia vuoto per vederli tutti.",
+			"language_hint": "Mostra solo ordini scritti in queste lingue. Lascia vuoto per vederli tutti. Gli ordini più vecchi senza lingua compaiono solo se il campo è vuoto.",
 			"language_placeholder": "Cerca lingue…",
 			"language_remove": "Rimuovi",
 			"language_no_matches": "Nessuna lingua corrispondente"
@@ -4736,7 +4736,7 @@
 	"syndicate": {
 		"first_trade": {
 			"title": "Ho appena completato il mio primo scambio con @{seller} su Morphit!",
-			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nMi sono unito a Morphit per poter finalmente scambiare cripto e valute fiat senza dipendere da un exchange centralizzato (CEX). Niente KYC, niente tracciamento, niente cookie, e nessuno custodisce i miei fondi.\n\nÈ il modo più privato che conosca per scambiare cripto e fiat da persona a persona.\n\nDai un'occhiata al mio profilo su Morphit!\n{profile_url}"
+			"body": "Mi sono unito a Morphit per poter finalmente scambiare cripto e valute fiat senza dipendere da un exchange centralizzato (CEX). Niente KYC, niente tracciamento, niente cookie, e nessuno custodisce i miei fondi.\n\nÈ il modo più privato che conosca per scambiare cripto e fiat da persona a persona.\n\nDai un'occhiata al mio profilo su Morphit!\n{profile_url}"
 		},
 		"order_post": {
 			"title_buy": "{subject}. Vuoi commerciare?",

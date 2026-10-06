@@ -64,7 +64,8 @@ import {
 	initColorMode,
 	error as printError,
 	info,
-	sanitizeForTerm
+	sanitizeForTerm,
+	warn
 } from './render/term.ts';
 import { runStatus } from './commands/status.ts';
 import { runDrainQueue } from './commands/drainQueue.ts';
@@ -415,12 +416,18 @@ async function main(): Promise<number> {
 	// new dist, so the self-heals from the JUST-INSTALLED version run on THIS
 	// upgrade instead of the next one. Not listed in help; operators never call it.
 	if (args.subcommand === '__post-upgrade-selfheal') {
+		const mod = await import('./commands/upgrade.ts').catch(() => null);
 		try {
 			// Each heal isolated, the relay's first — see runSelfHeals.
-			const { runSelfHeals } = await import('./commands/upgrade.ts');
-			await runSelfHeals({ child: true });
-		} catch {
-			/* best-effort — the upgrade falls back to its in-process heals */
+			if (mod) await mod.runSelfHeals({ child: true });
+		} catch (e) {
+			// Best-effort (the upgrade falls back to its in-process heals), but
+			// never silent: it counts as a warning in the upgrade's last lines.
+			warn(
+				`The repairs after the upgrade stopped early: ${e instanceof Error ? e.message : String(e)}`
+			);
+		} finally {
+			mod?.recordChildWarnings();
 		}
 		return 0;
 	}

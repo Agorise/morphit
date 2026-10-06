@@ -28,6 +28,7 @@
  * Boxes without a frontend container (bare-metal nginx on loopback, which is
  * always trusted) are left alone.
  */
+import { dockerStatus, type DockerStatus } from './dockerStatus.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { HealCtx, HealResult } from './healTypes.ts';
@@ -83,8 +84,11 @@ export function envSetting(texts: readonly string[], key: string): string | null
 }
 
 export interface BridgeRuntime {
+	/** Docker's state when frontendSubnet() answered null (absent: assumed up). */
+	docker?(): DockerStatus;
 	/** The frontend's host-facing Docker network: its subnet; null when there
-	 *  is no frontend container (or Docker cannot be asked). */
+	 *  is no frontend container (or Docker cannot be asked); '' when a frontend
+	 *  container runs but its host-facing network could not be read. */
 	frontendSubnet(): string | null;
 	readFile(path: string): string | null;
 	writeFile(path: string, text: string): boolean;
@@ -113,13 +117,32 @@ export async function healTrustedBridge(
 	} finally {
 		stop();
 	}
-	if (subnet === null)
+	if (subnet === '')
+		return {
+			strategy: 'left-alone',
+			verified: false,
+			detail:
+				"Indexer trusted proxies: the frontend container runs, but its host-facing Docker network could not be read, so the indexer's trusted proxies were left as they are; on this server check: sudo docker network ls and sudo docker inspect on the frontend container"
+		};
+	if (subnet === null) {
+		const st = rt.docker?.() ?? 'up';
+		if (st === 'down')
+			return {
+				strategy: 'docker-unavailable',
+				verified: false,
+				detail:
+					"Indexer trusted proxies: Docker did not answer, so the frontend's network could not be read; on this server check: sudo systemctl status docker"
+			};
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail:
-				'Indexer trusted proxies: no frontend container on this server (a proxy on loopback is always trusted).'
+				st === 'missing'
+					? 'Indexer trusted proxies: no Docker on this server (a proxy on loopback is always trusted).'
+					: 'Indexer trusted proxies: no frontend container on this server (a proxy on loopback is always trusted).'
 		};
+	}
 	if (range(subnet) === null)
 		return {
 			strategy: 'left-alone',
@@ -138,6 +161,7 @@ export async function healTrustedBridge(
 		return {
 			strategy: 'already',
 			verified: true,
+			routine: true,
 			detail: `Indexer trusted proxies: the frontend's network ${subnet} is already trusted${current ? ` (${TRUSTED_KEY})` : ' (the default)'}.`
 		};
 	const line = `${TRUSTED_KEY}=127.0.0.0/8,::1/128,${subnet}`;
@@ -221,16 +245,17 @@ interface Inspect {
 }
 
 const realRuntime: BridgeRuntime = {
+	docker: () => dockerStatus(),
 	frontendSubnet: () => {
 		const ids = sh('docker', ['ps', '-q']);
 		if (!ids.ok || ids.out.trim() === '') return null;
 		const insp = sh('docker', ['inspect', ...ids.out.trim().split(/\s+/)]);
-		if (!insp.ok) return null;
+		if (!insp.ok) return '';
 		let list: Inspect[];
 		try {
 			list = JSON.parse(insp.out) as Inspect[];
 		} catch {
-			return null;
+			return '';
 		}
 		const fe = list.find((c) =>
 			(c.Mounts ?? []).some((m) => /\/apps\/web\/build\/?$/.test(m.Source ?? ''))
@@ -259,7 +284,9 @@ const realRuntime: BridgeRuntime = {
 				(nets.length === 1 ? pairs[0] : undefined);
 			if (hit) return hit[0]!;
 		}
-		return null;
+		// The frontend is there, but which of its networks faces the host could
+		// not be told.
+		return '';
 	},
 	readFile: (p) => {
 		try {

@@ -22,6 +22,7 @@
  * when it starts; the containers restart with it), then read it back again.
  * Otherwise one calm line with the command for this server.
  */
+import { dockerStatus, type DockerStatus } from './dockerStatus.ts';
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -66,6 +67,8 @@ export function natForwards(natDump: string, port: number): boolean {
 export interface ForwardRuntime {
 	/** `docker ps --format '{{.Ports}}'` output; null when Docker is not usable. */
 	dockerPorts(): string | null;
+	/** Docker's state when dockerPorts() answered null (absent: assumed up). */
+	docker?(): DockerStatus;
 	readForward(): string | null;
 	writeForward(): boolean;
 	/** Files under /etc/sysctl.d (+ /etc/sysctl.conf) and their text. */
@@ -83,16 +86,33 @@ export async function healForwarding(
 	const rt = opts.runtime ?? realRuntime(opts.sysctlDir ?? '/etc/sysctl.d');
 	let stop = ctx.spinner('Checking IPv4 forwarding for the published web ports…');
 	let ports: number[];
+	let ps: string | null;
 	try {
-		const ps = rt.dockerPorts();
+		ps = rt.dockerPorts();
 		ports = ps === null ? [] : publicPublishedPorts(ps);
 	} finally {
 		stop();
+	}
+	if (ps === null) {
+		if ((rt.docker?.() ?? 'up') === 'missing')
+			return {
+				strategy: 'skipped',
+				verified: true,
+				routine: true,
+				detail: 'IPv4 forwarding: no Docker on this server.'
+			};
+		return {
+			strategy: 'docker-unavailable',
+			verified: false,
+			detail:
+				'IPv4 forwarding: Docker did not say which ports it publishes, so it was left as it is; on this server check: sudo systemctl status docker'
+		};
 	}
 	if (ports.length === 0)
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail:
 				'IPv4 forwarding: no container publishes a public port on this server, so it was left as it is.'
 		};
@@ -170,6 +190,7 @@ function realRuntime(sysctlDir: string): ForwardRuntime {
 			const r = sh('docker', ['ps', '--format', '{{.Ports}}']);
 			return r.ok ? r.out : null;
 		},
+		docker: () => dockerStatus(),
 		readForward: () => {
 			try {
 				return readFileSync('/proc/sys/net/ipv4/ip_forward', 'utf8').trim();

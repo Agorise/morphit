@@ -15,6 +15,11 @@ export interface HealResult {
 	readonly strategy: string;
 	readonly verified: boolean;
 	readonly detail: string;
+	/** The detail only says there was nothing to do here (no action item, no
+	 *  notice, nothing the operator must know): `morphit-ops upgrade` counts it
+	 *  in one "N other checks found nothing to change" line instead of printing
+	 *  it. Set it only on such results — a result without it is always shown. */
+	readonly routine?: boolean;
 }
 
 /** What a heal may use to talk to the operator while it works. */

@@ -206,12 +206,14 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'TLS renewal: no certificate here renews with port 80 of its own.'
 		};
 	if (owner === '' || /certbot/.test(owner))
 		return {
 			strategy: 'already',
 			verified: true,
+			routine: true,
 			detail:
 				'TLS renewal: port 80 is free on this server, so the certificate can renew as it was set up.'
 		};
@@ -334,7 +336,10 @@ export async function healTlsRenewal(ctx: HealCtx, opts: TlsHealOpts): Promise<H
 		if (ok) {
 			strategy = 'hooks';
 			parts.push(
-				`${domain} renews by pausing ${edge} for the few seconds certbot needs port 80 (a test renewal passed); the web build did not answer the challenge path${served ? '' : ' (the frontend may predate this release)'}`
+				`${domain} renews by pausing ${edge} for the few seconds certbot needs port 80 (a test renewal passed)` +
+					(served
+						? ''
+						: `; renewals go through the web server instead (no pause) once its frontend answers Let's Encrypt's check, which the next \`sudo morphit-ops upgrade --heals\` checks again`)
 			);
 			continue;
 		}

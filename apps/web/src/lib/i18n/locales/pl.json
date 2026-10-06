@@ -1316,7 +1316,7 @@
 			},
 			"run_your_own": {
 				"q": "Czy mogę postawić własnego Morphita?",
-				"a": "Tak, i prosimy, zrób to — Morphit pozostaje nie do zatrzymania tylko wtedy, gdy uruchamia go wiele osób. Jedna instalacja daje ci cały stos:\n\n• Strona — ten sam kod pod twoją domeną albo pod adresem .onion lub .b32.i2p (albo pod wszystkimi).\n\n• Indekser — czyta łańcuch Blurt i serwuje odwiedzającym arkusz zleceń, historię czatu i profile jako REST API i kanały RSS, a także rozmawia z innymi instancjami federacji.\n\n• Relay — tworzy konta Blurt dla nowych użytkowników twojej instancji (twój relay płaci łańcuchowi opłatę za utworzenie konta) i wysyła powiadomienia push.\n\nDlaczego to ważne: każda instancja to dodatkowa droga, której cenzor, upadły hosting czy zły wyrok sądu nie zamkną naraz. Jedna instancja to cel. Pięćdziesiąt to ruch. Wszystkie usługi to lekkie programy Node.js (TypeScript) z prostymi plikami konfiguracyjnymi, instalowane na serwerze Ubuntu jednym prowadzonym poleceniem; docs/RUN-A-MORPHIT-NODE.md przeprowadzi cię przez to i poda potrzebny rozmiar serwera. Prowadzenie węzła Morphit daje ci 90% opłat za ogłoszenia płaconych na nim w BLURT.\n\n**Operator może pójść na całość.** Węzeł może działać bez żadnego clearnetu: odczyty łańcucha, sprawdzanie opłat w BTC/XMR, ceny i aktualizacje idą przez Tor i I2P, a na takim węźle reguła zapory przepuszcza do internetu tylko Tor i I2P. Węzeł deklaruje brak clearnetu tylko wtedy, gdy przechodzą jego własne sprawdzenia każdej drogi wychodzącej, a katalog pokazuje to jako „Deklaruje, że nie korzysta z clearnetu” — oświadczenie samej instancji, którego inne węzły nie mogą zweryfikować. Odwiedzający docierają do takiego węzła tylko przez Tor lub I2P, a żadna z tych sieci nie mówi odwiedzającemu, gdzie stoi serwer. Jedna przestroga: serwer, który kiedyś działał w clearnecie, pozostaje powiązany ze swoją starą domeną, więc ukryty węzeł zakładaj z nowymi kluczami i nowym kontem operatora."
+				"a": "Tak, i prosimy, zrób to — Morphit pozostaje nie do zatrzymania tylko wtedy, gdy uruchamia go wiele osób. Jedna instalacja daje ci cały stos:\n\n• Strona — ten sam kod pod twoją domeną albo pod adresem .onion lub .b32.i2p (albo pod wszystkimi).\n\n• Indekser — czyta łańcuch Blurt i serwuje odwiedzającym arkusz zleceń, historię czatu i profile jako REST API i kanały RSS, a także rozmawia z innymi instancjami federacji.\n\n• Relay — tworzy konta Blurt dla nowych użytkowników twojej instancji (twój relay płaci łańcuchowi opłatę za utworzenie konta) i wysyła powiadomienia push.\n\nDlaczego to ważne: każda instancja to dodatkowa droga, której cenzor, upadły hosting czy zły wyrok sądu nie zamkną naraz. Jedna instancja to cel. Pięćdziesiąt to ruch. Wszystkie usługi to lekkie programy Node.js (TypeScript) z prostymi plikami konfiguracyjnymi, instalowane na serwerze Ubuntu jednym prowadzonym poleceniem; docs/RUN-A-MORPHIT-NODE.md przeprowadzi cię przez to i poda potrzebny rozmiar serwera. Prowadzenie węzła Morphit daje ci 90% opłat za ogłoszenia płaconych na nim w BLURT.\n\n**Operator może pójść na całość.** Węzeł może działać bez żadnego clearnetu: odczyty łańcucha, sprawdzanie opłat w BTC/XMR, ceny i aktualizacje idą przez Tor i I2P, a na takim węźle reguła zapory przepuszcza do internetu tylko Tor i I2P. Węzeł deklaruje brak clearnetu tylko wtedy, gdy przechodzą jego własne sprawdzenia każdej drogi wychodzącej, a katalog pokazuje to jako „Zero korzystania z clearnetu” — oświadczenie samej instancji, którego inne węzły nie mogą zweryfikować. Odwiedzający docierają do takiego węzła tylko przez Tor lub I2P, a żadna z tych sieci nie mówi odwiedzającemu, gdzie stoi serwer. Jedna przestroga: serwer, który kiedyś działał w clearnecie, pozostaje powiązany ze swoją starą domeną, więc ukryty węzeł zakładaj z nowymi kluczami i nowym kontem operatora."
 			},
 			"security_attack_vectors": {
 				"q": "Czy Morphit jest podatny na włamania, kradzież danych lub blokady?",
@@ -2240,7 +2240,7 @@
 		"last_probed_label": "Ostatnio sprawdzony",
 		"this_instance": "Jesteś tutaj",
 		"live": "Na żywo",
-		"clearnet_eliminated": "Deklaruje, że nie korzysta z clearnetu",
+		"clearnet_eliminated": "Zero korzystania z clearnetu",
 		"contact_via": "Kontakt przez {app}",
 		"contact_copy": "Kopiuj adres {app}"
 	},
@@ -2869,7 +2869,7 @@
 			"side_help": "Wskazówka: jeśli chcesz kupić kryptowaluty, szukaj ogłoszeń chcących sprzedać. Jeśli chcesz sprzedać, szukaj ogłoszeń chcących kupić.",
 			"order_details_label": "Warunki / Szczegóły / Notatki zlecenia",
 			"language_label": "Język",
-			"language_hint": "Pokazuj tylko oferty napisane w tych językach. Zostaw puste, aby widzieć wszystkie.",
+			"language_hint": "Pokazuj tylko oferty napisane w tych językach. Zostaw puste, aby widzieć wszystkie. Starsze oferty bez języka pojawiają się tylko, gdy pole jest puste.",
 			"language_placeholder": "Szukaj języków…",
 			"language_remove": "Usuń",
 			"language_no_matches": "Brak pasujących języków"
@@ -4736,7 +4736,7 @@
 	"syndicate": {
 		"first_trade": {
 			"title": "Właśnie zakończyłem moją pierwszą transakcję z @{seller} na Morphit!",
-			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nDołączyłem do Morphit, żeby wreszcie handlować kryptowalutami i walutami fiat bez polegania na scentralizowanej giełdzie (CEX). Bez KYC, bez śledzenia, bez ciasteczek i nikt nie trzyma moich środków.\n\nTo najbardziej prywatny sposób handlu kryptowalutami i fiatem między ludźmi, jaki znam.\n\nZobacz mój profil na Morphit!\n{profile_url}"
+			"body": "Dołączyłem do Morphit, żeby wreszcie handlować kryptowalutami i walutami fiat bez polegania na scentralizowanej giełdzie (CEX). Bez KYC, bez śledzenia, bez ciasteczek i nikt nie trzyma moich środków.\n\nTo najbardziej prywatny sposób handlu kryptowalutami i fiatem między ludźmi, jaki znam.\n\nZobacz mój profil na Morphit!\n{profile_url}"
 		},
 		"order_post": {
 			"title_buy": "{subject}. Chcesz handlować?",

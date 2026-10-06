@@ -52,7 +52,7 @@ the team and update both this README and the smoke.
 ## Footer "As of <day> <Month>, <year>"
 
 The build script stamps the footer with the claims list's "Last
-updated" date (the trailer of `MORPHIT-BRAG-LIST.md`), not the day
+updated" date (the trailer of `docs/MORPHIT-BRAG-LIST.md`), not the day
 it runs, so a rebuild of unchanged data is byte-identical. The
 freshness smoke checks that the stamp is present and well formed,
 and that the PNG's fingerprint matches the current SVG, which
@@ -80,7 +80,7 @@ When adding a new tradable asset, security feature, or audit milestone:
 
 1. Edit the `SECTIONS` list at the top of `build_comparison.py`.
 2. Add a row tuple `(feature_text, [m, b, h, o, s], optional_icon_id)`.
-3. Verify each cell against `MORPHIT-BRAG-LIST.md` AND the competitor's
+3. Verify each cell against `docs/MORPHIT-BRAG-LIST.md` AND the competitor's
    public docs / recent independent reviews. **Never invent claims.**
 4. Re-run the script. The PNG is auto-optimized and the footer
    date auto-updates.

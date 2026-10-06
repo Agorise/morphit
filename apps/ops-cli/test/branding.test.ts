@@ -267,7 +267,9 @@ describe('morphit-ops branding apply / reset', () => {
 		expect(JSON.parse(read('brand/brand.json'))).toEqual({
 			schema: 1,
 			name: 'A&B Trading',
-			beta_badge: false
+			beta_badge: false,
+			// Branded, but this test build has no link-preview picture to draw on.
+			og_image: 'shipped'
 		});
 		const manifest = JSON.parse(read('manifest.webmanifest')) as Record<string, unknown>;
 		expect(manifest.name).toBe('A&B Trading');

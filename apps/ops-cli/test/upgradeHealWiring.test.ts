@@ -130,7 +130,12 @@ describe('heal wiring in the self-heal phase', () => {
 
 	it('the heals that need the restarted services run in the after-restart phase, started before any question', async () => {
 		const n = names();
-		expect(n[n.length - 1]).toBe('the web-proxy result');
+		// The web-proxy result is the last step that works; the two after it only print.
+		expect(n.slice(-3)).toEqual([
+			'the web-proxy result',
+			'the routine checks summary',
+			'the questions left for later'
+		]);
 		// Started after every heal that restarts the indexer or the relay itself
 		// (the unit waits for the restarts that come after its start)…
 		for (const s of ['the service-user heal', 'the proxy-bridge heal', 'the stopped-relay heal'])

@@ -348,8 +348,8 @@ function tmp(prefix: string): string {
 		},
 		{
 			id: 'FD-8',
-			re: /redeploy the web frontend/,
-			desc: 'the confirmation prompt tells the operator the frontend will be redeployed'
+			re: /check that the site serves it/,
+			desc: 'the confirmation prompt tells the operator the site is checked to serve the new release'
 		},
 		{
 			id: 'FD-13',
@@ -547,7 +547,7 @@ function tmp(prefix: string): string {
 	// the real appliance command, and no longer sends every operator to a home
 	// script that does not exist on an Ansible box.
 	if (
-		/needs re-signing after this upgrade/.test(parserSrc) &&
+		/Re-sign the warrant canary \(the upgrade cleared it\)/.test(parserSrc) &&
 		/systemctl start morphit-canary\.service/.test(parserSrc) &&
 		!/was in the rebuilt build/.test(parserSrc)
 	)

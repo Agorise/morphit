@@ -1316,7 +1316,7 @@
 			},
 			"run_your_own": {
 				"q": "¿Puedo ejecutar mi propio Morphit?",
-				"a": "Sí, y por favor hazlo: Morphit solo sigue siendo imparable si mucha gente lo ejecuta. Una instalación te da toda la pila:\n\n• El sitio web — el mismo código en tu propio dominio, o en una dirección .onion o .b32.i2p (o en todas).\n\n• Un indexador — lee la cadena Blurt y sirve a tus visitantes el libro de órdenes, el historial de chat y los perfiles, como API REST y feeds RSS, y habla con las demás instancias de la federación.\n\n• Un relay — crea cuentas de Blurt para los nuevos usuarios de tu instancia (tu relay paga la comisión de creación de cuenta de la cadena) y envía notificaciones push.\n\nPor qué importa: cada instancia es un camino extra que un censor, un proveedor en quiebra o una mala orden judicial no pueden cerrar de una vez. Una instancia es un blanco. Cincuenta son un movimiento. Todos los servicios son programas ligeros de Node.js (TypeScript) con archivos de configuración sencillos, instalados en un servidor Ubuntu con un solo comando guiado; docs/RUN-A-MORPHIT-NODE.md te acompaña paso a paso e indica el tamaño de servidor que necesitas. Ejecutar un nodo Morphit te da el 90% de las comisiones de publicación pagadas en BLURT en él.\n\n**Un operador puede llegar hasta el final.** Un nodo puede funcionar sin nada de clearnet: lecturas de la cadena, comprobaciones de tarifas en BTC/XMR, precios y actualizaciones viajan por Tor e I2P, y en un nodo así una regla de cortafuegos deja que solo Tor e I2P salgan a internet. El nodo declara cero clearnet solo cuando pasan sus propias comprobaciones de cada camino de salida, y el directorio lo muestra como \"Dice que no usa internet clearnet\": la declaración de la propia instancia, que los demás nodos no pueden verificar. Los visitantes llegan a un nodo así solo por Tor o I2P, y ninguna de las dos redes le dice al visitante dónde está el servidor. Una advertencia: un servidor que alguna vez funcionó en clearnet sigue vinculado a su antiguo dominio, así que empieza un nodo oculto con claves nuevas y una cuenta de operador nueva."
+				"a": "Sí, y por favor hazlo: Morphit solo sigue siendo imparable si mucha gente lo ejecuta. Una instalación te da toda la pila:\n\n• El sitio web — el mismo código en tu propio dominio, o en una dirección .onion o .b32.i2p (o en todas).\n\n• Un indexador — lee la cadena Blurt y sirve a tus visitantes el libro de órdenes, el historial de chat y los perfiles, como API REST y feeds RSS, y habla con las demás instancias de la federación.\n\n• Un relay — crea cuentas de Blurt para los nuevos usuarios de tu instancia (tu relay paga la comisión de creación de cuenta de la cadena) y envía notificaciones push.\n\nPor qué importa: cada instancia es un camino extra que un censor, un proveedor en quiebra o una mala orden judicial no pueden cerrar de una vez. Una instancia es un blanco. Cincuenta son un movimiento. Todos los servicios son programas ligeros de Node.js (TypeScript) con archivos de configuración sencillos, instalados en un servidor Ubuntu con un solo comando guiado; docs/RUN-A-MORPHIT-NODE.md te acompaña paso a paso e indica el tamaño de servidor que necesitas. Ejecutar un nodo Morphit te da el 90% de las comisiones de publicación pagadas en BLURT en él.\n\n**Un operador puede llegar hasta el final.** Un nodo puede funcionar sin nada de clearnet: lecturas de la cadena, comprobaciones de tarifas en BTC/XMR, precios y actualizaciones viajan por Tor e I2P, y en un nodo así una regla de cortafuegos deja que solo Tor e I2P salgan a internet. El nodo declara cero clearnet solo cuando pasan sus propias comprobaciones de cada camino de salida, y el directorio lo muestra como \"Cero uso de internet clearnet\": la declaración de la propia instancia, que los demás nodos no pueden verificar. Los visitantes llegan a un nodo así solo por Tor o I2P, y ninguna de las dos redes le dice al visitante dónde está el servidor. Una advertencia: un servidor que alguna vez funcionó en clearnet sigue vinculado a su antiguo dominio, así que empieza un nodo oculto con claves nuevas y una cuenta de operador nueva."
 			},
 			"security_attack_vectors": {
 				"q": "¿Es Morphit vulnerable a ataques, robo de datos o bloqueos?",
@@ -2240,7 +2240,7 @@
 		"last_probed_label": "Última prueba",
 		"this_instance": "Estás aquí",
 		"live": "En vivo",
-		"clearnet_eliminated": "Dice que no usa internet clearnet",
+		"clearnet_eliminated": "Cero uso de internet clearnet",
 		"contact_via": "Contactar por {app}",
 		"contact_copy": "Copiar dirección de {app}"
 	},
@@ -2869,7 +2869,7 @@
 			"side_help": "Consejo: si quieres comprar cripto, busca publicaciones que quieren vender. Si quieres vender cripto, busca publicaciones que quieren comprar.",
 			"order_details_label": "Términos / Detalles / Notas del pedido",
 			"language_label": "Idioma",
-			"language_hint": "Mostrar solo pedidos escritos en estos idiomas. Déjalo vacío para ver todos.",
+			"language_hint": "Mostrar solo pedidos escritos en estos idiomas. Déjalo vacío para ver todos. Los pedidos antiguos sin idioma solo aparecen si lo dejas vacío.",
 			"language_placeholder": "Buscar idiomas…",
 			"language_remove": "Quitar",
 			"language_no_matches": "No hay idiomas coincidentes"
@@ -4736,7 +4736,7 @@
 	"syndicate": {
 		"first_trade": {
 			"title": "¡Acabo de completar mi primera operación con @{seller} en Morphit!",
-			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nMe uní a Morphit para poder por fin intercambiar criptomonedas y divisas sin depender de un exchange centralizado (CEX). Sin KYC, sin rastreo, sin cookies, y nadie custodia mis fondos.\n\nEs la forma de intercambio entre particulares de criptos y divisas más privada que conozco.\n\n¡Mira mi perfil en Morphit!\n{profile_url}"
+			"body": "Me uní a Morphit para poder por fin intercambiar criptomonedas y divisas sin depender de un exchange centralizado (CEX). Sin KYC, sin rastreo, sin cookies, y nadie custodia mis fondos.\n\nEs la forma de intercambio entre particulares de criptos y divisas más privada que conozco.\n\n¡Mira mi perfil en Morphit!\n{profile_url}"
 		},
 		"order_post": {
 			"title_buy": "{subject}. ¿Quieres comerciar?",

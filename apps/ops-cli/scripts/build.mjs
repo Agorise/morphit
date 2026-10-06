@@ -116,7 +116,9 @@ await build({
 	// errors (syntax, unresolved imports, the dynamic-require
 	// class) are unaffected and still surface.
 	logOverride: { 'tsconfig.json': 'silent' },
-	logLevel: 'info'
+	// An upgrade (MORPHIT_QUIET_BUILD=1) shows only warnings and errors, not
+	// the size table with its ⚠ marker for a bundle that is large by design.
+	logLevel: process.env.MORPHIT_QUIET_BUILD === '1' ? 'warning' : 'info'
 });
 
 // Post-process: guarantee exactly one shebang, and make it the

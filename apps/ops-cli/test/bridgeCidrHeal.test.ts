@@ -139,3 +139,23 @@ describe("the indexer trusts the frontend's own Docker bridge (trusted proxies)"
 		expect(coveredBy('10.0.0.0/8', ['10.0.0.0/16'])).toBe(false);
 	});
 });
+
+// v1.21.1 review: a failing `docker ps` read as "no frontend container".
+describe('when Docker cannot be asked', () => {
+	const c = { info: () => {}, warn: () => {}, spinner: () => () => {} };
+	it('not answering: a warning; not installed or no frontend: nothing to do', async () => {
+		const down = await healTrustedBridge(c, {
+			runtime: { frontendSubnet: () => null, docker: () => 'down' } as never
+		});
+		expect(down.verified).toBe(false);
+		const unread = await healTrustedBridge(c, {
+			runtime: { frontendSubnet: () => '', docker: () => 'up' } as never
+		});
+		expect(unread.verified).toBe(false);
+		expect(unread.detail).toMatch(/could not be read/);
+		const none = await healTrustedBridge(c, {
+			runtime: { frontendSubnet: () => null, docker: () => 'up' } as never
+		});
+		expect(none).toMatchObject({ verified: true, routine: true });
+	});
+});

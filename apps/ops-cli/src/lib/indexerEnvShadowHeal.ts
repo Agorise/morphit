@@ -74,6 +74,7 @@ export async function healIndexerEnvShadow(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Indexer asset policy: no /etc/morphit/indexer.env on this server.'
 		};
 	const before = f.before.map((p) => rt.readFile(p) ?? '');
@@ -94,6 +95,7 @@ export async function healIndexerEnvShadow(
 		return {
 			strategy: 'already',
 			verified: true,
+			routine: notes.length === 0,
 			detail: `Indexer asset policy: nothing in ${f.indexer} undoes it${notes.length ? `; ${notes.join('; ')}` : ''}.`
 		};
 	if (

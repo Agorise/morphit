@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { localePath } from '$i18n/path';
-	import { DEFAULT_LOCALE, type LocaleCode } from '$i18n/locales';
+	import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type LocaleCode } from '$i18n/locales';
 	/**
 	 * Morphit — orderbook page.
 	 *
@@ -644,8 +644,9 @@
 		// filter, so payment_methods carries only the user's typed picks.
 		const uniquePayment = [...new Set(paymentMethods)];
 		if (uniquePayment.length) q.payment_methods = uniquePayment.join(',');
-		// v1.15.0 — language filter. Empty ⇒ omit (= all languages). The indexer
-		// always shows untagged orders regardless of this filter.
+		// v1.15.0 — language filter. Empty ⇒ omit (= all languages). Set ⇒ only
+		// orders written in one of these languages (v1.21.1: untagged orders,
+		// posted before v1.15.0, no longer match).
 		const uniqueLangs = [...new Set(langFilter)];
 		if (uniqueLangs.length) q.langs = uniqueLangs.join(',');
 		if (minTrades > 0) q.min_trades = minTrades;
@@ -697,6 +698,13 @@
 				`${$_('orderbook.filters.min_trades_label')}: ${$_(`orderbook.filters.min_trades_${minTrades}`)}`
 			);
 		}
+		// The language filter, by each language's own name (as the form shows it).
+		if (langFilter.length) {
+			const names = [...new Set(langFilter)].map(
+				(c) => SUPPORTED_LOCALES.find((l) => l.code === c)?.nativeName ?? c
+			);
+			parts.push(`${$_('orderbook.filters.language_label')}: ${names.join(', ')}`);
+		}
 		if (sortMode !== 'recent') {
 			parts.push(
 				`${$_('orderbook.filters.sort_label')}: ${$_(`orderbook.filters.sort_${sortMode}`)}`
@@ -711,7 +719,7 @@
 	/** The query string handed to the per-asset RSS feed so the feed
 	 *  mirrors the current search.  Reuses currentQuery() as the single
 	 *  source of filter logic, then keeps the filters the feed honors —
-	 *  side, fiat_currency, location_region, payment_methods, min_trades.
+	 *  side, fiat_currency, location_region, payment_methods, langs, min_trades.
 	 *  asset is intentionally dropped from the filters (it's already in the
 	 *  feed PATH); sort is dropped as a FILTER because a feed is always
 	 *  recency-ordered (readers re-sort by date) — see
@@ -737,7 +745,7 @@
 	/** The GLOBAL (cross-asset) RSS pill shows when no single asset is
 	 *  selected — so the per-asset pill isn't showing — but the search
 	 *  still carries at least one filter the feed honors: side, fiat,
-	 *  region, payment, min_trades, or the barter payment constraint
+	 *  region, payment, language, min_trades, or the barter payment constraint
 	 *  (asset === 'barter'). This is what surfaces an RSS subscription
 	 *  for a side/region/experience search without an asset (orderbook
 	 *  items 1/4/6). `sort` is deliberately excluded — feeds are always
@@ -748,6 +756,7 @@
 				fiatList.length > 0 ||
 				region.trim() !== '' ||
 				paymentMethods.length > 0 ||
+				langFilter.length > 0 ||
 				minTrades > 0 ||
 				asset === 'barter')
 	);

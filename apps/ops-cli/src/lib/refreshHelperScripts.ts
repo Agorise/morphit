@@ -199,6 +199,17 @@ export function installHelperScript(opts: {
 	}
 }
 
+/** PURE. One line naming the helpers a refresh replaced, or null when it
+ *  replaced none (problems are logged by the refresh itself). */
+export function describeHelperRefresh(
+	results: readonly HelperResult[],
+	dir: string
+): string | null {
+	const names = results.filter((r) => r.action === 'refreshed').map((r) => r.name);
+	if (names.length === 0) return null;
+	return `Refreshed ${names.length === 1 ? 'the helper script' : `${names.length} helper scripts`} in ${dir} from this release: ${names.join(', ')} (each previous copy kept as <name>.bak).`;
+}
+
 /** Refresh installed helper scripts from the release. Never throws. */
 export function refreshHelperScripts(opts: RefreshHelperOptions): HelperResult[] {
 	const dir = opts.helperDir ?? DEFAULT_HELPER_DIR;
@@ -258,7 +269,6 @@ export function refreshHelperScripts(opts: RefreshHelperOptions): HelperResult[]
 			const afterSt = lstatSync(target);
 			if (after !== null && after.equals(fresh) && (afterSt.mode & 0o777) === 0o755) {
 				out.push({ name: h.name, action: 'refreshed', backupPath });
-				log(`Refreshed ${target} from this release (previous saved to ${backupPath}).`);
 			} else {
 				if (current !== null) atomicInstall(target, dir, current, st.mode & 0o777);
 				out.push({ name: h.name, action: 'verify-failed', backupPath });

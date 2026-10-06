@@ -67,7 +67,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 16. **Your broadcasts go through your operator's node, not a stranger's.** Posting an order, sending a chat, or editing your profile is signed on your device and relayed to the chain by the same-origin indexer — so your IP and your exact on-chain action aren't handed to a third-party Blurt RPC operator, and your keys never leave your device. Chain reads work the same way. There is no fallback to a public RPC node: if your operator's node is unreachable, the broadcast fails and you try again.
 
-17. **A node can run with zero clearnet — and one already does.** Every outbound path — chain reads, BTC/XMR fee checks, prices, upgrades — can ride Tor and I2P instead of clearnet; on a tor-only node a firewall rule lets only Tor and i2pd connect out (i2pd itself talks to other I2P routers directly). The directory badge "Says it uses no clearnet internet" is the instance's own claim, accepted only from an instance registered at a hidden address, not verified leg by leg. Every instance serves a Tor `.onion` (advertised with `Onion-Location`) and an I2P address, and we encourage VPN/Tor/I2P access.
+17. **A node can run with zero clearnet — and one already does.** Every outbound path — chain reads, BTC/XMR fee checks, prices, upgrades — can ride Tor and I2P instead of clearnet; on a tor-only node a firewall rule lets only Tor and i2pd connect out (i2pd itself talks to other I2P routers directly). The directory badge "Zero use of clearnet internet" is the instance's own claim, accepted only from an instance registered at a hidden address, not verified leg by leg. Every instance serves a Tor `.onion` (advertised with `Onion-Location`) and an I2P address, and we encourage VPN/Tor/I2P access.
 
 18. **No central key store.** Your Blurt private keys never leave your device. There's no key database for anyone — including a future-bankrupt operator — to leak.
 
@@ -129,7 +129,7 @@ A reference list of 300+ specific things Morphit does — privacy, security, dec
 
 46. **Known limits are stated where users and operators look.** `docs/METADATA-LEAK-CATALOG.md` lists what each surface reveals and to whom, and `docs/SECURITY.md` names its known limitations, instead of leaving them in a tracker nobody reads.
 
-47. **Every release says what it fixed.** All `RELEASE-NOTES-v*.md` files stay at the repository root, one per release, so the history of fixes and their reasons can be read release by release.
+47. **Every release says what it fixed.** All `RELEASE-NOTES-v*.md` files stay in `docs/release-notes/`, one per release, so the history of fixes and their reasons can be read release by release.
 
 48. **Release-blocking audits before major releases.** The v1.20.x line shipped only after a whole-codebase audit by reviewers working as hostile readers; its threat-model outputs are the three `docs/audit/2026-10-*` files above.
 

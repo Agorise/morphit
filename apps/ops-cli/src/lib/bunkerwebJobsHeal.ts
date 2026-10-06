@@ -167,6 +167,8 @@ export function planSchedulerMounts(text: string, service: string, root: string)
 
 export interface JobsRuntime {
 	containers(): ContainerInfo[] | null;
+	/** The docker command exists on this server (absent: assumed). */
+	dockerInstalled?(): boolean;
 	readFile(p: string): Buffer | null;
 	writeFile(p: string, b: Buffer): boolean;
 	backup(p: string): string | null;
@@ -194,17 +196,29 @@ export async function healBunkerwebJobs(
 ): Promise<HealResult> {
 	const rt = opts.runtime ?? realRuntime;
 	const all = rt.containers();
-	if (all === null)
+	if (all === null) {
+		// No Docker at all: nothing here to check. Docker installed but not
+		// answering: a problem the operator must see.
+		if (rt.dockerInstalled !== undefined && !rt.dockerInstalled())
+			return {
+				strategy: 'skipped',
+				verified: true,
+				routine: true,
+				detail: "BunkerWeb's jobs: no Docker on this server."
+			};
 		return {
-			strategy: 'skipped',
-			verified: true,
-			detail: "BunkerWeb's jobs: Docker is not answering on this server; nothing to check."
+			strategy: 'docker-unavailable',
+			verified: false,
+			detail:
+				"BunkerWeb's jobs: Docker is not answering on this server, so its job lists could not be checked; on this server check: sudo systemctl status docker"
 		};
+	}
 	const scheds = all.filter(isScheduler);
 	if (scheds.length === 0)
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: "BunkerWeb's jobs: no BunkerWeb scheduler runs on this server."
 		};
 	const details: string[] = [];
@@ -398,6 +412,14 @@ const docker = (args: string[], timeout = 20_000): { ok: boolean; out: string } 
 	}
 };
 const realRuntime: JobsRuntime = {
+	dockerInstalled: () => {
+		try {
+			const r = spawnSync('docker', ['--version'], { stdio: 'ignore', timeout: 10_000 });
+			return (r.error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT';
+		} catch {
+			return true;
+		}
+	},
 	containers: () => {
 		const ps = docker(['ps', '--format', '{{.Names}}']);
 		if (!ps.ok) return null;

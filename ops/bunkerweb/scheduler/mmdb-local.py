@@ -6,8 +6,8 @@
 # scheduler runs this job in their place (ops/bunkerweb/scheduler/jobs-plugin.json,
 # mounted over the image's list of internal jobs): it puts the databases the
 # image ships (/var/tmp/bunkerweb/*.mmdb) where BunkerWeb looks them up, and
-# fetches nothing. They only matter if you set BLACKLIST_COUNTRY or
-# WHITELIST_COUNTRY; they are as old as the BunkerWeb image.
+# fetches nothing. Nothing on a Morphit instance uses them: there are no
+# country or ASN rules (no instance turns visitors away by where they are).
 
 from os import getenv, sep
 from os.path import join

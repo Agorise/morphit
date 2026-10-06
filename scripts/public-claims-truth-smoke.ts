@@ -65,7 +65,7 @@ const JOURNAL = /^RELEASE-NOTES/;
 
 function publicFiles(): string[] {
 	const out: string[] = [];
-	for (const f of ['README.md', 'SECURITY.md', 'MORPHIT-BRAG-LIST.md', 'THIRD-PARTY-LICENSES.md']) {
+	for (const f of ['README.md', 'SECURITY.md', 'THIRD-PARTY-LICENSES.md']) {
 		if (existsSync(join(ROOT, f))) out.push(f);
 	}
 	const docs: string[] = [];
@@ -288,7 +288,7 @@ function claimEquals(
 
 console.log('\n2. numbers tied to code');
 
-const brag = read('MORPHIT-BRAG-LIST.md');
+const brag = read('docs/MORPHIT-BRAG-LIST.md');
 let faq = '';
 try {
 	const en = JSON.parse(read('apps/web/src/lib/i18n/locales/en.json')) as {
@@ -361,28 +361,28 @@ claimEquals(
 	brag,
 	/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) independent (?:Monero )?sources/i,
 	XMR?.length ?? null,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimEquals(
 	'2.brag Monero source count (default-list form)',
 	brag,
 	/default list of (one|two|three|four|five|six|seven|eight|nine|ten|\d+) XMR sources/i,
 	XMR?.length ?? null,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimEquals(
 	'2.brag Monero explorer count',
 	brag,
 	/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) (?:Monero )?explorers\b/i,
 	xmrExplorers,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimEquals(
 	'2.brag Monero node count',
 	brag,
 	/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) public Monero nodes/i,
 	xmrNodes,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 const QUORUM = constNum('apps/indexer/src/config/index.ts', 'DEFAULT_XMR_MIN_SUCCESSFUL_RESPONSES');
 claimEquals(
@@ -390,14 +390,14 @@ claimEquals(
 	brag,
 	/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+) must agree by default/i,
 	QUORUM,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimEquals(
 	'2.brag fee quorum ("default is")',
 	brag,
 	/The default is (\d+), over a default list/i,
 	QUORUM,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 
 const BID = 'apps/indexer/src/indexer/handlers/featureBid.ts';
@@ -406,21 +406,21 @@ claimEquals(
 	brag,
 	/expiring top-(\d+) bid/i,
 	constNum(BID, 'MAX_SLOTS_VISIBLE'),
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimEquals(
 	'2.brag soft-close window',
 	brag,
 	/arrives in the last (\d+) minutes/i,
 	constNum(BID, 'SNIPE_EXTENSION_MINUTES'),
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimEquals(
 	'2.brag soft-close cap',
 	brag,
 	/capped at (\d+) extensions/i,
 	constNum(BID, 'MAX_EXTENSIONS'),
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 
 /** "More than N" claims: N must be a true floor of the code's count and close
@@ -470,7 +470,7 @@ claimFloor(
 	/More than (\d+) smoke runners/i,
 	SMOKES,
 	100,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 claimFloor(
 	'2.README smoke runners',
@@ -483,14 +483,21 @@ claimFloor(
 
 const docsDir: string[] = [];
 walk(join(ROOT, 'docs'), docsDir);
-const DOC_COUNT = docsDir.filter((f) => !f.startsWith('docs/adr/')).length;
+// Design and operations documents: not the ADRs, the per-release notes or the
+// claims list itself (those two moved into docs/ in v1.21.1).
+const DOC_COUNT = docsDir.filter(
+	(f) =>
+		!f.startsWith('docs/adr/') &&
+		!f.startsWith('docs/release-notes/') &&
+		f !== 'docs/MORPHIT-BRAG-LIST.md'
+).length;
 claimFloor(
 	'2.brag design documents',
 	brag,
 	/More than (\d+) design and operations documents/i,
 	DOC_COUNT,
 	10,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 
 /** Entries with a `key:` field inside `export const NAME … = [ … ];`. */
@@ -508,7 +515,7 @@ claimFloor(
 	/more than (\d+) payment methods/i,
 	PAY?.length ?? null,
 	20,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 const CARRIERS = keyedEntries('apps/web/src/lib/shipping/carriers.ts', 'CARRIERS');
 claimEquals(
@@ -516,7 +523,7 @@ claimEquals(
 	brag,
 	/Top (\d+) worldwide carriers/i,
 	CARRIERS ? CARRIERS.filter((k) => k !== 'other').length : null,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 const relayCfg = read('apps/relay/src/config/index.ts').match(
 	/maxRequestBodyBytes:\s*(\d+)\s*\*\s*1024/
@@ -526,7 +533,7 @@ claimEquals(
 	brag,
 	/(\d+) KiB on the relay/i,
 	relayCfg ? Number(relayCfg[1]) : null,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 const idxCap = read('apps/indexer/src/config/index.ts').match(
 	/MORPHIT_INDEXER_MAX_BODY_BYTES:[^\n]*\.default\((\d+)\)/
@@ -536,7 +543,7 @@ claimEquals(
 	brag,
 	/(\d+) KiB by default on the indexer/i,
 	idxCap ? Number(idxCap[1]) / 1024 : null,
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 );
 
 console.log('');

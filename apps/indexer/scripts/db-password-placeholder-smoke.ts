@@ -84,7 +84,7 @@ const ALLOWED_PATHS = new Set([
 	// standing-action item was based on a misreading
 	// (the string is in a denylist by design).  Removing
 	// the literal would weaken the closure provenance.
-	'MORPHIT-BRAG-LIST.md',
+	'docs/MORPHIT-BRAG-LIST.md',
 	// the backup script implements the
 	// SAME placeholder-denylist discipline for AGE_RECIPIENT
 	// / REMOTE_DESTINATION values that previously only the

@@ -291,9 +291,18 @@ export function info(s: string): void {
 	process.stdout.write(`${sanitizeForTerm(s)}\n`);
 }
 
+/** Warnings printed by this process (the upgrade's last word counts them). */
+let warningsPrinted = 0;
+
 /** Print a warning to stderr. */
 export function warn(s: string): void {
+	warningsPrinted++;
 	process.stderr.write(`${glyph('warn')} ${sanitizeForTerm(s)}\n`);
+}
+
+/** How many warnings this process has printed. */
+export function warningCount(): number {
+	return warningsPrinted;
 }
 
 /** Print an error to stderr. */

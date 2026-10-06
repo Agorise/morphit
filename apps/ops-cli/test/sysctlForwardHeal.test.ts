@@ -107,3 +107,20 @@ describe('IPv4 forwarding where Docker publishes public ports', () => {
 		expect(natForwards(NAT, 22)).toBe(false);
 	});
 });
+
+// v1.21.1 review: Docker that does not answer was reported as "no
+// container publishes a public port" and counted as nothing to change.
+describe('when Docker cannot be asked', () => {
+	const c = { info: () => {}, warn: () => {}, spinner: () => () => {} };
+	it('not installed: nothing to do (routine); not answering: a warning with the command', async () => {
+		const missing = await healForwarding(c, {
+			runtime: { dockerPorts: () => null, docker: () => 'missing' } as never
+		});
+		expect(missing).toMatchObject({ verified: true, routine: true });
+		const down = await healForwarding(c, {
+			runtime: { dockerPorts: () => null, docker: () => 'down' } as never
+		});
+		expect(down.verified).toBe(false);
+		expect(down.detail).toMatch(/sudo systemctl status docker/);
+	});
+});

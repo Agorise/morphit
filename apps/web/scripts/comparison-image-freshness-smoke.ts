@@ -73,7 +73,7 @@ const FINGERPRINT = join(REPO_ROOT, 'scripts/comparison-image/morphit-comparison
 const SERVED_FINGERPRINT = join(REPO_ROOT, 'apps/web/static/morphit-comparison.png.fingerprint');
 const SVG = join(REPO_ROOT, 'scripts/comparison-image/comparison.svg');
 const SCRIPT = join(REPO_ROOT, 'scripts/comparison-image/build_comparison.py');
-const BRAG = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
+const BRAG = join(REPO_ROOT, 'docs', 'MORPHIT-BRAG-LIST.md');
 
 let passes = 0;
 let failures = 0;

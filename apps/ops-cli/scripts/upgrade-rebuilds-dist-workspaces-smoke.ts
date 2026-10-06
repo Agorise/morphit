@@ -48,7 +48,9 @@ const bad = (m: string): void => {
 function rebuildsBothWorkspaces(src: string): boolean {
 	return (
 		/for \(const wsDir of \[['"]ops-cli['"], ['"]mcp-server['"]\]/.test(src) &&
-		/runOrThrow\('npm', \['run', 'build'\], \{\s*cwd: join\(installDir, 'apps', wsDir\)/.test(src)
+		/runStepWithSpinner\([\s\S]{0,200}?\['run', '--silent', 'build'\],\s*\{\s*cwd: join\(installDir, 'apps', wsDir\)/.test(
+			src
+		)
 	);
 }
 

@@ -374,6 +374,7 @@ export async function healNginxVhosts(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Bare-metal nginx: not running on this server; nothing to do.'
 		};
 	const ours = rt.vhosts().filter((v) => isMorphitVhost(v.text));
@@ -381,6 +382,7 @@ export async function healNginxVhosts(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Bare-metal nginx: no Morphit site in /etc/nginx on this server.'
 		};
 	const plans = ours

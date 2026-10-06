@@ -25,7 +25,11 @@ import { emitJson } from '../render/json.ts';
 import { section, row, blank, info, fmt } from '../render/term.ts';
 import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CANONICAL_BLURT_TREASURY, localFeeView, type LocalFeeView } from '../lib/operatorFeeRecipient.ts';
+import {
+	CANONICAL_BLURT_TREASURY,
+	localFeeView,
+	type LocalFeeView
+} from '../lib/operatorFeeRecipient.ts';
 import { describeWebHeal, readWebHealState } from '../lib/webHeal.ts';
 
 // ─── Query result types ──────────────────────────────────────────
@@ -460,10 +464,19 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 	const wh = readWebHealState();
 	if (wh !== null) {
 		section('Web proxy (BunkerWeb)');
-		const bad = wh.state === 'done' && !['applied', 'already', 'no-proxy'].includes(wh.result ?? '');
+		const bad =
+			wh.state === 'done' &&
+			(!['applied', 'already', 'no-proxy'].includes(wh.result ?? '') || (wh.warnings ?? 0) > 0);
 		row({
 			label: 'Privacy settings:',
-			value: wh.state === 'running' ? 'applying' : bad ? 'not applied' : 'ok',
+			value:
+				wh.state === 'running'
+					? 'applying'
+					: !['applied', 'already', 'no-proxy'].includes(wh.result ?? '')
+						? 'not applied'
+						: bad
+							? 'applied, with warnings'
+							: 'ok',
 			status: bad ? 'warn' : 'ok',
 			detail: describeWebHeal(wh, Date.now())
 		});
@@ -590,7 +603,9 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 			});
 			i++;
 		}
-		info(fmt.dim('  Download or send a backup: copy <directory>/<filename> off this host (e.g. scp).'));
+		info(
+			fmt.dim('  Download or send a backup: copy <directory>/<filename> off this host (e.g. scp).')
+		);
 	}
 	blank();
 

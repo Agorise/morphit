@@ -157,8 +157,8 @@ export interface OrderPayload {
 	 *  Blurt announcement in place of the generic "goods/services" label. */
 	readonly specific_barter_title?: string;
 	/** v1.15.0 — the language the order text is written in (a SUPPORTED_LOCALES
-	 *  code). Optional; omitted → the order is untagged (never hidden by the
-	 *  orderbook language filter). */
+	 *  code). Optional; omitted → the order is untagged (shown only when the
+	 *  orderbook has no language filter). */
 	readonly lang?: string;
 }
 

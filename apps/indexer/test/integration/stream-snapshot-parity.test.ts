@@ -78,6 +78,28 @@ describe.skipIf(!INTEGRATION_ENABLED)('stream snapshot == REST page', () => {
 		return ((await res.json()) as { items: Record<string, unknown>[] }).items;
 	}
 
+	// v1.21.1 — a language filter lists only orders in that language: the
+	// untagged order (posted before v1.15.0) no longer slips through.
+	it('?langs=es lists only the Spanish order, on the page and in the live snapshot', async () => {
+		const [rest, live] = await Promise.all([restPage('?langs=es'), snapshot('?langs=es')]);
+		expect(rest.map((o) => o.account)).toEqual(['rated']);
+		expect(live.map((o) => o.account)).toEqual(['rated']);
+		expect((await restPage('')).map((o) => o.account).sort()).toEqual([
+			'newest',
+			'rated',
+			'untagged'
+		]);
+	});
+
+	it("the database's description of orders.lang says what the filter does (migration v67)", async () => {
+		const r = await fx.db.query<{ d: string | null }>(
+			`SELECT col_description('orders'::regclass, a.attnum) AS d
+			   FROM pg_attribute a WHERE a.attrelid = 'orders'::regclass AND a.attname = 'lang'`
+		);
+		expect(r.rows[0]?.d).toMatch(/lists only orders tagged with one of its languages/);
+		expect(r.rows[0]?.d).not.toMatch(/NEVER hidden/i);
+	});
+
 	for (const query of ['', '?sort=rating', '?langs=es']) {
 		it(`same orders, same order, same fields: "${query || 'bare'}"`, async () => {
 			const [rest, live] = await Promise.all([restPage(query), snapshot(query)]);

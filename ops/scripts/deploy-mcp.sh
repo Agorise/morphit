@@ -71,7 +71,8 @@ SRC="$REPO_DIR/apps/mcp-server"
 # fallback. Everything below this line uses absolute paths.
 cd / 2>/dev/null || true
 
-echo "morphit-mcp deploy: $SRC  ->  $DEST  (service user: $SVC_USER)"
+# An upgrade (MORPHIT_QUIET_BUILD=1) shows only the result line and problems.
+[ "${MORPHIT_QUIET_BUILD:-}" = 1 ] || echo "morphit-mcp deploy: $SRC  ->  $DEST  (service user: $SVC_USER)"
 
 # ── 1. Lay down the MCP source ─────────────────────────────────────
 # Replace the managed contents wholesale (so a re-run reflects repo
@@ -162,7 +163,7 @@ for (const at of need) {
 		chmodSync(join(dest, at, rel), 0o755);
 	}
 }
-console.log(`  ${need.size} runtime packages from the locked install (${copied} top-level), versions checked against package-lock.json`);
+if (process.env.MORPHIT_QUIET_BUILD !== '1') console.log(`  ${need.size} runtime packages from the locked install (${copied} top-level), versions checked against package-lock.json`);
 JS
 
 # ── 3. The two @morphit/* workspace packages (pure TS source) ──────

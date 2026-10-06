@@ -179,7 +179,7 @@ const CROSS_REFERENCE_FILES = [
 	'ops/bunkerweb/bunkerweb.env.example',
 	'ops/ansible/roles/bunkerweb/templates/bunkerweb.env.j2',
 	'docs/OPERATIONS.md',
-	'MORPHIT-BRAG-LIST.md'
+	'docs/MORPHIT-BRAG-LIST.md'
 ];
 
 function checkCrossReference(file: string): void {

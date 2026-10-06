@@ -41,11 +41,20 @@ const check = (desc: string, ok: boolean): void => {
 const chain = selfAndAncestorPids();
 check('selfAndAncestorPids includes the current process', chain.has(process.pid));
 check('selfAndAncestorPids includes the parent process (PPID walk works)', chain.has(process.ppid));
-check('selfAndAncestorPids includes init/pid 1 (walk reaches the root)', chain.has(1) || chain.size >= 2);
-check('selfAndAncestorPids never returns an empty/degenerate set', chain.size >= 1 && !chain.has(0));
+check(
+	'selfAndAncestorPids includes init/pid 1 (walk reaches the root)',
+	chain.has(1) || chain.size >= 2
+);
+check(
+	'selfAndAncestorPids never returns an empty/degenerate set',
+	chain.size >= 1 && !chain.has(0)
+);
 
 // ── 2. the sweep excludes self + ancestors at EVERY scan ──
-check('the sweep computes a protected set from selfAndAncestorPids()', /protectedPids\s*=\s*selfAndAncestorPids\(\)/.test(src));
+check(
+	'the sweep computes a protected set from selfAndAncestorPids()',
+	/protectedPids\s*=\s*selfAndAncestorPids\(\)/.test(src)
+);
 const sweepCalls = [...src.matchAll(/pidsWithCwdUnder\(backupDir\)/g)];
 check('pidsWithCwdUnder(backupDir) is used in the sweep', sweepCalls.length >= 3);
 const allFiltered = sweepCalls.every((m) => {
@@ -60,13 +69,24 @@ check(
 );
 
 // ── 3. the end-of-upgrade banner is friendly + names the version ──
-check('the final banner congratulates the operator', /Congratulations/.test(src));
-check('the final banner says the server is now running the version', /now running \$\{latestTag\}/.test(src));
-check('the old terse "Upgrade complete:" one-liner is gone', !/`\u2713 Upgrade complete: \$\{currentTag\}/.test(src));
+check(
+	'the last lines say what is left, or that nothing is',
+	/Left for you:/.test(src) && /Nothing else to do\./.test(src)
+);
+check(
+	'the final banner says the server is now running the version',
+	/now running \$\{s\.to\}/.test(src)
+);
+check(
+	'the old terse "Upgrade complete:" one-liner is gone',
+	!/`\u2713 Upgrade complete: \$\{currentTag\}/.test(src)
+);
 
 console.log('');
 if (fails.length > 0) {
-	console.log(`\u2717 ${fails.length} of ${pass + fails.length} upgrade-supersede-self-safe checks FAILED`);
+	console.log(
+		`\u2717 ${fails.length} of ${pass + fails.length} upgrade-supersede-self-safe checks FAILED`
+	);
 	for (const f of fails) console.log(`    - ${f}`);
 	process.exit(1);
 }

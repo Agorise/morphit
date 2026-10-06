@@ -147,8 +147,8 @@ interface ValidatedOrder {
 	readonly specific_barter_title: string | null;
 	/** v1.15.0 — the language the order text is written in (one of the 10
 	 *  SUPPORTED_LOCALES codes), used by the orderbook language filter. Optional:
-	 *  null on legacy orders and payloads that omit it; untagged orders are never
-	 *  hidden by the filter. */
+	 *  null on legacy orders and payloads that omit it; untagged orders show only
+	 *  when no language filter is set. */
 	readonly lang: string | null;
 }
 
@@ -581,8 +581,9 @@ function validate(payload: unknown, blockTime: Date): ValidatedOrder | { reason:
 	}
 
 	// lang — OPTIONAL language tag (one of the 10 supported locale codes). Absent
-	// or null on legacy/omitting payloads → stored NULL (untagged; never filtered
-	// out). A present-but-unsupported value is rejected rather than silently kept.
+	// or null on legacy/omitting payloads → stored NULL (untagged; shown only with
+	// no language filter). A present-but-unsupported value is rejected rather than
+	// silently kept.
 	let lang: string | null = null;
 	if (payload.lang !== undefined && payload.lang !== null) {
 		if (!isOrderLang(payload.lang)) return { reason: 'lang_unsupported' };

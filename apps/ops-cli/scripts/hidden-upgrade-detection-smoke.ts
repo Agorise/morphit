@@ -168,7 +168,7 @@ check(
 // (relay first, each isolated), shared by the re-exec'd binary and this fallback.
 check(
 	'upgrade falls back to in-process heals if the re-exec is unavailable',
-	/if \(!selfHealReexeced\) \{\s*await runSelfHeals\(\);/.test(upgrade) &&
+	/if \(!selfHealReexeced\) \{[^}]*?\n\t\tawait runSelfHeals\(\);/.test(upgrade) &&
 		/\(\) => startWebProxyHeals\(\)/.test(upgrade) &&
 		/healBunkerWebWaf\(undefined, installBuildDir\(\)/.test(upgrade)
 );

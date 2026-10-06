@@ -80,9 +80,7 @@ function packageJsonExtractor(text: string): string | null {
  *  Returns the FIRST match.  We anchor on the const-name to avoid
  *  picking up an unrelated literal somewhere else in the file. */
 function tsConstExtractor(constName: string) {
-	const re = new RegExp(
-		`const\\s+${constName}\\s*(?::\\s*\\w+\\s*)?=\\s*['"]([^'"]+)['"]`
-	);
+	const re = new RegExp(`const\\s+${constName}\\s*(?::\\s*\\w+\\s*)?=\\s*['"]([^'"]+)['"]`);
 	return (text: string): string | null => {
 		const m = text.match(re);
 		return m && m[1] ? m[1] : null;
@@ -117,18 +115,16 @@ const TOUCHPOINTS_STATIC: readonly Touchpoint[] = [
 
 	// Category B — runtime constants shipped to /v1/health.
 	{
-		label: "apps/relay/src/api/health.ts (`const VERSION`)",
+		label: 'apps/relay/src/api/health.ts (`const VERSION`)',
 		path: 'apps/relay/src/api/health.ts',
 		extract: tsConstExtractor('VERSION'),
-		remediation:
-			'update `const VERSION = ...` in apps/relay/src/api/health.ts'
+		remediation: 'update `const VERSION = ...` in apps/relay/src/api/health.ts'
 	},
 	{
-		label: "apps/indexer/src/api/health.ts (`const INDEXER_VERSION`)",
+		label: 'apps/indexer/src/api/health.ts (`const INDEXER_VERSION`)',
 		path: 'apps/indexer/src/api/health.ts',
 		extract: tsConstExtractor('INDEXER_VERSION'),
-		remediation:
-			'update `const INDEXER_VERSION = ...` in apps/indexer/src/api/health.ts'
+		remediation: 'update `const INDEXER_VERSION = ...` in apps/indexer/src/api/health.ts'
 	},
 	{
 		// The MCP server advertises its version in the SDK server-info
@@ -136,7 +132,7 @@ const TOUCHPOINTS_STATIC: readonly Touchpoint[] = [
 		// smoke can gate it like the other runtime constants — it used to
 		// be an inline literal that the smoke did not cover (a drift
 		// finding).
-		label: "apps/mcp-server/src/main.ts (`const MCP_VERSION`)",
+		label: 'apps/mcp-server/src/main.ts (`const MCP_VERSION`)',
 		path: 'apps/mcp-server/src/main.ts',
 		extract: tsConstExtractor('MCP_VERSION'),
 		remediation: 'update `const MCP_VERSION = ...` in apps/mcp-server/src/main.ts'
@@ -185,10 +181,7 @@ function buildTouchpoints(): readonly Touchpoint[] {
 	const wsEntries: string[] = [];
 	for (const w of rootPkg.workspaces) {
 		if (typeof w !== 'string') {
-			throw new Error(
-				'root package.json `workspaces` entry not a string: ' +
-					JSON.stringify(w)
-			);
+			throw new Error('root package.json `workspaces` entry not a string: ' + JSON.stringify(w));
 		}
 		if (w.includes('*') || w.includes('?')) {
 			throw new Error(
@@ -260,8 +253,8 @@ function main(): void {
 	// the release body, so nothing otherwise forces a notes file into
 	// existence on a version bump.  Tie it to the version here: bumping
 	// package.json to v1.0.0-beta.2 without creating
-	// RELEASE-NOTES-v1.0.0-beta.2.md now fails this gate.
-	const notesFile = `RELEASE-NOTES-v${expected}.md`;
+	// docs/release-notes/RELEASE-NOTES-v1.0.0-beta.2.md now fails this gate.
+	const notesFile = `docs/release-notes/RELEASE-NOTES-v${expected}.md`;
 	try {
 		const notes = readFileSync(join(REPO, notesFile), 'utf8');
 		if (notes.trim().length === 0) {
@@ -275,7 +268,7 @@ function main(): void {
 		mismatches.push({
 			label: notesFile,
 			got: null,
-			remediation: `create ${notesFile} at the repo root — every release must ship notes for publishing online (copy the structure of the prior RELEASE-NOTES-v*.md)`
+			remediation: `create ${notesFile} — every release must ship notes for publishing online (copy the structure of the prior RELEASE-NOTES-v*.md)`
 		});
 	}
 
@@ -284,9 +277,7 @@ function main(): void {
 			`✗ version-consistency-smoke FAILED — expected '${expected}' (from root package.json), found:`
 		);
 		for (const m of mismatches) {
-			console.error(
-				`  - ${m.label}: ${m.got === null ? '<not found>' : `'${m.got}'`}`
-			);
+			console.error(`  - ${m.label}: ${m.got === null ? '<not found>' : `'${m.got}'`}`);
 			console.error(`      fix: ${m.remediation}`);
 		}
 		console.error(

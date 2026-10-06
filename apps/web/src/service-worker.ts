@@ -51,7 +51,8 @@
  *     never cached here — see isDynamicDataPath.
  *   • EVERY navigation (the HTML document) is NETWORK-FIRST, prerendered
  *     route or not; the cached copy is only the offline fallback.
- *   • Operator-replaceable brand assets are stale-while-revalidate.
+ *   • Operator-replaceable brand assets are stale-while-revalidate (a read
+ *     marked ?fresh=1 — the Blurt post — is network-first).
  *   • Other same-origin GETs (hashed chunks, /static) are cache-first and
  *     refetched on a miss.
  *
@@ -73,7 +74,11 @@
 
 import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
-import { isDynamicDataPath, isBrandOverridablePath } from '$lib/net/dynamicPaths';
+import {
+	BRAND_FRESH_PARAM,
+	isDynamicDataPath,
+	isBrandOverridablePath
+} from '$lib/net/dynamicPaths';
 import { withHiddenFloor } from '$lib/net/transportBudget';
 import { DEFAULT_BRAND_NAME, sanitizeBrandName } from '$lib/brand/brandName';
 import { chatThreadFromClickPath, chatPeerMatches } from '$lib/notifications/chatThread';
@@ -262,6 +267,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 			// re-applied brand shows on the visitor's next load instead of
 			// waiting for the next release to rotate this cache.
 			if (isBrandOverridablePath(url.pathname)) {
+				// `?fresh=1` (only the Blurt post sends it, right before posting):
+				// the network's copy when there is one, the cached one only when
+				// there is not. Everything else stays stale-while-revalidate.
+				const wantsFresh = url.searchParams.has(BRAND_FRESH_PARAM);
+				// Cached under the bare path, so a fresh read updates what every
+				// later (query-less) read gets.
+				const key = wantsFresh ? new Request(url.origin + url.pathname) : req;
 				const cached = await cache.match(req, { ignoreSearch: true });
 				// Bounded: a hung background refresh must not keep the SW
 				// alive via waitUntil. Raised to the hidden-transport floor on
@@ -279,7 +291,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 					.then((fresh) => {
 						if (fresh.ok && fresh.status === 200) {
 							return cache
-								.put(req, fresh.clone())
+								.put(key, fresh.clone())
 								.catch(() => {})
 								.then(() => fresh);
 						}
@@ -287,11 +299,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 					})
 					.catch(() => null)
 					.finally(() => clearTimeout(timer));
-				if (cached) {
+				if (cached && !wantsFresh) {
 					event.waitUntil(refresh);
 					return cached;
 				}
 				const fresh = await refresh;
+				if (fresh && fresh.ok) return fresh;
+				if (cached) return cached;
 				if (fresh) return fresh;
 				return new Response('Offline — resource unavailable.', {
 					status: 503,

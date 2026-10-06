@@ -99,6 +99,7 @@ export async function healIndexerMemory(
 		return {
 			strategy: 'not-installed',
 			verified: true,
+			routine: true,
 			detail: 'Indexer memory cap: no indexer service on this server.'
 		};
 

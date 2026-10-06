@@ -270,7 +270,7 @@ posted through this instance.  Null on untagged instances.
 no clearnet internet (all its private-transport legs pass on its
 own checks). Other instances accept it only from an instance
 registered at an onion/I2P/Lokinet origin, and nobody verifies it
-leg by leg; directories show it as "Says it uses no clearnet
+leg by leg; directories show it with the badge "Zero use of clearnet
 internet". The list of failing legs (`clearnet_eliminated_missing`)
 is returned only to the operator's local tools.
 
@@ -306,7 +306,7 @@ Query parameters (all optional):
 | `fiat_currency`  | string  | ISO-4217, one or more, comma-separated, e.g. `USD` or `USD,EUR` |
 | `payment_methods`| string  | comma-separated method keys, e.g. `bank_transfer,paypal` (`payment_method` is accepted as an alias) |
 | `location_region`| string  | e.g. `US`, `EU` |
-| `langs`          | string  | comma-separated language codes; returns orders in those languages plus every order with no language |
+| `langs`          | string  | comma-separated language codes; returns only orders written in one of those languages (orders posted before v1.15.0 carry no language and are left out) |
 | `min_trades`     | integer | minimum completed trades of the poster (0–100) |
 | `sort`           | string  | `recent` (default), `rating`, `trades` |
 | `limit`          | integer | 1–100, default 50 |

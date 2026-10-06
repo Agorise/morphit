@@ -69,7 +69,7 @@ function fail(name: string, detail: string): void {
 
 console.log('\n── brag-list-kiss-budget smoke (cp60 LL #62 / O-12) ──\n');
 
-const BRAG_PATH = join(REPO_ROOT, 'MORPHIT-BRAG-LIST.md');
+const BRAG_PATH = join(REPO_ROOT, 'docs', 'MORPHIT-BRAG-LIST.md');
 const content = readFileSync(BRAG_PATH, 'utf-8');
 
 /**

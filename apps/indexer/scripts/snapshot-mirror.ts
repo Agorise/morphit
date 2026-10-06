@@ -48,6 +48,12 @@ import { loadConfig } from '../src/config/index.ts';
 import { bootChainClient, installChainRouting } from '../src/indexer/bootChainClient.ts';
 import { INDEXER_SNAPSHOT_SIGNER_DEFAULT } from '../src/blurt/indexerSnapshotOp.ts';
 import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
+import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+
+// The RPC library's own failover chatter ("Didn't failover for error …") is
+// noise here as in the indexer: the pool fails over, and this script reports
+// its result itself.
+suppressDblurtConsoleNoise();
 
 const STATE_PATH = process.env.MORPHIT_SNAPSHOT_MIRROR_STATE ?? '/var/lib/morphit/snapshot-mirror.json';
 
@@ -166,7 +172,6 @@ async function main(): Promise<void> {
 		say(`@${signer} is not the official account, so its key is not pinned — pass --signer-pubkey <BLT…>. Nothing to do.`);
 		return;
 	}
-	say(`reading @${signer}'s chain history for the newest indexer_snapshot_v1 …`);
 	const blurt = bootChainClient(config);
 	let resolved: Awaited<ReturnType<typeof resolveTrustedSnapshotOp>>;
 	try {

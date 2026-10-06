@@ -6826,9 +6826,10 @@ For everyone else, deploy it. Reasons it's the default recommendation:
 
 - OWASP-Top-10 protection out of the box (SQL injection, XSS, path traversal, etc.) without writing nginx ModSecurity rules.
 - Curated bot lists + behavioral detection layered on top of basic User-Agent blocking.
-- Per-country / per-AS rate limiting in addition to per-IP.
-- Built-in GeoIP, slow-loris guards, connection-rate limits.
-- Single dashboard for HTTPS certs, request rate limits, country blocking, and OWASP rule tuning.
+- Slow-loris guards, connection-rate limits, per-IP rate limiting.
+- One place for HTTPS certs, request rate limits and OWASP rule tuning.
+- (Its country and ASN blocking stays off on every Morphit instance: no
+  instance turns visitors away by where they are.)
 
 ### Caching the update surface — `/service-worker.js` + `verify.json` (why the update snackbar may not appear)
 
@@ -6911,8 +6912,7 @@ Both must show `cache-control: no-cache`. Until they do, a stale service worker 
 | HTTPS auto-renewal | Caddy yes; nginx via certbot | yes (built-in) |
 | OWASP Top-10 rules | nginx via ModSecurity (manual config); Caddy via plugins | built-in |
 | Bot detection | basic User-Agent blocking | curated bot lists + behavioral |
-| Rate limiting | per-IP, per-route | per-IP, per-route, per-country, per-AS |
-| GeoIP / country blocking | manual | built-in |
+| Rate limiting | per-IP, per-route | per-IP, per-route |
 | DDoS mitigation | per-IP rate limit only | per-IP + connection-rate + slow-loris + body-size guards |
 | Web UI | none | yes |
 
@@ -6971,7 +6971,8 @@ api.github.com, and "preview" Pro plugins from assets.bunkerity.com (code it
 downloads and installs, even without a licence). Morphit's compose files
 mount its own job lists over the scheduler's
 (`ops/bunkerweb/scheduler/`): those jobs are gone, and the GeoIP files come
-from the BunkerWeb image itself (only country rules use them). `morphit-ops
+from the BunkerWeb image itself (nothing uses them: Morphit has no country
+or ASN rules). `morphit-ops
 upgrade` adds the same mounts on installed servers and checks, inside the
 scheduler and in its log, that the jobs no longer run. With the Linux
 packages, copy `jobs-plugin.json` to `/usr/share/bunkerweb/core/jobs/plugin.json`,
@@ -7174,19 +7175,7 @@ sudo ufw insert 1 deny from 203.0.113.0/24
 sudo ufw insert 1 deny from 198.51.100.50
 ```
 
-**4. GeoIP-block from countries with disproportionate squatter activity.** This is operator's-call — Morphit is a worldwide service, blocking entire countries denies access to legitimate users. But if you're in incident response and an attacker is concentrated in one CC, you can:
-
-```yaml
-BLACKLIST_COUNTRY=XX YY  # ISO-3166 alpha-2 codes; looked up in a GeoIP file on this server
-```
-
-(On Ansible installs, set `bunkerweb_block_countries` in `group_vars/all.yml` instead.)
-
-Reverse the policy if you want to RESTRICT to specific countries (rare for Morphit):
-
-```yaml
-WHITELIST_COUNTRY=US CA GB DE FR
-```
+**4. No country blocks.** No Morphit instance turns visitors away by country. Federation exists so that people whose country blocks or firewalls services (China, Iran, North Korea, …) can still reach the instance of their choice. `BLACKLIST_COUNTRY` and `WHITELIST_COUNTRY` stay empty; `morphit-ops upgrade` empties any country list it finds (also per-site `<name>_BLACKLIST_COUNTRY` lines) and checks BunkerWeb runs without one. Block attacking addresses or networks instead (item 3).
 
 **5. No per-AS (ASN) blocks.** BunkerWeb's ASN blocks need the blacklist plugin, with its per-visitor reverse-DNS queries, and they turn away everyone on a VPN or hosting network — often the privacy-minded users Morphit is for. Morphit ships none.
 
@@ -9179,8 +9168,8 @@ nginx rule (`CUSTOM_CONF_SERVER_HTTP_morphit_ip_blocks=deny 198.51.100.7; deny 2
 in `/etc/bunkerweb/bunkerweb.env`; add or remove `deny <address-or-network>;`
 entries there, then recreate the containers on the server with
 `sudo docker compose up -d --force-recreate` in the BunkerWeb compose
-directory, since `docker restart` keeps the old environment). Blocks by **country** still work (`BLACKLIST_COUNTRY`
-/ `WHITELIST_COUNTRY`, from the GeoIP file in the image). Blocks by **ASN**,
+directory, since `docker restart` keeps the old environment). There are no blocks by **country**: no Morphit
+instance turns visitors away by country ("Advanced WAF rule tuning", item 4). Blocks by **ASN**,
 reverse DNS, user agent and URL are no longer available; the upgrade names
 any such list it finds on your server.
 
@@ -10129,8 +10118,7 @@ Layer 7-8 defenses run AFTER an attacker reaches the relay. Network-layer defens
 **a. Run the relay behind Tor / I2P only, with a clearnet mirror sitting in front.**  
 Squatters typically don't route through anonymity networks because the latency disrupts their automation. A relay only reachable via Tor onion address has natural friction. The clearnet mirror (BunkerWeb terminating TLS, proxying to localhost relay) gives normal users a fast path; the Tor address gives privacy-conscious users a private path. The guided install sets up the Tor and I2P addresses (`RUN-A-MORPHIT-NODE.md` §6).
 
-**b. Country-block from low-cost residential-proxy markets.**  
-This is operator's-call and ethically fraught — Morphit serves worldwide users. But if you're under active attack from a specific country and your user base is regional, a temporary `BLACKLIST_COUNTRY` (BunkerWeb) or geoip-based UFW rule narrows the attacker's options without breaking your real users.
+**b. Never block by country.** No Morphit instance turns visitors away by country, not even under attack: people behind national firewalls must be able to reach the instance they choose. Block the attacking addresses or networks ("Advanced WAF rule tuning", item 3).
 
 BunkerWeb's ASN blocks, its blacklist plugin and a "require a `Referer:`" rule are deliberately not on this list. ASN blocks need the blacklist plugin (a reverse-DNS query for every visitor) and turn away VPN users; the referer rule is not a BunkerWeb 1.5.10 setting at all, and Morphit's pages send no `Referer` anyway (`Referrer-Policy: no-referrer`). BunkerWeb's antibot challenge is site-wide and stays off (§32).
 

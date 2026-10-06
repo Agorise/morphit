@@ -1617,6 +1617,25 @@ describe('the frontend REALLY sends one address to the indexer (served config, n
 	});
 });
 
+// v1.21.1 review: a country list that reaches BunkerWeb another way (a compose
+// `environment:` entry this heal does not edit) failed the check of the heal's
+// own changes, so every upgrade put all of them back.
+describe('a country list this heal cannot edit', () => {
+	it('the privacy changes are applied and kept; the list is named with what to do', async () => {
+		const s = oldBox();
+		const gen = s.generated.bind(s);
+		s.generated = (x) => `${gen(x)}\nshop.example.org_BLACKLIST_COUNTRY=CN`;
+		for (const [n, x] of s.c)
+			if (/bunkerity\/bunkerweb:/.test(x.image)) s.edgeSettings.set(n, s.generated(x));
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		expect(s.warn.join(' ')).toMatch(/country list \(shop\.example\.org_BLACKLIST_COUNTRY=CN\)/);
+		const again = await s.run();
+		expect(again.kind).toBe('left-alone');
+		expect('reason' in again ? again.reason : '').toMatch(/No Morphit instance blocks by country/);
+	});
+});
+
 describe('BunkerWeb stops sending visitor data to third parties', () => {
 	const PRIVACY = [
 		'USE_BUNKERNET=no',

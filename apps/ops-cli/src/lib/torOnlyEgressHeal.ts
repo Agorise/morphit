@@ -67,6 +67,7 @@ export async function healTorOnlyEgress(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Tor-only egress rule: this node is not tor-only; nothing changed.'
 		};
 	let stop = ctx.spinner(

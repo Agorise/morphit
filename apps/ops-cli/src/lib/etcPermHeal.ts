@@ -31,7 +31,12 @@ export async function healEtcMorphitPerms(
 	const group = opts.group ?? 'morphit';
 	const st = rt.stat(p);
 	if (st === null)
-		return { strategy: 'skipped', verified: true, detail: `${p}: not on this server.` };
+		return {
+			strategy: 'skipped',
+			verified: true,
+			routine: true,
+			detail: `${p}: not on this server.`
+		};
 	if (!st.isDir)
 		return {
 			strategy: 'left-alone',
@@ -48,7 +53,12 @@ export async function healEtcMorphitPerms(
 	const good = (s: typeof st): boolean =>
 		s !== null && s.uid === 0 && s.gid === gid && (s.mode & 0o777) === 0o750;
 	if (good(st))
-		return { strategy: 'already', verified: true, detail: `${p} is root:${group} 0750.` };
+		return {
+			strategy: 'already',
+			verified: true,
+			routine: true,
+			detail: `${p} is root:${group} 0750.`
+		};
 	const before = `${st.uid === 0 ? 'root' : st.uid}:${st.gid === gid ? group : st.gid} ${(st.mode & 0o777).toString(8).padStart(4, '0')}`;
 	rt.set(p, 0, gid, 0o750);
 	const after = rt.stat(p);

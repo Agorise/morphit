@@ -1316,7 +1316,7 @@
 			},
 			"run_your_own": {
 				"q": "Kann ich meinen eigenen Morphit betreiben?",
-				"a": "Ja, und bitte tun Sie es — Morphit bleibt nur unaufhaltsam, wenn viele Leute es betreiben. Eine Installation gibt Ihnen den ganzen Stack:\n\n• Die Website — derselbe Code auf Ihrer eigenen Domain oder unter einer .onion- oder .b32.i2p-Adresse (oder allen).\n\n• Einen Indexer — liest die Blurt-Chain und liefert Ihren Besuchern Orderbuch, Chat-Verlauf und Profile als REST-API und RSS-Feeds und spricht mit den anderen Instanzen der Föderation.\n\n• Einen Relay — erstellt Blurt-Konten für neue Nutzer Ihrer Instanz (Ihr Relay zahlt die Gebühr der Chain für die Kontoerstellung) und verschickt Push-Benachrichtigungen.\n\nWarum das wichtig ist: Jede Instanz ist ein zusätzlicher Weg, den ein Zensor, ein pleitegegangener Hoster oder ein schlechtes Gerichtsurteil nicht auf einmal abschalten kann. Eine Instanz ist ein Ziel. Fünfzig sind eine Bewegung. Alle Dienste sind schlanke Node.js-Programme (TypeScript) mit einfachen Konfigurationsdateien, die ein geführter Befehl auf einem Ubuntu-Server installiert; docs/RUN-A-MORPHIT-NODE.md führt Sie durch und nennt die nötige Servergröße. Ein Morphit-Knoten bringt Ihnen 90 % der in BLURT bezahlten Inseratsgebühren auf ihm ein.\n\n**Ein Betreiber kann den ganzen Weg gehen.** Ein Knoten kann ganz ohne Clearnet laufen: Chain-Abfragen, Prüfungen von BTC/XMR-Gebühren, Preise und Upgrades laufen über Tor und I2P, und auf so einem Knoten lässt eine Firewall-Regel nur Tor und I2P ins Internet. Der Knoten erklärt sich nur dann clearnetfrei, wenn seine eigenen Prüfungen aller ausgehenden Wege bestanden sind, und das Verzeichnis zeigt das als „Gibt an, kein Clearnet-Internet zu nutzen“ — die eigene Aussage der Instanz, die andere Knoten nicht nachprüfen können. Besucher erreichen so einen Knoten nur über Tor oder I2P, und keines von beiden verrät einem Besucher, wo der Server steht. Eine Warnung: Ein Server, der einmal im Clearnet lief, bleibt mit seiner alten Domain verknüpft — starten Sie einen versteckten Knoten daher mit neuen Schlüsseln und einem neuen Betreiberkonto."
+				"a": "Ja, und bitte tun Sie es — Morphit bleibt nur unaufhaltsam, wenn viele Leute es betreiben. Eine Installation gibt Ihnen den ganzen Stack:\n\n• Die Website — derselbe Code auf Ihrer eigenen Domain oder unter einer .onion- oder .b32.i2p-Adresse (oder allen).\n\n• Einen Indexer — liest die Blurt-Chain und liefert Ihren Besuchern Orderbuch, Chat-Verlauf und Profile als REST-API und RSS-Feeds und spricht mit den anderen Instanzen der Föderation.\n\n• Einen Relay — erstellt Blurt-Konten für neue Nutzer Ihrer Instanz (Ihr Relay zahlt die Gebühr der Chain für die Kontoerstellung) und verschickt Push-Benachrichtigungen.\n\nWarum das wichtig ist: Jede Instanz ist ein zusätzlicher Weg, den ein Zensor, ein pleitegegangener Hoster oder ein schlechtes Gerichtsurteil nicht auf einmal abschalten kann. Eine Instanz ist ein Ziel. Fünfzig sind eine Bewegung. Alle Dienste sind schlanke Node.js-Programme (TypeScript) mit einfachen Konfigurationsdateien, die ein geführter Befehl auf einem Ubuntu-Server installiert; docs/RUN-A-MORPHIT-NODE.md führt Sie durch und nennt die nötige Servergröße. Ein Morphit-Knoten bringt Ihnen 90 % der in BLURT bezahlten Inseratsgebühren auf ihm ein.\n\n**Ein Betreiber kann den ganzen Weg gehen.** Ein Knoten kann ganz ohne Clearnet laufen: Chain-Abfragen, Prüfungen von BTC/XMR-Gebühren, Preise und Upgrades laufen über Tor und I2P, und auf so einem Knoten lässt eine Firewall-Regel nur Tor und I2P ins Internet. Der Knoten erklärt sich nur dann clearnetfrei, wenn seine eigenen Prüfungen aller ausgehenden Wege bestanden sind, und das Verzeichnis zeigt das als „Keine Nutzung des Clearnet-Internets“ — die eigene Aussage der Instanz, die andere Knoten nicht nachprüfen können. Besucher erreichen so einen Knoten nur über Tor oder I2P, und keines von beiden verrät einem Besucher, wo der Server steht. Eine Warnung: Ein Server, der einmal im Clearnet lief, bleibt mit seiner alten Domain verknüpft — starten Sie einen versteckten Knoten daher mit neuen Schlüsseln und einem neuen Betreiberkonto."
 			},
 			"security_attack_vectors": {
 				"q": "Ist Morphit anfällig für Hacks, Datendiebstahl oder Abschaltungen?",
@@ -2240,7 +2240,7 @@
 		"last_probed_label": "Zuletzt geprüft",
 		"this_instance": "Sie sind hier",
 		"live": "Live",
-		"clearnet_eliminated": "Gibt an, kein Clearnet-Internet zu nutzen",
+		"clearnet_eliminated": "Keine Nutzung des Clearnet-Internets",
 		"contact_via": "Kontakt über {app}",
 		"contact_copy": "{app}-Adresse kopieren"
 	},
@@ -2869,7 +2869,7 @@
 			"side_help": "Tipp: Wenn du Krypto kaufen willst, suche Beiträge, die verkaufen möchten. Wenn du verkaufen willst, suche Beiträge, die kaufen möchten.",
 			"order_details_label": "Bedingungen / Details / Notizen zur Order",
 			"language_label": "Sprache",
-			"language_hint": "Nur Angebote in diesen Sprachen anzeigen. Leer lassen, um alle zu sehen.",
+			"language_hint": "Nur Angebote in diesen Sprachen anzeigen. Leer lassen, um alle zu sehen. Ältere Angebote ohne Sprache erscheinen nur, wenn das Feld leer ist.",
 			"language_placeholder": "Sprachen suchen…",
 			"language_remove": "Entfernen",
 			"language_no_matches": "Keine passenden Sprachen"
@@ -4736,7 +4736,7 @@
 	"syndicate": {
 		"first_trade": {
 			"title": "Ich habe gerade meinen ersten Trade mit @{seller} auf Morphit abgeschlossen!",
-			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nIch bin Morphit beigetreten, um endlich Kryptos und Fiat-Währungen zu handeln, ohne auf eine zentrale Börse (CEX) angewiesen zu sein. Kein KYC, kein Tracking, keine Cookies, und niemand verwahrt mein Geld.\n\nEs ist die privateste Art, Kryptos und Fiat von Mensch zu Mensch zu handeln, die ich kenne.\n\nSchau dir mein Profil auf Morphit an!\n{profile_url}"
+			"body": "Ich bin Morphit beigetreten, um endlich Kryptos und Fiat-Währungen zu handeln, ohne auf eine zentrale Börse (CEX) angewiesen zu sein. Kein KYC, kein Tracking, keine Cookies, und niemand verwahrt mein Geld.\n\nEs ist die privateste Art, Kryptos und Fiat von Mensch zu Mensch zu handeln, die ich kenne.\n\nSchau dir mein Profil auf Morphit an!\n{profile_url}"
 		},
 		"order_post": {
 			"title_buy": "{subject}. Willst du handeln?",

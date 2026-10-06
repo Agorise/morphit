@@ -73,6 +73,7 @@ export async function healPgRole(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Indexer database role: no indexer database is configured on this server.'
 		};
 	let role: string | null = null;
@@ -105,6 +106,7 @@ export async function healPgRole(
 			return {
 				strategy: 'already',
 				verified: true,
+				routine: true,
 				detail: `Indexer database role: ${role} already has JIT off and an idle-transaction cap (seen in a new session).`
 			};
 		let strategy = 'as-role';

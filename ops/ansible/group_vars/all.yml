@@ -460,9 +460,8 @@ bunkerweb_crs_paranoia: 3
 # hosting providers turns away the many visitors who use a VPN.  See the
 # privacy section of roles/bunkerweb/templates/bunkerweb.env.j2.
 
-# Country-block list for §38.6 item b.  Empty by default; populate
-# only under active attack.  ISO-3166-1 alpha-2 codes.
-bunkerweb_block_countries: []
+# No country blocks: no Morphit instance turns visitors away by country
+# (people behind national firewalls must reach the instance they choose).
 
 
 # ─── UFW (§34) ───────────────────────────────────────────────────

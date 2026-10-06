@@ -50,7 +50,7 @@ export function loadInstanceEnv(repoRoot: string): InstanceEnvResult {
 	// 1) Operator-tunable config (allowlist-filtered, OS env wins).
 	let configLoaded = false;
 	try {
-		const res = loadOperatorConfig({ searchPaths: [repoRoot] });
+		const res = loadOperatorConfig({ searchPaths: [repoRoot], quiet: true });
 		configLoaded = res.file !== null;
 	} catch {
 		// Allowlist violation or unreadable file — not fatal here; the

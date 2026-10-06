@@ -61,10 +61,10 @@ bash scripts/run-smokes.sh
 
 Expect failures in this category — they're the drift detectors firing:
 
-- **`brag-list-claim-parity-smoke`** — flags every "N languages/locales" claim in `MORPHIT-BRAG-LIST.md`, `README.md`, and `apps/web/static/llms.txt` that still says the old count. The smoke output lists the exact `file:line` of each.
+- **`brag-list-claim-parity-smoke`** — flags every "N languages/locales" claim in `docs/MORPHIT-BRAG-LIST.md`, `README.md`, and `apps/web/static/llms.txt` that still says the old count. The smoke output lists the exact `file:line` of each.
 - **`i18n-locale-parity-smoke`** — verifies the new locale JSON has every key from `en.json`. If anything's missing this is your last chance to catch it.
 - **`i18n-locale-registry-smoke`** — confirms the disjointness + JSON-file-existence invariants now hold for the new locale.
-- **`mediakit-freshness-smoke`** — if `MORPHIT-BRAG-LIST.md` got edited to update locale counts, the bundled `morphit-mediakit.zip` goes stale; rebuild via `bash scripts/build-mediakit.sh`.
+- **`mediakit-freshness-smoke`** — if `docs/MORPHIT-BRAG-LIST.md` got edited to update locale counts, the bundled `morphit-mediakit.zip` goes stale; rebuild via `bash scripts/build-mediakit.sh`.
 
 Some smokes that load locales via `readdirSync` auto-adapt and just pass. Others that load via `SUPPORTED_LOCALES.map(...)` also auto-adapt. The only ones that fail are the claim-parity ones — by design.
 
@@ -80,10 +80,10 @@ For each `file:line` reported by `brag-list-claim-parity-smoke`, change the numb
 The smoke output is a complete checklist — no need to grep separately.
 
 Touchpoints typically affected (count from baseline):
-- `MORPHIT-BRAG-LIST.md` — 15 mentions
+- `docs/MORPHIT-BRAG-LIST.md` — 15 mentions
 - `README.md` — 1 mention
 - `apps/web/static/llms.txt` — 1 mention (line 42)
-- `MORPHIT-BRAG-LIST.md` trailer — "Last updated" date + the per-asset asset-count line that mentions locales
+- `docs/MORPHIT-BRAG-LIST.md` trailer — "Last updated" date + the per-asset asset-count line that mentions locales
 
 The brag-list count itself shifts at the line about "N locales shipped." Update that to N+1 and add the new language name.
 
@@ -93,7 +93,7 @@ A few comments and docstrings in source files casually mention "10 supported loc
 
 ```bash
 git grep -nE "all (10|ten) (locales|languages)|10 supported locales|10 fully localized" \
-    apps/ scripts/ docs/ README.md MORPHIT-BRAG-LIST.md
+    apps/ scripts/ docs/ README.md
 ```
 
 Update each to either the new exact number, or to "all supported locales" / "every supported locale" if it reads naturally that way.
@@ -107,13 +107,13 @@ Typical locations:
 
 ### 6. Rebuild the mediakit + the comparison image
 
-If you touched `MORPHIT-BRAG-LIST.md` (you did, step 4):
+If you touched `docs/MORPHIT-BRAG-LIST.md` (you did, step 4):
 
 ```bash
 bash scripts/build-mediakit.sh
 ```
 
-If `MORPHIT-BRAG-LIST.md` got a new entry, also rebuild:
+If `docs/MORPHIT-BRAG-LIST.md` got a new entry, also rebuild:
 
 ```bash
 python3 scripts/comparison-image/build_comparison.py

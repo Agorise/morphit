@@ -98,6 +98,7 @@ export async function healOsQuiet(
 		: {
 				strategy: 'already',
 				verified: true,
+				routine: true,
 				detail: `OS fetches: ${already.join(' and ')} already off.`
 			};
 }

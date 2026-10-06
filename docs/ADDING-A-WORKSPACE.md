@@ -437,7 +437,7 @@ surface don't need an ADR.
 
 If the workspace is a user-facing capability (not internal
 plumbing), add a concise public-facing brag entry to
-`MORPHIT-BRAG-LIST.md`.  Follow the existing entry style: 2–4
+`docs/MORPHIT-BRAG-LIST.md`.  Follow the existing entry style: 2–4
 sentences, verifiable in code or honestly disclosed as backlog,
 inserted in the proper themed section.
 

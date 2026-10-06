@@ -248,3 +248,23 @@ describe.skipIf(!compose)('the planned file, read by the real Docker Compose', (
 		}
 	});
 });
+
+// v1.21.1 review: a box with no Docker and a box whose Docker does not
+// answer both said "Docker is not answering … nothing to check" (a calm line).
+describe('when Docker cannot be asked', () => {
+	const ctx2 = { info: () => {}, warn: () => {}, spinner: () => () => {} };
+	it('no Docker installed: nothing to check (counted as routine)', async () => {
+		const r = await healBunkerwebJobs(ctx2, {
+			runtime: { containers: () => null, dockerInstalled: () => false } as unknown as JobsRuntime
+		});
+		expect(r).toMatchObject({ verified: true, routine: true });
+		expect(r.detail).toMatch(/no Docker on this server/);
+	});
+	it('Docker installed but not answering: a warning with the command to check it', async () => {
+		const r = await healBunkerwebJobs(ctx2, {
+			runtime: { containers: () => null, dockerInstalled: () => true } as unknown as JobsRuntime
+		});
+		expect(r.verified).toBe(false);
+		expect(r.detail).toMatch(/sudo systemctl status docker/);
+	});
+});

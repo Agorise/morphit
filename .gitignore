@@ -26,6 +26,8 @@ coverage/
 /ipfs-cid.txt
 /ipns-*.txt
 /ipns-sign.*
+# The on-chain payload ELI5 Block 4 writes for Block 5 (it is public once broadcast).
+/release.json
 
 # A signed canary and its key belong to the instance that publishes them
 # (scripts/canary/generate.sh writes canary.txt here by default).

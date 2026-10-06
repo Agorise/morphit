@@ -38,7 +38,7 @@
  * Each (file, pattern, match) tuple = one scenario.
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,9 +54,7 @@ const registryText = readFileSync(REGISTRY_PATH, 'utf8');
 // ASSET_TICKERS array literal — parse the bracketed list.
 // Regex matches the export line; the count is the number of
 // quoted strings inside.
-const tickersMatch = registryText.match(
-	/export\s+const\s+ASSET_TICKERS\s*=\s*\[([^\]]+)\]/
-);
+const tickersMatch = registryText.match(/export\s+const\s+ASSET_TICKERS\s*=\s*\[([^\]]+)\]/);
 if (!tickersMatch) {
 	console.log('  ✗ could not locate ASSET_TICKERS in registry');
 	console.log('\n✗ 1/1 scenarios failed');
@@ -68,9 +66,7 @@ const tickerStrings = tickersMatch[1]!.match(/'[A-Z0-9]+'/g) ?? [];
 // (barter) are a distinct category with their own release-notes section, not one
 // of the coins, so they must NOT count here. Derive the goods tickers straight
 // from the isGoodsAsset predicate body and exclude them.
-const goodsMatch = registryText.match(
-	/export\s+function\s+isGoodsAsset[^{]*\{([^}]+)\}/
-);
+const goodsMatch = registryText.match(/export\s+function\s+isGoodsAsset[^{]*\{([^}]+)\}/);
 const goodsTickers = new Set(goodsMatch ? (goodsMatch[1]!.match(/'[A-Z0-9]+'/g) ?? []) : []);
 const cryptoTickers = tickerStrings.filter((t) => !goodsTickers.has(t));
 const tradableCount = cryptoTickers.length;
@@ -88,10 +84,26 @@ console.log(`    trade-only = ${tradeOnlyCount}`);
 
 // ─── 2. Count-word ↔ number map ──────────────────────────────────
 const WORDS_TO_NUMBERS: Record<string, number> = {
-	one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
-	eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
-	thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
-	seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20
+	one: 1,
+	two: 2,
+	three: 3,
+	four: 4,
+	five: 5,
+	six: 6,
+	seven: 7,
+	eight: 8,
+	nine: 9,
+	ten: 10,
+	eleven: 11,
+	twelve: 12,
+	thirteen: 13,
+	fourteen: 14,
+	fifteen: 15,
+	sixteen: 16,
+	seventeen: 17,
+	eighteen: 18,
+	nineteen: 19,
+	twenty: 20
 };
 
 // Reverse map (1 → "one") so error messages can suggest the
@@ -109,13 +121,14 @@ function parseCount(token: string): number | null {
 }
 
 // ─── 3. Find release-notes files ─────────────────────────────────
-const allFiles = readdirSync(REPO);
+const NOTES_DIR = join(REPO, 'docs', 'release-notes');
+const allFiles = existsSync(NOTES_DIR) ? readdirSync(NOTES_DIR) : [];
 const RELEASE_NOTES_FILES = allFiles
 	.filter((f) => /^RELEASE-NOTES-v[\w.-]+\.md$/.test(f))
-	.map((f) => join(REPO, f));
+	.map((f) => join(NOTES_DIR, f));
 
 if (RELEASE_NOTES_FILES.length === 0) {
-	console.log('  ✗ no RELEASE-NOTES-v*.md files found at repo root');
+	console.log('  ✗ no RELEASE-NOTES-v*.md files found in docs/release-notes/');
 	console.log('\n✗ 1/1 scenarios failed');
 	process.exit(1);
 }
@@ -212,7 +225,7 @@ console.log(`  pattern matches checked: ${scenarios}`);
 
 if (scenarios === 0) {
 	console.log('\n  ✗ no asset-count claims found in any release-notes file —');
-	console.log('    pattern set is broken, or release notes don\'t carry claims');
+	console.log("    pattern set is broken, or release notes don't carry claims");
 	console.log('    (this is itself a regression — release notes should claim asset counts)');
 	console.log('\n✗ 1/1 scenarios failed');
 	process.exit(1);

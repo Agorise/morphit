@@ -262,6 +262,44 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 				dhtWrites(r.ipfs).length === 1,
 			r.out.slice(-300)
 		);
+
+		// Piped into `morphit-ops upgrade` (no terminal), the seed says its
+		// results only: no step-by-step lines, no staged-file listing, no bare
+		// CID line, no public-gateway hint. A verbose run still shows them.
+		const steps = [
+			/staging v9\.9\.9/,
+			/ipfs add \(timeout/,
+			/stage-release-dir: staged/,
+			/^\s+morphit-v9\.9\.9\.tar\.gz$/m,
+			/announcing to the network/,
+			/Resolve: https:\/\/ipfs\.io/,
+			new RegExp(`^${CID}$`, 'm')
+		];
+		const piped = run(sb, SEED, ['v9.9.9', CID], { ...seedEnv, MORPHIT_STAGE_TARBALL: tb });
+		check(
+			'seed, piped (an upgrade): only results — no step lines, file listing, bare CID or gateway hint',
+			piped.status === 0 && steps.every((re) => !re.test(piped.out)),
+			steps
+				.filter((re) => re.test(piped.out))
+				.map(String)
+				.join(' ')
+		);
+		check(
+			'seed, piped: still says the CID matches the anchored one',
+			/✓ CID matches the anchored ipfs_cid/.test(piped.out),
+			piped.out.slice(-300)
+		);
+		const verbose = run(sb, SEED, ['v9.9.9', CID], {
+			...seedEnv,
+			MORPHIT_STAGE_TARBALL: tb,
+			MORPHIT_SEED_VERBOSE: '1'
+		});
+		check(
+			'seed, verbose (a hand run): shows every step and the staged files',
+			verbose.status === 0 &&
+				[steps[0]!, steps[1]!, steps[2]!, steps[3]!].every((re) => re.test(verbose.out)),
+			verbose.out.slice(-400)
+		);
 	} finally {
 		rmSync(sb.dir, { recursive: true, force: true });
 	}

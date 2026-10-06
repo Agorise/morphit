@@ -261,7 +261,6 @@ apps/ops-cli/scripts/tor-onion-smoke.ts
 apps/ops-cli/scripts/tor-wizard-wiring-smoke.ts
 apps/ops-cli/scripts/upgrade-mcp-reachability-smoke.ts
 apps/ops-cli/scripts/upgrade-schema-reminder-smoke.ts
-apps/ops-cli/scripts/upgrade-supersede-self-safe-smoke.ts
 apps/ops-cli/scripts/workspace-deps-pin-check.ts
 apps/ops-cli/src/commands/altAddress.ts
 apps/ops-cli/src/commands/block.ts
@@ -275,7 +274,6 @@ apps/ops-cli/src/commands/moderation.ts
 apps/ops-cli/src/commands/paymentMethod.ts
 apps/ops-cli/src/commands/showKey.ts
 apps/ops-cli/src/commands/ssl.ts
-apps/ops-cli/src/commands/status.ts
 apps/ops-cli/src/init/assembleInstall.ts
 apps/ops-cli/src/init/chainCheck.ts
 apps/ops-cli/src/init/explorerHealth.ts
@@ -480,7 +478,6 @@ apps/web/scripts/public-key-display-smoke.ts
 apps/web/scripts/push-privacy-honesty-smoke.ts
 apps/web/scripts/rpc-health-merge-smoke.ts
 apps/web/scripts/rss-dynamic-title-smoke.ts
-apps/web/scripts/rss-feed-picker-wiring-smoke.ts
 apps/web/scripts/rtl-handle-and-footer-tasks-smoke.ts
 apps/web/scripts/seed-normalize-smoke.ts
 apps/web/scripts/send-blurt-modal-smoke.ts
@@ -503,7 +500,6 @@ apps/web/scripts/unlock-redirect-next-smoke.ts
 apps/web/scripts/untrusted-parseint-safety-smoke.ts
 apps/web/scripts/update-banner-deployed-version-poll-smoke.ts
 apps/web/scripts/user-preferences-smoke.ts
-apps/web/scripts/version-consistency-smoke.ts
 apps/web/scripts/wallet-op-builders-smoke.ts
 apps/web/scripts/wallet-power-modal-smoke.ts
 apps/web/scripts/web-push-wiring-smoke.ts
@@ -610,7 +606,6 @@ apps/web/src/lib/stores/pendingOrders.test.ts
 apps/web/src/lib/stores/preferredLangs.ts
 apps/web/src/lib/stores/selfProfile.test.ts
 apps/web/src/lib/stores/selfProfile.ts
-apps/web/src/lib/syndication/publish.ts
 apps/web/src/lib/ui/pinToBottom.test.ts
 apps/web/src/lib/updates/tamperBannerGate.ts
 apps/web/src/lib/utils/faqIndex.test.ts
@@ -653,7 +648,6 @@ scripts/assemble-install-smoke.ts
 scripts/backup-install-parity-smoke.ts
 scripts/backup-script-posix-safety-smoke.ts
 scripts/blurt-noble-tx-signature-proof.ts
-scripts/brag-list-claim-parity-smoke.ts
 scripts/build-llms-full.mjs
 scripts/build-sitemap.mjs
 scripts/build-verify-json.mjs
@@ -698,7 +692,6 @@ scripts/pwa-install-button-smoke.ts
 scripts/reboot-recovery-smoke.ts
 scripts/relay-health-probe-smoke.ts
 scripts/relay-keystore-content-smoke.ts
-scripts/release-notes-asset-count-parity-smoke.ts
 scripts/root-shell-then-redirect-smoke.ts
 scripts/save-secrets-smoke.ts
 scripts/seo-url-consistency-smoke.ts

@@ -109,19 +109,46 @@ for (const s of SURFACES) {
 	});
 }
 
-scenario('orderbook cross-asset pill is gated on globalRssActive (conditional, mutually exclusive)', () => {
-	const src = read('src/routes/[lang]/orderbook/+page.svelte');
-	if (!src.includes('globalRssActive')) {
-		throw new Error(
-			'orderbook: cross-asset RSS pill must be gated on globalRssActive (no-asset + has-filter), not shown unconditionally'
-		);
+scenario(
+	'orderbook cross-asset pill is gated on globalRssActive (conditional, mutually exclusive)',
+	() => {
+		const src = read('src/routes/[lang]/orderbook/+page.svelte');
+		if (!src.includes('globalRssActive')) {
+			throw new Error(
+				'orderbook: cross-asset RSS pill must be gated on globalRssActive (no-asset + has-filter), not shown unconditionally'
+			);
+		}
+		if (!src.includes('{:else if globalRssActive}')) {
+			throw new Error(
+				'orderbook: global pill should be the {:else if} branch of the per-asset pill so the two never both render'
+			);
+		}
 	}
-	if (!src.includes('{:else if globalRssActive}')) {
-		throw new Error(
-			'orderbook: global pill should be the {:else if} branch of the per-asset pill so the two never both render'
-		);
+);
+
+// v1.21.1 (review): a language-only search showed no feed pill, and a
+// language-filtered feed's title did not say so (the feed itself honors langs).
+scenario(
+	'orderbook: the language filter counts for the cross-asset pill and names itself in the feed title',
+	() => {
+		const src = read('src/routes/[lang]/orderbook/+page.svelte');
+		const active = /const globalRssActive = \$derived\(([\s\S]*?)\n\t\);/.exec(src)?.[1] ?? '';
+		if (!/langFilter\.length > 0/.test(active))
+			throw new Error(
+				'orderbook: globalRssActive must include the language filter (langFilter.length > 0)'
+			);
+		const title =
+			/const rssTitle = \$derived\.by\(\(\) => \{([\s\S]*?)\n\t\}\);/.exec(src)?.[1] ?? '';
+		if (!/orderbook\.filters\.language_label/.test(title))
+			throw new Error(
+				'orderbook: rssTitle must name the language filter (orderbook.filters.language_label)'
+			);
+		const query =
+			/const rssQuery = \$derived\.by\(\(\) => \{([\s\S]*?)\n\t\}\);/.exec(src)?.[1] ?? '';
+		if (!/params\.set\('langs', q\.langs\)/.test(query))
+			throw new Error('orderbook: rssQuery must pass langs to the feed');
 	}
-});
+);
 
 scenario('RssFeedPicker references all 8 rss.* keys', () => {
 	const src = read(PICKER);
@@ -159,10 +186,14 @@ scenario('format-name keys are the same proper nouns in every locale', () => {
 		format_json: 'JSON'
 	};
 	for (const lang of LOCALES) {
-		const rss = (JSON.parse(read(`src/lib/i18n/locales/${lang}.json`)) as { rss: Record<string, string> })
-			.rss;
+		const rss = (
+			JSON.parse(read(`src/lib/i18n/locales/${lang}.json`)) as { rss: Record<string, string> }
+		).rss;
 		for (const [k, v] of Object.entries(expect)) {
-			if (rss[k] !== v) throw new Error(`${lang}: rss.${k} should be ${JSON.stringify(v)}, got ${JSON.stringify(rss[k])}`);
+			if (rss[k] !== v)
+				throw new Error(
+					`${lang}: rss.${k} should be ${JSON.stringify(v)}, got ${JSON.stringify(rss[k])}`
+				);
 		}
 	}
 });

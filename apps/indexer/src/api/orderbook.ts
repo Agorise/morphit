@@ -9,7 +9,7 @@
  *   - location_region:  string up to 128, case-insensitive substring match (optional)
  *   - payment_methods:  comma-separated list, order matches any of (optional);
  *                       `payment_method` is accepted as an alias
- *   - langs:            comma-separated order languages; untagged orders always match
+ *   - langs:            comma-separated order languages; only orders tagged with one of them
  *   - min_trades:       integer ≥0, filter to traders with ≥N COMPLETED TRADES (optional).
  *                       v1.5.5: real completions (both parties credited), not
  *                       the pre-v1.5.5 received-feedback proxy.
@@ -88,7 +88,7 @@ const querySchema = z.object({
 	payment_method: z.string().min(1).max(256).optional(),
 	/** v1.15.0 — comma-separated language codes (SUPPORTED_LOCALES). When
 	 *  present, the orderbook returns only orders whose lang is one of these
-	 *  PLUS every untagged order (lang IS NULL is never hidden). Absent → no
+	 *  (untagged orders, posted before v1.15.0, do not match). Absent → no
 	 *  language filtering. */
 	langs: z.string().min(1).max(128).optional(),
 	/** Minimum completed-trade count (fee-paid completed orders, both

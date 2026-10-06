@@ -94,9 +94,8 @@ sudo cp ops/bunkerweb/docker-compose.yml /etc/bunkerweb/
 sudo cp ops/bunkerweb/bunkerweb.env.example /etc/bunkerweb/bunkerweb.env
 
 # 2. Edit the env file — set SERVER_NAME, the operator-tunable
-#    values flagged with DUMMY-VALUE, and any country blocks you want
-#    active from the start (no ASN blocks: they need the blacklist
-#    plugin, which Morphit leaves off).  Then give compose the Docker
+#    values flagged with DUMMY-VALUE (no country blocks, ever; no ASN
+#    blocks: they need the blacklist plugin, which Morphit leaves off).  Then give compose the Docker
 #    socket's group:
 sudoedit /etc/bunkerweb/bunkerweb.env
 echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee /etc/bunkerweb/.env
@@ -256,8 +255,9 @@ testing in staging.
   the server (`OPERATIONS.md` §37.13a). Watch BunkerWeb live with
   `sudo docker attach --no-stdin --sig-proxy=false bunkerweb` (nothing is
   stored).
-- Country block list (`BLACKLIST_COUNTRY`) — empty by default;
-  populate only under active attack (§38.6 item b).
+- No country blocks: `BLACKLIST_COUNTRY` / `WHITELIST_COUNTRY` stay empty on
+  every Morphit instance (people behind national firewalls must reach the
+  instance they choose); `morphit-ops upgrade` empties any it finds.
 - OWASP CRS paranoia level — defaults to 3.  Drop to 2 if you
   see real-user false positives (watch BunkerWeb live as above); raise to
   4 only if you can verify it doesn't break legitimate traffic.

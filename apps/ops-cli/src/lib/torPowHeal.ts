@@ -83,6 +83,7 @@ export async function healTorPow(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Tor onion PoW: no /etc/tor/torrc on this server.'
 		};
 	const w = withPow(text);
@@ -90,6 +91,7 @@ export async function healTorPow(
 		return {
 			strategy: 'already',
 			verified: true,
+			routine: true,
 			detail: 'Tor onion PoW: nothing to add (set already, or no port-80 onion service).'
 		};
 	if (!rt.hasPowModule())

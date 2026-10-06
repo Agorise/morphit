@@ -8,7 +8,7 @@ This repository carries the full source for the indexer, relay, frontend, operat
 
 ## Status
 
-Live. The canonical public instance is **morphit.io** (clearnet, Tor and I2P); other instances run alongside it, including zero-clearnet ones (Tor and I2P only), and community operators are welcome to launch their own. Releases are signed, published on Forgejo and anchored on-chain; the release notes for each version are the `RELEASE-NOTES-v*.md` files at the repo root. The current threat model is in `docs/audit/2026-10-*.md` (STRIDE matrix, attack tree, red-team narrative).
+Live. The canonical public instance is **morphit.io** (clearnet, Tor and I2P); other instances run alongside it, including zero-clearnet ones (Tor and I2P only), and community operators are welcome to launch their own. Releases are signed, published on Forgejo and anchored on-chain; the release notes for each version are the `RELEASE-NOTES-v*.md` files in [`docs/release-notes/`](docs/release-notes/). The current threat model is in `docs/audit/2026-10-*.md` (STRIDE matrix, attack tree, red-team narrative).
 
 ## New here? Start here 👇
 
@@ -35,7 +35,7 @@ evaluating or building the software.
 - **Encrypted chat.** X25519 + ChaCha20-Poly1305-IETF with a fresh sender ephemeral per message and sender authentication, stored on-chain as ciphertext; no forward secrecy, and who-talks-to-whom is public — see `docs/CHAT-CRYPTO.md` and `docs/METADATA-LEAK-CATALOG.md`.
 - **Reach.** Public hostname, Tor `.onion`, I2P `.b32`, Lokinet, and Nostr-relay channels are all first-class operator-config surfaces.
 
-For the long version, every claim is enumerated and source-anchored in [`MORPHIT-BRAG-LIST.md`](MORPHIT-BRAG-LIST.md).
+For the long version, every claim is enumerated and source-anchored in [`docs/MORPHIT-BRAG-LIST.md`](docs/MORPHIT-BRAG-LIST.md).
 
 ## Repo layout
 
@@ -48,9 +48,11 @@ For the long version, every claim is enumerated and source-anchored in [`MORPHIT
 | `apps/matrix-bot/` | Optional Matrix incident-pager bot for operators who want push-to-phone alerting |
 | `apps/mcp-server/` | Read-only MCP server exposing the orderbook to AI agents |
 | `packages/` | Shared TypeScript packages: `asset-registry`, `hidden-transport`, `indexer-client`, `net-defense`, `node-health`, `operator-config`, `relay-client`, `release-schema`, `rpc-pool` |
-| `docs/` | ADRs (`docs/adr/0001-…` through `0052-…`), audit logs, operator runbooks |
+| `docs/` | Guides and operator runbooks, ADRs (`docs/adr/0001-…` through `0052-…`), audit logs, the claims list (`docs/MORPHIT-BRAG-LIST.md`) |
+| `docs/release-notes/` | One `RELEASE-NOTES-v*.md` per release |
 | `ops/` | Ansible role, systemd units, env templates, nginx + BunkerWeb configs, postgres init |
 | `scripts/` | Build, smoke, mediakit, sitemap, llms.txt, and ceremony helpers |
+| top level | `morphit-setup.sh` (the installer), `morphit.config.env.example`, `README.md`, `SECURITY.md`, `LICENSE`, `THIRD-PARTY-LICENSES.md`, and the npm, TypeScript, Prettier and audit config files |
 
 ## Running an instance
 
@@ -107,4 +109,4 @@ Third-party dependencies are used under their own licenses (overwhelmingly permi
 
 ---
 
-*Don't trust the project's marketing — verify it. Every claim in `MORPHIT-BRAG-LIST.md` points at code, an ADR, or a smoke that proves it. If you find one that doesn't, open an issue.*
+*Don't trust the project's marketing — verify it. Every claim in [`docs/MORPHIT-BRAG-LIST.md`](docs/MORPHIT-BRAG-LIST.md) points at code, an ADR, or a smoke that proves it. If you find one that doesn't, open an issue.*

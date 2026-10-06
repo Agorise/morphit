@@ -1316,7 +1316,7 @@
 			},
 			"run_your_own": {
 				"q": "Puis-je faire tourner mon propre Morphit ?",
-				"a": "Oui, et faites-le, s'il vous plaît : Morphit ne reste inarrêtable que si beaucoup de gens le font tourner. Une seule installation vous donne toute la pile :\n\n• Le site web — le même code sur votre propre domaine, ou sur une adresse .onion ou .b32.i2p (ou toutes).\n\n• Un indexeur — lit la chaîne Blurt et sert à vos visiteurs le carnet d'ordres, l'historique du chat et les profils, en API REST et en flux RSS, et dialogue avec les autres instances de la fédération.\n\n• Un relais — crée des comptes Blurt pour les nouveaux utilisateurs de votre instance (votre relais paie les frais de création de compte de la chaîne) et envoie les notifications push.\n\nPourquoi c'est important : chaque instance est un chemin de plus qu'un censeur, un hébergeur en faillite ou une mauvaise décision de justice ne peuvent pas fermer d'un coup. Une instance est une cible. Cinquante, c'est un mouvement. Tous les services sont de petits programmes Node.js (TypeScript) avec des fichiers de configuration simples, installés sur un serveur Ubuntu par une seule commande guidée ; docs/RUN-A-MORPHIT-NODE.md vous accompagne et indique la taille de serveur nécessaire. Faire tourner un nœud Morphit vous rapporte 90 % des frais d'annonce payés en BLURT sur ce nœud.\n\n**Un opérateur peut aller jusqu'au bout.** Un nœud peut fonctionner sans aucun clearnet : lectures de la chaîne, vérifications des frais en BTC/XMR, prix et mises à jour passent par Tor et I2P, et sur un tel nœud une règle de pare-feu ne laisse que Tor et I2P sortir vers internet. Le nœud ne se déclare sans clearnet que lorsque ses propres vérifications de chaque chemin sortant réussissent, et l'annuaire l'affiche comme « Dit ne pas utiliser l'internet clearnet » : la déclaration de l'instance elle-même, que les autres nœuds ne peuvent pas vérifier. Les visiteurs n'atteignent un tel nœud que par Tor ou I2P, et aucun des deux n'indique au visiteur où se trouve le serveur. Une mise en garde : un serveur qui a tourné un jour sur le clearnet reste lié à son ancien domaine ; démarrez donc un nœud caché avec des clés neuves et un nouveau compte d'opérateur."
+				"a": "Oui, et faites-le, s'il vous plaît : Morphit ne reste inarrêtable que si beaucoup de gens le font tourner. Une seule installation vous donne toute la pile :\n\n• Le site web — le même code sur votre propre domaine, ou sur une adresse .onion ou .b32.i2p (ou toutes).\n\n• Un indexeur — lit la chaîne Blurt et sert à vos visiteurs le carnet d'ordres, l'historique du chat et les profils, en API REST et en flux RSS, et dialogue avec les autres instances de la fédération.\n\n• Un relais — crée des comptes Blurt pour les nouveaux utilisateurs de votre instance (votre relais paie les frais de création de compte de la chaîne) et envoie les notifications push.\n\nPourquoi c'est important : chaque instance est un chemin de plus qu'un censeur, un hébergeur en faillite ou une mauvaise décision de justice ne peuvent pas fermer d'un coup. Une instance est une cible. Cinquante, c'est un mouvement. Tous les services sont de petits programmes Node.js (TypeScript) avec des fichiers de configuration simples, installés sur un serveur Ubuntu par une seule commande guidée ; docs/RUN-A-MORPHIT-NODE.md vous accompagne et indique la taille de serveur nécessaire. Faire tourner un nœud Morphit vous rapporte 90 % des frais d'annonce payés en BLURT sur ce nœud.\n\n**Un opérateur peut aller jusqu'au bout.** Un nœud peut fonctionner sans aucun clearnet : lectures de la chaîne, vérifications des frais en BTC/XMR, prix et mises à jour passent par Tor et I2P, et sur un tel nœud une règle de pare-feu ne laisse que Tor et I2P sortir vers internet. Le nœud ne se déclare sans clearnet que lorsque ses propres vérifications de chaque chemin sortant réussissent, et l'annuaire l'affiche comme « Aucune utilisation de l'internet clearnet » : la déclaration de l'instance elle-même, que les autres nœuds ne peuvent pas vérifier. Les visiteurs n'atteignent un tel nœud que par Tor ou I2P, et aucun des deux n'indique au visiteur où se trouve le serveur. Une mise en garde : un serveur qui a tourné un jour sur le clearnet reste lié à son ancien domaine ; démarrez donc un nœud caché avec des clés neuves et un nouveau compte d'opérateur."
 			},
 			"security_attack_vectors": {
 				"q": "Morphit est-il vulnérable au piratage, au vol de données ou aux blocages ?",
@@ -2240,7 +2240,7 @@
 		"last_probed_label": "Dernière vérification",
 		"this_instance": "Vous êtes ici",
 		"live": "En direct",
-		"clearnet_eliminated": "Dit ne pas utiliser l'internet clearnet",
+		"clearnet_eliminated": "Aucune utilisation de l'internet clearnet",
 		"contact_via": "Contacter via {app}",
 		"contact_copy": "Copier l'adresse {app}"
 	},
@@ -2869,7 +2869,7 @@
 			"side_help": "Astuce : si vous voulez acheter de la crypto, cherchez des annonces voulant vendre. Si vous voulez vendre, cherchez des annonces voulant acheter.",
 			"order_details_label": "Conditions / Détails / Notes de l’ordre",
 			"language_label": "Langue",
-			"language_hint": "N’afficher que les ordres rédigés dans ces langues. Laissez vide pour tout voir.",
+			"language_hint": "N’afficher que les ordres rédigés dans ces langues. Laissez vide pour tout voir. Les ordres plus anciens sans langue n’apparaissent que si le champ est vide.",
 			"language_placeholder": "Rechercher des langues…",
 			"language_remove": "Retirer",
 			"language_no_matches": "Aucune langue correspondante"
@@ -4736,7 +4736,7 @@
 	"syndicate": {
 		"first_trade": {
 			"title": "Je viens de finaliser ma toute première transaction avec @{seller} sur Morphit !",
-			"body": "![](https://img.blurt.blog/blurtimage/morphit/e3d56ddc849685c391dcdb03526463b8264f3e09.png)\n\nJ'ai rejoint Morphit pour enfin échanger cryptos et monnaies fiat sans dépendre d'une plateforme centralisée (CEX). Pas de KYC, pas de pistage, pas de cookies, et personne ne détient mes fonds.\n\nC'est la façon la plus privée que je connaisse d'échanger cryptos et fiat de pair à pair.\n\nJette un œil à mon profil sur Morphit !\n{profile_url}"
+			"body": "J'ai rejoint Morphit pour enfin échanger cryptos et monnaies fiat sans dépendre d'une plateforme centralisée (CEX). Pas de KYC, pas de pistage, pas de cookies, et personne ne détient mes fonds.\n\nC'est la façon la plus privée que je connaisse d'échanger cryptos et fiat de pair à pair.\n\nJette un œil à mon profil sur Morphit !\n{profile_url}"
 		},
 		"order_post": {
 			"title_buy": "{subject}. Envie d’échanger ?",

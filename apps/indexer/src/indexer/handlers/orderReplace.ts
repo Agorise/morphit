@@ -344,7 +344,7 @@ function validate(payload: unknown, blockTime: Date): Validated | { reason: stri
 	}
 
 	// v1.15.0 — lang tag on edit (mirror of order.ts). Optional; a present value
-	// must be one of the 10 supported codes, else NULL (untagged, never filtered).
+	// must be one of the 10 supported codes, else NULL (untagged).
 	let lang_validated: string | null = null;
 	{
 		const raw = (payload as Record<string, unknown>).lang;

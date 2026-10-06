@@ -1003,6 +1003,20 @@ COMMENT ON COLUMN account_loyalty.canonical_blurt_paid IS
 	// pre-launch baseline; from v37 forward, every new schema change is its
 	// own additive migration with its own version number.  No further
 	// collapse should happen until well after 1.0.0 ships.
+	,{
+		version: 67,
+		description:
+			'orders.lang — correct the column comment: since v1.21.1 a language filter lists only orders tagged with one of its languages (untagged orders, posted before v1.15.0, show only with no language chosen). Comment only; no data or index change.',
+		// Why a migration for a comment: `\d+ orders` must not tell an operator
+		// the opposite of what the orderbook does. COMMENT ON is idempotent.
+		sql: `
+COMMENT ON COLUMN orders.lang IS
+    'Language the order text is written in (a SUPPORTED_LOCALES code: en/es/de/'
+    'pl/fr/it/ru/fa/zh-CN/zh-HK). NULL = untagged (created before the feature, '
+    'or unspecified). A language filter lists only orders tagged with one of its '
+    'languages (v1.21.1); with no language chosen, untagged orders show too.';
+`
+	}
 ];
 
 /** Validate the MIGRATIONS array at load time:

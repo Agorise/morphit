@@ -377,7 +377,14 @@ ok(
 );
 
 // A hidden-only node has no release page, so notes came out blank.
-ok('release notes fall back to the tarball on the hidden path', /RELEASE-NOTES\.md/.test(upgrade));
+// (The tarball has no RELEASE-NOTES.md; it carries RELEASE-NOTES-<tag>.md, which
+// upgradeOutput.test.ts reads from a real tarball.)
+ok(
+	'release notes fall back to the tarball on the hidden path',
+	/notesBody === '' && offline\?\.tarballPath\)\s*\{\s*const fromTar = readNotesFromTarball\(offline\.tarballPath, latestTag\)/.test(
+		upgrade
+	) && !/'\*\/RELEASE-NOTES\.md'/.test(upgrade)
+);
 
 // Operator-facing output must not assert consequences a check did not establish.
 ok(

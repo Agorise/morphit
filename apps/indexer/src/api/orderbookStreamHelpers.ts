@@ -44,7 +44,8 @@ export interface OrderbookStreamQuery {
 	fiat_currency?: string;
 	location_region?: string;
 	payment_methods?: string;
-	/** Comma-separated order language codes. Untagged orders always match. */
+	/** Comma-separated order language codes: only orders tagged with one of them
+	 *  (untagged orders do not match a language filter). */
 	langs?: string;
 	/** Needs the caller to join reputationJoin's tradeCountJoin as `tc`. */
 	min_trades?: number;
@@ -267,13 +268,15 @@ export function buildWhereClauses(
 		}
 	}
 	if (q.langs) {
-		// Untagged orders (lang IS NULL) always match: the filter only hides
-		// orders that declared a DIFFERENT language.
+		// Only orders written in a chosen language. Untagged orders (lang IS
+		// NULL, posted before v1.15.0) do not match a language filter: with them
+		// always shown, filtering by one language still listed every older order
+		// (morphit.io, v1.21.0). No valid language chosen → no language filter.
 		const langs = q.langs
 			.split(',')
 			.map((s) => s.trim())
 			.filter((s) => isOrderLang(s));
-		if (langs.length > 0) where.push(`(o.lang IS NULL OR o.lang = ANY(${p(langs)}::text[]))`);
+		if (langs.length > 0) where.push(`o.lang = ANY(${p(langs)}::text[])`);
 	}
 	if (typeof q.min_trades === 'number' && q.min_trades > 0) {
 		// REAL completed trades (tc.c), not the feedback count: one filter

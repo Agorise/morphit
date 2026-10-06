@@ -2834,8 +2834,8 @@ export async function stepMcpServer(): Promise<McpServerResult> {
 //
 // BunkerWeb is an AGPLv3 reverse-proxy WAF.  Morphit ships a turnkey
 // deployment at ops/bunkerweb/ (paralleling ops/nginx/).  Recommended
-// for any public-facing instance: OWASP Top-10, bot detection, GeoIP,
-// per-AS rate limiting, behavioural DDoS mitigation.
+// for any public-facing instance: OWASP Top-10, bot detection, rate
+// limiting, behavioural DDoS mitigation (never country or ASN blocks).
 //
 // The one piece of wiring this decision drives in config: when the
 // stack sits behind BunkerWeb's pinned 172.20.0.0/16 Docker network,
@@ -2859,8 +2859,8 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 			'\n' +
 			'BunkerWeb is an open-source (AGPLv3) reverse-proxy WAF.  Morphit\n' +
 			'ships a turnkey config at ops/bunkerweb/ that puts OWASP Top-10\n' +
-			'protection, bot detection, GeoIP/per-AS rate limiting, and\n' +
-			'behavioural DDoS mitigation in front of your whole stack.\n' +
+			'protection, bot detection, rate limiting and behavioural\n' +
+			'DDoS mitigation in front of your whole stack.\n' +
 			'Recommended for any public-facing instance.\n' +
 			'\n' +
 			'Say NO if you are serving directly behind nginx or Caddy (the\n' +

@@ -68,6 +68,7 @@ export async function healVapid(
 		return {
 			strategy: 'skipped',
 			verified: true,
+			routine: true,
 			detail: 'Web Push keys: none on this server (push not set up); nothing to do.'
 		};
 	const torOnly = rt.torOnly();
@@ -98,7 +99,12 @@ export async function healVapid(
 				: `subject set to ${subject} (was the example.com placeholder; keys kept)`;
 	}
 	if (next === text)
-		return { strategy: 'already', verified: true, detail: 'Web Push keys: in place.' };
+		return {
+			strategy: 'already',
+			verified: true,
+			routine: true,
+			detail: 'Web Push keys: in place.'
+		};
 	if (!rt.writeFile(p, next) || rt.readFile(p) !== next)
 		return {
 			strategy: 'left-alone',

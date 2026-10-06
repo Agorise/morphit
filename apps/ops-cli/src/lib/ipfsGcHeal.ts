@@ -97,18 +97,21 @@ export function runIpfsGcHeal(opts: {
 		);
 		return { kind: 'no-summary' };
 	}
-	const kept = `kept releases ${s.keptReleases.replace(/,/g, ', ')}; kept snapshots at blocks ${s.keptSnapshots.replace(/,/g, ', ')}`;
+	const releases = s.keptReleases.split(',').filter((x) => x !== '' && x !== '-');
+	const snapshots = s.keptSnapshots.split(',').filter((x) => x !== '' && x !== '-');
+	const kept =
+		`kept ${releases.length === 0 ? 'no release' : `release${releases.length === 1 ? '' : 's'} ${releases.join(', ')}`}` +
+		` and ${snapshots.length} snapshot${snapshots.length === 1 ? '' : 's'}`;
 	switch (s.result) {
 		case 'done':
 			opts.info(
-				`IPFS clean-up: unpinned ${s.unpinned} superseded item(s) and removed ${s.stagedRemoved} staged snapshot file(s) ` +
-					`(${kept}); repo ${size(s.bytesBefore)} → ${size(s.bytesAfter)}. It runs weekly from now on.`
+				`IPFS clean-up: unpinned ${s.unpinned} superseded item(s)` +
+					(s.stagedRemoved > 0 ? ` and removed ${s.stagedRemoved} staged snapshot file(s)` : '') +
+					`; ${kept}; repo ${size(s.bytesBefore)} → ${size(s.bytesAfter)}.`
 			);
 			break;
 		case 'nothing-to-do':
-			opts.info(
-				`IPFS clean-up: nothing superseded to let go (${kept}). It runs weekly from now on.`
-			);
+			// Nothing superseded: no line (the weekly timer keeps doing this).
 			break;
 		case 'no-daemon':
 			opts.info(

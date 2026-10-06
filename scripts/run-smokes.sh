@@ -719,6 +719,8 @@ SMOKES=(
 	".:ipns-release-wiring-smoke"
 	".:ipns-dht-rebroadcast-smoke"
 	".:ipfs-hidden-only-execution-smoke"
+	".:upgrade-quiet-scripts-smoke"
+	".:repo-root-tidy-smoke"
 	".:ipfs-release-hosting-smoke"
 	".:release-monitor-exec-smoke"
 	".:release-publish-reverify-smoke"

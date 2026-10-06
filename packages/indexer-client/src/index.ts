@@ -172,7 +172,7 @@ export interface OrderRecord {
 	readonly specific_barter_title?: string | null;
 	readonly terms: string | null;
 	/** v1.15.0 — the language the order is written in (a SUPPORTED_LOCALES code),
-	 *  or null for untagged/legacy orders (which are never hidden by the filter). */
+	 *  or null for untagged/legacy orders (shown only when no language filter is set). */
 	readonly lang?: string | null;
 	readonly status?: 'live' | 'cancelled' | 'expired' | 'completed';
 	readonly fee_status?:
@@ -349,8 +349,8 @@ export interface OrderbookQuery {
 	readonly location_region?: string;
 	/** Comma-separated list of payment methods. Matches any of. */
 	readonly payment_methods?: string;
-	/** v1.15.0 — comma-separated language codes; orders in these langs PLUS all
-	 *  untagged orders are returned. Omit for no language filtering. */
+	/** v1.15.0 — comma-separated language codes; only orders in these langs are
+	 *  returned (untagged orders do not match). Omit for no language filtering. */
 	readonly langs?: string;
 	/** Only include orders posted by accounts with ≥N received
 	 *  feedback rows. Use 0 (or omit) to include all. */

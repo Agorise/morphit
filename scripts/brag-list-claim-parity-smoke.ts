@@ -109,12 +109,7 @@
  * pass-zero is masking real drift.
  */
 
-import {
-	readFileSync,
-	existsSync,
-	readdirSync,
-	statSync
-} from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -135,7 +130,7 @@ const REPO = resolve(HERE, '..');
 // into this list temporarily so claim-parity catches drift before
 // publish, then remove it again once the release ships.
 const MARKETING_DOCS = [
-	'MORPHIT-BRAG-LIST.md',
+	'docs/MORPHIT-BRAG-LIST.md',
 	'README.md',
 	// llms.txt is the public-facing policy/index file served at
 	// /llms.txt for AI agents and retrieval crawlers.  Same trust-
@@ -149,8 +144,7 @@ const MARKETING_DOCS = [
 
 // Backtick-quoted path: <root>/<rest>, where rest can end in a
 // file extension OR in a trailing slash (directory).
-const PATH_TOKEN_RE =
-	/`((?:scripts|apps|ops|packages|docs)\/[A-Za-z0-9_./-]+)`/g;
+const PATH_TOKEN_RE = /`((?:scripts|apps|ops|packages|docs)\/[A-Za-z0-9_./-]+)`/g;
 
 const VALID_EXTS = new Set([
 	'sh',
@@ -204,11 +198,7 @@ const OP_TOKEN_RE = /`(morphit_[a-z][a-z0-9_]*_v\d+)`/g;
 
 // Cache: walk apps/indexer/src + apps/relay + apps/web/src
 // once, build a single big string we can substring-search.
-const OP_SCAN_ROOTS = [
-	'apps/indexer/src',
-	'apps/relay/src',
-	'apps/web/src/lib'
-];
+const OP_SCAN_ROOTS = ['apps/indexer/src', 'apps/relay/src', 'apps/web/src/lib'];
 
 // --- (C) operator env-var references -------------------------
 
@@ -274,10 +264,7 @@ const NUM = '(\\d{1,3}|[A-Za-z]{3,9})';
 const ASSET_RE = new RegExp(`${NUM}\\s+(?:tradable\\s+assets)\\b`, 'gi');
 
 // (E) locales / languages — same pattern; both nouns accepted.
-const LOCALE_RE = new RegExp(
-	`${NUM}\\s+(locales?|languages?)\\b`,
-	'gi'
-);
+const LOCALE_RE = new RegExp(`${NUM}\\s+(locales?|languages?)\\b`, 'gi');
 
 // Words that, when they appear on the same line as a
 // non-canonical locale/language number, signal "this is a
@@ -307,10 +294,7 @@ const LOCALE_SUBSET_MARKERS = [
 
 // (F) ADRs — both "ADRs" and the spelled-out "architecture
 // decision records".  Both forms appear in the brag list.
-const ADR_RE = new RegExp(
-	`${NUM}\\s+(ADRs|architecture\\s+decision\\s+records)\\b`,
-	'gi'
-);
+const ADR_RE = new RegExp(`${NUM}\\s+(ADRs|architecture\\s+decision\\s+records)\\b`, 'gi');
 
 // (G) footer brag-entry count: "*N specific selling points*"
 const FOOTER_RE = /\*(\d+)\s+specific\s+selling\s+points/g;
@@ -371,9 +355,7 @@ function listFilesRec(root: string, out: string[] = []): string[] {
 		if (s.isDirectory()) {
 			listFilesRec(full, out);
 		} else if (
-			/\.(ts|tsx|js|mjs|cjs|svelte|json|yml|yaml|sql|sh|md|env|example|service|timer)$/.test(
-				e
-			)
+			/\.(ts|tsx|js|mjs|cjs|svelte|json|yml|yaml|sql|sh|md|env|example|service|timer)$/.test(e)
 		) {
 			out.push(full);
 		}
@@ -408,10 +390,7 @@ const ENV_HAYSTACK = buildHaystack(ENV_SCAN_ROOTS);
 
 // Canonical source-of-truth values for numeric anchors
 function countAssetTickers(): number {
-	const src = readFileSync(
-		join(REPO, 'packages/asset-registry/src/index.ts'),
-		'utf8'
-	);
+	const src = readFileSync(join(REPO, 'packages/asset-registry/src/index.ts'), 'utf8');
 	const m = src.match(/ASSET_TICKERS\s*=\s*\[([^\]]+)\]/);
 	if (!m) return -1;
 	// the brag list's "N tradable assets" claims count CRYPTO assets
@@ -435,9 +414,7 @@ function countLocales(): number {
 
 function countAdrs(): number {
 	const dir = join(REPO, 'docs/adr');
-	return readdirSync(dir).filter(
-		(f) => /^\d{4}-/.test(f) && f !== '0000-template.md'
-	).length;
+	return readdirSync(dir).filter((f) => /^\d{4}-/.test(f) && f !== '0000-template.md').length;
 }
 
 /** Highest 4-digit prefix among non-template ADR filenames.
@@ -459,7 +436,7 @@ function highestAdrNumber(): number {
 }
 
 function countBragEntries(): number {
-	const src = readFileSync(join(REPO, 'MORPHIT-BRAG-LIST.md'), 'utf8');
+	const src = readFileSync(join(REPO, 'docs/MORPHIT-BRAG-LIST.md'), 'utf8');
 	const lines = src.split('\n');
 	let n = 0;
 	for (const ln of lines) {
@@ -495,7 +472,9 @@ function isOperatorManaged(p: string): boolean {
 }
 
 console.log('\n── brag-list-claim-parity smoke (cp111) ──────────────\n');
-console.log(`  canonical: ${CANONICAL_ASSETS} assets · ${CANONICAL_LOCALES} locales · ${CANONICAL_ADRS} ADRs (max #${CANONICAL_ADR_MAX}) · ${CANONICAL_BRAG_ENTRIES} brag entries`);
+console.log(
+	`  canonical: ${CANONICAL_ASSETS} assets · ${CANONICAL_LOCALES} locales · ${CANONICAL_ADRS} ADRs (max #${CANONICAL_ADR_MAX}) · ${CANONICAL_BRAG_ENTRIES} brag entries`
+);
 
 for (const docRel of MARKETING_DOCS) {
 	const abs = join(REPO, docRel);
@@ -624,7 +603,7 @@ for (const docRel of MARKETING_DOCS) {
 		}
 
 		// (G) footer count (brag list only)
-		if (docRel === 'MORPHIT-BRAG-LIST.md') {
+		if (docRel === 'docs/MORPHIT-BRAG-LIST.md') {
 			FOOTER_RE.lastIndex = 0;
 			while ((m = FOOTER_RE.exec(ln)) !== null) {
 				const n = parseInt(m[1], 10);
@@ -722,8 +701,6 @@ if (failures.length > 0) {
 	process.exit(1);
 }
 
-console.log(
-	`\n  ✓ all ${total} brag-list claims align with canonical source`
-);
+console.log(`\n  ✓ all ${total} brag-list claims align with canonical source`);
 console.log('\n──────────────────────────────────────────────────────');
 console.log(`✓ all ${total} scenarios passed`);

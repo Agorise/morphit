@@ -548,7 +548,7 @@ def _read_brag_trailer_date(brag_path: Path) -> str:
     today = date.today()
     return verbatim(today.day, today.month, today.year)
 
-_brag_path = Path(__file__).resolve().parent.parent.parent / 'MORPHIT-BRAG-LIST.md'
+_brag_path = Path(__file__).resolve().parent.parent.parent / 'docs' / 'MORPHIT-BRAG-LIST.md'
 _footer_date = _read_brag_trailer_date(_brag_path)
 out.append(f'<text x="{W//2}" y="{y_footer}" text-anchor="middle" '
            f'font-family="DejaVu Sans, sans-serif" font-size="{FOOTER_FONT}" '

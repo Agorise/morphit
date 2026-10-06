@@ -213,6 +213,7 @@ export async function healMailRelay(
 	return {
 		strategy: done.length === 0 && verified ? 'already' : verified ? 'applied' : 'partial',
 		verified,
+		routine: done.length === 0 && verified,
 		detail:
 			done.length === 0 && verified
 				? 'Host alert mail: nothing to change on this server.'

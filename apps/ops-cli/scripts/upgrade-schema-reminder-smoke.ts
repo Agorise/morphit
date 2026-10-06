@@ -112,7 +112,7 @@ else bad('upgrade.ts no longer exports schemaChangedWithoutMigration');
 if (/export function highestMigrationVersion/.test(upgradeSrc))
 	ok('upgrade.ts can read the tree\'s highest migration version');
 else bad('upgrade.ts cannot determine whether a new migration shipped');
-if (/if \(schemaChanged\)/.test(upgradeSrc)) ok('upgrade.ts gates the reminder on schemaChanged');
+if (/if \((?:s\.)?schemaChanged\)/.test(upgradeSrc)) ok('upgrade.ts gates the reminder on schemaChanged');
 else bad('upgrade.ts reminder not gated on schemaChanged');
 if (/database schema changed/i.test(upgradeSrc) && /doctor/.test(upgradeSrc) && /\u00a746/.test(upgradeSrc))
 	ok('upgrade.ts reminder points to doctor + OPERATIONS §46');

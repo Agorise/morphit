@@ -21,7 +21,7 @@ source and run it locally first.
 AGPL means the attacker has the schema, every constant and bound, and the
 exact bytes the site serves. They put the shipped web build behind the
 shipped frontend nginx configuration and a real indexer in an afternoon, read
-`MORPHIT-BRAG-LIST.md` for claims to falsify, and read `docs/audit/` to skip
+`docs/MORPHIT-BRAG-LIST.md` for claims to falsify, and read `docs/audit/` to skip
 what is already fixed.
 
 ## Day 1b: The first hour of running it

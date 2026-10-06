@@ -411,7 +411,7 @@ Before going to bed (or handing off to a sysadmin):
 - [ ] **Top up the relay account** if it's drifted down
       meaningfully.
 
-- [ ] **Check `MORPHIT-BRAG-LIST.md` claims against
+- [ ] **Check `docs/MORPHIT-BRAG-LIST.md` claims against
       reality** — anything in there that turned out
       different in production?  Flag for amendment.
 

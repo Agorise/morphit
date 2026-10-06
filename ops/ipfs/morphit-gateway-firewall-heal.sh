@@ -35,9 +35,12 @@ set -u
 FALLBACK_CIDR="172.20.0.0/16"
 
 log() { echo "morphit-gateway-heal: $*" >&2; }
+# Lines that only say all is well are for a terminal; piped into `morphit-ops
+# upgrade`, this says something only when it changed or could not confirm.
+note() { [ -t 2 ] && log "$@"; return 0; }
 
 # ── 0. Preconditions — every one of these is a legitimate "nothing to do" ──
-command -v docker >/dev/null 2>&1 || { log "no docker on this box — nothing to heal."; exit 0; }
+command -v docker >/dev/null 2>&1 || { note "no docker on this box — nothing to heal."; exit 0; }
 
 # The frontend container, by what it IS — the one serving the web build
 # (a bind mount ending in /apps/web/build) — never by its name: an Ansible
@@ -53,8 +56,8 @@ find_frontend() {
 	return 1
 }
 CONTAINER="${MORPHIT_FRONTEND_CONTAINER:-$(find_frontend)}" || true
-[ -n "${CONTAINER:-}" ] && docker inspect "$CONTAINER" >/dev/null 2>&1 || { log "no frontend container serving the web build — this box does not front the site with one; nothing to heal."; exit 0; }
-log "frontend container: $CONTAINER"
+[ -n "${CONTAINER:-}" ] && docker inspect "$CONTAINER" >/dev/null 2>&1 || { note "no frontend container serving the web build — this box does not front the site with one; nothing to heal."; exit 0; }
+note "frontend container: $CONTAINER"
 
 # The network it reaches the host through: the one whose gateway is its
 # host.docker.internal, else its only one. MORPHIT_BUNKERWEB_NET overrides.
@@ -72,7 +75,7 @@ find_net() {
 }
 NET="${MORPHIT_BUNKERWEB_NET:-$(find_net)}"
 [ -n "${NET:-}" ] || NET=bunkerweb_net
-command -v ipfs >/dev/null 2>&1 || { log "no ipfs on this box — nothing to heal."; exit 0; }
+command -v ipfs >/dev/null 2>&1 || { note "no ipfs on this box — nothing to heal."; exit 0; }
 
 # Gateway port: read it from kubo rather than assuming 8082.
 PORT="$(ipfs config Addresses.Gateway 2>/dev/null | sed -n 's#.*/tcp/\([0-9]\{1,5\}\).*#\1#p' | head -1)" || true
@@ -133,7 +136,7 @@ probe() {
 }
 
 if probe; then
-	log "frontend container can reach the IPFS gateway on ${PORT} — nothing to heal."
+	note "frontend container can reach the IPFS gateway on ${PORT} — nothing to heal."
 	exit 0
 fi
 

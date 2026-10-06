@@ -77,6 +77,7 @@ export async function healLogLevel(
 		return {
 			strategy: 'already',
 			verified: true,
+			routine: true,
 			detail: `Indexer log level: ${KEY} is valid or unset.`
 		};
 	if (!rt.indexerActive())

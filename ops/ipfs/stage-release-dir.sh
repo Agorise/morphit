@@ -104,7 +104,9 @@ fi
 cp "$OUT/$TARBALL" "$OUT/morphit-latest.tar.gz"
 
 # 4. Release notes — EXTRACTED FROM THE TARBALL (not fetched). The tarball is a
-# `tar` of the repo tree, so it carries RELEASE-NOTES-<tag>.md at its root. Both
+# `tar` of the repo tree, so it carries RELEASE-NOTES-<tag>.md (at its root up to
+# v1.21.0, in docs/release-notes/ since v1.21.1; the match below takes any folder,
+# so installed copies of this script read both layouts the same way). Both
 # callers hold the SAME verified tarball, so the extracted bytes are identical →
 # the CID stays deterministic with NO external fetch-dependency. Best-effort: a tag
 # that shipped no notes file simply gets no RELEASE-NOTES.md (both paths skip it
@@ -175,5 +177,8 @@ HAS_NOTES=0
 	printf '}\n'
 } > "$OUT/metadata.json"
 
-echo "stage-release-dir: staged $TAG at $OUT" >&2
-ls -1 "$OUT" | sed 's/^/  /' >&2
+# The listing is for a terminal (or a verbose seed); piped into an upgrade it is noise.
+if [ -t 2 ] || [ "${SEED_VERBOSE:-}" = 1 ]; then
+	echo "stage-release-dir: staged $TAG at $OUT" >&2
+	ls -1 "$OUT" | sed 's/^/  /' >&2
+fi

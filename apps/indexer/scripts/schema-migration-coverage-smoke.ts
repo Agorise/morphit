@@ -89,7 +89,10 @@ const MIGRATIONS_TS = join(REPO_ROOT, 'apps', 'indexer', 'src', 'db', 'migration
 // push_subscriptions and order_views data minimised. Present in both schema.sql
 // (banner at the end) and MIGRATIONS[]; the upgrade path is exercised by
 // test/integration/migration-v66-upgrade.test.ts.
-const SCHEMA_HEAD_VERSION = 66;
+// v1.21.1: 66 → 67. v67 = orders.lang comment correction (the language filter
+// lists only tagged orders), present in BOTH schema.sql (banner at the end) and
+// MIGRATIONS[] — checked.
+const SCHEMA_HEAD_VERSION = 67;
 /** Highest version covered by MIGRATIONS[] (max of `version` or any
  *  `subsumesVersions[]` entry).  Bump only when a new MIGRATIONS
  *  entry lands.  bumped 27 → 35 when
@@ -104,7 +107,8 @@ const SCHEMA_HEAD_VERSION = 66;
 // v1.20.0: 62 → 63 (G3), in lockstep with SCHEMA_HEAD_VERSION above.
 // v1.20.0: 63 → 65 (G1 v64, MK-H2 v65), in lockstep with SCHEMA_HEAD_VERSION above.
 // 65 → 66, in lockstep with SCHEMA_HEAD_VERSION above.
-const MIGRATIONS_COVERAGE_HIGH = 66;
+// v1.21.1: 66 → 67, in lockstep with SCHEMA_HEAD_VERSION above.
+const MIGRATIONS_COVERAGE_HIGH = 67;
 
 interface ScenarioResult {
 	readonly name: string;

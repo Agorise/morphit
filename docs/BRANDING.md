@@ -139,6 +139,14 @@ someone opens one directly.
   none. An instance with only its own colours keeps Morphit's picture. Your own 1200 × 630
   `static/og-image.png` replaces it (see below).
 
+- **The pictures in Blurt posts.** When a user posts an order to their Blurt blog, or announces
+  their first trade to the Morphit community, the post leads with your link-preview picture
+  (`/og-image.png`, drawn as above or your `static/og-image.png`), never Morphit's: if your
+  picture could not be drawn, the posts carry none. `branding apply` (and every upgrade) records
+  which it is in `/brand/brand.json` (`"og_image": "own"` or `"shipped"`). Blurt can only show a
+  picture from an `https://` address, so a post made over Tor or I2P carries none. An unbranded
+  instance keeps Morphit's pictures.
+
 **Other images** can be replaced by putting them under `/etc/morphit/branding/static/` at the same
 path they have on the site. For example, `static/splash/splash-iphone-12.png` replaces the iOS
 launch image at `/splash/splash-iphone-12.png`. Only images are accepted (`.png`, `.jpg`, `.webp`,
