@@ -22,6 +22,14 @@
       "lastReviewed": "2026-10-02",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Dev server only."
     },
+    "GHSA-5gmw-xhrv-c9v3": {
+      "package": "tinypool",
+      "severity": "critical",
+      "category": "dev-build-only",
+      "title": "Tinypool: Prototype Pollution gadget in worker options leads to Remote Code Execution",
+      "lastReviewed": "2026-10-05",
+      "rationale": "tinypool 1.1.1 is vitest's worker pool (a devDependency): it runs only during `vitest run` in development and CI, never on a node. The gadget needs an attacker to control vitest's worker options or pollute Object.prototype in the test process, which only our own test code configures. The fix is vitest 5 (a major); patch with that upgrade."
+    },
     "GHSA-5xrq-8626-4rwp": {
       "package": "vitest",
       "severity": "critical",
@@ -61,6 +69,14 @@
       "title": "Vitest: Path Traversal / Arbitrary File Read via @vitest/mocker Redirect Mock",
       "lastReviewed": "2026-10-02",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Triggers only while running a test suite with attacker-supplied mock redirects; Morphit's tests control their own mocks."
+    },
+    "GHSA-85c8-ppgw-ccpr": {
+      "package": "tinypool",
+      "severity": "critical",
+      "category": "dev-build-only",
+      "title": "Tinypool: Prototype Pollution Gadget to RCE in run() options",
+      "lastReviewed": "2026-10-05",
+      "rationale": "Same package and same exposure as GHSA-5gmw-xhrv-c9v3: tinypool runs only inside `vitest run` (development and CI), with run() options our own test setup passes; no node runs it and no outside input reaches it. The fix is vitest 5 (a major); patch with that upgrade."
     },
     "GHSA-fjxv-7rqg-78g4": {
       "package": "form-data",
@@ -117,6 +133,14 @@
       "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set",
       "lastReviewed": "2026-10-02",
       "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
+    },
+    "GHSA-rj75-hqrm-r3gf": {
+      "package": "postcss-selector-parser",
+      "severity": "moderate",
+      "category": "dev-build-only",
+      "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+      "lastReviewed": "2026-10-05",
+      "rationale": "postcss-selector-parser 6.1.4 is used by tailwindcss, postcss-nested and eslint-plugin-svelte (devDependencies) while the frontend is built and linted in CI, on the project's own CSS; nodes serve the prebuilt frontend and never run it. The fix needs tailwindcss 4 (a major); patch with that upgrade."
     },
     "GHSA-v6wh-96g9-6wx3": {
       "package": "vite",
