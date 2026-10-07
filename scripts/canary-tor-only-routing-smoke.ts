@@ -53,10 +53,10 @@ function check(desc: string, ok: boolean): void {
 const greet = socks5Greeting();
 check('greeting is [0x05,0x01,0x00]', greet.length === 3 && greet[0] === 0x05 && greet[1] === 0x01 && greet[2] === 0x00);
 
-const req = socks5ConnectRequest('rpc.blurt.world', 443);
+const req = socks5ConnectRequest('rpc.example.org', 443);
 check('CONNECT uses SOCKS v5 + CMD CONNECT', req[0] === 0x05 && req[1] === 0x01 && req[2] === 0x00);
 check('CONNECT uses ATYP=domain (0x03) — proxy-side DNS, no local resolve/leak', req[3] === 0x03);
-check('CONNECT encodes the hostname length + bytes', req[4] === 'rpc.blurt.world'.length && req.subarray(5, 5 + 15).toString('ascii') === 'rpc.blurt.world');
+check('CONNECT encodes the hostname length + bytes', req[4] === 'rpc.example.org'.length && req.subarray(5, 5 + 15).toString('ascii') === 'rpc.example.org');
 check('CONNECT encodes the port big-endian (443)', req.readUInt16BE(5 + 15) === 443);
 
 check('greeting reply [0x05,0x00] parses ok', parseSocks5Greeting(Buffer.from([0x05, 0x00])).ok === true);

@@ -216,12 +216,15 @@ Companion documents: `2026-10-attack-tree.md` (attacker goals) and
 | I      | Tor-only wizard enables a clearnet Matrix bot                     | wizard gates the homeserver on tor-only; bot routes onion/Tor via SOCKS                                              | a clearnet homeserver on a tor-only node is refused, not silently used | **FIXED** — `apps/matrix-bot:tor-socks-route-smoke`                              |
 | E      | Service user → root via root units executing a user-writable tree | tree root-owned; indexer/relay as their own users with empty capability sets; root pre-start helper fixes file modes | —                                                                      | **FIXED** — `apps/ops-cli:service-privilege-smoke`, `service-perms-helper-smoke` |
 | T      | Tarball escape                                                    | `--no-same-owner --no-same-permissions --no-overwrite-dir`                                                           | —                                                                      | ASSERTED                                                                         |
+| T/E    | Root writes through a link the service account planted in a directory it owns (`/var/lib/morphit`, `/var/log/morphit`) — v1.21.1 review G1 | root state in `/var/lib/morphit-ops` (0700); `/var/log/morphit` root:morphit 0750, healed on upgrade; every root write there opens with `O_NOFOLLOW`/`O_EXCL`, reads too | — | **FIXED** — `apps/ops-cli/test/rootWritesNoFollow.test.ts`, `noFollowFs.test.ts`, `etcPermHeal.test.ts` |
 
 ### P10 MCP, P11 Matrix bot
 
 | STRIDE | Threat                                     | Mitigation                                                           | Residual                   | Status                |
 | ------ | ------------------------------------------ | -------------------------------------------------------------------- | -------------------------- | --------------------- |
 | I      | MCP on a hidden-only node fetches clearnet | tor-only config leaves it without a usable instance URL (no request) | MCP not usable on tor-only | ASSERTED              |
+| D      | One visitor uses up the instance's MCP rate limit (behind the proxy every visitor shared one bucket) — v1.21.1 review G3 | the visitor address the proxy forwards is trusted from loopback and 172.16.0.0/12 | — | **FIXED** — `apps/mcp-server/test/clientKey.test.ts` |
+| D      | One request carries a JSON-RPC batch of 100 tool calls for one rate-limit token — v1.21.1 review G2 | every message counts; more than 10 per request refused | — | **FIXED** — `apps/mcp-server/test/httpBatch.test.ts` |
 | I      | Alerts readable by the homeserver operator | TLS only by default; `MORPHIT_MATRIX_ENCRYPT=1` for E2EE             | documented                 | accepted (documented) |
 
 ### E1 Browser (as a process we ship)

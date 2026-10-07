@@ -479,9 +479,14 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 	L.push('## 2. TLS');
 	L.push('');
 	if (bw) {
-		L.push('- [ ] **TLS is handled by BunkerWeb.**  In `/etc/bunkerweb/bunkerweb.env`');
-		L.push(`      set \`AUTO_LETS_ENCRYPT=yes\` and \`SERVER_NAME=${domain}\`.  BunkerWeb`);
-		L.push('      obtains and renews the certificate for you.');
+		L.push(`- [ ] **Point DNS first.**  Make the A/AAAA record for \`${domain}\` resolve to`);
+		L.push('      this server before requesting a certificate.');
+		L.push("- [ ] **Issue a Let's Encrypt certificate with this server's certbot**, before");
+		L.push('      BunkerWeb starts (it needs port 80 free):');
+		L.push(`      \`sudo certbot certonly --standalone -d ${domain}\``);
+		L.push("      BunkerWeb serves it from `/etc/letsencrypt` (its own Let's Encrypt client");
+		L.push('      stays off: `AUTO_LETS_ENCRYPT=no` in the shipped `bunkerweb.env`).  certbot');
+		L.push('      renews it by itself — verify with `systemctl list-timers certbot.timer`.');
 		L.push('      (Reference: OPERATIONS.md §32 and §35)');
 	} else {
 		L.push(`- [ ] **Point DNS first.**  Make the A/AAAA record for \`${domain}\` resolve to`);
@@ -498,9 +503,18 @@ export function renderHardeningChecklist(input: HardeningChecklistInput): string
 		L.push('- [ ] **BunkerWeb fronts the stack** (OWASP Top-10, bot detection,');
 		L.push('      rate limiting, DDoS mitigation):');
 		L.push('      ```');
-		L.push('      sudo cp -r ops/bunkerweb /etc/bunkerweb');
-		L.push(`      # edit /etc/bunkerweb/bunkerweb.env: SERVER_NAME=${domain}`);
-		L.push('      cd /etc/bunkerweb && docker compose up -d');
+		L.push('      sudo mkdir -p /etc/bunkerweb');
+		L.push(
+			'      sudo cp -r ops/bunkerweb/frontend ops/bunkerweb/docker-compose.yml /etc/bunkerweb/'
+		);
+		L.push('      sudo cp ops/bunkerweb/bunkerweb.env.example /etc/bunkerweb/bunkerweb.env');
+		L.push(
+			`      # edit /etc/bunkerweb/bunkerweb.env: SERVER_NAME=${domain} (the rest as shipped)`
+		);
+		L.push(
+			'      echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee /etc/bunkerweb/.env'
+		);
+		L.push('      cd /etc/bunkerweb && sudo docker compose up -d');
 		L.push('      ```');
 		L.push('      The wizard already set `MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16`');
 		L.push('      so the relay honours the real client IP BunkerWeb forwards.');

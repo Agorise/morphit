@@ -21,7 +21,7 @@
  *     fully triaged audit.
  *   MORPHIT_AUDIT_GATE=<other copy> runs the verdict checks against it.
  */
-import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -200,6 +200,111 @@ void (async (): Promise<void> => {
 		const a = { vulnerabilities: adv('GHSA-aaaa-bbbb-cccc', 'vite', 'high', true) };
 		assert((verdict(a)?.failures.length ?? 0) > 0, 'fixable advisory accepted');
 	});
+	// v1.21.1: npm marked the fix on express (its qs) and missed the one on tsx's
+	// esbuild (it called that a major), so the gate passed while a plain
+	// `npm audit fix` (no --force) changed both. The gate now asks npm's own
+	// resolver, on a copy, what an in-range fix would change.
+	type Fix = { path: string; name: string; from: string | null; to: string | null };
+	const gateFx = gate as unknown as {
+		inRangeFixesOrReason?: (cwd?: string) => { fixes: Fix[] | null; reason: string | null };
+		evaluate?: (
+			a: unknown,
+			t: string,
+			o?: { mode?: string; reason?: string | null; fixes?: Fix[] | null; fixReason?: string | null }
+		) => Verdict;
+	};
+	const expressFix: Fix[] = [
+		{ path: 'node_modules/express', name: 'express', from: '4.22.2', to: '4.22.3' }
+	];
+	check('gate: a lockfile change an in-range fix would make FAILS (strict), warns (report)', () => {
+		const strict = gateFx.evaluate?.(triaged, ALLOW, { fixes: expressFix });
+		const report = gateFx.evaluate?.(triaged, ALLOW, { mode: 'report', fixes: expressFix });
+		assert(
+			(strict?.failures ?? []).some((f) => f.includes('express') && f.includes('4.22.3')),
+			`in-range fix accepted: ${JSON.stringify(strict)}`
+		);
+		assert(
+			report?.failures.length === 0 && report.warnings.some((w) => w.includes('express')),
+			`report mode: ${JSON.stringify(report)}`
+		);
+	});
+	check(
+		'gate: when the in-range fix check could not run, it FAILS (no information is not a pass)',
+		() => {
+			const v = gateFx.evaluate?.(triaged, ALLOW, { fixes: null, fixReason: 'npm timed out' });
+			assert(
+				(v?.failures ?? []).some((f) => f.includes('npm timed out')),
+				`passed without the fix check: ${JSON.stringify(v)}`
+			);
+		}
+	);
+	check(
+		'gate: the in-range fix check runs npm audit fix WITHOUT --force on a copy, and reports what it changed',
+		() => {
+			assert(
+				typeof gateFx.inRangeFixesOrReason === 'function',
+				'audit-gate.mjs has no inRangeFixesOrReason()'
+			);
+			const repo = mkdtempSync(join(tmpdir(), 'audit-fix-repo-'));
+			const bin = mkdtempSync(join(tmpdir(), 'audit-fix-npm-'));
+			try {
+				const lock = {
+					name: 'x',
+					lockfileVersion: 3,
+					packages: {
+						'': { name: 'x', workspaces: ['apps/a'] },
+						'apps/a': { name: 'a', version: '1.0.0' },
+						'node_modules/express': { version: '4.22.2' },
+						'node_modules/qs': { version: '6.15.1' },
+						'node_modules/body-parser/node_modules/qs': { version: '6.16.0' }
+					}
+				};
+				const lockText = JSON.stringify(lock, null, 2);
+				writeFileSync(join(repo, 'package.json'), '{"name":"x","workspaces":["apps/a"]}');
+				writeFileSync(join(repo, 'package-lock.json'), lockText);
+				mkdirSync(join(repo, 'apps', 'a'), { recursive: true });
+				writeFileSync(join(repo, 'apps', 'a', 'package.json'), '{"name":"a","version":"1.0.0"}');
+				// The fake npm: records its arguments; `audit fix` rewrites the lockfile
+				// in the directory it runs in, as npm would.
+				writeFileSync(
+					join(bin, 'npm'),
+					`#!/bin/sh\nprintf '%s\\n' "$*" >> "${join(bin, 'calls')}"\n` +
+						`case "$*" in *"audit fix"*) node -e 'const f="package-lock.json";const l=JSON.parse(require("fs").readFileSync(f,"utf8"));l.packages["node_modules/express"].version="4.22.3";l.packages["node_modules/qs"].version="6.16.0";delete l.packages["node_modules/body-parser/node_modules/qs"];require("fs").writeFileSync(f,JSON.stringify(l))' ;; esac\n`,
+					{ mode: 0o755 }
+				);
+				const oldPath = process.env.PATH;
+				process.env.PATH = `${bin}:${oldPath ?? ''}`;
+				let r: { fixes: Fix[] | null; reason: string | null } | undefined;
+				try {
+					r = gateFx.inRangeFixesOrReason?.(repo);
+				} finally {
+					process.env.PATH = oldPath;
+				}
+				const calls = existsSync(join(bin, 'calls'))
+					? readFileSync(join(bin, 'calls'), 'utf8')
+					: '';
+				assert(/audit fix/.test(calls), `npm audit fix was not run: ${calls}`);
+				assert(!/--force/.test(calls), `the fix check ran --force: ${calls}`);
+				assert(
+					readFileSync(join(repo, 'package-lock.json'), 'utf8') === lockText,
+					"the repository's own lockfile was changed"
+				);
+				const names = (r?.fixes ?? []).map((f) => `${f.path}:${f.from}->${f.to}`).sort();
+				assert(
+					names.join(',') ===
+						[
+							'node_modules/body-parser/node_modules/qs:6.16.0->null',
+							'node_modules/express:4.22.2->4.22.3',
+							'node_modules/qs:6.15.1->6.16.0'
+						].join(','),
+					`changes: ${JSON.stringify(r)}`
+				);
+			} finally {
+				rmSync(repo, { recursive: true, force: true });
+				rmSync(bin, { recursive: true, force: true });
+			}
+		}
+	);
 	check('gate: an untriaged moderate FAILS', () => {
 		const a = {
 			vulnerabilities: {

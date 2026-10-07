@@ -130,10 +130,17 @@ try {
 		'upgrade calls resolveMcpHttpBind(mcpEnvFile())',
 		/resolveMcpHttpBind\(\s*mcpEnvFile\(\)\s*\)/.test(upgradeSrc)
 	);
-	check('upgrade awaits probeMcpHealth', /await\s+probeMcpHealth\(/.test(upgradeSrc));
+	// The probe (under a spinner since v1.21.1, in checkMcpAnswers) is awaited.
+	const checkFn = upgradeSrc.slice(upgradeSrc.indexOf('export async function checkMcpAnswers('));
+	check(
+		'upgrade awaits probeMcpHealth',
+		/await\s+checkMcpAnswers\(mcpHost, mcpPort\)/.test(upgradeSrc) &&
+			/await withSpinner\([^)]*,\s*\(\) =>\s*probeMcpHealth\(/.test(checkFn.slice(0, 600))
+	);
 	// The probe lives inside the MCP-unit-installed block AND after the restart.
-	const mcpBlockIdx = upgradeSrc.indexOf('morphit-mcp.service');
-	const probeIdx = upgradeSrc.indexOf('await probeMcpHealth('); // the CALL site, not the def
+	const runIdx = upgradeSrc.indexOf('export async function runUpgrade(');
+	const mcpBlockIdx = upgradeSrc.indexOf('morphit-mcp.service', runIdx);
+	const probeIdx = upgradeSrc.indexOf('await checkMcpAnswers('); // the CALL site, not the def
 	const restartIdx = upgradeSrc.indexOf("['restart', 'morphit-mcp.service']");
 	check(
 		'probe is wired after the MCP restart',
@@ -141,7 +148,7 @@ try {
 	);
 	check('probe is under the MCP block (unit-installed gate)', mcpBlockIdx !== -1 && probeIdx > mcpBlockIdx);
 	// Failure path is a warn (non-fatal), NOT a rollback.
-	const afterProbe = upgradeSrc.slice(probeIdx, probeIdx + 900);
+	const afterProbe = checkFn.slice(0, 1500);
 	check(
 		'unreachable path warns (non-fatal), does not roll back',
 		/probe\.reachable/.test(afterProbe) &&

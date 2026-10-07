@@ -64,8 +64,7 @@ import {
 	initColorMode,
 	error as printError,
 	info,
-	sanitizeForTerm,
-	warn
+	sanitizeForTerm
 } from './render/term.ts';
 import { runStatus } from './commands/status.ts';
 import { runDrainQueue } from './commands/drainQueue.ts';
@@ -416,18 +415,22 @@ async function main(): Promise<number> {
 	// new dist, so the self-heals from the JUST-INSTALLED version run on THIS
 	// upgrade instead of the next one. Not listed in help; operators never call it.
 	if (args.subcommand === '__post-upgrade-selfheal') {
-		const mod = await import('./commands/upgrade.ts').catch(() => null);
+		// Each heal isolated, the relay's first; a stop or a failure is said and
+		// its warning count left for the upgrade's last word — see
+		// runPostUpgradeSelfHealChild. This exits 0 either way: an upgrader of
+		// v1.16.11 or newer runs its OWN heals in-process only when the child
+		// could not be started or exited non-zero (it was stopped at its time
+		// limit), so a failed heal here is reported, never run twice.
 		try {
-			// Each heal isolated, the relay's first — see runSelfHeals.
-			if (mod) await mod.runSelfHeals({ child: true });
+			const mod = await import('./commands/upgrade.ts');
+			await mod.runPostUpgradeSelfHealChild();
 		} catch (e) {
-			// Best-effort (the upgrade falls back to its in-process heals), but
-			// never silent: it counts as a warning in the upgrade's last lines.
-			warn(
-				`The repairs after the upgrade stopped early: ${e instanceof Error ? e.message : String(e)}`
+			// Defence in depth (runPostUpgradeSelfHealChild reports its own
+			// failures): an error line; with no count left, the upgrade's last
+			// word says the heal phase's warnings were not counted.
+			printError(
+				`The repairs after the upgrade could not run: ${e instanceof Error ? e.message : String(e)}`
 			);
-		} finally {
-			mod?.recordChildWarnings();
 		}
 		return 0;
 	}
@@ -436,10 +439,15 @@ async function main(): Promise<number> {
 	// self-heal phase starts (lib/afterRestartHeal.ts). Not listed in help.
 	if (args.subcommand === '__post-upgrade-after-restart') {
 		try {
-			const { runAfterRestartHeals } = await import('./commands/upgrade.ts');
-			await runAfterRestartHeals(Number(args.positional[0] ?? '0'));
+			const { runAfterRestartUnit } = await import('./commands/upgrade.ts');
+			await runAfterRestartUnit(args.positional[0]);
 		} catch (e) {
-			console.error(`after-restart heals: ${e instanceof Error ? e.message : String(e)}`);
+			// Defence in depth (runAfterRestartUnit reports its own failures): an
+			// error line ("[ERR] …" in the unit's log), which the upgrade's last
+			// word counts.
+			printError(
+				`The checks after the restart could not run: ${e instanceof Error ? e.message : String(e)}`
+			);
 		}
 		return 0;
 	}

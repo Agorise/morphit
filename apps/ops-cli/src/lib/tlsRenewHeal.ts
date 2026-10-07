@@ -432,6 +432,9 @@ function realRuntime(): TlsRuntime {
 				'-skL',
 				'--max-time',
 				'10',
+				// A proxy in the environment would make curl ignore --resolve.
+				'--noproxy',
+				'*',
 				'--resolve',
 				`${domain}:80:127.0.0.1`,
 				'--resolve',

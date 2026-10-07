@@ -14,6 +14,8 @@
  * See the frontend module for full prose documentation.
  */
 
+import { withoutPostBaselineCodePoints } from '@morphit/asset-registry';
+
 const LETTER_EQUIVS: Record<string, readonly string[]> = {
 	a: [
 		'a',
@@ -279,7 +281,10 @@ const STRICT_EXTRA_FOLDS: Readonly<Record<string, string>> = {
  * homoglyph table is written for. Used only for the comparison, never stored.
  */
 export function confusableSkeleton(input: string): string {
-	const folded = input
+	// First, every code point Unicode 15.1 had not assigned: a newer runtime
+	// knows its properties and Node 22.0's does not, so leaving it in made the
+	// verdict depend on which Node an indexer runs (see the table's header).
+	const folded = withoutPostBaselineCodePoints(input)
 		.normalize('NFKD')
 		.replace(/[\p{Default_Ignorable_Code_Point}\p{M}]/gu, '')
 		.normalize('NFKC')

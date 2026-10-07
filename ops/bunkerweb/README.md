@@ -257,7 +257,11 @@ testing in staging.
   stored).
 - No country blocks: `BLACKLIST_COUNTRY` / `WHITELIST_COUNTRY` stay empty on
   every Morphit instance (people behind national firewalls must reach the
-  instance they choose); `morphit-ops upgrade` empties any it finds.
+  instance they choose). `morphit-ops upgrade` empties such a list (also a
+  per-site one) in `bunkerweb.env`, removes one saved in BunkerWeb's web UI
+  from BunkerWeb's database (keeping a copy of the database first), then
+  checks BunkerWeb runs without one; a list set anywhere else (an Autoconf
+  label, a compose `environment:` entry) is named, with where to clear it.
 - OWASP CRS paranoia level — defaults to 3.  Drop to 2 if you
   see real-user false positives (watch BunkerWeb live as above); raise to
   4 only if you can verify it doesn't break legitimate traffic.
@@ -271,12 +275,15 @@ testing in staging.
   relay enforces its own deeper signup ceilings + spacing).
 - Bad-behavior bans (`BAD_BEHAVIOR_*`) — by default BunkerWeb counts
   `400 401 403 404 405 429 444` and bans an IP that accumulates too
-  many.  Morphit narrows the counted set to `400 401 405 444`,
+  many.  Morphit narrows the counted set to `401 405 444`,
   because for a SPA + PWA + public read API the excluded codes ban
   real users: `429` is the rate limiter's own response (a normal
   burst), `403` is ALSO what BunkerWeb returns to an already-banned
-  IP (so counting it makes a ban self-perpetuate), and `404` is
-  normal PWA/SPA asset/manifest/icon probing.  Threshold 50, ban
+  IP (so counting it makes a ban self-perpetuate), `404` is
+  normal PWA/SPA asset/manifest/icon probing, and `400` is what the
+  `/v1/` and `/relay/` JSON APIs answer to a rejected broadcast (an
+  expired or malformed one: normal use, not malice; counting it banned
+  real traders in v1.16.9).  Threshold 50, ban
   3600s.  If you re-add any of the excluded codes, expect ordinary
   visitors to get banned during normal browsing.
 

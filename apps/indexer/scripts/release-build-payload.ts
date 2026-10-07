@@ -49,6 +49,16 @@
  *   #   MORPHIT_BUILD_ENDPOINTS_FILE=/path/to/endpoints.json
  *   #   tsx apps/indexer/scripts/release-build-payload.ts > release.json
  *
+ * Flags:
+ *   --ipfs-cid <cid>       the release's IPFS CID, for an anchor
+ *                          (MORPHIT_BUILD_ANCHOR_FILE) that carries none:
+ *                          release.yml could not compute it, and the release
+ *                          box printed it in Block 3 ("hosted vX → bafy…").
+ *                          Refused when the anchor has a CID, or without one.
+ *   --allow-no-ipfs-cid    emit a distribution block with no ipfs_cid anyway.
+ *                          Zero-clearnet nodes cannot fetch such a release
+ *                          (v1.20.2), so without this flag it is refused.
+ *
  * Output: a single JSON object on stdout, ready to broadcast
  * as the `json` field of a Blurt `custom_json` op.  Errors
  * print to stderr; the script exits non-zero if validation
@@ -119,12 +129,67 @@ export function parseAnchorEnv(text: string): Record<string, string> {
 	return out;
 }
 
+export interface BuilderFlags {
+	/** --ipfs-cid: the CID for an anchor that carries none. */
+	ipfsCid: string | null;
+	/** --allow-no-ipfs-cid: emit a distribution block without a CID. */
+	allowNoIpfsCid: boolean;
+}
+
+/** The command-line flags. Anything else refuses: a mistyped flag must not
+ *  quietly leave the CID out. PURE apart from the throw. */
+export function parseBuilderArgs(argv: readonly string[]): BuilderFlags {
+	const flags: BuilderFlags = { ipfsCid: null, allowNoIpfsCid: false };
+	for (let i = 0; i < argv.length; i++) {
+		const a = argv[i]!;
+		if (a === '--allow-no-ipfs-cid') flags.allowNoIpfsCid = true;
+		else if (a === '--ipfs-cid' || a.startsWith('--ipfs-cid=')) {
+			if (flags.ipfsCid !== null) throw new Error('--ipfs-cid is given twice');
+			const v = a === '--ipfs-cid' ? argv[++i] : a.slice('--ipfs-cid='.length);
+			if (v === undefined) throw new Error('--ipfs-cid needs the CID after it');
+			flags.ipfsCid = v.trim();
+		} else throw new Error(`unknown argument ${JSON.stringify(a)}`);
+	}
+	if (flags.ipfsCid !== null && flags.allowNoIpfsCid)
+		throw new Error('--ipfs-cid and --allow-no-ipfs-cid contradict each other');
+	return flags;
+}
+
+/**
+ * The CID a --ipfs-cid flag supplies for this anchor. Only for an anchor that
+ * carries none (release.yml could not compute it); the value must have a CID's
+ * shape. Returns the CID, or why it is refused. PURE.
+ */
+export function suppliedCidFor(
+	anchor: Readonly<Record<string, string>>,
+	flagCid: string
+): { ok: true; cid: string } | { ok: false; why: string } {
+	const anchored = anchor.MORPHIT_BUILD_IPFS_CID;
+	if (anchored !== undefined)
+		return {
+			ok: false,
+			why: `the anchor already carries IPFS CID ${anchored}; --ipfs-cid is only for an anchor that has none`
+		};
+	if (!ANCHOR_KEYS.MORPHIT_BUILD_IPFS_CID!.test(flagCid))
+		return {
+			ok: false,
+			why: '--ipfs-cid is not an IPFS CID (copy the bafy… value from the release box’s "hosted" line)'
+		};
+	return { ok: true, cid: flagCid };
+}
+
 /** MORPHIT_BUILD_ANCHOR_FILE → the anchor's values in process.env. A value an
  *  earlier step left in the environment for one of those keys refuses, so a
  *  previous release's CID or record can never ride along. */
-function loadAnchorFile(): void {
+function loadAnchorFile(flags: BuilderFlags): void {
 	const path = (process.env.MORPHIT_BUILD_ANCHOR_FILE ?? '').trim();
-	if (path === '') return;
+	if (path === '') {
+		if (flags.ipfsCid !== null)
+			fail(
+				'--ipfs-cid supplies the CID for an anchor that has none; give the anchor too (MORPHIT_BUILD_ANCHOR_FILE)'
+			);
+		return;
+	}
 	for (const k of Object.keys(ANCHOR_KEYS)) {
 		if ((process.env[k] ?? '') !== '') {
 			fail(
@@ -151,6 +216,11 @@ function loadAnchorFile(): void {
 		}
 	);
 	if (why !== null) fail(why);
+	if (flags.ipfsCid !== null) {
+		const supplied = suppliedCidFor(values, flags.ipfsCid);
+		if (!supplied.ok) fail(supplied.why);
+		values.MORPHIT_BUILD_IPFS_CID = supplied.cid;
+	}
 	for (const [k, v] of Object.entries(values)) process.env[k] = v;
 }
 
@@ -239,7 +309,8 @@ interface Inputs {
 	blurtBase: string;
 	/** decentralized-distribution anchor.  All empty = omit the
 	 *  whole block.  source_sha256 + gpg_fingerprint are required TOGETHER
-	 *  when either is set; ipfs_cid + mirrors are independently optional. */
+	 *  when either is set; a block that is emitted needs ipfs_cid too unless
+	 *  --allow-no-ipfs-cid is given; mirrors default to the baked list. */
 	sourceSha256: string;
 	/** v1.16.9 — the `-offline` self-contained bundle's SHA-256 (optional). */
 	offlineSha256: string;
@@ -364,7 +435,7 @@ async function gatherInputs(): Promise<Inputs> {
 		process.env.MORPHIT_BUILD_GPG_FINGERPRINT ?? ''
 	);
 	const ipfsCid = await ask(
-		'IPFS CID of the signed tarball (optional)',
+		'IPFS CID of the release directory (bafy…)',
 		process.env.MORPHIT_BUILD_IPFS_CID ?? ''
 	);
 	const ipnsName = await ask(
@@ -424,7 +495,7 @@ export function ipnsRecordTarget(recordB64: string): string | null {
 	return m ? m[1]! : null;
 }
 
-function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
+function buildDistribution(i: Inputs, flags: BuilderFlags): ReleaseDistributionBlock | null {
 	const sha = i.sourceSha256.trim().toLowerCase();
 	const offlineSha = (i.offlineSha256 ?? '').trim().toLowerCase();
 	const fpr = i.gpgFingerprint.replace(/\s+/g, '').toUpperCase();
@@ -506,15 +577,6 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 	// indexer) with no hand-signed .asc. Optional; omitted if not provided.
 	if (/^[0-9a-f]{64}$/.test(offlineSha)) value.offline_sha256 = offlineSha;
 	if (cid !== '') value.ipfs_cid = cid;
-	else {
-		// v1.20.3: release.yml skips the CID when it cannot download Kubo
-		// (v1.20.2), and a zero-clearnet instance then cannot fetch the release.
-		process.stderr.write(
-			'\n⚠ no ipfs_cid — zero-clearnet instances (Tor/I2P only) cannot fetch this release.\n' +
-				'  The release box printed it during its upgrade ("hosted vX.Y.Z → bafy…"):\n' +
-				'  export MORPHIT_BUILD_IPFS_CID=<that CID> and build again.\n\n'
-		);
-	}
 	// v1.20.3: the name is fixed, so it is always included — v1.20.2 went out
 	// without it (its anchor had none) and zero-clearnet nodes refused it.
 	value.ipns_name = ipns !== '' ? ipns : CANONICAL_IPNS_NAME;
@@ -534,6 +596,23 @@ function buildDistribution(i: Inputs): ReleaseDistributionBlock | null {
 			);
 		}
 		value.ipns_record = ipnsRec;
+	}
+	// After the record check, whose message names a left-over record exactly.
+	if (cid === '' && !flags.allowNoIpfsCid) {
+		// v1.20.2: release.yml could not download Kubo, the anchor carried no CID,
+		// the payload went out without one (it was only a warning), and every
+		// zero-clearnet instance (Tor/I2P only) was left unable to fetch the release.
+		fail(
+			`this release has no IPFS CID, and zero-clearnet instances (Tor/I2P only) cannot fetch a release without one.\n` +
+				`  release.yml could not compute it. The release box printed it when it seeded the release in Block 3:\n` +
+				`      morphit-ipfs-seed: hosted v${i.version} → bafy…\n` +
+				`  Run this payload command again with --ipfs-cid and that CID added after release-build-payload.ts.\n` +
+				`  (Only if no box printed one: --allow-no-ipfs-cid publishes without it, and zero-clearnet nodes cannot upgrade.)`
+		);
+	} else if (cid === '') {
+		process.stderr.write(
+			'\n⚠ --allow-no-ipfs-cid: no ipfs_cid — zero-clearnet instances (Tor/I2P only) cannot fetch this release.\n\n'
+		);
 	}
 	if (mirrorList.length > 0) value.mirrors = mirrorList;
 	return value as unknown as ReleaseDistributionBlock;
@@ -619,7 +698,13 @@ function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {
 }
 
 async function main(): Promise<void> {
-	loadAnchorFile();
+	let flags: BuilderFlags;
+	try {
+		flags = parseBuilderArgs(process.argv.slice(2));
+	} catch (e) {
+		fail(e instanceof Error ? e.message : String(e));
+	}
+	loadAnchorFile(flags);
 	const inputs = await gatherInputs();
 	const treasury = buildTreasury(inputs);
 
@@ -633,7 +718,7 @@ async function main(): Promise<void> {
 	}
 
 	// build + validate the distribution anchor independently too.
-	const distribution = buildDistribution(inputs);
+	const distribution = buildDistribution(inputs, flags);
 	if (distribution !== null) {
 		const dResult = validateDistribution(distribution);
 		if (!dResult.ok) {

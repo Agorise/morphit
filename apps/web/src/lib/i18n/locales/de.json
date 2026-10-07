@@ -903,7 +903,8 @@
 			"tx_expired": "Die Uhr deines Geräts geht falsch, daher ist die signierte Transaktion abgelaufen, bevor sie die Chain erreichte (sie gelten nur wenige Sekunden). Aktiviere die automatische Datums- & Uhrzeiteinstellung und versuche es erneut. (Chain: {reason})",
 			"duplicate": "Das scheint bereits durchgegangen zu sein. Lade die Seite neu und prüfe es, bevor du es erneut versuchst. (Chain: {reason})",
 			"waf_too_large": "Die Web-Firewall deiner Instanz hat diesen Upload als zu groß abgelehnt (413). Bitte den Betreiber, das Anfrage-Größenlimit zu erhöhen — ein Morphit-Upgrade behebt das automatisch.",
-			"waf_blocked": "Die Web-Firewall deiner Instanz hat diese Anfrage blockiert (403). Bitte den Betreiber, die /v1/-API auszunehmen — ein Morphit-Upgrade behebt das automatisch."
+			"waf_blocked": "Die Web-Firewall deiner Instanz hat diese Anfrage blockiert (403). Bitte den Betreiber, die /v1/-API auszunehmen — ein Morphit-Upgrade behebt das automatisch.",
+			"invalid_text": "Dieser Text enthält ein unsichtbares Zeichen, das Morphit nicht speichern kann (meist mit eingefügtem Text mitgekommen). Tippe den eingefügten Teil neu und versuche es erneut – es wurde nichts gesendet und nichts bezahlt."
 		},
 		"copy_unavailable": "Text markieren, um ihn zu kopieren",
 		"amount_input": {

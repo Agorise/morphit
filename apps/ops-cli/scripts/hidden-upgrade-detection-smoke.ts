@@ -41,7 +41,7 @@ writeFileSync(
 	emptyPool,
 	'FOO=bar\nMORPHIT_INDEXER_RPC_ENDPOINTS=\nMORPHIT_INDEXER_HIDDEN_RPC_ENDPOINTS=http://x.onion\n'
 );
-writeFileSync(clearPool, 'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.blurt.world\n');
+writeFileSync(clearPool, 'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.example.org\n');
 writeFileSync(noKey, 'FOO=bar\n');
 
 // 1. file heuristic

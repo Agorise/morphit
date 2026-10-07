@@ -33,13 +33,19 @@ Matrix room, another person's copy of the repo) before you trust it.
 ## Option A — verify a git clone (the signed tag)
 
 If you cloned the repo from **any** of the three mirrors, verify the
-release tag's signature. First import Morphit's public key (once) and
-confirm it is the fingerprint above:
+release tag's signature. First import Morphit's public key (once). It
+ships in the repository, so no key server is needed; confirm it is the
+fingerprint above:
 
 ```sh
-gpg --keyserver keyserver.ubuntu.com --recv-keys 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
+gpg --import .forgejo/release-signers/agorise.asc
 gpg --fingerprint 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
 ```
+
+The key came with the code you are checking, so the fingerprint is what
+you trust: compare it with one from a different channel (above). As an
+optional cross-check, a key server should hand you the same key:
+`gpg --keyserver keyserver.ubuntu.com --recv-keys 7B4C1D189DBB610C473B59ED53524E1F1017EB9C`.
 
 Then, in your clone:
 
@@ -104,7 +110,8 @@ node scripts/verify-download.mjs morphit-vX.Y.Z.tar.gz --version X.Y.Z
 ```
 
 The offline bundle (`morphit-X.Y.Z-offline.tar.gz`) is checked the same
-way, against the anchored `offline_sha256`; verify its `.asc` as in Step 2.
+way, against the anchored `offline_sha256`; when the release carries its
+`.asc`, verify that as in Step 2.
 
 It prints your file's SHA-256 and tells you plainly whether it
 **matches** the signed anchor. On a match it also shows the **GPG
@@ -144,15 +151,19 @@ verify the signed **tag**: clone any mirror and run **Option A**
 closes the loop — the bytes match the chain, and the chain's key signed
 the tag.
 
-Every release also carries a `.asc` for the tarball and for the offline
-bundle, so you can check a signature directly on the bytes:
+A release is signed on its bytes only when the release job held the
+signing key. Then the release page also carries a `.asc` for the tarball
+and for the offline bundle, and you can check a signature directly on the
+bytes. A release without them is checked by Step 1 and the signed tag
+above, which is also how `morphit-ops upgrade` installs it.
 
 ```sh
-# import the key once, and confirm its fingerprint (above)
-gpg --keyserver keyserver.ubuntu.com --recv-keys 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
+# import the key once (from your clone, or from the extracted tarball),
+# and confirm its fingerprint (above)
+gpg --import .forgejo/release-signers/agorise.asc
 gpg --fingerprint 7B4C1D189DBB610C473B59ED53524E1F1017EB9C
 
-# then verify the tarball
+# then verify the tarball (when the release carries its .asc)
 gpg --verify morphit-vX.Y.Z.tar.gz.asc morphit-vX.Y.Z.tar.gz
 sha256sum -c morphit-vX.Y.Z.tar.gz.sha256
 ```
@@ -186,15 +197,16 @@ cd morphit && git verify-tag vX.Y.Z
 ```
 
 If the release was also pinned to IPFS, the verifier prints its CID. That
-CID names a small **release directory** — the signed tarball plus its
-`.sha256`/`.asc`, the release notes, and a `metadata.json` — so you can
-browse it, read the notes, or pull the exact bytes and re-run the Option B
-checks:
+CID names a small **release directory** — the tarball (also under the
+stable name `morphit-latest.tar.gz`), its `.sha256`, the release notes, a
+`README.md` and a `metadata.json`; signatures are not in it, they stay on
+the release page — so you can browse it, read the notes, or pull the exact
+bytes and re-run the Option B checks:
 
 ```sh
 # list what's in the release directory
 ipfs ls <CID>
-# fetch the signed tarball out of it (its bytes are content-addressed, so
+# fetch the tarball out of it (its bytes are content-addressed, so
 # this is the same file the on-chain SHA-256 covers)
 ipfs get <CID>/morphit-vX.Y.Z.tar.gz -o morphit-vX.Y.Z.tar.gz
 ```
@@ -219,7 +231,7 @@ the download page). It resolves through a **w3name-aware** gateway —
 contains a stable-named `morphit-latest.tar.gz`:
 
 ```sh
-# always the latest signed tarball, by name instead of by CID
+# always the latest release tarball, by name instead of by CID
 curl -fsSLo morphit-latest.tar.gz https://dweb.link/ipns/<name>/morphit-latest.tar.gz
 # ...then run the same Option B checks on it (the on-chain SHA-256 tells you
 # which version you actually got). Browse https://dweb.link/ipns/<name>/ for
@@ -233,12 +245,13 @@ caveat is only for the `k51…` name).
 
 IPNS is a convenience for *discovery* only — it is a mutable pointer, so a
 copy fetched this way is still only trustworthy once it passes the
-`source_sha256` + GPG checks above. The immutable `ipfs_cid` and the signed
-tag remain the verification anchors.
+Option B checks above (the on-chain `source_sha256`, and the signed tag).
+The immutable `ipfs_cid` and the signed tag remain the verification
+anchors.
 
-Because the signed tag, the GPG signature, and the on-chain hash are all
-host-independent, code that passes verification is the genuine release
-no matter where you pulled it from.
+Because the signed tag and the on-chain hash (and the `.asc`, when the
+release carries one) are all host-independent, code that passes
+verification is the genuine release no matter where you pulled it from.
 
 ---
 

@@ -71,9 +71,26 @@ export function healRelayStateDir(root = '', log: (m: string) => void = () => {}
 	}
 	const moved: string[] = [];
 	if (st?.isDirectory()) {
+		// /var/lib/morphit is the morphit account's home, so it can make this
+		// directory itself and fill it (a SIGNUPS_DISABLED, a reset daily-ceiling
+		// file, links …) for root to move into the relay's private state on every
+		// upgrade (review G1). The relay of v1.20.0, the only one that wrote here,
+		// ran as root: take files only from a root-owned directory.
+		if (st.uid !== 0) {
+			return {
+				kind: 'left-alone',
+				reason: `${LEGACY_RELAY_STATE_DIR} was not made by the relay (owner uid ${st.uid}); nothing was taken from it. On this server check: sudo ls -la ${LEGACY_RELAY_STATE_DIR}`
+			};
+		}
 		for (const name of readdirSync(legacy)) {
 			const from = join(legacy, name);
 			const to = join(target, name);
+			// Only plain files the relay wrote; never a link or anything else.
+			const entry = lstatSync(from);
+			if (!entry.isFile() || entry.uid !== 0) {
+				moved.push(`${name} (left out: not a file the relay wrote)`);
+				continue;
+			}
 			if (existsSync(to)) {
 				// The new directory's copy is the live one; keep the old aside.
 				renameSync(from, `${to}.from-v1.20.0`);

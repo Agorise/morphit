@@ -119,9 +119,34 @@
   failed_when: false
   changed_when: false
 
+# Each image must load WITH its name (an image saved by name:tag@digest loads
+# with none, and nothing finds it). The frontend base, found by its pinned
+# reference (containerd image store), must also be complete: a layer whose
+# bytes do not match is dropped by docker load, which still exits 0, and the
+# build would then fetch it from the registry.
 - name: Load bundled Docker images (offline)
   ansible.builtin.shell:
-    cmd: "set -o pipefail; gzip -dc {{ item.path | quote }} | docker load"
+    cmd: |
+      set -o pipefail
+      file={{ item.path | quote }}
+      name={{ item.path | basename | quote }}
+      out="$(gzip -dc "$file" | docker load)"
+      printf '%s\n' "$out"
+      case "$out" in
+        *"Loaded image ID:"*)
+          echo "$name holds an image saved without a name, so nothing can use it. Rebuild the bundle with this release of scripts/build-offline-bundle.sh." >&2
+          exit 1 ;;
+      esac
+      ref="$(awk '/^FROM /{print $2; exit}' {{ (morphit_repo_path ~ '/ops/bunkerweb/frontend/Dockerfile') | quote }})"
+      if [ -n "$ref" ] && [ "$name" = "$(printf '%s' "$ref" | tr '/:' '__').tar.gz" ] \
+        && docker image inspect "$ref" >/dev/null 2>&1; then
+        docker rm -f morphit-base-check >/dev/null 2>&1 || true
+        if ! docker create --pull never --network none --name morphit-base-check "$ref" true >/dev/null; then
+          echo "The frontend base $ref in $name did not load completely (a layer is missing or damaged). Rebuild the bundle." >&2
+          exit 1
+        fi
+        docker rm -f morphit-base-check >/dev/null
+      fi
   args:
     executable: /bin/bash
   loop: "{{ morphit_vendor_docker.files | default([]) }}"
@@ -212,6 +237,49 @@
     - enable_ipfs | default(true) | bool
     - morphit_ipfs_gateway_expose | default(true) | bool
 
+# Docker classic image store (a box whose Docker predates 29): a base loaded
+# from the offline bundle has no digest there, so a FROM name:tag@digest build
+# would ask the registry. When the tag is proven to be the pinned image (its ID
+# is a config the pinned index names, read from the bundle hash by hash) and
+# all of it is here, the build names the tag; the label keeps the pinned value.
+- name: Build the frontend from the bundled base by its tag (classic image store)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      df=/etc/bunkerweb/frontend/Dockerfile
+      repo={{ morphit_repo_path | quote }}
+      ref="$(awk '/^FROM /{print $2; exit}' "$df")"
+      case "$ref" in *@sha256:*) ;; *) exit 0 ;; esac
+      docker image inspect "$ref" >/dev/null 2>&1 && exit 0
+      bundle="$repo/vendor/docker/$(printf '%s' "$ref" | tr '/:' '__').tar.gz"
+      [ -f "$bundle" ] || exit 0
+      id="$(docker image inspect "${ref%@*}" | python3 -c 'import json, sys; print(json.load(sys.stdin)[0]["Id"])')" || exit 0
+      python3 - "$bundle" "${ref##*@}" "$id" <<'PY' || exit 0
+      import hashlib, json, sys, tarfile
+      bundle, pinned, image_id = sys.argv[1:]
+      tar = tarfile.open(bundle, 'r:gz')
+      def doc(d):
+          try:
+              b = tar.extractfile('blobs/sha256/' + d.split(':', 1)[1]).read()
+          except Exception:
+              return None
+          return json.loads(b) if 'sha256:' + hashlib.sha256(b).hexdigest() == d else None
+      top = doc(pinned) or {}
+      entries = top.get('manifests')
+      mans = [doc(e.get('digest', '')) for e in entries if (e.get('platform') or {}).get('os') != 'unknown'] if entries else [top]
+      configs = [((m or {}).get('config') or {}).get('digest') for m in mans]
+      sys.exit(0 if image_id in configs else 1)
+      PY
+      docker rm -f morphit-base-check >/dev/null 2>&1 || true
+      docker create --pull never --network none --name morphit-base-check "${ref%@*}" true >/dev/null || exit 0
+      docker rm -f morphit-base-check >/dev/null
+      sed -i "s#^FROM ${ref}\$#FROM ${ref%@*}#" "$df"
+      echo changed
+  args:
+    executable: /bin/bash
+  register: bunkerweb_frontend_tagbase
+  changed_when: "'changed' in bunkerweb_frontend_tagbase.stdout"
+
 - name: Build the BunkerWeb frontend image
   # `docker_compose_v2` with build: always surfaces Docker's build progress
   # (e.g. "image bunkerweb-frontend: Built") as Ansible WARNINGs — which reads
@@ -226,7 +294,9 @@
   changed_when: >-
     ('Built' in (bunkerweb_build.stdout | default('')))
     or ('Built' in (bunkerweb_build.stderr | default('')))
-  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+  when: >-
+    bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+    or bunkerweb_frontend_tagbase is changed
 
 - name: Bring BunkerWeb up
   # Call the `docker compose` v2 CLI plugin directly rather than
@@ -245,7 +315,9 @@
     or ('Recreated' in (bunkerweb_up.stderr | default('')))
     or ('Created' in (bunkerweb_up.stderr | default('')))
     or ('Started' in (bunkerweb_up.stdout | default('')))
-  when: bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+  when: >-
+    bunkerweb_compose.changed or bunkerweb_env.changed or bunkerweb_frontend.changed
+    or bunkerweb_frontend_tagbase is changed
 
 - name: Verify the update surface is served no-cache (stale-worker guard)
   # A missing no-cache header on /service-worker.js + /verify.json lets an edge

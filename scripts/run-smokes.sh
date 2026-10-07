@@ -770,6 +770,7 @@ SMOKES=(
 	"apps/indexer:pairing-forward-contract-smoke"
 	".:tor-only-os-smoke"
 	".:ipfs-gc-smoke"
+	".:gateway-cidr-guard-smoke"
 	".:theme-literal-scan-smoke"
 	".:theme-tokens-smoke"
 	".:fixture-port-hygiene-smoke"
@@ -826,10 +827,11 @@ SMOKES=(
 # a 2-CPU host (2026-09-29, ~3,300 unit tests): right at the 240 s default. The
 # two no-phone-home smokes run a real BunkerWeb scheduler / Kubo daemon in a
 # network namespace when their prerequisites are present (2-4 min). They
-# get at least MORPHIT_SLOW_SMOKE_TIMEOUT (600 s); every other smoke keeps
+# get at least MORPHIT_SLOW_SMOKE_TIMEOUT (1200 s; vitest-must-pass took 528 s on an
+# idle 2-CPU host on 2026-10-06, ~4,800 unit tests); every other smoke keeps
 # SMOKE_TIMEOUT. smoke-runner-env-parity-smoke runs this function from both
 # runners, so run-smokes.sh and run-smokes-chunk.sh cannot drift apart.
-SLOW_SMOKE_TIMEOUT="${MORPHIT_SLOW_SMOKE_TIMEOUT:-600}"
+SLOW_SMOKE_TIMEOUT="${MORPHIT_SLOW_SMOKE_TIMEOUT:-1200}"
 smoke_timeout_for() {
 	case "$1" in
 	vitest-must-pass-smoke | workspace-typecheck-smoke | web-build-smoke | bunkerweb-no-phone-home-smoke | kubo-no-phone-home-smoke)

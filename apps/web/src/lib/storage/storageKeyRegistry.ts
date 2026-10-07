@@ -144,6 +144,10 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
 	// Local copy of the on-chain profile's preferred_langs (primary first). Not in the settings
 	// blob and not re-seeded from the chain, so only the sign-out sweep protects it.
 	{ key: 'morphit.preferredLangs.v1', tier: 'account', protection: 'sweep-only' },
+	// v1.21.1 — the orderbook language filter as the user last left it on the orderbook (empty =
+	// all languages). It says which languages the person reads, so it goes with the sign-out sweep;
+	// a Settings save re-seeds it.
+	{ key: 'morphit.orderbookLangFilter.v1', tier: 'account', protection: 'sweep-only' },
 	// v1.15.0 — the last language used to post an order on THIS browser; the default for the next
 	// post. Browser-local convenience.
 	{ key: 'morphit.lastPostLang.v1', tier: 'device' },

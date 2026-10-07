@@ -903,7 +903,8 @@
 			"tx_expired": "L'horloge de votre appareil est décalée, donc la transaction signée a expiré avant d'atteindre la chaîne (elles ne sont valables que quelques secondes). Activez la date et l'heure automatiques pour synchroniser l'horloge, puis réessayez. (Chaîne : {reason})",
 			"duplicate": "Cela semble déjà passé. Actualisez la page pour vérifier avant de réessayer. (Chaîne : {reason})",
 			"waf_too_large": "Le pare-feu web de ton instance a refusé cet envoi car trop volumineux (413). Demande à l'opérateur d'augmenter la limite de taille de requête — une mise à jour de Morphit le corrige automatiquement.",
-			"waf_blocked": "Le pare-feu web de ton instance a bloqué cette requête (403). Demande à l'opérateur d'exempter l'API /v1/ — une mise à jour de Morphit le corrige automatiquement."
+			"waf_blocked": "Le pare-feu web de ton instance a bloqué cette requête (403). Demande à l'opérateur d'exempter l'API /v1/ — une mise à jour de Morphit le corrige automatiquement.",
+			"invalid_text": "Ce texte contient un caractère invisible que Morphit ne peut pas enregistrer (souvent arrivé avec un texte collé). Retapez la partie collée et réessayez — rien n’a été envoyé ni payé."
 		},
 		"copy_unavailable": "Sélectionnez le texte pour le copier",
 		"amount_input": {

@@ -19,6 +19,14 @@ tarball, runs `npm ci`, rebuilds and redeploys the web frontend
 (then checks it answered on its configured bind), and restarts
 services. If anything fails, it rolls back automatically.
 
+**Deadline: every instance must run v1.21.1 or later before
+2026-11-01 00:00 UTC.** From that time (by block timestamp) every
+indexer applies the stricter "consensus v2" rules (listed in
+`docs/release-notes/RELEASE-NOTES-v1.21.0.md`, refined in v1.21.1). An
+instance that applies those blocks with an older release keeps
+records no other instance has — orders, reviews, profiles, featured
+slots — for good; it would then need `sudo morphit-ops fast-sync`.
+
 The rest of this doc covers the details: how the trust chain
 works, the manual procedure (for operators who prefer to apply
 each step themselves), the automated mode, rollbacks, and
@@ -37,21 +45,24 @@ push, in this order:
    GPG key (the public keys live in `.forgejo/release-signers/`
    in the repo — anyone with repo read access can audit who's
    authorized).
-2. Runs the **full validation gate**: typecheck across all
-   workspaces, ansible-lint in production profile, and the
-   complete triple-pulse smoke suite (thousands of self-checking
-   scenarios).
+2. Runs the **validation gate**: typecheck across all
+   workspaces, ansible-lint in production profile, and one pass
+   of the smoke suite (thousands of self-checking scenarios;
+   `ci.yml` already ran three passes on the same commit).
 3. Builds the **release tarball** and **SHA-256 checksum file**.
 4. Bakes a **provenance manifest** (`release-info.json`) into the
    tarball recording the tag, commit SHA, and CI build time.
-5. Publishes both artifacts to the release page.
+5. Publishes them to the release page, with the offline bundle,
+   `distribution-anchor.env` (the values `@morphit` then anchors on
+   chain) and, when CI holds the release signing key, a `.asc` for
+   each archive.
 
-**What you trust to use a release:** Forgejo's HTTPS server. Once
-the artifacts are signed in the release UI, the SHA-256 chains the
-download to the announced version, and `release-info.json` chains
-that to the signed commit. If you want one more layer (defense
-against a compromised Forgejo), see the "Belt-and-braces
-verification" section below.
+**What you trust to use a release:** the SHA-256 that `@morphit`
+anchors on the Blurt chain for each release (in a signed release
+record) chains the download to the announced version, and
+`release-info.json` chains that to the signed commit. If you want
+one more layer (defense against a compromised Forgejo), see the
+"Belt-and-braces verification" section below.
 
 > **Maintainer note — the pre-release flag and `morphit-ops
 > upgrade`.** `morphit-ops upgrade` now finds the newest release
@@ -356,7 +367,8 @@ never wait for an answer: where one has a question (old relay log lines
 in the journal, a Matrix bot kept on clearnet on a Tor-only node,
 plain-text backups), it takes the safe default (the journal is left, the
 clearnet bot is stopped, the backups are left), records the question and
-prints the command to answer it later:
+names it, with the command to answer it, in the upgrade's last lines
+(with any warnings and the background checks still running):
 
 - `sudo morphit-ops upgrade --questions` — asks those questions at a
   terminal (without one it stops with an error and changes nothing).
@@ -366,13 +378,16 @@ prints the command to answer it later:
   "Already on the latest release." (`--check-only` and `--json` stay
   read-only).
 
-**Zero-clearnet (Tor + I2P) nodes upgrade from the signed offline
-bundle.** Every release carries `morphit-<ver>-offline.tar.gz` (about
-250 MB) and its `.asc`, built and signed by the release job with the key your box
-already trusts. Download both on another computer, copy them over
+**Zero-clearnet (Tor + I2P) nodes upgrade like every other node:**
+`sudo morphit-ops upgrade` fetches the release from other instances over
+Tor/I2P and checks it against @morphit's signed on-chain release record.
+When no instance can serve it, use the offline bundle: every release
+carries `morphit-<ver>-offline.tar.gz` (about 250 MB; its SHA-256 is in the
+on-chain record as `offline_sha256`, and a `.asc` is attached when the
+release is signed). Download it on another computer, copy it over
 (`scp -O`, not plain `scp`), and run
 `sudo morphit-ops upgrade --from-file=/path/to/morphit-<ver>-offline.tar.gz`.
-The release notes give the exact steps for each release.
+(Nodes older than v1.21.0 accept an offline bundle only with its `.asc`.)
 
 ### Which indexer the upgrade asks (v1.18.0)
 

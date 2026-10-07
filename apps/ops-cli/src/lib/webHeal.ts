@@ -23,24 +23,33 @@ import { spawnSync } from 'node:child_process';
 import {
 	existsSync,
 	mkdirSync,
-	readFileSync,
-	statSync,
-	writeFileSync,
 	openSync,
 	readSync,
-	closeSync
+	closeSync,
+	fstatSync,
+	constants as fsConstants
 } from 'node:fs';
 import { dirname } from 'node:path';
+import {
+	ROOT_STATE_DIR,
+	ensureOwnDir,
+	freshFileNoFollow,
+	readNoFollow,
+	writeNoFollow
+} from './noFollowFs.ts';
 
 export const WEB_HEAL_UNIT = 'morphit-web-heal';
 export const WEB_HEAL_SUBCOMMAND = '__web-heal';
 /** Longest the background unit may run (systemd RuntimeMaxSec). */
 export const WEB_HEAL_MAX_S = 45 * 60;
 
+// Root's files, in directories only root may write (review G1): they lived in
+// the morphit account's home, where a link it planted made root write through
+// it (and where it could forge the reported result).
 export const webHealStatePath = (): string =>
-	process.env.MORPHIT_WEB_HEAL_STATE ?? '/var/lib/morphit/web-heal.json';
+	process.env.MORPHIT_WEB_HEAL_STATE ?? `${ROOT_STATE_DIR}/web-heal.json`;
 export const webHealLogPath = (): string =>
-	process.env.MORPHIT_WEB_HEAL_LOG ?? '/var/lib/morphit/web-heal.log';
+	process.env.MORPHIT_WEB_HEAL_LOG ?? '/var/log/morphit/web-heal.log';
 
 export interface WebHealState {
 	readonly state: 'running' | 'done';
@@ -55,7 +64,9 @@ export interface WebHealState {
 
 export function readWebHealState(path = webHealStatePath()): WebHealState | null {
 	try {
-		const j = JSON.parse(readFileSync(path, 'utf8')) as WebHealState;
+		const txt = readNoFollow(path);
+		if (txt === null) return null;
+		const j = JSON.parse(txt) as WebHealState;
 		return j && (j.state === 'running' || j.state === 'done') && typeof j.startedAt === 'string'
 			? j
 			: null;
@@ -66,8 +77,8 @@ export function readWebHealState(path = webHealStatePath()): WebHealState | null
 
 export function writeWebHealState(s: WebHealState, path = webHealStatePath()): void {
 	try {
-		mkdirSync(dirname(path), { recursive: true });
-		writeFileSync(path, `${JSON.stringify(s)}\n`, { mode: 0o640 });
+		ensureOwnDir(dirname(path));
+		writeNoFollow(path, `${JSON.stringify(s)}\n`, 0o640);
 	} catch {
 		/* best-effort: the status line just stays unknown */
 	}
@@ -92,6 +103,7 @@ export function describeWebHeal(s: WebHealState, nowMs: number): string {
 
 function describeOutcome(s: WebHealState, ago: (iso: string | undefined) => string): string {
 	const when = ago(s.finishedAt);
+	const d = s.detail;
 	switch (s.result) {
 		case 'applied':
 			return `applied and checked (${when})`;
@@ -99,10 +111,59 @@ function describeOutcome(s: WebHealState, ago: (iso: string | undefined) => stri
 			return `already in place (checked ${when})`;
 		case 'no-proxy':
 			return `no web containers to change (checked ${when})`;
+		case 'country-list':
+			return `in place, except: ${d ?? 'BunkerWeb still runs with a country list'} (${when})`;
+		case 'unchecked':
+			return `checked, except: ${d ?? 'one check could not run'} (${when})`;
 		case 'rolled-back':
-			return `not applied — ${s.detail ?? 'a check did not pass'}; the previous settings were put back (${when})`;
+			return `not applied — ${d ?? 'a check did not pass'}; the previous settings were put back (${when})`;
+		case 'invalid-compose':
+			return `not applied — ${d ?? 'Docker Compose would not give the new settings'}; the original files are back and nothing was restarted (${when})`;
+		case 'no-time':
+			return `not applied — not enough time was left; the next sudo morphit-ops upgrade does it (${when})`;
+		case 'apply-failed':
+			return `not applied — a settings file could not be copied or written first, so nothing was changed (${when})`;
+		case 'left-alone':
+			return `left as they are — ${d ?? 'they could not be checked'} (${when})`;
+		case 'error':
+			return `stopped by an error${d ? ` — ${d}` : ''} (${when})`;
 		default:
-			return `not applied (${s.result ?? 'unknown'}${s.detail ? `: ${s.detail}` : ''}; ${when})`;
+			return `ended without a result this version knows${d ? ` — ${d}` : ''} (${when})`;
+	}
+}
+
+/** The `morphit-ops status` row for the last web heal: a short value and how
+ *  it is marked. A country list left in BunkerWeb is not "not applied" (every
+ *  other setting is in place); a check that could not run is neither ok nor
+ *  a failure. PURE. */
+export function webHealStatusRow(s: WebHealState): {
+	readonly value: string;
+	readonly status: 'ok' | 'warn' | 'info';
+} {
+	if (s.state === 'running') return { value: 'applying', status: 'ok' };
+	const warned = (s.warnings ?? 0) > 0;
+	switch (s.result) {
+		case 'applied':
+		case 'already':
+		case 'no-proxy':
+			return warned
+				? {
+						value: s.result === 'applied' ? 'applied, with warnings' : 'in place, with warnings',
+						status: 'warn'
+					}
+				: { value: 'ok', status: 'ok' };
+		case 'country-list':
+			return { value: 'in place, except a country list', status: 'warn' };
+		case 'unchecked':
+			return warned
+				? { value: 'not fully checked, with warnings', status: 'warn' }
+				: { value: 'not fully checked', status: 'info' };
+		case 'left-alone':
+			return { value: 'left as they are', status: 'warn' };
+		case 'error':
+			return { value: 'not finished', status: 'warn' };
+		default:
+			return { value: 'not applied', status: 'warn' };
 	}
 }
 
@@ -131,7 +192,8 @@ export function launchWebHeal(
 		const log = webHealLogPath();
 		try {
 			mkdirSync(dirname(log), { recursive: true });
-			writeFileSync(log, '', { mode: 0o640 });
+			// A NEW root-owned file: systemd opens this path by name to append.
+			freshFileNoFollow(log, '', 0o640);
 		} catch {
 			/* the unit still runs; only the progress echo is lost */
 		}
@@ -174,10 +236,13 @@ function readLogFromFile(from: number): [string, number] {
 	const p = webHealLogPath();
 	try {
 		if (!existsSync(p)) return ['', from];
-		const size = statSync(p).size;
-		if (size <= from) return ['', size < from ? 0 : from];
-		const fd = openSync(p, 'r');
+		// Never read through a link (review G1).
+		const fd = openSync(p, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
 		try {
+			const st = fstatSync(fd);
+			if (!st.isFile()) return ['', from];
+			const size = st.size;
+			if (size <= from) return ['', size < from ? 0 : from];
 			const buf = Buffer.alloc(size - from);
 			readSync(fd, buf, 0, buf.length, from);
 			return [buf.toString('utf8'), size];

@@ -41,7 +41,19 @@
  *     apps/indexer/scripts/snapshot-mirror.ts [--signer morphit]
  */
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import {
+	chmodSync,
+	closeSync,
+	constants as fsConstants,
+	fstatSync,
+	lstatSync,
+	mkdirSync,
+	openSync,
+	readFileSync,
+	renameSync,
+	unlinkSync,
+	writeSync
+} from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { loadConfig } from '../src/config/index.ts';
@@ -55,7 +67,29 @@ import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
 // its result itself.
 suppressDblurtConsoleNoise();
 
-const STATE_PATH = process.env.MORPHIT_SNAPSHOT_MIRROR_STATE ?? '/var/lib/morphit/snapshot-mirror.json';
+// Root's state, in root's own directory (review G1): it lived in the morphit
+// account's home, where root wrote it through any link that account planted.
+const STATE_PATH =
+	process.env.MORPHIT_SNAPSHOT_MIRROR_STATE ?? '/var/lib/morphit-ops/snapshot-mirror.json';
+/** Where v1.21.0 and older kept it: read once, until this run writes the new one. */
+const LEGACY_STATE_PATH = '/var/lib/morphit/snapshot-mirror.json';
+
+/** A root-owned regular file's text, never read through a link; else null. */
+function readOwnFile(path: string): string | null {
+	let fd: number;
+	try {
+		fd = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+	} catch {
+		return null;
+	}
+	try {
+		const st = fstatSync(fd);
+		if (!st.isFile() || st.uid !== (process.getuid?.() ?? 0)) return null;
+		return readFileSync(fd, 'utf8');
+	} finally {
+		closeSync(fd);
+	}
+}
 
 function flag(name: string): string | undefined {
 	const i = process.argv.indexOf(`--${name}`);
@@ -64,6 +98,35 @@ function flag(name: string): string | undefined {
 const say = (m: string): void => {
 	process.stderr.write(`snapshot-mirror: ${m}\n`);
 };
+
+/**
+ * A slow step's label: at a terminal the braille spinner turns beside it
+ * (stderr, where this script reports), cleared when the step ends; from the
+ * weekly timer (a systemd unit) the label once, for the journal; piped into
+ * `morphit-ops upgrade` nothing — the upgrade's own spinner already shows the
+ * mirror is at work. Returns the stopper (idempotent).
+ */
+function readingChainSpinner(label: string): () => void {
+	if (process.stderr.isTTY !== true) {
+		if (process.env.INVOCATION_ID) say(label);
+		return () => {};
+	}
+	const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+	let i = 0;
+	const draw = (): void => {
+		process.stderr.write(`\r  ${frames[i++ % frames.length]} snapshot-mirror: ${label}`);
+	};
+	draw();
+	const timer = setInterval(draw, 80);
+	timer.unref();
+	let stopped = false;
+	return () => {
+		if (stopped) return;
+		stopped = true;
+		clearInterval(timer);
+		process.stderr.write('\r\u001b[K');
+	};
+}
 
 /**
  * Where kubo's repo lives, and who owns it.
@@ -116,8 +179,11 @@ interface MirrorState {
 
 function readState(): MirrorState | null {
 	try {
-		if (!existsSync(STATE_PATH)) return null;
-		const v = JSON.parse(readFileSync(STATE_PATH, 'utf8')) as Partial<MirrorState>;
+		const text =
+			readOwnFile(STATE_PATH) ??
+			(process.env.MORPHIT_SNAPSHOT_MIRROR_STATE === undefined ? readOwnFile(LEGACY_STATE_PATH) : null);
+		if (text === null) return null;
+		const v = JSON.parse(text) as Partial<MirrorState>;
 		if (typeof v.cid !== 'string' || v.cid === '') return null;
 		return {
 			cid: v.cid,
@@ -132,8 +198,30 @@ function readState(): MirrorState | null {
 
 function writeState(s: MirrorState): void {
 	try {
-		mkdirSync(dirname(STATE_PATH), { recursive: true });
-		writeFileSync(STATE_PATH, JSON.stringify(s, null, 2) + '\n');
+		const dir = dirname(STATE_PATH);
+		mkdirSync(dir, { recursive: true, mode: 0o700 });
+		const d = lstatSync(dir);
+		if (!d.isDirectory() || d.uid !== (process.getuid?.() ?? 0)) return;
+		if (process.env.MORPHIT_SNAPSHOT_MIRROR_STATE === undefined) chmodSync(dir, 0o700);
+		// A NEW temporary file (O_EXCL, never through a link), then rename():
+		// a link at the final name is replaced, not followed.
+		const tmp = `${STATE_PATH}.tmp`;
+		try {
+			unlinkSync(tmp);
+		} catch {
+			/* not there */
+		}
+		const fd = openSync(
+			tmp,
+			fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+			0o600
+		);
+		try {
+			writeSync(fd, JSON.stringify(s, null, 2) + '\n');
+		} finally {
+			closeSync(fd);
+		}
+		renameSync(tmp, STATE_PATH);
 	} catch {
 		/* a box that can't record state still mirrors correctly; it just re-pins next run */
 	}
@@ -174,6 +262,10 @@ async function main(): Promise<void> {
 	}
 	const blurt = bootChainClient(config);
 	let resolved: Awaited<ReturnType<typeof resolveTrustedSnapshotOp>>;
+	// A slow read (two RPC operators, over Tor on a hidden node): never a
+	// silent pause. At a terminal a spinner; from the weekly timer one line;
+	// piped into `morphit-ops upgrade` nothing (its own spinner shows it).
+	const stopReading = readingChainSpinner(`reading @${signer}'s chain history for the newest indexer_snapshot_v1…`);
 	try {
 		resolved = await resolveTrustedSnapshotOp(blurt, {
 			signer,
@@ -183,9 +275,11 @@ async function main(): Promise<void> {
 			minAgree: 2
 		});
 	} catch (e) {
+		stopReading();
 		say(`could not read the chain right now (${e instanceof Error ? e.message : String(e)}) — will retry on the next run.`);
 		return;
 	}
+	stopReading();
 	if (!resolved.ok) {
 		say(`${resolved.reason} Nothing was pinned; will retry on the next run.`);
 		return;

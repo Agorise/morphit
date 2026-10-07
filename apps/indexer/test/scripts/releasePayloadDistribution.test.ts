@@ -6,9 +6,9 @@
  * earlier requires, so morphitlat could not upgrade. These tests run the REAL
  * builder.
  */
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,15 +25,21 @@ const CID_1202 = 'bafybeiegfyir3zryt3iosz7ysxikcki4vwtui35ykd4uf55zp4ww5uctki';
 const RECORD_1201 =
 	'CkEvaXBmcy9iYWZ5YmVpYTVya3ltcGdyZHd4c2kzZG5lNHZpdW8zZmJjam1neGh5ZzN0bDJpYTdwNDN3ejJ6MnBuaRJAs0rKf4ZWU9XM6M841HO/IMR5mS34LoqNkq1A+KMs5u72Q2IuchSdyWK9McLW2Du1GxOoXcYHgAWB3wm1+T8+DxgAIh4yMDI3LTEwLTAxVDAzOjQxOjIwLjU5NjAwMDAwMFoo26z31QYwgPCSy90IQkD4v2GpuSEAMqouW7IUgWms0JRaFzz6I2lscEaBGvcOi4S/JLoGNYZzGCEJaVB5c/bTRHM9EWR8UVjP3whk43kFSpwBpWNUVEwbAAAARdlkuABlVmFsdWVYQS9pcGZzL2JhZnliZWlhNXJreW1wZ3Jkd3hzaTNkbmU0dml1bzNmYmNqbWd4aHlnM3RsMmlhN3A0M3d6MnoycG5paFNlcXVlbmNlGmq91ltoVmFsaWRpdHlYHjIwMjctMTAtMDFUMDM6NDE6MjAuNTk2MDAwMDAwWmxWYWxpZGl0eVR5cGUA';
 
-function build(env: Record<string, string>) {
+const dirs: string[] = [];
+afterAll(() => {
+	for (const d of dirs) rmSync(d, { recursive: true, force: true });
+});
+
+function build(env: Record<string, string>, args: string[] = []) {
 	const dir = mkdtempSync(join(tmpdir(), 'dist-m-'));
+	dirs.push(dir);
 	const f = join(dir, 'm.json');
 	writeFileSync(f, JSON.stringify({ 'index.html': 'sha256-' + 'a'.repeat(43) + '=' }));
 	// Only what the test gives: no MORPHIT_BUILD_* from the environment running it.
 	const base = Object.fromEntries(
 		Object.entries(process.env).filter(([k]) => !k.startsWith('MORPHIT_BUILD_'))
 	);
-	const r = spawnSync(TSX, [resolve(APP, 'scripts', 'release-build-payload.ts')], {
+	const r = spawnSync(TSX, [resolve(APP, 'scripts', 'release-build-payload.ts'), ...args], {
 		cwd: resolve(APP, '../..'),
 		env: {
 			...base,
@@ -80,12 +86,23 @@ describe('the release builder distribution block', () => {
 		expect(r.status).not.toBe(0);
 		expect(r.stderr).toMatch(/IPNS record/);
 	});
-	it('warns loudly when the release has no CID (zero-clearnet nodes cannot fetch it)', () => {
-		const { r, dist } = build({});
-		expect(r.status).toBe(0);
+	it('refuses to emit a release with no CID (v1.20.2: zero-clearnet nodes could not fetch it)', () => {
+		const { r } = build({});
+		expect(r.status).not.toBe(0);
+		expect(r.stdout, 'a payload with no ipfs_cid was emitted').toBe('');
+		// It says how to supply the CID instead.
+		expect(r.stderr).toMatch(/--ipfs-cid/);
+	});
+	it('emits a release with no CID only with the explicit override', () => {
+		const { r, dist } = build({}, ['--allow-no-ipfs-cid']);
+		expect(r.status, r.stderr.slice(-400)).toBe(0);
 		expect(dist).not.toHaveProperty('ipfs_cid');
-		expect(r.stderr).toMatch(/no ipfs_cid/);
-		expect(r.stderr).toMatch(/MORPHIT_BUILD_IPFS_CID/);
+		expect(dist?.ipns_name).toBe(CANONICAL_NAME);
+	});
+	it('refuses an argument it does not know (a typo must not silently drop the CID)', () => {
+		const { r } = build({ MORPHIT_BUILD_IPFS_CID: CID_1202 }, ['--ipfs-ci', CID_1202]);
+		expect(r.status).not.toBe(0);
+		expect(r.stdout).toBe('');
 	});
 	it('accepts a record that points at this release’s CID', () => {
 		const { r, dist } = build({

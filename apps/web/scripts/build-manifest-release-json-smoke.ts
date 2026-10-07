@@ -135,7 +135,7 @@ async function main(): Promise<void> {
 		const payload = {
 			version: '1.0.0',
 			hash_manifest: all,
-			endpoints: { rpc: ['https://rpc.blurt.world'] }
+			endpoints: { rpc: ['https://rpc.example.org'] }
 		};
 		const res = validateReleasePayload(payload);
 		if (res.ok) ok('validateReleasePayload accepts a payload built from --release-json output');

@@ -50,13 +50,13 @@ function goodEnv(keyPath: string): string {
 		'MORPHIT_INDEXER_RELAY_ACCOUNT=tester',
 		'MORPHIT_INDEXER_FEE_RECIPIENT=tester',
 		'MORPHIT_INDEXER_CHAIN_ID=cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f',
-		'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.blurt.world',
+		'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.example.org',
 		'MORPHIT_INDEXER_PUBLIC_ORIGIN=https://tester.example',
 		'MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY=BLT6CVC6C3PgmMe5xDtxFXJvGHaLnUTtcsK1ghHomDqLPWW7yeMp9',
 		'MORPHIT_RELAY_DATABASE_URL=postgres://u:p@localhost:5432/morphit_indexer',
 		'MORPHIT_RELAY_ACCOUNT=tester',
 		`MORPHIT_RELAY_ACTIVE_KEY_FILE=${keyPath}`,
-		'MORPHIT_RELAY_BLURT_RPC=https://rpc.blurt.world',
+		'MORPHIT_RELAY_BLURT_RPC=https://rpc.example.org',
 		''
 	].join('\n');
 }

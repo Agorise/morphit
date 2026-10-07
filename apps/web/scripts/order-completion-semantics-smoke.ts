@@ -25,9 +25,11 @@
  *   2. It names the reviewed subject as the counterparty, so BOTH sides get
  *      trade credit (a taker owns no order and would otherwise read "0 trades"
  *      forever).
- *   3. The completion is best-effort AFTER the review — the review is already
- *      irreversible on-chain, so a failed completion must not report the submit
- *      as failed and invite a duplicate review.
+ *   3. The completion goes FIRST and is best-effort: from the consensus
+ *      activation time (2026-11-01) a review citing the order is accepted only
+ *      when the pair traded on it, and the completion naming the reviewed party
+ *      is that proof (reviewAndComplete.ts). A failed completion still sends the
+ *      review. Checked by RUNNING sendReviewAndCompletion, not by reading it.
  *   4. my/orders passes completeOwnedOrder (every order there is the user's).
  *   5. The chat gates it on `orderIsMine` — a chat may be about the PEER's
  *      order, and completing is owner-only.
@@ -36,6 +38,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { sendReviewAndCompletion } from '../src/lib/feedback/reviewAndComplete';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -71,29 +74,48 @@ const ops = flat(OPS);
 
 // ── 1. the form completes the order ─────────────────────────────────
 check(
-	'LeaveFeedbackForm broadcasts order_complete for an owned order',
-	/if \(completeOwnedOrder\) \{ try \{ await broadcastOrderComplete\(/.test(form),
+	'LeaveFeedbackForm sends the completion for an owned order',
+	/sendReviewAndCompletion\( \{ sendCompletion: \(\) => broadcastOrderComplete\(/.test(form) &&
+		/completeOwnedOrder && !completionSent \)/.test(form),
 	'submitting a review on your OWN order must also mark it complete — otherwise a settled trade stays Live, stays in the orderbook, keeps its Cancel button and counts 0 under Paid (the maintainer hit exactly this)'
 );
 
 // ── 2. it names the counterparty ────────────────────────────────────
 check(
 	'the reviewed subject is named as the counterparty (both sides credited)',
-	/await broadcastOrderComplete\(state\.live, orderPermlink, subject\)/.test(form),
+	/broadcastOrderComplete\(state\.live, orderPermlink, subject\)/.test(form),
 	'without the counterparty only the OWNER is credited a trade; the taker owns no order and would read "0 trades" forever'
 );
 
-// ── 3. best-effort, and AFTER the review ────────────────────────────
+// ── 3. FIRST, and best-effort (run, not read) ──────────────────────
+async function order(completionFails: boolean): Promise<string[]> {
+	const calls: string[] = [];
+	await sendReviewAndCompletion(
+		{
+			sendReview: async () => {
+				calls.push('review');
+				return { block_num: 1, trx_id: 't' };
+			},
+			sendCompletion: async () => {
+				calls.push('complete');
+				if (completionFails) throw new Error('locked');
+			}
+		},
+		true
+	);
+	return calls;
+}
+const ok = await order(false);
 check(
-	'the completion cannot fail the review (best-effort, caught)',
-	/if \(completeOwnedOrder\) \{ try \{ await broadcastOrderComplete\([^)]*\);.*?\} catch/.test(form),
-	'the review is already irreversible on-chain; a failed completion must not report the submit as failed and invite a duplicate review'
+	'the completion reaches the chain BEFORE the review',
+	ok.join(',') === 'complete,review',
+	`got ${ok.join(',')} — from 2026-11-01 a review on an order the pair did not chat about is dropped unless the completion naming them is already on chain`
 );
+const failed = await order(true);
 check(
-	'the completion runs AFTER the review broadcast',
-	form.indexOf('await broadcastFeedback(') !== -1 &&
-		form.indexOf('await broadcastFeedback(') < form.indexOf('await broadcastOrderComplete('),
-	'the review is what the user typed — it must land first'
+	'a failed completion still sends the review (best-effort)',
+	failed.join(',') === 'complete,review',
+	`got ${failed.join(',')}`
 );
 
 // ── 4. my/orders opts in ────────────────────────────────────────────

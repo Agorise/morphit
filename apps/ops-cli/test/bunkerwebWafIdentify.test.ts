@@ -182,6 +182,8 @@ function morphitIo(
 		edgeLog?: string;
 		ruleCopies?: { rows: ReturnType<typeof ruleRow>[]; files: string[] };
 		edgeLive?: string;
+		/** BunkerWeb keeps its old nginx config even when recreated. */
+		edgeKeepsOldConfig?: boolean;
 	} = {}
 ) {
 	const w = mkdtempSync(join(tmpdir(), 'bw-identify-'));
@@ -272,7 +274,7 @@ function morphitIo(
 		edgeService: 'bunkerweb',
 		envPath,
 		edgeLive: opts.edgeLive ?? WIDE,
-		cleanLive: CLEAN,
+		cleanLive: opts.edgeKeepsOldConfig ? WIDE : CLEAN,
 		otherLive: FRONTEND_LIVE,
 		calls: [] as string[][],
 		compose: [] as Array<{ g: { p: string; d: string; f: string[]; e: string[] }; sub: string[] }>,
@@ -353,6 +355,22 @@ describe('healBunkerWebWaf on a morphit.io-shaped stack (all containers named bu
 		expect(r.env).toMatch(/^USE_REAL_IP=no$/m);
 		expect(r.st.edgeLive).toBe(CLEAN);
 		expect(r.out).toMatch(/real-IP verified live/);
+	});
+
+	// v1.21.1 review A-F2: the line asking the operator to recreate BunkerWeb
+	// was printed as info, so the last word said "Nothing else to do." after it.
+	it('BunkerWeb still running the old real-IP setting after its recreate: a warning (counted) with the command', async () => {
+		const { warningCount } = await import('../src/render/term.ts');
+		const box = morphitIo({ edgeKeepsOldConfig: true });
+		const before = warningCount();
+		const r = await box.run(() => healBunkerWebWaf(box.envPath, box.build));
+		expect(r.threw).toBeNull();
+		expect(r.env).toMatch(/^USE_REAL_IP=no$/m);
+		expect(r.out).toMatch(
+			/ERR \[WARN\] WAF: BunkerWeb still has the old real-IP setting loaded\. When convenient, run on this server: sudo docker compose -p bunkerweb .* up -d --no-deps --force-recreate bunkerweb bw-scheduler/
+		);
+		expect(r.out).not.toMatch(/real-IP verified live/);
+		expect(warningCount() - before).toBeGreaterThanOrEqual(1);
 	});
 
 	it('every `compose up` is --no-deps, names only BunkerWeb’s services, and addresses the whole project', async () => {

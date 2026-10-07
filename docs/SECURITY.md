@@ -278,7 +278,12 @@ on chain instead.
   DNSBL, the black/white/greylist plugins, the anonymous report and
   anti-bot are off, and its daily GeoIP download, update check and Pro
   plugin download are removed from its scheduler (the GeoIP files come
-  with its image). Kubo's AutoConf, HTTP routers and delegated IPNS
+  with its image). It blocks no country, so people behind national
+  firewalls can reach any instance: the upgrade empties a country list in
+  BunkerWeb's settings file, removes one saved in BunkerWeb's web UI from
+  its database, and checks BunkerWeb runs without one; a list set any
+  other way (an Autoconf label, a compose `environment:` entry) is named,
+  with where to clear it. Kubo's AutoConf, HTTP routers and delegated IPNS
   publishing are off too. Every remaining outbound connection of a server,
   and why it is needed, is listed in `docs/OPERATIONS.md` §37.13a.
 - Push subscriptions link an account to a browser's push endpoint in the

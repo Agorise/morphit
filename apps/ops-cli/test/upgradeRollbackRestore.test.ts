@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe('rollback restores the self-heal backups this run made', () => {
-	it('relay.env and a refreshed unit are put back exactly', () => {
+	it('relay.env and a refreshed unit are put back exactly', async () => {
 		const installDir = join(root, 'opt-morphit');
 		const backupDir = `${installDir}.bak-1`;
 		const tmp = join(root, 'tmp');
@@ -67,7 +67,7 @@ describe('rollback restores the self-heal backups this run made', () => {
 			...selfHealRestoreList(snap, installDir),
 			{ target: unit, backup: `${unit}.bak`, isUnit: true }
 		];
-		const rc = rollback(
+		const rc = await rollback(
 			installDir,
 			backupDir,
 			tmp,

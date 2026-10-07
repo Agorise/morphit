@@ -222,14 +222,19 @@ export async function healBunkerwebJobs(
 			detail: "BunkerWeb's jobs: no BunkerWeb scheduler runs on this server."
 		};
 	const details: string[] = [];
+	/** Schedulers with nothing to do and nothing to say (counted, not printed). */
+	const quiet: string[] = [];
 	let verified = true;
 	let strategy = 'already';
 	for (const s of scheds) {
 		const notes = operatorDownloads(s.env);
+		// An operator's setting that downloads something is a warning, named
+		// with what to do — never folded into a line that says all is clean.
 		const extra =
 			notes.length > 0
-				? ` Settings on this server still make BunkerWeb download something (Morphit sets none of them): ${notes.join('; ')}.`
+				? ` Settings on this server still make BunkerWeb download something (Morphit sets none of them): ${notes.join('; ')}; remove them from BunkerWeb's settings if you do not need them.`
 				: '';
+		if (notes.length > 0) verified = false;
 		if (!new RegExp(`:${VERSION.replace(/\./g, '\\.')}(@|$)`).test(s.image)) {
 			details.push(
 				`BunkerWeb's jobs: ${s.name} runs ${s.image}, not ${VERSION}, so Morphit's job lists (made for ${VERSION}) were not mounted.${extra}`
@@ -244,9 +249,14 @@ export async function healBunkerwebJobs(
 		];
 		const before = live();
 		if (before.length > 0 && !before.some((j) => PHONE_HOME_JOBS.includes(j))) {
-			details.push(
-				`BunkerWeb's jobs: ${s.name} already runs Morphit's job lists (nothing fetched from the internet).${extra}`
-			);
+			if (notes.length === 0)
+				quiet.push(
+					`BunkerWeb's jobs: ${s.name} already runs Morphit's job lists (its own jobs fetch nothing from the internet).`
+				);
+			else
+				details.push(
+					`BunkerWeb's jobs: ${s.name} already runs Morphit's job lists, so its own jobs fetch nothing from the internet.${extra}`
+				);
 			continue;
 		}
 		const ref = composeRefOf(s);
@@ -395,6 +405,9 @@ export async function healBunkerwebJobs(
 				` Copy: ${copy}.`
 		);
 	}
+	// Every scheduler already clean, with nothing to say: one routine result.
+	if (details.length === 0)
+		return { strategy: 'already', verified: true, routine: true, detail: quiet.join(' ') };
 	return { strategy, verified, detail: details.join(' ') };
 }
 

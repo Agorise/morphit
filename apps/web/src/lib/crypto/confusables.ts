@@ -48,6 +48,8 @@
  * for anything in the Latin block is plenty.
  */
 
+import { withoutPostBaselineCodePoints } from '@morphit/asset-registry';
+
 /**
  * Morphit — reserved-name impersonation defense.
  *
@@ -527,7 +529,10 @@ const EXTRA_FOLDS: Readonly<Record<string, string>> = {
  * comparison, never stored. Mirror of the indexer's `confusableSkeleton`.
  */
 export function confusableSkeleton(input: string): string {
-	const folded = input
+	// First, every code point Unicode 15.1 had not assigned: a newer runtime
+	// knows its properties and Node 22.0's does not, so leaving it in made the
+	// verdict depend on which Node an indexer runs (see the table's header).
+	const folded = withoutPostBaselineCodePoints(input)
 		.normalize('NFKD')
 		.replace(/[\p{Default_Ignorable_Code_Point}\p{M}]/gu, '')
 		.normalize('NFKC')

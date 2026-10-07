@@ -9,10 +9,16 @@
  *   2. an allowlisted advisory is no longer reported (remove the entry: a
  *      stale allowlist hides the next advisory with the same id);
  *   3. npm can fix a reported advisory WITHOUT a major version change (update
- *      the dependency instead of accepting it);
+ *      the dependency instead of accepting it). npm's own `fixAvailable` flag
+ *      is not enough: in v1.21.1 it put the fix on express (whose qs was the
+ *      advisory) and called tsx's esbuild 0.28.0 -> 0.28.2 a major, so this
+ *      gate passed while a plain `npm audit fix` changed both. So the gate
+ *      also runs `npm audit fix --package-lock-only` (never --force: that
+ *      allows major changes) on a COPY of the manifests and lockfile, and
+ *      fails on any version it would change;
  *   4. an allowlist entry has no category, reason or review date;
- *   5. the audit cannot run at all (registry unreachable, bad output) — the
- *      gate never passes on no information.
+ *   5. the audit, or the in-range fix check, cannot run at all (registry
+ *      unreachable, bad output) — the gate never passes on no information.
  * Low advisories not in the allowlist are reported, not failed.
  *
  * Release report mode (MORPHIT_AUDIT_GATE_MODE=report, set only by
@@ -23,7 +29,8 @@
  *   node scripts/audit-gate.mjs
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -84,10 +91,16 @@ export function advisoriesOf(audit) {
 
 /**
  * The verdict. `audit` is npm's JSON or null when it could not run (`reason`
- * says why).
+ * says why). `fixes` is what inRangeFixesOrReason() found an in-range
+ * `npm audit fix` would change: an array, null when that check could not run
+ * (`fixReason` says why), or undefined when it was not asked for.
  * Returns { failures: string[], warnings: string[], notes: string[] }.
  */
-export function evaluate(audit, allowlistText, { mode = 'strict', reason = null } = {}) {
+export function evaluate(
+	audit,
+	allowlistText,
+	{ mode = 'strict', reason = null, fixes = undefined, fixReason = null } = {}
+) {
 	const failures = [];
 	const warnings = [];
 	const notes = [];
@@ -121,7 +134,124 @@ export function evaluate(audit, allowlistText, { mode = 'strict', reason = null 
 			(report ? warnings : failures).push(msg);
 		}
 	}
+	if (fixes === null) {
+		failures.push(
+			`the in-range fix check (npm audit fix, without --force, on a copy) could not run — ${fixReason ?? 'no reason given'}. With no answer nothing is known about available fixes, so this does not pass, in either mode.`
+		);
+	} else if (Array.isArray(fixes)) {
+		// One line per package; optional platform binaries (esbuild's @esbuild/*)
+		// move with their package and are only counted.
+		const byName = new Map();
+		let optional = 0;
+		for (const f of fixes) {
+			if (f.optional) {
+				optional++;
+				continue;
+			}
+			const what =
+				f.from === null
+					? `adds ${f.path} ${f.to}`
+					: f.to === null
+						? `drops ${f.path} ${f.from}`
+						: `${f.path} ${f.from} → ${f.to}`;
+			byName.set(f.name, [...(byName.get(f.name) ?? []), what]);
+		}
+		for (const [name, whats] of byName) {
+			const msg = `an in-range fix exists: \`npm audit fix\` (no --force) changes ${name}: ${whats.join('; ')} — run npm update --package-lock-only ${name}, check the lockfile diff, and remove the allowlist entries npm then stops reporting`;
+			(report ? warnings : failures).push(msg);
+		}
+		if (optional > 0) {
+			const msg = `an in-range fix exists: \`npm audit fix\` (no --force) also changes ${optional} optional platform package(s) (e.g. ${fixes.find((f) => f.optional).path})${byName.size > 0 ? ', which move with the packages above' : ''}`;
+			(report ? warnings : failures).push(msg);
+		}
+	}
 	return { failures, warnings, notes };
+}
+
+/** { version, optional } by lockfile path, for every package the lockfile records. */
+function lockVersions(lockText) {
+	const out = new Map();
+	const lock = JSON.parse(lockText);
+	for (const [path, e] of Object.entries(lock.packages ?? {})) {
+		if (path === '' || e === null || typeof e !== 'object') continue;
+		out.set(path, {
+			version: typeof e.version === 'string' ? e.version : e.link ? 'link' : '',
+			optional: e.optional === true
+		});
+	}
+	return out;
+}
+
+/** The package name a lockfile path installs (its last node_modules/ segment). */
+function nameOf(path) {
+	const i = path.lastIndexOf('node_modules/');
+	return i === -1 ? path : path.slice(i + 'node_modules/'.length);
+}
+
+/**
+ * What a plain `npm audit fix` — NEVER --force, which allows major version
+ * changes — would change in the lockfile: { fixes, reason }. It runs on a COPY
+ * (the root package.json, .npmrc, package-lock.json and every workspace's
+ * package.json, in a temp directory), so the repository is never touched.
+ * `fixes` lists every lockfile path whose version would change, appear or go;
+ * it is null when the check could not run, and `reason` then says why.
+ */
+export function inRangeFixesOrReason(cwd = repoRoot) {
+	let dir = null;
+	try {
+		const lockText = readFileSync(join(cwd, 'package-lock.json'), 'utf8');
+		const lock = JSON.parse(lockText);
+		dir = mkdtempSync(join(tmpdir(), 'morphit-audit-fix-'));
+		const files = ['package.json', 'package-lock.json'];
+		if (existsSync(join(cwd, '.npmrc'))) files.push('.npmrc');
+		for (const path of Object.keys(lock.packages ?? {})) {
+			// Workspaces: lockfile paths outside node_modules.
+			if (path !== '' && !path.includes('node_modules/')) files.push(join(path, 'package.json'));
+		}
+		for (const f of files) {
+			if (!existsSync(join(cwd, f))) continue;
+			mkdirSync(dirname(join(dir, f)), { recursive: true });
+			copyFileSync(join(cwd, f), join(dir, f));
+		}
+		try {
+			execFileSync(
+				'npm',
+				['audit', 'fix', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'],
+				{
+					cwd: dir,
+					encoding: 'utf8',
+					stdio: ['ignore', 'pipe', 'pipe'],
+					maxBuffer: 32 * 1024 * 1024,
+					timeout: 300_000
+				}
+			);
+		} catch (err) {
+			// npm audit fix exits non-zero while advisories it cannot fix remain;
+			// what counts is whether it rewrote the lockfile, read below. A timeout
+			// or a missing npm is no answer.
+			if (err && (err.code === 'ENOENT' || err.signal === 'SIGTERM')) {
+				return { fixes: null, reason: reasonOf(err) };
+			}
+		}
+		const before = lockVersions(lockText);
+		const after = lockVersions(readFileSync(join(dir, 'package-lock.json'), 'utf8'));
+		const fixes = [];
+		for (const [path, v] of before) {
+			const w = after.get(path);
+			const base = { path, name: nameOf(path), optional: v.optional && (w?.optional ?? true) };
+			if (w === undefined) fixes.push({ ...base, from: v.version, to: null });
+			else if (w.version !== v.version) fixes.push({ ...base, from: v.version, to: w.version });
+		}
+		for (const [path, w] of after) {
+			if (!before.has(path))
+				fixes.push({ path, name: nameOf(path), optional: w.optional, from: null, to: w.version });
+		}
+		return { fixes, reason: null };
+	} catch (err) {
+		return { fixes: null, reason: err instanceof Error ? err.message : String(err) };
+	} finally {
+		if (dir !== null) rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 const PROXY_VARS = [
@@ -198,7 +328,13 @@ export function runAudit(cwd = repoRoot) {
 function main() {
 	const mode = process.env.MORPHIT_AUDIT_GATE_MODE === 'report' ? 'report' : 'strict';
 	const { audit, reason } = auditOrReason();
-	const v = evaluate(audit, readFileSync(ALLOWLIST_PATH, 'utf8'), { mode, reason });
+	const { fixes, reason: fixReason } = inRangeFixesOrReason();
+	const v = evaluate(audit, readFileSync(ALLOWLIST_PATH, 'utf8'), {
+		mode,
+		reason,
+		fixes,
+		fixReason
+	});
 	const total = audit ? advisoriesOf(audit).size : 0;
 	console.log(`audit-gate (${mode}): ${total} advisories reported.`);
 	for (const n of v.notes) console.log(`  note: ${n}`);

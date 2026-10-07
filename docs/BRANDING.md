@@ -143,9 +143,16 @@ someone opens one directly.
   their first trade to the Morphit community, the post leads with your link-preview picture
   (`/og-image.png`, drawn as above or your `static/og-image.png`), never Morphit's: if your
   picture could not be drawn, the posts carry none. `branding apply` (and every upgrade) records
-  which it is in `/brand/brand.json` (`"og_image": "own"` or `"shipped"`). Blurt can only show a
-  picture from an `https://` address, so a post made over Tor or I2P carries none. An unbranded
-  instance keeps Morphit's pictures.
+  which it is in `/brand/brand.json` (`"og_image": "own"` or `"shipped"`); when the page cannot read
+  that file at the moment of posting (a slow Tor or I2P connection, the browser offline), the post
+  carries no picture rather than possibly Morphit's. Blurt can only show a picture from an
+  `https://` address, so a post made over Tor or I2P carries none. An unbranded instance keeps
+  Morphit's pictures.
+
+- **Always give a name with a logo.** A logo without `--name` gets a preview picture with the logo
+  alone (never "Morphit" beside it), but the site keeps saying "Morphit" elsewhere.
+- **Your own `static/og-image.png` must be a 1200 × 630 PNG** (every page declares that size);
+  `branding apply` names any other size in a warning and serves it as given.
 
 **Other images** can be replaced by putting them under `/etc/morphit/branding/static/` at the same
 path they have on the site. For example, `static/splash/splash-iphone-12.png` replaces the iOS

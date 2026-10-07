@@ -163,9 +163,12 @@ function runVitest(workspacePath: string): {
 			cwd: fullPath,
 			encoding: 'utf-8',
 			stdio: ['ignore', 'pipe', 'pipe'],
-			// 5 minutes max; the full indexer suite is ~10s on commodity
-			// hardware, but cold-start + transform compilation needs slack.
-			timeout: 5 * 60_000,
+			// 10 minutes max per workspace. apps/ops-cli's suite (real child
+			// processes, PTY spinner checks, fake docker/systemctl) takes ~170 s
+			// on an idle 2-CPU host and ~290 s with the CPUs busy (2026-10-06):
+			// 5 minutes cut it off mid-run, which read as "could not parse".
+			// The whole smoke is still bounded by the runner's slow-smoke cap.
+			timeout: 10 * 60_000,
 			// CI=1 forces the basic reporter (defensive — `--reporter=basic` on
 			// the CLI takes precedence but VITEST_REPORTERS in env could override it).
 			env: childEnv

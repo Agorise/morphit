@@ -211,15 +211,20 @@ if (codeOnly.includes('copyFileSync') && codeOnly.includes('cpSync')) {
 	fail('carry-forward uses copyFileSync/cpSync (preserves 0600)', 'expected copyFileSync + cpSync');
 }
 
-// 3. carry-forward happens AFTER extract and BEFORE npm ci
+// 3. carry-forward happens AFTER extract and BEFORE npm ci — in runUpgrade's
+//    own order (npm ci runs in installDepsWithNpmCi, called from step 9).
 {
-	const extractIdx = codeOnly.indexOf("'tar'");
-	const carryIdx = codeOnly.indexOf('preserve');
-	const npmCiIdx = codeOnly.indexOf("'ci'");
+	const runIdx = codeOnly.indexOf('export async function runUpgrade(');
+	const extractIdx = codeOnly.indexOf("runOrThrow('tar'", runIdx);
+	const carryIdx = codeOnly.indexOf('preserve', extractIdx);
+	const npmCiIdx = codeOnly.indexOf('await installDepsWithNpmCi(installDir, backupDir)', runIdx);
+	const ciFn = codeOnly.slice(codeOnly.indexOf('export async function installDepsWithNpmCi('));
 	if (
+		runIdx !== -1 &&
 		extractIdx !== -1 &&
 		carryIdx !== -1 &&
 		npmCiIdx !== -1 &&
+		/'ci', '--ignore-scripts'/.test(ciFn.slice(0, 800)) &&
 		extractIdx < carryIdx &&
 		carryIdx < npmCiIdx
 	) {

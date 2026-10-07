@@ -5082,7 +5082,12 @@ instance sends 10% to the treasury, so this is about 1,000
 BLURT of fees there; on the canonical instance, 100 BLURT.
 This measure applies to attestation ops in blocks stamped from
 2026-11-01 00:00 UTC (the consensus-v2 activation time) on; earlier ops keep the old measure (all
-fee legs).
+fee legs). The treasury-share counter itself only counts fees paid from that
+time on (older fees are not stored leg by leg anywhere chain-derived), so on
+2026-11-01 it starts at 0 for every account: under `'launch'` attestors then
+qualify by age alone until they have paid again, and under `'steady'` nobody
+qualifies on loyalty for a while — do not switch to `'steady'` around that date
+(the traffic-trigger query below reads the same counter).
 
 **Default is `'launch'` (OR gate).** An attestor qualifies
 by meeting **either** loyalty OR age. This is the
@@ -6143,19 +6148,20 @@ reachable and PROVE it is the unmodified release.
 
 Three moving parts:
 
-1. **Sign** — `scripts/release-sign.sh <version>` (above).  It
-   also writes `release/distribution-anchor.env` with the
-   tarball's `source_sha256`, your key's `gpg_fingerprint`, and
-   the `mirrors` list.
-2. **Mirror** — this is AUTOMATIC.  Forgejo push-mirrors every
-   commit and the signed tag to GitHub + Codeberg, so the code
-   is already on three independent hosts with nothing to do by
-   hand.  Those two hosts are the default anchor mirrors
-   (override with `MORPHIT_RELEASE_MIRRORS`).  Optionally,
-   `ipfs add` the signed tarball and set `MORPHIT_BUILD_IPFS_CID`
-   before the payload build to add a content-addressed copy —
-   off by default, since availability then needs a pinned,
-   reachable node or a pinning service.
+1. **Build** — AUTOMATIC. The signed tag (Block 2) starts
+   `release.yml`, which builds the tarball and its `.sha256` and
+   writes `distribution-anchor.env` (the tarball's
+   `source_sha256`, the pinned tag signer's `gpg_fingerprint`,
+   the `mirrors` list and the release's IPFS CID). A `.asc` is
+   attached only when CI holds the signing key; without it the
+   anchor names the tag signer instead, and nothing waits on a
+   laptop.
+2. **Mirror** — AUTOMATIC. Forgejo push-mirrors every commit
+   and the signed tag to the other git hosts, and every Morphit
+   instance's Kubo pins the release directory by its CID (your
+   release box seeds it in Block 3). If `release.yml` could not
+   compute the CID, Block 4 stops and says how to pass the one
+   morphit.io printed (`--ipfs-cid`).
 3. **Anchor** — broadcast `morphit_release_v1` with a
    `distribution` block carrying `source_sha256`,
    `gpg_fingerprint`, the `mirrors` list, and optionally
@@ -6195,9 +6201,10 @@ the `MORPHIT_IPNS_KEY` secret.
 
 - **IPFS CID (self-hosted — no pinning service)** — `release.yml`
   installs the pinned Kubo (v0.42.0, checksum-verified) and computes the
-  DETERMINISTIC CID of a small **release directory** — the signed tarball
-  (versioned + a stable `morphit-latest.tar.gz`), its `.sha256`/`.asc`, the
-  release notes, and a deterministic `metadata.json` — with `ipfs add
+  DETERMINISTIC CID of a small **release directory** — the tarball
+  (versioned + a stable `morphit-latest.tar.gz`), its `.sha256`, the release
+  notes, a `README.md` and a deterministic `metadata.json` (signatures stay on
+  the release page) — with `ipfs add
   --only-hash` (offline; no upload, no account, no secret).  That DIRECTORY
   CID is anchored on-chain as `ipfs_cid`.  The bytes are HOSTED by our own
   nodes: your release box seeds it once per release (`morphit-ops harden` →
@@ -6935,21 +6942,32 @@ USE_REVERSE_PROXY=yes
 REVERSE_PROXY_URL=/
 REVERSE_PROXY_HOST=http://127.0.0.1:3000  # the apps/web dev server, OR
                                           # the static-build path if served by nginx
-AUTO_LETS_ENCRYPT=yes
-EMAIL_LETS_ENCRYPT=you@example.com
+# TLS: the host's certbot gets the certificate (§35); BunkerWeb's own
+# Let's Encrypt client stays off.
+AUTO_LETS_ENCRYPT=no
+USE_CUSTOM_SSL=yes
+CUSTOM_SSL_CERT=/etc/letsencrypt/live/morphit.example.com/fullchain.pem
+CUSTOM_SSL_KEY=/etc/letsencrypt/live/morphit.example.com/privkey.pem
 USE_LIMIT_REQ=yes
 LIMIT_REQ_RATE=10r/s
 USE_BAD_BEHAVIOR=yes
+BAD_BEHAVIOR_STATUS_CODES=401 405 444
 USE_MODSECURITY=yes
 MODSECURITY_CRS_VERSION=4
-# Off in Morphit: each one tells a third party about your visitors.
+# Off in Morphit: each one tells a third party about your visitors, or
+# keeps their addresses (metrics).
 USE_BUNKERNET=no
 USE_DNSBL=no
 USE_BLACKLIST=no
 USE_WHITELIST=no
 USE_GREYLIST=no
 SEND_ANONYMOUS_REPORT=no
+USE_METRICS=no
+USE_REVERSE_SCAN=no
 USE_ANTIBOT=no
+# No Morphit instance blocks by country.
+BLACKLIST_COUNTRY=
+WHITELIST_COUNTRY=
 ```
 
 **What Morphit turns off, and why.** BunkerWeb 1.5 turns several features
@@ -6999,10 +7017,24 @@ services:
       SERVER_NAME: "morphit.example.com"
       USE_REVERSE_PROXY: "yes"
       REVERSE_PROXY_HOST: "http://web:3000"
-      AUTO_LETS_ENCRYPT: "yes"
-      EMAIL_LETS_ENCRYPT: "you@example.com"
+      AUTO_LETS_ENCRYPT: "no"           # the host's certbot gets the certificate (§35)
+      USE_CUSTOM_SSL: "yes"
+      CUSTOM_SSL_CERT: "/etc/letsencrypt/live/morphit.example.com/fullchain.pem"
+      CUSTOM_SSL_KEY: "/etc/letsencrypt/live/morphit.example.com/privkey.pem"
       USE_BAD_BEHAVIOR: "yes"
+      BAD_BEHAVIOR_STATUS_CODES: "401 405 444"
       USE_MODSECURITY: "yes"
+      USE_BUNKERNET: "no"               # off: each of these tells a third party
+      USE_DNSBL: "no"                   # about your visitors, or keeps their
+      USE_BLACKLIST: "no"               # addresses (metrics)
+      USE_WHITELIST: "no"
+      USE_GREYLIST: "no"
+      SEND_ANONYMOUS_REPORT: "no"
+      USE_METRICS: "no"
+      USE_REVERSE_SCAN: "no"
+      USE_ANTIBOT: "no"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - web
 ```
@@ -7175,7 +7207,7 @@ sudo ufw insert 1 deny from 203.0.113.0/24
 sudo ufw insert 1 deny from 198.51.100.50
 ```
 
-**4. No country blocks.** No Morphit instance turns visitors away by country. Federation exists so that people whose country blocks or firewalls services (China, Iran, North Korea, …) can still reach the instance of their choice. `BLACKLIST_COUNTRY` and `WHITELIST_COUNTRY` stay empty; `morphit-ops upgrade` empties any country list it finds (also per-site `<name>_BLACKLIST_COUNTRY` lines) and checks BunkerWeb runs without one. Block attacking addresses or networks instead (item 3).
+**4. No country blocks.** No Morphit instance turns visitors away by country. Federation exists so that people whose country blocks or firewalls services (China, Iran, North Korea, …) can still reach the instance of their choice. `BLACKLIST_COUNTRY` and `WHITELIST_COUNTRY` stay empty. `morphit-ops upgrade` empties a country list in BunkerWeb's settings file (also per-site `<name>_BLACKLIST_COUNTRY` lines), removes one saved in BunkerWeb's web UI from BunkerWeb's database (keeping a copy of the database first), and checks BunkerWeb runs without one; a list set any other way (an Autoconf label, a compose `environment:` entry) is named in its output and in `sudo morphit-ops status`, with where to clear it. Block attacking addresses or networks instead (item 3).
 
 **5. No per-AS (ASN) blocks.** BunkerWeb's ASN blocks need the blacklist plugin, with its per-visitor reverse-DNS queries, and they turn away everyone on a VPN or hosting network — often the privacy-minded users Morphit is for. Morphit ships none.
 
@@ -7727,10 +7759,12 @@ sudo systemctl enable --now certbot.timer
 
 ### If you used BunkerWeb
 
-`AUTO_LETS_ENCRYPT=yes` in `variables.env` (§32) handles it. Verify:
+BunkerWeb's own Let's Encrypt client stays off (`AUTO_LETS_ENCRYPT=no`, §32): the host's certbot renews the certificate (its timer, above), and its deploy hook `/etc/letsencrypt/renewal-hooks/deploy/morphit-bunkerweb-reload.sh` (written by the Ansible `tls` role) makes the renewed files readable to BunkerWeb and reloads it. Verify:
 
 ```sh
-sudo journalctl -u bunkerweb.service | grep -i 'certificate'
+systemctl list-timers | grep certbot
+ls /etc/letsencrypt/renewal-hooks/deploy/
+sudo certbot renew --dry-run
 ```
 
 ### Quarterly verification
@@ -8325,11 +8359,10 @@ similar for `morphit-relay.service`):
 #
 #   indexer:   /var/lib/morphit            (DB-adjacent state)
 #   relay:     /var/lib/morphit-relay      (relay state, BLURT cache)
-#   logs:      /var/log/morphit/<service>  (only if you log to file
-#                                           rather than journald — most
-#                                           Morphit services log to
-#                                           journald, in which case
-#                                           the log path can be omitted)
+#   logs:      journald (every Morphit service logs there;
+#              /var/log/morphit is root:morphit 0750 since
+#              v1.21.1 and holds only root-written logs — the
+#              upgrade's background checks, AIDE, rkhunter)
 #
 # NOTE: the canonical morphit-ops / Ansible install runs from
 # /opt/morphit with DATA in Postgres (a Docker container reached
@@ -13713,7 +13746,7 @@ Publishing is **off by default** and should stay that way. An ordinary instance 
 systemctl list-timers 'morphit-snapshot-*'
 sudo systemctl start morphit-snapshot-mirror.service   # run it now
 journalctl -u morphit-snapshot-mirror.service -n 50
-cat /var/lib/morphit/snapshot-mirror.json              # which snapshot you serve
+cat /var/lib/morphit-ops/snapshot-mirror.json          # which snapshot you serve
 ```
 
 A healthy run ends with a line confirming the SHA-256 matched and that this instance now mirrors the federation snapshot. If it reports that no snapshot has been anchored yet, there is nothing to mirror and nothing to fix.

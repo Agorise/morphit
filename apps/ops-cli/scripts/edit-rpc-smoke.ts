@@ -111,35 +111,35 @@ scenario('parseRpcEndpoints: accepts single https endpoint', () => {
 
 scenario('parseRpcEndpoints: accepts multi-endpoint list', () => {
 	const r = parseRpcEndpoints(
-		'https://rpc.beblurt.com,https://rpc.blurt.world,https://blurt-rpc.saboin.com'
+		'https://rpc.beblurt.com,https://rpc.example.org,https://blurt-rpc.saboin.com'
 	);
 	if (typeof r === 'string') {
 		throw new Error(`expected list, got error: ${r}`);
 	}
 	assertEqual(
 		[...r],
-		['https://rpc.beblurt.com', 'https://rpc.blurt.world', 'https://blurt-rpc.saboin.com']
+		['https://rpc.beblurt.com', 'https://rpc.example.org', 'https://blurt-rpc.saboin.com']
 	);
 });
 
 scenario('parseRpcEndpoints: trims whitespace around entries', () => {
-	const r = parseRpcEndpoints('  https://rpc.beblurt.com  ,   https://rpc.blurt.world  ');
+	const r = parseRpcEndpoints('  https://rpc.beblurt.com  ,   https://rpc.example.org  ');
 	if (typeof r === 'string') throw new Error(`expected list: ${r}`);
-	assertEqual([...r], ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+	assertEqual([...r], ['https://rpc.beblurt.com', 'https://rpc.example.org']);
 });
 
 scenario('parseRpcEndpoints: deduplicates while preserving order', () => {
 	const r = parseRpcEndpoints(
-		'https://rpc.beblurt.com,https://rpc.blurt.world,https://rpc.beblurt.com'
+		'https://rpc.beblurt.com,https://rpc.example.org,https://rpc.beblurt.com'
 	);
 	if (typeof r === 'string') throw new Error(`expected list: ${r}`);
-	assertEqual([...r], ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+	assertEqual([...r], ['https://rpc.beblurt.com', 'https://rpc.example.org']);
 });
 
 scenario('parseRpcEndpoints: drops empty entries from trailing/double commas', () => {
-	const r = parseRpcEndpoints('https://rpc.beblurt.com,,https://rpc.blurt.world,');
+	const r = parseRpcEndpoints('https://rpc.beblurt.com,,https://rpc.example.org,');
 	if (typeof r === 'string') throw new Error(`expected list: ${r}`);
-	assertEqual([...r], ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+	assertEqual([...r], ['https://rpc.beblurt.com', 'https://rpc.example.org']);
 });
 
 // ─── loadExistingEnv ────────────────────────────────────────────
@@ -152,12 +152,12 @@ scenario('loadExistingEnv: parses RPC line from a populated env file', () => {
 		[
 			'# Header',
 			'MORPHIT_INDEXER_DATABASE_URL=postgres://x/y',
-			'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.beblurt.com,https://rpc.blurt.world',
+			'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.beblurt.com,https://rpc.example.org',
 			''
 		].join('\n')
 	);
 	const result = loadExistingEnv(envPath);
-	assertEqual(result.rpcEndpoints, ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+	assertEqual(result.rpcEndpoints, ['https://rpc.beblurt.com', 'https://rpc.example.org']);
 });
 
 scenario('loadExistingEnv: returns null rpc when key absent', () => {
@@ -193,10 +193,10 @@ scenario('loadExistingEnv: parses quoted RPC value', () => {
 	const envPath = join(tmp, 'morphit.env');
 	writeFileSync(
 		envPath,
-		'MORPHIT_INDEXER_RPC_ENDPOINTS="https://rpc.beblurt.com,https://rpc.blurt.world"\n'
+		'MORPHIT_INDEXER_RPC_ENDPOINTS="https://rpc.beblurt.com,https://rpc.example.org"\n'
 	);
 	const result = loadExistingEnv(envPath);
-	assertEqual(result.rpcEndpoints, ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+	assertEqual(result.rpcEndpoints, ['https://rpc.beblurt.com', 'https://rpc.example.org']);
 });
 
 // ─── atomicEnvWrite ─────────────────────────────────────────────
@@ -213,7 +213,7 @@ scenario('atomicEnvWrite: replaces RPC line in place, preserves other keys', () 
 	].join('\n');
 	writeFileSync(envPath, before);
 	const updates = new Map<string, string | null>([
-		['MORPHIT_INDEXER_RPC_ENDPOINTS', 'https://rpc.blurt.world,https://blurt-rpc.saboin.com']
+		['MORPHIT_INDEXER_RPC_ENDPOINTS', 'https://rpc.example.org,https://blurt-rpc.saboin.com']
 	]);
 	const result = atomicEnvWrite(envPath, before, updates);
 	if (!result.ok) {
@@ -222,7 +222,7 @@ scenario('atomicEnvWrite: replaces RPC line in place, preserves other keys', () 
 	const after = readFileSync(envPath, 'utf-8');
 	assertContains(after, 'MORPHIT_INDEXER_DATABASE_URL=postgres://x/y');
 	assertContains(after, 'MORPHIT_RELAY_ACCOUNT=morphit-relay');
-	assertContains(after, 'https://rpc.blurt.world,https://blurt-rpc.saboin.com');
+	assertContains(after, 'https://rpc.example.org,https://blurt-rpc.saboin.com');
 	// Old single-endpoint line must be gone.
 	if (after.includes('MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.beblurt.com\n')) {
 		throw new Error('old RPC line not replaced');
@@ -269,12 +269,12 @@ scenario('round-trip: written value parses successfully on indexer side', async 
 	// The indexer's Zod schema in apps/indexer/src/config/index.ts
 	// parses that string back into an array.  Verify the round
 	// trip succeeds for a typical wizard output.
-	const wizardOutput = ['https://rpc.beblurt.com', 'https://rpc.blurt.world'].join(',');
+	const wizardOutput = ['https://rpc.beblurt.com', 'https://rpc.example.org'].join(',');
 	const parseResult = parseRpcEndpoints(wizardOutput);
 	if (typeof parseResult === 'string') {
 		throw new Error(`wizard's own parser rejected its own format: ${parseResult}`);
 	}
-	assertEqual([...parseResult], ['https://rpc.beblurt.com', 'https://rpc.blurt.world']);
+	assertEqual([...parseResult], ['https://rpc.beblurt.com', 'https://rpc.example.org']);
 });
 
 // ─── The relay's twin line (v1.18.0) ─────────────────────────

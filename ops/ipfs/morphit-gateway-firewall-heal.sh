@@ -91,13 +91,33 @@ CIDR="$(docker network inspect "$NET" --format '{{range .IPAM.Config}}{{.Subnet}
 # range, and fall back to the pinned default otherwise. Refusing to widen is the
 # safe direction — a too-narrow rule leaves the gateway unreachable and gets
 # reported, while a too-wide one silently exposes it.
-case "${CIDR:-}" in
-	10.*/*|192.168.*/*|172.1[6-9].*/*|172.2[0-9].*/*|172.3[0-1].*/*) : ;;
-	*)
-		[ -n "${CIDR:-}" ] && log "  ignoring non-private subnet '${CIDR}' from docker; using ${FALLBACK_CIDR}"
-		CIDR=""
-		;;
-esac
+# The whole subnet must lie INSIDE 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16:
+# a prefix-only match would take "10.0.0.0/1" (half the internet).
+private_cidr_ok() {
+	_c="$1"
+	_ip="${_c%/*}"
+	_len="${_c##*/}"
+	[ "$_ip" != "$_c" ] || return 1
+	case "$_len" in '' | *[!0-9]*) return 1 ;; esac
+	[ "$_len" -le 32 ] || return 1
+	_rest="$_ip"
+	_a="${_rest%%.*}"; _rest="${_rest#*.}"
+	_b="${_rest%%.*}"; _rest="${_rest#*.}"
+	_x="${_rest%%.*}"; _d="${_rest#*.}"
+	for _o in "$_a" "$_b" "$_x" "$_d"; do
+		case "$_o" in '' | *[!0-9]*) return 1 ;; esac
+		[ "$_o" -le 255 ] || return 1
+	done
+	[ "$_ip" = "$_a.$_b.$_x.$_d" ] || return 1
+	if [ "$_a" -eq 10 ]; then [ "$_len" -ge 8 ]; return; fi
+	if [ "$_a" -eq 172 ] && [ "$_b" -ge 16 ] && [ "$_b" -le 31 ]; then [ "$_len" -ge 12 ]; return; fi
+	if [ "$_a" -eq 192 ] && [ "$_b" -eq 168 ]; then [ "$_len" -ge 16 ]; return; fi
+	return 1
+}
+if [ -n "${CIDR:-}" ] && ! private_cidr_ok "${CIDR}"; then
+	log "  ignoring subnet '${CIDR}' from docker (not inside a private range); using ${FALLBACK_CIDR}"
+	CIDR=""
+fi
 [ -n "${CIDR:-}" ] || CIDR="$FALLBACK_CIDR"
 
 # ── 1. OBSERVE from inside the container (ground truth) ──────────────

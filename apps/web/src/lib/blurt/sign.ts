@@ -39,6 +39,7 @@ import {
 	submitSignedTransaction,
 	submitSignedChatTransaction,
 	fetchDynamicGlobalProperties,
+	BroadcastError,
 	type ChatBroadcastResult
 } from './broadcastTransport';
 import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
@@ -46,6 +47,7 @@ import { OP_IDS, SIGNER_BACKEND, type MorphitOpId } from '$net/config';
 // alias points at apps/indexer/src/blurt/*, so the same specifier means a
 // different directory under the smoke runner than under web's Vite config.
 import { assertKeyControlsAccount, resolveBroadcastAccount } from './accountBinding';
+import { opTextRefused } from './opTextGate';
 import type { LiveIdentity } from '$crypto/keygen';
 
 /** Convert a Uint8Array (raw 32-byte secp256k1 scalar) into a dblurt
@@ -340,6 +342,15 @@ export async function prepareUnsignedOrderWithFee(
 	feeTransfers: ReadonlyArray<{ to: string; amount: string }>,
 	feeMemo: string
 ): Promise<Transaction> {
+	// Text every indexer refuses (opTextGate.ts): refused HERE, before anything
+	// is signed or paid, instead of being dropped by every indexer after the
+	// chain took the op (and, for an order, its listing fee).
+	if (opTextRefused(orderPayload)) {
+		throw new BroadcastError(
+			'invalid_text',
+			'The text holds an invisible character Morphit cannot store; nothing was sent.'
+		);
+	}
 	if (!blurtAccount) {
 		throw new Error('prepareUnsignedOrderWithFee: no Blurt account registered.');
 	}
@@ -475,6 +486,15 @@ async function signCustomJsonTx(
 	payload: unknown,
 	blurtAccount: string
 ): Promise<SignedTransaction> {
+	// Text every indexer refuses (opTextGate.ts): refused HERE, before anything
+	// is signed or paid, instead of being dropped by every indexer after the
+	// chain took the op (and, for an order, its listing fee).
+	if (opTextRefused(payload)) {
+		throw new BroadcastError(
+			'invalid_text',
+			'The text holds an invisible character Morphit cannot store; nothing was sent.'
+		);
+	}
 	if (!blurtAccount) {
 		throw new Error(
 			'Cannot broadcast: no Blurt account registered yet. ' +

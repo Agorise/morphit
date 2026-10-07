@@ -49,7 +49,7 @@
 	import FiatCurrencySelect from '$components/FiatCurrencySelect.svelte';
 	import PaymentFilterSelect from '$components/PaymentFilterSelect.svelte';
 	import LanguageFilterSelect from '$components/LanguageFilterSelect.svelte';
-	import { resolveOrderbookLangFilter } from '$lib/stores/preferredLangs';
+	import { resolveOrderbookLangFilter, writeOrderbookLangFilter } from '$lib/stores/preferredLangs';
 
 	import { getOrderbook, getHealth } from '$lib/indexer/client';
 	import { displayNamesForMethods } from '$lib/payments/display';
@@ -967,6 +967,14 @@
 		void langFilter.length;
 		void langFilter.join('\u0001');
 		scheduleRefetch();
+	});
+
+	// The language filter as the user leaves it here is the next visit's
+	// (empty too): re-seeding it from Settings on every visit hid every older,
+	// untagged order each time (v1.21.1 strict filter).
+	$effect(() => {
+		void langFilter.join('\u0001');
+		if (langFilterSeeded) writeOrderbookLangFilter(langFilter);
 	});
 
 	// ─── SSE stream handle (Phase E) ─────────────────────────────────

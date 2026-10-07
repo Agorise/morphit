@@ -51,6 +51,7 @@ import { signingPostingKey } from '$indexer/postingKeyBackfill';
 import { confirmFeeRelevantTransactions } from '$indexer/fee/btcFeeBlockConfirm';
 import { hasXmlNoncharacter, jsonNestingExceeds, pgSafeBlock, pgSafeDeep } from '$db/pgText';
 import { consensusV2Active } from '$indexer/consensusActivation';
+import { blockTimeOf } from '$indexer/blockTime';
 
 import profileHandler from '$indexer/handlers/profile';
 import orderHandler from '$indexer/handlers/order';
@@ -729,7 +730,7 @@ export async function applyBlock(
 	orderbookChanges: readonly string[];
 	chatChanges: readonly { lo: string; hi: string; messageId: number }[];
 }> {
-	const blockTime = new Date(block.timestamp + (block.timestamp.endsWith('Z') ? '' : 'Z'));
+	const blockTime = blockTimeOf(block.timestamp);
 
 	// v1.20.0 (MK-H2 / V3-6) — a block holding an op that moves the per-order
 	// BTC fee-address numbering, a release op (it can move the pin) or an

@@ -56,3 +56,29 @@ describe.skipIf(!root)('/etc/morphit goes back to root:morphit 0750', () => {
 		rmSync(d, { recursive: true, force: true });
 	});
 });
+
+describe('/var/log/morphit (review G1): root writes its logs there', () => {
+	it('the upgrade heal also makes /var/log/morphit root:morphit 0750, so the morphit account cannot plant links in it', async () => {
+		const { heal } = await import('../src/lib/etcPermHeal.ts');
+		const state: Record<string, { uid: number; gid: number; mode: number; isDir: boolean }> = {
+			'/etc/morphit': { uid: 0, gid: 990, mode: 0o40750, isDir: true },
+			// As the base role made it before v1.21.1: owned by the morphit account.
+			'/var/log/morphit': { uid: 990, gid: 990, mode: 0o40750, isDir: true }
+		};
+		const set: string[] = [];
+		const runtime = {
+			stat: (p: string) => state[p] ?? null,
+			gid: () => 990,
+			set: (p: string, uid: number, gid: number, mode: number) => {
+				set.push(p);
+				state[p] = { uid, gid, mode: 0o40000 | mode, isDir: true };
+				return true;
+			}
+		};
+		const r = await heal({ info: () => {}, warn: () => {}, spinner: () => () => {} }, { runtime });
+		expect(set).toEqual(['/var/log/morphit']);
+		expect(state['/var/log/morphit']!.uid).toBe(0);
+		expect(r.verified).toBe(true);
+		expect(r.detail).toMatch(/\/var\/log\/morphit/);
+	});
+});

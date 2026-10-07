@@ -48,6 +48,7 @@
 	} from '$blurt/ops/feedback';
 	import { noteFeedbackGiven } from '$lib/feedback/optimisticFeedbackGiven';
 	import { broadcastOrderComplete } from '$blurt/ops/order';
+	import { sendReviewAndCompletion } from '$lib/feedback/reviewAndComplete';
 	import { announceSettledElsewhere } from '$lib/chat/settledElsewhere';
 	import { runtimeSettledElsewhereDeps } from '$lib/chat/settledElsewhereRuntime';
 	import { getUserBlurtAccount } from '$blurt/ops/profile';
@@ -176,6 +177,9 @@
 	let hoverRating = $state(0);
 	let comment = $state('');
 	let submitting = $state(false);
+	/** The completion of this order already reached the chain from this form
+	 *  (its review then failed): a retry sends only the review. */
+	let completionSent = false;
 	let errorMessage = $state('');
 
 	// ─── Private-key protection ────────────────────────────────────
@@ -391,47 +395,47 @@
 		// warning or the warning somehow didn't fire, nothing
 		// sensitive leaves the client.
 		const outgoingComment = comment.length > 0 ? redactPrivateKeys(comment) : '';
+		// Narrowed above (submit returns early when it is null); kept for the
+		// closure below, where TypeScript cannot see the narrowing.
+		const chosenRating: number = rating;
 
 		try {
-			const result = await broadcastFeedback(state.live, {
-				subject,
-				rating,
-				comment: outgoingComment.length > 0 ? outgoingComment : undefined,
-				order_permlink: orderPermlink
-			});
-			// v1.5.5 — the review landed; now honour the button. When the
-			// reviewer OWNS this order ("Mark complete / review" on my/orders,
-			// "Mark this trade complete" in chat), also flip it live→completed
-			// and NAME the reviewed subject as the counterparty so both sides
-			// are credited a trade. Until now neither surface broadcast this,
-			// so a settled trade stayed Live, stayed in the orderbook, kept its
-			// Cancel button and counted 0 under the Paid pill.
-			//
-			// Deliberately AFTER the review and best-effort: the review is the
-			// thing the user typed and it is already irreversible on-chain. If
-			// the completion op fails (locked key, RPC hiccup), we must not
-			// report the whole submit as failed and invite a duplicate review —
-			// the indexer rejects the second one anyway. The manual complete
-			// action stays as the fallback.
-			if (completeOwnedOrder) {
-				try {
-					await broadcastOrderComplete(state.live, orderPermlink, subject);
-					// the trade is settled WITH `subject`; tell every
-					// OTHER inquirer on this order so they aren't left hanging.
-					// Fire-and-forget + best-effort: the completion above is already
-					// on-chain, and the auto-reply must never block or fail the
-					// submit. Gated to owner-completes (completeOwnedOrder), and the
-					// announcer excludes `subject` (the trader we chose) itself.
-					if (reviewerAccount) {
-						void announceSettledElsewhere(
-							runtimeSettledElsewhereDeps(reviewerAccount, () => state.live),
-							{ orderPermlink, counterparty: subject, me: reviewerAccount, live: state.live }
-						);
-					}
-				} catch (err) {
-					console.warn('[feedback] order-complete broadcast failed:', orderPermlink, err);
-				}
-			}
+			// The completion goes FIRST: from the consensus activation time
+			// (2026-11-01) a review citing this order is accepted only when the
+			// pair traded on it, and the completion naming `subject` is that
+			// proof when they chatted in another thread. See reviewAndComplete.ts.
+			// A completion already sent by an earlier attempt of this form (its
+			// review failed) is not sent again.
+			const { review: result, completed } = await sendReviewAndCompletion(
+				{
+					sendCompletion: () => broadcastOrderComplete(state.live, orderPermlink, subject),
+					onCompleted: () => {
+						// the trade is settled WITH `subject`; tell every
+						// OTHER inquirer on this order so they aren't left hanging.
+						// Fire-and-forget + best-effort: the completion is already
+						// on-chain, and the auto-reply must never block or fail the
+						// submit. Gated to owner-completes (completeOwnedOrder), and the
+						// announcer excludes `subject` (the trader we chose) itself.
+						if (reviewerAccount) {
+							void announceSettledElsewhere(
+								runtimeSettledElsewhereDeps(reviewerAccount, () => state.live),
+								{ orderPermlink, counterparty: subject, me: reviewerAccount, live: state.live }
+							);
+						}
+					},
+					onCompletionFailed: (err) =>
+						console.warn('[feedback] order-complete broadcast failed:', orderPermlink, err),
+					sendReview: () =>
+						broadcastFeedback(state.live, {
+							subject,
+							rating: chosenRating,
+							comment: outgoingComment.length > 0 ? outgoingComment : undefined,
+							order_permlink: orderPermlink
+						})
+				},
+				completeOwnedOrder && !completionSent
+			);
+			if (completed) completionSent = true;
 			// Successful broadcast. Fire Post A if this is the first
 			// feedback ever for this account on this device AND the
 			// user hasn't disabled auto-announce in Settings.

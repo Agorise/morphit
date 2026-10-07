@@ -903,7 +903,8 @@
 			"tx_expired": "El reloj de tu dispositivo está mal, así que la transacción firmada expiró antes de llegar a la cadena (solo son válidas unos segundos). Activa la fecha y hora automáticas para sincronizar el reloj y vuelve a intentarlo. (Cadena: {reason})",
 			"duplicate": "Parece que esto ya se procesó. Recarga la página para comprobarlo antes de volver a intentarlo. (Cadena: {reason})",
 			"waf_too_large": "El firewall web de tu instancia rechazó esta subida por ser demasiado grande (413). Pide al operador que aumente el límite de tamaño de la petición — una actualización de Morphit lo corrige automáticamente.",
-			"waf_blocked": "El firewall web de tu instancia bloqueó esta petición (403). Pide al operador que exima la API /v1/ — una actualización de Morphit lo corrige automáticamente."
+			"waf_blocked": "El firewall web de tu instancia bloqueó esta petición (403). Pide al operador que exima la API /v1/ — una actualización de Morphit lo corrige automáticamente.",
+			"invalid_text": "Este texto contiene un carácter invisible que Morphit no puede guardar (suele venir con un texto pegado). Vuelve a escribir la parte que pegaste e inténtalo de nuevo; no se envió ni se pagó nada."
 		},
 		"copy_unavailable": "Selecciona el texto para copiarlo",
 		"amount_input": {

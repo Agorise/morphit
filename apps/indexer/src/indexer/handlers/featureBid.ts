@@ -95,14 +95,21 @@ const MAX_HOURS = 168; // one week
  *  lives here.  If you change one, change both. */
 const MAX_SLOTS_VISIBLE = 3;
 
-/** SQL: the bid `b`'s order can be shown at `atParam` — live, fee verified,
- *  not expired. The featured strip ranks by the same rule (api). */
+/** SQL: the bid `b`'s order is live and unexpired at `atParam`.
+ *
+ *  Chain data ONLY: `status` is written by op handlers alone and the expiry is
+ *  compared with the block's own time. The order's `fee_status` is NOT read
+ *  here although the featured strip (api) also filters on it: node-local jobs
+ *  write it on their own clock (the external-fee re-check, the BLURT fee
+ *  re-verify), so two nodes can hold different values for the same order at
+ *  the same block, and a slot verdict that read it would differ between them
+ *  for good (featured_slot_bids is chain-derived state). The strip is a view;
+ *  this is consensus. */
 function liveBidPredicate(atParam: string): string {
 	return `AND EXISTS (
 	   SELECT 1 FROM orders o
 	    WHERE o.account = b.bidder AND o.permlink = b.order_permlink
 	      AND o.status = 'live'
-	      AND o.fee_status IN ('verified', 'verified_by_attestation')
 	      AND (o.expires_at IS NULL OR o.expires_at > ${atParam}))`;
 }
 
@@ -254,8 +261,7 @@ const handle: Handler = async (ctx: OpContext, client: pg.PoolClient): Promise<H
 	// Set when the bid is queued behind the bid it would displace (below).
 	let queuedUntil: Date | null = null;
 	// From CONSENSUS_V2_ACTIVATION_TIME a bid holds a slot only while its
-	// order can be shown (live, fee verified, unexpired) — the rule the
-	// featured strip ranks by. A bid on a dead order used to keep "its"
+	// order is live and unexpired (chain data only — see liveBidPredicate). A bid on a dead order used to keep "its"
 	// slot: it blanked a paid slot on the strip and still counted here.
 	const liveOnly = liveBidPredicateIf(ctx.blockTime, '$1');
 	const visibleTop = await client.query<{ blurt_per_hour: string; expires_at: Date }>(

@@ -903,7 +903,8 @@
 			"tx_expired": "Zegar Twojego urządzenia jest przestawiony, więc podpisana transakcja wygasła, zanim dotarła do łańcucha (są ważne tylko kilka sekund). Włącz automatyczną datę i godzinę, aby zsynchronizować zegar, i spróbuj ponownie. (Łańcuch: {reason})",
 			"duplicate": "Wygląda na to, że to już przeszło. Odśwież stronę, aby sprawdzić, zanim spróbujesz ponownie. (Łańcuch: {reason})",
 			"waf_too_large": "Zapora sieciowa twojej instancji odrzuciła to przesłanie jako zbyt duże (413). Poproś operatora o zwiększenie limitu rozmiaru żądania — aktualizacja Morphit naprawia to automatycznie.",
-			"waf_blocked": "Zapora sieciowa twojej instancji zablokowała to żądanie (403). Poproś operatora o wyłączenie API /v1/ — aktualizacja Morphit naprawia to automatycznie."
+			"waf_blocked": "Zapora sieciowa twojej instancji zablokowała to żądanie (403). Poproś operatora o wyłączenie API /v1/ — aktualizacja Morphit naprawia to automatycznie.",
+			"invalid_text": "Ten tekst zawiera niewidoczny znak, którego Morphit nie może zapisać (zwykle przychodzi z wklejonym tekstem). Wpisz ponownie wklejoną część i spróbuj jeszcze raz — nic nie zostało wysłane ani zapłacone."
 		},
 		"copy_unavailable": "Zaznacz tekst, aby go skopiować",
 		"amount_input": {

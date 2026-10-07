@@ -1,5 +1,6 @@
 /**
- * Installed-box heal: /etc/morphit is root:morphit 0750 again.
+ * Installed-box heal: /etc/morphit (and, since v1.21.1, /var/log/morphit) is
+ * root:morphit 0750 again.
  *
  * WHY. The base and hardening roles make it root:morphit 0750 (the services'
  * group reads the env files and the keystore inside; nobody else may even list
@@ -75,9 +76,37 @@ export async function healEtcMorphitPerms(
 			};
 }
 
-/** The real entry `morphit-ops upgrade` calls (lib/healTypes.ts). */
-export function heal(ctx: HealCtx): Promise<HealResult> {
-	return healEtcMorphitPerms(ctx);
+/** Directories this heal keeps root:morphit 0750. /var/log/morphit (v1.21.1,
+ *  review G1): the base role made it the morphit account's, yet only root
+ *  writes there (the background-check and web-heal logs, the AIDE and
+ *  rkhunter results — the services log to the journal); an account that owns
+ *  the directory can put a link where root then writes. */
+export const ROOT_MORPHIT_DIRS = ['/etc/morphit', '/var/log/morphit'] as const;
+
+/** The real entry `morphit-ops upgrade` calls (lib/healTypes.ts): every
+ *  directory in ROOT_MORPHIT_DIRS, one combined result. */
+export async function heal(
+	ctx: HealCtx,
+	opts: { runtime?: EtcPermRuntime } = {}
+): Promise<HealResult> {
+	const results: HealResult[] = [];
+	for (const path of ROOT_MORPHIT_DIRS) {
+		results.push(await healEtcMorphitPerms(ctx, { path, runtime: opts.runtime }));
+	}
+	const shown = results.filter((r) => r.routine !== true);
+	if (shown.length === 0) {
+		return {
+			strategy: 'already',
+			verified: true,
+			routine: true,
+			detail: results.map((r) => r.detail).join(' ')
+		};
+	}
+	return {
+		strategy: shown.map((r) => r.strategy).join('+'),
+		verified: shown.every((r) => r.verified),
+		detail: shown.map((r) => r.detail).join(' ')
+	};
 }
 
 const realRuntime: EtcPermRuntime = {

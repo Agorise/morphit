@@ -11,19 +11,57 @@
  * goes to a log file the operator is pointed at.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { lutimesSync, mkdirSync, readFileSync } from 'node:fs';
+import { freshFileNoFollow, writeNoFollow } from './noFollowFs.ts';
 import { dirname } from 'node:path';
+import { BASE_FETCH_TIMEOUT_MS } from './frontendBaseFetch.ts';
+import { EGRESS_HEAL_MAX_MS } from './torOnlyEgressHeal.ts';
 
 export const AFTER_RESTART_SUBCOMMAND = '__post-upgrade-after-restart';
 export const AFTER_RESTART_UNIT = 'morphit-after-upgrade-heal';
 /** Longest wait for the restarts, then the heals run anyway. */
 export const AFTER_RESTART_WAIT_MS = 15 * 60_000;
-// Restarts (15 min at most), the web-proxy heal the egress heal waits for
-// (10 min at most), the egress heal itself (about 4 min at worst), the
-// frontend base image fetch through Tor (15 min at most; the rebuild onto it
-// runs as its own unit, morphit-web-heal, after the web heal is idle — 10 min
-// at most), the rest.
-const UNIT_MAX_S = 65 * 60;
+/** Longest wait for the background web heal to be idle (waitForUnitIdle). */
+export const WEB_HEAL_IDLE_MAX_MS = 10 * 60_000;
+/** The heals before the egress heal (hidden RPC list … fee address check):
+ *  each a few local calls. The fetch, last, takes only what is left. */
+export const EARLY_HEALS_MAX_MS = 10 * 60_000;
+/** Kept for the end of the unit (the rebuild's start, the summary, "Done."). */
+export const UNIT_END_RESERVE_MS = 2 * 60_000;
+/** The unit's time limit (systemd RuntimeMaxSec), from the steps' own limits
+ *  in the order the unit runs them: the restarts, the early heals, the egress
+ *  heal (after the web heal is idle), the frontend base fetch through Tor and
+ *  the wait for the web heal before the rebuild onto it. The fetch fits its
+ *  pull into what is left (fetchFrontendBaseNow), so the unit is never killed
+ *  in the middle of it. */
+export const UNIT_MAX_S = Math.ceil(
+	(AFTER_RESTART_WAIT_MS +
+		EARLY_HEALS_MAX_MS +
+		WEB_HEAL_IDLE_MAX_MS +
+		EGRESS_HEAL_MAX_MS +
+		BASE_FETCH_TIMEOUT_MS +
+		WEB_HEAL_IDLE_MAX_MS +
+		UNIT_END_RESERVE_MS) /
+		1000
+);
+
+/** How long the frontend base fetch may pull when the unit stops at
+ *  `deadline`: at most BASE_FETCH_TIMEOUT_MS, leaving the wait for the web
+ *  heal and the end of the unit. */
+export function baseFetchBudgetMs(deadline: number, now: number = Date.now()): number {
+	return Math.min(
+		BASE_FETCH_TIMEOUT_MS,
+		deadline - now - WEB_HEAL_IDLE_MAX_MS - UNIT_END_RESERVE_MS
+	);
+}
+
+/** When the after-restart unit running this process is stopped (ms). */
+export function afterRestartDeadline(
+	now: number = Date.now(),
+	uptimeS: number = process.uptime()
+): number {
+	return now - uptimeS * 1000 + UNIT_MAX_S * 1000;
+}
 
 export function afterRestartLogPath(): string {
 	return process.env.MORPHIT_AFTER_RESTART_LOG ?? '/var/log/morphit/after-upgrade-heal.log';
@@ -102,7 +140,7 @@ export async function waitForUnitIdle(
 	const active = deps.isActive ?? isActive;
 	const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
 	const now = deps.now ?? Date.now;
-	const stopAt = now() + (deps.maxMs ?? 10 * 60_000);
+	const stopAt = now() + (deps.maxMs ?? WEB_HEAL_IDLE_MAX_MS);
 	for (;;) {
 		if (!active(unit)) return 'idle';
 		if (now() >= stopAt) return 'timed-out';
@@ -133,7 +171,9 @@ export function launchAfterRestartHeals(
 		const log = afterRestartLogPath();
 		try {
 			mkdirSync(dirname(log), { recursive: true });
-			writeFileSync(log, '', { mode: 0o640 });
+			// A NEW root-owned file in place of whatever is there (a link the
+			// morphit account planted …): systemd opens it by name to append.
+			freshFileNoFollow(log, '', 0o640);
 		} catch {
 			/* the unit still runs; only its log is lost */
 		}
@@ -159,8 +199,8 @@ export function launchAfterRestartHeals(
 		// Not started: the log must not look like this upgrade's run of the
 		// checks (the upgrade's last lines would say "still running").
 		try {
-			writeFileSync(log, 'The background checks could not be started.\n', { mode: 0o640 });
-			utimesSync(log, 0, 0);
+			writeNoFollow(log, 'The background checks could not be started.\n', 0o640);
+			lutimesSync(log, 0, 0);
 		} catch {
 			/* nothing to correct */
 		}

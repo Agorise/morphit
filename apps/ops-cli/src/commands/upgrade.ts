@@ -101,6 +101,7 @@
  *   5 — preflight check failed (network, permissions, ...)
  */
 
+import { readNoFollow, writeNoFollow } from '../lib/noFollowFs.ts';
 import {
 	tryResolveHiddenUpgrade,
 	readHiddenReleaseTarget,
@@ -179,7 +180,9 @@ import {
 } from '../lib/feeAddressEmptyHeal.ts';
 import {
 	AFTER_RESTART_UNIT,
+	afterRestartDeadline,
 	afterRestartLogPath,
+	baseFetchBudgetMs,
 	launchAfterRestartHeals,
 	waitForRestarts,
 	waitForUnitIdle
@@ -218,12 +221,18 @@ import {
 	restoreRuleCopies,
 	type RemovedCopies
 } from '../lib/bunkerwebRuleDedupe.ts';
-import { healFeeRecipientRegistration } from '../lib/feeRecipientHeal.ts';
+import {
+	healFeeRecipientRegistration,
+	type FeeRecipientHealOutcome
+} from '../lib/feeRecipientHeal.ts';
 import { healRelayStateDir, startIfEnabledButStopped } from '../lib/relayStateHeal.ts';
 import {
 	describeWebHeal,
 	followWebHeal,
 	launchWebHeal,
+	readWebHealState,
+	webHealLogPath,
+	webHealStatusRow,
 	WEB_HEAL_UNIT,
 	writeWebHealState,
 	type WebHealState
@@ -272,7 +281,7 @@ import {
 	info,
 	warn,
 	warningCount,
-	glyph,
+	plainText,
 	sanitizeForTerm
 } from '../render/term.ts';
 import { refreshManagedUnits } from '../lib/refreshUnits.ts';
@@ -530,6 +539,24 @@ export function applyOnionHeal(envText: string, onion: string): { text: string; 
 	return { text: `${envText.replace(/\s*$/, '')}\n${line}\n`, changed: true };
 }
 
+/** Step 10's onion heal, for the upgrade: when it put this node's onion into
+ *  the config, the operator re-publishes the registration — named in the last
+ *  lines, with the command that does it (`register`, the main menu's
+ *  "Re-publish my registration on-chain"). Never throws. */
+export function captureTorOnion(configPath: string, onionPath?: string): void {
+	try {
+		const heal = healTorOnionInConfig(configPath, onionPath);
+		if (heal.healed) {
+			info(`Captured this node's Tor onion into the config so it's advertised: ${heal.onion}`);
+			leftForYou.push(
+				"Tell the federation about this node's Tor address (it was just added to the config): on this server, sudo morphit-ops register (in the menu: Re-publish my registration on-chain)"
+			);
+		}
+	} catch {
+		/* non-fatal — the node still works over clearnet */
+	}
+}
+
 export function healTorOnionInConfig(
 	configPath: string,
 	onionPath = '/var/lib/tor/morphit/hostname'
@@ -606,6 +633,8 @@ export function probeLiveCanary(origin: string): boolean {
 				'--max-time',
 				'15',
 				'-k',
+				'--noproxy',
+				'*',
 				'--resolve',
 				`${host}:443:127.0.0.1`,
 				`https://${host}/canary.txt`
@@ -1021,6 +1050,66 @@ async function probeMcpHealth(
 		if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
 	}
 	return { reachable: false, detail: lastDetail };
+}
+
+/** The IPFS seed script's exit code (step 12), for the operator:
+ *  0 seeded and checked; 3 seeded, but a check it printed with a "⚠" needs the
+ *  operator (peers cannot fetch from this box, or it advertises a wrong
+ *  address) — a warning, never a ✓ after those lines; anything else did not
+ *  finish. Exported for its test. */
+export function reportSeedResult(tag: string, code: number): void {
+	if (code === 0) {
+		info(`✓ Seeded ${tag} to IPFS.`);
+		return;
+	}
+	if (code === 3) {
+		warn(
+			`Seeded ${tag} to IPFS, but its checks above (the lines marked ⚠) found something to fix on this server: ` +
+				'until it is fixed, peers cannot fetch the release from this box (or reach it at the address it advertises). ' +
+				'Each of those lines says what to do; to check again afterwards: sudo morphit-ops harden → "Seed this release to IPFS"'
+		);
+		return;
+	}
+	// Say what is actually unfinished. "Did not complete" left an operator
+	// unsure whether peers could fetch from this box at all: the CID had
+	// been announced, but the Tor/I2P verification had not run. Name that,
+	// and give a command that WORKS — the raw script needs a tag argument,
+	// so pointing at it bare produces a usage error.
+	warn(
+		'IPFS self-seed did not finish its checks (non-fatal). The release itself is ' +
+			'unaffected — git mirrors + the on-chain SHA-256 are the anchors — but this ' +
+			'box has NOT confirmed it serves the release over Tor/I2P, so hidden-only ' +
+			'peers may not be able to upgrade from it yet. Re-run the checks with: ' +
+			'sudo morphit-ops harden → "Seed this release to IPFS"'
+	);
+}
+
+/** Step 10b-reach: after its restart, does the MCP answer its health check?
+ *  Up to ~20 s of retries while it binds its listener, under a spinner (never
+ *  a silent pause). ✓ when it answers, else a warning with where to look.
+ *  Exported for its test. */
+export async function checkMcpAnswers(
+	mcpHost: string,
+	mcpPort: number,
+	probeOpts: { attempts?: number; delayMs?: number; timeoutMs?: number } = {}
+): Promise<void> {
+	const healthUrl = buildMcpHealthUrl(mcpHost, mcpPort);
+	const probe = await withSpinner('Checking the MCP server answers on its new version…', () =>
+		probeMcpHealth(healthUrl, probeOpts)
+	);
+	if (probe.reachable) {
+		info('✓ MCP server redeployed for this release, restarted, and answering its health check.');
+	} else {
+		warn(
+			`MCP did not answer at ${mcpHost}:${mcpPort} (${probe.detail}). The new code ` +
+				`is deployed and the service was restarted, so this is likely a transient ` +
+				`startup delay or a bind mismatch — morphit.io itself is unaffected. Check ` +
+				`\`journalctl -u morphit-mcp\`, confirm MORPHIT_MCP_HTTP_HOST/PORT in ` +
+				`${mcpEnvFile()} points where you expect it to listen (e.g. 172.18.0.1 on a ` +
+				`Docker-bridge / BunkerWeb host, 127.0.0.1 otherwise) and that a host ` +
+				`process can reach that address.`
+		);
+	}
 }
 
 /** Path to the operator's backup config. Root-owned; the upgrade (privileged)
@@ -1458,6 +1547,26 @@ export function readNotesFromTarball(
 	}
 }
 
+/** Print the release notes' summary before the upgrade question, and where
+ *  the rest is. Exported for its test. */
+export function showReleaseNotes(notesBody: string, fullNotes: () => string | null): void {
+	const summary = releaseNotesSummary(notesBody);
+	info('Release notes (summary):');
+	for (const line of summary.lines) {
+		// defense-in-depth.  latest.body is the release
+		// body fetched from Forgejo — upstream-trusted content but
+		// not source-controlled review-gated (a compromised release-
+		// publishing account could plant terminal escapes here).
+		// Plain text: no control sequence, and no colour or style either
+		// (conceal, SGR 8, would hide the lines after it).
+		console.log(`  ${plainText(line)}`);
+	}
+	if (summary.more) {
+		const where = fullNotes();
+		if (where !== null) console.log(`  … the full notes: ${plainText(where)}`);
+	}
+}
+
 /** PURE. Where the operator reads the full notes: the release's web page, or —
  *  when the release came as a tarball (no web page) — the command that prints
  *  the notes from it. Null when there is neither. */
@@ -1474,9 +1583,6 @@ export function fullNotesPointer(
 	return null;
 }
 
-/** Run a command whose output only matters when it fails (Docker's build
- *  progress, for one): on success nothing is shown; on failure its last 30
- *  lines are. True when it exited 0. */
 /** PURE. What a quiet step that worked still shows: its build warnings
  *  (esbuild's "▲ [WARNING]" blocks), nothing else. */
 export function stepWarnings(output: string): string {
@@ -1495,36 +1601,197 @@ export function stepWarnings(output: string): string {
 	return out.join('\n');
 }
 
-export function runShowingOutputOnFailure(
+/** Where a step that failed keeps its full output: root's log directory
+ *  (root:morphit 0750), one root-only file per failure. MORPHIT_STEP_LOG_DIR
+ *  moves it (tests). */
+function stepLogDir(): string {
+	return process.env.MORPHIT_STEP_LOG_DIR ?? '/var/log/morphit';
+}
+
+/** How a step's process ended. */
+export interface StepEnd {
+	readonly code: number | null;
+	readonly signal: string | null;
+	/** Its time limit, when it was stopped for running past it. */
+	readonly timedOutAfterMs: number | null;
+	/** Why it could not be started at all. */
+	readonly error: string | null;
+}
+
+/** PURE. A step that did not end well, in plain words: a time limit or a
+ *  signal is named as such (not "exited 1", not "ETIMEDOUT"). */
+export function describeStepEnd(name: string, end: StepEnd): string {
+	if (end.error !== null) return `${name} could not be started (${end.error})`;
+	if (end.timedOutAfterMs !== null) {
+		const s = Math.round(end.timedOutAfterMs / 1000);
+		return `${name} was stopped: it was still running after ${s >= 120 && s % 60 === 0 ? `${s / 60} minutes` : `${s} s`}, its time limit`;
+	}
+	if (end.signal !== null) return `${name} was stopped by a signal (${end.signal})`;
+	return `${name} failed (exit code ${end.code ?? 'unknown'})`;
+}
+
+/** Copy a failed step's output to the step log directory (a NEW root-only
+ *  file, never through a link). The kept path, or null when it could not. */
+function keepStepLog(from: string, name: string): string | null {
+	try {
+		const dir = stepLogDir();
+		mkdirSync(dir, { recursive: true, mode: 0o750 });
+		const slug =
+			name
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/^-|-$/g, '') || 'step';
+		const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+		const to = join(dir, `upgrade-${slug}-${stamp}.log`);
+		// COPYFILE_EXCL: a new file (a link or file already there is refused).
+		copyFileSync(from, to, fsConstants.COPYFILE_EXCL);
+		chmodSync(to, 0o600);
+		return to;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Run a child process while the braille spinner turns, then show its output.
+ *
+ * WHY NOT spawnSync: spawnSync BLOCKS the event loop, so no setInterval can
+ * fire and a spinner wrapped around it never draws — the screen sits still for
+ * as long as the step runs. The async spawn keeps the loop turning.
+ *
+ * Output goes to a file, not the terminal (a spinner and a child writing to
+ * the same TTY corrupt each other's lines) and not a memory buffer (a long
+ * build's output can be large). It is shown once the step finishes: all of it,
+ * or with `quietOnSuccess` only its build warnings (`warningsOnSuccess`,
+ * stepWarnings) when it worked and its last 40 lines when it did not. A step
+ * that failed keeps its FULL output in /var/log/morphit and says where, and
+ * says plainly when it was stopped at its time limit or by a signal.
+ *
+ * Standing rule: NO STEP RUNS SILENT. Every pause long enough to look like a
+ * hang gets a spinner, so an admin always knows work is happening.
+ */
+export async function runStepWithSpinner(
+	label: string,
 	cmd: string,
 	args: readonly string[],
-	timeoutMs: number
-): boolean {
-	// Output goes to a file, not a memory buffer: a long build's output can be
-	// large, and a full buffer would kill a build that was working.
+	opts: {
+		cwd?: string;
+		timeoutMs?: number;
+		env?: NodeJS.ProcessEnv;
+		/** Show the command's output only when it fails (its last 40 lines);
+		 *  on success only its warnings (stepWarnings). */
+		quietOnSuccess?: boolean;
+		/** With quietOnSuccess: also show its build warnings when it worked
+		 *  (default true). */
+		warningsOnSuccess?: boolean;
+		/** What the step is called in the line that says how it failed
+		 *  (default: the command and its first argument). */
+		name?: string;
+		/** Exit codes that are a result the caller reports, not a failure of
+		 *  the step (shown like success, returned as they are). */
+		alsoFine?: readonly number[];
+	} = {}
+): Promise<number> {
+	const name =
+		opts.name ??
+		`${basename(cmd)}${args[0] !== undefined && !args[0].startsWith('-') ? ` ${args[0]}` : ''}`;
 	let dir: string | null = null;
 	let fd: number | null = null;
+	let keepTemp = false;
+	const stop = startDotsSpinner(label);
 	try {
 		dir = mkdtempSync(join(tmpdir(), 'morphit-step-'));
 		const log = join(dir, 'out.log');
 		fd = openSync(log, 'w', 0o600);
-		const r = spawnSync(cmd, [...args], { stdio: ['ignore', fd, fd], timeout: timeoutMs });
+		const out = fd;
+		const end = await new Promise<StepEnd>((resolveStep) => {
+			let settled = false;
+			let timer: NodeJS.Timeout | null = null;
+			let timedOut = false;
+			const settle = (e: StepEnd): void => {
+				if (settled) return;
+				settled = true;
+				if (timer !== null) clearTimeout(timer);
+				resolveStep(e);
+			};
+			let child: ReturnType<typeof spawn>;
+			try {
+				child = spawn(cmd, [...args], {
+					cwd: opts.cwd,
+					stdio: ['ignore', out, out],
+					...(opts.env !== undefined ? { env: opts.env } : {})
+				});
+			} catch (e) {
+				settle({
+					code: null,
+					signal: null,
+					timedOutAfterMs: null,
+					error: e instanceof Error ? e.message : String(e)
+				});
+				return;
+			}
+			if (opts.timeoutMs !== undefined) {
+				const limit = opts.timeoutMs;
+				timer = setTimeout(() => {
+					timedOut = true;
+					try {
+						child.kill('SIGKILL');
+					} catch {
+						/* already gone */
+					}
+				}, limit);
+			}
+			child.on('error', (e) =>
+				settle({ code: null, signal: null, timedOutAfterMs: null, error: e.message })
+			);
+			child.on('close', (code, signal) =>
+				settle({
+					code,
+					signal,
+					timedOutAfterMs: timedOut ? (opts.timeoutMs ?? null) : null,
+					error: null
+				})
+			);
+		});
 		closeSync(fd);
 		fd = null;
-		if (r.status === 0) return true;
-		let text = '';
-		try {
-			text = readFileSync(log, 'utf8');
-		} catch {
-			/* nothing to show */
+		stop();
+		const text = (): string => {
+			try {
+				return readFileSync(log, 'utf8');
+			} catch {
+				return '';
+			}
+		};
+		const ok =
+			end.code !== null &&
+			(end.code === 0 || (opts.alsoFine ?? []).includes(end.code)) &&
+			end.error === null &&
+			end.timedOutAfterMs === null;
+		const shown = ok
+			? opts.quietOnSuccess !== true
+				? text()
+				: opts.warningsOnSuccess === false
+					? ''
+					: stepWarnings(text())
+			: opts.quietOnSuccess !== true
+				? text()
+				: text().trimEnd().split('\n').slice(-40).join('\n');
+		if (shown.trim() !== '') process.stdout.write(shown.endsWith('\n') ? shown : `${shown}\n`);
+		if (ok) return end.code ?? 0;
+		let kept = keepStepLog(log, name);
+		if (kept === null) {
+			keepTemp = true;
+			kept = log;
 		}
-		const tail = text.trim().split('\n').slice(-30).join('\n');
-		if (tail !== '') process.stdout.write(`${tail}\n`);
-		if (r.error) process.stdout.write(`${cmd}: ${r.error.message}\n`);
-		return false;
-	} catch {
-		return false;
+		info(`${describeStepEnd(name, end)}. Its full output is kept on this server: sudo cat ${kept}`);
+		return end.code !== null && end.code !== 0 ? end.code : end.timedOutAfterMs !== null ? 124 : 1;
+	} catch (e) {
+		stop();
+		info(`${name} could not be run (${e instanceof Error ? e.message : String(e)}).`);
+		return 1;
 	} finally {
+		stop();
 		if (fd !== null) {
 			try {
 				closeSync(fd);
@@ -1532,11 +1799,30 @@ export function runShowingOutputOnFailure(
 				/* already closed */
 			}
 		}
-		if (dir !== null) rmSync(dir, { recursive: true, force: true });
+		if (dir !== null && !keepTemp) rmSync(dir, { recursive: true, force: true });
 	}
 }
 
-export function restartFrontendContainer(name: string, installDir: string): void {
+/** A step whose output only matters when it fails (Docker's build progress,
+ *  for one), with the spinner turning meanwhile: on success nothing is shown;
+ *  on failure its last lines, how it ended and where its full output is. True
+ *  when it exited 0. */
+export async function runShowingOutputOnFailure(
+	label: string,
+	cmd: string,
+	args: readonly string[],
+	timeoutMs: number
+): Promise<boolean> {
+	return (
+		(await runStepWithSpinner(label, cmd, args, {
+			timeoutMs,
+			quietOnSuccess: true,
+			warningsOnSuccess: false
+		})) === 0
+	);
+}
+
+export async function restartFrontendContainer(name: string, installDir: string): Promise<void> {
 	// The frontend nginx.conf is BAKED into the image at build time, so a plain
 	// restart keeps a STALE config (timeapp: the `/v1/` 4 KB body cap that
 	// 413'd every avatar upload survived every restart + every backend upgrade).
@@ -1578,11 +1864,6 @@ export function restartFrontendContainer(name: string, installDir: string): void
 		} catch {
 			/* best-effort — the rebuild still recreates the container */
 		}
-		// It runs to the end before anything else is shown (up to 5 minutes, its
-		// output only on failure): say what is happening first.
-		info(
-			`Rebuilding the frontend container "${name}" so it serves the current config + build (this can take a few minutes)…`
-		);
 		// --force-recreate is LOAD-BEARING: on an upgrade the rebuilt image is
 		// usually byte-identical (same nginx.conf), so a plain `up --build` sees no
 		// change and leaves the RUNNING container in place — still bind-mounted to
@@ -1598,9 +1879,12 @@ export function restartFrontendContainer(name: string, installDir: string): void
 			'--force-recreate',
 			ref.service
 		]);
+		// Up to 5 minutes each, its output only on failure: the spinner turns
+		// meanwhile (the label is printed once when there is no terminal).
+		const label = `Rebuilding the frontend container "${name}" so it serves the current config + build (this can take a few minutes)…`;
 		const rebuilt =
-			runShowingOutputOnFailure('docker', up, 300_000) ||
-			runShowingOutputOnFailure('docker-compose', up.slice(1), 300_000);
+			(await runShowingOutputOnFailure(label, 'docker', up, 300_000)) ||
+			(await runShowingOutputOnFailure(label, 'docker-compose', up.slice(1), 300_000));
 		if (rebuilt) {
 			info(`\u2713 Frontend container "${name}" rebuilt (config changes applied).`);
 			return;
@@ -1608,8 +1892,14 @@ export function restartFrontendContainer(name: string, installDir: string): void
 		warn('Could not rebuild the frontend via compose; falling back to a restart.');
 	}
 
-	info(`Restarting the frontend container "${name}" so it serves the new build…`);
-	if (!runShowingOutputOnFailure('docker', ['restart', name], 120_000)) {
+	if (
+		!(await runShowingOutputOnFailure(
+			`Restarting the frontend container "${name}" so it serves the new build…`,
+			'docker',
+			['restart', name],
+			120_000
+		))
+	) {
 		warn(
 			`Could not restart the frontend container automatically. Run this yourself so ` +
 				`it serves the new build:\n      docker restart ${name}`
@@ -1744,6 +2034,131 @@ async function resolveServedVersion(
 	return null;
 }
 
+/** Step 9 on a clearnet node: npm ci (with no install scripts), then the
+ *  installed tree checked against the lockfile, then the Matrix bot's native
+ *  add-ons carried over from the previous install where unchanged. Throws —
+ *  the upgrade rolls back — when any of it fails. Exported for its test. */
+export async function installDepsWithNpmCi(installDir: string, backupDir: string): Promise<void> {
+	const ciCode = await runStepWithSpinner(
+		'Installing dependencies (npm ci) — this can take a minute…',
+		'npm',
+		['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
+		{ cwd: installDir, quietOnSuccess: true }
+	);
+	if (ciCode !== 0) throw new Error(`npm ci exited ${ciCode}`);
+	const lockText = readFileSync(join(installDir, 'package-lock.json'), 'utf8');
+	const problems = lockedTreeProblems(installDir, lockText);
+	if (problems.length > 0) {
+		throw new Error(
+			`the installed dependencies do not match the lockfile (${problems.slice(0, 3).join('; ')})`
+		);
+	}
+	const natives = carryNativeAddons(backupDir, installDir, lockText);
+	if (natives.length > 0)
+		info(`Reused the native add-ons of ${natives.join(', ')} from the previous install.`);
+}
+
+/**
+ * Step 9d — verify the new frontend is actually being SERVED (beta14).
+ *
+ * Confirms the just-built service worker is what the live frontend serves.
+ * When it isn't, the "Load it now" update prompt never fires for users (the
+ * recurring symptom) — so say so loudly with the specific fix, instead of
+ * reporting a silent success. Best-effort: never fails the upgrade. True only
+ * when the served frontend was SEEN to be this build (the last word says "the
+ * site serves it" only then). Exported for its test.
+ */
+export async function verifyServedFrontend(
+	plan: { copyToWebRoot: boolean; restartContainer: string | null },
+	buildDir: string,
+	webRoot: string
+): Promise<boolean> {
+	// For the last word: true only when the served frontend was seen to be this build.
+	let frontendVerified = false;
+	if (plan.copyToWebRoot || plan.restartContainer) {
+		try {
+			const builtVersion = readBuiltVersion(buildDir);
+			// the container was JUST restarted; give it a moment to come
+			// back up before deciding we can't verify. Without this, the check
+			// almost always runs before the web server is serving again and prints
+			// "Could not auto-verify the served frontend", which looks like a
+			// failure on an upgrade that actually worked. Retry a few times.
+			let servedVersion = await resolveServedVersion(plan, webRoot);
+			for (let attempt = 0; servedVersion === null && attempt < 5; attempt++) {
+				await new Promise((r) => setTimeout(r, 2000));
+				servedVersion = await resolveServedVersion(plan, webRoot);
+			}
+			const verdict = classifyFrontendVerify(builtVersion, servedVersion);
+			if (verdict === 'fresh') {
+				frontendVerified = true;
+				info(
+					`\u2713 Verified the live frontend is serving this build ` +
+						`(version ${builtVersion}). Returning visitors get the ` +
+						`"Load it now" update prompt within ~60s.`
+				);
+			} else if (verdict === 'stale') {
+				// Actively self-heal before giving up. The usual cause is a running
+				// container still bound to the PRE-upgrade build inode (the install
+				// dir was renamed to .bak under it). A restart re-binds it to the
+				// freshly-extracted build. Try it, re-verify, and only warn (with the
+				// manual command) if it is STILL stale — never fail the upgrade.
+				let healed = false;
+				if (plan.restartContainer) {
+					info(
+						`The served frontend is still the old build (${servedVersion}); ` +
+							`restarting "${plan.restartContainer}" so it re-binds the new build...`
+					);
+					await runShowingOutputOnFailure(
+						`Restarting "${plan.restartContainer}"…`,
+						'docker',
+						['restart', plan.restartContainer],
+						60_000
+					);
+					let reServed = await resolveServedVersion(plan, webRoot);
+					for (let attempt = 0; reServed === null && attempt < 5; attempt++) {
+						await new Promise((r) => setTimeout(r, 2000));
+						reServed = await resolveServedVersion(plan, webRoot);
+					}
+					if (classifyFrontendVerify(builtVersion, reServed) === 'fresh') {
+						healed = true;
+						frontendVerified = true;
+						info(
+							`\u2713 Verified the live frontend is serving this build ` +
+								`(version ${builtVersion}) after a restart. Returning visitors ` +
+								`get the "Load it now" prompt within ~60s.`
+						);
+					}
+				}
+				if (!healed) {
+					warn(
+						`The frontend being SERVED is still the old build (version ` +
+							`${servedVersion}); this upgrade built ${builtVersion}. The ` +
+							`"Load it now" update prompt will NOT appear until the served ` +
+							`build matches. ` +
+							(plan.restartContainer
+								? `Your frontend container "${plan.restartContainer}" is serving ` +
+									`a stale copy even after a restart: if it BAKES the build into ` +
+									`its image, rebuild that image; otherwise confirm it bind-mounts ` +
+									`${buildDir} and is not caching /verify.json.`
+								: `Check that ${webRoot} received the new build and that your ` +
+									`web server is not caching /verify.json or /service-worker.js.`)
+					);
+				}
+			}
+			// verdict === 'unknown': the box couldn't read its own served
+			// /verify.json (e.g. a Tor-only node, or a home box whose NAT won't
+			// hairpin its own public URL). The upgrade itself already reported
+			// success, and "unknown" is not evidence of a problem — so stay
+			// SILENT rather than printing a "Could not auto-verify …" line that
+			// reads like a failure on an upgrade that worked (v1.11.1).
+		} catch {
+			// verification is best-effort; never fail the upgrade over it
+		}
+	}
+
+	return frontendVerified;
+}
+
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const upgradeStartedMs = Date.now();
 	// What an earlier run (or an older upgrader's heal phase) may have left for
@@ -1773,79 +2188,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// anyway — an operator saw it after a clean upgrade, advising an npm upgrade
 	// they must not perform, since the release vendors a pinned npm/node.
 
-	/**
-	 * Run a child process while the braille spinner turns, then replay its output.
-	 *
-	 * WHY NOT spawnSync: spawnSync BLOCKS the event loop, so no setInterval can
-	 * fire and a spinner wrapped around it would sit frozen — worse than none. The
-	 * async spawn keeps the loop turning so the spinner actually animates.
-	 *
-	 * Output is captured rather than inherited, because a spinner and a child both
-	 * writing to the same TTY corrupt each other's lines. It is replayed verbatim
-	 * once the step finishes, so nothing is lost — the operator just sees it as a
-	 * block after the step instead of dribbling out during it.
-	 *
-	 * Standing rule: NO STEP RUNS SILENT. Every pause long enough to look
-	 * like a hang gets a spinner, so an admin always knows work is happening.
-	 */
-	async function runStepWithSpinner(
-		label: string,
-		cmd: string,
-		args: readonly string[],
-		opts: {
-			cwd?: string;
-			timeoutMs?: number;
-			env?: NodeJS.ProcessEnv;
-			/** Show the command's output only when it fails (its last 40 lines);
-			 *  on success only its warnings (stepWarnings). */
-			quietOnSuccess?: boolean;
-		} = {}
-	): Promise<number> {
-		const stop = startDotsSpinner(label);
-		try {
-			return await new Promise<number>((resolveStep) => {
-				const child = spawn(cmd, [...args], {
-					cwd: opts.cwd,
-					stdio: ['ignore', 'pipe', 'pipe'],
-					...(opts.env !== undefined ? { env: opts.env } : {})
-				});
-				let buf = '';
-				child.stdout?.on('data', (d: Buffer) => {
-					buf += d.toString();
-				});
-				child.stderr?.on('data', (d: Buffer) => {
-					buf += d.toString();
-				});
-				let timer: NodeJS.Timeout | null = null;
-				if (opts.timeoutMs !== undefined) {
-					timer = setTimeout(() => {
-						try {
-							child.kill('SIGKILL');
-						} catch {
-							/* already gone */
-						}
-					}, opts.timeoutMs);
-				}
-				const finish = (code: number): void => {
-					if (timer !== null) clearTimeout(timer);
-					stop();
-					const shown =
-						opts.quietOnSuccess !== true
-							? buf
-							: code === 0
-								? stepWarnings(buf)
-								: buf.trimEnd().split('\n').slice(-40).join('\n');
-					if (shown.trim() !== '')
-						process.stdout.write(shown.endsWith('\n') ? shown : shown + '\n');
-					resolveStep(code);
-				};
-				child.on('error', () => finish(1));
-				child.on('close', (code) => finish(code ?? 1));
-			});
-		} finally {
-			stop();
-		}
-	}
+	// Each child step (npm, the builds, the MCP deploy, the seed, …) runs
+	// through runStepWithSpinner (module level): a spinner while it runs, its
+	// output after, the full output kept when it fails.
 
 	// Before we spawn any child npm, strip an inherited offline flag. The ansible
 	// launcher runs us via `npm exec --offline`; that flag would otherwise force
@@ -2131,20 +2476,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		}
 	}
 	if (notesBody === '') notesBody = '(no release notes available for this source)';
-	const summary = releaseNotesSummary(notesBody);
-	info('Release notes (summary):');
-	for (const line of summary.lines) {
-		// defense-in-depth.  latest.body is the release
-		// body fetched from Forgejo — upstream-trusted content but
-		// not source-controlled review-gated (a compromised release-
-		// publishing account could plant terminal escapes here).
-		// Sanitize before display.
-		console.log(`  ${sanitizeForTerm(line)}`);
-	}
-	if (summary.more) {
-		const where = fullNotesPointer(latest.html_url, offline?.tarballPath ?? null, notesMember);
-		if (where !== null) console.log(`  … the full notes: ${sanitizeForTerm(where)}`);
-	}
+	showReleaseNotes(notesBody, () =>
+		fullNotesPointer(latest.html_url, offline?.tarballPath ?? null, notesMember)
+	);
 	console.log('');
 
 	if (checkOnly) {
@@ -2600,23 +2934,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			}
 			info(`\u2713 Dependencies ready (${outcome.strategy}: ${outcome.detail}).`);
 		} else {
-			const ciCode = await runStepWithSpinner(
-				'Installing dependencies (npm ci) — this can take a minute…',
-				'npm',
-				['ci', '--ignore-scripts', '--no-audit', '--no-fund'],
-				{ cwd: installDir, quietOnSuccess: true }
-			);
-			if (ciCode !== 0) throw new Error(`npm ci exited ${ciCode}`);
-			const lockText = readFileSync(join(installDir, 'package-lock.json'), 'utf8');
-			const problems = lockedTreeProblems(installDir, lockText);
-			if (problems.length > 0) {
-				throw new Error(
-					`the installed dependencies do not match the lockfile (${problems.slice(0, 3).join('; ')})`
-				);
-			}
-			const natives = carryNativeAddons(backupDir, installDir, lockText);
-			if (natives.length > 0)
-				info(`Reused the native add-ons of ${natives.join(', ')} from the previous install.`);
+			await installDepsWithNpmCi(installDir, backupDir);
 		}
 		ensureMatrixBotNatives(installDir, nodeHiddenOnly);
 	} catch (err) {
@@ -2972,7 +3290,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	if (plan.restartContainer) {
 		// Best-effort: the backend already upgraded and the build is fresh, so
 		// a docker hiccup must NOT roll the whole upgrade back.
-		restartFrontendContainer(plan.restartContainer, installDir);
+		await restartFrontendContainer(plan.restartContainer, installDir);
 	}
 	if (plan.warn) {
 		warn(plan.warn);
@@ -2986,85 +3304,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// specific fix, instead of reporting a silent success.  Best-effort:
 	// never fails the upgrade.
 	// For the last word: true only when the served frontend was seen to be this build.
-	let frontendVerified = false;
-	if (plan.copyToWebRoot || plan.restartContainer) {
-		try {
-			const builtVersion = readBuiltVersion(buildDir);
-			// the container was JUST restarted; give it a moment to come
-			// back up before deciding we can't verify. Without this, the check
-			// almost always runs before the web server is serving again and prints
-			// "Could not auto-verify the served frontend", which looks like a
-			// failure on an upgrade that actually worked. Retry a few times.
-			let servedVersion = await resolveServedVersion(plan, webRoot);
-			for (let attempt = 0; servedVersion === null && attempt < 5; attempt++) {
-				await new Promise((r) => setTimeout(r, 2000));
-				servedVersion = await resolveServedVersion(plan, webRoot);
-			}
-			const verdict = classifyFrontendVerify(builtVersion, servedVersion);
-			if (verdict === 'fresh') {
-				frontendVerified = true;
-				info(
-					`\u2713 Verified the live frontend is serving this build ` +
-						`(version ${builtVersion}). Returning visitors get the ` +
-						`"Load it now" update prompt within ~60s.`
-				);
-			} else if (verdict === 'stale') {
-				// Actively self-heal before giving up. The usual cause is a running
-				// container still bound to the PRE-upgrade build inode (the install
-				// dir was renamed to .bak under it). A restart re-binds it to the
-				// freshly-extracted build. Try it, re-verify, and only warn (with the
-				// manual command) if it is STILL stale — never fail the upgrade.
-				let healed = false;
-				if (plan.restartContainer) {
-					info(
-						`The served frontend is still the old build (${servedVersion}); ` +
-							`restarting "${plan.restartContainer}" so it re-binds the new build...`
-					);
-					spawnSync('docker', ['restart', plan.restartContainer], {
-						stdio: 'inherit',
-						timeout: 60_000
-					});
-					let reServed = await resolveServedVersion(plan, webRoot);
-					for (let attempt = 0; reServed === null && attempt < 5; attempt++) {
-						await new Promise((r) => setTimeout(r, 2000));
-						reServed = await resolveServedVersion(plan, webRoot);
-					}
-					if (classifyFrontendVerify(builtVersion, reServed) === 'fresh') {
-						healed = true;
-						frontendVerified = true;
-						info(
-							`\u2713 Verified the live frontend is serving this build ` +
-								`(version ${builtVersion}) after a restart. Returning visitors ` +
-								`get the "Load it now" prompt within ~60s.`
-						);
-					}
-				}
-				if (!healed) {
-					warn(
-						`The frontend being SERVED is still the old build (version ` +
-							`${servedVersion}); this upgrade built ${builtVersion}. The ` +
-							`"Load it now" update prompt will NOT appear until the served ` +
-							`build matches. ` +
-							(plan.restartContainer
-								? `Your frontend container "${plan.restartContainer}" is serving ` +
-									`a stale copy even after a restart: if it BAKES the build into ` +
-									`its image, rebuild that image; otherwise confirm it bind-mounts ` +
-									`${buildDir} and is not caching /verify.json.`
-								: `Check that ${webRoot} received the new build and that your ` +
-									`web server is not caching /verify.json or /service-worker.js.`)
-					);
-				}
-			}
-			// verdict === 'unknown': the box couldn't read its own served
-			// /verify.json (e.g. a Tor-only node, or a home box whose NAT won't
-			// hairpin its own public URL). The upgrade itself already reported
-			// success, and "unknown" is not evidence of a problem — so stay
-			// SILENT rather than printing a "Could not auto-verify …" line that
-			// reads like a failure on an upgrade that worked (v1.11.1).
-		} catch {
-			// verification is best-effort; never fail the upgrade over it
-		}
-	}
+	const frontendVerified = await verifyServedFrontend(plan, buildDir, webRoot);
 
 	// ─── 9d-bis. Offer a warrant canary when the footer link would 404 (v1.17.1) ──
 	//
@@ -3260,17 +3500,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// for a censored node). Populate it now if the onion exists but the config
 	// is empty, so the indexer restart below picks it up and /v1/instance
 	// advertises it. Idempotent + safe on every upgrade.
-	try {
-		const heal = healTorOnionInConfig(join(installDir, 'morphit.config.env'));
-		if (heal.healed) {
-			info(`Captured this node's Tor onion into the config so it's advertised: ${heal.onion}`);
-			leftForYou.push(
-				"Tell the federation about this node's Tor address (it was just added to the config): on this server, sudo morphit-ops → Alt addresses"
-			);
-		}
-	} catch {
-		/* non-fatal — the node still works over clearnet */
-	}
+	captureTorOnion(join(installDir, 'morphit.config.env'));
 
 	// v1.16.7 — self-heal a bare-email contact URL that an older `edit → branding`
 	// wrote (e.g. `you@host.tld`, no scheme). Not a valid URL, it used to fail the
@@ -3322,6 +3552,9 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	// the last word (step 14); clear what an earlier run may have left.
 	takeUpgradeQuestions();
 	takeChildWarnings();
+	// The heal phase ran as a child process: its warnings reach the last word
+	// only through the count it leaves (an older release's child leaves none).
+	let healChildRan = false;
 	try {
 		const newCli = join(installDir, 'apps', 'ops-cli', 'dist', 'main.js');
 		if (existsSync(newCli)) {
@@ -3332,6 +3565,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				// Shared with the web-proxy heal, which finishes (or rolls back) before it.
 				timeout: SELF_HEAL_CHILD_TIMEOUT_MS
 			});
+			// (pid 0: it could not be started at all.)
+			healChildRan = typeof r.pid === 'number' && r.pid > 0;
 			selfHealReexeced = r.status === 0;
 		}
 	} catch {
@@ -3471,23 +3706,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				// (with the exact place to look) rather than rolling back an
 				// otherwise-good upgrade.
 				const { host: mcpHost, port: mcpPort } = resolveMcpHttpBind(mcpEnvFile());
-				const healthUrl = buildMcpHealthUrl(mcpHost, mcpPort);
-				const probe = await probeMcpHealth(healthUrl);
-				if (probe.reachable) {
-					info(
-						'✓ MCP server redeployed for this release, restarted, and answering its health check.'
-					);
-				} else {
-					warn(
-						`MCP did not answer at ${mcpHost}:${mcpPort} (${probe.detail}). The new code ` +
-							`is deployed and the service was restarted, so this is likely a transient ` +
-							`startup delay or a bind mismatch — morphit.io itself is unaffected. Check ` +
-							`\`journalctl -u morphit-mcp\`, confirm MORPHIT_MCP_HTTP_HOST/PORT in ` +
-							`${mcpEnvFile()} points where you expect it to listen (e.g. 172.18.0.1 on a ` +
-							`Docker-bridge / BunkerWeb host, 127.0.0.1 otherwise) and that a host ` +
-							`process can reach that address.`
-					);
-				}
+				await checkMcpAnswers(mcpHost, mcpPort);
 			}
 		}
 	}
@@ -3507,37 +3726,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
 		MATRIX_BOT_UNIT
 	);
-	if (existsSync(matrixUnitPath)) {
-		const readiness = matrixBotReadiness(readMatrixBotEnv());
-		if (readiness.run) {
-			const res = syncMatrixBotService(true, { restart: true });
-			// Seen running a few seconds later (a bot that exits at once would
-			// still have "restarted" successfully).
-			let running = false;
-			if (res.ok) {
-				await new Promise((r) => setTimeout(r, 3_000));
-				running =
-					spawnSync('systemctl', ['is-active', '--quiet', MATRIX_BOT_UNIT], { timeout: 10_000 })
-						.status === 0;
-			}
-			if (res.ok && running) info('✓ Matrix alert bot restarted on this release (seen running).');
-			else if (res.ok)
-				warn(
-					'The Matrix alert bot was restarted but is not running a few seconds later. On this server: ' +
-						'`sudo journalctl -u morphit-matrix-bot -n 50`'
-				);
-			else {
-				warn(
-					'Could not enable/restart morphit-matrix-bot. Start it with ' +
-						'`sudo systemctl enable --now morphit-matrix-bot` and check ' +
-						'`journalctl -u morphit-matrix-bot`.'
-				);
-			}
-		} else {
-			// No alert username: the bot stays stopped (nothing to say).
-			syncMatrixBotService(false, {});
-		}
-	}
+	if (existsSync(matrixUnitPath)) await syncMatrixBotOnUpgrade();
 
 	// ─── 10d. Confirm the chat fast-path (sub-6s delivery) state ──
 	// Safeguard: a process still running with its cwd inside the OLD install
@@ -3783,11 +3972,14 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				} catch {
 					/* couldn't relax perms — the seed's download mode has no clearnet here, so it'll no-op */
 				}
-				await runStepWithSpinner(
-					`Seeding ${latestTag} to IPFS\u2026`,
-					'sudo',
-					['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag, ...seedCidArg],
-					{ timeoutMs: 1_200_000 }
+				reportSeedResult(
+					latestTag,
+					await runStepWithSpinner(
+						`Seeding ${latestTag} to IPFS\u2026`,
+						'sudo',
+						['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag, ...seedCidArg],
+						{ timeoutMs: 1_200_000, name: 'The IPFS seed', alsoFine: [3] }
+					)
 				);
 			} else {
 				info('');
@@ -3819,28 +4011,15 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 					/* couldn't relax perms — let the seed download mode handle it */
 				}
 			}
-			const seedRes = await runStepWithSpinner(
-				`Seeding ${latestTag} to IPFS\u2026`,
-				'sudo',
-				['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag, ...seedCidArg],
-				{ timeoutMs: 1_200_000 }
+			reportSeedResult(
+				latestTag,
+				await runStepWithSpinner(
+					`Seeding ${latestTag} to IPFS\u2026`,
+					'sudo',
+					['-u', 'ipfs', ...seedEnv, 'sh', seedScript, latestTag, ...seedCidArg],
+					{ timeoutMs: 1_200_000, name: 'The IPFS seed', alsoFine: [3] }
+				)
 			);
-			if (seedRes === 0) {
-				info(`✓ Seeded ${latestTag} to IPFS.`);
-			} else {
-				// Say what is actually unfinished. "Did not complete" left an operator
-				// unsure whether peers could fetch from this box at all: the CID had
-				// been announced, but the Tor/I2P verification had not run. Name that,
-				// and give a command that WORKS — the raw script needs a tag argument,
-				// so pointing at it bare produces a usage error.
-				warn(
-					'IPFS self-seed did not finish its checks (non-fatal). The release itself is ' +
-						'unaffected — git mirrors + the on-chain SHA-256 are the anchors — but this ' +
-						'box has NOT confirmed it serves the release over Tor/I2P, so hidden-only ' +
-						'peers may not be able to upgrade from it yet. Re-run the checks with:'
-				);
-				warn('    sudo morphit-ops harden   → "Seed this release to IPFS"');
-			}
 		}
 	} catch {
 		/* best-effort; never fail an upgrade over IPFS seeding */
@@ -3941,25 +4120,19 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	//         junk left behind on disk. Deferred to here (not step 11) so
 	//         the seed above could reuse the tarball we already had.
 	// ─── 14. The last word: what happened, and what is left ──────
-	printUpgradeSummary({
-		from: currentTag,
-		to: latestTag,
-		backupDir,
-		schemaChanged,
-		canaryLeft:
-			!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt')),
-		canaryTimer:
-			spawnSync('systemctl', ['cat', 'morphit-canary.timer'], { stdio: 'ignore', timeout: 10_000 })
-				.status === 0,
-		questions: takeUpgradeQuestions(),
-		...backgroundChecksForSummary(upgradeStartedMs),
-		warnings: warningCount() + takeChildWarnings(),
-		frontendVerified,
-		todo: leftForYou,
-		webHealRunning:
-			spawnSync('systemctl', ['is-active', '--quiet', WEB_HEAL_UNIT], { timeout: 10_000 })
-				.status === 0
-	});
+	printUpgradeSummary(
+		gatherUpgradeSummary({
+			from: currentTag,
+			to: latestTag,
+			backupDir,
+			schemaChanged,
+			canaryCleared:
+				!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt')),
+			frontendVerified,
+			startedMs: upgradeStartedMs,
+			healChildRan
+		})
+	);
 
 	cleanupTmp(tmpDir);
 
@@ -3988,6 +4161,48 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
  */
 export async function runSelfHeals(opts: { child?: boolean } = {}): Promise<void> {
 	await runHealSteps(selfHealSteps(), opts);
+}
+
+/**
+ * The heal phase as the child process the upgrade starts
+ * (`morphit-ops __post-upgrade-selfheal`): every heal, each isolated; a heal
+ * phase that stops early says so (a warning); and in every case — also at its
+ * time limit (runHealSteps' SIGTERM handler) — its warning count is left for
+ * the upgrade's last word. `steps` is a seam for its test.
+ */
+export async function runPostUpgradeSelfHealChild(
+	steps: () => Array<[string, () => unknown]> = selfHealSteps
+): Promise<void> {
+	try {
+		await runHealSteps(steps(), { child: true });
+	} catch (e) {
+		// Never silent: it counts as a warning in the upgrade's last lines.
+		warn(
+			`The repairs after the upgrade stopped early: ${e instanceof Error ? e.message : String(e)}`
+		);
+	} finally {
+		recordChildWarnings();
+	}
+}
+
+/**
+ * The after-restart unit's body (`morphit-ops __post-upgrade-after-restart`,
+ * output in its log): the heals that need the restarted services. If it stops
+ * on an error, that is an error line ("[ERR] …" without colour), which the
+ * upgrade's last word counts with the unit's warnings. `run` is a seam for its
+ * test.
+ */
+export async function runAfterRestartUnit(
+	sinceArg: string | undefined,
+	run: (sinceUs: number) => Promise<void> = runAfterRestartHeals
+): Promise<void> {
+	try {
+		await run(Number(sinceArg ?? '0'));
+	} catch (e) {
+		printError(
+			`The checks after the restart stopped early: ${e instanceof Error ? e.message : String(e)}. On this server, to run them again: ${HEALS_COMMAND}`
+		);
+	}
 }
 
 /**
@@ -4092,13 +4307,20 @@ export function recordChildWarnings(): void {
 
 /** Read and remove the heal-phase child's warning count (none: 0). */
 export function takeChildWarnings(): number {
+	return takeChildWarningsReport() ?? 0;
+}
+
+/** Read and remove the heal-phase child's warning count; null when it left
+ *  none (it could not, or an older release's child never does). */
+export function takeChildWarningsReport(): number | null {
 	const f = upgradeWarningsFile();
 	try {
-		const n = Number.parseInt(readFileSync(f, 'utf8').trim(), 10);
+		const text = readFileSync(f, 'utf8');
 		rmSync(f, { force: true });
+		const n = Number.parseInt(text.trim(), 10);
 		return Number.isFinite(n) && n > 0 ? n : 0;
 	} catch {
-		return 0;
+		return null;
 	}
 }
 
@@ -4124,19 +4346,20 @@ export function takeUpgradeQuestions(): string[] {
 
 /** The background checks for the last lines: still running (read the log
  *  later), or finished — then only their warnings, if any, are named. */
-function backgroundChecksForSummary(startedMs: number): {
+function backgroundChecksForSummary(
+	startedMs: number,
+	isActive: (unit: string) => boolean
+): {
 	backgroundLog: string | null;
 	backgroundWarnings: number;
 } {
 	if (!afterRestartLogWrittenSince(startedMs))
 		return { backgroundLog: null, backgroundWarnings: 0 };
-	const running =
-		spawnSync('systemctl', ['is-active', '--quiet', AFTER_RESTART_UNIT], { timeout: 10_000 })
-			.status === 0;
+	const running = isActive(AFTER_RESTART_UNIT);
 	if (running) return { backgroundLog: afterRestartLogPath(), backgroundWarnings: 0 };
 	let n = 0;
 	try {
-		n = readFileSync(afterRestartLogPath(), 'utf8')
+		n = (readNoFollow(afterRestartLogPath()) ?? '')
 			.split('\n')
 			.filter((l) => /^\s*(?:\[WARN\]|\[ERR\]|⚠|✗)\s/.test(l)).length;
 	} catch {
@@ -4152,6 +4375,92 @@ function afterRestartLogWrittenSince(ms: number): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/** `systemctl is-active --quiet <unit>` on this server. */
+function unitIsActive(unit: string): boolean {
+	return spawnSync('systemctl', ['is-active', '--quiet', unit], { timeout: 10_000 }).status === 0;
+}
+
+/** The background web heal (lib/webHeal.ts) for the last word: still running,
+ *  or — when THIS upgrade's run (or one it followed) ended in something the
+ *  operator must see — that outcome in a line. Its state file is read, not
+ *  only the unit: the heal often ends after the heal phase stopped watching.
+ *  Exported for its test. */
+export function webHealForSummary(
+	startedMs: number,
+	deps: {
+		readonly isActive?: (unit: string) => boolean;
+		readonly readState?: () => WebHealState | null;
+		readonly now?: () => number;
+	} = {}
+): { running: boolean; outcome: string | null } {
+	if ((deps.isActive ?? unitIsActive)(WEB_HEAL_UNIT)) return { running: true, outcome: null };
+	const s = (deps.readState ?? (() => readWebHealState()))();
+	if (s === null) return { running: false, outcome: null };
+	// This upgrade's: ended (or, for one that never wrote its end, started)
+	// during it.
+	const at = Date.parse(s.finishedAt ?? s.startedAt);
+	if (!Number.isFinite(at) || at < startedMs - 5_000) return { running: false, outcome: null };
+	if (s.state === 'running')
+		return {
+			running: false,
+			outcome: `The web-proxy settings heal (${WEB_HEAL_UNIT}) stopped before it finished, so nothing says how it ended. What it did is in its log, on this server: sudo cat ${webHealLogPath()} — to run it again: ${HEALS_COMMAND}`
+		};
+	if (webHealStatusRow(s).status !== 'warn') return { running: false, outcome: null };
+	return {
+		running: false,
+		outcome: `The web-proxy settings (BunkerWeb): ${describeWebHeal(s, (deps.now ?? Date.now)())}. On this server: sudo morphit-ops status`
+	};
+}
+
+/** Everything the upgrade's last word needs, read from where each part was
+ *  left: the heal phase's questions and warning count (files), this process's
+ *  warnings and to-do items, the background checks (their log and unit), the
+ *  background web heal (its unit and state file), the canary timer.
+ *  `isActive`/`unitExists` are seams for its test (default: systemctl).
+ *  Exported for its test. */
+export function gatherUpgradeSummary(
+	base: {
+		readonly from: string;
+		readonly to: string;
+		readonly backupDir: string;
+		readonly schemaChanged: boolean;
+		/** The upgrade cleared the canary file and nothing re-signed it. */
+		readonly canaryCleared: boolean;
+		readonly frontendVerified: boolean;
+		readonly startedMs: number;
+		/** The heal phase ran as a child process (else in this one). */
+		readonly healChildRan: boolean;
+	},
+	deps: {
+		readonly isActive?: (unit: string) => boolean;
+		readonly unitExists?: (unit: string) => boolean;
+	} = {}
+): UpgradeSummary {
+	const isActive = deps.isActive ?? unitIsActive;
+	const unitExists =
+		deps.unitExists ??
+		((u: string) =>
+			spawnSync('systemctl', ['cat', u], { stdio: 'ignore', timeout: 10_000 }).status === 0);
+	const childWarnings = takeChildWarningsReport();
+	const web = webHealForSummary(base.startedMs, { isActive });
+	return {
+		from: base.from,
+		to: base.to,
+		backupDir: base.backupDir,
+		schemaChanged: base.schemaChanged,
+		canaryLeft: base.canaryCleared,
+		canaryTimer: base.canaryCleared && unitExists('morphit-canary.timer'),
+		questions: takeUpgradeQuestions(),
+		...backgroundChecksForSummary(base.startedMs, isActive),
+		warnings: warningCount() + (childWarnings ?? 0),
+		healPhaseUncounted: base.healChildRan && childWarnings === null,
+		frontendVerified: base.frontendVerified,
+		todo: [...leftForYou],
+		webHealRunning: web.running,
+		webHealOutcome: web.outcome
+	};
 }
 
 export interface UpgradeSummary {
@@ -4176,6 +4485,12 @@ export interface UpgradeSummary {
 	readonly todo?: readonly string[];
 	/** The background web heal (BunkerWeb) is still at work. */
 	readonly webHealRunning?: boolean;
+	/** How this upgrade's background web heal ended, when the operator must
+	 *  see it (a line), else null. */
+	readonly webHealOutcome?: string | null;
+	/** The heal phase ran as a child that left no warning count (an older
+	 *  release's, on a downgrade): its warnings could not be counted. */
+	readonly healPhaseUncounted?: boolean;
 	/** The served frontend was seen to be this build. */
 	readonly frontendVerified: boolean;
 }
@@ -4190,22 +4505,31 @@ export function upgradeSummaryLines(s: UpgradeSummary): string[] {
 		'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
 		'',
 		`  Upgraded ${s.from} → ${s.to}.` +
-			(s.warnings === 0 ? ' Every service restarted on it.' : '') +
+			(s.warnings === 0 && s.healPhaseUncounted !== true ? ' Every service restarted on it.' : '') +
 			(s.frontendVerified ? ' The site serves it (checked).' : ''),
 		`  The previous install is kept at ${s.backupDir} (later upgrades remove old copies).`
 	];
 	const left: string[] = [];
+	// Both markers: a warning is "⚠" or "[WARN]" depending on whether the
+	// process that printed it uses colour (the heal phase and the scripts
+	// the upgrade runs do not always match this one).
 	if (s.warnings > 0) {
 		left.push(
-			`${s.warnings === 1 ? 'One warning' : `${s.warnings} warnings`} above (the lines marked ${glyph('warn')}): each says what to do and where`
+			`${s.warnings === 1 ? 'One warning' : `${s.warnings} warnings`} above (the lines marked ⚠ or [WARN]): each says what to do and where`
+		);
+	}
+	if (s.healPhaseUncounted) {
+		left.push(
+			`The repairs after the install (run by ${s.to}'s morphit-ops) left no count of their warnings: read their lines above for any marked ⚠ or [WARN]`
 		);
 	}
 	for (const t of s.todo ?? []) left.push(t);
 	if (s.webHealRunning) {
 		left.push(
-			'BunkerWeb is still at work on the web settings in the background (it puts the previous ones back by itself if a check fails). See how it ended, on this server: sudo morphit-ops status'
+			`${WEB_HEAL_STILL_RUNNING} See how it ended, on this server: sudo morphit-ops status`
 		);
 	}
+	if (s.webHealOutcome) left.push(s.webHealOutcome);
 	if (s.canaryLeft) {
 		left.push(
 			s.canaryTimer
@@ -4473,10 +4797,7 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 				return r;
 			}
 		],
-		[
-			'the fees-account registration heal',
-			() => healFeeRecipientRegistration({ info, warn, spinner: (l) => startDotsSpinner(l) })
-		],
+		['the fees-account registration heal', () => healFeesAccountRegistrationNow()],
 		// v1.20.1 (lib/relayStateHeal.ts): the relay's state moves out of
 		// /var/lib/morphit, which the capability-less relay cannot enter; an
 		// operator's SIGNUPS_DISABLED moves with it, and the old path links there.
@@ -4524,6 +4845,44 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 	];
 }
 
+/** The fees-account registration heal (lib/feeRecipientHeal.ts) in the heal
+ *  phase. When it ends `needs_operator` — the operator must run `register` —
+ *  its line is a warning (counted for the last word, marked ⚠), not one more
+ *  calm line. That line is the last it prints before returning, so it is held
+ *  back only until the outcome is known. `seams` are the lib's own (tests).
+ *  Exported for its test. */
+export async function healFeesAccountRegistrationNow(
+	seams: Partial<Parameters<typeof healFeeRecipientRegistration>[0]> = {}
+): Promise<FeeRecipientHealOutcome> {
+	// (An object: the line is set inside the callbacks.)
+	const held: { line: string | null } = { line: null };
+	const flush = (): void => {
+		if (held.line !== null) info(held.line);
+		held.line = null;
+	};
+	let outcome: FeeRecipientHealOutcome = 'unknown';
+	try {
+		outcome = await healFeeRecipientRegistration({
+			info: (m) => {
+				flush();
+				// The lib's "not in your on-chain operator registration yet … run on
+				// this server: sudo morphit-ops register" line ends a needs_operator run.
+				if (/is not in your on-chain operator registration yet/.test(m)) held.line = m;
+				else info(m);
+			},
+			warn,
+			spinner: (l) => {
+				flush();
+				return startDotsSpinner(l);
+			},
+			...seams
+		});
+	} finally {
+		if (held.line !== null) (outcome === 'needs_operator' ? warn : info)(held.line.trim());
+	}
+	return outcome;
+}
+
 /** The Matrix bot loads two native add-ons that `npm ci --ignore-scripts`
  *  does not put in place. Where the bot is configured, put them in place from
  *  pinned SHA-256s (scripts/fetch-matrix-bot-natives.mjs of the NEW tree) — or,
@@ -4559,6 +4918,44 @@ function ensureMatrixBotNatives(installDir: string, hiddenOnly: boolean): void {
 	} catch {
 		/* never fail an upgrade over the bot's add-ons */
 	}
+}
+
+/** Step 10c: the Matrix alert bot follows its configured alert username —
+ *  enabled and restarted on this release when one is set, else stopped. A
+ *  restart is only reported once the bot is SEEN running a few seconds later
+ *  (one that exits at once "restarted" too); the wait shows a spinner.
+ *  Exported for its test. */
+export async function syncMatrixBotOnUpgrade(
+	o: { readonly envPath?: string; readonly settleMs?: number } = {}
+): Promise<void> {
+	const readiness = matrixBotReadiness(readMatrixBotEnv(o.envPath));
+	if (!readiness.run) {
+		// No alert username: the bot stays stopped (nothing to say).
+		syncMatrixBotService(false, {});
+		return;
+	}
+	const res = syncMatrixBotService(true, { restart: true });
+	let running = false;
+	if (res.ok) {
+		await withSpinner('Checking the Matrix alert bot stays up…', async () => {
+			await new Promise((r) => setTimeout(r, o.settleMs ?? 3_000));
+			running =
+				spawnSync('systemctl', ['is-active', '--quiet', MATRIX_BOT_UNIT], { timeout: 10_000 })
+					.status === 0;
+		});
+	}
+	if (res.ok && running) info('✓ Matrix alert bot restarted on this release (seen running).');
+	else if (res.ok)
+		warn(
+			'The Matrix alert bot was restarted but is not running a few seconds later. On this server: ' +
+				'`sudo journalctl -u morphit-matrix-bot -n 50`'
+		);
+	else
+		warn(
+			'Could not enable/restart morphit-matrix-bot. Start it with ' +
+				'`sudo systemctl enable --now morphit-matrix-bot` and check ' +
+				'`journalctl -u morphit-matrix-bot`.'
+		);
 }
 
 /** Write matrix-bot.posture from matrix-bot.env when the bot is configured
@@ -4692,21 +5089,23 @@ export async function fetchFrontendBaseNow(
 		readonly runtime?: BaseFetchRuntime;
 		readonly waitIdle?: (unit: string) => Promise<'idle' | 'timed-out'>;
 		readonly rebuild?: () => Promise<void>;
+		/** When the after-restart unit is stopped (ms); the pull fits before it. */
+		readonly deadline?: number;
 	} = {}
 ): Promise<void> {
 	const res = await fetchFrontendBaseThroughTor(
 		healCtx(),
 		deps.runtime ??
-			realBaseFetchRuntime(() => {
-				try {
-					return findFrontendContainer(installBuildDir()) !== null;
-				} catch {
-					return false;
-				}
-			})
+			realBaseFetchRuntime({
+				frontend: () => findFrontendContainer(installBuildDir()),
+				buildDir: installBuildDir()
+			}),
+		() => baseFetchBudgetMs(deps.deadline ?? afterRestartDeadline())
 	);
 	await reportHeal(Promise.resolve(res));
-	if (res.strategy !== 'fetched') return;
+	// The base is here (fetched, loaded from the offline bundle, or already
+	// here while the frontend is not on it yet): rebuild onto it.
+	if (!['fetched', 'loaded', 'here'].includes(res.strategy)) return;
 	// The rebuild edits the same compose files and containers as the background
 	// web heal: never at the same time as it.
 	if (
@@ -4794,8 +5193,42 @@ export async function runAfterRestartHeals(sinceUs: number): Promise<void> {
 }
 
 /** Start the background unit and tell the operator where its results go. */
-export function startAfterRestartHeals(): void {
-	const r = launchAfterRestartHeals();
+export async function startAfterRestartHeals(): Promise<void> {
+	let r = launchAfterRestartHeals();
+	if (r === 'already-running') {
+		// An earlier upgrade's run: it runs THAT release's code and checks. Stop
+		// it and start this release's (which does all of its work again). Async,
+		// so the spinner draws while systemd stops it (up to two minutes).
+		let stopped = false;
+		try {
+			stopped =
+				(await runStepWithSpinner(
+					`Stopping the background checks an earlier upgrade started (${AFTER_RESTART_UNIT}), to run this release's…`,
+					'systemctl',
+					['stop', AFTER_RESTART_UNIT],
+					{ timeoutMs: 120_000, quietOnSuccess: true, name: `systemctl stop ${AFTER_RESTART_UNIT}` }
+				)) === 0 &&
+				spawnSync('systemctl', ['is-active', '--quiet', AFTER_RESTART_UNIT], {
+					stdio: 'ignore',
+					timeout: 10_000
+				}).status !== 0;
+		} catch {
+			stopped = false;
+		}
+		if (stopped) r = launchAfterRestartHeals();
+		if (r === 'already-running') {
+			afterRestartLaunched = false;
+			warn(
+				`This release's checks that need the restarted services did not run: the background checks an earlier upgrade started (${AFTER_RESTART_UNIT}) are still running and could not be stopped. ` +
+					`Once they have finished (on this server, \`systemctl is-active ${AFTER_RESTART_UNIT}\` says inactive), on this server: sudo morphit-ops upgrade --heals`
+			);
+			return;
+		}
+		if (r === 'launched')
+			info(
+				"Stopped the background checks an earlier upgrade started (they ran that release's code); this release's run instead."
+			);
+	}
 	afterRestartLaunched = r !== 'unavailable';
 	if (r === 'unavailable') {
 		warn(
@@ -4900,8 +5333,7 @@ const ROUTINE_STRATEGIES = new Set([
 	'no-bot',
 	'no-backups',
 	'nothing-to-check',
-	'kept-by-choice',
-	'deferred-quietly'
+	'kept-by-choice'
 ]);
 
 /** PURE. A heal result that needs no line of its own: observed, already right
@@ -5014,19 +5446,33 @@ export async function runWebProxyHealsNow(opts: { readonly background: boolean }
 }
 
 /** Post-upgrade step: on a BunkerWeb box start the heals in the background;
- *  otherwise (or when that is impossible) run them here as before. */
-async function startWebProxyHeals(): Promise<void> {
+ *  otherwise (or when that is impossible) run them here as before. `deps` are
+ *  seams for its test. */
+export async function startWebProxyHeals(
+	deps: {
+		readonly isBunkerWeb?: () => boolean;
+		readonly launch?: () => ReturnType<typeof launchWebHeal>;
+		readonly runHere?: () => Promise<void>;
+	} = {}
+): Promise<void> {
 	let bunkerweb = false;
 	try {
-		bunkerweb = findBunkerWebStack(installBuildDir()).stack !== null;
+		bunkerweb = (
+			deps.isBunkerWeb ?? (() => findBunkerWebStack(installBuildDir()).stack !== null)
+		)();
 	} catch {
 		bunkerweb = false;
 	}
 	if (bunkerweb) {
 		const at = Date.now();
-		const r = launchWebHeal();
+		const r = (deps.launch ?? (() => launchWebHeal()))();
 		if (r === 'launched' || r === 'already-running') {
-			webHealLaunchedAt = at;
+			// One already at work (an earlier upgrade's, or the frontend rebuild)
+			// started before now: follow THAT run to its end, by its own start.
+			const running = r === 'already-running' ? readWebHealState() : null;
+			const since =
+				running !== null && running.state === 'running' ? Date.parse(running.startedAt) : NaN;
+			webHealLaunchedAt = Number.isFinite(since) ? Math.min(since, at) : at;
 			info(
 				r === 'launched'
 					? "BunkerWeb's settings are checked in the background (a change takes BunkerWeb minutes to apply); anything they change is shown at the end of this upgrade."
@@ -5035,12 +5481,13 @@ async function startWebProxyHeals(): Promise<void> {
 			return;
 		}
 	}
-	await runWebProxyHealsNow({ background: false });
+	await (deps.runHere ?? (() => runWebProxyHealsNow({ background: false })))();
 }
 
 /** Post-upgrade step (last): show the background heal's progress and result
- *  while this child has time; else say plainly that it carries on. */
-async function showWebProxyResult(): Promise<void> {
+ *  while this child has time; else say plainly that it carries on. Exported
+ *  for its test. */
+export async function showWebProxyResult(): Promise<void> {
 	if (webHealLaunchedAt === null) return;
 	// Finish before the child's kill (it started process.uptime() s ago).
 	const until = Date.now() - process.uptime() * 1000 + SELF_HEAL_CHILD_TIMEOUT_MS - 25_000;
@@ -5050,27 +5497,37 @@ async function showWebProxyResult(): Promise<void> {
 		spinner: (l) => startDotsSpinner(l)
 	});
 	if (s === null) {
-		// The upgrade that started this phase names it in its last lines.
+		// The upgrade that started this phase names it in its last lines: still
+		// running then, or how it ended (it reads the state file).
 		if (process.env.MORPHIT_UPGRADE_SUMMARIZES === '1') return;
-		info(
-			'BunkerWeb is still at work on the web settings in the background (applying or checking them; it puts the previous ones back by itself if a check fails). See how it ended, on this server: sudo morphit-ops status'
-		);
+		info(`${WEB_HEAL_STILL_RUNNING} See how it ended, on this server: sudo morphit-ops status`);
 		return;
 	}
 	reportWebProxyOutcome(s);
 }
 
+/** The background web heal (morphit-web-heal) is still at work: true whether
+ *  the upgrade started it for the web-proxy settings or the after-restart
+ *  checks started it to rebuild the frontend onto its new base. */
+const WEB_HEAL_STILL_RUNNING =
+	'The web-proxy settings (BunkerWeb and the frontend container) are still being applied in the background; if a check fails, the previous settings are put back by themselves.';
+
 /** One web-heal outcome for the operator: nothing (counted) when nothing
- *  changed, ✓ when applied, a warning for anything else. */
-function reportWebProxyOutcome(s: WebHealState): void {
-	if (s.result === 'already' || s.result === 'no-proxy') {
+ *  changed and nothing was warned about, ✓ when applied, a warning for
+ *  anything else. Exported for its test. */
+export function reportWebProxyOutcome(s: WebHealState): void {
+	if ((s.result === 'already' || s.result === 'no-proxy') && (s.warnings ?? 0) === 0) {
 		routineCheck();
 		return;
 	}
 	const line = `Web-proxy settings: ${describeWebHeal(s, Date.now())}.`;
 	// Only an applied change is good news; anything else —
-	// rolled back, failed, left alone, no time — needs the operator.
-	if (s.result === 'applied') info(`✓ ${line}`);
+	// rolled back, failed, left alone, no time — needs the operator. So does
+	// a run that printed warnings: the line names them and their log (they
+	// are relayed above only when its log could be read).
+	const warned = (s.warnings ?? 0) > 0;
+	if (s.result === 'applied' && !warned) info(`✓ ${line}`);
+	else if (s.result === 'unchecked' && !warned) info(line);
 	else warn(line);
 }
 
@@ -5273,7 +5730,7 @@ export function healBranding(): void {
  *  only restarted the frontend). Self-contained + best-effort; no-ops if there's
  *  no compose-managed frontend. Docker layer-caching makes a no-change rebuild
  *  cheap, so running it every upgrade is fine. */
-export function healFrontendConfig(): void {
+export async function healFrontendConfig(): Promise<void> {
 	try {
 		// This runs from <installDir>/apps/ops-cli/dist/main.js — derive installDir
 		// from that path, falling back to the standard /opt/morphit.
@@ -5320,7 +5777,7 @@ export function healFrontendConfig(): void {
 			} else {
 				// restartFrontendContainer refreshes the build-context nginx.conf from
 				// the upgraded repo and rebuilds when compose-managed (else restarts).
-				restartFrontendContainer(name, installDir);
+				await restartFrontendContainer(name, installDir);
 			}
 		}
 	} catch {
@@ -5553,10 +6010,12 @@ export function bodyProbeResolve(origin: string): string | null {
  *  box often cannot reach its own public address, and the answer must be this
  *  server's — at the address's own port, then at 443 (where the exemption check
  *  asks), then the address itself (a BunkerWeb published on one host address
- *  only does not answer on 127.0.0.1). Null for a Tor/I2P address: it cannot be
- *  asked from here without Tor, so there is no check and nothing to report. */
+ *  only does not answer on 127.0.0.1) — but never that last one on a
+ *  hidden-only node. Null for a Tor/I2P address: it cannot be asked from here
+ *  without Tor, so there is no check and nothing to report. */
 export function bodyProbeCandidates(
-	origin: string
+	origin: string,
+	hiddenOnly = false
 ): Array<{ readonly url: string; readonly resolve: string | null }> | null {
 	let u: URL;
 	try {
@@ -5576,8 +6035,54 @@ export function bodyProbeCandidates(
 		if (u.port !== '' && u.port !== '443')
 			out.push({ url: target(''), resolve: `${u.hostname}:443:127.0.0.1` });
 	}
-	out.push({ url: target(u.port), resolve: null });
+	// The address itself goes through public DNS (and may leave this server):
+	// never on a hidden-only node.
+	if (!hiddenOnly) out.push({ url: target(u.port), resolve: null });
 	return out;
+}
+
+/** One ~50 KB POST to /v1/broadcast through curl: its HTTP status, '' or
+ *  '000' when nothing answered. A `resolve` candidate is THIS server: curl is
+ *  told to skip any proxy from the environment (https_proxy, ALL_PROXY), which
+ *  would make it ignore --resolve and ask somewhere else. */
+export function probeBroadcastBodyVia(c: { url: string; resolve: string | null }): string {
+	// ~50 KB: under the relay's 64 KB cap, far above a real avatar broadcast.
+	const blob = 'A'.repeat(50 * 1024);
+	const r = spawnSync(
+		'curl',
+		[
+			'-s',
+			...(c.resolve !== null ? ['-k', '--noproxy', '*', '--resolve', c.resolve] : []),
+			'-o',
+			'/dev/null',
+			'-w',
+			'%{http_code}',
+			'--max-time',
+			'12',
+			'-X',
+			'POST',
+			c.url,
+			'-H',
+			'content-type: application/json',
+			'--data',
+			`{"probe":"${blob}"}`
+		],
+		{ encoding: 'utf8', timeout: 20000 }
+	);
+	return (r.stdout ?? '').trim();
+}
+
+/** The body-limit probe over `candidates` in order (bodyProbeCandidates): the
+ *  first real answer. Exported for its test. */
+export function probeBroadcastBody(
+	candidates: ReadonlyArray<{ readonly url: string; readonly resolve: string | null }>
+): string {
+	let code = '';
+	for (const c of candidates) {
+		code = probeBroadcastBodyVia(c);
+		if (code !== '' && code !== '000') break;
+	}
+	return code;
 }
 
 function parseNginxSize(s: string): number | null {
@@ -6025,6 +6530,10 @@ export function healBunkerWebWaf(
 				'%{http_code}',
 				'--max-time',
 				'15',
+				// This server, not a proxy from the environment (with one, curl
+				// ignores --resolve and asks somewhere else).
+				'--noproxy',
+				'*',
 				'--resolve',
 				`${site}:443:127.0.0.1`,
 				`https://${site}${path}${q}`
@@ -6065,42 +6574,10 @@ export function healBunkerWebWaf(
 	//     mechanism BunkerWeb reliably honors) and reload. Figure it out, as requested.
 	try {
 		const origin = readInstanceEnvValue(INSTANCE_ENV.ORIGIN);
-		const candidates = origin ? bodyProbeCandidates(origin) : null;
-		if (origin && candidates !== null) {
-			const probeVia = (c: { url: string; resolve: string | null }): string => {
-				// ~50 KB: under the relay's 64 KB cap, far above a real avatar broadcast.
-				const blob = 'A'.repeat(50 * 1024);
-				const r = spawnSync(
-					'curl',
-					[
-						'-s',
-						...(c.resolve !== null ? ['-k', '--resolve', c.resolve] : []),
-						'-o',
-						'/dev/null',
-						'-w',
-						'%{http_code}',
-						'--max-time',
-						'12',
-						'-X',
-						'POST',
-						c.url,
-						'-H',
-						'content-type: application/json',
-						'--data',
-						`{"probe":"${blob}"}`
-					],
-					{ encoding: 'utf8', timeout: 20000 }
-				);
-				return (r.stdout ?? '').trim();
-			};
-			const probe = (): string => {
-				let code = '';
-				for (const c of candidates) {
-					code = probeVia(c);
-					if (code !== '' && code !== '000') break;
-				}
-				return code;
-			};
+		// A hidden-only node never asks the address through public DNS.
+		const candidates = origin ? bodyProbeCandidates(origin, isHiddenOnlyNode()) : null;
+		if (origin && candidates !== null && candidates.length > 0) {
+			const probe = (): string => probeBroadcastBody(candidates);
 			let code = probe();
 			if (code === '413' && sched !== null) {
 				info(
@@ -6195,8 +6672,9 @@ export function healBunkerWebWaf(
 			}
 			if (live === false)
 				info("WAF: real-IP verified live — BunkerWeb uses each visitor's own address.");
+			// It asks the operator to act: a warning (counted for the last word).
 			else if (live === true)
-				info(
+				warn(
 					ref !== null
 						? `WAF: BunkerWeb still has the old real-IP setting loaded. When convenient, run on this server: sudo ${composeCommand(ref, ['up', '-d', '--no-deps', '--force-recreate', ...stack.services])}`
 						: `WAF: BunkerWeb still has the old real-IP setting loaded. ${bw} was not started by Docker Compose; recreate it on this server the way it was started so it reads ${bwEnv} again.`
@@ -6318,55 +6796,10 @@ function readOperatorTagFromConfig(): string | null {
 
 /** Remember that this box has served a warrant canary (see step 9d-bis).
  *  Best-effort; never throws. */
-/** Write `data` to `path` WITHOUT following a symbolic link at `path` — the
- *  upgrade runs as root and these targets live in directories a non-root
- *  account owns (/var/lib/morphit, apps/web/build), so a planted link must be
- *  refused by the kernel, never followed (review B5). O_NOFOLLOW makes open()
- *  fail with ELOOP on a link; O_CREAT|O_TRUNC create-or-replace the real file.
- *  Throws on a link or any other open failure. */
-function writeNoFollow(path: string, data: string): void {
-	const fd = openSync(
-		path,
-		fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | fsConstants.O_NOFOLLOW,
-		0o644
-	);
-	try {
-		const buf = Buffer.from(data, 'utf8');
-		let off = 0;
-		while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off);
-	} finally {
-		closeSync(fd);
-	}
-}
-
-/** Read a regular file WITHOUT following a symbolic link at `path`; null if it
- *  is a link, is absent, or is not a regular file. */
-function readNoFollow(path: string): string | null {
-	let fd: number;
-	try {
-		fd = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-	} catch {
-		return null; // ELOOP (a link) / ENOENT — nothing safe to read
-	}
-	try {
-		if (!fstatSync(fd).isFile()) return null;
-		const chunks: Buffer[] = [];
-		const b = Buffer.alloc(65536);
-		for (;;) {
-			const n = readSync(fd, b, 0, b.length, null);
-			if (n === 0) break;
-			chunks.push(Buffer.from(b.subarray(0, n)));
-		}
-		return Buffer.concat(chunks).toString('utf8');
-	} finally {
-		closeSync(fd);
-	}
-}
-
 export function recordCanarySeen(marker: string): void {
 	try {
 		mkdirSync(dirname(marker), { recursive: true });
-		writeNoFollow(marker, `seen ${new Date().toISOString()}\n`);
+		writeNoFollow(marker, `seen ${new Date().toISOString()}\n`, 0o644);
 	} catch {
 		/* best-effort; the checks in step 9d-bis still work without it */
 	}
@@ -6384,7 +6817,7 @@ export function patchVerifyJsonOperatorTag(buildDir: string, tag: string): boole
 		`$1${JSON.stringify(tag)}`
 	);
 	if (patched === txt) return false;
-	writeNoFollow(p, patched);
+	writeNoFollow(p, patched, 0o644);
 	return true;
 }
 
@@ -6689,7 +7122,7 @@ export function selfHealRestoreList(
 /** Injectable seams for rollback, so the recovery path is testable without a
  *  live systemd or docker. Both default to the real implementations. */
 export interface RollbackDeps {
-	restartContainer?: (name: string, installDir: string) => void;
+	restartContainer?: (name: string, installDir: string) => void | Promise<void>;
 	systemctl?: (args: readonly string[]) => { status: number | null };
 }
 
@@ -6781,7 +7214,7 @@ async function verifyUnitStayedUp(svc: string, restartsBefore: number): Promise<
 	}
 }
 
-export function rollback(
+export async function rollback(
 	installDir: string,
 	backupDir: string,
 	tmpDir: string,
@@ -6789,7 +7222,7 @@ export function rollback(
 	web?: { webRoot: string; webRootBackup: string | null; container?: string | null },
 	restore: readonly RollbackRestore[] = [],
 	deps: RollbackDeps = {}
-): number {
+): Promise<number> {
 	const restartContainer = deps.restartContainer ?? restartFrontendContainer;
 	const systemctl =
 		deps.systemctl ?? ((args: readonly string[]) => spawnSync('systemctl', [...args]));
@@ -6864,7 +7297,7 @@ export function rollback(
 	// and nginx 500-loops). Re-bind it to the restored install.
 	if (web?.container) {
 		try {
-			restartContainer(web.container, installDir);
+			await restartContainer(web.container, installDir);
 			info(`Re-attached the frontend container "${web.container}" to the restored install.`);
 		} catch (ctErr) {
 			warn(

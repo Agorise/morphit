@@ -306,7 +306,7 @@ Query parameters (all optional):
 | `fiat_currency`  | string  | ISO-4217, one or more, comma-separated, e.g. `USD` or `USD,EUR` |
 | `payment_methods`| string  | comma-separated method keys, e.g. `bank_transfer,paypal` (`payment_method` is accepted as an alias) |
 | `location_region`| string  | e.g. `US`, `EU` |
-| `langs`          | string  | comma-separated language codes; returns only orders written in one of those languages (orders posted before v1.15.0 carry no language and are left out) |
+| `langs`          | string  | comma-separated language codes, exactly as written here (case-sensitive): `en`, `es`, `de`, `pl`, `fr`, `it`, `ru`, `fa`, `zh-CN`, `zh-HK`; returns only orders written in one of those languages (orders posted before v1.15.0 carry no language and are left out). Unknown codes in the list are ignored; a list with no known code is a `400`, on this endpoint and on the stream. Given twice, the last one counts |
 | `min_trades`     | integer | minimum completed trades of the poster (0–100) |
 | `sort`           | string  | `recent` (default), `rating`, `trades` |
 | `limit`          | integer | 1–100, default 50 |

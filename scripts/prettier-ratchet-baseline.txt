@@ -440,7 +440,6 @@ apps/web/scripts/operator-doc-per-asset-coverage-smoke.ts
 apps/web/scripts/operator-doc-section-length-smoke.ts
 apps/web/scripts/order-blog-post-mirror-smoke.ts
 apps/web/scripts/order-card-smoke.ts
-apps/web/scripts/order-completion-semantics-smoke.ts
 apps/web/scripts/order-detail-expired-ui-smoke.ts
 apps/web/scripts/order-detail-posting-retry-smoke.ts
 apps/web/scripts/order-lang-parity-smoke.ts

@@ -54,7 +54,16 @@
  */
 
 /** Per-endpoint health + latency state. */
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import {
+	closeSync,
+	constants as fsConstants,
+	fstatSync,
+	openSync,
+	readFileSync,
+	renameSync,
+	unlinkSync,
+	writeSync
+} from 'node:fs';
 
 export interface EndpointState {
 	readonly url: string;
@@ -463,8 +472,20 @@ export class EndpointPool {
 	private loadHealthState(): void {
 		if (this.healthStatePath === undefined) return;
 		try {
-			if (!existsSync(this.healthStatePath)) return;
-			const raw: unknown = JSON.parse(readFileSync(this.healthStatePath, 'utf8'));
+			// Never read through a link (review G1): a parse error would quote
+			// the first bytes of whatever file it named.
+			let text: string;
+			const fd = openSync(
+				this.healthStatePath,
+				fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK
+			);
+			try {
+				if (!fstatSync(fd).isFile()) return;
+				text = readFileSync(fd, 'utf8');
+			} finally {
+				closeSync(fd);
+			}
+			const raw: unknown = JSON.parse(text);
 			if (raw === null || typeof raw !== 'object') return;
 			const rec = raw as { savedAt?: unknown; endpoints?: unknown };
 			const savedAt = typeof rec.savedAt === 'number' ? rec.savedAt : 0;
@@ -498,8 +519,26 @@ export class EndpointPool {
 					consecutiveFailures: ep.consecutiveFailures
 				};
 			}
+			// Root (morphit-ops) saves here too, and the file lives in the
+			// morphit account's home: the temporary file is always a NEW one
+			// (O_EXCL), never opened through a link planted there (review G1);
+			// rename() replaces a link at the final name rather than following it.
 			const tmp = `${this.healthStatePath}.tmp`;
-			writeFileSync(tmp, JSON.stringify({ savedAt: Date.now(), endpoints: out }));
+			try {
+				unlinkSync(tmp);
+			} catch {
+				/* not there */
+			}
+			const fd = openSync(
+				tmp,
+				fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+				0o640
+			);
+			try {
+				writeSync(fd, JSON.stringify({ savedAt: Date.now(), endpoints: out }));
+			} finally {
+				closeSync(fd);
+			}
 			renameSync(tmp, this.healthStatePath);
 		} catch {
 			/* best-effort */

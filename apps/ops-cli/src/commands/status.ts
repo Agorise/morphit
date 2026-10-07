@@ -30,7 +30,12 @@ import {
 	localFeeView,
 	type LocalFeeView
 } from '../lib/operatorFeeRecipient.ts';
-import { describeWebHeal, readWebHealState } from '../lib/webHeal.ts';
+import {
+	describeWebHeal,
+	readWebHealState,
+	webHealStatusRow,
+	type WebHealState
+} from '../lib/webHeal.ts';
 
 // ─── Query result types ──────────────────────────────────────────
 
@@ -400,6 +405,24 @@ export function collectBackups(): StatusSnapshot['backups'] {
 }
 
 /** Compact human size (B/KB/MB/…), for the dashboard only. */
+/** The "Web proxy (BunkerWeb)" section: the background web heal's last
+ *  result, when there is one. What is in place, in words (lib/webHeal.ts): a
+ *  country list left in BunkerWeb is not "not applied", a check that could
+ *  not run is not a failure, and settings that were already in place are
+ *  never called "applied". Exported for its test. */
+export function renderWebHealSection(wh: WebHealState | null, nowMs = Date.now()): void {
+	if (wh === null) return;
+	section('Web proxy (BunkerWeb)');
+	const whRow = webHealStatusRow(wh);
+	row({
+		label: 'Privacy settings:',
+		value: whRow.value,
+		status: whRow.status,
+		detail: describeWebHeal(wh, nowMs)
+	});
+	blank();
+}
+
 function humanSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
 	const units = ['KB', 'MB', 'GB', 'TB'];
@@ -461,27 +484,7 @@ function renderHumanDashboard(ctx: CommandCtx, snap: StatusSnapshot): void {
 	blank();
 
 	// ── Web proxy (v1.20.1): the background BunkerWeb heal's last result ──
-	const wh = readWebHealState();
-	if (wh !== null) {
-		section('Web proxy (BunkerWeb)');
-		const bad =
-			wh.state === 'done' &&
-			(!['applied', 'already', 'no-proxy'].includes(wh.result ?? '') || (wh.warnings ?? 0) > 0);
-		row({
-			label: 'Privacy settings:',
-			value:
-				wh.state === 'running'
-					? 'applying'
-					: !['applied', 'already', 'no-proxy'].includes(wh.result ?? '')
-						? 'not applied'
-						: bad
-							? 'applied, with warnings'
-							: 'ok',
-			status: bad ? 'warn' : 'ok',
-			detail: describeWebHeal(wh, Date.now())
-		});
-		blank();
-	}
+	renderWebHealSection(readWebHealState());
 
 	// ── Relay drain queue ──
 	section('Relay drain queue');

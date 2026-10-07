@@ -903,7 +903,8 @@
 			"tx_expired": "Your device's clock is off, so the signed transaction expired before it reached the chain (they're valid for only a few seconds). Turn on automatic date & time to sync your clock, then try again. (Chain: {reason})",
 			"duplicate": "This looks like it already went through. Refresh the page to check before trying again. (Chain: {reason})",
 			"waf_too_large": "Your instance's web firewall rejected this upload as too large (413). Ask the operator to raise its request body-size limit — a Morphit upgrade fixes this automatically.",
-			"waf_blocked": "Your instance's web firewall blocked this request (403). Ask the operator to exempt the /v1/ API — a Morphit upgrade fixes this automatically."
+			"waf_blocked": "Your instance's web firewall blocked this request (403). Ask the operator to exempt the /v1/ API — a Morphit upgrade fixes this automatically.",
+			"invalid_text": "This text holds an invisible character Morphit cannot store (often pasted along with the text). Retype the part you pasted and try again — nothing was sent and nothing was paid."
 		},
 		"copy_unavailable": "Select the text to copy it",
 		"amount_input": {

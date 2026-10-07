@@ -50,7 +50,14 @@ const ACTIVATION = Date.parse(CONSENSUS_V2_ACTIVATION_TIME);
 /** The old rule's chain starts a month before the activation time. */
 const EARLIER = ACTIVATION - 30 * 86_400_000;
 
-async function run(fx: IntegrationFixture, base: number, t0: number, carolCancels = false) {
+async function run(
+	fx: IntegrationFixture,
+	base: number,
+	t0: number,
+	carolCancels = false,
+	/** Runs just before the given block: a write that is not chain data. */
+	offChain?: { beforeBlock: number; sql: string }
+) {
 	const blocks: [number, Op[][]][] = [
 		[base, [listed('alice'), listed('bob'), listed('carol'), listed('dave')]],
 		[base + 1, [bid('alice', '300.000 BLURT')]],
@@ -80,6 +87,7 @@ async function run(fx: IntegrationFixture, base: number, t0: number, carolCancel
 		[base + 4, [bid('dave', '306.000 BLURT')]]
 	];
 	for (const [n, trxs] of blocks) {
+		if (offChain && offChain.beforeBlock === n) await fx.db.query(offChain.sql);
 		const c: pg.PoolClient = await fx.pool.connect();
 		try {
 			await c.query(`SET search_path TO "${fx.schema}"`);
@@ -162,6 +170,42 @@ describe.skipIf(!INTEGRATION_ENABLED)(
 				expect(r.now.sort()).toEqual(
 					['alice', 'bob', 'carol', 'dave'].filter((x) => x !== 'carol').sort()
 				);
+			} finally {
+				await fx.teardown();
+			}
+		});
+
+		// The slot rule must read chain data only. An order's fee_status is also
+		// written by node-local jobs on their own clock (the external-fee re-check,
+		// the BLURT fee re-verify), so two nodes can hold different values for the
+		// same order at the same block; a verdict that read it would differ between
+		// them, permanently (featured_slot_bids is chain-derived state).
+		it('from the activation time the verdict does not depend on a fee status a node-local job wrote', async () => {
+			const fx = await setupWithMigrations();
+			try {
+				const r = await run(fx, 10, ACTIVATION, false, {
+					beforeBlock: 14,
+					sql: `UPDATE orders SET fee_status = 'pending_external' WHERE account = 'carol'`
+				});
+				expect(r.verdict).toBe('applied:');
+				expect(r.afterCarolExpires).toEqual(['dave']);
+				expect(r.daveHours).toBe(6);
+				// carol's bid still holds its slot: dave is queued behind it, as on a
+				// node whose job had not run yet.
+				const daveStarts = await fx.db.query<{ e: Date; b: Date }>(
+					`SELECT effective_at AS e, block_time_at AS b FROM featured_slot_bids WHERE bidder = 'dave'`
+				);
+				expect(daveStarts.rows[0]!.e.getTime()).toBeGreaterThan(daveStarts.rows[0]!.b.getTime());
+			} finally {
+				await fx.teardown();
+			}
+		});
+
+		it('before the activation time a bid on a cancelled order still holds its slot (history unchanged)', async () => {
+			const fx = await setupWithMigrations();
+			try {
+				const r = await run(fx, 100, EARLIER, true);
+				expect(r.verdict).toBe('rejected:bid_increment_too_small');
 			} finally {
 				await fx.teardown();
 			}

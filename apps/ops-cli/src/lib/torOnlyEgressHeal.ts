@@ -44,6 +44,36 @@ import { MATRIX_TOR_ONLY_DECISION } from './matrixTorOnlyHeal.ts';
 export const EGRESS_SCRIPT = 'morphit-tor-egress.sh';
 export const EGRESS_UNIT = 'morphit-tor-egress.service';
 
+// Every wait of this heal (the real runtime below uses these), and the longest
+// the heal can take when each one runs to its limit — the after-restart unit
+// sizes its time limit from it (lib/afterRestartHeal.ts).
+/** One `curl` to a hidden node through Tor (curl itself stops at 40 s). */
+export const TOR_PROBE_TIMEOUT_MS = 50_000;
+/** Hidden nodes tried per Tor check. */
+export const TOR_PROBE_TRIES = 3;
+/** One run of morphit-tor-egress.sh. */
+export const EGRESS_SCRIPT_TIMEOUT_MS = 60_000;
+/** One systemctl call (a Docker or i2pd restart included). */
+export const EGRESS_SYSTEMCTL_TIMEOUT_MS = 180_000;
+/** Installing the script and unit (their `systemctl daemon-reload`). */
+export const EGRESS_INSTALL_TIMEOUT_MS = 60_000;
+const TOR_CHECK_MAX_MS = TOR_PROBE_TRIES * TOR_PROBE_TIMEOUT_MS;
+/** The longest path through healTorOnlyEgress, every call at its limit:
+ *  Tor check, install, the OS jobs (check, apply, check), i2pd (check, apply,
+ *  restart, 3 s, is-active, check), Docker (check, apply, daemon-reload,
+ *  try-restart, 5 s, cat, check, is-active), the rule (check, apply, enable),
+ *  its verification (check, probe, Tor check), then the revert (script,
+ *  disable) or is-enabled. The test walks every path against it. */
+export const EGRESS_HEAL_MAX_MS =
+	TOR_CHECK_MAX_MS +
+	EGRESS_INSTALL_TIMEOUT_MS +
+	3 * EGRESS_SCRIPT_TIMEOUT_MS +
+	(3 * EGRESS_SCRIPT_TIMEOUT_MS + 2 * EGRESS_SYSTEMCTL_TIMEOUT_MS + 3_000) +
+	(3 * EGRESS_SCRIPT_TIMEOUT_MS + 4 * EGRESS_SYSTEMCTL_TIMEOUT_MS + 5_000) +
+	(2 * EGRESS_SCRIPT_TIMEOUT_MS + EGRESS_SYSTEMCTL_TIMEOUT_MS) +
+	(2 * EGRESS_SCRIPT_TIMEOUT_MS + TOR_CHECK_MAX_MS) +
+	(EGRESS_SCRIPT_TIMEOUT_MS + EGRESS_SYSTEMCTL_TIMEOUT_MS);
+
 export interface EgressRuntime {
 	torOnly(): boolean;
 	/** Does Tor reach the Tor network now (an HTTP answer from a hidden node)? */
@@ -270,7 +300,7 @@ function realRuntime(): EgressRuntime {
 		torWorks: async () => {
 			const onions = DEFAULT_HIDDEN_BLURT_RPC_ENDPOINTS.filter((u) => /\.onion:/.test(u)).slice(
 				0,
-				3
+				TOR_PROBE_TRIES
 			);
 			for (const u of onions) {
 				const r = sh(
@@ -287,7 +317,7 @@ function realRuntime(): EgressRuntime {
 						socks,
 						`${u}/`
 					],
-					50_000
+					TOR_PROBE_TIMEOUT_MS
 				);
 				if (/^[1-5]\d\d$/.test(r.out.trim())) return true;
 			}
@@ -301,7 +331,7 @@ function realRuntime(): EgressRuntime {
 				`/etc/systemd/system/${EGRESS_UNIT}`,
 				0o644
 			);
-			if (ok1 && ok2) sh('systemctl', ['daemon-reload']);
+			if (ok1 && ok2) sh('systemctl', ['daemon-reload'], EGRESS_INSTALL_TIMEOUT_MS);
 			return ok1 && ok2;
 		},
 		script: (mode) => {
@@ -310,11 +340,13 @@ function realRuntime(): EgressRuntime {
 			} catch {
 				/* the script says so if it needs it */
 			}
-			return sh('sh', [helper, mode, bk], 60_000, { ...process.env, MORPHIT_TOR_SOCKS: socks })
-				.status;
+			return sh('sh', [helper, mode, bk], EGRESS_SCRIPT_TIMEOUT_MS, {
+				...process.env,
+				MORPHIT_TOR_SOCKS: socks
+			}).status;
 		},
 		systemctl: (args) => {
-			const r = sh('systemctl', args, 180_000);
+			const r = sh('systemctl', args, EGRESS_SYSTEMCTL_TIMEOUT_MS);
 			return { ok: r.status === 0, out: r.out };
 		},
 		sleep: (ms) => new Promise((r) => setTimeout(r, ms)),

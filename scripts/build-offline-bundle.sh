@@ -357,9 +357,26 @@ log "5/6  Pulling + saving docker images (${BW_IMAGE} + ${BW_SCHED_IMAGE} + ${FE
 for img in "${BW_IMAGE}" "${BW_SCHED_IMAGE}" "${FE_BASE}"; do
 	docker pull "${img}"
 	_safe="$(printf '%s' "${img}" | tr '/:' '__')"
-	docker save "${img}" | gzip -9c > "${VENDOR}/docker/${_safe}.tar.gz"
+	# A digest-pinned image (name:tag@digest) is saved BY ITS TAG: saved by
+	# the full reference, `docker save` records no name, so the loaded image
+	# would have an ID and no name and nothing could find it (Docker 29.8.2,
+	# both image stores).  Saved by tag, its original index (the pinned digest)
+	# rides inside, which is how the installed box proves the loaded image is
+	# the pinned one (apps/ops-cli/src/lib/frontendBaseImage.ts).
+	_save="${img}"
+	case "${img}" in *@sha256:*) _save="${img%@*}"; docker tag "${img}" "${_save}" ;; esac
+	docker save "${_save}" | gzip -9c > "${VENDOR}/docker/${_safe}.tar.gz"
 	[ -s "${VENDOR}/docker/${_safe}.tar.gz" ] \
 		|| die "docker save produced an empty file for ${img} — image not present / save failed."
+	case "${img}" in *@sha256:*)
+		_hex="${img##*@sha256:}"
+		# (whole-stream reads: an early exit would SIGPIPE gzip under pipefail)
+		_got="$(tar -xzOf "${VENDOR}/docker/${_safe}.tar.gz" "blobs/sha256/${_hex}" 2>/dev/null | sha256sum | cut -d' ' -f1)" || _got=''
+		[ "${_got}" = "${_hex}" ] || die "the saved ${_save} does not carry the pinned index ${img#*@} — this Docker uses its classic image store, whose saves rewrite manifests. Build the bundle with Docker's containerd image store (the default of a new Docker 29+ install; or add {\"features\":{\"containerd-snapshotter\":true}} to /etc/docker/daemon.json and restart Docker), then run this again."
+		_mf="$(tar -xzOf "${VENDOR}/docker/${_safe}.tar.gz" manifest.json 2>/dev/null)" || _mf=''
+		case "${_mf}" in *"\"${_save}\""*) ;; *) die "the saved ${_save} carries no name for docker load to give it." ;; esac
+		;;
+	esac
 	log "     saved ${img} → $(du -h "${VENDOR}/docker/${_safe}.tar.gz" | cut -f1)"
 done
 fi

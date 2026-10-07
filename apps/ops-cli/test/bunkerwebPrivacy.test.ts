@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
 	LOCAL_IP_BLOCKS_KEY,
@@ -122,5 +126,103 @@ describe('checking BunkerWeb runs with no country list', () => {
 		expect(p.text).toContain('#old.example_BLACKLIST_COUNTRY=CN');
 		expect(p.text).toContain('FOO=a_BLACKLIST_COUNTRY=x');
 		expect(p.changes.filter((c) => /country list/.test(c))).toEqual([]);
+	});
+});
+
+// v1.21.1 review (D-6): Docker Compose also accepts `KEY = value`, `KEY: value`,
+// `export` with several spaces, a ` # comment` after an unquoted value, keys
+// that start with a digit or hold a `-`, and quoted values that run over
+// several lines. The expectations below are what `docker compose config`
+// (v5.5.1) printed for this exact file; the last block re-asks the real
+// Compose when this machine has it.
+const COMPOSE_FORMS = [
+	'BLACKLIST_COUNTRY = CN',
+	'WHITELIST_COUNTRY: US',
+	'shop.example.org_BLACKLIST_COUNTRY: RU',
+	'3dshop.example_BLACKLIST_COUNTRY=KP',
+	'  export  a-b.example_WHITELIST_COUNTRY =  "FR DE"  ',
+	'NOTE=CN # block',
+	"QUOTED='CN IR'",
+	"MULTI='a",
+	"BLACKLIST_COUNTRY=XX'",
+	'TABBED=CN\t# kept',
+	'#old.example_BLACKLIST_COUNTRY=CN',
+	''
+].join('\n');
+const COMPOSE_SAYS: Record<string, string> = {
+	BLACKLIST_COUNTRY: 'CN',
+	WHITELIST_COUNTRY: 'US',
+	'shop.example.org_BLACKLIST_COUNTRY': 'RU',
+	'3dshop.example_BLACKLIST_COUNTRY': 'KP',
+	'a-b.example_WHITELIST_COUNTRY': 'FR DE',
+	NOTE: 'CN',
+	QUOTED: 'CN IR',
+	MULTI: 'a\nBLACKLIST_COUNTRY=XX',
+	TABBED: 'CN\t# kept'
+};
+const COUNTRY_KEYS = Object.keys(COMPOSE_SAYS).filter((k) => /COUNTRY$/.test(k));
+
+describe('env-file lines are read the way Docker Compose reads them (D-6)', () => {
+	it('every form Compose accepts gives the value Compose gives', () => {
+		expect(Object.fromEntries(envValues(COMPOSE_FORMS))).toEqual(COMPOSE_SAYS);
+	});
+	it('every country list in those forms is emptied — and only real entries are rewritten', () => {
+		const p = planBunkerwebPrivacy(COMPOSE_FORMS);
+		const v = envValues(p.text);
+		for (const k of COUNTRY_KEYS) expect(v.get(k), k).toBe('');
+		for (const k of COUNTRY_KEYS) expect(p.want.get(k), k).toBe('');
+		// the multi-line value and the commented line are not entries: untouched
+		expect(v.get('MULTI')).toBe('a\nBLACKLIST_COUNTRY=XX');
+		expect(p.text).toContain('#old.example_BLACKLIST_COUNTRY=CN');
+		expect(p.text).toContain('  export  a-b.example_WHITELIST_COUNTRY=\n');
+		// a second run finds nothing left
+		expect(planBunkerwebPrivacy(p.text).changes.filter((c) => /ountr/.test(c))).toEqual([]);
+	});
+	const compose = spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' }).status === 0;
+	it.skipIf(!compose)(
+		'the real Docker Compose reads the file, and the planned one, the same way',
+		() => {
+			const dir = mkdtempSync(join(tmpdir(), 'bwenv-'));
+			try {
+				writeFileSync(
+					join(dir, 'docker-compose.yml'),
+					'services:\n  bunkerweb:\n    image: bunkerity/bunkerweb:1.5.10\n    env_file:\n      - ./bunkerweb.env\n'
+				);
+				const read = (text: string): Record<string, string> => {
+					writeFileSync(join(dir, 'bunkerweb.env'), text);
+					const r = spawnSync(
+						'docker',
+						['compose', '-f', join(dir, 'docker-compose.yml'), 'config', '--format', 'json'],
+						{ encoding: 'utf8' }
+					);
+					expect(r.status, r.stderr).toBe(0);
+					return JSON.parse(r.stdout).services.bunkerweb.environment as Record<string, string>;
+				};
+				expect(read(COMPOSE_FORMS)).toEqual(Object.fromEntries(envValues(COMPOSE_FORMS)));
+				const planned = planBunkerwebPrivacy(COMPOSE_FORMS).text;
+				const after = read(planned);
+				expect(after).toEqual(Object.fromEntries(envValues(planned)));
+				for (const k of COUNTRY_KEYS) expect(after[k], k).toBe('');
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
+			}
+		}
+	);
+});
+
+// v1.21.1 review (I-2): the operator is told which countries are no longer
+// turned away, for the global lists and each per-site one.
+describe('each country change names the countries it unblocks (I-2)', () => {
+	it('global and per-site lines name their countries; the lists end up empty', () => {
+		const p = planBunkerwebPrivacy(
+			'BLACKLIST_COUNTRY=CN IR\nWHITELIST_COUNTRY="US CA"\nshop.example.org_BLACKLIST_COUNTRY=RU\n'
+		);
+		const line = (k: string): string => p.changes.find((c) => c.includes(k)) ?? '';
+		expect(line('(BLACKLIST_COUNTRY')).toMatch(/\bCN\b.*\bIR\b/);
+		expect(line('(WHITELIST_COUNTRY')).toMatch(/\bUS\b.*\bCA\b/);
+		expect(line('shop.example.org_BLACKLIST_COUNTRY')).toMatch(/\bRU\b/);
+		expect(p.text).toMatch(/^BLACKLIST_COUNTRY=$/m);
+		expect(p.text).toMatch(/^WHITELIST_COUNTRY=$/m);
+		expect(p.text).toMatch(/^shop\.example\.org_BLACKLIST_COUNTRY=$/m);
 	});
 });

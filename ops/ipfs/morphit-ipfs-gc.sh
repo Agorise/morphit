@@ -23,7 +23,7 @@
 #   snapshots  (a pin is an indexer snapshot when it is a gzip tar whose
 #              manifest.json has snapshotFormatVersion + lastAppliedBlock)
 #     - the snapshot the chain anchors, as the snapshot mirror last VERIFIED it
-#       against the signed on-chain op (/var/lib/morphit/snapshot-mirror.json);
+#       against the signed on-chain op (/var/lib/morphit-ops/snapshot-mirror.json);
 #     - every snapshot newer than that one (the publisher's not-yet-anchored
 #       exports — any of them may be the one broadcast next);
 #     - the KEEP_OLDER (2) newest older ones: fast-sync and the mirrors only
@@ -60,7 +60,13 @@ esac
 IPFS_REPO="${IPFS_PATH:-/var/lib/ipfs/.ipfs}"
 IPFS_BIN="${MORPHIT_IPFS_BIN:-ipfs}"
 RELEASE_URL="${MORPHIT_RELEASE_URL:-http://127.0.0.1:${MORPHIT_INDEXER_PORT:-8081}/v1/release}"
-MIRROR_STATE="${MORPHIT_SNAPSHOT_MIRROR_STATE:-/var/lib/morphit/snapshot-mirror.json}"
+MIRROR_STATE="${MORPHIT_SNAPSHOT_MIRROR_STATE:-/var/lib/morphit-ops/snapshot-mirror.json}"
+# Until the mirror job has run on a release that keeps its state in root's own
+# directory: the old place, only as a plain file (never through a link).
+if [ -z "${MORPHIT_SNAPSHOT_MIRROR_STATE:-}" ] && [ ! -e "$MIRROR_STATE" ] &&
+	[ -f /var/lib/morphit/snapshot-mirror.json ] && [ ! -L /var/lib/morphit/snapshot-mirror.json ]; then
+	MIRROR_STATE=/var/lib/morphit/snapshot-mirror.json
+fi
 INSTALL_DIR="${MORPHIT_INSTALL_DIR:-/opt/morphit}"
 KEEP_OLDER="${MORPHIT_SNAPSHOT_KEEP_OLDER:-2}"
 GC_TIMEOUT="${MORPHIT_IPFS_GC_TIMEOUT:-600}"

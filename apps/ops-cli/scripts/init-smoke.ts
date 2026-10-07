@@ -147,7 +147,7 @@ const sampleAnswers: WizardAnswers = {
 	instanceName: 'test-instance',
 	tagline: 'A test',
 	databaseUrl: 'postgres://test:secret@localhost/test',
-	blurtRpcEndpoints: ['https://rpc.beblurt.com', 'https://rpc.blurt.world'],
+	blurtRpcEndpoints: ['https://rpc.beblurt.com', 'https://rpc.example.org'],
 	relayAccount: {
 		name: 'testrelay',
 		account: null,

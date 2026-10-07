@@ -85,13 +85,17 @@ beforeAll(() => {
 	expect(spawnSync('tar', ['-czf', tarball, '-C', tree, '.']).status).toBe(0);
 });
 
-/** Block 4's commands, as eli5-release.sh prints them. */
-function block4(): string[] {
+/** Block 4's section of what eli5-release.sh prints (up to Block 5). */
+function block4Text(): string {
 	const out = spawnSync('bash', [join(REPO, 'scripts', 'eli5-release.sh'), '9.9.9'], {
 		encoding: 'utf8'
 	}).stdout;
-	const b4 = out.slice(out.indexOf('**BLOCK 4**'));
-	const code = /```\n([\s\S]*?)```/.exec(b4)![1]!;
+	return out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
+}
+
+/** Block 4's commands, as eli5-release.sh prints them. */
+function block4(): string[] {
+	const code = /```\n([\s\S]*?)```/.exec(block4Text())![1]!;
 	return code.split('\n').filter((l) => l.trim() !== '');
 }
 
@@ -100,7 +104,12 @@ interface Fixtures {
 	served: Record<string, string>;
 }
 
-function runBlock4(fx: Fixtures, extraEnv: Record<string, string> = {}) {
+function runBlock4(
+	fx: Fixtures,
+	extraEnv: Record<string, string> = {},
+	/** Replaces Block 4's payload-build line (the recovery runs it again). */
+	payloadLine?: string
+) {
 	const run = mkdtempSync(join(S, 'run-'));
 	const home = join(run, 'home');
 	const tmp = join(run, 'tmp');
@@ -113,6 +122,9 @@ function runBlock4(fx: Fixtures, extraEnv: Record<string, string> = {}) {
 	);
 	const lines = block4()
 		.filter((l) => !/^npm ci\b/.test(l) && !/release-broadcast\.ts/.test(l))
+		.map((l) =>
+			payloadLine !== undefined && /release-build-payload\.ts/.test(l) ? payloadLine : l
+		)
 		.map((line) => {
 			const l = line
 				.replace(/(^|\s|=)\/tmp\//g, `$1${tmp}/`)
@@ -198,6 +210,58 @@ describe('ELI5 Block 4', () => {
 	it('refuses an anchor whose signing key is not a pinned release signer', () => {
 		const anchor = goodAnchor().replace(FPR, 'A'.repeat(40));
 		expect(runBlock4({ anchor, served: buildHex }).payload).toBeNull();
+	});
+
+	// v1.20.2: release.yml could not compute the CID, the anchor carried none, the
+	// payload went out without one, and zero-clearnet nodes could not upgrade.
+	const noCidAnchor = (): string =>
+		goodAnchor().replace(/^export MORPHIT_BUILD_IPFS_CID=.*\n/m, '');
+
+	it('stops when the anchor carries no IPFS CID, and says to pass --ipfs-cid', () => {
+		const { r, payload } = runBlock4({ anchor: noCidAnchor(), served: buildHex });
+		expect(payload, 'a payload with no ipfs_cid was written').toBeNull();
+		expect(r.stderr).toMatch(/--ipfs-cid/);
+	});
+
+	it('the recovery the blocks print (payload line + --ipfs-cid) anchors the CID the release box printed', () => {
+		const text = block4Text();
+		const recovery = /`([^`]*release-build-payload\.ts --ipfs-cid <cid>[^`]*)`/.exec(text)?.[1];
+		expect(recovery, 'Block 4 does not say how to supply a missing CID').toBeDefined();
+		// It is Block 4's own payload line with only the flag added.
+		const line = block4().find((l) => /release-build-payload\.ts/.test(l))!;
+		expect(recovery).toBe(
+			line.replace('release-build-payload.ts', 'release-build-payload.ts --ipfs-cid <cid>')
+		);
+		const { r, payload } = runBlock4(
+			{ anchor: noCidAnchor(), served: buildHex },
+			{},
+			recovery!.replace('<cid>', CID)
+		);
+		expect(r.status, r.stderr.slice(-600)).toBe(0);
+		expect(payload?.distribution?.ipfs_cid).toBe(CID);
+	});
+
+	it('refuses --ipfs-cid when the anchor already carries a CID', () => {
+		const line = block4().find((l) => /release-build-payload\.ts/.test(l))!;
+		const other = 'bafybeia5rkympgrdwxsi3dne4viuo3fbcjmgxhyg3tl2ia7p43wz2z2pni';
+		const { payload } = runBlock4(
+			{ anchor: goodAnchor(), served: buildHex },
+			{},
+			line.replace('release-build-payload.ts', `release-build-payload.ts --ipfs-cid ${other}`)
+		);
+		expect(payload, 'a hand-typed CID overrode the anchored one').toBeNull();
+	});
+
+	it('refuses a --ipfs-cid that is not a CID', () => {
+		const line = block4().find((l) => /release-build-payload\.ts/.test(l))!;
+		for (const bad of ['bafy-not-a-cid', `${CID}x$(touch PWNED)`, '']) {
+			const { payload } = runBlock4(
+				{ anchor: noCidAnchor(), served: buildHex },
+				{},
+				line.replace('release-build-payload.ts', `release-build-payload.ts --ipfs-cid '${bad}'`)
+			);
+			expect(payload, `--ipfs-cid '${bad}' was accepted`).toBeNull();
+		}
 	});
 });
 

@@ -99,6 +99,7 @@ import {
 } from '@morphit/operator-config/theme';
 import { impersonatesReservedOperatorName } from '../../../indexer/src/indexer/confusables.ts';
 import { sanitizeSvg, HostileSvgError } from './svgSanitize.ts';
+import { isHiddenOnlyNode } from './hiddenOnly.ts';
 import {
 	OG_HEIGHT,
 	OG_IMAGE_REL,
@@ -1140,9 +1141,14 @@ export function planBranding(
 	}
 
 	if (missingPngs.length > 0) {
+		// A Tor/I2P-only server must not be told to run apt as is: its package
+		// sources may still be clearnet ones (see `morphit-ops branding`).
+		const install = isHiddenOnlyNode()
+			? 'Install librsvg2-bin (rsvg-convert) the way you install packages on this server (apt over Tor, or the offline bundle)'
+			: 'Install one — sudo apt install librsvg2-bin —';
 		warnings.push(
 			`Could not generate ${missingPngs.join(' and ')} (this server has neither rsvg-convert nor ` +
-				'ImageMagick), so those still show the Morphit mark. Install one — sudo apt install librsvg2-bin — ' +
+				`ImageMagick), so those still show the Morphit mark. ${install} ` +
 				`and run \`sudo morphit-ops branding apply\` again, or put ready-made PNGs of the same names and ` +
 				`sizes in ${dir} (launch screens under ${dir}/static/splash/).`
 		);
@@ -1184,7 +1190,8 @@ export function planBranding(
 			originMap = null;
 		}
 		const og = renderOgImage({
-			name: settings.brandName ?? DEFAULT_BRAND_NAME,
+			// No name given: the operator's logo alone — never "Morphit" beside it.
+			name: settings.brandName ?? '',
 			mark: ogMark,
 			host: ogHostFromOriginMap(originMap),
 			palette
@@ -1229,6 +1236,16 @@ export function planBranding(
 				put(rel, Buffer.from(svgInput(`static/${rel}`).svg));
 			} else {
 				put(rel, buf);
+			}
+			if (rel === OG_IMAGE_REL) {
+				// Every page declares og:image as 1200 × 630; link previews crop or
+				// refuse another size.
+				const size = pngSize(buf);
+				if (size === null || size.width !== 1200 || size.height !== 630) {
+					warnings.push(
+						`static/${rel}: ${size === null ? 'not a PNG' : `${size.width} × ${size.height}`} — link previews expect a 1200 × 630 PNG; it is served as given`
+					);
+				}
 			}
 			notes.push(`static: ${rel}`);
 		}

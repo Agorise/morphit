@@ -4,10 +4,11 @@
 #
 # ⚠️  THE CANONICAL RELEASE IS BUILT BY CI, NOT BY THIS SCRIPT.  ⚠️
 # `.forgejo/workflows/release.yml` (fired by the pushed signed tag) builds the
-# tarball, hashes it (SHA-256), signs it with the pinned key (a release without
-# the signing key fails), PUBLISHES
-# the Forgejo release, attaches the assets, and writes the on-chain
-# `distribution-anchor.env`. The bytes people download come from THAT job, and
+# tarball, hashes it (SHA-256), signs it with the pinned key when the
+# MORPHIT_RELEASE_SIGNING_KEY secret is set (without it the release is
+# published with no .asc, and nodes install it by the SHA-256 in @morphit's
+# on-chain record), PUBLISHES the Forgejo release, attaches the assets, and
+# writes the on-chain `distribution-anchor.env`. The bytes people download come from THAT job, and
 # the ELI5 ceremony fetches the anchor it wrote. You normally never run this.
 #
 # This script builds the tarball a DIFFERENT way — `git archive` with a

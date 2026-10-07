@@ -29,6 +29,7 @@ import {
 } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { SchedulerCycle } from '../src/lib/bunkerwebScheduler.ts';
+import { countryListsInSettings, type CountryRow } from '../src/lib/bunkerwebPrivacy.ts';
 import { BUNKERWEB_PRIVACY_SETTINGS } from '../src/lib/bunkerwebPrivacy.ts';
 import { join, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -335,6 +336,17 @@ class Sim {
 	edgeSettings = new Map<string, string>();
 	settingsFrozen = false;
 	settingsReadable = true;
+	/** BunkerWeb's database: rows its web UI or Autoconf saved, by the key
+	 *  they show as in variables.env (`<server name>_KEY` per site). They win
+	 *  over the env file, as in BunkerWeb 1.5.10 (Database.save_config). */
+	db = new Map<string, { value: string; method: 'ui' | 'autoconf' }>();
+	/** What the scheduler's database is: BunkerWeb's sqlite, another server,
+	 *  or not readable at all (the exec fails). */
+	dbKind: 'sqlite' | 'other' | null = 'sqlite';
+	/** A database edit makes the running scheduler rebuild after this long. */
+	regenDelay = 30_000;
+	regenAt: number | null = null;
+	removals: CountryRow[][] = [];
 	info: string[] = [];
 	warn: string[] = [];
 	readonly project: string;
@@ -469,6 +481,12 @@ class Sim {
 			},
 			bunkerwebSettings: (n, t) => {
 				if (!cost(this.costs.probe, 'bunkerwebSettings', t) || !this.settingsReadable) return null;
+				if (this.regenAt !== null && this.t >= this.regenAt) {
+					this.regenAt = null;
+					for (const [name, x] of this.c)
+						if (/bunkerity\/bunkerweb:/.test(x.image))
+							this.edgeSettings.set(name, this.generated(x));
+				}
 				return this.edgeSettings.get(n) ?? null;
 			},
 			configNewerThanStart: (_n, t) => (cost(this.costs.probe, 'stat', t), this.newerThanStart),
@@ -497,7 +515,48 @@ class Sim {
 			},
 			dockerPullsThroughTor: () => this.torPulls,
 			schedulerCycle: () =>
-				this.verdict ? this.verdict(this.t - this.lastUpAt) : { kind: 'loaded' as const },
+				this.verdict
+					? this.verdict(this.t - this.lastUpAt)
+					: this.regenAt !== null && this.t < this.regenAt
+						? { kind: 'pending' as const }
+						: { kind: 'loaded' as const },
+			countryRows: (sched, t) => {
+				if (!cost(this.costs.probe, 'countryRows', t) || this.dbKind === null) return null;
+				if (this.dbKind === 'other') return { db: 'other' as const, rows: [] };
+				const split = (k: string): { service: string | null; key: string } => {
+					const m = /^(.+)_((?:BLACKLIST|WHITELIST)_COUNTRY)$/.exec(k);
+					return m ? { service: m[1]!, key: m[2]! } : { service: null, key: k };
+				};
+				const rows: CountryRow[] = [...this.db].map(([k, r]) => ({
+					...split(k),
+					suffix: 0,
+					value: r.value,
+					method: r.method
+				}));
+				// The rest come from the scheduler's own environment (method "scheduler").
+				for (const e of this.c.get(sched)?.env ?? []) {
+					const k = e.slice(0, e.indexOf('='));
+					const v = e.slice(e.indexOf('=') + 1);
+					if (/(?:BLACKLIST|WHITELIST)_COUNTRY$/.test(k) && v !== '' && !this.db.has(k))
+						rows.push({ ...split(k), suffix: 0, value: v, method: 'scheduler' });
+				}
+				return { db: 'sqlite' as const, rows };
+			},
+			removeCountryRows: (_sched, rows, t) => {
+				if (!cost(this.costs.probe, 'removeCountryRows', t) || this.dbKind !== 'sqlite')
+					return null;
+				this.removals.push([...rows]);
+				let removed = 0;
+				for (const r of rows) {
+					const k = r.service ? `${r.service}_${r.key}` : r.key;
+					if (this.db.get(k)?.method === 'ui') {
+						this.db.delete(k);
+						removed++;
+					}
+				}
+				this.regenAt = this.t + this.regenDelay;
+				return { backup: '/data/lib/db.pre-morphit-country.sqlite3', removed };
+			},
 			onTerminate: (fn) => ((this.terminate = fn), () => (this.terminate = null)),
 			sleep: async (ms) => {
 				this.t += ms;
@@ -538,6 +597,7 @@ class Sim {
 			['ANTIBOT_URI', '/challenge']
 		]);
 		for (const e of x.env) vars.set(e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1));
+		for (const [k, r] of this.db) vars.set(k, r.value);
 		return [...vars].map(([k, v]) => `${k}=${v}`).join('\n');
 	}
 	edgeNginx(x: ContainerInfo): string {
@@ -1629,10 +1689,368 @@ describe('a country list this heal cannot edit', () => {
 			if (/bunkerity\/bunkerweb:/.test(x.image)) s.edgeSettings.set(n, s.generated(x));
 		const out = await s.run();
 		expect(out.kind).toBe('applied');
-		expect(s.warn.join(' ')).toMatch(/country list \(shop\.example\.org_BLACKLIST_COUNTRY=CN\)/);
+		expect(s.warn.join(' ')).toMatch(/shop\.example\.org_BLACKLIST_COUNTRY=CN/);
 		const again = await s.run();
-		expect(again.kind).toBe('left-alone');
+		expect(again.kind).toBe('country-list');
 		expect('reason' in again ? again.reason : '').toMatch(/No Morphit instance blocks by country/);
+	});
+});
+
+const live = (s: Sim, name = 'bunkerweb'): string[] =>
+	countryListsInSettings(s.edgeSettings.get(name) ?? '');
+/** BunkerWeb saved a list (its web UI, or Autoconf) and rebuilt its settings. */
+const saveInBunkerWeb = (
+	s: Sim,
+	key: string,
+	value: string,
+	method: 'ui' | 'autoconf' = 'ui'
+): void => {
+	s.db.set(key, { value, method });
+	for (const [n, x] of s.c)
+		if (/bunkerity\/bunkerweb:/.test(x.image)) s.edgeSettings.set(n, s.generated(x));
+};
+
+/** The pre-v1.20.0 box with BunkerWeb's scheduler (which holds its database). */
+const schedBox = (env: string = OLD_ENV): Sim =>
+	sim({
+		files: {
+			'docker-compose.yml': OLD_COMPOSE.replace(
+				'\n  frontend:\n',
+				'\n  bunkerweb-scheduler:\n    image: bunkerity/bunkerweb-scheduler:1.5.10\n    container_name: bunkerweb-scheduler\n    env_file:\n      - ./bunkerweb.env\n\n  frontend:\n'
+			),
+			'bunkerweb.env': env
+		},
+		composeFiles: ['docker-compose.yml'],
+		containers: [
+			{
+				name: 'bunkerweb',
+				service: 'bunkerweb',
+				image: 'bunkerity/bunkerweb:1.5.10',
+				ports: ['0.0.0.0:443->8443/tcp', '0.0.0.0:80->8080/tcp']
+			},
+			{
+				name: 'bunkerweb-scheduler',
+				service: 'bunkerweb-scheduler',
+				image: 'bunkerity/bunkerweb-scheduler:1.5.10'
+			},
+			{
+				name: 'morphit-frontend',
+				service: 'frontend',
+				image: 'bunkerweb-frontend',
+				mounts: [BUILD]
+			}
+		]
+	});
+
+// v1.21.1 review (D-1): BunkerWeb 1.5.10 never replaces a setting saved in its
+// web UI with the env file's value, so emptying the env file never removed such
+// a list, and the heal blamed a compose "environment:" entry.
+describe("a country list saved in BunkerWeb's web UI (D-1)", () => {
+	it('is removed from BunkerWeb’s database, and seen gone from what BunkerWeb runs with — no restart', async () => {
+		const s = schedBox();
+		expect((await s.run()).kind).toBe('applied');
+		saveInBunkerWeb(s, 'BLACKLIST_COUNTRY', 'CN IR');
+		expect(live(s)).toEqual(['BLACKLIST_COUNTRY=CN IR']);
+		const ups = s.ups.length;
+		s.info.length = 0;
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		expect(s.removals).toEqual([
+			[{ service: null, key: 'BLACKLIST_COUNTRY', suffix: 0, value: 'CN IR', method: 'ui' }]
+		]);
+		expect(s.db.size).toBe(0);
+		expect(live(s)).toEqual([]);
+		expect(s.ups.length).toBe(ups); // the running scheduler rebuilt by itself
+		const done = s.info.filter((l) => l.startsWith('✓')).join('\n');
+		expect(done).toMatch(/\bCN\b.*\bIR\b/);
+		expect(done).toMatch(/web UI/);
+		expect(s.warn).toEqual([]);
+		expect(s.silent).toEqual([]);
+		expect((await s.run()).kind).toBe('already');
+	});
+	it('a web-UI list over a list the env file also set: the privacy changes are kept, both lists are gone', async () => {
+		const s = schedBox(`${OLD_ENV}BLACKLIST_COUNTRY=CN\n`);
+		saveInBunkerWeb(s, 'BLACKLIST_COUNTRY', 'CN IR');
+		saveInBunkerWeb(s, 'example.org_WHITELIST_COUNTRY', 'US');
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		expect(readFileSync(s.path('bunkerweb.env'), 'utf8')).toMatch(/^BLACKLIST_COUNTRY=$/m);
+		expect(s.edgeSettings.get('bunkerweb')!.split('\n')).toContain('USE_BUNKERNET=no');
+		expect(live(s)).toEqual([]);
+		expect(s.removals.flat().map((r) => r.service ?? '-')).toEqual(['-', 'example.org']);
+		expect(s.warn).toEqual([]);
+	});
+	it("BunkerWeb's database cannot be edited here: the web UI (or Autoconf) is named as the place, calmly", async () => {
+		const s = schedBox();
+		await s.run();
+		s.dbKind = null;
+		saveInBunkerWeb(s, 'BLACKLIST_COUNTRY', 'CN IR');
+		const out = await s.run();
+		expect(out.kind).toBe('country-list');
+		const why = 'reason' in out ? out.reason : '';
+		expect(why).toMatch(/BLACKLIST_COUNTRY=CN IR/);
+		expect(why).toMatch(/web UI/);
+		expect(why).toMatch(/Autoconf/);
+		expect(why).not.toMatch(/environment:"\?|recreate/);
+		expect(s.removals).toEqual([]);
+		// a database BunkerWeb keeps elsewhere (MariaDB/PostgreSQL): the same
+		s.dbKind = 'other';
+		const other = await s.run();
+		expect(other.kind).toBe('country-list');
+		expect('reason' in other ? other.reason : '').toMatch(/web UI/);
+	});
+	it('an Autoconf label is named as the label, never removed from the database', async () => {
+		const s = schedBox();
+		await s.run();
+		saveInBunkerWeb(s, 'app.example.org_BLACKLIST_COUNTRY', 'RU', 'autoconf');
+		const out = await s.run();
+		expect(out.kind).toBe('country-list');
+		const why = 'reason' in out ? out.reason : '';
+		expect(why).toMatch(/app\.example\.org_BLACKLIST_COUNTRY=RU/);
+		expect(why).toMatch(/label bunkerweb\.BLACKLIST_COUNTRY/);
+		expect(s.removals).toEqual([]);
+	});
+	it('a compose "environment:" entry of the scheduler is named exactly: service, file and command', async () => {
+		const s = sim({
+			files: {
+				'docker-compose.yml': MORPHITIO_COMPOSE.replace(
+					'  bw-scheduler:\n    image: bunkerity/bunkerweb-scheduler:1.5.10\n    env_file:\n      - ./bunkerweb.env\n',
+					'  bw-scheduler:\n    image: bunkerity/bunkerweb-scheduler:1.5.10\n    env_file:\n      - ./bunkerweb.env\n    environment:\n      BLACKLIST_COUNTRY: "CN"\n'
+				).replace(
+					'    env_file:\n      - ./bunkerweb.env\n  bw-scheduler',
+					'    env_file:\n      - ./bunkerweb.env\n    environment:\n      BLACKLIST_COUNTRY: "CN"\n  bw-scheduler'
+				),
+				'bunkerweb.env': 'SERVER_NAME=morphit.io\nUSE_REVERSE_PROXY=yes\n'
+			},
+			composeFiles: ['docker-compose.yml'],
+			containers: [
+				{
+					name: 'bunkerweb-frontend-1',
+					service: 'frontend',
+					image: 'fe',
+					mounts: [BUILD],
+					gateways: ['172.18.0.1']
+				},
+				{
+					name: 'bunkerweb-bunkerweb-1',
+					service: 'bunkerweb',
+					image: 'bunkerity/bunkerweb:1.5.10',
+					ports: ['0.0.0.0:443->8443/tcp'],
+					gateways: ['172.18.0.1']
+				},
+				{
+					name: 'bunkerweb-bw-scheduler-1',
+					service: 'bw-scheduler',
+					image: 'bunkerity/bunkerweb-scheduler:1.5.10',
+					gateways: ['172.18.0.1']
+				}
+			]
+		});
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		const again = await s.run();
+		expect(again.kind).toBe('country-list');
+		const why = 'reason' in again ? again.reason : '';
+		expect(why).toMatch(/"environment:" entry BLACKLIST_COUNTRY of bw-scheduler/);
+		expect(why).toContain(s.path('docker-compose.yml'));
+		expect(why).toMatch(/up -d --no-deps bw-scheduler bunkerweb/);
+		expect(s.removals).toEqual([]);
+	});
+});
+
+describe('a country list both in the env file and in a compose "environment:" entry', () => {
+	it('the privacy changes are applied and kept (never all put back); the entry is named', async () => {
+		const withEnv = (c: string): string =>
+			c
+				.replace(
+					'  bw-scheduler:\n    image: bunkerity/bunkerweb-scheduler:1.5.10\n    env_file:\n      - ./bunkerweb.env\n',
+					'  bw-scheduler:\n    image: bunkerity/bunkerweb-scheduler:1.5.10\n    env_file:\n      - ./bunkerweb.env\n    environment:\n      BLACKLIST_COUNTRY: "CN"\n'
+				)
+				.replace(
+					'    env_file:\n      - ./bunkerweb.env\n  bw-scheduler',
+					'    env_file:\n      - ./bunkerweb.env\n    environment:\n      BLACKLIST_COUNTRY: "CN"\n  bw-scheduler'
+				);
+		const s = sim({
+			files: {
+				'docker-compose.yml': withEnv(MORPHITIO_COMPOSE),
+				'bunkerweb.env': 'SERVER_NAME=morphit.io\nUSE_REVERSE_PROXY=yes\nBLACKLIST_COUNTRY=CN\n'
+			},
+			composeFiles: ['docker-compose.yml'],
+			containers: [
+				{
+					name: 'bunkerweb-frontend-1',
+					service: 'frontend',
+					image: 'fe',
+					mounts: [BUILD],
+					gateways: ['172.18.0.1']
+				},
+				{
+					name: 'bunkerweb-bunkerweb-1',
+					service: 'bunkerweb',
+					image: 'bunkerity/bunkerweb:1.5.10',
+					ports: ['0.0.0.0:443->8443/tcp'],
+					gateways: ['172.18.0.1']
+				},
+				{
+					name: 'bunkerweb-bw-scheduler-1',
+					service: 'bw-scheduler',
+					image: 'bunkerity/bunkerweb-scheduler:1.5.10',
+					gateways: ['172.18.0.1']
+				}
+			]
+		});
+		const out = await s.run();
+		expect(out.kind).toBe('applied');
+		expect(s.edgeSettings.get('bunkerweb-bunkerweb-1')!.split('\n')).toContain('USE_BUNKERNET=no');
+		expect(s.warn.join(' ')).toMatch(/"environment:" entry BLACKLIST_COUNTRY of bw-scheduler/);
+	});
+});
+
+// v1.21.1 review (D-5): no country check ran, yet the result counted as
+// "nothing to change".
+describe('when the country check cannot run, the result says so (D-5)', () => {
+	it("BunkerWeb's running settings cannot be read", async () => {
+		const s = oldBox();
+		await s.run();
+		s.settingsReadable = false;
+		const out = await s.run();
+		expect(out.kind).toBe('unchecked');
+		expect('reason' in out ? out.reason : '').toMatch(
+			/sudo docker exec bunkerweb grep COUNTRY \/etc\/nginx\/variables\.env/
+		);
+	});
+	it('BunkerWeb was not started by Docker Compose (the frontend was)', async () => {
+		const s = oldBox();
+		for (const k of Object.keys(s.c.get('bunkerweb')!.labels))
+			if (k.startsWith('com.docker.compose.'))
+				delete (s.c.get('bunkerweb')!.labels as Record<string, string>)[k];
+		await s.run();
+		const out = await s.run();
+		expect(out.kind).toBe('unchecked');
+		expect('reason' in out ? out.reason : '').toMatch(
+			/bunkerweb was not started by Docker Compose/
+		);
+	});
+	it('BunkerWeb alone, not started by Docker Compose: not "no web containers"', async () => {
+		const s = oldBox();
+		s.c.delete('morphit-frontend');
+		for (const k of Object.keys(s.c.get('bunkerweb')!.labels))
+			if (k.startsWith('com.docker.compose.'))
+				delete (s.c.get('bunkerweb')!.labels as Record<string, string>)[k];
+		expect((await s.run()).kind).toBe('unchecked');
+	});
+	it('several BunkerWeb containers, none of them known to be the public one', async () => {
+		const s = oldBox();
+		await s.run();
+		s.c.set('bunkerweb-b', {
+			...s.c.get('bunkerweb')!,
+			name: 'bunkerweb-b',
+			id: 'b',
+			ports: ['0.0.0.0:8443->8443/tcp', '0.0.0.0:443->8443/tcp']
+		});
+		const out = await s.run();
+		expect(out.kind).toBe('unchecked');
+		expect('reason' in out ? out.reason : '').toMatch(/bunkerweb, bunkerweb-b/);
+	});
+});
+
+// v1.21.1 review (I-3, D-6): a per-site key whose server name starts with a
+// digit was emptied but never checked live; and when the env file could not
+// be chosen, the heal said "its env file does not set" a list it never read.
+describe('per-site lists of any server name, checked live (I-3)', () => {
+	it('3dshop.example_BLACKLIST_COUNTRY is read, emptied and seen gone live', async () => {
+		expect(
+			envFileEntries('3dshop.example_BLACKLIST_COUNTRY=RU\n').get(
+				'3dshop.example_BLACKLIST_COUNTRY'
+			)
+		).toBe('RU');
+		const s = oldBox(`${OLD_ENV}3dshop.example_BLACKLIST_COUNTRY=RU\n`);
+		expect(live(s)).toEqual(['3dshop.example_BLACKLIST_COUNTRY=RU']);
+		expect((await s.run()).kind).toBe('applied');
+		expect(live(s)).toEqual([]);
+		expect(s.info.filter((l) => l.startsWith('✓')).join('\n')).toMatch(/3dshop\.example.*\bRU\b/);
+	});
+	it('BunkerWeb that keeps running with it: never reported as emptied', async () => {
+		const s = oldBox(`${OLD_ENV}3dshop.example_BLACKLIST_COUNTRY=RU\n`);
+		const gen = s.generated.bind(s);
+		s.generated = (x) =>
+			gen(x).replace(/^3dshop\.example_BLACKLIST_COUNTRY=.*$/m, '') +
+			'\n3dshop.example_BLACKLIST_COUNTRY=RU';
+		await s.run();
+		expect(s.info.filter((l) => l.startsWith('✓') && /3dshop/.test(l))).toEqual([]);
+		expect([...s.warn, ...s.info].join('\n')).toMatch(/3dshop\.example_BLACKLIST_COUNTRY=RU/);
+	});
+	it('settings files it cannot choose between: never claims what they do not set', async () => {
+		const s = sim({
+			files: {
+				'docker-compose.yml': OLD_COMPOSE.replace(
+					'    env_file:\n      - ./bunkerweb.env\n',
+					'    env_file:\n      - ./a.env\n      - ./b.env\n'
+				),
+				'a.env': 'SERVER_NAME=example.org\n',
+				'b.env': 'BLACKLIST_COUNTRY=CN\n'
+			},
+			composeFiles: ['docker-compose.yml'],
+			containers: [
+				{
+					name: 'bunkerweb',
+					service: 'bunkerweb',
+					image: 'bunkerity/bunkerweb:1.5.10',
+					ports: ['0.0.0.0:443->8443/tcp']
+				},
+				{
+					name: 'morphit-frontend',
+					service: 'frontend',
+					image: 'bunkerweb-frontend',
+					mounts: [BUILD]
+				}
+			]
+		});
+		s.dbKind = null;
+		await s.run();
+		const out = await s.run();
+		const why = 'reason' in out ? out.reason : '';
+		expect(why).toMatch(/BLACKLIST_COUNTRY=CN/);
+		expect(why).not.toMatch(/does not set/);
+	});
+});
+
+// D-5 (same class): when no settings file could be chosen, the privacy
+// settings were never set, yet a run with nothing else to do said "already".
+describe('no settings file to change: what BunkerWeb runs with is checked, and said', () => {
+	it('BunkerWeb on its own defaults (BunkerNet, DNSBL … on) is named, not "nothing to change"', async () => {
+		const s = sim({
+			files: {
+				'docker-compose.yml': OLD_COMPOSE.replace(
+					'    env_file:\n      - ./bunkerweb.env\n',
+					'    env_file:\n      - ./a.env\n      - ./b.env\n'
+				),
+				'a.env': 'SERVER_NAME=example.org\n',
+				'b.env': 'USE_REVERSE_PROXY=yes\n'
+			},
+			composeFiles: ['docker-compose.yml'],
+			containers: [
+				{
+					name: 'bunkerweb',
+					service: 'bunkerweb',
+					image: 'bunkerity/bunkerweb:1.5.10',
+					ports: ['0.0.0.0:443->8443/tcp']
+				},
+				{
+					name: 'morphit-frontend',
+					service: 'frontend',
+					image: 'bunkerweb-frontend',
+					mounts: [BUILD]
+				}
+			]
+		});
+		await s.run();
+		const out = await s.run();
+		expect(out.kind).toBe('left-alone');
+		const why = 'reason' in out ? out.reason : '';
+		expect(why).toMatch(/USE_BUNKERNET=yes/);
+		expect(why).toMatch(/several settings files/);
+		expect(why).not.toMatch(/country list/);
 	});
 });
 
@@ -1840,13 +2258,37 @@ describe("the frontend is built from this release's pinned nginx base", () => {
 		expect(out.forwarding).toBe('refreshed');
 		expect(s.refreshWithBase).toEqual([true]);
 	});
-	it('a hidden-only node whose Docker pulls through Tor: rebuilt on the pinned base', async () => {
+	it('a hidden-only node whose Docker pulls through Tor but lacks the base: no rebuild in the seconds the web heal has (the after-restart fetch has minutes), no manual command, said calmly', async () => {
+		const s = oldBox();
+		s.feBase = '';
+		s.feBaseAfterRefresh = '';
+		s.hidden = true;
+		s.torPulls = true;
+		expect((await s.run()).forwarding).toBe('ok');
+		expect(s.refreshes).toBe(0);
+		expect(s.warn).toEqual([]);
+		expect(s.info.join(' ')).toMatch(/being fetched through Tor in the background/);
+		expect(s.info.join(' ')).not.toMatch(/docker compose|--build/);
+	});
+	it('the same node once the base is here (the fetch brought it): rebuilt on the pinned base', async () => {
 		const s = oldBox();
 		s.feBase = '';
 		s.hidden = true;
 		s.torPulls = true;
+		s.basePresent = true;
 		expect((await s.run()).forwarding).toBe('refreshed');
 		expect(s.refreshWithBase).toEqual([true]);
+	});
+	it('a hidden-only node already labelled with the pinned base whose base image is gone (docker image prune -a): a config rebuild never names the pinned base, so Docker fetches nothing', async () => {
+		for (const torPulls of [false, true]) {
+			const s = oldBox();
+			s.hidden = true;
+			s.torPulls = torPulls;
+			s.served = SERVED_STALE;
+			await s.run();
+			expect(s.refreshes, `torPulls=${torPulls}`).toBe(1);
+			expect(s.refreshWithBase, `torPulls=${torPulls}`).toEqual([false]);
+		}
 	});
 	it('a hidden-only node that needs a rebuild for its config but cannot get the base: rebuilt WITHOUT the new base', async () => {
 		const s = oldBox();

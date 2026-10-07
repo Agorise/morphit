@@ -15,8 +15,10 @@ import {
 	launchWebHeal,
 	readWebHealState,
 	writeWebHealState,
+	webHealStatusRow,
 	type WebHealState
 } from '../src/lib/webHeal.ts';
+import { readFileSync } from 'node:fs';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -177,5 +179,79 @@ describe('the state file and its one line in `morphit-ops status`', () => {
 		).toBe(
 			"not applied — BunkerWeb's own config test failed (x); the previous settings were put back (5 min ago)"
 		);
+	});
+});
+
+// v1.21.1 review (D-2): a country list left in BunkerWeb read "not applied
+// (left-alone: …)" — an internal token, and "not applied" although every
+// privacy setting was in place — and `morphit-ops status` said "Privacy
+// settings: not applied" for ever after.
+describe('every outcome is said in words, and status says what is in place (D-2)', () => {
+	const t = '2026-10-06T12:00:00.000Z';
+	const done = (result: string, detail?: string): WebHealState => ({
+		state: 'done',
+		startedAt: t,
+		finishedAt: t,
+		result,
+		...(detail ? { detail } : {})
+	});
+	const KINDS = [
+		'applied',
+		'already',
+		'no-proxy',
+		'country-list',
+		'unchecked',
+		'left-alone',
+		'invalid-compose',
+		'no-time',
+		'rolled-back',
+		'apply-failed',
+		'error'
+	];
+	it('no outcome shows its internal name', () => {
+		for (const k of KINDS) {
+			const line = describeWebHeal(done(k, 'why'), Date.parse(t));
+			if (k.includes('-')) expect(line, k).not.toContain(k);
+			expect(line, k).not.toMatch(
+				/\((?:left-alone|invalid-compose|no-time|apply-failed|error|unknown)\b/
+			);
+		}
+	});
+	it('a country list BunkerWeb still runs with: in place, except that list — never "not applied"', () => {
+		const s = done(
+			'country-list',
+			'BunkerWeb still turns away visitors from CN, IR (BLACKLIST_COUNTRY=CN IR)'
+		);
+		const line = describeWebHeal(s, Date.parse(t));
+		expect(line).not.toMatch(/not applied/);
+		expect(line).toMatch(/BLACKLIST_COUNTRY=CN IR/);
+		const row = webHealStatusRow(s);
+		expect(row.value).not.toMatch(/not applied/);
+		expect(row.status).toBe('warn');
+	});
+	it('a check that could not run is shown, calmly: not ok, not a failure', () => {
+		const row = webHealStatusRow(done('unchecked', 'x'));
+		expect(row.status).toBe('info');
+		expect(row.value).not.toMatch(/not applied|ok/);
+	});
+	it('applied, already and no web containers stay ok; a roll-back is "not applied"', () => {
+		for (const k of ['applied', 'already', 'no-proxy'])
+			expect(webHealStatusRow(done(k))).toEqual({ value: 'ok', status: 'ok' });
+		expect(webHealStatusRow(done('rolled-back', 'x'))).toEqual({
+			value: 'not applied',
+			status: 'warn'
+		});
+		expect(webHealStatusRow({ state: 'running', startedAt: t }).value).toBe('applying');
+	});
+	it('`morphit-ops status` renders its row from webHealStatusRow (the call site)', () => {
+		const src = readFileSync(new URL('../src/commands/status.ts', import.meta.url), 'utf8');
+		const block = src.slice(
+			src.indexOf("label: 'Privacy settings:'"),
+			src.indexOf("label: 'Privacy settings:'") + 400
+		);
+		expect(src).toMatch(/const whRow = webHealStatusRow\(wh\);/);
+		expect(block).toMatch(/value: whRow\.value/);
+		expect(block).toMatch(/status: whRow\.status/);
+		expect(block).not.toMatch(/'not applied'/);
 	});
 });

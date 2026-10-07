@@ -19,10 +19,17 @@
 export const FORBIDDEN_TERMS_CHARS =
 	/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/;
 
+/** U+FFFE / U+FFFF: refused in ANY op by every indexer's dispatcher from the
+ *  consensus activation time (2026-11-01), before the order handler runs — so
+ *  not part of the handler classes above, which must stay byte-identical. */
+const DISPATCHER_REFUSED_CHARS = /[\uFFFE\uFFFF]/;
+const DISPATCHER_REFUSED_GLOBAL = /[\uFFFE\uFFFF]/g;
+
 /** True if `terms` contains a character the indexer would reject. Normalizes
  *  to NFC first, exactly like the indexer, so the two agree byte-for-byte. */
 export function termsHasForbiddenChar(terms: string): boolean {
-	return FORBIDDEN_TERMS_CHARS.test(terms.normalize('NFC'));
+	const n = terms.normalize('NFC');
+	return FORBIDDEN_TERMS_CHARS.test(n) || DISPATCHER_REFUSED_CHARS.test(n);
 }
 
 /**
@@ -44,5 +51,8 @@ const FORBIDDEN_SINGLE_LINE_GLOBAL = new RegExp(FORBIDDEN_SINGLE_LINE_CHARS.sour
  *  along; removing them changes nothing the user can see, and keeping them
  *  meant an order whose fee was paid and that the indexer then refused. */
 export function stripSingleLineForbidden(s: string): string {
-	return s.normalize('NFC').replace(FORBIDDEN_SINGLE_LINE_GLOBAL, '');
+	return s
+		.normalize('NFC')
+		.replace(FORBIDDEN_SINGLE_LINE_GLOBAL, '')
+		.replace(DISPATCHER_REFUSED_GLOBAL, '');
 }

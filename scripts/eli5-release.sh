@@ -34,11 +34,12 @@
 #
 # GATES (do not collapse these):
 #   • BLOCK 1 pushes main; WAIT for ci.yml green before the tag.
-#   • BLOCK 2 pushes the signed tag; release.yml then builds, hashes, signs,
-#     PUBLISHES the Forgejo release, and attaches every asset (tarball,
-#     .sha256, .asc, distribution-anchor.env, and the signed offline bundle a
-#     zero-clearnet node upgrades from). WAIT for release.yml green — you
-#     download + upload nothing.
+#   • BLOCK 2 pushes the signed tag; release.yml then builds, hashes, signs
+#     (only when CI holds the signing key; otherwise nodes install the release
+#     by its SHA-256 in the on-chain record), PUBLISHES the Forgejo release, and
+#     attaches every asset (tarball, .sha256, distribution-anchor.env, the
+#     offline bundle a zero-clearnet node upgrades from, and their .asc files
+#     when signed). WAIT for release.yml green — you download + upload nothing.
 #   • BLOCK 4 computes the manifest from the PUBLISHED tarball's prebuilt
 #     apps/web/build, after checking that tarball against the SHA-256 the
 #     release job anchored, and requires the canonical instance's SERVED
@@ -59,6 +60,12 @@
 #     The anchor names the signed tag object release.yml built; it must be the
 #     tag this repository made in BLOCK 2, so a tag moved after the push (back
 #     to an older signed object of the same name) is refused. No extra command.
+#   • A release with no IPFS CID is REFUSED by the payload builder: release.yml
+#     could not compute it (v1.20.2), and zero-clearnet nodes cannot fetch a
+#     release without one. The note after BLOCK 4 gives the payload line again
+#     with `--ipfs-cid <cid>`, the CID morphit.io printed when it seeded the
+#     release in BLOCK 3. The builder takes that flag only for an anchor that
+#     has no CID; values left in the terminal are still refused.
 #   • Broadcasting (BLOCK 5) is a laptop step ONLY: the @morphit spending WIF
 #     must never live in CI.
 #   • BLOCK 6 is not optional: `morphit-ops upgrade` wipes build/canary.txt.
@@ -74,13 +81,17 @@ if [[ -z "$VERSION" ]]; then
 	exit 1
 fi
 
+# The message goes into Block 1 single-quoted, each ' written as '\'' — so a
+# quote, backtick, $( ) or $ in it is pasted as text and never run.
+MESSAGE_QUOTED="'${MESSAGE//\'/\'\\\'\'}'"
+
 cat <<EOF
 # ELI5 RELEASE — v${VERSION}
 
 **BLOCK 1** — commit + push main (laptop, repo root):
 \`\`\`
 git add -A
-git commit -m "${MESSAGE}"
+git commit -m ${MESSAGE_QUOTED}
 git push origin main
 \`\`\`
 
@@ -98,7 +109,7 @@ git push origin v${VERSION}
 
 ---
 
-**GATE: wait for \`release.yml\` to go green.** The v${VERSION} release now exists on Forgejo with every asset attached, auto-mirrored to GitHub + Codeberg.
+**GATE: wait for \`release.yml\` to go green.** The v${VERSION} release now exists on Forgejo with every asset attached. \`release.yml\` also copies it to codeberg.org and gitea.com when their tokens are set (best-effort); the other mirrors get the commits and the tag through git push, not the release page.
 
 ---
 
@@ -121,9 +132,11 @@ node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-
 MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 ./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
 \`\`\`
-The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the auto-baked GitHub + Codeberg mirror list). If the manifest line stops with "does not match the release tarball", the canonical instance is not serving this release yet: finish Block 3 and fetch verify.json again.
+The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the mirror list baked into the payload builder). If the manifest line stops with "does not match the release tarball", the canonical instance is not serving this release yet: finish Block 3 and fetch verify.json again.
 
-There is deliberately **no public-gateway check here**. Block 3 already asserted that the CID your box produced equals the one in the anchor, and verified it serves over this instance's clearnet origin, its \`.onion\` and its \`.b32.i2p\` — the paths instances actually fetch from. A public gateway seeing it adds nothing to that, arrives minutes later, and depends on a third party we do not rely on. It used to gate this block and could stall a healthy release for half an hour. To confirm outside reachability by choice, it is a manual command that never blocks the ceremony: \`sh scripts/verify-cid-public.sh <cid> ${VERSION} https://morphit.io\`.
+If the payload line stops with "this release has no IPFS CID", \`release.yml\` could not compute it (as happened to v1.20.2), and a release without it cannot reach zero-clearnet nodes. morphit.io printed it in Block 3, on the line \`morphit-ipfs-seed: hosted v${VERSION} → bafy…\`. On the laptop, run the payload line again with that CID in place of \`<cid>\`, then the dry-run line again: \`MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts --ipfs-cid <cid> < /dev/null > release.json\`
+
+There is deliberately **no public-gateway check here**. Block 3 already asserted that the CID your box produced equals the one in the anchor (when the anchor carries one), and verified it serves over this instance's clearnet origin, its \`.onion\` and its \`.b32.i2p\` — the paths instances actually fetch from. A public gateway seeing it adds nothing to that, arrives minutes later, and depends on a third party we do not rely on. It used to gate this block and could stall a healthy release for half an hour. To confirm outside reachability by choice, it is a manual command that never blocks the ceremony: \`sh scripts/verify-cid-public.sh <cid> ${VERSION} https://morphit.io\`.
 
 ---
 

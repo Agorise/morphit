@@ -27,6 +27,7 @@
  */
 
 import { clientKey } from './clientKey.js';
+import { RateLimiter } from './rateLimiter.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -318,33 +319,6 @@ function bindAllowedByDefault(host: string): boolean {
 	return isLoopbackHost(host) || isPrivateIp(host);
 }
 
-/** Minimal per-client token bucket.  No deps.  Refills `perMin`
- *  tokens/minute up to a burst ceiling of `perMin`, keyed by a client
- *  identifier; stale buckets are swept lazily to bound memory. */
-class RateLimiter {
-	private buckets = new Map<string, { tokens: number; last: number }>();
-	constructor(private readonly perMin: number) {}
-	take(key: string): boolean {
-		const now = Date.now();
-		const refillPerMs = this.perMin / 60_000;
-		let b = this.buckets.get(key);
-		if (!b) {
-			b = { tokens: this.perMin, last: now };
-			this.buckets.set(key, b);
-		}
-		b.tokens = Math.min(this.perMin, b.tokens + (now - b.last) * refillPerMs);
-		b.last = now;
-		if (this.buckets.size > 4096) this.sweep(now);
-		if (b.tokens < 1) return false;
-		b.tokens -= 1;
-		return true;
-	}
-	private sweep(now: number): void {
-		for (const [k, v] of this.buckets) if (now - v.last > 120_000) this.buckets.delete(k);
-	}
-}
-
-
 function sendJson(res: ServerResponse, status: number, body: unknown, close = false): void {
 	const headers: Record<string, string> = {
 		'content-type': 'application/json',
@@ -395,6 +369,10 @@ function originAllowed(req: IncomingMessage, cfg: HttpConfig): boolean {
 
 const MCP_PATHS = new Set(['/', '/mcp', '/mcp/']);
 
+/** Most JSON-RPC messages one HTTP body may carry. MCP clients send one
+ *  message per request (batching left the protocol in 2025-06-18). */
+const MAX_BATCH_MESSAGES = 10;
+
 async function handleHttp(
 	req: IncomingMessage,
 	res: ServerResponse,
@@ -410,7 +388,8 @@ async function handleHttp(
 	}
 
 	// Rate-limit everything else.
-	if (!limiter.take(clientKey(req))) {
+	const key = clientKey(req);
+	if (!limiter.take(key)) {
 		sendJson(res, 429, { error: 'rate_limited' });
 		return;
 	}
@@ -451,6 +430,20 @@ async function handleHttp(
 		parsed = raw ? JSON.parse(raw) : undefined;
 	} catch {
 		sendJson(res, 413, { error: 'payload_too_large_or_invalid' }, true);
+		return;
+	}
+
+	// A JSON-RPC batch is many requests in one body, and the SDK runs every
+	// one (each tools/call can fan out to upstream fetches). One token per body
+	// let one POST run 100 calls. Each message now costs a token (the first was
+	// taken above), and a batch is capped.
+	const messages = Array.isArray(parsed) ? parsed.length : 1;
+	if (messages > MAX_BATCH_MESSAGES) {
+		sendJson(res, 400, { error: 'batch_too_large', max_messages: MAX_BATCH_MESSAGES });
+		return;
+	}
+	if (messages > 1 && !limiter.take(key, messages - 1)) {
+		sendJson(res, 429, { error: 'rate_limited' });
 		return;
 	}
 

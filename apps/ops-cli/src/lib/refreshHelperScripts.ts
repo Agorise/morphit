@@ -217,22 +217,36 @@ export function refreshHelperScripts(opts: RefreshHelperOptions): HelperResult[]
 	const out: HelperResult[] = [];
 
 	// The helper dir itself must be a real directory, not a link to elsewhere.
-	let dirOk = false;
+	// Absent: no helper is installed here (nothing to say). There but a link
+	// or not a directory: every helper in it is left as it is — said once, as
+	// it is not "nothing to change": they keep running their old copies.
+	let dirState: 'ok' | 'absent' | 'not-real' = 'absent';
 	try {
 		const st = lstatSync(dir);
-		dirOk = st.isDirectory() && !st.isSymbolicLink();
+		dirState = st.isDirectory() && !st.isSymbolicLink() ? 'ok' : 'not-real';
 	} catch {
-		dirOk = false;
+		dirState = 'absent';
+	}
+	if (dirState === 'not-real') {
+		log(
+			`Left the helper scripts in ${dir} as they are: it is ${(() => {
+				try {
+					return lstatSync(dir).isSymbolicLink() ? 'a link' : 'not a directory';
+				} catch {
+					return 'not a directory';
+				}
+			})()}, and nothing is written through one. They keep running their previous copies; make ${dir} a real directory (root-owned) and run on this server: sudo morphit-ops upgrade --heals`
+		);
 	}
 
 	for (const h of HELPER_SCRIPTS) {
 		const target = join(dir, h.name);
 		try {
-			if (!dirOk) {
+			if (dirState !== 'ok') {
 				out.push({
 					name: h.name,
-					action: 'not-installed',
-					detail: `${dir} is not a real directory`
+					action: dirState === 'absent' ? 'not-installed' : 'skipped-not-regular',
+					...(dirState === 'absent' ? {} : { detail: `${dir} is not a real directory` })
 				});
 				continue;
 			}

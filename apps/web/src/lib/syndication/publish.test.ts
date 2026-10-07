@@ -151,7 +151,9 @@ describe('post pictures carry this instance’s branding', () => {
 		document.documentElement.dataset.brandName = 'Vigilante Trading';
 		const p = await firstTrade();
 		expect(p.body).not.toContain(MORPHIT_PICTURE);
-		expect(p.extraMetadata?.image).toEqual(['https://alice.example/og-image.png']);
+		// Whether its /og-image.png is its own is not known without brand.json:
+		// no picture rather than possibly Morphit's.
+		expect(p.extraMetadata?.image).toBeUndefined();
 	});
 	// v1.21.1 review: the service worker can answer with an older
 	// brand.json (no og_image flag) on a branded site.
@@ -164,7 +166,9 @@ describe('post pictures carry this instance’s branding', () => {
 		document.documentElement.dataset.brandName = 'Morphit';
 		brandJson({ schema: 1, name: 'Vigilante Trading', beta_badge: false });
 		p = await firstTrade();
-		expect(p.extraMetadata?.image).toEqual(['https://alice.example/og-image.png']);
+		// No og_image flag: the served picture may be the shipped one.
+		expect(p.body).not.toContain(MORPHIT_PICTURE);
+		expect(p.extraMetadata?.image).toBeUndefined();
 	});
 	it('branded, but its picture could not be drawn (og_image "shipped"): no picture in either post, never Morphit’s', async () => {
 		brandJson({ schema: 1, name: 'Vigilante Trading', og_image: 'shipped' });

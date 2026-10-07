@@ -86,7 +86,7 @@ describe('rollback restarts a CRASHED (inactive) enabled unit', () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	it('issues a restart for a unit that is enabled but not active, and restarts the container', () => {
+	it('issues a restart for a unit that is enabled but not active, and restarts the container', async () => {
 		const install = join(root, 'install');
 		const backup = join(root, 'backup');
 		const tmp = join(root, 'tmp');
@@ -109,7 +109,7 @@ describe('rollback restarts a CRASHED (inactive) enabled unit', () => {
 			containerRestarts++;
 		};
 
-		const code = rollback(
+		const code = await rollback(
 			install,
 			backup,
 			tmp,

@@ -11,7 +11,7 @@
  * and turns into one calm sentence. No network beyond the local indexer, so it
  * is the same on a tor-only node.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { installHelperScript, DEFAULT_HELPER_DIR } from './refreshHelperScripts.ts';
@@ -21,8 +21,9 @@ export interface IpfsGcRuntime {
 	kuboPresent(): boolean;
 	/** Script installed, units installed, timer running (verified). */
 	install(): { ok: boolean; detail?: string };
-	/** Run the clean-up once; its combined output. */
-	run(): { status: number; output: string };
+	/** Run the clean-up once; its combined output. Asynchronous: the spinner
+	 *  shown meanwhile can only turn while the event loop does. */
+	run(): Promise<{ status: number; output: string }>;
 	spinner(label: string): () => void;
 }
 
@@ -73,11 +74,11 @@ const size = (n: number | null): string =>
 			? `${(n / 1024 / 1024).toFixed(1)} MB`
 			: `${Math.round(n / 1024)} kB`;
 
-export function runIpfsGcHeal(opts: {
+export async function runIpfsGcHeal(opts: {
 	readonly runtime: IpfsGcRuntime;
 	readonly info: (m: string) => void;
 	readonly warn: (m: string) => void;
-}): IpfsGcOutcome {
+}): Promise<IpfsGcOutcome> {
 	const rt = opts.runtime;
 	if (!rt.kuboPresent()) return { kind: 'no-kubo' };
 	const inst = rt.install();
@@ -88,8 +89,12 @@ export function runIpfsGcHeal(opts: {
 		return { kind: 'install-failed', detail: inst.detail };
 	}
 	const stop = rt.spinner('Letting go of superseded releases and snapshots on this node’s IPFS…');
-	const r = rt.run();
-	stop();
+	let r: { status: number; output: string };
+	try {
+		r = await rt.run();
+	} finally {
+		stop();
+	}
 	const s = parseGcSummary(r.output);
 	if (s === null) {
 		opts.warn(
@@ -135,12 +140,64 @@ function installRoot(): string {
 	return '/opt/morphit';
 }
 
+/** Run a command WITHOUT blocking the event loop (a spinner around a blocking
+ *  spawnSync never draws), with a time limit; its combined output. */
+export function runWithoutBlocking(
+	cmd: string,
+	args: readonly string[],
+	opts: { readonly timeoutMs: number; readonly env?: NodeJS.ProcessEnv }
+): Promise<{ status: number; output: string }> {
+	return new Promise((resolve) => {
+		let output = '';
+		let child: ReturnType<typeof spawn>;
+		try {
+			child = spawn(cmd, [...args], {
+				stdio: ['ignore', 'pipe', 'pipe'],
+				...(opts.env !== undefined ? { env: opts.env } : {})
+			});
+		} catch (e) {
+			resolve({ status: 1, output: e instanceof Error ? e.message : String(e) });
+			return;
+		}
+		const add = (d: Buffer): void => {
+			// Only the last line matters (the summary); keep the tail bounded.
+			output = (output + d.toString()).slice(-1024 * 1024);
+		};
+		child.stdout?.on('data', add);
+		child.stderr?.on('data', add);
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			child.kill('SIGKILL');
+		}, opts.timeoutMs);
+		let done = false;
+		const finish = (status: number, extra = ''): void => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			resolve({ status, output: output + extra });
+		};
+		const limit = `\nstopped after ${Math.round(opts.timeoutMs / 1000)} s (its time limit)\n`;
+		child.on('error', (e) => finish(1, `\n${e.message}\n`));
+		// Stopped at its limit: done when IT exits (a process it started may
+		// still hold the output pipe open).
+		child.on('exit', () => {
+			if (timedOut) {
+				child.stdout?.destroy();
+				child.stderr?.destroy();
+				finish(1, limit);
+			}
+		});
+		child.on('close', (code) => finish(timedOut ? 1 : (code ?? 1), timedOut ? limit : ''));
+	});
+}
+
 /** The real entry point, run from runSelfHeals. */
-export function healIpfsGc(deps: {
+export async function healIpfsGc(deps: {
 	readonly info: (m: string) => void;
 	readonly warn: (m: string) => void;
 	readonly spinner: (label: string) => () => void;
-}): IpfsGcOutcome {
+}): Promise<IpfsGcOutcome> {
 	const root = installRoot();
 	const helperDir = process.env.MORPHIT_HELPER_DIR ?? DEFAULT_HELPER_DIR;
 	const systemdDir = process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system';
@@ -172,14 +229,11 @@ export function healIpfsGc(deps: {
 			},
 			// A bounded run during the upgrade (repo gc gets 120 s here; the weekly
 			// timer gives it longer). Same env the unit gives it.
-			run: () => {
-				const r = spawnSync('sh', [join(helperDir, 'morphit-ipfs-gc.sh')], {
-					encoding: 'utf8',
-					timeout: 240_000,
+			run: () =>
+				runWithoutBlocking('sh', [join(helperDir, 'morphit-ipfs-gc.sh')], {
+					timeoutMs: 240_000,
 					env: { ...process.env, IPFS_PATH: repo, MORPHIT_IPFS_GC_TIMEOUT: '120' }
-				});
-				return { status: r.status ?? 1, output: `${r.stdout ?? ''}${r.stderr ?? ''}` };
-			},
+				}),
 			spinner: deps.spinner
 		}
 	});

@@ -28,7 +28,13 @@
 #     seed cannot download would diverge the CID (the v1.9.3 notes-in-dir bug). The
 #     rule is not "no notes" — it is "no EXTERNAL fetch-dependency": anything derived
 #     from the verified tarball itself is fine.
-# Signatures (.asc) still live on the release page/mirrors, not here.
+# Signatures (.asc, present only when CI held the signing key) live on the
+# release page, never here. The text below must not claim one exists: it is
+# published in every release directory (public-claims-truth-smoke reads it).
+# Any change to this file's OUTPUT changes the release CID. That is safe only
+# because CI (release.yml) and every box's upgrade seed (morphit-ipfs-seed.sh,
+# run from the tree the upgrade just extracted) stage a release with that
+# release's own copy of this script, never an older one.
 # POSIX sh. Deterministic. No secrets.
 set -eu
 
@@ -137,15 +143,15 @@ HAS_NOTES=0
 	printf -- '- `metadata.json` machine-readable release metadata (version, sha256, keywords)\n'
 	if [ "$HAS_NOTES" -eq 1 ]; then printf -- '- `RELEASE-NOTES.md` what changed in this release\n'; fi
 	printf '\n## Verify your download\n\n'
-	printf 'The tarball hash is anchored on-chain and the tarball is GPG-signed. Do not\n'
-	printf 'trust this copy blindly. Verify it:\n\n'
+	printf 'The tarball hash is anchored on-chain, in a release record signed by\n'
+	printf '@morphit. Do not trust this copy blindly. Verify it:\n\n'
 	printf '```sh\n'
 	printf 'sha256sum -c %s.sha256\n' "$TARBALL"
 	printf '```\n\n'
 	printf 'Expected SHA-256:\n\n'
 	printf '```\n%s\n```\n\n' "$GOT_SHA"
-	printf 'The same SHA-256 and the GPG fingerprint are published in the on-chain\n'
-	printf 'release record; the full verification guide is at %s.\n\n' "$VERIFY_GUIDE"
+	printf 'The same SHA-256 and the release key fingerprint are published in the\n'
+	printf 'on-chain release record; the full verification guide is at %s.\n\n' "$VERIFY_GUIDE"
 	printf '## Links\n\n'
 	printf -- '- Source and mirrors: %s\n' "$REPO_URL"
 	printf -- '- This release: %s/releases/tag/%s\n' "$REPO_URL" "$TAG"
@@ -163,7 +169,7 @@ HAS_NOTES=0
 {
 	printf '{\n'
 	printf '  "name": "Morphit",\n'
-	printf '  "description": "Morphit — non-custodial, no-KYC, censorship-resistant P2P fiat<->crypto/barter marketplace on Blurt. Signed release; verify against the on-chain SHA-256 + GPG signature.",\n'
+	printf '  "description": "Morphit — non-custodial, no-KYC, censorship-resistant P2P fiat<->crypto/barter marketplace on Blurt. Verify against the SHA-256 in the on-chain release record.",\n'
 	printf '  "version": "%s",\n' "$VERSION"
 	printf '  "tag": "%s",\n' "$TAG"
 	printf '  "tarball": "%s",\n' "$TARBALL"

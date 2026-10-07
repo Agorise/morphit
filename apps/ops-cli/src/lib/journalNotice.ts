@@ -16,10 +16,14 @@
  * (the upgrade never waits for an answer; no terminal) → nothing is changed and
  * the notice names the command that asks it (`later`).
  */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { ROOT_STATE_DIR, ensureOwnDir, regularFileExists, writeNoFollow } from './noFollowFs.ts';
 
-export const JOURNAL_NOTICE_MARKER = '/var/lib/morphit/.journal-signup-prefix-notice-done';
+/** In root's own state directory (review G1: it lived in the morphit account's
+ *  home, where root wrote it through any link that account planted). */
+export const JOURNAL_NOTICE_MARKER = `${ROOT_STATE_DIR}/.journal-signup-prefix-notice-done`;
+/** Where v1.21.0 and older kept it: still counts as "handled". */
+export const LEGACY_JOURNAL_NOTICE_MARKER = '/var/lib/morphit/.journal-signup-prefix-notice-done';
 
 export interface JournalNoticeRuntime {
 	/** How many journal lines of the relay carry the old event; null if unknown. */
@@ -95,12 +99,16 @@ export async function relayJournalNotice(rt: JournalNoticeRuntime): Promise<Jour
 	return 'vacuum-incomplete';
 }
 
-/** The marker file, created with its directory. */
+/** The marker file, created with its directory; never through a link. */
 export function writeNoticeMarker(path: string, text: string): void {
-	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, text, { mode: 0o600 });
+	ensureOwnDir(dirname(path));
+	writeNoFollow(path, text, 0o600);
 }
 
+/** A regular file at `path` (or, for the default path, at the legacy one). */
 export function noticeMarkerExists(path: string): boolean {
-	return existsSync(path);
+	return (
+		regularFileExists(path) ||
+		(path === JOURNAL_NOTICE_MARKER && regularFileExists(LEGACY_JOURNAL_NOTICE_MARKER))
+	);
 }

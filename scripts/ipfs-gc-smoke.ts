@@ -447,7 +447,9 @@ async function main(): Promise<void> {
 		const said: string[] = [];
 		let out;
 		try {
-			out = healIpfsGc({
+			// Asynchronous since v1.21.1: the clean-up runs without blocking, so its
+			// spinner turns.
+			out = await healIpfsGc({
 				info: (m) => said.push(m),
 				warn: (m) => said.push(`WARN ${m}`),
 				spinner: () => () => {}

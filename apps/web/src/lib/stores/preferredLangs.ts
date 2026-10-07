@@ -26,6 +26,12 @@ import { isOrderLang, ORDER_LANG_CODES } from '$i18n/locales';
 
 const KEY_PREFS = 'morphit.preferredLangs.v1'; // { v: 2, langs: [primary, ...] }
 const KEY_LAST = 'morphit.lastPostLang.v1'; // single code (next-post default)
+// The orderbook language filter as the user last left it ON THE ORDERBOOK, on
+// this device ({ v: 1, langs: [...] }, possibly empty). v1.21.1: a language
+// filter lists only orders tagged with its languages, so a filter re-seeded
+// from Settings on every visit hid every older (untagged) order each time,
+// however often the user cleared it.
+const KEY_OB_FILTER = 'morphit.orderbookLangFilter.v1';
 
 function clean(arr: unknown): string[] {
 	if (!Array.isArray(arr)) return [];
@@ -52,15 +58,41 @@ export function readLocalPreferredLangs(): string[] | null {
 	}
 }
 
-/** Write the user's chosen set (ordered, primary first). Empty ⇒ removes it. */
+/** Write the user's chosen set (ordered, primary first). Empty ⇒ removes it.
+ *  A new choice in Settings also re-seeds the orderbook filter from it. */
 export function writeLocalPreferredLangs(langs: readonly string[]): void {
 	if (!browser) return;
 	const c = clean(langs);
 	try {
 		if (c.length === 0) localStorage.removeItem(KEY_PREFS);
 		else localStorage.setItem(KEY_PREFS, JSON.stringify({ v: 2, langs: c }));
+		localStorage.removeItem(KEY_OB_FILTER);
 	} catch {
 		/* quota / disabled storage — non-fatal */
+	}
+}
+
+/** The orderbook language filter as the user last left it there (possibly
+ *  empty = all languages), or null when they never changed it there. */
+export function readOrderbookLangFilter(): string[] | null {
+	if (!browser) return null;
+	try {
+		const raw = localStorage.getItem(KEY_OB_FILTER);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as { v?: unknown; langs?: unknown } | null;
+		return parsed && parsed.v === 1 ? clean(parsed.langs) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Remember the orderbook language filter the user set there (empty too). */
+export function writeOrderbookLangFilter(langs: readonly string[]): void {
+	if (!browser) return;
+	try {
+		localStorage.setItem(KEY_OB_FILTER, JSON.stringify({ v: 1, langs: clean(langs) }));
+	} catch {
+		/* non-fatal */
 	}
 }
 
@@ -108,6 +140,9 @@ export function resolvePreferredLangs(
  * language filter deliberately.
  */
 export function resolveOrderbookLangFilter(chainLangs: readonly string[] | null): string[] {
+	// What the user last left on the orderbook wins (an empty filter too).
+	const own = readOrderbookLangFilter();
+	if (own !== null) return own;
 	const local = readLocalPreferredLangs();
 	if (local && local.length > 0) return local;
 	const fromChain = clean(chainLangs);

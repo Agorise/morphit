@@ -51,9 +51,13 @@ export function startDotsSpinner(
 		out.write(`  ${label}\n`);
 		return () => {};
 	}
-	let i = 0;
+	let i = 1;
 	let stopped = false;
 	out.write('\u001b[?25l'); // hide cursor
+	// The first frame now: a spinner around synchronous work (spawnSync) gets
+	// no timer tick until that work is done, and its label must be on screen
+	// for the whole pause.
+	out.write(`\r  ${FRAMES[0]} ${label}`);
 	const timer = setInterval(() => {
 		out.write(`\r  ${FRAMES[i % FRAMES.length]} ${label}`);
 		i += 1;

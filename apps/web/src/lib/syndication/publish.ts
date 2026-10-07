@@ -85,6 +85,10 @@ const BRAND_JSON_TIMEOUT_MS = 5_000;
 interface PostBrand {
 	/** The site's name ("Morphit" unbranded), for the picture's alt text. */
 	readonly name: string;
+	/** brand.json was read: `branded` is known. When it could not be read
+	 *  (Tor/I2P timeout, the service worker offline) nothing says the site is
+	 *  NOT branded, so neither post may carry Morphit's picture. */
+	readonly known: boolean;
 	/** The instance is branded (its own name or logo). */
 	readonly branded: boolean;
 	/** The served /og-image.png is this instance's own (`morphit-ops branding`
@@ -93,8 +97,8 @@ interface PostBrand {
 	readonly ownPicture: boolean;
 }
 
-/** This instance's brand, read when a post is made: /brand/brand.json, or —
- *  when that cannot be read — the name the page was stamped with. */
+/** This instance's brand, read when a post is made from /brand/brand.json —
+ *  or, when that cannot be read, only the name the page was stamped with. */
 async function postBrand(): Promise<PostBrand> {
 	const stamped =
 		sanitizeBrandName(
@@ -114,18 +118,22 @@ async function postBrand(): Promise<PostBrand> {
 				const branded = byName || b.og_image === 'own' || b.og_image === 'shipped';
 				return {
 					name,
+					known: true,
 					branded,
-					// A brand.json without the flag (an older copy, or one written by
-					// an older upgrader) on a branded site: its picture was drawn.
-					ownPicture: b.og_image === 'own' || (b.og_image === undefined && byName)
+					// Only a picture the branding marked as this instance's own. A
+					// brand.json without the flag (written by an older upgrader) may
+					// sit next to the shipped — Morphit's — picture.
+					ownPicture: b.og_image === 'own'
 				};
 			}
 		}
 	} catch {
 		// Offline / slow / malformed → decide from the stamped name.
 	}
+	// Not read. A stamped brand name proves a branded site; the stamped default
+	// proves nothing (the SPA shell is stamped "Morphit" on every site).
 	const byName = stamped !== DEFAULT_BRAND_NAME;
-	return { name: stamped, branded: byName, ownPicture: byName };
+	return { name: stamped, known: byName, branded: byName, ownPicture: false };
 }
 
 /** Blurt's frontends load a post's picture only from a public https address
@@ -138,7 +146,8 @@ function canShowPicture(origin: string): boolean {
  *  - a branded instance: its own link-preview picture (/og-image.png), or none
  *    when it has none of its own — never Morphit's;
  *  - an unbranded one: the per-order post leads with the site's link-preview
- *    picture, the first-trade post with the Morphit picture (hosted on Blurt).
+ *    picture, the first-trade post with the Morphit picture (hosted on Blurt);
+ *  - not known (brand.json could not be read): no picture at all.
  *  A picture from this instance is used only from a public https address:
  *  Blurt's frontends cannot load one from a hidden service (or plain http). */
 function postPictures(
@@ -146,6 +155,7 @@ function postPictures(
 	brand: PostBrand
 ): { readonly order: string | null; readonly firstTrade: string | null } {
 	const own = canShowPicture(origin) ? `${origin}/og-image.png` : null;
+	if (!brand.known) return { order: null, firstTrade: null };
 	if (brand.branded) {
 		const pic = brand.ownPicture ? own : null;
 		return { order: pic, firstTrade: pic };
@@ -361,7 +371,7 @@ export async function publishOrderPost(
 	// nothing to read brand.json for (it would only wait on Tor).
 	const brand: PostBrand = canShowPicture(origin)
 		? await postBrand()
-		: { name: DEFAULT_BRAND_NAME, branded: false, ownPicture: false };
+		: { name: DEFAULT_BRAND_NAME, known: true, branded: false, ownPicture: false };
 	const image = postPictures(origin, brand).order;
 	const orderUrl = `${origin}/${lang}/@${account}/${ctx.orderPermlink}`;
 	const termsText = (ctx.terms ?? '').trim();

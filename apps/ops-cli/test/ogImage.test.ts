@@ -599,3 +599,37 @@ describe('on upgrade (self-heal) and with the instance origin', () => {
 		expect(verifyMismatches()).toEqual([]);
 	});
 });
+
+// ─── v1.21.1 review (branding of morphitlat and vigilante.trading) ─────────
+
+describe('branding: what an operator supplies is what is shown', () => {
+	it('a logo with no name: the preview picture never names Morphit next to the operator’s logo', () => {
+		writeFileSync(join(brandDir, 'icon.svg'), ICON_SVG);
+		applyBranding({ buildDir, settings: settings() });
+		const png = og();
+		expect(png.equals(CANONICAL_OG)).toBe(false);
+		expect(pngText(png).Title ?? '').not.toBe('Morphit');
+	});
+
+	it('an own og-image.png that is not 1200 × 630 is named in a warning (every page declares that size)', () => {
+		mkdirSync(join(brandDir, 'static'), { recursive: true });
+		writeFileSync(
+			join(brandDir, 'static', 'og-image.png'),
+			readFileSync(join(REPO, 'apps', 'web', 'static', 'app-icon-192.png'))
+		);
+		const r = applyBranding({ buildDir, settings: settings({ brandName: 'Vigilante Trading' }) });
+		expect(r.warnings.some((w) => /og-image\.png/.test(w) && /1200/.test(w))).toBe(true);
+	});
+
+	it('on a Tor/I2P-only server the missing-rasterizer warning never says to run apt as is', () => {
+		writeFileSync(join(brandDir, 'icon.svg'), ICON_SVG);
+		writeFileSync(join(etcDir, 'indexer.env'), 'MORPHIT_INDEXER_RPC_ENDPOINTS=\n');
+		process.env.MORPHIT_ENV_ROOT = root;
+		const empty = mkdtempSync(join(tmpdir(), 'no-raster-'));
+		process.env.PATH = empty;
+		const r = applyBranding({ buildDir, settings: settings({ brandName: 'Libertad Latina' }) });
+		const w = r.warnings.join('\n');
+		expect(w).toMatch(/rsvg-convert/);
+		expect(w).not.toMatch(/sudo apt install librsvg2-bin/);
+	});
+});

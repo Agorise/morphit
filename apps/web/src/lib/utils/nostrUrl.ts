@@ -39,6 +39,9 @@ export type NostrUrlValidation =
  *  get rejected on sight. */
 const MAX_URL_LENGTH = 512;
 
+/** The indexer's own rule (apps/indexer handlers/profile.ts NOSTR_URI). */
+const NOSTR_URI = /^nostr:(?:npub|nprofile)1[0-9a-z]{6,400}$/;
+
 /** Validate a Nostr URL string. See file header for rules. */
 export function validateNostrUrl(raw: string | null | undefined): NostrUrlValidation {
 	if (raw === null || raw === undefined) return null;
@@ -47,9 +50,19 @@ export function validateNostrUrl(raw: string | null | undefined): NostrUrlValida
 	if (trimmed.length === 0) return null;
 	if (trimmed.length > MAX_URL_LENGTH) return { ok: false, reason: 'too_long' };
 
-	// nostr: URI — canonical form accepted directly.
-	if (/^nostr:npub1[a-z0-9]{10,}$/i.test(trimmed)) {
-		return { ok: true, cleaned: trimmed };
+	// nostr: URI. Sent in the one form the indexer stores (from the consensus
+	// activation time, 2026-11-01, it refuses anything else and the save is
+	// silently lost): lower case, `npub1…` or `nprofile1…`, 6–400 data
+	// characters. Bech32 is case-insensitive only when the whole string is in
+	// ONE case, so `NPUB1…` is lowered and a mixed-case value is refused.
+	const nostr = /^nostr:((?:npub|nprofile)1[0-9a-z]+)$/i.exec(trimmed);
+	if (nostr) {
+		const body = nostr[1]!;
+		if (body !== body.toLowerCase() && body !== body.toUpperCase()) {
+			return { ok: false, reason: 'malformed' };
+		}
+		const cleaned = `nostr:${body.toLowerCase()}`;
+		return NOSTR_URI.test(cleaned) ? { ok: true, cleaned } : { ok: false, reason: 'malformed' };
 	}
 
 	// http(s) URL — parse with URL(), re-emit via toString() to
@@ -59,7 +72,11 @@ export function validateNostrUrl(raw: string | null | undefined): NostrUrlValida
 	try {
 		const u = new URL(trimmed);
 		if (u.protocol === 'https:' || u.protocol === 'http:') {
-			return { ok: true, cleaned: u.toString() };
+			const cleaned = u.toString();
+			// The length the indexer checks is the length SENT: percent-encoding
+			// can turn 120 typed characters into 700.
+			if (cleaned.length > MAX_URL_LENGTH) return { ok: false, reason: 'too_long' };
+			return { ok: true, cleaned };
 		}
 		return { ok: false, reason: 'invalid_scheme' };
 	} catch {

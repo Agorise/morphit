@@ -39,7 +39,17 @@
  * (re)load. That file inside the edge container is therefore what BunkerWeb
  * really runs with, and the heal reads it there (bunkerwebSettingsProblems).
  *
- * Everything here is PURE.
+ * A SETTING SAVED IN BUNKERWEB'S WEB UI. The database row of a setting saved
+ * through BunkerWeb's web UI has method "ui", and 1.5.10's
+ * Database.save_config only replaces a row whose method is the caller's: the
+ * scheduler (method "scheduler") never overwrites it with the env file's
+ * value. So a country list saved there survives any edit of the env file.
+ * COUNTRY_DB_PY (below; run by the heal inside the scheduler, whose image
+ * ships python3 and sqlite3) lists the saved country lists with their method
+ * and removes the "ui" ones after a backup, then flags the plugin as changed,
+ * which the running scheduler polls (Database.check_changes) to rebuild.
+ *
+ * Everything here is PURE (COUNTRY_DB_PY is text the heal runs elsewhere).
  */
 
 import { isIP } from 'node:net';
@@ -128,22 +138,127 @@ const THIRD_PARTY_ANTIBOT = new Set(['recaptcha', 'hcaptcha', 'turnstile']);
 /** An anti-bot URI on a live Morphit path hides that path behind the challenge. */
 const LIVE_PATH = /^\/(v1|relay|rss|ipfs|ipns|mcp)(\/|$)/;
 
-/** An env-file value as Compose hands it over (surrounding quotes removed). */
-function unquote(raw: string): string {
-	const v = raw.trim();
-	if (v.length >= 2 && ((v[0] === "'" && v.endsWith("'")) || (v[0] === '"' && v.endsWith('"'))))
-		return v.slice(1, -1);
-	return v;
+/** One entry of an env file, as Docker Compose reads it. */
+export interface EnvEntry {
+	readonly key: string;
+	/** The value Compose hands the container. */
+	readonly value: string;
+	/** First and last line (0-based) of the entry: a quoted value may run on. */
+	readonly first: number;
+	readonly last: number;
+	/** What stands before the key on its line (indent, `export `). */
+	readonly pre: string;
 }
 
-/** `KEY=value` lines of an env file; the last one wins, as in Compose. */
-export function envValues(text: string): Map<string, string> {
-	const out = new Map<string, string>();
-	for (const line of text.split('\n')) {
-		const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
-		if (m) out.set(m[1]!, unquote(m[2]!));
+/** Where `quote` closes in `s` (a `"` escaped by a backslash does not); -1 if not. */
+function closingQuote(s: string, quote: string): number {
+	for (let i = 0; i < s.length; i++) {
+		if (quote === '"' && s[i] === '\\') {
+			i++;
+			continue;
+		}
+		if (s[i] === quote) return i;
+	}
+	return -1;
+}
+
+const DOUBLE_ESCAPES: Readonly<Record<string, string>> = {
+	n: '\n',
+	r: '\r',
+	t: '\t',
+	'\\': '\\',
+	'"': '"'
+};
+
+/**
+ * The entries of an env file, read the way Docker Compose reads them
+ * (compose-go's dotenv parser; every rule below was checked against
+ * `docker compose config` v5.5.1): blank and `#` lines skipped; an optional
+ * `export ` (any spaces); a key of letters, digits and `_ . - [ ]` (it may
+ * start with a digit: `3dshop.example_BLACKLIST_COUNTRY`); `=` or `:`, with
+ * spaces or tabs around it; a value in single quotes (literal) or double
+ * quotes (`\n \r \t \\ \"` unescaped) that may run over several lines and
+ * ignores what follows the closing quote; else the rest of the line, cut at
+ * ` #` and with trailing blanks removed. A line Compose would refuse (a space
+ * inside the key, a `$` in it) gives no entry. PURE.
+ */
+export function envEntries(text: string): EnvEntry[] {
+	const lines = text.split('\n').map((l) => l.replace(/\r$/, ''));
+	const out: EnvEntry[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		const m = /^(\s*(?:export\s+)?)([\p{L}\p{N}_.\-[\]]+)[ \t]*[=:](.*)$/u.exec(lines[i]!);
+		if (!m) continue;
+		const rest = m[3]!.replace(/^[ \t]+/, '');
+		const q = rest[0];
+		let value: string;
+		let last = i;
+		if (q === "'" || q === '"') {
+			let body = rest.slice(1);
+			let acc = '';
+			let j = i;
+			let at = closingQuote(body, q);
+			while (at < 0 && j + 1 < lines.length) {
+				acc += `${body}\n`;
+				body = lines[++j]!;
+				at = closingQuote(body, q);
+			}
+			if (at < 0) {
+				// Unterminated: Compose refuses the whole file. Read the line as it is.
+				value = rest.replace(/[ \t]+$/, '');
+			} else {
+				acc += body.slice(0, at);
+				value =
+					q === '"' ? acc.replace(/\\(.)/gs, (all, c: string) => DOUBLE_ESCAPES[c] ?? all) : acc;
+				last = j;
+			}
+		} else {
+			const c = rest.indexOf(' #');
+			value = (c >= 0 ? rest.slice(0, c) : rest).replace(/[ \t]+$/, '');
+		}
+		out.push({ key: m[2]!, value, first: i, last, pre: m[1]! });
+		i = last;
 	}
 	return out;
+}
+
+/** The values of an env file; the last entry of a key wins, as in Compose. PURE. */
+export function envValues(text: string): Map<string, string> {
+	const out = new Map<string, string>();
+	for (const e of envEntries(text)) out.set(e.key, e.value);
+	return out;
+}
+
+/** Every entry of `key` in `text` becomes one `key=val` line (indent and
+ *  `export` kept); with none, `key=val` is appended. PURE. */
+function setEntries(text: string, key: string, val: string): string {
+	const entries = envEntries(text).filter((e) => e.key === key);
+	if (entries.length === 0)
+		return `${text.replace(/\n*$/, '')}${text.trim() === '' ? '' : '\n'}${key}=${val}\n`;
+	const lines = text.split('\n');
+	for (const e of [...entries].reverse()) {
+		const cr = /\r$/.test(lines[e.last]!) ? '\r' : '';
+		lines.splice(e.first, e.last - e.first + 1, `${e.pre}${key}=${val}${cr}`);
+	}
+	return lines.join('\n');
+}
+
+/** The countries in a country-list value ("CN IR" → "CN, IR"). PURE. */
+function countriesOf(values: readonly string[]): string {
+	return [...new Set(values.flatMap((v) => v.split(/\s+/)).filter(Boolean))].join(', ');
+}
+
+/**
+ * The operator's line for a country list that no longer applies, naming the
+ * countries it unblocks: `how` says what was done to it ("emptied", or that a
+ * list saved in BunkerWeb's web UI was removed from its database). PURE.
+ */
+export function countryChangeLine(key: string, values: readonly string[], how: string): string {
+	const list = countriesOf(values);
+	const m = /^(?:(.+)_)?(BLACKLIST|WHITELIST)_COUNTRY$/.exec(key);
+	const site = m?.[1] ? ` for ${m[1]}` : '';
+	return m?.[2] === 'WHITELIST'
+		? `BunkerWeb: the country allow-list${site} — off: visitors from every country, not only ${list}, can reach this instance (${key} ${how}; no Morphit instance blocks by country)`
+		: `BunkerWeb: country blocks${site} — off: visitors from ${list} are no longer turned away (${key} ${how}; no Morphit instance blocks by country)`;
 }
 
 /** What BunkerWeb runs with for `key`: the file's value, else its default. */
@@ -235,38 +350,31 @@ export function planBunkerwebPrivacy(text: string): PrivacyPlan {
 		}
 	}
 	const setAll = (key: string, val: string): void => {
-		const re = new RegExp(`^(\\s*(?:export\\s+)?)${key}=.*$`, 'gm');
-		if (re.test(out)) out = out.replace(re, (_l, pre: string) => `${pre}${key}=${val}`);
-		else out = `${out.replace(/\n*$/, '')}${out.trim() === '' ? '' : '\n'}${key}=${val}\n`;
+		out = setEntries(out, key, val);
 	};
 	const before = envValues(text);
+	const entries = envEntries(text);
+	const valuesOf = (key: string): string[] =>
+		entries.filter((e) => e.key === key).map((e) => e.value.trim());
 	for (const s of BUNKERWEB_PRIVACY_SETTINGS) {
 		want.set(s.key, s.value);
-		// Every line that sets it agrees (or none does and the default is right).
-		const lines = [...text.matchAll(new RegExp(`^\\s*(?:export\\s+)?${s.key}=(.*)$`, 'gm'))];
-		if (
-			effectiveSetting(before, s.key) === s.value &&
-			lines.every((m) => unquote(m[1]!).trim() === s.value)
-		)
+		// Every entry that sets it agrees (or none does and the default is right).
+		if (effectiveSetting(before, s.key) === s.value && valuesOf(s.key).every((v) => v === s.value))
 			continue;
 		setAll(s.key, s.value);
-		changes.push(`BunkerWeb: ${s.what} — off (${s.key}=${s.value})`);
+		changes.push(
+			isCountryListKey(s.key)
+				? countryChangeLine(s.key, valuesOf(s.key), 'emptied')
+				: `BunkerWeb: ${s.what} — off (${s.key}=${s.value})`
+		);
 	}
 	// Per-site country lists (multisite: `<server name>_BLACKLIST_COUNTRY`).
-	for (const m of [
-		...text.matchAll(/^\s*(?:export\s+)?([A-Za-z0-9.-]+_(?:BLACKLIST|WHITELIST)_COUNTRY)=(.*)$/gm)
-	]) {
-		const key = m[1]!;
-		if (unquote(m[2]!).trim() === '' || want.has(key)) continue;
+	for (const e of entries) {
+		const key = e.key;
+		if (!isCountryListKey(key) || want.has(key) || valuesOf(key).every((v) => v === '')) continue;
 		want.set(key, '');
-		const re = new RegExp(
-			`^(\\s*(?:export\\s+)?)${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=.*$`,
-			'gm'
-		);
-		out = out.replace(re, (_l, pre: string) => `${pre}${key}=`);
-		changes.push(
-			`BunkerWeb: the country list ${key} — emptied (no Morphit instance blocks by country)`
-		);
+		setAll(key, '');
+		changes.push(countryChangeLine(key, valuesOf(key), 'emptied'));
 	}
 	const antibot = effectiveSetting(before, 'USE_ANTIBOT').toLowerCase();
 	const uri = effectiveSetting(before, 'ANTIBOT_URI');
@@ -323,18 +431,134 @@ export function bunkerwebSettingsProblems(
 export function countryListsInSettings(variablesEnv: string): string[] {
 	const out: string[] = [];
 	for (const line of variablesEnv.split('\n')) {
-		const m = /^((?:[A-Za-z0-9.-]+_)?(?:BLACKLIST|WHITELIST)_COUNTRY)=(.*)$/.exec(
-			line.replace(/\r$/, '')
-		);
-		if (m && m[2]!.trim() !== '') out.push(`${m[1]}=${m[2]!.trim()}`);
+		const m = /^([^=\s]+)=(.*)$/.exec(line.replace(/\r$/, ''));
+		if (m && isCountryListKey(m[1]!) && m[2]!.trim() !== '') out.push(`${m[1]}=${m[2]!.trim()}`);
 	}
 	return out;
 }
 
-/** True for a BunkerWeb country-list key, global or per site. PURE. */
+/** True for a BunkerWeb country-list key, global or per site (any server
+ *  name: it may start with a digit or hold a `-`). PURE. */
 export function isCountryListKey(k: string): boolean {
-	return /^(?:[A-Za-z0-9.-]+_)?(?:BLACKLIST|WHITELIST)_COUNTRY$/.test(k);
+	return /^(?:[\p{L}\p{N}_.\-[\]]+_)?(?:BLACKLIST|WHITELIST)_COUNTRY$/u.test(k);
 }
+
+// ─── country lists saved in BunkerWeb's database ─────────────────────────
+
+/** One saved country list (a row of bw_global_values / bw_services_settings). */
+export interface CountryRow {
+	/** The site of a per-site list; null for the global one. */
+	readonly service: string | null;
+	readonly key: 'BLACKLIST_COUNTRY' | 'WHITELIST_COUNTRY' | string;
+	readonly suffix: number | null;
+	readonly value: string;
+	/** Who saved it: "ui" (the web UI), "scheduler" (the scheduler's
+	 *  environment), "autoconf" (Autoconf labels) or "manual". */
+	readonly method: string;
+}
+
+export interface CountryDb {
+	/** BunkerWeb's sqlite database; or another database server (MariaDB,
+	 *  PostgreSQL) this script does not edit; or none at that path. */
+	readonly db: 'sqlite' | 'other' | 'missing';
+	readonly rows: readonly CountryRow[];
+}
+
+/** The key a row shows as in variables.env (`<site>_KEY` for a per-site one). PURE. */
+export function countryKeyOf(r: Pick<CountryRow, 'service' | 'key'>): string {
+	return r.service ? `${r.service}_${r.key}` : r.key;
+}
+
+/** The script's `MODE=list` answer; null when it is not one. PURE. */
+export function parseCountryDb(out: string): CountryDb | null {
+	try {
+		const j = JSON.parse(out) as { db?: unknown; rows?: unknown };
+		if (j.db !== 'sqlite' && j.db !== 'other' && j.db !== 'missing') return null;
+		const rows = Array.isArray(j.rows) ? (j.rows as CountryRow[]) : [];
+		if (
+			!rows.every(
+				(r) =>
+					typeof r.key === 'string' && typeof r.value === 'string' && typeof r.method === 'string'
+			)
+		)
+			return null;
+		return { db: j.db, rows };
+	} catch {
+		return null;
+	}
+}
+
+/** The script's `MODE=remove` answer; null when nothing was removed (all or nothing). PURE. */
+export function parseCountryRemoval(out: string): { backup: string; removed: number } | null {
+	try {
+		const j = JSON.parse(out) as { backup?: unknown; removed?: unknown };
+		return typeof j.backup === 'string' && typeof j.removed === 'number' && j.removed > 0
+			? { backup: j.backup, removed: j.removed }
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Run inside BunkerWeb's scheduler (`docker exec -i -e MODE=… <scheduler>
+ * python3 -c …`): its database is the one in its DATABASE_URI, BunkerWeb's
+ * default being sqlite:////var/lib/bunkerweb/db.sqlite3.
+ *  - MODE=list: every saved country list, with its method, as JSON.
+ *  - MODE=remove: the rows on stdin (JSON), each removed only while it is
+ *    still a web-UI row — all of them or none — after a backup of the
+ *    database next to it; then the plugin that owns the setting is flagged
+ *    changed (bw_plugins.config_changed, as BunkerWeb's own save does), which
+ *    the running scheduler polls and answers with a rebuild.
+ *  - MODE=where: the database path it would use.
+ */
+export const COUNTRY_DB_PY = String.raw`
+import datetime, json, os, re, sqlite3, sys
+KEYS = ("BLACKLIST_COUNTRY", "WHITELIST_COUNTRY")
+MODE = os.environ.get("MODE", "")
+URI = os.environ.get("DATABASE_URI") or "sqlite:////var/lib/bunkerweb/db.sqlite3"
+m = re.match(r"^sqlite(?:\+pysqlite)?:///(.+)$", URI)
+DB = m.group(1) if m else None
+if MODE == "where":
+    print(DB or "")
+    sys.exit(0)
+if DB is None:
+    print(json.dumps({"db": "other", "rows": []}))
+    sys.exit(0)
+if not os.path.isfile(DB):
+    print(json.dumps({"db": "missing", "rows": []}))
+    sys.exit(0)
+if MODE == "list":
+    c = sqlite3.connect("file:%s?mode=ro" % DB, uri=True, timeout=30)
+    rows = []
+    for r in c.execute("SELECT setting_id, suffix, value, method FROM bw_global_values WHERE setting_id IN (?, ?)", KEYS):
+        rows.append({"service": None, "key": r[0], "suffix": r[1], "value": r[2], "method": r[3]})
+    for r in c.execute("SELECT service_id, setting_id, suffix, value, method FROM bw_services_settings WHERE setting_id IN (?, ?)", KEYS):
+        rows.append({"service": r[0], "key": r[1], "suffix": r[2], "value": r[3], "method": r[4]})
+    print(json.dumps({"db": "sqlite", "rows": rows}))
+elif MODE == "remove":
+    want = [r for r in json.load(sys.stdin) if r.get("key") in KEYS]
+    s = sqlite3.connect(DB, timeout=30)
+    bk = os.path.join(os.path.dirname(DB), "db.pre-morphit-country.sqlite3")
+    d = sqlite3.connect(bk)
+    s.backup(d)
+    d.close()
+    n = 0
+    for r in want:
+        if r.get("service") is None:
+            n += s.execute("DELETE FROM bw_global_values WHERE setting_id = ? AND suffix IS ? AND method = 'ui'", (r["key"], r.get("suffix"))).rowcount
+        else:
+            n += s.execute("DELETE FROM bw_services_settings WHERE service_id = ? AND setting_id = ? AND suffix IS ? AND method = 'ui'", (r["service"], r["key"], r.get("suffix"))).rowcount
+    if n != len(want) or n == 0:
+        s.rollback()
+        print(json.dumps({"error": "not every row is a web-UI row any more", "removed": 0}))
+        sys.exit(0)
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    s.execute("UPDATE bw_plugins SET config_changed = 1, last_config_change = ? WHERE id IN (SELECT plugin_id FROM bw_settings WHERE id IN (?, ?))", (now,) + KEYS)
+    s.commit()
+    s.close()
+    print(json.dumps({"backup": bk, "removed": n}))
+`;
 
 /** The keys this module manages (the heal's verification needs them). */
 export const BUNKERWEB_PRIVACY_KEYS: readonly string[] = [

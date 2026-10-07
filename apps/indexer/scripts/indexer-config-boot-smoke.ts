@@ -119,7 +119,7 @@ setEnv('MORPHIT_INDEXER_DATABASE_URL', 'postgres://u:p@localhost:5432/morphit_in
 setEnv('MORPHIT_INDEXER_RELAY_ACCOUNT', 'tester');
 setEnv('MORPHIT_INDEXER_FEE_RECIPIENT', 'tester');
 setEnv('MORPHIT_INDEXER_CHAIN_ID', 'cd8d90f29ae273abec3eaa7731e25934c63eb654d55080caff2ebb7f5df6381f');
-setEnv('MORPHIT_INDEXER_RPC_ENDPOINTS', 'https://rpc.blurt.world');
+setEnv('MORPHIT_INDEXER_RPC_ENDPOINTS', 'https://rpc.example.org');
 
 try {
 	const mod = await import('../src/config/index.ts');

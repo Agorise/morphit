@@ -113,7 +113,10 @@ export function sanitizeForTerm(s: string): string {
 							}
 						}
 						if (allDigits) {
-							out += s.slice(i, j + 1);
+							// A style that HIDES text (conceal, SGR 8) is dropped
+							// whole: it would hide every line after it from the
+							// operator. Our own fmt.* never emits it.
+							if (!sgrConceals(s.slice(i + 2, j))) out += s.slice(i, j + 1);
 							i = j + 1;
 							sgr = true;
 						}
@@ -158,6 +161,30 @@ export function sanitizeForTerm(s: string): string {
 		i++;
 	}
 	return out;
+}
+
+/** PURE. Does an SGR parameter list (the part between `ESC[` and `m`) turn on
+ *  conceal (8)? The colour arguments of 38/48/58 (`5;n` or `2;r;g;b`) are
+ *  skipped, so a 256-colour 8 is not mistaken for it. */
+function sgrConceals(params: string): boolean {
+	const p = params.split(';');
+	for (let k = 0; k < p.length; k++) {
+		const n = p[k] === '' ? 0 : Number(p[k]);
+		if (n === 38 || n === 48 || n === 58) {
+			k += p[k + 1] === '5' ? 2 : p[k + 1] === '2' ? 4 : 0;
+			continue;
+		}
+		if (n === 8) return true;
+	}
+	return false;
+}
+
+/** Text from outside (release notes, a server's answer) as plain text: what
+ *  `sanitizeForTerm` keeps, without any colour or style either — a style in
+ *  someone else's text can hide or disguise the lines after it. */
+export function plainText(s: string): string {
+	// eslint-disable-next-line no-control-regex
+	return sanitizeForTerm(s).replace(/\u001b\[[0-9;]*m/g, '');
 }
 
 // ─── Color decision ──────────────────────────────────────────────
@@ -272,8 +299,10 @@ export function row(opts: {
 }): void {
 	const labelW = 22;
 	const valueW = 22;
-	const labelPad = sanitizeForTerm(opts.label).padEnd(labelW);
-	const valuePad = sanitizeForTerm(opts.value).padEnd(valueW);
+	// At least one space after each column, also when a value is longer than
+	// it ("in place, with warnings" ran into its "[WARN]").
+	const labelPad = `${sanitizeForTerm(opts.label)} `.padEnd(labelW);
+	const valuePad = `${sanitizeForTerm(opts.value)} `.padEnd(valueW);
 	const tail =
 		opts.status === undefined
 			? ''

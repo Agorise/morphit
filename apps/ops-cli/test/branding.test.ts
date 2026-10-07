@@ -1198,7 +1198,7 @@ describe('upgrade rollback re-attaches a container frontend', () => {
 			mkdirSync(backup, { recursive: true });
 			writeFileSync(join(backup, 'marker'), 'prev');
 			let restarted: string | null = null;
-			const code = rollback(
+			const code = await rollback(
 				install,
 				backup,
 				join(rroot, 'tmp'),

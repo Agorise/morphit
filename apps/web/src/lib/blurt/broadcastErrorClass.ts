@@ -64,6 +64,7 @@ export function classifyBroadcastError(err: unknown, account: string): Broadcast
 		return { key: 'key_mismatch', values: { account } };
 	if (err instanceof BroadcastError && (err.code === 'no_account' || err.code === 'locked'))
 		return { key: err.code };
+	if (err instanceof BroadcastError && err.code === 'invalid_text') return { key: 'invalid_text' };
 
 	// Transport couldn't reach the instance / chain — the most common opaque
 	// failure (offline or still-syncing instance). Now named + actionable, and for

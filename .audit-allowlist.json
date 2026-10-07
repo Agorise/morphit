@@ -11,8 +11,8 @@
       "severity": "moderate",
       "category": "not-reachable",
       "title": "qs: Denial of Service via Attacker Controlled isBuffer",
-      "lastReviewed": "2026-10-02",
-      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
+      "lastReviewed": "2026-10-06",
+      "rationale": "Only qs 6.5.5 under request (matrix-bot -> matrix-bot-sdk -> request), the Matrix alert bot's HTTP client, is affected; express (4.22.3, installed by matrix-bot-sdk) and the MCP SDK's express 5 now resolve qs 6.16.0, outside the advisory. request only builds and merges query strings for the bot's own calls to the operator-configured homeserver; no Morphit code starts an express app (the MCP server is a plain node:http server) and no outside request reaches request's qs. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out."
     },
     "GHSA-4w7w-66w2-5vf9": {
       "package": "vite",
@@ -41,18 +41,18 @@
     "GHSA-67mh-4wv8-2f99": {
       "package": "esbuild",
       "severity": "moderate",
-      "category": "runtime-accepted",
+      "category": "not-reachable",
       "title": "esbuild enables any website to send any requests to the development server and read the response",
-      "lastReviewed": "2026-10-02",
-      "rationale": "esbuild is a RUNTIME dependency: tsx transpiles the indexer, relay and ops-cli TypeScript with it on every node. The advisory needs esbuild's serve (dev server) mode, which neither tsx nor the ops-cli bundle step uses; Vite's dev server is local development only. The fix is a new esbuild major (0.25+/0.28) that tsx/vite pin below."
+      "lastReviewed": "2026-10-06",
+      "rationale": "Affected copies: esbuild 0.19.12 at the top level and vite's 0.21.5 (dev). The top-level copy is apps/ops-cli's own devDependency pin (^0.19.12), used only by apps/ops-cli/scripts/build.mjs through build(); svelte-i18n 4.0.1 also declares ^0.19.2, but its shipped dist (cli.js, runtime) never loads esbuild. tsx's copy (0.28.2), the one that transpiles TypeScript on nodes, is outside the advisory range. The advisory needs esbuild's serve (dev server) mode, which nothing here starts; Vite's dev server is local development only. Raising the ops-cli pin would not clear it (svelte-i18n keeps 0.19.x; tried 2026-10-06), so the fix is a svelte-i18n release on a newer esbuild."
     },
     "GHSA-6rw7-vpxm-498p": {
       "package": "qs",
       "severity": "moderate",
       "category": "not-reachable",
       "title": "qs's arrayLimit bypass in its bracket notation allows DoS via memory exhaustion",
-      "lastReviewed": "2026-10-02",
-      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
+      "lastReviewed": "2026-10-06",
+      "rationale": "Only qs 6.5.5 under request (matrix-bot -> matrix-bot-sdk -> request), the Matrix alert bot's HTTP client, is affected; express (4.22.3, installed by matrix-bot-sdk) and the MCP SDK's express 5 now resolve qs 6.16.0, outside the advisory. request only builds and merges query strings for the bot's own calls to the operator-configured homeserver; no Morphit code starts an express app (the MCP server is a plain node:http server) and no outside request reaches request's qs. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out."
     },
     "GHSA-72xf-g2v4-qvf3": {
       "package": "tough-cookie",
@@ -94,14 +94,6 @@
       "lastReviewed": "2026-10-02",
       "rationale": "Dev/test/build tooling only; never shipped to or run on a node (nodes serve the prebuilt frontend). Needs the Vite dev server on Windows; production never starts it."
     },
-    "GHSA-g7r4-m6w7-qqqr": {
-      "package": "esbuild",
-      "severity": "low",
-      "category": "runtime-accepted",
-      "title": "esbuild allows arbitrary file read when running the development server on Windows",
-      "lastReviewed": "2026-10-02",
-      "rationale": "Runtime dependency (via tsx), but the advisory needs esbuild's dev server on Windows; nodes run Linux and never start it."
-    },
     "GHSA-hmw2-7cc7-3qxx": {
       "package": "form-data",
       "severity": "high",
@@ -125,14 +117,6 @@
       "title": "cookie accepts cookie name, path, and domain with out of bounds characters",
       "lastReviewed": "2026-10-02",
       "rationale": "cookie 0.6 under @sveltejs/kit 2, used at build time only (the frontend is prerendered with adapter-static; nodes serve static files). The fix needs SvelteKit 3 (a major)."
-    },
-    "GHSA-q8mj-m7cp-5q26": {
-      "package": "qs",
-      "severity": "moderate",
-      "category": "not-reachable",
-      "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set",
-      "lastReviewed": "2026-10-02",
-      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
     },
     "GHSA-rj75-hqrm-r3gf": {
       "package": "postcss-selector-parser",
@@ -165,14 +149,6 @@
       "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
       "lastReviewed": "2026-10-02",
       "rationale": "Reached only through the Matrix alert bot (matrix-bot → matrix-bot-sdk → request/request-promise), which talks only to the operator-configured homeserver: no user-controlled URL, cookie, form field or header reaches it. matrix-bot-sdk's latest still depends on request, so no in-range update exists; replacing the SDK's HTTP layer is the way out. request calls uuid v4 without a caller buffer; the v3/v5/v6 buffer path is never used."
-    },
-    "GHSA-x5fp-wj9c-mxmx": {
-      "package": "qs",
-      "severity": "moderate",
-      "category": "not-reachable",
-      "title": "qs array-limit bypass via bracket-key comma parsing",
-      "lastReviewed": "2026-10-02",
-      "rationale": "qs 6.5 (under request — the Matrix bot's operator-only HTTP client) and qs 6.15.1 (express's query parser, pinned ~6.15 by express). express is installed (by @modelcontextprotocol/sdk and matrix-bot-sdk) but no Morphit code starts an express app: the MCP server is a plain node:http server with its own body cap and rate limit (apps/mcp-server/src/main.ts), and the bot uses MatrixClient, not the appservice (express) server. So no request reaches either qs. Revisit if an express app is ever started, or when express moves to qs >= 6.16."
     }
   }
 }

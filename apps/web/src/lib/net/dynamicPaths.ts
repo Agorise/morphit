@@ -96,6 +96,25 @@ export const BRAND_OVERRIDABLE_PATHS: readonly string[] = [
 export const BRAND_FRESH_PARAM = 'fresh';
 
 /**
+ * Which response the service worker gives for a brand file (PURE).
+ * `fresh` is the network's answer (null when it failed or timed out), `cached`
+ * the stored copy. A `?fresh=1` read (the Blurt post deciding which picture to
+ * use) must NEVER get the stored copy: one stored before the site was branded
+ * says "Morphit", and the post would carry Morphit's picture on a branded site.
+ * It gets the network's answer, or 'offline' (a 503).
+ */
+export function chooseBrandResponse<R extends { ok: boolean }>(
+	fresh: R | null,
+	cached: R | undefined,
+	wantsFresh: boolean
+): R | 'offline' {
+	if (fresh && fresh.ok) return fresh;
+	if (cached && !wantsFresh) return cached;
+	if (fresh) return fresh;
+	return 'offline';
+}
+
+/**
  * @param pathname  A URL pathname with no query or hash.
  * @returns `true` for a brand asset the operator may replace in place
  *          (including the iOS launch images under /splash/).

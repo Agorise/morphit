@@ -89,7 +89,12 @@ export class BroadcastUnavailableError extends Error {
  */
 export class BroadcastError extends Error {
 	constructor(
-		public readonly code: 'no_account' | 'locked' | 'missing_external_tx_id' | 'key_mismatch',
+		public readonly code:
+			| 'no_account'
+			| 'locked'
+			| 'missing_external_tx_id'
+			| 'key_mismatch'
+			| 'invalid_text',
 		message: string
 	) {
 		super(message);

@@ -15,6 +15,11 @@
 # staging drift). Proven end-to-end in the spike: a VPS `ipfs add` resolved
 # on ipfs.io + dweb.link.
 #
+# Exit:   0 seeded, and every check that ran found this box a usable seeder;
+#         3 seeded, but a check found something the operator must fix (each
+#           named above it with a "⚠" line: peers cannot fetch from this box,
+#           or it advertises a wrong address) — `morphit-ops upgrade` warns;
+#         1/2 not seeded.
 # Usage:  morphit-ipfs-seed.sh <tag> [expected_cid]
 #   e.g.  morphit-ipfs-seed.sh v1.9.3 bafybeibebk6sxb...
 #   - <tag>          the release tag to seed (vX.Y.Z).
@@ -228,7 +233,9 @@ _code() {
 # Probing that way would turn v1.17.1's false ✓ into an equally wrong false ✗
 # for every operator at once. So pin the REAL hostname to the loopback address:
 # correct SNI + Host, connection still never leaves the box.
-_gw=$(_code "http://127.0.0.1:${GW_PORT}${PROBE_PATH}" 20)
+# --noproxy '*': these ask THIS box; a proxy in the environment (https_proxy,
+# ALL_PROXY) would make curl ignore --resolve and ask somewhere else.
+_gw=$(_code "http://127.0.0.1:${GW_PORT}${PROBE_PATH}" 20 --noproxy '*')
 # Origin, from the first source that actually has one. This USED to read a single
 # key from a single file, and on both real instances that key is absent — so the
 # frontend check silently skipped on the canonical clearnet box, the one place it
@@ -288,17 +295,20 @@ if [ "$_fe" = "skip-hidden" ]; then
 	_fe_skip_hidden=1
 fi
 if [ -n "$_host" ] && [ "$_fe_skip_hidden" = "0" ]; then
-	_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
+	_fe=$(_code "https://${_host}${PROBE_PATH}" 45 --noproxy '*' -k --resolve "${_host}:443:127.0.0.1")
 	# BunkerWeb rate-limits (2 r/s); a 429 here is our own probing, not a fault.
 	if [ "$_fe" = "429" ]; then
 		sleep 3
-		_fe=$(_code "https://${_host}${PROBE_PATH}" 45 -k --resolve "${_host}:443:127.0.0.1")
+		_fe=$(_code "https://${_host}${PROBE_PATH}" 45 --noproxy '*' -k --resolve "${_host}:443:127.0.0.1")
 	fi
 else
 	_fe=""
 fi
 
+# Set by every "⚠" finding below: the seed then exits 3 (see the header).
+_needs_operator=0
 if [ "$_gw" != "200" ]; then
+	_needs_operator=1
 	log "⚠ WARNING: the local IPFS gateway is NOT serving $CID (127.0.0.1:${GW_PORT} → ${_gw:-none})."
 	log "  Content is pinned but unreachable — this box is NOT a usable seeder."
 elif [ "$_fe" = "200" ]; then
@@ -315,6 +325,7 @@ elif [ "$_fe" = "403" ] || [ "$_fe" = "429" ]; then
 	log "• Frontend check inconclusive (HTTP ${_fe}) — the edge refused our own local probe."
 	log "  Not a seeding fault on its own; the hidden checks below are authoritative."
 else
+	_needs_operator=1
 	log "⚠ WARNING: the gateway serves $CID but the FRONTEND does not (HTTP ${_fe:-timeout})."
 	log "  Peers fetch through the frontend, so this box is NOT a usable seeder yet."
 	log "  Usual cause: the firewall drops the container-to-host connect to ${GW_PORT}. Fix:"
@@ -371,6 +382,7 @@ fi
 _addr_mismatch=0
 if [ -n "${MORPHIT_ROUTER_ONION:-}" ] && [ -n "${_onion:-}" ] && [ "$MORPHIT_ROUTER_ONION" != "$_onion" ]; then
 	_addr_mismatch=1
+	_needs_operator=1
 	log "⚠ CONFIG/ROUTER MISMATCH — your .onion is advertised wrong."
 	log "    config says : $_onion"
 	log "    tor hosts   : $MORPHIT_ROUTER_ONION"
@@ -380,6 +392,7 @@ if [ -n "${MORPHIT_ROUTER_ONION:-}" ] && [ -n "${_onion:-}" ] && [ "$MORPHIT_ROU
 fi
 if [ -n "${MORPHIT_ROUTER_I2P:-}" ] && [ -n "${_i2p:-}" ] && [ "$MORPHIT_ROUTER_I2P" != "$_i2p" ]; then
 	_addr_mismatch=1
+	_needs_operator=1
 	log "⚠ CONFIG/ROUTER MISMATCH — your .b32.i2p is advertised wrong."
 	log "    config says : $_i2p"
 	log "    i2pd hosts  : $MORPHIT_ROUTER_I2P"
@@ -402,8 +415,12 @@ if [ -n "${_onion:-}" ]; then
 	_sp=$(ss -lnt 2>/dev/null | grep -oE '127\.0\.0\.1:(9050|9150)' | head -1 | cut -d: -f2) || true
 	[ -n "${_sp:-}" ] || _sp=9050
 	_t=$(_code "http://${_onion}${PROBE_PATH}" 180 --socks5-hostname "127.0.0.1:${_sp}")
-	[ "$_t" = "200" ] && log "✓ Tor: the .onion serves the release — hidden-only peers can upgrade from this box." \
-		|| log "⚠ Tor: the .onion did NOT serve the release (HTTP ${_t:-timeout}) — hidden peers cannot fetch it here."
+	if [ "$_t" = "200" ]; then
+		log "✓ Tor: the .onion serves the release — hidden-only peers can upgrade from this box."
+	else
+		_needs_operator=1
+		log "⚠ Tor: the .onion did NOT serve the release (HTTP ${_t:-timeout}) — hidden peers cannot fetch it here."
+	fi
 fi
 if [ -n "${_i2p:-}" ]; then
 	_i=$(_code "http://${_i2p}${PROBE_PATH}" 240 -x "http://127.0.0.1:4444")
@@ -419,6 +436,7 @@ if [ -n "${_i2p:-}" ]; then
 		# far end is the problem. Saying "tunnels are slow to warm up" here is
 		# what talked an operator out of investigating a genuinely wrong address
 		# for an unknown length of time. Do not explain away a real answer.
+		_needs_operator=1
 		log "⚠ I2P: i2pd replied HTTP ${_i} — the proxy works, so this is NOT a warm-up delay."
 		if [ "$_addr_mismatch" = "1" ]; then
 			log "  See the CONFIG/ROUTER MISMATCH above — that is almost certainly the cause."
@@ -440,3 +458,5 @@ if [ "$HIDDEN_ONLY" = yes ]; then
 else
 	step "done. Resolve: https://ipfs.io/ipfs/$CID/metadata.json  |  ipns://<name>/morphit-latest.tar.gz"
 fi
+# Seeded, but a "⚠" above needs the operator: not a clean result (exit 3).
+[ "$_needs_operator" = 0 ] || exit 3

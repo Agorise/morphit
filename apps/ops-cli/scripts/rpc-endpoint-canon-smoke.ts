@@ -19,11 +19,15 @@
  * so a cosmetic reorder is fine but a stray/missing endpoint fails.
  *
  * This is the guard that would have caught the beta5 firefight's root
- * config bug: the wizard's list contained `rpc.blurt.world` and was
- * missing two endpoints the rest of the app used.
+ * config bug: the wizard's list contained a dead node and was missing
+ * two endpoints the rest of the app used.
+ *
+ * That node is permanently offline and must never be referenced anywhere,
+ * so this file spells it in parts (DEAD_HOST) and checks that no file in
+ * the repository names it.
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
@@ -44,6 +48,9 @@ const bad = (m: string, detail = '') => {
 };
 
 const canon = new Set(DEFAULT_BLURT_RPC_ENDPOINTS);
+/** The decommissioned node, spelled in parts so this guard does not name it. */
+const DEAD_HOST = ['rpc', 'blurt', 'world'].join('.');
+const DEAD_RE = new RegExp(DEAD_HOST.replace(/\./g, '\\.'), 'i');
 const setEq = (a: Set<string>, b: Set<string>) =>
 	a.size === b.size && [...a].every((x) => b.has(x));
 const show = (s: Iterable<string>) => [...s].sort().join(', ');
@@ -56,8 +63,9 @@ if (DEFAULT_BLURT_RPC_ENDPOINTS.every((u) => u.startsWith('https://'))) ok('cano
 else bad('a canonical endpoint is not https://', show(canon));
 
 // Regression guard for the exact firefight artefact.
-if (!canon.has('https://rpc.blurt.world')) ok('canonical set does not contain the un-attributed rpc.blurt.world (firefight regression)');
-else bad('rpc.blurt.world is back in the canonical set — confirm it is a real, attributed node first');
+if (!DEFAULT_BLURT_RPC_ENDPOINTS.some((u) => DEAD_RE.test(u)))
+	ok('canonical set does not contain the dead node (firefight regression)');
+else bad('the dead node is back in the canonical set — it is permanently offline');
 
 // ── frontend literal (browser-CORS-clean SUBSET of canon) ───────────
 // the browser list is the CORS-clean SUBSET of the canonical
@@ -157,7 +165,7 @@ for (const [path, varName] of [
 
 // ── Ansible deploy defaults ─────────────────────────────────
 // The env examples above were guarded, but the Ansible group_vars copy
-// was NOT — and that is exactly where the dead rpc.blurt.world node
+// was NOT — and that is exactly where the dead node
 // survived (group_vars/all.yml pinned the indexer to it as "primary",
 // and the egress allowlist opened it while BLOCKING the real six). Pin
 // the Ansible indexer-endpoint default to canon too, and keep the
@@ -196,17 +204,15 @@ function yamlScalarList(path: string, key: string): Set<string> | null {
 	}
 
 	const ay = readFileSync(join(REPO, ansiblePath), 'utf8');
-	if (!ay.includes('rpc.blurt.world')) {
-		ok(`${ansiblePath} is free of the dead rpc.blurt.world node (endpoints + egress allowlist)`);
+	if (!DEAD_RE.test(ay)) {
+		ok(`${ansiblePath} is free of the dead node (endpoints + egress allowlist)`);
 	} else {
-		bad(
-			`rpc.blurt.world reappeared in ${ansiblePath} — decommissioned node; use the canonical set`
-		);
+		bad(`the dead node reappeared in ${ansiblePath} — decommissioned; use the canonical set`);
 	}
 }
 
 // ── verify-download.mjs (this copy rotted — it still pinned the
-//    dead rpc.blurt.world and a downloader hit "could not reach the
+//    dead node and a downloader hit "could not reach the
 //    chain" during the v1.8.15 ceremony). It's a standalone Node script
 //    (no browser CORS), so its DEFAULT_RPCS must equal the WHOLE 6-node
 //    canonical pool, and must never contain the decommissioned node. ──
@@ -225,9 +231,33 @@ function yamlScalarList(path: string, key: string): Set<string> | null {
 				`script=[${show(urls)}] canon=[${show(canon)}]`
 			);
 	}
-	if (!/rpc\.blurt\.world/.test(src))
-		ok('verify-download.mjs is free of the dead rpc.blurt.world node (list + usage + error suggestion)');
-	else bad('rpc.blurt.world reappeared in scripts/verify-download.mjs — decommissioned node');
+	if (!DEAD_RE.test(src))
+		ok('verify-download.mjs is free of the dead node (list + usage + error suggestion)');
+	else bad('the dead node reappeared in scripts/verify-download.mjs — decommissioned');
+}
+
+// ── no file anywhere names the dead node ─────────────────────────────
+// Code, tests, fixtures, comments and docs alike: a fixture naming it is how
+// it keeps coming back. (node_modules, build output and the private journal
+// are not the repository's text.)
+{
+	const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.svelte-kit', 'private']);
+	const hits: string[] = [];
+	const walk = (dir: string): void => {
+		for (const name of readdirSync(dir)) {
+			const p = join(dir, name);
+			const st = statSync(p);
+			if (st.isDirectory()) {
+				if (!SKIP_DIRS.has(name)) walk(p);
+			} else if (st.isFile() && st.size < 4 * 1024 * 1024 && !name.endsWith('.map')) {
+				const text = readFileSync(p, 'latin1');
+				if (DEAD_RE.test(text)) hits.push(p.slice(REPO.length + 1));
+			}
+		}
+	};
+	walk(REPO);
+	if (hits.length === 0) ok('no file in the repository names the dead node');
+	else bad('files still name the dead node (use a neutral host such as rpc.example.org)', hits.join(', '));
 }
 
 console.log('');

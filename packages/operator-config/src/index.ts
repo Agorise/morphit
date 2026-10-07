@@ -80,7 +80,7 @@ export const MORPHIT_GENESIS_BLOCK = 59441298;
  * component imports, so the relay's default, the indexer's default,
  * the wizard-written value, and the account-lookup fallback can never
  * drift apart (they did before beta5: the wizard wrote a 3-endpoint
- * set including `rpc.blurt.world` while the relay used a different 4,
+ * set including a since-dead node while the relay used a different 4,
  * which is how one real node's INDEXER froze on dead endpoints while
  * its RELAY survived). A drift smoke also pins the frontend copy and
  * the env examples to this list.

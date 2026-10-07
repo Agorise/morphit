@@ -141,9 +141,9 @@ for (const [label, path] of [
 		ask({ SMOKE_TIMEOUT: '900' }, 'vitest-must-pass-smoke'),
 		ask({ SMOKE_TIMEOUT: '90', MORPHIT_SLOW_SMOKE_TIMEOUT: '700' }, 'web-build-smoke')
 	].join(',');
-	if (got === '600,600,600,240,900,700')
-		ok(`${label}: slow-solo smokes get ≥600 s, the rest keep MORPHIT_SMOKE_TIMEOUT`);
-	else bad(`${label}: smoke_timeout_for() answers ${got}`, 'expected 600,600,600,240,900,700');
+	if (got === '1200,1200,1200,240,1200,700')
+		ok(`${label}: slow-solo smokes get ≥1200 s, the rest keep MORPHIT_SMOKE_TIMEOUT`);
+	else bad(`${label}: smoke_timeout_for() answers ${got}`, 'expected 1200,1200,1200,240,1200,700');
 	if (
 		/timeout --signal=TERM --kill-after=5 "\$\(smoke_timeout_for "\$name"\)"|this_timeout="\$\(smoke_timeout_for "\$name"\)"/.test(
 			src

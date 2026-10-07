@@ -15,8 +15,9 @@
  *   • the manifest comes from the VPS's served verify.json, not a laptop build;
  *   • no placeholder token ever creeps back in.
  */
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,7 +51,40 @@ check(
 	'the version is interpolated into the payload build',
 	/MORPHIT_BUILD_VERSION=9\.9\.9/.test(out)
 );
-check('the commit message is interpolated', /git commit -m "test message"/.test(out));
+check('the commit message is interpolated', /^git commit -m 'test message'$/m.test(out));
+
+// ─── the commit line runs the message as DATA, whatever it contains ───
+// It was pasted into `git commit -m "…"`: a quote broke the line and a `$(…)`
+// or backtick ran a command on the laptop. Run the printed line with `git`
+// replaced by a function that records its arguments.
+{
+	const dir = mkdtempSync(join(tmpdir(), 'eli5-msg-'));
+	const pwned = join(dir, 'PWNED');
+	const hostile = `v9.9.9 — it's "quoted" \`touch ${pwned}\` $(touch ${pwned}) $HOME \\ ; touch ${pwned} '' "`;
+	const o = execFileSync('bash', [GEN, '9.9.9', hostile], { encoding: 'utf8' });
+	const line = (/^git commit -m .*$/m.exec(o) ?? [''])[0];
+	const r = spawnSync(
+		'bash',
+		['-c', `git() { printf '%s\\0' "$@" > "${join(dir, 'args')}"; }\n${line}`],
+		{ encoding: 'utf8' }
+	);
+	let args: string[] = [];
+	try {
+		args = readFileSync(join(dir, 'args'), 'utf8').split('\0').slice(0, -1);
+	} catch {
+		args = [];
+	}
+	check(
+		'a commit message with quotes, backticks, $( ) and $ is committed verbatim and runs nothing',
+		r.status === 0 &&
+			!existsSync(pwned) &&
+			args.length === 3 &&
+			args[0] === 'commit' &&
+			args[1] === '-m' &&
+			args[2] === hostile
+	);
+	rmSync(dir, { recursive: true, force: true });
+}
 
 // ─── NO PLACEHOLDERS. This is the exact class of bug that shipped. ───
 const PLACEHOLDERS = ['<your-vps>', '<vps>', '<version>', 'X.Y.Z', 'YOUR_', 'TODO', 'FIXME', '...'];
@@ -190,6 +224,18 @@ check(
 	);
 }
 
+// ─── (v1.21.1) a release whose anchor has no CID: Block 4 says how to supply it ───
+// (behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs the line)
+{
+	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
+	check(
+		'BLOCK 4 says to take the CID morphit.io printed in Block 3 and pass it with --ipfs-cid',
+		/hosted v9\.9\.9 → bafy/.test(b4) &&
+			/morphit\.io/.test(b4) &&
+			/release-build-payload\.ts --ipfs-cid <cid> < \/dev\/null > release\.json/.test(b4)
+	);
+}
+
 // ─── the manifest: from the anchored tarball, checked against the served site ───
 // (behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs Block 4)
 check(
@@ -226,10 +272,26 @@ check(
 		!/^\s*(source|\.)\s/m.test(out) &&
 		builder.includes('MORPHIT_BUILD_ANCHOR_FILE')
 );
-check(
-	'the blocks note that mirroring to GitHub + Codeberg is automatic',
-	/GitHub \+ Codeberg/.test(out)
-);
+// The release (its page and assets) is copied only to the hosts release.yml
+// publishes to; the other mirrors get the commits and the tag by git push.
+// The blocks must name exactly those hosts, and never claim more.
+{
+	const ymlHosts = [
+		...readFileSync(join(REPO, '.forgejo', 'workflows', 'release.yml'), 'utf8').matchAll(
+			/^\s*publish_to "([a-z0-9.-]+)"/gm
+		)
+	].map((m) => m[1]!);
+	const gate = out.slice(out.indexOf('release.yml` to go green'), out.indexOf('**BLOCK 3**'));
+	check('release.yml copies the release to at least one host', ymlHosts.length > 0);
+	check(
+		`the gate after BLOCK 2 names every host release.yml copies the release to (${ymlHosts.join(', ')})`,
+		ymlHosts.every((h) => gate.includes(h))
+	);
+	check(
+		'the blocks never claim the release is mirrored to GitHub (it gets only the git push)',
+		!/mirrored to GitHub|GitHub \+ Codeberg/.test(out)
+	);
+}
 // IPFS is OPTIONAL + off by default: the ceremony must NOT force an ipfs add
 // or a manual mirror push (the maintainer's Forgejo auto-mirrors those refs already).
 check('the ceremony does not force an ipfs add step', !/ipfs add/.test(out));

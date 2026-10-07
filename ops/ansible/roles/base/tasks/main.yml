@@ -229,10 +229,14 @@
     group: root
     mode: '0755'
 
-- name: Create /var/log/morphit for service logs
+# Only root writes here (the upgrade's background-check and web-heal logs, the
+# AIDE and rkhunter results; the services log to the journal). Owned by root so
+# the service account cannot put a link where root then writes; its group may
+# read. `morphit-ops upgrade` heals boxes installed before (lib/etcPermHeal.ts).
+- name: Create /var/log/morphit for root-written logs
   ansible.builtin.file:
     path: /var/log/morphit
     state: directory
-    owner: "{{ morphit_service_user }}"
+    owner: root
     group: "{{ morphit_service_group }}"
     mode: '0750'

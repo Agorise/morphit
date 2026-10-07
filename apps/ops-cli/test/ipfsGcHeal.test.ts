@@ -57,16 +57,16 @@ describe('runIpfsGcHeal', () => {
 			o.calls?.push('install');
 			return { ok: true };
 		},
-		run: () => {
+		run: async () => {
 			o.calls?.push('run');
 			return { status: 0, output: LINE };
 		},
 		spinner: () => () => {},
 		...o
 	});
-	it('does nothing at all on a node without Kubo', () => {
+	it('does nothing at all on a node without Kubo', async () => {
 		const calls: string[] = [];
-		const out = runIpfsGcHeal({
+		const out = await runIpfsGcHeal({
 			runtime: rt({ calls, kuboPresent: () => false }),
 			info: () => {},
 			warn: () => {}
@@ -74,16 +74,16 @@ describe('runIpfsGcHeal', () => {
 		expect(out).toEqual({ kind: 'no-kubo' });
 		expect(calls).toEqual([]);
 	});
-	it('installs first, then runs, and returns what the clean-up reported', () => {
+	it('installs first, then runs, and returns what the clean-up reported', async () => {
 		const calls: string[] = [];
-		const out = runIpfsGcHeal({ runtime: rt({ calls }), info: () => {}, warn: () => {} });
+		const out = await runIpfsGcHeal({ runtime: rt({ calls }), info: () => {}, warn: () => {} });
 		expect(calls).toEqual(['install', 'run']);
 		expect(out.kind).toBe('ran');
 		if (out.kind === 'ran') expect(out.summary.unpinned).toBe(2);
 	});
-	it('does not run the clean-up when it could not be installed', () => {
+	it('does not run the clean-up when it could not be installed', async () => {
 		const calls: string[] = [];
-		const out = runIpfsGcHeal({
+		const out = await runIpfsGcHeal({
 			runtime: rt({ calls, install: () => ({ ok: false, detail: 'x' }) }),
 			info: () => {},
 			warn: () => {}
@@ -91,13 +91,13 @@ describe('runIpfsGcHeal', () => {
 		expect(out.kind).toBe('install-failed');
 		expect(calls).not.toContain('run');
 	});
-	it('a partial clean-up is a warning, a finished one is not', () => {
+	it('a partial clean-up is a warning, a finished one is not', async () => {
 		const warns: string[] = [];
-		runIpfsGcHeal({ runtime: rt(), info: () => {}, warn: (m) => warns.push(m) });
+		await runIpfsGcHeal({ runtime: rt(), info: () => {}, warn: (m) => warns.push(m) });
 		expect(warns).toEqual([]);
-		runIpfsGcHeal({
+		await runIpfsGcHeal({
 			runtime: rt({
-				run: () => ({ status: 1, output: LINE.replace('result=done', 'result=partial') })
+				run: async () => ({ status: 1, output: LINE.replace('result=done', 'result=partial') })
 			}),
 			info: () => {},
 			warn: (m) => warns.push(m)

@@ -28,15 +28,21 @@ const gate = (await import(pathToFileURL(join(REPO, 'scripts', 'audit-gate.mjs')
 	evaluate: (
 		audit: unknown,
 		allowText: string,
-		o?: { mode?: string; reason?: string | null }
+		o?: { mode?: string; reason?: string | null; fixes?: unknown; fixReason?: string | null }
 	) => Verdict;
+	inRangeFixesOrReason: (cwd?: string) => { fixes: unknown; reason: string | null };
 	ALLOWLIST_PATH: string;
 };
 
 const { audit, reason } = gate.auditOrReason(REPO);
+// The same in-range check CI's audit job runs: an advisory a plain (never
+// --force) `npm audit fix` would clear must be fixed, not allowlisted.
+const { fixes, reason: fixReason } = gate.inRangeFixesOrReason(REPO);
 const v = gate.evaluate(audit, readFileSync(gate.ALLOWLIST_PATH, 'utf8'), {
 	mode: REPORT_MODE ? 'report' : 'strict',
-	reason
+	reason,
+	fixes,
+	fixReason
 });
 for (const n of v.notes) console.log(`  note: ${n}`);
 for (const w of v.warnings) {

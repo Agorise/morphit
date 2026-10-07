@@ -1058,7 +1058,7 @@ export async function stepBackup(databaseUrl: string): Promise<BackupResult> {
 // beta5 item D: re-exported from the single source of truth in
 // @morphit/operator-config (imported below with the other operator-config
 // symbols). This was previously a DIVERGENT 3-endpoint list
-// (rpc.beblurt.com, rpc.blurt.world, blurt-rpc.saboin.com) — the wizard
+// (rpc.beblurt.com, a since-dead node, blurt-rpc.saboin.com) — the wizard
 // wrote that into the indexer config while the relay used a different
 // 4-endpoint default, the asymmetry that let one node's relay survive
 // while its indexer froze on dead endpoints.
@@ -2879,15 +2879,25 @@ export async function stepBunkerWeb(): Promise<BunkerWebResult> {
 			'  ✓ BunkerWeb selected.  morphit.config.env will set\n' +
 				'    MORPHIT_RELAY_TRUSTED_PROXY_IPS=172.20.0.0/16 for you.\n' +
 				'\n' +
-				'    To bring BunkerWeb up:\n' +
+				'    To bring BunkerWeb up (every step: ops/bunkerweb/README.md,\n' +
+				'    "Quick start"):\n' +
 				'      1. Copy the shipped config into place:\n' +
-				'           sudo cp -r ops/bunkerweb /etc/bunkerweb\n' +
+				'           sudo mkdir -p /etc/bunkerweb\n' +
+				'           sudo cp -r ops/bunkerweb/frontend ops/bunkerweb/docker-compose.yml /etc/bunkerweb/\n' +
+				'           sudo cp ops/bunkerweb/bunkerweb.env.example /etc/bunkerweb/bunkerweb.env\n' +
 				'      2. Edit /etc/bunkerweb/bunkerweb.env — set SERVER_NAME to\n' +
-				'         your domain, and (optionally) BLACKLIST_* / GREYLIST_*\n' +
-				'         AS blocks.  AUTO_LETS_ENCRYPT=yes handles TLS.\n' +
-				'      3. Start it:\n' +
-				'           cd /etc/bunkerweb && docker compose up -d\n' +
-				'      4. Confirm it came up healthy:\n' +
+				'         your domain.  Leave the rest as shipped: no Morphit\n' +
+				'         instance blocks visitors by country or network (ASN),\n' +
+				'         and nothing about a visitor is sent anywhere.  Then give\n' +
+				"         Compose the Docker socket's group:\n" +
+				'           echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" | sudo tee /etc/bunkerweb/.env\n' +
+				"      3. TLS: this server's certbot gets the certificate\n" +
+				"         (BunkerWeb's own Let's Encrypt client stays off,\n" +
+				'         AUTO_LETS_ENCRYPT=no).  Before starting BunkerWeb:\n' +
+				'           sudo certbot certonly --standalone -d <your domain>\n' +
+				'      4. Start it:\n' +
+				'           cd /etc/bunkerweb && sudo docker compose up -d\n' +
+				'      5. Confirm it came up healthy:\n' +
 				'           sudo morphit-ops bunkerweb\n' +
 				'\n' +
 				'    BunkerWeb terminates TLS, serves your apps/web/build, and\n' +
@@ -2969,9 +2979,10 @@ export async function stepHardening(bunkerWebEnabled: boolean): Promise<Hardenin
 			'this out in the right order.\n' +
 			'\n' +
 			(bunkerWebEnabled
-				? 'Because you chose BunkerWeb, the checklist covers TLS + the\n' +
-					'web edge via BunkerWeb (AUTO_LETS_ENCRYPT) and focuses the\n' +
-					'host section on SSH + UFW + fail2ban + unattended-upgrades.\n'
+				? 'Because you chose BunkerWeb, the checklist covers TLS (a\n' +
+					"Let's Encrypt certificate from this server's certbot, which\n" +
+					'BunkerWeb serves) + the web edge via BunkerWeb, and focuses\n' +
+					'the host section on SSH + UFW + fail2ban + unattended-upgrades.\n'
 				: 'Because you are serving directly (no BunkerWeb), the checklist\n' +
 					'includes placing the shipped nginx configs (ops/nginx/) and\n' +
 					"issuing a Let's Encrypt cert with certbot for your domain.\n")

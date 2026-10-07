@@ -76,6 +76,7 @@ import { build, files, prerendered, version } from '$service-worker';
 import { sanitizeClickPath } from '$lib/notifications/sanitizeClickPath';
 import {
 	BRAND_FRESH_PARAM,
+	chooseBrandResponse,
 	isDynamicDataPath,
 	isBrandOverridablePath
 } from '$lib/net/dynamicPaths';
@@ -304,9 +305,10 @@ self.addEventListener('fetch', (event: FetchEvent) => {
 					return cached;
 				}
 				const fresh = await refresh;
-				if (fresh && fresh.ok) return fresh;
-				if (cached) return cached;
-				if (fresh) return fresh;
+				// A ?fresh=1 read never gets the stored copy (it may predate the
+				// site's branding): see chooseBrandResponse.
+				const pick = chooseBrandResponse(fresh, cached, wantsFresh);
+				if (pick !== 'offline') return pick;
 				return new Response('Offline — resource unavailable.', {
 					status: 503,
 					headers: { 'Content-Type': 'text/plain; charset=utf-8' }

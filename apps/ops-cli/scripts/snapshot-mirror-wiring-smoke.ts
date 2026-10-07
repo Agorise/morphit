@@ -122,7 +122,8 @@ ok('heal: says which strategy worked', /healed via/.test(heal));
 ok('heal: always exits 0 — can never fail an upgrade', !/exit 1/.test(heal));
 ok(
 	'heal: VALIDATES the discovered subnet is RFC1918 before opening a port to it (a bogus or over-wide answer must never become a firewall rule)',
-	/192\.168\.\*\/\*/.test(heal) && /ignoring non-private subnet/.test(heal)
+	// (The function's behaviour on wide and malformed subnets: gateway-cidr-guard-smoke.)
+	/^private_cidr_ok\(\) \{/m.test(heal) && /! private_cidr_ok "\$\{CIDR\}"/.test(heal)
 );
 ok(
 	'heal: the fallback on an invalid subnet is the pinned CIDR, never a wider one',

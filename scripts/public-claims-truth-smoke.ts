@@ -85,6 +85,9 @@ function publicFiles(): string[] {
 	}
 	walk(join(ROOT, 'ops'), out);
 	out.push('apps/web/src/lib/i18n/locales/en.json');
+	// Not a document, but its README.md and metadata.json text is published in
+	// every release's IPFS directory.
+	out.push('ops/ipfs/stage-release-dir.sh');
 	return out;
 }
 
@@ -177,8 +180,21 @@ const BANNED: Banned[] = [
 	},
 	{
 		id: 'unsigned-never-published',
-		re: /never published unsigned|nothing is published unsigned|every release (?:tarball )?carries (?:a |its )?(?:detached )?(?:GPG )?signature/i,
+		// Also: "every release also carries a .asc", a release directory "with its
+		// .sha256/.asc" (the stager never stages one), and the text the stager
+		// writes into every release's IPFS directory.
+		re: /never published unsigned|nothing is published unsigned|every release (?:tarball )?(?:also )?carries (?:a |an |its )?(?:detached )?(?:GPG )?(?:signature|`?\.asc)|\.sha256`?\s*\/\s*`?\.asc|tarball is GPG-signed|Signed release; verify/i,
 		why: 'a release is published without .asc files when CI holds no signing key; nodes then install it by the on-chain SHA-256'
+	},
+	{
+		id: 'release-ui-signing',
+		re: /signed in the release UI/i,
+		why: 'nothing is signed by hand in the release UI; CI signs when it holds the key'
+	},
+	{
+		id: 'release-yml-triple-pulse',
+		re: /complete triple-pulse smoke suite/i,
+		why: 'release.yml runs one smoke pass (ci.yml ran three on the same commit)'
 	},
 	{
 		id: 'custom-rpc-setting',

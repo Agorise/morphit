@@ -48,6 +48,12 @@ except where listed under "Known limits". The most serious:
 
 The release notes ([RELEASE-NOTES-v1.21.0.md](release-notes/RELEASE-NOTES-v1.21.0.md)) describe the fixes.
 
+A follow-up review of v1.21.1 (before its release) found and fixed: root code writing through links the
+service account could plant in its own directories, the MCP rate limit being shared by every visitor behind
+the web proxy and not counting batched calls, consensus rules from 2026-11-01 that read node-local data or
+the runtime's Unicode version, and a BunkerWeb country list saved in BunkerWeb's web UI surviving the
+upgrade.
+
 ## Known limits
 
 - **Block content is cross-checked, not proven.** Every applied block's Merkle root, id and link are
@@ -62,6 +68,9 @@ The release notes ([RELEASE-NOTES-v1.21.0.md](release-notes/RELEASE-NOTES-v1.21.
   catches accidental tampering, not a hostile operator. The download verifier (`scripts/verify-download.mjs`)
   is the independent check.
 - **Chat messages sent before v1.21.0** are shown as unverified.
+- **The indexer and the relay share one database role.** Someone who takes over the indexer process can
+  read the relay's push subscriptions and queue relay transfers. The services run as separate Unix users;
+  separating their database roles is planned.
 - **A release is GPG-signed only when the release job holds the signing key.** Without it, nodes install the
   release by the SHA-256 in @morphit's signed on-chain record, and that hash is the one the release job computed:
   the job's runner is trusted to build what the signed tag names.

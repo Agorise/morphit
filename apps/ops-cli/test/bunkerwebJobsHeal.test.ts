@@ -268,3 +268,42 @@ describe('when Docker cannot be asked', () => {
 		expect(r.detail).toMatch(/sudo systemctl status docker/);
 	});
 });
+
+// v1.21.1 review (D-4): "already runs Morphit's job lists (nothing fetched
+// from the internet). Settings on this server still make BunkerWeb download
+// something…" was printed as a plain ✓-style line every upgrade; and the plain
+// "already" line was printed every upgrade instead of being counted.
+describe('what the upgrade prints for a scheduler already on Morphit’s lists (D-4)', async () => {
+	const { isRoutineHeal } = await import('../src/commands/upgrade.ts');
+	it('nothing to do: counted in "N other checks found nothing to change", not printed', async () => {
+		const b = new Box();
+		b.mounted = true;
+		const r = await healBunkerwebJobs(ctx, { runtime: b });
+		expect(r.strategy).toBe('already');
+		expect(isRoutineHeal(r)).toBe(true);
+	});
+	it('an operator setting that downloads something: a warning that names it, never "nothing fetched"', async () => {
+		const b = new Box();
+		b.mounted = true;
+		b.c = sched({
+			env: ['EXTERNAL_PLUGIN_URLS=https://example.org/p.zip', 'MODSECURITY_CRS_VERSION=nightly']
+		});
+		const r = await healBunkerwebJobs(ctx, { runtime: b });
+		expect(isRoutineHeal(r)).toBe(false);
+		expect(r.verified).toBe(false); // reportHeal prints it as a warning
+		expect(r.detail).toMatch(/EXTERNAL_PLUGIN_URLS/);
+		expect(r.detail).toMatch(/MODSECURITY_CRS_VERSION=nightly/);
+		expect(r.detail).not.toMatch(/nothing fetched from the internet/);
+		expect(b.ups).toBe(0);
+	});
+	it('two schedulers, one clean and one with such a setting: the warning is not hidden by the clean one', async () => {
+		const b = new Box();
+		b.mounted = true;
+		const other = sched({ name: 'bunkerweb-scheduler-2', env: ['PRO_LICENSE_KEY=abc'] });
+		b.containers = () => [b.c, other];
+		const r = await healBunkerwebJobs(ctx, { runtime: b });
+		expect(isRoutineHeal(r)).toBe(false);
+		expect(r.verified).toBe(false);
+		expect(r.detail).toMatch(/bunkerweb-scheduler-2.*PRO_LICENSE_KEY/);
+	});
+});

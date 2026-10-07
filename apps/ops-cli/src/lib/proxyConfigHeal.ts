@@ -36,6 +36,14 @@
  *    host.docker.internal → the gateway of the network the frontend is REALLY
  *    on (observed) instead of docker0's host-gateway. A service whose logging
  *    the operator configured keeps it.
+ *  - no country list (no Morphit instance blocks by country), whoever set it:
+ *    what BunkerWeb runs with (variables.env) is read after every run; a list
+ *    saved in BunkerWeb's web UI — which BunkerWeb never lets an env file
+ *    replace — is removed from its database inside the scheduler (after a
+ *    backup; lib/bunkerwebPrivacy.ts COUNTRY_DB_PY) and seen gone; any other
+ *    (an Autoconf label, a compose `environment:` entry) is named with where
+ *    to clear it. When that cannot be checked, the result says so (never
+ *    "nothing to change").
  *  - CrowdSec: when a CrowdSec container reads the edge's log (its acquisition
  *    names the edge, or cannot be read), or any other container can read logs
  *    through the Docker socket, `driver: none` would blind it. Then the edge
@@ -78,12 +86,28 @@ import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { readSchedulerCycle, dockerLogsSince, type SchedulerCycle } from './bunkerwebScheduler.ts';
 import { isHiddenOnlyNode } from './hiddenOnly.ts';
+import { torSocksFromEnv } from './torOnlyOsHeal.ts';
+import {
+	bundledBaseFile,
+	frontendBaseState,
+	loadBundledFrontendBase,
+	withTagOnlyFrom
+} from './frontendBaseImage.ts';
 import {
 	BUNKERWEB_PRIVACY_KEYS,
+	BUNKERWEB_PRIVACY_SETTINGS,
+	COUNTRY_DB_PY,
 	bunkerwebSettingsProblems,
+	countryChangeLine,
+	countryKeyOf,
 	countryListsInSettings,
+	envEntries,
 	isCountryListKey,
-	planBunkerwebPrivacy
+	parseCountryDb,
+	parseCountryRemoval,
+	planBunkerwebPrivacy,
+	type CountryDb,
+	type CountryRow
 } from './bunkerwebPrivacy.ts';
 
 // ── Canonical values (kept equal to ops/bunkerweb/bunkerweb.env.example by the
@@ -237,14 +261,12 @@ export function envFileValue(raw: string): string {
 	return v;
 }
 
-/** `KEY=` lines of an env file, as Compose reads them (last one wins). PURE. */
+/** The entries of an env file, as Compose reads them (last one wins; every
+ *  form Compose accepts — `KEY = v`, `KEY: v`, a key that starts with a digit
+ *  such as `3dshop.example_BLACKLIST_COUNTRY` — see envEntries). PURE. */
 export function envFileEntries(text: string): Map<string, string> {
 	const out = new Map<string, string>();
-	for (const line of text.split('\n')) {
-		// Keys may carry a server name (`<server name>_KEY`, BunkerWeb multisite).
-		const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.-]*)=(.*)$/.exec(line);
-		if (m) out.set(m[1]!, envFileValue(m[2]!));
-	}
+	for (const e of envEntries(text)) out.set(e.key, e.value);
 	return out;
 }
 
@@ -608,6 +630,9 @@ export interface Identified {
 	readonly crowdsec: readonly ContainerInfo[];
 	/** Other containers that can read container logs via the Docker socket. */
 	readonly socketWatchers: readonly ContainerInfo[];
+	/** BunkerWeb containers when there are several and none is known to be
+	 *  the public one (then `edge` is null). */
+	readonly ambiguous: readonly ContainerInfo[];
 	readonly notes: readonly string[];
 }
 
@@ -627,12 +652,14 @@ export function identifyContainers(list: readonly ContainerInfo[], buildDir: str
 	let bws = running.filter((c) => c !== frontend && isBunkerWebImage(c.image));
 	if (bws.length > 1) bws = bws.filter(publishes443);
 	let edge: ContainerInfo | null = null;
+	let ambiguous: ContainerInfo[] = [];
 	if (bws.length === 1) edge = bws[0]!;
-	else if (bws.length > 1 || running.filter((c) => isBunkerWebImage(c.image)).length > 1)
+	else if (bws.length > 1 || running.filter((c) => isBunkerWebImage(c.image)).length > 1) {
+		ambiguous = running.filter((c) => c !== frontend && isBunkerWebImage(c.image));
 		notes.push(
 			`Found several BunkerWeb containers and could not tell which one is the public one, so BunkerWeb's settings were left alone.`
 		);
-	else {
+	} else {
 		const pub = running.filter((c) => c !== frontend && publishes443(c));
 		if (pub.length > 0)
 			notes.push(
@@ -654,6 +681,7 @@ export function identifyContainers(list: readonly ContainerInfo[], buildDir: str
 		schedulers: running.filter((c) => isSchedulerImage(c.image)),
 		crowdsec,
 		socketWatchers,
+		ambiguous,
 		notes
 	};
 }
@@ -1091,13 +1119,15 @@ export interface ProxyHealRuntime {
 	refreshFrontend(ref: ComposeRef, timeoutMs: number, withBase?: boolean): boolean;
 	/** This node takes no clearnet route (lib/hiddenOnly.ts). Optional: absent → no. */
 	hiddenOnly?(): boolean;
-	/** The pinned frontend base image is on this box (`docker image inspect`). */
+	/** The pinned frontend base image is on this box and a build can use it
+	 *  without a pull (lib/frontendBaseImage.ts). */
 	baseImagePresent?(timeoutMs: number): boolean;
 	/** `docker load` the offline bundle's copy of the pinned base, if the
-	 *  install carries one (vendor/docker); true when it loaded. */
+	 *  install carries one (vendor/docker); true when it is then proven to be
+	 *  the pinned image and usable. */
 	loadBundledBase?(timeoutMs: number): boolean;
-	/** The RUNNING Docker daemon pulls through Tor (its environment has the
-	 *  socks5 proxy the tor-only egress heal writes). */
+	/** The RUNNING Docker daemon pulls through Tor's SocksPort
+	 *  (dockerDaemonPullsThroughTor). */
 	dockerPullsThroughTor?(): boolean;
 	/** BunkerWeb's own verdict (lib/bunkerwebScheduler.ts) on the config its
 	 *  scheduler(s) built since `sinceIso`. Optional: absent → not consulted. */
@@ -1107,6 +1137,17 @@ export interface ProxyHealRuntime {
 		sinceIso: string,
 		timeoutMs: number
 	): SchedulerCycle;
+	/** The country lists saved in BunkerWeb's database, read inside a
+	 *  scheduler (COUNTRY_DB_PY); null when that could not run. Optional:
+	 *  absent → not consulted. */
+	countryRows?(scheduler: string, timeoutMs: number): CountryDb | null;
+	/** Remove these web-UI rows (all or none) after a backup, and flag
+	 *  BunkerWeb to rebuild; null when nothing was removed. */
+	removeCountryRows?(
+		scheduler: string,
+		rows: readonly CountryRow[],
+		timeoutMs: number
+	): { backup: string; removed: number } | null;
 	/** Run `fn` if the process is told to stop; returns the unregister. */
 	onTerminate(fn: () => void): () => void;
 	sleep(ms: number): Promise<void>;
@@ -1123,7 +1164,13 @@ type ComposeOutcome =
 	| { kind: 'no-time' }
 	| { kind: 'applied'; changes: readonly string[] }
 	| { kind: 'rolled-back'; reason: string; restoreVerified: boolean }
-	| { kind: 'apply-failed' };
+	| { kind: 'apply-failed' }
+	/** Nothing to change in the files, but BunkerWeb's running settings could
+	 *  not be checked for a country list (said in `reason`, with the command). */
+	| { kind: 'unchecked'; reason: string }
+	/** Everything else is in place; BunkerWeb still runs with a country list
+	 *  this heal could not remove (`reason` names where it is set). */
+	| { kind: 'country-list'; reason: string };
 
 /** What the running frontend forwards to the relay/indexer (see the header). */
 export type ForwardingState = 'ok' | 'refreshed' | 'stale' | 'unknown';
@@ -1138,6 +1185,9 @@ const VERIFY_MIN_MS = 15_000;
 const ROLLBACK_RESERVE_MS = 40_000;
 const REFRESH_MIN_MS = 60_000;
 const REFRESH_WAIT_MS = 15_000;
+/** Longest wait for BunkerWeb to rebuild after a country list is removed
+ *  (a rebuild took ~2 min on a box whose downloads time out). */
+const SETTLE_MAX_MS = 6 * 60_000;
 
 export interface HealOpts {
 	readonly runtime: ProxyHealRuntime;
@@ -1238,33 +1288,47 @@ async function verifyFrontendForwarding(
 		const b = rt.frontendBase?.(fe.name, clock.t(PROBE_MS)) ?? null;
 		if (b === null || b === FRONTEND_BASE) return b === null ? null : true;
 		if (rt.frontendRebuildPinsBase?.(feRef) === false) return null;
-		return baseReachable() ? false : null;
+		return baseReach() === 'here' ? false : null;
 	};
 	// A rebuild onto the pinned base makes Docker fetch that image when it is
 	// not on the box. On a hidden-only node that would be a Docker Hub pull from
-	// the box's own address, so the base switch waits until the image is here
-	// (or loads from the offline bundle's vendor/docker) or Docker is seen
-	// pulling through Tor. Decided once per run.
-	let baseHeld: boolean | null = null;
-	const baseReachable = (): boolean => {
-		if (baseHeld === null) {
-			baseHeld =
-				rt.hiddenOnly?.() === true &&
-				!(rt.baseImagePresent?.(clock.t(PROBE_MS)) ?? false) &&
-				!(
-					(rt.loadBundledBase?.(clock.t(UP_MAX_MS, 10_000)) ?? false) &&
-					(rt.baseImagePresent?.(clock.t(PROBE_MS)) ?? false)
-				) &&
-				!(rt.dockerPullsThroughTor?.() ?? false);
-			if (baseHeld)
-				opts.info(
-					`The frontend (${fe.name}) stays on its current nginx base for now: this hidden-only node does not have ` +
-						`this release's base image (${FRONTEND_BASE.split('@')[0]}), and Docker does not pull through Tor yet, so nothing ` +
-						'is fetched from Docker Hub. Once Docker pulls through Tor (the tor-only egress heal sets that up), ' +
-						'run on this server: sudo morphit-ops upgrade --heals'
-				);
-		}
-		return !baseHeld;
+	// the box's own address — or, when Docker pulls through Tor, a pull through
+	// Tor squeezed into the seconds this rebuild has. So there the base switch
+	// waits until the image is here (or loads, checked, from the offline
+	// bundle's vendor/docker): while Docker does not pull through Tor ('held'),
+	// and while it does, for the after-restart unit's fetch, which has the
+	// minutes Tor needs and rebuilds the frontend onto it ('fetching'). Any
+	// rebuild meanwhile keeps the Dockerfile's base as it is — also when the
+	// label is current but the image itself is gone (`docker image prune -a`).
+	// Decided once per run.
+	let baseWay: 'here' | 'held' | 'fetching' | null = null;
+	const baseReach = (): 'here' | 'held' | 'fetching' => {
+		if (baseWay !== null) return baseWay;
+		const here = (): boolean => rt.baseImagePresent?.(clock.t(PROBE_MS)) ?? false;
+		baseWay =
+			rt.hiddenOnly?.() !== true ||
+			here() ||
+			((rt.loadBundledBase?.(clock.t(UP_MAX_MS, 10_000)) ?? false) && here())
+				? 'here'
+				: (rt.dockerPullsThroughTor?.() ?? false)
+					? 'fetching'
+					: 'held';
+		const name = FRONTEND_BASE.split('@')[0];
+		if (baseWay === 'fetching')
+			opts.info(
+				`The frontend (${fe.name}) moves to this release's nginx base image (${name}) once that image is on this ` +
+					'server: it is being fetched through Tor in the background, by the checks that run after the services ' +
+					'restart, and the frontend is rebuilt onto it then. Nothing to do; the site keeps working as it is.'
+			);
+		else if (baseWay === 'held')
+			opts.info(
+				`The frontend (${fe.name}) stays on its current nginx base for now: this hidden-only node does not have ` +
+					`this release's base image (${name}), and Docker does not pull through Tor yet, so nothing is fetched ` +
+					'from Docker Hub. The checks that run after the services restart try to set Docker to pull through Tor, ' +
+					'then fetch it that way and rebuild the frontend onto it; they say how that went. The site keeps ' +
+					'working as it is.'
+			);
+		return baseWay;
 	};
 	const check = (): Seen | null => {
 		const dump = rt.nginxT(fe.name, clock.t(PROBE_MS));
@@ -1359,7 +1423,8 @@ async function verifyFrontendForwarding(
 	let after: Seen = first;
 	let refreshed = false;
 	try {
-		refreshed = rt.refreshFrontend(feRef, clock.t(UP_MAX_MS, 10_000), baseHeld !== true);
+		const withBase = baseReach() === 'here';
+		refreshed = rt.refreshFrontend(feRef, clock.t(UP_MAX_MS, 10_000), withBase);
 		// A recreated nginx answers within seconds; do not let a rebuild that did
 		// not help eat the time the privacy/header change needs.
 		const until = rt.now() + REFRESH_WAIT_MS;
@@ -1420,8 +1485,15 @@ async function applyComposeAndEnv(
 		note(
 			`${edge.name} was not started by Docker Compose, so BunkerWeb's settings were left alone.`
 		);
+	// BunkerWeb runs here but cannot be looked at (D-5): never "nothing to change".
+	const bwUnchecked: string | null =
+		edge && !edgeRef
+			? `${edge.name} was not started by Docker Compose, so whether BunkerWeb runs with a country list or with Morphit's privacy settings was not checked; on this server: sudo docker exec ${edge.name} grep COUNTRY /etc/nginx/variables.env`
+			: id.ambiguous.length > 0
+				? `several BunkerWeb containers run here (${id.ambiguous.map((c) => c.name).join(', ')}) and none is known to be the public one, so whether BunkerWeb runs with a country list was not checked; on this server, for each of them: sudo docker exec <name> grep COUNTRY /etc/nginx/variables.env`
+				: null;
 	const ref = edgeRef ?? feRef;
-	if (!ref) return { kind: 'no-proxy' };
+	if (!ref) return bwUnchecked ? { kind: 'unchecked', reason: bwUnchecked } : { kind: 'no-proxy' };
 	const inProject = (r: ComposeRef | null): boolean =>
 		r !== null && r.project === ref.project && sameList(r.files, ref.files);
 	const edgeIn = edge && inProject(edgeRef) ? edge : null;
@@ -1482,23 +1554,28 @@ async function applyComposeAndEnv(
 
 	// ── which env file (Compose says which one the edge reads) ──
 	let envPath: string | null = null;
+	/** Why no env file could be chosen (said again if BunkerWeb runs without
+	 *  Morphit's privacy settings). */
+	let envWhy: string | null = null;
 	if (edgeIn) {
 		const ef = m0Files?.get(svc.edge!)?.envFiles ?? null;
 		if (ef === null)
-			note(
-				"This server's Docker Compose cannot show which settings file BunkerWeb reads (it is older than the " +
-					"`--no-env-resolution` option), so BunkerWeb's headers and log format were left alone."
-			);
+			envWhy =
+				"this server's Docker Compose cannot show which settings file BunkerWeb reads (it is older than the " +
+				'`--no-env-resolution` option)';
 		else {
 			const named = ef.filter((p) => /(^|\/)bunkerweb\.env$/.test(p));
 			envPath = named.length === 1 ? named[0]! : ef.length === 1 ? ef[0]! : null;
 			if (envPath === null)
-				note(
+				envWhy =
 					ef.length === 0
-						? "BunkerWeb's settings are not in a file Docker Compose reads for it, so its headers and log format were left alone."
-						: `BunkerWeb reads several settings files (${ef.join(', ')}), so its headers and log format were left alone.`
-				);
+						? "BunkerWeb's settings are not in a file Docker Compose reads for it"
+						: `BunkerWeb reads several settings files (${ef.join(', ')})`;
 		}
+		if (envWhy !== null)
+			note(
+				`${envWhy[0]!.toUpperCase()}${envWhy.slice(1)}, so BunkerWeb's privacy settings, headers and log format were left alone.`
+			);
 	}
 	const schedulers = edgeIn
 		? id.schedulers.filter((s) => {
@@ -1641,27 +1718,249 @@ async function applyComposeAndEnv(
 	const staleEdge = staleOf(edgeIn);
 	const staleFe = staleOf(feIn);
 	const allChanges = [...envChanges, ...composeChanges];
-	// Nothing to change in the files: still, no country list may reach BunkerWeb
-	// another way (a compose `environment:` entry this heal does not edit).
-	const countryElsewhere = (): ComposeOutcome | null => {
-		if (!edgeIn || !rt.bunkerwebSettings) return null;
-		const stop = rt.spinner('Checking that no country list reaches BunkerWeb…');
+
+	// ── no country list may reach BunkerWeb, whoever set it (D-1, D-5) ──
+	// What BunkerWeb runs with is its generated variables.env; where a list is
+	// saved, BunkerWeb's database says (the row's method). A list saved in its
+	// web UI ("ui") is removed there; any other is named with where to clear it.
+	const dbSched = ((): ContainerInfo | null => {
+		const mine = id.schedulers.filter((c) => inProject(composeRefOf(c)));
+		return mine[0] ?? (id.schedulers.length === 1 ? id.schedulers[0]! : null);
+	})();
+	const pollMs = opts.pollMs ?? 3000;
+	const schedSvc = dbSched ? (composeRefOf(dbSched)?.service ?? null) : null;
+	/** The command that applies a changed setting: the scheduler (it builds
+	 *  BunkerWeb's settings) and the edge, recreated on their files. */
+	const applyCmd = (): string => {
+		const svcs = [dbSched && inProject(composeRefOf(dbSched)) ? schedSvc : null, svc.edge];
+		return `sudo ${composeCommand(ref, ['up', '-d', '--no-deps', ...svcs.filter((x): x is string => !!x)])}`;
+	};
+	interface CountryCheck {
+		/** Lines for the lists this run removed and saw gone (shown with ✓). */
+		readonly done: readonly string[];
+		/** The country lists BunkerWeb runs with now; null: could not be read. */
+		readonly live: readonly string[] | null;
+		/** Why nothing could be checked, with the command to look by hand. */
+		readonly unchecked?: string;
+		/** What is left, where it is set and what to do. */
+		readonly left?: string;
+		/** BunkerWeb's privacy settings that are not Morphit's, when no settings
+		 *  file could be chosen to set them in. */
+		readonly privacy?: readonly string[];
+	}
+	const privacyAll = new Map(
+		BUNKERWEB_PRIVACY_SETTINGS.filter((p) => !isCountryListKey(p.key)).map(
+			(p) => [p.key, p.value] as const
+		)
+	);
+	const checkCountry = async (waitSince: string | null): Promise<CountryCheck> => {
+		if (!edgeIn)
+			return bwUnchecked
+				? { done: [], live: null, unchecked: bwUnchecked }
+				: { done: [], live: [] };
+		const edgeName = edgeIn.name;
+		const cantRead: CountryCheck = {
+			done: [],
+			live: null,
+			unchecked: `BunkerWeb's running settings (/etc/nginx/variables.env in ${edgeName}) could not be read, so whether it runs with a country list was not checked; on this server: sudo docker exec ${edgeName} grep COUNTRY /etc/nginx/variables.env`
+		};
+		if (!rt.bunkerwebSettings) return cantRead;
+		const read = (): string | null => rt.bunkerwebSettings!(edgeName, clock.t(PROBE_MS));
+		let stop = rt.spinner('Checking that BunkerWeb runs with no country list…');
 		let vars: string | null;
 		try {
-			vars = rt.bunkerwebSettings(edgeIn.name, clock.t(PROBE_MS));
+			vars = read();
 		} finally {
 			stop();
 		}
-		if (vars === null) return null;
-		const lists = countryListsInSettings(vars);
-		if (lists.length === 0) return null;
+		if (vars === null) return cantRead;
+		// BunkerWeb's scheduler rebuilds by itself; follow its verdict, re-reading.
+		const settle = async (
+			since: string,
+			label: string
+		): Promise<{ vars: string | null; refused: string | null }> => {
+			const st = rt.spinner(label);
+			let v: string | null = null;
+			let refusedWhy: string | null = null;
+			const until = rt.now() + SETTLE_MAX_MS;
+			try {
+				for (;;) {
+					let loaded = true;
+					if (dbSched && rt.schedulerCycle) {
+						const c = rt.schedulerCycle([dbSched.name], edgeName, since, clock.t(PROBE_MS));
+						if (c.kind === 'refused') refusedWhy = c.reason;
+						loaded = c.kind !== 'pending';
+					}
+					v = read();
+					if (v !== null && countryListsInSettings(v).length === 0) break;
+					if (loaded || clock.left() < pollMs + 5_000 || rt.now() + pollMs > until) break;
+					await rt.sleep(pollMs);
+				}
+			} finally {
+				st();
+			}
+			return { vars: v, refused: refusedWhy };
+		};
+		let refused: string | null = null;
+		if (waitSince !== null && countryListsInSettings(vars).length > 0) {
+			const r = await settle(
+				waitSince,
+				'Waiting for BunkerWeb to apply the emptied country lists…'
+			);
+			if (r.vars !== null) vars = r.vars;
+			refused = r.refused;
+		}
+		// No settings file could be chosen, so the privacy settings were not
+		// set: say which ones BunkerWeb runs without (never "nothing to change").
+		const privacy: string[] = [];
+		if (envPath === null) {
+			const have = new Map(
+				vars
+					.split('\n')
+					.map((l) => /^([^=\s]+)=(.*)$/.exec(l.replace(/\r$/, '')))
+					.filter((m): m is RegExpExecArray => m !== null)
+					.map((m) => [m[1]!, m[2]!.trim()] as const)
+			);
+			for (const [k, v] of privacyAll)
+				if (have.get(k) !== v) privacy.push(`${k}=${have.get(k) ?? '(not shown)'}`);
+		}
+		let lists = countryListsInSettings(vars);
+		if (lists.length === 0) return { done: [], live: [], privacy };
+		let db: CountryDb | null = null;
+		if (dbSched && rt.countryRows) {
+			stop = rt.spinner("Asking BunkerWeb's database where the country list is saved…");
+			try {
+				db = rt.countryRows(dbSched.name, clock.t(PROBE_MS));
+			} finally {
+				stop();
+			}
+		}
+		const rowOf = (kv: string): CountryRow | undefined =>
+			db?.rows.find((r) => r.value.trim() !== '' && kv.startsWith(`${countryKeyOf(r)}=`));
+		const ui = lists.map(rowOf).filter((r): r is CountryRow => r?.method === 'ui');
+		const done: string[] = [];
+		const removed = new Set<string>();
+		let uiWhy: string | null = null;
+		if (ui.length > 0) {
+			if (!rt.removeCountryRows) uiWhy = "this heal cannot edit BunkerWeb's database here";
+			else if (clock.left() < VERIFY_MIN_MS) uiWhy = 'not enough time was left in this upgrade';
+			else {
+				const since = new Date(rt.now() - 2_000).toISOString();
+				stop = rt.spinner(
+					"Removing the country list saved in BunkerWeb's web UI (a copy of its database is kept)…"
+				);
+				let res: { backup: string; removed: number } | null;
+				try {
+					res = rt.removeCountryRows(dbSched!.name, ui, clock.t(PROBE_MS));
+				} finally {
+					stop();
+				}
+				if (res === null || res.removed !== ui.length)
+					uiWhy = "BunkerWeb's database did not take the change, so nothing in it was changed";
+				else {
+					for (const r of ui) removed.add(countryKeyOf(r));
+					const r2 = await settle(
+						since,
+						'Waiting for BunkerWeb to apply it (it rebuilds its settings by itself)…'
+					);
+					if (r2.vars !== null) vars = r2.vars;
+					refused = r2.refused ?? refused;
+					lists = countryListsInSettings(vars);
+					for (const r of ui)
+						if (!lists.some((kv) => kv.startsWith(`${countryKeyOf(r)}=`)))
+							done.push(
+								countryChangeLine(
+									countryKeyOf(r),
+									[r.value],
+									`was saved in BunkerWeb's web UI: removed from its database; the database as it was is kept at ${res.backup} inside ${dbSched!.name}`
+								)
+							);
+				}
+			}
+		}
+		if (lists.length === 0) return { done, live: [], privacy };
+		// ── what is left, and where to clear it ──
+		const notYet = refused ?? 'it had not rebuilt its settings in time';
+		const parts: string[] = [];
+		const stale = lists.filter((kv) => removed.has(kv.slice(0, kv.indexOf('='))));
+		if (stale.length > 0)
+			parts.push(
+				`${stale.join(', ')} was removed from BunkerWeb's database (it was saved in its web UI), but BunkerWeb has not applied that yet (${notYet}); it does at its next rebuild — to rebuild now, on this server run: sudo docker restart ${dbSched!.name}.`
+			);
+		const rest = lists.filter((kv) => !stale.includes(kv));
+		const byMethod = (m: string): string[] => rest.filter((kv) => rowOf(kv)?.method === m);
+		const inUi = byMethod('ui');
+		if (inUi.length > 0)
+			parts.push(
+				`${inUi.join(', ')} is saved in BunkerWeb's web UI and was not removed here (${uiWhy ?? 'it was saved again'}): in the web UI, empty it under Global config → Country (a per-site list: Services → the site → Country) and save; BunkerWeb applies that by itself.`
+			);
+		for (const kv of byMethod('autoconf')) {
+			const k = kv.slice(0, kv.indexOf('='));
+			const m = /^(?:(.+)_)?((?:BLACKLIST|WHITELIST)_COUNTRY)$/.exec(k);
+			parts.push(
+				`${kv} comes from BunkerWeb's Autoconf: remove the label bunkerweb.${m?.[2] ?? k}${m?.[1] ? ` from the container labelled bunkerweb.SERVER_NAME=${m[1]}` : ' (or that setting in the environment of the BunkerWeb container Autoconf reads)'}; Autoconf applies that by itself.`
+			);
+		}
+		for (const kv of byMethod('scheduler')) {
+			const k = kv.slice(0, kv.indexOf('='));
+			const inline = [schedSvc, svc.edge].filter(
+				(x): x is string => !!x && (m0Files?.get(x)?.environment.has(k) ?? false)
+			);
+			const schedFiles = schedSvc ? (m0Files?.get(schedSvc)?.envFiles ?? []) : [];
+			parts.push(
+				inline.length > 0
+					? `${kv} is set by the "environment:" entry ${k} of ${inline.join(' and ')} in ${ref.files.join(', ')}: remove it there, then on this server run: ${applyCmd()}`
+					: envPath !== null && envFinal.get(k) === '' && schedFiles.includes(envPath)
+						? `${envPath} now leaves ${k} empty, but BunkerWeb has not applied that yet (${notYet}); on this server run: ${applyCmd()}`
+						: `${kv} comes from the settings BunkerWeb's scheduler${dbSched ? ` (${dbSched.name})` : ''} reads${schedFiles.length > 0 ? ` (${schedFiles.join(', ')})` : ''}: empty it there, then on this server run: ${applyCmd()}`
+			);
+		}
+		const unknown = rest.filter(
+			(kv) => !['ui', 'autoconf', 'scheduler'].includes(rowOf(kv)?.method ?? '')
+		);
+		if (unknown.length > 0) {
+			const why = !dbSched
+				? 'no BunkerWeb scheduler runs here to ask its database where it is saved'
+				: db === null
+					? "BunkerWeb's database could not be read here"
+					: db.db === 'other'
+						? 'BunkerWeb keeps its settings in a database server (MariaDB or PostgreSQL), which Morphit does not edit'
+						: db.db === 'missing'
+							? "BunkerWeb's database was not found where its DATABASE_URI points"
+							: "BunkerWeb's database does not say where it was saved";
+			// The settings file this heal edits is named only when it may hold one.
+			const files =
+				envPath !== null &&
+				unknown.every((kv) => (envFinal.get(kv.slice(0, kv.indexOf('='))) ?? '') === '')
+					? []
+					: (m0Files?.get(svc.edge!)?.envFiles ?? []);
+			parts.push(
+				`${unknown.join(', ')}: ${why}. It is set in one of these places — BunkerWeb's web UI (empty it under Global config → Country, or Services → the site → Country, and save), an Autoconf label (bunkerweb.BLACKLIST_COUNTRY or bunkerweb.WHITELIST_COUNTRY), or an "environment:" entry${files.length > 0 ? ' or a settings file' : ''} of BunkerWeb's scheduler${files.length > 0 ? ` (BunkerWeb reads ${files.join(', ')})` : ''}.`
+			);
+		}
 		return {
-			kind: 'left-alone',
-			reason: `BunkerWeb runs with a country list (${lists.join(', ')}) that its env file does not set (a compose "environment:" entry?). No Morphit instance blocks by country: remove it there, then recreate BunkerWeb on this server (sudo docker compose up -d --force-recreate in its compose directory)`
+			done,
+			live: lists,
+			privacy,
+			left: `BunkerWeb still runs with a country list (${lists.join(', ')}). No Morphit instance blocks by country. ${parts.join(' ')}`
 		};
 	};
-	if (allChanges.length === 0 && !staleEdge && !staleFe)
-		return countryElsewhere() ?? { kind: 'already' };
+	const privacyLeft = (problems: readonly string[]): string =>
+		`BunkerWeb runs with settings that tell others about its visitors or keep their addresses (${problems.join(', ')}), and Morphit could not set them: ${envWhy ?? 'its settings file could not be chosen'}. Set them as in ops/bunkerweb/bunkerweb.env.example ("Nothing about a visitor leaves this server") in the file BunkerWeb reads, then on this server run: ${applyCmd()}`;
+	/** Nothing in the files to change: the outcome is what the live check says. */
+	const unchanged = async (): Promise<ComposeOutcome> => {
+		const c = await checkCountry(null);
+		for (const d of c.done) opts.info(`✓ ${d}`);
+		if ((c.privacy ?? []).length > 0)
+			return {
+				kind: 'left-alone',
+				reason: `${privacyLeft(c.privacy!)}${c.left ? ` ${c.left}` : ''}`
+			};
+		if (c.left) return { kind: 'country-list', reason: c.left };
+		if (c.unchecked) return { kind: 'unchecked', reason: c.unchecked };
+		return c.done.length > 0 ? { kind: 'applied', changes: c.done } : { kind: 'already' };
+	};
+	if (allChanges.length === 0 && !staleEdge && !staleFe) return unchanged();
 
 	const upServices: string[] = [];
 	const upNames: string[] = [];
@@ -1676,7 +1975,7 @@ async function applyComposeAndEnv(
 	if (envChanges.length > 0) for (const s of schedulers) addUp(s);
 	if (edgeIn && (envChanges.length > 0 || touched.has(svc.edge!) || staleEdge)) addUp(edgeIn);
 	if (feIn && (touched.has(svc.frontend!) || staleFe)) addUp(feIn);
-	if (upServices.length === 0) return countryElsewhere() ?? { kind: 'already' };
+	if (upServices.length === 0) return unchanged();
 
 	if (clock.left() < UP_MIN_MS + VERIFY_MIN_MS + reserve) {
 		note(
@@ -1752,9 +2051,11 @@ async function applyComposeAndEnv(
 			for (const s of [svc.edge, svc.frontend])
 				if (hostChanged(s) && !sameList(ms(s)?.dockerHost ?? [], [gw!]))
 					planned.push(`${s} would not get host.docker.internal = ${gw} alone`);
+			// (A country list that something else sets is named after the change by
+			// the country check — never a reason to put every other change back.)
 			if (edgeIn && e)
 				for (const k of changedKeys)
-					if (e.environment.get(k) !== envFinal.get(k))
+					if (!isCountryListKey(k) && e.environment.get(k) !== envFinal.get(k))
 						planned.push(`BunkerWeb would not get the new ${k} (something else sets it)`);
 		}
 		if (planned.length > 0) {
@@ -1789,9 +2090,11 @@ async function applyComposeAndEnv(
 		// The privacy settings this run changes (lib/bunkerwebPrivacy.ts), and
 		// where they were seen live: BunkerWeb's generated settings, or (when
 		// that file cannot be read) the containers' environment.
+		// Country lists are checked after this, by the country check (which also
+		// finds a list saved in BunkerWeb's web UI, that no env file can empty).
 		const privacyWant = new Map(
 			changedKeys
-				.filter((k) => BUNKERWEB_PRIVACY_KEYS.includes(k) || isCountryListKey(k))
+				.filter((k) => BUNKERWEB_PRIVACY_KEYS.includes(k) && !isCountryListKey(k))
 				.map((k) => [k, envFinal.get(k)!] as const)
 		);
 		const evidence: { seen: 'generated' | 'environment' } = { seen: 'environment' };
@@ -1857,7 +2160,7 @@ async function applyComposeAndEnv(
 				}
 			if (e)
 				for (const k of changedKeys)
-					if (!e.env.includes(`${k}=${envFinal.get(k)}`))
+					if (!isCountryListKey(k) && !e.env.includes(`${k}=${envFinal.get(k)}`))
 						problems.push(`${e.name} does not have the new ${k} yet`);
 			if (privacyWant.size > 0) {
 				// BunkerWeb's jobs (BunkerNet registration, list downloads, the
@@ -1902,7 +2205,10 @@ async function applyComposeAndEnv(
 			return problems;
 		}
 		if (why === '') {
-			for (const c of allChanges) opts.info(`✓ ${c}`);
+			const countryKeys = changedKeys.filter(isCountryListKey);
+			const keyOfLine = (c: string): string | undefined =>
+				countryKeys.find((k) => c.includes(`(${k} `));
+			for (const c of allChanges) if (keyOfLine(c) === undefined) opts.info(`✓ ${c}`);
 			for (const n of envNotices) opts.info(`${n}.`);
 			if (privacyWant.size > 0)
 				opts.info(
@@ -1912,11 +2218,25 @@ async function applyComposeAndEnv(
 				);
 			if (staleEdge || staleFe)
 				opts.info('✓ The web containers now run with the logging their Compose file sets.');
-			// Applied and checked. A country list that reaches BunkerWeb another
-			// way (not this heal's to edit) is still named, with what to do.
-			const elsewhere = countryElsewhere();
-			if (elsewhere !== null && elsewhere.kind === 'left-alone') opts.warn(elsewhere.reason);
-			return { kind: 'applied', changes: allChanges };
+			// Applied and checked. Then no country list may be left: the ones this
+			// run emptied are seen gone (✓), one saved in BunkerWeb's web UI is
+			// removed, and any other is named with where to clear it.
+			const cc = await checkCountry(countryKeys.length > 0 ? upSince : null);
+			for (const c of allChanges) {
+				const k = keyOfLine(c);
+				if (k === undefined) continue;
+				if (cc.live !== null && !cc.live.some((kv) => kv.startsWith(`${k}=`))) opts.info(`✓ ${c}`);
+				else
+					opts.info(
+						`${c} — in ${envPath}; ${cc.live === null ? 'not checked in what BunkerWeb runs with' : 'BunkerWeb still runs with it (see below)'}.`
+					);
+			}
+			for (const d of cc.done) opts.info(`✓ ${d}`);
+			if ((cc.privacy ?? []).length > 0) opts.warn(privacyLeft(cc.privacy!));
+			if (cc.left) opts.warn(cc.left);
+			else if (cc.unchecked)
+				opts.info(`${cc.unchecked[0]!.toUpperCase()}${cc.unchecked.slice(1)}.`);
+			return { kind: 'applied', changes: [...allChanges, ...cc.done] };
 		}
 
 		// ── fall back: the original files, the same containers, checked ──
@@ -1973,35 +2293,63 @@ function list0(id: Identified, names: readonly string[]): ContainerInfo[] {
 
 // ─── real entry point ───────────────────────────────────────────────────
 
-/** The RUNNING Docker daemon pulls through Tor: its environment has the
- *  socks5 proxy the tor-only egress heal writes. */
-export function dockerDaemonPullsThroughTor(): boolean {
+/** PURE. A proxy URL that is Tor's SocksPort (`socks5://<SocksPort>`, as the
+ *  tor-only egress heal writes it; socks5h too). Any other SOCKS proxy —
+ *  another local port included (an ssh -D tunnel, a VPN client) — is not. */
+export function isTorSocksProxy(url: string, torSocks: string): boolean {
+	const m = /^socks5h?:\/\/([^/]+)\/?$/i.exec(url.trim());
+	return m !== null && m[1] === torSocks;
+}
+
+/** The RUNNING Docker daemon pulls through Tor: its environment has Tor's
+ *  SocksPort (torSocksFromEnv, the one the tor-only egress heal writes) as
+ *  its HTTPS proxy, and daemon.json does not send pulls elsewhere. */
+export function dockerDaemonPullsThroughTor(
+	deps: {
+		readonly daemonJson?: () => string | null;
+		/** The running daemon's environment (`KEY=value`), or null. */
+		readonly daemonEnv?: () => string[] | null;
+		readonly torSocks?: () => string;
+	} = {}
+): boolean {
+	const tor = (deps.torSocks ?? (() => torSocksFromEnv()))();
 	// daemon.json's "proxies" win over the daemon's environment (Docker 23+):
 	// one that is not Tor's makes every pull go there instead.
-	let daemonJson: string | null = null;
+	const daemonJson = (
+		deps.daemonJson ??
+		(() => {
+			try {
+				return readFileSync('/etc/docker/daemon.json', 'utf8');
+			} catch {
+				return null;
+			}
+		})
+	)();
+	if (!daemonJsonProxiesAllowTor(daemonJson, tor)) return false;
+	const env = (deps.daemonEnv ?? runningDockerEnv)();
+	if (env === null) return false;
+	// Go's proxy settings: HTTPS_PROXY, else https_proxy.
+	const value = (k: string): string =>
+		env.find((e) => e.startsWith(`${k}=`) && e.length > k.length + 1)?.slice(k.length + 1) ?? '';
+	const https = value('HTTPS_PROXY') || value('https_proxy');
+	const noProxy = env
+		.filter((e) => /^no_proxy=/i.test(e))
+		.map((e) => e.slice(e.indexOf('=') + 1))
+		.join(',');
+	return isTorSocksProxy(https, tor) && !noProxyBypassesRegistry(noProxy);
+}
+
+/** The environment of the running `docker` unit's main process, or null. */
+function runningDockerEnv(): string[] | null {
 	try {
-		daemonJson = readFileSync('/etc/docker/daemon.json', 'utf8');
+		const pid = spawnSync('systemctl', ['show', '-p', 'MainPID', '--value', 'docker'], {
+			encoding: 'utf8',
+			timeout: 10_000
+		}).stdout?.trim();
+		if (!pid || !/^[1-9]\d*$/.test(pid)) return null;
+		return readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
 	} catch {
-		daemonJson = null;
-	}
-	if (!daemonJsonProxiesAllowTor(daemonJson)) return false;
-	const pid = spawnSync('systemctl', ['show', '-p', 'MainPID', '--value', 'docker'], {
-		encoding: 'utf8',
-		timeout: 10_000
-	}).stdout?.trim();
-	if (!pid || !/^[1-9]\d*$/.test(pid)) return false;
-	try {
-		const env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
-		const noProxy = env
-			.filter((e) => /^no_proxy=/i.test(e))
-			.map((e) => e.slice(e.indexOf('=') + 1))
-			.join(',');
-		return (
-			env.some((e) => /^HTTPS_PROXY=socks5h?:\/\/127\.0\.0\.1:\d+$/i.test(e)) &&
-			!noProxyBypassesRegistry(noProxy)
-		);
-	} catch {
-		return false;
+		return null;
 	}
 }
 
@@ -2023,9 +2371,9 @@ export function noProxyBypassesRegistry(list: string): boolean {
 }
 
 /** PURE. Docker's daemon.json leaves pulls to Tor: no "proxies" block, or one
- *  whose http/https proxies are Tor's local SOCKS port. An unreadable or
+ *  whose http/https proxies are Tor's SocksPort (`torSocks`). An unreadable or
  *  malformed file is not proof of anything: false. */
-export function daemonJsonProxiesAllowTor(text: string | null): boolean {
+export function daemonJsonProxiesAllowTor(text: string | null, torSocks: string): boolean {
 	if (text === null || text.trim() === '') return true;
 	let doc: unknown;
 	try {
@@ -2039,7 +2387,7 @@ export function daemonJsonProxiesAllowTor(text: string | null): boolean {
 	if (proxies === null || typeof proxies !== 'object') return false;
 	const p = proxies as Record<string, unknown>;
 	const tor = (v: unknown): boolean =>
-		v === undefined || (typeof v === 'string' && /^socks5h?:\/\/127\.0\.0\.1:\d+$/i.test(v));
+		v === undefined || (typeof v === 'string' && isTorSocksProxy(v, torSocks));
 	const np = p['no-proxy'];
 	if (np !== undefined && (typeof np !== 'string' || noProxyBypassesRegistry(np))) return false;
 	return tor(p['http-proxy']) && tor(p['https-proxy']);
@@ -2052,6 +2400,26 @@ function docker(args: string[], timeout = 15_000): { ok: boolean; out: string; m
 		return { ok: r.status === 0, out: `${r.stdout ?? ''}`.trim(), missing };
 	} catch {
 		return { ok: false, out: '', missing: false };
+	}
+}
+
+/** COUNTRY_DB_PY inside a BunkerWeb scheduler (its image ships python3 and
+ *  sqlite3; its DATABASE_URI names the database); its output, or null. */
+function countryDbPy(
+	scheduler: string,
+	mode: 'list' | 'remove',
+	stdin: string,
+	timeout: number
+): string | null {
+	try {
+		const r = spawnSync(
+			'docker',
+			['exec', '-i', '-e', `MODE=${mode}`, scheduler, 'python3', '-c', COUNTRY_DB_PY],
+			{ input: stdin, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }
+		);
+		return r.status === 0 ? (r.stdout ?? '').trim() : null;
+	} catch {
+		return null;
 	}
 }
 
@@ -2086,6 +2454,8 @@ export async function healProxyConfig(deps: {
 		: undefined;
 	const inspect = (names: readonly string[], t: number): ContainerInfo[] =>
 		names.length === 0 ? [] : parseDockerInspect(docker(['inspect', ...names], t).out || '[]');
+	// The offline bundle's saved copy of the pinned frontend base, if any.
+	const bundle = bundledBaseFile(dirname(dirname(dirname(deps.buildDir))), FRONTEND_BASE);
 	return applyAndVerifyProxyConfig({
 		info: deps.info,
 		warn: deps.warn,
@@ -2189,6 +2559,9 @@ export async function healProxyConfig(deps: {
 						'-',
 						'--max-time',
 						String(Math.max(1, Math.floor(t / 1000) - 1)),
+						// A proxy in the environment would make curl ignore --resolve.
+						'--noproxy',
+						'*',
 						'--resolve',
 						`${serverName}:443:127.0.0.1`,
 						`https://${serverName}/`
@@ -2265,8 +2638,20 @@ export async function healProxyConfig(deps: {
 						existsSync(dsrc) &&
 						existsSync(ddst) &&
 						isMorphitFrontendDockerfile(readFileSync(ddst, 'utf8'))
-					)
-						copyFileSync(dsrc, ddst);
+					) {
+						// Docker's classic image store holds a base loaded from the
+						// offline bundle by its tag only, and a `FROM name:tag@digest`
+						// build would ask the registry for it: there, once the tag is
+						// proven to be the pinned image, the build names the tag (the
+						// label keeps the pinned reference).
+						const text = readFileSync(dsrc, 'utf8');
+						writeFileSync(
+							ddst,
+							frontendBaseState(FRONTEND_BASE, bundle, undefined, 15_000) === 'tag'
+								? withTagOnlyFrom(text, FRONTEND_BASE)
+								: text
+						);
+					}
 				} catch {
 					/* the rebuild below still recreates the container */
 				}
@@ -2291,22 +2676,11 @@ export async function healProxyConfig(deps: {
 				).ok;
 			},
 			hiddenOnly: () => isHiddenOnlyNode(),
-			baseImagePresent: (t) => docker(['image', 'inspect', FRONTEND_BASE], t).ok,
-			loadBundledBase: (t) => {
-				const root = dirname(dirname(dirname(deps.buildDir)));
-				const f = join(root, 'vendor', 'docker', `${FRONTEND_BASE.replace(/[/:]/g, '_')}.tar.gz`);
-				if (!existsSync(f)) return false;
-				try {
-					return (
-						spawnSync('sh', ['-c', 'gzip -dc "$1" | docker load', 'sh', f], {
-							stdio: 'ignore',
-							timeout: t
-						}).status === 0
-					);
-				} catch {
-					return false;
-				}
-			},
+			// Here AND usable without a pull, by digest or (classic image store)
+			// by a tag proven to be the pinned image (lib/frontendBaseImage.ts).
+			baseImagePresent: (t) => frontendBaseState(FRONTEND_BASE, bundle, undefined, t) !== 'absent',
+			// `docker load` the offline bundle's copy, then the same proof.
+			loadBundledBase: (t) => loadBundledFrontendBase(FRONTEND_BASE, bundle, t) !== 'absent',
 			dockerPullsThroughTor: () => dockerDaemonPullsThroughTor(),
 			schedulerCycle: (schedulers, edge, sinceIso, t) => {
 				const edgeLogs = edge ? dockerLogsSince(edge, sinceIso, t) : '';
@@ -2317,6 +2691,14 @@ export async function healProxyConfig(deps: {
 					if (c.kind === 'pending') pending = true;
 				}
 				return pending ? { kind: 'pending' } : { kind: 'loaded' };
+			},
+			countryRows: (sched, t) => {
+				const out = countryDbPy(sched, 'list', '', t);
+				return out === null ? null : parseCountryDb(out);
+			},
+			removeCountryRows: (sched, rows, t) => {
+				const out = countryDbPy(sched, 'remove', JSON.stringify(rows), t);
+				return out === null ? null : parseCountryRemoval(out);
 			},
 			onTerminate: (fn) => {
 				const h = (): void => {

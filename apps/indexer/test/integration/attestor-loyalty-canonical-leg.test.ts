@@ -201,5 +201,12 @@ describe.skipIf(!INTEGRATION_ENABLED)('attestor loyalty counts the canonical leg
 		expect(r.feesVerified).toBe(true);
 		expect(r.attests).toEqual(['applied:', 'applied:']);
 		expect(r.free).toBe('verified_by_attestation');
+		// The new measure starts at the activation time: fees paid before it are
+		// not counted (else a node that replayed history would hold a different
+		// counter than one that applied the same blocks live under the old code).
+		const loyalty = await before.db.query<{ c: string }>(
+			`SELECT COALESCE(SUM(canonical_blurt_paid), 0)::text AS c FROM account_loyalty`
+		);
+		expect(Number(loyalty.rows[0]!.c)).toBe(0);
 	});
 });

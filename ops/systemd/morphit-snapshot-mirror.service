@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 # Runs as root because it drives kubo and writes the mirror-state file under
-# /var/lib/morphit. It only ever PINS content whose sha256 was signed on-chain
+# /var/lib/morphit-ops (root's own directory). It only ever PINS content whose sha256 was signed on-chain
 # by @morphit, and verifies that hash before keeping the pin, so a bad or
 # hostile copy can never end up being served from this box.
 User=root

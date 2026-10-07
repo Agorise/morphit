@@ -69,8 +69,10 @@ if (args[0] === 'add') { console.log(process.env.STUB_CID); process.exit(0); }
 process.exit(0);
 `;
 
-// Stub curl: logs its argv; answers the local /v1/release when told to; every
-// other request fails like an unreachable host.
+// Stub curl: logs its argv; answers the local /v1/release when told to; the
+// seed's self-checks (a status code for /ipfs/<cid>/metadata.json, asked of
+// this box's gateway or through Tor) with STUB_PROBE_CODE; every other request
+// fails like an unreachable host.
 const STUB_CURL = `#!/usr/bin/env node
 const fs = require('fs');
 const argv = process.argv.slice(2);
@@ -78,6 +80,11 @@ fs.appendFileSync(process.env.STUB_LOG_CURL, JSON.stringify(argv) + '\\n');
 const url = argv.find((a) => /^https?:\\/\\//.test(a)) || '';
 if (process.env.STUB_RELEASE_JSON && /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\/v1\\/release$/.test(url)) {
   process.stdout.write(process.env.STUB_RELEASE_JSON); process.exit(0);
+}
+const local = /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\//.test(url);
+const tor = argv.includes('--socks5-hostname') && /\\.onion\\//.test(url);
+if (process.env.STUB_PROBE_CODE && (local || tor) && /\\/ipfs\\/[^/]+\\/metadata\\.json$/.test(url)) {
+  process.stdout.write(process.env.STUB_PROBE_CODE); process.exit(0);
 }
 process.exit(7);
 `;
@@ -135,6 +142,9 @@ function run(
 			STUB_LOG_CURL: logCurl,
 			STUB_LOG_IPFS: logIpfs,
 			STUB_CID: CID,
+			// This box serves the release (the self-checks pass) unless a check
+			// below says otherwise.
+			STUB_PROBE_CODE: '200',
 			...env
 		}
 	});
@@ -245,7 +255,24 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 			MORPHIT_SEED_HIDDEN_ONLY: '1',
 			MORPHIT_STAGE_TARBALL: tb
 		});
-		check('seed, hidden-only, matching on-chain CID: passes', r.status === 0);
+		check('seed, hidden-only, matching on-chain CID: passes', r.status === 0, r.out.slice(-400));
+
+		// Seeded, but this box does not serve it (its gateway answers 404): the
+		// "⚠ … NOT a usable seeder" finding needs the operator — exit 3, so the
+		// upgrade warns instead of printing "✓ Seeded".
+		r = run(sb, SEED, ['v9.9.9', CID], {
+			...seedEnv,
+			MORPHIT_SEED_HIDDEN_ONLY: '1',
+			MORPHIT_STAGE_TARBALL: tb,
+			STUB_PROBE_CODE: '404'
+		});
+		check(
+			'seed, gateway not serving the release: seeded (ipfs add ran) but exits 3 with the ⚠ finding',
+			r.status === 3 &&
+				r.ipfs.some((a) => a.includes('add')) &&
+				/⚠ WARNING: the local IPFS gateway is NOT serving/.test(r.out),
+			`${r.status} ${r.out.slice(-400)}`
+		);
 		r = run(sb, SEED, ['v9.9.9', 'bafybeiwrongwrongwrongwrongwrongwrongwrongwrongwrongwrongwr'], {
 			...seedEnv,
 			MORPHIT_SEED_HIDDEN_ONLY: '1',

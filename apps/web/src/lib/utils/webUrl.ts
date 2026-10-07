@@ -58,7 +58,12 @@ export function validateWebUrl(raw: string | null | undefined): WebUrlValidation
 		return { ok: false, reason: 'malformed' };
 	}
 
-	return { ok: true, cleaned: u.toString() };
+	const cleaned = u.toString();
+	// The indexer checks the length SENT (from the consensus activation time,
+	// 2026-11-01, a longer value is refused and the save silently lost), and
+	// percent-encoding can turn 120 typed characters into 700.
+	if (cleaned.length > MAX_URL_LENGTH) return { ok: false, reason: 'too_long' };
+	return { ok: true, cleaned };
 }
 
 /** Render-side helper: returns the cleaned string or null. Opaque about WHY —

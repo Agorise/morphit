@@ -44,6 +44,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { ASSET_TICKERS } from '@morphit/asset-registry';
+import { isOrderLang } from '@morphit/operator-config';
 import type { Database } from '$db/pool';
 import type { Poller } from '$indexer/poller';
 import { logger } from '$log';
@@ -311,6 +312,11 @@ export function orderbookStreamRoute(db: Database, poller: Poller, operatorAccou
 			if (tokens.length === 0) {
 				return c.json(errorBody('bad_request', 'payment_methods: no valid tokens'), 400);
 			}
+		}
+		// Same for langs (the REST orderbook's check): no valid code would drop
+		// the filter and stream every order to a caller that filtered.
+		if (filter.langs && !filter.langs.split(',').some((s) => isOrderLang(s.trim()))) {
+			return c.json(errorBody('bad_request', 'langs: no valid language codes'), 400);
 		}
 
 		// v1.20.0 (E4): a slot under the open-stream caps, released exactly

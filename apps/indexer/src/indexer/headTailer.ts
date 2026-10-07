@@ -66,6 +66,8 @@ import type { BlurtClient, BlockHeader, ChainOperation } from '$blurt/client';
 import type { Database } from '$db/pool';
 import { extractSigner, parseJsonPayload, type CustomJsonOp } from '$blurt/verify';
 import { checkJsonbSize } from '$indexer/payloadSize';
+import { blockTimeOf } from '$indexer/blockTime';
+import { hasXmlNoncharacter, jsonNestingExceeds, pgSafeDeep } from '$db/pgText';
 import { chatEventBus } from '$indexer/chatEventBus';
 import { fastChatNotifyAllowed } from '$indexer/fastNotifyGate';
 import { reviewCitesFeePaidOrder } from '$indexer/reviewCitation';
@@ -320,6 +322,12 @@ export interface LocatedChatOp {
 	readonly orderPermlink: string | null;
 }
 
+/** The dispatcher's payload nesting cap from the consensus activation time
+ *  (MAX_PAYLOAD_DEPTH in dispatcher.ts — not imported: the dispatcher imports
+ *  this module's importers; a test pins the two equal). The fast path applies
+ *  it at all times: it must stay a strict subset of durable admission. */
+export const FAST_PATH_MAX_PAYLOAD_DEPTH = 64;
+
 /**
  * Parse + shape-validate one custom_json op as a chat message. Returns
  * the located op when it is a well-formed, client-tag-carrying chat
@@ -352,6 +360,17 @@ export function locateChatOp(op: ChainOperation): LocatedChatOp | null {
 
 	const payload = parseJsonPayload(customOp);
 	if (!isPlainObject(payload)) return null;
+	// Text the dispatcher refuses before any handler runs (a NUL, an unpaired
+	// surrogate; from the consensus activation time U+FFFE / U+FFFF and nesting
+	// past its cap) — the strictest form, always: a message shown and pushed
+	// live that the durable pass then refuses is never stored.
+	if (
+		jsonNestingExceeds(payload, FAST_PATH_MAX_PAYLOAD_DEPTH) ||
+		pgSafeDeep(payload) !== payload ||
+		hasXmlNoncharacter(payload)
+	) {
+		return null;
+	}
 
 	const recipient = payload.recipient;
 	if (typeof recipient !== 'string' || !ACCOUNT_NAME_RE.test(recipient)) return null;
@@ -575,7 +594,7 @@ export class HeadTailer {
 	/** Extract, validate, block-check, and emit chat ops from one block. */
 	private async scanBlock(block: BlockHeader): Promise<void> {
 		// Head-block timestamps are UTC; normalise like the dispatcher.
-		const createdAt = new Date(block.timestamp + (block.timestamp.endsWith('Z') ? '' : 'Z'));
+		const createdAt = blockTimeOf(block.timestamp);
 		// Not a head block (see HEAD_BLOCK_MAX_SKEW_MS): nothing in it is live.
 		if (
 			!Number.isFinite(createdAt.getTime()) ||

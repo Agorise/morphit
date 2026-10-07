@@ -170,9 +170,11 @@ export interface ReleaseTreasuryBlock {
  * Codeberg, IPFS, etc. — so anyone can obtain the code from whatever
  * host is reachable and PROVE it is the unmodified release.
  *
- * The tarball + signatures are produced by `scripts/release-sign.sh`
- * (`git archive` from the tagged commit → `morphit-vX.Y.Z-source.tar.gz`
- * + `.sha256` + `.asc`). The verifier `scripts/verify-download.mjs`
+ * The tarball, its `.sha256` and the anchor values are produced by CI
+ * (`.forgejo/workflows/release.yml`, fired by the signed tag), which also
+ * signs the tarball (`.asc`) when it holds the release key; without it the
+ * on-chain `source_sha256` is the tarball's proof. (`scripts/release-sign.sh`
+ * is an offline fallback only.) The verifier `scripts/verify-download.mjs`
  * reads THIS block from the chain (via RPC, never the indexer — same
  * anti-circularity rule as the rest of the release op) and checks a
  * downloaded tarball against it. See docs/VERIFY-YOUR-DOWNLOAD.md.

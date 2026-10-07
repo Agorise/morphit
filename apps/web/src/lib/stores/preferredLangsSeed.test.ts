@@ -34,3 +34,33 @@ describe('preferred languages', () => {
 		expect(localStorage.getItem('morphit.preferredLangs.v1')).toBeNull();
 	});
 });
+
+describe('the orderbook language filter remembers the user’s own choice (review C-2)', () => {
+	it('cleared on the orderbook: the next visit shows every language, older untagged orders included', async () => {
+		const m = await import('./preferredLangs');
+		writeLocalPreferredLangs(['es']);
+		expect(resolveOrderbookLangFilter(null)).toEqual(['es']);
+		m.writeOrderbookLangFilter([]);
+		expect(resolveOrderbookLangFilter(null)).toEqual([]);
+	});
+	it('a set picked on the orderbook is kept for the next visit', async () => {
+		const m = await import('./preferredLangs');
+		m.writeOrderbookLangFilter(['fr', 'xx']);
+		expect(resolveOrderbookLangFilter(null)).toEqual(['fr']);
+	});
+	it('saving preferred languages in Settings again re-seeds the filter from them', async () => {
+		const m = await import('./preferredLangs');
+		m.writeOrderbookLangFilter([]);
+		writeLocalPreferredLangs(['de']);
+		expect(resolveOrderbookLangFilter(null)).toEqual(['de']);
+	});
+	it('the orderbook page writes the choice when the filter changes (call site)', async () => {
+		const { readFileSync } = await import('node:fs');
+		const { join } = await import('node:path');
+		const page = readFileSync(
+			join(__dirname, '..', '..', 'routes', '[lang]', 'orderbook', '+page.svelte'),
+			'utf8'
+		);
+		expect(page).toMatch(/writeOrderbookLangFilter\(langFilter\)/);
+	});
+});
