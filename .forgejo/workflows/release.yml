@@ -394,7 +394,8 @@ jobs:
         #   MORPHIT_RELEASE_SIGNING_PASSPHRASE  — its passphrase (may be empty).
         # With no key set, the release is published without .asc files: an
         # installed node then accepts it only by its SHA-256 in @morphit's
-        # signed on-chain record (ELI5 Block 4), and the anchor names the
+        # signed on-chain record (ELI5 Blocks 3-4, broadcast before any node
+        # upgrades), and the anchor names the
         # pinned key that signed the tag. A key that is set but not pinned
         # FAILS the release. The passphrase reaches gpg on a file descriptor,
         # never on its command line. The signature logic is inline here, not a
@@ -410,7 +411,7 @@ jobs:
           rm -f release-signer.fpr
           if [ -z "${SIGNING_KEY:-}" ]; then
             rm -f "$TARBALL.asc" "${OFFLINE:-}.asc"
-            echo "::notice::No MORPHIT_RELEASE_SIGNING_KEY secret: publishing without .asc files. Installed nodes accept this release only by its SHA-256 in @morphit's signed on-chain record (ELI5 Block 4)."
+            echo "::notice::No MORPHIT_RELEASE_SIGNING_KEY secret: publishing without .asc files. Installed nodes accept this release only by its SHA-256 in @morphit's signed on-chain record (ELI5 Block 4, broadcast before the upgrade in Block 5)."
             echo "signed=no" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -459,7 +460,7 @@ jobs:
         # directory CID is anchored on-chain as ipfs_cid; ipns://<name> is repointed
         # at it below. No secret, no account, no cost. ANY failure here is NON-FATAL
         # (git mirrors + on-chain SHA-256 are the real anchors) — it just means no
-        # ipfs_cid this run, which the Block-4 dry-run makes visible.
+        # ipfs_cid this run, which the Block-3 dry-run makes visible.
         #
         # KUBO_VERSION + KUBO_SHA512 MUST stay in sync with
         # ops/ipfs/morphit-ipfs-setup.sh (asserted by ipfs-selfseed-smoke). The binary
@@ -488,7 +489,7 @@ jobs:
             echo "WARNING: Kubo download failed from ${KURL}" >&2
           done
           if [ "$KOK" != yes ]; then
-            echo "::warning::could not download Kubo ${KUBO_VERSION} — NO ipfs_cid this run: Block 4 must take the CID the release box prints when it seeds." >&2
+            echo "::warning::could not download Kubo ${KUBO_VERSION} — NO ipfs_cid this run: Block 3 says how to have the release box seed it and print the CID." >&2
             exit 0
           fi
           GOT=$(sha512sum "${KUBO_DIR}/${KTAR}" | awk '{print $1}')
@@ -550,7 +551,7 @@ jobs:
         # The sequence is the build's unix timestamp: strictly monotonic across releases
         # (newest wins on resolve) with no fragile chain read. NO key → skipped; ANY
         # failure is NON-FATAL (IPNS is additive to the immutable ipfs_cid + git
-        # mirrors + on-chain SHA-256). Broadcast (Block 5) is laptop-only; the IPNS key
+        # mirrors + on-chain SHA-256). Broadcast (Block 4) is laptop-only; the IPNS key
         # only repoints a name, never touches funds.
         env:
           MORPHIT_IPNS_KEY: ${{ secrets.MORPHIT_IPNS_KEY }}
@@ -622,7 +623,7 @@ jobs:
             [ "$FPR" = "$(printf '%s' "$p" | tr a-f A-F)" ] && PINNED=yes
           done
           [ "$PINNED" = yes ] || FPR=""
-          # The signed tag object this job verified and built. Block 4 (on the
+          # The signed tag object this job verified and built. Block 3 (on the
           # laptop that made the tag in Block 2) refuses an anchor naming any
           # other object, so a tag re-pointed at an older signed object of the
           # same name cannot reach the chain.
@@ -642,7 +643,7 @@ jobs:
             # The offline bundle's SHA-256 (signed above, like the tarball).
             echo "export MORPHIT_BUILD_OFFLINE_SHA256=${OFF_SHA}"
             # Optional canonical IPFS CID from the compute step above (present
-            # unless Kubo download/staging failed). Read by the payload builder at ELI5 Block 4,
+            # unless Kubo download/staging failed). Read by the payload builder at ELI5 Block 3,
             # it flows into the payload builder's `ipfs_cid` and is anchored
             # on-chain alongside the mirrors; the release box seeds THIS exact CID
             # and instances pin it. Absent → the block simply omits ipfs_cid
@@ -655,14 +656,14 @@ jobs:
             fi
             # Optional stable IPNS name from the publish step above (present only
             # if a MORPHIT_IPNS_KEY secret is set and the publish succeeded).
-            # Read at ELI5 Block 4, it flows into the payload builder's
+            # Read at ELI5 Block 3, it flows into the payload builder's
             # `ipns_name` and is anchored on-chain as the canonical "always
             # latest" pointer. Absent → the block omits ipns_name (schema-optional).
             if [ -s ipns-name.txt ] && grep -qE '^k51[a-z0-9]{50,70}$' ipns-name.txt; then
               echo "export MORPHIT_BUILD_IPNS_NAME=$(cat ipns-name.txt)"
             fi
             # Optional signed IPNS record (base64) from the sign step above (v1.9.6):
-            # the DHT-rebroadcast pointer. Read at ELI5 Block 4 into the payload
+            # the DHT-rebroadcast pointer. Read at ELI5 Block 3 into the payload
             # builder's `ipns_record` and anchored on-chain, where every instance reads
             # it (via /v1/release) and rebroadcasts it to the DHT. Absent → omitted
             # (schema-optional), exactly as before.

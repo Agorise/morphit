@@ -42,6 +42,10 @@ const op = [
 ] as never;
 
 describe('sign once, broadcast to ranked nodes (D12)', () => {
+	const clock = () => {
+		let t = 1_000_000;
+		return { now: () => t, sleep: async (ms: number) => void (t += ms) };
+	};
 	it('clearnet only by default; hidden nodes only when asked; --node pins one', () => {
 		const d = candidateNodes({ nodeOverride: null, includeHidden: false });
 		expect(d.length).toBe(6);
@@ -82,6 +86,8 @@ describe('sign once, broadcast to ranked nodes (D12)', () => {
 	it('"duplicate transaction" from a later node means an earlier attempt landed: success, same id', async () => {
 		const res = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
 			log: () => undefined,
+			...clock(),
+			getTx: async () => null,
 			send: async (url) => {
 				if (url === 'a') throw new Error('timeout');
 				throw new Error('Duplicate transaction check failed');
@@ -143,5 +149,116 @@ describe('sign once, broadcast to ranked nodes (D12)', () => {
 			send: async () => ({ block_num: 101 })
 		});
 		expect(seen.confirmedBy).toBe('b');
+	});
+	// 2026-10-07 (snapshot anchor): dblurt's send uses the asynchronous
+	// broadcast_transaction, which answers without a block number, so nothing
+	// was checked and the run said "NOT confirmed by a second node" for a
+	// transaction that was in a block. Now the other nodes are asked for the
+	// transaction by its id, and the block they name is checked for it.
+
+	it('accepted without a block number: found by id on another node, then seen in that block', async () => {
+		const lines: string[] = [];
+		const c = clock();
+		let id = '';
+		const r = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2), ok('c', 3)], {
+			log: (l) => void lines.push(l),
+			...c,
+			getTx: async (url, trx) => {
+				id = trx;
+				return url === 'b' ? { block_num: 105, transaction_id: trx } : null;
+			},
+			getBlock: async (url, num) =>
+				num === 105
+					? { block_id: 'x', transaction_ids: [id] }
+					: { block_id: 'x', transaction_ids: [] },
+			send: async () => ({})
+		});
+		expect(r.blockNum).toBe(105);
+		expect(r.confirmedBy).not.toBeNull();
+		expect(r.confirmedBy).not.toBe('a');
+		expect(lines.join('\n')).toMatch(/Confirmed: .* has transaction .* in block 105/);
+		expect(lines.join('\n')).not.toMatch(/NOT confirmed/);
+	});
+
+	it('an answer without the id, with a block before the head, or whose block lacks it is not a confirmation', async () => {
+		// Each case breaks one rule only: in the first three every block asked
+		// about lists the transaction, so only the answer itself can reject it.
+		for (const [answer, blockLists] of [
+			[(_trx: string) => ({ block_num: 105, transaction_id: 'f'.repeat(40) }), true], // another id
+			[(trx: string) => ({ block_num: 90, transaction_id: trx }), true], // before the head it was built on
+			[(trx: string) => ({ block_num: 5_000, transaction_id: trx }), true], // after it expired
+			[(trx: string) => ({ block_num: 105, transaction_id: trx }), false] // the block does not list it
+		] as const) {
+			const lines: string[] = [];
+			let id = '';
+			const r = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
+				log: (l) => void lines.push(l),
+				...clock(),
+				getTx: async (_url, trx) => {
+					id = trx;
+					return answer(trx);
+				},
+				getBlock: async () => ({ block_id: 'x', transaction_ids: blockLists ? [id] : [] }),
+				send: async () => ({})
+			});
+			expect(r.confirmedBy).toBeNull();
+			expect(lines.join('\n')).toMatch(/NOT confirmed by a second node/);
+		}
+	});
+
+	it('the block is checked on a node other than the one that answered, when there is one', async () => {
+		let id = '';
+		const r = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2), ok('c', 3)], {
+			log: () => undefined,
+			...clock(),
+			getTx: async (url, trx) => {
+				id = trx;
+				return url === 'b' ? { block_num: 104, transaction_id: trx } : null;
+			},
+			getBlock: async (_u, num) => (num === 104 ? { block_id: 'x', transaction_ids: [id] } : null),
+			send: async () => ({})
+		});
+		expect(r.blockNum).toBe(104);
+		expect(r.confirmedBy, 'b confirmed its own answer').toBe('c');
+	});
+
+	it('the other nodes are asked in parallel each round, and the wait ends when the transaction has expired', async () => {
+		const c = clock();
+		const start = c.now();
+		const calls: string[] = [];
+		const nodes = [ok('a', 1), ok('b', 2), ok('c', 3), ok('d', 4)];
+		await signOnceAndBroadcast(op, key, nodes, {
+			log: () => undefined,
+			...c,
+			getTx: async (url) => {
+				calls.push(url);
+				return null;
+			},
+			getBlock: async () => ({ block_id: 'x', transaction_ids: [] }),
+			send: async () => ({})
+		});
+		const waited = c.now() - start;
+		expect(waited).toBeLessThanOrEqual(60_000 + 6_000 + 3_000);
+		// Every round asks all three other nodes.
+		expect(calls.length % 3).toBe(0);
+		expect(calls.filter((u) => u === 'a').length).toBe(0);
+	});
+
+	it('"duplicate transaction": the block is looked up by id too', async () => {
+		let id = '';
+		const r = await signOnceAndBroadcast(op, key, [ok('a', 1), ok('b', 2)], {
+			log: () => undefined,
+			...clock(),
+			getTx: async (_url, trx) => {
+				id = trx;
+				return { block_num: 103, transaction_id: trx };
+			},
+			getBlock: async (_u, num) => (num === 103 ? { block_id: 'x', transaction_ids: [id] } : null),
+			send: async () => {
+				throw new Error('Duplicate transaction check failed');
+			}
+		});
+		expect(r.duplicate).toBe(true);
+		expect(r.blockNum).toBe(103);
 	});
 });

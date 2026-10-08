@@ -39,7 +39,7 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import { askHidden, broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
 
 import {
 	buildReleaseCustomJsonOp,
@@ -118,23 +118,6 @@ if (dryRun) {
 }
 
 // ── masked prompt helpers ──────────────────────────────────────────
-function askHidden(query: string): Promise<string> {
-	// stderr, not stdout: it's unbuffered and it's where the rest of the
-	// ceremony prints, so the prompt always shows immediately (a plain
-	// stdout write with no newline could sit invisibly in a buffer and
-	// look like the script had stalled).
-	process.stderr.write(query);
-	return new Promise((resolve) => {
-		const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-		// Suppress all keystroke echo so the WIF never appears on screen.
-		(rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = () => {};
-		rl.question('', (ans) => {
-			rl.close();
-			process.stderr.write('\n');
-			resolve(ans.trim());
-		});
-	});
-}
 function ask(query: string): Promise<string> {
 	return new Promise((resolve) => {
 		const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -156,8 +139,7 @@ async function main(): Promise<void> {
 	const wif = await askHidden(
 		`\n→ NOW PASTE the @${op.required_posting_auths[0]} PRIVATE posting key` +
 			` (the WIF — it starts with "5") and press Enter.\n` +
-			`  Nothing will show as you paste it — that is intentional; the key stays hidden.\n` +
-			`  key> `
+			`  Nothing will show as you paste it — that is intentional; the key stays hidden.\n`
 	);
 	if (!wif.startsWith('5') || wif.length < 50) {
 		die('that does not look like a Blurt WIF private key (expected a "5..." string).');

@@ -65,7 +65,15 @@ async function fetchOneLive(url: string): Promise<BlurtHead | null> {
 		}
 		return head;
 	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
+		// undici reports every connection failure as "fetch failed" and keeps the
+		// real reason (refused, TLS, proxy) in `cause`; show both.
+		const cause = err instanceof Error ? (err as { cause?: unknown }).cause : undefined;
+		const msg =
+			err instanceof Error
+				? cause instanceof Error && cause.message !== err.message
+					? `${err.message} (${cause.message})`
+					: err.message
+				: String(err);
 		process.stderr.write(`canary:   ${url} -> ${msg}\n`);
 		return null;
 	} finally {
@@ -102,8 +110,12 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 	process.stderr.write(`canary: got head ${got.head.head_block_number} from ${got.url}\n`);
+	// Exit once the line is out: a connection still open (a node that never
+	// answered for an earlier attempt) must not keep this process — and
+	// generate.sh, which waits for it — alive.
 	process.stdout.write(
-		`${got.head.head_block_number}\t${got.head.head_block_id}\t${got.head.time}\n`
+		`${got.head.head_block_number}\t${got.head.head_block_id}\t${got.head.time}\n`,
+		() => process.exit(0)
 	);
 }
 

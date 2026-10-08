@@ -16,8 +16,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { lookupBlurtAccount } from '../src/init/chainCheck.ts';
 import { broadcastCustomJson } from '../src/commands/chainErrors.ts';
+import { chainRead } from '../src/lib/chainAccess.ts';
 
-type Mode = 'ok' | 'down503' | 'duplicate' | 'flaky' | 'rpcerror';
+type Mode = 'ok' | 'down503' | 'duplicate' | 'flaky' | 'rpcerror' | 'slow' | 'bad400' | 'err502';
+/** 'slow' indexer: answers after this many ms (a chain read over Tor). */
+const SLOW_MS = 1500;
 /** 'flaky' nodes: the FIRST broadcast any of them receives gets HTTP 503. */
 let broadcastsSeen = 0;
 
@@ -97,6 +100,10 @@ async function startIndexer(): Promise<Mock> {
 			method: path + (body?.method ? `:${body.method}` : ''),
 			params: body?.trx ?? body?.params
 		});
+		if (m.mode === 'slow') await new Promise((r) => setTimeout(r, SLOW_MS));
+		if (m.mode === 'bad400') return send(res, 400, { message: 'method not allowed' });
+		if (m.mode === 'err502')
+			return send(res, 502, { message: 'could not reach the Blurt network' });
 		if (path === '/v1/chain/condenser') {
 			if (body?.method === 'get_accounts')
 				return send(res, 200, { result: [{ name: 'alice', balance: '9.000 BLURT' }] });
@@ -218,6 +225,143 @@ describe('lookupBlurtAccount routing (D12)', () => {
 		).rejects.toThrow();
 		expect(nodeA.requests.length + nodeB.requests.length).toBe(0);
 		expect(blocked).toEqual([]);
+	});
+});
+
+// morphitir (2026-10-07): a box whose clearnet nodes are unreachable, and whose
+// indexer reaches the chain over Tor, answered slower than the 4 s the first
+// local read allows; the clearnet pool then failed too, and the upgrade
+// refused ("all RPC endpoints unavailable"). The indexer was the one path that
+// worked: when the pool fails, it is asked again with a long wait.
+describe('reads when the clearnet nodes are unreachable', () => {
+	it('slow indexer + every node down → the indexer is asked again, with a long wait, and answers', async () => {
+		indexer.mode = 'slow';
+		nodeA.mode = 'down503';
+		nodeB.mode = 'down503';
+		const props = await chainRead<{ head_block_number: number }>(
+			'get_dynamic_global_properties',
+			[],
+			deps({ localReadTimeoutMs: 300, localRetryTimeoutMs: SLOW_MS * 4 })
+		);
+		expect(props.head_block_number).toBe(HEAD.head_block_number);
+		const asked = indexer.requests.filter((r) => r.method.startsWith('/v1/chain/condenser'));
+		expect(asked.length).toBe(2); // the quick try, then the patient one
+		expect(blocked).toEqual([]);
+	});
+
+	it('indexer down + every node down → no second try (nothing is there), and the error names both paths', async () => {
+		nodeA.mode = 'down503';
+		nodeB.mode = 'down503';
+		const err = (await chainRead(
+			'get_dynamic_global_properties',
+			[],
+			deps({ indexerBases: [deadIndexer] })
+		).catch((e: unknown) => e)) as Error;
+		expect(err).toBeInstanceOf(Error);
+		expect(err.message).toMatch(
+			/this node's own indexer did not answer .*and the Blurt RPC nodes could not be reached/s
+		);
+		// Not the hidden-only wording, and no "asked again".
+		expect(err.message).not.toMatch(/hidden-only/);
+		expect(err.message).not.toMatch(/asked again/);
+	});
+
+	it('nodes ANSWER with an RPC error → that error, and the indexer is not asked again', async () => {
+		indexer.mode = 'slow';
+		nodeA.mode = 'rpcerror';
+		nodeB.mode = 'rpcerror';
+		await expect(
+			chainRead(
+				'get_dynamic_global_properties',
+				[],
+				deps({ localReadTimeoutMs: 300, localRetryTimeoutMs: SLOW_MS * 4 })
+			)
+		).rejects.toThrow(/RPC error/);
+		const asked = indexer.requests.filter((r) => r.method.startsWith('/v1/chain/condenser'));
+		expect(asked.length).toBe(1);
+	});
+
+	it('the indexer ANSWERS with a request error (4xx) → not asked again; the message says it answered', async () => {
+		indexer.mode = 'bad400';
+		nodeA.mode = 'down503';
+		nodeB.mode = 'down503';
+		const err = (await chainRead('get_dynamic_global_properties', [], deps()).catch(
+			(e: unknown) => e
+		)) as Error;
+		expect(err.message).toMatch(
+			/this node's own indexer answered with an error \(method not allowed\)/
+		);
+		const asked = indexer.requests.filter((r) => r.method.startsWith('/v1/chain/condenser'));
+		expect(asked.length).toBe(1);
+	});
+
+	it('the indexer could not reach the network (5xx) and the nodes are down → asked again', async () => {
+		indexer.mode = 'err502';
+		nodeA.mode = 'down503';
+		nodeB.mode = 'down503';
+		await chainRead(
+			'get_dynamic_global_properties',
+			[],
+			deps({ localRetryTimeoutMs: 2_000 })
+		).catch(() => undefined);
+		const asked = indexer.requests.filter((r) => r.method.startsWith('/v1/chain/condenser'));
+		expect(asked.length).toBe(2);
+	});
+
+	it('no indexer installed (no indexer.env, no configured address) → no second try', async () => {
+		nodeA.mode = 'down503';
+		nodeB.mode = 'down503';
+		const prev = process.env.MORPHIT_ENV_ROOT;
+		process.env.MORPHIT_ENV_ROOT = tmp; // an empty root: no indexer.env
+		const started = Date.now();
+		try {
+			const d = { ...deps() } as Record<string, unknown>;
+			delete d.indexerBases;
+			await chainRead('get_dynamic_global_properties', [], d as never).catch(() => undefined);
+		} finally {
+			if (prev === undefined) delete process.env.MORPHIT_ENV_ROOT;
+			else process.env.MORPHIT_ENV_ROOT = prev;
+		}
+		expect(Date.now() - started).toBeLessThan(10_000);
+		expect(blocked.filter((u) => u.includes('/v1/chain/condenser')).length).toBeLessThanOrEqual(3);
+	});
+
+	it('a deadline that has passed stops the second try', async () => {
+		indexer.mode = 'slow';
+		nodeA.mode = 'down503';
+		nodeB.mode = 'down503';
+		await chainRead(
+			'get_dynamic_global_properties',
+			[],
+			deps({ localReadTimeoutMs: 300, deadlineAt: Date.now() + 200 })
+		).catch(() => undefined);
+		const asked = indexer.requests.filter((r) => r.method.startsWith('/v1/chain/condenser'));
+		expect(asked.length).toBe(1);
+	});
+
+	it('a fast indexer is asked once, and no node is asked', async () => {
+		await chainRead('get_dynamic_global_properties', [], deps());
+		expect(indexer.requests.length).toBe(1);
+		expect(nodeA.requests.length + nodeB.requests.length).toBe(0);
+	});
+});
+
+describe('a broadcast with a deadline', { timeout: 60_000 }, () => {
+	it('is never signed or sent once the deadline has passed (the caller already said it gave up)', async () => {
+		indexer.mode = 'slow';
+		const deadlineAt = Date.now() + SLOW_MS / 2; // the head read finishes after it
+		await expect(
+			broadcastCustomJson({
+				account: 'alice',
+				wif: WIF,
+				opId: 'x',
+				payload: {},
+				deps: deps({ localReadTimeoutMs: SLOW_MS * 4 }),
+				deadlineAt
+			})
+		).rejects.toThrow(/gave up before signing/);
+		expect(indexer.requests.filter((r) => r.method === '/v1/broadcast').length).toBe(0);
+		expect(nodeA.requests.length + nodeB.requests.length).toBe(0);
 	});
 });
 

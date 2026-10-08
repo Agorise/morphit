@@ -444,6 +444,9 @@ export async function broadcastRegistration(
 ): Promise<{ trx_id: string }> {
 	const hiddenOnly = isHiddenOnlyNode();
 	const limitMs = Math.min(hiddenOnly ? 200_000 : 15_000, maxLimitMs ?? Number.POSITIVE_INFINITY);
+	// Nothing is signed or sent after the limit: the message below tells the
+	// operator the registration is unchanged, so it must stay unchanged.
+	const deadlineAt = Date.now() + limitMs;
 	let timer: NodeJS.Timeout | undefined;
 	try {
 		return await withSpinner(
@@ -452,7 +455,13 @@ export async function broadcastRegistration(
 				: 'Broadcasting your registration to the chain…',
 			() =>
 				Promise.race([
-					broadcastCustomJson({ account, wif, opId: 'morphit_operator_register_v1', payload }),
+					broadcastCustomJson({
+						account,
+						wif,
+						opId: 'morphit_operator_register_v1',
+						payload,
+						deadlineAt
+					}),
 					new Promise<never>((_, reject) => {
 						timer = setTimeout(
 							() =>

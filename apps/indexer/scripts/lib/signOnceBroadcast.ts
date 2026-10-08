@@ -30,7 +30,7 @@
  *      on its own, because the lost answer may have been an acceptance.
  *
  * HIDDEN NODES ARE OPT-IN (`--include-hidden`). These scripts run on the maintainer's
- * LAPTOP (Block 5 of the release ceremony), which may have no Tor or i2pd; a
+ * LAPTOP (Block 4 of the release ceremony), which may have no Tor or i2pd; a
  * default that waited on fourteen hidden nodes would slow every run for
  * nothing. With the flag, the node's Tor SOCKS / i2pd proxy settings are read
  * from the usual env names and hidden nodes are ranked alongside clearnet.
@@ -273,6 +273,117 @@ async function confirmIncluded(
 	return null;
 }
 
+/** Look a transaction up by id on one node: its block, or null when the node
+ *  does not have it (yet). */
+export type TxLookup = (
+	url: string,
+	trxId: string
+) => Promise<{ block_num?: number; transaction_id?: string } | null>;
+
+async function getTxOnce(
+	url: string,
+	trxId: string
+): Promise<{ block_num?: number; transaction_id?: string } | null> {
+	const ctrl = new AbortController();
+	// A hidden node answers over Tor/I2P: give it the probe's 20 s.
+	const t = setTimeout(
+		() => ctrl.abort(),
+		/\.(onion|i2p)(:\d+)?(\/|$)/i.test(url) ? 20_000 : 10_000
+	);
+	try {
+		const res = await fetch(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'condenser_api.get_transaction',
+				params: [trxId]
+			}),
+			redirect: 'manual',
+			signal: ctrl.signal
+		});
+		if (!res.ok) return null;
+		const j = (await res.json()) as {
+			result?: { block_num?: number; transaction_id?: string } | null;
+		};
+		return j.result ?? null;
+	} finally {
+		clearTimeout(t);
+	}
+}
+
+/**
+ * Another node that has `trxId`, found by the id itself, then checked in the
+ * block's contents. Every real broadcast needs this: dblurt's `send` uses the
+ * asynchronous broadcast_transaction, which answers without a block number
+ * (the snapshot anchor of 2026-10-07 printed "NOT confirmed by a second node"
+ * for a transaction that was in block 64,290,997).
+ *
+ * An answer counts only when it names exactly this id and a block the
+ * transaction can be in (after the head it was built on, before it expires),
+ * and then a node other than the one that answered — when there is one — must
+ * list the id in that block (confirmIncluded). The other nodes are asked in
+ * parallel each round, a line per round, until the transaction has expired
+ * plus two blocks.
+ */
+async function confirmById(
+	ranked: readonly NodeHealth[],
+	via: string,
+	trxId: string,
+	baseHead: number,
+	getTx: TxLookup,
+	getBlock: BlockLookup,
+	sleep: (ms: number) => Promise<void>,
+	now: () => number,
+	log: (l: string) => void
+): Promise<{ url: string; blockNum: number } | null> {
+	const others = ranked.filter((h) => h.ok && h.url !== via).map((h) => h.url);
+	if (others.length === 0) return null;
+	const lastBlock = baseHead + Math.ceil(EXPIRE_MS / 3_000) + 2;
+	const giveUpAt = now() + EXPIRE_MS + 6_000;
+	for (let round = 1; now() < giveUpAt; round++) {
+		const answers = await Promise.all(
+			others.map(async (u) => {
+				try {
+					return { u, t: await getTx(u, trxId) };
+				} catch {
+					return { u, t: null };
+				}
+			})
+		);
+		for (const { u, t } of answers) {
+			const num = t?.block_num;
+			if (
+				t === null ||
+				t === undefined ||
+				t.transaction_id !== trxId ||
+				typeof num !== 'number' ||
+				num <= baseHead ||
+				num > lastBlock
+			)
+				continue;
+			// The block's contents, on a node other than the one that answered
+			// when there is one, else on that one.
+			const checkOn = ranked.filter((h) => h.url !== u);
+			const by =
+				(await confirmIncluded(checkOn, via, trxId, num, getBlock, sleep)) ??
+				(await confirmIncluded(
+					ranked.filter((h) => h.url === u),
+					'',
+					trxId,
+					num,
+					getBlock,
+					sleep
+				));
+			if (by !== null) return { url: by, blockNum: num };
+		}
+		log(`  round ${round}: no other node has ${trxId} in a block yet …`);
+		await sleep(3_000);
+	}
+	return null;
+}
+
 /** The dblurt default: 60 s from the head the transaction is built on. */
 const EXPIRE_MS = 60_000;
 
@@ -289,12 +400,14 @@ export async function signOnceAndBroadcast(
 		readonly log?: (line: string) => void;
 		readonly now?: () => number;
 		readonly getBlock?: BlockLookup;
+		readonly getTx?: TxLookup;
 		readonly sleep?: (ms: number) => Promise<void>;
 	} = {}
 ): Promise<BroadcastResult> {
 	const log = opts.log ?? ((l: string) => process.stderr.write(`${l}\n`));
 	const now = opts.now ?? Date.now;
 	const getBlock = opts.getBlock ?? getBlockOnce;
+	const getTx = opts.getTx ?? getTxOnce;
 	const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	const base = await confirmedBase(ranked, getBlock, log);
 	const p = base.props!;
@@ -327,11 +440,28 @@ export async function signOnceAndBroadcast(
 		log(`Broadcasting via ${h.url} …`);
 		try {
 			const conf = await send(h.url, signed);
-			const blockNum = conf.block_num ?? null;
-			const confirmedBy =
-				blockNum === null
-					? null
-					: await confirmIncluded(ranked, h.url, trxId, blockNum, getBlock, sleep);
+			let blockNum = conf.block_num ?? null;
+			let confirmedBy: string | null = null;
+			if (blockNum !== null) {
+				confirmedBy = await confirmIncluded(ranked, h.url, trxId, blockNum, getBlock, sleep);
+			} else {
+				log(`  ${h.url} accepted it without a block number; asking the other nodes for ${trxId} …`);
+				const found = await confirmById(
+					ranked,
+					h.url,
+					trxId,
+					p.head_block_number,
+					getTx,
+					getBlock,
+					sleep,
+					now,
+					log
+				);
+				if (found !== null) {
+					confirmedBy = found.url;
+					blockNum = found.blockNum;
+				}
+			}
 			log(
 				confirmedBy !== null
 					? `Confirmed: ${confirmedBy} has transaction ${trxId} in block ${blockNum}.`
@@ -340,10 +470,30 @@ export async function signOnceAndBroadcast(
 			return { trxId, via: h.url, blockNum, duplicate: false, confirmedBy };
 		} catch (e) {
 			if (/duplicate/i.test(errMsg(e))) {
-				log(
-					`  ${h.url}: already has it — an earlier attempt was accepted. Look ${trxId} up on a block explorer to see its block.`
+				log(`  ${h.url}: already has it — an earlier attempt was accepted; looking up its block …`);
+				const found = await confirmById(
+					ranked,
+					h.url,
+					trxId,
+					p.head_block_number,
+					getTx,
+					getBlock,
+					sleep,
+					now,
+					log
 				);
-				return { trxId, via: h.url, blockNum: null, duplicate: true, confirmedBy: null };
+				if (found === null) {
+					log(`  Look ${trxId} up on a block explorer to see its block.`);
+				} else {
+					log(`Confirmed: ${found.url} has transaction ${trxId} in block ${found.blockNum}.`);
+				}
+				return {
+					trxId,
+					via: h.url,
+					blockNum: found?.blockNum ?? null,
+					duplicate: true,
+					confirmedBy: found?.url ?? null
+				};
 			}
 			lastErr = e;
 			log(`  ✗ ${h.url}: ${errMsg(e)}`);
@@ -395,16 +545,47 @@ export async function broadcastCustomJsonOnce(
 /**
  * Ask for a secret at the terminal without echoing it (the WIF never appears
  * on screen or in a terminal log). The prompt goes to stderr.
+ *
+ * The prompt always ENDS WITH A NEWLINE. On a terminal, readline moves the
+ * cursor to column 1 and clears to the end of the screen right after the
+ * prompt is written; a prompt the cursor still sat on was erased the moment it
+ * appeared (indexer-snapshot-broadcast, 2026-10-07: "it never asked me for my
+ * key", and what was typed next was read as the key). The key is then typed
+ * on the line below it.
+ *
+ * `io` is for tests (a TTY-shaped stream pair); the default is the terminal.
  */
-export function askHidden(query: string): Promise<string> {
-	process.stderr.write(query);
+export function askHidden(
+	query: string,
+	io: {
+		readonly input?: NodeJS.ReadableStream;
+		readonly output?: NodeJS.WritableStream;
+		readonly err?: NodeJS.WritableStream;
+	} = {}
+): Promise<string> {
+	const err = io.err ?? process.stderr;
+	err.write(query.endsWith('\n') ? query : `${query}\n`);
 	return new Promise((resolve) => {
-		const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+		const rl = createInterface({
+			input: io.input ?? process.stdin,
+			// readline's own cursor codes go where the prompt goes, never into
+			// stdout (which a caller may redirect to a file).
+			output: io.output ?? process.stderr,
+			terminal: true
+		});
+		// Suppress all keystroke echo so the WIF never appears on screen.
 		(rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = () => {};
+		let answered = false;
 		rl.question('', (ans) => {
+			answered = true;
 			rl.close();
-			process.stderr.write('\n');
+			err.write('\n');
 			resolve(ans.trim());
+		});
+		// Input closed before a line (stdin at EOF, e.g. `< /dev/null`): no key —
+		// the caller's "no key" path runs, instead of the process just ending.
+		rl.once('close', () => {
+			if (!answered) resolve('');
 		});
 	});
 }

@@ -1,5 +1,5 @@
 /**
- * v1.20.3 — the release-op builder's distribution block (Block 4 of the
+ * v1.20.3 — the release-op builder's distribution block (Block 3 of the
  * ceremony). v1.20.2's first dry-run carried the PREVIOUS release's IPFS record
  * and CID (old values left in the laptop's terminal) and, once those were
  * dropped, no IPNS name at all — which every zero-clearnet node of v1.20.2 and

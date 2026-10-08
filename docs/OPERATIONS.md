@@ -6159,9 +6159,10 @@ Three moving parts:
 2. **Mirror** — AUTOMATIC. Forgejo push-mirrors every commit
    and the signed tag to the other git hosts, and every Morphit
    instance's Kubo pins the release directory by its CID (your
-   release box seeds it in Block 3). If `release.yml` could not
-   compute the CID, Block 4 stops and says how to pass the one
-   morphit.io printed (`--ipfs-cid`).
+   release box seeds it when it upgrades, in Block 5). If
+   `release.yml` could not compute the CID, Block 3 stops; its note
+   has morphit.io seed the release (installing nothing) and print
+   the CID to pass with `--ipfs-cid`.
 3. **Anchor** — broadcast `morphit_release_v1` with a
    `distribution` block carrying `source_sha256`,
    `gpg_fingerprint`, the `mirrors` list, and optionally
@@ -6171,9 +6172,10 @@ Three moving parts:
    (`ReleaseDistributionBlock`).
 
 The ELI5 ceremony (`scripts/eli5-release.sh <version>`) now
-prints these as Blocks 4–6, filled in and in order, so the
-anchor values flow from the sign step into the payload build
-without hand-copying.
+prints these as Blocks 3–6, filled in and in order (payload,
+broadcast, then the upgrade, which needs the on-chain record),
+so the anchor values flow from the release job into the payload
+build without hand-copying.
 
 Anyone can then verify what they got — **not** against any
 Morphit server, so a compromised host can't fake a match.  Two
@@ -6211,9 +6213,11 @@ the `MORPHIT_IPNS_KEY` secret.
   "Seed this release to IPFS", or `ops/ipfs/morphit-ipfs-seed.sh <tag>`), and
   every Morphit instance's Kubo pins it from the network.  Because the CID is
   deterministic, the seed box's `ipfs add` reproduces exactly the CID CI
-  anchored (the seed asserts equality).  Before broadcasting,
-  `scripts/verify-cid-public.sh <cid> <version>` confirms the CID resolves on
-  a public gateway — a release never anchors a CID the world can't fetch.
+  anchored (the seed asserts equality).  Since the ceremony broadcasts
+  before morphit.io upgrades (2026-10-07), no box hosts the CID until that
+  upgrade seeds it, so there is no public-gateway check before the
+  broadcast; `scripts/verify-cid-public.sh <cid> <version> https://morphit.io`
+  is an optional manual check after the upgrade (ceremony Block 5 note).
 - **IPNS "always latest" (DHT-native — no DNS, no third party)** — run
   `npm ci --prefix scripts/ipns --ignore-scripts && node
   scripts/ipns/ipns-keygen.mjs` **once** on your release laptop (the IPNS
@@ -7987,8 +7991,30 @@ The generator fetches three external resources when you run it
 - an RSS feed for news entropy (default Cointelegraph — choose any
   high-frequency public feed you trust).
 
+On a Tor-only box (an `.onion` or `.b32.i2p` origin, or
+`MORPHIT_CANARY_TOR_ONLY=1`) all three go through the box's Tor SOCKS
+proxy, never directly: the chain head from the hidden Blurt RPC nodes,
+the Bitcoin head and the news feed from their usual `https://` addresses
+through a Tor exit, with the certificate checked as for a direct
+connection. (Before this was fixed, every Bitcoin explorer failed over Tor
+and a Tor-only canary's Bitcoin block height read "(unavailable at signing time …)".)
+
 Users who fetch /canary.txt only hit your own static file, so the
 canary never leaks user IPs to third parties.
+
+**Which code the weekly refresh runs.** On a same-box canary the refresh
+script (`~/.morphit/update-canary.sh`) runs the canary code of the tree
+named in its `REPO=` line. `scripts/canary/setup.sh` records the deployed
+install (`/opt/morphit`) when the served `build/` belongs to it, so every
+upgrade brings new canary code with it; older setups recorded the folder
+setup ran from (an unpacked `~/Downloads/morphit`), which no upgrade
+updates. `morphit-ops upgrade` repairs the refresh the system timer runs
+as root: it points `REPO=` at the install, and an old-form script (one
+that took the public key from that folder) is rewritten in the current
+form with the same key, operator, origin and account, the public key
+exported once from root's keyring into `/root/.morphit/canary`. A refresh
+script in another account's home is not changed by root; the upgrade
+names the command to run as that account.
 
 ## 37. Comprehensive server hardening — defense-in-depth checklist
 
@@ -10861,7 +10887,7 @@ payload carrying the `treasury` block.  Full shape
 
 A helper script generates this for you.  Note the
 `hash_manifest` is NOT hand-typed — you derive it from the
-VPS's served `/verify.json` with
+published release tarball's prebuilt `apps/web/build` with
 `apps/web/scripts/verify-json-to-release-manifest.mjs` (step 0
 below), never a laptop build; you give the builder its path.
 See the numbered flow below for the exact commands.
@@ -10899,42 +10925,66 @@ that broadcasts arbitrary `custom_json`.  The repo ships a
 helper that does it from the same machine, using the same
 Blurt library the relay uses (`@beblurt/dblurt`):
 
-```
-# first) install exactly this release's packages. Unpacking the release
-#    tarball over your repo updates the code but NOT node_modules, and the
-#    scripts below then import whatever old copies are still installed
-#    (v1.20.0: the payload builder died on an outdated @noble/curves):
-npm ci --no-audit --no-fund
+The release ceremony prints these commands filled in for the version
+(`bash scripts/eli5-release.sh <version>`, Blocks 3 and 4); in short, from the
+repo root on the laptop:
 
-# 0) derive the SRI hash manifest from the VPS's SERVED /verify.json —
-#    NOT a laptop build. Vite/Rollup output is not byte-reproducible
-#    across machines, so a laptop-built manifest won't match the deployed
-#    bundle and trips the frontend's "Build integrity check failed"
-#    banner. Upgrade the VPS FIRST (`morphit-ops upgrade`) so /verify.json
-#    reflects the new bundle, then convert its tamper-critical BOOTSTRAP
-#    subset (shell + service worker + entry loader — stays under the
-#    indexer's 4 KB per-field JSONB cap; /verify.json keeps the full
-#    per-file coverage):
-curl -fsSL https://<your-instance>/verify.json -o ~/verify.json
-node apps/web/scripts/verify-json-to-release-manifest.mjs ~/verify.json \
-  > apps/web/build-manifest.release.json
+```
+# first) install exactly this release's packages, running no install script.
+#    Unpacking the release tarball over your repo updates the code but NOT
+#    node_modules, and the scripts below then import whatever old copies are
+#    still installed (v1.20.0: the payload builder died on an outdated
+#    @noble/curves):
+npm ci --ignore-scripts --no-audit --no-fund
+# clear values an earlier ceremony left in this terminal (the payload builder refuses them):
+unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')
+
+# 0) fetch the anchor and the tarball release.yml published, and derive the
+#    SRI hash manifest from the tarball's prebuilt apps/web/build — NOT a
+#    laptop build (Vite/Rollup output is not byte-reproducible across
+#    machines, so a laptop-built manifest trips the frontend's "Build
+#    integrity check failed" banner). The tarball is checked against the
+#    anchored SHA-256, and its files against the verify.json inside it. Only
+#    the tamper-critical BOOTSTRAP subset goes on chain (shell + service
+#    worker + entry loader — under the indexer's 4 KB per-field JSONB cap;
+#    /verify.json keeps the full per-file coverage):
+curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v<semver>/distribution-anchor.env -o /tmp/morphit-anchor.env
+curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v<semver>/morphit-v<semver>.tar.gz -o /tmp/morphit-v<semver>.tar.gz
+node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env \
+  --tarball /tmp/morphit-v<semver>.tar.gz > apps/web/build-manifest.release.json
 
 # 1) build the payload — BTC/XMR treasury pre-filled from
-#    apps/indexer/src/config/canonicalTreasury.ts; you supply the
-#    version and the manifest from step 0. (endpoints are no
-#    longer pinned on-chain; omit MORPHIT_BUILD_ENDPOINTS_FILE.)
-#    < /dev/null forces non-interactive mode so the redirected
-#    stdout is clean JSON (not echoed prompts):
-MORPHIT_BUILD_VERSION=<semver> \
+#    apps/indexer/src/config/canonicalTreasury.ts; the anchor file is parsed
+#    (never sourced). < /dev/null forces non-interactive mode so the
+#    redirected stdout is clean JSON (not echoed prompts):
+MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=<semver> \
+  MORPHIT_BUILD_BLURT_BASE=125 \
   MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json \
-  npx tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
+  ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 
 # 2) PREVIEW — prints the exact op, asks for NO key, sends nothing:
-npx tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
+./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
 
 # 3) sign + broadcast for real (prompts for the PRIVATE posting key / WIF, masked):
-npx tsx apps/indexer/scripts/release-broadcast.ts release.json
+./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json
 ```
+
+**Broadcast BEFORE any instance upgrades, morphit.io included.** Since
+v1.21.0, `morphit-ops upgrade` installs a release only with a signature from a
+pinned key or by its SHA-256 in this on-chain record. CI holds no signing key,
+so until the record exists every upgrade refuses the release ("The release is
+not signed, and no signed on-chain release record names its hash"). That is
+what stopped the v1.21.1 ceremony, which upgraded morphit.io first. Once
+morphit.io has upgraded, the ceremony's Block 6 checks that it serves the
+anchored build: the same manifest command with `--served` and the site's
+`/verify.json`.
+
+**A change to what the record may contain needs a release in between.**
+Because the broadcast comes first, every node, morphit.io included, judges a
+new record with the PREVIOUS release's validator (`handlers/release.ts`), and
+an op it rejects stays rejected after it upgrades. So a release that widens
+what the record may carry (a new field, a new allowed character, a higher
+cap) ships the new check first, and only a later release's record uses it.
 
 `release-broadcast.ts` re-validates the payload, refuses any
 64-hex secret, reads the posting WIF from a MASKED prompt
@@ -11190,10 +11240,10 @@ up to 90 days). UI: `BtcFeePayPanel.svelte` (post success card + My orders).
 4. Ship it in the FIRST release AFTER v1.20.0 is running on all three boxes
    (morphit.io, morphitir, morphitlat) — an older frontend still asks users
    to pay the shared address first and paste the txid, which v1.20.0 indexers
-   refuse after the pin. The normal ELI5 ceremony does the rest: Block 4's
+   refuse after the pin. The normal ELI5 ceremony does the rest: Block 3's
    `release-build-payload.ts` reads the key from `canonicalTreasury.ts`, pins
    it next to the old address, and prints addresses #0-#2 again — compare them
-   with Sparrow once more before Block 5 broadcasts.
+   with Sparrow once more before Block 4 broadcasts.
 5. Keep the wallet seeing every payment (server, as root, any time):
    ```
    sudo morphit-ops treasury btc

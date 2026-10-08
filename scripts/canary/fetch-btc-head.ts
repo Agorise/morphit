@@ -34,6 +34,16 @@ import {
 const TIMEOUT_MS = 15_000;
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) Morphit-Canary';
 
+/** An error and the reason under it: undici reports every connection failure
+ *  as "fetch failed" and keeps the real one (refused, TLS, proxy) in `cause`. */
+function errText(err: unknown): string {
+	if (!(err instanceof Error)) return String(err);
+	const cause = (err as { cause?: unknown }).cause;
+	return cause instanceof Error && cause.message !== err.message
+		? `${err.message} (${cause.message})`
+		: err.message;
+}
+
 /** Live single-source fetch, dispatched by shape. Returns a BtcHead on success
  *  or null on ANY failure so the walk moves to the next provider. */
 async function fetchOneLive(source: CanaryBtcSource): Promise<BtcHead | null> {
@@ -64,7 +74,7 @@ async function fetchOneLive(source: CanaryBtcSource): Promise<BtcHead | null> {
 		const head = parseBtcSourceBody(source.kind, await resp.text());
 		return head ?? note('malformed JSON tip');
 	} catch (err) {
-		return note(err instanceof Error ? err.message : String(err));
+		return note(errText(err));
 	} finally {
 		clearTimeout(timer);
 	}
@@ -92,7 +102,10 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 	process.stderr.write(`canary: got BTC head ${got.head.height} from ${got.source.label}\n`);
-	process.stdout.write(`${got.head.height}\t${got.head.hash}\n`);
+	// Exit once the line is out: a connection still open (a Tor exit that
+	// never finished a handshake for an earlier source) must not keep this
+	// process — and generate.sh, which waits for it — alive.
+	process.stdout.write(`${got.head.height}\t${got.head.hash}\n`, () => process.exit(0));
 }
 
 void main();

@@ -14,8 +14,8 @@
 #     - the CID the chain anchors for the CURRENT release, as this node's own
 #       indexer serves it (/v1/release → distribution.ipfs_cid);
 #     - every release at or above the anchored version (one this node has
-#       seeded before its broadcast, e.g. on the release box between BLOCK 3
-#       and BLOCK 5 of the ceremony);
+#       seeded before its broadcast, e.g. on the release box when BLOCK 3 of
+#       the ceremony has it seed a release whose anchor has no CID);
 #     - the PREVIOUS release (the newest one below the anchored version), for
 #       rollback and for peers that have not upgraded yet;
 #     - the release this node is running (its package.json version).

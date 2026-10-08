@@ -172,6 +172,7 @@ import { heal as healIndexerMemory } from '../lib/indexerMemoryHeal.ts';
 import { heal as healOsQuiet } from '../lib/osQuietHeal.ts';
 import { heal as healBunkerwebJobs } from '../lib/bunkerwebJobsHeal.ts';
 import { healBackupEncryption, realBackupRuntime } from '../lib/backupEncryptHeal.ts';
+import { healCanaryRefreshRepo, realCanaryRepoRuntime } from '../lib/canaryRepoHeal.ts';
 import { resolveInstanceOrigin, syncInstanceOrigin } from '../lib/instanceOrigin.ts';
 import {
 	healEmptyFeeAddressLines,
@@ -3930,8 +3931,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		// this passed only the tag, so the seed script
 		// curled git.agorise.net for the tag's CID after EVERY upgrade, hidden and
 		// offline ones included, from the box's home IP. Hand it the on-chain CID
-		// this node's own indexer holds (only when that record IS this tag; a newer
-		// release seeded before its broadcast has none yet), and tell it when the
+		// this node's own indexer holds (only when that record IS this tag; a signed
+		// release installed before its broadcast has none yet), and tell it when the
 		// node is hidden-only, which the unprivileged ipfs user cannot read from
 		// indexer.env: then it never fetches, downloads or announces anything.
 		const seedHiddenOnly = isHiddenOnlyNode();
@@ -4833,6 +4834,9 @@ export function selfHealSteps(): Array<[string, () => unknown]> {
 		// already on the box are encrypted to an age key, or deleted, only on
 		// the operator's answer; without a terminal it only says so.
 		['the backup encryption offer', () => healBackupOfferNow()],
+		// (lib/canaryRepoHeal.ts): the weekly canary refresh runs the installed
+		// release's canary code, not the copy it was first set up from. No network.
+		['the canary refresh-source heal', () => healCanaryRefreshRepoNow()],
 		// say so when this instance still serves morphit.io's canary key
 		// as its own /pgp_keys.asc. No network.
 		['the canary key check', () => warnUpstreamCanaryKey()],
@@ -5376,6 +5380,13 @@ export async function reportHeal(r: Promise<HealResult>): Promise<void> {
 	}
 	if (res.detail === '') return;
 	(res.verified ? info : warn)(res.detail);
+}
+
+/** The canary refresh-source heal in the heal phase (lib/canaryRepoHeal.ts). */
+export async function healCanaryRefreshRepoNow(): Promise<void> {
+	await reportHeal(
+		Promise.resolve(healCanaryRefreshRepo(selfHealInstallDir(), realCanaryRepoRuntime()))
+	);
 }
 
 /** When the background web heal was started by this process (ms), or null. */

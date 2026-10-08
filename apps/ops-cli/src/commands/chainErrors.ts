@@ -71,6 +71,8 @@ export async function broadcastCustomJson(args: {
 	payload: Record<string, unknown>;
 	/** Test seam: routing dependencies (default: this box's real config). */
 	deps?: ChainAccessDeps;
+	/** Epoch ms after which nothing is signed or sent (see ChainAccessDeps). */
+	deadlineAt?: number;
 }): Promise<{ trx_id: string }> {
 	const op = [
 		'custom_json',
@@ -89,7 +91,11 @@ export async function broadcastCustomJson(args: {
 		// install. Surface the real cause so the diagnostics classify it right.
 		throw new Error(`could not load the Blurt broadcast library: ${errMsg(err)}`);
 	}
-	const { trx_id } = await signOnceAndBroadcast({ op, wif: args.wif }, args.deps ?? {});
+	const deps: ChainAccessDeps = {
+		...(args.deps ?? {}),
+		...(args.deadlineAt !== undefined ? { deadlineAt: args.deadlineAt } : {})
+	};
+	const { trx_id } = await signOnceAndBroadcast({ op, wif: args.wif }, deps);
 	return { trx_id };
 }
 

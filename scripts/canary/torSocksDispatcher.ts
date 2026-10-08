@@ -34,6 +34,9 @@
  * .onion and .b32.i2p origins. Reaching clearnet freshness sources over I2P
  * alone would need an outproxy and is out of scope; Tor is the universal path.
  */
+import tls from 'node:tls';
+import { isIP } from 'node:net';
+import type net from 'node:net';
 import { Agent, setGlobalDispatcher } from 'undici';
 import { makeSocks5Connector, parseHostPort } from '@morphit/hidden-transport';
 
@@ -66,7 +69,90 @@ export function installTorDispatcherIfTorOnly(env: NodeJS.ProcessEnv = process.e
 	setGlobalDispatcher(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- undici's
 		// connect type doesn't model a custom SOCKS connector cleanly.
-		new Agent({ connect: makeSocks5Connector(host, port) as any })
+		new Agent({ connect: makeCanaryTorConnector(host, port) as any })
 	);
 	return `tor-only (SOCKS ${host}:${port})`;
+}
+
+type ConnectOpts = {
+	hostname: string;
+	port: number | string;
+	protocol?: string;
+	servername?: string;
+};
+type ConnectCb = (err: Error | null, socket: net.Socket | null) => void;
+
+/** How long a TLS handshake inside the Tor tunnel may take. undici gives a
+ *  custom connector no timeout of its own, and aborting a fetch does not stop
+ *  a connect already under way: without this, one Tor exit that took the
+ *  connection and never answered kept the helper process alive after the next
+ *  explorer had already answered (generate.sh waits for it, with no limit). */
+export const CANARY_TLS_HANDSHAKE_MS = 20_000;
+
+/**
+ * The canary's connector: the shared SOCKS5 tunnel, plus TLS for https://
+ * CLEARNET hosts reached through a Tor exit.
+ *
+ * The shared connector refuses https: on purpose — it is built for .onion and
+ * .b32.i2p, which carry plain HTTP — and the canary used it unchanged for its
+ * https:// Bitcoin explorers, so on a Tor-only box every explorer "fetch
+ * failed" at once and the canary never carried a Bitcoin block height
+ * (morphitlat, 2026-10-07). For an https:// clearnet host the tunnel is opened
+ * to its port (443 by default), and TLS runs inside it with the certificate
+ * checked against the host name, as for a direct connection. The name is still
+ * resolved by Tor (the CONNECT carries the domain). A hidden-network https://
+ * URL is still refused by the shared connector.
+ */
+export function makeCanaryTorConnector(
+	socksHost: string,
+	socksPort: number,
+	handshakeMs: number = CANARY_TLS_HANDSHAKE_MS
+) {
+	const tunnel = makeSocks5Connector(socksHost, socksPort);
+	return (opts: ConnectOpts, cb: ConnectCb): void => {
+		const hidden = /\.(onion|i2p)\.?$/i.test(opts.hostname);
+		if (opts.protocol !== 'https:' || hidden) {
+			tunnel(opts, cb);
+			return;
+		}
+		const port = typeof opts.port === 'string' ? Number(opts.port) || 443 : opts.port || 443;
+		const name = opts.hostname.replace(/\.$/, '');
+		tunnel({ hostname: opts.hostname, port, protocol: 'http:' }, (err, raw) => {
+			if (err !== null || raw === null) {
+				// The shared connector words its failures for onions; this is a
+				// clearnet host reached through a Tor exit.
+				const why = err?.message.replace(/^onion unreachable via Tor: /, '') ?? 'no tunnel';
+				cb(new Error(`${name} unreachable through Tor: ${why}`, { cause: err ?? undefined }), null);
+				return;
+			}
+			let settled = false;
+			const secure = tls.connect({
+				socket: raw,
+				// The certificate is checked against this name. SNI carries it
+				// too, except for an IP literal (SNI must not be an address).
+				host: name,
+				...(isIP(name) === 0 ? { servername: opts.servername || name } : {}),
+				ALPNProtocols: ['http/1.1']
+			});
+			const fail = (e: Error): void => {
+				if (settled) return;
+				settled = true;
+				secure.destroy();
+				raw.destroy();
+				cb(e, null);
+			};
+			secure.setTimeout(handshakeMs, () =>
+				fail(
+					new Error(`${name}: no TLS answer through Tor within ${Math.round(handshakeMs / 1000)} s`)
+				)
+			);
+			secure.once('secureConnect', () => {
+				if (settled) return;
+				settled = true;
+				secure.setTimeout(0);
+				cb(null, secure);
+			});
+			secure.once('error', fail);
+		});
+	};
 }

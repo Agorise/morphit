@@ -296,7 +296,7 @@ try {
 		: '';
 	const tagObject = sh('git rev-parse refs/tags/v9.9.9').stdout.trim();
 	check(
-		'the distribution anchor names the signed tag object the job built (Block 4 compares it with the tag it pushed)',
+		'the distribution anchor names the signed tag object the job built (Block 3 compares it with the tag it pushed)',
 		anch.status === 0 &&
 			new RegExp(`^export MORPHIT_BUILD_TAG_OBJECT=${tagObject}$`, 'm').test(anchorText),
 		anch.stderr.slice(-300) || anchorText

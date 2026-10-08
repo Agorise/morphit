@@ -377,6 +377,7 @@ SMOKES=(
 	".:canary-setup-smoke"
 	".:canary-tor-only-routing-smoke"
 	".:canary-socks-connector-smoke"
+	".:canary-tor-https-smoke"
 	".:now-in-handler-sql-smoke"
 	"apps/web:i18n-hardcoded-english-smoke"
 	"apps/web:i18n-raw-exception-smoke"

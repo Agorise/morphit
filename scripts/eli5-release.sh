@@ -40,20 +40,22 @@
 #     attaches every asset (tarball, .sha256, distribution-anchor.env, the
 #     offline bundle a zero-clearnet node upgrades from, and their .asc files
 #     when signed). WAIT for release.yml green — you download + upload nothing.
-#   • BLOCK 4 computes the manifest from the PUBLISHED tarball's prebuilt
+#   • BLOCK 3 computes the manifest from the PUBLISHED tarball's prebuilt
 #     apps/web/build, after checking that tarball against the SHA-256 the
-#     release job anchored, and requires the canonical instance's SERVED
-#     /verify.json to match it file for file. Never a laptop build:
-#     cross-machine Vite/Rollup output is not reproducible, and a laptop-built
-#     manifest puts a red "Build integrity check failed" banner on the live site
-#     (learned 2026-07-08, v1.1.5). Never the served copy alone either: whatever
-#     that box serves would be anchored for every instance.
-#   • BLOCK 4 starts with `npm ci --ignore-scripts`: the laptop's repo is
+#     release job anchored, and requires the tarball's own verify.json (the list
+#     every instance serves at /verify.json) to name the same hash for every
+#     bootstrap file (page, service worker, entry scripts). Never a
+#     laptop build: cross-machine Vite/Rollup output is not reproducible, and a
+#     laptop-built manifest puts a red "Build integrity check failed" banner on
+#     the live site (learned 2026-07-08, v1.1.5). The served copy is checked
+#     only after the upgrade (BLOCK 6): whatever that box serves must never be
+#     what is anchored.
+#   • BLOCK 3 starts with `npm ci --ignore-scripts`: the laptop's repo is
 #     refreshed by unpacking the release tarball over it, which updates the code
 #     but NOT node_modules (v1.20.0's payload builder died on an older installed
 #     library, 2026-09-30). No dependency install script runs on the machine
 #     that holds the @morphit WIF.
-#   • BLOCK 4 never sources the downloaded anchor: the payload builder PARSES it
+#   • BLOCK 3 never sources the downloaded anchor: the payload builder PARSES it
 #     (MORPHIT_BUILD_ANCHOR_FILE: known keys, exact value shapes, a pinned
 #     signing key) and refuses any MORPHIT_BUILD_* value an earlier ceremony left
 #     in the terminal (v1.20.2 carried v1.20.1's CID and IPNS record that way).
@@ -62,13 +64,28 @@
 #     to an older signed object of the same name) is refused. No extra command.
 #   • A release with no IPFS CID is REFUSED by the payload builder: release.yml
 #     could not compute it (v1.20.2), and zero-clearnet nodes cannot fetch a
-#     release without one. The note after BLOCK 4 gives the payload line again
-#     with `--ipfs-cid <cid>`, the CID morphit.io printed when it seeded the
-#     release in BLOCK 3. The builder takes that flag only for an anchor that
-#     has no CID; values left in the terminal are still refused.
-#   • Broadcasting (BLOCK 5) is a laptop step ONLY: the @morphit spending WIF
+#     release without one. The note after BLOCK 3 has morphit.io seed the
+#     release with the release's OWN seed scripts from the checked tarball (it
+#     hosts it, installs nothing, and prints the CID), then gives the
+#     payload line again with `--ipfs-cid <cid>`. The builder takes that flag
+#     only for an anchor that has no CID; values left in the terminal are still
+#     refused.
+#   • Broadcasting (BLOCK 4) is a laptop step ONLY: the @morphit spending WIF
 #     must never live in CI.
-#   • BLOCK 6 is not optional: `morphit-ops upgrade` wipes build/canary.txt.
+#   • BLOCK 4 comes BEFORE the upgrade (BLOCK 5). Since v1.21.0 `morphit-ops
+#     upgrade` installs a release only with a signature from a pinned key or by
+#     its SHA-256 in @morphit's on-chain record; CI holds no signing key, so the
+#     record must exist first. The v1.21.1 ceremony upgraded before it
+#     broadcast, and morphit.io refused the release ("The release is not
+#     signed, and no signed on-chain release record names its hash").
+#   • Because the broadcast comes first, every node (morphit.io included)
+#     judges the new record with the PREVIOUS release's validator, and an op it
+#     rejects stays rejected after it upgrades. A change that widens what the
+#     record may carry ships in one release; only a later release's record
+#     uses it (docs/OPERATIONS.md §40.6).
+#   • BLOCK 6 checks, after the upgrade, that morphit.io SERVES the anchored
+#     build, and repairs the canary (`morphit-ops upgrade` wipes
+#     build/canary.txt). Not optional.
 #
 set -euo pipefail
 
@@ -84,6 +101,19 @@ fi
 # The message goes into Block 1 single-quoted, each ' written as '\'' — so a
 # quote, backtick, $( ) or $ in it is pasted as text and never run.
 MESSAGE_QUOTED="'${MESSAGE//\'/\'\\\'\'}'"
+
+# The no-CID fallback (the note after Block 3), run on morphit.io as root. It
+# seeds with the NEW release's own seed and staging scripts, taken from the
+# published tarball after checking it against the anchored SHA-256: the
+# installed copies are the previous release's, and a change in how a release
+# directory is staged would give a CID that this release's upgrades, staging
+# with their own copy, never reproduce. Kept identical to the command
+# release-build-payload.ts prints (releaseCeremony.test.ts runs both).
+SEED_CMD=$(cat <<'SEED'
+D=$(mktemp -d) && chmod 755 "$D" && cd "$D" && curl -fsSLO https://git.agorise.net/agorise/morphit/releases/download/v@V@/distribution-anchor.env && curl -fsSLO https://git.agorise.net/agorise/morphit/releases/download/v@V@/morphit-v@V@.tar.gz && echo "$(sed -n 's/^export MORPHIT_BUILD_SOURCE_SHA256=//p' distribution-anchor.env)  morphit-v@V@.tar.gz" | sha256sum -c && tar -xzf morphit-v@V@.tar.gz --no-same-owner --wildcards './ops/ipfs/*' && sudo -u ipfs env IPFS_PATH=/var/lib/ipfs/.ipfs MORPHIT_STAGE_TARBALL="$D/morphit-v@V@.tar.gz" MORPHIT_SEED_ORIGIN=https://morphit.io sh "$D/ops/ipfs/morphit-ipfs-seed.sh" v@V@
+SEED
+)
+SEED_CMD="${SEED_CMD//@V@/$VERSION}"
 
 cat <<EOF
 # ELI5 RELEASE — v${VERSION}
@@ -113,43 +143,53 @@ git push origin v${VERSION}
 
 ---
 
-**BLOCK 3** — upgrade the VPS (morphit.io, logged in as root; regenerates the served bundle + \`/verify.json\`; let it finish):
-\`\`\`
-sudo morphit-ops
-\`\`\`
-Then choose **option 2**. (The upgrade also self-seeds this release to IPFS if this box runs IPFS hosting — it becomes an origin host automatically; a box without hosting skips it.)
-
----
-
-**BLOCK 4** — build the on-chain payload from the published release and dry-run it (laptop, repo root). The first line installs exactly this release's packages, running no install script; the second clears values an earlier ceremony left in this terminal; then fetch the anchor and the tarball \`release.yml\` published and the canonical instance's served verify.json. The manifest is computed from the tarball (checked against the anchored SHA-256) and must match what the site serves; the payload builder reads the anchor itself (it is never sourced):
+**BLOCK 3** — build the on-chain payload from the published release and dry-run it (laptop, repo root). The first line installs exactly this release's packages, running no install script; the second clears values an earlier ceremony left in this terminal, the third deletes the files an earlier ceremony downloaded; then fetch the anchor and the tarball \`release.yml\` published. The manifest is computed from the tarball (checked against the anchored SHA-256 and against the verify.json inside it); the payload builder reads the anchor itself (it is never sourced):
 \`\`\`
 npm ci --ignore-scripts --no-audit --no-fund
 unset \$(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')
+rm -f /tmp/morphit-anchor.env /tmp/morphit-v${VERSION}.tar.gz
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/distribution-anchor.env -o /tmp/morphit-anchor.env
 curl -fsSL https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz -o /tmp/morphit-v${VERSION}.tar.gz
-curl -fsSL https://morphit.io/verify.json -o /tmp/morphit-verify.json
-node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env --tarball /tmp/morphit-v${VERSION}.tar.gz --served /tmp/morphit-verify.json > apps/web/build-manifest.release.json
+node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env --tarball /tmp/morphit-v${VERSION}.tar.gz > apps/web/build-manifest.release.json
 MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts < /dev/null > release.json
 ./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json --dry-run
 \`\`\`
-The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the mirror list baked into the payload builder). If the manifest line stops with "does not match the release tarball", the canonical instance is not serving this release yet: finish Block 3 and fetch verify.json again.
+The dry-run's printed payload should carry a \`distribution\` block (source_sha256 + gpg_fingerprint + \`ipfs_cid\` + \`ipns_name\` + the mirror list baked into the payload builder).
 
-If the payload line stops with "this release has no IPFS CID", \`release.yml\` could not compute it (as happened to v1.20.2), and a release without it cannot reach zero-clearnet nodes. morphit.io printed it in Block 3, on the line \`morphit-ipfs-seed: hosted v${VERSION} → bafy…\`. On the laptop, run the payload line again with that CID in place of \`<cid>\`, then the dry-run line again: \`MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts --ipfs-cid <cid> < /dev/null > release.json\`
-
-There is deliberately **no public-gateway check here**. Block 3 already asserted that the CID your box produced equals the one in the anchor (when the anchor carries one), and verified it serves over this instance's clearnet origin, its \`.onion\` and its \`.b32.i2p\` — the paths instances actually fetch from. A public gateway seeing it adds nothing to that, arrives minutes later, and depends on a third party we do not rely on. It used to gate this block and could stall a healthy release for half an hour. To confirm outside reachability by choice, it is a manual command that never blocks the ceremony: \`sh scripts/verify-cid-public.sh <cid> ${VERSION} https://morphit.io\`.
+If the payload line stops with "this release has no IPFS CID", \`release.yml\` could not compute it (as happened to v1.20.2), and a release without it cannot reach zero-clearnet nodes. Have morphit.io host the release and print its CID (morphit.io, logged in as root; this installs nothing). The command downloads the release, checks it against the anchored SHA-256, and seeds it with the release's own seed scripts, not the installed older ones:
+\`\`\`
+${SEED_CMD}
+\`\`\`
+It prints the line \`morphit-ipfs-seed: hosted v${VERSION} → bafy…\`; that CID is the one to use, even if lines after it warn about this box. On the laptop, run the payload line again with that CID in place of \`<cid>\`, then the dry-run line again: \`MORPHIT_BUILD_ANCHOR_FILE=/tmp/morphit-anchor.env MORPHIT_BUILD_VERSION=${VERSION} MORPHIT_BUILD_BLURT_BASE=125 MORPHIT_BUILD_HASH_MANIFEST_FILE=apps/web/build-manifest.release.json ./node_modules/.bin/tsx apps/indexer/scripts/release-build-payload.ts --ipfs-cid <cid> < /dev/null > release.json\`
 
 ---
 
-**BLOCK 5** — the real broadcast (laptop, repo root; masked \`@morphit\` WIF prompt; your key starts with \`5\`):
+**BLOCK 4** — the real broadcast (laptop, repo root; masked \`@morphit\` WIF prompt; your key starts with \`5\`). It comes before the upgrade: an unsigned release installs only by its SHA-256 in this on-chain record:
 \`\`\`
 ./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts release.json
 \`\`\`
 Afterwards anyone can verify a download against the chain by re-fetching the canonical tarball from the release page: \`curl -fsSLO https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz && node scripts/verify-download.mjs morphit-v${VERSION}.tar.gz\`, or clone any mirror and \`git verify-tag v${VERSION}\` (see docs/VERIFY-YOUR-DOWNLOAD.md).
 
+Until morphit.io upgrades, its visitors notice nothing, and get no tamper alarm: a browser checks the build only when it runs the version the record announces.
+
 ---
 
-**BLOCK 6** — canary repair (laptop — the canary is signed there, never on the server; the upgrade wipes \`build/canary.txt\` every time):
+**BLOCK 5** — upgrade the VPS (morphit.io, logged in as root; installs the release by its on-chain record, regenerates the served bundle + \`/verify.json\`; let it finish):
 \`\`\`
+sudo morphit-ops
+\`\`\`
+Then choose **option 2**. It prints \`✓ Integrity verified (onchain-anchored-sha256)\`. (The upgrade also self-seeds this release to IPFS if this box runs IPFS hosting — it becomes an origin host automatically; a box without hosting skips it.) The other instances can upgrade now: morphitir and timeapp since Block 4, morphitlat after this block, because it fetches the release from morphit.io over Tor/I2P.
+
+There is deliberately **no public-gateway check here**. This block already asserts that the CID your box produced equals the one in the anchor (when the anchor carries one), and verifies it serves over this instance's clearnet origin, its \`.onion\` and its \`.b32.i2p\` — the paths instances actually fetch from. A public gateway seeing it adds nothing to that, arrives minutes later, and depends on a third party we do not rely on. It used to gate the ceremony and could stall a healthy release for half an hour. To confirm outside reachability by choice, it is a manual command that never blocks the ceremony: \`sh scripts/verify-cid-public.sh <cid> ${VERSION} https://morphit.io\`.
+
+---
+
+**BLOCK 6** — check what morphit.io now serves, then repair the canary (laptop, repo root — the canary is signed there, never on the server; the upgrade wipes \`build/canary.txt\` every time). The first lines fetch the served verify.json and require it to name the anchored tarball's hash for every bootstrap file (the page, the service worker, the entry scripts):
+\`\`\`
+rm -f /tmp/morphit-verify.json
+curl -fsSL https://morphit.io/verify.json -o /tmp/morphit-verify.json
+node apps/web/scripts/verify-json-to-release-manifest.mjs --anchor /tmp/morphit-anchor.env --tarball /tmp/morphit-v${VERSION}.tar.gz --served /tmp/morphit-verify.json > /dev/null
 bash ~/.morphit/update-canary.sh
 \`\`\`
+The \`node\` line ends with "the served verify.json matches". If it says "does not match", morphit.io serves something other than the anchored build: its visitors see the tamper alarm. Do not ignore it.
 EOF

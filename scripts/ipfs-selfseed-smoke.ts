@@ -173,7 +173,7 @@ const guard = stripHash(read('scripts/verify-cid-public.sh'));
 		: bad('morphit-ops seed action not wired');
 }
 
-// ── 8. morphit-ops UPGRADE auto-seeds the installed release (Block 3 fold) ──
+// ── 8. morphit-ops UPGRADE auto-seeds the installed release (Block 5 fold) ──
 {
 	const upgrade = read('apps/ops-cli/src/commands/upgrade.ts');
 	const checks: Array<[string, boolean]> = [

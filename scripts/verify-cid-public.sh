@@ -1,12 +1,13 @@
 #!/bin/sh
-# verify-cid-public.sh — the release GUARD. (v1.9.3)
+# verify-cid-public.sh — is a release CID fetchable from outside? (v1.9.3)
 #
-# Refuses to let a release anchor/broadcast a CID the public can't actually fetch.
-# Run on the laptop during the ELI5 ceremony, AFTER the seed box has `ipfs add`ed
-# the release (morphit-ipfs-seed.sh) and BEFORE the on-chain broadcast. If this
-# fails, DO NOT broadcast — an immutable Blurt op pointing at unreachable content
-# is permanent. This is the check that would have stopped the dead Qmb11…/empty
-# bafkr… CIDs from ever nearing the chain.
+# An optional, manual check; it gates nothing. It once ran between the seed and
+# the broadcast and refused to let a release be anchored until a public gateway
+# served it (it would have stopped the dead Qmb11…/empty bafkr… CIDs). Since
+# 2026-10-07 the ceremony broadcasts BEFORE morphit.io upgrades, and no box hosts
+# the CID until that upgrade seeds it, so run this after the upgrade, by choice
+# (the note after Block 5 of scripts/eli5-release.sh). The upgrade itself already
+# checks that the box serves the CID over its clearnet origin, .onion and .b32.i2p.
 #
 # Rule (from the spike): pass on the FIRST independent public gateway that
 # serves the CID's metadata.json with the expected version. A healthy node

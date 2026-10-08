@@ -64,6 +64,23 @@ BUILD_DIR="$REPO_ROOT/apps/web/build"
 # the signed canary + weekly refresh land where it's actually served, not in the
 # source tree where nothing reads it.
 SERVE_DIR="${MORPHIT_CANARY_SERVE_DIR:-$REPO_ROOT/apps/web/build}"
+# The tree the WEEKLY refresh runs the canary code from. It used to be the tree
+# this script ran from — the unpacked source on a wizard install, which upgrades
+# never touch — so the weekly refresh ran that copy's canary code forever.
+# morphitlat (v1.21.1): that old code fetched the chain head from clearnet nodes
+# the zero-clearnet box no longer reaches, and every weekly run failed. When the
+# served build/ belongs to another Morphit tree (the deployed /opt/morphit), the
+# refresh runs that one, which every upgrade replaces.
+canary_run_repo() { # $1=REPO_ROOT $2=SERVE_DIR → the tree, on stdout
+	local d
+	d="$(cd "$2/../../.." 2>/dev/null && pwd)" || d=""
+	if [ -n "$d" ] && [ "$d" != "$1" ] && [ -f "$d/scripts/canary/generate.sh" ]; then
+		printf '%s' "$d"
+	else
+		printf '%s' "$1"
+	fi
+}
+RUN_REPO="$(canary_run_repo "$REPO_ROOT" "$SERVE_DIR")"
 # USER-WRITABLE staging dir for the signed canary + public key. The old
 # flow staged both in the in-tree apps/web/static/, which is root-owned on a
 # root-installed /opt/morphit — so a first-time setup run as a non-root operator
@@ -95,7 +112,8 @@ done
 # in place. Requiring tsx here would abort the whole setup on an air-gapped box
 # and leave it with no canary at all, so skip the check when deferring.
 if [ "${MORPHIT_CANARY_DEFER_FIRST_REFRESH:-}" != "1" ]; then
-	[ -x "$REPO_ROOT/node_modules/.bin/tsx" ] || die "tsx not found — run 'npm ci' in $REPO_ROOT first (the canary's chain-head fetchers need it)."
+	# The first refresh (below) runs from the tree the refresh script records.
+	[ -x "$RUN_REPO/node_modules/.bin/tsx" ] || die "tsx not found — run 'npm ci' in $RUN_REPO first (the canary's chain-head fetchers need it)."
 fi
 
 # ─── 2. Which deployment? ────────────────────────────────────────
@@ -345,7 +363,7 @@ mkdir -p "$MORPHIT_HOME"
 	printf "export MORPHIT_CANARY_OPERATOR_NAME='%s'\n" "$OPERATOR_NAME"
 	printf "export MORPHIT_CANARY_INSTANCE_ORIGIN='%s'\n" "$INSTANCE_ORIGIN"
 	printf "export MORPHIT_CANARY_OPERATOR_ACCOUNT='%s'\n" "$OPERATOR_ACCOUNT"
-	printf "REPO='%s'\n" "$REPO_ROOT"
+	printf "REPO='%s'\n" "$RUN_REPO"
 	printf "SERVE='%s'\n" "$SERVE_DIR"
 	printf "STAGE='%s'\n" "$STAGE_DIR"
 	printf 'cd "$REPO"\n'

@@ -28,9 +28,10 @@
 #                    distribution-anchor.env (release.yml attaches it) — the
 #                    tag-authoritative CID. NOT /v1/release, which serves the
 #                    CURRENTLY broadcast release and would be the WRONG (older)
-#                    CID when seeding a newer release pre-broadcast (e.g. from the
-#                    morphit-ops upgrade). If the anchor has no CID yet, the
-#                    script just adds + prints (no assertion).
+#                    CID when seeding a newer release before its broadcast (the
+#                    release ceremony's no-CID fallback after Block 3, which runs
+#                    this copy from the new release's tarball). If the anchor has
+#                    no CID, the script just adds + prints (no assertion).
 # Env:
 #   IPFS_PATH                 Kubo repo (default /var/lib/ipfs/.ipfs)
 #   MORPHIT_SEED_HIDDEN_ONLY  =1 on a hidden-only node (morphit-ops upgrade sets it
@@ -38,6 +39,9 @@
 #                             Routing.Type=none. Then: no clearnet anchor fetch, no
 #                             download, no DHT announce.
 #   MORPHIT_RELEASE_DOWNLOAD_BASE   base URL for release assets (fetch the tag's anchor when expected_cid omitted)
+#   MORPHIT_STAGE_TARBALL     a local copy of the release tarball to stage from (no download)
+#   MORPHIT_SEED_ORIGIN       this instance's public origin, for the frontend check
+#                             (the ipfs user cannot read the instance's config files)
 #   IPFS_ADD_TIMEOUT          seconds for the add (default 900)
 # Run as the ipfs service user (the systemd unit / morphit-ops handle that):
 #   sudo -u ipfs env IPFS_PATH=/var/lib/ipfs/.ipfs morphit-ipfs-seed.sh v1.9.3 <cid>

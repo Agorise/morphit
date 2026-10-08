@@ -186,8 +186,19 @@ if (dryIdx !== -1 && askIdx !== -1 && dryIdx < askIdx)
 	ok('--dry-run exits before any key is requested');
 else bad('--dry-run no longer precedes the key prompt', 'dry-run could leak into the key path');
 
-if (cli.includes('_writeToOutput') && /askHidden/.test(cli))
-	ok('posting key is read via a masked prompt (echo suppressed)');
+// 2026-10-07: the CLI uses the shared masked prompt (lib/signOnceBroadcast.ts),
+// whose on-screen behaviour test/scripts/askHidden.test.ts drives.
+const sharedPrompt = readFileSync(
+	join(REPO, 'apps/indexer/scripts/lib/signOnceBroadcast.ts'),
+	'utf-8'
+);
+if (
+	/import \{[^}]*\baskHidden\b[^}]*\} from '\.\/lib\/signOnceBroadcast\.ts'/.test(cli) &&
+	!/function askHidden\(/.test(cli) &&
+	sharedPrompt.includes('_writeToOutput') &&
+	/export function askHidden\(/.test(sharedPrompt)
+)
+	ok('posting key is read via the shared masked prompt (echo suppressed)');
 else bad('posting key prompt is no longer masked', 'WIF could echo to the screen');
 
 if (

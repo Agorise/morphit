@@ -344,8 +344,12 @@ function validateDistribution(
 				// clone URL / displayed link) and this only ACCEPTS MORE: every
 				// prior payload had no `+`, so all remain valid. NB forward-compat:
 				// a `+` URL is rejected by pre-v1.8.16 validators, so a release
-				// carrying the Launchpad mirror must be broadcast AFTER the canonical
-				// instance is on v1.8.16 (the ceremony upgrades it before broadcast).
+				// carrying the Launchpad mirror could be broadcast only once nodes ran
+				// v1.8.16. Since 2026-10-07 the ceremony broadcasts BEFORE any node
+				// upgrades, so every node judges a record with the PREVIOUS release's
+				// validator, and a rejected op stays rejected (officialOpReverify
+				// re-checks once): a change that widens what the record may carry
+				// ships in one release and is used only by a later one.
 				!/^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~+/-]*)?$/.test(m)
 			) {
 				return { reason: 'distribution_mirror_invalid' };

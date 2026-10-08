@@ -589,7 +589,7 @@ ok(
 // seeder had verified seconds earlier — was never consulted at all.
 const guard = read('scripts/verify-cid-public.sh');
 ok('the guard checks THIS instance\u2019s own origin first', /SELF_ORIGIN/.test(guard));
-// The fast path existed but the ceremony never passed an origin, and block 4
+// The fast path existed but the ceremony never passed an origin, and the payload block
 // runs on a LAPTOP where no /opt/morphit config exists — so it fell through to
 // polling public gateways and a release stalled for 50+ rounds. A capability
 // nobody can reach is not a feature.
@@ -601,9 +601,9 @@ ok(
 	'…and says so plainly when no origin is known, instead of silently grinding',
 	/no instance origin known here/.test(guard)
 );
-// The generated ceremony must PASS it. Block 4 runs on a laptop, so without an
+// The generated ceremony must PASS it. Block 3 runs on a laptop, so without an
 // explicit origin the guard has no fast path — which is exactly how this shipped.
-// The ceremony no longer runs the gateway check AT ALL. Block 3 already asserts
+// The ceremony no longer runs the gateway check AT ALL. Block 5 (the upgrade) asserts
 // the produced CID equals the anchored one AND that it serves over this
 // instance's clearnet origin, .onion and .b32.i2p — the paths instances actually
 // fetch from. A public gateway seeing it adds nothing, arrives minutes later, and

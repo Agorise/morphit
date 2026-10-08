@@ -28,7 +28,7 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import { askHidden, broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
 
 import {
 	buildRpcDirectoryCustomJsonOp,
@@ -160,18 +160,6 @@ if (dryRun) {
 	process.exit(0);
 }
 
-function askHidden(query: string): Promise<string> {
-	process.stderr.write(query);
-	return new Promise((resolve) => {
-		const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-		(rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = () => {};
-		rl.question('', (ans) => {
-			rl.close();
-			process.stderr.write('\n');
-			resolve(ans.trim());
-		});
-	});
-}
 function ask(query: string): Promise<string> {
 	return new Promise((resolve) => {
 		const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -191,8 +179,7 @@ async function main(): Promise<void> {
 	const wif = await askHidden(
 		`\n\u2192 NOW PASTE the @${op.required_posting_auths[0]} PRIVATE posting key` +
 			` (the WIF \u2014 it starts with "5") and press Enter.\n` +
-			`  Nothing will show as you paste it \u2014 that is intentional; the key stays hidden.\n` +
-			`  key> `
+			`  Nothing will show as you paste it \u2014 that is intentional; the key stays hidden.\n`
 	);
 	if (!wif.startsWith('5') || wif.length < 50) {
 		die('that does not look like a Blurt WIF private key (expected a "5..." string).');

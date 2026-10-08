@@ -223,8 +223,9 @@ tarball, plus a systemd timer. Sequence on a caught-up node:
    **never** the release or block_log key (same rule pin-snapshot.sh enforces).
 5. Emit the `indexer_snapshot_v1` payload; `indexer-snapshot-broadcast.ts` (signed
    `@morphit` for the canonical federation snapshot).
-6. `verify-cid-public.sh <CID>` — confirm public-gateway reachability before the anchor
-   is trusted (same guard as the release ceremony's Block 4).
+6. `verify-cid-public.sh <CID>` — optionally confirm public-gateway reachability (the
+   release ceremony does not gate on this; it is a manual command there, see Block 5 of
+   `scripts/eli5-release.sh`).
 7. Rotate: keep last N pins; IPNS + the newest on-chain op are the durable pointers.
 
 **Cadence:** daily. A 1-day-old snapshot leaves only ~28,800 blocks of tail

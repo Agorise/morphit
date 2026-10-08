@@ -53,7 +53,8 @@
  *   --ipfs-cid <cid>       the release's IPFS CID, for an anchor
  *                          (MORPHIT_BUILD_ANCHOR_FILE) that carries none:
  *                          release.yml could not compute it, and the release
- *                          box printed it in Block 3 ("hosted vX → bafy…").
+ *                          box printed it when Block 3 had it seed the
+ *                          release ("hosted vX → bafy…").
  *                          Refused when the anchor has a CID, or without one.
  *   --allow-no-ipfs-cid    emit a distribution block with no ipfs_cid anyway.
  *                          Zero-clearnet nodes cannot fetch such a release
@@ -604,8 +605,10 @@ function buildDistribution(i: Inputs, flags: BuilderFlags): ReleaseDistributionB
 		// zero-clearnet instance (Tor/I2P only) was left unable to fetch the release.
 		fail(
 			`this release has no IPFS CID, and zero-clearnet instances (Tor/I2P only) cannot fetch a release without one.\n` +
-				`  release.yml could not compute it. The release box printed it when it seeded the release in Block 3:\n` +
-				`      morphit-ipfs-seed: hosted v${i.version} → bafy…\n` +
+				`  release.yml could not compute it. Have morphit.io host the release and print it (as root there; this installs nothing).\n` +
+				`  This downloads the release, checks it against the anchored SHA-256, and seeds it with the release's own seed scripts:\n` +
+				`      ${noCidSeedCommand(i.version)}\n` +
+				`  It prints the line:  morphit-ipfs-seed: hosted v${i.version} → bafy…  (that CID, even if lines after it warn)\n` +
 				`  Run this payload command again with --ipfs-cid and that CID added after release-build-payload.ts.\n` +
 				`  (Only if no box printed one: --allow-no-ipfs-cid publishes without it, and zero-clearnet nodes cannot upgrade.)`
 		);
@@ -616,6 +619,27 @@ function buildDistribution(i: Inputs, flags: BuilderFlags): ReleaseDistributionB
 	}
 	if (mirrorList.length > 0) value.mirrors = mirrorList;
 	return value as unknown as ReleaseDistributionBlock;
+}
+
+/**
+ * The no-CID fallback, run on morphit.io as root: the NEW release's own seed
+ * and staging scripts, from the published tarball after checking it against
+ * the anchored SHA-256. The installed copies are the previous release's, and a
+ * change in how a release directory is staged would give a CID this release's
+ * own upgrades never reproduce. Identical to the command in the note after
+ * Block 3 of scripts/eli5-release.sh (releaseCeremony.test.ts runs both).
+ */
+export function noCidSeedCommand(version: string): string {
+	const url = `https://git.agorise.net/agorise/morphit/releases/download/v${version}`;
+	const tgz = `morphit-v${version}.tar.gz`;
+	return (
+		`D=$(mktemp -d) && chmod 755 "$D" && cd "$D" && curl -fsSLO ${url}/distribution-anchor.env && ` +
+		`curl -fsSLO ${url}/${tgz} && ` +
+		`echo "$(sed -n 's/^export MORPHIT_BUILD_SOURCE_SHA256=//p' distribution-anchor.env)  ${tgz}" | sha256sum -c && ` +
+		`tar -xzf ${tgz} --no-same-owner --wildcards './ops/ipfs/*' && ` +
+		`sudo -u ipfs env IPFS_PATH=/var/lib/ipfs/.ipfs MORPHIT_STAGE_TARBALL="$D/${tgz}" MORPHIT_SEED_ORIGIN=https://morphit.io ` +
+		`sh "$D/ops/ipfs/morphit-ipfs-seed.sh" v${version}`
+	);
 }
 
 function buildTreasury(i: Inputs): ReleaseTreasuryBlock | null {

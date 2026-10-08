@@ -3,7 +3,7 @@
  *
  * The maintainer's laptop steps: `set-treasury-btc-xpub.ts <key>` writes the key into
  * CANONICAL_TREASURY.btcXpub (refusing anything that is not a mainnet BIP84
- * account PUBLIC key), and the release-op builder (Block 4 of the ELI5
+ * account PUBLIC key), and the release-op builder (Block 3 of the ELI5
  * ceremony) pins it as treasury.btc.xpub. These tests run the REAL scripts.
  */
 import { describe, expect, it } from 'vitest';

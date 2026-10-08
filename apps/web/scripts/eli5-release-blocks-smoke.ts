@@ -12,7 +12,8 @@
  *   • every script path it names actually exists on disk;
  *   • the env-var names match what `release-build-payload.ts` really reads;
  *   • the gates survive (signed tag, CI-green gate, `< /dev/null`, canary);
- *   • the manifest comes from the VPS's served verify.json, not a laptop build;
+ *   • the manifest comes from the published tarball, not a laptop build, and
+ *     the upgraded site is checked against it after the broadcast;
  *   • no placeholder token ever creeps back in.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -20,6 +21,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { integrityGate } from '../../ops-cli/src/commands/upgrade.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dirname, '..', '..', '..');
@@ -152,9 +154,9 @@ for (const v of [
 	);
 }
 // The BLURT floor must be CHAIN-PINNED, not left to the builder's empty default:
-// BLOCK 4 runs with `< /dev/null`, so an unset value would OMIT the floor and let
+// BLOCK 3 runs with `< /dev/null`, so an unset value would OMIT the floor and let
 // each instance silently fall back to its own env. Pin the canonical 125.
-check('BLOCK 4 pins the BLURT floor to 125', /MORPHIT_BUILD_BLURT_BASE=125\b/.test(out));
+check('BLOCK 3 pins the BLURT floor to 125', /MORPHIT_BUILD_BLURT_BASE=125\b/.test(out));
 
 // ─── every block says WHICH MACHINE it runs on (v1.18.0 review, O12) ───
 // the maintainer works across several boxes at once; a block that does not say where it
@@ -166,12 +168,13 @@ for (const h of headers) {
 	check(`BLOCK ${h[1]} names the machine it runs on`, MACHINE.test(h[2] ?? ''));
 }
 check(
-	'BLOCK 3 (the upgrade) runs on morphit.io',
-	/^\*\*BLOCK 3\*\* — [^\n]*\(morphit\.io\b/m.test(out)
+	'BLOCK 5 (the upgrade) runs on morphit.io',
+	/^\*\*BLOCK 5\*\* — [^\n]*\(morphit\.io\b/m.test(out)
 );
 check(
-	'BLOCKS 5 and 6 (key and canary) run on the laptop, never the server',
-	/^\*\*BLOCK 5\*\* — [^\n]*\(laptop\b/m.test(out) &&
+	'BLOCKS 3, 4 and 6 (payload, key and canary) run on the laptop, never the server',
+	/^\*\*BLOCK 3\*\* — [^\n]*\(laptop\b/m.test(out) &&
+		/^\*\*BLOCK 4\*\* — [^\n]*\(laptop\b/m.test(out) &&
 		/^\*\*BLOCK 6\*\* — [^\n]*\(laptop\b/m.test(out)
 );
 
@@ -194,55 +197,72 @@ check(
 	/\.morphit\/update-canary\.sh/.test(out) && !/morphit-canary-setup\.sh/.test(out)
 );
 
-// ─── BLOCK 4 installs the lockfile before running any repo tooling ───
+// ─── BLOCK 3 installs the lockfile before running any repo tooling ───
 // (v1.20.0) The laptop repo is refreshed by unpacking the release tarball, which
 // leaves node_modules as it was. The payload builder then imported a library
 // whose installed copy predated the lockfile and died before writing
-// release.json. BLOCK 4's FIRST command must be `npm ci`, ahead of every tsx
+// release.json. BLOCK 3's FIRST command must be `npm ci`, ahead of every tsx
 // run in the ceremony — and with no install scripts, on the machine that holds
 // the @morphit WIF.
 {
-	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
-	const firstCmd = (/```\n([^\n]*)/.exec(b4) ?? [])[1] ?? '';
+	const b3 = out.slice(out.indexOf('**BLOCK 3**'), out.indexOf('**BLOCK 4**'));
+	const firstCmd = (/```\n([^\n]*)/.exec(b3) ?? [])[1] ?? '';
 	check(
-		'BLOCK 4 starts with `npm ci --ignore-scripts` (unpacking a tarball does not update node_modules)',
+		'BLOCK 3 starts with `npm ci --ignore-scripts` (unpacking a tarball does not update node_modules)',
 		/^npm ci --ignore-scripts\b/.test(firstCmd) &&
 			out.indexOf('npm ci') < out.indexOf('node_modules/.bin/tsx')
 	);
 }
 
-// ─── (v1.20.3) BLOCK 4 clears the previous ceremony's values first ───
+// ─── (v1.20.3) BLOCK 3 clears the previous ceremony's values first ───
 // v1.20.2's payload carried the CID and IPNS record v1.20.1's ceremony had left
 // in the same terminal. The unset comes BEFORE the payload build, which also
 // refuses such a value itself (MORPHIT_BUILD_ANCHOR_FILE).
 {
-	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
-	const unsetAt = b4.indexOf("unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')");
+	const b3 = out.slice(out.indexOf('**BLOCK 3**'), out.indexOf('**BLOCK 4**'));
+	const unsetAt = b3.indexOf("unset $(env | grep -o '^MORPHIT_BUILD_[A-Z0-9_]*')");
 	check(
-		'BLOCK 4 unsets every MORPHIT_BUILD_* value before building the payload',
-		unsetAt !== -1 && unsetAt < b4.indexOf('release-build-payload.ts')
+		'BLOCK 3 unsets every MORPHIT_BUILD_* value before building the payload',
+		unsetAt !== -1 && unsetAt < b3.indexOf('release-build-payload.ts')
 	);
 }
 
-// ─── (v1.21.1) a release whose anchor has no CID: Block 4 says how to supply it ───
-// (behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs the line)
+// ─── (v1.21.1) a release whose anchor has no CID: Block 3 says how to supply it ───
+// Behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs the printed
+// seed command with stub ipfs/curl (the "hosted" line, the copy that ran, a
+// tarball failing its hash) and the --ipfs-cid recovery line.
+// 2026-10-07: the CID can no longer come from the upgrade, which now runs after
+// the broadcast; morphit.io seeds on its own (it installs nothing), with the
+// NEW release's seed scripts from the checked tarball, never the installed ones
+// (an older stager stages different bytes, so a different CID).
 {
-	const b4 = out.slice(out.indexOf('**BLOCK 4**'), out.indexOf('**BLOCK 5**'));
+	const b3 = out.slice(out.indexOf('**BLOCK 3**'), out.indexOf('**BLOCK 4**'));
+	const note = b3.slice(b3.indexOf('this release has no IPFS CID'));
+	const cmd = /```\n([^\n]+)\n```/.exec(note)?.[1] ?? '';
 	check(
-		'BLOCK 4 says to take the CID morphit.io printed in Block 3 and pass it with --ipfs-cid',
-		/hosted v9\.9\.9 → bafy/.test(b4) &&
-			/morphit\.io/.test(b4) &&
-			/release-build-payload\.ts --ipfs-cid <cid> < \/dev\/null > release\.json/.test(b4)
+		'BLOCK 3 has morphit.io seed the release with its own scripts, and passes the CID with --ipfs-cid',
+		/sha256sum -c/.test(cmd) &&
+			/MORPHIT_STAGE_TARBALL="\$D\/morphit-v9\.9\.9\.tar\.gz"/.test(cmd) &&
+			/sh "\$D\/ops\/ipfs\/morphit-ipfs-seed\.sh" v9\.9\.9$/.test(cmd) &&
+			!/\/opt\/morphit\/ops/.test(cmd) &&
+			/morphit\.io, logged in as root/.test(note) &&
+			/hosted v9\.9\.9 → bafy/.test(note) &&
+			/release-build-payload\.ts --ipfs-cid <cid> < \/dev\/null > release\.json/.test(note)
 	);
 }
 
-// ─── the manifest: from the anchored tarball, checked against the served site ───
-// (behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs Block 4)
-check(
-	'the manifest is computed from the published tarball, checked against the served verify.json',
-	/verify-json-to-release-manifest\.mjs --anchor \S+ --tarball \S+ --served \S+/.test(out) &&
-		/curl -fsSL https:\/\/morphit\.io\/verify\.json/.test(out)
-);
+// ─── the manifest: from the anchored tarball, checked against its own list ───
+// (behaviour: apps/indexer/test/scripts/releaseCeremony.test.ts runs Block 3 and
+// Block 6's served check)
+{
+	const b3 = out.slice(out.indexOf('**BLOCK 3**'), out.indexOf('**BLOCK 4**'));
+	check(
+		'BLOCK 3 computes the manifest from the published tarball it downloaded',
+		/verify-json-to-release-manifest\.mjs --anchor \/tmp\/morphit-anchor\.env --tarball \/tmp\/morphit-v9\.9\.9\.tar\.gz > apps\/web\/build-manifest\.release\.json/.test(
+			b3
+		) && /-o \/tmp\/morphit-v9\.9\.9\.tar\.gz$/m.test(b3)
+	);
+}
 check(
 	'no laptop build feeds the manifest (cross-machine hashes differ)',
 	!/npm run build/.test(out) && !/build-manifest\.mjs/.test(out)
@@ -376,6 +396,54 @@ check(
 	'the payload builder reads MORPHIT_BUILD_IPFS_CID → on-chain ipfs_cid',
 	/MORPHIT_BUILD_IPFS_CID/.test(payloadBuilder) && /value\.ipfs_cid = cid/.test(payloadBuilder)
 );
+
+// ─── (2026-10-07) the release is anchored on chain BEFORE morphit.io upgrades ───
+// Since v1.21.0, `morphit-ops upgrade` installs a release only with a pinned
+// signature or @morphit's on-chain record of its SHA-256 (integrityGate). CI
+// holds no signing key, so the record is the only way in, and the v1.21.1
+// ceremony, which upgraded morphit.io in Block 3 and broadcast in Block 5, was
+// refused on morphit.io and morphitir: "The release is not signed, and no
+// signed on-chain release record names its hash." Assert the reason (the gate,
+// run) and the consequence (the order of the printed blocks).
+{
+	const gateRefusesUnanchored = !integrityGate({
+		signature: 'absent',
+		chainHash: null,
+		primaryHash: 'a'.repeat(64),
+		actualHash: 'a'.repeat(64),
+		hidden: null
+	}).allowed;
+	check(
+		'the upgrader refuses an unsigned release that has no on-chain record (so the ceremony must broadcast first)',
+		gateRefusesUnanchored
+	);
+	const broadcastAt = out.search(
+		/\n\.\/node_modules\/\.bin\/tsx apps\/indexer\/scripts\/release-broadcast\.ts release\.json\n/
+	);
+	const upgradeAt = out.search(/^sudo morphit-ops\b/m);
+	check(
+		'the real broadcast is printed before the first `sudo morphit-ops` (the upgrade needs the on-chain record)',
+		broadcastAt !== -1 && upgradeAt !== -1 && broadcastAt < upgradeAt
+	);
+	const b5 = out.slice(out.indexOf('**BLOCK 5**'), out.indexOf('**BLOCK 6**'));
+	check(
+		'BLOCK 5 is the morphit.io upgrade, after the broadcast',
+		/^\*\*BLOCK 5\*\* — [^\n]*\(morphit\.io\b/m.test(out) && /^sudo morphit-ops$/m.test(b5)
+	);
+	// The served-site check still runs: after the upgrade, against the record.
+	const b6 = out.slice(out.indexOf('**BLOCK 6**'));
+	check(
+		'BLOCK 6 checks the upgraded morphit.io serves the anchored build (verify.json against the tarball)',
+		/curl -fsSL https:\/\/morphit\.io\/verify\.json -o (\S+)/.test(b6) &&
+			/verify-json-to-release-manifest\.mjs --anchor \S+ --tarball \S+ --served \S+/.test(b6)
+	);
+	// No line before the broadcast fetches what morphit.io serves: it still
+	// serves the previous release then.
+	check(
+		'nothing before the broadcast reads morphit.io/verify.json (it still serves the old release)',
+		!out.slice(0, broadcastAt).includes('morphit.io/verify.json')
+	);
+}
 
 // ─── all six blocks, in order ───
 const order = ['BLOCK 1', 'BLOCK 2', 'BLOCK 3', 'BLOCK 4', 'BLOCK 5', 'BLOCK 6'];

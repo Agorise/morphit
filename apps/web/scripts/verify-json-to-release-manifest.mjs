@@ -6,19 +6,27 @@
  * BOOTSTRAP: shell + service worker + entry loader, in the release-op SRI
  * format) for a release.
  *
- * RELEASE MODE (the ceremony, ELI5 Block 4):
+ * RELEASE MODE (the ceremony, ELI5 Block 3, before the broadcast):
  *   node apps/web/scripts/verify-json-to-release-manifest.mjs \
  *     --anchor distribution-anchor.env --tarball morphit-vX.Y.Z.tar.gz \
- *     --served verify.json > build-manifest.release.json
+ *     > build-manifest.release.json
  *
  *   1. The tarball's SHA-256 must equal the `MORPHIT_BUILD_SOURCE_SHA256` the
  *      release job anchored (the anchor file is PARSED, never sourced).
  *   2. The manifest is computed from the files of that tarball's prebuilt
- *      `apps/web/build` — the exact bytes every instance serves.
- *   3. The canonical instance's SERVED `/verify.json` must name the same hash
- *      for every one of those files. It is a must-match check, not the source:
- *      a served copy that differs (a rebuilt or altered site) stops the
- *      ceremony instead of being anchored on chain for every instance.
+ *      `apps/web/build` — the exact bytes every instance serves (the upgrade
+ *      installs that build as shipped; it rebuilds only when none is shipped).
+ *   3. The tarball's own `apps/web/build/verify.json` — the list every
+ *      instance serves at /verify.json — must name the same hash for every one
+ *      of those files. A build whose files and list disagree stops here.
+ *
+ * SERVED CHECK (ELI5 Block 6, after morphit.io has upgraded):
+ *   the same command with `--served <the canonical instance's verify.json>`
+ *   checks that list instead of the tarball's, so a site that serves anything
+ *   else (a rebuilt or altered bundle) is caught. It is no longer a step
+ *   before the broadcast: since v1.21.0 the upgrade installs an unsigned
+ *   release only by its on-chain record, so morphit.io cannot serve the
+ *   release until it has been broadcast.
  *
  * LEGACY MODE (no flags): convert a verify.json's bootstrap subset as before.
  * Kept for inspection only; the ceremony does not use it.
@@ -99,8 +107,8 @@ const flag = (name) => {
 const tarball = flag('--tarball');
 if (tarball !== null) {
 	const anchor = flag('--anchor') ?? fail('--tarball needs --anchor <distribution-anchor.env>');
-	const served =
-		flag('--served') ?? fail('--tarball needs --served <the canonical instance’s verify.json>');
+	// Without --served, the list to match is the tarball's own verify.json.
+	const served = flag('--served');
 	const want = anchoredSha(anchor);
 	let bytes;
 	try {
@@ -133,21 +141,41 @@ if (tarball !== null) {
 		for (const e of entries) if (isBootstrap(e.rel)) fromTarball[e.rel] = e.hex;
 		if (Object.keys(fromTarball).length === 0) fail('the tarball build has no bootstrap files');
 
-		const fromServed = servedBootstrap(readFileSync(served, 'utf8'), served);
+		let fromServed;
+		if (served !== null) {
+			let raw;
+			try {
+				raw = readFileSync(served, 'utf8');
+			} catch (e) {
+				fail(
+					`could not read the served verify.json ${served} (${e.code ?? e.message}); fetch it first (the curl line before this one)`
+				);
+			}
+			fromServed = servedBootstrap(raw, served);
+		} else {
+			const own = join(build, 'verify.json');
+			if (!existsSync(own)) fail(`${tarball} carries no apps/web/build/verify.json`);
+			fromServed = servedBootstrap(readFileSync(own, 'utf8'), `the verify.json in ${tarball}`);
+		}
 		const differ = [];
 		for (const k of new Set([...Object.keys(fromTarball), ...Object.keys(fromServed)])) {
 			if (fromTarball[k] !== fromServed[k]) differ.push(k);
 		}
 		if (differ.length > 0) {
+			const which = `${differ.slice(0, 5).join(', ')}${differ.length > 5 ? ', …' : ''}`;
 			fail(
-				`the served verify.json does not match the release tarball for ${differ.length} bootstrap file(s): ` +
-					`${differ.slice(0, 5).join(', ')}${differ.length > 5 ? ', …' : ''}. ` +
-					'Upgrade the canonical instance to this release (Block 3) and fetch verify.json again; do not anchor this.'
+				served !== null
+					? `the served verify.json does not match the release tarball for ${differ.length} bootstrap file(s): ` +
+							`${which}. If that instance has not finished upgrading to this release, finish it and fetch ` +
+							'verify.json again; otherwise it serves a build other than the anchored one.'
+					: `the tarball's own verify.json does not match its build for ${differ.length} bootstrap file(s): ` +
+							`${which}. The release build is inconsistent; do not anchor it.`
 			);
 		}
 		const out = toRelease(fromTarball);
 		process.stderr.write(
-			`verify-json-to-release-manifest: ${Object.keys(out).length} bootstrap entries from the anchored tarball; the served verify.json matches\n`
+			`verify-json-to-release-manifest: ${Object.keys(out).length} bootstrap entries from the anchored tarball; ` +
+				`${served !== null ? 'the served verify.json matches' : "the tarball's own verify.json matches"}\n`
 		);
 		process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 	} finally {

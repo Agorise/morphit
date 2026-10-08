@@ -115,11 +115,19 @@ export function localIndexerBases(files: readonly string[] = indexerEnvFiles()):
 
 /** The local indexer could not be reached at all. */
 export class LocalIndexerUnreachableError extends Error {
-	constructor(detail: string) {
+	/** What went wrong, without the hidden-only wording around it. */
+	readonly detail: string;
+	/** True when an address took the connection and then gave no answer in
+	 *  time (an indexer that is there but slow), not when none could be
+	 *  reached at all. */
+	readonly timedOut: boolean;
+	constructor(detail: string, timedOut = false) {
 		super(
 			`could not reach this node's own indexer (hidden-only node, so nothing else is asked): ${detail}`
 		);
 		this.name = 'LocalIndexerUnreachableError';
+		this.detail = detail;
+		this.timedOut = timedOut;
 	}
 }
 
@@ -151,6 +159,7 @@ export async function localIndexerJson<T>(
 	const bases = opts.bases ?? localIndexerBases();
 	const method = init.method ?? 'GET';
 	let lastErr = 'no local address answered';
+	let timedOutAny = false;
 	for (const base of bases) {
 		const ctrl = new AbortController();
 		const t = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 10_000);
@@ -169,6 +178,7 @@ export async function localIndexerJson<T>(
 		} catch (err) {
 			clearTimeout(t);
 			const timedOut = ctrl.signal.aborted;
+			if (timedOut) timedOutAny = true;
 			lastErr = timedOut
 				? `no answer within ${Math.round((opts.timeoutMs ?? 10_000) / 1000)}s`
 				: String(err);
@@ -201,7 +211,7 @@ export async function localIndexerJson<T>(
 				: `HTTP ${res.status}`;
 		throw new LocalIndexerAnswerError(res.status, msg);
 	}
-	throw new LocalIndexerUnreachableError(lastErr);
+	throw new LocalIndexerUnreachableError(lastErr, timedOutAny);
 }
 
 /** A read-only condenser call relayed by the local indexer (its whitelist:
