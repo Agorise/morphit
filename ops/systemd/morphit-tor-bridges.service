@@ -1,0 +1,33 @@
+[Unit]
+Description=Morphit Tor bridges — when this network filters plain Tor, move Tor onto bridges
+Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
+After=tor.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/tor/torrc
+
+[Service]
+Type=oneshot
+# Root: it may install the transport programs (apt), edit /etc/tor/torrc and
+# restart Tor. A Tor that loads its .onion is left alone (one quick check), so
+# most runs end in seconds. The repair itself is bounded at 45 minutes
+# (apps/ops-cli/src/lib/torBridgesHeal.ts, TOR_BRIDGES_HEAL_MAX_MS).
+User=root
+Group=root
+# Not inside /opt/morphit: an upgrade moves that directory aside and stops every
+# process still working in it, which would cut a repair (and its apt) short.
+WorkingDirectory=/
+# Only with a morphit-ops that knows --tor-bridges: one from an older release
+# (a server moved back) would ignore the flag and run a whole upgrade instead.
+# grep's "not found" (1) skips the run; it is not a failure.
+ExecCondition=/usr/bin/grep -qF -- "flags['tor-bridges']" /opt/morphit/apps/ops-cli/src/commands/upgrade.ts
+ExecStart=/opt/morphit/node_modules/.bin/tsx --tsconfig /opt/morphit/apps/ops-cli/tsconfig.json /opt/morphit/apps/ops-cli/src/main.ts upgrade --tor-bridges
+TimeoutStartSec=50min
+Nice=10
+PrivateTmp=true
+ProtectHome=true
+# Node's V8 JIT writes and then executes code in memory (see the indexer unit).
+MemoryDenyWriteExecute=no
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

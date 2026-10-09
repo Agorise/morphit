@@ -282,7 +282,8 @@ describe('the last lines of an upgrade', () => {
 		questions: [],
 		backgroundLog: null,
 		warnings: 0,
-		frontendVerified: true
+		frontendVerified: true,
+		servicesVerified: true
 	};
 	it('say "Nothing else to do." only when nothing is left', () => {
 		const t = upgradeSummaryLines(base).join('\n');
@@ -310,14 +311,27 @@ describe('the last lines of an upgrade', () => {
 		const t = upgradeSummaryLines({ ...base, warnings: 2 }).join('\n');
 		expect(t).not.toMatch(/Nothing else to do/);
 		expect(t).toMatch(/Left for you:[\s\S]*2 warnings above/);
-		expect(t).not.toMatch(/Every service restarted/);
 		expect(upgradeSummaryLines({ ...base, warnings: 1 }).join('\n')).toMatch(/One warning above/);
+	});
+	// 2026-10-08 (morphitir): one seed-check warning dropped "Every service
+	// restarted on it" although each service had been seen to stay up on the
+	// new version. The sentence now follows that check, not the warning count.
+	it('says every service restarted exactly when each was seen to stay up, warnings or not', () => {
+		expect(upgradeSummaryLines({ ...base, warnings: 2 }).join('\n')).toMatch(
+			/Every service restarted on it \(checked\)\./
+		);
+		expect(
+			upgradeSummaryLines({ ...base, warnings: 2, servicesVerified: false }).join('\n')
+		).not.toMatch(/Every service restarted/);
+		expect(upgradeSummaryLines({ ...base, servicesVerified: false }).join('\n')).not.toMatch(
+			/Every service restarted/
+		);
 	});
 	it('says the site serves the new version only when that was checked', () => {
 		expect(upgradeSummaryLines(base).join('\n')).toMatch(/The site serves it \(checked\)\./);
 		const t = upgradeSummaryLines({ ...base, frontendVerified: false }).join('\n');
 		expect(t).not.toMatch(/site serves it/);
-		expect(t).toMatch(/Every service restarted on it\./);
+		expect(t).toMatch(/Every service restarted on it \(checked\)\./);
 	});
 	it('the heal phase (a child process) hands its warning count to the last lines', () => {
 		const d = tmp();
@@ -756,6 +770,25 @@ describe('the Matrix alert bot line', () => {
 			/\[WARN\] The Matrix alert bot was restarted but is not running a few seconds later/
 		);
 	});
+	// v1.21.4 review (A7): a bot that did not stay up must also take
+	// "Every service restarted on it (checked)." out of the last lines.
+	it('tells the upgrade whether the bot was seen running', async () => {
+		const box = botBox();
+		let up: unknown;
+		let down: unknown;
+		await withBox(box, '0', () =>
+			captured(async () => {
+				up = await syncMatrixBotOnUpgrade({ envPath: box.env, settleMs: 50 });
+			})
+		);
+		await withBox(box, '3', () =>
+			captured(async () => {
+				down = await syncMatrixBotOnUpgrade({ envPath: box.env, settleMs: 50 });
+			})
+		);
+		expect(up).toBe(true);
+		expect(down).toBe(false);
+	});
 	it('the few seconds it waits show a spinner at a terminal (never a silent pause)', () => {
 		const box = botBox();
 		const r = runInTerminal(
@@ -971,6 +1004,56 @@ describe('the pauses after the services restart show what is happening (A-F6)', 
 		).toBeGreaterThanOrEqual(5);
 		expect(r.out).toMatch(/\[WARN\] MCP did not answer at 127\.0\.0\.1:9/);
 	}, 60_000);
+
+	// v1.21.4 review (A7): an MCP that does not answer is not "checked".
+	it('the MCP health check tells the upgrade whether it answered', async () => {
+		let answered: unknown;
+		await captured(async () => {
+			answered = await checkMcpAnswers('127.0.0.1', 9, {
+				attempts: 1,
+				delayMs: 10,
+				timeoutMs: 200
+			});
+		});
+		expect(answered).toBe(false);
+	});
+
+	it('an MCP or Matrix bot that did not come back, or no service restarted at all, is not "every service restarted (checked)"', async () => {
+		const { readFileSync: rf } = await import('node:fs');
+		const ts = (await import('typescript')).default;
+		const file = join(__dirname, '..', 'src', 'commands', 'upgrade.ts');
+		const sf = ts.createSourceFile(file, rf(file, 'utf8'), ts.ScriptTarget.Latest, true);
+		// Each call's result must reach `servicesVerified = false` when it fails.
+		const clears = (callee: string): boolean => {
+			let found = false;
+			const visit = (n: import('typescript').Node): void => {
+				if (ts.isIfStatement(n)) {
+					const cond = n.expression.getText(sf);
+					const body = n.thenStatement.getText(sf);
+					if (
+						new RegExp(`!\\s*\\(?\\s*await\\s+${callee}\\(`).test(cond) &&
+						/servicesVerified\s*=\s*false/.test(body)
+					)
+						found = true;
+				}
+				ts.forEachChild(n, visit);
+			};
+			visit(sf);
+			return found;
+		};
+		expect(clears('checkMcpAnswers'), 'the MCP check').toBe(true);
+		expect(clears('syncMatrixBotOnUpgrade'), 'the Matrix bot').toBe(true);
+		const src = rf(file, 'utf8');
+		expect(src, 'a failed MCP restart or redeploy').toMatch(
+			/if \(dep\.status !== 0\) \{[\s\S]{0,200}servicesVerified = false;/
+		);
+		expect(src, 'a failed MCP restart').toMatch(
+			/if \(rs\.status !== 0\) \{[\s\S]{0,200}servicesVerified = false;/
+		);
+		// The restart step's own verdict (test/upgradeServicesVerified.test.ts)
+		// is where the last lines start from.
+		expect(src, 'the restart step').toMatch(/let servicesVerified = restartsDone\.verified;/);
+	});
 
 	it('the snapshot mirror run by hand says it is reading the chain while it does (piped into the upgrade: not)', async () => {
 		const d = tmp();

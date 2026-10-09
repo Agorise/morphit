@@ -127,11 +127,11 @@ import {
 	normalizeFingerprint
 } from '@morphit/operator-config';
 import {
-	readSignedReleaseAnchor,
+	findSignedReleaseAnchor,
 	type CondenserRead,
 	type ReleaseAnchor
 } from '../lib/releaseAnchor.ts';
-import { chainRead } from '../lib/chainAccess.ts';
+import { chainRead, directNodeReaders } from '../lib/chainAccess.ts';
 import {
 	installDepsForHiddenNode,
 	lockedTreeProblems,
@@ -151,7 +151,7 @@ import { healTorOnlyOs } from '../lib/torOnlyOsHeal.ts';
 import { heal as healServicePrivileges } from '../lib/unitPrivilegeHeal.ts';
 import { heal as healForwarding } from '../lib/sysctlForwardHeal.ts';
 import { heal as healTlsRenewalHeal } from '../lib/tlsRenewHeal.ts';
-import type { HealResult } from '../lib/healTypes.ts';
+import type { HealCtx, HealResult } from '../lib/healTypes.ts';
 import {
 	healMatrixBotTorOnly,
 	realMatrixTorOnlyRuntime,
@@ -167,6 +167,7 @@ import { closeQuietly, codeHostAgent } from '../lib/codeHostAgent.ts';
 import { heal as healPgRoles } from '../lib/pgRoleHeal.ts';
 import { heal as healIndexerEnvShadow } from '../lib/indexerEnvShadowHeal.ts';
 import { heal as healTorPow } from '../lib/torPowHeal.ts';
+import { heal as healTorBridges } from '../lib/torBridgesHeal.ts';
 import { heal as healEtcPerms } from '../lib/etcPermHeal.ts';
 import { heal as healMailRelay } from '../lib/mailRelayHeal.ts';
 import { heal as healVapid } from '../lib/vapidHeal.ts';
@@ -354,6 +355,11 @@ interface RunUpgradeOptions {
 	/** What an up-to-date box runs instead of an upgrade. Tests only; the
 	 *  default is this release's heals (runHealsAgain). */
 	readonly healsWhenUpToDate?: () => Promise<number>;
+	/** The clock the release-record wait runs on. Tests only. */
+	readonly anchorWait?: {
+		readonly now?: () => number;
+		readonly sleep?: (ms: number) => Promise<void>;
+	};
 }
 
 interface ReleaseInfo {
@@ -383,6 +389,10 @@ const DEFAULT_REPO = 'agorise/morphit';
 const DEFAULT_INSTALL_DIR = '/opt/morphit';
 const DEFAULT_WEB_ROOT = '/var/www/morphit-frontend';
 const DEFAULT_BACKUP_KEEP = 3;
+/** How long the upgrade keeps asking for a release record no node lists yet
+ *  (a record broadcast moments ago, or nodes behind the chain) before it
+ *  refuses an unsigned release. */
+export const RELEASE_RECORD_WAIT_MS = 180_000;
 
 // Services to restart UNCONDITIONALLY on upgrade.  Listed in dependency
 // order (deps before consumers).  If a service unit doesn't exist on
@@ -1126,18 +1136,19 @@ export function reportSeedResult(tag: string, code: number): void {
 /** Step 10b-reach: after its restart, does the MCP answer its health check?
  *  Up to ~20 s of retries while it binds its listener, under a spinner (never
  *  a silent pause). ✓ when it answers, else a warning with where to look.
- *  Exported for its test. */
+ *  True when it answered. Exported for its test. */
 export async function checkMcpAnswers(
 	mcpHost: string,
 	mcpPort: number,
 	probeOpts: { attempts?: number; delayMs?: number; timeoutMs?: number } = {}
-): Promise<void> {
+): Promise<boolean> {
 	const healthUrl = buildMcpHealthUrl(mcpHost, mcpPort);
 	const probe = await withSpinner('Checking the MCP server answers on its new version…', () =>
 		probeMcpHealth(healthUrl, probeOpts)
 	);
 	if (probe.reachable) {
 		info('✓ MCP server redeployed for this release, restarted, and answering its health check.');
+		return true;
 	} else {
 		warn(
 			`MCP did not answer at ${mcpHost}:${mcpPort} (${probe.detail}). The new code ` +
@@ -1148,6 +1159,7 @@ export async function checkMcpAnswers(
 				`Docker-bridge / BunkerWeb host, 127.0.0.1 otherwise) and that a host ` +
 				`process can reach that address.`
 		);
+		return false;
 	}
 }
 
@@ -2257,6 +2269,11 @@ export async function verifyServedFrontend(
 
 export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const upgradeStartedMs = Date.now();
+	// The Tor bridges check alone (lib/torBridgesHeal.ts): what
+	// morphit-tor-bridges.timer runs between upgrades. First, before the lines
+	// below take the questions and warning counts a running upgrade keeps for
+	// its last lines: the timer may fire during one.
+	if (opts.flags['tor-bridges'] === 'true') return runTorBridgesCheck();
 	// What an earlier run (or an older upgrader's heal phase) may have left for
 	// its last lines is not this upgrade's: start clean.
 	takeUpgradeQuestions();
@@ -2420,7 +2437,8 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				...(opts.trust?.postingPubkey !== undefined
 					? { postingPubkey: opts.trust.postingPubkey }
 					: {}),
-				...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {})
+				...(opts.trust?.chainRead !== undefined ? { chainRead: opts.trust.chainRead } : {}),
+				anchorWait: { waitMs: RELEASE_RECORD_WAIT_MS, ...(opts.anchorWait ?? {}) }
 			});
 		} catch (err) {
 			hiddenSpin.stop();
@@ -2792,25 +2810,68 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	const localBuildEnv = nodeHiddenOnly
 		? { ...withoutProxyEnv(process.env), npm_config_offline: 'true' }
 		: undefined;
+	// The signature needs no chain record, so it is checked first: a release
+	// signed by a pinned key never waits for one.
+	const signature: SignatureCheck =
+		sigPath === null
+			? 'absent'
+			: checkDetachedSignature(
+					installDir,
+					tarballPath,
+					sigPath,
+					opts.trust?.signerFingerprints ?? RELEASE_SIGNER_FINGERPRINTS
+				);
 	let anchor: ReleaseAnchor | null = hiddenResolution?.anchor ?? null;
 	if (anchor === null) {
-		const read: CondenserRead =
+		const viaIndexer: CondenserRead =
 			opts.trust?.chainRead ??
 			((method, params) =>
 				chainRead(method, params, {
 					hiddenOnly: () => nodeHiddenOnly,
 					...(opts.localIndexerBases !== undefined ? { indexerBases: opts.localIndexerBases } : {})
 				}));
-		const found = await withSpinner(
+		// One answer without the record proves nothing: the indexer relays the read
+		// to whichever node answers first, and a node behind the chain (or one
+		// whose history does not list a record broadcast a minute ago) answers
+		// without it (morphit.io, v1.21.2 → v1.21.3). The record is authenticated
+		// by its signature, so every node may be asked: this node's indexer, then
+		// each configured clearnet node directly (none on a hidden-only node).
+		const sources: CondenserRead[] = [
+			viaIndexer,
+			...(opts.trust?.chainRead !== undefined
+				? []
+				: directNodeReaders({ hiddenOnly: () => nodeHiddenOnly }))
+		];
+		const anchorArgs = {
+			tag: latestTag,
+			signer: MORPHIT_RELEASE_ACCOUNT,
+			pinnedPubkey: opts.trust?.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
+			chainId: BLURT_MAINNET_CHAIN_ID
+		};
+		const clockOpts = {
+			...(opts.anchorWait?.now !== undefined ? { now: opts.anchorWait.now } : {}),
+			...(opts.anchorWait?.sleep !== undefined ? { sleep: opts.anchorWait.sleep } : {})
+		};
+		let found = await withSpinner(
 			`Reading @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for ${latestTag} from the chain…`,
-			() =>
-				readSignedReleaseAnchor(read, {
-					tag: latestTag,
-					signer: MORPHIT_RELEASE_ACCOUNT,
-					pinnedPubkey: opts.trust?.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
-					chainId: BLURT_MAINNET_CHAIN_ID
-				})
+			() => findSignedReleaseAnchor({ sources, ...clockOpts }, anchorArgs)
 		);
+		if (!found.ok && 'notListed' in found && found.notListed === true && signature !== 'valid') {
+			info(
+				`  The record for ${latestTag} is not in the history these nodes serve yet: a record broadcast ` +
+					'in the last few minutes can take a little while to appear there.'
+			);
+			found = await withSpinner(
+				`Asking the nodes again for @${MORPHIT_RELEASE_ACCOUNT}'s release record (up to ${Math.round(RELEASE_RECORD_WAIT_MS / 60_000)} minutes)…`,
+				() =>
+					// A record that is merely late is among the newest entries: one page
+					// per source each round, not four, for up to three minutes.
+					findSignedReleaseAnchor(
+						{ sources, waitMs: RELEASE_RECORD_WAIT_MS, intervalMs: 10_000, ...clockOpts },
+						{ ...anchorArgs, maxPages: 1 }
+					)
+			);
+		}
 		if (found.ok) {
 			anchor = found.anchor;
 		} else {
@@ -2828,15 +2889,6 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				: `  @${MORPHIT_RELEASE_ACCOUNT}'s signed release record for ${latestTag} names no hash for the offline bundle; a pinned signature is needed for it.`
 		);
 	}
-	const signature: SignatureCheck =
-		sigPath === null
-			? 'absent'
-			: checkDetachedSignature(
-					installDir,
-					tarballPath,
-					sigPath,
-					opts.trust?.signerFingerprints ?? RELEASE_SIGNER_FINGERPRINTS
-				);
 	const actualHash = computeSha256(tarballPath);
 	const trust = integrityGate({
 		signature,
@@ -3791,74 +3843,20 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 	restoreOnRollback.push(...selfHealRestoreList(healSnapshot, installDir));
 	restoreOnRollback.push(...selfHealRestoreList(helperSnapshot, installDir));
 
-	for (const svc of SERVICES_TO_RESTART) {
-		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
-		if (!isActive) {
-			// v1.20.1: an ENABLED service that is not running is meant to run
-			// (morphitir's relay had exited with status 0 and been left down);
-			// start it on the new version below. Disabled / absent: skip.
-			const enabled = (
-				spawnSync('systemctl', ['is-enabled', svc], { encoding: 'utf8' }).stdout ?? ''
-			).trim();
-			if (enabled !== 'enabled') {
-				info(`Skipping ${svc} (not active on this host).`);
-				continue;
-			}
-			info(`${svc} is enabled but was not running; starting it on the new version.`);
-		}
-		const restartsBefore = readUnitRestarts(svc);
-		try {
-			// Under the turning spinner (systemctl's output shown if it fails).
-			const code = await runStepWithSpinner(`Restarting ${svc}…`, 'systemctl', ['restart', svc], {
-				quietOnSuccess: true,
-				warningsOnSuccess: false
-			});
-			if (code !== 0) throw new Error(`systemctl restart ${svc} exited ${code}`);
-		} catch (err) {
-			// It was down before this upgrade: the upgrade did not break it, so it
-			// does not undo the upgrade — say so and carry on.
-			if (!isActive) {
-				warn(
-					`${svc} was not running before this upgrade and could not be started now. See: sudo journalctl -u ${svc} -n 50`
-				);
-				continue;
-			}
-			warn(`Service restart failed for ${svc}; rolling back.`);
-			return rollback(
-				installDir,
-				backupDir,
-				tmpDir,
-				err,
-				{ webRoot, webRootBackup, container: plan.restartContainer },
-				restoreOnRollback
-			);
-		}
-		// `systemctl restart` on a Type=simple unit returns success the instant it
-		// forks the process — it does NOT mean the new code STAYED up. VERIFY by
-		// observing the running state (the heal mandate): a unit that crashed on the
-		// new code flips to `failed`, or auto-restarts (NRestarts climbs). Poll a
-		// short window; `activating`/a slow first chain read over Tor is NOT a
-		// failure. Only a confirmed `failed`/crash-loop rolls back — so a
-		// half-upgraded box is never left running the new code down.
-		const outcome = await verifyUnitStayedUp(svc, restartsBefore);
-		if (outcome === 'down' && !isActive) {
-			warn(
-				`${svc} was not running before this upgrade and did not stay up when started now. See: sudo journalctl -u ${svc} -n 50`
-			);
-			continue;
-		}
-		if (outcome === 'down') {
-			warn(`${svc} did not stay up after restarting on the new version; rolling back.`);
-			return rollback(
-				installDir,
-				backupDir,
-				tmpDir,
-				new Error(`${svc} failed to come up after the upgrade restart`),
-				{ webRoot, webRootBackup, container: plan.restartContainer },
-				restoreOnRollback
-			);
-		}
-	}
+	// Every service restarted here was seen to stay up on the new version (else
+	// the upgrade rolls back); one that was down before and still is, an MCP or
+	// Matrix bot that did not come back, or no service restarted at all, clears it.
+	const restartsDone = await restartServicesOnNewVersion();
+	if ('rollback' in restartsDone)
+		return rollback(
+			installDir,
+			backupDir,
+			tmpDir,
+			restartsDone.rollback,
+			{ webRoot, webRootBackup, container: plan.restartContainer },
+			restoreOnRollback
+		);
+	let servicesVerified = restartsDone.verified;
 
 	// ─── 10b. Redeploy + restart the MCP (its own isolated tree) ──
 	// The MCP runs from a SELF-CONTAINED tree at /opt/morphit-mcp, separate
@@ -3889,6 +3887,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		]);
 		const dep = { status: depCode };
 		if (dep.status !== 0) {
+			servicesVerified = false;
 			warn(
 				`MCP redeploy failed (deploy-mcp.sh exit ${dep.status ?? 'signal'}); morphit-mcp ` +
 					`may keep running stale code. Re-run \`sudo bash ${deployScript} ${installDir} ` +
@@ -3904,6 +3903,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				)
 			};
 			if (rs.status !== 0) {
+				servicesVerified = false;
 				warn(
 					`morphit-mcp restart failed (exit ${rs.status ?? 'signal'}); the new code is ` +
 						`deployed. Start it with \`sudo systemctl restart morphit-mcp\` and check ` +
@@ -3925,7 +3925,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 				// (with the exact place to look) rather than rolling back an
 				// otherwise-good upgrade.
 				const { host: mcpHost, port: mcpPort } = resolveMcpHttpBind(mcpEnvFile());
-				await checkMcpAnswers(mcpHost, mcpPort);
+				if (!(await checkMcpAnswers(mcpHost, mcpPort))) servicesVerified = false;
 			}
 		}
 	}
@@ -3945,7 +3945,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 		process.env.MORPHIT_SYSTEMD_DIR ?? '/etc/systemd/system',
 		MATRIX_BOT_UNIT
 	);
-	if (existsSync(matrixUnitPath)) await syncMatrixBotOnUpgrade();
+	if (existsSync(matrixUnitPath) && !(await syncMatrixBotOnUpgrade())) servicesVerified = false;
 
 	// ─── 10d. Confirm the chat fast-path (sub-6s delivery) state ──
 	// Safeguard: a process still running with its cwd inside the OLD install
@@ -4360,6 +4360,7 @@ export async function runUpgrade(opts: RunUpgradeOptions): Promise<number> {
 			canaryCleared:
 				!canaryAutoRefreshed && existsSync(join(backupDir, 'apps', 'web', 'build', 'canary.txt')),
 			frontendVerified,
+			servicesVerified,
 			startedMs: upgradeStartedMs,
 			healChildRan
 		})
@@ -4660,6 +4661,8 @@ export function gatherUpgradeSummary(
 		/** The upgrade cleared the canary file and nothing re-signed it. */
 		readonly canaryCleared: boolean;
 		readonly frontendVerified: boolean;
+		/** Each service this upgrade restarted was seen to stay up on it. */
+		readonly servicesVerified?: boolean;
 		readonly startedMs: number;
 		/** The heal phase ran as a child process (else in this one). */
 		readonly healChildRan: boolean;
@@ -4688,6 +4691,7 @@ export function gatherUpgradeSummary(
 		warnings: warningCount() + (childWarnings ?? 0),
 		healPhaseUncounted: base.healChildRan && childWarnings === null,
 		frontendVerified: base.frontendVerified,
+		servicesVerified: base.servicesVerified === true,
 		todo: [...leftForYou],
 		webHealRunning: web.running,
 		webHealOutcome: web.outcome
@@ -4724,6 +4728,9 @@ export interface UpgradeSummary {
 	readonly healPhaseUncounted?: boolean;
 	/** The served frontend was seen to be this build. */
 	readonly frontendVerified: boolean;
+	/** Each service this upgrade restarted was seen to stay up on it (its
+	 *  restart step's own check, independent of other warnings). */
+	readonly servicesVerified?: boolean;
 }
 
 /** PURE. The upgrade's last lines: that it worked, then what is left, each
@@ -4736,7 +4743,7 @@ export function upgradeSummaryLines(s: UpgradeSummary): string[] {
 		'━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
 		'',
 		`  Upgraded ${s.from} → ${s.to}.` +
-			(s.warnings === 0 && s.healPhaseUncounted !== true ? ' Every service restarted on it.' : '') +
+			(s.servicesVerified === true ? ' Every service restarted on it (checked).' : '') +
 			(s.frontendVerified ? ' The site serves it (checked).' : ''),
 		`  The previous install is kept at ${s.backupDir} (later upgrades remove old copies).`
 	];
@@ -4855,6 +4862,20 @@ async function runQuestions(): Promise<number> {
 	}
 	info('✓ No other question is waiting.');
 	return 0;
+}
+
+/** `morphit-ops upgrade --tor-bridges`: the Tor bridges check and repair on
+ *  its own (the timer's run). Exit 0 when Tor works afterwards. */
+export async function runTorBridgesCheck(
+	run: (ctx: HealCtx, installDir: string) => Promise<HealResult> = healTorBridges
+): Promise<number> {
+	if (process.getuid?.() !== 0) {
+		info('The Tor bridges check edits /etc/tor/torrc: run it with sudo.');
+		return 1;
+	}
+	const r = await run(healCtx(), selfHealInstallDir());
+	(r.verified ? info : warn)(r.detail);
+	return r.verified ? 0 : 1;
 }
 
 /** `upgrade --heals`: this release's heals again, then the checks that need
@@ -5158,15 +5179,15 @@ async function ensureMatrixBotNatives(installDir: string, hiddenOnly: boolean): 
  *  enabled and restarted on this release when one is set, else stopped. A
  *  restart is only reported once the bot is SEEN running a few seconds later
  *  (one that exits at once "restarted" too); the wait shows a spinner.
- *  Exported for its test. */
+ *  False when it should run and was not seen running. Exported for its test. */
 export async function syncMatrixBotOnUpgrade(
 	o: { readonly envPath?: string; readonly settleMs?: number } = {}
-): Promise<void> {
+): Promise<boolean> {
 	const readiness = matrixBotReadiness(readMatrixBotEnv(o.envPath));
 	if (!readiness.run) {
 		// No alert username: the bot stays stopped (nothing to say).
 		await syncMatrixBotServiceAtTerminal(false, {});
-		return;
+		return true;
 	}
 	const res = await syncMatrixBotServiceAtTerminal(true, { restart: true });
 	let running = false;
@@ -5178,8 +5199,11 @@ export async function syncMatrixBotOnUpgrade(
 					.status === 0;
 		});
 	}
-	if (res.ok && running) info('✓ Matrix alert bot restarted on this release (seen running).');
-	else if (res.ok)
+	if (res.ok && running) {
+		info('✓ Matrix alert bot restarted on this release (seen running).');
+		return true;
+	}
+	if (res.ok)
 		warn(
 			'The Matrix alert bot was restarted but is not running a few seconds later. On this server: ' +
 				'`sudo journalctl -u morphit-matrix-bot -n 50`'
@@ -5190,6 +5214,7 @@ export async function syncMatrixBotOnUpgrade(
 				'`sudo systemctl enable --now morphit-matrix-bot` and check ' +
 				'`journalctl -u morphit-matrix-bot`.'
 		);
+	return false;
 }
 
 /** Write matrix-bot.posture from matrix-bot.env when the bot is configured
@@ -5299,6 +5324,11 @@ export function afterRestartHealSteps(): Array<[string, () => Promise<void>]> {
 			() =>
 				reportHeal(healReleaseMonitor(healCtx(), realReleaseMonitorRuntime(selfHealInstallDir())))
 		],
+		// 2026-10-09 (lib/torBridgesHeal.ts): when this network filters plain Tor
+		// (morphitir: torproject.org sinkholed, circuits starved), Tor moves onto
+		// the release's built-in bridges, proven by its .onion loading, else put
+		// back. Before the tor-only egress heal, whose checks go through Tor.
+		['the Tor bridges heal', () => reportHeal(healTorBridges(healCtx(), selfHealInstallDir()))],
 		// last — up to about four minutes of Tor checks, which the
 		// self-heal child (killed at 300 s) cannot always afford after the
 		// tor-only OS heal, and it may restart Docker, so it waits for the
@@ -7480,6 +7510,77 @@ export const CRASH_LOOP_RESTARTS = 3;
 const RESTART_WINDOW_MS = 45_000;
 const RESTART_POLL_MS = 1_500;
 const STABLE_POLLS = 4;
+
+/** Step 10: restart each service on the new version and watch it stay up.
+ *  `verified` only when each one restarted and stayed up, and at least one
+ *  did; `rollback` when a service that was running cannot run the new
+ *  version (the caller undoes the upgrade). A service that was down before
+ *  and still cannot start does not undo it. Exported for its test. */
+export async function restartServicesOnNewVersion(
+	services: readonly string[] = SERVICES_TO_RESTART
+): Promise<{ readonly verified: boolean } | { readonly rollback: Error }> {
+	let servicesVerified = true;
+	let restartedAny = false;
+	for (const svc of services) {
+		const isActive = spawnSync('systemctl', ['is-active', '--quiet', svc]).status === 0;
+		if (!isActive) {
+			// v1.20.1: an ENABLED service that is not running is meant to run
+			// (morphitir's relay had exited with status 0 and been left down);
+			// start it on the new version below. Disabled / absent: skip.
+			const enabled = (
+				spawnSync('systemctl', ['is-enabled', svc], { encoding: 'utf8' }).stdout ?? ''
+			).trim();
+			if (enabled !== 'enabled') {
+				info(`Skipping ${svc} (not active on this host).`);
+				continue;
+			}
+			info(`${svc} is enabled but was not running; starting it on the new version.`);
+		}
+		const restartsBefore = readUnitRestarts(svc);
+		try {
+			// Under the turning spinner (systemctl's output shown if it fails).
+			const code = await runStepWithSpinner(`Restarting ${svc}…`, 'systemctl', ['restart', svc], {
+				quietOnSuccess: true,
+				warningsOnSuccess: false
+			});
+			if (code !== 0) throw new Error(`systemctl restart ${svc} exited ${code}`);
+		} catch (err) {
+			// It was down before this upgrade: the upgrade did not break it, so it
+			// does not undo the upgrade — say so and carry on.
+			if (!isActive) {
+				warn(
+					`${svc} was not running before this upgrade and could not be started now. See: sudo journalctl -u ${svc} -n 50`
+				);
+				servicesVerified = false;
+				continue;
+			}
+			warn(`Service restart failed for ${svc}; rolling back.`);
+			return { rollback: err instanceof Error ? err : new Error(String(err)) };
+		}
+		// `systemctl restart` on a Type=simple unit returns success the instant it
+		// forks the process — it does NOT mean the new code STAYED up. VERIFY by
+		// observing the running state (the heal mandate): a unit that crashed on the
+		// new code flips to `failed`, or auto-restarts (NRestarts climbs). Poll a
+		// short window; `activating`/a slow first chain read over Tor is NOT a
+		// failure. Only a confirmed `failed`/crash-loop rolls back — so a
+		// half-upgraded box is never left running the new code down.
+		const outcome = await verifyUnitStayedUp(svc, restartsBefore);
+		if (outcome === 'down' && !isActive) {
+			warn(
+				`${svc} was not running before this upgrade and did not stay up when started now. See: sudo journalctl -u ${svc} -n 50`
+			);
+			servicesVerified = false;
+			continue;
+		}
+		if (outcome === 'down') {
+			warn(`${svc} did not stay up after restarting on the new version; rolling back.`);
+			return { rollback: new Error(`${svc} failed to come up after the upgrade restart`) };
+		}
+		restartedAny = true;
+	}
+	if (!restartedAny) servicesVerified = false;
+	return { verified: servicesVerified };
+}
 
 /** Classify ONE observation of a unit after the upgrade restarted it. PURE
  *  (v1.20.0, B6; wave 4, P6). `failed`, or CRASH_LOOP_RESTARTS+ automatic

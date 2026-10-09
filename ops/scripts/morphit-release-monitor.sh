@@ -124,13 +124,18 @@ case "$EXIT_CODE" in
         # not node's closing "Node.js vX" line (a program that died at load).
         # Cut to whole characters (GNU cut counts bytes; iconv -c drops a
         # character split at the edge).
-        WHY=$(grep -v -e '^[[:space:]]*$' -e '^[[:space:]]*at ' -e '^Node\.js v' "$ERR_FILE" 2>/dev/null \
-              | tail -n 1 | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | tr -d '\000-\037\177"\\' \
-              | cut -c1-240 | iconv -c -f UTF-8 -t UTF-8 2>/dev/null)
-        [ "$EXIT_CODE" = 124 ] && WHY="it did not finish within 90 s"
-        [ -n "$WHY" ] || WHY="no reason given (exit status $EXIT_CODE)"
+        LINE=$(grep -v -e '^[[:space:]]*$' -e '^[[:space:]]*at ' -e '^Node\.js v' "$ERR_FILE" 2>/dev/null \
+              | tail -n 1 | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | tr -d '\000-\037\177"\\')
+        WHY=$(printf '%s' "$LINE" | cut -c1-240 | iconv -c -f UTF-8 -t UTF-8 2>/dev/null)
+        # A reason cut short says so (morphitir, 2026-10-08: "…trusted as it. I.
+        # To see it" read as if whole), and its own full stop is not doubled.
+        SEP='. '
+        [ "${#WHY}" -lt "${#LINE}" ] && SEP='… '
+        WHY=$(printf '%s' "$WHY" | sed 's/[.[:space:]]*$//')
+        [ "$EXIT_CODE" = 124 ] && { WHY="it did not finish within 90 s"; SEP='. '; }
+        [ -n "$WHY" ] || { WHY="no reason given (exit status $EXIT_CODE)"; SEP='. '; }
         emit info release_check_failed \
-             "{\"exit_code\":$EXIT_CODE,\"hint\":\"The release check could not check: $WHY. To see it on this server: sudo morphit-ops upgrade --check-only\"}"
+             "{\"exit_code\":$EXIT_CODE,\"hint\":\"The release check could not check: ${WHY}${SEP}To see it on this server: sudo morphit-ops upgrade --check-only\"}"
         ;;
 esac
 rm -f "$ERR_FILE"

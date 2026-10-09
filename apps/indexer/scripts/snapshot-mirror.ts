@@ -55,12 +55,14 @@ import {
 	writeSync
 } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { loadConfig } from '../src/config/index.ts';
 import { bootChainClient, installChainRouting } from '../src/indexer/bootChainClient.ts';
 import { INDEXER_SNAPSHOT_SIGNER_DEFAULT } from '../src/blurt/indexerSnapshotOp.ts';
 import { resolveTrustedSnapshotOp } from '../src/blurt/snapshotOpTrust.ts';
 import { suppressDblurtConsoleNoise } from '@morphit/rpc-pool';
+import { buildSnapshotSources, extractPeerAddressesFromHistory } from '../src/blurt/snapshotMirrors.ts';
+import { importCarWith, pinSnapshotFromPeers } from '../src/blurt/snapshotCarFetch.ts';
 
 // The RPC library's own failover chatter ("Didn't failover for error …") is
 // noise here as in the indexer: the pool fails over, and this script reports
@@ -228,6 +230,18 @@ function writeState(s: MirrorState): void {
 }
 
 
+/** A peer's CAR into kubo, pinning only the anchored CID (importCarWith). */
+function importCar(bytes: Uint8Array, cid: string, budgetMs?: number): boolean {
+	return importCarWith(ipfs, bytes, cid, budgetMs);
+}
+
+/** The whole run must end within 30 minutes (the timer unit's and the
+ *  upgrade's limit). Fetching stops here, leaving the time the steps after it
+ *  may take: reading the snapshot back to check it (5 minutes), letting go of
+ *  the previous one (1) and kubo's garbage collection (5). */
+const RUN_STARTED = Date.now();
+const FETCH_DEADLINE = RUN_STARTED + 18 * 60_000;
+
 async function main(): Promise<void> {
 	// kubo is optional on a Morphit box. No kubo, nothing to mirror — and that is
 	// a normal configuration, not an error.
@@ -326,14 +340,43 @@ async function main(): Promise<void> {
 		if (i === 0) say('kubo has no peers yet (it may have just restarted) — waiting before fetching …');
 		await new Promise((r) => setTimeout(r, 2000));
 	}
+	let pinned = false;
 	if (peers === 0) {
-		say('kubo still has no swarm peers after 60s — cannot fetch the snapshot yet. Will retry on the next run.');
-		say('  (Nothing is broken; this box just is not a mirror yet. Check: systemctl status ipfs)');
-		return;
+		say('kubo still has no swarm peers after 60s.');
+	} else {
+		say(`pinning to this box\u2019s IPFS node (${peers} peer${peers === 1 ? '' : 's'}) …`);
+		// A swarm of a handful of peers (a Tor/I2P-only box) rarely holds it:
+		// leave most of the run to the federation peers below.
+		const pinMs = Math.max(
+			60_000,
+			Math.min(peers < 5 ? 180_000 : 600_000, FETCH_DEADLINE - Date.now() - 5 * 60_000)
+		);
+		pinned = ipfs(['pin', 'add', '--progress=false', op.ipfs_cid], pinMs) !== null;
+		if (!pinned) say('kubo could not fetch it from its swarm.');
 	}
-
-	say(`pinning to this box\u2019s IPFS node (${peers} peer${peers === 1 ? '' : 's'}) …`);
-	if (ipfs(['pin', 'add', '--progress=false', op.ipfs_cid], 600_000) === null) {
+	// FALLBACK (morphitlat, 2026-10-08: 2 swarm peers, never a mirror): ask the
+	// federation peers that re-serve it — the publisher's own .onion and
+	// .b32.i2p, from its registration in the history just read — for the CAR,
+	// and import it under the same CID (src/blurt/snapshotCarFetch.ts). The
+	// sha256 check below still decides whether it is kept.
+	if (!pinned) {
+		const sources = buildSnapshotSources({
+			cid: op.ipfs_cid,
+			peers: extractPeerAddressesFromHistory(resolved.history),
+			publicGateways: [],
+			localGateway: null,
+			hiddenOnly: config.blurtRpcEndpoints.length === 0
+		});
+		const got = await pinSnapshotFromPeers(sources, op.ipfs_cid, {
+			fetch: (u, init) => fetch(u, init),
+			importCar,
+			say,
+			deadline: FETCH_DEADLINE
+		});
+		pinned = got.ok;
+		if (got.ok) say(`imported from ${got.from} under ${op.ipfs_cid}.`);
+	}
+	if (!pinned) {
 		say('could not fetch/pin the snapshot right now — will retry on the next run. (Nothing is broken; this box just is not a mirror yet.)');
 		return;
 	}

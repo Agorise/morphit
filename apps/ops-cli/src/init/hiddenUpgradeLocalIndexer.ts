@@ -239,7 +239,41 @@ export interface ListenerProbeDeps {
 	readonly isRoot?: () => boolean;
 	/** MainPID of morphit-indexer.service, or null when it is not running. */
 	readonly indexerMainPid?: () => number | null;
+	/** Where the cgroup tree is mounted. Tests point this at a scratch tree. */
+	readonly cgroupRoot?: string;
 	readonly env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * The processes of morphit-indexer.service as its cgroup lists them: cgroup v2
+ * (and the hybrid layout's unified tree), then v1's systemd tree. Only systemd
+ * (root) writes these files, so a process cannot add itself to the list.
+ *
+ * WHY. The release monitor runs as a throwaway user inside a sandbox where
+ * `systemctl` cannot reach systemd (morphitir, 2026-10-08: "Failed to get
+ * properties: Transport endpoint is not connected"), so the unit's MainPID was
+ * unknown, the indexer was declared "not running", and every release check
+ * failed. The cgroup's process list was readable there.
+ */
+export function unitPidsFromCgroup(cgroupRoot = '/sys/fs/cgroup'): number[] | null {
+	const rel = join('system.slice', INDEXER_UNIT, 'cgroup.procs');
+	for (const f of [
+		join(cgroupRoot, rel),
+		join(cgroupRoot, 'unified', rel),
+		join(cgroupRoot, 'systemd', rel)
+	]) {
+		let text: string;
+		try {
+			text = readFileSync(f, 'utf8');
+		} catch {
+			continue;
+		}
+		return text
+			.split('\n')
+			.map((l) => Number(l.trim()))
+			.filter((n) => Number.isInteger(n) && n > 0);
+	}
+	return null;
 }
 
 function systemdMainPid(): number | null {
@@ -363,7 +397,10 @@ export function verifyIndexerListener(
 
 	// Unprivileged: other users' fds are unreadable, but every socket's owner is
 	// public. The indexer's main process owner is public too.
-	const mainPid = (deps.indexerMainPid ?? systemdMainPid)();
+	// systemd's MainPID first; where systemctl cannot reach systemd (the release
+	// monitor's sandbox), the unit's own cgroup.
+	const mainPid =
+		(deps.indexerMainPid ?? systemdMainPid)() ?? unitPidsFromCgroup(deps.cgroupRoot)?.[0] ?? null;
 	if (mainPid === null) {
 		return {
 			kind: 'refused',

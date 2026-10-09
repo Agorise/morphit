@@ -177,6 +177,55 @@ describe('unprivileged (the release monitor): the socket owner must be the index
 	});
 });
 
+describe("inside the release monitor's sandbox, where systemctl cannot reach systemd", () => {
+	// morphitir, 2026-10-08, the release check's own sandbox: `systemctl show`
+	// failed ("Transport endpoint is not connected"), so the indexer looked "not
+	// running" and every check failed; its cgroup's process list was readable.
+	const cg = (): string => join(proc, 'sys-fs-cgroup');
+	function unitProcs(pids: number[], layout: 'v2' | 'v1' = 'v2'): void {
+		const dir =
+			layout === 'v2'
+				? join(cg(), 'system.slice', 'morphit-indexer.service')
+				: join(cg(), 'systemd', 'system.slice', 'morphit-indexer.service');
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, 'cgroup.procs'), pids.map((p) => `${p}\n`).join(''));
+	}
+	const sandboxed = (host: string): ListenerVerdict =>
+		verifyIndexerListener(host, 8081, {
+			procRoot: proc,
+			cgroupRoot: cg(),
+			isRoot: () => false,
+			indexerMainPid: () => null,
+			env: {}
+		});
+
+	it("morphitir's shape: the unit's processes are read from its cgroup and the listener is theirs", () => {
+		listen([{ ip: '127.0.0.1', port: 8081, uid: 997, inode: 5555 }]);
+		processHolding(752381, 5555, INDEXER_CG, 'node', 997);
+		unitProcs([752381, 752395]);
+		expect(sandboxed('127.0.0.1')).toEqual({ kind: 'verified', how: 'socket-owner' });
+	});
+	it('the cgroup v1 layout is read too', () => {
+		listen([{ ip: '127.0.0.1', port: 8081, uid: 997, inode: 5555 }]);
+		processHolding(4242, 5555, INDEXER_CG, 'node', 997);
+		unitProcs([4242], 'v1');
+		expect(sandboxed('127.0.0.1')).toEqual({ kind: 'verified', how: 'socket-owner' });
+	});
+	it("a listener owned by another user than the unit's processes is still refused", () => {
+		listen([{ ip: '127.0.0.1', port: 8081, uid: 1001, inode: 5555 }]);
+		processHolding(4242, 7777, INDEXER_CG, 'node', 997);
+		unitProcs([4242]);
+		expect(sandboxed('127.0.0.1').kind).toBe('refused');
+	});
+	it('an empty cgroup (the unit stopped) is "not running"', () => {
+		listen([{ ip: '127.0.0.1', port: 8081, uid: 997, inode: 5555 }]);
+		unitProcs([]);
+		const v = sandboxed('127.0.0.1');
+		expect(v.kind).toBe('refused');
+		expect('reason' in v ? v.reason : '').toMatch(/is not running/);
+	});
+});
+
 describe('which address is asked', () => {
 	it('the configured listen address, and only it', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'morphit-cfg-'));

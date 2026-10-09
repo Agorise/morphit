@@ -151,6 +151,8 @@ The dry-run prints the payload; its \`distribution\` block carries the \`ipfs_ci
 \`\`\`
 ./node_modules/.bin/tsx apps/indexer/scripts/release-broadcast.ts /tmp/morphit-release.json
 \`\`\`
+It then waits (up to 5 minutes) until the nodes list the record in @morphit's history, which is where the upgrades look for it. Start Block 5 when it prints "Block 5 can start".
+
 Afterwards anyone can verify a download against the chain by re-fetching the canonical tarball from the release page: \`curl -fsSLO https://git.agorise.net/agorise/morphit/releases/download/v${VERSION}/morphit-v${VERSION}.tar.gz && node scripts/verify-download.mjs morphit-v${VERSION}.tar.gz\`, or clone any mirror and \`git verify-tag v${VERSION}\` (see docs/VERIFY-YOUR-DOWNLOAD.md).
 
 Until morphit.io upgrades, its visitors notice nothing, and get no tamper alarm: a browser checks the build only when it runs the version the record announces.

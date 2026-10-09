@@ -13542,6 +13542,27 @@ It now falls back to the **hidden-service front end**: `127.0.0.1:8090`, where `
 
 The fallback runs only when the public origin is unreachable. A clearnet instance whose proxy refuses batches still fails the check, as it must.
 
+## 51.0. When your network filters Tor: bridges, set up for you
+
+Some networks block Tor: they send `torproject.org` names to a sinkhole and let connections to Tor relays open but starve the circuits built over them. Tor on such a server loads nothing, its `.onion` cannot publish its descriptor, and nobody can reach it over Tor (morphitir, 2026-10-09: `bridges.torproject.org` resolved to `10.10.34.36`; plain Tor loaded 0 of 6 pages). Over Tor **bridges** — Snowflake and obfs4, which disguise Tor's traffic — the same server worked at once.
+
+`morphit-ops upgrade` handles this in its background checks, and `morphit-tor-bridges.timer` runs the same check between upgrades (half an hour after the timer starts — at boot, or when an upgrade turns it on — then every 6 hours; one run at a time, at most 45 minutes each). To run it now: `sudo morphit-ops upgrade --tor-bridges`.
+
+1. If Tor is running and loads **nothing** — neither this server's `.onion` nor a page through it, a few tries over up to four minutes — the Tor bridges repair starts. A Tor that works without bridges is never touched; one that works over bridges only as in step 6.
+2. It installs the transport programs from your distribution (`snowflake-client`, `obfs4proxy`; Tor's own AppArmor profile already allows both). A Tor/I2P-only server uses **obfs4 only**: Snowflake asks DNS for its front and its STUN servers, and that server's egress rule refuses DNS to every user. Its package downloads go through Tor, so `obfs4proxy` is installed there while Tor still works (every check does it when it is missing). If its Tor already loads nothing, bring it in by hand: on a computer that can reach your distribution, `apt-get download obfs4proxy`; copy the `.deb` file to the server; there, `sudo apt-get install ./obfs4proxy_*.deb`, then `sudo morphit-ops upgrade --tor-bridges`.
+3. It writes the bridges into `/etc/tor/torrc` between `# >>> morphit: Tor bridges` markers, only after `tor --verify-config` accepts the file. The first original is kept as `/etc/tor/torrc.bak-before-bridges`; the onion service's keys are not touched.
+4. Tor restarts and must connect (up to five minutes), then this server's `.onion` (or a page) must load through it.
+5. A server already on bridges that loads nothing gets this release's bridges again; if that fails too, it tries plain Tor, and when plain Tor works the bridges come out of `/etc/tor/torrc` (a network that stopped filtering Tor).
+6. A server on bridges that works is checked, at most once a day, with a separate, throwaway Tor client without bridges (its own empty config and data directory, run as Tor's own user; the server's Tor is not touched). That client connects to public Tor relays, which a filtering network can see. When it loads through plain Tor, the bridges come out, proven as in step 4. If this server's Tor then does not work without them, they go back, Tor is proven to work over them again, and plain Tor is not tried for a week.
+7. When nothing works, the `torrc` the run found is put back and Tor restarted on it. If the file cannot be written back, the result says so and names `/etc/tor/torrc.bak-before-bridges`.
+8. `/etc/tor/torrc` is read again before each write: an edit made during the check (by you, Ansible or another repair; the onion proof-of-work repair does the same) is never overwritten or put back over; the check stops and the next one looks again.
+
+Each Snowflake bridge is written with one domain front as `front=` (the first of its `fronts=`): Ubuntu's `snowflake-client` reads only that form. The timer runs only with a `morphit-ops` that knows `--tor-bridges` (`ExecCondition=`), so on a server moved back to an older release it does nothing.
+
+**Where the bridges come from.** A filtered network blocks `torproject.org` too, so the release carries the list Tor Browser ships: `ops/tor/builtin-bridges.json`, fetched from `https://bridges.torproject.org/moat/circumvention/builtin`. To refresh it (on a machine that can reach that address): `curl -fsS -X POST -H 'Content-Type: application/vnd.api+json' https://bridges.torproject.org/moat/circumvention/builtin`, and put the answer under `"bridges"` in that file.
+
+**Checking it.** `grep -A3 'morphit: Tor bridges' /etc/tor/torrc` shows the block; `sudo journalctl -u tor@default -n 50` shows Tor connecting ("Bootstrapped 100%"). The IPFS seed check after an upgrade now tries the `.onion` three times and, when it still fails, prints curl's own reason and points here.
+
 ## 51.1. Diagnosing federated chat when it is slow
 
 Federated chat is supposed to land in under six seconds between any two instances. When it does not, the question is almost always *which* of the two possible failures you have, and they look identical from the outside:
@@ -13771,7 +13792,7 @@ The mirror job:
 
 1. reads the newest signed `indexer_snapshot_v1` op from chain, over whatever transport your node already uses (hidden RPC included — no clearnet required). Since v1.18.0 it only accepts an op that **two RPC operators agree on** (a node's `.onion` and `.b32.i2p` count as one operator; the default hidden nodes are all run by the project, so on a hidden-only node the signature is the real check) and whose signature comes from the pinned `MORPHIT_INDEXER_OFFICIAL_POSTING_PUBKEY` — the same key the release and RPC-directory checks use. If the nodes it can reach do not agree yet, it pins nothing and tries again next run;
 2. refuses outright if the snapshot is for a different chain;
-3. pins the CID to your Kubo;
+3. pins the CID to your Kubo. When Kubo's own swarm cannot fetch it — a Tor/I2P-only box often has only two or three swarm peers, so with fewer than five the swarm gets 3 minutes — it asks the publisher's own `.onion` and `.b32.i2p` (from its on-chain registration) for the snapshot as a CAR (`/ipfs/<cid>?format=car`; up to 64 MB, no redirects) and imports that, pinning only the anchored CID, whatever roots the CAR names. Fetching stops 18 minutes into the run, which leaves the steps after it the time they may take within the run's 30 minutes;
 4. reads the pinned content back and **verifies it against the on-chain SHA-256** — if it does not match, the pin is removed and your box serves nothing rather than serving something a newcomer will reject;
 5. unpins the snapshot it was serving before and runs a repo GC. One live snapshot per box, never a growing pile — nobody wants last month's copy when this month's exists.
 

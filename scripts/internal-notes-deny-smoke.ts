@@ -89,6 +89,11 @@ const ALLOWED_PUBLIC_IPV4 = new Set([
 	// namespace (Kubo ignores private ranges, so the test needs a public one).
 	'45.33.0.2'
 ]);
+/** Files whose addresses are a list someone else publishes, reviewed as a
+ *  whole: the Tor Project's built-in bridges (2026-10-09), shipped so a server
+ *  whose network blocks torproject.org can still reach Tor. Every other check
+ *  still applies to them. */
+const PUBLISHED_ADDRESS_FILES = new Set(['ops/tor/builtin-bridges.json']);
 /** Dotted quads without leading zeros ("08.1.1.1" is a number run, not an address). */
 const IPV4 =
 	/(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.])/g;
@@ -125,7 +130,7 @@ for (const rel of files) {
 		if (OPERATOR_FACING.test(rel) && CHECKPOINT.test(line))
 			hits.push(`${at}: a fix-session checkpoint marker in an operator doc or config file`);
 		// SVG path data is digit runs, not addresses.
-		if (rel.endsWith('.svg')) return;
+		if (rel.endsWith('.svg') || PUBLISHED_ADDRESS_FILES.has(rel)) return;
 		for (const m of line.matchAll(IPV4))
 			if (!isNonPublic(m[0]) && !ALLOWED_PUBLIC_IPV4.has(m[0]))
 				hits.push(`${at}: a public IPv4 address not on the reviewed list (${m[0]})`);

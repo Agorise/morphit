@@ -1,0 +1,17 @@
+[Unit]
+Description=Morphit Tor bridges — check that Tor works (half an hour after start, then every 6 hours)
+Documentation=https://git.agorise.net/agorise/morphit/src/branch/main/docs/OPERATIONS.md
+
+[Timer]
+# Between upgrades: a network that starts filtering Tor is noticed within hours,
+# and Tor moves onto bridges then. Each upgrade runs the same repair too.
+# Counted from when the timer starts (at boot, or when an upgrade installs it),
+# not from boot: a boot-relative time already past would fire it at once, right
+# after the upgrade's own run of the repair.
+OnActiveSec=30min
+OnUnitActiveSec=6h
+RandomizedDelaySec=15min
+Unit=morphit-tor-bridges.service
+
+[Install]
+WantedBy=timers.target

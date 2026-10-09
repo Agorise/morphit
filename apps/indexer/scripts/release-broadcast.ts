@@ -39,7 +39,8 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { PrivateKey } from '@beblurt/dblurt';
 import { DEFAULT_BLURT_RPC_ENDPOINTS } from '@morphit/operator-config';
-import { askHidden, broadcastCustomJsonOnce } from './lib/signOnceBroadcast.ts';
+import { askHidden, broadcastCustomJsonOnce, candidateNodes } from './lib/signOnceBroadcast.ts';
+import { waitForHistoryListing } from './lib/historyListing.ts';
 
 import {
 	buildReleaseCustomJsonOp,
@@ -188,6 +189,32 @@ async function main(): Promise<void> {
 			`  op id     : ${RELEASE_OP_ID}\n\n` +
 			'Every Morphit instance picks up the chain-pinned treasury within a block.\n'
 	);
+
+	// A block is not yet the account history, where every server's upgrade
+	// looks for this record: wait until the nodes list it (morphit.io,
+	// 2026-10-08: an upgrade started right after the broadcast refused).
+	process.stderr.write(
+		`\nWaiting until the nodes list ${res.trxId} in @${op.required_posting_auths[0]}'s history (up to 5 minutes) …\n`
+	);
+	const listing = await waitForHistoryListing({
+		nodes: candidateNodes({ nodeOverride, includeHidden }),
+		account: op.required_posting_auths[0],
+		trxId: res.trxId
+	});
+	if (listing.complete) {
+		process.stdout.write(
+			`✓ ${listing.listed.length} node(s) list the release record in @${op.required_posting_auths[0]}'s history. Block 5 can start.\n`
+		);
+	} else if (listing.listed.length === 0 && listing.notListed.length === 0) {
+		process.stdout.write(
+			'No node answered the history check from this machine. Before Block 5, check the transaction id above on a block explorer.\n'
+		);
+	} else {
+		process.stdout.write(
+			`Not listed yet by: ${listing.notListed.join(', ')}.\n` +
+				'An upgrade whose indexer reads from one of those may say it finds no release record; running it again a little later works.\n'
+		);
+	}
 }
 
 void main();

@@ -821,6 +821,7 @@ SMOKES=(
 	".:release-packers-exclude-private-smoke"
 	"apps/ops-cli:bunkerweb-no-phone-home-smoke"
 	"apps/ops-cli:kubo-no-phone-home-smoke"
+	"apps/ops-cli:tor-plain-probe-execution-smoke"
 )
 
 # Slow-solo smokes each run a whole toolchain — every workspace's vitest, the

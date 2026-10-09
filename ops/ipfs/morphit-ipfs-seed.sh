@@ -418,12 +418,26 @@ fi
 if [ -n "${_onion:-}" ]; then
 	_sp=$(ss -lnt 2>/dev/null | grep -oE '127\.0\.0\.1:(9050|9150)' | head -1 | cut -d: -f2) || true
 	[ -n "${_sp:-}" ] || _sp=9050
-	_t=$(_code "http://${_onion}${PROBE_PATH}" 180 --socks5-hostname "127.0.0.1:${_sp}")
+	# Up to three tries (morphitir, 2026-10-09: ONE try decided, with no reason,
+	# on a network that starves Tor circuits; Tor over bridges fixed it). The
+	# last failure's own words are kept for the message.
+	_t=""
+	_terr=""
+	_tef=$(mktemp 2>/dev/null || echo "/tmp/morphit-seed-tor.$$")
+	for _try in 1 2 3; do
+		_t=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 --socks5-hostname "127.0.0.1:${_sp}" \
+			"http://${_onion}${PROBE_PATH}" 2>"$_tef") || true
+		[ "$_t" = "200" ] && break
+		_terr=$(head -n 1 "$_tef" 2>/dev/null)
+	done
+	rm -f "$_tef"
 	if [ "$_t" = "200" ]; then
 		log "✓ Tor: the .onion serves the release — hidden-only peers can upgrade from this box."
 	else
 		_needs_operator=1
-		log "⚠ Tor: the .onion did NOT serve the release (HTTP ${_t:-timeout}) — hidden peers cannot fetch it here."
+		_terr=$(printf '%s' "$_terr" | tr -d '\r' | head -n 1 | cut -c1-160)
+		log "⚠ Tor: the .onion did not serve the release in 3 tries (HTTP ${_t:-none}${_terr:+; $_terr}) — hidden peers cannot fetch it here."
+		log "  If this network filters Tor, the Tor bridges repair moves Tor onto bridges: sudo morphit-ops upgrade --tor-bridges"
 	fi
 fi
 if [ -n "${_i2p:-}" ]; then

@@ -16,6 +16,7 @@
  * Otherwise nothing is written.
  */
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -113,6 +114,15 @@ export async function healTorPow(
 					?.trim() ?? 'verify-config failed'
 			}), so nothing was changed.`
 		};
+	// Never over an edit made since it was read (the Tor bridges repair's
+	// timer may write the same file during an upgrade).
+	if (rt.readTorrc() !== text)
+		return {
+			strategy: 'left-alone',
+			verified: false,
+			detail:
+				'Tor onion PoW: /etc/tor/torrc was changed by something else meanwhile, so it was left as it is; the next upgrade looks again.'
+		};
 	if (!rt.writeTorrc(w.text))
 		return {
 			strategy: 'left-alone',
@@ -126,7 +136,15 @@ export async function healTorPow(
 	} finally {
 		stop();
 	}
-	const ok = rt.torActive() && rt.readTorrc() === w.text;
+	const now = rt.readTorrc();
+	if (now !== w.text)
+		return {
+			strategy: 'left-alone',
+			verified: false,
+			detail:
+				'Tor onion PoW: /etc/tor/torrc was changed by something else during the reload, so it holds that change, not the defence. On this server run: sudo systemctl status tor'
+		};
+	const ok = rt.torActive();
 	if (!ok) {
 		rt.writeTorrc(text);
 		rt.reloadTor();
@@ -162,13 +180,16 @@ const realRuntime: PowRuntime = {
 		}
 	},
 	writeTorrc: (t) => {
-		const tmp = `${TORRC}.morphit-tmp`;
+		// Its own name: the Tor bridges repair (its timer may run during an
+		// upgrade) writes the same file and never shares a temporary with it.
+		const tmp = `${TORRC}.morphit-tmp-${process.pid}-${randomBytes(4).toString('hex')}`;
 		try {
 			writeFileSync(tmp, t, { mode: 0o644 });
 			keepOwnerAndMode(TORRC, tmp);
 			renameSync(tmp, TORRC);
 			return true;
 		} catch {
+			rmSync(tmp, { force: true });
 			return false;
 		}
 	},

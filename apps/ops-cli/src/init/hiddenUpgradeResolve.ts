@@ -31,7 +31,7 @@ import {
 import { makeHiddenTarballFetcher } from './hiddenUpgradeTransport.js';
 import { localCondenser } from '../lib/hiddenOnly.ts';
 import {
-	readSignedReleaseAnchor,
+	findSignedReleaseAnchor,
 	type CondenserRead,
 	type ReleaseAnchor
 } from '../lib/releaseAnchor.ts';
@@ -253,6 +253,13 @@ export async function tryResolveHiddenUpgrade(
 		/** Tests only: the pinned posting key and the chain reader. */
 		postingPubkey?: string;
 		chainRead?: CondenserRead;
+		/** How long to keep asking the indexer for a record its first answer
+		 *  lacked, and the clock that wait runs on (tests). */
+		anchorWait?: {
+			readonly waitMs?: number;
+			readonly now?: () => number;
+			readonly sleep?: (ms: number) => Promise<void>;
+		};
 	}
 ): Promise<HiddenUpgradeResolution | null> {
 	if (!(await isHiddenOnly(opts))) return null;
@@ -279,12 +286,30 @@ export async function tryResolveHiddenUpgrade(
 	const read: CondenserRead =
 		opts.chainRead ??
 		((method, params) => localCondenser(method, params, { bases: [base], timeoutMs: 60_000 }));
-	const verified = await readSignedReleaseAnchor(read, {
+	const anchorArgs = {
 		tag: version,
 		signer: MORPHIT_RELEASE_ACCOUNT,
 		pinnedPubkey: opts.postingPubkey ?? MORPHIT_OFFICIAL_POSTING_PUBKEY,
 		chainId: BLURT_MAINNET_CHAIN_ID
-	});
+	};
+	const clock = {
+		...(opts.anchorWait?.now !== undefined ? { now: opts.anchorWait.now } : {}),
+		...(opts.anchorWait?.sleep !== undefined ? { sleep: opts.anchorWait.sleep } : {})
+	};
+	let verified = await findSignedReleaseAnchor({ sources: [read], ...clock }, anchorArgs);
+	// The indexer relays the read to whichever node answers first; one answer
+	// without the record proves nothing (the indexer's own /v1/release just
+	// named this version), so it is asked again for a while.
+	const waitMs = opts.anchorWait?.waitMs ?? 0;
+	if (!verified.ok && 'notListed' in verified && verified.notListed === true && waitMs > 0) {
+		opts.onProgress?.(
+			`the record for v${version} is not in the history the indexer's node served; asking again (up to ${Math.round(waitMs / 60_000)} minutes)…`
+		);
+		verified = await findSignedReleaseAnchor(
+			{ sources: [read], waitMs, intervalMs: 10_000, ...clock },
+			{ ...anchorArgs, maxPages: 1 }
+		);
+	}
 	if (!verified.ok) {
 		// (`in`, not the ok flag: the smoke typecheck runs without strictNullChecks.)
 		const why = 'reason' in verified ? verified.reason : 'unknown';

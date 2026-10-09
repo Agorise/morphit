@@ -123,6 +123,24 @@ export async function jsonRpc(
 	}
 }
 
+/**
+ * One read-only condenser reader per configured clearnet node, asked directly
+ * (never through the pool's first-answer race): for reads where a single
+ * node's answer can be incomplete and every node is worth asking — the
+ * release record, whose signature makes WHO answered irrelevant. Empty on a
+ * hidden-only node, which never dials clearnet.
+ */
+export function directNodeReaders(
+	deps: ChainAccessDeps = {},
+	timeoutMs = 10_000
+): Array<(method: string, params: readonly unknown[]) => Promise<unknown>> {
+	if ((deps.hiddenOnly ?? (() => isHiddenOnlyNode()))()) return [];
+	return clearnetList(deps).map(
+		(url) => (method: string, params: readonly unknown[]) =>
+			jsonRpc(url, `condenser_api.${method}`, params, undefined, timeoutMs)
+	);
+}
+
 /** A read-only condenser call: local indexer first, then (not hidden-only) the
  *  health-ordered clearnet pool, then — when the pool could not be reached and
  *  this box's indexer is there but was slow — the indexer once more with time

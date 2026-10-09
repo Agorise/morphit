@@ -9,6 +9,7 @@
  * egress heal's bound is checked against every path through it with each call
  * at its limit, and the fetch fits its pull into what the unit has left.
  */
+import { TOR_BRIDGES_HEAL_MAX_MS } from '../src/lib/torBridgesHeal.ts';
 import { describe, expect, it } from 'vitest';
 import {
 	AFTER_RESTART_WAIT_MS,
@@ -125,6 +126,7 @@ describe('the after-restart unit is never killed in the middle of its work', () 
 			AFTER_RESTART_WAIT_MS +
 			AFTER_RESTART_ANSWER_MS +
 			EARLY_HEALS_MAX_MS +
+			TOR_BRIDGES_HEAL_MAX_MS +
 			WEB_HEAL_IDLE_MAX_MS +
 			EGRESS_HEAL_MAX_MS +
 			BASE_FETCH_TIMEOUT_MS +

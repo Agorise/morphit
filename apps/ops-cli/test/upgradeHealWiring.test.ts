@@ -38,6 +38,7 @@ for (const [mod, name] of [
 	['../src/lib/vapidHeal.ts', 'vapid'],
 	['../src/lib/logLevelHeal.ts', 'logLevel'],
 	['../src/lib/torOnlyEgressHeal.ts', 'egress'],
+	['../src/lib/torBridgesHeal.ts', 'torBridges'],
 	['../src/lib/osQuietHeal.ts', 'quiet'],
 	['../src/lib/bunkerwebJobsHeal.ts', 'jobs'],
 	['../src/lib/indexerMemoryHeal.ts', 'memory']
@@ -165,10 +166,13 @@ describe('heal wiring in the self-heal phase', () => {
 			'vapid',
 			'logLevel',
 			'releaseMonitor',
+			// 2026-10-09 (lib/torBridgesHeal.ts): a network that filters plain Tor
+			// gets bridges, before the tor-only egress heal (which relies on Tor).
+			'torBridges',
 			'egress'
 		]);
 		expect(out).toMatch(
-			/HIDDENRPC-DETAIL[\s\S]*SHADOW-DETAIL[\s\S]*VAPID-DETAIL[\s\S]*LOGLEVEL-DETAIL[\s\S]*RELEASEMONITOR-DETAIL[\s\S]*EGRESS-DETAIL/
+			/HIDDENRPC-DETAIL[\s\S]*SHADOW-DETAIL[\s\S]*VAPID-DETAIL[\s\S]*LOGLEVEL-DETAIL[\s\S]*RELEASEMONITOR-DETAIL[\s\S]*TORBRIDGES-DETAIL[\s\S]*EGRESS-DETAIL/
 		);
 	});
 

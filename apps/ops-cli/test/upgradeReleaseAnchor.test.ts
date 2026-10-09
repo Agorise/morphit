@@ -202,13 +202,16 @@ const configure = (pool: 'hidden' | 'clearnet'): void =>
 			: 'MORPHIT_INDEXER_RPC_ENDPOINTS=https://rpc.example.invalid\n'
 	);
 
+let clockMs = 0;
 function run(base: string, flags: Record<string, string>, signerFingerprints: string[] = []) {
 	return runUpgrade({
 		flags: { yes: 'true', ...flags },
 		positional: [],
 		localIndexerBases: [base],
 		verifyLocalIndexer: trustListener,
-		trust: { postingPubkey: OFFICIAL_PUB, signerFingerprints }
+		trust: { postingPubkey: OFFICIAL_PUB, signerFingerprints },
+		// The wait for a record no node lists yet runs on a clock that jumps.
+		anchorWait: { now: () => clockMs, sleep: async (ms: number) => void (clockMs += ms) }
 	} as never);
 }
 

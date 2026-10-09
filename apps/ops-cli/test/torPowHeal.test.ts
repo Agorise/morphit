@@ -103,6 +103,32 @@ describe('Tor proof-of-work for the onion service', () => {
 		expect((await c.run()).verified).toBe(false);
 		expect(c.torrc).toBe(ANSIBLE);
 	});
+	// v1.21.4 review: the Tor bridges repair (its timer can run during an
+	// upgrade) writes the same file; neither may undo the other's write.
+	it('heal: a torrc changed by something else after it was read is never written over', async () => {
+		const b = new Box();
+		const edited = `${ANSIBLE}# Tor bridges block written meanwhile\n`;
+		let reads = 0;
+		const read = b.rt.readTorrc;
+		(b.rt as { readTorrc: () => string | null }).readTorrc = () => {
+			if (reads++ === 1) b.torrc = edited;
+			return read();
+		};
+		const r = await b.run();
+		expect(b.torrc).toBe(edited);
+		expect(r.verified).toBe(false);
+	});
+	it('heal: nor put back over a change made during its reload', async () => {
+		const b = new Box();
+		const edited = `${ANSIBLE}# Tor bridges block written meanwhile\n`;
+		let reloads = 0;
+		(b.rt as { reloadTor: () => boolean }).reloadTor = () => {
+			if (reloads++ === 0) b.torrc = edited;
+			return true;
+		};
+		await b.run();
+		expect(b.torrc).toBe(edited);
+	});
 	it('heal: Tor not running after the reload → the previous torrc is put back', async () => {
 		const b = new Box();
 		b.active = false;

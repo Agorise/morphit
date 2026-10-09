@@ -138,11 +138,11 @@ check(
 const payload = readFileSync(join(REPO, 'apps/indexer/scripts/release-build-payload.ts'), 'utf8');
 check(
 	'the trust gate accepts the signed on-chain SHA-256 as a trust path',
-	/readSignedReleaseAnchor\(/.test(upgrade) && /onchain-anchored-sha256/.test(upgrade)
+	/(?:find|read)SignedReleaseAnchor\(/.test(upgrade) && /onchain-anchored-sha256/.test(upgrade)
 );
 check(
 	'the hidden resolver verifies the signed op, not /v1/release alone',
-	/readSignedReleaseAnchor\(/.test(resolver)
+	/(?:find|read)SignedReleaseAnchor\(/.test(resolver)
 );
 check(
 	'offline path picks offline_sha256 for a -offline bundle',

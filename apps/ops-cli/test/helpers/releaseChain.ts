@@ -77,6 +77,8 @@ export function fixtureReader(f: ChainFixture) {
 export interface StubIndexer {
 	readonly base: string;
 	readonly paths: string[];
+	/** How many times the condenser relay was asked for account history. */
+	historyCalls(): number;
 	close(): Promise<void>;
 }
 
@@ -85,8 +87,13 @@ export async function stubIndexer(opts: {
 	release?: unknown;
 	chain?: ChainFixture;
 	instances?: unknown;
+	/** The history answers in the order they are given, the last repeating:
+	 *  a node behind the chain answers without the newest ops. Blocks still
+	 *  come from `chain`. */
+	historyAnswers?: unknown[][];
 }): Promise<StubIndexer> {
 	const paths: string[] = [];
+	let historyCalls = 0;
 	const server: Server = createServer((req, res) => {
 		paths.push(`${req.method} ${req.url}`);
 		const send = (status: number, body: unknown): void => {
@@ -103,7 +110,13 @@ export async function stubIndexer(opts: {
 			req.on('end', () => {
 				const { method, params } = JSON.parse(body) as { method: string; params: unknown[] };
 				const f = opts.chain ?? { history: [], blocks: {} };
-				if (method === 'get_account_history') return send(200, { result: f.history });
+				if (method === 'get_account_history') {
+					const a = opts.historyAnswers;
+					const n = historyCalls++;
+					return send(200, {
+						result: a !== undefined && a.length > 0 ? a[Math.min(n, a.length - 1)] : f.history
+					});
+				}
 				if (method === 'get_block')
 					return send(200, { result: f.blocks[Number(params[0])] ?? null });
 				send(400, { message: 'method not allowed' });
@@ -117,6 +130,48 @@ export async function stubIndexer(opts: {
 	return {
 		base: `http://127.0.0.1:${port}`,
 		paths,
+		historyCalls: () => historyCalls,
+		close: () => new Promise<void>((r) => server.close(() => r()))
+	};
+}
+
+export interface StubNode {
+	readonly url: string;
+	historyCalls(): number;
+	close(): Promise<void>;
+}
+
+/** A Blurt RPC node (JSON-RPC over HTTP) answering condenser_api reads from a fixture. */
+export async function stubNode(chain: ChainFixture): Promise<StubNode> {
+	let historyCalls = 0;
+	const server: Server = createServer((req, res) => {
+		let body = '';
+		req.on('data', (d) => (body += d));
+		req.on('end', () => {
+			const { id, method, params } = JSON.parse(body) as {
+				id: number;
+				method: string;
+				params: unknown[];
+			};
+			const reply = (result: unknown): void => {
+				res.writeHead(200, { 'content-type': 'application/json' });
+				res.end(JSON.stringify({ jsonrpc: '2.0', id, result }));
+			};
+			if (method === 'condenser_api.get_account_history') {
+				historyCalls++;
+				return reply(chain.history);
+			}
+			if (method === 'condenser_api.get_block')
+				return reply(chain.blocks[Number(params[0])] ?? null);
+			res.writeHead(200, { 'content-type': 'application/json' });
+			res.end(JSON.stringify({ jsonrpc: '2.0', id, error: { message: `no ${method}` } }));
+		});
+	});
+	await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+	const { port } = server.address() as AddressInfo;
+	return {
+		url: `http://127.0.0.1:${port}`,
+		historyCalls: () => historyCalls,
 		close: () => new Promise<void>((r) => server.close(() => r()))
 	};
 }

@@ -83,6 +83,17 @@ if (process.env.STUB_RELEASE_JSON && /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\/v1\\/re
 }
 const local = /^http:\\/\\/127\\.0\\.0\\.1:\\d+\\//.test(url);
 const tor = argv.includes('--socks5-hostname') && /\\.onion\\//.test(url);
+// STUB_TOR_FAILS=N: the first N probes through Tor time out, as on a network
+// that filters Tor (morphitir, 2026-10-09).
+if (tor && process.env.STUB_TOR_FAILS && /\\/ipfs\\/[^/]+\\/metadata\\.json$/.test(url)) {
+  const f = process.env.STUB_LOG_CURL + '.tor';
+  const n = fs.existsSync(f) ? Number(fs.readFileSync(f, 'utf8')) : 0;
+  fs.writeFileSync(f, String(n + 1));
+  if (n < Number(process.env.STUB_TOR_FAILS)) {
+    process.stderr.write('curl: (28) Connection timed out after 90001 milliseconds\\n');
+    process.stdout.write('000'); process.exit(28);
+  }
+}
 if (process.env.STUB_PROBE_CODE && (local || tor) && /\\/ipfs\\/[^/]+\\/metadata\\.json$/.test(url)) {
   process.stdout.write(process.env.STUB_PROBE_CODE); process.exit(0);
 }
@@ -225,6 +236,33 @@ console.log('\nipfs-hidden-only-execution-smoke\n' + '─'.repeat(56));
 		check(
 			'seed, hidden-only: still verifies the release over its .onion (through Tor)',
 			r.curl.some((a) => a.includes('--socks5-hostname') && a.some((x) => x.includes(ONION)))
+		);
+
+		// 2026-10-09 (morphitir): ONE Tor probe decided "the .onion did NOT serve
+		// the release (HTTP 000)", with no reason. It now tries again, and when
+		// every try fails it says why and what repairs it.
+		r = run(sb, SEED, ['v9.9.9'], {
+			...seedEnv,
+			MORPHIT_SEED_HIDDEN_ONLY: '1',
+			MORPHIT_STAGE_TARBALL: tb,
+			STUB_TOR_FAILS: '1'
+		});
+		check(
+			'seed: a Tor probe that fails once and then answers is a working .onion',
+			/✓ Tor: the \.onion serves the release/.test(r.out) && !/⚠ Tor/.test(r.out),
+			r.out.slice(-600)
+		);
+		r = run(sb, SEED, ['v9.9.9'], {
+			...seedEnv,
+			MORPHIT_SEED_HIDDEN_ONLY: '1',
+			MORPHIT_STAGE_TARBALL: tb,
+			STUB_TOR_FAILS: '99'
+		});
+		check(
+			"seed: a .onion that never answers is reported with curl's reason and the repair",
+			/⚠ Tor: .*\(28\) Connection timed out/.test(r.out) &&
+				/sudo morphit-ops upgrade --tor-bridges/.test(r.out),
+			r.out.slice(-600)
 		);
 
 		// Hidden-only inferred from Kubo's own config (a hand-run seed).

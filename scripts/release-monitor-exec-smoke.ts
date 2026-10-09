@@ -180,8 +180,20 @@ exit "\${FAKE_TSX_EXIT:-1}"
 	for (const [err, want, label] of [
 		[
 			long,
-			/^The release check could not check: \[ERR\] Could not check: —+\. To see it/,
-			'a long line with dashes'
+			/^The release check could not check: \[ERR\] Could not check: —+… To see it/,
+			'a long line with dashes, marked as cut'
+		],
+		[
+			// morphitir, 2026-10-08: the cut fell mid-sentence and read
+			// "…can be trusted as it. I. To see it", as if the reason were whole.
+			"[ERR] Could not check for a new release privately, so nothing was fetched and this node stays as it is: this node's indexer could not be confirmed: morphit-indexer.service is not running, so nothing on 127.0.0.1:8081 can be trusted as it. If this box runs its indexer outside systemd, set MORPHIT_TRUST_LOCAL_INDEXER=1 for this command to skip this check (see docs/OPERATIONS.md, Upgrading).",
+			/can be trusted as it\.? .*… To see it on this server/,
+			'a reason longer than the alert holds ends with an ellipsis'
+		],
+		[
+			'[ERR] Could not check: the indexer is busy.',
+			/: \[ERR\] Could not check: the indexer is busy\. To see it/,
+			'a reason that ends with a full stop does not get a second one'
 		],
 		[
 			"Error: Cannot find module 'x'\n    at load (node:internal)\n\nNode.js v22.22.0",

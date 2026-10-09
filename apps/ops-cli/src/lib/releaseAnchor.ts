@@ -47,7 +47,15 @@ export interface ReleaseAnchor {
 
 export type ReleaseAnchorResult =
 	| { readonly ok: true; readonly anchor: ReleaseAnchor }
-	| { readonly ok: false; readonly reason: string };
+	| {
+			readonly ok: false;
+			readonly reason: string;
+			/** A source ANSWERED and its history did not list the record, or
+			 *  listed it while its block was not there yet (as opposed to no
+			 *  source being readable at all): what a record not yet in a node's
+			 *  history, or a node behind the chain, looks like. */
+			readonly notListed?: boolean;
+	  };
 
 interface TxLike {
 	readonly ref_block_num: number;
@@ -256,16 +264,26 @@ export async function readSignedReleaseAnchor(
 		from = low - 1;
 	}
 	if (candidates.length === 0) {
-		return { ok: false, reason: `@${signer} has published no release record for v${version}` };
+		return {
+			ok: false,
+			reason: `@${signer} has published no release record for v${version}`,
+			notListed: true
+		};
 	}
 
 	let lastWhy = '';
+	// A listed record whose block the node answering did not have (a node a
+	// few blocks behind, or a read that failed) is lag, like a record not
+	// listed yet: the callers wait for it. A block that holds something else
+	// signed, or nothing valid, is not.
+	let lagging = false;
 	for (const c of candidates) {
 		let block: unknown;
 		try {
 			block = await read('get_block', [c.blockNum]);
 		} catch (err) {
 			lastWhy = `could not read block ${c.blockNum} (${err instanceof Error ? err.message : String(err)})`;
+			lagging = true;
 			continue;
 		}
 		const txs = (block as { transactions?: unknown } | null)?.transactions;
@@ -274,6 +292,7 @@ export async function readSignedReleaseAnchor(
 			: undefined;
 		if (tx === undefined) {
 			lastWhy = `block ${c.blockNum} does not hold transaction ${c.trxId}`;
+			lagging = true;
 			continue;
 		}
 		if (!recoverSigningKeys(tx, args.chainId).includes(args.pinnedPubkey)) {
@@ -296,5 +315,60 @@ export async function readSignedReleaseAnchor(
 		}
 		return { ok: true, anchor };
 	}
-	return { ok: false, reason: lastWhy };
+	return lagging ? { ok: false, reason: lastWhy, notListed: true } : { ok: false, reason: lastWhy };
+}
+
+/** Where and how long `findSignedReleaseAnchor` looks. */
+export interface AnchorSearch {
+	/** Readers asked in order, every round. The record is authenticated by its
+	 *  signature, so a source only decides whether it is FOUND, never what it
+	 *  says: one that lacks it or forges it just passes the turn to the next. */
+	readonly sources: readonly CondenserRead[];
+	/** How long to keep asking when no source holds the record yet (0: one
+	 *  round). A record broadcast a minute ago may not be in a node's history
+	 *  yet, and a node behind the chain answers without it. */
+	readonly waitMs?: number;
+	/** Pause between rounds. */
+	readonly intervalMs?: number;
+	readonly sleep?: (ms: number) => Promise<void>;
+	readonly now?: () => number;
+}
+
+/**
+ * The verified on-chain release record for `tag` from the first source that
+ * holds it, asking every source each round until `waitMs` has passed. One
+ * answer without the record proves nothing (morphit.io, 2026-10-08: the
+ * v1.21.3 upgrade refused on one node's history). Never throws.
+ */
+export async function findSignedReleaseAnchor(
+	search: AnchorSearch,
+	args: Parameters<typeof readSignedReleaseAnchor>[1]
+): Promise<ReleaseAnchorResult> {
+	const now = search.now ?? Date.now;
+	const sleep = search.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+	const interval = Math.max(1, search.intervalMs ?? 10_000);
+	const until = now() + Math.max(0, search.waitMs ?? 0);
+	const started = now();
+	const reasons = new Set<string>();
+	let notListed = false;
+	let rounds = 0;
+	for (;;) {
+		rounds++;
+		for (const read of search.sources) {
+			// The first round asks every source; a later one starts none past the
+			// deadline, so slow sources cannot stretch the promised wait.
+			if (rounds > 1 && now() >= until) break;
+			const r = await readSignedReleaseAnchor(read, args);
+			if (r.ok) return r;
+			reasons.add('reason' in r ? r.reason : 'unknown');
+			if ('notListed' in r && r.notListed === true) notListed = true;
+		}
+		if (now() + interval > until) break;
+		await sleep(interval);
+	}
+	const asked = `${search.sources.length} source${search.sources.length === 1 ? '' : 's'}`;
+	const span = Math.round((now() - started) / 1000);
+	const when = rounds > 1 ? `, asked ${rounds} times over ${span} s` : '';
+	const head = reasons.size > 0 ? [...reasons].join('; ') : 'no source answered';
+	return { ok: false, reason: `${head} (${asked}${when})`, notListed };
 }
